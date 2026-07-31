@@ -4,9 +4,12 @@ An SSH terminal for **Android and desktop** — background sessions, tabs,
 adaptive splits, and a real keyboard. Qt Widgets, C++, one codebase for
 both platforms.
 
-Status: **M0 skeleton.** The app builds and shows an empty character-cell
-grid. There is no SSH, no emulator and no session handling yet — see
-`project.md` §14 for the milestone plan.
+Status: **M0 done, M1 in progress.** The app builds and shows a
+character-cell grid, and the SSH transport interface, its test seam and the
+byte path into the view all exist and are tested. What is missing is the
+real backend: `bssh_ssh_session` has no libssh implementation yet, so the
+app cannot connect to anything. No emulator and no session handling either
+— see `project.md` §14 for the milestone plan.
 
 ## Build (desktop)
 
@@ -15,7 +18,7 @@ Needs Qt 6 (6.8 LTS or newer) and a C++17 compiler.
 ```sh
 make          # build ./beerssh
 make run      # build and run it
-make test     # headless smoke test (offscreen QPA)
+make test     # smoke test + unit tests (offscreen QPA, no server needed)
 make style    # indentation gate
 ```
 
@@ -43,7 +46,9 @@ beerssh.pro          qmake project — the app, both platforms
 Makefile             top-level: wraps qmake, plus everything non-Qt
 src/main.cpp         entry point (--self-test is what CI runs)
 src/ui/              widgets: main window, terminal grid
+src/ssh/             bssh_ssh_session -- the SSH transport, behind an interface
 src/platform/        bssh_platform + one implementation per platform
+tests/               host unit tests + the fake SSH session they drive
 android/             AndroidManifest.xml
 tools/               indentation gate; font validation lands at M9
 ```

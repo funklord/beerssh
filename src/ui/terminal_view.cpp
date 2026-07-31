@@ -35,12 +35,62 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	setFocusPolicy(Qt::StrongFocus);
 	setAttribute(Qt::WA_OpaquePaintEvent);
 	update_metrics();
+
+	/*
+	 * Compute the grid up front rather than waiting for the first
+	 * resizeEvent. Qt does not deliver one to a widget that has never
+	 * been shown, so without this the view reports a 0x0 grid until it is
+	 * mapped -- and anything that arrives in the meantime (an SSH banner
+	 * beats the first paint comfortably) gets trimmed away against a row
+	 * count of zero. The emission is a no-op here: nothing can be
+	 * connected to a widget still inside its own constructor.
+	 */
+	recompute_grid();
 }
 
 void bssh_terminal_view::set_terminal_font(const QFont &font) {
 	m_font = font;
 	update_metrics();
 	recompute_grid();
+	update();
+}
+
+void bssh_terminal_view::feed(const QByteArray &bytes) {
+	if (m_lines.isEmpty()) m_lines.append(QString());
+
+	/*
+	 * Latin-1, not UTF-8, and that is not an oversight to fix here: doing
+	 * it properly means decoding across chunk boundaries (a multi-byte
+	 * sequence split between two reads is the normal case, not the edge
+	 * one) and knowing each character's cell width so CJK occupies two
+	 * cells (sec 9.3). Both belong to the emulator at M2. Byte-per-cell
+	 * is the honest placeholder until then -- it is obviously wrong for
+	 * non-ASCII rather than subtly wrong.
+	 */
+	const QString text = QString::fromLatin1(bytes);
+	for (const QChar &c : text) {
+		if (c == QLatin1Char('\n')) {
+			m_lines.append(QString());
+		} else if (c == QLatin1Char('\r')) {
+			/* Bare CR: start of line, no new line. */
+			m_lines.last().clear();
+		} else if (c.isPrint() || c == QLatin1Char('\t')) {
+			m_lines.last().append(c);
+		}
+		/* Everything else -- escapes, control bytes -- is dropped on the
+		 * floor at M1 rather than rendered as garbage. */
+	}
+
+	/*
+	 * Keep only what can be shown. There is no scrollback until M2, and
+	 * an unbounded buffer here would be a slow leak on a chatty session
+	 * for no visible benefit.
+	 */
+	const int keep = qMax(1, m_rows);
+	while (m_lines.size() > keep) {
+		m_lines.removeFirst();
+	}
+
 	update();
 }
 
@@ -89,11 +139,32 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	painter.setFont(m_font);
 	painter.setPen(m_foreground);
 
-	const QString placeholder = QString::fromLatin1(BSSH_PLACEHOLDER);
-	for (int i = 0; i < placeholder.size() && i < m_cols; ++i) {
-		painter.drawText(QPointF(i * m_cell_width, m_baseline), QString(placeholder.at(i)));
+	/*
+	 * Drawn one cell at a time, which is how the emulator's row renderer
+	 * will draw at M2 as well: a font whose advance width does not match
+	 * the cell then shows up as visibly uneven spacing, rather than as a
+	 * subtle misalignment nobody notices until a TUI is on screen.
+	 *
+	 * The per-glyph loop is also deliberately NOT the shape to optimise
+	 * yet -- sec 9.5's shared glyph cache and per-row runs are M9, and
+	 * guessing at them now would just be a cache to throw away.
+	 */
+	const QStringList rendered = m_lines.isEmpty()
+	                              ? QStringList(QString::fromLatin1(BSSH_PLACEHOLDER))
+	                              : m_lines;
+
+	for (int row = 0; row < rendered.size() && row < m_rows; ++row) {
+		const QString &line = rendered.at(row);
+		const qreal baseline = m_baseline + row * m_cell_height;
+
+		for (int col = 0; col < line.size() && col < m_cols; ++col) {
+			painter.drawText(QPointF(col * m_cell_width, baseline), QString(line.at(col)));
+		}
 	}
 
-	/* Block cursor on the next row, so the cell size is visible as a shape. */
-	painter.fillRect(0, m_cell_height, m_cell_width, m_cell_height, m_foreground);
+	/* Block cursor after the last line, so the cell size is visible as a shape. */
+	const int cursor_row = qMin(rendered.size() - 1, m_rows - 1);
+	const int cursor_col = qMin(rendered.last().size(), m_cols - 1);
+	painter.fillRect(cursor_col * m_cell_width, cursor_row * m_cell_height,
+	                  m_cell_width, m_cell_height, m_foreground);
 }

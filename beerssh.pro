@@ -28,13 +28,19 @@ INCLUDEPATH += $$PWD/src
 SOURCES += \
     src/main.cpp \
     src/platform/platform.cpp \
+    src/ssh/ssh_session.cpp \
     src/ui/main_window.cpp \
     src/ui/terminal_view.cpp
 
 HEADERS += \
     src/platform/platform.h \
+    src/ssh/ssh_session.h \
     src/ui/main_window.h \
     src/ui/terminal_view.h
+
+# The libssh implementation of bssh_ssh_session is added here once the
+# dependency is in the tree (M1). Nothing else in the project may mention
+# libssh -- see src/ssh/ssh_session.h for why that matters.
 
 # The one platform conditional. A second one appearing anywhere else in
 # this file is the same smell as an #ifdef in the sources.

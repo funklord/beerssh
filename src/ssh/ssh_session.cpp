@@ -1,0 +1,22 @@
+#include "ssh/ssh_session.h"
+
+bssh_ssh_session::bssh_ssh_session(QObject *parent)
+    : QObject(parent),
+      m_state(DISCONNECTED) {
+}
+
+bssh_ssh_session::~bssh_ssh_session() {
+}
+
+void bssh_ssh_session::set_state(state_t state) {
+	/*
+	 * Silent on a no-op transition. Every implementation calls this from
+	 * its own event handling, where the same state is easily reached
+	 * twice, and a status UI that flickers "reconnecting" at a session
+	 * that never left CONNECTED is worse than no status at all.
+	 */
+	if (m_state == state) return;
+
+	m_state = state;
+	emit state_changed(m_state);
+}

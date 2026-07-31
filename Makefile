@@ -14,7 +14,7 @@
 #                        SET, not for a value -- see BUILD FLAGS.
 #   make SANITIZE=1   -- add ASan+UBSan, independent of DEBUG
 #   make run          -- build and run it
-#   make test         -- build and run the headless smoke test
+#   make test         -- build and run the smoke test + unit tests
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
 #   make android      -- build the Android AAB (needs a Qt-for-Android kit,
 #                        see ANDROID below)
@@ -85,11 +85,24 @@ $(TARGET): $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
 run: $(TARGET)
 	./$(TARGET)
 
-# The offscreen QPA plugin is what makes this runnable in CI at all -- a
-# GUI that only starts with a display is a GUI CI never exercises.
-test: $(TARGET)
+# Built in its own directory from its own .pro: the test binary needs the
+# app's sources but not src/main.cpp, or it would have two main()s.
+TEST_BUILD_DIR = build-tests
+TEST_BIN       = $(TEST_BUILD_DIR)/beerssh_test
+
+$(TEST_BUILD_DIR)/Makefile: tests/tests.pro
+	mkdir -p $(TEST_BUILD_DIR)
+	cd $(TEST_BUILD_DIR) && $(QMAKE) ../tests/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX)
+
+$(TEST_BIN): $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard tests/*.cpp tests/*.h)
+	$(MAKE) -C $(TEST_BUILD_DIR)
+
+# The offscreen QPA plugin is what makes both of these runnable in CI at
+# all -- a GUI that only starts with a display is a GUI CI never exercises.
+test: $(TARGET) $(TEST_BIN)
 	QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test
 	@echo "test: headless smoke test passed"
+	QT_QPA_PLATFORM=offscreen ./$(TEST_BIN)
 
 style:
 	./tools/check-indent.sh
@@ -113,12 +126,13 @@ install: all
 # every Makefile in the sibling tree uses.
 clean:
 	@if [ -f $(BUILD_DIR)/Makefile ]; then $(MAKE) -C $(BUILD_DIR) clean; fi
+	@if [ -f $(TEST_BUILD_DIR)/Makefile ]; then $(MAKE) -C $(TEST_BUILD_DIR) clean; fi
 	@if [ -f $(ANDROID_BUILD_DIR)/Makefile ]; then $(MAKE) -C $(ANDROID_BUILD_DIR) clean; fi
 
 # The build dirs are ours: this Makefile created them and qmake owns their
 # contents, so removing them is a named delete, not a wildcard sweep.
 veryclean: clean
-	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR)
 	rm -f $(TARGET)
 
 distclean: veryclean

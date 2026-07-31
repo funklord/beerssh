@@ -1,8 +1,10 @@
 #ifndef BSSH_TERMINAL_VIEW_H
 #define BSSH_TERMINAL_VIEW_H
 
+#include <QByteArray>
 #include <QColor>
 #include <QFont>
+#include <QStringList>
 #include <QWidget>
 
 /*
@@ -31,6 +33,21 @@ public:
 
 	void set_terminal_font(const QFont &font);
 
+	/*
+	 * M1: bytes from the SSH channel, rendered as text and nothing more.
+	 *
+	 * This is the "naive text view" the milestone asks for, and it is
+	 * deliberately not an emulator: no escape sequences, no colours, no
+	 * cursor addressing, no alternate screen. Its whole job is to prove
+	 * the byte path -- channel to widget -- actually works end to end.
+	 * M2 replaces the body of feed() with the VT parser and this line
+	 * buffer with a real screen plus scrollback (project.md sec 7).
+	 */
+	void feed(const QByteArray &bytes);
+
+	/* The rendered lines. Exists so tests can assert on what was drawn. */
+	QStringList lines() const { return m_lines; }
+
 signals:
 	/*
 	 * Emitted only when the grid size actually changes, not on every
@@ -49,6 +66,7 @@ private:
 	void recompute_grid();
 
 	QFont m_font;
+	QStringList m_lines;
 	QColor m_background;
 	QColor m_foreground;
 	int m_cell_width;

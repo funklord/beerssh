@@ -26,9 +26,9 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 	# until after it has been committed, which is exactly backwards for a
 	# pre-commit gate.
 	files=$(git ls-files --cached --others --exclude-standard \
-		'src/*.cpp' 'src/*.h')
+		'src/*.cpp' 'src/*.h' 'tests/*.cpp' 'tests/*.h')
 else
-	files=$(find src -name '*.cpp' -o -name '*.h')
+	files=$(find src tests -name '*.cpp' -o -name '*.h')
 fi
 
 # An empty or implausibly short list is a FAILURE, not a pass.

@@ -1,6 +1,7 @@
 # qmake build directories (created by the top-level Makefile)
 build/
 build-android/
+build-tests/
 .qmake.stash
 
 # The built binary, copied out of build/ by `make`
