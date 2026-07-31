@@ -20,12 +20,18 @@ CONFIG -= app_bundle
 INCLUDEPATH += $$PWD/../src $$PWD
 
 SOURCES += \
+    main.cpp \
+    screen_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
     ../src/ssh/ssh_session.cpp \
+    ../src/term/screen.cpp \
     ../src/ui/terminal_view.cpp
 
 HEADERS += \
     fake_ssh_session.h \
+    screen_test.h \
+    terminal_view_test.h \
     ../src/ssh/ssh_session.h \
+    ../src/term/screen.h \
     ../src/ui/terminal_view.h

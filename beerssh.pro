@@ -30,6 +30,7 @@ SOURCES += \
     src/platform/platform.cpp \
     src/ssh/ssh_session.cpp \
     src/ssh/ssh_session_libssh.cpp \
+    src/term/screen.cpp \
     src/ui/main_window.cpp \
     src/ui/terminal_view.cpp
 
@@ -37,6 +38,7 @@ HEADERS += \
     src/platform/platform.h \
     src/ssh/ssh_session.h \
     src/ssh/ssh_session_libssh.h \
+    src/term/screen.h \
     src/ui/main_window.h \
     src/ui/terminal_view.h
 
