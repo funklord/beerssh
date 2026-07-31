@@ -49,6 +49,13 @@ public:
 	explicit bssh_ssh_session(QObject *parent = nullptr);
 	~bssh_ssh_session() override;
 
+	/*
+	 * Builds the concrete transport. Defined by whichever backend is
+	 * compiled in, which is how callers create a session without naming
+	 * -- or including a header from -- the SSH library in use.
+	 */
+	static bssh_ssh_session *create(QObject *parent = nullptr);
+
 	state_t state() const { return m_state; }
 
 	/*

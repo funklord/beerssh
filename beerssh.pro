@@ -29,23 +29,34 @@ SOURCES += \
     src/main.cpp \
     src/platform/platform.cpp \
     src/ssh/ssh_session.cpp \
+    src/ssh/ssh_session_libssh.cpp \
     src/ui/main_window.cpp \
     src/ui/terminal_view.cpp
 
 HEADERS += \
     src/platform/platform.h \
     src/ssh/ssh_session.h \
+    src/ssh/ssh_session_libssh.h \
     src/ui/main_window.h \
     src/ui/terminal_view.h
 
-# The libssh implementation of bssh_ssh_session is added here once the
-# dependency is in the tree (M1). Nothing else in the project may mention
-# libssh -- see src/ssh/ssh_session.h for why that matters.
+# libssh is the only third-party dependency so far. It is named here and
+# nowhere else in the project -- src/ssh/ssh_session_libssh.cpp is the one
+# file allowed to include its headers, which is what keeps the
+# libssh-vs-libssh2 decision (project.md sec 4) genuinely reversible.
+CONFIG += link_pkgconfig
+PKGCONFIG += libssh
 
 # The one platform conditional. A second one appearing anywhere else in
 # this file is the same smell as an #ifdef in the sources.
 android {
     SOURCES += src/platform/platform_android.cpp
+
+    # NOTE: PKGCONFIG above will not resolve for Android -- there is no
+    # system libssh in an NDK sysroot. The cross-compiled libssh+OpenSSL
+    # (project.md sec 12.1) gets wired in here, and until it is, the
+    # Android build stops at configure time rather than silently producing
+    # an app with no SSH in it.
 
     ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android
     ANDROID_VERSION_CODE = 1

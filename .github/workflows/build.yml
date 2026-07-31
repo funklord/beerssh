@@ -30,7 +30,7 @@ jobs:
       - name: Install Qt 6 (distro packages)
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev libgl1-mesa-dev
+          sudo apt-get install -y qt6-base-dev libgl1-mesa-dev libssh-dev
       - name: Build
         run: make
       - name: Headless smoke test

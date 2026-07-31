@@ -1,10 +1,13 @@
 #include <QApplication>
+#include <QString>
 #include <QTimer>
 
 #include "ui/main_window.h"
 
 /*
  * BeerSSH -- SSH terminal for Android and desktop (project.md sec 0.1).
+ *
+ * Usage: beerssh [user@host[:port]]
  *
  * --self-test constructs the window, pumps the event loop once and exits
  * 0. It is what CI runs under the offscreen QPA plugin (sec 12.4): a GUI
@@ -22,11 +25,22 @@ int main(int argc, char *argv[]) {
 	QGuiApplication::setDesktopFileName(QStringLiteral("se.vibes.beerssh"));
 
 	bool self_test = false;
+	QString target;
 	for (int i = 1; i < argc; ++i) {
-		if (qstrcmp(argv[i], "--self-test") == 0) self_test = true;
+		const QString arg = QString::fromLocal8Bit(argv[i]);
+		if (arg == QLatin1String("--self-test")) {
+			self_test = true;
+		} else if (!arg.startsWith(QLatin1Char('-'))) {
+			target = arg;
+		}
 	}
 
-	bssh_main_window window;
+	/*
+	 * A [user@]host[:port] on the command line is M1's way in, and the
+	 * only one: host profiles (sec 10) arrive at M6. --self-test never
+	 * takes a target, since CI has no server to reach.
+	 */
+	bssh_main_window window(self_test ? QString() : target);
 	window.resize(900, 600);
 	window.show();
 

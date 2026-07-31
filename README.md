@@ -4,16 +4,31 @@ An SSH terminal for **Android and desktop** — background sessions, tabs,
 adaptive splits, and a real keyboard. Qt Widgets, C++, one codebase for
 both platforms.
 
-Status: **M0 done, M1 in progress.** The app builds and shows a
-character-cell grid, and the SSH transport interface, its test seam and the
-byte path into the view all exist and are tested. What is missing is the
-real backend: `bssh_ssh_session` has no libssh implementation yet, so the
-app cannot connect to anything. No emulator and no session handling either
-— see `project.md` §14 for the milestone plan.
+Status: **M0 done, M1 all but complete.** The app connects over SSH,
+authenticates with a password, opens a PTY channel and renders what the
+remote sends:
+
+```sh
+./beerssh user@host        # asks for a password, then shows the shell
+```
+
+Two limits worth knowing before you try it. **You cannot type yet** — the
+input router is M3, so this is a read-only view of the remote output. And
+output is rendered as plain text with escape sequences dropped, because the
+VT emulator is M2; expect a colourless, uncontrolled-cursor approximation
+of a terminal, which is exactly what M1 promises and no more.
+
+Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
+never `~/.ssh/known_hosts`. An unknown or changed key fails the connection
+and prints the fingerprint; the trust prompt that would let you accept one
+from the UI is M6, so until then an entry gets added by hand.
+
+See `project.md` §14 for the milestone plan.
 
 ## Build (desktop)
 
-Needs Qt 6 (6.8 LTS or newer) and a C++17 compiler.
+Needs Qt 6 (6.8 LTS or newer), libssh, and a C++17 compiler.
+On Debian/Ubuntu: `qt6-base-dev libssh-dev`.
 
 ```sh
 make          # build ./beerssh
