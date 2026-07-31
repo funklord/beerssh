@@ -1,0 +1,68 @@
+<?xml version="1.0"?>
+<!--
+	AndroidManifest.xml -- BeerSSH (project.md sec 0.1, sec 2)
+
+	Hand-maintained rather than left to androiddeployqt's default,
+	because the default would ship the app under an org.qtproject.example
+	package name instead of se.vibes.beerssh.
+
+	VERIFY THIS ON THE FIRST REAL ANDROID BUILD. It follows Qt 6.8's
+	template, but it was written without a Qt-for-Android kit present, so
+	it has never been through androiddeployqt. Diff it against the
+	template in the installed kit
+	($QT_ANDROID_ROOT/src/android/templates/AndroidManifest.xml) and keep
+	whatever that version requires -- the %%INSERT...%% tokens below are
+	substituted by androiddeployqt and must survive verbatim.
+
+	The service, its foregroundServiceType and POST_NOTIFICATIONS are
+	deliberately NOT here yet: they arrive with the background work at M4
+	(project.md sec 5.1), and declaring a foreground service before one
+	exists would be a permission the app cannot justify at review.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="se.vibes.beerssh"
+          android:installLocation="auto"
+          android:versionCode="1"
+          android:versionName="0.1.0">
+
+	<uses-permission android:name="android.permission.INTERNET"/>
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
+	<application android:name="org.qtproject.qt.android.bindings.QtApplication"
+	             android:label="BeerSSH"
+	             android:hardwareAccelerated="true"
+	             android:allowBackup="false">
+
+		<activity android:name="org.qtproject.qt.android.bindings.QtActivity"
+		          android:label="BeerSSH"
+		          android:exported="true"
+		          android:launchMode="singleTop"
+		          android:screenOrientation="unspecified"
+		          android:windowSoftInputMode="adjustResize"
+		          android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density">
+
+			<!--
+				configChanges is load-bearing, not boilerplate. Handling
+				these in-process rather than letting Android recreate the
+				activity is what keeps a rotation or a fold from tearing
+				down the view tree underneath live sessions (sec 8.2) --
+				and adjustResize is what keeps the on-screen key row and
+				the grid above the soft keyboard rather than behind it
+				(sec 6.2).
+			-->
+
+			<intent-filter>
+				<action android:name="android.intent.action.MAIN"/>
+				<category android:name="android.intent.category.LAUNCHER"/>
+			</intent-filter>
+
+			<meta-data android:name="android.app.lib_name"
+			           android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
+			<meta-data android:name="android.app.arguments"
+			           android:value="-- %%INSERT_APP_ARGUMENTS%% --"/>
+		</activity>
+	</application>
+
+	<!-- minSdk 26 per project.md sec 2 [OPEN]; targetSdk 35 is [DECIDED]. -->
+	<uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
+</manifest>

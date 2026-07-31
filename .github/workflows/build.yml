@@ -1,0 +1,63 @@
+# Both platforms build on every change (project.md sec 12.4).
+#
+# That is the whole point of this file: a change that builds on desktop and
+# breaks Android is the failure mode the entire architecture is arranged to
+# prevent, and nothing but CI catches it reliably. Neither job is allowed
+# to be continue-on-error for that reason -- a job whose failure is ignored
+# is a job that is not checking anything.
+#
+# NOTE: the android job has never run. It was written without a Qt-for-
+# Android kit or an NDK available, so treat its first run as part of the
+# work, not as a regression.
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  style:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Indentation gate
+        run: make style
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt 6 (distro packages)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qt6-base-dev libgl1-mesa-dev
+      - name: Build
+        run: make
+      - name: Headless smoke test
+        run: make test
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      # The host Qt is not optional: androiddeployqt and the moc/rcc tools
+      # run on the host even though everything else is cross-built.
+      - name: Install host Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.2'
+          host: linux
+          target: desktop
+      - name: Install Qt for Android (arm64)
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.2'
+          host: linux
+          target: android
+          arch: android_arm64_v8a
+      - name: Build AAB
+        run: make android QT_ANDROID_ROOT="$QT_ROOT_DIR"

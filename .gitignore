@@ -1,0 +1,15 @@
+# qmake build directories (created by the top-level Makefile)
+build/
+build-android/
+.qmake.stash
+
+# The built binary, copied out of build/ by `make`
+/beerssh
+
+# Python bytecode from tools/
+__pycache__/
+
+# Editor and OS litter
+*~
+*.swp
+.DS_Store
