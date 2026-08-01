@@ -46,6 +46,7 @@
 #   halfway through a cross build.
 # =============================================================================
 
+CC    ?= gcc
 CXX   ?= g++
 QMAKE ?= qmake6
 
@@ -59,6 +60,25 @@ DESTDIR ?=
 
 SOURCES = $(wildcard src/*.cpp src/*/*.cpp)
 HEADERS = $(wildcard src/*.h src/*/*.h)
+
+# --- vendored libvterm ------------------------------------------------------
+# Built here, by hand, rather than through its own autotools: this repo's
+# convention is that everything except the Qt app is a plain Makefile, and
+# compiling nine C files needs no more than that. It also means the Android
+# build gets the same rule with a cross-compiler in CC, instead of a second
+# build system to make work under the NDK.
+#
+# The submodule is upstream, untouched, and stays that way -- vendored code
+# keeps its own style and its own history (code-style.md).
+VTERM_DIR  = vterm
+VTERM_SRCS = $(wildcard $(VTERM_DIR)/src/*.c)
+VTERM_OBJS = $(patsubst $(VTERM_DIR)/src/%.c,$(VTERM_BUILD_DIR)/%.o,$(VTERM_SRCS))
+VTERM_BUILD_DIR = build-vterm
+VTERM_LIB  = $(VTERM_BUILD_DIR)/libvterm.a
+
+# -w: this is third-party code built to someone else's warning standard, and
+# a wall of warnings nobody will act on is a wall that hides ours.
+VTERM_CFLAGS = -std=c99 -O2 -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
 
 ifdef DEBUG
     QMAKE_CONFIG = CONFIG+=debug CONFIG-=release
@@ -74,11 +94,28 @@ endif
 
 all: $(TARGET)
 
+$(VTERM_BUILD_DIR)/%.o: $(VTERM_DIR)/src/%.c
+	@mkdir -p $(VTERM_BUILD_DIR)
+	$(CC) $(VTERM_CFLAGS) -c $< -o $@
+
+$(VTERM_LIB): $(VTERM_OBJS)
+	$(AR) rcs $@ $(VTERM_OBJS)
+
+# A missing submodule is the one failure worth catching by hand: without
+# this, make reports "no rule to make target vterm/src/vterm.c" at whoever
+# forgot --recurse-submodules, which names the symptom and not the fix.
+$(VTERM_SRCS):
+	@if [ ! -f $(VTERM_DIR)/src/vterm.c ]; then \
+		echo "make: the vterm submodule is not checked out."; \
+		echo "make:   run: git submodule update --init"; \
+		exit 1; \
+	fi
+
 $(BUILD_DIR)/Makefile: beerssh.pro
 	mkdir -p $(BUILD_DIR)
 	cd $(BUILD_DIR) && $(QMAKE) ../beerssh.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX)
 
-$(TARGET): $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
+$(TARGET): $(VTERM_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
 	$(MAKE) -C $(BUILD_DIR)
 	cp $(BUILD_DIR)/$(TARGET) $(TARGET)
 
@@ -94,7 +131,7 @@ $(TEST_BUILD_DIR)/Makefile: tests/tests.pro
 	mkdir -p $(TEST_BUILD_DIR)
 	cd $(TEST_BUILD_DIR) && $(QMAKE) ../tests/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX)
 
-$(TEST_BIN): $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard tests/*.cpp tests/*.h)
+$(TEST_BIN): $(VTERM_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard tests/*.cpp tests/*.h)
 	$(MAKE) -C $(TEST_BUILD_DIR)
 
 # The offscreen QPA plugin is what makes both of these runnable in CI at
@@ -132,7 +169,7 @@ clean:
 # The build dirs are ours: this Makefile created them and qmake owns their
 # contents, so removing them is a named delete, not a wildcard sweep.
 veryclean: clean
-	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR) $(VTERM_BUILD_DIR)
 	rm -f $(TARGET)
 
 distclean: veryclean

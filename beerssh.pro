@@ -30,6 +30,7 @@ SOURCES += \
     src/platform/platform.cpp \
     src/ssh/ssh_session.cpp \
     src/ssh/ssh_session_libssh.cpp \
+    src/term/emulator_vterm.cpp \
     src/term/screen.cpp \
     src/ui/main_window.cpp \
     src/ui/terminal_view.cpp
@@ -38,6 +39,7 @@ HEADERS += \
     src/platform/platform.h \
     src/ssh/ssh_session.h \
     src/ssh/ssh_session_libssh.h \
+    src/term/emulator.h \
     src/term/screen.h \
     src/ui/main_window.h \
     src/ui/terminal_view.h
@@ -48,6 +50,14 @@ HEADERS += \
 # libssh-vs-libssh2 decision (project.md sec 4) genuinely reversible.
 CONFIG += link_pkgconfig
 PKGCONFIG += libssh
+
+# Vendored libvterm (project.md sec 7): the parser is proven and assumes no
+# PTY, so this project owns only the rendering and the input on top of it.
+# Built by the top-level Makefile into a static archive -- `make`, not a
+# bare qmake, is what produces a working build.
+INCLUDEPATH += $$PWD/vterm/include
+LIBS += $$PWD/build-vterm/libvterm.a
+PRE_TARGETDEPS += $$PWD/build-vterm/libvterm.a
 
 # The one platform conditional. A second one appearing anywhere else in
 # this file is the same smell as an #ifdef in the sources.

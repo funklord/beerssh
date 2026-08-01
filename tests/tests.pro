@@ -17,21 +17,27 @@ QT += widgets testlib
 CONFIG += c++17 console
 CONFIG -= app_bundle
 
-INCLUDEPATH += $$PWD/../src $$PWD
+INCLUDEPATH += $$PWD/../src $$PWD $$PWD/../vterm/include
+LIBS += $$PWD/../build-vterm/libvterm.a
+PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a
 
 SOURCES += \
     main.cpp \
+    emulator_test.cpp \
     screen_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
     ../src/ssh/ssh_session.cpp \
+    ../src/term/emulator_vterm.cpp \
     ../src/term/screen.cpp \
     ../src/ui/terminal_view.cpp
 
 HEADERS += \
     fake_ssh_session.h \
+    emulator_test.h \
     screen_test.h \
     terminal_view_test.h \
     ../src/ssh/ssh_session.h \
+    ../src/term/emulator.h \
     ../src/term/screen.h \
     ../src/ui/terminal_view.h
