@@ -500,14 +500,21 @@ model on a finger.
   and desktop conventions). It would look like the obvious shortcut for the
   desktop build specifically — taking it would mean two different emulators
   across platforms, which is the worst possible outcome for a project whose
-  whole premise is one core. Options, **[OPEN]**:
-  1. **Write a focused emulator** targeting xterm subset (most control, most
-     work). Recommended for correctness + Android fit.
-  2. **Port/vendor a lightweight VT widget** (e.g. a `QVTerminal`-style base) and
-     extend it — faster start, may hit gaps on advanced sequences.
-  3. Vendor `libvterm` (C library, PTY-agnostic parser) and write only the Qt
-     rendering + input on top. **Strong candidate** — proven parser, no PTY
-     assumption, you own only rendering/input.
+  whole premise is one core.
+- **[DECIDED] Vendor `libvterm`** (C library, PTY-agnostic parser) and write only
+  the Qt rendering + input on top. Pinned as a submodule and built from source,
+  which is what makes one answer serve both platforms — there is no system
+  libvterm in an NDK sysroot, so a distro package could only ever have solved
+  the desktop half. The alternatives considered and rejected: writing a focused
+  emulator ourselves (most control, but weeks of edge cases libvterm already
+  handles), and porting a lightweight VT widget (faster start, gaps on advanced
+  sequences).
+- **libvterm integration constraint, learned the hard way:** it does **not**
+  tolerate a UTF-8 sequence split across two `vterm_input_write()` calls — the
+  halves decode to U+FFFD. SSH reads split wherever the network put a packet
+  boundary, so the binding holds an incomplete trailing sequence back until the
+  rest arrives. Any future parser swap must keep doing this or non-ASCII output
+  breaks intermittently, which is the worst way for it to break.
 - **Rendering:** custom `QWidget::paintEvent` drawing a monospaced grid; cache
   glyph runs per row. See §9 for the font pipeline, fallback chain, and
   double-width (CJK) cell handling.
@@ -1041,7 +1048,6 @@ expensive if it wasn't.
 
 ## 16. Open decisions to resolve during implementation
 - Crypto backend: OpenSSL (default) vs mbedTLS/wolfSSL.
-- Terminal emulator: vendor **libvterm** (recommended) vs custom vs port a VT widget.
 - libssh (LGPL, dynamic link) vs libssh2 (BSD) — licensing may decide it, and it
   is the Android build that decides it (§4).
 - Foreground-service type: `connectedDevice` (start here) vs `specialUse` (fallback).

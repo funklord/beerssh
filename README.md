@@ -4,19 +4,19 @@ An SSH terminal for **Android and desktop** — background sessions, tabs,
 adaptive splits, and a real keyboard. Qt Widgets, C++, one codebase for
 both platforms.
 
-Status: **M0 done, M1 all but complete.** The app connects over SSH,
-authenticates with a password, opens a PTY channel and renders what the
-remote sends:
+Status: **M0–M2 done bar credentials.** The app connects over SSH,
+authenticates with a password, opens a PTY channel, and renders the result
+through a real VT emulator — colours, attributes, cursor addressing,
+scrolling and CJK double-width cells all work:
 
 ```sh
 ./beerssh user@host        # asks for a password, then shows the shell
 ```
 
-Two limits worth knowing before you try it. **You cannot type yet** — the
-input router is M3, so this is a read-only view of the remote output. And
-output is rendered as plain text with escape sequences dropped, because the
-VT emulator is M2; expect a colourless, uncontrolled-cursor approximation
-of a terminal, which is exactly what M1 promises and no more.
+One limit worth knowing before you try it: **you cannot type yet.** The
+input router is M3, so this is a read-only view of the remote output. The
+terminal does answer cursor-position and device-attribute queries, so
+programs that ask at startup will not hang.
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown or changed key fails the connection
@@ -29,6 +29,9 @@ See `project.md` §14 for the milestone plan.
 
 Needs Qt 6 (6.8 LTS or newer), libssh, and a C++17 compiler.
 On Debian/Ubuntu: `qt6-base-dev libssh-dev`.
+
+libvterm is vendored as a submodule and built from source, so clone with
+`--recurse-submodules` (or run `git submodule update --init`).
 
 ```sh
 make          # build ./beerssh
@@ -62,6 +65,8 @@ Makefile             top-level: wraps qmake, plus everything non-Qt
 src/main.cpp         entry point (--self-test is what CI runs)
 src/ui/              widgets: main window, terminal grid
 src/ssh/             bssh_ssh_session -- the SSH transport, behind an interface
+src/term/            bssh_screen + the libvterm-backed emulator
+vterm/               vendored libvterm (submodule, MIT, upstream untouched)
 src/platform/        bssh_platform + one implementation per platform
 tests/               host unit tests + the fake SSH session they drive
 android/             AndroidManifest.xml

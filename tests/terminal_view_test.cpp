@@ -4,6 +4,7 @@
 #include "terminal_view_test.h"
 
 #include "fake_ssh_session.h"
+#include "term/emulator.h"
 #include "ui/terminal_view.h"
 
 
@@ -61,56 +62,67 @@ void terminal_view_test::grid_resized_fires_only_on_real_change() {
 	 */
 }
 
-void terminal_view_test::feed_appends_and_splits_lines() {
+void terminal_view_test::renders_without_a_screen_attached() {
 	bssh_terminal_view view;
-	show_and_resize(view, 800, 400);
+	show_and_resize(view, 400, 200);
 
-	view.feed(QByteArrayLiteral("hello"));
-	QCOMPARE(view.lines().last(), QStringLiteral("hello"));
-
-	view.feed(QByteArrayLiteral(" world\nsecond"));
-	QCOMPARE(view.lines().size(), 2);
-	QCOMPARE(view.lines().at(0), QStringLiteral("hello world"));
-	QCOMPARE(view.lines().at(1), QStringLiteral("second"));
-
-	/* A chunk boundary mid-line must not start a new line. */
-	view.feed(QByteArrayLiteral(" line"));
-	QCOMPARE(view.lines().size(), 2);
-	QCOMPARE(view.lines().at(1), QStringLiteral("second line"));
+	/*
+	 * Before any session exists there is no screen. Painting must still
+	 * work rather than dereferencing its way out of the process.
+	 */
+	QVERIFY(view.screen() == nullptr);
+	const QPixmap frame = view.grab();
+	QCOMPARE(frame.size(), view.size());
 }
 
-void terminal_view_test::feed_drops_control_bytes() {
+void terminal_view_test::renders_cell_colours_from_the_screen() {
 	bssh_terminal_view view;
-	show_and_resize(view, 800, 400);
+	show_and_resize(view, 400, 200);
 
-	/* An escape sequence at M1 is noise, not output -- it must not be
-	 * rendered as literal garbage. M2 parses it instead. */
-	view.feed(QByteArrayLiteral("a\x1b[31mb"));
-	QCOMPARE(view.lines().last(), QStringLiteral("a[31mb"));
+	bssh_screen screen(20, 5);
+	bssh_cell_t cell;
+	cell.bg.kind = bssh_color_t::INDEXED;
+	cell.bg.index = 1; /* red, in the xterm palette */
+	screen.set_cell(0, 0, cell);
+	screen.set_cursor_visible(false);
 
-	/* Bare CR returns to the start of the line without adding one. */
-	view.feed(QByteArrayLiteral("\rover"));
-	QCOMPARE(view.lines().size(), 1);
-	QCOMPARE(view.lines().last(), QStringLiteral("over"));
+	view.attach_screen(&screen);
+	const QImage frame = view.grab().toImage();
+
+	/*
+	 * Sampling one pixel inside the first cell is enough: the point is
+	 * that an indexed colour reached the painter at all, not what the
+	 * exact palette entry is. The cursor is hidden so it cannot be the
+	 * thing being sampled.
+	 */
+	const QColor painted = frame.pixelColor(2, 2);
+	QVERIFY(painted.red() > 100);
+	QVERIFY(painted.green() < 60);
+	QVERIFY(painted.blue() < 60);
 }
 
-void terminal_view_test::session_bytes_reach_the_view() {
+void terminal_view_test::session_bytes_reach_the_screen_through_the_emulator() {
 	bssh_terminal_view view;
 	show_and_resize(view, 800, 400);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
 
 	bssh_fake_ssh_session session;
-	session.set_script({QByteArrayLiteral("motd line\n"), QByteArrayLiteral("user@host:~$ ")});
+	session.set_script({QByteArrayLiteral("motd line\r\n"), QByteArrayLiteral("user@host:~$ ")});
 
-	connect(&session, &bssh_ssh_session::bytes_received, &view, &bssh_terminal_view::feed);
+	connect(&session, &bssh_ssh_session::bytes_received, &emulator, &bssh_emulator::feed);
 
 	session.connect_to_host(QStringLiteral("example.invalid"), 22, QStringLiteral("user"));
 	session.authenticate_password(QStringLiteral("hunter2"));
 	session.open_shell(view.cols(), view.rows());
 
 	QCOMPARE(session.state(), bssh_ssh_session::CONNECTED);
-	QCOMPARE(view.lines().size(), 2);
-	QCOMPARE(view.lines().at(0), QStringLiteral("motd line"));
-	QCOMPARE(view.lines().at(1), QStringLiteral("user@host:~$ "));
+
+	/* End to end: fake server bytes, real emulator, the grid the view draws. */
+	const QString text = emulator.screen().to_text();
+	QCOMPARE(text.section(QLatin1Char('\n'), 0, 0), QStringLiteral("motd line"));
+	QCOMPARE(text.section(QLatin1Char('\n'), 1, 1), QStringLiteral("user@host:~$"));
 }
 
 void terminal_view_test::session_records_what_the_client_wrote() {

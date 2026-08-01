@@ -14,6 +14,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_terminal_view(new bssh_terminal_view(this)),
       m_status_label(new QLabel(this)),
       m_session(nullptr),
+      m_emulator(nullptr),
       m_cols(0),
       m_rows(0) {
 	setWindowTitle(QStringLiteral("BeerSSH"));
@@ -37,6 +38,26 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 
 	m_cols = m_terminal_view->cols();
 	m_rows = m_terminal_view->rows();
+
+	/*
+	 * The emulator owns the screen; the view only draws it (sec 3, core
+	 * principle 2). It is created with the window rather than with the
+	 * session so that output arriving before -- or after -- a connection
+	 * still has somewhere to land.
+	 */
+	m_emulator = new bssh_emulator(m_cols, m_rows, this);
+	m_terminal_view->attach_screen(&m_emulator->screen());
+
+	connect(m_emulator, &bssh_emulator::damaged,
+	         m_terminal_view, QOverload<>::of(&QWidget::update));
+	connect(m_emulator, &bssh_emulator::output_ready,
+	         this, &bssh_main_window::on_emulator_output);
+	connect(m_emulator, &bssh_emulator::title_changed, this, [this](const QString &title) {
+		/* OSC title -> window title on desktop, tab label at M7 (sec 8.3). */
+		setWindowTitle(title.isEmpty() ? QStringLiteral("BeerSSH")
+		                                : QStringLiteral("%1 - BeerSSH").arg(title));
+	});
+
 	update_status();
 
 	if (!target.isEmpty()) connect_to(target);
@@ -78,7 +99,7 @@ void bssh_main_window::connect_to(const QString &target) {
 	m_session = bssh_ssh_session::create(this);
 
 	connect(m_session, &bssh_ssh_session::bytes_received,
-	         m_terminal_view, &bssh_terminal_view::feed);
+	         m_emulator, &bssh_emulator::feed);
 	connect(m_session, &bssh_ssh_session::state_changed,
 	         this, &bssh_main_window::on_state_changed);
 	connect(m_session, &bssh_ssh_session::failed,
@@ -103,6 +124,19 @@ void bssh_main_window::on_state_changed(bssh_ssh_session::state_t state) {
 	update_status();
 }
 
+void bssh_main_window::on_emulator_output() {
+	/*
+	 * Replies the terminal owes the remote -- cursor-position reports and
+	 * device attributes, and later mouse and bracketed-paste events. A
+	 * client that never sends these hangs any editor that asks the
+	 * terminal a question at startup and waits for the answer.
+	 */
+	if (!m_session) return;
+
+	const QByteArray reply = m_emulator->take_output();
+	if (!reply.isEmpty()) m_session->send(reply);
+}
+
 void bssh_main_window::on_failed(const QString &reason) {
 	m_error = reason;
 	update_status();
@@ -117,6 +151,7 @@ void bssh_main_window::on_grid_resized(int cols, int rows) {
 	 * one computes its own geometry, so this stays per-session rather
 	 * than becoming a window-wide broadcast.
 	 */
+	if (m_emulator) m_emulator->resize(cols, rows);
 	if (m_session) m_session->resize(cols, rows);
 
 	update_status();

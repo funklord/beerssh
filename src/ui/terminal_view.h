@@ -1,11 +1,11 @@
 #ifndef BSSH_TERMINAL_VIEW_H
 #define BSSH_TERMINAL_VIEW_H
 
-#include <QByteArray>
 #include <QColor>
 #include <QFont>
-#include <QStringList>
 #include <QWidget>
+
+#include "term/screen.h"
 
 /*
  * bssh_terminal_view -- the character-cell grid widget (project.md sec 7).
@@ -34,19 +34,17 @@ public:
 	void set_terminal_font(const QFont &font);
 
 	/*
-	 * M1: bytes from the SSH channel, rendered as text and nothing more.
+	 * The grid to render. The view does not own it and does not write to
+	 * it: the emulator owns the screen, the view draws whatever is in it
+	 * when a repaint comes (project.md sec 3, core principle 2 -- state
+	 * lives outside the widget, so this view can be destroyed and rebuilt
+	 * at M7/M8 without losing anything).
 	 *
-	 * This is the "naive text view" the milestone asks for, and it is
-	 * deliberately not an emulator: no escape sequences, no colours, no
-	 * cursor addressing, no alternate screen. Its whole job is to prove
-	 * the byte path -- channel to widget -- actually works end to end.
-	 * M2 replaces the body of feed() with the VT parser and this line
-	 * buffer with a real screen plus scrollback (project.md sec 7).
+	 * nullptr renders an empty grid, which is what the app shows before a
+	 * session exists.
 	 */
-	void feed(const QByteArray &bytes);
-
-	/* The rendered lines. Exists so tests can assert on what was drawn. */
-	QStringList lines() const { return m_lines; }
+	void attach_screen(const bssh_screen *screen);
+	const bssh_screen *screen() const { return m_screen; }
 
 signals:
 	/*
@@ -65,8 +63,10 @@ private:
 	void update_metrics();
 	void recompute_grid();
 
+	QColor resolve(const bssh_color_t &color, const QColor &fallback) const;
+
+	const bssh_screen *m_screen;
 	QFont m_font;
-	QStringList m_lines;
 	QColor m_background;
 	QColor m_foreground;
 	int m_cell_width;

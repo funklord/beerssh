@@ -1,7 +1,10 @@
 #include "ui/terminal_view.h"
 
 #include <QFontDatabase>
+#include <QPen>
 #include <QFontMetricsF>
+
+#include <algorithm>
 #include <QPainter>
 #include <QResizeEvent>
 
@@ -15,6 +18,7 @@ static const char *const BSSH_PLACEHOLDER = "BeerSSH -- no session (M0 skeleton)
 
 bssh_terminal_view::bssh_terminal_view(QWidget *parent)
     : QWidget(parent),
+      m_screen(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_cell_width(1),
@@ -55,43 +59,45 @@ void bssh_terminal_view::set_terminal_font(const QFont &font) {
 	update();
 }
 
-void bssh_terminal_view::feed(const QByteArray &bytes) {
-	if (m_lines.isEmpty()) m_lines.append(QString());
-
-	/*
-	 * Latin-1, not UTF-8, and that is not an oversight to fix here: doing
-	 * it properly means decoding across chunk boundaries (a multi-byte
-	 * sequence split between two reads is the normal case, not the edge
-	 * one) and knowing each character's cell width so CJK occupies two
-	 * cells (sec 9.3). Both belong to the emulator at M2. Byte-per-cell
-	 * is the honest placeholder until then -- it is obviously wrong for
-	 * non-ASCII rather than subtly wrong.
-	 */
-	const QString text = QString::fromLatin1(bytes);
-	for (const QChar &c : text) {
-		if (c == QLatin1Char('\n')) {
-			m_lines.append(QString());
-		} else if (c == QLatin1Char('\r')) {
-			/* Bare CR: start of line, no new line. */
-			m_lines.last().clear();
-		} else if (c.isPrint() || c == QLatin1Char('\t')) {
-			m_lines.last().append(c);
-		}
-		/* Everything else -- escapes, control bytes -- is dropped on the
-		 * floor at M1 rather than rendered as garbage. */
-	}
-
-	/*
-	 * Keep only what can be shown. There is no scrollback until M2, and
-	 * an unbounded buffer here would be a slow leak on a chatty session
-	 * for no visible benefit.
-	 */
-	const int keep = qMax(1, m_rows);
-	while (m_lines.size() > keep) {
-		m_lines.removeFirst();
-	}
-
+void bssh_terminal_view::attach_screen(const bssh_screen *screen) {
+	m_screen = screen;
 	update();
+}
+
+/*
+ * The xterm 256-colour palette: 16 system colours, a 6x6x6 cube, then 24
+ * greys. Built rather than tabulated -- the cube and the ramp are exact
+ * formulas, and a 256-entry literal is 256 chances to fat-finger one.
+ *
+ * The 16 system colours are the one part that is a choice rather than a
+ * formula, and at M10 they become a preset-owned colour scheme (sec 10.2).
+ */
+QColor bssh_terminal_view::resolve(const bssh_color_t &color, const QColor &fallback) const {
+	static const QRgb system[16] = {
+		qRgb(0x00, 0x00, 0x00), qRgb(0xcd, 0x00, 0x00),
+		qRgb(0x00, 0xcd, 0x00), qRgb(0xcd, 0xcd, 0x00),
+		qRgb(0x00, 0x00, 0xee), qRgb(0xcd, 0x00, 0xcd),
+		qRgb(0x00, 0xcd, 0xcd), qRgb(0xe5, 0xe5, 0xe5),
+		qRgb(0x7f, 0x7f, 0x7f), qRgb(0xff, 0x00, 0x00),
+		qRgb(0x00, 0xff, 0x00), qRgb(0xff, 0xff, 0x00),
+		qRgb(0x5c, 0x5c, 0xff), qRgb(0xff, 0x00, 0xff),
+		qRgb(0x00, 0xff, 0xff), qRgb(0xff, 0xff, 0xff)
+	};
+
+	if (color.kind == bssh_color_t::RGB) return QColor(color.rgb);
+	if (color.kind != bssh_color_t::INDEXED) return fallback;
+
+	const int index = color.index;
+	if (index < 16) return QColor(system[index]);
+
+	if (index < 232) {
+		const int offset = index - 16;
+		const int steps[6] = {0, 95, 135, 175, 215, 255};
+		return QColor(steps[(offset / 36) % 6], steps[(offset / 6) % 6], steps[offset % 6]);
+	}
+
+	const int grey = 8 + (index - 232) * 10;
+	return QColor(grey, grey, grey);
 }
 
 void bssh_terminal_view::update_metrics() {
@@ -139,32 +145,82 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	painter.setFont(m_font);
 	painter.setPen(m_foreground);
 
-	/*
-	 * Drawn one cell at a time, which is how the emulator's row renderer
-	 * will draw at M2 as well: a font whose advance width does not match
-	 * the cell then shows up as visibly uneven spacing, rather than as a
-	 * subtle misalignment nobody notices until a TUI is on screen.
-	 *
-	 * The per-glyph loop is also deliberately NOT the shape to optimise
-	 * yet -- sec 9.5's shared glyph cache and per-row runs are M9, and
-	 * guessing at them now would just be a cache to throw away.
-	 */
-	const QStringList rendered = m_lines.isEmpty()
-	                              ? QStringList(QString::fromLatin1(BSSH_PLACEHOLDER))
-	                              : m_lines;
+	if (!m_screen) {
+		/* No session yet: name the app rather than showing a blank void. */
+		const QString placeholder = QString::fromLatin1(BSSH_PLACEHOLDER);
+		for (int col = 0; col < placeholder.size() && col < m_cols; ++col) {
+			painter.drawText(QPointF(col * m_cell_width, m_baseline), QString(placeholder.at(col)));
+		}
+		return;
+	}
 
-	for (int row = 0; row < rendered.size() && row < m_rows; ++row) {
-		const QString &line = rendered.at(row);
+	const int rows = qMin(m_rows, m_screen->rows());
+	const int cols = qMin(m_cols, m_screen->cols());
+
+	/*
+	 * Cell by cell, and per-cell QFont changes for bold/italic. That is
+	 * the naive renderer on purpose: sec 9.5's shared glyph atlas and
+	 * per-row glyph runs are M9, and building a cache now -- before the
+	 * font pipeline exists and before there is anything to profile --
+	 * would be a cache written to be thrown away.
+	 */
+	for (int row = 0; row < rows; ++row) {
 		const qreal baseline = m_baseline + row * m_cell_height;
 
-		for (int col = 0; col < line.size() && col < m_cols; ++col) {
-			painter.drawText(QPointF(col * m_cell_width, baseline), QString(line.at(col)));
+		for (int col = 0; col < cols; ++col) {
+			const bssh_cell_t &cell = m_screen->cell(row, col);
+
+			/* The far half of a double-width glyph: already drawn. */
+			if (cell.width == 0) continue;
+
+			QColor fg = resolve(cell.fg, m_foreground);
+			QColor bg = resolve(cell.bg, m_background);
+			if (cell.attrs & bssh_cell_t::INVERSE) std::swap(fg, bg);
+
+			const int x = col * m_cell_width;
+			const int y = row * m_cell_height;
+			const int width = qMax(1, int(cell.width)) * m_cell_width;
+
+			if (bg != m_background) painter.fillRect(x, y, width, m_cell_height, bg);
+
+			if (cell.ch != U'\0' && cell.ch != U' ') {
+				if (cell.attrs & (bssh_cell_t::BOLD | bssh_cell_t::ITALIC)) {
+					QFont font = m_font;
+					font.setBold(cell.attrs & bssh_cell_t::BOLD);
+					font.setItalic(cell.attrs & bssh_cell_t::ITALIC);
+					painter.setFont(font);
+				} else {
+					painter.setFont(m_font);
+				}
+
+				painter.setPen(fg);
+				painter.drawText(QPointF(x, baseline), QString::fromUcs4(&cell.ch, 1));
+			}
+
+			if (cell.attrs & bssh_cell_t::UNDERLINE) {
+				painter.setPen(fg);
+				painter.drawLine(x, y + m_cell_height - 1, x + width - 1, y + m_cell_height - 1);
+			}
 		}
 	}
 
-	/* Block cursor after the last line, so the cell size is visible as a shape. */
-	const int cursor_row = qMin(rendered.size() - 1, m_rows - 1);
-	const int cursor_col = qMin(rendered.last().size(), m_cols - 1);
-	painter.fillRect(cursor_col * m_cell_width, cursor_row * m_cell_height,
-	                  m_cell_width, m_cell_height, m_foreground);
+	if (m_screen->cursor_visible()) {
+		/*
+		 * A filled block with the character punched out of it. Drawing
+		 * the glyph again in the background colour is what keeps the
+		 * character under the cursor readable -- a solid block that
+		 * simply covers it hides the one cell the user is looking at.
+		 */
+		const int x = m_screen->cursor_col() * m_cell_width;
+		const int y = m_screen->cursor_row() * m_cell_height;
+		const bssh_cell_t &cell = m_screen->cell(m_screen->cursor_row(), m_screen->cursor_col());
+
+		painter.fillRect(x, y, m_cell_width, m_cell_height, m_foreground);
+		if (cell.ch != U'\0' && cell.ch != U' ') {
+			painter.setFont(m_font);
+			painter.setPen(m_background);
+			painter.drawText(QPointF(x, m_baseline + m_screen->cursor_row() * m_cell_height),
+			                  QString::fromUcs4(&cell.ch, 1));
+		}
+	}
 }
