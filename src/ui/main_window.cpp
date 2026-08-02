@@ -542,7 +542,17 @@ void bssh_main_window::show_session(bssh_session *session) {
 	m_terminal_view->attach_emulator(session->emulator());
 	m_terminal_view->attach_input_router(session->input_router());
 
-	if (m_key_row) m_key_row->set_router(session->input_router());
+	if (m_key_row) {
+		m_key_row->set_router(session->input_router());
+
+		/*
+		 * The row follows the session on screen, not the window: two
+		 * tabs on different presets get different keys, and switching
+		 * between them has to switch the row too (sec 6.2).
+		 */
+		m_key_row->set_layout(
+		        session->settings().value(QStringLiteral("key_row_layout")).toString());
+	}
 
 	/*
 	 * Before the geometry below, because the font decides the cell size and
@@ -555,6 +565,10 @@ void bssh_main_window::show_session(bssh_session *session) {
 	connect(session, &bssh_session::settings_changed, this, [this, session] {
 		if (m_current != session) return;
 		bssh_apply_appearance(m_terminal_view, session->settings());
+		if (m_key_row) {
+			m_key_row->set_layout(
+			        session->settings().value(QStringLiteral("key_row_layout")).toString());
+		}
 		session->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
 		                                      m_terminal_view->cell_height());
 		session->resize(m_terminal_view->cols(), m_terminal_view->rows());

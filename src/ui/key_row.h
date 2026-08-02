@@ -46,6 +46,14 @@ public:
 	void set_router(bssh_input_router *router);
 
 	void set_visibility_mode(visibility_t mode);
+
+	/*
+	 * Which keys the row holds (sec 6.2, sec 10.2). Empty selects the
+	 * default layout; the value comes from the host's preset, so a
+	 * network switch and a build server get different rows.
+	 */
+	void set_layout(const QString &id);
+	QString layout_id() const { return m_layout_id; }
 	visibility_t visibility_mode() const { return m_mode; }
 
 	/* Whether the row should be shown, given the mode and the platform. */
@@ -55,11 +63,16 @@ private:
 	void add_key(const QString &label, int key);
 	void add_modifier(const QString &label, quint8 modifier);
 	void add_text(const QString &label, char32_t ch);
+	void add_chord(const QString &label, char32_t ch, quint8 modifier);
 	QAbstractButton *make_button(const QString &label);
 	void refresh_modifier_buttons();
 
 	bssh_input_router *m_router;
 	visibility_t m_mode;
+	QString m_layout_id;
+
+	/* Every button in the row, so a layout change can clear it. */
+	QList<QAbstractButton *> m_buttons;
 	QList<QAbstractButton *> m_modifier_buttons;
 	QList<quint8> m_modifier_values;
 };

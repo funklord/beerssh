@@ -489,9 +489,15 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
 
 - Render it as a Qt Widget docked above the input area; feed synthetic key events
   into `bssh_input_router`.
-- Provide a settings screen to customize the row. The row layout is a
-  **preset-owned setting** (§10.2), so different server types can get different
-  key rows.
+- The row layout is a **preset-owned setting** (§10.2), so different server types
+  get different key rows. **[BUILT]** Five layouts, curated on the same pattern
+  as the fonts (§9.2) and colour schemes (§10.2):
+  **Default** (what the row always held), **Network switch** (`?` and `|` for a
+  console CLI, no Alt), **tmux** (the Ctrl-B prefix as a single key, plus what
+  usually follows it), **vi / vim** (Esc first, then `:` `/` `$` `^`), and
+  **Minimal** (four keys and the arrows, for a narrow screen). Every layout is
+  checked to carry Escape and a modifier — a row without those cannot drive a
+  terminal at all. Still open: letting a user compose their own row.
 - **Hidden by default on desktop, but not `#ifdef`-ed out.** Gate it on
   "touch-primary input", not on the OS — a convertible laptop in tablet mode and
   an Android device with a Bluetooth keyboard are the two cases an OS check gets
@@ -1433,8 +1439,7 @@ background).
     tab marker, and `on_connect_command` runs on every connect — including
     reconnects, which is the one that matters, since §5.3's answer to "a
     reconnect is a new shell" is attaching to tmux. Still inert:
-    `key_row_layout`, which needs a set of key-row layouts to choose from
-    before choosing one means anything. **`colour_scheme` is built** (§10.2):
+    nothing — every preset field now reaches something that uses it. **`colour_scheme` is built** (§10.2):
     six curated schemes, picked alongside the font so the preview shows what
     the terminal will actually look like, with the sixteen swatches drawn
     because a scheme's name tells a user nothing.

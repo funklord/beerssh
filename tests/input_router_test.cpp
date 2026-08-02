@@ -4,6 +4,7 @@
 #include <QtTest>
 
 #include "input/input_router.h"
+#include "ui/key_row_layout.h"
 #include "input_router_test.h"
 #include "term/emulator.h"
 #include "ui/key_row.h"
@@ -314,4 +315,99 @@ void input_router_test::key_row_visibility_follows_the_input_device() {
 
 	row.set_visibility_mode(bssh_key_row::NEVER);
 	QVERIFY(!row.should_be_visible());
+}
+
+void input_router_test::a_key_row_layout_changes_which_keys_exist() {
+	const bssh_key_row_catalog catalog;
+
+	/* Every layout has to be usable: a row without Escape or a modifier
+	 * is a row that cannot drive a terminal at all. */
+	for (const bssh_key_row_layout_t &layout : catalog.all()) {
+		QVERIFY(!layout.id.isEmpty());
+		QVERIFY(!layout.display_name.isEmpty());
+		QVERIFY2(!layout.description.isEmpty(),
+		         qPrintable("no description for " + layout.id));
+
+		bool has_escape = false;
+		bool has_modifier = false;
+		for (const bssh_key_t &key : layout.keys) {
+			if (key.kind == bssh_key_t::KEY && key.value == bssh_emulator::KEY_ESCAPE) {
+				has_escape = true;
+			}
+			if (key.kind == bssh_key_t::MODIFIER) has_modifier = true;
+		}
+
+		QVERIFY2(has_escape, qPrintable("no Escape in " + layout.id));
+		QVERIFY2(has_modifier, qPrintable("no modifier in " + layout.id));
+	}
+
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_key_row row(&router);
+
+	row.set_layout(QStringLiteral("tmux"));
+	QCOMPARE(row.layout_id(), QStringLiteral("tmux"));
+
+	const QList<QAbstractButton *> tmux_keys = row.findChildren<QAbstractButton *>();
+	bool has_prefix = false;
+	for (const QAbstractButton *button : tmux_keys) {
+		if (button->text() == QStringLiteral("C-b")) has_prefix = true;
+	}
+	QVERIFY2(has_prefix, "the tmux layout exists for the prefix key");
+
+	/*
+	 * And they have to be VISIBLE, not merely present. Counting buttons
+	 * is what this test did at first, and it passed while every layout
+	 * switched to at runtime drew an empty strip: Qt does not show a
+	 * widget added to a layout whose parent is already visible. A key row
+	 * that reports twelve keys and displays none is worse than one that
+	 * fails outright.
+	 */
+	row.set_visibility_mode(bssh_key_row::ALWAYS);
+	for (const QAbstractButton *button : tmux_keys) {
+		QVERIFY2(!button->isHidden(),
+		         qPrintable("key not shown: " + button->text()));
+	}
+
+	/* Switching layouts replaces the row rather than appending to it. */
+	row.set_layout(QStringLiteral("minimal"));
+	QVERIFY(row.findChildren<QAbstractButton *>().size() < tmux_keys.size());
+
+	for (const QAbstractButton *button : row.findChildren<QAbstractButton *>()) {
+		QVERIFY2(button->text() != QStringLiteral("C-b"),
+		         "keys from the previous layout must not survive");
+	}
+
+	/* An unknown layout falls back rather than leaving an empty strip: a
+	 * row with no keys is a session that cannot send Ctrl-C. */
+	row.set_layout(QStringLiteral("no-such-layout"));
+	QVERIFY(!row.findChildren<QAbstractButton *>().isEmpty());
+}
+
+void input_router_test::a_chord_key_sends_one_press_not_a_sticky_modifier() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_key_row row(&router);
+
+	row.set_layout(QStringLiteral("tmux"));
+
+	QAbstractButton *prefix = nullptr;
+	for (QAbstractButton *button : row.findChildren<QAbstractButton *>()) {
+		if (button->text() == QStringLiteral("C-b")) prefix = button;
+	}
+	QVERIFY(prefix != nullptr);
+
+	emulator.take_output();
+	prefix->click();
+
+	/* Ctrl-B is 0x02. */
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x02"));
+
+	/*
+	 * And it must not have left Ctrl stuck on. A chord that set a sticky
+	 * modifier would make the NEXT key a Ctrl chord too -- so pressing
+	 * the tmux prefix and then "c" would send Ctrl-C, killing the pane
+	 * the user was trying to create.
+	 */
+	QCOMPARE(router.sticky_modifiers(), quint8(bssh_emulator::MOD_NONE));
 }

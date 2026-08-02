@@ -79,6 +79,7 @@ SOURCES += \
     ../src/ui/session_dialog.cpp \
     ../src/ui/tab_status.cpp \
     ../src/platform/platform_desktop.cpp \
+    ../src/ui/key_row_layout.cpp \
     ../src/ui/key_row.cpp \
     ../src/ui/terminal_view.cpp
 

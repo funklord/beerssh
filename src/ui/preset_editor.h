@@ -97,6 +97,7 @@ private:
 	QSpinBox *m_keepalive;
 	QCheckBox *m_compression;
 	QLineEdit *m_on_connect;
+	QComboBox *m_key_row;
 
 	QPushButton *m_save;
 	QPushButton *m_clone;

@@ -36,6 +36,8 @@ private slots:
 	void pane_chords_are_kept_by_the_app();
 	void key_row_goes_through_the_router();
 	void key_row_visibility_follows_the_input_device();
+	void a_key_row_layout_changes_which_keys_exist();
+	void a_chord_key_sends_one_press_not_a_sticky_modifier();
 };
 
 #endif /* BSSH_INPUT_ROUTER_TEST_H */

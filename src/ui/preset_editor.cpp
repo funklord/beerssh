@@ -19,6 +19,7 @@
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
+#include "ui/key_row_layout.h"
 
 /*
  * Scrollback is in lines and the range is deliberately wide: 200 is a
@@ -117,6 +118,19 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 	m_on_connect = new QLineEdit(this);
 	m_on_connect->setPlaceholderText(QStringLiteral("tmux attach || tmux new"));
 
+	/*
+	 * The on-screen key row for this kind of host (sec 6.2). Shown on both
+	 * platforms even though the row itself only appears on touch: a
+	 * preset is edited wherever the user happens to be, and a setting that
+	 * vanished on the desktop would be one they could not prepare before
+	 * picking up the phone.
+	 */
+	m_key_row = new QComboBox(this);
+	for (const bssh_key_row_layout_t &layout : bssh_key_row_catalog::instance().all()) {
+		m_key_row->addItem(layout.display_name, layout.id);
+		m_key_row->setItemData(m_key_row->count() - 1, layout.description, Qt::ToolTipRole);
+	}
+
 	form->addRow(QStringLiteral("Name"), m_name);
 	form->addRow(QStringLiteral("TERM"), m_term);
 	form->addRow(QStringLiteral("Scrollback"), m_scrollback);
@@ -126,6 +140,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 	form->addRow(QStringLiteral("Keepalive"), m_keepalive);
 	form->addRow(QString(), m_compression);
 	form->addRow(QStringLiteral("On connect"), m_on_connect);
+	form->addRow(QStringLiteral("Key row"), m_key_row);
 	right->addLayout(form);
 
 	right->addWidget(m_font);
@@ -254,6 +269,10 @@ void bssh_preset_editor::show_preset(const bssh_preset_t &preset) {
 	m_font->set_font_choice(preset.font_family, preset.font_size);
 	m_font->set_scheme(preset.colour_scheme);
 
+	const bssh_key_row_catalog &rows = bssh_key_row_catalog::instance();
+	const int row_index = m_key_row->findData(rows.effective_id(preset.key_row_layout));
+	m_key_row->setCurrentIndex(row_index < 0 ? 0 : row_index);
+
 	const int style = m_cursor_style->findData(preset.cursor_style);
 	m_cursor_style->setCurrentIndex(style < 0 ? 0 : style);
 
@@ -294,6 +313,11 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 
 	if (m_font->font_id() != resolved) preset.font_family = m_font->font_id();
 	preset.font_size = m_font->point_size();
+
+	const bssh_key_row_catalog &rows = bssh_key_row_catalog::instance();
+	if (m_key_row->currentData().toString() != rows.effective_id(m_current.key_row_layout)) {
+		preset.key_row_layout = m_key_row->currentData().toString();
+	}
 
 	/* Same rule for the scheme: an untouched default stays unset. */
 	const bssh_colour_scheme_catalog &schemes = bssh_colour_scheme_catalog::instance();

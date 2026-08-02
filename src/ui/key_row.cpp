@@ -7,6 +7,7 @@
 #include "input/input_router.h"
 #include "platform/platform.h"
 #include "term/emulator.h"
+#include "ui/key_row_layout.h"
 
 /*
  * Minimum touch target. Android's own guidance is 48dp, and a terminal key
@@ -25,27 +26,13 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
 	layout->setContentsMargins(2, 2, 2, 2);
 	layout->setSpacing(2);
 
-	add_key(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE);
-	add_key(QStringLiteral("Tab"), bssh_emulator::KEY_TAB);
-	add_modifier(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL);
-	add_modifier(QStringLiteral("Alt"), bssh_emulator::MOD_ALT);
-	add_key(QStringLiteral("←"), bssh_emulator::KEY_LEFT);
-	add_key(QStringLiteral("↓"), bssh_emulator::KEY_DOWN);
-	add_key(QStringLiteral("↑"), bssh_emulator::KEY_UP);
-	add_key(QStringLiteral("→"), bssh_emulator::KEY_RIGHT);
-
 	/*
-	 * The punctuation a soft keyboard buries two layers deep, and which a
-	 * shell needs constantly. The set is a starting point, not a decision:
-	 * sec 10.2 makes the row's layout preset-owned, so an OpenWrt box and
-	 * a build server can carry different keys.
+	 * Built from a layout rather than hardcoded (sec 6.2, sec 10.2): the
+	 * keys that matter differ by what is on the other end of the
+	 * connection, which is why the row's layout is a preset-owned setting
+	 * and why the starter presets are named after host types.
 	 */
-	add_text(QStringLiteral("-"), U'-');
-	add_text(QStringLiteral("/"), U'/');
-	add_text(QStringLiteral("|"), U'|');
-	add_text(QStringLiteral("~"), U'~');
-
-	layout->addStretch(1);
+	set_layout(QString());
 
 	if (m_router) {
 		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
@@ -55,9 +42,92 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
 	setVisible(should_be_visible());
 }
 
+void bssh_key_row::set_layout(const QString &id) {
+	const bssh_key_row_catalog &catalog = bssh_key_row_catalog::instance();
+
+	const QString wanted = catalog.effective_id(id);
+	if (wanted == m_layout_id && !m_buttons.isEmpty()) return;
+
+	m_layout_id = wanted;
+
+	/*
+	 * An unknown layout falls back to the default rather than to an empty
+	 * strip. A row with no keys on a phone is a session that cannot send
+	 * Ctrl-C, which is a far worse outcome than the wrong keys.
+	 */
+	const bssh_key_row_layout_t *layout = catalog.by_id(wanted);
+	if (!layout) layout = catalog.by_id(catalog.default_id());
+	if (!layout) return;
+
+	qDeleteAll(m_buttons);
+	m_buttons.clear();
+	m_modifier_buttons.clear();
+	m_modifier_values.clear();
+
+	QHBoxLayout *row = qobject_cast<QHBoxLayout *>(this->layout());
+	if (!row) return;
+
+	/* The stretch is re-added after the keys, so it stays last. */
+	while (QLayoutItem *item = row->takeAt(0)) delete item;
+
+	for (const bssh_key_t &key : layout->keys) {
+		switch (key.kind) {
+		case bssh_key_t::KEY:
+			add_key(key.label, key.value);
+			break;
+		case bssh_key_t::MODIFIER:
+			add_modifier(key.label, key.modifier);
+			break;
+		case bssh_key_t::TEXT:
+			add_text(key.label, char32_t(key.value));
+			break;
+		case bssh_key_t::CHORD:
+			add_chord(key.label, char32_t(key.value), key.modifier);
+			break;
+		}
+	}
+
+	row->addStretch(1);
+	refresh_modifier_buttons();
+}
+
+void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier) {
+	QAbstractButton *button = make_button(label);
+
+	connect(button, &QAbstractButton::clicked, this, [this, ch, modifier] {
+		if (!m_router) return;
+
+		/*
+		 * Sent as one event with the modifier attached, NOT by setting a
+		 * sticky modifier and then the key: a sticky Ctrl the user
+		 * already had set would combine with this one and send something
+		 * nobody asked for. A chord is a single press with a single
+		 * meaning.
+		 */
+		const Qt::KeyboardModifiers qt_modifiers =
+		        (modifier & bssh_emulator::MOD_CTRL ? Qt::ControlModifier : Qt::NoModifier) |
+		        (modifier & bssh_emulator::MOD_ALT ? Qt::AltModifier : Qt::NoModifier);
+
+		/*
+		 * The KEY CODE, with empty text, and this is not incidental: with
+		 * Ctrl held the router reads the codepoint from key() rather than
+		 * from text(), because a real keyboard's text() is already the
+		 * control character and using it would encode the modifier twice.
+		 * A synthetic event carrying only text therefore falls through
+		 * that branch and arrives as a plain letter -- pressing the tmux
+		 * prefix would type "b" into the shell.
+		 */
+		const int code = QChar(char16_t(ch)).toUpper().unicode();
+
+		QKeyEvent event(QEvent::KeyPress, code, qt_modifiers, QString());
+		m_router->handle_key(&event);
+	});
+}
+
 QAbstractButton *bssh_key_row::make_button(const QString &label) {
 	QToolButton *button = new QToolButton(this);
 	button->setText(label);
+	m_buttons.append(button);
 	button->setMinimumSize(BSSH_TOUCH_TARGET_DP, BSSH_TOUCH_TARGET_DP);
 
 	/*
@@ -68,6 +138,19 @@ QAbstractButton *bssh_key_row::make_button(const QString &label) {
 	button->setFocusPolicy(Qt::NoFocus);
 
 	layout()->addWidget(button);
+
+	/*
+	 * Explicitly shown, because adding a widget to a layout whose parent
+	 * is ALREADY visible does not show it -- Qt only shows children when
+	 * the parent itself is shown. The keys built in the constructor
+	 * escaped this (the whole row was shown afterwards) and every layout
+	 * switched to at runtime did not: the row rebuilt itself correctly,
+	 * reported the right number of buttons, and drew an empty strip.
+	 *
+	 * The tests counted buttons and passed. A screenshot is what noticed.
+	 */
+	button->show();
+
 	return button;
 }
 
