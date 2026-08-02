@@ -13,7 +13,7 @@
 TEMPLATE = app
 TARGET = beerssh_test
 
-QT += widgets network sql testlib
+QT += widgets network testlib
 
 CONFIG += link_pkgconfig
 PKGCONFIG += libsixel libssh libcrypto libsecret-1

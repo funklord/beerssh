@@ -1,7 +1,6 @@
-#include <QSqlDatabase>
-#include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <QFile>
 
 #include "model/profile_store.h"
 #include "profile_store_test.h"
@@ -85,42 +84,46 @@ void profile_store_test::survives_being_reopened() {
 
 void profile_store_test::schema_has_nowhere_to_put_a_secret() {
 	QTemporaryDir dir;
-	const QString path = dir.filePath(QStringLiteral("test.db"));
-	bssh_profile_store store(path);
-	store.save(make_profile(QStringLiteral("x"), QStringLiteral("y")));
+	bssh_profile_store store(dir.path());
+
+	bssh_profile_t profile = make_profile(QStringLiteral("x"), QStringLiteral("y"));
+	profile.has_stored_password = true;
+	store.save(profile);
 
 	/*
-	 * sec 11 says secrets never touch this database. Asserting on the
-	 * columns keeps that structural rather than a habit: a table with no
-	 * password column cannot grow one by accident, and a future migration
-	 * that adds one fails here first.
+	 * sec 11 says secrets never reach the config. Asserting on the FILE
+	 * keeps that structural rather than a habit: the text that lands on
+	 * disk is the thing a user copies to another machine, mails to a
+	 * colleague, or checks into their dotfiles repository, and it has to
+	 * be safe to do all three.
+	 *
+	 * This used to inspect the SQLite columns. The store is INI now and
+	 * the guarantee is the same one, so the test moved rather than went.
 	 */
-	QStringList columns;
-	{
-		/*
-		 * Both the query AND the database handle have to be out of scope
-		 * before removeDatabase, or Qt warns that the connection is
-		 * still in use. A warning nobody cleans up is a warning nobody
-		 * reads when it finally matters.
-		 */
-		QSqlDatabase check = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"),
-		                                                QStringLiteral("schema_check"));
-		check.setDatabaseName(path);
-		QVERIFY(check.open());
+	QFile hosts(dir.path() + QStringLiteral("/hosts.ini"));
+	QVERIFY(hosts.open(QIODevice::ReadOnly));
+	const QString text = QString::fromUtf8(hosts.readAll()).toLower();
 
-		QSqlQuery query(check);
-		QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(profiles)")));
-		while (query.next()) columns.append(query.value(1).toString().toLower());
+	QVERIFY(text.contains(QStringLiteral("host=y")));
 
-		check.close();
-	}
-	QSqlDatabase::removeDatabase(QStringLiteral("schema_check"));
+	QVERIFY2(!text.contains(QStringLiteral("password=")) ||
+	          text.contains(QStringLiteral("has_password=")),
+	          "only the flag may appear, never a credential");
+	QVERIFY(!text.contains(QStringLiteral("passphrase")));
+	QVERIFY(!text.contains(QStringLiteral("secret")));
+	QVERIFY(!text.contains(QStringLiteral("private")));
 
-	QVERIFY(!columns.contains(QStringLiteral("password")));
-	QVERIFY(!columns.contains(QStringLiteral("passphrase")));
-	QVERIFY(!columns.contains(QStringLiteral("key")));
-	QVERIFY(!columns.contains(QStringLiteral("secret")));
-	QVERIFY(columns.contains(QStringLiteral("host")));
+	/*
+	 * And the preset file, which sec 10.3 says is safe to share, must not
+	 * name anyone's infrastructure at all -- no host, no user.
+	 */
+	QFile presets(dir.path() + QStringLiteral("/presets.ini"));
+	QVERIFY(presets.open(QIODevice::ReadOnly));
+	const QString preset_text = QString::fromUtf8(presets.readAll()).toLower();
+
+	QVERIFY(!preset_text.contains(QStringLiteral("\nhost=")));
+	QVERIFY(!preset_text.contains(QStringLiteral("\nuser=")));
+	QVERIFY(!preset_text.contains(QStringLiteral("password")));
 }
 
 void profile_store_test::layout_round_trips() {
@@ -181,88 +184,87 @@ void profile_store_test::layout_forgets_deleted_hosts() {
 
 void profile_store_test::an_old_database_gains_the_layout_table() {
 	QTemporaryDir dir;
-	const QString path = dir.filePath(QStringLiteral("v1.db"));
 
 	/*
-	 * A version-1 file: profiles, no layout table, user_version 1. This
-	 * is what an existing user's database looks like, and migrating it
-	 * has to work on the file rather than only on a fresh one -- which is
-	 * the whole reason sec 10.6 wanted migrations from day one.
+	 * A config file written by hand, or by an older build that did not
+	 * have half these fields. This is what migration MEANS once the store
+	 * is text: read the keys that are there, default the ones that are
+	 * not, and never refuse the file.
+	 *
+	 * It replaces a test that built a version-1 SQLite database and
+	 * checked the layout table appeared. Same question -- does an older
+	 * file still open -- asked of the format that now exists.
 	 */
 	{
-		QSqlDatabase old = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"),
-		                                              QStringLiteral("v1_setup"));
-		old.setDatabaseName(path);
-		QVERIFY(old.open());
-		{
-			QSqlQuery query(old);
-			QVERIFY(query.exec(QStringLiteral(
-			        "CREATE TABLE profiles (id INTEGER PRIMARY KEY AUTOINCREMENT,"
-			        " name TEXT NOT NULL, host TEXT NOT NULL, user TEXT,"
-			        " port INTEGER NOT NULL DEFAULT 22)")));
-			QVERIFY(query.exec(QStringLiteral(
-			        "INSERT INTO profiles (name, host, user, port)"
-			        " VALUES ('legacy', 'old.example', 'nabbe', 22)")));
-			QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 1")));
-		}
-		old.close();
+		QFile hosts(dir.path() + QStringLiteral("/hosts.ini"));
+		QVERIFY(hosts.open(QIODevice::WriteOnly));
+		hosts.write("[host-1]\n"
+		            "host=old.example\n"
+		            "user=nabbe\n");
 	}
-	QSqlDatabase::removeDatabase(QStringLiteral("v1_setup"));
+	{
+		QFile presets(dir.path() + QStringLiteral("/presets.ini"));
+		QVERIFY(presets.open(QIODevice::WriteOnly));
+		presets.write("[minimal]\n"
+		              "scrollback_lines=1234\n");
+	}
 
-	bssh_profile_store store(path);
-	QVERIFY2(store.is_open(), qPrintable(store.last_error()));
+	bssh_profile_store store(dir.path());
 
-	/* The existing profile survived the migration... */
-	QCOMPARE(store.profiles().count(), 1);
-	QCOMPARE(store.profiles().first().name, QStringLiteral("legacy"));
+	const QList<bssh_profile_t> profiles = store.profiles();
+	QCOMPARE(profiles.size(), 1);
+	QCOMPARE(profiles.first().host, QStringLiteral("old.example"));
 
-	/* ...and the new table works. */
-	bssh_profile_store::layout_state_t layout;
-	layout.profile_ids = {store.profiles().first().id};
-	QVERIFY(store.save_layout(layout));
-	QCOMPARE(store.layout().profile_ids.count(), 1);
+	/* Absent keys take their defaults rather than becoming empty. */
+	QCOMPARE(profiles.first().port, quint16(22));
+	QVERIFY(!profiles.first().has_stored_password);
+
+	const QList<bssh_preset_t> presets = store.presets();
+	QCOMPARE(presets.size(), 1);
+	QCOMPARE(presets.first().scrollback_lines, 1234);
+	QCOMPARE(presets.first().name, QStringLiteral("minimal"));
+	QCOMPARE(presets.first().term, QStringLiteral("xterm-256color"));
+
+	/* A section with no id gets one, and it survives the next open. */
+	QVERIFY(presets.first().id != 0);
+	const int assigned = presets.first().id;
+
+	bssh_preset_t edited = presets.first();
+	edited.scrollback_lines = 4321;
+	store.save_preset(edited);
+
+	bssh_profile_store reopened(dir.path());
+	QCOMPARE(reopened.presets().first().id, assigned);
+	QCOMPARE(reopened.presets().first().scrollback_lines, 4321);
 }
 
 void profile_store_test::the_stored_password_flag_round_trips() {
 	QTemporaryDir dir;
-	const QString path = dir.filePath(QStringLiteral("test.db"));
 
 	int id = 0;
 	{
-		bssh_profile_store store(path);
-		bssh_profile_t profile = make_profile(QStringLiteral("saved"), QStringLiteral("s.example"));
-
-		/* Off unless someone says otherwise -- keeping a credential is a
-		 * decision, not a default. */
-		QVERIFY(!profile.has_stored_password);
-
+		bssh_profile_store store(dir.path());
+		bssh_profile_t profile = make_profile(QStringLiteral("vault"),
+		                                       QStringLiteral("vault.example"));
 		profile.has_stored_password = true;
 		id = store.save(profile);
 	}
 
-	bssh_profile_store reopened(path);
-	QCOMPARE(reopened.profile(id).has_stored_password, true);
-
 	/*
-	 * A flag, not a credential. It exists so the app knows whether asking
-	 * for the store's passphrase is worth it -- without it, every
-	 * connection would ask, including the ones with nothing saved.
+	 * A flag, never the credential (sec 11). It exists so the app knows
+	 * whether asking the secret store for its passphrase is worth it --
+	 * and so a host copied to a machine with an empty keyring simply
+	 * prompts rather than failing strangely.
 	 */
-	QSqlDatabase check = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"),
-	                                                QStringLiteral("flag_check"));
-	QStringList columns;
-	{
-		check.setDatabaseName(path);
-		QVERIFY(check.open());
-		QSqlQuery query(check);
-		QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(profiles)")));
-		while (query.next()) columns.append(query.value(1).toString().toLower());
-		check.close();
-	}
-	QSqlDatabase::removeDatabase(QStringLiteral("flag_check"));
+	bssh_profile_store reopened(dir.path());
+	QVERIFY(reopened.profile(id).has_stored_password);
 
-	QVERIFY(columns.contains(QStringLiteral("has_password")));
-	QVERIFY(!columns.contains(QStringLiteral("password")));
+	bssh_profile_t cleared = reopened.profile(id);
+	cleared.has_stored_password = false;
+	reopened.save(cleared);
+
+	bssh_profile_store again(dir.path());
+	QVERIFY(!again.profile(id).has_stored_password);
 }
 
 void profile_store_test::the_starter_presets_are_seeded_once() {

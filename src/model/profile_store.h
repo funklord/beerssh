@@ -1,6 +1,7 @@
 #ifndef BSSH_PROFILE_STORE_H
 #define BSSH_PROFILE_STORE_H
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -9,27 +10,41 @@
 #include "model/profile.h"
 
 /*
- * bssh_profile_store -- saved hosts, in SQLite (project.md sec 10.6).
+ * bssh_profile_store -- saved hosts, presets and layout, in INI files
+ * (project.md sec 10.6).
  *
- * SQLite rather than a settings file because sec 10.6 says so and because
- * of where this ends up: profiles, presets, layout state and known-hosts
- * in one place, with migrations from day one. Users accumulate profiles
- * they care about, and a store that cannot be migrated is a store that
- * eventually has to be thrown away.
+ * Three files in the app's config directory, and all three are meant to be
+ * opened in an editor:
  *
- * Secrets are NOT here. The database holds an id; the secret store holds
- * the material (sec 11). On desktop this file is an ordinary user file --
- * visible, backed up, openable in sqlite3 -- so it is written on the
- * assumption someone will read it.
+ *   hosts.ini     [host-3]   name/host/user/port/preset, plus any
+ *                            per-field overrides of the preset
+ *   presets.ini   [servers]  the preset fields, section named by slug
+ *   layout.ini    [layout]   which hosts were open, and how
+ *
+ * This replaced a SQLite database. The data is tens of rows with no query
+ * that is not a full scan and no concurrent writer, so what the database
+ * was actually costing was the ability to read, diff, copy between
+ * machines or fix by hand the configuration of a terminal -- for a tool
+ * whose users live in text files. Migrations become "read the old key if
+ * the new one is absent", which is what a config file has always done.
+ *
+ * Secrets are NOT here and must never be (sec 11). A host carries
+ * has_password, a boolean saying whether a credential exists in the
+ * platform store; the credential itself stays in the keyring or the
+ * encrypted file. That separation is what makes these files safe to copy
+ * between machines, and it is the same rule that keeps a host or user out
+ * of a preset (sec 10.3).
  */
 class bssh_profile_store : public QObject {
 	Q_OBJECT
 
 public:
 	/*
-	 * An empty path opens the per-user database under AppDataLocation.
-	 * Tests pass their own path, and ":memory:" works too -- which is the
-	 * main reason the path is a parameter at all.
+	 * An empty path uses the per-user config directory. Tests pass their
+	 * own, which is the main reason it is a parameter at all. A path
+	 * ending in .db is taken as the old database's location and its
+	 * DIRECTORY is used, so a caller that has not been updated still
+	 * writes its config somewhere sensible rather than failing to open.
 	 */
 	explicit bssh_profile_store(const QString &path = QString(), QObject *parent = nullptr);
 	~bssh_profile_store() override;
@@ -94,12 +109,35 @@ signals:
 	void changed();
 
 private:
-	bool open(const QString &path);
-	bool migrate();
+	bool open(const QString &directory);
+	void load();
+	void load_presets();
+	void load_profiles();
+	void write_presets();
+	void write_profiles();
+	void sort_profiles();
+	void sort_presets();
 
-	QString m_connection_name;
+	QString hosts_path() const;
+	QString presets_path() const;
+	QString layout_path() const;
+
+	/*
+	 * Presets are addressed by slug in the files and by id in memory. The
+	 * slug is what a host refers to and what a person reads; the id is
+	 * what the UI holds while a dialog is open. This is the map between
+	 * them, rebuilt on every load.
+	 */
+	QString unique_slug(const QString &base, int except_id) const;
+	int id_for_slug(const QString &slug) const;
+
+	QString m_directory;
 	QString m_last_error;
 	bool m_open;
+
+	QList<bssh_profile_t> m_profiles;
+	QList<bssh_preset_t> m_presets;
+	QHash<int, QString> m_slugs;
 };
 
 #endif /* BSSH_PROFILE_STORE_H */

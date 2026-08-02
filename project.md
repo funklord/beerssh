@@ -1062,8 +1062,12 @@ Each sets sensible `TERM`, colours, and key-row defaults for that target. These
 double as documentation of what a preset can do.
 
 ### 10.5 Import / export
-- Presets export/import as **JSON** (human-readable, diffable, shareable) with a
-  schema version field for forward compatibility.
+- Presets export/import as **INI** — the same format they are stored in (§10.6),
+  so exporting one is copying a section out and importing is pasting it back,
+  with a `schema` key for forward compatibility. Human-readable, diffable and
+  shareable were the reasons the format had to be one of those; being *the same*
+  format as the store is what stops export from being a second serialiser that
+  drifts from the first.
 - **[OPEN]** OpenSSH `~/.ssh/config` import — parse `Host` blocks (`HostName`,
   `User`, `Port`, `IdentityFile`, `ProxyJump`) into host profiles. Not chosen for
   v1, but design the profile schema so it maps cleanly onto those fields; it's a
@@ -1074,22 +1078,46 @@ double as documentation of what a preset can do.
 - **[OPEN]** Host groups/folders with inherited settings. Presets cover most of the
   need; add folders only if organising many hosts proves awkward.
 
-### 10.6 Storage
-- **SQLite** (via Qt SQL) for profiles, presets, layout state, and known-hosts.
-  Same schema and same file format on both platforms.
-- Secrets **never** in SQLite in plaintext — platform-wrapped blobs only (§11),
-  referenced by ID. The database is therefore *not* portable between devices on
-  its own; a secret ID is meaningless outside the machine that wrapped it.
+### 10.6 Storage — **[DECIDED]** plain INI files
+- **INI files**, one per kind, in the app's config directory. Same format and
+  same layout on both platforms:
+
+  | file | holds |
+  |---|---|
+  | `hosts.ini` | `[host-3]` — name, host, user, port, which preset it follows, and any per-field overrides as ordinary keys |
+  | `presets.ini` | `[servers]` — the preset's fields, section named by slug |
+  | `layout.ini` | `[layout]` — which hosts were open, and how |
+
+  This replaced an earlier SQLite decision, and the reasoning is worth keeping:
+  the data is tens of rows, there is no query that is not a full scan and no
+  concurrent writer, so what the database was actually costing was the ability
+  to **read, diff, copy between machines, or fix by hand** the configuration of
+  a terminal — for a tool whose users live in text files. Migrations become
+  "read the key if it is there, default it if it is not", which is what a config
+  file has always done. Known-hosts is unaffected: it was never in the database,
+  it is libssh's own file (§11).
+- **Presets are addressed by slug, hosts by number.** `preset=servers` survives
+  being edited by hand; `preset_id=4` survives nothing. Numeric ids still exist
+  in memory, where a dialog needs a stable handle, and are persisted so they
+  keep meaning the same thing across a restart.
+- **A key that is not one of the host's own is an override** of its preset
+  (§10.1). That is what makes an override something a person can add by typing
+  it, rather than something requiring a nested syntax.
+- Secrets **never** in these files — platform-wrapped blobs only (§11). A host
+  carries `has_password`, a boolean saying a credential exists in the platform
+  store, never the credential. That split is what makes the config safe to copy
+  to another machine, where the flag is true, the keyring is empty, and the app
+  simply asks.
 - **Locations come from `QStandardPaths`**, never a hardcoded path:
-  `AppDataLocation` for the database, `AppConfigLocation` for settings. That
-  lands correctly in the app-private directory on Android and under
-  `~/.local/share/beerssh` (XDG) on Linux without either being special-cased.
-- **The desktop database is a normal user file** — visible, backed up by the
-  user's backup tool, and openable in `sqlite3`. Assume it will be inspected and
-  occasionally hand-edited; that's an argument for a schema that's readable and
-  for keeping the secret/non-secret split (§10.3) obvious in the table layout,
-  not for obfuscating it.
-- Schema migrations from day one; users will accumulate profiles they care about.
+  `AppConfigLocation`, which is `~/.config/beerssh` on Linux and the app-private
+  directory on Android without either being special-cased.
+- **These are normal user files** — visible, backed up, and *meant* to be
+  opened. Assume they will be inspected and hand-edited: that is an argument for
+  readable keys and for keeping the secret/non-secret split (§10.3) obvious,
+  not for obfuscating anything.
+- `tools/migrate-db-to-ini.py` converts a database written by an earlier build.
+  A script rather than app code, because the app no longer links Qt SQL at all
+  and carrying a database driver forever to read one file once is a poor trade.
 
 ---
 
@@ -1100,7 +1128,7 @@ All of it goes behind one interface — `bssh_secret_store` (`store`, `load`,
 core principle 3. Callers get an opaque ID back and never see a key mechanism.
 
 - **Private keys / passwords** stored encrypted; never plaintext in app files,
-  `SharedPreferences`, config files, or the SQLite database (§10.6).
+  `SharedPreferences`, or the INI config files (§10.6).
   - **Android:** wrap secrets with the **Android Keystore** (hardware-backed
     where available).
   - **Desktop [DECIDED, partly built]:** the platform secret service —

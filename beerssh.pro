@@ -19,7 +19,7 @@
 TEMPLATE = app
 TARGET = beerssh
 
-QT += widgets network sql
+QT += widgets network
 CONFIG += c++17
 CONFIG -= app_bundle
 
@@ -168,10 +168,8 @@ android {
         lib/libQt6Gui_$${QT_ARCH}.so \
         lib/libQt6Widgets_$${QT_ARCH}.so \
         lib/libQt6Network_$${QT_ARCH}.so \
-        lib/libQt6Sql_$${QT_ARCH}.so \
         plugins/platforms/libplugins_platforms_qtforandroid_$${QT_ARCH}.so \
         plugins/styles/libplugins_styles_qandroidstyle_$${QT_ARCH}.so \
-        plugins/sqldrivers/libplugins_sqldrivers_qsqlite_$${QT_ARCH}.so \
         plugins/imageformats/libplugins_imageformats_qjpeg_$${QT_ARCH}.so
 
     # jar/Qt6Android          QtActivityBase and friends. Left out of the
@@ -182,7 +180,6 @@ android {
     # jar/Qt6AndroidNetwork    QtNetwork's Java side
     # platforms/qtforandroid  the platform plugin; nothing runs without it
     # styles/qandroidstyle    native-looking widgets rather than Fusion
-    # sqldrivers/qsqlite      the profile and preset store (sec 10.6)
     # imageformats/qjpeg      inline images (sec 7.1); PNG is inside QtGui
 } else {
     SOURCES += \
