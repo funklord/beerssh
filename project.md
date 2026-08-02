@@ -1185,6 +1185,10 @@ background).
 9. **M8 – Adaptive splits.** `bssh_layout_manager`, size classes, 2/4-pane
    splits, focus indication, collapse-to-tabs on shrink, per-pane
    `window-change`. Desktop window-drag resizing exercises this hardest — use it.
+   **Mostly built:** size classes, pane limits, the collapse/restore rule with
+   the layout intent remembered, per-pane geometry, and the focus border.
+   Still open: pane navigation shortcuts, drag-to-resize snapping to whole
+   cells, and persisting the arrangement across restarts.
 10. **M9 – Fonts.** Curated set, fallback chain, wide-char handling, shared glyph
     cache, asset-pack delivery (Android) / full set (desktop), CI validation
     script, fractional-scaling and multi-monitor DPI checks.

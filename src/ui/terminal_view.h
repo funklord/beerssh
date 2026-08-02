@@ -72,6 +72,13 @@ public:
 	void set_scroll_offset(int lines);
 	void scroll_by(int lines);
 	void scroll_to_live();
+
+	/*
+	 * Draws the focused-pane border (sec 8.3). Owned by the view because
+	 * it is painted with the grid, but decided by the pane container --
+	 * a view has no idea whether it has siblings.
+	 */
+	void set_focus_border(bool focused);
 	const bssh_screen *screen() const { return m_screen; }
 
 	/*
@@ -138,6 +145,7 @@ private:
 	const bssh_image_store *m_images;
 	const bssh_scrollback *m_scrollback;
 	int m_scroll_offset;
+	bool m_focus_border;
 
 	/*
 	 * Selection endpoints in ABSOLUTE line coordinates -- history line

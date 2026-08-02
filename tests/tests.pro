@@ -32,6 +32,7 @@ SOURCES += \
     profile_store_test.cpp \
     session_registry_test.cpp \
     input_router_test.cpp \
+    layout_test.cpp \
     screen_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
@@ -48,6 +49,8 @@ SOURCES += \
     ../src/model/session.cpp \
     ../src/model/session_registry.cpp \
     ../src/ui/host_list.cpp \
+    ../src/ui/layout_manager.cpp \
+    ../src/ui/pane_container.cpp \
     ../src/ui/main_window.cpp \
     ../src/ui/session_dialog.cpp \
     ../src/platform/platform_desktop.cpp \
@@ -62,6 +65,7 @@ HEADERS += \
     profile_store_test.h \
     session_registry_test.h \
     input_router_test.h \
+    layout_test.h \
     screen_test.h \
     terminal_view_test.h \
     ../src/input/input_router.h \
@@ -78,6 +82,8 @@ HEADERS += \
     ../src/model/session.h \
     ../src/model/session_registry.h \
     ../src/ui/host_list.h \
+    ../src/ui/layout_manager.h \
+    ../src/ui/pane_container.h \
     ../src/ui/main_window.h \
     ../src/ui/session_dialog.h \
     ../src/ui/key_row.h \

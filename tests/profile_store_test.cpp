@@ -94,17 +94,25 @@ void profile_store_test::schema_has_nowhere_to_put_a_secret() {
 	 * password column cannot grow one by accident, and a future migration
 	 * that adds one fails here first.
 	 */
-	QSqlDatabase check = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"),
-	                                                QStringLiteral("schema_check"));
-	check.setDatabaseName(path);
-	QVERIFY(check.open());
-
 	QStringList columns;
-	QSqlQuery query(check);
-	QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(profiles)")));
-	while (query.next()) columns.append(query.value(1).toString().toLower());
+	{
+		/*
+		 * Both the query AND the database handle have to be out of scope
+		 * before removeDatabase, or Qt warns that the connection is
+		 * still in use. A warning nobody cleans up is a warning nobody
+		 * reads when it finally matters.
+		 */
+		QSqlDatabase check = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"),
+		                                                QStringLiteral("schema_check"));
+		check.setDatabaseName(path);
+		QVERIFY(check.open());
 
-	check.close();
+		QSqlQuery query(check);
+		QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(profiles)")));
+		while (query.next()) columns.append(query.value(1).toString().toLower());
+
+		check.close();
+	}
 	QSqlDatabase::removeDatabase(QStringLiteral("schema_check"));
 
 	QVERIFY(!columns.contains(QStringLiteral("password")));

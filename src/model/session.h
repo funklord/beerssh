@@ -68,4 +68,14 @@ private:
 	int m_rows;
 };
 
+/*
+ * Registered because signals carry it -- bssh_session_registry's
+ * session_added/session_closing and the pane container's focus_changed.
+ * Without this a queued connection cannot deliver it and QSignalSpy
+ * cannot record it, and both fail at RUNTIME with a warning rather than
+ * at compile time. It surfaced as a test that could not see a signal it
+ * was watching.
+ */
+Q_DECLARE_METATYPE(bssh_session *)
+
 #endif /* BSSH_SESSION_H */

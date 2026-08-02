@@ -1,9 +1,20 @@
 #include "model/session_registry.h"
 
+#include <QMetaType>
+
 #include "model/session.h"
 
 bssh_session_registry::bssh_session_registry(QObject *parent)
     : QObject(parent) {
+	/*
+	 * Declaring the metatype is a compile-time fact; REGISTERING it is
+	 * the runtime one, and signals carrying bssh_session * need both.
+	 * Without this a queued connection cannot deliver the pointer and
+	 * QSignalSpy cannot record it -- neither fails to compile, both warn
+	 * at runtime, and the visible symptom is a signal that appears never
+	 * to have been emitted.
+	 */
+	qRegisterMetaType<bssh_session *>();
 }
 
 bssh_session *bssh_session_registry::create(const bssh_profile_t &profile) {

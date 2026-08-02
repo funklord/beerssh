@@ -30,6 +30,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_images(nullptr),
       m_scrollback(nullptr),
       m_scroll_offset(0),
+      m_focus_border(false),
       m_selecting(false),
       m_selection_anchor_line(-1),
       m_selection_anchor_col(0),
@@ -107,6 +108,13 @@ void bssh_terminal_view::set_scroll_offset(int lines) {
 
 void bssh_terminal_view::scroll_by(int lines) {
 	set_scroll_offset(m_scroll_offset + lines);
+}
+
+void bssh_terminal_view::set_focus_border(bool focused) {
+	if (m_focus_border == focused) return;
+
+	m_focus_border = focused;
+	update();
 }
 
 void bssh_terminal_view::scroll_to_live() {
@@ -358,6 +366,18 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			                    placement.rows * m_cell_height);
 			painter.drawImage(target, placement.image);
 		}
+	}
+
+	if (m_focus_border) {
+		/*
+		 * Drawn last, over everything, and inset by half a pen width so
+		 * the whole line lands inside the widget rather than half of it
+		 * being clipped away by the neighbouring pane.
+		 */
+		QPen border(QColor(0x2b, 0x90, 0xd9));
+		border.setWidth(2);
+		painter.setPen(border);
+		painter.drawRect(rect().adjusted(1, 1, -1, -1));
 	}
 
 	/* No cursor while reading history: it belongs to the live screen. */

@@ -52,7 +52,15 @@ re-points the view at another session's screen — nothing is copied, and a
 session keeps running (and keeps receiving output) while nothing is
 showing it.
 
-Not built yet: split panes, layout persistence, per-tab status dots,
+Split panes follow the window, not the platform: under 600dp it is tabs
+only, up to 840dp two panes, above that four. Narrowing the window
+collapses the extra panes back to tabs **without closing or disconnecting
+anything**, and widening restores the arrangement. The focused pane carries
+a border whenever there is more than one — two identical shells side by
+side is a real footgun otherwise.
+
+Not built yet: pane navigation shortcuts, layout persistence, per-tab
+status dots,
 triple-click line selection, the Android background service, and the
 tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 
