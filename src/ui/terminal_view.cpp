@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QWheelEvent>
 #include <QResizeEvent>
 
 #include "input/input_router.h"
@@ -24,6 +25,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
     : QWidget(parent),
       m_screen(nullptr),
       m_images(nullptr),
+      m_scrollback(nullptr),
+      m_scroll_offset(0),
       m_input_router(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -75,6 +78,46 @@ void bssh_terminal_view::attach_screen(const bssh_screen *screen) {
 void bssh_terminal_view::attach_images(const bssh_image_store *images) {
 	m_images = images;
 	update();
+}
+
+void bssh_terminal_view::attach_scrollback(const bssh_scrollback *scrollback) {
+	m_scrollback = scrollback;
+	update();
+}
+
+void bssh_terminal_view::set_scroll_offset(int lines) {
+	const int available = m_scrollback ? m_scrollback->count() : 0;
+	const int clamped = qBound(0, lines, available);
+
+	if (clamped == m_scroll_offset) return;
+
+	m_scroll_offset = clamped;
+	update();
+}
+
+void bssh_terminal_view::scroll_by(int lines) {
+	set_scroll_offset(m_scroll_offset + lines);
+}
+
+void bssh_terminal_view::scroll_to_live() {
+	set_scroll_offset(0);
+}
+
+void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
+	if (!m_scrollback) {
+		QWidget::wheelEvent(event);
+		return;
+	}
+
+	/*
+	 * Three lines per notch, the usual desktop convention. Touch
+	 * (QScroller, sec 6.4) will drive the same set_scroll_offset rather
+	 * than growing a second scrolling path.
+	 */
+	const int notches = event->angleDelta().y() / 120;
+	if (notches != 0) scroll_by(notches * 3);
+
+	event->accept();
 }
 
 /*
@@ -153,7 +196,13 @@ void bssh_terminal_view::keyPressEvent(QKeyEvent *event) {
 	 * is usable with a soft keyboard. Noted rather than stubbed, because
 	 * a stub here would look done.
 	 */
+	/*
+	 * Typing returns to the live screen. Anything else means a keystroke
+	 * disappears into history the user is reading -- they type, nothing
+	 * appears, and the terminal looks broken.
+	 */
 	if (m_input_router && m_input_router->handle_key(event)) {
+		scroll_to_live();
 		event->accept();
 		return;
 	}
@@ -207,6 +256,16 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	const int cols = qMin(m_cols, m_screen->cols());
 
 	/*
+	 * With an offset, the top of the view comes from the scrollback and
+	 * the live screen slides down out of sight by the same amount. The
+	 * screen itself is untouched: scrolling back is something the VIEW
+	 * does, so the session carries on and the grid the remote believes in
+	 * never changes.
+	 */
+	const int history = m_scrollback ? m_scrollback->count() : 0;
+	const int offset = qBound(0, m_scroll_offset, history);
+
+	/*
 	 * Cell by cell, and per-cell QFont changes for bold/italic. That is
 	 * the naive renderer on purpose: sec 9.5's shared glyph atlas and
 	 * per-row glyph runs are M9, and building a cache now -- before the
@@ -216,8 +275,21 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	for (int row = 0; row < rows; ++row) {
 		const qreal baseline = m_baseline + row * m_cell_height;
 
+		/*
+		 * Rows above the fold come from history; the rest from the live
+		 * screen, shifted down by however far back the view is.
+		 */
+		const int history_index = history - offset + row;
+		const bool from_history = offset > 0 && history_index < history;
+		const QList<bssh_cell_t> &history_line =
+		        from_history ? m_scrollback->line(history_index) : QList<bssh_cell_t>();
+		const int screen_row = row - offset;
+
 		for (int col = 0; col < cols; ++col) {
-			const bssh_cell_t &cell = m_screen->cell(row, col);
+			static const bssh_cell_t blank;
+			const bssh_cell_t &cell =
+			        from_history ? (col < history_line.size() ? history_line.at(col) : blank)
+			                     : (screen_row >= 0 ? m_screen->cell(screen_row, col) : blank);
 
 			/* The far half of a double-width glyph: already drawn. */
 			if (cell.width == 0) continue;
@@ -270,7 +342,8 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		}
 	}
 
-	if (m_screen->cursor_visible()) {
+	/* No cursor while reading history: it belongs to the live screen. */
+	if (m_screen->cursor_visible() && offset == 0) {
 		/*
 		 * A filled block with the character punched out of it. Drawing
 		 * the glyph again in the background colour is what keeps the

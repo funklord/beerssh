@@ -7,6 +7,7 @@
 
 #include "term/image_store.h"
 #include "term/screen.h"
+#include "term/scrollback.h"
 
 struct bssh_emulator_private;
 
@@ -102,6 +103,13 @@ public:
 	const bssh_image_store &images() const;
 
 	/*
+	 * Lines that have scrolled off the top (sec 7). The view reads this
+	 * to render a scrolled-back position; nothing else writes it.
+	 */
+	const bssh_scrollback &scrollback() const;
+	void set_scrollback_lines(int lines);
+
+	/*
 	 * Cell size in pixels, which the emulator cannot work out for itself
 	 * and needs in order to turn an image's pixel dimensions into a cell
 	 * footprint. The view is the only thing that knows it, so the view
@@ -130,6 +138,9 @@ signals:
 
 	/* An image arrived or was removed; the view repaints. */
 	void images_changed();
+
+	/* A line entered or left the scrollback. */
+	void scrollback_changed();
 
 private:
 	bssh_emulator_private *m_private;

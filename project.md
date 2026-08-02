@@ -515,6 +515,18 @@ model on a finger.
   boundary, so the binding holds an incomplete trailing sequence back until the
   rest arrives. Any future parser swap must keep doing this or non-ASCII output
   breaks intermittently, which is the worst way for it to break.
+- **Scrollback** is a **bounded ring of cells**, not of text — scrolled-back
+  output keeps its colours, which is the point of having it. The cap is not
+  optional: a terminal left on a chatty log is the normal case, and on a phone
+  an unbounded buffer is the difference between working and being killed. Size
+  becomes a preset-owned setting at M10 (§10.2).
+- **The alternate screen must be explicitly enabled** in libvterm
+  (`vterm_screen_enable_altscreen`) — it does not allocate the buffer
+  otherwise, and DECSET 1049 then silently does nothing, so `vim` and `less`
+  redraw over the primary buffer and destroy the shell output beneath them
+  with nothing to restore on exit. Found by a scrollback test that noticed an
+  editor's redraws in history; the visible symptom is much worse than the one
+  that caught it.
 - **Rendering:** custom `QWidget::paintEvent` drawing a monospaced grid; cache
   glyph runs per row. See §9 for the font pipeline, fallback chain, and
   double-width (CJK) cell handling.

@@ -53,6 +53,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	m_emulator = new bssh_emulator(m_cols, m_rows, this);
 	m_terminal_view->attach_screen(&m_emulator->screen());
 	m_terminal_view->attach_images(&m_emulator->images());
+	m_terminal_view->attach_scrollback(&m_emulator->scrollback());
 
 	/*
 	 * The emulator cannot know how big a cell is -- only the view, which
@@ -92,6 +93,12 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	         this, [this](bssh_input_router::shortcut_t shortcut) {
 		if (shortcut == bssh_input_router::SHORTCUT_PASTE) {
 			m_input_router->paste(QGuiApplication::clipboard()->text());
+		}
+		if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_UP) {
+			m_terminal_view->scroll_by(m_terminal_view->rows() / 2);
+		}
+		if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_DOWN) {
+			m_terminal_view->scroll_by(-m_terminal_view->rows() / 2);
 		}
 		/* SHORTCUT_COPY needs a selection to copy, which arrives with
 		 * mouse selection (sec 6.4) -- not yet built. */

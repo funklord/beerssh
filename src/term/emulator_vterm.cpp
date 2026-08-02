@@ -35,6 +35,7 @@ struct bssh_emulator_private {
 	int modify_other_keys;
 
 	bssh_image_store images;
+	bssh_scrollback scrollback;
 	bssh_graphics_transmission_t graphics;   /* chunked kitty transmissions */
 	QByteArray apc_buffer;        /* an APC split across reads */
 	QByteArray osc_buffer;
@@ -66,6 +67,7 @@ struct bssh_emulator_private {
 
 	int copy_cell(int row, int col);
 	void copy_rect(const VTermRect &rect);
+	bssh_cell_t convert_cell(const VTermScreenCell &source) const;
 };
 
 namespace {
@@ -350,6 +352,55 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
 	return 1;
 }
 
+/*
+ * A line has scrolled off the top. libvterm hands over the cells rather
+ * than the text, so colours and attributes survive being scrolled back
+ * to -- which is the whole reason the scrollback stores cells.
+ */
+int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
+	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+
+	QList<bssh_cell_t> line;
+	line.reserve(cols);
+	for (int col = 0; col < cols; ++col) {
+		line.append(self->convert_cell(cells[col]));
+	}
+
+	self->scrollback.push(line);
+	emit self->owner->scrollback_changed();
+	return 1;
+}
+
+/*
+ * libvterm wants a line back, because the screen is scrolling down again
+ * -- leaving the alternate screen, or a resize pulling content back onto
+ * the grid. Returning 0 tells it there is nothing, which it handles.
+ */
+int on_sb_popline(int cols, VTermScreenCell *cells, void *user) {
+	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+
+	QList<bssh_cell_t> line;
+	if (!self->scrollback.pop(line)) return 0;
+
+	for (int col = 0; col < cols; ++col) {
+		const bssh_cell_t source = col < line.size() ? line.at(col) : bssh_cell_t();
+
+		/*
+		 * Only what libvterm needs to lay the line out again: the full
+		 * attribute round-trip would mean rebuilding VTermColor by hand,
+		 * and a wrong colour handed back to the parser is worse than a
+		 * default one. The cells the VIEW draws come from our own copy,
+		 * which kept everything.
+		 */
+		cells[col] = VTermScreenCell();
+		cells[col].chars[0] = source.ch;
+		cells[col].width = source.width ? source.width : 1;
+	}
+
+	emit self->owner->scrollback_changed();
+	return 1;
+}
+
 int on_bell(void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	emit self->owner->bell();
@@ -379,8 +430,8 @@ const VTermScreenCallbacks screen_callbacks = {
 	.settermprop = on_set_term_prop,
 	.bell        = on_bell,
 	.resize      = nullptr, /* our own resize() drives the mirror */
-	.sb_pushline = nullptr, /* scrollback is its own milestone */
-	.sb_popline  = nullptr,
+	.sb_pushline = on_sb_pushline,
+	.sb_popline  = on_sb_popline,
 	.sb_clear    = nullptr,
 	/* Opt-in ABI extension; only used if the has_pushline4 call is made. */
 	.sb_pushline4 = nullptr
@@ -394,14 +445,7 @@ const VTermScreenCallbacks screen_callbacks = {
 
 } /* namespace */
 
-int bssh_emulator_private::copy_cell(int row, int col) {
-	VTermPos pos;
-	pos.row = row;
-	pos.col = col;
-
-	VTermScreenCell source;
-	if (!vterm_screen_get_cell(vts, pos, &source)) return 1;
-
+bssh_cell_t bssh_emulator_private::convert_cell(const VTermScreenCell &source) const {
 	bssh_cell_t cell;
 	/*
 	 * chars[0] only: libvterm hands back the base character plus any
@@ -415,7 +459,18 @@ int bssh_emulator_private::copy_cell(int row, int col) {
 	cell.attrs = to_bssh_attrs(source.attrs);
 	cell.fg = to_bssh_color(source.fg, true);
 	cell.bg = to_bssh_color(source.bg, false);
+	return cell;
+}
 
+int bssh_emulator_private::copy_cell(int row, int col) {
+	VTermPos pos;
+	pos.row = row;
+	pos.col = col;
+
+	VTermScreenCell source;
+	if (!vterm_screen_get_cell(vts, pos, &source)) return 1;
+
+	const bssh_cell_t cell = convert_cell(source);
 	screen.set_cell(row, col, cell);
 
 	/*
@@ -469,6 +524,16 @@ bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
 
 	m_private->vts = vterm_obtain_screen(m_private->vt);
 	vterm_screen_set_callbacks(m_private->vts, &screen_callbacks, m_private);
+
+	/*
+	 * The alternate screen has to be asked for: libvterm does not
+	 * allocate its buffer unless told, and without it DECSET 1049 does
+	 * nothing at all. That is not merely a scrollback nicety -- it means
+	 * vim and less would redraw over the primary buffer and destroy the
+	 * shell output underneath them, with nothing to restore on exit.
+	 * Found by a scrollback test noticing an editor's redraws in history.
+	 */
+	vterm_screen_enable_altscreen(m_private->vts, 1);
 	vterm_screen_reset(m_private->vts, 1);
 
 	vterm_screen_set_unrecognised_fallbacks(m_private->vts, &unrecognised_fallbacks, m_private);
@@ -611,6 +676,15 @@ void bssh_emulator_private::apply_graphics(const bssh_graphics_result_t &result)
 	case bssh_graphics_result_t::NOTHING:
 		break;
 	}
+}
+
+const bssh_scrollback &bssh_emulator::scrollback() const {
+	return m_private->scrollback;
+}
+
+void bssh_emulator::set_scrollback_lines(int lines) {
+	m_private->scrollback.set_max_lines(lines);
+	emit scrollback_changed();
 }
 
 const bssh_image_store &bssh_emulator::images() const {

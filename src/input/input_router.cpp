@@ -44,6 +44,22 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 		}
 	}
 
+	/*
+	 * Shift+PageUp/PageDown scroll the view rather than reaching the
+	 * remote -- the same convention as every terminal, and the reason
+	 * plain PageUp still goes through: a pager needs it.
+	 */
+	if (event->modifiers().testFlag(Qt::ShiftModifier)) {
+		if (event->key() == Qt::Key_PageUp) {
+			emit shortcut_pressed(SHORTCUT_SCROLL_PAGE_UP);
+			return false;
+		}
+		if (event->key() == Qt::Key_PageDown) {
+			emit shortcut_pressed(SHORTCUT_SCROLL_PAGE_DOWN);
+			return false;
+		}
+	}
+
 	const quint8 modifiers = modifiers_for(event);
 	int key = bssh_emulator::KEY_NONE;
 

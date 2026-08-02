@@ -27,6 +27,10 @@ private slots:
 	void device_status_report_produces_a_reply();
 	void title_is_reported_from_osc();
 	void resize_keeps_existing_text();
+	void scrolled_lines_enter_the_scrollback();
+	void scrollback_is_capped();
+	void scrollback_keeps_colour();
+	void alternate_screen_does_not_pollute_the_scrollback();
 };
 
 #endif /* BSSH_EMULATOR_TEST_H */

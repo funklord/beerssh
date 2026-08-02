@@ -7,7 +7,9 @@
 
 #include "term/image_store.h"
 #include "term/screen.h"
+#include "term/scrollback.h"
 
+class QWheelEvent;
 class bssh_input_router;
 
 /*
@@ -54,6 +56,20 @@ public:
 
 	/* Images drawn over (or under) the grid -- see sec 7.1, tier 4. */
 	void attach_images(const bssh_image_store *images);
+
+	/* Lines that scrolled off, for scrolling back through (sec 7). */
+	void attach_scrollback(const bssh_scrollback *scrollback);
+
+	/*
+	 * How many lines above the live screen the view is showing. 0 is
+	 * live; scrolling back is a VIEW state, not a session state -- the
+	 * remote is not told, and output keeps arriving while the user reads
+	 * history.
+	 */
+	int scroll_offset() const { return m_scroll_offset; }
+	void set_scroll_offset(int lines);
+	void scroll_by(int lines);
+	void scroll_to_live();
 	const bssh_screen *screen() const { return m_screen; }
 
 	/*
@@ -77,6 +93,7 @@ protected:
 	void paintEvent(QPaintEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
 	void keyPressEvent(QKeyEvent *event) override;
+	void wheelEvent(QWheelEvent *event) override;
 	void inputMethodEvent(QInputMethodEvent *event) override;
 
 private:
@@ -87,6 +104,8 @@ private:
 
 	const bssh_screen *m_screen;
 	const bssh_image_store *m_images;
+	const bssh_scrollback *m_scrollback;
+	int m_scroll_offset;
 	bssh_input_router *m_input_router;
 	QFont m_font;
 	QColor m_background;

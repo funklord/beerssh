@@ -155,3 +155,77 @@ void emulator_test::resize_keeps_existing_text() {
 	QCOMPARE(emulator.screen().rows(), 3);
 	QCOMPARE(row(emulator, 0), QStringLiteral("stays"));
 }
+
+void emulator_test::scrolled_lines_enter_the_scrollback() {
+	bssh_emulator emulator(20, 3);
+	QSignalSpy spy(&emulator, &bssh_emulator::scrollback_changed);
+
+	QCOMPARE(emulator.scrollback().count(), 0);
+
+	emulator.feed(QByteArrayLiteral("one\r\ntwo\r\nthree\r\nfour\r\nfive"));
+
+	/* Two lines pushed off the top of a three-row screen. */
+	QCOMPARE(emulator.scrollback().count(), 2);
+	QVERIFY(spy.count() >= 2);
+
+	/* Oldest first, and the text is intact. */
+	const QList<bssh_cell_t> &oldest = emulator.scrollback().line(0);
+	QCOMPARE(QString::fromUcs4(&oldest.at(0).ch, 1), QStringLiteral("o"));
+	QCOMPARE(QString::fromUcs4(&oldest.at(1).ch, 1), QStringLiteral("n"));
+	QCOMPARE(QString::fromUcs4(&oldest.at(2).ch, 1), QStringLiteral("e"));
+}
+
+void emulator_test::scrollback_is_capped() {
+	bssh_emulator emulator(20, 2);
+	emulator.set_scrollback_lines(3);
+
+	for (int i = 0; i < 20; ++i) {
+		emulator.feed(QByteArray::number(i) + QByteArrayLiteral("\r\n"));
+	}
+
+	/*
+	 * A terminal left on a chatty log is the normal case. Without the cap
+	 * this list grows for as long as the session lives, which on a phone
+	 * is the difference between working and being killed.
+	 */
+	QCOMPARE(emulator.scrollback().count(), 3);
+
+	/* The cap keeps the NEWEST lines, not the first three ever seen. */
+	const QList<bssh_cell_t> &newest = emulator.scrollback().line(2);
+	QCOMPARE(QString::fromUcs4(&newest.at(0).ch, 1), QStringLiteral("1"));
+}
+
+void emulator_test::scrollback_keeps_colour() {
+	bssh_emulator emulator(20, 2);
+
+	emulator.feed(QByteArrayLiteral("\x1b[31mred\x1b[0m\r\na\r\nb"));
+
+	QVERIFY(emulator.scrollback().count() >= 1);
+
+	/*
+	 * Cells, not text: scrolled-back output that loses its colours is
+	 * scrolled-back output nobody can read a log in.
+	 */
+	const bssh_cell_t &cell = emulator.scrollback().line(0).at(0);
+	QCOMPARE(cell.fg.kind, bssh_color_t::INDEXED);
+	QCOMPARE(int(cell.fg.index), 1);
+}
+
+void emulator_test::alternate_screen_does_not_pollute_the_scrollback() {
+	bssh_emulator emulator(20, 3);
+
+	emulator.feed(QByteArrayLiteral("keep\r\nthis\r\nhistory\r\nplease"));
+	const int before = emulator.scrollback().count();
+	QVERIFY(before > 0);
+
+	/*
+	 * The alternate screen is what vim and less run on, and its scrolling
+	 * must not end up in history -- otherwise quitting an editor leaves
+	 * the scrollback full of its screen redraws.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h"));
+	emulator.feed(QByteArrayLiteral("a\r\nb\r\nc\r\nd\r\ne\r\nf"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1049l"));
+
+	QCOMPARE(emulator.scrollback().count(), before);
+}

@@ -29,9 +29,14 @@ protocol**, **iTerm2 inline images** and **sixel** — `kitten icat`,
 `imgcat` and `img2sixel` style output all render. Needs `libsixel-dev`
 (Debian/Ubuntu) alongside Qt and libssh.
 
+Scrollback works — mouse wheel or `Shift+PageUp`/`PageDown`, capped at 5000
+lines by default, keeping colours and attributes. Typing returns to the
+live screen. The alternate screen is honoured, so `vim` and `less` leave
+your shell output as they found it.
+
 Not built yet: mouse selection and copy (`Ctrl+Shift+C` is wired but has
-nothing to copy until then), scrollback, tabs and splits, and the tier-3
-extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
+nothing to copy until then), tabs and splits, and the tier-3 extensions in
+§7.1 (synchronized output, OSC 8 hyperlinks).
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown or changed key fails the connection

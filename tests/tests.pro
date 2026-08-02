@@ -37,6 +37,7 @@ SOURCES += \
     ../src/term/emulator_vterm.cpp \
     ../src/term/graphics.cpp \
     ../src/term/image_store.cpp \
+    ../src/term/scrollback.cpp \
     ../src/term/screen.cpp \
     ../src/platform/platform.cpp \
     ../src/platform/platform_desktop.cpp \
@@ -55,6 +56,7 @@ HEADERS += \
     ../src/term/emulator.h \
     ../src/term/graphics_internal.h \
     ../src/term/image_store.h \
+    ../src/term/scrollback.h \
     ../src/term/screen.h \
     ../src/platform/platform.h \
     ../src/ui/key_row.h \
