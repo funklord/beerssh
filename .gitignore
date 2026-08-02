@@ -1,8 +1,18 @@
-# qmake build directories (created by the top-level Makefile)
+# Build output.
+#
+# A glob rather than a list of names. This file used to spell out every
+# build directory individually, and the one that was not on the list --
+# build-android-x86, created by hand for an emulator run -- was swept into
+# the history by `git add -A`, taking a cross-compiled OpenSSL tree with
+# it and costing 247 MB. Ignore the shape, not the instances: anything
+# this project builds goes in a build-* directory.
 build/
-build-android/
-build-tests/
+build-*/
 .qmake.stash
+
+# Cross-compiled dependency install prefixes (tools/build-deps-android.sh).
+# Reproducible from the script, and several hundred MB if committed.
+deps/
 
 # The built binary, copied out of build/ by `make`
 /beerssh
@@ -14,9 +24,3 @@ __pycache__/
 *~
 *.swp
 .DS_Store
-
-# Android cross-build output
-build-android/
-build-vterm-android/
-build-deps-android/
-deps/
