@@ -75,6 +75,14 @@ public:
 
 	static front_door_t front_door_for(bool touch_primary);
 
+	/*
+	 * Whether the front door is what is on screen. Exists because its
+	 * absence was not caught by anything: the widgets were tested and
+	 * screenshotted on their own, so a window that never built them
+	 * looked fine everywhere except on a device.
+	 */
+	bool showing_front_door() const;
+
 protected:
 	void closeEvent(QCloseEvent *event) override;
 

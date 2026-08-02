@@ -194,10 +194,11 @@ python3 -m venv ~/.venv/aqt && ~/.venv/aqt/bin/pip install aqtinstall
 ~/.venv/aqt/bin/aqt install-qt linux android 6.8.2 android_arm64_v8a
 ```
 
-**The native build works**; packaging has never run. The manifest has been
-checked against the installed kit's own template and is parsed as part of
-the build, but it has still not been through `androiddeployqt`, and
-nothing has run on a device or an emulator.
+**It runs.** Built, packaged and launched on an Android 11 x86_64
+emulator: the touch front door appears, the on-screen key row shows itself
+because touch is the primary input, and the grid reports its own size. Not
+yet exercised on a device: the SSH path, the foreground service (which is
+not implemented), and anything involving a real keyboard.
 
 ## Layout
 

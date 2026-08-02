@@ -62,3 +62,23 @@ void platform_test::close_policy_asks_only_when_something_is_live() {
 	/* Asked once and told to keep running: do not ask again. */
 	QCOMPARE(bssh_main_window::close_action(true, true), bssh_main_window::CLOSE_TO_BACKGROUND);
 }
+
+void platform_test::the_window_opens_on_the_front_door() {
+	bssh_main_window window;
+
+	/*
+	 * The regression this exists for: the constructor's front-door block
+	 * was deleted in an unrelated rewrite, so the app opened straight
+	 * into an empty terminal on both platforms for eight commits. Nothing
+	 * caught it because every other test drives the widgets directly --
+	 * this one asserts on the ASSEMBLED window, which is the only place
+	 * the omission was visible.
+	 */
+	QVERIFY(window.showing_front_door());
+
+	/*
+	 * The command-line-target case is deliberately NOT exercised here: it
+	 * reaches a modal password dialog, and a test that can block is worse
+	 * than a gap in coverage.
+	 */
+}

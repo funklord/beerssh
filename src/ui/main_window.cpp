@@ -96,6 +96,30 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		if (m_current == session) detach_session();
 	});
 
+	/*
+	 * The front door, and only the one this device wants (sec 8.5). This
+	 * block was lost in the rewrite that introduced the session registry,
+	 * and nothing noticed for eight commits: every test drives the widgets
+	 * directly, and every screenshot rendered them directly, so the app
+	 * opening straight into an empty terminal was invisible until it ran
+	 * on a phone. showing_front_door() now has a test.
+	 */
+	if (front_door_for(bssh_platform::instance()->is_touch_primary())
+	    == FRONT_DOOR_HOST_LIST) {
+		m_host_list = new bssh_host_list(m_profile_store, this);
+		connect(m_host_list, &bssh_host_list::open_requested,
+		         this, &bssh_main_window::open_profile);
+		connect(m_host_list, &bssh_host_list::add_requested,
+		         this, &bssh_main_window::on_add_host);
+		m_pages->addWidget(m_host_list);
+	} else {
+		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
+		connect(m_session_dialog, &bssh_session_dialog::open_requested,
+		         this, &bssh_main_window::open_profile);
+		connect(m_session_dialog, &bssh_session_dialog::cancelled, this, &QWidget::close);
+		m_pages->addWidget(m_session_dialog);
+	}
+
 	m_pages->addWidget(m_terminal_page);
 
 	m_status_label->setContentsMargins(6, 3, 6, 3);
@@ -697,6 +721,10 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 	}
 	bssh_platform::instance()->set_keep_alive(false);
 	event->accept();
+}
+
+bool bssh_main_window::showing_front_door() const {
+	return m_pages->currentWidget() != m_terminal_page;
 }
 
 bssh_main_window::front_door_t bssh_main_window::front_door_for(bool touch_primary) {
