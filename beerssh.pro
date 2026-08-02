@@ -132,6 +132,13 @@ android {
     ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android
     ANDROID_VERSION_CODE = 1
     ANDROID_VERSION_NAME = 0.1.0
+
+    # Set here rather than as <uses-sdk> in the manifest: the Gradle
+    # plugin takes these from the build file and warns about (or
+    # overrides) a manifest that also declares them. project.md sec 2:
+    # minSdk 26, targetSdk 35 for Play.
+    ANDROID_MIN_SDK_VERSION = 26
+    ANDROID_TARGET_SDK_VERSION = 35
 } else {
     SOURCES += \
         src/platform/platform_desktop.cpp \

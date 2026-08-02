@@ -1,38 +1,82 @@
 <?xml version="1.0"?>
 <!--
-	AndroidManifest.xml -- BeerSSH (project.md sec 0.1, sec 2)
+	AndroidManifest.xml for BeerSSH (project.md sec 0.1, sec 2)
 
-	Hand-maintained rather than left to androiddeployqt's default,
-	because the default would ship the app under an org.qtproject.example
-	package name instead of se.vibes.beerssh.
+	Hand-maintained rather than left to androiddeployqt's default, because
+	the default ships the app as org.qtproject.example rather than
+	se.vibes.beerssh.
 
-	VERIFY THIS ON THE FIRST REAL ANDROID BUILD. It follows Qt 6.8's
-	template, but it was written without a Qt-for-Android kit present, so
-	it has never been through androiddeployqt. Diff it against the
-	template in the installed kit
-	($QT_ANDROID_ROOT/src/android/templates/AndroidManifest.xml) and keep
-	whatever that version requires -- the %%INSERT...%% tokens below are
-	substituted by androiddeployqt and must survive verbatim.
+	Reconciled against the template in the installed kit
+	(Qt/6.11.1/android_arm64_v8a/src/android/templates/AndroidManifest.xml)
+	after the first Android build. The %%INSERT...%% tokens are substituted
+	by androiddeployqt and must survive verbatim; the first version of this
+	file hardcoded values where tokens belong, which would have silently
+	ignored the versions set in beerssh.pro.
 
-	The service, its foregroundServiceType and POST_NOTIFICATIONS are
-	deliberately NOT here yet: they arrive with the background work at M4
-	(project.md sec 5.1), and declaring a foreground service before one
-	exists would be a permission the app cannot justify at review.
+	NOTE ON COMMENTS: XML forbids a double hyphen inside a comment, so the
+	house style of using one as an em dash cannot be used in this file.
+	The first version of this manifest did, and was therefore malformed
+	from the day it was written; nothing noticed until it was parsed,
+	because nothing parses a manifest until packaging.
+
+	Where this deviates from Qt's template it is deliberate, and each
+	deviation says why. Everything else follows the template, because the
+	parts that look like boilerplate are the parts androiddeployqt and
+	Qt's own Java layer depend on.
 -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
           package="se.vibes.beerssh"
           android:installLocation="auto"
-          android:versionCode="1"
-          android:versionName="0.1.0">
+          android:versionCode="-- %%INSERT_VERSION_CODE%% --"
+          android:versionName="-- %%INSERT_VERSION_NAME%% --">
+
+	<!-- androiddeployqt injects what Qt itself needs here; ours follow. -->
+	<!-- %%INSERT_PERMISSIONS -->
+	<!-- %%INSERT_FEATURES -->
 
 	<uses-permission android:name="android.permission.INTERNET"/>
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
+	<!--
+		The foreground-service permissions are not here yet. They arrive
+		with the service itself at M4 (sec 5.1), and declaring a
+		permission the app does not use is exactly what Play review asks
+		about.
+	-->
+
+	<supports-screens
+	        android:anyDensity="true"
+	        android:largeScreens="true"
+	        android:normalScreens="true"
+	        android:smallScreens="true" />
+
+	<!--
+		allowBackup is false, a deliberate deviation from Qt's template,
+		which says true. This app's data directory holds the known-hosts
+		store and, where no keyring is running, the encrypted credential
+		file (sec 11). Android's automatic backup would copy both to the
+		user's cloud account, which is not a decision a terminal should
+		make on their behalf.
+	-->
 	<application android:name="org.qtproject.qt.android.bindings.QtApplication"
 	             android:label="BeerSSH"
+	             android:icon="-- %%INSERT_APP_ICON%% --"
 	             android:hardwareAccelerated="true"
-	             android:allowBackup="false">
+	             android:enableOnBackInvokedCallback="false"
+	             android:allowBackup="false"
+	             android:fullBackupOnly="false">
 
+		<!--
+			configChanges is load-bearing, not boilerplate: handling these
+			in-process rather than letting Android recreate the activity is
+			what stops a rotation or a fold tearing down the view tree
+			under live sessions (sec 8.2).
+
+			windowSoftInputMode is ours, not the template's: without
+			adjustResize the soft keyboard covers the terminal and the
+			on-screen key row instead of shrinking the grid above it
+			(sec 6.2).
+		-->
 		<activity android:name="org.qtproject.qt.android.bindings.QtActivity"
 		          android:label="BeerSSH"
 		          android:exported="true"
@@ -40,16 +84,6 @@
 		          android:screenOrientation="unspecified"
 		          android:windowSoftInputMode="adjustResize"
 		          android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density">
-
-			<!--
-				configChanges is load-bearing, not boilerplate. Handling
-				these in-process rather than letting Android recreate the
-				activity is what keeps a rotation or a fold from tearing
-				down the view tree underneath live sessions (sec 8.2) --
-				and adjustResize is what keeps the on-screen key row and
-				the grid above the soft keyboard rather than behind it
-				(sec 6.2).
-			-->
 
 			<intent-filter>
 				<action android:name="android.intent.action.MAIN"/>
@@ -61,8 +95,20 @@
 			<meta-data android:name="android.app.arguments"
 			           android:value="-- %%INSERT_APP_ARGUMENTS%% --"/>
 		</activity>
-	</application>
 
-	<!-- minSdk 26 per project.md sec 2 [OPEN]; targetSdk 35 is [DECIDED]. -->
-	<uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35"/>
+		<!--
+			Required by Qt 6.11's Android layer, and absent from the first
+			version of this file because that was written from memory of
+			an older Qt. Qt uses it for content URIs; leaving it out is the
+			kind of omission that surfaces as a crash the first time a file
+			dialog opens rather than as a build error.
+		-->
+		<provider android:name="androidx.core.content.FileProvider"
+		          android:authorities="${applicationId}.qtprovider"
+		          android:exported="false"
+		          android:grantUriPermissions="true">
+			<meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+			           android:resource="@xml/qtprovider_paths"/>
+		</provider>
+	</application>
 </manifest>
