@@ -6,14 +6,16 @@
 
 #include "input/input_router.h"
 #include "ssh/ssh_session.h"
-#include "term/emulator.h"
 
 class QLabel;
+class QTabBar;
 class QStackedWidget;
 class bssh_host_list;
 class bssh_key_row;
 class bssh_profile_store;
 class bssh_session_dialog;
+class bssh_session;
+class bssh_session_registry;
 class bssh_terminal_view;
 
 #include "model/profile.h"
@@ -77,13 +79,17 @@ protected:
 
 private slots:
 	void open_profile(const bssh_profile_t &profile);
+	void on_add_host();
+	void on_tab_changed(int index);
+	void on_tab_close_requested(int index);
+	void on_registry_changed();
 	void on_grid_resized(int cols, int rows);
-	void on_state_changed(bssh_ssh_session::state_t state);
 	void on_failed(const QString &reason);
-	void on_emulator_output();
 
 private:
 	void connect_to(const QString &target);
+	void show_session(bssh_session *session);
+	void detach_session();
 	void update_status();
 
 	QStackedWidget *m_pages;
@@ -93,12 +99,10 @@ private:
 	bssh_host_list *m_host_list;
 	bssh_terminal_view *m_terminal_view;
 	QLabel *m_status_label;
-	bssh_ssh_session *m_session;
-	bssh_emulator *m_emulator;
-	bssh_input_router *m_input_router;
+	bssh_session_registry *m_registry;
+	bssh_session *m_current;
+	QTabBar *m_tabs;
 	bssh_key_row *m_key_row;
-	QString m_password;
-	QString m_target;
 	QString m_error;
 	int m_cols;
 	int m_rows;

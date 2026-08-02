@@ -28,6 +28,8 @@ INCLUDEPATH += $$PWD/src
 SOURCES += \
     src/main.cpp \
     src/model/profile_store.cpp \
+    src/model/session.cpp \
+    src/model/session_registry.cpp \
     src/input/input_router.cpp \
     src/platform/platform.cpp \
     src/ssh/ssh_session.cpp \
@@ -47,6 +49,8 @@ HEADERS += \
     src/input/input_router.h \
     src/model/profile.h \
     src/model/profile_store.h \
+    src/model/session.h \
+    src/model/session_registry.h \
     src/platform/platform.h \
     src/ssh/ssh_session.h \
     src/ssh/ssh_session_libssh.h \

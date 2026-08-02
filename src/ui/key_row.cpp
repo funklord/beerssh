@@ -124,6 +124,20 @@ bool bssh_key_row::should_be_visible() const {
 	return bssh_platform::instance()->is_touch_primary();
 }
 
+void bssh_key_row::set_router(bssh_input_router *router) {
+	if (m_router == router) return;
+
+	if (m_router) disconnect(m_router, nullptr, this, nullptr);
+	m_router = router;
+
+	if (m_router) {
+		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
+		         this, [this](quint8) { refresh_modifier_buttons(); });
+	}
+
+	refresh_modifier_buttons();
+}
+
 void bssh_key_row::set_visibility_mode(visibility_t mode) {
 	m_mode = mode;
 	setVisible(should_be_visible());

@@ -1178,6 +1178,10 @@ background).
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,
    tab bar, OSC titles (and desktop window title), per-tab status, layout
    persistence. *(Do this before splits — the registry is the foundation.)*
+   **Mostly built:** registry, `bssh_session` owning transport + emulator +
+   router, a tab bar rebuilt from the registry, and titles falling back
+   OSC → profile name → target. Layout persistence and per-tab status dots
+   are still open.
 9. **M8 – Adaptive splits.** `bssh_layout_manager`, size classes, 2/4-pane
    splits, focus indication, collapse-to-tabs on shrink, per-pane
    `window-change`. Desktop window-drag resizing exercises this hardest — use it.

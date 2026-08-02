@@ -46,9 +46,15 @@ window; the Android half of that — the foreground service — is **not
 implemented**, and `platform_android.cpp` says so at the call site rather
 than stubbing it to look finished.
 
-Not built yet: tabs and splits, triple-click line selection, the Android
-background service, and the tier-3 extensions in §7.1 (synchronized
-output, OSC 8 hyperlinks).
+Multiple sessions work: each lives in a registry rather than in a widget,
+with a tab bar that appears once there is more than one. Switching tabs
+re-points the view at another session's screen — nothing is copied, and a
+session keeps running (and keeps receiving output) while nothing is
+showing it.
+
+Not built yet: split panes, layout persistence, per-tab status dots,
+triple-click line selection, the Android background service, and the
+tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown or changed key fails the connection

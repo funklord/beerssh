@@ -30,6 +30,7 @@ SOURCES += \
     graphics_test.cpp \
     platform_test.cpp \
     profile_store_test.cpp \
+    session_registry_test.cpp \
     input_router_test.cpp \
     screen_test.cpp \
     terminal_view_test.cpp \
@@ -44,6 +45,8 @@ SOURCES += \
     ../src/term/screen.cpp \
     ../src/platform/platform.cpp \
     ../src/model/profile_store.cpp \
+    ../src/model/session.cpp \
+    ../src/model/session_registry.cpp \
     ../src/ui/host_list.cpp \
     ../src/ui/main_window.cpp \
     ../src/ui/session_dialog.cpp \
@@ -57,6 +60,7 @@ HEADERS += \
     graphics_test.h \
     platform_test.h \
     profile_store_test.h \
+    session_registry_test.h \
     input_router_test.h \
     screen_test.h \
     terminal_view_test.h \
@@ -71,6 +75,8 @@ HEADERS += \
     ../src/platform/platform.h \
     ../src/model/profile.h \
     ../src/model/profile_store.h \
+    ../src/model/session.h \
+    ../src/model/session_registry.h \
     ../src/ui/host_list.h \
     ../src/ui/main_window.h \
     ../src/ui/session_dialog.h \

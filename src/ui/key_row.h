@@ -42,6 +42,9 @@ public:
 
 	explicit bssh_key_row(bssh_input_router *router, QWidget *parent = nullptr);
 
+	/* Retargeted when the shown session changes (sec 3, principle 2). */
+	void set_router(bssh_input_router *router);
+
 	void set_visibility_mode(visibility_t mode);
 	visibility_t visibility_mode() const { return m_mode; }
 
