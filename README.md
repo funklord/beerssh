@@ -114,6 +114,20 @@ louder, differently-worded warning and defaults to cancelling.
 
 See `project.md` §14 for the milestone plan.
 
+## Presets
+
+A preset is a reusable set of terminal settings — `TERM`, scrollback,
+colours, keepalive, an on-connect command — attached to many hosts, so
+editing one changes all of them. Six starter presets ship (Default Linux,
+Raspberry Pi/SBC, OpenWrt/BusyBox, BSD, network switch, tmux-first), and a
+host may override any single field with a one-click revert.
+
+**A preset is structurally incapable of holding a secret** — no hostname,
+username, password or key reference — so exporting one and sending it to a
+colleague cannot leak your infrastructure. That is enforced by the type
+having nowhere to put such a thing, and asserted by a test on the exported
+keys.
+
 ## The interface
 
 Two front doors over one set of saved hosts (`project.md` §8.5):

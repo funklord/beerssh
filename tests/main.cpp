@@ -5,6 +5,7 @@
 #include "emulator_test.h"
 #include "graphics_test.h"
 #include "platform_test.h"
+#include "preset_test.h"
 #include "secret_store_test.h"
 #include "profile_store_test.h"
 #include "session_registry_test.h"
@@ -41,6 +42,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<emulator_test>(argc, argv);
 	failures += run_test<graphics_test>(argc, argv);
 	failures += run_test<platform_test>(argc, argv);
+	failures += run_test<preset_test>(argc, argv);
 	failures += run_test<secret_store_test>(argc, argv);
 	failures += run_test<profile_store_test>(argc, argv);
 	failures += run_test<session_registry_test>(argc, argv);

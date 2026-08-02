@@ -30,6 +30,7 @@ SOURCES += \
     emulator_test.cpp \
     graphics_test.cpp \
     platform_test.cpp \
+    preset_test.cpp \
     secret_store_test.cpp \
     profile_store_test.cpp \
     session_registry_test.cpp \
@@ -50,7 +51,9 @@ SOURCES += \
     ../src/platform/platform.cpp \
     ../src/platform/secret_store_file.cpp \
     ../src/model/conn_manager.cpp \
+    ../src/model/preset.cpp \
     ../src/model/profile_store.cpp \
+    ../src/model/settings_resolver.cpp \
     ../src/model/session.cpp \
     ../src/model/session_registry.cpp \
     ../src/ui/host_list.cpp \
@@ -69,6 +72,7 @@ HEADERS += \
     emulator_test.h \
     graphics_test.h \
     platform_test.h \
+    preset_test.h \
     secret_store_test.h \
     profile_store_test.h \
     session_registry_test.h \
@@ -89,7 +93,9 @@ HEADERS += \
     ../src/platform/secret_store.h \
     ../src/model/profile.h \
     ../src/model/conn_manager.h \
+    ../src/model/preset.h \
     ../src/model/profile_store.h \
+    ../src/model/settings_resolver.h \
     ../src/model/session.h \
     ../src/model/session_registry.h \
     ../src/ui/host_list.h \

@@ -1245,7 +1245,11 @@ background).
     cache, asset-pack delivery (Android) / full set (desktop), CI validation
     script, fractional-scaling and multi-monitor DPI checks.
 11. **M10 – Preset system.** Preset/profile layering, built-in starter presets,
-    JSON import/export, propagation UI.
+    JSON import/export, propagation UI. **Core built:** `bssh_preset_t` (with
+    no field a secret could occupy), the three-layer resolver with
+    override detection and revert, JSON round-trip, and the six starter
+    presets. Still open: the preset store table, the editing UI, and the
+    "used by N hosts" warning before a save propagates.
 12. **M11 – Settings, polish, accessibility.**
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop
