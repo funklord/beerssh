@@ -74,6 +74,8 @@ private slots:
 	void on_save();
 	void on_clone();
 	void on_delete();
+	void on_export();
+	void on_import();
 
 private:
 	void show_preset(const bssh_preset_t &preset);
@@ -99,6 +101,8 @@ private:
 	QPushButton *m_save;
 	QPushButton *m_clone;
 	QPushButton *m_delete;
+	QPushButton *m_export;
+	QPushButton *m_import;
 
 	bssh_preset_t m_current;
 	bool m_touch;

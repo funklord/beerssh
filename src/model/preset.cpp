@@ -1,4 +1,7 @@
 #include "model/preset.h"
+#include <QTemporaryDir>
+#include <QSettings>
+#include <QFile>
 
 #include <QJsonArray>
 
@@ -133,4 +136,125 @@ QList<bssh_preset_t> bssh_preset_t::builtins() {
 	presets.append(tmux_first);
 
 	return presets;
+}
+
+/*
+ * Qt reads and writes INI through a file path; Android hands out
+ * content:// URIs, which QFile understands and QSettings does not. Rather
+ * than write a second INI implementation for one platform, the bytes move
+ * through a temporary file and QSettings stays the only thing that parses
+ * the format.
+ */
+static bool bssh_is_local_path(const QString &path) {
+	return !path.startsWith(QStringLiteral("content://")) &&
+	       !path.startsWith(QStringLiteral("file://"));
+}
+
+bool bssh_preset_t::write_ini(const QString &path) const {
+	QTemporaryDir staging;
+	const QString target = bssh_is_local_path(path)
+	        ? path
+	        : staging.filePath(QStringLiteral("preset.ini"));
+
+	{
+		QSettings file(target, QSettings::IniFormat);
+		file.clear();
+		file.beginGroup(QStringLiteral("preset"));
+
+		const QJsonObject json = to_json();
+		for (auto it = json.constBegin(); it != json.constEnd(); ++it) {
+			if (it.value().isBool()) {
+				file.setValue(it.key(), it.value().toBool() ? QStringLiteral("true")
+				                                            : QStringLiteral("false"));
+			} else if (it.value().isDouble()) {
+				file.setValue(it.key(), it.value().toInt());
+			} else {
+				file.setValue(it.key(), it.value().toString());
+			}
+		}
+
+		file.endGroup();
+		file.sync();
+
+		if (file.status() != QSettings::NoError) return false;
+	}
+
+	if (bssh_is_local_path(path)) return true;
+
+	QFile source(target);
+	QFile destination(path);
+	if (!source.open(QIODevice::ReadOnly)) return false;
+	if (!destination.open(QIODevice::WriteOnly)) return false;
+
+	return destination.write(source.readAll()) >= 0;
+}
+
+bssh_preset_t bssh_preset_t::read_ini(const QString &path, bool *ok) {
+	if (ok) *ok = false;
+
+	QTemporaryDir staging;
+	QString source = path;
+
+	if (!bssh_is_local_path(path)) {
+		QFile incoming(path);
+		if (!incoming.open(QIODevice::ReadOnly)) return bssh_preset_t();
+
+		source = staging.filePath(QStringLiteral("preset.ini"));
+		QFile local(source);
+		if (!local.open(QIODevice::WriteOnly)) return bssh_preset_t();
+		local.write(incoming.readAll());
+		local.close();
+	}
+
+	QSettings file(source, QSettings::IniFormat);
+	if (file.status() != QSettings::NoError) return bssh_preset_t();
+
+	/*
+	 * [preset] is what this project writes, but a file someone assembled
+	 * by copying a section out of presets.ini carries that section's own
+	 * name instead. Both are accepted: refusing the obvious way to make
+	 * one of these by hand would defeat the point of a text format.
+	 */
+	QString section = QStringLiteral("preset");
+	if (!file.childGroups().contains(section)) {
+		if (file.childGroups().isEmpty()) return bssh_preset_t();
+		section = file.childGroups().first();
+	}
+
+	file.beginGroup(section);
+
+	QJsonObject json = bssh_preset_t().to_json();
+	json.insert(QStringLiteral("name"), section);
+
+	for (const QString &key : file.childKeys()) {
+		/* Never imported -- see write_ini. */
+		if (key == QStringLiteral("id") || key == QStringLiteral("builtin")) continue;
+
+		const QJsonValue reference = json.value(key);
+		const QString raw = file.value(key).toString();
+
+		if (reference.isBool()) {
+			json.insert(key, raw.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0 ||
+			                  raw == QStringLiteral("1"));
+		} else if (reference.isDouble()) {
+			json.insert(key, raw.toInt());
+		} else {
+			json.insert(key, raw);
+		}
+	}
+
+	file.endGroup();
+
+	bssh_preset_t preset = bssh_preset_t::from_json(json);
+	if (preset.name.isEmpty()) preset.name = section;
+
+	/*
+	 * Arrives as a new, editable preset of this installation's own, never
+	 * as a shipped one and never claiming an id.
+	 */
+	preset.id = 0;
+	preset.is_builtin = false;
+
+	if (ok) *ok = true;
+	return preset;
 }

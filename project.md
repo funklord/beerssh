@@ -1062,6 +1062,16 @@ Each sets sensible `TERM`, colours, and key-row defaults for that target. These
 double as documentation of what a preset can do.
 
 ### 10.5 Import / export
+- **Export is built and works on both platforms**; **import works on desktop**
+  and is **[OPEN] on Android**: the document picker lists preset files but will
+  not let one be selected, on an Android 11 emulator image. The intent Qt sends
+  (`ACTION_OPEN_DOCUMENT`, `typ=*/*`, category `OPENABLE`) looks right, and a
+  suffix filter, no filter, an all-files filter and explicit MIME filters all
+  behave identically — a `.txt` is refused exactly as an `.ini` is, while
+  *export* through `ACTION_CREATE_DOCUMENT` works on the same device. The likely
+  answer is not a better filter but a different shape: an intent-filter so a
+  preset file is opened from a file manager *into* BeerSSH, which is how Android
+  expects this to work.
 - Presets export/import as **INI** — the same format they are stored in (§10.6),
   so exporting one is copying a section out and importing is pasting it back,
   with a `schema` key for forward compatibility. Human-readable, diffable and

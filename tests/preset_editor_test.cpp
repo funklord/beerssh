@@ -1,4 +1,5 @@
 #include <QtTest>
+#include <QFile>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -184,4 +185,143 @@ void preset_editor_test::an_overridden_field_does_not_follow_the_preset() {
 	 * exception temporary.
 	 */
 	QCOMPARE(resolved.value(QStringLiteral("scrollback_lines")).toInt(), 50);
+}
+
+void preset_editor_test::a_preset_round_trips_through_an_exported_file() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("servers.ini"));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("Servers");
+	preset.term = QStringLiteral("xterm-direct");
+	preset.scrollback_lines = 20000;
+	preset.bell_enabled = false;
+	preset.cursor_style = QStringLiteral("bar");
+	preset.font_family = QStringLiteral("hack");
+	preset.font_size = 13;
+	preset.keepalive_seconds = 30;
+	preset.compression = true;
+	preset.on_connect_command = QStringLiteral("tmux attach || tmux new");
+
+	QVERIFY(preset.write_ini(path));
+
+	bool ok = false;
+	const bssh_preset_t restored = bssh_preset_t::read_ini(path, &ok);
+	QVERIFY(ok);
+
+	/*
+	 * Every field, including the booleans and the numbers -- INI holds
+	 * strings, so a type that is not restored comes back as "true" or
+	 * "30" and quietly stops meaning anything.
+	 */
+	QCOMPARE(restored.name, preset.name);
+	QCOMPARE(restored.term, preset.term);
+	QCOMPARE(restored.scrollback_lines, preset.scrollback_lines);
+	QCOMPARE(restored.bell_enabled, preset.bell_enabled);
+	QCOMPARE(restored.cursor_style, preset.cursor_style);
+	QCOMPARE(restored.font_family, preset.font_family);
+	QCOMPARE(restored.font_size, preset.font_size);
+	QCOMPARE(restored.keepalive_seconds, preset.keepalive_seconds);
+	QCOMPARE(restored.compression, preset.compression);
+	QCOMPARE(restored.on_connect_command, preset.on_connect_command);
+}
+
+void preset_editor_test::an_exported_preset_names_nobodys_infrastructure() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("share-me.ini"));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("Servers");
+	QVERIFY(preset.write_ini(path));
+
+	QFile file(path);
+	QVERIFY(file.open(QIODevice::ReadOnly));
+	const QString text = QString::fromUtf8(file.readAll()).toLower();
+
+	/*
+	 * sec 10.3's whole promise, checked on the artefact rather than on the
+	 * struct: this is the file a user mails to a colleague or pastes into
+	 * a forum, and it must not describe their network. bssh_preset_t has
+	 * no field for any of these -- this is the test that notices if one
+	 * ever gains one.
+	 */
+	QVERIFY(!text.contains(QStringLiteral("host")));
+	QVERIFY(!text.contains(QStringLiteral("user")));
+	QVERIFY(!text.contains(QStringLiteral("password")));
+	QVERIFY(!text.contains(QStringLiteral("passphrase")));
+	QVERIFY(!text.contains(QStringLiteral("identity")));
+	QVERIFY(!text.contains(QStringLiteral("port")));
+
+	/* A schema version, so a future build knows what it is reading. */
+	QVERIFY(text.contains(QStringLiteral("schema=")));
+}
+
+void preset_editor_test::an_import_never_claims_an_id_or_shipped_status() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("hostile.ini"));
+
+	/*
+	 * A file claiming to be preset number four and shipped with the app.
+	 * Neither is the file's to decide: an id belongs to this
+	 * installation's store, and "shipped" is what makes a preset
+	 * read-only, so an import that could set it would be an import that
+	 * could plant an uneditable preset.
+	 */
+	{
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("[preset]\n"
+		           "name=Trojan\n"
+		           "id=4\n"
+		           "builtin=true\n"
+		           "scrollback_lines=777\n");
+	}
+
+	bool ok = false;
+	const bssh_preset_t imported = bssh_preset_t::read_ini(path, &ok);
+
+	QVERIFY(ok);
+	QCOMPARE(imported.scrollback_lines, 777);
+	QCOMPARE(imported.id, 0);
+	QVERIFY(!imported.is_builtin);
+
+	/* And a file that is not a preset at all is refused rather than
+	 * imported as an empty one. */
+	const QString junk = dir.filePath(QStringLiteral("junk.ini"));
+	{
+		QFile file(junk);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("this is not an ini file at all\n");
+	}
+
+	bool junk_ok = true;
+	bssh_preset_t::read_ini(junk, &junk_ok);
+	QVERIFY(!junk_ok);
+}
+
+void preset_editor_test::an_untouched_font_stays_unset_rather_than_being_pinned() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.path());
+	bssh_preset_editor editor(&store);
+
+	/* A shipped preset: every one of them leaves the font unset (sec 10.4). */
+	QListWidget *list = editor.findChild<QListWidget *>();
+	list->setCurrentRow(0);
+	QVERIFY(store.preset(editor.current_preset_id()).font_family.isEmpty());
+
+	/*
+	 * Cloning without touching the font must not pin one. The picker
+	 * cannot display "unset" -- it shows the default that an empty value
+	 * resolves to -- so writing back what it displays would turn "use
+	 * this device's default" into "always use JetBrains Mono", and a
+	 * preset exported from a desktop would override the condensed
+	 * default a phone is supposed to get (sec 9.2).
+	 */
+	for (QPushButton *button : editor.findChildren<QPushButton *>()) {
+		if (button->text() == QStringLiteral("Save as new")) button->click();
+	}
+
+	const bssh_preset_t clone = store.preset(editor.current_preset_id());
+	QVERIFY2(clone.font_family.isEmpty(),
+	         "an untouched font must not be recorded as an explicit choice");
 }

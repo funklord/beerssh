@@ -74,6 +74,23 @@ struct bssh_preset_t {
 	QJsonObject to_json() const;
 	static bssh_preset_t from_json(const QJsonObject &object);
 
+	/*
+	 * Export and import, in the INI the store itself uses (sec 10.5, sec
+	 * 10.6). One format rather than two: a second serialiser for sharing
+	 * is a second serialiser to keep in step, and the first divergence
+	 * shows up as a preset that imports subtly wrong.
+	 *
+	 * The path may be a content:// URI on Android, which QSettings cannot
+	 * open and QFile can -- so the bytes are bridged through a temporary
+	 * file rather than by hand-rolling an INI parser for one platform.
+	 *
+	 * id and is_builtin never travel: they are facts about THIS
+	 * installation's store, and importing someone else's "id 4, shipped"
+	 * would claim a slot and a status that are not theirs to give.
+	 */
+	bool write_ini(const QString &path) const;
+	static bssh_preset_t read_ini(const QString &path, bool *ok = nullptr);
+
 	/* The starter set (sec 10.4). Read-only; users clone them. */
 	static QList<bssh_preset_t> builtins();
 };

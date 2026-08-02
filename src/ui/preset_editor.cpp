@@ -2,6 +2,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QFileDialog>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -14,6 +15,8 @@
 #include <QVBoxLayout>
 
 #include "model/profile_store.h"
+#include "platform/platform.h"
+#include "term/font_catalog.h"
 #include "ui/font_picker.h"
 
 /*
@@ -138,6 +141,21 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 
 	right->addStretch(1);
 
+	/*
+	 * sec 10.5. A preset is the one thing in this app that is safe to send
+	 * to someone -- it holds no host, no user and no credential by
+	 * construction (sec 10.3) -- so sharing it is a feature rather than a
+	 * risk, and it is worth a button rather than an instruction to find
+	 * the config directory.
+	 */
+	QHBoxLayout *transfer = new QHBoxLayout();
+	m_import = new QPushButton(QStringLiteral("Import..."), this);
+	m_export = new QPushButton(QStringLiteral("Export..."), this);
+	transfer->addStretch(1);
+	transfer->addWidget(m_import);
+	transfer->addWidget(m_export);
+	right->addLayout(transfer);
+
 	QHBoxLayout *buttons = new QHBoxLayout();
 	m_save = new QPushButton(QStringLiteral("Save"), this);
 	m_clone = new QPushButton(QStringLiteral("Save as new"), this);
@@ -174,6 +192,8 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 	connect(m_save, &QPushButton::clicked, this, &bssh_preset_editor::on_save);
 	connect(m_clone, &QPushButton::clicked, this, &bssh_preset_editor::on_clone);
 	connect(m_delete, &QPushButton::clicked, this, &bssh_preset_editor::on_delete);
+	connect(m_export, &QPushButton::clicked, this, &bssh_preset_editor::on_export);
+	connect(m_import, &QPushButton::clicked, this, &bssh_preset_editor::on_import);
 
 	reload();
 }
@@ -253,7 +273,24 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 	preset.bell_enabled = m_bell->isChecked();
 	preset.cursor_style = m_cursor_style->currentData().toString();
 	preset.cursor_blink = m_cursor_blink->isChecked();
-	preset.font_family = m_font->font_id();
+	/*
+	 * An untouched font stays UNSET rather than becoming whatever the
+	 * picker resolved it to. The picker cannot show "unset" -- an empty
+	 * value means "the default for this form factor" (sec 9.2), so it
+	 * displays that default -- and writing the resolved value back would
+	 * pin it: a preset exported from a desktop would then carry
+	 * jetbrains-mono, and importing it on a phone would quietly override
+	 * the condensed default that form factor is supposed to get.
+	 *
+	 * Same rule as a host override: do not record a value that only
+	 * agrees with what it would have resolved to anyway.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool compact = platform && platform->is_touch_primary();
+	const QString resolved = bssh_font_catalog::instance()
+	                                 .effective_id(m_current.font_family, compact);
+
+	if (m_font->font_id() != resolved) preset.font_family = m_font->font_id();
 	preset.font_size = m_font->point_size();
 	preset.keepalive_seconds = m_keepalive->value();
 	preset.compression = m_compression->isChecked();
@@ -368,4 +405,124 @@ void bssh_preset_editor::on_delete() {
 	m_current = bssh_preset_t();
 	reload();
 	emit preset_removed(id);
+}
+
+void bssh_preset_editor::on_export() {
+	const bssh_preset_t preset = edited_preset();
+
+	/*
+	 * Exports what is ON SCREEN, not what was last saved. Someone who has
+	 * just typed a change and wants to send it to a colleague means the
+	 * change; making them save first -- into a shipped preset they cannot
+	 * save into -- would be a rule with no reason behind it.
+	 */
+	const QString suggested = QStringLiteral("%1.ini").arg(
+	        preset.name.isEmpty() ? QStringLiteral("preset") : preset.name);
+
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool touch = platform && platform->is_touch_primary();
+
+	const QString path = QFileDialog::getSaveFileName(
+	        this, QStringLiteral("Export preset"), suggested,
+	        touch ? QString() : QStringLiteral("Preset files (*.ini)"));
+
+	if (path.isEmpty()) return;
+
+	if (!preset.write_ini(path)) {
+		QMessageBox::warning(this, QStringLiteral("Export failed"),
+		                      QStringLiteral("Could not write %1.").arg(path));
+	}
+}
+
+void bssh_preset_editor::on_import() {
+	/*
+	 * "All files" on touch, rather than the suffix filter. Android's
+	 * document picker filters by MIME TYPE, and Qt derives the intent's
+	 * type from the name filter: ".ini" is not a type Android knows, so
+	 * every preset file was offered as an unselectable "BIN file" and
+	 * import was impossible on the platform rather than merely awkward.
+	 * Found by tapping the button on a device -- the desktop dialog
+	 * filters by suffix and was perfectly fine.
+	 *
+	 * Nothing is lost by dropping it: read_ini validates the CONTENT and
+	 * refuses a file that is not a preset, which is the check that
+	 * actually matters -- an extension has never been evidence of what is
+	 * inside a file.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool touch = platform && platform->is_touch_primary();
+
+	QFileDialog dialog(this, QStringLiteral("Import preset"));
+	dialog.setAcceptMode(QFileDialog::AcceptOpen);
+	dialog.setFileMode(QFileDialog::ExistingFile);
+
+	if (touch) {
+		/*
+		 * KNOWN LIMITATION, and deliberately not papered over: on the
+		 * Android 11 emulator image this picker lists preset files but
+		 * will not let one be chosen. The intent Qt sends is
+		 * ACTION_OPEN_DOCUMENT with a wildcard type and category
+		 * OPENABLE, which looks correct, and neither a suffix filter,
+		 * no filter, an
+		 * "All files" filter, nor explicit MIME filters (octet-stream,
+		 * text-plain, wildcard) changed it -- a .txt file is refused
+		 * just as an .ini is. EXPORT works on the same device, so the
+		 * content:// plumbing underneath is fine; it is specific to
+		 * choosing an existing document.
+		 *
+		 * Left as the plain wildcard rather than as a cleverer guess,
+		 * because four guesses have already been wrong and the next
+		 * person deserves the simple version to debug rather than mine.
+		 * sec 10.5 records it as open; the likely route is an
+		 * intent-filter so a preset is opened from a file manager INTO
+		 * BeerSSH, which is the more Android-shaped answer anyway.
+		 */
+		dialog.setMimeTypeFilters({ QStringLiteral("*/*") });
+	} else {
+		dialog.setNameFilter(QStringLiteral("Preset files (*.ini)"));
+	}
+
+	if (dialog.exec() != QDialog::Accepted) return;
+
+	const QList<QUrl> chosen = dialog.selectedUrls();
+	if (chosen.isEmpty()) return;
+
+	/*
+	 * A local path where there is one, the content:// URL otherwise --
+	 * read_ini takes either, and on Android there is no path to be had.
+	 */
+	const QUrl url = chosen.first();
+	const QString path = url.isLocalFile() ? url.toLocalFile() : url.toString();
+
+	if (path.isEmpty() || !m_store) return;
+
+	bool ok = false;
+	bssh_preset_t imported = bssh_preset_t::read_ini(path, &ok);
+
+	if (!ok) {
+		QMessageBox::warning(this, QStringLiteral("Import failed"),
+		                      QStringLiteral("%1 does not look like a preset file.")
+		                              .arg(path));
+		return;
+	}
+
+	/*
+	 * Added, never merged over an existing one of the same name. An
+	 * import that silently replaced a preset would change every host
+	 * following it -- the propagation this editor otherwise asks about
+	 * explicitly, done invisibly by opening a file.
+	 */
+	for (const bssh_preset_t &existing : m_store->presets()) {
+		if (existing.name.compare(imported.name, Qt::CaseInsensitive) != 0) continue;
+		imported.name = imported.name + QStringLiteral(" (imported)");
+		break;
+	}
+
+	const int id = m_store->save_preset(imported);
+	if (id == 0) return;
+
+	m_current = imported;
+	m_current.id = id;
+	reload();
+	emit preset_saved(id);
 }
