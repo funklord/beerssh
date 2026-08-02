@@ -33,6 +33,7 @@ SOURCES += \
     src/model/session_registry.cpp \
     src/input/input_router.cpp \
     src/platform/platform.cpp \
+    src/platform/secret_store_file.cpp \
     src/ssh/ssh_session.cpp \
     src/ssh/ssh_session_libssh.cpp \
     src/term/emulator_vterm.cpp \
@@ -57,6 +58,7 @@ HEADERS += \
     src/model/session.h \
     src/model/session_registry.h \
     src/platform/platform.h \
+    src/platform/secret_store.h \
     src/ssh/ssh_session.h \
     src/ssh/ssh_session_libssh.h \
     src/term/emulator.h \
@@ -78,7 +80,7 @@ HEADERS += \
 # file allowed to include its headers, which is what keeps the
 # libssh-vs-libssh2 decision (project.md sec 4) genuinely reversible.
 CONFIG += link_pkgconfig
-PKGCONFIG += libssh libsixel
+PKGCONFIG += libssh libsixel libcrypto
 
 # Vendored libvterm (project.md sec 7): the parser is proven and assumes no
 # PTY, so this project owns only the rendering and the input on top of it.

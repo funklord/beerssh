@@ -96,6 +96,12 @@ to expose one), reopening every remembered host at once (needs key auth),
 triple-click line selection, the Android background service, and the
 tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 
+Credentials, when stored, go in a passphrase-encrypted file
+(`~/.local/share/beerssh/secrets.enc`, PBKDF2 + AES-256-GCM via OpenSSL).
+The UI names the backend rather than calling everything "encrypted" — a
+passphrase file and a hardware keystore are not the same promise. The
+Secret Service backend for machines running a keyring is not built yet.
+
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown host shows its fingerprint and waits
 for you to accept before anything is written; a *changed* key gets a

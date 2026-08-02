@@ -1049,12 +1049,17 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   `SharedPreferences`, config files, or the SQLite database (§10.6).
   - **Android:** wrap secrets with the **Android Keystore** (hardware-backed
     where available).
-  - **Desktop [OPEN, decide at implementation]:** the platform secret service —
+  - **Desktop [DECIDED, partly built]:** the platform secret service —
     Secret Service / `libsecret` (GNOME Keyring, KWallet) on Linux, Keychain on
     macOS, DPAPI/Credential Manager on Windows. **Fallback where no such service
     is running** (a headless or minimal session — common enough on Linux to plan
     for, not an edge case): a passphrase-derived key (Argon2id) unlocking a local
-    encrypted store, prompted for at app start.
+    encrypted store, prompted for at app start. **The fallback is built**
+    (PBKDF2-HMAC-SHA256 + AES-256-GCM, both OpenSSL's, behind
+    `bssh_secret_store`); the Secret Service backend needs `libsecret-1-dev`
+    and is not. The fallback was built first deliberately: a headless or
+    minimal Linux session has no keyring, so it is needed regardless, and
+    it is the case a keyring-only implementation would have left broken.
 - **Be honest in the UI about which one is in use.** Keystore-backed and
   passphrase-backed are not equivalent security, and a desktop user with the
   fallback deserves to know their keys are only as safe as the passphrase and
@@ -1214,7 +1219,8 @@ background).
    keys are offered an unlock prompt before any password, since for a
    key-only server a password prompt is not a fallback but a prompt that
    cannot succeed; and the trust-on-first-use prompt is built (§11). Still
-   open: the secret store itself, so nothing is remembered between runs.
+   open: wiring the store into the session flow, so a password given once
+   is offered back on reconnect, and the libsecret backend.
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,
    tab bar, OSC titles (and desktop window title), per-tab status, layout
    persistence. *(Do this before splits — the registry is the foundation.)*

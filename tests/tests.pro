@@ -16,7 +16,7 @@ TARGET = beerssh_test
 QT += widgets network sql testlib
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libsixel libssh
+PKGCONFIG += libsixel libssh libcrypto
 CONFIG += c++17 console
 CONFIG -= app_bundle
 
@@ -30,6 +30,7 @@ SOURCES += \
     emulator_test.cpp \
     graphics_test.cpp \
     platform_test.cpp \
+    secret_store_test.cpp \
     profile_store_test.cpp \
     session_registry_test.cpp \
     tab_status_test.cpp \
@@ -47,6 +48,7 @@ SOURCES += \
     ../src/term/scrollback.cpp \
     ../src/term/screen.cpp \
     ../src/platform/platform.cpp \
+    ../src/platform/secret_store_file.cpp \
     ../src/model/conn_manager.cpp \
     ../src/model/profile_store.cpp \
     ../src/model/session.cpp \
@@ -67,6 +69,7 @@ HEADERS += \
     emulator_test.h \
     graphics_test.h \
     platform_test.h \
+    secret_store_test.h \
     profile_store_test.h \
     session_registry_test.h \
     tab_status_test.h \
@@ -83,6 +86,7 @@ HEADERS += \
     ../src/term/scrollback.h \
     ../src/term/screen.h \
     ../src/platform/platform.h \
+    ../src/platform/secret_store.h \
     ../src/model/profile.h \
     ../src/model/conn_manager.h \
     ../src/model/profile_store.h \
