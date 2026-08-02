@@ -143,7 +143,8 @@ Two front doors over one set of saved hosts (`project.md` §8.5):
   top, saved sessions with Load/Save/Delete. Familiar without instructions
   if you have ever used PuTTY.
 - **Touch gets a mobile list** — full-bleed rows, one tap to connect, a
-  floating add button, kinetic scrolling.
+  floating add button, kinetic scrolling, and a full-screen form (not a
+  dialog) for adding a host.
 
 Which appears follows the input device rather than the OS, so a
 convertible in tablet mode gets the touch one. Hosts live in SQLite under

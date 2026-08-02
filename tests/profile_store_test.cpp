@@ -5,6 +5,7 @@
 
 #include "model/profile_store.h"
 #include "profile_store_test.h"
+#include "ui/host_editor.h"
 #include "ui/main_window.h"
 
 static bssh_profile_t make_profile(const QString &name, const QString &host) {
@@ -381,6 +382,33 @@ void profile_store_test::a_shipped_preset_cannot_be_edited() {
 
 	/* And a shipped preset cannot be deleted either. */
 	QVERIFY(!store.remove_preset(builtin.id));
+}
+
+void profile_store_test::the_host_editor_builds_a_profile() {
+	bssh_host_editor editor;
+
+	bssh_profile_t typed;
+	typed.host = QStringLiteral("10.0.0.42");
+	typed.user = QStringLiteral("pi");
+	typed.port = 2222;
+	editor.set_profile(typed);
+
+	const bssh_profile_t built = editor.profile();
+	QCOMPARE(built.host, QStringLiteral("10.0.0.42"));
+	QCOMPARE(built.user, QStringLiteral("pi"));
+	QCOMPARE(int(built.port), 2222);
+
+	/*
+	 * An unnamed host is named after itself. Making someone name a thing
+	 * before they can connect to it is a form asking for tidiness rather
+	 * than for what it needs -- but a blank row in the list is worse.
+	 */
+	QCOMPARE(built.name, QStringLiteral("10.0.0.42"));
+
+	/* Nothing typed is nothing to save, and the editor says so by being
+	 * invalid rather than by inventing a host. */
+	bssh_host_editor empty;
+	QVERIFY(!empty.profile().is_valid());
 }
 
 void profile_store_test::front_door_follows_the_input_device() {

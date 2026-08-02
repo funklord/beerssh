@@ -10,6 +10,7 @@
 class QLabel;
 class QTabBar;
 class QStackedWidget;
+class bssh_host_editor;
 class bssh_host_list;
 class bssh_layout_manager;
 class bssh_key_row;
@@ -118,6 +119,7 @@ private:
 	bssh_profile_store *m_profile_store;
 	bssh_session_dialog *m_session_dialog;
 	bssh_host_list *m_host_list;
+	bssh_host_editor *m_host_editor;
 	bssh_terminal_view *m_terminal_view;
 	QLabel *m_status_label;
 	bssh_session_registry *m_registry;

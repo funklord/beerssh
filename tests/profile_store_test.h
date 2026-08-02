@@ -27,6 +27,7 @@ private slots:
 	void a_host_follows_a_preset_and_may_override_it();
 	void a_preset_in_use_cannot_be_deleted();
 	void a_shipped_preset_cannot_be_edited();
+	void the_host_editor_builds_a_profile();
 	void front_door_follows_the_input_device();
 };
 

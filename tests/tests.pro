@@ -59,6 +59,7 @@ SOURCES += \
     ../src/model/settings_resolver.cpp \
     ../src/model/session.cpp \
     ../src/model/session_registry.cpp \
+    ../src/ui/host_editor.cpp \
     ../src/ui/host_list.cpp \
     ../src/ui/layout_manager.cpp \
     ../src/ui/pane_container.cpp \
@@ -101,6 +102,7 @@ HEADERS += \
     ../src/model/settings_resolver.h \
     ../src/model/session.h \
     ../src/model/session_registry.h \
+    ../src/ui/host_editor.h \
     ../src/ui/host_list.h \
     ../src/ui/layout_manager.h \
     ../src/ui/pane_container.h \

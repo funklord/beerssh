@@ -31,6 +31,7 @@
 
 #include "platform/platform.h"
 #include "platform/secret_store.h"
+#include "ui/host_editor.h"
 #include "ui/host_list.h"
 #include "ui/key_row.h"
 #include "ui/session_dialog.h"
@@ -44,6 +45,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_profile_store(new bssh_profile_store(QString(), this)),
       m_session_dialog(nullptr),
       m_host_list(nullptr),
+      m_host_editor(nullptr),
       m_terminal_view(new bssh_terminal_view(this)),
       m_status_label(new QLabel(this)),
       m_registry(new bssh_session_registry(this)),
@@ -112,6 +114,24 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		connect(m_host_list, &bssh_host_list::add_requested,
 		         this, &bssh_main_window::on_add_host);
 		m_pages->addWidget(m_host_list);
+
+		/*
+		 * Its own page rather than a dialog (sec 8.5). A phone has one
+		 * screen and the user is holding it; a form that covers it is
+		 * the native shape, and going back is the system's own gesture.
+		 */
+		m_host_editor = new bssh_host_editor(this);
+		m_pages->addWidget(m_host_editor);
+
+		connect(m_host_editor, &bssh_host_editor::save_requested,
+		         this, [this](const bssh_profile_t &profile) {
+			m_profile_store->save(profile);
+			m_host_list->reload();
+			m_pages->setCurrentWidget(m_host_list);
+		});
+		connect(m_host_editor, &bssh_host_editor::cancelled, this, [this] {
+			m_pages->setCurrentWidget(m_host_list);
+		});
 	} else {
 		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
 		connect(m_session_dialog, &bssh_session_dialog::open_requested,
@@ -422,35 +442,15 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 
 void bssh_main_window::on_add_host() {
 	/*
-	 * The touch front door's "+". Deliberately the same four fields the
-	 * desktop's Session page has, because they are the same profile --
-	 * a second, different idea of what a host is would be a second thing
-	 * to keep in step (sec 8.5).
+	 * The touch front door's "+". A full-screen form on this platform;
+	 * the desktop reaches the same profile through the PuTTY-shaped
+	 * Session page instead, which is why this path only exists where the
+	 * host list does.
 	 */
-	bool ok = false;
-	const QString target = QInputDialog::getText(
-	        this, QStringLiteral("Add host"),
-	        QStringLiteral("user@host[:port]"), QLineEdit::Normal, QString(), &ok);
-	if (!ok || target.trimmed().isEmpty()) return;
+	if (!m_host_editor || !m_host_list) return;
 
-	bssh_profile_t profile;
-	QString rest = target.trimmed();
-
-	const int at = rest.lastIndexOf(QLatin1Char('@'));
-	if (at >= 0) {
-		profile.user = rest.left(at);
-		rest = rest.mid(at + 1);
-	}
-	const int colon = rest.lastIndexOf(QLatin1Char(':'));
-	if (colon >= 0) {
-		profile.port = static_cast<quint16>(rest.mid(colon + 1).toUShort());
-		rest = rest.left(colon);
-	}
-	profile.host = rest;
-	profile.name = profile.host;
-
-	m_profile_store->save(profile);
-	if (m_host_list) m_host_list->reload();
+	m_host_editor->set_profile(bssh_profile_t());
+	m_pages->setCurrentWidget(m_host_editor);
 }
 
 void bssh_main_window::show_session(bssh_session *session) {

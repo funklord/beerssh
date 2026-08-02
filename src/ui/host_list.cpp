@@ -98,7 +98,15 @@ void bssh_host_list::reload() {
 	const QList<bssh_profile_t> profiles = m_store->profiles();
 	for (const bssh_profile_t &profile : profiles) {
 		QListWidgetItem *item = new QListWidgetItem(m_list);
-		item->setText(profile.name + QLatin1Char('\n') + profile.target());
+
+		/*
+		 * Name over target, unless they are the same string -- an
+		 * unnamed host is named after itself, and printing that twice
+		 * makes the row look like a bug to the person reading it.
+		 */
+		const QString target = profile.target();
+		item->setText(profile.name == target ? target
+		                                     : profile.name + QLatin1Char('\n') + target);
 		item->setData(Qt::UserRole, profile.id);
 		item->setSizeHint(QSize(0, BSSH_ROW_HEIGHT_DP));
 	}

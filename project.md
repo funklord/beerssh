@@ -784,7 +784,12 @@ than making a second one. Categories beyond *Session* are listed and say
 which milestone fills them in, because a pane that looks finished and does
 nothing is worse than one that admits it is empty.
 
-**Touch: a full-bleed host list.** One list, 64dp rows carrying a name and
+**Touch: a full-bleed host list**, and its editor is a **page, not a
+dialog**. The first Android build used a `QInputDialog` to add a host, and
+driving it on a device showed exactly what this section warns about: a
+small floating box with one cramped field, mid-screen, on a device held in
+one hand. It worked, which was the problem — the desktop idiom had
+survived into the mobile front door because nobody had looked at it. One list, 64dp rows carrying a name and
 its `user@host`, one tap to connect, a floating action button to add. No
 category tree: a tree of setting categories beside a form of small fields
 is a desktop idiom that survives neither a thumb nor a 5-inch screen.
