@@ -1,6 +1,7 @@
 #include "platform/platform.h"
 
 #include <QApplication>
+#include <QDir>
 #include <QGuiApplication>
 #include <QMenu>
 #include <QNetworkInformation>
@@ -82,6 +83,39 @@ public:
 		 */
 		ensure_tray();
 		if (m_tray) m_tray->showMessage(title, body);
+	}
+
+	QString font_directory() const override {
+		/*
+		 * Three places, in the order that makes a developer's checkout
+		 * behave like an installation rather than a special case:
+		 *
+		 *   next to the binary   -- a build tree, and any self-contained
+		 *                           layout that ships fonts beside the app
+		 *   ../share/beerssh     -- an installed prefix
+		 *   BSSH_FONT_DIR        -- an override, for running against a
+		 *                           font set somewhere else entirely
+		 *
+		 * The override goes first because that is what an override means.
+		 * Nothing here is fatal if missing: sec 9.4 lets the catalog fall
+		 * back to families the distribution already installed, which on a
+		 * Linux desktop is usually most of the set.
+		 */
+		const QByteArray override_dir = qgetenv("BSSH_FONT_DIR");
+		if (!override_dir.isEmpty()) return QString::fromLocal8Bit(override_dir);
+
+		const QString app_dir = QCoreApplication::applicationDirPath();
+		const QStringList candidates = {
+			app_dir + QStringLiteral("/fonts"),
+			app_dir + QStringLiteral("/../share/beerssh/fonts"),
+			app_dir + QStringLiteral("/../../fonts")
+		};
+
+		for (const QString &candidate : candidates) {
+			if (QDir(candidate).exists()) return QDir(candidate).canonicalPath();
+		}
+
+		return QString();
 	}
 
 	bool is_touch_primary() const override {

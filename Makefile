@@ -16,6 +16,10 @@
 #   make run          -- build and run it
 #   make test         -- build and run the smoke test + unit tests
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
+#   make fonts        -- fetch the curated font set (sec 9.2) into fonts/;
+#                        not needed to build, see FONTS below
+#   make fonts-list   -- show the set and its pinned versions
+#   make check-fonts  -- validate the fetched fonts against sec 9.1
 #   make android      -- build the Android APK (needs a Qt kit, NDK, SDK
 #                        and a JDK; see ANDROID below)
 #   make android-aab  -- the Play bundle instead of an APK
@@ -54,6 +58,15 @@
 #
 #   The dependencies must be cross-compiled first:
 #     tools/build-deps-android.sh arm64-v8a
+#
+# FONTS
+#   The curated set (sec 9.2) is fetched, not committed: `make fonts` pulls
+#   each family from a pinned release and verifies its SHA-256. The app
+#   builds and runs without it, falling back to whatever monospace families
+#   the system already has, so this is never a build dependency.
+#
+#   `make check-fonts` is sec 9.6's gate -- uniform advance width, box
+#   drawing, weights, licence -- and needs fontTools (pip install fonttools).
 # =============================================================================
 
 CC    ?= gcc
@@ -203,6 +216,22 @@ test: $(TARGET) $(TEST_BIN)
 style:
 	./tools/check-indent.sh
 
+# --- the curated font set (project.md sec 9) --------------------------------
+# Not a build dependency: the app runs without it, falling back to whatever
+# monospace families the system has (sec 9.4). Making `all` depend on a
+# 300 MB download would be a rude first build for a change that touches one
+# line of the emulator.
+fonts:
+	./tools/fetch-fonts.sh
+
+fonts-list:
+	@./tools/fetch-fonts.sh --list
+
+# sec 9.6's gate. Separate from `style` because it needs the fonts present
+# and fontTools installed, neither of which a plain checkout has.
+check-fonts:
+	@python3 tools/check-fonts.py $(FONT_DIR)
+
 $(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
 	@mkdir -p $(VTERM_ANDROID_DIR)
 	$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_API) $(VTERM_CFLAGS) -c $< -o $@
@@ -290,5 +319,5 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test style android android-check android-aab android-run \
-        install clean veryclean distclean help
+.PHONY: all run test style fonts fonts-list check-fonts android android-check \
+        android-aab android-run install clean veryclean distclean help

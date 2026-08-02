@@ -39,6 +39,7 @@ SOURCES += \
     src/ssh/ssh_session.cpp \
     src/ssh/ssh_session_libssh.cpp \
     src/term/emulator_vterm.cpp \
+    src/term/font_catalog.cpp \
     src/term/graphics.cpp \
     src/term/image_store.cpp \
     src/term/scrollback.cpp \
@@ -67,6 +68,7 @@ HEADERS += \
     src/ssh/ssh_session.h \
     src/ssh/ssh_session_libssh.h \
     src/term/emulator.h \
+    src/term/font_catalog.h \
     src/term/graphics_internal.h \
     src/term/image_store.h \
     src/term/scrollback.h \

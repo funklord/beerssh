@@ -12,6 +12,7 @@
 #include "tab_status_test.h"
 #include "input_router_test.h"
 #include "layout_test.h"
+#include "font_catalog_test.h"
 #include "screen_test.h"
 #include "terminal_view_test.h"
 
@@ -37,6 +38,7 @@ int main(int argc, char *argv[]) {
 	QApplication app(argc, argv);
 
 	int failures = 0;
+	failures += run_test<font_catalog_test>(argc, argv);
 	failures += run_test<screen_test>(argc, argv);
 	failures += run_test<conn_manager_test>(argc, argv);
 	failures += run_test<emulator_test>(argc, argv);

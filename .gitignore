@@ -14,6 +14,15 @@ build-*/
 # Reproducible from the script, and several hundred MB if committed.
 deps/
 
+# The curated font set (tools/fetch-fonts.sh, project.md sec 9.2).
+#
+# Fetched, not committed: 54 MB of the set is font files and Iosevka alone
+# is 42 MB of that, none of which ever diffs usefully. The script pins a
+# version and a SHA-256 per family, which is the reproducibility a
+# committed copy would have bought, and the licence texts it downloads
+# alongside them are what sec 9.4's licences screen is built from.
+fonts/
+
 # The built binary, copied out of build/ by `make`
 /beerssh
 

@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QElapsedTimer>
 #include <QFont>
+#include <QHash>
 #include <QWidget>
 
 #include "term/image_store.h"
@@ -44,6 +45,36 @@ public:
 	int cell_height() const { return m_cell_height; }
 
 	void set_terminal_font(const QFont &font);
+
+	/*
+	 * The curated set's way in (project.md sec 9): a stable font id and a
+	 * point size, resolved through bssh_font_catalog rather than by naming
+	 * a family here. Going through the catalog is what gets the sec 9.3
+	 * fallback chain, so a CJK character or a box-drawing glyph the chosen
+	 * face lacks is served by DejaVu or Noto instead of by whatever Qt
+	 * would have merged in.
+	 */
+	void set_font_id(const QString &id, int point_size);
+
+	QString font_id() const { return m_font_id; }
+
+	/*
+	 * Non-empty when the chosen font is not on this device and something
+	 * else is being drawn (sec 9.4). The window shows it; the view only
+	 * knows it, because a terminal that pops up its own banner is a
+	 * terminal that covers the output it exists to display.
+	 */
+	QString font_substitution_note() const;
+
+private:
+	/*
+	 * The font to draw one cell in, cached. Returned by reference because
+	 * the paint loop asks per cell and a QFont copy per cell is the cost
+	 * this cache exists to remove.
+	 */
+	const QFont &cell_font(const QString &family, bool bold, bool italic) const;
+
+public:
 
 	/*
 	 * The grid to render. The view does not own it and does not write to
@@ -179,6 +210,26 @@ private:
 	bssh_emulator *m_emulator;
 	bssh_input_router *m_input_router;
 	QFont m_font;
+
+	/*
+	 * The catalog id behind m_font, and the size it was built at. Kept as
+	 * the id rather than derived back from the QFont, because m_font may
+	 * be carrying a substitute family and the question "what did the user
+	 * ask for" still has to have an answer.
+	 */
+	QString m_font_id;
+	int m_font_size;
+
+	/*
+	 * Per-repaint font cache, keyed by family and the two attributes that
+	 * change one. Building a QFont per cell showed up as the obvious cost
+	 * once the fallback chain meant the family could change mid-row: a
+	 * screen of 80x24 constructs it 1920 times otherwise, and the answer
+	 * is the same handful of fonts every time. sec 9.5's shared glyph
+	 * atlas is a bigger structure than this and still open.
+	 */
+	mutable QHash<QString, QFont> m_font_cache;
+
 	QColor m_background;
 	QColor m_foreground;
 	int m_cell_width;

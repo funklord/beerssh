@@ -65,6 +65,23 @@ public:
 	/* Reconnecting, reconnect failed, a bell in an unfocused pane. */
 	virtual void notify(const QString &title, const QString &body) = 0;
 
+	/*
+	 * Where the curated font set lives (sec 9.4).
+	 *
+	 * The two platforms answer this from genuinely different places -- an
+	 * installed share directory or a source checkout on desktop, the
+	 * packaged assets on Android, with the rest of the set arriving later
+	 * through an asset pack -- and sec 3 says a difference like that
+	 * belongs behind this interface rather than in an #ifdef inside the
+	 * renderer. bssh_font_catalog asks once at startup and never learns
+	 * which kind of path it got.
+	 *
+	 * May be empty when nothing is bundled, which is not an error: the
+	 * catalog then falls back to system-installed families and, failing
+	 * that, down sec 9.3's chain.
+	 */
+	virtual QString font_directory() const = 0;
+
 signals:
 	/*
 	 * Connectivity changed and any live session should re-check itself:

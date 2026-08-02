@@ -110,6 +110,22 @@ public:
 		        context.object(), status.object<jstring>());
 	}
 
+	QString font_directory() const override {
+		/*
+		 * The APK's own assets, reached through Qt's "assets:" scheme --
+		 * an Android asset is not a file on disk and has no path a
+		 * QFileInfo would recognise without it.
+		 *
+		 * Only the base set is here. sec 9.4 delivers the rest through
+		 * Play asset packs, which unpack into the app's data directory
+		 * rather than into assets, so this becomes two directories the
+		 * day that lands. It is one for now because shipping a picker
+		 * that offers downloads before the download exists is worse than
+		 * shipping three fonts that work.
+		 */
+		return QStringLiteral("assets:/fonts");
+	}
+
 	bool is_touch_primary() const override {
 		/*
 		 * True as the M0 default, but this is not a constant either: an

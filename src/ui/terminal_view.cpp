@@ -16,6 +16,15 @@
 #include <QResizeEvent>
 
 #include "input/input_router.h"
+#include "platform/platform.h"
+#include "term/font_catalog.h"
+
+/*
+ * Matches bssh_preset_t's default, so a view built before any settings are
+ * resolved is already showing the size a session will resolve to rather
+ * than jumping one point the moment it connects.
+ */
+static const int BSSH_DEFAULT_POINT_SIZE = 11;
 
 /*
  * The placeholder drawn into the empty grid. It exists to prove the cell
@@ -41,6 +50,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_selection_focus_col(0),
       m_emulator(nullptr),
       m_input_router(nullptr),
+      m_font_size(BSSH_DEFAULT_POINT_SIZE),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_cell_width(1),
@@ -49,14 +59,22 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_cols(0),
       m_rows(0) {
 	/*
-	 * The curated bundled set arrives at M9 (sec 9.2); until then the
-	 * platform's own fixed-pitch font is the honest placeholder. Asking
-	 * for the system fixed font rather than naming a family is what keeps
-	 * this working identically on a phone and a workstation.
+	 * The default from the curated set (sec 9.2), by form factor: the
+	 * condensed face on a touch-primary device, where the extra columns
+	 * are the difference between a usable and an unusable width, and the
+	 * legibility-first one everywhere else. Same set both ways -- only the
+	 * starting choice differs, so a profile that names a font still means
+	 * the same thing on either.
+	 *
+	 * The catalog degrades on its own when none of the set is installed,
+	 * so this is safe before any font has been fetched or bundled.
 	 */
-	m_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-	m_font.setStyleHint(QFont::Monospace);
-	m_font.setFixedPitch(true);
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool compact = platform && platform->is_touch_primary();
+
+	m_font_id = bssh_font_catalog::instance().default_id(compact);
+	m_font = bssh_font_catalog::make_font(
+	        bssh_font_catalog::instance().family_for(m_font_id), m_font_size);
 
 	setFocusPolicy(Qt::StrongFocus);
 	setMouseTracking(false);
@@ -79,9 +97,61 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 
 void bssh_terminal_view::set_terminal_font(const QFont &font) {
 	m_font = font;
+	m_font_cache.clear();
 	update_metrics();
 	recompute_grid();
 	update();
+}
+
+void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
+	bssh_font_catalog &catalog = bssh_font_catalog::instance();
+
+	/*
+	 * Tolerated rather than rejected: a profile may carry a family name
+	 * written before ids existed, or one an import file spelled out.
+	 * canonical_id turns what it can into an id and passes anything else
+	 * through unchanged, so an unknown font ends up drawn in the fallback
+	 * chain with a note rather than refused.
+	 */
+	m_font_id = catalog.canonical_id(id);
+	m_font_size = point_size > 0 ? point_size : BSSH_DEFAULT_POINT_SIZE;
+
+	m_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id), m_font_size);
+	m_font_cache.clear();
+
+	/*
+	 * A different font is a different cell size, which is a different
+	 * column count, which the remote end has to be told about -- so this
+	 * goes all the way through to window-change (sec 9.5). Changing the
+	 * font without that leaves the shell laying out for the old width.
+	 */
+	update_metrics();
+	recompute_grid();
+	update();
+}
+
+QString bssh_terminal_view::font_substitution_note() const {
+	return bssh_font_catalog::instance().substitution_note(m_font_id);
+}
+
+const QFont &bssh_terminal_view::cell_font(const QString &family, bool bold, bool italic) const {
+	/*
+	 * The key carries the attributes because a bold face is a different
+	 * font object, and the family because the fallback chain can change it
+	 * from one cell to the next -- a line of box drawing followed by CJK
+	 * followed by ASCII is three families in one row.
+	 */
+	const QString key = family + (bold ? QLatin1Char('B') : QLatin1Char('b'))
+	                           + (italic ? QLatin1Char('I') : QLatin1Char('i'));
+
+	const auto cached = m_font_cache.constFind(key);
+	if (cached != m_font_cache.constEnd()) return cached.value();
+
+	QFont font = bssh_font_catalog::make_font(family, m_font_size);
+	font.setBold(bold);
+	font.setItalic(italic);
+
+	return *m_font_cache.insert(key, font);
 }
 
 void bssh_terminal_view::attach_screen(const bssh_screen *screen) {
@@ -334,14 +404,19 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			if (bg != m_background) painter.fillRect(x, y, width, m_cell_height, bg);
 
 			if (cell.ch != U'\0' && cell.ch != U' ') {
-				if (cell.attrs & (bssh_cell_t::BOLD | bssh_cell_t::ITALIC)) {
-					QFont font = m_font;
-					font.setBold(cell.attrs & bssh_cell_t::BOLD);
-					font.setItalic(cell.attrs & bssh_cell_t::ITALIC);
-					painter.setFont(font);
-				} else {
-					painter.setFont(m_font);
-				}
+				/*
+				 * Which family carries THIS character (sec 9.3). Asked per
+				 * cell because that is the granularity the answer changes
+				 * at, and cheap because the catalog caches coverage and
+				 * cell_font caches the resulting QFont -- the work here is
+				 * two hash lookups, not two font constructions.
+				 */
+				const QString family =
+				        bssh_font_catalog::instance().family_for_glyph(m_font_id, cell.ch);
+
+				painter.setFont(cell_font(family,
+				                          cell.attrs & bssh_cell_t::BOLD,
+				                          cell.attrs & bssh_cell_t::ITALIC));
 
 				painter.setPen(fg);
 				painter.drawText(QPointF(x, baseline), QString::fromUcs4(&cell.ch, 1));

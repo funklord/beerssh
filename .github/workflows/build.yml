@@ -23,6 +23,34 @@ jobs:
       - name: Indentation gate
         run: make style
 
+  # sec 9.6: "Fail the build if a font doesn't qualify." Its own job rather
+  # than a step of the Linux build, because it needs 300 MB of upstream
+  # release archives and nothing else does -- the app builds and tests
+  # without a single font present.
+  fonts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Keyed on the fetch script, which is where the pinned versions and
+      # checksums live: change a version, re-download; otherwise don't.
+      - name: Cache the curated font set
+        id: font-cache
+        uses: actions/cache@v4
+        with:
+          path: fonts
+          key: fonts-${{ hashFiles('tools/fetch-fonts.sh') }}
+
+      - name: Fetch fonts
+        if: steps.font-cache.outputs.cache-hit != 'true'
+        run: make fonts
+
+      - name: Install fontTools
+        run: pip install fonttools
+
+      - name: Validate against sec 9.1
+        run: make check-fonts
+
   linux:
     runs-on: ubuntu-latest
     steps:

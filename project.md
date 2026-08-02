@@ -894,10 +894,21 @@ in a character-cell grid confuse column alignment for many users).
 | **Noto Sans Mono** | OFL 1.1 | Fallback-tier: enormous Unicode coverage including CJK. |
 | **GNU Unifont** | OFL 1.1 (dual-licensed) | Last-resort fallback so *nothing* renders as tofu. Ugly but complete. |
 
-**[OPEN]** Trim this list at build time — 6–8 user-selectable families plus 2
-fallback-only families is plenty. Prioritise: JetBrains Mono, Iosevka, DejaVu,
-Hack, Fira, Cascadia as selectable; Noto Sans Mono + Unifont as fallback-only
-(never shown in the picker).
+**[DECIDED]** Trimmed to exactly the priority list above: **JetBrains Mono,
+Iosevka Term, DejaVu Sans Mono, Hack, Fira Code, Cascadia Code PL** selectable,
+**Noto Sans Mono + GNU Unifont** fallback-only and never shown in the picker.
+Source Code Pro, IBM Plex Mono and Inconsolata are dropped — not for any fault,
+but because a picker of eight near-equivalent faces is a picker nobody reaches
+the bottom of, and each one is a licence to track and megabytes to ship.
+
+The set lives in one table in `bssh_font_catalog` and is fetched by
+`tools/fetch-fonts.sh`, which pins a version *and* a SHA-256 per family. The
+fonts are deliberately **not committed**: 54 MB that never diffs usefully, and
+a pinned checksum gives the same reproducibility a committed copy would.
+Specific choices worth recording: **Iosevka Term**, not plain Iosevka, because
+the Term variant is the one metrically intended for a character grid; and
+**Cascadia Code PL**, because the PL variant is where §9.2's powerline coverage
+comes from without bundling Nerd Font patched derivatives.
 
 **The *default* may differ by form factor; the *set* may not.** A condensed face
 that wins on a 5-inch screen is not the obvious choice on a 27-inch monitor, so
@@ -1282,6 +1293,17 @@ background).
 10. **M9 – Fonts.** Curated set, fallback chain, wide-char handling, shared glyph
     cache, asset-pack delivery (Android) / full set (desktop), CI validation
     script, fractional-scaling and multi-monitor DPI checks.
+    **Mostly built:** the set is decided and pinned (§9.2), `bssh_font_catalog`
+    resolves a stable id through §9.3's chain per glyph, fonts are built with
+    font merging **off** so nothing proportional can be substituted in, real
+    bold/italic faces are loaded rather than synthesised, ligatures are
+    disabled by default, the font directory is a `bssh_platform` question,
+    and §9.6's validator runs in CI and fails the build on an unsuitable
+    font. Still open: the shared glyph atlas (§9.5 — the renderer caches
+    per-glyph *family* lookups and QFonts, not rasterised glyphs), Android
+    asset-pack delivery and subsetting (Iosevka alone is 42 MB, so the
+    compact default falls back until it ships), the font picker UI, and the
+    fractional-scaling and multi-monitor DPI checks.
 11. **M10 – Preset system.** Preset/profile layering, built-in starter presets,
     JSON import/export, propagation UI. **Core built:** `bssh_preset_t` (with
     no field a secret could occupy), the three-layer resolver with

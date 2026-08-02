@@ -21,6 +21,11 @@ CONFIG += c++17 console
 CONFIG -= app_bundle
 
 INCLUDEPATH += $$PWD/../src $$PWD $$PWD/../vterm/include
+
+# Where tools/fetch-fonts.sh puts the curated set (project.md sec 9.2).
+# The font tests skip themselves when it is not there, so a checkout that
+# has never run the fetch script still has a green test suite.
+DEFINES += BSSH_TEST_FONT_DIR=\\\"$$PWD/../fonts\\\"
 LIBS += $$PWD/../build-vterm/libvterm.a
 PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a
 
@@ -37,6 +42,7 @@ SOURCES += \
     tab_status_test.cpp \
     input_router_test.cpp \
     layout_test.cpp \
+    font_catalog_test.cpp \
     screen_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
@@ -44,6 +50,7 @@ SOURCES += \
     ../src/ssh/ssh_session.cpp \
     ../src/ssh/ssh_session_libssh.cpp \
     ../src/term/emulator_vterm.cpp \
+    ../src/term/font_catalog.cpp \
     ../src/term/graphics.cpp \
     ../src/term/image_store.cpp \
     ../src/term/scrollback.cpp \
@@ -83,6 +90,7 @@ HEADERS += \
     tab_status_test.h \
     input_router_test.h \
     layout_test.h \
+    font_catalog_test.h \
     screen_test.h \
     terminal_view_test.h \
     ../src/input/input_router.h \
