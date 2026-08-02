@@ -18,8 +18,15 @@ application-cursor mode, Meta/Alt, bracketed paste (`Ctrl+Shift+V`), and
 input-method commit text. The on-screen key row for touch devices is
 built on every platform but hidden unless touch is the primary input.
 
+Modern keyboard protocols are supported so full-screen programs can tell
+`Ctrl+I` from `Tab` and `Alt+x` from `Escape`-then-`x`: the **kitty keyboard
+protocol** (disambiguate tier, with push/pop/set/query) and **xterm
+`modifyOtherKeys` level 2**. `project.md` §7.1 surveys the wider set of
+modern terminal extensions and says where each one stands.
+
 Not built yet: mouse selection and copy (`Ctrl+Shift+C` is wired but has
-nothing to copy until then), scrollback, tabs and splits.
+nothing to copy until then), scrollback, tabs and splits, and the tier-3/4
+extensions in §7.1 (synchronized output, OSC 8 hyperlinks, images).
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown or changed key fails the connection
@@ -34,7 +41,10 @@ Needs Qt 6 (6.8 LTS or newer), libssh, and a C++17 compiler.
 On Debian/Ubuntu: `qt6-base-dev libssh-dev`.
 
 libvterm is vendored as a submodule and built from source, so clone with
-`--recurse-submodules` (or run `git submodule update --init`).
+`--recurse-submodules` (or run `git submodule update --init`). The build
+applies the patches in `vterm-patches/` to it; `make veryclean` reverts
+them. See `project.md` §7.1 for what they fix and why they are not
+committed into the submodule.
 
 ```sh
 make          # build ./beerssh

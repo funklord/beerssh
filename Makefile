@@ -76,6 +76,14 @@ VTERM_OBJS = $(patsubst $(VTERM_DIR)/src/%.c,$(VTERM_BUILD_DIR)/%.o,$(VTERM_SRCS
 VTERM_BUILD_DIR = build-vterm
 VTERM_LIB  = $(VTERM_BUILD_DIR)/libvterm.a
 
+# Patches applied to the vendored copy at build time (vterm-patches/), kept
+# as files rather than as edits committed into the submodule: a submodule
+# pinned to a commit that exists only locally is a submodule nobody else can
+# clone. Applying them here means an upstream update that conflicts fails
+# loudly at the patch step instead of silently dropping the fix.
+VTERM_PATCHES = $(sort $(wildcard vterm-patches/*.patch))
+VTERM_STAMP   = $(VTERM_BUILD_DIR)/.patched
+
 # -w: this is third-party code built to someone else's warning standard, and
 # a wall of warnings nobody will act on is a wall that hides ours.
 VTERM_CFLAGS = -std=c99 -O2 -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
@@ -94,7 +102,25 @@ endif
 
 all: $(TARGET)
 
-$(VTERM_BUILD_DIR)/%.o: $(VTERM_DIR)/src/%.c
+$(VTERM_STAMP): $(VTERM_PATCHES)
+	@mkdir -p $(VTERM_BUILD_DIR)
+	@echo "applying $(words $(VTERM_PATCHES)) patch(es) to vendored libvterm"
+	@for patch in $(VTERM_PATCHES); do \
+		if ! git -C $(VTERM_DIR) apply --check "$(CURDIR)/$$patch" 2>/dev/null; then \
+			if git -C $(VTERM_DIR) apply --reverse --check "$(CURDIR)/$$patch" 2>/dev/null; then \
+				echo "  $$patch: already applied"; \
+				continue; \
+			fi; \
+			echo "  $$patch: DOES NOT APPLY -- upstream changed under it."; \
+			echo "  Rebase the patch against the current submodule before building."; \
+			exit 1; \
+		fi; \
+		git -C $(VTERM_DIR) apply "$(CURDIR)/$$patch" || exit 1; \
+		echo "  $$patch: applied"; \
+	done
+	@touch $@
+
+$(VTERM_BUILD_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
 	@mkdir -p $(VTERM_BUILD_DIR)
 	$(CC) $(VTERM_CFLAGS) -c $< -o $@
 
@@ -170,6 +196,9 @@ clean:
 # contents, so removing them is a named delete, not a wildcard sweep.
 veryclean: clean
 	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR) $(VTERM_BUILD_DIR)
+	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
+		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
+	fi
 	rm -f $(TARGET)
 
 distclean: veryclean

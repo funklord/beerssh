@@ -1,0 +1,45 @@
+Reach the fallback for private-leader CSI sequences libvterm does not model
+
+Two gaps in libvterm's own extension hook, both of which make sequences
+unreachable rather than merely unhandled -- vterm_screen_set_unrecognised_
+fallbacks never sees them, so an application cannot implement them itself:
+
+  1. on_csi() rejects any leader byte other than '?' and '>' before the
+     dispatch switch is reached, so `CSI < u` and `CSI = ... u` (the kitty
+     keyboard protocol's pop and set controls) are dropped silently.
+
+  2. `CSI ? 4 m` -- xterm's XTQMODKEYS query -- is consumed by the DECSGR
+     case, a printer-era sequence no DEC terminal implemented, leaving a
+     terminal unable to answer a query it does support.
+
+Applied to the vendored copy at build time (see the top-level Makefile);
+upstream is otherwise untouched. Worth sending upstream.
+
+diff --git a/src/state.c b/src/state.c
+index 54618d5..f8c495a 100644
+--- a/src/state.c
++++ b/src/state.c
+@@ -965,6 +965,8 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
+     switch(leader[0]) {
+     case '?':
+     case '>':
++    case '<':
++    case '=':
+       leader_byte = leader[0];
+       break;
+     default:
+@@ -1376,6 +1378,14 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
+     break;
+ 
+   case LEADER('?', 0x6d): // DECSGR
++    /* Application-level fallback gets first refusal: XTQMODKEYS
++     * (CSI ? 4 m) has the same shape as DECSGR, and swallowing it here
++     * leaves a terminal unable to answer a query it does support.
++     */
++    if(state->fallbacks && state->fallbacks->csi)
++      if((*state->fallbacks->csi)(leader, args, argcount, intermed, command, state->fbdata))
++        return 1;
++
+     /* No actual DEC terminal recognised these, but some printers did. These
+      * are alternative ways to request subscript/superscript/off
+      */

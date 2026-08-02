@@ -150,6 +150,96 @@ void input_router_test::paste_is_bracketed_only_when_the_remote_asked() {
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[200~ls\x1b[201~"));
 }
 
+void input_router_test::kitty_protocol_disambiguates_ctrl_and_escape() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/* Legacy first: Ctrl+I and Tab really are the same byte. */
+	QCOMPARE(press(router, emulator, Qt::Key_I, Qt::ControlModifier), QByteArrayLiteral("\t"));
+	QCOMPARE(press(router, emulator, Qt::Key_Tab), QByteArrayLiteral("\t"));
+
+	/* The remote turns on kitty's disambiguate tier. */
+	emulator.feed(QByteArrayLiteral("\x1b[>1u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 1);
+
+	/* Now they differ, which is the entire point of the protocol. */
+	QCOMPARE(press(router, emulator, Qt::Key_I, Qt::ControlModifier),
+	          QByteArrayLiteral("\x1b[105;5u"));
+	QCOMPARE(press(router, emulator, Qt::Key_Tab), QByteArrayLiteral("\t"));
+
+	/* Alt+x stops being byte-identical to Escape followed by x. */
+	QCOMPARE(press(router, emulator, Qt::Key_X, Qt::AltModifier, QStringLiteral("x")),
+	          QByteArrayLiteral("\x1b[120;3u"));
+	QCOMPARE(press(router, emulator, Qt::Key_Escape), QByteArrayLiteral("\x1b[27u"));
+
+	/* Unmodified typing must stay exactly as it was, or every program
+	 * that never opted in would break. */
+	QCOMPARE(press(router, emulator, Qt::Key_X, Qt::NoModifier, QStringLiteral("x")),
+	          QByteArrayLiteral("x"));
+}
+
+void input_router_test::kitty_protocol_pushes_and_pops() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	emulator.feed(QByteArrayLiteral("\x1b[>1u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 1);
+
+	/*
+	 * Push/pop exists so a full-screen program can restore whatever the
+	 * shell had without knowing what it was.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[<u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
+	QCOMPARE(press(router, emulator, Qt::Key_Escape), QByteArrayLiteral("\x1b"));
+
+	/* Popping past the bottom must not underflow into a negative stack. */
+	emulator.feed(QByteArrayLiteral("\x1b[<9u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
+
+	/* CSI = flags ; 2 u ORs bits into the current entry. */
+	emulator.feed(QByteArrayLiteral("\x1b[=1;2u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 1);
+	emulator.feed(QByteArrayLiteral("\x1b[=1;3u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
+}
+
+void input_router_test::kitty_protocol_answers_a_query() {
+	bssh_emulator emulator(80, 24);
+
+	/* A client cannot use the protocol without being able to detect it. */
+	emulator.feed(QByteArrayLiteral("\x1b[?u"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?0u"));
+
+	emulator.feed(QByteArrayLiteral("\x1b[>5u"));
+	emulator.feed(QByteArrayLiteral("\x1b[?u"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?5u"));
+}
+
+void input_router_test::modify_other_keys_encodes_and_reports_its_level() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	emulator.feed(QByteArrayLiteral("\x1b[>4;2m"));
+	QCOMPARE(emulator.modify_other_keys_level(), 2);
+
+	QCOMPARE(press(router, emulator, Qt::Key_I, Qt::ControlModifier),
+	          QByteArrayLiteral("\x1b[27;5;105~"));
+
+	/* XTQMODKEYS: the client asks what it actually got. */
+	emulator.feed(QByteArrayLiteral("\x1b[?4m"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[>4;2m"));
+
+	/*
+	 * Level 3 is clamped to 2 and reported as 2, so a client asking for
+	 * more is told plainly rather than silently getting less (sec 7.1).
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[>4;3m"));
+	QCOMPARE(emulator.modify_other_keys_level(), 2);
+	emulator.feed(QByteArrayLiteral("\x1b[?4m"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[>4;2m"));
+}
+
 void input_router_test::key_row_goes_through_the_router() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

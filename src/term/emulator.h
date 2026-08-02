@@ -69,6 +69,15 @@ public:
 		MOD_CTRL  = 0x04
 	};
 
+	/*
+	 * Keyboard-protocol state (sec 7.1, tier 2). Legacy terminal input
+	 * cannot distinguish Ctrl+I from Tab, or Alt+x from Escape then x --
+	 * these are the two protocols that fix that, and a remote program
+	 * turns on whichever it prefers.
+	 */
+	int kitty_keyboard_flags() const;
+	int modify_other_keys_level() const;
+
 	void send_key(int key, quint8 modifiers);
 	void send_char(char32_t ch, quint8 modifiers);
 

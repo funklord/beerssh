@@ -21,10 +21,26 @@ struct bssh_emulator_private {
 	QByteArray pending_output;
 	QByteArray pending_input;
 	QString title;
+
+	/*
+	 * Kitty keyboard protocol flags, as a stack: the protocol is defined
+	 * as push/pop precisely so a full-screen program can enable what it
+	 * needs and restore whatever the shell had without knowing what that
+	 * was. Bottom entry is 0 -- legacy -- and is never popped.
+	 */
+	QList<int> kitty_stack;
 	bssh_emulator *owner;
+	int modify_other_keys;
 
 	bssh_emulator_private(int cols, int rows, bssh_emulator *owner)
-	    : vt(nullptr), vts(nullptr), screen(cols, rows), owner(owner) {}
+	    : vt(nullptr), vts(nullptr), screen(cols, rows), owner(owner),
+	      modify_other_keys(0) {
+		kitty_stack.append(0);
+	}
+
+	int kitty_flags() const { return kitty_stack.last(); }
+	bool encode_modern_key(char32_t ch, quint8 modifiers);
+	void reply(const QByteArray &bytes);
 
 	int copy_cell(int row, int col);
 	void copy_rect(const VTermRect &rect);
@@ -167,6 +183,91 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 	}
 }
 
+/*
+ * Everything libvterm does not recognise arrives here (sec 7.1). This is
+ * its documented extension hook, so the vendored copy stays unpatched --
+ * which matters, because a patched dependency is one that has to be
+ * re-patched on every update.
+ */
+int on_unrecognised_csi(const char *leader, const long args[], int argcount,
+	                       const char *intermed, char command, void *user) {
+	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+	Q_UNUSED(intermed);
+
+	const QByteArray lead = QByteArray(leader ? leader : "");
+
+	if (command == 'u') {
+		/* Kitty keyboard protocol: push, pop, set, query. */
+		if (lead == ">") {
+			const int flags = argcount > 0 ? int(args[0]) : 0;
+			self->kitty_stack.append(flags);
+			return 1;
+		}
+		if (lead == "<") {
+			const int count = argcount > 0 && args[0] > 0 ? int(args[0]) : 1;
+			for (int i = 0; i < count && self->kitty_stack.size() > 1; ++i) {
+				self->kitty_stack.removeLast();
+			}
+			return 1;
+		}
+		if (lead == "=") {
+			const int flags = argcount > 0 ? int(args[0]) : 0;
+			const int mode = argcount > 1 ? int(args[1]) : 1;
+			int current = self->kitty_stack.last();
+			if (mode == 2) {
+				current |= flags;
+			} else if (mode == 3) {
+				current &= ~flags;
+			} else {
+				current = flags;
+			}
+			self->kitty_stack.last() = current;
+			return 1;
+		}
+		if (lead == "?") {
+			self->reply(QByteArrayLiteral("\x1b[?")
+				           + QByteArray::number(self->kitty_flags())
+				           + QByteArrayLiteral("u"));
+			return 1;
+		}
+	}
+
+	if (command == 'm') {
+		/* xterm modifyOtherKeys: CSI > 4 ; n m sets, CSI ? 4 m queries. */
+		if (lead == ">" && argcount > 0 && args[0] == 4) {
+			int level = argcount > 1 ? int(args[1]) : 0;
+			/*
+			 * Level 3 is clamped to 2 rather than accepted (sec 7.1):
+			 * XTQMODKEYS reports only the current value, so a client
+			 * that asked for 3 and got 2 silently could not tell. It
+			 * asks, it is told 2, it can decide.
+			 */
+			if (level > 2) level = 2;
+			if (level < 0) level = 0;
+			self->modify_other_keys = level;
+			return 1;
+		}
+		if (lead == "?" && argcount > 0 && args[0] == 4) {
+			self->reply(QByteArrayLiteral("\x1b[>4;")
+				           + QByteArray::number(self->modify_other_keys)
+				           + QByteArrayLiteral("m"));
+			return 1;
+		}
+	}
+
+	return 0;
+}
+
+const VTermStateFallbacks unrecognised_fallbacks = {
+	.control = nullptr,
+	.csi     = on_unrecognised_csi,
+	.osc     = nullptr,
+	.dcs     = nullptr,
+	.apc     = nullptr,
+	.pm      = nullptr,
+	.sos     = nullptr
+};
+
 int on_bell(void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	emit self->owner->bell();
@@ -278,6 +379,7 @@ bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
 	vterm_screen_set_callbacks(m_private->vts, &screen_callbacks, m_private);
 	vterm_screen_reset(m_private->vts, 1);
 
+	vterm_screen_set_unrecognised_fallbacks(m_private->vts, &unrecognised_fallbacks, m_private);
 	vterm_output_set_callback(m_private->vt, on_output, m_private);
 }
 
@@ -329,6 +431,56 @@ const bssh_screen &bssh_emulator::screen() const {
 	return m_private->screen;
 }
 
+void bssh_emulator_private::reply(const QByteArray &bytes) {
+	pending_output.append(bytes);
+	emit owner->output_ready();
+}
+
+/*
+ * Encodes one key under whichever modern protocol is active, or returns
+ * false to let libvterm's legacy encoder handle it.
+ *
+ * Only the cases legacy cannot express are taken: a plain character with
+ * no modifiers still sends itself, because a protocol that re-encodes
+ * ordinary typing would break every program that has not opted in. That
+ * is the whole design of kitty's "disambiguate" tier.
+ */
+bool bssh_emulator_private::encode_modern_key(char32_t ch, quint8 modifiers) {
+	const bool kitty = kitty_flags() != 0;
+	if (!kitty && modify_other_keys < 2) return false;
+
+	/* Nothing to disambiguate without ctrl or alt. */
+	const bool interesting = modifiers & (bssh_emulator::MOD_CTRL | bssh_emulator::MOD_ALT);
+	if (!interesting) return false;
+
+	/* Both protocols number modifiers the same way: 1 + the bitmask. */
+	const int encoded_mod = 1 + int(modifiers);
+
+	if (kitty) {
+		reply(QByteArrayLiteral("\x1b[")
+		       + QByteArray::number(uint(ch))
+		       + QByteArrayLiteral(";")
+		       + QByteArray::number(encoded_mod)
+		       + QByteArrayLiteral("u"));
+		return true;
+	}
+
+	reply(QByteArrayLiteral("\x1b[27;")
+	       + QByteArray::number(encoded_mod)
+	       + QByteArrayLiteral(";")
+	       + QByteArray::number(uint(ch))
+	       + QByteArrayLiteral("~"));
+	return true;
+}
+
+int bssh_emulator::kitty_keyboard_flags() const {
+	return m_private->kitty_flags();
+}
+
+int bssh_emulator::modify_other_keys_level() const {
+	return m_private->modify_other_keys;
+}
+
 void bssh_emulator::send_key(int key, quint8 modifiers) {
 	const VTermModifier mod = static_cast<VTermModifier>(modifiers);
 
@@ -337,6 +489,20 @@ void bssh_emulator::send_key(int key, quint8 modifiers) {
 		vterm_keyboard_key(m_private->vt,
 		                    static_cast<VTermKey>(VTERM_KEY_FUNCTION(key - KEY_FUNCTION_BASE)),
 		                    mod);
+		return;
+	}
+
+	/*
+	 * A bare Escape is THE ambiguous key: legacy cannot distinguish it
+	 * from the start of any escape sequence, which is why terminal apps
+	 * carry an ESC timeout at all. Under kitty's protocol it becomes
+	 * unambiguous, and the timeout stops being needed.
+	 */
+	if (key == KEY_ESCAPE && m_private->kitty_flags() != 0) {
+		m_private->reply(QByteArrayLiteral("\x1b[27")
+		                  + (modifiers ? QByteArrayLiteral(";") + QByteArray::number(1 + int(modifiers))
+		                               : QByteArray())
+		                  + QByteArrayLiteral("u"));
 		return;
 	}
 
@@ -363,6 +529,27 @@ void bssh_emulator::send_key(int key, quint8 modifiers) {
 }
 
 void bssh_emulator::send_char(char32_t ch, quint8 modifiers) {
+	if (m_private->encode_modern_key(ch, modifiers)) return;
+
+	/*
+	 * Legacy Ctrl+letter is the classic control byte, and this is ours to
+	 * decide rather than libvterm's to impose: libvterm emits CSI u
+	 * unconditionally for the ambiguous ones (Ctrl+I, Ctrl+M, Ctrl+[),
+	 * which is right for an editor that always speaks the modern
+	 * protocol and wrong for a terminal talking to whatever is out there.
+	 * A remote that has not enabled a keyboard protocol must get exactly
+	 * what a VT100 would have sent, or it sees a sequence it cannot
+	 * parse.
+	 */
+	if ((modifiers & MOD_CTRL) && !(modifiers & MOD_ALT) && ch < 0x80) {
+		const char32_t upper = (ch >= U'a' && ch <= U'z') ? ch - 32 : ch;
+		if (upper >= U'@' && upper <= U'_') {
+			const char control = char(upper & 0x1f);
+			m_private->reply(QByteArray(1, control));
+			return;
+		}
+	}
+
 	vterm_keyboard_unichar(m_private->vt, ch, static_cast<VTermModifier>(modifiers));
 }
 

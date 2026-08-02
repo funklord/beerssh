@@ -29,6 +29,10 @@ private slots:
 	void sticky_modifier_applies_once_then_clears();
 	void ctrl_shift_c_is_kept_by_the_app();
 	void paste_is_bracketed_only_when_the_remote_asked();
+	void kitty_protocol_disambiguates_ctrl_and_escape();
+	void kitty_protocol_pushes_and_pops();
+	void kitty_protocol_answers_a_query();
+	void modify_other_keys_encodes_and_reports_its_level();
 	void key_row_goes_through_the_router();
 	void key_row_visibility_follows_the_input_device();
 };

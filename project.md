@@ -524,6 +524,100 @@ model on a finger.
   the widget. On desktop it should also drive the **window title**; that is a
   platform-layer call, not something the emulator knows about.
 
+### 7.1 Modern terminal extensions — **[DECIDED to support, tiered]**
+
+VT100/xterm is the floor, not the target. Terminals have moved a long way
+since, and the extensions below are what a 2026 terminal is expected to
+speak. **Support is tiered by value-per-effort, not by novelty.** The list
+exists because most of these are unfamiliar unless you have implemented one:
+each says what it *is*, who needs it, and where it stands here.
+
+**Tier 1 — a terminal is broken without these.**
+
+| Extension | What it is | Status |
+|---|---|---|
+| **Truecolor** (SGR 38;2;r;g;b) | 24-bit colour instead of a 256-entry palette | **Done** — §7, carried per cell |
+| **Bracketed paste** (DEC 2004) | Wraps pasted text so a shell knows it was pasted rather than typed, instead of executing every newline | **Done** — §6.4 |
+| **SGR mouse** (1006) | Mouse reports that work past column 223, unlike the original X10 encoding | libvterm has it; the UI side is §6.4, not yet wired |
+| **Focus reporting** (1004) | Tells the remote when the terminal gains/loses focus, so editors can reload changed files | libvterm parses it; needs the window events wired |
+
+**Tier 2 — keyboard disambiguation. This is the big one.**
+
+Legacy terminal input cannot express what a modern keyboard sends. `Ctrl+I`
+and `Tab` are the same byte. `Alt+x` and `Escape` then `x` are the same two
+bytes, and *no* decoder can separate them — which is why terminal apps have
+an ESC timeout at all. Three tiers exist, and a terminal should offer the
+best one it can:
+
+- **Kitty keyboard protocol** (`CSI > flags u` to push, `CSI < u` to pop,
+  `CSI ? u` to query). Progressive enhancement flags; the first,
+  "disambiguate escape codes", is the one that matters. **Implemented** —
+  the disambiguate tier, plus the push/pop/query/set controls.
+- **xterm `modifyOtherKeys`** (`CSI > 4 ; 2 m`, queried with `CSI ? 4 m`).
+  The middle tier, and what a terminal that predates kitty's protocol
+  offers. **Implemented at level 2.** Level 3 is deliberately not offered:
+  it encodes *unmodified* keys too, and XTQMODKEYS reports only the current
+  value rather than the maximum supported, so a client asking for 3 and
+  silently getting 2 could not tell the difference.
+- **Legacy** — what everything falls back to, with its ambiguities intact.
+
+The sibling `fuzzypickles` TUI probes exactly these tiers from the client
+side (see its `gui/project.md`); BeerSSH is the other half of that
+conversation, and should let it reach its best tier.
+
+**Tier 3 — worth having, not yet built.**
+
+| Extension | What it is | Why it is not built yet |
+|---|---|---|
+| **Synchronized output** (DEC 2026) | Remote brackets a screen update so the terminal paints it in one frame instead of mid-redraw; removes tearing in full-screen apps | Cheap and worth doing — needs the repaint coalescing in §8.4 to land with it |
+| **OSC 8 hyperlinks** | Marks a run of cells as a clickable URL | Needs a per-cell link ID in `bssh_screen` and a click target in the view |
+| **OSC 52 clipboard** | Remote sets the local clipboard | **Security review first** — a remote host silently writing the user's clipboard is a real hazard, and reading it is worse. Off by default, if offered at all |
+| **XTGETTCAP / DECRQM** | Lets a remote query what the terminal supports rather than guessing from `TERM` | Small; pairs naturally with the tier-2 work |
+
+**Tier 4 — images, and the honest problem with them.**
+
+**Sixel**, the **kitty graphics protocol** and **iTerm2's inline images** all
+put pixels in a character grid, and no two agree on how. Sixel is oldest and
+most widely supported; kitty's is the most capable; iTerm2's is the
+simplest. None is *the* standard, so "support all of them" is three
+implementations, plus an image cache that has to survive scrolling, resizing
+and a phone's memory limits.
+
+**[OPEN], and a real decision, not a formality:** whether v1 ships any of
+them. Recommendation is **sixel first if any** — widest support, smallest
+implementation — and only once §9's font and rendering pipeline exists,
+because both want the same glyph/tile cache. A terminal that draws images
+badly is worse than one that declines to.
+
+**Where this lives in the code:** libvterm handles the sequences it knows
+and hands everything else to `vterm_screen_set_unrecognised_fallbacks`, its
+documented extension hook. Modes libvterm does not model (kitty flags,
+modifyOtherKeys level) are tracked in `bssh_emulator` beside it.
+
+**The hook turned out to have holes, and this is where vendoring earned its
+keep.** Two sequences never reach it at all: `on_csi()` rejects any private
+leader other than `?` and `>` before dispatch, which drops kitty's pop
+(`CSI < u`) and set (`CSI = … u`); and `CSI ? 4 m`, xterm's XTQMODKEYS
+query, is swallowed by a DECSGR case for a printer-era sequence no DEC
+terminal implemented. Both are *unreachable*, not merely unhandled, so no
+amount of application code could have implemented them.
+
+The fix lives in **`vterm-patches/`**, applied to the submodule at build
+time by the top-level Makefile — **not** committed into the submodule
+itself, because a submodule pinned to a commit that exists only on this
+machine is one nobody else can clone. An upstream update that conflicts
+fails loudly at the patch step rather than silently dropping the fix, and
+`make veryclean` hands the submodule back pristine. Both patches are worth
+sending upstream.
+
+**Not everything libvterm does is a defect to patch, either.** Its keyboard
+encoder emits `CSI u` unconditionally for the ambiguous control keys
+(`Ctrl+I`, `Ctrl+M`, `Ctrl+[`) — correct for an editor that always speaks
+the modern protocol, wrong for a terminal talking to whatever is on the
+other end. A remote that has *not* enabled a keyboard protocol must receive
+exactly what a VT100 would have sent. That is a policy decision this
+project owns, so it lives in `bssh_emulator`, not in a patch.
+
 ---
 
 ## 8. Multi-session UI: tabs everywhere, splits on large screens
