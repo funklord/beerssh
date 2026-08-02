@@ -57,6 +57,20 @@ from the UI is M6, so until then an entry gets added by hand.
 
 See `project.md` §14 for the milestone plan.
 
+## The interface
+
+Two front doors over one set of saved hosts (`project.md` §8.5):
+
+- **Desktop borrows PuTTY's layout** — category tree, destination at the
+  top, saved sessions with Load/Save/Delete. Familiar without instructions
+  if you have ever used PuTTY.
+- **Touch gets a mobile list** — full-bleed rows, one tap to connect, a
+  floating add button, kinetic scrolling.
+
+Which appears follows the input device rather than the OS, so a
+convertible in tablet mode gets the touch one. Hosts live in SQLite under
+`AppDataLocation`; the schema has no column a credential could go in.
+
 ## Build (desktop)
 
 Needs Qt 6 (6.8 LTS or newer), libssh, and a C++17 compiler.

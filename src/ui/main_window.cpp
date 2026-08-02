@@ -11,12 +11,22 @@
 #include <QMetaEnum>
 #include <QVBoxLayout>
 
+#include <QStackedWidget>
+
+#include "model/profile_store.h"
 #include "platform/platform.h"
+#include "ui/host_list.h"
 #include "ui/key_row.h"
+#include "ui/session_dialog.h"
 #include "ui/terminal_view.h"
 
 bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
     : QWidget(parent),
+      m_pages(new QStackedWidget(this)),
+      m_terminal_page(new QWidget(this)),
+      m_profile_store(new bssh_profile_store(QString(), this)),
+      m_session_dialog(nullptr),
+      m_host_list(nullptr),
       m_terminal_view(new bssh_terminal_view(this)),
       m_status_label(new QLabel(this)),
       m_session(nullptr),
@@ -29,11 +39,38 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_background_on_close(false) {
 	setWindowTitle(QStringLiteral("BeerSSH"));
 
-	QVBoxLayout *layout = new QVBoxLayout(this);
+	QVBoxLayout *outer = new QVBoxLayout(this);
+	outer->setContentsMargins(0, 0, 0, 0);
+	outer->setSpacing(0);
+	outer->addWidget(m_pages, 1);
+
+	QVBoxLayout *layout = new QVBoxLayout(m_terminal_page);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
 	layout->addWidget(m_terminal_view, 1);
 	layout->addWidget(m_status_label, 0);
+
+	/*
+	 * One front door or the other, never both, chosen from the input
+	 * device rather than the OS (sec 8.5). The unchosen one is not built:
+	 * two live front doors over one store would be two things to keep in
+	 * step for no benefit.
+	 */
+	if (front_door_for(bssh_platform::instance()->is_touch_primary())
+	    == FRONT_DOOR_HOST_LIST) {
+		m_host_list = new bssh_host_list(m_profile_store, this);
+		connect(m_host_list, &bssh_host_list::open_requested,
+		         this, &bssh_main_window::open_profile);
+		m_pages->addWidget(m_host_list);
+	} else {
+		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
+		connect(m_session_dialog, &bssh_session_dialog::open_requested,
+		         this, &bssh_main_window::open_profile);
+		connect(m_session_dialog, &bssh_session_dialog::cancelled, this, &QWidget::close);
+		m_pages->addWidget(m_session_dialog);
+	}
+
+	m_pages->addWidget(m_terminal_page);
 
 	m_status_label->setContentsMargins(6, 3, 6, 3);
 
@@ -129,7 +166,15 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 
 	update_status();
 
-	if (!target.isEmpty()) connect_to(target);
+	/*
+	 * A command-line target skips the front door entirely, which is what
+	 * anyone typing one wants. Otherwise the front door is the first
+	 * thing shown, as it is in PuTTY.
+	 */
+	if (!target.isEmpty()) {
+		m_pages->setCurrentWidget(m_terminal_page);
+		connect_to(target);
+	}
 }
 
 void bssh_main_window::connect_to(const QString &target) {
@@ -308,4 +353,17 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 	if (m_session) m_session->disconnect_from_host();
 	bssh_platform::instance()->set_keep_alive(false);
 	event->accept();
+}
+
+bssh_main_window::front_door_t bssh_main_window::front_door_for(bool touch_primary) {
+	return touch_primary ? FRONT_DOOR_HOST_LIST : FRONT_DOOR_SESSION_DIALOG;
+}
+
+void bssh_main_window::open_profile(const bssh_profile_t &profile) {
+	if (!profile.is_valid()) return;
+
+	m_pages->setCurrentWidget(m_terminal_page);
+	m_terminal_view->setFocus();
+
+	connect_to(profile.target());
 }

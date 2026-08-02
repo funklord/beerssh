@@ -19,7 +19,7 @@
 TEMPLATE = app
 TARGET = beerssh
 
-QT += widgets network
+QT += widgets network sql
 CONFIG += c++17
 CONFIG -= app_bundle
 
@@ -27,6 +27,7 @@ INCLUDEPATH += $$PWD/src
 
 SOURCES += \
     src/main.cpp \
+    src/model/profile_store.cpp \
     src/input/input_router.cpp \
     src/platform/platform.cpp \
     src/ssh/ssh_session.cpp \
@@ -36,12 +37,16 @@ SOURCES += \
     src/term/image_store.cpp \
     src/term/scrollback.cpp \
     src/term/screen.cpp \
+    src/ui/host_list.cpp \
     src/ui/key_row.cpp \
     src/ui/main_window.cpp \
+    src/ui/session_dialog.cpp \
     src/ui/terminal_view.cpp
 
 HEADERS += \
     src/input/input_router.h \
+    src/model/profile.h \
+    src/model/profile_store.h \
     src/platform/platform.h \
     src/ssh/ssh_session.h \
     src/ssh/ssh_session_libssh.h \
@@ -50,8 +55,10 @@ HEADERS += \
     src/term/image_store.h \
     src/term/scrollback.h \
     src/term/screen.h \
+    src/ui/host_list.h \
     src/ui/key_row.h \
     src/ui/main_window.h \
+    src/ui/session_dialog.h \
     src/ui/terminal_view.h
 
 # libssh is the only third-party dependency so far. It is named here and

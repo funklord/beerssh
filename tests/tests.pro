@@ -13,7 +13,7 @@
 TEMPLATE = app
 TARGET = beerssh_test
 
-QT += widgets network testlib
+QT += widgets network sql testlib
 
 CONFIG += link_pkgconfig
 PKGCONFIG += libsixel libssh
@@ -29,6 +29,7 @@ SOURCES += \
     emulator_test.cpp \
     graphics_test.cpp \
     platform_test.cpp \
+    profile_store_test.cpp \
     input_router_test.cpp \
     screen_test.cpp \
     terminal_view_test.cpp \
@@ -42,7 +43,10 @@ SOURCES += \
     ../src/term/scrollback.cpp \
     ../src/term/screen.cpp \
     ../src/platform/platform.cpp \
+    ../src/model/profile_store.cpp \
+    ../src/ui/host_list.cpp \
     ../src/ui/main_window.cpp \
+    ../src/ui/session_dialog.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/key_row.cpp \
     ../src/ui/terminal_view.cpp
@@ -52,6 +56,7 @@ HEADERS += \
     emulator_test.h \
     graphics_test.h \
     platform_test.h \
+    profile_store_test.h \
     input_router_test.h \
     screen_test.h \
     terminal_view_test.h \
@@ -64,6 +69,10 @@ HEADERS += \
     ../src/term/scrollback.h \
     ../src/term/screen.h \
     ../src/platform/platform.h \
+    ../src/model/profile.h \
+    ../src/model/profile_store.h \
+    ../src/ui/host_list.h \
     ../src/ui/main_window.h \
+    ../src/ui/session_dialog.h \
     ../src/ui/key_row.h \
     ../src/ui/terminal_view.h

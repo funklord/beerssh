@@ -9,8 +9,14 @@
 #include "term/emulator.h"
 
 class QLabel;
+class QStackedWidget;
+class bssh_host_list;
 class bssh_key_row;
+class bssh_profile_store;
+class bssh_session_dialog;
 class bssh_terminal_view;
+
+#include "model/profile.h"
 
 /*
  * bssh_main_window -- the top-level window.
@@ -54,10 +60,23 @@ public:
 
 	static close_action_t close_action(bool sessions_live, bool remembered_background);
 
+	/*
+	 * Which front door to show (sec 8.5). A capability question, like the
+	 * key row's: a convertible in tablet mode wants the touch list, and a
+	 * phone docked with a keyboard and a monitor does not.
+	 */
+	enum front_door_t {
+		FRONT_DOOR_SESSION_DIALOG, /* PuTTY-shaped, for pointer + keyboard */
+		FRONT_DOOR_HOST_LIST       /* full-bleed list, for a thumb */
+	};
+
+	static front_door_t front_door_for(bool touch_primary);
+
 protected:
 	void closeEvent(QCloseEvent *event) override;
 
 private slots:
+	void open_profile(const bssh_profile_t &profile);
 	void on_grid_resized(int cols, int rows);
 	void on_state_changed(bssh_ssh_session::state_t state);
 	void on_failed(const QString &reason);
@@ -67,6 +86,11 @@ private:
 	void connect_to(const QString &target);
 	void update_status();
 
+	QStackedWidget *m_pages;
+	QWidget *m_terminal_page;
+	bssh_profile_store *m_profile_store;
+	bssh_session_dialog *m_session_dialog;
+	bssh_host_list *m_host_list;
 	bssh_terminal_view *m_terminal_view;
 	QLabel *m_status_label;
 	bssh_ssh_session *m_session;

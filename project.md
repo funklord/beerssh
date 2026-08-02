@@ -739,6 +739,46 @@ collapse/restore is bookkeeping, not surgery.
 - **Per-pane geometry:** each pane computes its own cols×rows from its own size and
   its session's font — panes may legitimately differ.
 
+### 8.5 The front door — **[DECIDED]**
+
+**Desktop borrows PuTTY's interface. Touch gets a mobile one. Same model
+underneath.**
+
+This is the one place the two platforms deliberately do *not* share a
+layout, and the reason is not screen size — it is that both idioms are
+already in people's fingers, and neither survives being moved to the other
+platform.
+
+**Desktop: PuTTY's configuration window.** Category tree down the left,
+the chosen category's settings on the right, the destination at the top,
+and a saved-sessions list with Load / Save / Delete. Anyone arriving from
+PuTTY — which is most of the Windows-side audience for an SSH client —
+should be able to use it without reading anything. Double-clicking a saved
+session opens it; saving under an existing name updates that entry rather
+than making a second one. Categories beyond *Session* are listed and say
+which milestone fills them in, because a pane that looks finished and does
+nothing is worse than one that admits it is empty.
+
+**Touch: a full-bleed host list.** One list, 64dp rows carrying a name and
+its `user@host`, one tap to connect, a floating action button to add. No
+category tree: a tree of setting categories beside a form of small fields
+is a desktop idiom that survives neither a thumb nor a 5-inch screen.
+Kinetic scrolling via `QScroller` — dragging a desktop scrollbar with a
+thumb is the single most obvious way a Widgets app announces it was not
+written for touch. **Still Widgets, still no QML** (§2): the touch
+affordances here are a stylesheet, a row height and a gesture recogniser.
+
+**Which one appears is a capability question, not an OS question** —
+`front_door_for(touch_primary)`, the same rule as the on-screen key row
+(§6.2). A convertible in tablet mode gets the list; a phone docked with a
+keyboard and a monitor does not. Only the chosen one is constructed: two
+live front doors over one store would be two things to keep in step for no
+benefit.
+
+**Both read and write the same `bssh_profile_store`** (§10.6), so a host
+saved on one is a host listed on the other, and the preset system (§10)
+attaches to profiles rather than to either UI.
+
 ### 8.4 Implementation notes
 - A **`bssh_layout_manager`** owns the tab-group → pane-tree mapping and is the
   single place that decides tabs-vs-splits from the current window size class. UI
