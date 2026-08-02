@@ -380,16 +380,8 @@ void bssh_main_window::on_registry_changed() {
 		 * package, and they follow the theme's own sizing.
 		 */
 		const int size = m_tabs->fontMetrics().height() / 2;
-		QPixmap dot(size, size);
-		dot.fill(Qt::transparent);
-		{
-			QPainter painter(&dot);
-			painter.setRenderHint(QPainter::Antialiasing);
-			painter.setPen(Qt::NoPen);
-			painter.setBrush(bssh_tab_status::colour_for(bssh_tab_status::state_for(session)));
-			painter.drawEllipse(0, 0, size, size);
-		}
-		m_tabs->setTabIcon(i, QIcon(dot));
+		m_tabs->setTabIcon(i, QIcon(bssh_tab_status::dot(
+		        size, bssh_tab_status::state_for(session))));
 
 		if (session == m_current) m_tabs->setCurrentIndex(i);
 	}

@@ -1,5 +1,7 @@
 #include "ui/tab_status.h"
 
+#include <QPainter>
+
 #include "model/session.h"
 
 namespace bssh_tab_status {
@@ -36,6 +38,26 @@ QColor colour_for(state_t state) {
 		return QColor(0x95, 0xa5, 0xa6);
 	}
 	return QColor(0x95, 0xa5, 0xa6);
+}
+
+QPixmap dot(int size, state_t state) {
+	size = qMax(4, size);
+
+	QPixmap pixmap(size, size);
+	pixmap.fill(Qt::transparent);
+
+	QPainter painter(&pixmap);
+	painter.setRenderHint(QPainter::Antialiasing);
+	painter.setPen(Qt::NoPen);
+	painter.setBrush(colour_for(state));
+
+	/*
+	 * Inset by a pixel: an ellipse drawn to the exact bounds of its
+	 * pixmap loses its antialiased edge to clipping and reads as a
+	 * slightly square blob at tab-bar sizes.
+	 */
+	painter.drawEllipse(1, 1, size - 2, size - 2);
+	return pixmap;
 }
 
 } /* namespace bssh_tab_status */
