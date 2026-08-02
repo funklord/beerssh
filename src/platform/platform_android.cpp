@@ -126,6 +126,40 @@ public:
 		return QStringLiteral("assets:/fonts");
 	}
 
+	QString launch_document() const override {
+		/*
+		 * The URI the activity was started with, straight out of the
+		 * launch intent. Qt's file engine opens a content:// URI as
+		 * happily as a path, so what comes back here can be handed to
+		 * QFile unchanged and never has to be turned into a filename --
+		 * which is fortunate, because a content URI does not have one.
+		 */
+		QJniObject activity = QNativeInterface::QAndroidApplication::context();
+		if (!activity.isValid()) return QString();
+
+		QJniObject intent = activity.callObjectMethod(
+		        "getIntent", "()Landroid/content/Intent;");
+		if (!intent.isValid()) return QString();
+
+		QJniObject data = intent.callObjectMethod("getData", "()Landroid/net/Uri;");
+
+		/*
+		 * ACTION_SEND puts the URI in an extra instead of in the data,
+		 * and sharing a file to an app is the gesture most Android file
+		 * managers offer, so both are read.
+		 */
+		if (!data.isValid()) {
+			QJniObject key = QJniObject::fromString(QStringLiteral("android.intent.extra.STREAM"));
+			data = intent.callObjectMethod(
+			        "getParcelableExtra",
+			        "(Ljava/lang/String;)Landroid/os/Parcelable;", key.object<jstring>());
+		}
+
+		if (!data.isValid()) return QString();
+
+		return data.callObjectMethod("toString", "()Ljava/lang/String;").toString();
+	}
+
 	bool is_touch_primary() const override {
 		/*
 		 * True as the M0 default, but this is not a constant either: an

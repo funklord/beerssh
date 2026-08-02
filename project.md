@@ -1062,16 +1062,25 @@ Each sets sensible `TERM`, colours, and key-row defaults for that target. These
 double as documentation of what a preset can do.
 
 ### 10.5 Import / export
-- **Export is built and works on both platforms**; **import works on desktop**
-  and is **[OPEN] on Android**: the document picker lists preset files but will
-  not let one be selected, on an Android 11 emulator image. The intent Qt sends
-  (`ACTION_OPEN_DOCUMENT`, `typ=*/*`, category `OPENABLE`) looks right, and a
-  suffix filter, no filter, an all-files filter and explicit MIME filters all
-  behave identically — a `.txt` is refused exactly as an `.ini` is, while
-  *export* through `ACTION_CREATE_DOCUMENT` works on the same device. The likely
-  answer is not a better filter but a different shape: an intent-filter so a
-  preset file is opened from a file manager *into* BeerSSH, which is how Android
-  expects this to work.
+- **Export works on both platforms. Import works on both platforms**, by two
+  different routes, because the two platforms hand a file over differently:
+  - **Desktop:** the file picker inside the app, or a path on the command line
+    (which is what a file manager passes to a registered handler).
+  - **Android:** being **given** the file — share a preset to BeerSSH, and the
+    launch intent's URI is read and imported. Verified on a device with a real
+    SAF-granted `content://` URI: opened, parsed, imported, and name-collided
+    into "BSD (imported)" rather than overwriting.
+  - **[OPEN]** The in-app picker still cannot *select* a file on Android
+    (`ACTION_OPEN_DOCUMENT` lists preset files greyed out, and a `.txt` behaves
+    the same as an `.ini`, so it is not about filters). It is left in place
+    because it costs nothing and may be an emulator-image quirk; the hand-over
+    route above is the one that works and is the more Android-shaped gesture
+    regardless.
+  - Deliberately **not** claimed: `ACTION_VIEW` on arbitrary `content://`
+    documents. Matching those needs a filter on `application/octet-stream` with
+    no path pattern, which would put BeerSSH in the "open with" list of every
+    unknown binary on the device — a rude thing to do, and a lie, since the only
+    file this app can open is a preset.
 - Presets export/import as **INI** — the same format they are stored in (§10.6),
   so exporting one is copying a section out and importing is pasting it back,
   with a `schema` key for forward compatibility. Human-readable, diffable and

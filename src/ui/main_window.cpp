@@ -1,6 +1,7 @@
 #include "ui/main_window.h"
 
 #include <QCloseEvent>
+#include <QFile>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QClipboard>
@@ -37,6 +38,7 @@
 #include "ui/host_editor.h"
 #include "ui/host_list.h"
 #include "ui/key_row.h"
+#include "model/preset.h"
 #include "ui/preset_editor.h"
 #include "ui/session_dialog.h"
 #include "ui/tab_status.h"
@@ -703,6 +705,46 @@ void bssh_main_window::restore_layout() {
 	if (!profile.is_valid()) return;
 
 	if (m_session_dialog) m_session_dialog->set_current_profile(profile);
+}
+
+void bssh_main_window::import_launch_document() {
+	bssh_platform *platform = bssh_platform::instance();
+	if (!platform || !m_profile_store) return;
+
+	const QString document = platform->launch_document();
+	if (document.isEmpty()) return;
+
+	bool ok = false;
+	bssh_preset_t imported = bssh_preset_t::read_ini(document, &ok);
+
+	if (!ok) {
+		/*
+		 * Said out loud rather than ignored. Being handed a file and
+		 * silently doing nothing with it is indistinguishable from the
+		 * app being broken, and the user picked this app on purpose.
+		 */
+		QMessageBox::warning(this, QStringLiteral("Not a preset"),
+		                      QStringLiteral("BeerSSH could not read a preset from "
+		                                      "that file."));
+		return;
+	}
+
+	/* Never merged over an existing one -- see bssh_preset_editor. */
+	for (const bssh_preset_t &existing : m_profile_store->presets()) {
+		if (existing.name.compare(imported.name, Qt::CaseInsensitive) != 0) continue;
+		imported.name = imported.name + QStringLiteral(" (imported)");
+		break;
+	}
+
+	const int id = m_profile_store->save_preset(imported);
+	if (id == 0) return;
+
+	QMessageBox::information(
+	        this, QStringLiteral("Preset imported"),
+	        QStringLiteral("\"%1\" is now available to any host.").arg(imported.name));
+
+	if (m_preset_editor) m_preset_editor->reload();
+	reresolve_sessions(id);
 }
 
 void bssh_main_window::reresolve_sessions(int preset_id) {

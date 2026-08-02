@@ -88,8 +88,8 @@ struct bssh_preset_t {
 	 * installation's store, and importing someone else's "id 4, shipped"
 	 * would claim a slot and a status that are not theirs to give.
 	 */
-	bool write_ini(const QString &path) const;
-	static bssh_preset_t read_ini(const QString &path, bool *ok = nullptr);
+	bool write_ini(const QString &raw_path) const;
+	static bssh_preset_t read_ini(const QString &raw_path, bool *ok = nullptr);
 
 	/* The starter set (sec 10.4). Read-only; users clone them. */
 	static QList<bssh_preset_t> builtins();

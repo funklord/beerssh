@@ -82,6 +82,22 @@ public:
 	 */
 	virtual QString font_directory() const = 0;
 
+	/*
+	 * A document this app was ASKED to open, or empty (project.md sec
+	 * 10.5). A preset file, in practice -- the only file type BeerSSH
+	 * knows how to be handed.
+	 *
+	 * The two platforms are handed one in genuinely different ways: a
+	 * path on the command line from a desktop file manager, an intent
+	 * carrying a content:// URI on Android. That is the difference sec 3
+	 * says belongs behind this interface, and it is also the answer to a
+	 * problem the other direction could not solve -- picking a file from
+	 * inside the app does not work on Android, while being GIVEN one
+	 * does, and being given one is how Android expects this to work
+	 * anyway.
+	 */
+	virtual QString launch_document() const = 0;
+
 signals:
 	/*
 	 * Connectivity changed and any live session should re-check itself:

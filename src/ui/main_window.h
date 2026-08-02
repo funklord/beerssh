@@ -85,6 +85,16 @@ public:
 	 */
 	bool showing_front_door() const;
 
+	/*
+	 * Imports the preset file this app was launched to open, if any
+	 * (sec 10.5). Called by main() rather than from the constructor, and
+	 * deliberately: it can put a modal dialog on screen, and --self-test
+	 * runs with nobody to dismiss one. Constructing a window that may
+	 * block forever is a window CI cannot check -- which is exactly what
+	 * happened the first time this ran from the constructor.
+	 */
+	void import_launch_document();
+
 protected:
 	void closeEvent(QCloseEvent *event) override;
 

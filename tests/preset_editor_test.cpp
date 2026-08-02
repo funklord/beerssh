@@ -1,5 +1,6 @@
 #include <QtTest>
 #include <QFile>
+#include <QUrl>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -324,4 +325,40 @@ void preset_editor_test::an_untouched_font_stays_unset_rather_than_being_pinned(
 	const bssh_preset_t clone = store.preset(editor.current_preset_id());
 	QVERIFY2(clone.font_family.isEmpty(),
 	         "an untouched font must not be recorded as an explicit choice");
+}
+
+void preset_editor_test::a_file_url_is_read_as_a_file_rather_than_as_a_name() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("handed-over.ini"));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("Handed Over");
+	preset.scrollback_lines = 31337;
+	QVERIFY(preset.write_ini(path));
+
+	/*
+	 * Being handed a document by URL is how the platform does it -- an
+	 * Android intent carries one, and so does a desktop file manager.
+	 *
+	 * This is a regression test for a bug found by firing a real intent:
+	 * a file:// URL was treated as "not a path" and pushed through the
+	 * content:// bridge, where QFile opened it as a relative FILENAME
+	 * that did not exist. The app then said "not a preset" about a file
+	 * that was a perfectly good preset -- a failure that blames the user's
+	 * file for the app's own mistake.
+	 */
+	const QString url = QUrl::fromLocalFile(path).toString();
+	QVERIFY(url.startsWith(QStringLiteral("file://")));
+
+	bool ok = false;
+	const bssh_preset_t restored = bssh_preset_t::read_ini(url, &ok);
+
+	QVERIFY2(ok, "a file:// URL must be readable");
+	QCOMPARE(restored.name, QStringLiteral("Handed Over"));
+	QCOMPARE(restored.scrollback_lines, 31337);
+
+	/* And writing back through a URL lands in the same place. */
+	const QString written = dir.filePath(QStringLiteral("written.ini"));
+	QVERIFY(restored.write_ini(QUrl::fromLocalFile(written).toString()));
+	QVERIFY(QFile::exists(written));
 }

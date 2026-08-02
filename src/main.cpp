@@ -81,6 +81,12 @@ int main(int argc, char *argv[]) {
 
 	if (self_test) {
 		QTimer::singleShot(0, &app, &QCoreApplication::quit);
+	} else {
+		/*
+		 * After show(), so a confirmation has a window to sit on, and
+		 * never under --self-test, which has nobody to dismiss it.
+		 */
+		window.import_launch_document();
 	}
 
 	return app.exec();

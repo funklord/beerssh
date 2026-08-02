@@ -25,6 +25,7 @@ private slots:
 	void an_exported_preset_names_nobodys_infrastructure();
 	void an_import_never_claims_an_id_or_shipped_status();
 	void an_untouched_font_stays_unset_rather_than_being_pinned();
+	void a_file_url_is_read_as_a_file_rather_than_as_a_name();
 };
 
 #endif /* BSSH_PRESET_EDITOR_TEST_H */

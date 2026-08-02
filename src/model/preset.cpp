@@ -2,6 +2,7 @@
 #include <QTemporaryDir>
 #include <QSettings>
 #include <QFile>
+#include <QUrl>
 
 #include <QJsonArray>
 
@@ -146,11 +147,29 @@ QList<bssh_preset_t> bssh_preset_t::builtins() {
  * the format.
  */
 static bool bssh_is_local_path(const QString &path) {
-	return !path.startsWith(QStringLiteral("content://")) &&
-	       !path.startsWith(QStringLiteral("file://"));
+	/*
+	 * content:// is the only thing that genuinely is not a path. A file://
+	 * URL is one wearing a URL's clothes, and it arrives that way whenever
+	 * something hands the app a document by URL rather than by name -- so
+	 * it is converted rather than bridged.
+	 *
+	 * Getting this wrong is not subtle in its consequences and is silent
+	 * in its cause: QFile takes a PATH, opens "file:///sdcard/x.ini" as a
+	 * relative filename that does not exist, and the import reports "not a
+	 * preset" about a file that is a perfectly good preset.
+	 */
+	return !path.startsWith(QStringLiteral("content://"));
 }
 
-bool bssh_preset_t::write_ini(const QString &path) const {
+/* file:// to a path; anything else unchanged. */
+static QString bssh_normalise_path(const QString &path) {
+	if (!path.startsWith(QStringLiteral("file://"))) return path;
+	return QUrl(path).toLocalFile();
+}
+
+bool bssh_preset_t::write_ini(const QString &raw_path) const {
+	const QString path = bssh_normalise_path(raw_path);
+
 	QTemporaryDir staging;
 	const QString target = bssh_is_local_path(path)
 	        ? path
@@ -189,8 +208,10 @@ bool bssh_preset_t::write_ini(const QString &path) const {
 	return destination.write(source.readAll()) >= 0;
 }
 
-bssh_preset_t bssh_preset_t::read_ini(const QString &path, bool *ok) {
+bssh_preset_t bssh_preset_t::read_ini(const QString &raw_path, bool *ok) {
 	if (ok) *ok = false;
+
+	const QString path = bssh_normalise_path(raw_path);
 
 	QTemporaryDir staging;
 	QString source = path;

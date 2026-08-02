@@ -2,6 +2,7 @@
 
 #include <QApplication>
 #include <QDir>
+#include <QFileInfo>
 #include <QGuiApplication>
 #include <QMenu>
 #include <QNetworkInformation>
@@ -113,6 +114,24 @@ public:
 
 		for (const QString &candidate : candidates) {
 			if (QDir(candidate).exists()) return QDir(candidate).canonicalPath();
+		}
+
+		return QString();
+	}
+
+	QString launch_document() const override {
+		/*
+		 * A file named on the command line, which is what a desktop file
+		 * manager passes when BeerSSH is the handler for a .ini, and
+		 * what a shell passes when someone types it. Only .ini is
+		 * accepted: the first non-option argument is otherwise a
+		 * [user@]host[:port] target (sec 14, M1), and mistaking a
+		 * hostname for a file to import would be a strange way to fail.
+		 */
+		for (const QString &argument : QCoreApplication::arguments().mid(1)) {
+			if (argument.startsWith(QLatin1Char('-'))) continue;
+			if (!argument.endsWith(QStringLiteral(".ini"), Qt::CaseInsensitive)) continue;
+			if (QFileInfo::exists(argument)) return argument;
 		}
 
 		return QString();

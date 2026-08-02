@@ -115,6 +115,42 @@
 				<category android:name="android.intent.category.LAUNCHER"/>
 			</intent-filter>
 
+			<!--
+				Opening a preset file (sec 10.5). This is the direction
+				that works on Android: choosing a file from inside the
+				app through the document picker does not, while being
+				handed one does, and being handed one is the gesture the
+				platform is built around.
+
+				Deliberately narrow. A filter claiming every text/plain
+				document would put BeerSSH in the "open with" list of
+				every note and log on the device, which is rude and
+				would also be a lie: the only file this app can open is
+				a preset. The pathPattern restricts it to names ending
+				in .ini, and the host wildcard is required for a
+				pathPattern to be considered at all.
+			-->
+			<intent-filter>
+				<action android:name="android.intent.action.VIEW"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<category android:name="android.intent.category.BROWSABLE"/>
+				<data android:scheme="file"/>
+				<data android:scheme="content"/>
+				<data android:host="*"/>
+				<data android:mimeType="application/octet-stream"/>
+				<data android:pathPattern=".*\\.ini"/>
+			</intent-filter>
+
+			<!--
+				Sharing a preset to BeerSSH, which is what a file manager
+				offers when a document has no obvious owner.
+			-->
+			<intent-filter>
+				<action android:name="android.intent.action.SEND"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<data android:mimeType="application/octet-stream"/>
+			</intent-filter>
+
 			<meta-data android:name="android.app.lib_name"
 			           android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
 			<meta-data android:name="android.app.arguments"
