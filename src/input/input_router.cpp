@@ -60,6 +60,18 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 		}
 	}
 
+	if (event->modifiers().testFlag(Qt::ControlModifier)
+	    && event->modifiers().testFlag(Qt::AltModifier)) {
+		if (event->key() == Qt::Key_Left) {
+			emit shortcut_pressed(SHORTCUT_FOCUS_PANE_LEFT);
+			return false;
+		}
+		if (event->key() == Qt::Key_Right) {
+			emit shortcut_pressed(SHORTCUT_FOCUS_PANE_RIGHT);
+			return false;
+		}
+	}
+
 	const quint8 modifiers = modifiers_for(event);
 	int key = bssh_emulator::KEY_NONE;
 

@@ -41,6 +41,13 @@ public:
 
 	void focus_session(bssh_session *session);
 
+	/*
+	 * Moves focus one pane left or right. Stops at the ends rather than
+	 * wrapping: with two panes, wrapping makes "left" and "right" do the
+	 * same thing, and the user loses track of where focus is.
+	 */
+	void focus_adjacent(int direction);
+
 signals:
 	/* The focused pane changed -- the window retargets its shortcuts. */
 	void focus_changed(bssh_session *session);

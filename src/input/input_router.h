@@ -72,7 +72,17 @@ public:
 		SHORTCUT_COPY,
 		SHORTCUT_PASTE,
 		SHORTCUT_SCROLL_PAGE_UP,
-		SHORTCUT_SCROLL_PAGE_DOWN
+		SHORTCUT_SCROLL_PAGE_DOWN,
+
+		/*
+		 * Pane focus (sec 6.1). Ctrl+Alt+Arrow, because every chord
+		 * stolen here is one the remote shell can never receive again --
+		 * and Ctrl+Arrow and Alt+Arrow are both in daily use by readline
+		 * and by editors, so the pair together is the cheapest chord
+		 * available.
+		 */
+		SHORTCUT_FOCUS_PANE_LEFT,
+		SHORTCUT_FOCUS_PANE_RIGHT
 	};
 
 signals:

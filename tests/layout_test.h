@@ -21,6 +21,7 @@ private slots:
 	void layout_only_changes_on_a_class_boundary();
 	void panes_get_their_own_geometry();
 	void focus_is_visible_only_when_there_is_a_choice();
+	void pane_focus_moves_with_the_keyboard();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

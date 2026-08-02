@@ -70,8 +70,12 @@ running program and working directory are gone; only the local scrollback
 survives. Attaching to `tmux` on connect is the available answer until
 Mosh is considered in v2.
 
-Not built yet: SSH keepalive, reconnect status in the UI, pane navigation
-shortcuts, layout persistence, per-tab status dots,
+`Ctrl+Alt+Left`/`Right` move focus between panes, and the status line
+reports reconnection as it happens rather than leaving a silent terminal
+that looks identical to a quiet one.
+
+Not built yet: SSH keepalive (see `project.md` §4 — libssh turns out not
+to expose one), layout persistence, per-tab status dots,
 triple-click line selection, the Android background service, and the
 tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 

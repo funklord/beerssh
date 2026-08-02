@@ -17,6 +17,7 @@
 
 #include "model/profile_store.h"
 #include "model/session.h"
+#include "model/conn_manager.h"
 #include "model/session_registry.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
@@ -131,6 +132,33 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	};
 	connect(m_registry, &bssh_session_registry::session_added,
 	         this, [this, handle_shortcut](bssh_session *session) {
+		/*
+		 * Reconnection is only real to the user if they can see it. A
+		 * terminal that has silently stopped receiving output looks
+		 * identical to one whose remote is merely quiet (sec 5.3).
+		 */
+		if (bssh_conn_manager *manager = m_registry->conn_manager_for(session)) {
+			connect(manager, &bssh_conn_manager::reconnect_scheduled,
+			         this, [this, session](int delay_ms, int attempt) {
+				if (session != m_current) return;
+				m_error = QStringLiteral("reconnecting in %1s (attempt %2)")
+				                  .arg((delay_ms + 999) / 1000)
+				                  .arg(attempt);
+				update_status();
+			});
+			connect(manager, &bssh_conn_manager::reconnect_started, this, [this, session](int) {
+				if (session != m_current) return;
+				m_error = QStringLiteral("reconnecting...");
+				update_status();
+			});
+			connect(manager, &bssh_conn_manager::gave_up, this, [this, session] {
+				if (session != m_current) return;
+				m_error = QStringLiteral("gave up reconnecting -- the shell is gone, "
+				                          "not suspended");
+				update_status();
+			});
+		}
+
 		connect(session->input_router(), &bssh_input_router::shortcut_pressed,
 		         this, handle_shortcut);
 
@@ -211,6 +239,13 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 	 */
 	bssh_session *session = m_registry->create(profile);
 	connect(session, &bssh_session::failed, this, &bssh_main_window::on_failed);
+	connect(session, &bssh_session::state_changed, this, [this, session] {
+		/* A successful (re)connect clears whatever the last message was. */
+		if (session == m_current && session->is_live()) {
+			m_error.clear();
+			update_status();
+		}
+	});
 
 	m_pages->setCurrentWidget(m_terminal_page);
 	show_session(session);

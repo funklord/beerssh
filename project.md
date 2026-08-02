@@ -227,7 +227,7 @@ Both cross-compile for Android with the NDK; both need a crypto backend
 |---|---|---|
 | API level | Higher-level, more batteries-included | Lower-level, more manual plumbing |
 | PTY / interactive channel | `ssh_channel_request_pty`, `window-change`, easy | Supported but more manual state handling |
-| Keepalive | Built-in (`ssh_options` keepalive) | Manual / app-driven |
+| Keepalive | **Not exposed** — see the correction below | `libssh2_keepalive_config`/`_send` |
 | SFTP (future) | Built-in SFTP subsystem | `libssh2_sftp_*` available |
 | Known-hosts handling | Built-in helpers | More manual |
 | Threading model | Callbacks + blocking/non-blocking modes; be careful | Non-blocking friendly, integrates with a socket loop |
@@ -235,6 +235,22 @@ Both cross-compile for Android with the NDK; both need a crypto backend
 | License | LGPLv2.1 | BSD-3 |
 | Android build notes | CMake toolchain; static link recommended | CMake/autotools; static link recommended |
 | Desktop build notes | Packaged on every distro; link the system library where one exists | Likewise |
+
+**Correction, found while building M5:** this table originally credited
+libssh with built-in keepalive. It does not have one. libssh 0.11's public
+headers expose no client keepalive API — no option, no send call — only a
+`SSH_GLOBAL_REQUEST_KEEPALIVE` constant for requests arriving the other
+way. libssh2 does have `libssh2_keepalive_config`/`libssh2_keepalive_send`.
+
+That matters because §5.3 wants keepalive to detect a dead socket quickly,
+and it is one of the reasons this table gave for choosing libssh. It is
+now **[OPEN]** again, with three routes: send our own periodic global
+request through the vendored-and-patched route (§7.1 already establishes
+the precedent), switch this one component to libssh2 — which the
+`bssh_ssh_session` interface exists precisely to make possible (§4) — or
+rely on TCP keepalive plus the network-change trigger, which is slower but
+not nothing. **Do not treat the transport choice as settled on the
+strength of a row that was wrong.**
 
 **Recommendation: `libssh`** for v1 — its higher-level PTY/keepalive/known-hosts
 handling reduces the surface area for subtle bugs, and its built-in SFTP eases

@@ -33,6 +33,7 @@ private slots:
 	void kitty_protocol_pushes_and_pops();
 	void kitty_protocol_answers_a_query();
 	void modify_other_keys_encodes_and_reports_its_level();
+	void pane_chords_are_kept_by_the_app();
 	void key_row_goes_through_the_router();
 	void key_row_visibility_follows_the_input_device();
 };

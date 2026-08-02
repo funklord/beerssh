@@ -114,6 +114,18 @@ void bssh_pane_container::focus_session(bssh_session *session) {
 	emit focus_changed(m_focused);
 }
 
+void bssh_pane_container::focus_adjacent(int direction) {
+	if (m_sessions.size() < 2) return;
+
+	const int current = m_sessions.indexOf(m_focused);
+	if (current < 0) return;
+
+	const int next = qBound(0, current + (direction < 0 ? -1 : 1), m_sessions.size() - 1);
+	if (next == current) return;
+
+	focus_session(m_sessions.at(next));
+}
+
 void bssh_pane_container::apply_focus_styling() {
 	/*
 	 * Non-negotiable, per sec 8.3: with more than one pane the focused

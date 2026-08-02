@@ -240,6 +240,29 @@ void input_router_test::modify_other_keys_encodes_and_reports_its_level() {
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[>4;2m"));
 }
 
+void input_router_test::pane_chords_are_kept_by_the_app() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	QSignalSpy spy(&router, &bssh_input_router::shortcut_pressed);
+
+	QKeyEvent left(QEvent::KeyPress, Qt::Key_Left,
+	                Qt::ControlModifier | Qt::AltModifier, QString());
+	QVERIFY(!router.handle_key(&left));
+	QCOMPARE(spy.count(), 1);
+
+	/* Stolen from the remote, so it must not also produce bytes. */
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	/*
+	 * Ctrl+Arrow and Alt+Arrow are both in daily use by readline and by
+	 * editors, so neither may be swallowed -- only the pair together
+	 * (sec 6.1: keep the stolen set minimal).
+	 */
+	QVERIFY(!press(router, emulator, Qt::Key_Left, Qt::ControlModifier).isEmpty());
+	QVERIFY(!press(router, emulator, Qt::Key_Left, Qt::AltModifier).isEmpty());
+	QCOMPARE(spy.count(), 1);
+}
+
 void input_router_test::key_row_goes_through_the_router() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

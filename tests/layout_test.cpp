@@ -193,3 +193,36 @@ void layout_test::focus_is_visible_only_when_there_is_a_choice() {
 	QCOMPARE(container.view_at(0)->property("bssh_focused").toBool(), false);
 	QCOMPARE(container.view_at(1)->property("bssh_focused").toBool(), true);
 }
+
+void layout_test::pane_focus_moves_with_the_keyboard() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a, b});
+
+	QCOMPARE(container.focused_session(), a);
+
+	container.focus_adjacent(1);
+	QCOMPARE(container.focused_session(), b);
+
+	/*
+	 * Stops at the end rather than wrapping. With two panes, wrapping
+	 * makes left and right do the same thing and the user loses track of
+	 * where focus is -- which matters because the focused pane is the one
+	 * about to receive whatever they type (sec 6.3).
+	 */
+	container.focus_adjacent(1);
+	QCOMPARE(container.focused_session(), b);
+
+	container.focus_adjacent(-1);
+	QCOMPARE(container.focused_session(), a);
+	container.focus_adjacent(-1);
+	QCOMPARE(container.focused_session(), a);
+}
