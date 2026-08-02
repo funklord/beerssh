@@ -4,6 +4,7 @@
 #include "platform/platform.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
+#include "ui/preset_editor.h"
 
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -44,6 +45,15 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	        QStringList(QStringLiteral("Terminal")));
 	QTreeWidgetItem *window = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Window")));
+	/*
+	 * Not a category PuTTY has, because presets are not a concept PuTTY
+	 * has (sec 10). It sits at the top level rather than under Session
+	 * because a preset is not a property of the session being opened --
+	 * it is the thing many sessions share.
+	 */
+	QTreeWidgetItem *presets = new QTreeWidgetItem(m_categories,
+	        QStringList(QStringLiteral("Presets")));
+
 	QTreeWidgetItem *connection = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Connection")));
 	new QTreeWidgetItem(connection, QStringList(QStringLiteral("SSH")));
@@ -53,6 +63,13 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	m_pages->addWidget(build_placeholder_page(QStringLiteral("Terminal"),
 	                                           QStringLiteral("M10, with the preset system")));
 	m_pages->addWidget(build_window_page());
+	m_preset_editor = new bssh_preset_editor(m_store, this);
+	m_pages->addWidget(m_preset_editor);
+	connect(m_preset_editor, &bssh_preset_editor::preset_saved,
+	         this, &bssh_session_dialog::presets_changed);
+	connect(m_preset_editor, &bssh_preset_editor::preset_removed,
+	         this, &bssh_session_dialog::presets_changed);
+
 	m_pages->addWidget(build_placeholder_page(QStringLiteral("Connection"),
 	                                           QStringLiteral("M5, with keepalive and reconnect")));
 	m_pages->addWidget(build_placeholder_page(QStringLiteral("SSH"),
@@ -61,6 +78,7 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	Q_UNUSED(session);
 	Q_UNUSED(terminal);
 	Q_UNUSED(window);
+	Q_UNUSED(presets);
 
 	columns->addWidget(m_categories);
 	columns->addWidget(m_pages, 1);
@@ -190,8 +208,9 @@ void bssh_session_dialog::on_category_changed() {
 	if (name == QStringLiteral("Session")) m_pages->setCurrentIndex(0);
 	else if (name == QStringLiteral("Terminal")) m_pages->setCurrentIndex(1);
 	else if (name == QStringLiteral("Window")) m_pages->setCurrentIndex(2);
-	else if (name == QStringLiteral("Connection")) m_pages->setCurrentIndex(3);
-	else if (name == QStringLiteral("SSH")) m_pages->setCurrentIndex(4);
+	else if (name == QStringLiteral("Presets")) m_pages->setCurrentIndex(3);
+	else if (name == QStringLiteral("Connection")) m_pages->setCurrentIndex(4);
+	else if (name == QStringLiteral("SSH")) m_pages->setCurrentIndex(5);
 }
 
 void bssh_session_dialog::reload_sessions() {

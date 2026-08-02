@@ -140,6 +140,16 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		connect(m_session_dialog, &bssh_session_dialog::open_requested,
 		         this, &bssh_main_window::open_profile);
 		connect(m_session_dialog, &bssh_session_dialog::cancelled, this, &QWidget::close);
+
+		/*
+		 * Propagation, made visible (sec 10.1). Editing a preset that
+		 * seven hosts follow has to change those seven hosts, and the
+		 * ones the user can actually see are the connected ones -- a
+		 * change that only reached the NEXT connection would look like
+		 * the edit had not worked.
+		 */
+		connect(m_session_dialog, &bssh_session_dialog::presets_changed,
+		         this, &bssh_main_window::reresolve_sessions);
 		m_pages->addWidget(m_session_dialog);
 	}
 
@@ -668,6 +678,23 @@ void bssh_main_window::restore_layout() {
 	if (!profile.is_valid()) return;
 
 	if (m_session_dialog) m_session_dialog->set_current_profile(profile);
+}
+
+void bssh_main_window::reresolve_sessions(int preset_id) {
+	if (!m_registry) return;
+
+	for (bssh_session *session : m_registry->sessions()) {
+		/*
+		 * Only the hosts that follow this preset. Re-resolving every
+		 * session would work, but it would also mean a font change on one
+		 * preset briefly reflowing the grid of a host that has nothing to
+		 * do with it, and a window-change message sent to a remote for no
+		 * reason.
+		 */
+		if (session->profile().preset_id != preset_id) continue;
+
+		session->set_settings(resolved_settings(session->profile()));
+	}
 }
 
 QJsonObject bssh_main_window::resolved_settings(const bssh_profile_t &profile) const {

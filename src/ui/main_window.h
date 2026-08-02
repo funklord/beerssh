@@ -106,6 +106,9 @@ private:
 	 */
 	QJsonObject resolved_settings(const bssh_profile_t &profile) const;
 
+	/* Re-applies a changed preset to the open sessions that follow it. */
+	void reresolve_sessions(int preset_id);
+
 	void connect_to(const QString &target);
 	/*
 	 * The credential flow (sec 11). Split out because it is a sequence of

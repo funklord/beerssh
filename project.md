@@ -1340,8 +1340,15 @@ background).
     following a preset with sparse overrides, and `hosts_using()` — the
     number behind "used by 7 hosts". Shipped presets are structurally
     read-only: saving over one is refused, and a preset still followed by a
-    host cannot be deleted. Still open: the editing UI, and showing that
-    warning before a save.
+    host cannot be deleted. **The editing UI is built**: presets are listed
+    with the shipped ones marked, the fields are editable, and "used by N
+    hosts" is on screen while they are being typed into as well as in a
+    confirmation before the write. A shipped preset offers "Save as new"
+    instead of Save rather than a Save that silently fails, and saving
+    re-resolves the *open* sessions that follow the preset — propagation
+    that only reached the next connection would look like the edit had not
+    worked. Still open: JSON import/export through the UI, and the
+    per-field override badges and revert control (§10.1) on the host side.
 12. **M11 – Settings, polish, accessibility.**
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop

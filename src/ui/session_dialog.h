@@ -13,6 +13,7 @@ class QStackedWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
 class bssh_font_picker;
+class bssh_preset_editor;
 class bssh_profile_store;
 
 /*
@@ -47,6 +48,13 @@ signals:
 	/* "Open" -- connect to this. */
 	void open_requested(const bssh_profile_t &profile);
 	void cancelled();
+
+	/*
+	 * A preset was saved or deleted. The window re-resolves every open
+	 * session on this: propagation the user cannot see happening, on the
+	 * hosts they are looking at, is propagation they will not believe in.
+	 */
+	void presets_changed(int preset_id);
 
 private slots:
 	void on_load();
@@ -92,6 +100,7 @@ private:
 	 */
 	bssh_profile_t m_current;
 	bssh_font_picker *m_font_picker;
+	bssh_preset_editor *m_preset_editor;
 };
 
 #endif /* BSSH_SESSION_DIALOG_H */

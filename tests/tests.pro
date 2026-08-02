@@ -44,6 +44,7 @@ SOURCES += \
     layout_test.cpp \
     font_catalog_test.cpp \
     font_picker_test.cpp \
+    preset_editor_test.cpp \
     screen_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
@@ -68,6 +69,7 @@ SOURCES += \
     ../src/model/session.cpp \
     ../src/model/session_registry.cpp \
     ../src/ui/font_picker.cpp \
+    ../src/ui/preset_editor.cpp \
     ../src/ui/host_editor.cpp \
     ../src/ui/host_list.cpp \
     ../src/ui/layout_manager.cpp \
@@ -94,6 +96,7 @@ HEADERS += \
     layout_test.h \
     font_catalog_test.h \
     font_picker_test.h \
+    preset_editor_test.h \
     screen_test.h \
     terminal_view_test.h \
     ../src/input/input_router.h \
@@ -114,6 +117,7 @@ HEADERS += \
     ../src/model/session.h \
     ../src/model/session_registry.h \
     ../src/ui/font_picker.h \
+    ../src/ui/preset_editor.h \
     ../src/ui/host_editor.h \
     ../src/ui/host_list.h \
     ../src/ui/layout_manager.h \
