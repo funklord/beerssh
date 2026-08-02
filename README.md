@@ -74,8 +74,13 @@ Mosh is considered in v2.
 reports reconnection as it happens rather than leaving a silent terminal
 that looks identical to a quiet one.
 
+Each tab carries a status dot — connected, connecting, disconnected, or a
+bell that rang while you were looking at another tab. Dragging a divider
+snaps to whole character cells, so no pane renders half a glyph at its
+edge.
+
 Not built yet: SSH keepalive (see `project.md` §4 — libssh turns out not
-to expose one), layout persistence, per-tab status dots,
+to expose one), layout persistence,
 triple-click line selection, the Android background service, and the
 tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 

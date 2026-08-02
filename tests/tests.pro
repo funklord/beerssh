@@ -32,6 +32,7 @@ SOURCES += \
     platform_test.cpp \
     profile_store_test.cpp \
     session_registry_test.cpp \
+    tab_status_test.cpp \
     input_router_test.cpp \
     layout_test.cpp \
     screen_test.cpp \
@@ -55,6 +56,7 @@ SOURCES += \
     ../src/ui/pane_container.cpp \
     ../src/ui/main_window.cpp \
     ../src/ui/session_dialog.cpp \
+    ../src/ui/tab_status.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/key_row.cpp \
     ../src/ui/terminal_view.cpp
@@ -67,6 +69,7 @@ HEADERS += \
     platform_test.h \
     profile_store_test.h \
     session_registry_test.h \
+    tab_status_test.h \
     input_router_test.h \
     layout_test.h \
     screen_test.h \
@@ -90,5 +93,6 @@ HEADERS += \
     ../src/ui/pane_container.h \
     ../src/ui/main_window.h \
     ../src/ui/session_dialog.h \
+    ../src/ui/tab_status.h \
     ../src/ui/key_row.h \
     ../src/ui/terminal_view.h

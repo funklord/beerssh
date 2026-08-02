@@ -8,6 +8,8 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
       m_profile(profile),
       m_transport(nullptr),
       m_user_disconnected(false),
+      m_unseen_bell(false),
+      m_on_screen(false),
       m_cols(80),
       m_rows(24) {
 	/*
@@ -17,6 +19,13 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 	 */
 	m_emulator = new bssh_emulator(m_cols, m_rows, this);
 	m_input_router = new bssh_input_router(m_emulator, this);
+
+	connect(m_emulator, &bssh_emulator::bell, this, [this] {
+		if (m_on_screen) return;
+
+		m_unseen_bell = true;
+		emit state_changed();
+	});
 
 	connect(m_emulator, &bssh_emulator::title_changed, this, [this](const QString &title) {
 		m_remote_title = title;
@@ -109,6 +118,18 @@ void bssh_session::reconnect() {
 
 	const QString password = m_password;
 	connect_to_host(password);
+}
+
+void bssh_session::mark_seen() {
+	if (!m_unseen_bell) return;
+
+	m_unseen_bell = false;
+	emit state_changed();
+}
+
+void bssh_session::set_on_screen(bool on_screen) {
+	m_on_screen = on_screen;
+	if (on_screen) mark_seen();
 }
 
 void bssh_session::resize(int cols, int rows) {

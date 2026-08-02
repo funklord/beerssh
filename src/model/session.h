@@ -45,6 +45,15 @@ public:
 	bssh_ssh_session::state_t state() const;
 	bool is_live() const;
 
+	/*
+	 * A bell that rang while this session was not the one on screen
+	 * (sec 8.3). The whole value of a bell is telling you about the tab
+	 * you are NOT looking at, so it is remembered rather than played and
+	 * forgotten.
+	 */
+	bool has_unseen_bell() const { return m_unseen_bell; }
+	void mark_seen();
+
 	void connect_to_host(const QString &password);
 
 	/*
@@ -62,6 +71,9 @@ public:
 	/* Grid size for this session, from whichever view is showing it. */
 	void resize(int cols, int rows);
 
+	/* Shown or hidden -- drives whether a bell counts as unseen. */
+	void set_on_screen(bool on_screen);
+
 signals:
 	void title_changed();
 	void state_changed();
@@ -76,6 +88,8 @@ private:
 	QString m_error;
 	QString m_password;
 	bool m_user_disconnected;
+	bool m_unseen_bell;
+	bool m_on_screen;
 	int m_cols;
 	int m_rows;
 };

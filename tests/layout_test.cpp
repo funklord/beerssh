@@ -226,3 +226,34 @@ void layout_test::pane_focus_moves_with_the_keyboard() {
 	container.focus_adjacent(-1);
 	QCOMPARE(container.focused_session(), a);
 }
+
+void layout_test::dividers_snap_to_whole_cells() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+
+	QCOMPARE(container.pane_count(), 2);
+
+	container.snap_divider_to_cells();
+	QCoreApplication::processEvents();
+
+	/*
+	 * A pane two and a half columns wide renders a half column at its
+	 * edge, and the half is not blank -- it is the left side of a glyph
+	 * (sec 8.3).
+	 */
+	const int cell = container.view_at(0)->cell_width();
+	QVERIFY(cell > 1);
+
+	const int width = container.view_at(0)->width();
+	QCOMPARE(width % cell, 0);
+}

@@ -13,6 +13,9 @@
 
 #include <QStackedWidget>
 
+#include <QIcon>
+#include <QPainter>
+#include <QPixmap>
 #include <QTabBar>
 
 #include "model/profile_store.h"
@@ -25,6 +28,7 @@
 #include "ui/host_list.h"
 #include "ui/key_row.h"
 #include "ui/session_dialog.h"
+#include "ui/tab_status.h"
 #include "ui/terminal_view.h"
 
 bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
@@ -288,7 +292,15 @@ void bssh_main_window::on_add_host() {
 void bssh_main_window::show_session(bssh_session *session) {
 	if (!session) return;
 
+	/*
+	 * Only one session is on screen, and it is the one whose bell has
+	 * been heard. Telling the outgoing session first means a bell that
+	 * arrives during the switch lands on the right tab.
+	 */
+	if (m_current && m_current != session) m_current->set_on_screen(false);
+
 	m_current = session;
+	session->set_on_screen(true);
 
 	/*
 	 * Attaching is the whole operation: the view points at this session's
@@ -361,6 +373,24 @@ void bssh_main_window::on_registry_changed() {
 		bssh_session *session = m_registry->at(i);
 		m_tabs->setTabText(i, session->title());
 		m_tabs->setTabToolTip(i, session->profile().target());
+
+		/*
+		 * The status dot (sec 8.3). Painted rather than shipped as an
+		 * icon file: four solid circles are cheaper to draw than to
+		 * package, and they follow the theme's own sizing.
+		 */
+		const int size = m_tabs->fontMetrics().height() / 2;
+		QPixmap dot(size, size);
+		dot.fill(Qt::transparent);
+		{
+			QPainter painter(&dot);
+			painter.setRenderHint(QPainter::Antialiasing);
+			painter.setPen(Qt::NoPen);
+			painter.setBrush(bssh_tab_status::colour_for(bssh_tab_status::state_for(session)));
+			painter.drawEllipse(0, 0, size, size);
+		}
+		m_tabs->setTabIcon(i, QIcon(dot));
+
 		if (session == m_current) m_tabs->setCurrentIndex(i);
 	}
 

@@ -48,6 +48,9 @@ public:
 	 */
 	void focus_adjacent(int direction);
 
+	/* Rounds pane widths down to whole cells (sec 8.3). */
+	void snap_divider_to_cells();
+
 signals:
 	/* The focused pane changed -- the window retargets its shortcuts. */
 	void focus_changed(bssh_session *session);

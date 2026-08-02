@@ -29,6 +29,15 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
 	m_splitter->setHandleWidth(8);
 	m_splitter->setChildrenCollapsible(false);
 
+	/*
+	 * Dividers snap to whole character cells (sec 8.3): a pane that is
+	 * two and a half columns wide renders a half column at its edge, and
+	 * the half is not blank -- it is the left side of a glyph.
+	 */
+	connect(m_splitter, &QSplitter::splitterMoved, this, [this] {
+		snap_divider_to_cells();
+	});
+
 	outer->addWidget(m_splitter, 1);
 
 	if (m_layout) {
@@ -112,6 +121,32 @@ void bssh_pane_container::focus_session(bssh_session *session) {
 	if (view) view->setFocus();
 
 	emit focus_changed(m_focused);
+}
+
+void bssh_pane_container::snap_divider_to_cells() {
+	if (m_views.size() < 2) return;
+
+	const int cell = m_views.first()->cell_width();
+	if (cell <= 1) return;
+
+	QList<int> sizes = m_splitter->sizes();
+	bool changed = false;
+
+	for (int i = 0; i < sizes.size() - 1; ++i) {
+		const int snapped = qMax(cell, (sizes.at(i) / cell) * cell);
+		if (snapped == sizes.at(i)) continue;
+
+		/*
+		 * Whatever is trimmed off goes to the neighbour rather than
+		 * vanishing: the splitter's sizes must still add up to the
+		 * width it was given, or it reflows them itself and undoes this.
+		 */
+		sizes[i + 1] += sizes.at(i) - snapped;
+		sizes[i] = snapped;
+		changed = true;
+	}
+
+	if (changed) m_splitter->setSizes(sizes);
 }
 
 void bssh_pane_container::focus_adjacent(int direction) {
