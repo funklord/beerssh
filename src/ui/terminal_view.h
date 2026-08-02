@@ -2,6 +2,7 @@
 #define BSSH_TERMINAL_VIEW_H
 
 #include <QColor>
+#include <QElapsedTimer>
 #include <QFont>
 #include <QWidget>
 
@@ -153,6 +154,15 @@ private:
 	 * while a selection exists must not move the selection, and view rows
 	 * change meaning the moment the offset does.
 	 */
+	/*
+	 * Triple-click is a double-click followed by a third press inside the
+	 * platform's double-click interval: Qt reports the third press as an
+	 * ordinary press, so it has to be recognised here (sec 6.4).
+	 */
+	QElapsedTimer m_multi_click_timer;
+	int m_click_count;
+	qint64 m_last_click_line;
+
 	bool m_selecting;
 	qint64 m_selection_anchor_line;
 	int m_selection_anchor_col;

@@ -247,6 +247,37 @@ void terminal_view_test::double_click_selects_a_word() {
 	QCOMPARE(view.selection_text(), QStringLiteral("/etc/hosts"));
 }
 
+void terminal_view_test::triple_click_selects_the_line() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("cat /etc/hosts here"));
+
+	/*
+	 * Qt has no triple-click event: it sends press, double-click, press.
+	 * The third press is what this counts, which is why the test sends
+	 * exactly that sequence rather than a single synthetic event.
+	 */
+	const QPoint point(6 * view.cell_width() + 1, 1);
+	const auto press = [&](QEvent::Type type) {
+		QMouseEvent event(type, point, view.mapToGlobal(point),
+		                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+		QCoreApplication::sendEvent(&view, &event);
+	};
+
+	press(QEvent::MouseButtonPress);
+	press(QEvent::MouseButtonDblClick);
+	press(QEvent::MouseButtonPress);
+
+	/* The whole line, with the row's trailing padding trimmed off. */
+	QCOMPARE(view.selection_text(), QStringLiteral("cat /etc/hosts here"));
+}
+
 void terminal_view_test::mouse_goes_to_the_remote_when_it_asks_for_it() {
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 320);

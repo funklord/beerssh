@@ -497,7 +497,7 @@ model on a finger.
 
 | Operation | Desktop | Touch |
 |---|---|---|
-| Select text | Click-drag (**done**); double-click for word (**done**), triple-click for line | Long-press then drag handles |
+| Select text | Click-drag, double-click for word, triple-click for line — **all done** | Long-press then drag handles |
 | Copy | `Ctrl+Shift+C` (never bare `Ctrl+C` — that's `SIGINT`) | Selection toolbar |
 | Paste | `Ctrl+Shift+V`, middle-click on X11/Wayland | Selection toolbar / key row |
 | Scroll | Wheel, `Shift+PgUp/PgDn` | Kinetic touch scroll (`QScroller`) |

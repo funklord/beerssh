@@ -8,6 +8,7 @@
 #include <QPainter>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QApplication>
 #include <QMouseEvent>
 #include <QWheelEvent>
 
@@ -31,6 +32,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_scrollback(nullptr),
       m_scroll_offset(0),
       m_focus_border(false),
+      m_click_count(0),
+      m_last_click_line(-1),
       m_selecting(false),
       m_selection_anchor_line(-1),
       m_selection_anchor_col(0),
@@ -542,6 +545,40 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	int col = 0;
 	if (!cell_at(event->pos(), line, col)) return;
 
+	/*
+	 * Qt delivers a triple-click as press, double-click, press -- there is
+	 * no triple-click event -- so the third press is counted here. The
+	 * interval is the platform's own double-click time, because a
+	 * hardcoded one is wrong for anyone who has changed it, and the row
+	 * must match too: three clicks that wandered onto another line are
+	 * three clicks, not a line selection.
+	 */
+	const bool in_time = m_multi_click_timer.isValid()
+	        && m_multi_click_timer.elapsed() < QApplication::doubleClickInterval();
+	m_click_count = (in_time && line == m_last_click_line) ? m_click_count + 1 : 1;
+	m_multi_click_timer.restart();
+	m_last_click_line = line;
+
+	if (m_click_count >= 3) {
+		/*
+		 * The whole line, trailing blanks included in the range but
+		 * trimmed by selection_text() -- selecting a line should give
+		 * the line, not the line plus the padding a terminal row always
+		 * carries.
+		 */
+		m_selection_anchor_line = line;
+		m_selection_anchor_col = 0;
+		m_selection_focus_line = line;
+		m_selection_focus_col = qMax(0, m_cols - 1);
+		m_selecting = false;
+		m_click_count = 0;
+
+		update();
+		emit selection_changed();
+		event->accept();
+		return;
+	}
+
 	m_selecting = true;
 	m_selection_anchor_line = line;
 	m_selection_anchor_col = col;
@@ -620,6 +657,16 @@ void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
 	m_selection_focus_line = line;
 	m_selection_focus_col = to;
 	m_selecting = false;
+
+	/*
+	 * The double-click counts itself. Qt delivers press, double-click,
+	 * press for a triple-click, and a double-click does NOT arrive as a
+	 * press -- so counting only presses leaves the third one at two, and
+	 * the line selection never fires.
+	 */
+	m_click_count = 2;
+	m_multi_click_timer.restart();
+	m_last_click_line = line;
 
 	update();
 	emit selection_changed();

@@ -25,6 +25,7 @@ private slots:
 	void drag_selects_text();
 	void selection_spans_the_scrollback();
 	void double_click_selects_a_word();
+	void triple_click_selects_the_line();
 	void mouse_goes_to_the_remote_when_it_asks_for_it();
 	void shift_overrides_mouse_reporting_to_select();
 	void session_records_what_the_client_wrote();

@@ -42,6 +42,7 @@ live screen. The alternate screen is honoured, so `vim` and `less` leave
 your shell output as they found it.
 
 Mouse works: drag to select, double-click for a word (paths included),
+triple-click for a whole line,
 `Ctrl+Shift+C` to copy, middle-click paste via the primary selection on
 X11/Wayland. When a full-screen program asks for the mouse it gets the
 clicks instead — hold `Shift` to select anyway.
