@@ -1199,9 +1199,11 @@ desktop build and an untried Android build is not done, and the debt from
 deferring that compounds fastest in exactly the two riskiest areas (input,
 background).
 
-1. **M0 – Skeleton & toolchain.** *(Android half now real: the app
-   cross-compiles and links for arm64 against libssh + OpenSSL + libvterm
-   built by `tools/build-deps-android.sh`. Packaging still needs the SDK.)*
+1. **M0 – Skeleton & toolchain.** *(Android half done: the app
+   cross-compiles for arm64 and x86_64, packages, installs, runs, and
+   connects over SSH on an emulator. `make android` checks for the Qt kit,
+   NDK, SDK, a JDK and the cross-built dependencies by name, because each
+   of those fails unhelpfully when missing.)*
    Qt Widgets app named per §0.1
    (`se.vibes.beerssh`) building **both** ways from one qmake project: host build
    on Linux, Qt-for-Android + NDK build for arm64 (libssh + OpenSSL cross-compiled

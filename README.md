@@ -195,11 +195,17 @@ python3 -m venv ~/.venv/aqt && ~/.venv/aqt/bin/pip install aqtinstall
 ~/.venv/aqt/bin/aqt install-qt linux android 6.8.2 android_arm64_v8a
 ```
 
-**It runs.** Built, packaged and launched on an Android 11 x86_64
-emulator: the touch front door appears, the on-screen key row shows itself
-because touch is the primary input, adding a host writes the SQLite store,
-and the debug APK is 18.6 MB carrying no QML runtime and no permissions
-beyond INTERNET and ACCESS_NETWORK_STATE. Not
+**It runs, and it connects.** Built, packaged and driven on an Android 11
+x86_64 emulator: the touch front door appears, the on-screen key row shows
+itself because touch is the primary input, adding a host writes the SQLite
+store, and SSH reaches a real server — key exchange, the trust-on-first-use
+prompt showing the correct fingerprint, the key written to the device's own
+known-hosts store, then key auth attempted and a password requested. The
+debug APK is 18.6 MB with no QML runtime and no permissions beyond INTERNET
+and ACCESS_NETWORK_STATE.
+
+Not yet done on Android: the foreground service (M4), so a backgrounded
+session dies; and no session has been carried through to a live shell. Not
 yet exercised on a device: the SSH path, the foreground service (which is
 not implemented), and anything involving a real keyboard.
 

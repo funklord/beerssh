@@ -16,8 +16,10 @@
 #   make run          -- build and run it
 #   make test         -- build and run the smoke test + unit tests
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
-#   make android      -- build the Android AAB (needs a Qt-for-Android kit,
-#                        see ANDROID below)
+#   make android      -- build the Android APK (needs a Qt kit, NDK, SDK
+#                        and a JDK; see ANDROID below)
+#   make android-aab  -- the Play bundle instead of an APK
+#   make android-run  -- install and launch on the attached device
 #   make install      -- install the binary to $(DESTDIR)$(PREFIX)/bin
 #   make clean        -- remove compilation intermediates only; the built
 #                        binary is left in place, so `make install` stays
@@ -41,9 +43,17 @@
 #   of which the desktop build requires. Point QT_ANDROID_ROOT at the Qt
 #   kit (the one containing bin/qmake for e.g. android_arm64_v8a) and have
 #   ANDROID_NDK_ROOT/ANDROID_SDK_ROOT set as Qt's tooling expects:
-#     make android QT_ANDROID_ROOT=$HOME/Qt/6.8.2/android_arm64_v8a
-#   The recipe checks for it and says so rather than failing obscurely
-#   halfway through a cross build.
+#     make android QT_ANDROID_ROOT=$HOME/Qt/6.11.1/android_arm64_v8a
+#
+#   Four things are needed and each is checked for by name, because every
+#   one of them fails unhelpfully when missing:
+#     QT_ANDROID_ROOT   the Qt kit for the target ABI
+#     ANDROID_NDK_ROOT  the NDK (compiles); tools/build-deps-android.sh too
+#     ANDROID_SDK_ROOT  the SDK (packages); separate from the NDK
+#     a JDK on PATH     Gradle will not run on a JRE
+#
+#   The dependencies must be cross-compiled first:
+#     tools/build-deps-android.sh arm64-v8a
 # =============================================================================
 
 CC    ?= gcc
@@ -200,16 +210,57 @@ $(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
 $(VTERM_ANDROID_LIB): $(VTERM_ANDROID_OBJS)
 	$(NDK_BIN)/llvm-ar rcs $@ $(VTERM_ANDROID_OBJS)
 
-android: $(VTERM_ANDROID_LIB)
+# Everything the Android build needs, checked by name. Each of these fails
+# unhelpfully when missing: a bare qmake error, a wall of missing symbols,
+# a Gradle stack trace about JAVA_COMPILER, or a "platforms does not
+# exist" from a path nobody set.
+android-check:
 	@if [ -z "$(QT_ANDROID_ROOT)" ]; then \
 		echo "make android: QT_ANDROID_ROOT is not set."; \
 		echo "make android:   point it at a Qt-for-Android kit, e.g."; \
-		echo "make android:   make android QT_ANDROID_ROOT=\$$HOME/Qt/6.8.2/android_arm64_v8a"; \
+		echo "make android:   make android QT_ANDROID_ROOT=\$$HOME/Qt/6.11.1/android_arm64_v8a"; \
 		exit 1; \
 	fi
+	@if [ -z "$(ANDROID_NDK_ROOT)" ]; then \
+		echo "make android: ANDROID_NDK_ROOT is not set (needed to compile)."; \
+		exit 1; \
+	fi
+	@if [ -z "$(ANDROID_SDK_ROOT)" ] && [ ! -d "$$HOME/Android/Sdk" ]; then \
+		echo "make android: no Android SDK found. Set ANDROID_SDK_ROOT."; \
+		echo "make android:   the SDK is SEPARATE from the NDK -- Gradle needs"; \
+		echo "make android:   platform-tools, a platform, and build-tools."; \
+		exit 1; \
+	fi
+	@if ! command -v javac >/dev/null 2>&1 && [ -z "$(JAVA_HOME)" ]; then \
+		echo "make android: no javac on PATH and JAVA_HOME is unset."; \
+		echo "make android:   Gradle needs a JDK; a JRE alone will not do, and"; \
+		echo "make android:   it says so only as a toolchain capability error."; \
+		exit 1; \
+	fi
+	@if [ ! -f deps/android/$(ANDROID_ABI)/lib/libssh.a ]; then \
+		echo "make android: dependencies for $(ANDROID_ABI) are not built."; \
+		echo "make android:   run: tools/build-deps-android.sh $(ANDROID_ABI)"; \
+		exit 1; \
+	fi
+
+$(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) beerssh.pro
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../beerssh.pro $(QMAKE_CONFIG)
+
+# The APK is what gets installed on a device or emulator, so it is the
+# default. The AAB is what Play wants (sec 2) and is its own target.
+android: $(ANDROID_BUILD_DIR)/Makefile
+	$(MAKE) -C $(ANDROID_BUILD_DIR) apk
+
+android-aab: $(ANDROID_BUILD_DIR)/Makefile
 	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
+
+# Installs onto whatever single device adb sees, and launches it.
+android-run: android
+	$(ANDROID_SDK_ROOT)/platform-tools/adb install -r \
+	        $(ANDROID_BUILD_DIR)/android-build/build/outputs/apk/debug/android-build-debug.apk
+	$(ANDROID_SDK_ROOT)/platform-tools/adb shell am start -n \
+	        se.vibes.beerssh/org.qtproject.qt.android.bindings.QtActivity
 
 install: all
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
@@ -239,4 +290,5 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test style android install clean veryclean distclean help
+.PHONY: all run test style android android-check android-aab android-run \
+        install clean veryclean distclean help
