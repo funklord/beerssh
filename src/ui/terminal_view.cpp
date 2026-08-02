@@ -347,6 +347,18 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 				painter.drawText(QPointF(x, baseline), QString::fromUcs4(&cell.ch, 1));
 			}
 
+			/*
+			 * A link is underlined so it is visibly one. Terminals
+			 * differ on whether to colour them too; underlining alone
+			 * keeps the remote's own colours intact, which matters when
+			 * the link IS the output (ls --color, a compiler error).
+			 */
+			if (cell.link != 0 && !(cell.attrs & bssh_cell_t::UNDERLINE)) {
+				painter.setPen(fg);
+				painter.drawLine(x, y + m_cell_height - 1, x + width - 1,
+				                  y + m_cell_height - 1);
+			}
+
 			if (cell.attrs & bssh_cell_t::UNDERLINE) {
 				painter.setPen(fg);
 				painter.drawLine(x, y + m_cell_height - 1, x + width - 1, y + m_cell_height - 1);
@@ -544,6 +556,24 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	qint64 line = 0;
 	int col = 0;
 	if (!cell_at(event->pos(), line, col)) return;
+
+	/*
+	 * Ctrl+click opens a hyperlink, not a plain click. The URL comes from
+	 * the remote host, so a stray tap on a line of output should not be
+	 * able to launch a browser at an address someone else chose -- which
+	 * is why every terminal that supports OSC 8 asks for a modifier.
+	 */
+	if (event->modifiers().testFlag(Qt::ControlModifier) && m_emulator) {
+		const bssh_cell_t &cell = cell_for_line(line, col);
+		if (cell.link != 0) {
+			const QString uri = m_emulator->link_uri(cell.link);
+			if (!uri.isEmpty()) {
+				emit link_activated(uri);
+				event->accept();
+				return;
+			}
+		}
+	}
 
 	/*
 	 * Qt delivers a triple-click as press, double-click, press -- there is

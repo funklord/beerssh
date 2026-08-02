@@ -25,7 +25,9 @@ application-cursor mode, Meta/Alt, bracketed paste (`Ctrl+Shift+V`), and
 input-method commit text. The on-screen key row for touch devices is
 built on every platform but hidden unless touch is the primary input.
 
-Synchronized output (DEC 2026) is honoured, so a full-screen program that
+OSC 8 hyperlinks are underlined and open on `Ctrl+click`, after showing you
+the address — a URL chosen by the remote host should not open on a stray
+tap. Synchronized output (DEC 2026) is honoured, so a full-screen program that
 brackets its redraw is painted in one frame rather than mid-update.
 
 Modern keyboard protocols are supported so full-screen programs can tell
@@ -98,7 +100,7 @@ rather than pretending to have restored anything.
 Not built yet: SSH keepalive (see `project.md` §4 — libssh turns out not
 to expose one), reopening every remembered host at once (needs key auth),
 triple-click line selection, the Android background service, and the
-tier-3 extensions in §7.1 (OSC 8 hyperlinks).
+remaining tier-3/4 items in §7.1 (OSC 52, image scrollback).
 
 A password can be remembered per host — off by default, and only for a
 saved host, since the secret is keyed to it. Remembered passwords are

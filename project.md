@@ -623,7 +623,7 @@ conversation, and should let it reach its best tier.
 | Extension | What it is | Why it is not built yet |
 |---|---|---|
 | **Synchronized output** (DEC 2026) | Remote brackets a screen update so the terminal paints it in one frame instead of mid-redraw; removes tearing in full-screen apps | **Done** — with a 150 ms safety release, since a program that sets it and dies would otherwise freeze the display |
-| **OSC 8 hyperlinks** | Marks a run of cells as a clickable URL | Needs a per-cell link ID in `bssh_screen` and a click target in the view |
+| **OSC 8 hyperlinks** | Marks a run of cells as a clickable URL | **Done** — per-cell link id, underlined, opened on Ctrl+click after a confirmation |
 | **OSC 52 clipboard** | Remote sets the local clipboard | **Security review first** — a remote host silently writing the user's clipboard is a real hazard, and reading it is worse. Off by default, if offered at all |
 | **XTGETTCAP / DECRQM** | Lets a remote query what the terminal supports rather than guessing from `TERM` | Small; pairs naturally with the tier-2 work |
 
@@ -662,6 +662,13 @@ original row while output moves past it looks like the terminal has come
 apart), and they are **dropped when scrolled off or when the grid shrinks
 past them** — there is no image scrollback, and holding every image a long
 session ever drew is how a phone runs out of memory.
+
+**Ctrl+click, and a prompt, for hyperlinks.** The URL comes from the remote,
+so a plain tap on a line of output must not be able to launch a browser at
+an address someone else chose — every terminal supporting OSC 8 asks for a
+modifier, and BeerSSH additionally shows the address before opening it. The
+widget does not open anything itself: what to do with a remote's URL is the
+window's decision, not a terminal component's.
 
 **[OPEN]** Image scrollback, and a memory budget for it. Also `z < 0`
 placement is stored but the renderer draws everything over the text.

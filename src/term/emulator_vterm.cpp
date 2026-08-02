@@ -1,5 +1,6 @@
 #include "term/emulator.h"
 
+#include <QHash>
 #include <QTimer>
 
 #include <vterm.h>
@@ -46,6 +47,21 @@ struct bssh_emulator_private {
 	QByteArray apc_buffer;        /* an APC split across reads */
 	QByteArray osc_buffer;
 	QByteArray dcs_buffer;
+
+	/* OSC 8 hyperlinks (sec 7.1). */
+	struct link_range_t {
+		int row;
+		int from;
+		int to;
+		quint16 id;
+	};
+
+	QHash<quint16, QString> links;
+	QList<link_range_t> pending_links;
+	quint16 next_link_id;
+	quint16 open_link_id;
+	int link_start_row;
+	int link_start_col;
 	int cell_width;
 	int cell_height;
 
@@ -69,10 +85,16 @@ struct bssh_emulator_private {
 	void begin_sync();
 	void end_sync();
 
+	void begin_link(const QString &uri);
+	void end_link();
+	void apply_pending_links();
+	VTermPos cursor_position() const;
+
 	bssh_emulator_private(int cols, int rows, bssh_emulator *owner)
 	    : vt(nullptr), vts(nullptr), screen(cols, rows), owner(owner),
 	      modify_other_keys(0), mouse_reporting(false), sync_output(false),
-	      sync_damage_pending(false), sync_timeout(nullptr), cell_width(8), cell_height(16),
+	      sync_damage_pending(false), sync_timeout(nullptr),
+	      next_link_id(0), open_link_id(0), link_start_row(0), link_start_col(0), cell_width(8), cell_height(16),
 	      pending_cursor_advance(0) {
 		kitty_stack.append(0);
 	}
@@ -354,14 +376,40 @@ int on_apc(VTermStringFragment frag, void *user) {
 	return 1;
 }
 
+/*
+ * OSC 8 hyperlinks: "OSC 8 ; params ; URI ST" opens one, "OSC 8 ; ; ST"
+ * closes it, and everything printed between belongs to it.
+ */
+int on_osc_link(const QByteArray &payload, bssh_emulator_private *self) {
+	/* payload is "params;URI", params ignored (id= is the only defined one). */
+	const int semicolon = payload.indexOf(';');
+	if (semicolon < 0) return 0;
+
+	const QString uri = QString::fromUtf8(payload.mid(semicolon + 1));
+	if (uri.isEmpty()) {
+		self->end_link();
+	} else {
+		self->begin_link(uri);
+	}
+	return 1;
+}
+
 /* iTerm2 inline images: OSC 1337. */
 int on_osc(int command, VTermStringFragment frag, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
-	if (command != 1337) return 0;
+	if (command != 1337 && command != 8) return 0;
 
 	if (frag.initial) self->osc_buffer.clear();
 	self->osc_buffer.append(frag.str, int(frag.len));
 	if (!frag.final) return 1;
+
+	/*
+	 * OSC 8 and OSC 1337 arrive through the same callback and are
+	 * completely different things. Without this split the hyperlink
+	 * payload was handed to the image parser, which rejected it in
+	 * silence -- a whole feature doing nothing, with no error anywhere.
+	 */
+	if (command == 8) return on_osc_link(self->osc_buffer, self);
 
 	self->apply_graphics(bssh_parse_iterm2(self->osc_buffer,
 		                                      self->cell_width, self->cell_height));
@@ -606,6 +654,8 @@ void bssh_emulator::feed(const QByteArray &bytes) {
 	 * by parsing a cursor-down -- and do it here, after the write, rather
 	 * than re-entering the parser from inside its own callback.
 	 */
+	m_private->apply_pending_links();
+
 	if (m_private->pending_cursor_advance > 0) {
 		const QByteArray advance = QByteArrayLiteral("\x1b[")
 		                            + QByteArray::number(m_private->pending_cursor_advance)
@@ -730,6 +780,93 @@ void bssh_emulator_private::end_sync() {
 	}
 }
 
+void bssh_emulator_private::apply_pending_links() {
+	if (pending_links.isEmpty()) return;
+
+	for (const link_range_t &range : pending_links) {
+		for (int col = range.from; col <= range.to; ++col) {
+			bssh_cell_t cell = screen.cell(range.row, col);
+			cell.link = range.id;
+			screen.set_cell(range.row, col, cell);
+		}
+	}
+
+	pending_links.clear();
+	notify_damaged();
+}
+
+VTermPos bssh_emulator_private::cursor_position() const {
+	VTermPos pos;
+	pos.row = 0;
+	pos.col = 0;
+
+	if (vt) vterm_state_get_cursorpos(vterm_obtain_state(vt), &pos);
+	return pos;
+}
+
+void bssh_emulator_private::begin_link(const QString &uri) {
+	/*
+	 * Ids wrap rather than grow without bound: a session left running on
+	 * output full of links would otherwise allocate for ever. Wrapping
+	 * can only ever mislabel a link that has already scrolled out of the
+	 * bounded scrollback.
+	 */
+	if (++next_link_id == 0) next_link_id = 1;
+
+	open_link_id = next_link_id;
+	links.insert(open_link_id, uri);
+
+	/*
+	 * libvterm's own cursor, not the mirror's. Damage and cursor
+	 * callbacks are flushed in batches, so at the moment an OSC is
+	 * parsed the mirror can still be showing where the cursor WAS -- and
+	 * a link anchored there covers the wrong cells, or none at all,
+	 * which is exactly how the first version of this failed.
+	 */
+	VTermPos pos = cursor_position();
+	link_start_row = pos.row;
+	link_start_col = pos.col;
+}
+
+void bssh_emulator_private::end_link() {
+	if (open_link_id == 0) return;
+
+	/*
+	 * The link covers everything printed since it opened, which may have
+	 * wrapped across rows -- so this walks cells rather than a single
+	 * span, and stops at the current cursor.
+	 */
+	const VTermPos pos = cursor_position();
+	const int end_row = pos.row;
+	const int end_col = pos.col;
+
+	for (int row = link_start_row; row <= end_row && row < screen.rows(); ++row) {
+		const int from = row == link_start_row ? link_start_col : 0;
+		const int to = row == end_row ? end_col - 1 : screen.cols() - 1;
+
+		/*
+		 * Queued, not applied. libvterm flushes damage in a batch at the
+		 * end of the write, and copy_rect rewrites every damaged cell
+		 * from libvterm's own screen -- which knows nothing about links,
+		 * so marking cells now means marking cells that are about to be
+		 * overwritten. That is exactly how the first version of this
+		 * silently did nothing.
+		 *
+		 * Applying afterwards is also self-correcting: if the remote
+		 * later redraws those cells, the damage copy clears the link,
+		 * which is right, because the text it decorated is gone.
+		 */
+		link_range_t range;
+		range.row = row;
+		range.from = from;
+		range.to = qMin(to, screen.cols() - 1);
+		range.id = open_link_id;
+		if (range.to >= range.from) pending_links.append(range);
+	}
+
+	open_link_id = 0;
+}
+
 void bssh_emulator_private::apply_graphics(const bssh_graphics_result_t &result) {
 	switch (result.action) {
 	case bssh_graphics_result_t::PLACE: {
@@ -779,6 +916,10 @@ const bssh_image_store &bssh_emulator::images() const {
 void bssh_emulator::set_cell_pixels(int width, int height) {
 	m_private->cell_width = qMax(1, width);
 	m_private->cell_height = qMax(1, height);
+}
+
+QString bssh_emulator::link_uri(quint16 id) const {
+	return m_private->links.value(id);
 }
 
 bool bssh_emulator::synchronised_output() const {

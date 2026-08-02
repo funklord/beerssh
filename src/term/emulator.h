@@ -85,6 +85,13 @@ public:
 	 */
 	bool synchronised_output() const;
 
+	/*
+	 * The URI behind a cell's link id, or empty. Looked up rather than
+	 * stored per cell, so a wrapped link costs two bytes a cell instead
+	 * of a copy of the URL.
+	 */
+	QString link_uri(quint16 id) const;
+
 	int kitty_keyboard_flags() const;
 	int modify_other_keys_level() const;
 

@@ -282,3 +282,51 @@ void emulator_test::synchronised_output_releases_itself_if_abandoned() {
 	QCOMPARE(damaged.count(), 1);
 	QVERIFY(emulator.screen().to_text().contains(QStringLiteral("stuck?")));
 }
+
+void emulator_test::osc8_marks_cells_with_a_link() {
+	bssh_emulator emulator(40, 5);
+
+	emulator.feed(QByteArrayLiteral("see \x1b]8;;https://example.com/x\x07"
+	                                 "this link\x1b]8;;\x07 and after"));
+
+	QCOMPARE(row(emulator, 0), QStringLiteral("see this link and after"));
+
+	/* The four cells before the link are plain. */
+	QCOMPARE(int(emulator.screen().cell(0, 0).link), 0);
+
+	/* "this link" carries a link id, and the id resolves to the URI. */
+	const quint16 id = emulator.screen().cell(0, 4).link;
+	QVERIFY(id != 0);
+	QCOMPARE(emulator.link_uri(id), QStringLiteral("https://example.com/x"));
+	QCOMPARE(emulator.screen().cell(0, 12).link, id);
+
+	/*
+	 * And the text after the closing sequence is NOT part of it. A link
+	 * that swallows the rest of the line is the failure mode here, and it
+	 * looks fine until someone clicks the wrong word.
+	 */
+	QCOMPARE(int(emulator.screen().cell(0, 14).link), 0);
+	QCOMPARE(int(emulator.screen().cell(0, 20).link), 0);
+}
+
+void emulator_test::osc8_survives_a_wrap_and_ends_where_told() {
+	/* Narrow enough that the link text wraps to the next row. */
+	bssh_emulator emulator(10, 5);
+
+	emulator.feed(QByteArrayLiteral("\x1b]8;;https://example.com\x07"
+	                                 "aaaaaaaaaabbbb\x1b]8;;\x07"));
+
+	const quint16 id = emulator.screen().cell(0, 0).link;
+	QVERIFY(id != 0);
+
+	/* The wrapped remainder belongs to the same link, not to nothing. */
+	QCOMPARE(emulator.screen().cell(1, 0).link, id);
+	QCOMPARE(emulator.screen().cell(1, 3).link, id);
+
+	/* But not the cells past where it ended. */
+	QCOMPARE(int(emulator.screen().cell(1, 5).link), 0);
+	QCOMPARE(emulator.link_uri(id), QStringLiteral("https://example.com"));
+
+	/* An unknown id resolves to nothing rather than to a stale URL. */
+	QCOMPARE(emulator.link_uri(9999), QString());
+}

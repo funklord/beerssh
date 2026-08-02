@@ -74,7 +74,15 @@ struct bssh_cell_t {
 	 */
 	quint8 width;
 
-	bssh_cell_t() : ch(U' '), attrs(NONE), width(1) {}
+	/*
+	 * OSC 8 hyperlink id, 0 for none (sec 7.1, tier 3). An id rather than
+	 * the URI itself: a long URL repeated across every cell of a wrapped
+	 * link would dwarf the text it decorates, and the scrollback stores
+	 * cells.
+	 */
+	quint16 link;
+
+	bssh_cell_t() : ch(U' '), attrs(NONE), width(1), link(0) {}
 };
 
 class bssh_screen {

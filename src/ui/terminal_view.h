@@ -117,6 +117,14 @@ signals:
 	/* A selection was made or cleared -- the window updates the clipboard. */
 	void selection_changed();
 
+	/*
+	 * A hyperlink was activated (sec 7.1). The view does not open it: what
+	 * to do with a URL a remote host chose is the window's decision, and
+	 * a terminal widget opening browsers on its own is a component with
+	 * more authority than it needs.
+	 */
+	void link_activated(const QString &uri);
+
 protected:
 	void paintEvent(QPaintEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;

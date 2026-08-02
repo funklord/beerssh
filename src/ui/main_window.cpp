@@ -1,6 +1,8 @@
 #include "ui/main_window.h"
 
 #include <QCloseEvent>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QClipboard>
 #include <QMessageBox>
 #include <QPushButton>
@@ -233,6 +235,22 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	 * Qt reports the mode as unsupported on platforms that lack it, so
 	 * this needs no platform check of its own.
 	 */
+	/*
+	 * Opening a URL the remote chose is a decision, so it is made here
+	 * rather than in the widget, and it asks first. A terminal that opens
+	 * whatever a compromised host puts on screen is a terminal being used
+	 * as a delivery mechanism.
+	 */
+	connect(m_terminal_view, &bssh_terminal_view::link_activated,
+	         this, [this](const QString &uri) {
+		const QMessageBox::StandardButton answer = QMessageBox::question(
+		        this, QStringLiteral("Open link"),
+		        QStringLiteral("Open this address, sent by the remote host?\n\n%1").arg(uri),
+		        QMessageBox::Open | QMessageBox::Cancel, QMessageBox::Cancel);
+
+		if (answer == QMessageBox::Open) QDesktopServices::openUrl(QUrl(uri));
+	});
+
 	connect(m_terminal_view, &bssh_terminal_view::selection_changed, this, [this] {
 		if (!QGuiApplication::clipboard()->supportsSelection()) return;
 
