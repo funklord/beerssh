@@ -196,7 +196,9 @@ python3 -m venv ~/.venv/aqt && ~/.venv/aqt/bin/pip install aqtinstall
 
 **It runs.** Built, packaged and launched on an Android 11 x86_64
 emulator: the touch front door appears, the on-screen key row shows itself
-because touch is the primary input, and the grid reports its own size. Not
+because touch is the primary input, adding a host writes the SQLite store,
+and the debug APK is 18.6 MB carrying no QML runtime and no permissions
+beyond INTERNET and ACCESS_NETWORK_STATE. Not
 yet exercised on a device: the SSH path, the foreground service (which is
 not implemented), and anything involving a real keyboard.
 

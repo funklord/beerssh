@@ -1170,7 +1170,11 @@ honest data handling) apply to both packages.
 - Data safety form: declare what's stored (credentials stay on-device).
 - **Open-source licence attribution screen** for bundled fonts and libraries (§9.4).
 - Justify any sensitive permissions; avoid `QUERY_ALL_PACKAGES` and unneeded
-  permissions. Gate `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` behind explicit user
+  permissions. **Note:** left alone, `androiddeployqt` injects
+  `READ/WRITE_EXTERNAL_STORAGE` from Qt6Core's own dependency manifest — an
+  SSH client asking for the user's photos. The `%%INSERT_PERMISSIONS` marker
+  is therefore deliberately absent from our manifest, so the permission list
+  is owned rather than inherited. Verified in the built APK. Gate `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` behind explicit user
   action or drop it.
 - Store listing per §0.1: title `BeerSSH — SSH Terminal`, package
   `se.vibes.beerssh`, JuiceSSH-successor framing in the description body.
@@ -1286,6 +1290,7 @@ expensive if it wasn't.
 | **Platform-specific behaviour leaking into the core** | Medium/High (every fix needs doing twice) | `#ifdef` outside the platform layer is a review failure; the router, emulator and layout manager take no platform input. |
 | Desktop secret store absent (headless/minimal session) | Medium | Passphrase-derived fallback (§11), and say plainly in the UI which backend is active. |
 | APK bloat from bundled fonts | Medium | 2–3 fonts in base, rest via Play Asset Delivery; subset fallbacks (§9.4). |
+| APK bloat from Qt's own deployment | Medium | `androiddeployqt` scanning for itself bundles the virtual keyboard plugin and with it QtQuick, QtQml and Lottie — a QML runtime in an app §2 forbids from using QML. `ANDROID_DEPLOYMENT_DEPENDENCIES` lists what ships instead: 29.8 MB → 18.6 MB, verified running. |
 | Wide-char / CJK cell misalignment | Medium | Implement `wcwidth` rules early; test with CJK + emoji + `htop`. |
 | Multi-pane render perf (4 panes, chatty output) | Medium | Shared glyph cache; repaint throttled to refresh rate, not to data. Desktop hides this (fast CPU, big cache) — profile on a phone. |
 | libssh LGPL linking obligations | Medium (legal) | Dynamic linking, or switch to BSD-licensed libssh2; decide before ship. |

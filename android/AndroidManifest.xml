@@ -30,8 +30,24 @@
           android:versionCode="-- %%INSERT_VERSION_CODE%% --"
           android:versionName="-- %%INSERT_VERSION_NAME%% --">
 
-	<!-- androiddeployqt injects what Qt itself needs here; ours follow. -->
-	<!-- %%INSERT_PERMISSIONS -->
+	<!--
+		The %%INSERT_PERMISSIONS marker is deliberately absent. With it,
+		androiddeployqt injects whatever Qt's own module manifests ask
+		for, and Qt6Core's asks for READ and WRITE_EXTERNAL_STORAGE. That
+		is an SSH client requesting access to the user's photos and
+		documents, which sec 13 says to avoid and Play review asks about.
+		Nothing here reads external storage: profiles, known hosts and
+		credentials all live in the app's own directory.
+
+		The cost of removing the marker is that a permission Qt genuinely
+		needs would have to be added here by hand. That is the right way
+		round: the permission list is a thing this project should own
+		rather than inherit.
+
+		%%INSERT_FEATURES stays, because uses-feature entries drive Play
+		device filtering and Qt knows what it needs (OpenGL ES) better
+		than this file does.
+	-->
 	<!-- %%INSERT_FEATURES -->
 
 	<uses-permission android:name="android.permission.INTERNET"/>

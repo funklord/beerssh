@@ -139,6 +139,43 @@ android {
     # minSdk 26, targetSdk 35 for Play.
     ANDROID_MIN_SDK_VERSION = 26
     ANDROID_TARGET_SDK_VERSION = 35
+
+    # Deploy exactly these, and nothing else.
+    #
+    # Left to scan for itself, androiddeployqt bundles Qt's virtual
+    # keyboard plugin, which pulls in QtQuick, QtQml, Lottie and
+    # QuickShapes: seven megabytes of QML runtime in a Widgets-only app
+    # that project.md sec 2 forbids from using QML at all. Android's soft
+    # keyboard is the system IME, reached through the qtforandroid
+    # platform plugin, so Qt's own on-screen keyboard is not merely
+    # unused here, it is the wrong component.
+    #
+    # The cost of this list is that a genuinely needed plugin left out of
+    # it fails at RUNTIME rather than at link time. Each line below says
+    # what needs it.
+    ANDROID_DEPLOYMENT_DEPENDENCIES = \
+        jar/Qt6Android.jar \
+        jar/Qt6AndroidNetwork.jar \
+        lib/libQt6Core_$${QT_ARCH}.so \
+        lib/libQt6Gui_$${QT_ARCH}.so \
+        lib/libQt6Widgets_$${QT_ARCH}.so \
+        lib/libQt6Network_$${QT_ARCH}.so \
+        lib/libQt6Sql_$${QT_ARCH}.so \
+        plugins/platforms/libplugins_platforms_qtforandroid_$${QT_ARCH}.so \
+        plugins/styles/libplugins_styles_qandroidstyle_$${QT_ARCH}.so \
+        plugins/sqldrivers/libplugins_sqldrivers_qsqlite_$${QT_ARCH}.so \
+        plugins/imageformats/libplugins_imageformats_qjpeg_$${QT_ARCH}.so
+
+    # jar/Qt6Android          QtActivityBase and friends. Left out of the
+    #                         first attempt, which is how this list taught
+    #                         that it governs Qt's JARS as well as its
+    #                         shared objects: the build failed with twelve
+    #                         javac errors about missing Qt classes.
+    # jar/Qt6AndroidNetwork    QtNetwork's Java side
+    # platforms/qtforandroid  the platform plugin; nothing runs without it
+    # styles/qandroidstyle    native-looking widgets rather than Fusion
+    # sqldrivers/qsqlite      the profile and preset store (sec 10.6)
+    # imageformats/qjpeg      inline images (sec 7.1); PNG is inside QtGui
 } else {
     SOURCES += \
         src/platform/platform_desktop.cpp \
