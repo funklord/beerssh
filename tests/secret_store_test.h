@@ -23,6 +23,7 @@ private slots:
 	void a_locked_store_yields_nothing();
 	void erasing_removes_it_from_the_file();
 	void the_backend_describes_itself_honestly();
+	void the_selector_always_returns_a_working_store();
 };
 
 #endif /* BSSH_SECRET_STORE_TEST_H */

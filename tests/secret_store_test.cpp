@@ -7,6 +7,11 @@
 #include "secret_store_test.h"
 
 /*
+ * These exercise the FILE backend by name rather than through
+ * instance(), which picks whatever this machine happens to be running --
+ * a test that goes through the selector asserts the tester's session, not
+ * the code.
+ *
  * The store writes under AppDataLocation, so the tests redirect that to a
  * temporary directory rather than touching the developer's real
  * credentials -- a test that can destroy the thing it is testing is a test
@@ -23,7 +28,7 @@ void secret_store_test::stores_and_loads_a_secret() {
 	QTemporaryDir dir;
 	redirect_app_data(dir);
 
-	bssh_secret_store *store = bssh_secret_store::instance();
+	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
 
 	QVERIFY(!store->is_unlocked());
@@ -43,7 +48,7 @@ void secret_store_test::the_wrong_passphrase_is_rejected_not_guessed_at() {
 	QTemporaryDir dir;
 	redirect_app_data(dir);
 
-	bssh_secret_store *store = bssh_secret_store::instance();
+	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
 	QVERIFY(store->unlock(QStringLiteral("right")));
 	store->store(QStringLiteral("id"), QStringLiteral("secret"));
@@ -68,7 +73,7 @@ void secret_store_test::the_file_does_not_contain_the_secret() {
 	QTemporaryDir dir;
 	const QString path = redirect_app_data(dir);
 
-	bssh_secret_store *store = bssh_secret_store::instance();
+	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
 	QVERIFY(store->unlock(QStringLiteral("passphrase")));
 	QVERIFY(store->store(QStringLiteral("profile:7"), QStringLiteral("s3kr3t-value")));
@@ -92,7 +97,7 @@ void secret_store_test::tampering_is_detected() {
 	QTemporaryDir dir;
 	const QString path = redirect_app_data(dir);
 
-	bssh_secret_store *store = bssh_secret_store::instance();
+	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
 	QVERIFY(store->unlock(QStringLiteral("passphrase")));
 	store->store(QStringLiteral("id"), QStringLiteral("value"));
@@ -115,7 +120,7 @@ void secret_store_test::a_locked_store_yields_nothing() {
 	QTemporaryDir dir;
 	redirect_app_data(dir);
 
-	bssh_secret_store *store = bssh_secret_store::instance();
+	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
 	QVERIFY(store->unlock(QStringLiteral("p")));
 	store->store(QStringLiteral("id"), QStringLiteral("value"));
@@ -132,7 +137,7 @@ void secret_store_test::erasing_removes_it_from_the_file() {
 	QTemporaryDir dir;
 	redirect_app_data(dir);
 
-	bssh_secret_store *store = bssh_secret_store::instance();
+	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
 	QVERIFY(store->unlock(QStringLiteral("p")));
 	store->store(QStringLiteral("gone"), QStringLiteral("value"));
@@ -147,7 +152,7 @@ void secret_store_test::erasing_removes_it_from_the_file() {
 }
 
 void secret_store_test::the_backend_describes_itself_honestly() {
-	bssh_secret_store *store = bssh_secret_store::instance();
+	bssh_secret_store *store = bssh_make_file_secret_store();
 
 	/*
 	 * sec 11 asks the UI to say which backend answered. A passphrase file
@@ -157,4 +162,29 @@ void secret_store_test::the_backend_describes_itself_honestly() {
 	QVERIFY(!store->is_hardware_backed());
 	QVERIFY(store->needs_passphrase());
 	QVERIFY(store->backend_name().contains(QStringLiteral("passphrase")));
+}
+
+void secret_store_test::the_selector_always_returns_a_working_store() {
+	bssh_secret_store *selected = bssh_secret_store::instance();
+
+	/*
+	 * Whichever backend answered, there must BE one: a machine with no
+	 * keyring falls back to the file rather than to nothing, because the
+	 * alternative is an app that silently cannot save a credential.
+	 */
+	QVERIFY(selected != nullptr);
+	QVERIFY(!selected->backend_name().isEmpty());
+
+	/* And the choice is stable -- re-probing could answer from the
+	 * keyring before the session bus appeared and from the file after,
+	 * leaving secrets written to one invisible in the other. */
+	QCOMPARE(bssh_secret_store::instance(), selected);
+
+	/* The keyring needs no passphrase; the file does. Whichever this is,
+	 * the two answers must agree with each other. */
+	if (selected->needs_passphrase()) {
+		QVERIFY(selected->backend_name().contains(QStringLiteral("passphrase")));
+	} else {
+		QVERIFY(selected->is_unlocked());
+	}
 }

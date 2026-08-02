@@ -1054,12 +1054,13 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
     macOS, DPAPI/Credential Manager on Windows. **Fallback where no such service
     is running** (a headless or minimal session — common enough on Linux to plan
     for, not an edge case): a passphrase-derived key (Argon2id) unlocking a local
-    encrypted store, prompted for at app start. **The fallback is built**
-    (PBKDF2-HMAC-SHA256 + AES-256-GCM, both OpenSSL's, behind
-    `bssh_secret_store`); the Secret Service backend needs `libsecret-1-dev`
-    and is not. The fallback was built first deliberately: a headless or
-    minimal Linux session has no keyring, so it is needed regardless, and
-    it is the case a keyring-only implementation would have left broken.
+    encrypted store, prompted for at app start. **Both are built**, and the
+    choice between them is made at **runtime, not at build time** — "is a
+    keyring running" is a property of the session, and the same binary meets
+    a desktop login and a headless one. libsecret is asked whether a service
+    actually answers rather than assumed from its presence; the file store
+    (PBKDF2-HMAC-SHA256 + AES-256-GCM, both OpenSSL's) is what a container,
+    a minimal window manager or a broken session bus falls back to.
 - **Be honest in the UI about which one is in use.** Keystore-backed and
   passphrase-backed are not equivalent security, and a desktop user with the
   fallback deserves to know their keys are only as safe as the passphrase and
@@ -1219,7 +1220,7 @@ background).
    keys are offered an unlock prompt before any password, since for a
    key-only server a password prompt is not a fallback but a prompt that
    cannot succeed; and the trust-on-first-use prompt is built (§11). Still
-   open: the libsecret backend, and biometric unlock. The store IS wired
+   open: biometric unlock. The store IS wired
    in: a password can be remembered per host (off by default), the profile
    row carries a non-secret `has_password` flag so the app knows whether
    asking for the store's passphrase is worth it, and a remembered password

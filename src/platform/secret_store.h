@@ -26,7 +26,14 @@ public:
 	explicit bssh_secret_store(QObject *parent = nullptr);
 	~bssh_secret_store() override;
 
-	/* The store built for this platform. */
+	/*
+	 * The store for this machine: the platform's secret service when one
+	 * is actually running, the passphrase-derived file otherwise. Chosen
+	 * at RUNTIME, not at build time, because "is a keyring running" is a
+	 * property of the session rather than of the build -- the same binary
+	 * meets both cases, and a headless login of a desktop install is the
+	 * common one.
+	 */
 	static bssh_secret_store *instance();
 
 	/* Shown to the user, verbatim. Never softened. */
@@ -56,5 +63,13 @@ public:
 
 	virtual bool erase(const QString &id) = 0;
 };
+
+/*
+ * The backends, built directly. instance() picks between them; tests use
+ * them by name, because a test that goes through instance() asserts
+ * whatever happens to be running on the machine it runs on.
+ */
+bssh_secret_store *bssh_make_file_secret_store();
+bssh_secret_store *bssh_make_libsecret_store();   /* nullptr when unavailable */
 
 #endif /* BSSH_SECRET_STORE_H */

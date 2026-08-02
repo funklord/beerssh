@@ -285,19 +285,7 @@ private:
 	QJsonObject m_secrets;
 };
 
-bssh_secret_store::bssh_secret_store(QObject *parent) : QObject(parent) {
-}
-
-bssh_secret_store::~bssh_secret_store() {
-}
-
-bssh_secret_store *bssh_secret_store::instance() {
-	/*
-	 * One backend, chosen at build time like bssh_platform (sec 3). When
-	 * the libsecret backend exists this becomes a runtime check for a
-	 * running secret service, falling back to this file -- which is why
-	 * the interface reports which one answered.
-	 */
+bssh_secret_store *bssh_make_file_secret_store() {
 	static bssh_secret_store_file store;
 	return &store;
 }

@@ -16,7 +16,7 @@ TARGET = beerssh_test
 QT += widgets network sql testlib
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libsixel libssh libcrypto
+PKGCONFIG += libsixel libssh libcrypto libsecret-1
 CONFIG += c++17 console
 CONFIG -= app_bundle
 
@@ -49,7 +49,9 @@ SOURCES += \
     ../src/term/scrollback.cpp \
     ../src/term/screen.cpp \
     ../src/platform/platform.cpp \
+    ../src/platform/secret_store.cpp \
     ../src/platform/secret_store_file.cpp \
+    ../src/platform/secret_store_libsecret.cpp \
     ../src/model/conn_manager.cpp \
     ../src/model/preset.cpp \
     ../src/model/profile_store.cpp \

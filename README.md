@@ -101,11 +101,14 @@ saved host, since the secret is keyed to it. Remembered passwords are
 replayed on reconnect, so a password-authenticated session survives a
 network drop without holding the credential in memory the whole time.
 
-Credentials, when stored, go in a passphrase-encrypted file
+Credentials go to the **system keyring** (GNOME Keyring, KWallet, anything
+speaking Secret Service) when one is actually running — no extra
+passphrase, since your login session already unlocked it. Where none
+answers, they go to a passphrase-encrypted file
 (`~/.local/share/beerssh/secrets.enc`, PBKDF2 + AES-256-GCM via OpenSSL).
-The UI names the backend rather than calling everything "encrypted" — a
-passphrase file and a hardware keystore are not the same promise. The
-Secret Service backend for machines running a keyring is not built yet.
+The choice is made at runtime, and the UI names the backend rather than
+calling everything "encrypted" — a passphrase file and a session keyring
+are not the same promise.
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown host shows its fingerprint and waits
