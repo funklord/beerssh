@@ -59,8 +59,19 @@ anything**, and widening restores the arrangement. The focused pane carries
 a border whenever there is more than one — two identical shells side by
 side is a real footgun otherwise.
 
-Not built yet: pane navigation shortcuts, layout persistence, per-tab
-status dots,
+Dropped connections retry on their own: exponential backoff, capped and
+jittered so several sessions dropped by one network flap do not all
+reconnect in the same millisecond, and an immediate retry when the network
+changes (a laptop waking from suspend is the common case). A disconnect
+you asked for is never retried.
+
+**A reconnect is a new remote shell.** Plain SSH cannot resume one, so the
+running program and working directory are gone; only the local scrollback
+survives. Attaching to `tmux` on connect is the available answer until
+Mosh is considered in v2.
+
+Not built yet: SSH keepalive, reconnect status in the UI, pane navigation
+shortcuts, layout persistence, per-tab status dots,
 triple-click line selection, the Android background service, and the
 tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 

@@ -1172,7 +1172,11 @@ background).
    close-with-sessions prompt (§5.5).
 6. **M5 – Reconnection & network awareness.** Connection FSM, keepalive, network-
    change reconnect (Android callbacks + desktop `QNetworkInformation`, including
-   suspend/resume), backoff, status UI.
+   suspend/resume), backoff, status UI. **Partly built:** `bssh_conn_manager`
+   per session, exponential backoff capped and jittered, network-change
+   retry, user-disconnect suppression, and an attempt limit so a dead host
+   stops waking the radio. Still open: SSH-level keepalive to detect a dead
+   socket quickly, and the reconnect status in the UI.
 7. **M6 – Security & profiles.** `bssh_secret_store` with both backends, key
    auth, host-key verification, host profiles, biometric unlock where available.
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,

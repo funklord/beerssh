@@ -27,6 +27,7 @@ INCLUDEPATH += $$PWD/src
 
 SOURCES += \
     src/main.cpp \
+    src/model/conn_manager.cpp \
     src/model/profile_store.cpp \
     src/model/session.cpp \
     src/model/session_registry.cpp \
@@ -50,6 +51,7 @@ SOURCES += \
 HEADERS += \
     src/input/input_router.h \
     src/model/profile.h \
+    src/model/conn_manager.h \
     src/model/profile_store.h \
     src/model/session.h \
     src/model/session_registry.h \

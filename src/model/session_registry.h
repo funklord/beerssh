@@ -1,11 +1,13 @@
 #ifndef BSSH_SESSION_REGISTRY_H
 #define BSSH_SESSION_REGISTRY_H
 
+#include <QHash>
 #include <QList>
 #include <QObject>
 
 #include "model/profile.h"
 
+class bssh_conn_manager;
 class bssh_session;
 
 /*
@@ -41,6 +43,8 @@ public:
 	int count() const { return m_sessions.size(); }
 	int live_count() const;
 
+	bssh_conn_manager *conn_manager_for(bssh_session *session) const;
+
 	bssh_session *at(int index) const;
 	int index_of(bssh_session *session) const;
 
@@ -56,6 +60,7 @@ signals:
 
 private:
 	QList<bssh_session *> m_sessions;
+	QHash<bssh_session *, bssh_conn_manager *> m_managers;
 };
 
 #endif /* BSSH_SESSION_REGISTRY_H */

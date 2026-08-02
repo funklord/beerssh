@@ -7,6 +7,7 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
     : QObject(parent),
       m_profile(profile),
       m_transport(nullptr),
+      m_user_disconnected(false),
       m_cols(80),
       m_rows(24) {
 	/*
@@ -44,6 +45,7 @@ bool bssh_session::is_live() const {
 void bssh_session::connect_to_host(const QString &password) {
 	if (m_transport) return;
 
+	m_user_disconnected = false;
 	m_password = password;
 	m_transport = bssh_ssh_session::create(this);
 
@@ -65,8 +67,15 @@ void bssh_session::connect_to_host(const QString &password) {
 	connect(m_transport, &bssh_ssh_session::state_changed,
 	         this, [this](bssh_ssh_session::state_t state) {
 		if (state == bssh_ssh_session::AUTHENTICATING) {
+			/*
+			 * Kept, not cleared: without it a reconnect cannot
+			 * authenticate, and prompting again for every network blip
+			 * would make auto-reconnect useless. That is a real
+			 * trade-off -- the password now lives in process memory for
+			 * the life of the session -- and it is what sec 11's
+			 * Keystore work at M6 replaces with a key.
+			 */
 			m_transport->authenticate_password(m_password);
-			m_password.clear();
 		} else if (state == bssh_ssh_session::CONNECTED) {
 			m_transport->open_shell(m_cols, m_rows);
 		}
@@ -77,7 +86,29 @@ void bssh_session::connect_to_host(const QString &password) {
 }
 
 void bssh_session::disconnect_from_host() {
+	m_user_disconnected = true;
 	if (m_transport) m_transport->disconnect_from_host();
+}
+
+void bssh_session::reconnect() {
+	if (m_user_disconnected) return;
+
+	/*
+	 * A fresh transport rather than a revived one: the old libssh
+	 * session's socket, channel and state are gone, and reusing the
+	 * object would mean reasoning about which parts of it survived a
+	 * failure. The emulator, screen and scrollback are untouched, so the
+	 * user keeps their history across the drop -- but the remote shell
+	 * is genuinely new (sec 5.3).
+	 */
+	if (m_transport) {
+		m_transport->disconnect_from_host();
+		m_transport->deleteLater();
+		m_transport = nullptr;
+	}
+
+	const QString password = m_password;
+	connect_to_host(password);
 }
 
 void bssh_session::resize(int cols, int rows) {

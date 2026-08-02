@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QtTest>
 
+#include "conn_manager_test.h"
 #include "emulator_test.h"
 #include "graphics_test.h"
 #include "platform_test.h"
@@ -34,6 +35,7 @@ int main(int argc, char *argv[]) {
 
 	int failures = 0;
 	failures += run_test<screen_test>(argc, argv);
+	failures += run_test<conn_manager_test>(argc, argv);
 	failures += run_test<emulator_test>(argc, argv);
 	failures += run_test<graphics_test>(argc, argv);
 	failures += run_test<platform_test>(argc, argv);

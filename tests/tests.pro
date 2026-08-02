@@ -26,6 +26,7 @@ PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a
 
 SOURCES += \
     main.cpp \
+    conn_manager_test.cpp \
     emulator_test.cpp \
     graphics_test.cpp \
     platform_test.cpp \
@@ -45,6 +46,7 @@ SOURCES += \
     ../src/term/scrollback.cpp \
     ../src/term/screen.cpp \
     ../src/platform/platform.cpp \
+    ../src/model/conn_manager.cpp \
     ../src/model/profile_store.cpp \
     ../src/model/session.cpp \
     ../src/model/session_registry.cpp \
@@ -59,6 +61,7 @@ SOURCES += \
 
 HEADERS += \
     fake_ssh_session.h \
+    conn_manager_test.h \
     emulator_test.h \
     graphics_test.h \
     platform_test.h \
@@ -78,6 +81,7 @@ HEADERS += \
     ../src/term/screen.h \
     ../src/platform/platform.h \
     ../src/model/profile.h \
+    ../src/model/conn_manager.h \
     ../src/model/profile_store.h \
     ../src/model/session.h \
     ../src/model/session_registry.h \

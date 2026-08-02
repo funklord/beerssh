@@ -46,7 +46,18 @@ public:
 	bool is_live() const;
 
 	void connect_to_host(const QString &password);
+
+	/*
+	 * Reconnect after a drop. A NEW remote shell: the running program and
+	 * the working directory are gone, and only the local scrollback
+	 * survives (sec 5.3). Callers must not present this as resumption.
+	 */
+	void reconnect();
+
 	void disconnect_from_host();
+
+	/* True when the last disconnect was asked for rather than suffered. */
+	bool disconnect_was_requested() const { return m_user_disconnected; }
 
 	/* Grid size for this session, from whichever view is showing it. */
 	void resize(int cols, int rows);
@@ -64,6 +75,7 @@ private:
 	QString m_remote_title;
 	QString m_error;
 	QString m_password;
+	bool m_user_disconnected;
 	int m_cols;
 	int m_rows;
 };
