@@ -74,6 +74,8 @@ void bssh_session::connect_to_host() {
 	connect(m_transport, &bssh_ssh_session::shell_exited,
 	         this, &bssh_session::note_remote_exit);
 
+	connect(m_transport, &bssh_ssh_session::key_passphrase_required,
+	         this, &bssh_session::needs_key_passphrase);
 	connect(m_transport, &bssh_ssh_session::host_key_unknown,
 	         this, &bssh_session::host_key_unknown);
 	connect(m_transport, &bssh_ssh_session::host_key_changed,
@@ -154,6 +156,10 @@ void bssh_session::reconnect() {
 void bssh_session::supply_password(const QString &password) {
 	m_password = password;
 	if (m_transport) m_transport->authenticate_password(password);
+}
+
+void bssh_session::supply_key_passphrase(const QString &passphrase) {
+	if (m_transport) m_transport->supply_key_passphrase(passphrase);
 }
 
 void bssh_session::accept_host_key() {

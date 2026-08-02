@@ -79,6 +79,14 @@ public:
 	/* Trust the host key that is being asked about, and carry on. */
 	void accept_host_key();
 
+	/*
+	 * Unlocks the private key. Not retained: unlike the password, this
+	 * never needs replaying -- a reconnect re-runs key auth, and holding
+	 * a key passphrase for the life of a session would be strictly worse
+	 * than the password case sec 11 already dislikes.
+	 */
+	void supply_key_passphrase(const QString &passphrase);
+
 	/* True when this session got in without a password at all. */
 	bool used_key_auth() const { return m_used_key_auth; }
 
@@ -109,6 +117,7 @@ signals:
 
 	/* Keys did not get in; the window should ask. */
 	void needs_password();
+	void needs_key_passphrase();
 
 	/* A host key needs a person's answer -- see bssh_ssh_session. */
 	void host_key_unknown(const QString &fingerprint);

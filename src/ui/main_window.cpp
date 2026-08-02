@@ -305,6 +305,21 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 		}
 	});
 
+	connect(session, &bssh_session::needs_key_passphrase, this, [this, session] {
+		bool ok = false;
+		const QString passphrase = QInputDialog::getText(
+		        this, QStringLiteral("BeerSSH"),
+		        QStringLiteral("Passphrase for your SSH key:"),
+		        QLineEdit::Password, QString(), &ok);
+
+		/*
+		 * Declining is not a cancel: the server may well take a
+		 * password, so an empty answer falls through to that path rather
+		 * than dropping the connection.
+		 */
+		session->supply_key_passphrase(ok ? passphrase : QString());
+	});
+
 	connect(session, &bssh_session::needs_password, this, [this, session] {
 		bool ok = false;
 		const QString password = QInputDialog::getText(

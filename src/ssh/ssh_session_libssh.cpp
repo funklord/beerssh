@@ -1,6 +1,7 @@
 #include "ssh/ssh_session_libssh.h"
 
 #include <QDir>
+#include <QFile>
 #include <QSocketNotifier>
 #include <QStandardPaths>
 #include <QTimer>
@@ -33,6 +34,28 @@ const char *const BSSH_TERM = "xterm-256color";
  * there, which is far harder to diagnose than a timer is to delete.
  */
 const int BSSH_POLL_INTERVAL_MS = 25;
+
+/*
+ * Whether the user has a private key at all.
+ *
+ * libssh does not say WHY publickey_auto failed -- no key, wrong key, or a
+ * key it could not decrypt all look the same from here. This is the
+ * heuristic that distinguishes "ask for the passphrase" from "ask for the
+ * password": if a default identity exists and unaided key auth failed, a
+ * passphrase is the likely missing piece. Guessing wrong costs one
+ * dismissable prompt, and never guessing costs every user with an
+ * encrypted key and no agent.
+ */
+bool default_identity_exists() {
+	const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+	const QStringList names = {QStringLiteral("id_ed25519"), QStringLiteral("id_ecdsa"),
+			                        QStringLiteral("id_rsa"), QStringLiteral("id_dsa")};
+
+	for (const QString &name : names) {
+		if (QFile::exists(home + QStringLiteral("/.ssh/") + name)) return true;
+	}
+	return false;
+}
 
 QString known_hosts_path() {
 	/*
@@ -67,6 +90,7 @@ public slots:
 	void do_send(const QByteArray &bytes);
 	void do_disconnect();
 	void do_accept_host_key();
+	void do_key_passphrase(const QString &passphrase);
 	void drain();
 
 signals:
@@ -80,6 +104,7 @@ signals:
 	void failed(const QString &reason);
 	void exited(int exit_status);
 	void password_required();
+	void key_passphrase_required();
 	void host_key_unknown(const QString &fingerprint);
 	void host_key_changed(const QString &fingerprint);
 
@@ -167,6 +192,25 @@ bool bssh_libssh_worker::verify_host_key() {
 	return false;
 }
 
+void bssh_libssh_worker::do_key_passphrase(const QString &passphrase) {
+	if (!m_session) return;
+
+	const QByteArray passphrase_utf8 = passphrase.toUtf8();
+	const int rc = ssh_userauth_publickey_auto(m_session, nullptr, passphrase_utf8.constData());
+
+	if (rc == SSH_AUTH_SUCCESS) {
+		emit state_changed(bssh_ssh_session::CONNECTED);
+		return;
+	}
+
+	/*
+	 * Wrong passphrase, or a key the server does not accept -- libssh
+	 * does not distinguish, so the honest next step is the password path
+	 * rather than a second guess at the passphrase.
+	 */
+	emit password_required();
+}
+
 void bssh_libssh_worker::do_accept_host_key() {
 	if (!m_session) return;
 
@@ -238,6 +282,17 @@ void bssh_libssh_worker::authenticate() {
 	const int key_rc = ssh_userauth_publickey_auto(m_session, nullptr, nullptr);
 	if (key_rc == SSH_AUTH_SUCCESS) {
 		emit state_changed(bssh_ssh_session::CONNECTED);
+		return;
+	}
+
+	/*
+	 * A key on disk that did not work unaided is most likely encrypted
+	 * with no agent loaded. Offer to unlock it before falling back to a
+	 * password -- which for a server that only accepts keys is not a
+	 * fallback at all, just a prompt that cannot succeed.
+	 */
+	if (default_identity_exists()) {
+		emit key_passphrase_required();
 		return;
 	}
 
@@ -375,6 +430,8 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 	         this, &bssh_ssh_session::shell_exited);
 	connect(m_worker, &bssh_libssh_worker::password_required,
 	         this, &bssh_ssh_session::password_required);
+	connect(m_worker, &bssh_libssh_worker::key_passphrase_required,
+	         this, &bssh_ssh_session::key_passphrase_required);
 	connect(m_worker, &bssh_libssh_worker::host_key_unknown,
 	         this, &bssh_ssh_session::host_key_unknown);
 	connect(m_worker, &bssh_libssh_worker::host_key_changed,
@@ -434,6 +491,12 @@ void bssh_ssh_session_libssh::disconnect_from_host() {
 
 void bssh_ssh_session_libssh::accept_host_key() {
 	QMetaObject::invokeMethod(m_worker, "do_accept_host_key", Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::supply_key_passphrase(const QString &passphrase) {
+	QMetaObject::invokeMethod(m_worker, [this, passphrase] {
+		m_worker->do_key_passphrase(passphrase);
+	}, Qt::QueuedConnection);
 }
 
 bssh_ssh_session *bssh_ssh_session::create(QObject *parent) {

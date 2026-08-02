@@ -69,6 +69,10 @@ public:
 	void send(const QByteArray &bytes) override;
 	void disconnect_from_host() override;
 	void accept_host_key() override { m_host_key_accepted = true; }
+	void supply_key_passphrase(const QString &passphrase) override { m_passphrase = passphrase; }
+
+	QString key_passphrase() const { return m_passphrase; }
+	void simulate_key_passphrase_required() { emit key_passphrase_required(); }
 
 	bool host_key_accepted() const { return m_host_key_accepted; }
 
@@ -83,6 +87,7 @@ private:
 	int m_rows;
 	int m_resize_count;
 	bool m_host_key_accepted = false;
+	QString m_passphrase;
 };
 
 #endif /* BSSH_FAKE_SSH_SESSION_H */

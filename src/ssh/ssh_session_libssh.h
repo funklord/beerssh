@@ -35,6 +35,7 @@ public:
 	void send(const QByteArray &bytes) override;
 	void disconnect_from_host() override;
 	void accept_host_key() override;
+	void supply_key_passphrase(const QString &passphrase) override;
 
 private:
 	QThread m_thread;

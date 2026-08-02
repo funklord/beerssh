@@ -15,8 +15,10 @@ scrolling and CJK double-width cells all work:
 
 Public-key authentication is tried first — the agent, then your default
 identities — so a key-authenticated session holds no credential at all and
-reconnects on its own after a network drop. Passphrase-protected keys with
-no agent loaded fall through to the password path for now.
+reconnects on its own after a network drop. If a key exists but does not
+get in unaided it offers to unlock it, because for a server that only
+accepts keys a password prompt is not a fallback but a prompt that cannot
+succeed. The passphrase is used and not kept.
 
 Typing works: keys, modifiers, function keys, arrows in both normal and
 application-cursor mode, Meta/Alt, bracketed paste (`Ctrl+Shift+V`), and

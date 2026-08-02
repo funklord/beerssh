@@ -77,6 +77,9 @@ public:
 	/* Answers host_key_unknown/host_key_changed: trust it and continue. */
 	virtual void accept_host_key() = 0;
 
+	/* Answers key_passphrase_required. */
+	virtual void supply_key_passphrase(const QString &passphrase) = 0;
+
 signals:
 	void bytes_received(const QByteArray &bytes);
 	void state_changed(bssh_ssh_session::state_t state);
@@ -97,6 +100,14 @@ signals:
 	 * and it is what every other SSH client gets right.
 	 */
 	void password_required();
+
+	/*
+	 * A private key exists but did not get us in unaided, which usually
+	 * means it is passphrase-protected and no agent is loaded. Asked
+	 * before falling back to a password, because unlocking the key is
+	 * what the user almost certainly wants.
+	 */
+	void key_passphrase_required();
 
 	/*
 	 * The host is not in our known-hosts store. The connection is HELD

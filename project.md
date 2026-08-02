@@ -1210,9 +1210,11 @@ background).
    auth, host-key verification, host profiles, biometric unlock where available.
    **Started:** public-key authentication is tried before any password
    (agent, then the default identities), so a key-authenticated session holds
-   no credential at all and can reconnect on its own. Still open: the secret
-   store itself, passphrase-protected keys with no agent loaded, and the
-   trust-on-first-use prompt.
+   no credential at all and can reconnect on its own; passphrase-protected
+   keys are offered an unlock prompt before any password, since for a
+   key-only server a password prompt is not a fallback but a prompt that
+   cannot succeed; and the trust-on-first-use prompt is built (§11). Still
+   open: the secret store itself, so nothing is remembered between runs.
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,
    tab bar, OSC titles (and desktop window title), per-tab status, layout
    persistence. *(Do this before splits — the registry is the foundation.)*

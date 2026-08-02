@@ -197,3 +197,22 @@ void session_registry_test::a_host_key_is_never_trusted_without_an_answer() {
 	QCOMPARE(changed.count(), 1);
 	QCOMPARE(unknown.count(), 1);
 }
+
+void session_registry_test::an_encrypted_key_is_offered_before_a_password() {
+	bssh_fake_ssh_session transport;
+	QSignalSpy passphrase(&transport, &bssh_ssh_session::key_passphrase_required);
+	QSignalSpy password(&transport, &bssh_ssh_session::password_required);
+
+	/*
+	 * A key on disk that did not work unaided is most likely encrypted
+	 * with no agent loaded. Asking for the passphrase first matters
+	 * because for a server that only accepts keys, a password prompt is
+	 * not a fallback -- it is a prompt that cannot succeed.
+	 */
+	transport.simulate_key_passphrase_required();
+	QCOMPARE(passphrase.count(), 1);
+	QCOMPARE(password.count(), 0);
+
+	transport.supply_key_passphrase(QStringLiteral("hunter2"));
+	QCOMPARE(transport.key_passphrase(), QStringLiteral("hunter2"));
+}
