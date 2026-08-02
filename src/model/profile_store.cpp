@@ -15,7 +15,7 @@ namespace {
  * that gains migrations only once it needs them has already shipped a
  * database it cannot upgrade (project.md sec 10.6).
  */
-const int BSSH_SCHEMA_VERSION = 1;
+const int BSSH_SCHEMA_VERSION = 2;
 
 int next_connection_id() {
 	static int counter = 0;
@@ -97,6 +97,25 @@ bool bssh_profile_store::migrate() {
 		}
 	}
 
+	if (version < 2) {
+		/*
+		 * One row per remembered tab. A table rather than a blob so it
+		 * stays readable in sqlite3 -- sec 10.6 assumes this file will
+		 * be inspected by hand.
+		 */
+		const bool created = query.exec(QStringLiteral(
+		        "CREATE TABLE IF NOT EXISTS layout ("
+		        "  position INTEGER PRIMARY KEY,"
+		        "  profile_id INTEGER NOT NULL,"
+		        "  is_pane INTEGER NOT NULL DEFAULT 0,"
+		        "  is_active INTEGER NOT NULL DEFAULT 0"
+		        ")"));
+		if (!created) {
+			m_last_error = query.lastError().text();
+			return false;
+		}
+	}
+
 	if (version != BSSH_SCHEMA_VERSION) {
 		query.exec(QStringLiteral("PRAGMA user_version = %1").arg(BSSH_SCHEMA_VERSION));
 	}
@@ -162,6 +181,66 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 	const int id = profile.id == 0 ? query.lastInsertId().toInt() : profile.id;
 	emit changed();
 	return id;
+}
+
+bool bssh_profile_store::save_layout(const layout_state_t &layout) {
+	if (!m_open) return false;
+
+	QSqlDatabase database = QSqlDatabase::database(m_connection_name);
+	QSqlQuery query(database);
+
+	/* Replaced wholesale: a workspace is one value, not a set of rows to
+	 * reconcile. */
+	if (!query.exec(QStringLiteral("DELETE FROM layout"))) {
+		m_last_error = query.lastError().text();
+		return false;
+	}
+
+	for (int i = 0; i < layout.profile_ids.size(); ++i) {
+		query.prepare(QStringLiteral(
+		        "INSERT INTO layout (position, profile_id, is_pane, is_active)"
+		        " VALUES (?, ?, ?, ?)"));
+		query.addBindValue(i);
+		query.addBindValue(layout.profile_ids.at(i));
+		query.addBindValue(i < layout.pane_count ? 1 : 0);
+		query.addBindValue(i == layout.active_index ? 1 : 0);
+
+		if (!query.exec()) {
+			m_last_error = query.lastError().text();
+			return false;
+		}
+	}
+
+	emit changed();
+	return true;
+}
+
+bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
+	layout_state_t state;
+	if (!m_open) return state;
+
+	/*
+	 * Joined against profiles so an id deleted between runs simply does
+	 * not come back -- restoring a tab for a host the user removed would
+	 * be the store second-guessing them.
+	 */
+	QSqlQuery query(QSqlDatabase::database(m_connection_name));
+	if (!query.exec(QStringLiteral(
+	        "SELECT l.profile_id, l.is_pane, l.is_active FROM layout l"
+	        " JOIN profiles p ON p.id = l.profile_id"
+	        " ORDER BY l.position"))) {
+		return state;
+	}
+
+	state.pane_count = 0;
+	while (query.next()) {
+		state.profile_ids.append(query.value(0).toInt());
+		if (query.value(1).toInt() != 0) ++state.pane_count;
+		if (query.value(2).toInt() != 0) state.active_index = state.profile_ids.size() - 1;
+	}
+
+	if (state.pane_count < 1) state.pane_count = 1;
+	return state;
 }
 
 bool bssh_profile_store::remove(int id) {

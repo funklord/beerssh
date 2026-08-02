@@ -22,6 +22,7 @@
 #include "model/session.h"
 #include "model/conn_manager.h"
 #include "model/session_registry.h"
+#include "ui/layout_manager.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "platform/platform.h"
@@ -41,6 +42,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_terminal_view(new bssh_terminal_view(this)),
       m_status_label(new QLabel(this)),
       m_registry(new bssh_session_registry(this)),
+      m_layout(nullptr),
       m_current(nullptr),
       m_tabs(new QTabBar(m_terminal_page)),
       m_key_row(nullptr),
@@ -201,6 +203,8 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	if (!target.isEmpty()) {
 		m_pages->setCurrentWidget(m_terminal_page);
 		connect_to(target);
+	} else {
+		restore_layout();
 	}
 }
 
@@ -403,6 +407,53 @@ void bssh_main_window::on_registry_changed() {
 	update_status();
 }
 
+void bssh_main_window::save_layout() {
+	/*
+	 * Profile ids, not session ids: sessions do not survive a restart,
+	 * because plain SSH cannot resume a shell (sec 5.3). What can
+	 * honestly be remembered is which hosts were open and how they were
+	 * arranged.
+	 *
+	 * Sessions opened from a command-line target have no profile behind
+	 * them and are skipped rather than invented into the store.
+	 */
+	bssh_profile_store::layout_state_t layout;
+
+	for (bssh_session *session : m_registry->sessions()) {
+		const int id = session->profile().id;
+		if (id == 0) continue;
+
+		if (session == m_current) layout.active_index = layout.profile_ids.size();
+		layout.profile_ids.append(id);
+	}
+
+	layout.pane_count = qMax(1, m_layout ? m_layout->visible_panes().size() : 1);
+	m_profile_store->save_layout(layout);
+}
+
+void bssh_main_window::restore_layout() {
+	const bssh_profile_store::layout_state_t layout = m_profile_store->layout();
+	if (layout.is_empty()) return;
+
+	/*
+	 * The arrangement comes back; the connections do not, and cannot --
+	 * each would need its password again. So the front door opens with
+	 * the host that was active last time already selected, which is one
+	 * keystroke from where the user left off without pretending to have
+	 * restored a session.
+	 *
+	 * [OPEN] Reopening every remembered host at once needs key
+	 * authentication (M6) to be anything but a queue of password
+	 * prompts.
+	 */
+	const int active = layout.profile_ids.value(layout.active_index,
+	                                             layout.profile_ids.first());
+	const bssh_profile_t profile = m_profile_store->profile(active);
+	if (!profile.is_valid()) return;
+
+	if (m_session_dialog) m_session_dialog->set_current_profile(profile);
+}
+
 void bssh_main_window::on_failed(const QString &reason) {
 	m_error = reason;
 	update_status();
@@ -502,6 +553,8 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 		event->ignore();
 		return;
 	}
+
+	save_layout();
 
 	for (bssh_session *session : m_registry->sessions()) {
 		session->disconnect_from_host();

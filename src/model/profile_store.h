@@ -44,6 +44,30 @@ public:
 
 	bool remove(int id);
 
+	/*
+	 * The workspace: which hosts were open, in what order, how many of
+	 * them were side by side as panes, and which was active (sec 8.4).
+	 *
+	 * Stored as profile ids rather than session ids because sessions do
+	 * not survive a restart -- plain SSH cannot resume one (sec 5.3), so
+	 * what can honestly be restored is the ARRANGEMENT, not the
+	 * connections.
+	 */
+	struct layout_state_t {
+		QList<int> profile_ids;  /* tab order */
+		int pane_count;          /* how many of the first N were split */
+		int active_index;
+
+		layout_state_t() : pane_count(1), active_index(0) {}
+		bool is_empty() const { return profile_ids.isEmpty(); }
+	};
+
+	bool save_layout(const layout_state_t &layout);
+
+	/* Ids that no longer exist are dropped -- a profile can be deleted
+	 * between one run and the next. */
+	layout_state_t layout() const;
+
 signals:
 	void changed();
 

@@ -19,6 +19,9 @@ private slots:
 	void removes_profiles();
 	void survives_being_reopened();
 	void schema_has_nowhere_to_put_a_secret();
+	void layout_round_trips();
+	void layout_forgets_deleted_hosts();
+	void an_old_database_gains_the_layout_table();
 	void front_door_follows_the_input_device();
 };
 

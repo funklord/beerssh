@@ -122,6 +122,106 @@ void profile_store_test::schema_has_nowhere_to_put_a_secret() {
 	QVERIFY(columns.contains(QStringLiteral("host")));
 }
 
+void profile_store_test::layout_round_trips() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("test.db"));
+
+	int first = 0;
+	int second = 0;
+	int third = 0;
+	{
+		bssh_profile_store store(path);
+		first = store.save(make_profile(QStringLiteral("one"), QStringLiteral("a.example")));
+		second = store.save(make_profile(QStringLiteral("two"), QStringLiteral("b.example")));
+		third = store.save(make_profile(QStringLiteral("three"), QStringLiteral("c.example")));
+
+		bssh_profile_store::layout_state_t layout;
+		layout.profile_ids = {first, second, third};
+		layout.pane_count = 2;   /* the first two were side by side */
+		layout.active_index = 1;
+
+		QVERIFY(store.save_layout(layout));
+	}
+
+	/*
+	 * What survives a restart is the ARRANGEMENT, not the connections:
+	 * plain SSH cannot resume a shell (sec 5.3), so restoring anything
+	 * more would be a promise the protocol cannot keep.
+	 */
+	bssh_profile_store reopened(path);
+	const bssh_profile_store::layout_state_t restored = reopened.layout();
+
+	QCOMPARE(restored.profile_ids, QList<int>({first, second, third}));
+	QCOMPARE(restored.pane_count, 2);
+	QCOMPARE(restored.active_index, 1);
+}
+
+void profile_store_test::layout_forgets_deleted_hosts() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	const int kept = store.save(make_profile(QStringLiteral("kept"), QStringLiteral("k.example")));
+	const int doomed = store.save(make_profile(QStringLiteral("doomed"), QStringLiteral("d.example")));
+
+	bssh_profile_store::layout_state_t layout;
+	layout.profile_ids = {kept, doomed};
+	layout.pane_count = 2;
+	store.save_layout(layout);
+
+	store.remove(doomed);
+
+	/*
+	 * Restoring a tab for a host the user deleted between runs would be
+	 * the store second-guessing them.
+	 */
+	const bssh_profile_store::layout_state_t restored = store.layout();
+	QCOMPARE(restored.profile_ids, QList<int>({kept}));
+}
+
+void profile_store_test::an_old_database_gains_the_layout_table() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("v1.db"));
+
+	/*
+	 * A version-1 file: profiles, no layout table, user_version 1. This
+	 * is what an existing user's database looks like, and migrating it
+	 * has to work on the file rather than only on a fresh one -- which is
+	 * the whole reason sec 10.6 wanted migrations from day one.
+	 */
+	{
+		QSqlDatabase old = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"),
+		                                              QStringLiteral("v1_setup"));
+		old.setDatabaseName(path);
+		QVERIFY(old.open());
+		{
+			QSqlQuery query(old);
+			QVERIFY(query.exec(QStringLiteral(
+			        "CREATE TABLE profiles (id INTEGER PRIMARY KEY AUTOINCREMENT,"
+			        " name TEXT NOT NULL, host TEXT NOT NULL, user TEXT,"
+			        " port INTEGER NOT NULL DEFAULT 22)")));
+			QVERIFY(query.exec(QStringLiteral(
+			        "INSERT INTO profiles (name, host, user, port)"
+			        " VALUES ('legacy', 'old.example', 'nabbe', 22)")));
+			QVERIFY(query.exec(QStringLiteral("PRAGMA user_version = 1")));
+		}
+		old.close();
+	}
+	QSqlDatabase::removeDatabase(QStringLiteral("v1_setup"));
+
+	bssh_profile_store store(path);
+	QVERIFY2(store.is_open(), qPrintable(store.last_error()));
+
+	/* The existing profile survived the migration... */
+	QCOMPARE(store.profiles().count(), 1);
+	QCOMPARE(store.profiles().first().name, QStringLiteral("legacy"));
+
+	/* ...and the new table works. */
+	bssh_profile_store::layout_state_t layout;
+	layout.profile_ids = {store.profiles().first().id};
+	QVERIFY(store.save_layout(layout));
+	QCOMPARE(store.layout().profile_ids.count(), 1);
+}
+
 void profile_store_test::front_door_follows_the_input_device() {
 	/*
 	 * The PuTTY-shaped dialog for pointer and keyboard, the full-bleed

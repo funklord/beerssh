@@ -11,6 +11,7 @@ class QLabel;
 class QTabBar;
 class QStackedWidget;
 class bssh_host_list;
+class bssh_layout_manager;
 class bssh_key_row;
 class bssh_profile_store;
 class bssh_session_dialog;
@@ -88,6 +89,8 @@ private slots:
 
 private:
 	void connect_to(const QString &target);
+	void save_layout();
+	void restore_layout();
 	void show_session(bssh_session *session);
 	void detach_session();
 	void update_status();
@@ -100,6 +103,7 @@ private:
 	bssh_terminal_view *m_terminal_view;
 	QLabel *m_status_label;
 	bssh_session_registry *m_registry;
+	bssh_layout_manager *m_layout;
 	bssh_session *m_current;
 	QTabBar *m_tabs;
 	bssh_key_row *m_key_row;

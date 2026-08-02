@@ -79,8 +79,13 @@ bell that rang while you were looking at another tab. Dragging a divider
 snaps to whole character cells, so no pane renders half a glyph at its
 edge.
 
+Which hosts were open, how they were arranged and which was active are
+remembered across restarts. The connections are not — plain SSH cannot
+resume a shell — so the front door reopens with the last host selected
+rather than pretending to have restored anything.
+
 Not built yet: SSH keepalive (see `project.md` §4 — libssh turns out not
-to expose one), layout persistence,
+to expose one), reopening every remembered host at once (needs key auth),
 triple-click line selection, the Android background service, and the
 tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 

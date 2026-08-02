@@ -1207,8 +1207,11 @@ background).
    `window-change`. Desktop window-drag resizing exercises this hardest — use it.
    **Mostly built:** size classes, pane limits, the collapse/restore rule with
    the layout intent remembered, per-pane geometry, the focus border, pane
-   navigation chords, and dividers snapping to whole cells. Still open:
-   persisting the arrangement across restarts.
+   navigation chords, and dividers snapping to whole cells. The arrangement
+   is persisted (profile ids, pane count, active tab) and the front door
+   reopens with the last-active host selected. **[OPEN]** Reopening every
+   remembered host at once needs key authentication (M6) to be anything
+   but a queue of password prompts.
 10. **M9 – Fonts.** Curated set, fallback chain, wide-char handling, shared glyph
     cache, asset-pack delivery (Android) / full set (desktop), CI validation
     script, fractional-scaling and multi-monitor DPI checks.
