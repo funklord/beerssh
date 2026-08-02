@@ -172,9 +172,14 @@ Needs a Qt-for-Android kit and an NDK, neither of which the desktop build
 requires:
 
 ```sh
+export ANDROID_NDK_ROOT=$HOME/android-ndk-r29
 tools/build-deps-android.sh arm64-v8a          # cross-builds libssh + OpenSSL
-make android QT_ANDROID_ROOT=$HOME/Qt/6.8.2/android_arm64_v8a
+make android QT_ANDROID_ROOT=$HOME/Qt/6.11.1/android_arm64_v8a
 ```
+
+Verified for `arm64-v8a` and `x86_64` (the emulator's ABI). Packaging into
+an APK additionally needs the Android **SDK**, which is separate from the
+NDK.
 
 No Qt account is needed for the kit — `aqtinstall` fetches the same
 official binaries:
@@ -185,13 +190,10 @@ python3 -m venv ~/.venv/aqt && ~/.venv/aqt/bin/pip install aqtinstall
 ~/.venv/aqt/bin/aqt install-qt linux android 6.8.2 android_arm64_v8a
 ```
 
-**The native build works** — `libbeerssh_arm64-v8a.so` builds and links
-against cross-compiled libssh + OpenSSL and a cross-compiled libvterm.
-**Packaging does not, yet:** `androiddeployqt` needs the Android SDK
-(platform-tools, `platforms;android-35`, `build-tools`), which is separate
-from the NDK. `android/AndroidManifest.xml` has still never been through
-androiddeployqt, so check it against the installed kit's template on the
-first packaging run.
+**The native build works**; packaging has never run. The manifest has been
+checked against the installed kit's own template and is parsed as part of
+the build, but it has still not been through `androiddeployqt`, and
+nothing has run on a device or an emulator.
 
 ## Layout
 

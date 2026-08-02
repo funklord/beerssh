@@ -40,24 +40,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-      # The host Qt is not optional: androiddeployqt and the moc/rcc tools
-      # run on the host even though everything else is cross-built.
+
+      # The host Qt is not optional: androiddeployqt, moc and rcc run on
+      # the host even though everything else is cross-built.
       - name: Install host Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.2'
+          version: '6.11.1'
           host: linux
           target: desktop
+
       - name: Install Qt for Android (arm64)
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.8.2'
+          version: '6.11.1'
           host: linux
           target: android
           arch: android_arm64_v8a
-      - name: Build AAB
+
+      # libssh and OpenSSL have to be cross-compiled; there is no such
+      # thing as a system libssh in an NDK sysroot. Cached because it is
+      # several minutes of work that only changes when the pinned
+      # versions do.
+      - name: Cache cross-compiled dependencies
+        id: deps-cache
+        uses: actions/cache@v4
+        with:
+          path: deps/android
+          key: android-deps-${{ runner.os }}-${{ hashFiles('tools/build-deps-android.sh') }}
+
+      - name: Cross-compile libssh + OpenSSL
+        if: steps.deps-cache.outputs.cache-hit != 'true'
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
+        run: tools/build-deps-android.sh arm64-v8a
+
+      # Compiles and links libbeerssh_arm64-v8a.so. Packaging into an AAB
+      # additionally needs the SDK, which the runner image provides.
+      - name: Build
+        env:
+          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
         run: make android QT_ANDROID_ROOT="$QT_ROOT_DIR"
