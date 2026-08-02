@@ -24,6 +24,7 @@ private slots:
 	void a_password_is_requested_only_when_keys_fail();
 	void a_host_key_is_never_trusted_without_an_answer();
 	void an_encrypted_key_is_offered_before_a_password();
+	void a_hosts_keepalive_interval_reaches_its_transport();
 };
 
 #endif /* BSSH_SESSION_REGISTRY_TEST_H */

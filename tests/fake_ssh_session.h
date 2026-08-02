@@ -68,6 +68,11 @@ public:
 	void resize(int cols, int rows) override;
 	void send(const QByteArray &bytes) override;
 	void disconnect_from_host() override;
+
+	/* Recorded rather than acted on -- what the tests check is that the
+	 * host's interval reached the transport at all. */
+	void set_keepalive(int seconds) override { m_keepalive_seconds = seconds; }
+	int keepalive_seconds() const { return m_keepalive_seconds; }
 	void accept_host_key() override { m_host_key_accepted = true; }
 	void supply_key_passphrase(const QString &passphrase) override { m_passphrase = passphrase; }
 
@@ -87,6 +92,7 @@ private:
 	int m_rows;
 	int m_resize_count;
 	bool m_host_key_accepted = false;
+	int m_keepalive_seconds = 0;
 	QString m_passphrase;
 };
 

@@ -6,6 +6,10 @@
 #include <QStandardPaths>
 #include <QTimer>
 
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <sys/socket.h>
+
 #include <libssh/libssh.h>
 
 /*
@@ -34,6 +38,67 @@ const char *const BSSH_TERM = "xterm-256color";
  * there, which is far harder to diagnose than a timer is to delete.
  */
 const int BSSH_POLL_INTERVAL_MS = 25;
+
+/*
+ * TCP-level dead-peer detection (sec 4, sec 5.3).
+ *
+ * The application-level keepalive below keeps the NAT mapping alive; it
+ * cannot notice a peer that has gone away, because SSH_MSG_IGNORE is
+ * never answered and a write into a dead socket succeeds into the kernel
+ * buffer. What DOES notice is TCP keepalive, so the socket is configured
+ * to probe rather than left at the system default of two hours -- which
+ * is a session that stays "connected" for the rest of the afternoon.
+ *
+ * Chosen to fail in about a minute: idle 30s, then probes 10s apart, three
+ * of them. Fast enough that a user reaching for a dead terminal sees it
+ * reconnecting rather than typing into nothing, slow enough not to be a
+ * radio wakeup every few seconds on a phone (sec 5.1).
+ */
+const int BSSH_TCP_KEEPALIVE_IDLE_S = 30;
+const int BSSH_TCP_KEEPALIVE_INTERVAL_S = 10;
+const int BSSH_TCP_KEEPALIVE_COUNT = 3;
+
+/*
+ * Set the socket options that make a dead connection announce itself.
+ *
+ * The #ifdefs here are about which POSIX socket options this KERNEL has,
+ * not about which platform the app is running on, so they do not belong
+ * behind bssh_platform (sec 3): Android and desktop Linux take exactly
+ * the same branch, and it is macOS and Windows that differ. Every one of
+ * them is best-effort -- a failure means slower detection, never a
+ * connection that does not work, so none of them is checked.
+ */
+static void bssh_configure_tcp_keepalive(int fd) {
+	if (fd < 0) return;
+
+	const int on = 1;
+	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+
+#ifdef TCP_KEEPIDLE
+	const int idle = BSSH_TCP_KEEPALIVE_IDLE_S;
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+#endif
+#ifdef TCP_KEEPINTVL
+	const int interval = BSSH_TCP_KEEPALIVE_INTERVAL_S;
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+#endif
+#ifdef TCP_KEEPCNT
+	const int count = BSSH_TCP_KEEPALIVE_COUNT;
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
+#endif
+#ifdef TCP_USER_TIMEOUT
+	/*
+	 * The one that matters when the user is actually typing: it bounds
+	 * how long UNACKNOWLEDGED data may sit before the socket errors.
+	 * Without it, keystrokes sent into a dead link are retransmitted for
+	 * many minutes while the terminal looks merely slow.
+	 */
+	const int user_timeout_ms =
+		      (BSSH_TCP_KEEPALIVE_IDLE_S +
+		       BSSH_TCP_KEEPALIVE_INTERVAL_S * BSSH_TCP_KEEPALIVE_COUNT) * 1000;
+	setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, sizeof(user_timeout_ms));
+#endif
+}
 
 /*
  * Whether the user has a private key at all.
@@ -75,7 +140,8 @@ class bssh_libssh_worker : public QObject {
 	Q_OBJECT
 
 public:
-	bssh_libssh_worker() : m_session(nullptr), m_channel(nullptr), m_notifier(nullptr), m_poll(nullptr) {
+	bssh_libssh_worker() : m_session(nullptr), m_channel(nullptr), m_notifier(nullptr), m_poll(nullptr),
+	                       m_keepalive(nullptr), m_keepalive_seconds(0) {
 	}
 
 	~bssh_libssh_worker() override {
@@ -91,6 +157,7 @@ public slots:
 	void do_disconnect();
 	void do_accept_host_key();
 	void do_key_passphrase(const QString &passphrase);
+	void do_set_keepalive(int seconds);
 	void drain();
 
 signals:
@@ -120,6 +187,14 @@ private:
 	ssh_channel m_channel;
 	QSocketNotifier *m_notifier;
 	QTimer *m_poll;
+
+	/*
+	 * Sends SSH_MSG_IGNORE on a timer. Kept alongside the interval so a
+	 * preset change mid-session retimes an existing connection rather
+	 * than only affecting the next one.
+	 */
+	QTimer *m_keepalive;
+	int m_keepalive_seconds;
 };
 
 QString bssh_libssh_worker::session_error() const {
@@ -138,6 +213,8 @@ void bssh_libssh_worker::teardown() {
 	m_notifier = nullptr;
 	delete m_poll;
 	m_poll = nullptr;
+	delete m_keepalive;
+	m_keepalive = nullptr;
 
 	if (m_channel) {
 		if (ssh_channel_is_open(m_channel)) ssh_channel_close(m_channel);
@@ -352,7 +429,51 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 	connect(m_poll, &QTimer::timeout, this, &bssh_libssh_worker::drain);
 	m_poll->start();
 
+	bssh_configure_tcp_keepalive(ssh_get_fd(m_session));
+
+	/*
+	 * Re-applied here because the interval usually arrives before there is
+	 * a connection to apply it to: the host's settings are resolved when
+	 * the session is created, and this runs once the shell is open.
+	 */
+	do_set_keepalive(m_keepalive_seconds);
+
 	drain();
+}
+
+void bssh_libssh_worker::do_set_keepalive(int seconds) {
+	m_keepalive_seconds = seconds > 0 ? seconds : 0;
+
+	delete m_keepalive;
+	m_keepalive = nullptr;
+
+	if (m_keepalive_seconds == 0 || !m_session) return;
+
+	m_keepalive = new QTimer(this);
+	m_keepalive->setInterval(m_keepalive_seconds * 1000);
+
+	/*
+	 * SSH_MSG_IGNORE, which is the one thing libssh 0.11 exposes that puts
+	 * bytes on the wire without meaning anything (sec 4 -- it has no
+	 * client keepalive API, only a constant for requests arriving the
+	 * other way). Its job is NAT: a phone's carrier drops an idle mapping
+	 * in minutes, and the session it silently kills looks to the user like
+	 * a terminal that stopped responding for no reason.
+	 *
+	 * It is deliberately not a liveness check. Nothing answers it, so a
+	 * successful send proves only that the local kernel accepted the
+	 * bytes; noticing a peer that has gone is TCP keepalive's job, above.
+	 * An error, though, is real and worth reporting -- it means libssh has
+	 * already given up on the socket.
+	 */
+	connect(m_keepalive, &QTimer::timeout, this, [this] {
+		if (!m_session) return;
+		if (ssh_send_ignore(m_session, "") == SSH_ERROR) {
+			fail(session_error());
+		}
+	});
+
+	m_keepalive->start();
 }
 
 void bssh_libssh_worker::drain() {
@@ -485,6 +606,12 @@ void bssh_ssh_session_libssh::send(const QByteArray &bytes) {
 	}, Qt::QueuedConnection);
 }
 
+void bssh_ssh_session_libssh::set_keepalive(int seconds) {
+	QMetaObject::invokeMethod(m_worker, [this, seconds] {
+		m_worker->do_set_keepalive(seconds);
+	}, Qt::QueuedConnection);
+}
+
 void bssh_ssh_session_libssh::disconnect_from_host() {
 	QMetaObject::invokeMethod(m_worker, "do_disconnect", Qt::QueuedConnection);
 }
@@ -500,6 +627,8 @@ void bssh_ssh_session_libssh::supply_key_passphrase(const QString &passphrase) {
 }
 
 bssh_ssh_session *bssh_ssh_session::create(QObject *parent) {
+	if (bssh_ssh_session *injected = create_from_factory(parent)) return injected;
+
 	return new bssh_ssh_session_libssh(parent);
 }
 

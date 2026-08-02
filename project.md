@@ -243,14 +243,30 @@ headers expose no client keepalive API — no option, no send call — only a
 way. libssh2 does have `libssh2_keepalive_config`/`libssh2_keepalive_send`.
 
 That matters because §5.3 wants keepalive to detect a dead socket quickly,
-and it is one of the reasons this table gave for choosing libssh. It is
-now **[OPEN]** again, with three routes: send our own periodic global
-request through the vendored-and-patched route (§7.1 already establishes
-the precedent), switch this one component to libssh2 — which the
-`bssh_ssh_session` interface exists precisely to make possible (§4) — or
-rely on TCP keepalive plus the network-change trigger, which is slower but
-not nothing. **Do not treat the transport choice as settled on the
-strength of a row that was wrong.**
+and it is one of the reasons this table gave for choosing libssh.
+
+**[DECIDED]** — the third route, strengthened, and no vendoring or library
+switch. Two mechanisms, because the problem is two problems:
+
+- **NAT mappings** are kept alive by `ssh_send_ignore()`, which IS public
+  libssh API (SSH_MSG_IGNORE), on the host's `keepalive_seconds` interval.
+  This is what a carrier NAT dropping an idle mapping needs, and it is the
+  common case on a phone.
+- **A peer that has gone** is detected by TCP keepalive, configured on the
+  socket from `ssh_get_fd()`: idle 30s, three probes 10s apart, plus
+  `TCP_USER_TIMEOUT` so unacknowledged *keystrokes* also time out rather
+  than being retransmitted for minutes while the terminal merely looks
+  slow. The system default is two hours, which is a session that stays
+  "connected" all afternoon.
+
+The honest limit: SSH_MSG_IGNORE is never answered, so a successful send
+proves only that the local kernel took the bytes — the round trip that
+actually detects a dead peer is TCP's, not ours. If ~60s proves too slow
+in practice, route one (our own global request with `want_reply`, through
+the vendored-and-patched route) is the escalation, and the
+`bssh_ssh_session` interface still makes route two possible.
+**Do not treat the transport choice as settled on the strength of a row
+that was wrong.**
 
 **Recommendation: `libssh`** for v1 — its higher-level PTY/keepalive/known-hosts
 handling reduces the surface area for subtle bugs, and its built-in SFTP eases
@@ -1258,8 +1274,13 @@ background).
    suspend/resume), backoff, status UI. **Partly built:** `bssh_conn_manager`
    per session, exponential backoff capped and jittered, network-change
    retry, user-disconnect suppression, and an attempt limit so a dead host
-   stops waking the radio. Still open: SSH-level keepalive to detect a dead
-   socket quickly, and the reconnect status in the UI.
+   stops waking the radio. **Keepalive is built** (§4): a per-host
+   SSH_MSG_IGNORE interval for NAT plus TCP keepalive and `TCP_USER_TIMEOUT`
+   for dead-peer detection, applied both when settings resolve and when the
+   transport is built — they arrive in that order, and doing only the first
+   leaves every first connection unprotected. The reconnect status is in the
+   UI. Still open: verifying the timings against a real dropped link rather
+   than against a unit test.
 7. **M6 – Security & profiles.** `bssh_secret_store` with both backends, key
    auth, host-key verification, host profiles, biometric unlock where available.
    **Started:** public-key authentication is tried before any password

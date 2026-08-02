@@ -2,6 +2,8 @@
 #define BSSH_SSH_SESSION_H
 
 #include <QByteArray>
+
+#include <functional>
 #include <QObject>
 #include <QString>
 
@@ -56,6 +58,21 @@ public:
 	 */
 	static bssh_ssh_session *create(QObject *parent = nullptr);
 
+	/*
+	 * Replaces what create() builds. This is the seam sec 12.3 asks for:
+	 * "a fake implementation of this one interface, replaying a captured
+	 * byte stream, is how the emulator gets tested without a server". The
+	 * fake existed already, but nothing could get one INTO a
+	 * bssh_session, so everything between the session and the transport
+	 * -- reconnection, keepalive, how a clean exit differs from a drop --
+	 * was reachable only by running against a real host.
+	 *
+	 * Null restores the built-in backend. Tests must do that in cleanup,
+	 * or the next test builds a transport out of a factory whose captured
+	 * state is gone.
+	 */
+	static void set_factory(std::function<bssh_ssh_session *(QObject *)> factory);
+
 	state_t state() const { return m_state; }
 
 	/*
@@ -73,6 +90,21 @@ public:
 
 	virtual void send(const QByteArray &bytes) = 0;
 	virtual void disconnect_from_host() = 0;
+
+	/*
+	 * How often to prove the connection is still there, in seconds; 0
+	 * disables it (project.md sec 4, sec 5.3).
+	 *
+	 * This is on the interface rather than inside one implementation
+	 * because it is a property of the connection, not of the library: a
+	 * libssh2 backend would satisfy it with libssh2_keepalive_config, and
+	 * the fake used by the tests satisfies it by recording the value.
+	 *
+	 * The interval belongs to the host's preset (keepalive_seconds), so a
+	 * jump box on a hostile NAT can be told to speak up more often than a
+	 * machine on the LAN.
+	 */
+	virtual void set_keepalive(int seconds) = 0;
 
 	/* Answers host_key_unknown/host_key_changed: trust it and continue. */
 	virtual void accept_host_key() = 0;
@@ -126,6 +158,9 @@ signals:
 
 protected:
 	void set_state(state_t state);
+
+	/* Null unless a test installed a factory; create() consults it first. */
+	static bssh_ssh_session *create_from_factory(QObject *parent);
 
 private:
 	state_t m_state;

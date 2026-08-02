@@ -216,3 +216,48 @@ void session_registry_test::an_encrypted_key_is_offered_before_a_password() {
 	transport.supply_key_passphrase(QStringLiteral("hunter2"));
 	QCOMPARE(transport.key_passphrase(), QStringLiteral("hunter2"));
 }
+
+void session_registry_test::a_hosts_keepalive_interval_reaches_its_transport() {
+	/*
+	 * sec 5.3 wants a keepalive so a dead socket is noticed rather than
+	 * typed into. It is only worth anything if the host's interval
+	 * actually arrives at the transport, and the two travel in opposite
+	 * directions: settings are resolved when the session is created,
+	 * while the transport is not built until someone connects.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("nat.example.com");
+
+	bssh_session session(profile);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("keepalive_seconds"), 45);
+	session.set_settings(settings);
+
+	/* Set before there was anything to set it on. */
+	QVERIFY(fake == nullptr);
+
+	session.connect_to_host();
+	QVERIFY(fake != nullptr);
+
+	/*
+	 * The case this test exists for: applied at connect time from the
+	 * settings the session was already carrying. Applying it only in
+	 * set_settings would leave every FIRST connection without a
+	 * keepalive, which is exactly the one most likely to be dropped.
+	 */
+	QCOMPARE(fake->keepalive_seconds(), 45);
+
+	/* And a later preset edit retimes the live connection. */
+	settings.insert(QStringLiteral("keepalive_seconds"), 15);
+	session.set_settings(settings);
+	QCOMPARE(fake->keepalive_seconds(), 15);
+
+	bssh_ssh_session::set_factory(nullptr);
+}

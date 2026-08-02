@@ -20,3 +20,17 @@ void bssh_ssh_session::set_state(state_t state) {
 	m_state = state;
 	emit state_changed(m_state);
 }
+
+/*
+ * Empty except in tests. A function pointer rather than a compile-time
+ * switch so the production build still links exactly one backend.
+ */
+static std::function<bssh_ssh_session *(QObject *)> g_factory;
+
+void bssh_ssh_session::set_factory(std::function<bssh_ssh_session *(QObject *)> factory) {
+	g_factory = std::move(factory);
+}
+
+bssh_ssh_session *bssh_ssh_session::create_from_factory(QObject *parent) {
+	return g_factory ? g_factory(parent) : nullptr;
+}

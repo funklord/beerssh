@@ -44,6 +44,19 @@ void bssh_session::set_settings(const QJsonObject &settings) {
 	if (settings == m_settings) return;
 
 	m_settings = settings;
+
+	/*
+	 * Straight through to the transport (sec 5.3). The interval is a
+	 * per-host setting because the right value is a property of the
+	 * network in between: a box behind a mobile carrier's NAT needs to
+	 * speak up every minute to keep its mapping, and one on the LAN does
+	 * not need to speak at all.
+	 */
+	if (m_transport) {
+		m_transport->set_keepalive(
+		        m_settings.value(QStringLiteral("keepalive_seconds")).toInt());
+	}
+
 	emit settings_changed();
 }
 
@@ -71,6 +84,18 @@ void bssh_session::connect_to_host() {
 	m_used_key_auth = false;
 	m_password_requested = false;
 	m_transport = bssh_ssh_session::create(this);
+
+	/*
+	 * The interval is applied HERE as well as in set_settings, because the
+	 * two arrive in the other order: a session is created and has its
+	 * settings resolved long before anyone presses connect, so at
+	 * set_settings time there is no transport to tell. Applying it in only
+	 * one of the two places leaves every first connection running without
+	 * a keepalive -- which is precisely the connection a phone is most
+	 * likely to lose.
+	 */
+	m_transport->set_keepalive(
+	        m_settings.value(QStringLiteral("keepalive_seconds")).toInt());
 
 	connect(m_transport, &bssh_ssh_session::bytes_received,
 	         m_emulator, &bssh_emulator::feed);
