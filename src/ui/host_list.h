@@ -42,6 +42,9 @@ signals:
 	void open_requested(const bssh_profile_t &profile);
 	void add_requested();
 
+	/* The preset editor, reached from the only screen a phone starts on. */
+	void presets_requested();
+
 private slots:
 	void on_row_activated();
 
@@ -49,6 +52,7 @@ private:
 	bssh_profile_store *m_store;
 	QListWidget *m_list;
 	QToolButton *m_add;
+	QToolButton *m_presets;
 };
 
 #endif /* BSSH_HOST_LIST_H */

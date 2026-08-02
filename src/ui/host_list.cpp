@@ -5,6 +5,7 @@
 #include <QResizeEvent>
 #include <QScroller>
 #include <QToolButton>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 
 #include "term/font_catalog.h"
@@ -27,12 +28,30 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
 
-	QLabel *title = new QLabel(QStringLiteral("  Hosts"), this);
+	/*
+	 * The heading row carries the one action that is not about a specific
+	 * host. A phone front door has no menu bar to hang it from (sec 8.5),
+	 * and presets are the thing hosts are configured THROUGH -- so it
+	 * belongs on the screen that lists them, not buried behind a host.
+	 */
+	QWidget *heading = new QWidget(this);
+	QHBoxLayout *heading_row = new QHBoxLayout(heading);
+	heading_row->setContentsMargins(0, 0, 8, 0);
+
+	QLabel *title = new QLabel(QStringLiteral("  Hosts"), heading);
 	QFont title_font = bssh_scaled_font(title->font(), 1.4);
 	title_font.setBold(true);
 	title->setFont(title_font);
 	title->setMinimumHeight(56);
-	layout->addWidget(title);
+	heading_row->addWidget(title, 1);
+
+	m_presets = new QToolButton(heading);
+	m_presets->setText(QStringLiteral("Presets"));
+	m_presets->setMinimumHeight(48);
+	connect(m_presets, &QToolButton::clicked, this, &bssh_host_list::presets_requested);
+	heading_row->addWidget(m_presets, 0);
+
+	layout->addWidget(heading);
 
 	m_list = new QListWidget(this);
 	m_list->setFrameShape(QFrame::NoFrame);

@@ -37,6 +37,7 @@
 #include "ui/host_editor.h"
 #include "ui/host_list.h"
 #include "ui/key_row.h"
+#include "ui/preset_editor.h"
 #include "ui/session_dialog.h"
 #include "ui/tab_status.h"
 #include "ui/terminal_view.h"
@@ -49,6 +50,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_session_dialog(nullptr),
       m_host_list(nullptr),
       m_host_editor(nullptr),
+      m_preset_editor(nullptr),
       m_terminal_view(new bssh_terminal_view(this)),
       m_status_label(new QLabel(this)),
       m_registry(new bssh_session_registry(this)),
@@ -133,6 +135,29 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 			m_pages->setCurrentWidget(m_host_list);
 		});
 		connect(m_host_editor, &bssh_host_editor::cancelled, this, [this] {
+			m_pages->setCurrentWidget(m_host_list);
+		});
+
+		/*
+		 * The same editor the desktop dialog embeds, as its own page
+		 * (sec 8.5: same job, different shape). sec 14 is explicit that a
+		 * milestone lands on both platforms before the next one starts,
+		 * and a preset system editable only on a desktop would leave the
+		 * phone -- the device this app is mostly for -- stuck with
+		 * whatever was shipped.
+		 */
+		m_preset_editor = new bssh_preset_editor(m_profile_store, true, this);
+		m_pages->addWidget(m_preset_editor);
+
+		connect(m_host_list, &bssh_host_list::presets_requested, this, [this] {
+			m_preset_editor->reload();
+			m_pages->setCurrentWidget(m_preset_editor);
+		});
+		connect(m_preset_editor, &bssh_preset_editor::preset_saved,
+		         this, &bssh_main_window::reresolve_sessions);
+		connect(m_preset_editor, &bssh_preset_editor::preset_removed,
+		         this, &bssh_main_window::reresolve_sessions);
+		connect(m_preset_editor, &bssh_preset_editor::back_requested, this, [this] {
 			m_pages->setCurrentWidget(m_host_list);
 		});
 	} else {

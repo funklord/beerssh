@@ -10,6 +10,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QScroller>
 #include <QVBoxLayout>
 
 #include "model/profile_store.h"
@@ -24,9 +25,13 @@
 static const int BSSH_MIN_SCROLLBACK = 0;
 static const int BSSH_MAX_SCROLLBACK = 200000;
 
-bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, QWidget *parent)
+/* sec 6.2's floor, the same one the key row and the host page use. */
+static const int BSSH_TOUCH_HEIGHT_DP = 48;
+
+bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QWidget *parent)
     : QWidget(parent),
-      m_store(store) {
+      m_store(store),
+      m_touch(touch) {
 	QHBoxLayout *columns = new QHBoxLayout(this);
 
 	/*
@@ -48,10 +53,27 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, QWidget *paren
 	m_presets->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	m_presets->setTextElideMode(Qt::ElideRight);
 
-	columns->addWidget(m_presets);
-
 	QVBoxLayout *right = new QVBoxLayout();
-	columns->addLayout(right, 1);
+
+	if (m_touch) {
+		/*
+		 * One column. Side by side, the list gets a fifth of a phone's
+		 * width and every preset reads "Default Lin...", which is a
+		 * chooser that cannot be chosen from. Above the fields it gets
+		 * the whole width and only the height it needs.
+		 */
+		m_presets->setMaximumWidth(QWIDGETSIZE_MAX);
+		m_presets->setMaximumHeight(200);
+		QScroller::grabGesture(m_presets->viewport(), QScroller::LeftMouseButtonGesture);
+
+		QVBoxLayout *single = new QVBoxLayout();
+		single->addWidget(m_presets, 0);
+		single->addLayout(right, 1);
+		columns->addLayout(single);
+	} else {
+		columns->addWidget(m_presets);
+		columns->addLayout(right, 1);
+	}
 
 	QFormLayout *form = new QFormLayout();
 	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -125,6 +147,27 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, QWidget *paren
 	buttons->addWidget(m_delete);
 	buttons->addWidget(m_save);
 	right->addLayout(buttons);
+
+	if (m_touch) {
+		/*
+		 * A page with no way out is the one bug a phone punishes hardest:
+		 * the system back gesture is not wired to this stack, so without
+		 * this the only exit from the preset editor is killing the app.
+		 */
+		QPushButton *back = new QPushButton(QStringLiteral("Back to hosts"), this);
+		back->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
+		connect(back, &QPushButton::clicked, this, &bssh_preset_editor::back_requested);
+		right->addWidget(back);
+
+		for (QWidget *control : QList<QWidget *>{ m_name, m_term, m_scrollback,
+			                                         m_cursor_style, m_keepalive,
+			                                         m_on_connect, m_bell, m_cursor_blink,
+			                                         m_compression, m_save, m_clone,
+			                                         m_delete }) {
+			control->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
+		}
+		m_font->set_touch_sized(true);
+	}
 
 	connect(m_presets, &QListWidget::itemSelectionChanged,
 	         this, &bssh_preset_editor::on_selection_changed);

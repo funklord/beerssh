@@ -40,7 +40,15 @@ class bssh_preset_editor : public QWidget {
 	Q_OBJECT
 
 public:
-	explicit bssh_preset_editor(bssh_profile_store *store, QWidget *parent = nullptr);
+	/*
+	 * touch picks the SHAPE, not the contents (sec 8.5). The desktop gets
+	 * PuTTY's two columns; a phone gets one column, a short list above the
+	 * fields, controls that clear sec 6.2's 48dp floor, and a way back --
+	 * which the two-column version does not need because a dialog has a
+	 * category tree to click away to and a full-screen page has nothing.
+	 */
+	explicit bssh_preset_editor(bssh_profile_store *store, bool touch = false,
+	                             QWidget *parent = nullptr);
 
 	/* Re-reads the store -- after a save, or after a host changed which
 	 * preset it follows. */
@@ -57,6 +65,9 @@ signals:
 	 */
 	void preset_saved(int preset_id);
 	void preset_removed(int preset_id);
+
+	/* Touch layout only: the page is done and the caller should go back. */
+	void back_requested();
 
 private slots:
 	void on_selection_changed();
@@ -90,6 +101,7 @@ private:
 	QPushButton *m_delete;
 
 	bssh_preset_t m_current;
+	bool m_touch;
 };
 
 #endif /* BSSH_PRESET_EDITOR_H */

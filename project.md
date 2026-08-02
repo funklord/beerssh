@@ -1347,8 +1347,12 @@ background).
     instead of Save rather than a Save that silently fails, and saving
     re-resolves the *open* sessions that follow the preset — propagation
     that only reached the next connection would look like the edit had not
-    worked. Still open: JSON import/export through the UI, and the
-    per-field override badges and revert control (§10.1) on the host side.
+    worked. On Android the same editor is reached from the Hosts screen
+    and laid out for touch — one column, a full-width list, 48dp controls
+    and a way back — because §14's both-platforms rule is not satisfied by
+    a desktop layout that technically renders on a phone. Still open: JSON
+    import/export through the UI, and the per-field override badges and
+    revert control (§10.1) on the host side.
 12. **M11 – Settings, polish, accessibility.**
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop
