@@ -74,6 +74,9 @@ public:
 	virtual void send(const QByteArray &bytes) = 0;
 	virtual void disconnect_from_host() = 0;
 
+	/* Answers host_key_unknown/host_key_changed: trust it and continue. */
+	virtual void accept_host_key() = 0;
+
 signals:
 	void bytes_received(const QByteArray &bytes);
 	void state_changed(bssh_ssh_session::state_t state);
@@ -94,6 +97,21 @@ signals:
 	 * and it is what every other SSH client gets right.
 	 */
 	void password_required();
+
+	/*
+	 * The host is not in our known-hosts store. The connection is HELD
+	 * open, not failed: nothing continues until someone answers
+	 * accept_host_key() or disconnects. Never accepted silently (sec 11).
+	 */
+	void host_key_unknown(const QString &fingerprint);
+
+	/*
+	 * The host's key is not the one we recorded. Same hold, different
+	 * weight: this is what a man-in-the-middle looks like, and it is also
+	 * what a reinstalled server looks like, so it must be answered by a
+	 * person rather than by a policy.
+	 */
+	void host_key_changed(const QString &fingerprint);
 
 protected:
 	void set_state(state_t state);

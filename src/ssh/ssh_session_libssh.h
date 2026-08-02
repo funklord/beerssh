@@ -34,6 +34,7 @@ public:
 	void resize(int cols, int rows) override;
 	void send(const QByteArray &bytes) override;
 	void disconnect_from_host() override;
+	void accept_host_key() override;
 
 private:
 	QThread m_thread;

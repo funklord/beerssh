@@ -95,9 +95,9 @@ triple-click line selection, the Android background service, and the
 tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
-never `~/.ssh/known_hosts`. An unknown or changed key fails the connection
-and prints the fingerprint; the trust prompt that would let you accept one
-from the UI is M6, so until then an entry gets added by hand.
+never `~/.ssh/known_hosts`. An unknown host shows its fingerprint and waits
+for you to accept before anything is written; a *changed* key gets a
+louder, differently-worded warning and defaults to cancelling.
 
 See `project.md` §14 for the milestone plan.
 

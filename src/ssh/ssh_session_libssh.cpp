@@ -66,6 +66,7 @@ public slots:
 	void do_resize(int cols, int rows);
 	void do_send(const QByteArray &bytes);
 	void do_disconnect();
+	void do_accept_host_key();
 	void drain();
 
 signals:
@@ -79,12 +80,16 @@ signals:
 	void failed(const QString &reason);
 	void exited(int exit_status);
 	void password_required();
+	void host_key_unknown(const QString &fingerprint);
+	void host_key_changed(const QString &fingerprint);
 
 private:
 	void teardown();
 	void fail(const QString &reason);
 	QString session_error() const;
 	bool verify_host_key();
+	QString server_fingerprint() const;
+	void authenticate();
 
 	ssh_session m_session;
 	ssh_channel m_channel;
@@ -121,18 +126,7 @@ void bssh_libssh_worker::teardown() {
 	}
 }
 
-bool bssh_libssh_worker::verify_host_key() {
-	const enum ssh_known_hosts_e known = ssh_session_is_known_server(m_session);
-	if (known == SSH_KNOWN_HOSTS_OK) return true;
-
-	/*
-	 * Never silently accept (sec 11). At M1 there is no UI to ask
-	 * through, so an unknown or changed key is a hard failure that names
-	 * the fingerprint -- the user can compare it and add the entry
-	 * themselves. M6 turns this into the trust-on-first-use prompt and
-	 * the key-changed warning, which is the same decision with a dialog
-	 * in front of it, not a different policy.
-	 */
+QString bssh_libssh_worker::server_fingerprint() const {
 	QString fingerprint = QStringLiteral("<unavailable>");
 	ssh_key key = nullptr;
 	if (ssh_get_server_publickey(m_session, &key) == SSH_OK) {
@@ -149,15 +143,43 @@ bool bssh_libssh_worker::verify_host_key() {
 		ssh_key_free(key);
 	}
 
+	return fingerprint;
+}
+
+bool bssh_libssh_worker::verify_host_key() {
+	const enum ssh_known_hosts_e known = ssh_session_is_known_server(m_session);
+	if (known == SSH_KNOWN_HOSTS_OK) return true;
+
+	/*
+	 * Never accepted silently (sec 11), and never decided here: the
+	 * connection is HELD -- session open, nothing torn down -- while a
+	 * person answers. Failing instead, which is what this did before,
+	 * meant the only way to reach a new host was to edit known_hosts by
+	 * hand.
+	 */
+	const QString fingerprint = server_fingerprint();
+
 	if (known == SSH_KNOWN_HOSTS_CHANGED) {
-		fail(QStringLiteral("HOST KEY CHANGED -- possible man-in-the-middle. Server key is %1. "
-		                     "Not connecting.").arg(fingerprint));
+		emit host_key_changed(fingerprint);
 	} else {
-		fail(QStringLiteral("Host key is not known: %1. Add it to %2 to continue "
-		                     "(the trust prompt arrives at M6).")
-		         .arg(fingerprint, known_hosts_path()));
+		emit host_key_unknown(fingerprint);
 	}
 	return false;
+}
+
+void bssh_libssh_worker::do_accept_host_key() {
+	if (!m_session) return;
+
+	/*
+	 * Writes the key to OUR store (sec 11), not to ~/.ssh/known_hosts,
+	 * and only ever in response to someone having said yes.
+	 */
+	if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
+		fail(session_error());
+		return;
+	}
+
+	authenticate();
 }
 
 void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QString &user) {
@@ -188,6 +210,12 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	}
 
 	if (!verify_host_key()) return;
+
+	authenticate();
+}
+
+void bssh_libssh_worker::authenticate() {
+	if (!m_session) return;
 
 	emit state_changed(bssh_ssh_session::AUTHENTICATING);
 
@@ -347,6 +375,10 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 	         this, &bssh_ssh_session::shell_exited);
 	connect(m_worker, &bssh_libssh_worker::password_required,
 	         this, &bssh_ssh_session::password_required);
+	connect(m_worker, &bssh_libssh_worker::host_key_unknown,
+	         this, &bssh_ssh_session::host_key_unknown);
+	connect(m_worker, &bssh_libssh_worker::host_key_changed,
+	         this, &bssh_ssh_session::host_key_changed);
 	connect(m_worker, &bssh_libssh_worker::state_changed, this, [this](int state) {
 		set_state(static_cast<state_t>(state));
 	});
@@ -398,6 +430,10 @@ void bssh_ssh_session_libssh::send(const QByteArray &bytes) {
 
 void bssh_ssh_session_libssh::disconnect_from_host() {
 	QMetaObject::invokeMethod(m_worker, "do_disconnect", Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::accept_host_key() {
+	QMetaObject::invokeMethod(m_worker, "do_accept_host_key", Qt::QueuedConnection);
 }
 
 bssh_ssh_session *bssh_ssh_session::create(QObject *parent) {

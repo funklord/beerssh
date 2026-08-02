@@ -68,6 +68,12 @@ public:
 	void resize(int cols, int rows) override;
 	void send(const QByteArray &bytes) override;
 	void disconnect_from_host() override;
+	void accept_host_key() override { m_host_key_accepted = true; }
+
+	bool host_key_accepted() const { return m_host_key_accepted; }
+
+	void simulate_host_key_unknown(const QString &fingerprint) { emit host_key_unknown(fingerprint); }
+	void simulate_host_key_changed(const QString &fingerprint) { emit host_key_changed(fingerprint); }
 
 private:
 	QList<QByteArray> m_script;
@@ -76,6 +82,7 @@ private:
 	int m_cols;
 	int m_rows;
 	int m_resize_count;
+	bool m_host_key_accepted = false;
 };
 
 #endif /* BSSH_FAKE_SSH_SESSION_H */

@@ -171,3 +171,29 @@ void session_registry_test::a_password_is_requested_only_when_keys_fail() {
 	transport.simulate_password_required();
 	QCOMPARE(asked.count(), 1);
 }
+
+void session_registry_test::a_host_key_is_never_trusted_without_an_answer() {
+	bssh_fake_ssh_session transport;
+	QSignalSpy unknown(&transport, &bssh_ssh_session::host_key_unknown);
+	QSignalSpy changed(&transport, &bssh_ssh_session::host_key_changed);
+
+	transport.simulate_host_key_unknown(QStringLiteral("SHA256:abc"));
+	QCOMPARE(unknown.count(), 1);
+	QCOMPARE(unknown.first().first().toString(), QStringLiteral("SHA256:abc"));
+
+	/*
+	 * Asking is not accepting. Nothing may be written to the known-hosts
+	 * store until someone actually answers (sec 11) -- the failure mode
+	 * being guarded against is a prompt that records the key while it is
+	 * still on screen.
+	 */
+	QVERIFY(!transport.host_key_accepted());
+
+	transport.accept_host_key();
+	QVERIFY(transport.host_key_accepted());
+
+	/* A changed key is reported as its own thing, not as a first sighting. */
+	transport.simulate_host_key_changed(QStringLiteral("SHA256:xyz"));
+	QCOMPARE(changed.count(), 1);
+	QCOMPARE(unknown.count(), 1);
+}

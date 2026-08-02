@@ -76,6 +76,9 @@ public:
 
 	void supply_password(const QString &password);
 
+	/* Trust the host key that is being asked about, and carry on. */
+	void accept_host_key();
+
 	/* True when this session got in without a password at all. */
 	bool used_key_auth() const { return m_used_key_auth; }
 
@@ -106,6 +109,10 @@ signals:
 
 	/* Keys did not get in; the window should ask. */
 	void needs_password();
+
+	/* A host key needs a person's answer -- see bssh_ssh_session. */
+	void host_key_unknown(const QString &fingerprint);
+	void host_key_changed(const QString &fingerprint);
 	void failed(const QString &reason);
 
 private:

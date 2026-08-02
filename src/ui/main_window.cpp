@@ -241,6 +241,70 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 	bssh_session *session = m_registry->create(profile);
 	connect(session, &bssh_session::failed, this, &bssh_main_window::on_failed);
 
+	/*
+	 * First contact with a host. The fingerprint is shown because it is
+	 * the only thing the user can actually check -- against what the
+	 * server's owner published, or against `ssh-keyscan` from somewhere
+	 * they already trust.
+	 */
+	connect(session, &bssh_session::host_key_unknown, this, [this, session](const QString &fp) {
+		QMessageBox box(this);
+		box.setIcon(QMessageBox::Question);
+		box.setWindowTitle(QStringLiteral("Unknown host key"));
+		box.setText(QStringLiteral("The host %1 is not in BeerSSH's known-hosts store.")
+		                    .arg(session->profile().target()));
+		box.setInformativeText(QStringLiteral(
+		        "Key fingerprint:\n%1\n\nCheck it against a source you already trust "
+		        "before accepting. Accepting records it for next time.").arg(fp));
+
+		QPushButton *accept = box.addButton(QStringLiteral("Accept and connect"),
+		                                     QMessageBox::AcceptRole);
+		box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
+
+		/*
+		 * Cancel is the default, so leaning on Enter does not trust a
+		 * host nobody looked at.
+		 */
+		box.setDefaultButton(QMessageBox::Cancel);
+		box.exec();
+
+		if (box.clickedButton() == static_cast<QAbstractButton *>(accept)) {
+			session->accept_host_key();
+		} else {
+			session->disconnect_from_host();
+		}
+	});
+
+	/*
+	 * A changed key is a different question wearing the same clothes, and
+	 * the dialog says so: this is what a man-in-the-middle looks like, and
+	 * it is also what a reinstalled server looks like. Only a person can
+	 * tell those apart, which is why it is asked rather than decided.
+	 */
+	connect(session, &bssh_session::host_key_changed, this, [this, session](const QString &fp) {
+		QMessageBox box(this);
+		box.setIcon(QMessageBox::Warning);
+		box.setWindowTitle(QStringLiteral("HOST KEY CHANGED"));
+		box.setText(QStringLiteral("The key for %1 is NOT the one recorded.")
+		                    .arg(session->profile().target()));
+		box.setInformativeText(QStringLiteral(
+		        "New fingerprint:\n%1\n\nThis happens when a server is rebuilt -- and it "
+		        "is also exactly what an interception attack looks like. Do not accept "
+		        "unless you know why the key changed.").arg(fp));
+
+		QPushButton *accept = box.addButton(QStringLiteral("Accept the new key"),
+		                                     QMessageBox::DestructiveRole);
+		box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
+		box.setDefaultButton(QMessageBox::Cancel);
+		box.exec();
+
+		if (box.clickedButton() == static_cast<QAbstractButton *>(accept)) {
+			session->accept_host_key();
+		} else {
+			session->disconnect_from_host();
+		}
+	});
+
 	connect(session, &bssh_session::needs_password, this, [this, session] {
 		bool ok = false;
 		const QString password = QInputDialog::getText(

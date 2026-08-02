@@ -1068,7 +1068,14 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   model cleanly: the agent is just another `bssh_secret_store` implementation
   that never yields the key material at all.
 - **Host key verification**: known-hosts store with trust-on-first-use prompt and
-  clear warning on key change (MITM protection). Do not silently accept. Keep
+  clear warning on key change (MITM protection). Do not silently accept.
+  **Built.** An unknown or changed key **holds the connection open** rather than
+  failing it — session up, nothing torn down, nothing written — until a person
+  answers. Failing instead (which is what it did first) meant the only way to
+  reach a new host was to hand-edit the store. The two prompts are deliberately
+  not the same dialog: first contact asks, a *changed* key warns, says plainly
+  that this is both what a rebuilt server and an interception attack look like,
+  and defaults to Cancel so leaning on Enter trusts nothing. Keep
   BeerSSH's own known-hosts store — **do not** read or write the user's
   `~/.ssh/known_hosts` on desktop; sharing that file across two tools with
   different trust UIs is how a warning ends up silently pre-accepted.
