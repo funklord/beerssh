@@ -152,3 +152,22 @@ void session_registry_test::the_transport_reports_which_kind_of_ending_it_was() 
 	QCOMPARE(failed.count(), 1);
 	QCOMPARE(exited.count(), 1);
 }
+
+void session_registry_test::a_password_is_requested_only_when_keys_fail() {
+	bssh_fake_ssh_session transport;
+	QSignalSpy asked(&transport, &bssh_ssh_session::password_required);
+
+	/*
+	 * Key authentication succeeding must not ask for anything. Prompting
+	 * before trying a key -- which is what this did until now -- asks for
+	 * a credential the user usually does not need to give, and forces the
+	 * password to be kept in memory so a reconnect can reuse it (sec 11).
+	 */
+	transport.simulate_key_auth_success();
+	QCOMPARE(transport.state(), bssh_ssh_session::CONNECTED);
+	QCOMPARE(asked.count(), 0);
+
+	/* And when they fail, the request is explicit rather than assumed. */
+	transport.simulate_password_required();
+	QCOMPARE(asked.count(), 1);
+}

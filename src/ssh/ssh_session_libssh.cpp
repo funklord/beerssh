@@ -78,6 +78,7 @@ signals:
 	void bytes_received(const QByteArray &bytes);
 	void failed(const QString &reason);
 	void exited(int exit_status);
+	void password_required();
 
 private:
 	void teardown();
@@ -189,6 +190,30 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	if (!verify_host_key()) return;
 
 	emit state_changed(bssh_ssh_session::AUTHENTICATING);
+
+	/*
+	 * Keys first, and this is the ordering every SSH client uses:
+	 * ssh_userauth_publickey_auto tries the agent and then the default
+	 * identities (~/.ssh/id_ed25519 and friends). Most people have one,
+	 * and asking for a password before trying is asking for a credential
+	 * that was never needed.
+	 *
+	 * It also removes the reason M5 had to keep the password in memory
+	 * for the life of the session: a key-authenticated session can
+	 * reconnect on its own after a network drop, with nothing held.
+	 *
+	 * A passphrase-protected key with no agent loaded is NOT handled here
+	 * -- passing nullptr means "unencrypted keys and the agent only", and
+	 * a passphrase prompt is its own piece of UI. Such a key simply falls
+	 * through to the password path rather than silently failing.
+	 */
+	const int key_rc = ssh_userauth_publickey_auto(m_session, nullptr, nullptr);
+	if (key_rc == SSH_AUTH_SUCCESS) {
+		emit state_changed(bssh_ssh_session::CONNECTED);
+		return;
+	}
+
+	emit password_required();
 }
 
 void bssh_libssh_worker::do_authenticate_password(const QString &password) {
@@ -320,6 +345,8 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 	         this, &bssh_ssh_session::failed);
 	connect(m_worker, &bssh_libssh_worker::exited,
 	         this, &bssh_ssh_session::shell_exited);
+	connect(m_worker, &bssh_libssh_worker::password_required,
+	         this, &bssh_ssh_session::password_required);
 	connect(m_worker, &bssh_libssh_worker::state_changed, this, [this](int state) {
 		set_state(static_cast<state_t>(state));
 	});

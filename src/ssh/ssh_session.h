@@ -87,6 +87,14 @@ signals:
 	 */
 	void shell_exited(int exit_status);
 
+	/*
+	 * Key authentication did not get us in, so a password is needed.
+	 * Emitted instead of assuming one: prompting before trying a key is
+	 * how a client asks for a credential the user does not need to give,
+	 * and it is what every other SSH client gets right.
+	 */
+	void password_required();
+
 protected:
 	void set_state(state_t state);
 

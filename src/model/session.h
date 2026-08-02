@@ -68,7 +68,16 @@ public:
 	void note_remote_exit(int exit_status);
 	void note_connection_lost();
 
-	void connect_to_host(const QString &password);
+	/*
+	 * Connects. No password up front: keys are tried first, and one is
+	 * requested through needs_password() only if they fail.
+	 */
+	void connect_to_host();
+
+	void supply_password(const QString &password);
+
+	/* True when this session got in without a password at all. */
+	bool used_key_auth() const { return m_used_key_auth; }
 
 	/*
 	 * Reconnect after a drop. A NEW remote shell: the running program and
@@ -94,6 +103,9 @@ signals:
 
 	/* The shell ended: the window says so instead of silently retrying. */
 	void shell_exited(int exit_status);
+
+	/* Keys did not get in; the window should ask. */
+	void needs_password();
 	void failed(const QString &reason);
 
 private:
@@ -108,6 +120,8 @@ private:
 	bool m_unseen_bell;
 	bool m_remote_exited;
 	int m_exit_status;
+	bool m_used_key_auth;
+	bool m_password_requested;
 	bool m_on_screen;
 	int m_cols;
 	int m_rows;

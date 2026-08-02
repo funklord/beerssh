@@ -232,21 +232,30 @@ void bssh_main_window::connect_to(const QString &target) {
 void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 	if (!profile.is_valid()) return;
 
-	bool ok = false;
-	const QString password = QInputDialog::getText(
-	        this, QStringLiteral("BeerSSH"),
-	        QStringLiteral("Password for %1:").arg(profile.target()),
-	        QLineEdit::Password, QString(), &ok);
-	if (!ok) return;
-
 	/*
-	 * The session belongs to the registry from the moment it exists. The
-	 * window shows it; it never owns it (sec 3, core principle 2). The
-	 * password is handed straight over and not kept here -- proper
-	 * credential handling is sec 11's Keystore work at M6.
+	 * No password prompt here. Keys are tried first and most people have
+	 * one, so asking up front is asking for a credential that is usually
+	 * not needed -- the session asks through needs_password() only when
+	 * the keys have actually failed.
 	 */
 	bssh_session *session = m_registry->create(profile);
 	connect(session, &bssh_session::failed, this, &bssh_main_window::on_failed);
+
+	connect(session, &bssh_session::needs_password, this, [this, session] {
+		bool ok = false;
+		const QString password = QInputDialog::getText(
+		        this, QStringLiteral("BeerSSH"),
+		        QStringLiteral("Password for %1:").arg(session->profile().target()),
+		        QLineEdit::Password, QString(), &ok);
+
+		if (!ok) {
+			session->disconnect_from_host();
+			return;
+		}
+
+		session->supply_password(password);
+	});
+
 	connect(session, &bssh_session::shell_exited, this, [this, session](int status) {
 		if (session != m_current) return;
 
@@ -265,7 +274,7 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 
 	m_pages->setCurrentWidget(m_terminal_page);
 	show_session(session);
-	session->connect_to_host(password);
+	session->connect_to_host();
 }
 
 void bssh_main_window::on_add_host() {

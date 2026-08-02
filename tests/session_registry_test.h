@@ -21,6 +21,7 @@ private slots:
 	void live_count_ignores_dead_sessions();
 	void title_falls_back_from_osc_to_profile();
 	void the_transport_reports_which_kind_of_ending_it_was();
+	void a_password_is_requested_only_when_keys_fail();
 };
 
 #endif /* BSSH_SESSION_REGISTRY_TEST_H */

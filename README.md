@@ -10,8 +10,13 @@ through a real VT emulator — colours, attributes, cursor addressing,
 scrolling and CJK double-width cells all work:
 
 ```sh
-./beerssh user@host        # asks for a password, then shows the shell
+./beerssh user@host        # tries your SSH key, asks for a password only if it fails
 ```
+
+Public-key authentication is tried first — the agent, then your default
+identities — so a key-authenticated session holds no credential at all and
+reconnects on its own after a network drop. Passphrase-protected keys with
+no agent loaded fall through to the password path for now.
 
 Typing works: keys, modifiers, function keys, arrows in both normal and
 application-cursor mode, Meta/Alt, bracketed paste (`Ctrl+Shift+V`), and

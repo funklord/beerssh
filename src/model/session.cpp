@@ -11,6 +11,8 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
       m_unseen_bell(false),
       m_remote_exited(false),
       m_exit_status(0),
+      m_used_key_auth(false),
+      m_password_requested(false),
       m_on_screen(false),
       m_cols(80),
       m_rows(24) {
@@ -53,13 +55,14 @@ bool bssh_session::is_live() const {
 	return current != bssh_ssh_session::DISCONNECTED && current != bssh_ssh_session::FAILED;
 }
 
-void bssh_session::connect_to_host(const QString &password) {
+void bssh_session::connect_to_host() {
 	if (m_transport) return;
 
 	m_user_disconnected = false;
 	m_remote_exited = false;
 	m_exit_status = 0;
-	m_password = password;
+	m_used_key_auth = false;
+	m_password_requested = false;
 	m_transport = bssh_ssh_session::create(this);
 
 	connect(m_transport, &bssh_ssh_session::bytes_received,
@@ -70,6 +73,24 @@ void bssh_session::connect_to_host(const QString &password) {
 	});
 	connect(m_transport, &bssh_ssh_session::shell_exited,
 	         this, &bssh_session::note_remote_exit);
+
+	connect(m_transport, &bssh_ssh_session::password_required, this, [this] {
+		m_password_requested = true;
+
+		/*
+		 * A reconnect can answer for itself if a password was given
+		 * before; a first connection has to ask. Keeping the password
+		 * only once it has actually been needed is narrower than
+		 * keeping it always, which is what this did before keys were
+		 * tried.
+		 */
+		if (!m_password.isEmpty()) {
+			m_transport->authenticate_password(m_password);
+			return;
+		}
+
+		emit needs_password();
+	});
 
 	/*
 	 * The emulator's replies -- cursor reports, device attributes, and
@@ -84,17 +105,14 @@ void bssh_session::connect_to_host(const QString &password) {
 
 	connect(m_transport, &bssh_ssh_session::state_changed,
 	         this, [this](bssh_ssh_session::state_t state) {
-		if (state == bssh_ssh_session::AUTHENTICATING) {
+		if (state == bssh_ssh_session::CONNECTED) {
 			/*
-			 * Kept, not cleared: without it a reconnect cannot
-			 * authenticate, and prompting again for every network blip
-			 * would make auto-reconnect useless. That is a real
-			 * trade-off -- the password now lives in process memory for
-			 * the life of the session -- and it is what sec 11's
-			 * Keystore work at M6 replaces with a key.
+			 * Reached without a password ever being asked for means the
+			 * key worked -- and such a session holds no credential at
+			 * all, so it can reconnect after a drop with nothing kept in
+			 * memory (sec 11).
 			 */
-			m_transport->authenticate_password(m_password);
-		} else if (state == bssh_ssh_session::CONNECTED) {
+			if (!m_password_requested) m_used_key_auth = true;
 			m_transport->open_shell(m_cols, m_rows);
 		}
 		emit state_changed();
@@ -125,8 +143,12 @@ void bssh_session::reconnect() {
 		m_transport = nullptr;
 	}
 
-	const QString password = m_password;
-	connect_to_host(password);
+	connect_to_host();
+}
+
+void bssh_session::supply_password(const QString &password) {
+	m_password = password;
+	if (m_transport) m_transport->authenticate_password(password);
 }
 
 void bssh_session::note_remote_exit(int exit_status) {

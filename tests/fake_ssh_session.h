@@ -37,6 +37,12 @@ public:
 		set_state(DISCONNECTED);
 	}
 
+	/* Keys were tried and did not get in. */
+	void simulate_password_required() { emit password_required(); }
+
+	/* Keys got in; no password was ever asked for. */
+	void simulate_key_auth_success() { set_state(CONNECTED); }
+
 	/* The connection drops underneath a live shell. */
 	void simulate_connection_lost() {
 		emit failed(QStringLiteral("connection reset"));

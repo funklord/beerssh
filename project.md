@@ -1201,6 +1201,11 @@ background).
    socket quickly, and the reconnect status in the UI.
 7. **M6 – Security & profiles.** `bssh_secret_store` with both backends, key
    auth, host-key verification, host profiles, biometric unlock where available.
+   **Started:** public-key authentication is tried before any password
+   (agent, then the default identities), so a key-authenticated session holds
+   no credential at all and can reconnect on its own. Still open: the secret
+   store itself, passphrase-protected keys with no agent loaded, and the
+   trust-on-first-use prompt.
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,
    tab bar, OSC titles (and desktop window title), per-tab status, layout
    persistence. *(Do this before splits — the registry is the foundation.)*
