@@ -261,3 +261,100 @@ void session_registry_test::a_hosts_keepalive_interval_reaches_its_transport() {
 
 	bssh_ssh_session::set_factory(nullptr);
 }
+
+void session_registry_test::every_resolved_setting_reaches_something_that_uses_it() {
+	/*
+	 * The gap this test exists to close: bssh_preset_t had nine settable
+	 * fields, a three-layer resolver, an editor and a config file, and
+	 * NOTHING consumed any of them except the font. A setting a user can
+	 * change and cannot observe is worse than one that is missing --
+	 * missing looks unfinished, this looks broken.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("box.example.com");
+	bssh_session session(profile);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("term"), QStringLiteral("xterm-direct"));
+	settings.insert(QStringLiteral("compression"), true);
+	settings.insert(QStringLiteral("keepalive_seconds"), 45);
+	settings.insert(QStringLiteral("scrollback_lines"), 12345);
+	session.set_settings(settings);
+
+	session.connect_to_host();
+	QVERIFY(fake != nullptr);
+
+	QCOMPARE(fake->term(), QStringLiteral("xterm-direct"));
+	QCOMPARE(fake->compression(), true);
+	QCOMPARE(fake->keepalive_seconds(), 45);
+	QCOMPARE(session.emulator()->scrollback().max_lines(), 12345);
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void session_registry_test::the_on_connect_command_runs_on_every_connect() {
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("box.example.com");
+	bssh_session session(profile);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("on_connect_command"),
+	                 QStringLiteral("tmux attach || tmux new"));
+	session.set_settings(settings);
+
+	session.connect_to_host();
+	fake->simulate_key_auth_success();
+
+	/*
+	 * sec 5.3: a reconnect is a NEW shell, and attaching to tmux is the
+	 * available answer. That only works if the command runs on the
+	 * reconnect too -- which is precisely the connection where the user's
+	 * work is sitting in a detached session waiting for it.
+	 */
+	QVERIFY(fake->written().contains("tmux attach || tmux new\n"));
+
+	const qsizetype first = fake->written().size();
+	fake->simulate_connection_lost();
+	fake->simulate_key_auth_success();
+	QVERIFY2(fake->written().size() > first, "it must run again on a reconnect");
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void session_registry_test::a_silenced_bell_does_not_mark_the_tab() {
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("noisy.example.com");
+	bssh_session session(profile);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("bell_enabled"), false);
+	session.set_settings(settings);
+
+	session.set_on_screen(false);
+	session.emulator()->feed(QByteArrayLiteral("\a"));
+
+	/*
+	 * "Do not tell me about the bell" has to mean the tab dot as well as
+	 * the sound. A build machine that rings every few minutes would
+	 * otherwise keep its tab permanently marked, which trains the user to
+	 * ignore the one marker that means something.
+	 */
+	QVERIFY2(!session.has_unseen_bell(), "a silenced bell must not mark the tab");
+
+	settings.insert(QStringLiteral("bell_enabled"), true);
+	session.set_settings(settings);
+	session.emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY(session.has_unseen_bell());
+}

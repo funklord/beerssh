@@ -141,7 +141,8 @@ class bssh_libssh_worker : public QObject {
 
 public:
 	bssh_libssh_worker() : m_session(nullptr), m_channel(nullptr), m_notifier(nullptr), m_poll(nullptr),
-	                       m_keepalive(nullptr), m_keepalive_seconds(0) {
+	                       m_keepalive(nullptr), m_keepalive_seconds(0),
+	                       m_term(QString::fromLatin1(BSSH_TERM)), m_compression(false) {
 	}
 
 	~bssh_libssh_worker() override {
@@ -158,6 +159,8 @@ public slots:
 	void do_accept_host_key();
 	void do_key_passphrase(const QString &passphrase);
 	void do_set_keepalive(int seconds);
+	void do_set_term(const QString &term);
+	void do_set_compression(bool compression);
 	void drain();
 
 signals:
@@ -195,6 +198,10 @@ private:
 	 */
 	QTimer *m_keepalive;
 	int m_keepalive_seconds;
+
+	/* Applied at connect time; see set_term's comment on the interface. */
+	QString m_term;
+	bool m_compression;
 };
 
 QString bssh_libssh_worker::session_error() const {
@@ -322,6 +329,15 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	ssh_options_set(m_session, SSH_OPTIONS_USER, user_utf8.constData());
 	ssh_options_set(m_session, SSH_OPTIONS_KNOWNHOSTS, known_utf8.constData());
 
+	/*
+	 * Before ssh_connect, because compression is negotiated during the
+	 * handshake: setting it afterwards sets a value nothing will read.
+	 * Worth having as a per-host setting rather than a global one -- it
+	 * trades CPU for bandwidth, which is the right trade over a phone's
+	 * mobile data and the wrong one on a LAN to a low-powered box.
+	 */
+	ssh_options_set(m_session, SSH_OPTIONS_COMPRESSION, m_compression ? "yes" : "no");
+
 	emit state_changed(bssh_ssh_session::RESOLVING);
 	emit state_changed(bssh_ssh_session::CONNECTING);
 
@@ -412,7 +428,8 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 	 * on either platform (sec 3, core principle 1). The remote allocates
 	 * it; this side only ever says how big the grid is.
 	 */
-	if (ssh_channel_request_pty_size(m_channel, BSSH_TERM, cols, rows) != SSH_OK) {
+	if (ssh_channel_request_pty_size(m_channel, m_term.toUtf8().constData(),
+	                                  cols, rows) != SSH_OK) {
 		fail(session_error());
 		return;
 	}
@@ -439,6 +456,28 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 	do_set_keepalive(m_keepalive_seconds);
 
 	drain();
+}
+
+void bssh_libssh_worker::do_set_term(const QString &term) {
+	/*
+	 * Empty means the compiled-in default rather than an empty TERM: a
+	 * remote told its terminal is "" behaves worse than one told nothing
+	 * useful, and a preset with the field cleared means "no opinion".
+	 */
+	m_term = term.isEmpty() ? QString::fromLatin1(BSSH_TERM) : term;
+}
+
+void bssh_libssh_worker::do_set_compression(bool compression) {
+	m_compression = compression;
+
+	/*
+	 * Applied to the session as soon as there is one; otherwise it waits
+	 * for do_connect, which sets it before ssh_connect. Compression is
+	 * negotiated in the handshake and cannot be turned on afterwards.
+	 */
+	if (!m_session) return;
+	ssh_options_set(m_session, SSH_OPTIONS_COMPRESSION,
+	                 m_compression ? "yes" : "no");
 }
 
 void bssh_libssh_worker::do_set_keepalive(int seconds) {
@@ -609,6 +648,18 @@ void bssh_ssh_session_libssh::send(const QByteArray &bytes) {
 void bssh_ssh_session_libssh::set_keepalive(int seconds) {
 	QMetaObject::invokeMethod(m_worker, [this, seconds] {
 		m_worker->do_set_keepalive(seconds);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::set_term(const QString &term) {
+	QMetaObject::invokeMethod(m_worker, [this, term] {
+		m_worker->do_set_term(term);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::set_compression(bool compression) {
+	QMetaObject::invokeMethod(m_worker, [this, compression] {
+		m_worker->do_set_compression(compression);
 	}, Qt::QueuedConnection);
 }
 

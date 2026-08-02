@@ -25,6 +25,13 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 	m_input_router = new bssh_input_router(m_emulator, this);
 
 	connect(m_emulator, &bssh_emulator::bell, this, [this] {
+		/*
+		 * A host whose preset silences the bell (sec 10.2) -- a noisy
+		 * build machine, say -- should not mark its tab either. The
+		 * setting means "do not tell me", not "tell me quietly".
+		 */
+		if (!m_settings.value(QStringLiteral("bell_enabled")).toBool(true)) return;
+
 		if (m_on_screen) return;
 
 		m_unseen_bell = true;
@@ -55,6 +62,20 @@ void bssh_session::set_settings(const QJsonObject &settings) {
 	if (m_transport) {
 		m_transport->set_keepalive(
 		        m_settings.value(QStringLiteral("keepalive_seconds")).toInt());
+		m_transport->set_term(m_settings.value(QStringLiteral("term")).toString());
+		m_transport->set_compression(
+		        m_settings.value(QStringLiteral("compression")).toBool());
+	}
+
+	/*
+	 * How much history this host keeps (sec 10.2). On the emulator rather
+	 * than on a view, because it is session state: scrolling back through
+	 * a pane that was just rebuilt by a layout change must still find the
+	 * history (sec 3, core principle 2).
+	 */
+	if (m_emulator) {
+		const int lines = m_settings.value(QStringLiteral("scrollback_lines")).toInt();
+		if (lines > 0) m_emulator->set_scrollback_lines(lines);
 	}
 
 	emit settings_changed();
@@ -96,6 +117,9 @@ void bssh_session::connect_to_host() {
 	 */
 	m_transport->set_keepalive(
 	        m_settings.value(QStringLiteral("keepalive_seconds")).toInt());
+	m_transport->set_term(m_settings.value(QStringLiteral("term")).toString());
+	m_transport->set_compression(
+	        m_settings.value(QStringLiteral("compression")).toBool());
 
 	connect(m_transport, &bssh_ssh_session::bytes_received,
 	         m_emulator, &bssh_emulator::feed);
@@ -153,6 +177,22 @@ void bssh_session::connect_to_host() {
 			 */
 			if (!m_password_requested) m_used_key_auth = true;
 			m_transport->open_shell(m_cols, m_rows);
+
+			/*
+			 * The on-connect command (sec 10.2), and sec 5.3's practical
+			 * answer to "a reconnect is a new shell": pointing it at
+			 * tmux is what turns a dropped connection into a session
+			 * that comes back with the work still in it.
+			 *
+			 * Sent on every connect, INCLUDING a reconnect, because a
+			 * reconnect is exactly when it matters -- the new shell is
+			 * the one that needs re-attaching.
+			 */
+			const QString command =
+			        m_settings.value(QStringLiteral("on_connect_command")).toString();
+			if (!command.isEmpty()) {
+				m_transport->send(command.toUtf8() + '\n');
+			}
 		}
 		emit state_changed();
 	});

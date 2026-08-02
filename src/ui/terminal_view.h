@@ -13,6 +13,7 @@
 #include "term/scrollback.h"
 
 class QMouseEvent;
+class QTimer;
 class QWheelEvent;
 class bssh_emulator;
 class bssh_input_router;
@@ -66,6 +67,12 @@ public:
 	 * terminal that covers the output it exists to display.
 	 */
 	QString font_substitution_note() const;
+
+	/* block | underline | bar, and whether it blinks (sec 10.2). */
+	void set_cursor_style(const QString &style);
+	void set_cursor_blink(bool blink);
+	QString cursor_style() const { return m_cursor_style; }
+	bool cursor_blinks() const { return m_blink_timer != nullptr; }
 
 private:
 	/*
@@ -230,6 +237,10 @@ private:
 	 * atlas is a bigger structure than this and still open.
 	 */
 	mutable QHash<QString, QFont> m_font_cache;
+
+	QString m_cursor_style;
+	bool m_cursor_on;
+	QTimer *m_blink_timer;
 
 	QColor m_background;
 	QColor m_foreground;

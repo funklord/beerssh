@@ -1405,6 +1405,15 @@ background).
     goes back to *following* rather than merely agreeing for now. Still open:
     import/export through the UI (§10.5; the format is now INI, the same one
     the store uses).
+    **The settings now act.** `term` reaches the PTY request, `compression`
+    the handshake, `keepalive_seconds` the transport, `scrollback_lines` the
+    emulator, `cursor_style`/`cursor_blink` the renderer, `bell_enabled` the
+    tab marker, and `on_connect_command` runs on every connect — including
+    reconnects, which is the one that matters, since §5.3's answer to "a
+    reconnect is a new shell" is attaching to tmux. Still inert:
+    `colour_scheme` and `key_row_layout`, because both need a subsystem that
+    does not exist yet (a set of schemes; a set of key-row layouts) rather
+    than a line of wiring.
 12. **M11 – Settings, polish, accessibility.**
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop

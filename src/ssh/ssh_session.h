@@ -106,6 +106,20 @@ public:
 	 */
 	virtual void set_keepalive(int seconds) = 0;
 
+	/*
+	 * The TERM string the remote is told about, and whether to ask for
+	 * compression (sec 10.2). Both come from the host's preset and both
+	 * must be set BEFORE the shell is opened -- TERM is sent with the PTY
+	 * request, and compression is negotiated during the handshake, so
+	 * neither can be changed on a live connection.
+	 *
+	 * TERM matters more than it looks: it is the whole contract with the
+	 * remote about what this terminal can do, and a switch that only
+	 * understands "vt100" gets a different answer from a modern box.
+	 */
+	virtual void set_term(const QString &term) = 0;
+	virtual void set_compression(bool compression) = 0;
+
 	/* Answers host_key_unknown/host_key_changed: trust it and continue. */
 	virtual void accept_host_key() = 0;
 

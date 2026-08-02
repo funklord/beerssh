@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <QPainter>
+#include <QTimer>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QApplication>
@@ -25,6 +26,12 @@
  * than jumping one point the moment it connects.
  */
 static const int BSSH_DEFAULT_POINT_SIZE = 11;
+
+/*
+ * Half a second on, half off -- the rate every other terminal uses, and
+ * the one people read as "here is the cursor" rather than as a fault.
+ */
+static const int BSSH_CURSOR_BLINK_MS = 500;
 
 /*
  * The placeholder drawn into the empty grid. It exists to prove the cell
@@ -51,6 +58,9 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_emulator(nullptr),
       m_input_router(nullptr),
       m_font_size(BSSH_DEFAULT_POINT_SIZE),
+      m_cursor_style(QStringLiteral("block")),
+      m_cursor_on(true),
+      m_blink_timer(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_cell_width(1),
@@ -130,6 +140,54 @@ void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 	update_metrics();
 	recompute_grid();
 	update();
+}
+
+void bssh_terminal_view::set_cursor_style(const QString &style) {
+	/*
+	 * Anything unrecognised is a block. The value comes from a config file
+	 * a person can type into (sec 10.6), so "blok" has to render as
+	 * something rather than as no cursor at all.
+	 */
+	const QString wanted = style.isEmpty() ? QStringLiteral("block") : style.toLower();
+	if (wanted == m_cursor_style) return;
+
+	m_cursor_style = wanted;
+	update();
+}
+
+void bssh_terminal_view::set_cursor_blink(bool blink) {
+	if (blink == (m_blink_timer != nullptr)) return;
+
+	if (!blink) {
+		delete m_blink_timer;
+		m_blink_timer = nullptr;
+
+		/*
+		 * Left ON when blinking stops, never wherever the phase happened
+		 * to be: a cursor that switches off and stays off looks like a
+		 * session that has died.
+		 */
+		m_cursor_on = true;
+		update();
+		return;
+	}
+
+	m_blink_timer = new QTimer(this);
+	m_blink_timer->setInterval(BSSH_CURSOR_BLINK_MS);
+	connect(m_blink_timer, &QTimer::timeout, this, [this] {
+		m_cursor_on = !m_cursor_on;
+
+		/*
+		 * Repaints the cursor cell rather than the whole grid. A full
+		 * repaint twice a second, per pane, on a phone, to animate one
+		 * cell is exactly the kind of idle wakeup sec 5.1 cares about.
+		 */
+		if (!m_screen) return;
+		update(m_screen->cursor_col() * m_cell_width,
+		        m_screen->cursor_row() * m_cell_height,
+		        m_cell_width, m_cell_height);
+	});
+	m_blink_timer->start();
 }
 
 QString bssh_terminal_view::font_substitution_note() const {
@@ -472,24 +530,36 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		painter.drawRect(rect().adjusted(1, 1, -1, -1));
 	}
 
-	/* No cursor while reading history: it belongs to the live screen. */
-	if (m_screen->cursor_visible() && offset == 0) {
-		/*
-		 * A filled block with the character punched out of it. Drawing
-		 * the glyph again in the background colour is what keeps the
-		 * character under the cursor readable -- a solid block that
-		 * simply covers it hides the one cell the user is looking at.
-		 */
+	/*
+	 * No cursor while reading history: it belongs to the live screen. And
+	 * none on the dark half of a blink (sec 10.2).
+	 */
+	if (m_screen->cursor_visible() && offset == 0 && m_cursor_on) {
 		const int x = m_screen->cursor_col() * m_cell_width;
 		const int y = m_screen->cursor_row() * m_cell_height;
 		const bssh_cell_t &cell = m_screen->cell(m_screen->cursor_row(), m_screen->cursor_col());
 
-		painter.fillRect(x, y, m_cell_width, m_cell_height, m_foreground);
-		if (cell.ch != U'\0' && cell.ch != U' ') {
-			painter.setFont(m_font);
-			painter.setPen(m_background);
-			painter.drawText(QPointF(x, m_baseline + m_screen->cursor_row() * m_cell_height),
-			                  QString::fromUcs4(&cell.ch, 1));
+		/*
+		 * Underline and bar are thin marks laid over the cell, so the
+		 * character stays as it was drawn. Only the block has to punch
+		 * the glyph out of itself: a solid block that simply covered the
+		 * cell would hide the one character the user is looking at.
+		 */
+		if (m_cursor_style == QStringLiteral("underline")) {
+			const int thickness = qMax(1, m_cell_height / 10);
+			painter.fillRect(x, y + m_cell_height - thickness,
+			                  m_cell_width, thickness, m_foreground);
+		} else if (m_cursor_style == QStringLiteral("bar")) {
+			const int thickness = qMax(1, m_cell_width / 6);
+			painter.fillRect(x, y, thickness, m_cell_height, m_foreground);
+		} else {
+			painter.fillRect(x, y, m_cell_width, m_cell_height, m_foreground);
+			if (cell.ch != U'\0' && cell.ch != U' ') {
+				painter.setFont(m_font);
+				painter.setPen(m_background);
+				painter.drawText(QPointF(x, m_baseline + m_screen->cursor_row() * m_cell_height),
+				                  QString::fromUcs4(&cell.ch, 1));
+			}
 		}
 	}
 }
@@ -782,6 +852,9 @@ void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
 
 void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings) {
 	if (!view) return;
+
+	view->set_cursor_style(settings.value(QStringLiteral("cursor_style")).toString());
+	view->set_cursor_blink(settings.value(QStringLiteral("cursor_blink")).toBool());
 
 	/*
 	 * The font and its size go together in one call: they are two halves

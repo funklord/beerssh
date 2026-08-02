@@ -73,6 +73,12 @@ public:
 	 * host's interval reached the transport at all. */
 	void set_keepalive(int seconds) override { m_keepalive_seconds = seconds; }
 	int keepalive_seconds() const { return m_keepalive_seconds; }
+
+	void set_term(const QString &term) override { m_term = term; }
+	QString term() const { return m_term; }
+
+	void set_compression(bool compression) override { m_compression = compression; }
+	bool compression() const { return m_compression; }
 	void accept_host_key() override { m_host_key_accepted = true; }
 	void supply_key_passphrase(const QString &passphrase) override { m_passphrase = passphrase; }
 
@@ -93,6 +99,8 @@ private:
 	int m_resize_count;
 	bool m_host_key_accepted = false;
 	int m_keepalive_seconds = 0;
+	QString m_term;
+	bool m_compression = false;
 	QString m_passphrase;
 };
 
