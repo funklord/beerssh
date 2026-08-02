@@ -1378,9 +1378,14 @@ background).
     worked. On Android the same editor is reached from the Hosts screen
     and laid out for touch — one column, a full-width list, 48dp controls
     and a way back — because §14's both-platforms rule is not satisfied by
-    a desktop layout that technically renders on a phone. Still open: JSON
-    import/export through the UI, and the per-field override badges and
-    revert control (§10.1) on the host side.
+    a desktop layout that technically renders on a phone. **Override badges
+    and revert are built** (§10.1): a host's Appearance page says whether it
+    is following its preset or overriding it — naming the preset and what
+    that preset would give — and offers "Use the preset's font", which drops
+    the override rather than copying the preset's current value, so the host
+    goes back to *following* rather than merely agreeing for now. Still open:
+    import/export through the UI (§10.5; the format is now INI, the same one
+    the store uses).
 12. **M11 – Settings, polish, accessibility.**
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop

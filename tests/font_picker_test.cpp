@@ -145,3 +145,59 @@ void font_picker_test::a_font_matching_the_preset_is_not_recorded_as_an_override
 	QVERIFY2(!saved.overrides.contains(QStringLiteral("font_size")),
 	         "an untouched dialog must not write a size override");
 }
+
+void font_picker_test::reverting_drops_the_override_rather_than_copying_the_value() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.path());
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("Servers");
+	preset.font_family = QStringLiteral("hack");
+	preset.font_size = 12;
+	const int preset_id = store.save_preset(preset);
+
+	bssh_profile_t host;
+	host.host = QStringLiteral("one.example.com");
+	host.preset_id = preset_id;
+
+	QJsonObject overrides;
+	overrides.insert(QStringLiteral("font_family"), QStringLiteral("fira-code"));
+	host.overrides = overrides;
+	store.save(host);
+
+	/*
+	 * sec 10.1's revert. The distinction it turns on: dropping the
+	 * override makes the host FOLLOW the preset again, while setting the
+	 * field to the preset's current value merely happens to agree with it
+	 * today and stops agreeing the next time the preset is edited --
+	 * which is exactly the behaviour the user asked to undo.
+	 */
+	QJsonObject reverted =
+	        bssh_settings_resolver::revert_field(host.overrides,
+	                                              QStringLiteral("font_family"));
+	QVERIFY(!reverted.contains(QStringLiteral("font_family")));
+
+	QCOMPARE(bssh_settings_resolver::resolve(store.preset(preset_id), reverted)
+	                 .value(QStringLiteral("font_family")).toString(),
+	         QStringLiteral("hack"));
+
+	/* And it still follows: edit the preset, and the host moves with it. */
+	bssh_preset_t edited = store.preset(preset_id);
+	edited.font_family = QStringLiteral("cascadia-code-pl");
+	store.save_preset(edited);
+
+	QCOMPARE(bssh_settings_resolver::resolve(store.preset(preset_id), reverted)
+	                 .value(QStringLiteral("font_family")).toString(),
+	         QStringLiteral("cascadia-code-pl"));
+
+	/*
+	 * The overridden field is the one sec 10.1 says gets a badge, and
+	 * only that one -- a badge on a field that follows its preset is a
+	 * badge that means nothing.
+	 */
+	const QSet<QString> badged =
+	        bssh_settings_resolver::overridden_fields(store.preset(preset_id),
+	                                                   host.overrides);
+	QVERIFY(badged.contains(QStringLiteral("font_family")));
+	QVERIFY(!badged.contains(QStringLiteral("font_size")));
+}

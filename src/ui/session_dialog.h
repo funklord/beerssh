@@ -12,6 +12,8 @@ class QSpinBox;
 class QStackedWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
+class QLabel;
+class QPushButton;
 class bssh_font_picker;
 class bssh_preset_editor;
 class bssh_profile_store;
@@ -78,6 +80,14 @@ private:
 
 	/* This host's preset with its own overrides applied (sec 10.1). */
 	QJsonObject resolved_settings(const bssh_profile_t &profile) const;
+
+	/*
+	 * Repaints sec 10.1's "this field overrides its preset" badge and the
+	 * revert control beside it. Called whenever the value or the host
+	 * changes, because a badge that is right only when a dialog opens is
+	 * a badge that lies for the rest of the session.
+	 */
+	void update_override_badges();
 	void reload_sessions();
 	int selected_profile_id() const;
 
@@ -101,6 +111,8 @@ private:
 	bssh_profile_t m_current;
 	bssh_font_picker *m_font_picker;
 	bssh_preset_editor *m_preset_editor;
+	QLabel *m_font_scope;
+	QPushButton *m_font_revert;
 };
 
 #endif /* BSSH_SESSION_DIALOG_H */

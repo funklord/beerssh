@@ -23,7 +23,10 @@
 bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *parent)
     : QWidget(parent),
       m_store(store),
-      m_font_picker(nullptr) {
+      m_font_picker(nullptr),
+      m_preset_editor(nullptr),
+      m_font_scope(nullptr),
+      m_font_revert(nullptr) {
 	setWindowTitle(QStringLiteral("BeerSSH Configuration"));
 
 	QHBoxLayout *columns = new QHBoxLayout(this);
@@ -300,6 +303,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 		m_font_picker->set_font_choice(
 		        resolved.value(QStringLiteral("font_family")).toString(),
 		        resolved.value(QStringLiteral("font_size")).toInt());
+		update_override_badges();
 	}
 }
 
@@ -365,17 +369,97 @@ QWidget *bssh_session_dialog::build_window_page() {
 	layout->addWidget(m_font_picker);
 
 	/*
-	 * Says where the value really lives (sec 10.1). A font set here is an
-	 * override on this host; the preset behind it is what other hosts
-	 * follow. Without saying so, changing a font on one host and finding
-	 * another unchanged looks like the setting did not save.
+	 * sec 10.1's badge and revert control. The three layers only mean
+	 * something if a person can see which one a value is coming from:
+	 * without this, "this host looks different from the others" and "this
+	 * host overrides its preset" are the same observation, and the way
+	 * back to following the preset is deleting and re-adding the host.
 	 */
-	QLabel *scope = new QLabel(
-	        QStringLiteral("Applies to this host. Hosts that follow a preset take the "
-	                        "preset's font until one is chosen here."), page);
-	scope->setWordWrap(true);
-	layout->addWidget(scope);
+	QHBoxLayout *scope_row = new QHBoxLayout();
+
+	m_font_scope = new QLabel(page);
+	m_font_scope->setWordWrap(true);
+	scope_row->addWidget(m_font_scope, 1);
+
+	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font"), page);
+	scope_row->addWidget(m_font_revert, 0);
+	layout->addLayout(scope_row);
+
+	connect(m_font_revert, &QPushButton::clicked, this, [this] {
+		/*
+		 * Drops the override rather than setting the field to the
+		 * preset's current value. The difference matters and is the
+		 * whole point of sec 10.1's revert: a copied value stops
+		 * following the preset the next time the preset changes, which
+		 * is precisely what the user asked to undo.
+		 */
+		m_current.overrides =
+		        bssh_settings_resolver::revert_field(m_current.overrides,
+		                                              QStringLiteral("font_family"));
+		m_current.overrides =
+		        bssh_settings_resolver::revert_field(m_current.overrides,
+		                                              QStringLiteral("font_size"));
+
+		const QJsonObject resolved = resolved_settings(m_current);
+		m_font_picker->set_font_choice(
+		        resolved.value(QStringLiteral("font_family")).toString(),
+		        resolved.value(QStringLiteral("font_size")).toInt());
+
+		update_override_badges();
+	});
+
+	connect(m_font_picker, &bssh_font_picker::font_chosen,
+	         this, [this] { update_override_badges(); });
 
 	layout->addStretch(1);
 	return page;
+}
+
+void bssh_session_dialog::update_override_badges() {
+	if (!m_font_scope || !m_font_picker) return;
+
+	const bssh_preset_t preset = m_store && m_current.preset_id != 0
+	        ? m_store->preset(m_current.preset_id)
+	        : bssh_preset_t();
+
+	/*
+	 * Compared against what the host WOULD resolve to with no font
+	 * override of its own -- not against what it resolves to now, which
+	 * already includes the override and would always compare equal.
+	 */
+	QJsonObject without = m_current.overrides;
+	without.remove(QStringLiteral("font_family"));
+	without.remove(QStringLiteral("font_size"));
+
+	const QJsonObject followed = m_current.preset_id == 0
+	        ? bssh_settings_resolver::app_defaults()
+	        : bssh_settings_resolver::resolve(preset, without);
+
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool compact = platform && platform->is_touch_primary();
+	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
+
+	const QString inherited = catalog.effective_id(
+	        followed.value(QStringLiteral("font_family")).toString(), compact);
+	const int inherited_size = followed.value(QStringLiteral("font_size")).toInt();
+
+	const bool overridden = m_font_picker->font_id() != inherited ||
+	                        m_font_picker->point_size() != inherited_size;
+
+	const QString source = m_current.preset_id == 0
+	        ? QStringLiteral("the app defaults")
+	        : QStringLiteral("preset \"%1\"").arg(preset.name);
+
+	if (overridden) {
+		const bssh_font_t *font = catalog.by_id(inherited);
+		m_font_scope->setText(
+		        QStringLiteral("<b>Overrides %1</b>, which uses %2 at %3 pt.")
+		                .arg(source,
+		                     font ? font->display_name : inherited,
+		                     QString::number(inherited_size)));
+	} else {
+		m_font_scope->setText(QStringLiteral("Following %1.").arg(source));
+	}
+
+	m_font_revert->setEnabled(overridden);
 }
