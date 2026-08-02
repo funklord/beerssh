@@ -120,21 +120,39 @@ void graphics_test::iterm2_inline_image_is_placed() {
 	QCOMPARE(placement.rows, 1);
 }
 
-void graphics_test::sixel_is_declined_rather_than_half_decoded() {
+void graphics_test::sixel_is_decoded_by_libsixel() {
 	bssh_emulator emulator(40, 10);
 	emulator.set_cell_pixels(8, 16);
 
-	emulator.feed(QByteArrayLiteral("\x1bPq#0;2;0;0;0#0~~@@vv@@~~@@~~$\x1b\\"));
+	/*
+	 * "#0;2;100;0;0" defines colour 0 as pure red in libsixel's
+	 * percentage form; "~~" is two columns with all six pixels of the
+	 * band set. So: 2 wide, 6 tall, red.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1bPq#0;2;100;0;0#0~~\x1b\\"));
+
+	QCOMPARE(emulator.images().count(), 1);
+
+	const bssh_image_placement_t &placement = emulator.images().placements().first();
+	QCOMPARE(placement.image.size(), QSize(2, 6));
+	QCOMPARE(placement.image.pixelColor(0, 0), QColor(255, 0, 0));
+
+	/* 2x6 pixels in 8x16 cells rounds up to one cell each way. */
+	QCOMPARE(placement.cols, 1);
+	QCOMPARE(placement.rows, 1);
+}
+
+void graphics_test::malformed_sixel_is_declined_not_guessed() {
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
 
 	/*
-	 * Declined until libsixel is available: no image, and -- just as
-	 * importantly -- no crash and no garbage placement. A wrong image is
-	 * worse than a missing one.
+	 * Nonsense where the palette should be. libsixel must not be handed
+	 * this and have its answer trusted blindly -- and whatever it makes
+	 * of it, the sequence must not leak into the text.
 	 */
-	QCOMPARE(emulator.images().count(), 0);
-
-	/* The sequence must not leak into the text either. */
-	QVERIFY(!emulator.screen().to_text().contains(QLatin1Char('~')));
+	emulator.feed(QByteArrayLiteral("\x1bPq#####\x1b\\"));
+	QVERIFY(!emulator.screen().to_text().contains(QLatin1Char('#')));
 }
 
 void graphics_test::images_follow_the_text_when_the_screen_scrolls() {

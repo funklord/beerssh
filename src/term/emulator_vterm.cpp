@@ -35,6 +35,13 @@ struct bssh_emulator_private {
 	int modify_other_keys;
 
 	bssh_image_store images;
+	bssh_graphics_transmission_t graphics;   /* chunked kitty transmissions */
+	QByteArray apc_buffer;        /* an APC split across reads */
+	QByteArray osc_buffer;
+	QByteArray dcs_buffer;
+	int cell_width;
+	int cell_height;
+
 	/*
 	 * Rows the cursor owes an image. It cannot be applied inside the APC
 	 * callback: moving our own mirror's cursor there is invisible to
@@ -43,11 +50,6 @@ struct bssh_emulator_private {
 	 * back to it as a real CUD once the current write has finished.
 	 */
 	int pending_cursor_advance;
-	bssh_graphics_transmission_t graphics;   /* chunked kitty transmissions */
-	QByteArray apc_buffer;        /* an APC split across reads */
-	QByteArray osc_buffer;
-	int cell_width;
-	int cell_height;
 
 	void apply_graphics(const bssh_graphics_result_t &result);
 
@@ -325,14 +327,26 @@ int on_osc(int command, VTermStringFragment frag, void *user) {
 	return 1;
 }
 
-/* Sixel: DCS ... q. Declined until libsixel is available -- see graphics.cpp. */
+/* Sixel: DCS <params> q <data> ST. */
 int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
-	Q_UNUSED(frag);
 
 	if (commandlen < 1 || command[commandlen - 1] != 'q') return 0;
 
-	self->apply_graphics(bssh_parse_sixel(QByteArray(), self->cell_width, self->cell_height));
+	/*
+	 * Reassembled with its introducer, because libsixel needs it: given
+	 * only the body it reports success and returns a 1x1 image, which is
+	 * the kind of failure that reaches a screenshot rather than a log.
+	 */
+	if (frag.initial) {
+		self->dcs_buffer = QByteArrayLiteral("\x1bP") + QByteArray(command, int(commandlen));
+	}
+	self->dcs_buffer.append(frag.str, int(frag.len));
+	if (!frag.final) return 1;
+
+	self->apply_graphics(bssh_parse_sixel(self->dcs_buffer,
+		                                     self->cell_width, self->cell_height));
+	self->dcs_buffer.clear();
 	return 1;
 }
 

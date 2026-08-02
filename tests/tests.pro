@@ -14,6 +14,9 @@ TEMPLATE = app
 TARGET = beerssh_test
 
 QT += widgets testlib
+
+CONFIG += link_pkgconfig
+PKGCONFIG += libsixel
 CONFIG += c++17 console
 CONFIG -= app_bundle
 

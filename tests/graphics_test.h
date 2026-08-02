@@ -20,7 +20,8 @@ private slots:
 	void kitty_chunked_transmission_reassembles();
 	void kitty_delete_removes_images();
 	void iterm2_inline_image_is_placed();
-	void sixel_is_declined_rather_than_half_decoded();
+	void sixel_is_decoded_by_libsixel();
+	void malformed_sixel_is_declined_not_guessed();
 	void images_follow_the_text_when_the_screen_scrolls();
 	void images_are_dropped_when_the_grid_shrinks();
 };

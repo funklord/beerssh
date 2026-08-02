@@ -587,16 +587,21 @@ producing one of them.
 |---|---|---|---|
 | **kitty** | APC `_G…` | base64 PNG (`f=100`) or raw RGB/RGBA (`f=24/32`), chunked with `m=1` | **Done** — transmit, display, delete, chunked |
 | **iTerm2** | OSC 1337 | base64 PNG/JPEG | **Done** |
-| **sixel** | DCS `q` | a 1974 pixel encoding with its own palette handling | **Declined until libsixel is present** |
+| **sixel** | DCS `q` | a 1974 pixel encoding with its own palette handling | **Done** — decoded by `libsixel` |
 
-Decoding is Qt's: `QImage` reads PNG and JPEG and `QByteArray::fromBase64`
-does the transport, so two of the three needed no image decoder written
-here at all. **Sixel is the one that genuinely needs a library** — its
-payload is not a container Qt knows — and `libsixel` is exactly the work
-not worth repeating. It is packaged everywhere (`libsixel-dev`); until it
-is installed, `bssh_parse_sixel` declines rather than half-decodes, because
-a wrong image is worse than a declined one and a stub that looks finished
-is worse than either. Wiring it in is that one function's body.
+Decoding is never ours: `QImage` reads PNG and JPEG and
+`QByteArray::fromBase64` does the transport, so kitty and iTerm2 needed no
+image decoder written here at all, and sixel — whose payload is not a
+container Qt knows — is decoded by **libsixel**, which is exactly the work
+not worth repeating.
+
+Two parts of libsixel's contract are established by experiment rather than
+by its header, and **both fail silently when got wrong**, so they are
+written down here as well as at the call site: the **DCS introducer must be
+included** (given only the body after the `q` it returns success and a 1×1
+image), and the **palette is RGB triplets** despite the header comment
+saying ARGB (read as four-byte entries the colours come out wrong but
+plausible).
 
 Two things images must do that are easy to miss, and both are tested:
 they **follow the text when the screen scrolls** (an image pinned to its

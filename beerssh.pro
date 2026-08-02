@@ -57,7 +57,7 @@ HEADERS += \
 # file allowed to include its headers, which is what keeps the
 # libssh-vs-libssh2 decision (project.md sec 4) genuinely reversible.
 CONFIG += link_pkgconfig
-PKGCONFIG += libssh
+PKGCONFIG += libssh libsixel
 
 # Vendored libvterm (project.md sec 7): the parser is proven and assumes no
 # PTY, so this project owns only the rendering and the input on top of it.

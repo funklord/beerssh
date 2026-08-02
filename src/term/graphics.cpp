@@ -3,6 +3,8 @@
 #include <QMap>
 #include <QString>
 
+#include <sixel.h>
+
 #include "term/graphics_internal.h"
 
 /*
@@ -183,22 +185,64 @@ bssh_graphics_result_t bssh_parse_iterm2(const QByteArray &payload,
 
 bssh_graphics_result_t bssh_parse_sixel(const QByteArray &payload,
                                          int cell_width, int cell_height) {
-	Q_UNUSED(payload);
-	Q_UNUSED(cell_width);
-	Q_UNUSED(cell_height);
+	bssh_graphics_result_t result;
+	if (payload.isEmpty()) return result;
 
 	/*
-	 * Sixel is the one of the three that genuinely needs a library:
-	 * unlike kitty and iTerm2, its payload is not a PNG in base64 but a
-	 * 1974 pixel encoding with its own palette handling, and hand-writing
-	 * that decoder is precisely the work libsixel already did.
+	 * Decoding is libsixel's. Sixel is the one of the three protocols
+	 * whose payload is not a container Qt already reads -- it is a 1974
+	 * encoding with its own palette handling -- and reimplementing that
+	 * decoder is exactly the work libsixel has already done well.
 	 *
-	 * libsixel is packaged everywhere (libsixel-dev) but is not installed
-	 * here, so this returns "unsupported" rather than a half-decoder:
-	 * a wrong image is worse than a declined one, and a stub that looks
-	 * finished is worse than either. The seam is deliberately the same
-	 * shape as the other two, so wiring libsixel in is this function's
-	 * body and nothing else.
+	 * Two things about its contract are established by experiment rather
+	 * than by its header, and both are silent when wrong:
+	 *
+	 *   - The DCS introducer must be included. Passing only the body
+	 *     after the "q" returns SIXEL_OK and a 1x1 image, so a caller
+	 *     that trimmed the introducer would see success and one stray
+	 *     pixel.
+	 *   - The palette is RGB triplets, three bytes per colour, despite
+	 *     the header comment calling it ARGB. Reading it as four-byte
+	 *     entries gives colours that are wrong but plausible.
 	 */
-	return bssh_graphics_result_t();
+	unsigned char *pixels = nullptr;
+	unsigned char *palette = nullptr;
+	int width = 0;
+	int height = 0;
+	int ncolors = 0;
+
+	const SIXELSTATUS status = sixel_decode_raw(
+	        reinterpret_cast<unsigned char *>(const_cast<char *>(payload.constData())),
+	        payload.size(), &pixels, &width, &height, &palette, &ncolors, nullptr);
+
+	if (!SIXEL_SUCCEEDED(status) || !pixels || !palette
+	    || width <= 0 || height <= 0 || ncolors <= 0) {
+		free(pixels);
+		free(palette);
+		return result;
+	}
+
+	QImage image(width, height, QImage::Format_RGB888);
+	for (int y = 0; y < height; ++y) {
+		for (int x = 0; x < width; ++x) {
+			/*
+			 * Clamped: the index comes from the remote, and a sixel
+			 * naming a colour outside the palette it declared must not
+			 * read past the end of it.
+			 */
+			const int index = qBound(0, int(pixels[y * width + x]), ncolors - 1);
+			const unsigned char *entry = palette + index * 3;
+			image.setPixel(x, y, qRgb(entry[0], entry[1], entry[2]));
+		}
+	}
+
+	free(pixels);
+	free(palette);
+
+	result.action = bssh_graphics_result_t::PLACE;
+	result.placement.image = image;
+	result.placement.cols = (width + cell_width - 1) / qMax(1, cell_width);
+	result.placement.rows = (height + cell_height - 1) / qMax(1, cell_height);
+
+	return result;
 }

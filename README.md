@@ -24,10 +24,10 @@ protocol** (disambiguate tier, with push/pop/set/query) and **xterm
 `modifyOtherKeys` level 2**. `project.md` §7.1 surveys the wider set of
 modern terminal extensions and says where each one stands.
 
-Inline images work for the **kitty graphics protocol** and **iTerm2's
-inline images** — `kitten icat` and `imgcat` style output both render.
-**Sixel is declined** rather than half-decoded until `libsixel-dev` is
-installed; wiring it in is one function's body.
+Inline images work for all three protocols: the **kitty graphics
+protocol**, **iTerm2 inline images** and **sixel** — `kitten icat`,
+`imgcat` and `img2sixel` style output all render. Needs `libsixel-dev`
+(Debian/Ubuntu) alongside Qt and libssh.
 
 Not built yet: mouse selection and copy (`Ctrl+Shift+C` is wired but has
 nothing to copy until then), scrollback, tabs and splits, and the tier-3
@@ -43,7 +43,7 @@ See `project.md` §14 for the milestone plan.
 ## Build (desktop)
 
 Needs Qt 6 (6.8 LTS or newer), libssh, and a C++17 compiler.
-On Debian/Ubuntu: `qt6-base-dev libssh-dev`.
+On Debian/Ubuntu: `qt6-base-dev libssh-dev libsixel-dev`.
 
 libvterm is vendored as a submodule and built from source, so clone with
 `--recurse-submodules` (or run `git submodule update --init`). The build
