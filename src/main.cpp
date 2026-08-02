@@ -41,7 +41,22 @@ int main(int argc, char *argv[]) {
 	 */
 	bssh_platform *platform = bssh_platform::instance();
 	if (platform) {
-		bssh_font_catalog::instance().load_bundled(platform->font_directory());
+		const QString font_dir = platform->font_directory();
+		const int faces = bssh_font_catalog::instance().load_bundled(font_dir);
+
+		/*
+		 * One line, because "the terminal font looks wrong" and "no fonts
+		 * were found" are the same bug report, and only this can tell them
+		 * apart. It is worth it specifically on Android, where the fonts
+		 * live behind the assets: scheme and a packaging mistake produces
+		 * an app that renders in the system font and never says why.
+		 */
+		if (faces > 0) {
+			qInfo("beerssh: %d font faces from %s", faces, qPrintable(font_dir));
+		} else {
+			qInfo("beerssh: no bundled fonts (%s) -- using system families",
+			      font_dir.isEmpty() ? "no font directory" : qPrintable(font_dir));
+		}
 	}
 
 	bool self_test = false;

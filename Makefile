@@ -276,12 +276,65 @@ $(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) beerssh.pro
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../beerssh.pro $(QMAKE_CONFIG)
 
+# The base font set that ships inside the APK (project.md sec 9.4).
+#
+# Three families, not eight: the default, the box-drawing fallback, and one
+# alternative. Everything else is an asset pack, because the full set is
+# 54 MB and Iosevka is 42 MB of that on its own -- the condensed face that
+# would otherwise be the phone default (sec 9.2) cannot ship in a base
+# download and has to arrive later.
+#
+# Noto is in the base set despite being fallback-only: it is what stops CJK
+# rendering as tofu, and a terminal that cannot draw the output of a
+# remote `ls` in a Japanese directory is broken in a way no picker fixes.
+# Unifont is not -- 4.9 MB to cover what Noto already covers, for scripts
+# a phone will not meet.
+ANDROID_BASE_FONTS = \
+	JetBrainsMono-Regular.ttf JetBrainsMono-Bold.ttf \
+	JetBrainsMono-Italic.ttf JetBrainsMono-BoldItalic.ttf \
+	DejaVuSansMono.ttf DejaVuSansMono-Bold.ttf \
+	DejaVuSansMono-Oblique.ttf DejaVuSansMono-BoldOblique.ttf \
+	Hack-Regular.ttf Hack-Bold.ttf Hack-Italic.ttf Hack-BoldItalic.ttf \
+	NotoSansMono-Regular.ttf
+
+ANDROID_ASSET_DIR = android/assets/fonts
+
+# Copied rather than symlinked: androiddeployqt packages what it finds in
+# the asset directory, and a symlink into a directory that is not there on
+# a build machine packages nothing while looking like it worked.
+#
+# Silently skipped when fonts/ is absent. `make android` has to keep
+# working on a checkout that has not run `make fonts` -- the app falls back
+# to the system's own monospace font (sec 9.4), which is exactly what it
+# did before this milestone.
+android-fonts:
+	@if [ ! -d fonts ]; then \
+		echo "android-fonts: no fonts/ -- APK will use system fonts only"; \
+		echo "android-fonts:   run 'make fonts' first to bundle the base set"; \
+		exit 0; \
+	fi; \
+	mkdir -p $(ANDROID_ASSET_DIR); \
+	mkdir -p $(ANDROID_ASSET_DIR)/licences; \
+	for font in $(ANDROID_BASE_FONTS); do \
+		if [ -f "fonts/$$font" ]; then \
+			cp -u "fonts/$$font" $(ANDROID_ASSET_DIR)/; \
+		else \
+			echo "android-fonts: missing fonts/$$font"; exit 1; \
+		fi; \
+	done; \
+	cp -u fonts/licences/OFL-JetBrainsMono.txt \
+	      fonts/licences/LICENSE-DejaVu.txt \
+	      fonts/licences/LICENSE-Hack.md \
+	      fonts/licences/OFL-NotoSansMono.txt \
+	      $(ANDROID_ASSET_DIR)/licences/ 2>/dev/null || true; \
+	echo "android-fonts: bundled $$(du -sh $(ANDROID_ASSET_DIR) | cut -f1) of fonts"
+
 # The APK is what gets installed on a device or emulator, so it is the
 # default. The AAB is what Play wants (sec 2) and is its own target.
-android: $(ANDROID_BUILD_DIR)/Makefile
+android: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 	$(MAKE) -C $(ANDROID_BUILD_DIR) apk
 
-android-aab: $(ANDROID_BUILD_DIR)/Makefile
+android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
 
 # Installs onto whatever single device adb sees, and launches it.
@@ -319,5 +372,6 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test style fonts fonts-list check-fonts android android-check \
-        android-aab android-run install clean veryclean distclean help
+.PHONY: all run test style fonts fonts-list check-fonts android-fonts \
+        android android-check android-aab android-run install clean veryclean \
+        distclean help

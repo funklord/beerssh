@@ -1299,11 +1299,14 @@ background).
     bold/italic faces are loaded rather than synthesised, ligatures are
     disabled by default, the font directory is a `bssh_platform` question,
     and §9.6's validator runs in CI and fails the build on an unsuitable
-    font. Still open: the shared glyph atlas (§9.5 — the renderer caches
-    per-glyph *family* lookups and QFonts, not rasterised glyphs), Android
-    asset-pack delivery and subsetting (Iosevka alone is 42 MB, so the
-    compact default falls back until it ships), the font picker UI, and the
-    fractional-scaling and multi-monitor DPI checks.
+    font. **On both platforms:** the base set (JetBrains Mono, DejaVu, Hack,
+    Noto — 4.1 MB, 13 faces) ships inside the APK and is verified loading
+    from `assets:/fonts` on a device. Still open: the shared glyph atlas
+    (§9.5 — the renderer caches per-glyph *family* lookups and QFonts, not
+    rasterised glyphs), Play asset-pack delivery and subsetting for the rest
+    (Iosevka alone is 42 MB, so the condensed face cannot be the compact
+    default until it ships), the font picker UI, and the fractional-scaling
+    and multi-monitor DPI checks.
 11. **M10 – Preset system.** Preset/profile layering, built-in starter presets,
     JSON import/export, propagation UI. **Core built:** `bssh_preset_t` (with
     no field a secret could occupy), the three-layer resolver with

@@ -7,6 +7,8 @@
 #include <QSpinBox>
 #include <QVBoxLayout>
 
+#include "term/font_catalog.h"
+
 /*
  * Touch target sizes. The same 48dp floor the key row uses (sec 6.2),
  * applied to text fields and buttons: a field a thumb cannot reliably
@@ -22,8 +24,7 @@ bssh_host_editor::bssh_host_editor(QWidget *parent)
 	outer->setSpacing(12);
 
 	QLabel *title = new QLabel(QStringLiteral("Add host"), this);
-	QFont title_font = title->font();
-	title_font.setPointSizeF(title_font.pointSizeF() * 1.4);
+	QFont title_font = bssh_scaled_font(title->font(), 1.4);
 	title_font.setBold(true);
 	title->setFont(title_font);
 	outer->addWidget(title);

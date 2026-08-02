@@ -7,6 +7,8 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include "term/font_catalog.h"
+
 #include "model/profile_store.h"
 
 /*
@@ -26,8 +28,7 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	layout->setSpacing(0);
 
 	QLabel *title = new QLabel(QStringLiteral("  Hosts"), this);
-	QFont title_font = title->font();
-	title_font.setPointSizeF(title_font.pointSizeF() * 1.4);
+	QFont title_font = bssh_scaled_font(title->font(), 1.4);
 	title_font.setBold(true);
 	title->setFont(title_font);
 	title->setMinimumHeight(56);

@@ -81,6 +81,23 @@ struct bssh_font_t {
 	bssh_font_t() : selectable(true), condensed(false) {}
 };
 
+/*
+ * Scale a UI font, whichever unit it is defined in.
+ *
+ * Not part of the catalog: this is for app chrome (a page heading), not for
+ * the terminal grid, which sizes itself in whole cells. It lives here
+ * because it is font handling and because the alternative was two copies of
+ * it in two front doors.
+ *
+ * A QFont carries EITHER a point size or a pixel size, and the other one
+ * reads back as -1. Qt's default UI font on Android is defined in pixels,
+ * so the obvious `setPointSizeF(pointSizeF() * factor)` sets a negative
+ * size there: Qt warns, ignores it, and the heading a page was designed
+ * around comes out the same size as its body text. Desktop never shows
+ * this, because its default font is defined in points.
+ */
+QFont bssh_scaled_font(const QFont &font, qreal factor);
+
 class bssh_font_catalog {
 public:
 	/*

@@ -102,7 +102,7 @@ bssh_font_catalog::bssh_font_catalog() {
 		 * knowingly, because an unreadable glyph still beats a box.
 		 */
 		{ "unifont", "Unifont", "Unifont",
-			"unifont.ttf", "OFL-1.1", false, false }
+			"unifont.otf", "OFL-1.1", false, false }
 	};
 
 	for (const entry_t &entry : entries) {
@@ -364,4 +364,21 @@ QString bssh_font_catalog::substitution_note(const QString &id) const {
 	return QStringLiteral("%1 is not installed on this device yet. "
 	                      "Showing %2 until it is.")
 	        .arg(font->display_name, served);
+}
+
+QFont bssh_scaled_font(const QFont &font, qreal factor) {
+	QFont scaled = font;
+
+	if (font.pointSizeF() > 0) {
+		scaled.setPointSizeF(font.pointSizeF() * factor);
+	} else if (font.pixelSize() > 0) {
+		scaled.setPixelSize(qMax(1, qRound(font.pixelSize() * factor)));
+	}
+
+	/*
+	 * A font with neither is one Qt has not resolved yet; leaving it alone
+	 * is better than guessing a size, because the caller's widget will
+	 * inherit a sensible one from its parent either way.
+	 */
+	return scaled;
 }
