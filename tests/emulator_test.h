@@ -27,6 +27,8 @@ private slots:
 	void device_status_report_produces_a_reply();
 	void title_is_reported_from_osc();
 	void resize_keeps_existing_text();
+	void synchronised_output_holds_the_repaint();
+	void synchronised_output_releases_itself_if_abandoned();
 	void scrolled_lines_enter_the_scrollback();
 	void scrollback_is_capped();
 	void scrollback_keeps_colour();

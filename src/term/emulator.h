@@ -77,6 +77,14 @@ public:
 	 * these are the two protocols that fix that, and a remote program
 	 * turns on whichever it prefers.
 	 */
+	/*
+	 * Synchronised output, DEC 2026 (sec 7.1, tier 3). While a remote has
+	 * it set, the screen is being rewritten and must not be painted
+	 * half-done -- the tearing it removes is the flicker every full-screen
+	 * app shows on a slow link.
+	 */
+	bool synchronised_output() const;
+
 	int kitty_keyboard_flags() const;
 	int modify_other_keys_level() const;
 

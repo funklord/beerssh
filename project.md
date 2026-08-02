@@ -610,7 +610,7 @@ conversation, and should let it reach its best tier.
 
 | Extension | What it is | Why it is not built yet |
 |---|---|---|
-| **Synchronized output** (DEC 2026) | Remote brackets a screen update so the terminal paints it in one frame instead of mid-redraw; removes tearing in full-screen apps | Cheap and worth doing — needs the repaint coalescing in §8.4 to land with it |
+| **Synchronized output** (DEC 2026) | Remote brackets a screen update so the terminal paints it in one frame instead of mid-redraw; removes tearing in full-screen apps | **Done** — with a 150 ms safety release, since a program that sets it and dies would otherwise freeze the display |
 | **OSC 8 hyperlinks** | Marks a run of cells as a clickable URL | Needs a per-cell link ID in `bssh_screen` and a click target in the view |
 | **OSC 52 clipboard** | Remote sets the local clipboard | **Security review first** — a remote host silently writing the user's clipboard is a real hazard, and reading it is worse. Off by default, if offered at all |
 | **XTGETTCAP / DECRQM** | Lets a remote query what the terminal supports rather than guessing from `TERM` | Small; pairs naturally with the tier-2 work |
@@ -660,12 +660,15 @@ documented extension hook. Modes libvterm does not model (kitty flags,
 modifyOtherKeys level) are tracked in `bssh_emulator` beside it.
 
 **The hook turned out to have holes, and this is where vendoring earned its
-keep.** Two sequences never reach it at all: `on_csi()` rejects any private
+keep.** Three sequences never reach it at all: `on_csi()` rejects any private
 leader other than `?` and `>` before dispatch, which drops kitty's pop
 (`CSI < u`) and set (`CSI = … u`); and `CSI ? 4 m`, xterm's XTQMODKEYS
 query, is swallowed by a DECSGR case for a printer-era sequence no DEC
-terminal implemented. Both are *unreachable*, not merely unhandled, so no
-amount of application code could have implemented them.
+terminal implemented. And `set_dec_mode()` drops any DEC private mode
+libvterm does not model with a debug log, which is why synchronized output
+needed a patch before it could be implemented at all. All three are
+*unreachable*, not merely unhandled, so no amount of application code
+could have implemented them.
 
 The fix lives in **`vterm-patches/`**, applied to the submodule at build
 time by the top-level Makefile — **not** committed into the submodule

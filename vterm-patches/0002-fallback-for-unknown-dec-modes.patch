@@ -1,0 +1,36 @@
+Reach the fallback for DEC private modes libvterm does not model
+
+set_dec_mode() drops an unrecognised mode with a debug log and returns, so
+vterm_screen_set_unrecognised_fallbacks never sees it. As with the
+private-leader CSIs in 0001, that makes such modes *unreachable* rather
+than merely unhandled: an application cannot implement one itself no
+matter what it registers.
+
+DEC 2026 (synchronised output) is the live example -- a terminal cannot
+support it on top of libvterm's parser, because the sequence never
+arrives.
+
+Applied on top of 0001 at build time (see the top-level Makefile);
+upstream is otherwise untouched. Worth sending upstream.
+
+--- a/src/state.c
++++ b/src/state.c
+@@ -863,6 +863,17 @@
+     break;
+ 
+   default:
++    /* Give the application-level fallback a chance before dropping it.
++     * Modes libvterm does not model are not thereby unimplementable --
++     * DEC 2026 (synchronised output) is a live example -- but without
++     * this they are unreachable, since vterm_screen_set_unrecognised_
++     * fallbacks never sees a CSI ? h/l that got this far. */
++    if(state->fallbacks && state->fallbacks->csi) {
++      long fallback_args[1] = { num };
++      (*state->fallbacks->csi)("?", fallback_args, 1, NULL, val ? 'h' : 'l', state->fbdata);
++      return;
++    }
++
+     DEBUG_LOG("libvterm: Unknown DEC mode %d\n", num);
+     return;
+   }
+

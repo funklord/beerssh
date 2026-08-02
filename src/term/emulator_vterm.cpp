@@ -1,5 +1,7 @@
 #include "term/emulator.h"
 
+#include <QTimer>
+
 #include <vterm.h>
 
 #include "term/graphics_internal.h"
@@ -34,6 +36,9 @@ struct bssh_emulator_private {
 	bssh_emulator *owner;
 	int modify_other_keys;
 	bool mouse_reporting;
+	bool sync_output;
+	bool sync_damage_pending;
+	QTimer *sync_timeout;
 
 	bssh_image_store images;
 	bssh_scrollback scrollback;
@@ -55,9 +60,19 @@ struct bssh_emulator_private {
 
 	void apply_graphics(const bssh_graphics_result_t &result);
 
+	/*
+	 * The single point every repaint request goes through, which is what
+	 * makes the synchronised-output hold possible at all: a hold spread
+	 * across the six places that emit damage would leak one of them.
+	 */
+	void notify_damaged();
+	void begin_sync();
+	void end_sync();
+
 	bssh_emulator_private(int cols, int rows, bssh_emulator *owner)
 	    : vt(nullptr), vts(nullptr), screen(cols, rows), owner(owner),
-	      modify_other_keys(0), mouse_reporting(false), cell_width(8), cell_height(16),
+	      modify_other_keys(0), mouse_reporting(false), sync_output(false),
+	      sync_damage_pending(false), sync_timeout(nullptr), cell_width(8), cell_height(16),
 	      pending_cursor_advance(0) {
 		kitty_stack.append(0);
 	}
@@ -158,7 +173,7 @@ quint8 to_bssh_attrs(const VTermScreenCellAttrs &attrs) {
 int on_damage(VTermRect rect, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	self->copy_rect(rect);
-	emit self->owner->damaged();
+	self->notify_damaged();
 	return 1;
 }
 
@@ -167,7 +182,7 @@ int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user) {
 	Q_UNUSED(visible);
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	self->screen.set_cursor(pos.row, pos.col);
-	emit self->owner->damaged();
+	self->notify_damaged();
 	return 1;
 }
 
@@ -193,7 +208,7 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 		emit self->owner->images_changed();
 	}
 
-	emit self->owner->damaged();
+	self->notify_damaged();
 	return 1;
 }
 
@@ -224,7 +239,7 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		return 1;
 	case VTERM_PROP_CURSORVISIBLE:
 		self->screen.set_cursor_visible(value->boolean);
-		emit self->owner->damaged();
+		self->notify_damaged();
 		return 1;
 	default:
 		return 0;
@@ -278,6 +293,19 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 				           + QByteArrayLiteral("u"));
 			return 1;
 		}
+	}
+
+	if (command == 'h' || command == 'l') {
+		/* DEC 2026: synchronised output (sec 7.1). */
+		if (lead == "?" && argcount > 0 && args[0] == 2026) {
+			if (command == 'h') {
+				self->begin_sync();
+			} else {
+				self->end_sync();
+			}
+			return 1;
+		}
+		return 0;
 	}
 
 	if (command == 'm') {
@@ -607,7 +635,7 @@ void bssh_emulator::resize(int cols, int rows) {
 	m_private->copy_rect(all);
 	m_private->images.trim_to(rows);
 
-	emit damaged();
+	m_private->notify_damaged();
 }
 
 const bssh_screen &bssh_emulator::screen() const {
@@ -656,6 +684,52 @@ bool bssh_emulator_private::encode_modern_key(char32_t ch, quint8 modifiers) {
 	return true;
 }
 
+void bssh_emulator_private::notify_damaged() {
+	if (sync_output) {
+		/*
+		 * Held, not dropped: the repaint happens when the remote says
+		 * the frame is complete. One flag rather than a queue -- what is
+		 * owed is "repaint", and owing it twice is the same as owing it
+		 * once.
+		 */
+		sync_damage_pending = true;
+		return;
+	}
+
+	emit owner->damaged();
+}
+
+void bssh_emulator_private::begin_sync() {
+	sync_output = true;
+
+	/*
+	 * A program that sets 2026 and then dies, or a connection that drops
+	 * mid-frame, would otherwise freeze the display permanently. Every
+	 * terminal that implements this carries a timeout for exactly that;
+	 * ours releases the hold after 150ms, which is far longer than a
+	 * frame and far shorter than a user noticing a stuck screen.
+	 */
+	if (!sync_timeout) {
+		sync_timeout = new QTimer(owner);
+		sync_timeout->setSingleShot(true);
+		sync_timeout->setInterval(150);
+		QObject::connect(sync_timeout, &QTimer::timeout, owner, [this] { end_sync(); });
+	}
+	sync_timeout->start();
+}
+
+void bssh_emulator_private::end_sync() {
+	if (!sync_output) return;
+
+	sync_output = false;
+	if (sync_timeout) sync_timeout->stop();
+
+	if (sync_damage_pending) {
+		sync_damage_pending = false;
+		emit owner->damaged();
+	}
+}
+
 void bssh_emulator_private::apply_graphics(const bssh_graphics_result_t &result) {
 	switch (result.action) {
 	case bssh_graphics_result_t::PLACE: {
@@ -671,7 +745,7 @@ void bssh_emulator_private::apply_graphics(const bssh_graphics_result_t &result)
 		pending_cursor_advance = qMax(pending_cursor_advance, placement.rows);
 
 		emit owner->images_changed();
-		emit owner->damaged();
+		notify_damaged();
 		break;
 	}
 	case bssh_graphics_result_t::DELETE_IMAGES:
@@ -681,7 +755,7 @@ void bssh_emulator_private::apply_graphics(const bssh_graphics_result_t &result)
 			images.clear();
 		}
 		emit owner->images_changed();
-		emit owner->damaged();
+		notify_damaged();
 		break;
 	case bssh_graphics_result_t::CONTINUE:
 	case bssh_graphics_result_t::NOTHING:
@@ -705,6 +779,10 @@ const bssh_image_store &bssh_emulator::images() const {
 void bssh_emulator::set_cell_pixels(int width, int height) {
 	m_private->cell_width = qMax(1, width);
 	m_private->cell_height = qMax(1, height);
+}
+
+bool bssh_emulator::synchronised_output() const {
+	return m_private->sync_output;
 }
 
 bool bssh_emulator::mouse_reporting() const {

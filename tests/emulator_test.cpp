@@ -229,3 +229,56 @@ void emulator_test::alternate_screen_does_not_pollute_the_scrollback() {
 
 	QCOMPARE(emulator.scrollback().count(), before);
 }
+
+void emulator_test::synchronised_output_holds_the_repaint() {
+	/* Wide enough that the test string does not wrap: a wrapped line puts
+	 * a newline through the middle of it, and the assertion would fail on
+	 * the screen's width rather than on the behaviour under test. */
+	bssh_emulator emulator(40, 5);
+	QSignalSpy damaged(&emulator, &bssh_emulator::damaged);
+
+	emulator.feed(QByteArrayLiteral("before"));
+	QVERIFY(damaged.count() > 0);
+	damaged.clear();
+
+	/* DEC 2026 on: the remote is rewriting the screen. */
+	emulator.feed(QByteArrayLiteral("\x1b[?2026h"));
+	QVERIFY(emulator.synchronised_output());
+
+	emulator.feed(QByteArrayLiteral("\x1b[2J\x1b[Hhalf a frame"));
+	emulator.feed(QByteArrayLiteral(" and the rest"));
+
+	/*
+	 * Nothing painted yet -- that is the whole point. Painting here is
+	 * exactly the torn frame the mode exists to prevent.
+	 */
+	QCOMPARE(damaged.count(), 0);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?2026l"));
+	QVERIFY(!emulator.synchronised_output());
+
+	/* One repaint for the whole frame, not one per write. */
+	QCOMPARE(damaged.count(), 1);
+	QVERIFY(emulator.screen().to_text().contains(QStringLiteral("half a frame and the rest")));
+}
+
+void emulator_test::synchronised_output_releases_itself_if_abandoned() {
+	bssh_emulator emulator(20, 5);
+	QSignalSpy damaged(&emulator, &bssh_emulator::damaged);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?2026h"));
+	emulator.feed(QByteArrayLiteral("stuck?"));
+	QCOMPARE(damaged.count(), 0);
+
+	/*
+	 * The remote never sends the closing sequence -- it crashed, or the
+	 * connection dropped mid-frame. Without a timeout the display would
+	 * be frozen for the rest of the session, which is a worse failure
+	 * than the tearing this mode prevents.
+	 */
+	QTest::qWait(250);
+
+	QVERIFY(!emulator.synchronised_output());
+	QCOMPARE(damaged.count(), 1);
+	QVERIFY(emulator.screen().to_text().contains(QStringLiteral("stuck?")));
+}
