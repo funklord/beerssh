@@ -4,6 +4,7 @@
 #include "model/session.h"
 #include "model/session_registry.h"
 #include "session_registry_test.h"
+#include "fake_ssh_session.h"
 #include "term/emulator.h"
 #include "ui/terminal_view.h"
 
@@ -128,4 +129,26 @@ void session_registry_test::title_falls_back_from_osc_to_profile() {
 	bare.host = QStringLiteral("plain.example");
 	bare.user = QStringLiteral("root");
 	QCOMPARE(registry.create(bare)->title(), QStringLiteral("root@plain.example"));
+}
+
+void session_registry_test::the_transport_reports_which_kind_of_ending_it_was() {
+	bssh_fake_ssh_session transport;
+	QSignalSpy exited(&transport, &bssh_ssh_session::shell_exited);
+	QSignalSpy failed(&transport, &bssh_ssh_session::failed);
+
+	/*
+	 * The interface has to carry the distinction, or every implementation
+	 * loses it the way the libssh one did: it knew the channel had closed
+	 * cleanly and reported a plain disconnect, so nothing downstream could
+	 * tell an exited shell from a dropped connection.
+	 */
+	transport.simulate_remote_exit(0);
+	QCOMPARE(exited.count(), 1);
+	QCOMPARE(exited.first().first().toInt(), 0);
+	QCOMPARE(failed.count(), 0);
+	QCOMPARE(transport.state(), bssh_ssh_session::DISCONNECTED);
+
+	transport.simulate_connection_lost();
+	QCOMPARE(failed.count(), 1);
+	QCOMPARE(exited.count(), 1);
 }

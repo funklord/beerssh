@@ -72,6 +72,9 @@ void bssh_conn_manager::note_network_changed() {
 	if (!m_auto_reconnect || m_user_disconnected) return;
 	if (!m_session || m_session->is_live()) return;
 
+	/* Nor does a new network make an exited shell worth reopening. */
+	if (m_session->exited_cleanly()) return;
+
 	/*
 	 * The network moved, so whatever the backoff was waiting for has
 	 * probably just changed. Reset and try immediately rather than
@@ -96,6 +99,18 @@ void bssh_conn_manager::on_session_state_changed() {
 		m_attempt = 0;
 		m_reconnecting = false;
 		m_timer->stop();
+		return;
+	}
+
+	/*
+	 * A shell that ended by itself is not a connection that dropped.
+	 * Retrying it reopens the shell the user just left -- reported from
+	 * a real session as "when I exit it keeps restarting the terminal",
+	 * which is exactly what this class did until the transport learned to
+	 * say which kind of ending it was.
+	 */
+	if (m_session->exited_cleanly()) {
+		cancel();
 		return;
 	}
 

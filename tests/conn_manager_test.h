@@ -18,6 +18,8 @@ private slots:
 	void backoff_grows_and_then_stops_growing();
 	void backoff_is_jittered_within_bounds();
 	void jitter_separates_sessions_dropped_together();
+	void an_exited_shell_is_not_reopened();
+	void a_dropped_connection_is_still_retried();
 	void a_user_disconnect_is_not_retried();
 	void auto_reconnect_can_be_switched_off();
 };

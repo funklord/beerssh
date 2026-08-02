@@ -9,6 +9,8 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
       m_transport(nullptr),
       m_user_disconnected(false),
       m_unseen_bell(false),
+      m_remote_exited(false),
+      m_exit_status(0),
       m_on_screen(false),
       m_cols(80),
       m_rows(24) {
@@ -55,12 +57,19 @@ void bssh_session::connect_to_host(const QString &password) {
 	if (m_transport) return;
 
 	m_user_disconnected = false;
+	m_remote_exited = false;
+	m_exit_status = 0;
 	m_password = password;
 	m_transport = bssh_ssh_session::create(this);
 
 	connect(m_transport, &bssh_ssh_session::bytes_received,
 	         m_emulator, &bssh_emulator::feed);
-	connect(m_transport, &bssh_ssh_session::failed, this, &bssh_session::failed);
+	connect(m_transport, &bssh_ssh_session::failed, this, [this](const QString &reason) {
+		note_connection_lost();
+		emit failed(reason);
+	});
+	connect(m_transport, &bssh_ssh_session::shell_exited,
+	         this, &bssh_session::note_remote_exit);
 
 	/*
 	 * The emulator's replies -- cursor reports, device attributes, and
@@ -118,6 +127,19 @@ void bssh_session::reconnect() {
 
 	const QString password = m_password;
 	connect_to_host(password);
+}
+
+void bssh_session::note_remote_exit(int exit_status) {
+	m_remote_exited = true;
+	m_exit_status = exit_status;
+
+	emit shell_exited(exit_status);
+	emit state_changed();
+}
+
+void bssh_session::note_connection_lost() {
+	m_remote_exited = false;
+	emit state_changed();
 }
 
 void bssh_session::mark_seen() {

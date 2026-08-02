@@ -247,6 +247,14 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 	 */
 	bssh_session *session = m_registry->create(profile);
 	connect(session, &bssh_session::failed, this, &bssh_main_window::on_failed);
+	connect(session, &bssh_session::shell_exited, this, [this, session](int status) {
+		if (session != m_current) return;
+
+		m_error = status == 0
+		                  ? QStringLiteral("session ended")
+		                  : QStringLiteral("session ended (exit %1)").arg(status);
+		update_status();
+	});
 	connect(session, &bssh_session::state_changed, this, [this, session] {
 		/* A successful (re)connect clears whatever the last message was. */
 		if (session == m_current && session->is_live()) {

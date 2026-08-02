@@ -31,6 +31,18 @@ public:
 	/* What the "server" sends once a shell is opened. */
 	void set_script(const QList<QByteArray> &chunks) { m_script = chunks; }
 
+	/* The remote shell ends by itself -- `exit` at the prompt. */
+	void simulate_remote_exit(int status) {
+		emit shell_exited(status);
+		set_state(DISCONNECTED);
+	}
+
+	/* The connection drops underneath a live shell. */
+	void simulate_connection_lost() {
+		emit failed(QStringLiteral("connection reset"));
+		set_state(DISCONNECTED);
+	}
+
 	/* Send one chunk now, whatever the script says. */
 	void emit_chunk(const QByteArray &bytes) { emit bytes_received(bytes); }
 

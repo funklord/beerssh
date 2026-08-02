@@ -350,6 +350,12 @@ show one healthy and one reconnecting pane simultaneously. This class is
 portable — it must contain no platform conditionals; it consumes network-change
 events from `bssh_platform` (§3) without caring which platform produced them.
 
+- **A shell that exits is not a connection that dropped.** The transport must
+  report the two separately, or reconnection reopens the shell the user just
+  left — endlessly, which is exactly what happened the first time this was run
+  against a real host. `exit` at the prompt, a command finishing, and a
+  non-zero exit status are all *endings*; a reset socket and a vanished
+  network are *drops*. Only the second kind is retried.
 - **Keepalive/heartbeat** to detect dead sockets fast (SSH-level keepalive +
   optional app-level ping).
 - **Network-change awareness**: on Android, subscribe to

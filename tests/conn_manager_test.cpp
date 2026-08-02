@@ -70,6 +70,60 @@ void conn_manager_test::jitter_separates_sessions_dropped_together() {
 	QVERIFY2(delays.size() > 1, "jitter collapsed: every session would retry at once");
 }
 
+void conn_manager_test::an_exited_shell_is_not_reopened() {
+	bssh_session session(host(QStringLiteral("exiting")));
+	bssh_conn_manager manager(&session);
+
+	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
+
+	/*
+	 * The regression. Typing `exit` at the prompt ends the remote shell,
+	 * and reconnecting reopens the shell that was just left -- which,
+	 * reported from a real session, looked like "when I exit it keeps
+	 * restarting the terminal".
+	 *
+	 * The transport knew this was a clean end and kept it to itself; the
+	 * manager saw only a session that was no longer live.
+	 */
+	session.note_remote_exit(0);
+
+	QVERIFY(session.exited_cleanly());
+	QCOMPARE(session.exit_status(), 0);
+	QCOMPARE(scheduled.count(), 0);
+	QVERIFY(!manager.is_reconnecting());
+
+	/* Nor does a network change make it worth reopening. */
+	manager.note_network_changed();
+	QCOMPARE(scheduled.count(), 0);
+
+	/* A non-zero status is still an exit, not a failure to retry. */
+	bssh_session failed_shell(host(QStringLiteral("failing")));
+	bssh_conn_manager other(&failed_shell);
+	QSignalSpy other_scheduled(&other, &bssh_conn_manager::reconnect_scheduled);
+
+	failed_shell.note_remote_exit(130);
+	QCOMPARE(failed_shell.exit_status(), 130);
+	QCOMPARE(other_scheduled.count(), 0);
+}
+
+void conn_manager_test::a_dropped_connection_is_still_retried() {
+	bssh_session session(host(QStringLiteral("dropping")));
+	bssh_conn_manager manager(&session);
+
+	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
+
+	/*
+	 * The other half of the same distinction, and the reason the fix is
+	 * not simply "never reconnect": a connection that dropped underneath
+	 * a live shell is exactly what auto-reconnect exists for.
+	 */
+	session.note_connection_lost();
+
+	QVERIFY(!session.exited_cleanly());
+	QCOMPARE(scheduled.count(), 1);
+	QVERIFY(manager.is_reconnecting());
+}
+
 void conn_manager_test::a_user_disconnect_is_not_retried() {
 	bssh_session session(host(QStringLiteral("a")));
 	bssh_conn_manager manager(&session);

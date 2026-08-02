@@ -77,6 +77,7 @@ signals:
 	void state_changed(int state);
 	void bytes_received(const QByteArray &bytes);
 	void failed(const QString &reason);
+	void exited(int exit_status);
 
 private:
 	void teardown();
@@ -271,7 +272,21 @@ void bssh_libssh_worker::drain() {
 	}
 
 	if (ssh_channel_is_eof(m_channel)) {
-		/* The remote shell exited: a clean end, not a failure. */
+		/*
+		 * The remote shell exited. Reported as its own thing rather than
+		 * as a plain disconnect: this function knew it was "a clean end,
+		 * not a failure" and kept that to itself, so the reconnection
+		 * machine saw only a dead session and reopened the shell the
+		 * user had just exited -- endlessly.
+		 */
+		uint32_t exit_code = 0;
+		char *exit_signal = nullptr;
+		int core_dumped = 0;
+		ssh_channel_get_exit_state(m_channel, &exit_code, &exit_signal, &core_dumped);
+		if (exit_signal) ssh_string_free_char(exit_signal);
+
+		emit exited(int(exit_code));
+
 		teardown();
 		emit state_changed(bssh_ssh_session::DISCONNECTED);
 	}
@@ -303,6 +318,8 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 	         this, &bssh_ssh_session::bytes_received);
 	connect(m_worker, &bssh_libssh_worker::failed,
 	         this, &bssh_ssh_session::failed);
+	connect(m_worker, &bssh_libssh_worker::exited,
+	         this, &bssh_ssh_session::shell_exited);
 	connect(m_worker, &bssh_libssh_worker::state_changed, this, [this](int state) {
 		set_state(static_cast<state_t>(state));
 	});

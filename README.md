@@ -4,7 +4,7 @@ An SSH terminal for **Android and desktop** — background sessions, tabs,
 adaptive splits, and a real keyboard. Qt Widgets, C++, one codebase for
 both platforms.
 
-Status: **M0–M3 done bar credentials.** The app connects over SSH,
+Status: **verified against a real host.** The app connects over SSH,
 authenticates with a password, opens a PTY channel, and renders the result
 through a real VT emulator — colours, attributes, cursor addressing,
 scrolling and CJK double-width cells all work:

@@ -79,6 +79,14 @@ signals:
 	void state_changed(bssh_ssh_session::state_t state);
 	void failed(const QString &reason);
 
+	/*
+	 * The remote shell ended by itself -- the user typed `exit`, or the
+	 * command finished. This is NOT a dropped connection, and everything
+	 * downstream has to be able to tell the difference: reconnecting a
+	 * shell somebody deliberately exited reopens it forever.
+	 */
+	void shell_exited(int exit_status);
+
 protected:
 	void set_state(state_t state);
 

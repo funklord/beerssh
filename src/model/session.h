@@ -54,6 +54,20 @@ public:
 	bool has_unseen_bell() const { return m_unseen_bell; }
 	void mark_seen();
 
+	/*
+	 * True when the remote shell ended by itself rather than the
+	 * connection dropping. Reconnecting one of these reopens a shell the
+	 * user deliberately exited, which is the difference between a
+	 * terminal that survives a flaky network and one that will not let
+	 * you leave.
+	 */
+	bool exited_cleanly() const { return m_remote_exited; }
+	int exit_status() const { return m_exit_status; }
+
+	/* How the transport reports each kind of ending. */
+	void note_remote_exit(int exit_status);
+	void note_connection_lost();
+
 	void connect_to_host(const QString &password);
 
 	/*
@@ -77,6 +91,9 @@ public:
 signals:
 	void title_changed();
 	void state_changed();
+
+	/* The shell ended: the window says so instead of silently retrying. */
+	void shell_exited(int exit_status);
 	void failed(const QString &reason);
 
 private:
@@ -89,6 +106,8 @@ private:
 	QString m_password;
 	bool m_user_disconnected;
 	bool m_unseen_bell;
+	bool m_remote_exited;
+	int m_exit_status;
 	bool m_on_screen;
 	int m_cols;
 	int m_rows;
