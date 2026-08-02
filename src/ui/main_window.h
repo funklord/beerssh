@@ -89,6 +89,16 @@ private slots:
 
 private:
 	void connect_to(const QString &target);
+	/*
+	 * The credential flow (sec 11). Split out because it is a sequence of
+	 * decisions -- is one stored, is the store unlocked, should this one
+	 * be kept -- and burying that in a lambda is how it stops being
+	 * reviewable.
+	 */
+	QString stored_password_for(const bssh_profile_t &profile);
+	void offer_to_remember(bssh_session *session, const QString &password);
+	bool unlock_secret_store();
+
 	void save_layout();
 	void restore_layout();
 	void show_session(bssh_session *session);

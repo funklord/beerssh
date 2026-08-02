@@ -1219,8 +1219,11 @@ background).
    keys are offered an unlock prompt before any password, since for a
    key-only server a password prompt is not a fallback but a prompt that
    cannot succeed; and the trust-on-first-use prompt is built (§11). Still
-   open: wiring the store into the session flow, so a password given once
-   is offered back on reconnect, and the libsecret backend.
+   open: the libsecret backend, and biometric unlock. The store IS wired
+   in: a password can be remembered per host (off by default), the profile
+   row carries a non-secret `has_password` flag so the app knows whether
+   asking for the store's passphrase is worth it, and a remembered password
+   is replayed on reconnect instead of being held in memory all session.
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,
    tab bar, OSC titles (and desktop window title), per-tab status, layout
    persistence. *(Do this before splits — the registry is the foundation.)*

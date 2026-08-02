@@ -15,7 +15,7 @@ namespace {
  * that gains migrations only once it needs them has already shipped a
  * database it cannot upgrade (project.md sec 10.6).
  */
-const int BSSH_SCHEMA_VERSION = 2;
+const int BSSH_SCHEMA_VERSION = 3;
 
 int next_connection_id() {
 	static int counter = 0;
@@ -116,6 +116,16 @@ bool bssh_profile_store::migrate() {
 		}
 	}
 
+	if (version < 3) {
+		/*
+		 * A flag, not a credential. ALTER TABLE rather than a rebuild so
+		 * an existing user's rows survive -- which is the case the
+		 * migration test builds a real v1 file to cover.
+		 */
+		query.exec(QStringLiteral(
+		        "ALTER TABLE profiles ADD COLUMN has_password INTEGER NOT NULL DEFAULT 0"));
+	}
+
 	if (version != BSSH_SCHEMA_VERSION) {
 		query.exec(QStringLiteral("PRAGMA user_version = %1").arg(BSSH_SCHEMA_VERSION));
 	}
@@ -129,7 +139,8 @@ QList<bssh_profile_t> bssh_profile_store::profiles() const {
 
 	QSqlQuery query(QSqlDatabase::database(m_connection_name));
 	if (!query.exec(QStringLiteral(
-	        "SELECT id, name, host, user, port FROM profiles ORDER BY name COLLATE NOCASE"))) {
+	        "SELECT id, name, host, user, port, has_password FROM profiles"
+	        " ORDER BY name COLLATE NOCASE"))) {
 		return result;
 	}
 
@@ -140,6 +151,7 @@ QList<bssh_profile_t> bssh_profile_store::profiles() const {
 		profile.host = query.value(2).toString();
 		profile.user = query.value(3).toString();
 		profile.port = static_cast<quint16>(query.value(4).toUInt());
+		profile.has_stored_password = query.value(5).toInt() != 0;
 		result.append(profile);
 	}
 
@@ -161,16 +173,19 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 
 	if (profile.id == 0) {
 		query.prepare(QStringLiteral(
-		        "INSERT INTO profiles (name, host, user, port) VALUES (?, ?, ?, ?)"));
+		        "INSERT INTO profiles (name, host, user, port, has_password)"
+		        " VALUES (?, ?, ?, ?, ?)"));
 	} else {
 		query.prepare(QStringLiteral(
-		        "UPDATE profiles SET name = ?, host = ?, user = ?, port = ? WHERE id = ?"));
+		        "UPDATE profiles SET name = ?, host = ?, user = ?, port = ?,"
+		        " has_password = ? WHERE id = ?"));
 	}
 
 	query.addBindValue(profile.name.isEmpty() ? profile.host : profile.name);
 	query.addBindValue(profile.host);
 	query.addBindValue(profile.user);
 	query.addBindValue(profile.port);
+	query.addBindValue(profile.has_stored_password ? 1 : 0);
 	if (profile.id != 0) query.addBindValue(profile.id);
 
 	if (!query.exec()) {

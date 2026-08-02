@@ -27,7 +27,16 @@ struct bssh_profile_t {
 	QString user;
 	quint16 port;
 
-	bssh_profile_t() : id(0), port(22) {}
+	/*
+	 * Whether a password for this host exists in the secret store. NOT a
+	 * secret -- it is the hint that lets the app know it is worth asking
+	 * for the store's passphrase, without unlocking the store to find
+	 * out. Storing this in the profile row keeps sec 10.3's rule intact:
+	 * the database still has nowhere to put a credential.
+	 */
+	bool has_stored_password;
+
+	bssh_profile_t() : id(0), port(22), has_stored_password(false) {}
 
 	bool is_valid() const { return !host.isEmpty(); }
 

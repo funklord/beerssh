@@ -222,6 +222,48 @@ void profile_store_test::an_old_database_gains_the_layout_table() {
 	QCOMPARE(store.layout().profile_ids.count(), 1);
 }
 
+void profile_store_test::the_stored_password_flag_round_trips() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("test.db"));
+
+	int id = 0;
+	{
+		bssh_profile_store store(path);
+		bssh_profile_t profile = make_profile(QStringLiteral("saved"), QStringLiteral("s.example"));
+
+		/* Off unless someone says otherwise -- keeping a credential is a
+		 * decision, not a default. */
+		QVERIFY(!profile.has_stored_password);
+
+		profile.has_stored_password = true;
+		id = store.save(profile);
+	}
+
+	bssh_profile_store reopened(path);
+	QCOMPARE(reopened.profile(id).has_stored_password, true);
+
+	/*
+	 * A flag, not a credential. It exists so the app knows whether asking
+	 * for the store's passphrase is worth it -- without it, every
+	 * connection would ask, including the ones with nothing saved.
+	 */
+	QSqlDatabase check = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"),
+	                                                QStringLiteral("flag_check"));
+	QStringList columns;
+	{
+		check.setDatabaseName(path);
+		QVERIFY(check.open());
+		QSqlQuery query(check);
+		QVERIFY(query.exec(QStringLiteral("PRAGMA table_info(profiles)")));
+		while (query.next()) columns.append(query.value(1).toString().toLower());
+		check.close();
+	}
+	QSqlDatabase::removeDatabase(QStringLiteral("flag_check"));
+
+	QVERIFY(columns.contains(QStringLiteral("has_password")));
+	QVERIFY(!columns.contains(QStringLiteral("password")));
+}
+
 void profile_store_test::front_door_follows_the_input_device() {
 	/*
 	 * The PuTTY-shaped dialog for pointer and keyboard, the full-bleed

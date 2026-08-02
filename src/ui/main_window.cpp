@@ -25,7 +25,12 @@
 #include "ui/layout_manager.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
+#include <QCheckBox>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+
 #include "platform/platform.h"
+#include "platform/secret_store.h"
 #include "ui/host_list.h"
 #include "ui/key_row.h"
 #include "ui/session_dialog.h"
@@ -321,18 +326,53 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 	});
 
 	connect(session, &bssh_session::needs_password, this, [this, session] {
-		bool ok = false;
-		const QString password = QInputDialog::getText(
-		        this, QStringLiteral("BeerSSH"),
-		        QStringLiteral("Password for %1:").arg(session->profile().target()),
-		        QLineEdit::Password, QString(), &ok);
+		/*
+		 * A password already kept for this host is used without asking,
+		 * which is the entire point of storing one -- and is what makes
+		 * auto-reconnect work for password-authenticated hosts without
+		 * holding the credential in memory all session (sec 5.3, 11).
+		 */
+		const QString stored = stored_password_for(session->profile());
+		if (!stored.isEmpty()) {
+			session->supply_password(stored);
+			return;
+		}
 
-		if (!ok) {
+		QDialog dialog(this);
+		dialog.setWindowTitle(QStringLiteral("BeerSSH"));
+
+		QFormLayout *form = new QFormLayout(&dialog);
+		QLineEdit *field = new QLineEdit(&dialog);
+		field->setEchoMode(QLineEdit::Password);
+		form->addRow(QStringLiteral("Password for %1:").arg(session->profile().target()), field);
+
+		QCheckBox *remember = new QCheckBox(QStringLiteral("Remember this password"), &dialog);
+		/*
+		 * Only offered for a SAVED host: there is nowhere to hang the
+		 * secret otherwise, since it is keyed by profile id. And it is
+		 * unchecked by default -- storing a credential is a decision, not
+		 * a default.
+		 */
+		remember->setEnabled(session->profile().id != 0);
+		form->addRow(QString(), remember);
+
+		QDialogButtonBox *buttons = new QDialogButtonBox(
+		        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+		form->addRow(buttons);
+		connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+		connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+
+		field->setFocus();
+
+		if (dialog.exec() != QDialog::Accepted) {
 			session->disconnect_from_host();
 			return;
 		}
 
+		const QString password = field->text();
 		session->supply_password(password);
+
+		if (remember->isChecked()) offer_to_remember(session, password);
 	});
 
 	connect(session, &bssh_session::shell_exited, this, [this, session](int status) {
@@ -663,3 +703,65 @@ bssh_main_window::front_door_t bssh_main_window::front_door_for(bool touch_prima
 	return touch_primary ? FRONT_DOOR_HOST_LIST : FRONT_DOOR_SESSION_DIALOG;
 }
 
+
+QString bssh_main_window::stored_password_for(const bssh_profile_t &profile) {
+	/*
+	 * The profile's has_stored_password flag is what makes this cheap:
+	 * without it, finding out whether a password exists would mean
+	 * unlocking the store -- so every connection would ask for the
+	 * store's passphrase, including the many that do not need one.
+	 */
+	if (profile.id == 0 || !profile.has_stored_password) return QString();
+
+	bssh_secret_store *store = bssh_secret_store::instance();
+	if (!store->is_unlocked() && !unlock_secret_store()) return QString();
+
+	return store->load(QStringLiteral("profile:%1:password").arg(profile.id));
+}
+
+bool bssh_main_window::unlock_secret_store() {
+	bssh_secret_store *store = bssh_secret_store::instance();
+	if (store->is_unlocked()) return true;
+	if (!store->needs_passphrase()) return false;
+
+	bool ok = false;
+	const QString passphrase = QInputDialog::getText(
+	        this, QStringLiteral("Unlock saved passwords"),
+	        QStringLiteral("Passphrase for the credential store\n(%1):")
+	                .arg(store->backend_name()),
+	        QLineEdit::Password, QString(), &ok);
+	if (!ok) return false;
+
+	if (store->unlock(passphrase)) return true;
+
+	/*
+	 * Said plainly rather than folded into a generic failure: a wrong
+	 * passphrase and a damaged store look the same to the user, and the
+	 * difference matters to what they do next.
+	 */
+	QMessageBox::warning(this, QStringLiteral("BeerSSH"),
+	                      QStringLiteral("That passphrase did not open the credential store.\n\n"
+	                                      "Either it is wrong, or the store has been modified."));
+	return false;
+}
+
+void bssh_main_window::offer_to_remember(bssh_session *session, const QString &password) {
+	if (session->profile().id == 0 || password.isEmpty()) return;
+
+	if (!unlock_secret_store()) return;
+
+	bssh_secret_store *store = bssh_secret_store::instance();
+	if (!store->store(QStringLiteral("profile:%1:password").arg(session->profile().id), password)) {
+		return;
+	}
+
+	/*
+	 * The flag goes in the profile row so the next run knows to ask for
+	 * the store passphrase. Written only after the secret itself landed,
+	 * or a failed write would leave the app hunting for a password that
+	 * was never saved.
+	 */
+	bssh_profile_t updated = session->profile();
+	updated.has_stored_password = true;
+	m_profile_store->save(updated);
+}

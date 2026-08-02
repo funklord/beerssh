@@ -22,6 +22,7 @@ private slots:
 	void layout_round_trips();
 	void layout_forgets_deleted_hosts();
 	void an_old_database_gains_the_layout_table();
+	void the_stored_password_flag_round_trips();
 	void front_door_follows_the_input_device();
 };
 

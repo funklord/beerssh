@@ -96,6 +96,11 @@ to expose one), reopening every remembered host at once (needs key auth),
 triple-click line selection, the Android background service, and the
 tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 
+A password can be remembered per host — off by default, and only for a
+saved host, since the secret is keyed to it. Remembered passwords are
+replayed on reconnect, so a password-authenticated session survives a
+network drop without holding the credential in memory the whole time.
+
 Credentials, when stored, go in a passphrase-encrypted file
 (`~/.local/share/beerssh/secrets.enc`, PBKDF2 + AES-256-GCM via OpenSSL).
 The UI names the backend rather than calling everything "encrypted" — a
