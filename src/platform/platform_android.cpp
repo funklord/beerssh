@@ -1,5 +1,24 @@
 #include "platform/platform.h"
 
+#include <QCoreApplication>
+#include <QJniObject>
+
+namespace {
+
+/*
+ * The one JNI bridge in the project (project.md sec 5.2). Three calls
+ * into one Java class, and nothing else crosses: no networking, no
+ * session state, no protocol. If this list ever grows, the thing being
+ * added almost certainly belongs in C++.
+ */
+const char *const BSSH_SERVICE_CLASS = "se/vibes/beerssh/BsshService";
+
+QJniObject android_context() {
+	return QNativeInterface::QAndroidApplication::context();
+}
+
+} /* namespace */
+
 /*
  * Android implementation of bssh_platform.
  *
@@ -15,7 +34,7 @@
  */
 class bssh_platform_android : public bssh_platform {
 public:
-	bssh_platform_android() {
+	bssh_platform_android() : m_keep_alive(false), m_status(QStringLiteral("Connected")) {
 	}
 
 	QString name() const override {
@@ -23,31 +42,72 @@ public:
 	}
 
 	void set_keep_alive(bool keep_alive) override {
-		Q_UNUSED(keep_alive);
 		/*
-		 * NOT IMPLEMENTED, and deliberately not stubbed to look done.
-		 *
-		 * This is where the foreground service starts and stops: a JNI
-		 * call into the manifest-registered Service, which builds its
-		 * mandatory notification and keeps the process from being killed
-		 * (sec 5.1/5.2). Until it exists, an Android build backgrounds
-		 * like any other app -- which is to say its sessions die.
-		 *
-		 * It cannot be written blind: the Play foreground-service type
-		 * is still [OPEN] in sec 5.1, and the whole area has to be
-		 * tested on a device that this was developed without.
+		 * Starts and stops the foreground service (sec 5.1). A
+		 * backgrounded Android app cannot hold a socket open; this is
+		 * what buys the process the right to keep running, and Android
+		 * will not grant it without the notification the service shows.
 		 */
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+
+		if (keep_alive) {
+			const QJniObject status = QJniObject::fromString(m_status);
+			QJniObject::callStaticMethod<void>(
+			        BSSH_SERVICE_CLASS, "start",
+			        "(Landroid/content/Context;Ljava/lang/String;)V",
+			        context.object(), status.object<jstring>());
+		} else {
+			QJniObject::callStaticMethod<void>(
+			        BSSH_SERVICE_CLASS, "stop", "(Landroid/content/Context;)V",
+			        context.object());
+		}
+
+		m_keep_alive = keep_alive;
 	}
 
 	void set_session_count(int count) override {
-		Q_UNUSED(count);
-		/* Notification text, via the same JNI bridge. See set_keep_alive. */
+		m_status = count == 1
+		                   ? QStringLiteral("1 session connected")
+		                   : QStringLiteral("%1 sessions connected").arg(count);
+
+		/* Nothing to update while no service is running. */
+		if (!m_keep_alive) return;
+
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+
+		const QJniObject status = QJniObject::fromString(m_status);
+		QJniObject::callStaticMethod<void>(
+		        BSSH_SERVICE_CLASS, "updateStatus",
+		        "(Landroid/content/Context;Ljava/lang/String;)V",
+		        context.object(), status.object<jstring>());
 	}
 
 	void notify(const QString &title, const QString &body) override {
+		/*
+		 * Folded into the service's own notification rather than posting
+		 * a second one: two notifications from a terminal that is doing
+		 * one thing is one too many, and the ongoing one is already on
+		 * screen. A separate alert for a bell or a failed reconnect is
+		 * worth revisiting once there is a device to judge it on.
+		 */
 		Q_UNUSED(title);
-		Q_UNUSED(body);
-		/* NotificationCompat through the service. See set_keep_alive. */
+		set_status_text(body);
+	}
+
+	void set_status_text(const QString &text) {
+		m_status = text;
+		if (!m_keep_alive) return;
+
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+
+		const QJniObject status = QJniObject::fromString(m_status);
+		QJniObject::callStaticMethod<void>(
+		        BSSH_SERVICE_CLASS, "updateStatus",
+		        "(Landroid/content/Context;Ljava/lang/String;)V",
+		        context.object(), status.object<jstring>());
 	}
 
 	bool is_touch_primary() const override {
@@ -59,6 +119,10 @@ public:
 		 */
 		return true;
 	}
+
+private:
+	bool m_keep_alive;
+	QString m_status;
 };
 
 bssh_platform *bssh_platform::instance() {

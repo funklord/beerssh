@@ -557,7 +557,19 @@ void bssh_main_window::on_registry_changed() {
 	 * The notification and tray tooltip count sessions, never panes or
 	 * tabs (sec 5.2).
 	 */
-	bssh_platform::instance()->set_session_count(m_registry->live_count());
+	/*
+	 * sec 5.1: "started when the first session connects and stopped when
+	 * the last disconnects". Tying this to the window's close event, as
+	 * it was, is a desktop assumption -- Android has no close event,
+	 * because an app is backgrounded with the home button, so the service
+	 * would never have started where it matters most.
+	 *
+	 * On desktop the same call means the tray icon and staying resident;
+	 * on Android it means the foreground service. Neither is named here.
+	 */
+	const int live = m_registry->live_count();
+	bssh_platform::instance()->set_session_count(live);
+	bssh_platform::instance()->set_keep_alive(live > 0);
 
 	if (m_registry->count() == 0) {
 		detach_session();
@@ -708,7 +720,19 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 		 * whole operation.
 		 */
 		bssh_platform::instance()->set_keep_alive(true);
-		bssh_platform::instance()->set_session_count(m_registry->live_count());
+		/*
+	 * sec 5.1: "started when the first session connects and stopped when
+	 * the last disconnects". Tying this to the window's close event, as
+	 * it was, is a desktop assumption -- Android has no close event,
+	 * because an app is backgrounded with the home button, so the service
+	 * would never have started where it matters most.
+	 *
+	 * On desktop the same call means the tray icon and staying resident;
+	 * on Android it means the foreground service. Neither is named here.
+	 */
+	const int live = m_registry->live_count();
+	bssh_platform::instance()->set_session_count(live);
+	bssh_platform::instance()->set_keep_alive(live > 0);
 		hide();
 		event->ignore();
 		return;

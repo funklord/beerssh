@@ -54,11 +54,20 @@
 	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
 	<!--
-		The foreground-service permissions are not here yet. They arrive
-		with the service itself at M4 (sec 5.1), and declaring a
-		permission the app does not use is exactly what Play review asks
-		about.
+		The foreground service (sec 5.1). connectedDevice is the type this
+		project starts with: no runtime time limit, unlike dataSync, whose
+		Android 15 cap of roughly six hours a day is a poor fit for a shell
+		left open all day. It requires one of a set of qualifying
+		permissions, which is what CHANGE_NETWORK_STATE is doing here.
+
+		sec 5.1 keeps specialUse as the fallback if Play pushes back on
+		the framing, and says to re-check the policy at build time because
+		these rules move.
 	-->
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+	<uses-permission android:name="android.permission.CHANGE_NETWORK_STATE"/>
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
 
 	<supports-screens
 	        android:anyDensity="true"
@@ -119,6 +128,15 @@
 			kind of omission that surfaces as a crash the first time a file
 			dialog opens rather than as a build error.
 		-->
+		<!--
+			Not exported: nothing outside this app has any business
+			starting it, and an exported service is a component any other
+			app can poke.
+		-->
+		<service android:name="se.vibes.beerssh.BsshService"
+		         android:exported="false"
+		         android:foregroundServiceType="connectedDevice"/>
+
 		<provider android:name="androidx.core.content.FileProvider"
 		          android:authorities="${applicationId}.qtprovider"
 		          android:exported="false"

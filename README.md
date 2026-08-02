@@ -204,8 +204,14 @@ known-hosts store, then key auth attempted and a password requested. The
 debug APK is 18.6 MB with no QML runtime and no permissions beyond INTERNET
 and ACCESS_NETWORK_STATE.
 
-Not yet done on Android: the foreground service (M4), so a backgrounded
-session dies; and no session has been carried through to a live shell. Not
+Backgrounding works: a foreground service starts with the first session and
+stops with the last, so sessions survive the home button. The notification
+it must show reports the session count.
+
+Not yet done on Android: no session has been carried through to a live
+shell, and the emulator runs API 30, where Android 14's foreground-service
+type rules are not enforced — so the `connectedDevice` choice is untested
+where it counts. Not
 yet exercised on a device: the SSH path, the foreground service (which is
 not implemented), and anything involving a real keyboard.
 

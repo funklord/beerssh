@@ -316,6 +316,18 @@ prepare a `specialUse` justification as the fallback if Play pushes back. Avoid
 `dataSync` as the primary type because of the Android 15 time limit. **Verify the
 exact current Play policy at implementation time** — these rules change.
 
+**Built, and verified on an emulator.** The service starts when the first
+session becomes live and stops when the last ends — §5.1's own wording, and
+notably *not* tied to the window closing, which is a desktop idea Android
+does not have. Confirmed: `isForeground=true`, a notification reading "1
+session connected", the process surviving the home button, and both service
+and notification going away with the session.
+
+**Two things that emulator could not test**, and both matter for shipping:
+it runs API 30, where the `foregroundServiceType` rules Android 14+ enforces
+do not apply, so `connectedDevice` was never actually adjudicated; and Play
+review's opinion of the framing remains entirely unknown.
+
 Required manifest permissions (indicative): `FOREGROUND_SERVICE`, the
 type-specific `FOREGROUND_SERVICE_*` permission, `INTERNET`,
 `ACCESS_NETWORK_STATE`, `POST_NOTIFICATIONS` (Android 13+), and
@@ -1218,9 +1230,10 @@ background).
 4. **M3 – Keyboard.** Physical/Bluetooth key handling + `bssh_input_router` +
    on-screen key row (Ctrl/Alt/Esc/arrows). Get the tables right on desktop, then
    test on a real Android hardware keyboard *and* on Wayland + X11.
-5. **M4 – Platform layer & background.** `bssh_platform` split; Android
-   foreground service + JNI bridge + notification, keeping a session alive
-   screen-off/backgrounded; desktop tray/stay-resident behaviour and the
+5. **M4 – Platform layer & background.** **Done on both platforms.**
+   `bssh_platform` split; Android foreground service + JNI bridge +
+   notification, verified keeping a backgrounded session alive on an
+   emulator; desktop tray/stay-resident behaviour and the
    close-with-sessions prompt (§5.5).
 6. **M5 – Reconnection & network awareness.** Connection FSM, keepalive, network-
    change reconnect (Android callbacks + desktop `QNetworkInformation`, including
