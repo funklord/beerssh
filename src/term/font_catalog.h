@@ -127,6 +127,21 @@ public:
 	QString canonical_id(const QString &name) const;
 
 	/*
+	 * What a STORED value actually means (sec 10.1 + sec 9.4). Three
+	 * different callers needed this rule -- the view, the picker and the
+	 * form that decides whether to record an override -- and when each
+	 * spelled it out for itself they disagreed: a dialog opened and saved
+	 * without a single click wrote "jetbrains-mono" as an override of a
+	 * preset whose font was unset, detaching that host from its preset
+	 * for good.
+	 *
+	 *   empty        -> the default for this form factor
+	 *   a display name -> its id
+	 *   anything else  -> itself, so an unknown font stays visible
+	 */
+	QString effective_id(const QString &stored, bool compact) const;
+
+	/*
 	 * The out-of-the-box choice. Same set both ways (sec 9.2): compact
 	 * form factors get the condensed default, everything else the
 	 * legibility-first one.

@@ -154,6 +154,11 @@ QString bssh_font_catalog::canonical_id(const QString &name) const {
 	return name;
 }
 
+QString bssh_font_catalog::effective_id(const QString &stored, bool compact) const {
+	if (stored.isEmpty()) return default_id(compact);
+	return canonical_id(stored);
+}
+
 QString bssh_font_catalog::default_id(bool compact) const {
 	const QString preferred = compact ? QStringLiteral("iosevka-term")
 	                                  : QStringLiteral("jetbrains-mono");

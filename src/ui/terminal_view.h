@@ -5,6 +5,7 @@
 #include <QElapsedTimer>
 #include <QFont>
 #include <QHash>
+#include <QJsonObject>
 #include <QWidget>
 
 #include "term/image_store.h"
@@ -238,5 +239,19 @@ private:
 	int m_cols;
 	int m_rows;
 };
+
+/*
+ * Apply a host's resolved settings (sec 10.1) to a view.
+ *
+ * A free function rather than a method, because it is the one place that
+ * knows the resolver's field NAMES, and a widget that knows those is a
+ * widget coupled to the preset schema. Everything it touches is
+ * appearance: what the grid is drawn in, never what the session does.
+ *
+ * Unset fields are left at the view's defaults rather than being forced to
+ * anything -- a preset with no font chosen means "no opinion", which is
+ * not the same as an opinion that happens to match the default.
+ */
+void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings);
 
 #endif /* BSSH_TERMINAL_VIEW_H */

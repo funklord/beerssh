@@ -30,6 +30,9 @@ private slots:
 	void shift_overrides_mouse_reporting_to_select();
 	void session_records_what_the_client_wrote();
 	void session_reports_every_state_on_the_way_up();
+	void a_hosts_resolved_font_reaches_its_view();
+	void an_unset_font_means_the_default_not_the_fallback_chain();
+	void changing_a_hosts_font_changes_its_grid();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */

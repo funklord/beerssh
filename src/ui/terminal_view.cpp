@@ -107,13 +107,15 @@ void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 	bssh_font_catalog &catalog = bssh_font_catalog::instance();
 
 	/*
-	 * Tolerated rather than rejected: a profile may carry a family name
-	 * written before ids existed, or one an import file spelled out.
-	 * canonical_id turns what it can into an id and passes anything else
-	 * through unchanged, so an unknown font ends up drawn in the fallback
-	 * chain with a note rather than refused.
+	 * Through effective_id, so this agrees with the picker and with
+	 * whatever decides to record an override. An empty value means "the
+	 * platform's default", not "no font": every shipped preset leaves the
+	 * font unset (sec 10.4), and treating that as a request would drop
+	 * into the fallback chain and render every default host in DejaVu.
 	 */
-	m_font_id = catalog.canonical_id(id);
+	const bssh_platform *platform = bssh_platform::instance();
+	m_font_id = catalog.effective_id(id, platform && platform->is_touch_primary());
+
 	m_font_size = point_size > 0 ? point_size : BSSH_DEFAULT_POINT_SIZE;
 
 	m_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id), m_font_size);
@@ -776,4 +778,19 @@ void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
 	update();
 	emit selection_changed();
 	event->accept();
+}
+
+void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings) {
+	if (!view) return;
+
+	/*
+	 * The font and its size go together in one call: they are two halves
+	 * of one cell measurement, and applying them separately means two
+	 * grid recomputations and two window-change messages for what the
+	 * user did as a single change.
+	 */
+	const QString family = settings.value(QStringLiteral("font_family")).toString();
+	const int size = settings.value(QStringLiteral("font_size")).toInt();
+
+	view->set_font_id(family, size);
 }

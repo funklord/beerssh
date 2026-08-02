@@ -24,6 +24,7 @@
 #include "model/session.h"
 #include "model/conn_manager.h"
 #include "model/session_registry.h"
+#include "model/settings_resolver.h"
 #include "ui/layout_manager.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
@@ -309,6 +310,14 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 	connect(session, &bssh_session::failed, this, &bssh_main_window::on_failed);
 
 	/*
+	 * Resolve the host's settings once, here, where the store is (sec
+	 * 10.1). The session carries them from now on, so a pane rebuilt by a
+	 * layout change does not have to find a preset table to know what font
+	 * to draw in.
+	 */
+	session->set_settings(resolved_settings(profile));
+
+	/*
 	 * First contact with a host. The fingerprint is shown because it is
 	 * the only thing the user can actually check -- against what the
 	 * server's owner published, or against `ssh-keyscan` from somewhere
@@ -498,6 +507,23 @@ void bssh_main_window::show_session(bssh_session *session) {
 
 	if (m_key_row) m_key_row->set_router(session->input_router());
 
+	/*
+	 * Before the geometry below, because the font decides the cell size and
+	 * therefore the column count. Two hosts on different fonts genuinely
+	 * have different grids in the same window, and each remote has to be
+	 * told about its own (sec 9.5).
+	 */
+	bssh_apply_appearance(m_terminal_view, session->settings());
+
+	connect(session, &bssh_session::settings_changed, this, [this, session] {
+		if (m_current != session) return;
+		bssh_apply_appearance(m_terminal_view, session->settings());
+		session->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
+		                                      m_terminal_view->cell_height());
+		session->resize(m_terminal_view->cols(), m_terminal_view->rows());
+		update_status();
+	}, Qt::UniqueConnection);
+
 	session->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
 	                                      m_terminal_view->cell_height());
 	session->resize(m_terminal_view->cols(), m_terminal_view->rows());
@@ -642,6 +668,21 @@ void bssh_main_window::restore_layout() {
 	if (!profile.is_valid()) return;
 
 	if (m_session_dialog) m_session_dialog->set_current_profile(profile);
+}
+
+QJsonObject bssh_main_window::resolved_settings(const bssh_profile_t &profile) const {
+	if (!m_profile_store) return bssh_settings_resolver::app_defaults();
+
+	/*
+	 * preset_id 0 is "follows nothing", which is what a host created from
+	 * a command-line target has. It resolves to the app defaults rather
+	 * than to a preset that does not exist, so such a session still gets
+	 * a font and a size rather than an empty object.
+	 */
+	if (profile.preset_id == 0) return bssh_settings_resolver::app_defaults();
+
+	const bssh_preset_t preset = m_profile_store->preset(profile.preset_id);
+	return bssh_settings_resolver::resolve(preset, profile.overrides);
 }
 
 void bssh_main_window::on_failed(const QString &reason) {

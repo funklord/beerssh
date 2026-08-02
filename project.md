@@ -1305,8 +1305,12 @@ background).
     (§9.5 — the renderer caches per-glyph *family* lookups and QFonts, not
     rasterised glyphs), Play asset-pack delivery and subsetting for the rest
     (Iosevka alone is 42 MB, so the condensed face cannot be the compact
-    default until it ships), the font picker UI, and the fractional-scaling
-    and multi-monitor DPI checks.
+    default until it ships), and the fractional-scaling and multi-monitor
+    DPI checks. The **font picker is built** and is one widget on both
+    platforms (§9.4): Window → Appearance in the PuTTY-shaped dialog, the
+    host page on Android, with a live preview, unavailable families listed
+    and marked rather than hidden, and the choice stored as a per-host
+    override only where it differs from what the host already resolves to.
 11. **M10 – Preset system.** Preset/profile layering, built-in starter presets,
     JSON import/export, propagation UI. **Core built:** `bssh_preset_t` (with
     no field a secret could occupy), the three-layer resolver with

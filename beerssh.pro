@@ -44,6 +44,7 @@ SOURCES += \
     src/term/image_store.cpp \
     src/term/scrollback.cpp \
     src/term/screen.cpp \
+    src/ui/font_picker.cpp \
     src/ui/host_editor.cpp \
     src/ui/host_list.cpp \
     src/ui/layout_manager.cpp \
@@ -73,6 +74,7 @@ HEADERS += \
     src/term/image_store.h \
     src/term/scrollback.h \
     src/term/screen.h \
+    src/ui/font_picker.h \
     src/ui/host_editor.h \
     src/ui/host_list.h \
     src/ui/layout_manager.h \

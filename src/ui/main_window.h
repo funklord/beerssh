@@ -97,6 +97,15 @@ private slots:
 	void on_failed(const QString &reason);
 
 private:
+	/*
+	 * A host's preset with its own overrides applied (sec 10.1). One place,
+	 * because "which settings does this host actually have" is a question
+	 * that must have exactly one answer -- two call sites resolving it
+	 * their own way is how a host ends up with one font in a tab and
+	 * another in a split.
+	 */
+	QJsonObject resolved_settings(const bssh_profile_t &profile) const;
+
 	void connect_to(const QString &target);
 	/*
 	 * The credential flow (sec 11). Split out because it is a sequence of

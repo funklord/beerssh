@@ -81,6 +81,21 @@ void bssh_pane_container::rebuild() {
 		view->attach_emulator(session->emulator());
 		view->attach_input_router(session->input_router());
 
+		/*
+		 * The host's resolved appearance (sec 9, sec 10.1), before the
+		 * cell metrics are read below: the font decides the cell size,
+		 * so applying it afterwards would tell the emulator a geometry
+		 * computed for a font that is no longer in use, and the remote
+		 * would lay out for the wrong width until the next resize.
+		 */
+		bssh_apply_appearance(view, session->settings());
+
+		connect(session, &bssh_session::settings_changed, view, [view, session] {
+			bssh_apply_appearance(view, session->settings());
+			session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
+			session->resize(view->cols(), view->rows());
+		});
+
 		session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
 
 		/*

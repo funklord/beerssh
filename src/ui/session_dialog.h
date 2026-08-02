@@ -1,6 +1,7 @@
 #ifndef BSSH_SESSION_DIALOG_H
 #define BSSH_SESSION_DIALOG_H
 
+#include <QJsonObject>
 #include <QWidget>
 
 #include "model/profile.h"
@@ -11,6 +12,7 @@ class QSpinBox;
 class QStackedWidget;
 class QTreeWidget;
 class QTreeWidgetItem;
+class bssh_font_picker;
 class bssh_profile_store;
 
 /*
@@ -57,6 +59,17 @@ private slots:
 private:
 	QWidget *build_session_page();
 	QWidget *build_placeholder_page(const QString &title, const QString &milestone);
+
+	/*
+	 * PuTTY keeps font selection under Window > Appearance, and so does
+	 * this (sec 8.5's "borrow the shape people already know"). It is the
+	 * same bssh_font_picker the Android host page embeds -- one list, both
+	 * platforms (sec 9.4).
+	 */
+	QWidget *build_window_page();
+
+	/* This host's preset with its own overrides applied (sec 10.1). */
+	QJsonObject resolved_settings(const bssh_profile_t &profile) const;
 	void reload_sessions();
 	int selected_profile_id() const;
 
@@ -68,7 +81,17 @@ private:
 	QLineEdit *m_user;
 	QLineEdit *m_session_name;
 	QListWidget *m_sessions;
-	int m_current_id;
+	/*
+	 * The profile being edited, whole -- not just its id.
+	 *
+	 * This used to be an id, and current_profile() rebuilt a bare
+	 * bssh_profile_t from the text fields around it. Everything the form
+	 * does NOT show was therefore dropped on every save: the preset the
+	 * host follows and its per-field overrides (sec 10.1), which is a
+	 * host quietly losing its settings by being opened and saved.
+	 */
+	bssh_profile_t m_current;
+	bssh_font_picker *m_font_picker;
 };
 
 #endif /* BSSH_SESSION_DIALOG_H */

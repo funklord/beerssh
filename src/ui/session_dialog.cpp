@@ -1,5 +1,10 @@
 #include "ui/session_dialog.h"
 
+#include "model/settings_resolver.h"
+#include "platform/platform.h"
+#include "term/font_catalog.h"
+#include "ui/font_picker.h"
+
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -17,7 +22,7 @@
 bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *parent)
     : QWidget(parent),
       m_store(store),
-      m_current_id(0) {
+      m_font_picker(nullptr) {
 	setWindowTitle(QStringLiteral("BeerSSH Configuration"));
 
 	QHBoxLayout *columns = new QHBoxLayout(this);
@@ -47,8 +52,7 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	m_pages->addWidget(build_session_page());
 	m_pages->addWidget(build_placeholder_page(QStringLiteral("Terminal"),
 	                                           QStringLiteral("M10, with the preset system")));
-	m_pages->addWidget(build_placeholder_page(QStringLiteral("Window"),
-	                                           QStringLiteral("M9, with the font pipeline")));
+	m_pages->addWidget(build_window_page());
 	m_pages->addWidget(build_placeholder_page(QStringLiteral("Connection"),
 	                                           QStringLiteral("M5, with keepalive and reconnect")));
 	m_pages->addWidget(build_placeholder_page(QStringLiteral("SSH"),
@@ -208,21 +212,76 @@ int bssh_session_dialog::selected_profile_id() const {
 }
 
 bssh_profile_t bssh_session_dialog::current_profile() const {
-	bssh_profile_t profile;
-	profile.id = m_current_id;
+	/*
+	 * Starts from the loaded profile so that everything this form does not
+	 * show -- the preset it follows, its other overrides, whether a
+	 * password is stored -- survives a save.
+	 */
+	bssh_profile_t profile = m_current;
 	profile.name = m_session_name->text();
 	profile.host = m_host->text().trimmed();
 	profile.user = m_user->text().trimmed();
 	profile.port = static_cast<quint16>(m_port->value());
+
+	/*
+	 * The font is an override on this host (sec 10.1), written only when
+	 * it differs from what the host already resolves to. Writing it
+	 * unconditionally would mark every host as overriding its preset's
+	 * font the first time its dialog was opened, and an override that
+	 * changes nothing is exactly what sec 10.1 says not to record.
+	 */
+	if (m_font_picker) {
+		const QJsonObject resolved = resolved_settings(m_current);
+		QJsonObject overrides = profile.overrides;
+
+		const QString family = m_font_picker->font_id();
+		const int size = m_font_picker->point_size();
+
+		/*
+		 * Compared against what the host ALREADY resolves to, run
+		 * through the same effective_id rule the picker used to fill
+		 * itself in. Comparing the picker's id against a raw stored
+		 * value compares an id with an empty string and records an
+		 * override on every save.
+		 */
+		const bssh_platform *platform = bssh_platform::instance();
+		const QString current = bssh_font_catalog::instance().effective_id(
+		        resolved.value(QStringLiteral("font_family")).toString(),
+		        platform && platform->is_touch_primary());
+
+		if (family != current) {
+			overrides.insert(QStringLiteral("font_family"), family);
+		}
+		if (size != resolved.value(QStringLiteral("font_size")).toInt()) {
+			overrides.insert(QStringLiteral("font_size"), size);
+		}
+
+		profile.overrides = overrides;
+	}
+
 	return profile;
 }
 
+QJsonObject bssh_session_dialog::resolved_settings(const bssh_profile_t &profile) const {
+	if (!m_store || profile.preset_id == 0) return bssh_settings_resolver::app_defaults();
+
+	return bssh_settings_resolver::resolve(m_store->preset(profile.preset_id),
+	                                        profile.overrides);
+}
+
 void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
-	m_current_id = profile.id;
+	m_current = profile;
 	m_session_name->setText(profile.name);
 	m_host->setText(profile.host);
 	m_user->setText(profile.user);
 	m_port->setValue(profile.port);
+
+	if (m_font_picker) {
+		const QJsonObject resolved = resolved_settings(profile);
+		m_font_picker->set_font_choice(
+		        resolved.value(QStringLiteral("font_family")).toString(),
+		        resolved.value(QStringLiteral("font_size")).toInt());
+	}
 }
 
 void bssh_session_dialog::on_load() {
@@ -251,7 +310,7 @@ void bssh_session_dialog::on_save() {
 		}
 	}
 
-	m_current_id = m_store->save(profile);
+	m_current.id = m_store->save(profile);
 	reload_sessions();
 }
 
@@ -260,7 +319,7 @@ void bssh_session_dialog::on_delete() {
 	if (id == 0 || !m_store) return;
 
 	m_store->remove(id);
-	if (m_current_id == id) m_current_id = 0;
+	if (m_current.id == id) m_current = bssh_profile_t();
 	reload_sessions();
 }
 
@@ -274,4 +333,30 @@ void bssh_session_dialog::on_open() {
 	if (!profile.is_valid()) return;
 
 	emit open_requested(profile);
+}
+
+QWidget *bssh_session_dialog::build_window_page() {
+	QWidget *page = new QWidget(this);
+	QVBoxLayout *layout = new QVBoxLayout(page);
+
+	QLabel *heading = new QLabel(QStringLiteral("<b>Appearance</b>"), page);
+	layout->addWidget(heading);
+
+	m_font_picker = new bssh_font_picker(page);
+	layout->addWidget(m_font_picker);
+
+	/*
+	 * Says where the value really lives (sec 10.1). A font set here is an
+	 * override on this host; the preset behind it is what other hosts
+	 * follow. Without saying so, changing a font on one host and finding
+	 * another unchanged looks like the setting did not save.
+	 */
+	QLabel *scope = new QLabel(
+	        QStringLiteral("Applies to this host. Hosts that follow a preset take the "
+	                        "preset's font until one is chosen here."), page);
+	scope->setWordWrap(true);
+	layout->addWidget(scope);
+
+	layout->addStretch(1);
+	return page;
 }

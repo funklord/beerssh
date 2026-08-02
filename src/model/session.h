@@ -1,6 +1,7 @@
 #ifndef BSSH_SESSION_H
 #define BSSH_SESSION_H
 
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 
@@ -31,6 +32,23 @@ public:
 	~bssh_session() override;
 
 	const bssh_profile_t &profile() const { return m_profile; }
+
+	/*
+	 * The resolved settings for this host: the preset's values with the
+	 * host's own overrides applied (sec 10.1), as bssh_settings_resolver
+	 * produced them.
+	 *
+	 * They live on the session rather than being looked up by whatever
+	 * widget needs one, for the reason sec 3 puts all session state here:
+	 * a pane can be destroyed and rebuilt by a layout change, and a view
+	 * that resolved its own font would go back to the default every time
+	 * the window was narrow enough to collapse the splits.
+	 *
+	 * Empty until someone sets them, which is honest -- a session created
+	 * from a bare host:port has no preset behind it.
+	 */
+	const QJsonObject &settings() const { return m_settings; }
+	void set_settings(const QJsonObject &settings);
 
 	bssh_emulator *emulator() const { return m_emulator; }
 	bssh_input_router *input_router() const { return m_input_router; }
@@ -112,6 +130,14 @@ signals:
 	void title_changed();
 	void state_changed();
 
+	/*
+	 * The resolved settings changed -- a preset was edited, or this host
+	 * overrode a field. Whatever is showing the session re-reads them;
+	 * the font and size are the ones that change the grid (sec 9.5), so
+	 * this ends in a window-change rather than only a repaint.
+	 */
+	void settings_changed();
+
 	/* The shell ended: the window says so instead of silently retrying. */
 	void shell_exited(int exit_status);
 
@@ -126,6 +152,7 @@ signals:
 
 private:
 	bssh_profile_t m_profile;
+	QJsonObject m_settings;
 	bssh_ssh_session *m_transport;
 	bssh_emulator *m_emulator;
 	bssh_input_router *m_input_router;

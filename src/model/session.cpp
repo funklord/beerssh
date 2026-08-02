@@ -40,6 +40,13 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 bssh_session::~bssh_session() {
 }
 
+void bssh_session::set_settings(const QJsonObject &settings) {
+	if (settings == m_settings) return;
+
+	m_settings = settings;
+	emit settings_changed();
+}
+
 QString bssh_session::title() const {
 	if (!m_remote_title.isEmpty()) return m_remote_title;
 	if (!m_profile.name.isEmpty()) return m_profile.name;

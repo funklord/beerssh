@@ -6,6 +6,7 @@
 #include "model/profile.h"
 
 class QLineEdit;
+class bssh_font_picker;
 class QSpinBox;
 
 /*
@@ -49,6 +50,7 @@ private:
 	QLineEdit *m_host;
 	QLineEdit *m_user;
 	QSpinBox *m_port;
+	bssh_font_picker *m_font_picker;
 };
 
 #endif /* BSSH_HOST_EDITOR_H */

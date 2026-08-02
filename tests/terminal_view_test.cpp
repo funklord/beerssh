@@ -6,6 +6,7 @@
 #include "fake_ssh_session.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
+#include "term/font_catalog.h"
 #include "ui/terminal_view.h"
 
 
@@ -349,4 +350,72 @@ void terminal_view_test::session_reports_every_state_on_the_way_up() {
 	/* A repeated state must stay silent, or the status UI flickers. */
 	session.authenticate_password(QStringLiteral("hunter2"));
 	QCOMPARE(spy.count(), 4);
+}
+
+void terminal_view_test::a_hosts_resolved_font_reaches_its_view() {
+	/*
+	 * The wiring sec 10.1 describes, end to end: a host's resolved
+	 * settings decide what its terminal is drawn in. bssh_font_catalog
+	 * existed for a whole commit before anything called it, which is the
+	 * failure this test is here to catch -- a font picker that changes a
+	 * stored value and nothing else looks like it works.
+	 */
+	bssh_terminal_view view;
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("font_family"), QStringLiteral("hack"));
+	settings.insert(QStringLiteral("font_size"), 14);
+	bssh_apply_appearance(&view, settings);
+
+	QCOMPARE(view.font_id(), QStringLiteral("hack"));
+
+	/* A display name, as an imported profile might carry it (sec 9.4). */
+	settings.insert(QStringLiteral("font_family"), QStringLiteral("DejaVu Sans Mono"));
+	bssh_apply_appearance(&view, settings);
+	QCOMPARE(view.font_id(), QStringLiteral("dejavu-sans-mono"));
+}
+
+void terminal_view_test::an_unset_font_means_the_default_not_the_fallback_chain() {
+	/*
+	 * Every shipped preset leaves the font unset (sec 10.4), so this is
+	 * the path almost every host takes. An empty string must mean "the
+	 * platform's default", not "no font" -- the latter drops into sec
+	 * 9.3's chain and renders every out-of-the-box host in DejaVu.
+	 */
+	bssh_terminal_view view;
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("font_family"), QString());
+	settings.insert(QStringLiteral("font_size"), 0);
+	bssh_apply_appearance(&view, settings);
+
+	const bssh_font_catalog catalog;
+	QCOMPARE(view.font_id(), catalog.default_id(false));
+	QVERIFY(catalog.by_id(view.font_id()) != nullptr);
+}
+
+void terminal_view_test::changing_a_hosts_font_changes_its_grid() {
+	/*
+	 * A font change is a geometry change (sec 9.5): different cell size,
+	 * different column count, and the remote has to be told or it keeps
+	 * laying out for the old width. Asserting on the cell metrics rather
+	 * than on a signal, because the metrics are what the emulator and the
+	 * window-change message are computed from.
+	 */
+	bssh_terminal_view view;
+	view.resize(800, 400);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("font_family"), QStringLiteral("dejavu-sans-mono"));
+	settings.insert(QStringLiteral("font_size"), 10);
+	bssh_apply_appearance(&view, settings);
+
+	const int narrow_cell = view.cell_width();
+	const int narrow_cols = view.cols();
+
+	settings.insert(QStringLiteral("font_size"), 20);
+	bssh_apply_appearance(&view, settings);
+
+	QVERIFY2(view.cell_width() > narrow_cell, "a bigger font must mean a wider cell");
+	QVERIFY2(view.cols() < narrow_cols, "a wider cell must mean fewer columns");
 }
