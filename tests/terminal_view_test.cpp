@@ -152,6 +152,149 @@ void terminal_view_test::ime_commit_text_becomes_input() {
 	QCOMPARE(emulator.take_output(), QByteArray());
 }
 
+/* A drag, as three events, at cell coordinates rather than pixels. */
+static void drag(bssh_terminal_view &view, int from_col, int from_row,
+                  int to_col, int to_row, Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+	const QPoint from(from_col * view.cell_width() + 1, from_row * view.cell_height() + 1);
+	const QPoint to(to_col * view.cell_width() + 1, to_row * view.cell_height() + 1);
+
+	QMouseEvent press(QEvent::MouseButtonPress, from, view.mapToGlobal(from),
+	                   Qt::LeftButton, Qt::LeftButton, modifiers);
+	QMouseEvent move(QEvent::MouseMove, to, view.mapToGlobal(to),
+	                  Qt::NoButton, Qt::LeftButton, modifiers);
+	QMouseEvent release(QEvent::MouseButtonRelease, to, view.mapToGlobal(to),
+	                     Qt::LeftButton, Qt::NoButton, modifiers);
+
+	QCoreApplication::sendEvent(&view, &press);
+	QCoreApplication::sendEvent(&view, &move);
+	QCoreApplication::sendEvent(&view, &release);
+}
+
+void terminal_view_test::drag_selects_text() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("hello world"));
+
+	QVERIFY(!view.has_selection());
+	drag(view, 0, 0, 4, 0);
+
+	QVERIFY(view.has_selection());
+	QCOMPARE(view.selection_text(), QStringLiteral("hello"));
+
+	/*
+	 * Trailing blanks are padding: a terminal row is always full width,
+	 * and copying the padding is how a pasted command arrives with a tail
+	 * of spaces.
+	 */
+	drag(view, 0, 0, view.cols() - 1, 0);
+	QCOMPARE(view.selection_text(), QStringLiteral("hello world"));
+}
+
+void terminal_view_test::selection_spans_the_scrollback() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < 20; ++i) {
+		emulator.feed(QByteArrayLiteral("row") + QByteArray::number(i) + QByteArrayLiteral("\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 0);
+
+	/* Scroll back, then select a line that only exists in history. */
+	view.scroll_by(5);
+	drag(view, 0, 0, 3, 0);
+
+	QVERIFY(view.has_selection());
+	QVERIFY(view.selection_text().startsWith(QStringLiteral("row")));
+
+	/*
+	 * Scrolling must not move the selection: it is anchored to absolute
+	 * lines, not to view rows, or the highlight would slide across the
+	 * text as the user scrolls to see the rest of it.
+	 */
+	const QString before = view.selection_text();
+	view.scroll_by(-2);
+	QCOMPARE(view.selection_text(), before);
+}
+
+void terminal_view_test::double_click_selects_a_word() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("cat /etc/hosts here"));
+
+	/* Inside the path: a double-click should take all of it, not "etc". */
+	const QPoint point(6 * view.cell_width() + 1, 1);
+	QMouseEvent event(QEvent::MouseButtonDblClick, point, view.mapToGlobal(point),
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&view, &event);
+
+	QCOMPARE(view.selection_text(), QStringLiteral("/etc/hosts"));
+}
+
+void terminal_view_test::mouse_goes_to_the_remote_when_it_asks_for_it() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("text"));
+	QVERIFY(!emulator.mouse_reporting());
+
+	/* The remote turns on mouse tracking, SGR encoding. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	QVERIFY(emulator.mouse_reporting());
+	emulator.take_output();
+
+	drag(view, 2, 1, 2, 1);
+
+	/* The click became a report, and did NOT become a selection. */
+	QVERIFY(!emulator.take_output().isEmpty());
+	QVERIFY(!view.has_selection());
+}
+
+void terminal_view_test::shift_overrides_mouse_reporting_to_select() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("selectable"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h"));
+	emulator.take_output();
+
+	/*
+	 * Shift is the conventional escape hatch: without it there is no way
+	 * to copy text out of a full-screen program that grabbed the mouse.
+	 */
+	drag(view, 0, 0, 5, 0, Qt::ShiftModifier);
+
+	QVERIFY(view.has_selection());
+	QCOMPARE(view.selection_text(), QStringLiteral("select"));
+	QCOMPARE(emulator.take_output(), QByteArray());
+}
+
 void terminal_view_test::session_records_what_the_client_wrote() {
 	bssh_fake_ssh_session session;
 

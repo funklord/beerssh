@@ -9,7 +9,9 @@
 #include "term/screen.h"
 #include "term/scrollback.h"
 
+class QMouseEvent;
 class QWheelEvent;
+class bssh_emulator;
 class bssh_input_router;
 
 /*
@@ -80,6 +82,21 @@ public:
 	 */
 	void attach_input_router(bssh_input_router *router) { m_input_router = router; }
 
+	/*
+	 * The emulator, for mouse reporting: a click goes to the remote when
+	 * it has asked for the mouse, and selects text otherwise (sec 6.4).
+	 * The view needs to ask which, per click.
+	 */
+	void attach_emulator(bssh_emulator *emulator) { m_emulator = emulator; }
+
+	/*
+	 * The current selection as text, with trailing blanks trimmed per
+	 * line. Empty when nothing is selected.
+	 */
+	QString selection_text() const;
+	bool has_selection() const;
+	void clear_selection();
+
 signals:
 	/*
 	 * Emitted only when the grid size actually changes, not on every
@@ -89,11 +106,18 @@ signals:
 	 */
 	void grid_resized(int cols, int rows);
 
+	/* A selection was made or cleared -- the window updates the clipboard. */
+	void selection_changed();
+
 protected:
 	void paintEvent(QPaintEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
 	void keyPressEvent(QKeyEvent *event) override;
 	void wheelEvent(QWheelEvent *event) override;
+	void mousePressEvent(QMouseEvent *event) override;
+	void mouseMoveEvent(QMouseEvent *event) override;
+	void mouseReleaseEvent(QMouseEvent *event) override;
+	void mouseDoubleClickEvent(QMouseEvent *event) override;
 	void inputMethodEvent(QInputMethodEvent *event) override;
 
 private:
@@ -102,10 +126,31 @@ private:
 
 	QColor resolve(const bssh_color_t &color, const QColor &fallback) const;
 
+	/* View row/col <-> absolute line, the one conversion selection needs. */
+	qint64 line_for_row(int row) const;
+	bool cell_at(const QPoint &point, qint64 &line, int &col) const;
+	const bssh_cell_t &cell_for_line(qint64 line, int col) const;
+	bool is_selected(qint64 line, int col) const;
+	void normalised_selection(qint64 &first_line, int &first_col,
+	                           qint64 &last_line, int &last_col) const;
+
 	const bssh_screen *m_screen;
 	const bssh_image_store *m_images;
 	const bssh_scrollback *m_scrollback;
 	int m_scroll_offset;
+
+	/*
+	 * Selection endpoints in ABSOLUTE line coordinates -- history line
+	 * index, continuing into the live screen -- not view rows. Scrolling
+	 * while a selection exists must not move the selection, and view rows
+	 * change meaning the moment the offset does.
+	 */
+	bool m_selecting;
+	qint64 m_selection_anchor_line;
+	int m_selection_anchor_col;
+	qint64 m_selection_focus_line;
+	int m_selection_focus_col;
+	bssh_emulator *m_emulator;
 	bssh_input_router *m_input_router;
 	QFont m_font;
 	QColor m_background;

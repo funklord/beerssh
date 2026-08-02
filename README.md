@@ -34,9 +34,13 @@ lines by default, keeping colours and attributes. Typing returns to the
 live screen. The alternate screen is honoured, so `vim` and `less` leave
 your shell output as they found it.
 
-Not built yet: mouse selection and copy (`Ctrl+Shift+C` is wired but has
-nothing to copy until then), tabs and splits, and the tier-3 extensions in
-§7.1 (synchronized output, OSC 8 hyperlinks).
+Mouse works: drag to select, double-click for a word (paths included),
+`Ctrl+Shift+C` to copy, middle-click paste via the primary selection on
+X11/Wayland. When a full-screen program asks for the mouse it gets the
+clicks instead — hold `Shift` to select anyway.
+
+Not built yet: tabs and splits, triple-click line selection, and the
+tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown or changed key fails the connection

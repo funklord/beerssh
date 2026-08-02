@@ -8,7 +8,10 @@
 #include <QPainter>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QWheelEvent>
+
+#include "term/emulator.h"
 #include <QResizeEvent>
 
 #include "input/input_router.h"
@@ -27,6 +30,12 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_images(nullptr),
       m_scrollback(nullptr),
       m_scroll_offset(0),
+      m_selecting(false),
+      m_selection_anchor_line(-1),
+      m_selection_anchor_col(0),
+      m_selection_focus_line(-1),
+      m_selection_focus_col(0),
+      m_emulator(nullptr),
       m_input_router(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -46,6 +55,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	m_font.setFixedPitch(true);
 
 	setFocusPolicy(Qt::StrongFocus);
+	setMouseTracking(false);
 	/* Without this Qt never routes input-method events here at all. */
 	setAttribute(Qt::WA_InputMethodEnabled);
 	setAttribute(Qt::WA_OpaquePaintEvent);
@@ -298,6 +308,14 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			QColor bg = resolve(cell.bg, m_background);
 			if (cell.attrs & bssh_cell_t::INVERSE) std::swap(fg, bg);
 
+			/*
+			 * Selection inverts rather than tinting: it stays visible
+			 * whatever colours the cell already carries, which a fixed
+			 * highlight colour cannot promise against 256 possible
+			 * backgrounds.
+			 */
+			if (is_selected(history - offset + row, col)) std::swap(fg, bg);
+
 			const int x = col * m_cell_width;
 			const int y = row * m_cell_height;
 			const int width = qMax(1, int(cell.width)) * m_cell_width;
@@ -362,4 +380,228 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			                  QString::fromUcs4(&cell.ch, 1));
 		}
 	}
+}
+
+/*
+ * Absolute line numbering: history lines come first, the live screen
+ * continues straight on from them. One coordinate space for both is what
+ * lets a selection span the fold and survive scrolling.
+ */
+qint64 bssh_terminal_view::line_for_row(int row) const {
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	return history - m_scroll_offset + row;
+}
+
+const bssh_cell_t &bssh_terminal_view::cell_for_line(qint64 line, int col) const {
+	static const bssh_cell_t blank;
+
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	if (line < 0) return blank;
+
+	if (line < history) {
+		const QList<bssh_cell_t> &stored = m_scrollback->line(int(line));
+		return col >= 0 && col < stored.size() ? stored.at(col) : blank;
+	}
+
+	if (!m_screen) return blank;
+	return m_screen->cell(int(line - history), col);
+}
+
+bool bssh_terminal_view::cell_at(const QPoint &point, qint64 &line, int &col) const {
+	if (m_cell_width <= 0 || m_cell_height <= 0) return false;
+
+	const int row = qBound(0, point.y() / m_cell_height, qMax(0, m_rows - 1));
+	col = qBound(0, point.x() / m_cell_width, qMax(0, m_cols - 1));
+	line = line_for_row(row);
+	return true;
+}
+
+void bssh_terminal_view::normalised_selection(qint64 &first_line, int &first_col,
+                                               qint64 &last_line, int &last_col) const {
+	first_line = m_selection_anchor_line;
+	first_col = m_selection_anchor_col;
+	last_line = m_selection_focus_line;
+	last_col = m_selection_focus_col;
+
+	/* Dragging upwards or leftwards is the same selection, backwards. */
+	if (last_line < first_line || (last_line == first_line && last_col < first_col)) {
+		qSwap(first_line, last_line);
+		qSwap(first_col, last_col);
+	}
+}
+
+bool bssh_terminal_view::is_selected(qint64 line, int col) const {
+	if (!has_selection()) return false;
+
+	qint64 first_line = 0;
+	int first_col = 0;
+	qint64 last_line = 0;
+	int last_col = 0;
+	normalised_selection(first_line, first_col, last_line, last_col);
+
+	if (line < first_line || line > last_line) return false;
+	if (line == first_line && col < first_col) return false;
+	if (line == last_line && col > last_col) return false;
+	return true;
+}
+
+bool bssh_terminal_view::has_selection() const {
+	if (m_selection_anchor_line < 0 || m_selection_focus_line < 0) return false;
+	return m_selection_anchor_line != m_selection_focus_line
+	        || m_selection_anchor_col != m_selection_focus_col;
+}
+
+void bssh_terminal_view::clear_selection() {
+	if (m_selection_anchor_line < 0) return;
+
+	m_selection_anchor_line = -1;
+	m_selection_focus_line = -1;
+	update();
+	emit selection_changed();
+}
+
+QString bssh_terminal_view::selection_text() const {
+	if (!has_selection()) return QString();
+
+	qint64 first_line = 0;
+	int first_col = 0;
+	qint64 last_line = 0;
+	int last_col = 0;
+	normalised_selection(first_line, first_col, last_line, last_col);
+
+	QStringList lines;
+	for (qint64 line = first_line; line <= last_line; ++line) {
+		const int from = line == first_line ? first_col : 0;
+		const int to = line == last_line ? last_col : m_cols - 1;
+
+		QString text;
+		for (int col = from; col <= to; ++col) {
+			const bssh_cell_t &cell = cell_for_line(line, col);
+			if (cell.width == 0) continue;
+			text.append(QString::fromUcs4(&cell.ch, 1));
+		}
+
+		/*
+		 * Trailing blanks are padding, not content: a terminal line is
+		 * always m_cols wide, and pasting the padding back into a shell
+		 * is how a copied command arrives with a tail of spaces.
+		 */
+		while (text.endsWith(QLatin1Char(' '))) text.chop(1);
+		lines.append(text);
+	}
+
+	return lines.join(QLatin1Char('\n'));
+}
+
+void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
+	/*
+	 * When the remote has asked for the mouse, clicks are its business --
+	 * unless Shift is held, the conventional override that lets a user
+	 * select text out of a full-screen program (sec 6.4).
+	 */
+	const bool shift = event->modifiers().testFlag(Qt::ShiftModifier);
+	if (m_emulator && m_emulator->mouse_reporting() && !shift) {
+		qint64 line = 0;
+		int col = 0;
+		if (cell_at(event->pos(), line, col)) {
+			m_emulator->send_mouse_move(int(line - line_for_row(0)), col, 0);
+			m_emulator->send_mouse_button(event->button() == Qt::RightButton ? 3
+			                               : event->button() == Qt::MiddleButton ? 2 : 1,
+			                               true, 0);
+		}
+		event->accept();
+		return;
+	}
+
+	if (event->button() != Qt::LeftButton) {
+		QWidget::mousePressEvent(event);
+		return;
+	}
+
+	qint64 line = 0;
+	int col = 0;
+	if (!cell_at(event->pos(), line, col)) return;
+
+	m_selecting = true;
+	m_selection_anchor_line = line;
+	m_selection_anchor_col = col;
+	m_selection_focus_line = line;
+	m_selection_focus_col = col;
+
+	update();
+	event->accept();
+}
+
+void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
+	if (!m_selecting) {
+		QWidget::mouseMoveEvent(event);
+		return;
+	}
+
+	qint64 line = 0;
+	int col = 0;
+	if (cell_at(event->pos(), line, col)) {
+		m_selection_focus_line = line;
+		m_selection_focus_col = col;
+		update();
+	}
+
+	event->accept();
+}
+
+void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
+	if (m_emulator && m_emulator->mouse_reporting()
+	    && !event->modifiers().testFlag(Qt::ShiftModifier)) {
+		m_emulator->send_mouse_button(1, false, 0);
+		event->accept();
+		return;
+	}
+
+	if (!m_selecting) {
+		QWidget::mouseReleaseEvent(event);
+		return;
+	}
+
+	m_selecting = false;
+	emit selection_changed();
+	event->accept();
+}
+
+void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
+	qint64 line = 0;
+	int col = 0;
+	if (event->button() != Qt::LeftButton || !cell_at(event->pos(), line, col)) {
+		QWidget::mouseDoubleClickEvent(event);
+		return;
+	}
+
+	/*
+	 * Word selection, using the same word characters a shell does -- a
+	 * double-click on a path should take the whole path, which is most of
+	 * what anyone double-clicks in a terminal for.
+	 */
+	const QString word_chars = QStringLiteral("_-./~:@");
+	int from = col;
+	int to = col;
+
+	while (from > 0) {
+		const QChar previous = QChar(cell_for_line(line, from - 1).ch);
+		if (!previous.isLetterOrNumber() && !word_chars.contains(previous)) break;
+		--from;
+	}
+	while (to < m_cols - 1) {
+		const QChar next = QChar(cell_for_line(line, to + 1).ch);
+		if (!next.isLetterOrNumber() && !word_chars.contains(next)) break;
+		++to;
+	}
+
+	m_selection_anchor_line = line;
+	m_selection_anchor_col = from;
+	m_selection_focus_line = line;
+	m_selection_focus_col = to;
+	m_selecting = false;
+
+	update();
+	emit selection_changed();
+	event->accept();
 }

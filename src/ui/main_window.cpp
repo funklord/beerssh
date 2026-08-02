@@ -54,6 +54,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	m_terminal_view->attach_screen(&m_emulator->screen());
 	m_terminal_view->attach_images(&m_emulator->images());
 	m_terminal_view->attach_scrollback(&m_emulator->scrollback());
+	m_terminal_view->attach_emulator(m_emulator);
 
 	/*
 	 * The emulator cannot know how big a cell is -- only the view, which
@@ -91,6 +92,10 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 
 	connect(m_input_router, &bssh_input_router::shortcut_pressed,
 	         this, [this](bssh_input_router::shortcut_t shortcut) {
+		if (shortcut == bssh_input_router::SHORTCUT_COPY) {
+			const QString selected = m_terminal_view->selection_text();
+			if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
+		}
 		if (shortcut == bssh_input_router::SHORTCUT_PASTE) {
 			m_input_router->paste(QGuiApplication::clipboard()->text());
 		}
@@ -100,8 +105,21 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_DOWN) {
 			m_terminal_view->scroll_by(-m_terminal_view->rows() / 2);
 		}
-		/* SHORTCUT_COPY needs a selection to copy, which arrives with
-		 * mouse selection (sec 6.4) -- not yet built. */
+	});
+
+	/*
+	 * X11/Wayland's primary selection: selecting text makes it available
+	 * to middle-click paste, without touching the ordinary clipboard.
+	 * Qt reports the mode as unsupported on platforms that lack it, so
+	 * this needs no platform check of its own.
+	 */
+	connect(m_terminal_view, &bssh_terminal_view::selection_changed, this, [this] {
+		if (!QGuiApplication::clipboard()->supportsSelection()) return;
+
+		const QString selected = m_terminal_view->selection_text();
+		if (selected.isEmpty()) return;
+
+		QGuiApplication::clipboard()->setText(selected, QClipboard::Selection);
 	});
 
 	update_status();

@@ -33,6 +33,7 @@ struct bssh_emulator_private {
 	QList<int> kitty_stack;
 	bssh_emulator *owner;
 	int modify_other_keys;
+	bool mouse_reporting;
 
 	bssh_image_store images;
 	bssh_scrollback scrollback;
@@ -56,7 +57,7 @@ struct bssh_emulator_private {
 
 	bssh_emulator_private(int cols, int rows, bssh_emulator *owner)
 	    : vt(nullptr), vts(nullptr), screen(cols, rows), owner(owner),
-	      modify_other_keys(0), cell_width(8), cell_height(16),
+	      modify_other_keys(0), mouse_reporting(false), cell_width(8), cell_height(16),
 	      pending_cursor_advance(0) {
 		kitty_stack.append(0);
 	}
@@ -210,6 +211,16 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		if (value->string.initial) self->title.clear();
 		self->title.append(QString::fromUtf8(value->string.str, value->string.len));
 		if (value->string.final) emit self->owner->title_changed(self->title);
+		return 1;
+	case VTERM_PROP_MOUSE:
+		/*
+		 * The remote turned mouse tracking on or off. Worth mirroring
+		 * rather than querying: the view has to decide on every click
+		 * whether it is selecting text or sending a report, and asking
+		 * libvterm per event would be a lookup for something that
+		 * changes twice a session.
+		 */
+		self->mouse_reporting = value->number != VTERM_PROP_MOUSE_NONE;
 		return 1;
 	case VTERM_PROP_CURSORVISIBLE:
 		self->screen.set_cursor_visible(value->boolean);
@@ -694,6 +705,18 @@ const bssh_image_store &bssh_emulator::images() const {
 void bssh_emulator::set_cell_pixels(int width, int height) {
 	m_private->cell_width = qMax(1, width);
 	m_private->cell_height = qMax(1, height);
+}
+
+bool bssh_emulator::mouse_reporting() const {
+	return m_private->mouse_reporting;
+}
+
+void bssh_emulator::send_mouse_move(int row, int col, quint8 modifiers) {
+	vterm_mouse_move(m_private->vt, row, col, static_cast<VTermModifier>(modifiers));
+}
+
+void bssh_emulator::send_mouse_button(int button, bool pressed, quint8 modifiers) {
+	vterm_mouse_button(m_private->vt, button, pressed, static_cast<VTermModifier>(modifiers));
 }
 
 int bssh_emulator::kitty_keyboard_flags() const {

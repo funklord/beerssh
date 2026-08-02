@@ -473,7 +473,7 @@ model on a finger.
 
 | Operation | Desktop | Touch |
 |---|---|---|
-| Select text | Click-drag; double/triple-click for word/line | Long-press then drag handles |
+| Select text | Click-drag (**done**); double-click for word (**done**), triple-click for line | Long-press then drag handles |
 | Copy | `Ctrl+Shift+C` (never bare `Ctrl+C` — that's `SIGINT`) | Selection toolbar |
 | Paste | `Ctrl+Shift+V`, middle-click on X11/Wayland | Selection toolbar / key row |
 | Scroll | Wheel, `Shift+PgUp/PgDn` | Kinetic touch scroll (`QScroller`) |
@@ -484,7 +484,12 @@ model on a finger.
 - **Mouse reporting** (SGR 1006 et al.) matters mainly on desktop, where TUIs
   expect clicks to reach the remote app. When the remote enables it, clicks go
   to the remote — with a modifier (conventionally `Shift`) to override and select
-  locally. On touch, keep local selection winning.
+  locally. On touch, keep local selection winning. **Done**, encoding delegated
+  to libvterm, which already tracks which mouse modes the remote enabled.
+- **Selection is anchored to absolute lines**, not to view rows: it spans the
+  fold into scrollback, and scrolling must not drag the highlight across the
+  text. It renders by **inverting** the cell rather than tinting it — a fixed
+  highlight colour cannot stay legible against 256 possible backgrounds.
 - **Multi-line paste is a footgun**: a paste containing newlines executes
   commands. Warn on multi-line paste by default (a setting), on both platforms.
 
@@ -550,7 +555,7 @@ each says what it *is*, who needs it, and where it stands here.
 |---|---|---|
 | **Truecolor** (SGR 38;2;r;g;b) | 24-bit colour instead of a 256-entry palette | **Done** — §7, carried per cell |
 | **Bracketed paste** (DEC 2004) | Wraps pasted text so a shell knows it was pasted rather than typed, instead of executing every newline | **Done** — §6.4 |
-| **SGR mouse** (1006) | Mouse reports that work past column 223, unlike the original X10 encoding | libvterm has it; the UI side is §6.4, not yet wired |
+| **SGR mouse** (1006) | Mouse reports that work past column 223, unlike the original X10 encoding | **Done** — libvterm encodes, §6.4 decides local-vs-remote |
 | **Focus reporting** (1004) | Tells the remote when the terminal gains/loses focus, so editors can reload changed files | libvterm parses it; needs the window events wired |
 
 **Tier 2 — keyboard disambiguation. This is the big one.**

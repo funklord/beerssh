@@ -90,6 +90,17 @@ public:
 	 */
 	void send_paste(const QString &text);
 
+	/*
+	 * Mouse, forwarded to the remote when it has asked for it (sec 7.1,
+	 * tier 1). The encoding -- X10, SGR 1006, which buttons, whether
+	 * motion counts -- is libvterm's, and it tracks which modes the
+	 * remote enabled, so this is a pass-through rather than a second
+	 * implementation.
+	 */
+	bool mouse_reporting() const;
+	void send_mouse_move(int row, int col, quint8 modifiers);
+	void send_mouse_button(int button, bool pressed, quint8 modifiers);
+
 	void feed(const QByteArray &bytes);
 	void resize(int cols, int rows);
 
