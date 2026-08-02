@@ -19,7 +19,7 @@
 TEMPLATE = app
 TARGET = beerssh
 
-QT += widgets
+QT += widgets network
 CONFIG += c++17
 CONFIG -= app_bundle
 

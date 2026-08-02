@@ -39,8 +39,16 @@ Mouse works: drag to select, double-click for a word (paths included),
 X11/Wayland. When a full-screen program asks for the mouse it gets the
 clicks instead — hold `Shift` to select anyway.
 
-Not built yet: tabs and splits, triple-click line selection, and the
-tier-3 extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
+Closing the window with a session still connected asks whether to keep it
+running in the background or disconnect and quit, and remembers the answer.
+On desktop "background" means a tray icon and a process that outlives its
+window; the Android half of that — the foreground service — is **not
+implemented**, and `platform_android.cpp` says so at the call site rather
+than stubbing it to look finished.
+
+Not built yet: tabs and splits, triple-click line selection, the Android
+background service, and the tier-3 extensions in §7.1 (synchronized
+output, OSC 8 hyperlinks).
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown or changed key fails the connection

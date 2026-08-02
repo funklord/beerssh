@@ -359,13 +359,15 @@ service anyway. Add an in-app prompt to whitelist the app from battery
 optimization (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) — but note Play restricts
 this permission's use, so gate it behind clear user action.
 
-### 5.5 The desktop equivalent — **[DECIDED]**
+### 5.5 The desktop equivalent — **[DECIDED, and built]**
 No service, no notification channel, no OS permission: a desktop process that
 holds a socket open simply keeps holding it. What still needs deciding is what
 "backgrounded" means when there is no Android lifecycle to tell you.
 
 - **`setQuitOnLastWindowClosed(false)`** while any session is connected, with a
-  **system tray icon** as the way back to the window. Sessions belong to the
+  **system tray icon** as the way back to the window. Both live behind
+  `bssh_platform::set_keep_alive()`, so the caller states the intent and never
+  learns whether it got a tray icon or a foreground service. Sessions belong to the
   registry, not to a window (§3), so closing the window must not touch them —
   the same rule Android's activity recreation forces, arriving here as a
   deliberate choice rather than an OS requirement.

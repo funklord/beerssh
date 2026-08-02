@@ -40,6 +40,23 @@ public:
 	 */
 	explicit bssh_main_window(const QString &target = QString(), QWidget *parent = nullptr);
 
+	/*
+	 * What closing the window should do when sessions are still
+	 * connected. A pure decision, separated from the dialog that asks it,
+	 * so the policy can be tested without a message box on screen -- and
+	 * so the Android back-button path can reuse it later.
+	 */
+	enum close_action_t {
+		CLOSE_AND_QUIT,      /* nothing live; ordinary close */
+		CLOSE_TO_BACKGROUND, /* keep sessions running, no window */
+		ASK_FIRST            /* live sessions and no remembered answer */
+	};
+
+	static close_action_t close_action(bool sessions_live, bool remembered_background);
+
+protected:
+	void closeEvent(QCloseEvent *event) override;
+
 private slots:
 	void on_grid_resized(int cols, int rows);
 	void on_state_changed(bssh_ssh_session::state_t state);
@@ -61,6 +78,10 @@ private:
 	QString m_error;
 	int m_cols;
 	int m_rows;
+
+	/* Remembered answer to the close prompt; unset until asked once. */
+	bool m_asked_about_closing;
+	bool m_background_on_close;
 };
 
 #endif /* BSSH_MAIN_WINDOW_H */

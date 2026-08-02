@@ -22,6 +22,34 @@ public:
 		return QStringLiteral("android");
 	}
 
+	void set_keep_alive(bool keep_alive) override {
+		Q_UNUSED(keep_alive);
+		/*
+		 * NOT IMPLEMENTED, and deliberately not stubbed to look done.
+		 *
+		 * This is where the foreground service starts and stops: a JNI
+		 * call into the manifest-registered Service, which builds its
+		 * mandatory notification and keeps the process from being killed
+		 * (sec 5.1/5.2). Until it exists, an Android build backgrounds
+		 * like any other app -- which is to say its sessions die.
+		 *
+		 * It cannot be written blind: the Play foreground-service type
+		 * is still [OPEN] in sec 5.1, and the whole area has to be
+		 * tested on a device that this was developed without.
+		 */
+	}
+
+	void set_session_count(int count) override {
+		Q_UNUSED(count);
+		/* Notification text, via the same JNI bridge. See set_keep_alive. */
+	}
+
+	void notify(const QString &title, const QString &body) override {
+		Q_UNUSED(title);
+		Q_UNUSED(body);
+		/* NotificationCompat through the service. See set_keep_alive. */
+	}
+
 	bool is_touch_primary() const override {
 		/*
 		 * True as the M0 default, but this is not a constant either: an

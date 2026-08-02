@@ -1,6 +1,9 @@
 #include "ui/main_window.h"
 
+#include <QCloseEvent>
 #include <QClipboard>
+#include <QMessageBox>
+#include <QPushButton>
 #include <QGuiApplication>
 #include <QInputDialog>
 #include <QLabel>
@@ -21,7 +24,9 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_input_router(nullptr),
       m_key_row(nullptr),
       m_cols(0),
-      m_rows(0) {
+      m_rows(0),
+      m_asked_about_closing(false),
+      m_background_on_close(false) {
 	setWindowTitle(QStringLiteral("BeerSSH"));
 
 	QVBoxLayout *layout = new QVBoxLayout(this);
@@ -241,4 +246,66 @@ void bssh_main_window::update_status() {
 	                         .arg(m_cols)
 	                         .arg(m_rows)
 	                         .arg(session_text));
+}
+
+bssh_main_window::close_action_t bssh_main_window::close_action(bool sessions_live,
+                                                                 bool remembered_background) {
+	/*
+	 * Nothing live: an ordinary close, and the process should go. Keeping
+	 * a terminal resident with no sessions would be a background process
+	 * doing nothing, which is the kind of thing users hunt down and kill.
+	 */
+	if (!sessions_live) return CLOSE_AND_QUIT;
+
+	/*
+	 * Live sessions and no answer on file: ASK. A terminal that vanishes
+	 * into the tray unannounced is how someone loses work they believed
+	 * they had closed -- and one that silently kills a running build is
+	 * worse (sec 5.5).
+	 */
+	return remembered_background ? CLOSE_TO_BACKGROUND : ASK_FIRST;
+}
+
+void bssh_main_window::closeEvent(QCloseEvent *event) {
+	const bool sessions_live = m_session
+	        && m_session->state() != bssh_ssh_session::DISCONNECTED
+	        && m_session->state() != bssh_ssh_session::FAILED;
+
+	close_action_t action = close_action(sessions_live,
+	                                      m_asked_about_closing && m_background_on_close);
+
+	if (action == ASK_FIRST) {
+		QMessageBox box(this);
+		box.setWindowTitle(QStringLiteral("BeerSSH"));
+		box.setText(QStringLiteral("%1 is still connected.").arg(m_target));
+		box.setInformativeText(QStringLiteral(
+		        "Keep it running in the background, or disconnect and quit?"));
+
+		QPushButton *background = box.addButton(QStringLiteral("Keep running"),
+		                                         QMessageBox::AcceptRole);
+		box.addButton(QStringLiteral("Disconnect and quit"), QMessageBox::DestructiveRole);
+		box.setDefaultButton(background);
+		box.exec();
+
+		m_asked_about_closing = true;
+		m_background_on_close = box.clickedButton() == static_cast<QAbstractButton *>(background);
+		action = m_background_on_close ? CLOSE_TO_BACKGROUND : CLOSE_AND_QUIT;
+	}
+
+	if (action == CLOSE_TO_BACKGROUND) {
+		/*
+		 * The session is untouched: it lives in the registry, not in this
+		 * window (sec 3, core principle 2), so hiding the window is the
+		 * whole operation.
+		 */
+		bssh_platform::instance()->set_keep_alive(true);
+		bssh_platform::instance()->set_session_count(1);
+		hide();
+		event->ignore();
+		return;
+	}
+
+	if (m_session) m_session->disconnect_from_host();
+	bssh_platform::instance()->set_keep_alive(false);
+	event->accept();
 }

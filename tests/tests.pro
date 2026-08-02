@@ -13,10 +13,10 @@
 TEMPLATE = app
 TARGET = beerssh_test
 
-QT += widgets testlib
+QT += widgets network testlib
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libsixel
+PKGCONFIG += libsixel libssh
 CONFIG += c++17 console
 CONFIG -= app_bundle
 
@@ -28,18 +28,21 @@ SOURCES += \
     main.cpp \
     emulator_test.cpp \
     graphics_test.cpp \
+    platform_test.cpp \
     input_router_test.cpp \
     screen_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
     ../src/input/input_router.cpp \
     ../src/ssh/ssh_session.cpp \
+    ../src/ssh/ssh_session_libssh.cpp \
     ../src/term/emulator_vterm.cpp \
     ../src/term/graphics.cpp \
     ../src/term/image_store.cpp \
     ../src/term/scrollback.cpp \
     ../src/term/screen.cpp \
     ../src/platform/platform.cpp \
+    ../src/ui/main_window.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/key_row.cpp \
     ../src/ui/terminal_view.cpp
@@ -48,16 +51,19 @@ HEADERS += \
     fake_ssh_session.h \
     emulator_test.h \
     graphics_test.h \
+    platform_test.h \
     input_router_test.h \
     screen_test.h \
     terminal_view_test.h \
     ../src/input/input_router.h \
     ../src/ssh/ssh_session.h \
+    ../src/ssh/ssh_session_libssh.h \
     ../src/term/emulator.h \
     ../src/term/graphics_internal.h \
     ../src/term/image_store.h \
     ../src/term/scrollback.h \
     ../src/term/screen.h \
     ../src/platform/platform.h \
+    ../src/ui/main_window.h \
     ../src/ui/key_row.h \
     ../src/ui/terminal_view.h
