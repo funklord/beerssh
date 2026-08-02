@@ -54,7 +54,7 @@ work="$root/build-deps-android/$abi"
 # Pinned. An unpinned dependency makes a build that worked yesterday a
 # build that cannot be reproduced tomorrow (sec 12.4).
 openssl_version=3.5.4
-libssh_version=0.11.3
+libssh_version=0.11.5
 
 mkdir -p "$prefix" "$work"
 cd "$work"
@@ -99,13 +99,28 @@ if [ ! -f "$prefix/lib/libssh.a" ]; then
 	rm -rf "libssh-$libssh_version"
 	tar xf "libssh-$libssh_version.tar.xz"
 
+	# CMAKE_FIND_ROOT_PATH is not redundant with OPENSSL_ROOT_DIR, and
+	# leaving it out is how the first attempt at this failed. The NDK
+	# toolchain sets CMAKE_FIND_ROOT_PATH_MODE_{INCLUDE,LIBRARY,PACKAGE}
+	# to ONLY, so find_package searches the sysroot and NOTHING ELSE --
+	# a prefix outside it is silently ignored however it is named, and
+	# the error blames a missing OpenSSL that is sitting right there.
+	# S_IWRITE is a legacy alias for S_IWUSR that bionic does not define,
+	# and libssh's misc.c uses it unguarded -- libssh does not target
+	# Android, so this is not a version that can be waited out (checked:
+	# 0.11.5 has it too). Supplied as a define rather than a patch to
+	# their source, so it survives the next version bump.
 	rm -rf libssh-build
 	cmake -S "libssh-$libssh_version" -B libssh-build \
+		-DCMAKE_C_FLAGS="-DS_IWRITE=S_IWUSR" \
 		-DCMAKE_TOOLCHAIN_FILE="$toolchain" \
 		-DANDROID_ABI="$abi" \
 		-DANDROID_PLATFORM="android-$api" \
 		-DCMAKE_INSTALL_PREFIX="$prefix" \
 		-DOPENSSL_ROOT_DIR="$prefix" \
+		-DOPENSSL_USE_STATIC_LIBS=ON \
+		-DCMAKE_PREFIX_PATH="$prefix" \
+		-DCMAKE_FIND_ROOT_PATH="$prefix" \
 		-DBUILD_SHARED_LIBS=OFF \
 		-DWITH_EXAMPLES=OFF \
 		-DWITH_SERVER=OFF \

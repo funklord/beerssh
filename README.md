@@ -185,10 +185,13 @@ python3 -m venv ~/.venv/aqt && ~/.venv/aqt/bin/pip install aqtinstall
 ~/.venv/aqt/bin/aqt install-qt linux android 6.8.2 android_arm64_v8a
 ```
 
-**This path has never been run.** The manifest, the dependency script and
-the CI Android job were all written without an NDK present, so treat the
-first Android build as work rather than as a regression — and check
-`android/AndroidManifest.xml` against the installed kit's own template.
+**The native build works** — `libbeerssh_arm64-v8a.so` builds and links
+against cross-compiled libssh + OpenSSL and a cross-compiled libvterm.
+**Packaging does not, yet:** `androiddeployqt` needs the Android SDK
+(platform-tools, `platforms;android-35`, `build-tools`), which is separate
+from the NDK. `android/AndroidManifest.xml` has still never been through
+androiddeployqt, so check it against the installed kit's template on the
+first packaging run.
 
 ## Layout
 

@@ -88,6 +88,29 @@ VTERM_STAMP   = $(VTERM_BUILD_DIR)/.patched
 # a wall of warnings nobody will act on is a wall that hides ours.
 VTERM_CFLAGS = -std=c99 -O2 -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
 
+# --- vendored libvterm, cross-compiled ------------------------------------
+# The host archive cannot be reused: it is x86_64, and the first Android
+# link said so in nine identical lines. One build per ABI, in its own
+# directory, because "the library" stops being one artifact the moment
+# there is more than one target.
+ANDROID_ABI ?= arm64-v8a
+ANDROID_API ?= 26
+
+ifeq ($(ANDROID_ABI),arm64-v8a)
+    ANDROID_TRIPLE = aarch64-linux-android
+else ifeq ($(ANDROID_ABI),armeabi-v7a)
+    ANDROID_TRIPLE = armv7a-linux-androideabi
+else ifeq ($(ANDROID_ABI),x86_64)
+    ANDROID_TRIPLE = x86_64-linux-android
+else
+    ANDROID_TRIPLE = i686-linux-android
+endif
+
+NDK_BIN = $(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/linux-x86_64/bin
+VTERM_ANDROID_DIR  = build-vterm-android/$(ANDROID_ABI)
+VTERM_ANDROID_LIB  = $(VTERM_ANDROID_DIR)/libvterm.a
+VTERM_ANDROID_OBJS = $(patsubst $(VTERM_DIR)/src/%.c,$(VTERM_ANDROID_DIR)/%.o,$(VTERM_SRCS))
+
 ifdef DEBUG
     QMAKE_CONFIG = CONFIG+=debug CONFIG-=release
 else
@@ -170,7 +193,14 @@ test: $(TARGET) $(TEST_BIN)
 style:
 	./tools/check-indent.sh
 
-android:
+$(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
+	@mkdir -p $(VTERM_ANDROID_DIR)
+	$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_API) $(VTERM_CFLAGS) -c $< -o $@
+
+$(VTERM_ANDROID_LIB): $(VTERM_ANDROID_OBJS)
+	$(NDK_BIN)/llvm-ar rcs $@ $(VTERM_ANDROID_OBJS)
+
+android: $(VTERM_ANDROID_LIB)
 	@if [ -z "$(QT_ANDROID_ROOT)" ]; then \
 		echo "make android: QT_ANDROID_ROOT is not set."; \
 		echo "make android:   point it at a Qt-for-Android kit, e.g."; \
@@ -195,7 +225,8 @@ clean:
 # The build dirs are ours: this Makefile created them and qmake owns their
 # contents, so removing them is a named delete, not a wildcard sweep.
 veryclean: clean
-	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR) $(VTERM_BUILD_DIR)
+	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR) $(VTERM_BUILD_DIR) \
+	        build-vterm-android
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
 	fi

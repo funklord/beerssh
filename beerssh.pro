@@ -88,8 +88,16 @@ HEADERS += \
 # Built by the top-level Makefile into a static archive -- `make`, not a
 # bare qmake, is what produces a working build.
 INCLUDEPATH += $$PWD/vterm/include
-LIBS += $$PWD/build-vterm/libvterm.a
-PRE_TARGETDEPS += $$PWD/build-vterm/libvterm.a
+
+# One archive per target: the host build is x86_64 and cannot go into an
+# arm64 library, which the first Android link demonstrated at length.
+android {
+    BSSH_VTERM_LIB = $$PWD/build-vterm-android/$$QT_ARCH/libvterm.a
+} else {
+    BSSH_VTERM_LIB = $$PWD/build-vterm/libvterm.a
+}
+LIBS += $$BSSH_VTERM_LIB
+PRE_TARGETDEPS += $$BSSH_VTERM_LIB
 
 # The one platform conditional, and everything platform-shaped lives inside
 # it: the implementation of bssh_platform, the secret-store backends and
