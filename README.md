@@ -172,13 +172,23 @@ Needs a Qt-for-Android kit and an NDK, neither of which the desktop build
 requires:
 
 ```sh
+tools/build-deps-android.sh arm64-v8a          # cross-builds libssh + OpenSSL
 make android QT_ANDROID_ROOT=$HOME/Qt/6.8.2/android_arm64_v8a
 ```
 
-This path has not been run yet — the M0 scaffold was written on a machine
-with no NDK, so expect the first Android build to need fixing rather than
-just working. `android/AndroidManifest.xml` in particular must be checked
-against the installed kit's template.
+No Qt account is needed for the kit — `aqtinstall` fetches the same
+official binaries:
+
+```sh
+python3 -m venv ~/.venv/aqt && ~/.venv/aqt/bin/pip install aqtinstall
+~/.venv/aqt/bin/aqt install-qt linux desktop 6.8.2            # host tools
+~/.venv/aqt/bin/aqt install-qt linux android 6.8.2 android_arm64_v8a
+```
+
+**This path has never been run.** The manifest, the dependency script and
+the CI Android job were all written without an NDK present, so treat the
+first Android build as work rather than as a regression — and check
+`android/AndroidManifest.xml` against the installed kit's own template.
 
 ## Layout
 

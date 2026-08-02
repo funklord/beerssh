@@ -36,8 +36,6 @@ SOURCES += \
     src/input/input_router.cpp \
     src/platform/platform.cpp \
     src/platform/secret_store.cpp \
-    src/platform/secret_store_file.cpp \
-    src/platform/secret_store_libsecret.cpp \
     src/ssh/ssh_session.cpp \
     src/ssh/ssh_session_libssh.cpp \
     src/term/emulator_vterm.cpp \
@@ -85,9 +83,6 @@ HEADERS += \
 # nowhere else in the project -- src/ssh/ssh_session_libssh.cpp is the one
 # file allowed to include its headers, which is what keeps the
 # libssh-vs-libssh2 decision (project.md sec 4) genuinely reversible.
-CONFIG += link_pkgconfig
-PKGCONFIG += libssh libsixel libcrypto libsecret-1
-
 # Vendored libvterm (project.md sec 7): the parser is proven and assumes no
 # PTY, so this project owns only the rendering and the input on top of it.
 # Built by the top-level Makefile into a static archive -- `make`, not a
@@ -96,20 +91,46 @@ INCLUDEPATH += $$PWD/vterm/include
 LIBS += $$PWD/build-vterm/libvterm.a
 PRE_TARGETDEPS += $$PWD/build-vterm/libvterm.a
 
-# The one platform conditional. A second one appearing anywhere else in
-# this file is the same smell as an #ifdef in the sources.
+# The one platform conditional, and everything platform-shaped lives inside
+# it: the implementation of bssh_platform, the secret-store backends and
+# their selector, and where the third-party libraries come from. A second
+# conditional appearing elsewhere in this file is the same smell as an
+# #ifdef in the sources (project.md sec 3, core principle 3).
 android {
-    SOURCES += src/platform/platform_android.cpp
+    SOURCES += \
+        src/platform/platform_android.cpp \
+        src/platform/secret_store_file.cpp \
+        src/platform/secret_store_select_android.cpp
 
-    # NOTE: PKGCONFIG above will not resolve for Android -- there is no
-    # system libssh in an NDK sysroot. The cross-compiled libssh+OpenSSL
-    # (project.md sec 12.1) gets wired in here, and until it is, the
-    # Android build stops at configure time rather than silently producing
-    # an app with no SSH in it.
+    # Cross-compiled, not system: an NDK sysroot has none of these.
+    # tools/build-deps-android.sh builds them into deps/android/<abi>.
+    BSSH_ANDROID_DEPS = $$PWD/deps/android/$$QT_ARCH
+    INCLUDEPATH += $$BSSH_ANDROID_DEPS/include
+    LIBS += -L$$BSSH_ANDROID_DEPS/lib -lssh -lssl -lcrypto
+
+    # Fails HERE, naming the fix, rather than as a pile of missing symbols
+    # at link time -- which is what the first Android build would otherwise
+    # produce and spend an afternoon on.
+    !exists($$BSSH_ANDROID_DEPS/lib/libssh.a) {
+        error("Android dependencies are missing. Run: tools/build-deps-android.sh $$QT_ARCH")
+    }
+
+    # Sixel is NOT built for Android yet: libsixel needs its own cross
+    # build, and inline images are the least of what a first device build
+    # has to prove. bssh_parse_sixel declines when it is absent, which is
+    # the same honest path it took before libsixel existed at all.
+    DEFINES += BSSH_NO_SIXEL
 
     ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android
     ANDROID_VERSION_CODE = 1
     ANDROID_VERSION_NAME = 0.1.0
 } else {
-    SOURCES += src/platform/platform_desktop.cpp
+    SOURCES += \
+        src/platform/platform_desktop.cpp \
+        src/platform/secret_store_file.cpp \
+        src/platform/secret_store_libsecret.cpp \
+        src/platform/secret_store_select_desktop.cpp
+
+    CONFIG += link_pkgconfig
+    PKGCONFIG += libssh libsixel libcrypto libsecret-1
 }

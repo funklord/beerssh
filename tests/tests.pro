@@ -52,6 +52,7 @@ SOURCES += \
     ../src/platform/secret_store.cpp \
     ../src/platform/secret_store_file.cpp \
     ../src/platform/secret_store_libsecret.cpp \
+    ../src/platform/secret_store_select_desktop.cpp \
     ../src/model/conn_manager.cpp \
     ../src/model/preset.cpp \
     ../src/model/profile_store.cpp \

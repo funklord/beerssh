@@ -3,7 +3,9 @@
 #include <QMap>
 #include <QString>
 
+#ifndef BSSH_NO_SIXEL
 #include <sixel.h>
+#endif
 
 #include "term/graphics_internal.h"
 
@@ -185,6 +187,19 @@ bssh_graphics_result_t bssh_parse_iterm2(const QByteArray &payload,
 
 bssh_graphics_result_t bssh_parse_sixel(const QByteArray &payload,
                                          int cell_width, int cell_height) {
+#ifdef BSSH_NO_SIXEL
+	/*
+	 * Built without libsixel -- currently the Android build, where the
+	 * library has no cross-compiled copy yet. Declining is the same
+	 * honest path this took before libsixel existed at all: no image, no
+	 * crash, and the sequence swallowed rather than leaking into the text
+	 * as garbage.
+	 */
+	Q_UNUSED(payload);
+	Q_UNUSED(cell_width);
+	Q_UNUSED(cell_height);
+	return bssh_graphics_result_t();
+#else
 	bssh_graphics_result_t result;
 	if (payload.isEmpty()) return result;
 
@@ -245,4 +260,5 @@ bssh_graphics_result_t bssh_parse_sixel(const QByteArray &payload,
 	result.placement.rows = (height + cell_height - 1) / qMax(1, cell_height);
 
 	return result;
+#endif
 }
