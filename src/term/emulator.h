@@ -29,6 +29,56 @@ public:
 	bssh_emulator(int cols, int rows, QObject *parent = nullptr);
 	~bssh_emulator() override;
 
+	/*
+	 * Key entry points. The escape sequences a key produces depend on the
+	 * terminal's current modes -- application cursor keys, application
+	 * keypad, bracketed paste -- which only the emulator knows, so the
+	 * translation belongs here and the bytes come out through the same
+	 * output path as the emulator's own replies (sec 6.3).
+	 *
+	 * The tables behind this are libvterm's, not ours. Hand-writing an
+	 * escape-sequence table for every key x modifier x mode combination
+	 * is exactly the kind of thing the vendored library already gets
+	 * right, and getting it subtly wrong is invisible until someone
+	 * presses Shift-F7 in a full-screen editor.
+	 */
+	enum key_t {
+		KEY_NONE,
+		KEY_ENTER,
+		KEY_TAB,
+		KEY_BACKSPACE,
+		KEY_ESCAPE,
+		KEY_UP,
+		KEY_DOWN,
+		KEY_LEFT,
+		KEY_RIGHT,
+		KEY_INSERT,
+		KEY_DELETE,
+		KEY_HOME,
+		KEY_END,
+		KEY_PAGE_UP,
+		KEY_PAGE_DOWN,
+		/* Function keys are KEY_FUNCTION_BASE + n, for F1..Fn. */
+		KEY_FUNCTION_BASE = 256
+	};
+
+	enum modifier_t {
+		MOD_NONE  = 0x00,
+		MOD_SHIFT = 0x01,
+		MOD_ALT   = 0x02,
+		MOD_CTRL  = 0x04
+	};
+
+	void send_key(int key, quint8 modifiers);
+	void send_char(char32_t ch, quint8 modifiers);
+
+	/*
+	 * Wraps a paste in the bracketed-paste markers when the remote has
+	 * asked for them. Bypassing this and writing the text straight to the
+	 * channel is what makes a paste into vim indent itself to death.
+	 */
+	void send_paste(const QString &text);
+
 	void feed(const QByteArray &bytes);
 	void resize(int cols, int rows);
 

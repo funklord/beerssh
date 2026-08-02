@@ -21,6 +21,7 @@ private slots:
 	void renders_without_a_screen_attached();
 	void renders_cell_colours_from_the_screen();
 	void session_bytes_reach_the_screen_through_the_emulator();
+	void ime_commit_text_becomes_input();
 	void session_records_what_the_client_wrote();
 	void session_reports_every_state_on_the_way_up();
 };

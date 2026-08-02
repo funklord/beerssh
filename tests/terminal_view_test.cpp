@@ -4,6 +4,7 @@
 #include "terminal_view_test.h"
 
 #include "fake_ssh_session.h"
+#include "input/input_router.h"
 #include "term/emulator.h"
 #include "ui/terminal_view.h"
 
@@ -123,6 +124,32 @@ void terminal_view_test::session_bytes_reach_the_screen_through_the_emulator() {
 	const QString text = emulator.screen().to_text();
 	QCOMPARE(text.section(QLatin1Char('\n'), 0, 0), QStringLiteral("motd line"));
 	QCOMPARE(text.section(QLatin1Char('\n'), 1, 1), QStringLiteral("user@host:~$"));
+}
+
+void terminal_view_test::ime_commit_text_becomes_input() {
+	bssh_terminal_view view;
+	show_and_resize(view, 400, 200);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	bssh_input_router router(&emulator);
+	view.attach_screen(&emulator.screen());
+	view.attach_input_router(&router);
+
+	/*
+	 * Android delivers some keys only as IME commit text (sec 6.1), and
+	 * desktop dead keys arrive the same way -- "é" typed as a compose
+	 * sequence is one commit string, not a key event.
+	 */
+	QInputMethodEvent event;
+	event.setCommitString(QStringLiteral("é"));
+	QCoreApplication::sendEvent(&view, &event);
+
+	QCOMPARE(emulator.take_output(), QString::fromUtf8("é").toUtf8());
+
+	/* Pre-edit text is not input: it must produce nothing. */
+	QInputMethodEvent preedit(QStringLiteral("ni"), QList<QInputMethodEvent::Attribute>());
+	QCoreApplication::sendEvent(&view, &preedit);
+	QCOMPARE(emulator.take_output(), QByteArray());
 }
 
 void terminal_view_test::session_records_what_the_client_wrote() {

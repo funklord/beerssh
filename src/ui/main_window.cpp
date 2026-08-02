@@ -1,5 +1,7 @@
 #include "ui/main_window.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -7,6 +9,7 @@
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
+#include "ui/key_row.h"
 #include "ui/terminal_view.h"
 
 bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
@@ -15,6 +18,8 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_status_label(new QLabel(this)),
       m_session(nullptr),
       m_emulator(nullptr),
+      m_input_router(nullptr),
+      m_key_row(nullptr),
       m_cols(0),
       m_rows(0) {
 	setWindowTitle(QStringLiteral("BeerSSH"));
@@ -56,6 +61,28 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		/* OSC title -> window title on desktop, tab label at M7 (sec 8.3). */
 		setWindowTitle(title.isEmpty() ? QStringLiteral("BeerSSH")
 		                                : QStringLiteral("%1 - BeerSSH").arg(title));
+	});
+
+	m_input_router = new bssh_input_router(m_emulator, this);
+	m_terminal_view->attach_input_router(m_input_router);
+	m_terminal_view->setFocus();
+
+	/*
+	 * Between the terminal and the status line, so it sits directly above
+	 * the soft keyboard when one is up (sec 6.2). Hidden unless touch is
+	 * the primary input -- it is built on every platform regardless, so
+	 * desktop can enable it and so it stays compiled and tested.
+	 */
+	m_key_row = new bssh_key_row(m_input_router, this);
+	layout->insertWidget(1, m_key_row);
+
+	connect(m_input_router, &bssh_input_router::shortcut_pressed,
+	         this, [this](bssh_input_router::shortcut_t shortcut) {
+		if (shortcut == bssh_input_router::SHORTCUT_PASTE) {
+			m_input_router->paste(QGuiApplication::clipboard()->text());
+		}
+		/* SHORTCUT_COPY needs a selection to copy, which arrives with
+		 * mouse selection (sec 6.4) -- not yet built. */
 	});
 
 	update_status();

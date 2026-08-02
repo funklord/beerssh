@@ -180,15 +180,23 @@ void on_output(const char *bytes, size_t len, void *user) {
 }
 
 const VTermScreenCallbacks screen_callbacks = {
-	on_damage,
-	on_move_rect,
-	on_move_cursor,
-	on_set_term_prop,
-	on_bell,
-	nullptr, /* resize: our own resize() drives the mirror */
-	nullptr, /* sb_pushline: scrollback is M2's second half */
-	nullptr, /* sb_popline */
-	nullptr  /* sb_clear */
+	.damage      = on_damage,
+	.moverect    = on_move_rect,
+	.movecursor  = on_move_cursor,
+	.settermprop = on_set_term_prop,
+	.bell        = on_bell,
+	.resize      = nullptr, /* our own resize() drives the mirror */
+	.sb_pushline = nullptr, /* scrollback is its own milestone */
+	.sb_popline  = nullptr,
+	.sb_clear    = nullptr,
+	/* Opt-in ABI extension; only used if the has_pushline4 call is made. */
+	.sb_pushline4 = nullptr
+	/*
+	 * Designated initialisers on purpose: libvterm has added callbacks
+	 * before (sb_pushline4 is newer than this list), and a positional
+	 * initialiser would silently shift every function pointer down one
+	 * slot the next time that happens.
+	 */
 };
 
 } /* namespace */
@@ -319,6 +327,65 @@ void bssh_emulator::resize(int cols, int rows) {
 
 const bssh_screen &bssh_emulator::screen() const {
 	return m_private->screen;
+}
+
+void bssh_emulator::send_key(int key, quint8 modifiers) {
+	const VTermModifier mod = static_cast<VTermModifier>(modifiers);
+
+	if (key >= KEY_FUNCTION_BASE) {
+		/* The macro yields an int; C++ will not narrow that to the enum. */
+		vterm_keyboard_key(m_private->vt,
+		                    static_cast<VTermKey>(VTERM_KEY_FUNCTION(key - KEY_FUNCTION_BASE)),
+		                    mod);
+		return;
+	}
+
+	static const VTermKey mapping[] = {
+		VTERM_KEY_NONE,
+		VTERM_KEY_ENTER,
+		VTERM_KEY_TAB,
+		VTERM_KEY_BACKSPACE,
+		VTERM_KEY_ESCAPE,
+		VTERM_KEY_UP,
+		VTERM_KEY_DOWN,
+		VTERM_KEY_LEFT,
+		VTERM_KEY_RIGHT,
+		VTERM_KEY_INS,
+		VTERM_KEY_DEL,
+		VTERM_KEY_HOME,
+		VTERM_KEY_END,
+		VTERM_KEY_PAGEUP,
+		VTERM_KEY_PAGEDOWN
+	};
+
+	if (key <= KEY_NONE || key >= int(sizeof(mapping) / sizeof(mapping[0]))) return;
+	vterm_keyboard_key(m_private->vt, mapping[key], mod);
+}
+
+void bssh_emulator::send_char(char32_t ch, quint8 modifiers) {
+	vterm_keyboard_unichar(m_private->vt, ch, static_cast<VTermModifier>(modifiers));
+}
+
+void bssh_emulator::send_paste(const QString &text) {
+	if (text.isEmpty()) return;
+
+	/*
+	 * libvterm emits the bracketing markers itself, and only when the
+	 * remote enabled the mode -- which is why this goes through the
+	 * library rather than prepending the escape sequences by hand.
+	 */
+	vterm_keyboard_start_paste(m_private->vt);
+
+	const QList<uint> codepoints = text.toUcs4();
+	for (uint codepoint : codepoints) {
+		if (codepoint == u'\r' || codepoint == u'\n') {
+			vterm_keyboard_key(m_private->vt, VTERM_KEY_ENTER, VTERM_MOD_NONE);
+			continue;
+		}
+		vterm_keyboard_unichar(m_private->vt, codepoint, VTERM_MOD_NONE);
+	}
+
+	vterm_keyboard_end_paste(m_private->vt);
 }
 
 QByteArray bssh_emulator::take_output() {

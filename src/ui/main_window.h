@@ -4,10 +4,12 @@
 #include <QString>
 #include <QWidget>
 
+#include "input/input_router.h"
 #include "ssh/ssh_session.h"
 #include "term/emulator.h"
 
 class QLabel;
+class bssh_key_row;
 class bssh_terminal_view;
 
 /*
@@ -52,6 +54,8 @@ private:
 	QLabel *m_status_label;
 	bssh_ssh_session *m_session;
 	bssh_emulator *m_emulator;
+	bssh_input_router *m_input_router;
+	bssh_key_row *m_key_row;
 	QString m_password;
 	QString m_target;
 	QString m_error;

@@ -7,6 +7,8 @@
 
 #include "term/screen.h"
 
+class bssh_input_router;
+
 /*
  * bssh_terminal_view -- the character-cell grid widget (project.md sec 7).
  *
@@ -46,6 +48,14 @@ public:
 	void attach_screen(const bssh_screen *screen);
 	const bssh_screen *screen() const { return m_screen; }
 
+	/*
+	 * The router that turns this widget's key events into bytes (sec
+	 * 6.3). The view does no translation of its own -- it forwards, so
+	 * that the on-screen key row and a physical keyboard cannot drift
+	 * apart.
+	 */
+	void attach_input_router(bssh_input_router *router) { m_input_router = router; }
+
 signals:
 	/*
 	 * Emitted only when the grid size actually changes, not on every
@@ -58,6 +68,8 @@ signals:
 protected:
 	void paintEvent(QPaintEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
+	void keyPressEvent(QKeyEvent *event) override;
+	void inputMethodEvent(QInputMethodEvent *event) override;
 
 private:
 	void update_metrics();
@@ -66,6 +78,7 @@ private:
 	QColor resolve(const bssh_color_t &color, const QColor &fallback) const;
 
 	const bssh_screen *m_screen;
+	bssh_input_router *m_input_router;
 	QFont m_font;
 	QColor m_background;
 	QColor m_foreground;

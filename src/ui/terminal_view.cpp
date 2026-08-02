@@ -6,7 +6,11 @@
 
 #include <algorithm>
 #include <QPainter>
+#include <QInputMethodEvent>
+#include <QKeyEvent>
 #include <QResizeEvent>
+
+#include "input/input_router.h"
 
 /*
  * The placeholder drawn into the empty grid. It exists to prove the cell
@@ -19,6 +23,7 @@ static const char *const BSSH_PLACEHOLDER = "BeerSSH -- no session (M0 skeleton)
 bssh_terminal_view::bssh_terminal_view(QWidget *parent)
     : QWidget(parent),
       m_screen(nullptr),
+      m_input_router(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_cell_width(1),
@@ -37,6 +42,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	m_font.setFixedPitch(true);
 
 	setFocusPolicy(Qt::StrongFocus);
+	/* Without this Qt never routes input-method events here at all. */
+	setAttribute(Qt::WA_InputMethodEnabled);
 	setAttribute(Qt::WA_OpaquePaintEvent);
 	update_metrics();
 
@@ -130,6 +137,42 @@ void bssh_terminal_view::recompute_grid() {
 	m_cols = cols;
 	m_rows = rows;
 	emit grid_resized(m_cols, m_rows);
+}
+
+void bssh_terminal_view::keyPressEvent(QKeyEvent *event) {
+	/*
+	 * Both paths matter, and this is only one of them. Android delivers
+	 * some keys as IME commit text rather than key events (sec 6.1), so
+	 * inputMethodEvent needs the same forwarding before the Android build
+	 * is usable with a soft keyboard. Noted rather than stubbed, because
+	 * a stub here would look done.
+	 */
+	if (m_input_router && m_input_router->handle_key(event)) {
+		event->accept();
+		return;
+	}
+
+	QWidget::keyPressEvent(event);
+}
+
+void bssh_terminal_view::inputMethodEvent(QInputMethodEvent *event) {
+	/*
+	 * The second delivery path sec 6.1 warns about. On Android some keys
+	 * arrive only as IME commit text and never as key events; on desktop
+	 * this is where dead keys and compose sequences arrive. A terminal
+	 * that implements only keyPressEvent silently drops both.
+	 *
+	 * Pre-edit text is deliberately ignored: an in-progress composition
+	 * is not input yet, and echoing it to the remote would send
+	 * characters the user has not committed to.
+	 */
+	if (m_input_router && !event->commitString().isEmpty()) {
+		m_input_router->send_text(event->commitString());
+		event->accept();
+		return;
+	}
+
+	QWidget::inputMethodEvent(event);
 }
 
 void bssh_terminal_view::resizeEvent(QResizeEvent *event) {

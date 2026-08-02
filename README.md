@@ -4,7 +4,7 @@ An SSH terminal for **Android and desktop** — background sessions, tabs,
 adaptive splits, and a real keyboard. Qt Widgets, C++, one codebase for
 both platforms.
 
-Status: **M0–M2 done bar credentials.** The app connects over SSH,
+Status: **M0–M3 done bar credentials.** The app connects over SSH,
 authenticates with a password, opens a PTY channel, and renders the result
 through a real VT emulator — colours, attributes, cursor addressing,
 scrolling and CJK double-width cells all work:
@@ -13,10 +13,13 @@ scrolling and CJK double-width cells all work:
 ./beerssh user@host        # asks for a password, then shows the shell
 ```
 
-One limit worth knowing before you try it: **you cannot type yet.** The
-input router is M3, so this is a read-only view of the remote output. The
-terminal does answer cursor-position and device-attribute queries, so
-programs that ask at startup will not hang.
+Typing works: keys, modifiers, function keys, arrows in both normal and
+application-cursor mode, Meta/Alt, bracketed paste (`Ctrl+Shift+V`), and
+input-method commit text. The on-screen key row for touch devices is
+built on every platform but hidden unless touch is the primary input.
+
+Not built yet: mouse selection and copy (`Ctrl+Shift+C` is wired but has
+nothing to copy until then), scrollback, tabs and splits.
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown or changed key fails the connection
@@ -66,6 +69,7 @@ src/main.cpp         entry point (--self-test is what CI runs)
 src/ui/              widgets: main window, terminal grid
 src/ssh/             bssh_ssh_session -- the SSH transport, behind an interface
 src/term/            bssh_screen + the libvterm-backed emulator
+src/input/           bssh_input_router -- every keystroke becomes bytes here
 vterm/               vendored libvterm (submodule, MIT, upstream untouched)
 src/platform/        bssh_platform + one implementation per platform
 tests/               host unit tests + the fake SSH session they drive
