@@ -5,6 +5,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QStandardPaths>
+#include <QJsonDocument>
 #include <QVariant>
 
 namespace {
@@ -15,7 +16,7 @@ namespace {
  * that gains migrations only once it needs them has already shipped a
  * database it cannot upgrade (project.md sec 10.6).
  */
-const int BSSH_SCHEMA_VERSION = 3;
+const int BSSH_SCHEMA_VERSION = 4;
 
 int next_connection_id() {
 	static int counter = 0;
@@ -126,6 +127,42 @@ bool bssh_profile_store::migrate() {
 		        "ALTER TABLE profiles ADD COLUMN has_password INTEGER NOT NULL DEFAULT 0"));
 	}
 
+	if (version < 4) {
+		/*
+		 * The preset itself is stored as its own JSON -- the same shape
+		 * that gets exported (sec 10.5), so there is one definition of
+		 * what a preset is rather than a column list that can drift from
+		 * it. Still readable in sqlite3, which sec 10.6 assumes.
+		 */
+		query.exec(QStringLiteral(
+		        "CREATE TABLE IF NOT EXISTS presets ("
+		        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+		        "  name TEXT NOT NULL,"
+		        "  is_builtin INTEGER NOT NULL DEFAULT 0,"
+		        "  json TEXT NOT NULL"
+		        ")"));
+		query.exec(QStringLiteral(
+		        "ALTER TABLE profiles ADD COLUMN preset_id INTEGER NOT NULL DEFAULT 0"));
+		query.exec(QStringLiteral(
+		        "ALTER TABLE profiles ADD COLUMN overrides TEXT NOT NULL DEFAULT '{}'"));
+
+		/*
+		 * The starter presets are seeded once, here, rather than merged
+		 * on every start: re-seeding would resurrect ones the user
+		 * deleted, and a preset that comes back after being removed is
+		 * worse than one that was never shipped.
+		 */
+		for (const bssh_preset_t &builtin : bssh_preset_t::builtins()) {
+			QSqlQuery insert(database);
+			insert.prepare(QStringLiteral(
+			        "INSERT INTO presets (name, is_builtin, json) VALUES (?, 1, ?)"));
+			insert.addBindValue(builtin.name);
+			insert.addBindValue(QString::fromUtf8(
+			        QJsonDocument(builtin.to_json()).toJson(QJsonDocument::Compact)));
+			insert.exec();
+		}
+	}
+
 	if (version != BSSH_SCHEMA_VERSION) {
 		query.exec(QStringLiteral("PRAGMA user_version = %1").arg(BSSH_SCHEMA_VERSION));
 	}
@@ -139,8 +176,8 @@ QList<bssh_profile_t> bssh_profile_store::profiles() const {
 
 	QSqlQuery query(QSqlDatabase::database(m_connection_name));
 	if (!query.exec(QStringLiteral(
-	        "SELECT id, name, host, user, port, has_password FROM profiles"
-	        " ORDER BY name COLLATE NOCASE"))) {
+	        "SELECT id, name, host, user, port, has_password, preset_id, overrides"
+	        " FROM profiles ORDER BY name COLLATE NOCASE"))) {
 		return result;
 	}
 
@@ -152,6 +189,8 @@ QList<bssh_profile_t> bssh_profile_store::profiles() const {
 		profile.user = query.value(3).toString();
 		profile.port = static_cast<quint16>(query.value(4).toUInt());
 		profile.has_stored_password = query.value(5).toInt() != 0;
+		profile.preset_id = query.value(6).toInt();
+		profile.overrides = QJsonDocument::fromJson(query.value(7).toString().toUtf8()).object();
 		result.append(profile);
 	}
 
@@ -173,12 +212,12 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 
 	if (profile.id == 0) {
 		query.prepare(QStringLiteral(
-		        "INSERT INTO profiles (name, host, user, port, has_password)"
-		        " VALUES (?, ?, ?, ?, ?)"));
+		        "INSERT INTO profiles (name, host, user, port, has_password, preset_id, overrides)"
+		        " VALUES (?, ?, ?, ?, ?, ?, ?)"));
 	} else {
 		query.prepare(QStringLiteral(
 		        "UPDATE profiles SET name = ?, host = ?, user = ?, port = ?,"
-		        " has_password = ? WHERE id = ?"));
+		        " has_password = ?, preset_id = ?, overrides = ? WHERE id = ?"));
 	}
 
 	query.addBindValue(profile.name.isEmpty() ? profile.host : profile.name);
@@ -186,6 +225,9 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 	query.addBindValue(profile.user);
 	query.addBindValue(profile.port);
 	query.addBindValue(profile.has_stored_password ? 1 : 0);
+	query.addBindValue(profile.preset_id);
+	query.addBindValue(QString::fromUtf8(
+	        QJsonDocument(profile.overrides).toJson(QJsonDocument::Compact)));
 	if (profile.id != 0) query.addBindValue(profile.id);
 
 	if (!query.exec()) {
@@ -196,6 +238,106 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 	const int id = profile.id == 0 ? query.lastInsertId().toInt() : profile.id;
 	emit changed();
 	return id;
+}
+
+QList<bssh_preset_t> bssh_profile_store::presets() const {
+	QList<bssh_preset_t> result;
+	if (!m_open) return result;
+
+	QSqlQuery query(QSqlDatabase::database(m_connection_name));
+	if (!query.exec(QStringLiteral(
+	        "SELECT id, is_builtin, json FROM presets ORDER BY name COLLATE NOCASE"))) {
+		return result;
+	}
+
+	while (query.next()) {
+		bssh_preset_t preset = bssh_preset_t::from_json(
+		        QJsonDocument::fromJson(query.value(2).toString().toUtf8()).object());
+		/*
+		 * id and builtin come from the ROW, never from the stored JSON --
+		 * from_json deliberately refuses to read them, so that an
+		 * imported file cannot claim to be one of the shipped presets.
+		 */
+		preset.id = query.value(0).toInt();
+		preset.is_builtin = query.value(1).toInt() != 0;
+		result.append(preset);
+	}
+
+	return result;
+}
+
+bssh_preset_t bssh_profile_store::preset(int id) const {
+	const QList<bssh_preset_t> all = presets();
+	for (const bssh_preset_t &preset : all) {
+		if (preset.id == id) return preset;
+	}
+	return bssh_preset_t();
+}
+
+int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
+	if (!m_open || preset.name.isEmpty()) return 0;
+
+	/*
+	 * A shipped preset is cloned, not edited (sec 10.4): saving over one
+	 * would change the starting point every other clone came from.
+	 */
+	if (preset.id != 0 && this->preset(preset.id).is_builtin) return 0;
+
+	QSqlQuery query(QSqlDatabase::database(m_connection_name));
+	const QString json = QString::fromUtf8(
+	        QJsonDocument(preset.to_json()).toJson(QJsonDocument::Compact));
+
+	if (preset.id == 0) {
+		query.prepare(QStringLiteral(
+		        "INSERT INTO presets (name, is_builtin, json) VALUES (?, 0, ?)"));
+		query.addBindValue(preset.name);
+		query.addBindValue(json);
+	} else {
+		query.prepare(QStringLiteral("UPDATE presets SET name = ?, json = ? WHERE id = ?"));
+		query.addBindValue(preset.name);
+		query.addBindValue(json);
+		query.addBindValue(preset.id);
+	}
+
+	if (!query.exec()) {
+		m_last_error = query.lastError().text();
+		return 0;
+	}
+
+	const int id = preset.id == 0 ? query.lastInsertId().toInt() : preset.id;
+	emit changed();
+	return id;
+}
+
+int bssh_profile_store::hosts_using(int preset_id) const {
+	if (!m_open || preset_id == 0) return 0;
+
+	QSqlQuery query(QSqlDatabase::database(m_connection_name));
+	query.prepare(QStringLiteral("SELECT COUNT(*) FROM profiles WHERE preset_id = ?"));
+	query.addBindValue(preset_id);
+
+	if (!query.exec() || !query.next()) return 0;
+	return query.value(0).toInt();
+}
+
+bool bssh_profile_store::remove_preset(int id) {
+	if (!m_open || id == 0) return false;
+
+	/*
+	 * Refused while hosts still follow it. They would silently fall back
+	 * to app defaults, which is a change to every one of them made by
+	 * deleting something else.
+	 */
+	if (hosts_using(id) > 0) return false;
+
+	QSqlQuery query(QSqlDatabase::database(m_connection_name));
+	query.prepare(QStringLiteral("DELETE FROM presets WHERE id = ? AND is_builtin = 0"));
+	query.addBindValue(id);
+
+	if (!query.exec() || query.numRowsAffected() == 0) return false;
+
+	emit changed();
+	return true;
 }
 
 bool bssh_profile_store::save_layout(const layout_state_t &layout) {

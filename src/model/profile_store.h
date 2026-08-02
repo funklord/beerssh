@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 
+#include "model/preset.h"
 #include "model/profile.h"
 
 /*
@@ -61,6 +62,27 @@ public:
 		layout_state_t() : pane_count(1), active_index(0) {}
 		bool is_empty() const { return profile_ids.isEmpty(); }
 	};
+
+	/* --- presets (sec 10) ------------------------------------------ */
+
+	QList<bssh_preset_t> presets() const;
+	bssh_preset_t preset(int id) const;
+
+	int save_preset(const bssh_preset_t &preset);
+
+	/*
+	 * Refuses while any host still follows it. Deleting a preset out from
+	 * under seven hosts is not a decision to make silently -- the caller
+	 * is expected to have shown hosts_using() first (sec 10.1).
+	 */
+	bool remove_preset(int id);
+
+	/*
+	 * How many hosts follow this preset. The number behind "used by 7
+	 * hosts" -- the warning that has to appear BEFORE a save, because
+	 * propagation is the feature and the surprise at the same time.
+	 */
+	int hosts_using(int preset_id) const;
 
 	bool save_layout(const layout_state_t &layout);
 

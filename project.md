@@ -1249,8 +1249,12 @@ background).
     JSON import/export, propagation UI. **Core built:** `bssh_preset_t` (with
     no field a secret could occupy), the three-layer resolver with
     override detection and revert, JSON round-trip, and the six starter
-    presets. Still open: the preset store table, the editing UI, and the
-    "used by N hosts" warning before a save propagates.
+    presets, the preset table with the starter set seeded once, hosts
+    following a preset with sparse overrides, and `hosts_using()` — the
+    number behind "used by 7 hosts". Shipped presets are structurally
+    read-only: saving over one is refused, and a preset still followed by a
+    host cannot be deleted. Still open: the editing UI, and showing that
+    warning before a save.
 12. **M11 – Settings, polish, accessibility.**
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop

@@ -1,6 +1,7 @@
 #ifndef BSSH_PROFILE_H
 #define BSSH_PROFILE_H
 
+#include <QJsonObject>
 #include <QString>
 
 /*
@@ -36,7 +37,16 @@ struct bssh_profile_t {
 	 */
 	bool has_stored_password;
 
-	bssh_profile_t() : id(0), port(22), has_stored_password(false) {}
+	/*
+	 * The preset this host follows (sec 10.1), and the fields where it
+	 * disagrees. Overrides are sparse on purpose: a field absent here
+	 * takes the preset's value, which is what makes editing a preset
+	 * reach every host that has not spoken for that field.
+	 */
+	int preset_id;
+	QJsonObject overrides;
+
+	bssh_profile_t() : id(0), port(22), has_stored_password(false), preset_id(0) {}
 
 	bool is_valid() const { return !host.isEmpty(); }
 

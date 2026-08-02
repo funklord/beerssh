@@ -264,6 +264,125 @@ void profile_store_test::the_stored_password_flag_round_trips() {
 	QVERIFY(!columns.contains(QStringLiteral("password")));
 }
 
+void profile_store_test::the_starter_presets_are_seeded_once() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("test.db"));
+
+	int seeded = 0;
+	{
+		bssh_profile_store store(path);
+		seeded = store.presets().count();
+		QVERIFY(seeded >= 5);
+
+		bool found_openwrt = false;
+		for (const bssh_preset_t &preset : store.presets()) {
+			QVERIFY(preset.id != 0);
+			if (preset.name.contains(QStringLiteral("OpenWrt"))) {
+				found_openwrt = true;
+				QCOMPARE(preset.term, QStringLiteral("vt100"));
+				QVERIFY(preset.is_builtin);
+			}
+		}
+		QVERIFY(found_openwrt);
+	}
+
+	/*
+	 * Seeded at migration, not merged on every start. Re-seeding would
+	 * resurrect presets the user deleted, and one that comes back after
+	 * being removed is worse than one that never shipped.
+	 */
+	bssh_profile_store reopened(path);
+	QCOMPARE(reopened.presets().count(), seeded);
+}
+
+void profile_store_test::a_host_follows_a_preset_and_may_override_it() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("test.db"));
+
+	int profile_id = 0;
+	int preset_id = 0;
+	{
+		bssh_profile_store store(path);
+		preset_id = store.presets().first().id;
+
+		bssh_profile_t profile = make_profile(QStringLiteral("router"),
+		                                       QStringLiteral("192.168.1.1"));
+		profile.preset_id = preset_id;
+		profile.overrides.insert(QStringLiteral("font_size"), 14);
+		profile_id = store.save(profile);
+	}
+
+	bssh_profile_store reopened(path);
+	const bssh_profile_t restored = reopened.profile(profile_id);
+
+	QCOMPARE(restored.preset_id, preset_id);
+	QCOMPARE(restored.overrides.value(QStringLiteral("font_size")).toInt(), 14);
+
+	/* And the store can answer sec 10.1's "used by N hosts". */
+	QCOMPARE(reopened.hosts_using(preset_id), 1);
+	QCOMPARE(reopened.hosts_using(0), 0);
+}
+
+void profile_store_test::a_preset_in_use_cannot_be_deleted() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("work-bastion");
+	const int preset_id = store.save_preset(preset);
+	QVERIFY(preset_id > 0);
+
+	bssh_profile_t profile = make_profile(QStringLiteral("host"), QStringLiteral("h.example"));
+	profile.preset_id = preset_id;
+	const int profile_id = store.save(profile);
+
+	/*
+	 * Hosts following a deleted preset would silently fall back to app
+	 * defaults -- a change to every one of them, caused by deleting
+	 * something else.
+	 */
+	QVERIFY(!store.remove_preset(preset_id));
+	QCOMPARE(store.hosts_using(preset_id), 1);
+
+	/* Once nothing follows it, it goes. */
+	store.remove(profile_id);
+	QCOMPARE(store.hosts_using(preset_id), 0);
+	QVERIFY(store.remove_preset(preset_id));
+}
+
+void profile_store_test::a_shipped_preset_cannot_be_edited() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	bssh_preset_t builtin = store.presets().first();
+	QVERIFY(builtin.is_builtin);
+
+	const QString original_term = builtin.term;
+	builtin.term = QStringLiteral("mangled");
+
+	/*
+	 * Shipped presets are cloned, not edited (sec 10.4): saving over one
+	 * would change the starting point every other clone came from.
+	 */
+	QCOMPARE(store.save_preset(builtin), 0);
+	QCOMPARE(store.preset(builtin.id).term, original_term);
+
+	/* Cloning it is the supported move, and the clone is editable. */
+	bssh_preset_t clone = store.presets().first();
+	clone.id = 0;
+	clone.is_builtin = false;
+	clone.name = QStringLiteral("my linux");
+	clone.term = QStringLiteral("xterm");
+
+	const int clone_id = store.save_preset(clone);
+	QVERIFY(clone_id > 0);
+	QCOMPARE(store.preset(clone_id).term, QStringLiteral("xterm"));
+	QVERIFY(!store.preset(clone_id).is_builtin);
+
+	/* And a shipped preset cannot be deleted either. */
+	QVERIFY(!store.remove_preset(builtin.id));
+}
+
 void profile_store_test::front_door_follows_the_input_device() {
 	/*
 	 * The PuTTY-shaped dialog for pointer and keyboard, the full-bleed
