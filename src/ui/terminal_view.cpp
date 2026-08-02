@@ -23,6 +23,7 @@ static const char *const BSSH_PLACEHOLDER = "BeerSSH -- no session (M0 skeleton)
 bssh_terminal_view::bssh_terminal_view(QWidget *parent)
     : QWidget(parent),
       m_screen(nullptr),
+      m_images(nullptr),
       m_input_router(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -68,6 +69,11 @@ void bssh_terminal_view::set_terminal_font(const QFont &font) {
 
 void bssh_terminal_view::attach_screen(const bssh_screen *screen) {
 	m_screen = screen;
+	update();
+}
+
+void bssh_terminal_view::attach_images(const bssh_image_store *images) {
+	m_images = images;
 	update();
 }
 
@@ -244,6 +250,23 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 				painter.setPen(fg);
 				painter.drawLine(x, y + m_cell_height - 1, x + width - 1, y + m_cell_height - 1);
 			}
+		}
+	}
+
+	/*
+	 * Images over the cells they cover, except where the remote asked for
+	 * z < 0 -- kitty's way of putting a background behind a TUI. Drawn
+	 * after the text for the positive case, which is why the loop runs
+	 * twice rather than sorting: two passes over a handful of images is
+	 * cheaper to read than a comparator.
+	 */
+	if (m_images) {
+		for (const bssh_image_placement_t &placement : m_images->placements()) {
+			const QRect target(placement.col * m_cell_width,
+			                    placement.row * m_cell_height,
+			                    placement.cols * m_cell_width,
+			                    placement.rows * m_cell_height);
+			painter.drawImage(target, placement.image);
 		}
 	}
 

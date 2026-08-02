@@ -5,6 +5,7 @@
 #include <QFont>
 #include <QWidget>
 
+#include "term/image_store.h"
 #include "term/screen.h"
 
 class bssh_input_router;
@@ -33,6 +34,10 @@ public:
 	int cols() const { return m_cols; }
 	int rows() const { return m_rows; }
 
+	/* Cell metrics in pixels -- the emulator needs these to size images. */
+	int cell_width() const { return m_cell_width; }
+	int cell_height() const { return m_cell_height; }
+
 	void set_terminal_font(const QFont &font);
 
 	/*
@@ -46,6 +51,9 @@ public:
 	 * session exists.
 	 */
 	void attach_screen(const bssh_screen *screen);
+
+	/* Images drawn over (or under) the grid -- see sec 7.1, tier 4. */
+	void attach_images(const bssh_image_store *images);
 	const bssh_screen *screen() const { return m_screen; }
 
 	/*
@@ -78,6 +86,7 @@ private:
 	QColor resolve(const bssh_color_t &color, const QColor &fallback) const;
 
 	const bssh_screen *m_screen;
+	const bssh_image_store *m_images;
 	bssh_input_router *m_input_router;
 	QFont m_font;
 	QColor m_background;

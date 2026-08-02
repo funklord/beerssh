@@ -52,6 +52,18 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	 */
 	m_emulator = new bssh_emulator(m_cols, m_rows, this);
 	m_terminal_view->attach_screen(&m_emulator->screen());
+	m_terminal_view->attach_images(&m_emulator->images());
+
+	/*
+	 * The emulator cannot know how big a cell is -- only the view, which
+	 * owns the font, can. Without this an inline image gets a zero-cell
+	 * footprint and lands invisible (sec 7.1).
+	 */
+	m_emulator->set_cell_pixels(m_terminal_view->cell_width(),
+	                             m_terminal_view->cell_height());
+
+	connect(m_emulator, &bssh_emulator::images_changed,
+	         m_terminal_view, QOverload<>::of(&QWidget::update));
 
 	connect(m_emulator, &bssh_emulator::damaged,
 	         m_terminal_view, QOverload<>::of(&QWidget::update));
@@ -178,7 +190,11 @@ void bssh_main_window::on_grid_resized(int cols, int rows) {
 	 * one computes its own geometry, so this stays per-session rather
 	 * than becoming a window-wide broadcast.
 	 */
-	if (m_emulator) m_emulator->resize(cols, rows);
+	if (m_emulator) {
+		m_emulator->set_cell_pixels(m_terminal_view->cell_width(),
+		                             m_terminal_view->cell_height());
+		m_emulator->resize(cols, rows);
+	}
 	if (m_session) m_session->resize(cols, rows);
 
 	update_status();

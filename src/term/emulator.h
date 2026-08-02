@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QString>
 
+#include "term/image_store.h"
 #include "term/screen.h"
 
 struct bssh_emulator_private;
@@ -94,6 +95,21 @@ public:
 	const bssh_screen &screen() const;
 
 	/*
+	 * Images placed on the grid (sec 7.1, tier 4). The store is the
+	 * emulator's, like the screen: the view renders it and owns none of
+	 * it, so a view can be destroyed and rebuilt without losing images.
+	 */
+	const bssh_image_store &images() const;
+
+	/*
+	 * Cell size in pixels, which the emulator cannot work out for itself
+	 * and needs in order to turn an image's pixel dimensions into a cell
+	 * footprint. The view is the only thing that knows it, so the view
+	 * tells it -- and must, or images land with a zero-cell footprint.
+	 */
+	void set_cell_pixels(int width, int height);
+
+	/*
 	 * Bytes the terminal owes the remote: answers to device-status and
 	 * primary-attribute queries, and later the mouse and bracketed-paste
 	 * reports. A caller that never drains this hangs any program that
@@ -111,6 +127,9 @@ signals:
 
 	void bell();
 	void output_ready();
+
+	/* An image arrived or was removed; the view repaints. */
+	void images_changed();
 
 private:
 	bssh_emulator_private *m_private;

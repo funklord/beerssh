@@ -24,6 +24,7 @@ PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a
 SOURCES += \
     main.cpp \
     emulator_test.cpp \
+    graphics_test.cpp \
     input_router_test.cpp \
     screen_test.cpp \
     terminal_view_test.cpp \
@@ -31,6 +32,8 @@ SOURCES += \
     ../src/input/input_router.cpp \
     ../src/ssh/ssh_session.cpp \
     ../src/term/emulator_vterm.cpp \
+    ../src/term/graphics.cpp \
+    ../src/term/image_store.cpp \
     ../src/term/screen.cpp \
     ../src/platform/platform.cpp \
     ../src/platform/platform_desktop.cpp \
@@ -40,12 +43,15 @@ SOURCES += \
 HEADERS += \
     fake_ssh_session.h \
     emulator_test.h \
+    graphics_test.h \
     input_router_test.h \
     screen_test.h \
     terminal_view_test.h \
     ../src/input/input_router.h \
     ../src/ssh/ssh_session.h \
     ../src/term/emulator.h \
+    ../src/term/graphics_internal.h \
+    ../src/term/image_store.h \
     ../src/term/screen.h \
     ../src/platform/platform.h \
     ../src/ui/key_row.h \

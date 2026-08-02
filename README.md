@@ -24,9 +24,14 @@ protocol** (disambiguate tier, with push/pop/set/query) and **xterm
 `modifyOtherKeys` level 2**. `project.md` §7.1 surveys the wider set of
 modern terminal extensions and says where each one stands.
 
+Inline images work for the **kitty graphics protocol** and **iTerm2's
+inline images** — `kitten icat` and `imgcat` style output both render.
+**Sixel is declined** rather than half-decoded until `libsixel-dev` is
+installed; wiring it in is one function's body.
+
 Not built yet: mouse selection and copy (`Ctrl+Shift+C` is wired but has
-nothing to copy until then), scrollback, tabs and splits, and the tier-3/4
-extensions in §7.1 (synchronized output, OSC 8 hyperlinks, images).
+nothing to copy until then), scrollback, tabs and splits, and the tier-3
+extensions in §7.1 (synchronized output, OSC 8 hyperlinks).
 
 Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
 never `~/.ssh/known_hosts`. An unknown or changed key fails the connection

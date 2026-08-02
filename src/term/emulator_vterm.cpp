@@ -2,6 +2,8 @@
 
 #include <vterm.h>
 
+#include "term/graphics_internal.h"
+
 /*
  * The libvterm binding. This file is the only one in the tree that
  * includes vterm.h.
@@ -32,9 +34,27 @@ struct bssh_emulator_private {
 	bssh_emulator *owner;
 	int modify_other_keys;
 
+	bssh_image_store images;
+	/*
+	 * Rows the cursor owes an image. It cannot be applied inside the APC
+	 * callback: moving our own mirror's cursor there is invisible to
+	 * libvterm, which then writes the next text over the image it just
+	 * placed. libvterm exposes no cursor setter, so the movement is fed
+	 * back to it as a real CUD once the current write has finished.
+	 */
+	int pending_cursor_advance;
+	bssh_graphics_transmission_t graphics;   /* chunked kitty transmissions */
+	QByteArray apc_buffer;        /* an APC split across reads */
+	QByteArray osc_buffer;
+	int cell_width;
+	int cell_height;
+
+	void apply_graphics(const bssh_graphics_result_t &result);
+
 	bssh_emulator_private(int cols, int rows, bssh_emulator *owner)
 	    : vt(nullptr), vts(nullptr), screen(cols, rows), owner(owner),
-	      modify_other_keys(0) {
+	      modify_other_keys(0), cell_width(8), cell_height(16),
+	      pending_cursor_advance(0) {
 		kitty_stack.append(0);
 	}
 
@@ -155,6 +175,19 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 	 * move, and doing so would be a second chance to get it wrong.
 	 */
 	self->copy_rect(dest);
+
+	/*
+	 * Images move with the text they were drawn beside. An image pinned
+	 * to its original row while everything around it scrolls looks like
+	 * the terminal has come apart.
+	 */
+	if (dest.start_col == src.start_col && dest.start_row != src.start_row) {
+		self->images.scrolled(qMin(dest.start_row, src.start_row),
+			                     qMax(dest.end_row, src.end_row),
+			                     src.start_row - dest.start_row);
+		emit self->owner->images_changed();
+	}
+
 	emit self->owner->damaged();
 	return 1;
 }
@@ -258,15 +291,50 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 	return 0;
 }
 
-const VTermStateFallbacks unrecognised_fallbacks = {
-	.control = nullptr,
-	.csi     = on_unrecognised_csi,
-	.osc     = nullptr,
-	.dcs     = nullptr,
-	.apc     = nullptr,
-	.pm      = nullptr,
-	.sos     = nullptr
-};
+
+/*
+ * Kitty's graphics protocol arrives as APC. libvterm passes these through
+ * untouched, which is all this needs -- unlike the private CSIs in sec
+ * 7.1, no patch was required here.
+ */
+int on_apc(VTermStringFragment frag, void *user) {
+	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+
+	if (frag.initial) self->apc_buffer.clear();
+	self->apc_buffer.append(frag.str, int(frag.len));
+	if (!frag.final) return 1;
+
+	if (!self->apc_buffer.startsWith('G')) return 0;
+
+	self->apply_graphics(bssh_parse_kitty(self->apc_buffer, self->graphics,
+		                                     self->cell_width, self->cell_height));
+	return 1;
+}
+
+/* iTerm2 inline images: OSC 1337. */
+int on_osc(int command, VTermStringFragment frag, void *user) {
+	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+	if (command != 1337) return 0;
+
+	if (frag.initial) self->osc_buffer.clear();
+	self->osc_buffer.append(frag.str, int(frag.len));
+	if (!frag.final) return 1;
+
+	self->apply_graphics(bssh_parse_iterm2(self->osc_buffer,
+		                                      self->cell_width, self->cell_height));
+	return 1;
+}
+
+/* Sixel: DCS ... q. Declined until libsixel is available -- see graphics.cpp. */
+int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user) {
+	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+	Q_UNUSED(frag);
+
+	if (commandlen < 1 || command[commandlen - 1] != 'q') return 0;
+
+	self->apply_graphics(bssh_parse_sixel(QByteArray(), self->cell_width, self->cell_height));
+	return 1;
+}
 
 int on_bell(void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
@@ -279,6 +347,16 @@ void on_output(const char *bytes, size_t len, void *user) {
 	self->pending_output.append(bytes, static_cast<int>(len));
 	emit self->owner->output_ready();
 }
+
+const VTermStateFallbacks unrecognised_fallbacks = {
+	.control = nullptr,
+	.csi     = on_unrecognised_csi,
+	.osc     = on_osc,
+	.dcs     = on_dcs,
+	.apc     = on_apc,
+	.pm      = nullptr,
+	.sos     = nullptr
+};
 
 const VTermScreenCallbacks screen_callbacks = {
 	.damage      = on_damage,
@@ -403,6 +481,20 @@ void bssh_emulator::feed(const QByteArray &bytes) {
 
 	if (buffer.isEmpty()) return;
 	vterm_input_write(m_private->vt, buffer.constData(), buffer.size());
+
+	/*
+	 * An image placed during that write leaves the cursor sitting on top
+	 * of it. Move it down past the image the only way libvterm accepts --
+	 * by parsing a cursor-down -- and do it here, after the write, rather
+	 * than re-entering the parser from inside its own callback.
+	 */
+	if (m_private->pending_cursor_advance > 0) {
+		const QByteArray advance = QByteArrayLiteral("\x1b[")
+		                            + QByteArray::number(m_private->pending_cursor_advance)
+		                            + QByteArrayLiteral("B");
+		m_private->pending_cursor_advance = 0;
+		vterm_input_write(m_private->vt, advance.constData(), advance.size());
+	}
 }
 
 void bssh_emulator::resize(int cols, int rows) {
@@ -423,6 +515,7 @@ void bssh_emulator::resize(int cols, int rows) {
 	all.start_col = 0;
 	all.end_col = cols;
 	m_private->copy_rect(all);
+	m_private->images.trim_to(rows);
 
 	emit damaged();
 }
@@ -471,6 +564,48 @@ bool bssh_emulator_private::encode_modern_key(char32_t ch, quint8 modifiers) {
 	       + QByteArray::number(uint(ch))
 	       + QByteArrayLiteral("~"));
 	return true;
+}
+
+void bssh_emulator_private::apply_graphics(const bssh_graphics_result_t &result) {
+	switch (result.action) {
+	case bssh_graphics_result_t::PLACE: {
+		/*
+		 * Placed at the cursor, which is where every one of the three
+		 * protocols puts an image, and the cursor then advances past it
+		 * the way a wide glyph advances past its cells.
+		 */
+		bssh_image_placement_t placement = result.placement;
+		placement.row = screen.cursor_row();
+		placement.col = screen.cursor_col();
+		images.place(placement);
+		pending_cursor_advance = qMax(pending_cursor_advance, placement.rows);
+
+		emit owner->images_changed();
+		emit owner->damaged();
+		break;
+	}
+	case bssh_graphics_result_t::DELETE_IMAGES:
+		if (result.id > 0) {
+			images.remove(result.id);
+		} else {
+			images.clear();
+		}
+		emit owner->images_changed();
+		emit owner->damaged();
+		break;
+	case bssh_graphics_result_t::CONTINUE:
+	case bssh_graphics_result_t::NOTHING:
+		break;
+	}
+}
+
+const bssh_image_store &bssh_emulator::images() const {
+	return m_private->images;
+}
+
+void bssh_emulator::set_cell_pixels(int width, int height) {
+	m_private->cell_width = qMax(1, width);
+	m_private->cell_height = qMax(1, height);
 }
 
 int bssh_emulator::kitty_keyboard_flags() const {

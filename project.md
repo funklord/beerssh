@@ -574,20 +574,39 @@ conversation, and should let it reach its best tier.
 | **OSC 52 clipboard** | Remote sets the local clipboard | **Security review first** — a remote host silently writing the user's clipboard is a real hazard, and reading it is worse. Off by default, if offered at all |
 | **XTGETTCAP / DECRQM** | Lets a remote query what the terminal supports rather than guessing from `TERM` | Small; pairs naturally with the tier-2 work |
 
-**Tier 4 — images, and the honest problem with them.**
+**Tier 4 — images. [DECIDED: support all three]**
 
-**Sixel**, the **kitty graphics protocol** and **iTerm2's inline images** all
-put pixels in a character grid, and no two agree on how. Sixel is oldest and
-most widely supported; kitty's is the most capable; iTerm2's is the
-simplest. None is *the* standard, so "support all of them" is three
-implementations, plus an image cache that has to survive scrolling, resizing
-and a phone's memory limits.
+**Sixel**, the **kitty graphics protocol** and **iTerm2's inline images**
+all put pixels in a character grid, and no two agree on transport,
+encoding or placement. They agree only on the *result* — an image anchored
+at a cell, occupying a rectangle of cells — so that result is what
+`bssh_image_store` holds, and each protocol's parser is reduced to
+producing one of them.
 
-**[OPEN], and a real decision, not a formality:** whether v1 ships any of
-them. Recommendation is **sixel first if any** — widest support, smallest
-implementation — and only once §9's font and rendering pipeline exists,
-because both want the same glyph/tile cache. A terminal that draws images
-badly is worse than one that declines to.
+| Protocol | Transport | Payload | Status |
+|---|---|---|---|
+| **kitty** | APC `_G…` | base64 PNG (`f=100`) or raw RGB/RGBA (`f=24/32`), chunked with `m=1` | **Done** — transmit, display, delete, chunked |
+| **iTerm2** | OSC 1337 | base64 PNG/JPEG | **Done** |
+| **sixel** | DCS `q` | a 1974 pixel encoding with its own palette handling | **Declined until libsixel is present** |
+
+Decoding is Qt's: `QImage` reads PNG and JPEG and `QByteArray::fromBase64`
+does the transport, so two of the three needed no image decoder written
+here at all. **Sixel is the one that genuinely needs a library** — its
+payload is not a container Qt knows — and `libsixel` is exactly the work
+not worth repeating. It is packaged everywhere (`libsixel-dev`); until it
+is installed, `bssh_parse_sixel` declines rather than half-decodes, because
+a wrong image is worse than a declined one and a stub that looks finished
+is worse than either. Wiring it in is that one function's body.
+
+Two things images must do that are easy to miss, and both are tested:
+they **follow the text when the screen scrolls** (an image pinned to its
+original row while output moves past it looks like the terminal has come
+apart), and they are **dropped when scrolled off or when the grid shrinks
+past them** — there is no image scrollback, and holding every image a long
+session ever drew is how a phone runs out of memory.
+
+**[OPEN]** Image scrollback, and a memory budget for it. Also `z < 0`
+placement is stored but the renderer draws everything over the text.
 
 **Where this lives in the code:** libvterm handles the sequences it knows
 and hands everything else to `vterm_screen_set_unrecognised_fallbacks`, its
