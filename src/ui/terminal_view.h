@@ -8,6 +8,7 @@
 #include <QJsonObject>
 #include <QWidget>
 
+#include "term/colour_scheme.h"
 #include "term/image_store.h"
 #include "term/screen.h"
 #include "term/scrollback.h"
@@ -67,6 +68,18 @@ public:
 	 * terminal that covers the output it exists to display.
 	 */
 	QString font_substitution_note() const;
+
+	/* The sixteen ANSI colours, the default fg/bg and the cursor colour
+	 * (sec 10.2). Empty selects the default scheme. */
+	void set_colour_scheme(const QString &id);
+	QString colour_scheme() const { return m_scheme_id; }
+
+	/*
+	 * Colour resolution, exposed for the tests that check a scheme
+	 * repaints the sixteen it owns and leaves the 256-colour cube alone.
+	 * The renderer's own path is private and stays that way.
+	 */
+	QColor colour_for_test(const bssh_color_t &colour) const { return resolve(colour, m_foreground); }
 
 	/* block | underline | bar, and whether it blinks (sec 10.2). */
 	void set_cursor_style(const QString &style);
@@ -237,6 +250,9 @@ private:
 	 * atlas is a bigger structure than this and still open.
 	 */
 	mutable QHash<QString, QFont> m_font_cache;
+
+	QString m_scheme_id;
+	bssh_colour_scheme_t m_scheme;
 
 	QString m_cursor_style;
 	bool m_cursor_on;

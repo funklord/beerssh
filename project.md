@@ -1036,6 +1036,28 @@ encoding, scrollback size, cursor style/blink, bell behaviour, keepalive interva
 compression, algorithm preferences (ciphers/KEX/MACs), and default split/tab
 behaviour for that host type.
 
+#### Colour schemes — **[DECIDED]**
+§10.2 gave a preset a `colour_scheme` field and never said what one is. It is
+the sixteen ANSI colours plus a default foreground, background and cursor —
+curated, compiled in, addressed by a stable id, identical on both platforms, on
+the same pattern §9.2 uses for fonts. Six to start with, each recording its
+licence because these are other people's designs:
+
+| Scheme | Licence | Why it is in the set |
+|---|---|---|
+| **Default** | BeerSSH | The xterm-ish palette this renderer already used. Deliberately the default, so the day schemes landed nobody's terminal changed colour unasked. |
+| **Solarized Dark / Light** | MIT (Ethan Schoonover) | The most widely recognised pair; one palette, two backgrounds. |
+| **Gruvbox Dark** | MIT (Pavel Pertsev) | Warm, high-contrast, very widely used. |
+| **Nord** | MIT (Arctic Ice Studio) | Low-contrast cool palette; the most requested modern scheme. |
+| **Tango Dark** | Public domain (Tango Desktop Project) | What GNOME Terminal shipped for years — the one a Linux user recognises without knowing its name. |
+
+**A scheme owns the low sixteen and nothing else.** The 6×6×6 cube and the grey
+ramp above them are exact formulas every terminal computes identically: a program
+asking for colour 137 has asked for a particular RGB value, not for the user's
+taste, so recolouring those would make this terminal disagree with every other
+one about what 256-colour output looks like. That is a bug wearing a feature's
+clothes, and there is a test asserting it does not happen.
+
 **Presets are platform-neutral by construction.** A preset describes the *host*,
 not the device looking at it, so it holds no platform-conditional fields — the
 key row layout it carries is simply ignored where no key row is shown (§6.2). A
@@ -1411,9 +1433,11 @@ background).
     tab marker, and `on_connect_command` runs on every connect — including
     reconnects, which is the one that matters, since §5.3's answer to "a
     reconnect is a new shell" is attaching to tmux. Still inert:
-    `colour_scheme` and `key_row_layout`, because both need a subsystem that
-    does not exist yet (a set of schemes; a set of key-row layouts) rather
-    than a line of wiring.
+    `key_row_layout`, which needs a set of key-row layouts to choose from
+    before choosing one means anything. **`colour_scheme` is built** (§10.2):
+    six curated schemes, picked alongside the font so the preview shows what
+    the terminal will actually look like, with the sixteen swatches drawn
+    because a scheme's name tells a user nothing.
 12. **M11 – Settings, polish, accessibility.**
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop

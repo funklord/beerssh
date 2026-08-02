@@ -1,12 +1,15 @@
 #include "ui/font_picker.h"
 
 #include <QComboBox>
+#include <QPainter>
+#include <QPixmap>
 #include <QFormLayout>
 #include <QLabel>
 #include <QSpinBox>
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
+#include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 
 /*
@@ -28,6 +31,33 @@ static const int BSSH_MAX_POINT_SIZE = 32;
 
 /* sec 6.2's floor, applied to the controls rather than only to the key row. */
 static const int BSSH_TOUCH_HEIGHT_DP = 48;
+
+/* Tall enough to read as colour rather than as a line. */
+static const int BSSH_SWATCH_HEIGHT = 18;
+
+/*
+ * The scheme's sixteen ANSI colours as one strip: normal on the top half,
+ * bright underneath, in ANSI order. Two rows rather than sixteen squares
+ * in a line, because the bright half is what distinguishes two schemes
+ * that look alike at a glance.
+ */
+static QPixmap bssh_swatch_strip(const bssh_colour_scheme_t &scheme, int height) {
+	const int width = 16 * 18;
+	QPixmap strip(width, qMax(2, height));
+	strip.fill(QColor(scheme.background));
+
+	QPainter painter(&strip);
+	const int cell = width / 8;
+	const int half = strip.height() / 2;
+
+	for (int i = 0; i < 8; ++i) {
+		painter.fillRect(i * cell, 0, cell, half, QColor(scheme.ansi[i]));
+		painter.fillRect(i * cell, half, cell, strip.height() - half,
+		                  QColor(scheme.ansi[i + 8]));
+	}
+
+	return strip;
+}
 
 bssh_font_picker::bssh_font_picker(QWidget *parent)
     : QWidget(parent) {
@@ -66,8 +96,16 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 		m_family->addItem(label, font.id);
 	}
 
+	m_scheme = new QComboBox(this);
+	m_scheme->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
+	for (const bssh_colour_scheme_t &scheme : bssh_colour_scheme_catalog::instance().all()) {
+		m_scheme->addItem(scheme.display_name, scheme.id);
+	}
+
 	form->addRow(QStringLiteral("Font"), m_family);
 	form->addRow(QStringLiteral("Size"), m_size);
+	form->addRow(QStringLiteral("Colours"), m_scheme);
 	outer->addLayout(form);
 
 	m_preview = new QLabel(QString::fromUtf8(BSSH_PREVIEW_TEXT), this);
@@ -83,6 +121,15 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	m_preview->setStyleSheet(QStringLiteral("background: #1c1c1c; color: #d0d0d0;"));
 	outer->addWidget(m_preview);
 
+	/*
+	 * The sixteen colours, drawn. A scheme's NAME tells a user nothing --
+	 * "Nord" and "Gruvbox Dark" are both "a dark one" until you see them
+	 * -- and the sample text only ever exercises two of the sixteen.
+	 */
+	m_swatches = new QLabel(this);
+	m_swatches->setFixedHeight(BSSH_SWATCH_HEIGHT);
+	outer->addWidget(m_swatches);
+
 	m_note = new QLabel(this);
 	m_note->setWordWrap(true);
 	outer->addWidget(m_note);
@@ -91,6 +138,10 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	         this, &bssh_font_picker::on_choice_changed);
 	connect(m_size, QOverload<int>::of(&QSpinBox::valueChanged),
 	         this, &bssh_font_picker::on_choice_changed);
+	connect(m_scheme, &QComboBox::currentIndexChanged, this, [this] {
+		refresh_preview();
+		emit scheme_chosen(scheme_id());
+	});
 
 	const bssh_platform *platform = bssh_platform::instance();
 	set_font_choice(QString(), 0);
@@ -136,6 +187,27 @@ void bssh_font_picker::set_touch_sized(bool touch) {
 	const int height = touch ? BSSH_TOUCH_HEIGHT_DP : 0;
 	m_family->setMinimumHeight(height);
 	m_size->setMinimumHeight(height);
+	m_scheme->setMinimumHeight(height);
+}
+
+QString bssh_font_picker::scheme_id() const {
+	return m_scheme->currentData().toString();
+}
+
+void bssh_font_picker::set_scheme(const QString &id) {
+	const bssh_colour_scheme_catalog &catalog = bssh_colour_scheme_catalog::instance();
+	const QString wanted = catalog.effective_id(id);
+
+	const int index = m_scheme->findData(wanted);
+	if (index < 0) {
+		/* Same rule as an unknown font: shown, not swallowed. */
+		m_scheme->addItem(wanted + QStringLiteral("  (not in this build)"), wanted);
+		m_scheme->setCurrentIndex(m_scheme->count() - 1);
+	} else {
+		m_scheme->setCurrentIndex(index);
+	}
+
+	refresh_preview();
 }
 
 void bssh_font_picker::on_choice_changed() {
@@ -154,6 +226,23 @@ void bssh_font_picker::refresh_preview() {
 	 * use is worse than no preview.
 	 */
 	m_preview->setFont(bssh_font_catalog::make_font(catalog.family_for(id), point_size()));
+
+	/*
+	 * The preview wears the scheme's own colours, so what is on screen is
+	 * what the terminal will look like rather than a font sample on an
+	 * unrelated background. A scheme judged against the wrong background
+	 * is a scheme judged wrongly -- contrast is the whole decision.
+	 */
+	const bssh_colour_scheme_catalog &schemes = bssh_colour_scheme_catalog::instance();
+	const bssh_colour_scheme_t *scheme = schemes.by_id(scheme_id());
+	if (!scheme) scheme = schemes.by_id(schemes.default_id());
+
+	if (scheme) {
+		m_preview->setStyleSheet(QStringLiteral("background: %1; color: %2;")
+		                                 .arg(QColor(scheme->background).name(),
+		                                      QColor(scheme->foreground).name()));
+		m_swatches->setPixmap(bssh_swatch_strip(*scheme, m_swatches->height()));
+	}
 
 	const QString note = catalog.substitution_note(id);
 	if (note.isEmpty()) {

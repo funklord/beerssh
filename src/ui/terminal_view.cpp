@@ -18,6 +18,7 @@
 
 #include "input/input_router.h"
 #include "platform/platform.h"
+#include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 
 /*
@@ -79,6 +80,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 * The catalog degrades on its own when none of the set is installed,
 	 * so this is safe before any font has been fetched or bundled.
 	 */
+	set_colour_scheme(QString());
+
 	const bssh_platform *platform = bssh_platform::instance();
 	const bool compact = platform && platform->is_touch_primary();
 
@@ -139,6 +142,30 @@ void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 	 */
 	update_metrics();
 	recompute_grid();
+	update();
+}
+
+void bssh_terminal_view::set_colour_scheme(const QString &id) {
+	const bssh_colour_scheme_catalog &catalog = bssh_colour_scheme_catalog::instance();
+
+	const QString wanted = catalog.effective_id(id);
+	if (wanted == m_scheme_id) return;
+
+	m_scheme_id = wanted;
+
+	/*
+	 * An unknown scheme draws in the default rather than in nothing. The
+	 * id is kept as asked for, so the picker can still show what the
+	 * profile wanted and say it is not in this build (sec 10.1).
+	 */
+	const bssh_colour_scheme_t *scheme = catalog.by_id(wanted);
+	if (!scheme) scheme = catalog.by_id(catalog.default_id());
+	if (!scheme) return;
+
+	m_scheme = *scheme;
+	m_background = QColor(m_scheme.background);
+	m_foreground = QColor(m_scheme.foreground);
+
 	update();
 }
 
@@ -280,22 +307,20 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
  * formula, and at M10 they become a preset-owned colour scheme (sec 10.2).
  */
 QColor bssh_terminal_view::resolve(const bssh_color_t &color, const QColor &fallback) const {
-	static const QRgb system[16] = {
-		qRgb(0x00, 0x00, 0x00), qRgb(0xcd, 0x00, 0x00),
-		qRgb(0x00, 0xcd, 0x00), qRgb(0xcd, 0xcd, 0x00),
-		qRgb(0x00, 0x00, 0xee), qRgb(0xcd, 0x00, 0xcd),
-		qRgb(0x00, 0xcd, 0xcd), qRgb(0xe5, 0xe5, 0xe5),
-		qRgb(0x7f, 0x7f, 0x7f), qRgb(0xff, 0x00, 0x00),
-		qRgb(0x00, 0xff, 0x00), qRgb(0xff, 0xff, 0x00),
-		qRgb(0x5c, 0x5c, 0xff), qRgb(0xff, 0x00, 0xff),
-		qRgb(0x00, 0xff, 0xff), qRgb(0xff, 0xff, 0xff)
-	};
-
 	if (color.kind == bssh_color_t::RGB) return QColor(color.rgb);
 	if (color.kind != bssh_color_t::INDEXED) return fallback;
 
 	const int index = color.index;
-	if (index < 16) return QColor(system[index]);
+
+	/*
+	 * The low sixteen come from the host's colour scheme (sec 10.2); the
+	 * cube and the grey ramp below do not, because they are exact formulas
+	 * every terminal computes identically. A program asking for colour 137
+	 * has asked for a particular RGB value, not for the user's taste, and
+	 * recolouring those would make this terminal disagree with every
+	 * other one about what 256-colour output looks like.
+	 */
+	if (index < 16) return QColor(m_scheme.ansi[index]);
 
 	if (index < 232) {
 		const int offset = index - 16;
@@ -545,15 +570,17 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		 * the glyph out of itself: a solid block that simply covered the
 		 * cell would hide the one character the user is looking at.
 		 */
+		const QColor cursor_colour(m_scheme.cursor);
+
 		if (m_cursor_style == QStringLiteral("underline")) {
 			const int thickness = qMax(1, m_cell_height / 10);
 			painter.fillRect(x, y + m_cell_height - thickness,
-			                  m_cell_width, thickness, m_foreground);
+			                  m_cell_width, thickness, cursor_colour);
 		} else if (m_cursor_style == QStringLiteral("bar")) {
 			const int thickness = qMax(1, m_cell_width / 6);
-			painter.fillRect(x, y, thickness, m_cell_height, m_foreground);
+			painter.fillRect(x, y, thickness, m_cell_height, cursor_colour);
 		} else {
-			painter.fillRect(x, y, m_cell_width, m_cell_height, m_foreground);
+			painter.fillRect(x, y, m_cell_width, m_cell_height, cursor_colour);
 			if (cell.ch != U'\0' && cell.ch != U' ') {
 				painter.setFont(m_font);
 				painter.setPen(m_background);
@@ -853,6 +880,7 @@ void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
 void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings) {
 	if (!view) return;
 
+	view->set_colour_scheme(settings.value(QStringLiteral("colour_scheme")).toString());
 	view->set_cursor_style(settings.value(QStringLiteral("cursor_style")).toString());
 	view->set_cursor_blink(settings.value(QStringLiteral("cursor_blink")).toBool());
 

@@ -2,6 +2,7 @@
 
 #include "model/settings_resolver.h"
 #include "platform/platform.h"
+#include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
 #include "ui/preset_editor.h"
@@ -278,6 +279,14 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 			overrides.insert(QStringLiteral("font_size"), size);
 		}
 
+		const bssh_colour_scheme_catalog &schemes = bssh_colour_scheme_catalog::instance();
+		const QString current_scheme = schemes.effective_id(
+		        resolved.value(QStringLiteral("colour_scheme")).toString());
+
+		if (m_font_picker->scheme_id() != current_scheme) {
+			overrides.insert(QStringLiteral("colour_scheme"), m_font_picker->scheme_id());
+		}
+
 		profile.overrides = overrides;
 	}
 
@@ -303,6 +312,8 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 		m_font_picker->set_font_choice(
 		        resolved.value(QStringLiteral("font_family")).toString(),
 		        resolved.value(QStringLiteral("font_size")).toInt());
+		m_font_picker->set_scheme(
+		        resolved.value(QStringLiteral("colour_scheme")).toString());
 		update_override_badges();
 	}
 }

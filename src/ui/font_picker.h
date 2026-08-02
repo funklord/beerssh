@@ -43,8 +43,18 @@ public:
 	/* Bigger controls for touch (sec 6.2's 48dp floor). */
 	void set_touch_sized(bool touch);
 
+	/*
+	 * The colour scheme lives here too, because it and the font are the
+	 * same question asked twice -- "what does this host look like" -- and
+	 * splitting them across two widgets would mean two previews, neither
+	 * showing what the terminal will actually look like.
+	 */
+	QString scheme_id() const;
+	void set_scheme(const QString &id);
+
 signals:
 	void font_chosen(const QString &id, int point_size);
+	void scheme_chosen(const QString &id);
 
 private slots:
 	void on_choice_changed();
@@ -53,8 +63,10 @@ private:
 	void refresh_preview();
 
 	QComboBox *m_family;
+	QComboBox *m_scheme;
 	QSpinBox *m_size;
 	QLabel *m_preview;
+	QLabel *m_swatches;
 	QLabel *m_note;
 };
 

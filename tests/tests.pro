@@ -52,6 +52,7 @@ SOURCES += \
     ../src/ssh/ssh_session.cpp \
     ../src/ssh/ssh_session_libssh.cpp \
     ../src/term/emulator_vterm.cpp \
+    ../src/term/colour_scheme.cpp \
     ../src/term/font_catalog.cpp \
     ../src/term/graphics.cpp \
     ../src/term/image_store.cpp \

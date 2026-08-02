@@ -26,6 +26,8 @@ private slots:
 	void glyph_lookup_answers_from_the_chain_and_repeats_itself();
 	void fonts_are_built_with_merging_off();
 	void the_bundled_set_loads_and_covers_what_it_promises();
+	void a_colour_scheme_repaints_only_the_sixteen_it_owns();
+	void an_unknown_scheme_is_kept_but_drawn_in_the_default();
 };
 
 #endif /* BSSH_FONT_CATALOG_TEST_H */

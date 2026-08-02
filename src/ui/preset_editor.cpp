@@ -16,6 +16,7 @@
 
 #include "model/profile_store.h"
 #include "platform/platform.h"
+#include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
 
@@ -251,6 +252,7 @@ void bssh_preset_editor::show_preset(const bssh_preset_t &preset) {
 	m_compression->setChecked(preset.compression);
 	m_on_connect->setText(preset.on_connect_command);
 	m_font->set_font_choice(preset.font_family, preset.font_size);
+	m_font->set_scheme(preset.colour_scheme);
 
 	const int style = m_cursor_style->findData(preset.cursor_style);
 	m_cursor_style->setCurrentIndex(style < 0 ? 0 : style);
@@ -292,6 +294,12 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 
 	if (m_font->font_id() != resolved) preset.font_family = m_font->font_id();
 	preset.font_size = m_font->point_size();
+
+	/* Same rule for the scheme: an untouched default stays unset. */
+	const bssh_colour_scheme_catalog &schemes = bssh_colour_scheme_catalog::instance();
+	if (m_font->scheme_id() != schemes.effective_id(m_current.colour_scheme)) {
+		preset.colour_scheme = m_font->scheme_id();
+	}
 	preset.keepalive_seconds = m_keepalive->value();
 	preset.compression = m_compression->isChecked();
 	preset.on_connect_command = m_on_connect->text();

@@ -2,7 +2,9 @@
 #include <QDir>
 
 #include "font_catalog_test.h"
+#include "term/colour_scheme.h"
 #include "term/font_catalog.h"
+#include "ui/terminal_view.h"
 
 void font_catalog_test::ids_are_stable_and_unique() {
 	const bssh_font_catalog catalog;
@@ -255,4 +257,84 @@ void font_catalog_test::the_bundled_set_loads_and_covers_what_it_promises() {
 	QVERIFY2(cjk != QStringLiteral("JetBrains Mono"),
 	         "CJK must fall through to the broad-coverage fallbacks");
 	QVERIFY(cjk == QStringLiteral("Noto Sans Mono") || cjk == QStringLiteral("Unifont"));
+}
+
+void font_catalog_test::a_colour_scheme_repaints_only_the_sixteen_it_owns() {
+	const bssh_colour_scheme_catalog catalog;
+
+	QVERIFY(catalog.all().size() >= 4);
+	QVERIFY(catalog.by_id(QStringLiteral("solarized-dark")) != nullptr);
+
+	for (const bssh_colour_scheme_t &scheme : catalog.all()) {
+		QVERIFY(!scheme.id.isEmpty());
+		QVERIFY(!scheme.display_name.isEmpty());
+
+		/* Somebody else's design: it has to say whose (sec 9.4's rule,
+		 * applied to colours). */
+		QVERIFY2(!scheme.licence.isEmpty(), qPrintable("no licence: " + scheme.id));
+
+		/* Opaque, or every cell is drawn transparent onto whatever was
+		 * behind it -- a table written as 0xRRGGBB is easy to forget the
+		 * alpha byte on. */
+		for (int i = 0; i < 16; ++i) {
+			QCOMPARE(qAlpha(scheme.ansi[i]), 255);
+		}
+		QCOMPARE(qAlpha(scheme.background), 255);
+		QCOMPARE(qAlpha(scheme.foreground), 255);
+
+		/* Foreground and background must actually differ, which is the
+		 * one way a colour scheme can be catastrophically wrong. */
+		QVERIFY2(scheme.background != scheme.foreground,
+		         qPrintable("invisible text in " + scheme.id));
+	}
+
+	/*
+	 * The cube and the grey ramp are NOT the scheme's to touch: a program
+	 * asking for colour 137 asked for a specific RGB value, and a
+	 * terminal that recoloured it would disagree with every other one
+	 * about what 256-colour output looks like.
+	 */
+	bssh_terminal_view view;
+	bssh_color_t cube;
+	cube.kind = bssh_color_t::INDEXED;
+	cube.index = 137;
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("default"));
+	bssh_apply_appearance(&view, settings);
+	const QColor before = view.colour_for_test(cube);
+
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("gruvbox-dark"));
+	bssh_apply_appearance(&view, settings);
+
+	QCOMPARE(view.colour_for_test(cube), before);
+
+	/* While colour 1 -- which the scheme DOES own -- changes with it. */
+	bssh_color_t red;
+	red.kind = bssh_color_t::INDEXED;
+	red.index = 1;
+	QVERIFY(view.colour_for_test(red) != QColor(catalog.by_id(QStringLiteral("default"))->ansi[1]));
+}
+
+void font_catalog_test::an_unknown_scheme_is_kept_but_drawn_in_the_default() {
+	bssh_terminal_view view;
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("some-future-scheme"));
+	bssh_apply_appearance(&view, settings);
+
+	/*
+	 * Kept, so the picker can show what the profile asked for, and drawn
+	 * in the default so there is something on screen. Rewriting the value
+	 * to "default" would lose the fact that the user ever chose otherwise
+	 * (sec 10.1).
+	 */
+	QCOMPARE(view.colour_scheme(), QStringLiteral("some-future-scheme"));
+
+	const bssh_colour_scheme_catalog catalog;
+	bssh_color_t red;
+	red.kind = bssh_color_t::INDEXED;
+	red.index = 1;
+	QCOMPARE(view.colour_for_test(red),
+	         QColor(catalog.by_id(catalog.default_id())->ansi[1]));
 }
