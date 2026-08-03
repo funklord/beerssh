@@ -787,3 +787,104 @@ void live_ssh_test::an_unknown_jump_host_is_refused_rather_than_prompted_about()
 	          qPrintable(QStringLiteral("the reason must name what went wrong: %1")
 	                             .arg(out.reason)));
 }
+
+namespace {
+
+/*
+ * Opens a shell at a given size, runs a command, and returns everything
+ * that came back. Separate from attempt() because the question here is
+ * not whether the connection works -- that is settled above -- but what
+ * the far end believes about the terminal it is drawing into.
+ */
+QByteArray shell_output(int cols, int rows, const QByteArray &command,
+                         int resize_cols = 0, int resize_rows = 0)
+{
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	QByteArray received;
+
+	QObject::connect(session, &bssh_ssh_session::bytes_received,
+		                [&received](const QByteArray &bytes) { received += bytes; });
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+		                [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed,
+		                [&loop](const QString &) { loop.quit(); });
+
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+		                [&](bssh_ssh_session::state_t state) {
+		if (state != bssh_ssh_session::CONNECTED) return;
+
+		session->open_shell(cols, rows);
+
+		/*
+		 * The resize, when one is asked for, goes AFTER the shell is up
+		 * and before the question -- which is the order a user produces
+		 * by rotating the phone while looking at a prompt.
+		 */
+		if (resize_cols > 0) {
+			QTimer::singleShot(600, session, [session, resize_cols, resize_rows] {
+				session->resize(resize_cols, resize_rows);
+			});
+		}
+
+		QTimer::singleShot(1200, session, [session, command] {
+			session->send(command + QByteArrayLiteral("\n"));
+		});
+		QTimer::singleShot(3000, &loop, [&loop] { loop.quit(); });
+	});
+
+	session->set_identity_file(test_key());
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
+		                        qEnvironmentVariable("USER"));
+
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(15000);
+	loop.exec();
+
+	session->disconnect_from_host();
+	delete session;
+	return received;
+}
+
+} /* namespace */
+
+void live_ssh_test::the_remote_is_told_the_size_it_was_given()
+{
+	if (!server_available()) return;
+	if (phase() == QStringLiteral("rekeyed")) {
+		QSKIP("the host key has been swapped; authentication is refused by design here");
+	}
+
+	/*
+	 * Deliberately not 80x24: those are the defaults a pty falls back to,
+	 * so a size that never arrived would look exactly like a size that
+	 * did. 97x37 can only be there because this app sent it.
+	 */
+	const QByteArray out = shell_output(97, 37, QByteArrayLiteral("stty size"));
+
+	QVERIFY2(out.contains("37 97"),
+	          qPrintable(QStringLiteral("the remote reported: %1")
+	                             .arg(QString::fromUtf8(out.simplified()))));
+}
+
+void live_ssh_test::a_resize_reaches_the_remote()
+{
+	if (!server_available()) return;
+	if (phase() == QStringLiteral("rekeyed")) {
+		QSKIP("the host key has been swapped; authentication is refused by design here");
+	}
+
+	/*
+	 * A window-change on a LIVE shell, which is the case that matters:
+	 * the initial size rides along with the pty request and could work
+	 * while the update that follows every rotation and every pane drag
+	 * goes nowhere.
+	 */
+	const QByteArray out = shell_output(97, 37, QByteArrayLiteral("stty size"), 61, 19);
+
+	QVERIFY2(out.contains("19 61"),
+	          qPrintable(QStringLiteral("the remote reported: %1")
+	                             .arg(QString::fromUtf8(out.simplified()))));
+}

@@ -73,6 +73,17 @@ private slots:
 	 * that, and the failure mode if the pump is wrong is a handshake that
 	 * hangs rather than one that errors.
 	 */
+	/*
+	 * The size the remote is told. Every full-screen program there --
+	 * vim, less, top -- lays itself out from it, so a wrong one is not a
+	 * cosmetic bug: it is a screen drawn to the wrong shape. Only a real
+	 * pty can answer, which is why this is here and not in the emulator
+	 * tests, and it is asked of the SHELL rather than of anything this
+	 * app kept a copy of.
+	 */
+	void the_remote_is_told_the_size_it_was_given();
+	void a_resize_reaches_the_remote();
+
 	void a_host_is_reachable_through_a_jump_host();
 	void an_unknown_jump_host_is_refused_rather_than_prompted_about();
 };
