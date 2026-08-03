@@ -2,6 +2,8 @@
 #include <QDir>
 #include <QFile>
 
+#include <QColor>
+#include <cmath>
 #include "font_catalog_test.h"
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
@@ -379,4 +381,77 @@ void font_catalog_test::every_bundled_font_names_a_licence_file_that_exists() {
 		         qPrintable(QStringLiteral("%1 is only %2 bytes")
 		                            .arg(font.licence_file).arg(file.size())));
 	}
+}
+
+namespace {
+
+double srgb_channel(int value) {
+	const double c = value / 255.0;
+	return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+}
+
+double relative_luminance(QRgb rgb) {
+	const QColor c(rgb);
+	return 0.2126 * srgb_channel(c.red()) + 0.7152 * srgb_channel(c.green()) +
+		      0.0722 * srgb_channel(c.blue());
+}
+
+double contrast_ratio(QRgb a, QRgb b) {
+	const double la = relative_luminance(a);
+	const double lb = relative_luminance(b);
+	return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
+}
+
+} /* namespace */
+
+void font_catalog_test::our_own_scheme_is_legible() {
+	/*
+	 * A contrast floor for the schemes this project AUTHORS, and only
+	 * those. The third-party sets are reproduced exactly on purpose --
+	 * a "Solarized Dark" whose values are not Solarized's is a
+	 * mislabelled scheme, and several of them do sit below this floor by
+	 * their designers' choice (Solarized's bright black IS its
+	 * background). Holding someone else's palette to our bar would mean
+	 * either failing the build over their decision or silently editing
+	 * their work; the licences recorded beside each set are why neither
+	 * is acceptable.
+	 *
+	 * 3:1 rather than 4.5:1 for the ANSI entries, and the reason is
+	 * arithmetic rather than laziness: blue contributes 0.0722 of
+	 * luminance, so on a near-black background no recognisably saturated
+	 * red or blue can reach 4.5 -- pure #ff0000 tops out at 4.26. The
+	 * default foreground, which is what most text actually is, is held to
+	 * the full 4.5.
+	 */
+	const bssh_colour_scheme_catalog &catalog = bssh_colour_scheme_catalog::instance();
+
+	int checked = 0;
+	for (const bssh_colour_scheme_t &scheme : catalog.all()) {
+		if (scheme.licence != QStringLiteral("BeerSSH")) continue;
+		++checked;
+
+		const double fg = contrast_ratio(scheme.foreground, scheme.background);
+		QVERIFY2(fg >= 4.5,
+		          qPrintable(QStringLiteral("%1: default text is only %2:1")
+		                             .arg(scheme.id).arg(fg, 0, 'f', 2)));
+
+		for (int i = 0; i < 16; ++i) {
+			/*
+			 * The colour at the background's own end is meant to
+			 * disappear into it: ANSI black on a dark scheme, white on a
+			 * light one. A program printing colour 0 as text on a dark
+			 * terminal is the broken one, and every terminal in
+			 * existence renders it this way.
+			 */
+			if (scheme.dark && (i == 0 || i == 8)) continue;
+			if (!scheme.dark && (i == 7 || i == 15)) continue;
+
+			const double ratio = contrast_ratio(scheme.ansi[i], scheme.background);
+			QVERIFY2(ratio >= 3.0,
+			          qPrintable(QStringLiteral("%1: ANSI %2 is only %3:1 on its background")
+			                             .arg(scheme.id).arg(i).arg(ratio, 0, 'f', 2)));
+		}
+	}
+
+	QVERIFY2(checked > 0, "no scheme was checked -- the licence marker must have changed");
 }

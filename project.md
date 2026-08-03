@@ -1075,6 +1075,34 @@ is found:
   same cell are two chances to spell it differently**, and the one that is
   wrong is whichever the user is not looking at.
 
+**Contrast, measured, and only for the schemes this project authors.** The
+same WCAG arithmetic the tab dots are held to (§6.2), applied to what a user
+actually stares at. Two floors, and the difference between them is arithmetic
+rather than leniency: the default foreground must reach **4.5:1** against its
+background, but the sixteen ANSI entries only **3:1** — blue contributes 0.0722
+of luminance, so on a near-black background no recognisably saturated red or
+blue can reach 4.5 at all (pure `#ff0000` tops out at 4.26). The colour at the
+background's own end is exempt: ANSI black on a dark scheme is *meant* to
+disappear, and every terminal in existence renders it that way.
+
+It found the shipped default wanting. That scheme is xterm's palette, and
+xterm's blue `0x0000ee` measures **1.81:1** — the most notorious readability
+problem in terminal history, and why GNOME Terminal, iTerm2 and Windows
+Terminal all ship a brightened one. Blue is not a rare colour; it is directory
+names in `ls` and half of git's output. It is now `0x2472c8` (3.50:1), the value
+Windows Terminal settled on, and red moves from `0xcd0000` (2.92:1) to
+`0xe02020` (3.57:1) — the smallest step that clears the floor. The other
+thirteen already passed and are untouched.
+
+**The third-party sets are exempt and must stay so.** Solarized, Nord, Gruvbox
+and Tango are reproduced exactly; a "Solarized Dark" whose values are not
+Solarized's is a mislabelled scheme, and several of them do sit below this floor
+by their designers' choice — Solarized's bright black *is* its background.
+Holding someone else's palette to our bar would mean either failing the build
+over their decision or silently editing their work, and the licences recorded
+beside each set are why neither is acceptable. The test selects on the licence
+marker for exactly this reason.
+
 ### 9.4 Packaging and size
 Bundling ~10 families × multiple weights is **tens of megabytes** — too much for
 the base download on Android. Desktop has no such pressure, which is a licence to

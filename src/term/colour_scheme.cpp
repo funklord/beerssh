@@ -26,9 +26,30 @@ struct entry_t {
 const entry_t BSSH_SCHEMES[] = {
 	{
 		"default", "Default", "BeerSSH", true,
+		/*
+		 * xterm's palette, with two values raised for legibility and
+		 * measured rather than eyeballed (sec 9.1).
+		 *
+		 * xterm's blue is 0x0000ee, which lands at 1.81:1 against this
+		 * background -- the single most notorious readability problem in
+		 * terminal history, and the reason GNOME Terminal, iTerm2 and
+		 * Windows Terminal all ship a brightened one. Blue is not a rare
+		 * colour: it is directory names in ls and half of git's output.
+		 * 0x2472c8 is the azure-shifted value Windows Terminal settled
+		 * on, at 3.50:1.
+		 *
+		 * xterm's red at 0xcd0000 is 2.92:1, just under the floor, so it
+		 * moves the smallest distance that clears it. Both stay clearly
+		 * distinct from their bright counterparts, which is the other
+		 * thing a palette owes a program that asks for one of them.
+		 *
+		 * The other thirteen already pass and are left exactly as xterm
+		 * had them. Only the schemes this project AUTHORS get adjusted
+		 * like this -- see the note on the third-party sets below.
+		 */
 		{
-			0x000000, 0xcd0000, 0x00cd00, 0xcdcd00,
-			0x0000ee, 0xcd00cd, 0x00cdcd, 0xe5e5e5,
+			0x000000, 0xe02020, 0x00cd00, 0xcdcd00,
+			0x2472c8, 0xcd00cd, 0x00cdcd, 0xe5e5e5,
 			0x7f7f7f, 0xff0000, 0x00ff00, 0xffff00,
 			0x5c5cff, 0xff00ff, 0x00ffff, 0xffffff
 		},
@@ -36,6 +57,14 @@ const entry_t BSSH_SCHEMES[] = {
 	},
 
 	/*
+	 * The sets below are OTHER PEOPLE'S DESIGNS and are reproduced
+	 * exactly, contrast measurements notwithstanding. A "Solarized Dark"
+	 * whose values are not Solarized's is a mislabelled scheme, and the
+	 * licences recorded above exist precisely because these came from
+	 * somewhere. Several of them do have entries below the contrast floor
+	 * -- Solarized's bright black IS its background, by design -- and
+	 * that is theirs to decide, not this project's to correct.
+	 *
 	 * Solarized's whole point is that the two variants share one palette
 	 * and differ only in which end of it is the background, so they are
 	 * two entries rather than one with a flag.
