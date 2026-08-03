@@ -330,3 +330,54 @@ void emulator_test::osc8_survives_a_wrap_and_ends_where_told() {
 	/* An unknown id resolves to nothing rather than to a stale URL. */
 	QCOMPARE(emulator.link_uri(9999), QString());
 }
+
+void emulator_test::the_remote_may_ask_for_the_clipboard_but_never_read_it() {
+	bssh_emulator emulator(80, 24);
+	QSignalSpy asked(&emulator, &bssh_emulator::clipboard_write_requested);
+
+	/* OSC 52 ; c ; base64("hello") ST */
+	emulator.feed(QByteArrayLiteral("\x1b]52;c;aGVsbG8=\x1b\\"));
+
+	QCOMPARE(asked.count(), 1);
+	QCOMPARE(asked.at(0).at(0).toString(), QStringLiteral("hello"));
+
+	/*
+	 * A REQUEST, not an instruction: the emulator reports what was asked
+	 * for and the window decides, because whether this host is trusted is
+	 * a setting the emulator does not have (sec 7.1).
+	 */
+
+	/*
+	 * The read query sends NOTHING back. "OSC 52 ; c ; ?" asks the
+	 * terminal to transmit the local clipboard to the remote, which turns
+	 * every connection into an exfiltration channel for whatever the user
+	 * last copied -- a password, a token, someone else's message. No
+	 * setting makes that acceptable: the risk is not the user's to accept
+	 * on behalf of something they copied ten minutes ago.
+	 */
+	emulator.take_output();
+	emulator.feed(QByteArrayLiteral("\x1b]52;c;?\x1b\\"));
+
+	QCOMPARE(asked.count(), 1);
+	QVERIFY2(emulator.take_output().isEmpty(),
+	         "a clipboard read query must send nothing back");
+
+	/*
+	 * A payload too large to be a yank is dropped rather than decoded:
+	 * the bytes are attacker-controlled, and without a cap a host can
+	 * spend the terminal's memory for the price of writing to a socket.
+	 */
+	QByteArray huge = QByteArrayLiteral("\x1b]52;c;");
+	huge += QByteArray(200 * 1024, 'A');       /* ~150 KB once decoded */
+	huge += QByteArrayLiteral("\x1b\\");
+	emulator.feed(huge);
+
+	/*
+	 * Dropped whole, not truncated. libvterm decodes into a fixed buffer
+	 * and hands it over in pieces as that buffer fills, so an oversized
+	 * payload arrives as several fragments rather than being refused --
+	 * and half a clipboard is not a smaller version of what was asked
+	 * for, it is a different string that someone might paste somewhere.
+	 */
+	QCOMPARE(asked.count(), 1);
+}

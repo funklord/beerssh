@@ -29,6 +29,7 @@ QJsonObject bssh_preset_t::to_json() const {
 	object.insert(QStringLiteral("font_family"), font_family);
 	object.insert(QStringLiteral("font_size"), font_size);
 	object.insert(QStringLiteral("colour_scheme"), colour_scheme);
+	object.insert(QStringLiteral("allow_clipboard_write"), allow_clipboard_write);
 	object.insert(QStringLiteral("keepalive_seconds"), keepalive_seconds);
 	object.insert(QStringLiteral("compression"), compression);
 	object.insert(QStringLiteral("on_connect_command"), on_connect_command);
@@ -56,6 +57,8 @@ bssh_preset_t bssh_preset_t::from_json(const QJsonObject &object) {
 	preset.font_family = object.value(QStringLiteral("font_family")).toString();
 	preset.font_size = object.value(QStringLiteral("font_size")).toInt(preset.font_size);
 	preset.colour_scheme = object.value(QStringLiteral("colour_scheme")).toString();
+	preset.allow_clipboard_write =
+	        object.value(QStringLiteral("allow_clipboard_write")).toBool(false);
 	preset.keepalive_seconds =
 	        object.value(QStringLiteral("keepalive_seconds")).toInt(preset.keepalive_seconds);
 	preset.compression = object.value(QStringLiteral("compression")).toBool(preset.compression);

@@ -115,6 +115,19 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 
 	m_compression = new QCheckBox(QStringLiteral("Request compression"), this);
 
+	/*
+	 * Named for what it lets the host DO rather than for the sequence it
+	 * enables: "OSC 52" means nothing to the person deciding whether they
+	 * trust this machine, and the decision is about trust (sec 7.1).
+	 */
+	m_clipboard = new QCheckBox(
+	        QStringLiteral("Let this host set my clipboard"), this);
+	m_clipboard->setToolTip(
+	        QStringLiteral("Lets programs on the host copy to your clipboard, so "
+	                        "yanking in vim over SSH works. A host that can do this "
+	                        "can also replace what you copied, so leave it off for "
+	                        "machines you do not control."));
+
 	m_on_connect = new QLineEdit(this);
 	m_on_connect->setPlaceholderText(QStringLiteral("tmux attach || tmux new"));
 
@@ -139,6 +152,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 	form->addRow(QString(), m_cursor_blink);
 	form->addRow(QStringLiteral("Keepalive"), m_keepalive);
 	form->addRow(QString(), m_compression);
+	form->addRow(QString(), m_clipboard);
 	form->addRow(QStringLiteral("On connect"), m_on_connect);
 	form->addRow(QStringLiteral("Key row"), m_key_row);
 	right->addLayout(form);
@@ -265,6 +279,7 @@ void bssh_preset_editor::show_preset(const bssh_preset_t &preset) {
 	m_cursor_blink->setChecked(preset.cursor_blink);
 	m_keepalive->setValue(preset.keepalive_seconds);
 	m_compression->setChecked(preset.compression);
+	m_clipboard->setChecked(preset.allow_clipboard_write);
 	m_on_connect->setText(preset.on_connect_command);
 	m_font->set_font_choice(preset.font_family, preset.font_size);
 	m_font->set_scheme(preset.colour_scheme);
@@ -326,6 +341,7 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 	}
 	preset.keepalive_seconds = m_keepalive->value();
 	preset.compression = m_compression->isChecked();
+	preset.allow_clipboard_write = m_clipboard->isChecked();
 	preset.on_connect_command = m_on_connect->text();
 
 	if (preset.term.isEmpty()) preset.term = QStringLiteral("xterm-256color");

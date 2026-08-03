@@ -96,6 +96,7 @@ private:
 	bssh_font_picker *m_font;
 	QSpinBox *m_keepalive;
 	QCheckBox *m_compression;
+	QCheckBox *m_clipboard;
 	QLineEdit *m_on_connect;
 	QComboBox *m_key_row;
 

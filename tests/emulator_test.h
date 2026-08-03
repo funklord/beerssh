@@ -35,6 +35,7 @@ private slots:
 	void scrollback_is_capped();
 	void scrollback_keeps_colour();
 	void alternate_screen_does_not_pollute_the_scrollback();
+	void the_remote_may_ask_for_the_clipboard_but_never_read_it();
 };
 
 #endif /* BSSH_EMULATOR_TEST_H */

@@ -631,6 +631,28 @@ void bssh_main_window::show_session(bssh_session *session) {
 	 * resolves to, and the geometry the remote is told about. Reconnected
 	 * on every show because a pane rebuild replaces the view underneath.
 	 */
+	/*
+	 * OSC 52 (sec 7.1): the remote asking to set the clipboard. Honoured
+	 * only where the host's preset says so -- off by default -- and never
+	 * silently: the status line says which host did it, because a
+	 * clipboard that changed without the user acting is the whole hazard,
+	 * and the useful case (yanking in vim over ssh) is one they just
+	 * caused deliberately.
+	 */
+	connect(session->emulator(), &bssh_emulator::clipboard_write_requested,
+	         this, [this, session](const QString &text) {
+		if (!session->settings().value(QStringLiteral("allow_clipboard_write")).toBool()) {
+			return;
+		}
+
+		QGuiApplication::clipboard()->setText(text);
+
+		m_error = QStringLiteral("%1 set the clipboard (%2 characters)")
+		                  .arg(session->title())
+		                  .arg(text.size());
+		update_status();
+	}, Qt::UniqueConnection);
+
 	connect(session, &bssh_session::settings_changed, this, [this, session] {
 		if (m_current != session || !m_terminal_view) return;
 

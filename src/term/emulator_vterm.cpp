@@ -46,6 +46,19 @@ struct bssh_emulator_private {
 	bssh_graphics_transmission_t graphics;   /* chunked kitty transmissions */
 	QByteArray apc_buffer;        /* an APC split across reads */
 	QByteArray osc_buffer;
+
+	/* Accumulates a selection payload across fragments (OSC 52). */
+	QByteArray selection_buffer;
+	bool selection_oversized = false;
+
+	/*
+	 * libvterm decodes the base64 into a buffer WE own and it does not
+	 * grow: it is a cap as much as a buffer. 64 KB is more than any
+	 * plausible yank and far less than a problem, and the payload is
+	 * attacker-controlled -- without a bound a host could spend the
+	 * terminal's memory for the price of writing to a socket.
+	 */
+	char selection_storage[64 * 1024];
 	QByteArray dcs_buffer;
 
 	/* OSC 8 hyperlinks (sec 7.1). */
@@ -416,6 +429,94 @@ int on_osc(int command, VTermStringFragment frag, void *user) {
 	return 1;
 }
 
+/*
+ * OSC 52 -- the remote asking to put something on the user's clipboard, or
+ * to read what is already there (project.md sec 7.1).
+ *
+ * Through libvterm's selection callbacks rather than the OSC fallback,
+ * because libvterm handles OSC 52 itself and returns before the fallback
+ * is consulted: the first version of this parsed the sequence by hand and
+ * was never called at all. The library also does the base64 and the
+ * chunking, which is work not worth repeating badly.
+ *
+ * THE READ IS NOT IMPLEMENTED AND WILL NOT BE. A query asks the terminal
+ * to send the local clipboard back down the wire, which turns every
+ * connection into an exfiltration channel for whatever the user last
+ * copied -- a password, a token, someone else's message. No setting makes
+ * that acceptable, because the risk is not the user's to accept on behalf
+ * of something they copied ten minutes ago. The query is answered with
+ * silence, which is what a terminal without the feature does.
+ *
+ * The write IS offered, per host and off by default (sec 7.1: "off by
+ * default, if offered at all"). Yanking in vim over ssh is why the
+ * sequence exists; the hazard is that a compromised host can replace what
+ * the user thinks they copied and wait for them to paste it. So it is a
+ * per-host trust decision -- which is what a preset is -- and the window
+ * says so on the status line rather than letting it happen silently.
+ */
+const int BSSH_MAX_SELECTION_BYTES = 64 * 1024;
+
+int on_selection_set(VTermSelectionMask mask, VTermStringFragment frag, void *user) {
+	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+	Q_UNUSED(mask);
+
+	if (frag.initial) {
+		self->selection_buffer.clear();
+		self->selection_oversized = false;
+	}
+
+	/*
+	 * libvterm decodes into a fixed buffer and hands it over in pieces as
+	 * that buffer fills, so a payload larger than the cap arrives as
+	 * several fragments rather than being refused. Accumulating them
+	 * without a bound of our own would put the cap back where it started:
+	 * the remote decides how much memory this costs.
+	 *
+	 * An oversized payload is dropped WHOLE rather than truncated. Half a
+	 * clipboard is not a smaller version of the thing the user asked for
+	 * -- it is a different string, and pasting it somewhere is worse than
+	 * pasting nothing.
+	 */
+	if (self->selection_buffer.size() + int(frag.len) > BSSH_MAX_SELECTION_BYTES) {
+		self->selection_oversized = true;
+		self->selection_buffer.clear();
+	}
+
+	if (!self->selection_oversized) {
+		self->selection_buffer.append(frag.str, int(frag.len));
+	}
+
+	if (!frag.final) return 1;
+
+	/*
+	 * An empty final fragment is how libvterm reports input it could not
+	 * decode. Nothing to put on a clipboard, and saying "the host set your
+	 * clipboard to nothing" would be a notification about a malformed
+	 * escape sequence.
+	 */
+	if (!self->selection_oversized && !self->selection_buffer.isEmpty()) {
+		emit self->owner->clipboard_write_requested(
+			      QString::fromUtf8(self->selection_buffer));
+	}
+
+	self->selection_buffer.clear();
+	self->selection_oversized = false;
+	return 1;
+}
+
+int on_selection_query(VTermSelectionMask mask, void *user) {
+	Q_UNUSED(mask);
+	Q_UNUSED(user);
+
+	/* Answered with silence. See above -- this one is not a setting. */
+	return 1;
+}
+
+const VTermSelectionCallbacks BSSH_SELECTION_CALLBACKS = {
+	on_selection_set,
+	on_selection_query
+};
+
 /* Sixel: DCS <params> q <data> ST. */
 int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
@@ -624,6 +725,16 @@ bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
 	vterm_screen_reset(m_private->vts, 1);
 
 	vterm_screen_set_unrecognised_fallbacks(m_private->vts, &unrecognised_fallbacks, m_private);
+
+	/*
+	 * OSC 52 goes through here rather than through the OSC fallback:
+	 * libvterm handles that command itself and returns before any
+	 * fallback is consulted (sec 7.1).
+	 */
+	vterm_state_set_selection_callbacks(vterm_obtain_state(m_private->vt),
+	                                     &BSSH_SELECTION_CALLBACKS, m_private,
+	                                     m_private->selection_storage,
+	                                     sizeof(m_private->selection_storage));
 	vterm_output_set_callback(m_private->vt, on_output, m_private);
 }
 

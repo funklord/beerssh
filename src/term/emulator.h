@@ -160,6 +160,21 @@ signals:
 	void title_changed(const QString &title);
 
 	void bell();
+
+	/*
+	 * The remote asked to put text on the user's clipboard (OSC 52, sec
+	 * 7.1). A REQUEST, not an instruction: whether it is honoured is the
+	 * host's per-host setting, and the decision is made where the setting
+	 * is known rather than here. The emulator's job is to parse the
+	 * sequence and say what it asked for.
+	 *
+	 * There is deliberately no signal for the read half. A remote asking
+	 * to be sent the local clipboard is an exfiltration channel for
+	 * whatever the user last copied, and no setting makes that acceptable
+	 * -- the risk is not theirs to accept on behalf of the password they
+	 * copied ten minutes ago. The query is swallowed.
+	 */
+	void clipboard_write_requested(const QString &text);
 	void output_ready();
 
 	/* An image arrived or was removed; the view repaints. */

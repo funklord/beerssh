@@ -39,6 +39,16 @@ struct bssh_preset_t {
 	int font_size;
 	QString colour_scheme;
 
+	/*
+	 * Whether this host may put things on the local clipboard (OSC 52,
+	 * sec 7.1). Off by default and per host, because it is a question of
+	 * trust rather than of taste: a build box of one's own is not a jump
+	 * host shared with strangers, and a compromised remote that can
+	 * rewrite the clipboard can swap a copied command for a destructive
+	 * one and wait for it to be pasted.
+	 */
+	bool allow_clipboard_write;
+
 	/* Connection behaviour. */
 	int keepalive_seconds;
 	bool compression;
@@ -66,6 +76,7 @@ struct bssh_preset_t {
 	      cursor_style(QStringLiteral("block")),
 	      cursor_blink(true),
 	      font_size(11),
+	      allow_clipboard_write(false),
 	      keepalive_seconds(60),
 	      compression(false),
 	      is_builtin(false) {}

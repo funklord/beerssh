@@ -650,8 +650,29 @@ conversation, and should let it reach its best tier.
 |---|---|---|
 | **Synchronized output** (DEC 2026) | Remote brackets a screen update so the terminal paints it in one frame instead of mid-redraw; removes tearing in full-screen apps | **Done** — with a 150 ms safety release, since a program that sets it and dies would otherwise freeze the display |
 | **OSC 8 hyperlinks** | Marks a run of cells as a clickable URL | **Done** — per-cell link id, underlined, opened on Ctrl+click after a confirmation |
-| **OSC 52 clipboard** | Remote sets the local clipboard | **Security review first** — a remote host silently writing the user's clipboard is a real hazard, and reading it is worse. Off by default, if offered at all |
+| **OSC 52 clipboard** | Remote sets the local clipboard | **Done, write only.** See below |
 | **XTGETTCAP / DECRQM** | Lets a remote query what the terminal supports rather than guessing from `TERM` | Small; pairs naturally with the tier-2 work |
+
+**OSC 52, reviewed.** The write half is offered **per host and off by
+default**, because the useful case (yanking in vim over SSH and pasting
+locally) and the hazard (a compromised host replacing what you think you
+copied, then waiting for you to paste it) are the same mechanism pointed at
+different machines — which makes it a question of trust in *that host*, and
+trust in a host is what a preset already expresses. Every honoured write says
+so on the status line: a clipboard that changed without the user acting is the
+entire risk, and the legitimate case is one they just caused deliberately.
+
+**The read half is not implemented and will not be.** A query asks the terminal
+to transmit the local clipboard to the remote, turning every connection into an
+exfiltration channel for whatever was last copied — a password, a token,
+someone else's message. No setting makes that acceptable, because the risk is
+not the user's to accept on behalf of something they copied ten minutes ago and
+have forgotten about. The query is answered with silence, which is what a
+terminal without the feature does.
+
+Payloads are capped at 64 KB and an oversized one is dropped **whole**: the
+bytes are attacker-controlled, and half a clipboard is not a smaller version of
+what was asked for — it is a different string that someone might paste.
 
 **Tier 4 — images. [DECIDED: support all three]**
 
