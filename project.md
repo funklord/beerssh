@@ -1171,6 +1171,21 @@ App defaults  ←  Preset ("work-bastion")  ←  Host profile overrides
   point. The UI must make this obvious ("used by 7 hosts") before saving.
 - Overridden fields show an explicit badge with a one-tap/one-click "revert to
   preset value", so users can always see why a host differs.
+- **Reading an override and writing one are the same question, so they are one
+  function** (`bssh_appearance_overrides` / `bssh_font_override_badge`). Both ask
+  "does this differ from what the host *inherits*", and both must exclude the
+  host's current override when working that out — comparing against what it
+  resolves to *with* the override applied compares the value against itself and
+  can never see agreement. Splitting them is not a tidiness question: the desktop
+  dialog had it wrong on the write side alone, so choosing the value the preset
+  already gives recorded an override pinning it **while the badge two lines away
+  said "Following"**. The screen and the store disagreed about the same host, and
+  the host quietly stopped following the preset it was displayed as following.
+- **An override is cleared by agreeing, not only by reverting.** Insert-only
+  leaves a host that has been talked back into matching its preset still carrying
+  an override, which stops following the next time the preset changes. The revert
+  button is the explicit route; picking the inherited value by hand has to mean
+  the same thing, or the two controls disagree.
 
 ### 10.2 What lives in a preset (shareable, non-secret)
 Terminal type/`TERM` string, colour scheme, font family + size (§9), on-screen key

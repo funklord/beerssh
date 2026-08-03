@@ -360,54 +360,33 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	 * password is stored -- survives a save.
 	 */
 	bssh_profile_t profile = m_current;
-	profile.name = m_session_name->text();
+	profile.name = m_session_name->text().trimmed();
 	profile.host = m_host->text().trimmed();
 	profile.user = m_user->text().trimmed();
 	profile.port = static_cast<quint16>(m_port->value());
 	profile.identity_file = m_identity->text().trimmed();
 
 	/*
-	 * The font is an override on this host (sec 10.1), written only when
-	 * it differs from what the host already resolves to. Writing it
-	 * unconditionally would mark every host as overriding its preset's
-	 * font the first time its dialog was opened, and an override that
-	 * changes nothing is exactly what sec 10.1 says not to record.
+	 * An unnamed host is named after itself, as the touch editor has
+	 * always done. Only this form let a nameless one through, and it
+	 * shows up as a blank row in the saved-sessions list -- the one place
+	 * a host has to be recognisable.
+	 */
+	if (profile.name.isEmpty()) profile.name = profile.host;
+
+	/*
+	 * The appearance fields as sparse overrides, written only where they
+	 * differ from what this host inherits and dropped where they agree
+	 * (sec 10.1). Shared with the touch editor, because the two used to
+	 * compute it differently and this one got it wrong: it compared the
+	 * picker against what the host resolves to WITH its override applied,
+	 * so choosing the value the preset already gives recorded an override
+	 * pinning it, while the badge two lines away said "Following".
 	 */
 	if (m_font_picker) {
-		const QJsonObject resolved = resolved_settings(m_current);
-		QJsonObject overrides = profile.overrides;
-
-		const QString family = m_font_picker->font_id();
-		const int size = m_font_picker->point_size();
-
-		/*
-		 * Compared against what the host ALREADY resolves to, run
-		 * through the same effective_id rule the picker used to fill
-		 * itself in. Comparing the picker's id against a raw stored
-		 * value compares an id with an empty string and records an
-		 * override on every save.
-		 */
-		const bssh_platform *platform = bssh_platform::instance();
-		const QString current = bssh_font_catalog::instance().effective_id(
-		        resolved.value(QStringLiteral("font_family")).toString(),
-		        platform && platform->is_touch_primary());
-
-		if (family != current) {
-			overrides.insert(QStringLiteral("font_family"), family);
-		}
-		if (size != resolved.value(QStringLiteral("font_size")).toInt()) {
-			overrides.insert(QStringLiteral("font_size"), size);
-		}
-
-		const bssh_colour_scheme_catalog &schemes = bssh_colour_scheme_catalog::instance();
-		const QString current_scheme = schemes.effective_id(
-		        resolved.value(QStringLiteral("colour_scheme")).toString());
-
-		if (m_font_picker->scheme_id() != current_scheme) {
-			overrides.insert(QStringLiteral("colour_scheme"), m_font_picker->scheme_id());
-		}
-
-		profile.overrides = overrides;
+		profile.overrides = bssh_appearance_overrides(
+		        m_store, m_current, m_font_picker->font_id(),
+		        m_font_picker->point_size(), m_font_picker->scheme_id());
 	}
 
 	return profile;

@@ -1,6 +1,7 @@
 #ifndef BSSH_OVERRIDE_BADGE_H
 #define BSSH_OVERRIDE_BADGE_H
 
+#include <QJsonObject>
 #include <QString>
 
 #include "model/profile.h"
@@ -39,5 +40,29 @@ bssh_override_badge_t bssh_font_override_badge(const bssh_profile_store *store,
                                                 const bssh_profile_t &profile,
                                                 const QString &picked_font_id,
                                                 int picked_size);
+
+/*
+ * The sparse appearance overrides this host should carry, given what the
+ * picker is showing. Returns the profile's overrides with font_family,
+ * font_size and colour_scheme inserted where they differ from what the
+ * host INHERITS, and removed where they now agree with it.
+ *
+ * Paired with the badge above and sharing its idea of "inherits", because
+ * the two disagreeing is not a cosmetic bug: the desktop dialog compared
+ * the picker against what the host resolves to WITH its current override
+ * still applied, so choosing the value the preset already gives recorded
+ * an override pinning it -- while the badge, comparing against the value
+ * without it, said "Following". The screen said one thing and the store
+ * held another.
+ *
+ * Removing when they agree is the other half. Insert-only leaves a host
+ * that has been talked back into agreeing with its preset still carrying
+ * an override, which stops following the next time the preset changes.
+ */
+QJsonObject bssh_appearance_overrides(const bssh_profile_store *store,
+                                       const bssh_profile_t &profile,
+                                       const QString &picked_font_id,
+                                       int picked_size,
+                                       const QString &picked_scheme_id);
 
 #endif /* BSSH_OVERRIDE_BADGE_H */

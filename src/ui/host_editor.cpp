@@ -250,56 +250,12 @@ bssh_profile_t bssh_host_editor::profile() const {
 	edited.identity_file = m_identity->text().trimmed();
 
 	/*
-	 * The font and colour scheme as overrides, and only where they differ
-	 * from what this host ALREADY resolves to -- an override equal to
-	 * what it overrides is a badge that tells the user something untrue
-	 * (sec 10.1).
-	 *
-	 * "Already resolves to" means through the preset, not the app
-	 * defaults. Comparing against the defaults is what made this page
-	 * write an override pinning the value the preset had just given.
+	 * Sparse appearance overrides, computed by the same function the
+	 * desktop dialog uses so the two cannot drift (sec 10.1).
 	 */
-	QJsonObject without = edited.overrides;
-	without.remove(QStringLiteral("font_family"));
-	without.remove(QStringLiteral("font_size"));
-
-	const QJsonObject followed =
-	        (!m_store || edited.preset_id == 0)
-	                ? bssh_settings_resolver::app_defaults()
-	                : bssh_settings_resolver::resolve(m_store->preset(edited.preset_id), without);
-
-	QJsonObject overrides = edited.overrides;
-
-	const bssh_platform *platform = bssh_platform::instance();
-	const QString inherited = bssh_font_catalog::instance().effective_id(
-	        followed.value(QStringLiteral("font_family")).toString(),
-	        platform && platform->is_touch_primary());
-
-	if (m_font_picker->font_id() != inherited) {
-		overrides.insert(QStringLiteral("font_family"), m_font_picker->font_id());
-	} else {
-		overrides.remove(QStringLiteral("font_family"));
-	}
-
-	if (m_font_picker->point_size() != followed.value(QStringLiteral("font_size")).toInt()) {
-		overrides.insert(QStringLiteral("font_size"), m_font_picker->point_size());
-	} else {
-		overrides.remove(QStringLiteral("font_size"));
-	}
-
-	/*
-	 * The colour scheme, which this page showed and then threw away: the
-	 * picker carries one, nothing read it back, so choosing a scheme on a
-	 * phone did nothing at all.
-	 */
-	const QString followed_scheme = followed.value(QStringLiteral("colour_scheme")).toString();
-	if (m_font_picker->scheme_id() != followed_scheme) {
-		overrides.insert(QStringLiteral("colour_scheme"), m_font_picker->scheme_id());
-	} else {
-		overrides.remove(QStringLiteral("colour_scheme"));
-	}
-
-	edited.overrides = overrides;
+	edited.overrides = bssh_appearance_overrides(
+	        m_store, edited, m_font_picker->font_id(),
+	        m_font_picker->point_size(), m_font_picker->scheme_id());
 
 	/* An unnamed host is named after itself, so the list never shows a
 	 * blank row. */

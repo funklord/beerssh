@@ -9,6 +9,8 @@
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
 #include "ui/session_dialog.h"
+#include "model/preset.h"
+#include "ui/override_badge.h"
 
 void font_picker_test::offers_the_selectable_set_and_nothing_else() {
 	bssh_font_picker picker;
@@ -226,4 +228,75 @@ void font_picker_test::the_session_dialog_round_trips_the_key_file() {
 	plain.host = QStringLiteral("home.example.com");
 	dialog.set_current_profile(plain);
 	QVERIFY(dialog.current_profile().identity_file.isEmpty());
+}
+
+void font_picker_test::agreeing_with_the_preset_clears_the_override() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.db")));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("Chunky");
+	preset.font_family = QStringLiteral("hack");
+	preset.font_size = 17;
+	const int preset_id = store.save_preset(preset);
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("box");
+	host.host = QStringLiteral("box.example.com");
+	host.preset_id = preset_id;
+	host.overrides.insert(QStringLiteral("font_family"), QStringLiteral("jetbrains-mono"));
+	const int id = store.save(host);
+
+	bssh_session_dialog dialog(&store);
+	dialog.set_current_profile(store.profile(id));
+
+	/*
+	 * The dialog embeds two pickers -- its own and the preset editor's --
+	 * so the one under test is identified by what it is showing rather
+	 * than by findChild order, which is not a contract.
+	 */
+	bssh_font_picker *picker = nullptr;
+	for (bssh_font_picker *candidate : dialog.findChildren<bssh_font_picker *>()) {
+		if (candidate->font_id() == QStringLiteral("jetbrains-mono")) picker = candidate;
+	}
+	QVERIFY(picker);
+
+	/* The user picks what the preset gives, meaning "go back to following it". */
+	picker->set_font_choice(QStringLiteral("hack"), 17);
+
+	const bssh_override_badge_t badge = bssh_font_override_badge(
+	        &store, store.profile(id), picker->font_id(), picker->point_size());
+	QVERIFY2(!badge.overridden, "the badge must see agreement with the preset");
+
+	/*
+	 * And the save must agree with the badge. It did not: the write path
+	 * compared the picker against what the host resolves to WITH its
+	 * override still applied -- itself -- so it could never see
+	 * agreement, and recorded an override pinning the preset's own value
+	 * while the badge said "Following". The screen and the store said
+	 * different things about the same host.
+	 */
+	const bssh_profile_t saved = dialog.current_profile();
+	QVERIFY2(!saved.overrides.contains(QStringLiteral("font_family")),
+	          "agreeing with the preset must CLEAR the override, not re-pin it");
+	QVERIFY2(!saved.overrides.contains(QStringLiteral("font_size")),
+	          "agreeing with the preset must CLEAR the override, not re-pin it");
+}
+
+void font_picker_test::the_desktop_form_never_saves_a_nameless_host() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.db")));
+	bssh_session_dialog dialog(&store);
+
+	/*
+	 * The touch editor has always named an unnamed host after itself;
+	 * only this form let a nameless one through, and it lands as a blank
+	 * row in the saved-sessions list -- the one place a host has to be
+	 * recognisable.
+	 */
+	bssh_profile_t nameless;
+	nameless.host = QStringLiteral("10.0.0.42");
+	dialog.set_current_profile(nameless);
+
+	QCOMPARE(dialog.current_profile().name, QStringLiteral("10.0.0.42"));
 }
