@@ -26,6 +26,7 @@ private slots:
 	void the_desktop_form_never_saves_a_nameless_host();
 	void a_font_matching_the_preset_is_not_recorded_as_an_override();
 	void reverting_drops_the_override_rather_than_copying_the_value();
+	void the_swatches_show_what_the_terminal_will_draw();
 };
 
 #endif /* BSSH_FONT_PICKER_TEST_H */

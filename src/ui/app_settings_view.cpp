@@ -33,6 +33,26 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	form->addRow(QStringLiteral("On-screen keys"), m_key_row);
 
 	/*
+	 * Directly under the control it explains, not at the foot of the
+	 * page. It says what "Automatic" decides, and it sat below the whole
+	 * form back when there was one setting to explain -- with three, and
+	 * with Appearance offering a "Follow the system" of its own, a note
+	 * about "Automatic" under a contrast checkbox reads as if it
+	 * described the page.
+	 *
+	 * The honest answer is not "on Android": sec 6.2 gates the row on
+	 * touch being the PRIMARY input, since an OS check gets a convertible
+	 * in tablet mode and a tablet with a keyboard docked wrong in
+	 * opposite directions.
+	 */
+	QLabel *note = new QLabel(
+	        QStringLiteral("Automatic shows the key row when touch is this device's main "
+	                        "input. Override it if you have a keyboard attached to a "
+	                        "tablet, or a touchscreen on a laptop."), this);
+	note->setWordWrap(true);
+	form->addRow(QString(), note);
+
+	/*
 	 * Light/dark, defaulting to whatever the desktop is asking for
 	 * (sec 6.2). Three states rather than a checkbox for the same reason
 	 * the key row has three: "follow the system" is a real answer and the
@@ -61,18 +81,6 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	form->addRow(QString(), m_raise_contrast);
 	outer->addLayout(form);
 
-	/*
-	 * Says what "automatic" actually decides, because the honest answer is
-	 * not "on Android": sec 6.2 gates the row on touch being the PRIMARY
-	 * input, since an OS check gets a convertible in tablet mode and a
-	 * tablet with a keyboard docked wrong in opposite directions.
-	 */
-	QLabel *note = new QLabel(
-	        QStringLiteral("Automatic shows the key row when touch is this device's main "
-	                        "input. Override it if you have a keyboard attached to a "
-	                        "tablet, or a touchscreen on a laptop."), this);
-	note->setWordWrap(true);
-	outer->addWidget(note);
 
 	outer->addStretch(1);
 

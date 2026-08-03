@@ -1105,6 +1105,15 @@ background no recognisably saturated red or blue can reach 4.5 at all — pure
 `#ff0000` tops out at 4.26. A floor nothing can satisfy is not a standard, it is
 a way of getting the rule switched off.
 
+Anything that SHOWS a scheme has to show it through the same floor, or the one
+control whose job is judging contrast becomes the one place reporting it wrongly.
+The font picker's preview and its sixteen swatches go through
+`bssh_raise_contrast()` too — otherwise it paints a nearly invisible blue block
+beside a terminal drawing a perfectly readable blue prompt, while claiming in its
+own comment that what is on screen is what the terminal will look like. Two
+schemes whose blues both get lifted really will look alike in use, so a strip
+that says so is being accurate rather than losing information.
+
 **[REJECTED]** Shipping a "readable" variant of each scheme alongside the
 faithful one. It doubles the picker, and an improved *Solarized Dark* is either
 mislabelled or an argument with its author; the same result is available from one

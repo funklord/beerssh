@@ -9,6 +9,7 @@
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
+#include "model/app_settings.h"
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 
@@ -41,7 +42,7 @@ static const int BSSH_SWATCH_HEIGHT = 18;
  * in a line, because the bright half is what distinguishes two schemes
  * that look alike at a glance.
  */
-static QPixmap bssh_swatch_strip(const bssh_colour_scheme_t &scheme, int height) {
+static QPixmap bssh_swatch_strip(const bssh_colour_scheme_t &scheme, int height, bool raise) {
 	const int width = 16 * 18;
 	QPixmap strip(width, qMax(2, height));
 	strip.fill(QColor(scheme.background));
@@ -50,10 +51,23 @@ static QPixmap bssh_swatch_strip(const bssh_colour_scheme_t &scheme, int height)
 	const int cell = width / 8;
 	const int half = strip.height() / 2;
 
+	/*
+	 * Drawn through the same contrast floor the terminal draws through
+	 * (sec 9.3), because this strip exists to answer "what will this look
+	 * like" and the answer changed when the floor arrived. Showing the
+	 * published values while the terminal shows lifted ones makes the one
+	 * control whose entire job is judging contrast the one place that
+	 * reports it wrongly -- a nearly invisible blue block beside a
+	 * perfectly readable blue prompt.
+	 */
 	for (int i = 0; i < 8; ++i) {
-		painter.fillRect(i * cell, 0, cell, half, QColor(scheme.ansi[i]));
-		painter.fillRect(i * cell, half, cell, strip.height() - half,
-		                  QColor(scheme.ansi[i + 8]));
+		const QRgb top = raise ? bssh_raise_contrast(scheme.ansi[i], scheme.background)
+		                        : scheme.ansi[i];
+		const QRgb bottom = raise ? bssh_raise_contrast(scheme.ansi[i + 8], scheme.background)
+		                           : scheme.ansi[i + 8];
+
+		painter.fillRect(i * cell, 0, cell, half, QColor(top));
+		painter.fillRect(i * cell, half, cell, strip.height() - half, QColor(bottom));
 	}
 
 	return strip;
@@ -238,10 +252,15 @@ void bssh_font_picker::refresh_preview() {
 	if (!scheme) scheme = schemes.by_id(schemes.default_id());
 
 	if (scheme) {
+		const bool raise = bssh_app_settings().raise_contrast();
+		const QRgb foreground = raise
+		        ? bssh_raise_contrast(scheme->foreground, scheme->background)
+		        : scheme->foreground;
+
 		m_preview->setStyleSheet(QStringLiteral("background: %1; color: %2;")
 		                                 .arg(QColor(scheme->background).name(),
-		                                      QColor(scheme->foreground).name()));
-		m_swatches->setPixmap(bssh_swatch_strip(*scheme, m_swatches->height()));
+		                                      QColor(foreground).name()));
+		m_swatches->setPixmap(bssh_swatch_strip(*scheme, m_swatches->height(), raise));
 	}
 
 	const QString note = catalog.substitution_note(id);

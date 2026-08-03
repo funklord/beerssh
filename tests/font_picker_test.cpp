@@ -3,6 +3,9 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 
+#include <QImage>
+#include <QLabel>
+#include "term/colour_scheme.h"
 #include "font_picker_test.h"
 #include "model/profile_store.h"
 #include "model/settings_resolver.h"
@@ -299,4 +302,45 @@ void font_picker_test::the_desktop_form_never_saves_a_nameless_host() {
 	dialog.set_current_profile(nameless);
 
 	QCOMPARE(dialog.current_profile().name, QStringLiteral("10.0.0.42"));
+}
+
+void font_picker_test::the_swatches_show_what_the_terminal_will_draw() {
+	/*
+	 * The picker's whole claim is that what is on screen is what the
+	 * terminal will look like -- its comment says contrast is the whole
+	 * decision. The draw-time floor (sec 9.3) broke that quietly: the
+	 * strip kept painting the published values while the terminal painted
+	 * lifted ones, so the one control whose job is judging contrast was
+	 * the one place reporting it wrongly.
+	 *
+	 * Asserted on the pixels, because the bug was in what got painted
+	 * rather than in what was computed.
+	 */
+	bssh_font_picker picker;
+	picker.set_scheme(QStringLiteral("default"));
+
+	QLabel *swatches = nullptr;
+	for (QLabel *candidate : picker.findChildren<QLabel *>()) {
+		if (!candidate->pixmap().isNull()) swatches = candidate;
+	}
+	QVERIFY2(swatches, "the swatch strip must be on screen to be checked");
+
+	const bssh_colour_scheme_t *scheme =
+	        bssh_colour_scheme_catalog::instance().by_id(QStringLiteral("default"));
+	QVERIFY(scheme);
+
+	const QImage strip = swatches->pixmap().toImage();
+	const int cell = strip.width() / 8;
+
+	/*
+	 * ANSI 4 is xterm's blue, 1.81:1 as published -- the colour this
+	 * whole design argued about. Its swatch must be the lifted one.
+	 */
+	const QColor painted = strip.pixelColor(4 * cell + cell / 2, strip.height() / 4);
+	const QRgb expected = bssh_raise_contrast(scheme->ansi[4], scheme->background);
+
+	QCOMPARE(painted.rgb(), expected);
+	QVERIFY2(painted.rgb() != scheme->ansi[4],
+	          "this colour is below the floor, so the swatch must differ from the palette");
+	QVERIFY(bssh_contrast_ratio(painted.rgb(), scheme->background) >= BSSH_CONTRAST_FLOOR);
 }
