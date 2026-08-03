@@ -28,6 +28,7 @@ private slots:
 	void the_bundled_set_loads_and_covers_what_it_promises();
 	void a_colour_scheme_repaints_only_the_sixteen_it_owns();
 	void an_unknown_scheme_is_kept_but_drawn_in_the_default();
+	void every_bundled_font_names_a_licence_file_that_exists();
 };
 
 #endif /* BSSH_FONT_CATALOG_TEST_H */

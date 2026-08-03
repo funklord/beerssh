@@ -1,5 +1,6 @@
 #include <QtTest>
 #include <QDir>
+#include <QFile>
 
 #include "font_catalog_test.h"
 #include "term/colour_scheme.h"
@@ -337,4 +338,45 @@ void font_catalog_test::an_unknown_scheme_is_kept_but_drawn_in_the_default() {
 	red.index = 1;
 	QCOMPARE(view.colour_for_test(red),
 	         QColor(catalog.by_id(catalog.default_id())->ansi[1]));
+}
+
+void font_catalog_test::every_bundled_font_names_a_licence_file_that_exists() {
+	const bssh_font_catalog catalog;
+
+	/*
+	 * sec 9.4 requires the licence to travel with the font and be shown.
+	 * The screen that shows it originally FOUND the file by transforming
+	 * the display name, which worked for five of the eight: "Iosevka
+	 * Term" ships under OFL-Iosevka.md, "Cascadia Code PL" under
+	 * OFL-CascadiaCode.txt, "DejaVu Sans Mono" under LICENSE-DejaVu.txt.
+	 * Three fonts were credited with a line saying their licence was not
+	 * installed, on the one screen whose whole purpose is crediting
+	 * people. The names are now data rather than a guess, and this checks
+	 * they point at something.
+	 */
+	for (const bssh_font_t &font : catalog.all()) {
+		QVERIFY2(!font.licence_file.isEmpty(),
+		         qPrintable("no licence file named for " + font.id));
+	}
+
+	const QString directory = QStringLiteral(BSSH_TEST_FONT_DIR);
+	if (!QDir(directory).exists()) {
+		QSKIP("no bundled fonts -- run tools/fetch-fonts.sh");
+	}
+
+	for (const bssh_font_t &font : catalog.all()) {
+		const QString path = directory + QStringLiteral("/licences/") + font.licence_file;
+
+		QVERIFY2(QFile::exists(path),
+		         qPrintable(QStringLiteral("%1 names %2, which is not there")
+		                            .arg(font.id, font.licence_file)));
+
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::ReadOnly));
+
+		/* A truncated licence is worse than none: it looks satisfied. */
+		QVERIFY2(file.size() > 500,
+		         qPrintable(QStringLiteral("%1 is only %2 bytes")
+		                            .arg(font.licence_file).arg(file.size())));
+	}
 }

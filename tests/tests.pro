@@ -80,6 +80,7 @@ SOURCES += \
     ../src/ui/tab_status.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/key_row_layout.cpp \
+    ../src/ui/licences_view.cpp \
     ../src/ui/key_row.cpp \
     ../src/ui/terminal_view.cpp
 
@@ -127,5 +128,6 @@ HEADERS += \
     ../src/ui/main_window.h \
     ../src/ui/session_dialog.h \
     ../src/ui/tab_status.h \
+    ../src/ui/licences_view.h \
     ../src/ui/key_row.h \
     ../src/ui/terminal_view.h

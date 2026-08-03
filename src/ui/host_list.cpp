@@ -51,6 +51,12 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	connect(m_presets, &QToolButton::clicked, this, &bssh_host_list::presets_requested);
 	heading_row->addWidget(m_presets, 0);
 
+	m_about = new QToolButton(heading);
+	m_about->setText(QStringLiteral("Licences"));
+	m_about->setMinimumHeight(48);
+	connect(m_about, &QToolButton::clicked, this, &bssh_host_list::licences_requested);
+	heading_row->addWidget(m_about, 0);
+
 	layout->addWidget(heading);
 
 	m_list = new QListWidget(this);

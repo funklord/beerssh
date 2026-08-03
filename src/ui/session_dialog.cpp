@@ -5,6 +5,7 @@
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
+#include "ui/licences_view.h"
 #include "ui/preset_editor.h"
 
 #include <QGroupBox>
@@ -60,6 +61,15 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 
 	QTreeWidgetItem *connection = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Connection")));
+
+	/*
+	 * sec 9.4's Open Source Licences screen. A category rather than an
+	 * About button, because what it holds is not a boast about this app
+	 * but a list of other people's terms, and those belong where settings
+	 * are read rather than behind a splash.
+	 */
+	QTreeWidgetItem *licences = new QTreeWidgetItem(m_categories,
+	        QStringList(QStringLiteral("Licences")));
 	new QTreeWidgetItem(connection, QStringList(QStringLiteral("SSH")));
 
 	m_pages = new QStackedWidget(this);
@@ -78,11 +88,13 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	                                           QStringLiteral("M5, with keepalive and reconnect")));
 	m_pages->addWidget(build_placeholder_page(QStringLiteral("SSH"),
 	                                           QStringLiteral("M6, with key authentication")));
+	m_pages->addWidget(new bssh_licences_view(this));
 
 	Q_UNUSED(session);
 	Q_UNUSED(terminal);
 	Q_UNUSED(window);
 	Q_UNUSED(presets);
+	Q_UNUSED(licences);
 
 	columns->addWidget(m_categories);
 	columns->addWidget(m_pages, 1);
@@ -215,6 +227,7 @@ void bssh_session_dialog::on_category_changed() {
 	else if (name == QStringLiteral("Presets")) m_pages->setCurrentIndex(3);
 	else if (name == QStringLiteral("Connection")) m_pages->setCurrentIndex(4);
 	else if (name == QStringLiteral("SSH")) m_pages->setCurrentIndex(5);
+	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(6);
 }
 
 void bssh_session_dialog::reload_sessions() {

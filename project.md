@@ -998,7 +998,13 @@ diverge on *delivery* but never on *which fonts exist*.
   TTF.
 - Keep each font's licence file in the bundle and surface an **Open Source
   Licences** screen in settings (also good Play hygiene, and required in spirit
-  by the OFL/Apache terms on every platform).
+  by the OFL/Apache terms on every platform). **[BUILT]** Reached from the
+  Licences category in the desktop dialog and from the Hosts screen on Android;
+  it shows each bundled font's full licence text verbatim (read from the bundle,
+  and on Android straight out of `assets:/fonts/licences`), the colour schemes'
+  attributions (§10.2), and the libraries — including the sentence libssh needs
+  rather than a name, since its LGPL is what makes the desktop build link it
+  dynamically (§4).
 
 ### 9.5 Rendering pipeline
 - **Shared glyph atlas/cache across all panes** (§8.4) keyed by (family, size,

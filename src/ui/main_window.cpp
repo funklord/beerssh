@@ -41,6 +41,7 @@
 #include "ui/host_editor.h"
 #include "ui/host_list.h"
 #include "ui/key_row.h"
+#include "ui/licences_view.h"
 #include "model/preset.h"
 #include "ui/preset_editor.h"
 #include "ui/session_dialog.h"
@@ -216,6 +217,16 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		connect(m_preset_editor, &bssh_preset_editor::preset_removed,
 		         this, &bssh_main_window::reresolve_sessions);
 		connect(m_preset_editor, &bssh_preset_editor::back_requested, this, [this] {
+			m_pages->setCurrentWidget(m_host_list);
+		});
+
+		bssh_licences_view *licences = new bssh_licences_view(this);
+		m_pages->addWidget(licences);
+
+		connect(m_host_list, &bssh_host_list::licences_requested, this, [this, licences] {
+			m_pages->setCurrentWidget(licences);
+		});
+		connect(licences, &bssh_licences_view::back_requested, this, [this] {
 			m_pages->setCurrentWidget(m_host_list);
 		});
 	} else {

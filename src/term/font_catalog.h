@@ -58,6 +58,16 @@ struct bssh_font_t {
 	QString file;
 
 	/*
+	 * The licence file that ships beside it, in licences/. Named here
+	 * rather than guessed from the family: "Iosevka Term" ships under
+	 * OFL-Iosevka.md and "Cascadia Code PL" under OFL-CascadiaCode.txt,
+	 * so any rule derived from the display name is a rule with exceptions
+	 * -- and a licence screen that silently shows nothing is the worst
+	 * possible failure for the one screen whose job is to credit people.
+	 */
+	QString licence_file;
+
+	/*
 	 * Kept because the OFL and Apache terms require the licence to travel
 	 * with the font, and sec 9.4 wants an Open Source Licences screen
 	 * built from something rather than maintained by hand.

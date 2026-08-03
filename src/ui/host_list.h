@@ -45,6 +45,9 @@ signals:
 	/* The preset editor, reached from the only screen a phone starts on. */
 	void presets_requested();
 
+	/* sec 9.4's licences screen, the only other app-level page. */
+	void licences_requested();
+
 private slots:
 	void on_row_activated();
 
@@ -53,6 +56,7 @@ private:
 	QListWidget *m_list;
 	QToolButton *m_add;
 	QToolButton *m_presets;
+	QToolButton *m_about;
 };
 
 #endif /* BSSH_HOST_LIST_H */

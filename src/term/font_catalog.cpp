@@ -47,6 +47,7 @@ bssh_font_catalog::bssh_font_catalog() {
 		const char *family;
 		const char *file;
 		const char *licence;
+		const char *licence_file;
 		bool selectable;
 		bool condensed;
 	};
@@ -58,7 +59,7 @@ bssh_font_catalog::bssh_font_catalog() {
 		 * present in the file and switched off in make_font.
 		 */
 		{ "jetbrains-mono", "JetBrains Mono", "JetBrains Mono",
-			"JetBrainsMono-Regular.ttf", "OFL-1.1", true, false },
+			"JetBrainsMono-Regular.ttf", "OFL-1.1", "OFL-JetBrainsMono.txt", true, false },
 
 		/*
 		 * The Term variant, not plain Iosevka: it is the one whose
@@ -68,17 +69,17 @@ bssh_font_catalog::bssh_font_catalog() {
 		 * of a match.
 		 */
 		{ "iosevka-term", "Iosevka Term", "Iosevka Term",
-			"IosevkaTerm-Regular.ttf", "OFL-1.1", true, true },
+			"IosevkaTerm-Regular.ttf", "OFL-1.1", "OFL-Iosevka.md", true, true },
 
 		/* Selectable in its own right and the first fallback (sec 9.3). */
 		{ "dejavu-sans-mono", "DejaVu Sans Mono", "DejaVu Sans Mono",
-			"DejaVuSansMono.ttf", "Bitstream Vera / DejaVu", true, false },
+			"DejaVuSansMono.ttf", "Bitstream Vera / DejaVu", "LICENSE-DejaVu.txt", true, false },
 
 		{ "hack", "Hack", "Hack",
-			"Hack-Regular.ttf", "Hack Open Font License", true, false },
+			"Hack-Regular.ttf", "Hack Open Font License", "LICENSE-Hack.md", true, false },
 
 		{ "fira-code", "Fira Code", "Fira Code",
-			"FiraCode-Regular.ttf", "OFL-1.1", true, false },
+			"FiraCode-Regular.ttf", "OFL-1.1", "OFL-FiraCode.txt", true, false },
 
 		/*
 		 * The PL variant carries the powerline glyphs that sec 9.2 says
@@ -86,7 +87,7 @@ bssh_font_catalog::bssh_font_catalog() {
 		 * derivatives, whose licensing needs reviewing case by case.
 		 */
 		{ "cascadia-code-pl", "Cascadia Code PL", "Cascadia Code PL",
-			"CascadiaCodePL.ttf", "OFL-1.1", true, false },
+			"CascadiaCodePL.ttf", "OFL-1.1", "OFL-CascadiaCode.txt", true, false },
 
 		/*
 		 * Fallback-only from here down: never in the picker (sec 9.2).
@@ -94,7 +95,7 @@ bssh_font_catalog::bssh_font_catalog() {
 		 * terminal-first font has.
 		 */
 		{ "noto-sans-mono", "Noto Sans Mono", "Noto Sans Mono",
-			"NotoSansMono-Regular.ttf", "OFL-1.1", false, false },
+			"NotoSansMono-Regular.ttf", "OFL-1.1", "OFL-NotoSansMono.txt", false, false },
 
 		/*
 		 * Last resort, so that nothing renders as tofu. Unifont is a
@@ -102,7 +103,7 @@ bssh_font_catalog::bssh_font_catalog() {
 		 * knowingly, because an unreadable glyph still beats a box.
 		 */
 		{ "unifont", "Unifont", "Unifont",
-			"unifont.otf", "OFL-1.1", false, false }
+			"unifont.otf", "OFL-1.1", "LICENSE-Unifont.txt", false, false }
 	};
 
 	for (const entry_t &entry : entries) {
@@ -112,6 +113,7 @@ bssh_font_catalog::bssh_font_catalog() {
 		font.family = QString::fromLatin1(entry.family);
 		font.file = QString::fromLatin1(entry.file);
 		font.licence = QString::fromLatin1(entry.licence);
+		font.licence_file = QString::fromLatin1(entry.licence_file);
 		font.selectable = entry.selectable;
 		font.condensed = entry.condensed;
 		m_fonts.append(font);
