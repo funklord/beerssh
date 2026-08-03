@@ -86,12 +86,6 @@ public:
 
 	void set_keep_alive(bool keep_alive) override {
 		/*
-		 * Starts and stops the foreground service (sec 5.1). A
-		 * backgrounded Android app cannot hold a socket open; this is
-		 * what buys the process the right to keep running, and Android
-		 * will not grant it without the notification the service shows.
-		 */
-		/*
 		 * Only on a real change. The window recomputes this on every
 		 * session event, so without it a stop is sent for a service that
 		 * was never started -- and since a stop is delivered as a start
@@ -100,6 +94,12 @@ public:
 		 */
 		if (keep_alive == m_keep_alive) return;
 
+		/*
+		 * Starts and stops the foreground service (sec 5.1). A
+		 * backgrounded Android app cannot hold a socket open; this is
+		 * what buys the process the right to keep running, and Android
+		 * will not grant it without the notification the service shows.
+		 */
 		const QJniObject context = android_context();
 		if (!context.isValid()) return;
 

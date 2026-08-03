@@ -921,6 +921,15 @@ collapse/restore is bookkeeping, not surgery.
   render a half column.
 - **Per-pane geometry:** each pane computes its own cols×rows from its own size and
   its session's font — panes may legitimately differ.
+- **The grid size in the status line is asked of the view, not remembered.** The
+  window cached it once while the pane was still being laid out, got a
+  one-column answer, and the later resize arrived through a connection that was
+  not yet in place — so it reported "1x41 cells" on a screen plainly showing 48
+  columns, for the whole life of the session. Two places computing one thing.
+  What the *remote* is told was never affected, and there are now live tests
+  (§12.3) that ask a real shell `stty size` for both the opening size and a
+  window-change on a live shell, at sizes that are not the pty's 80x24 fallback
+  so an arriving size cannot be confused with a default.
 - **The status line never decides how wide the window is.** A `QLabel` asks for
   room for its whole text, and a failure reason is a sentence — the jump-host
   messages (§10.5) run well past a phone's width. Left to itself the label pushed

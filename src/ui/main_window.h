@@ -197,8 +197,6 @@ private:
 	 * every resize from the original rather than from what is on screen.
 	 */
 	QString m_status_text;
-	int m_cols;
-	int m_rows;
 
 	/* Remembered answer to the close prompt; unset until asked once. */
 	bool m_asked_about_closing;

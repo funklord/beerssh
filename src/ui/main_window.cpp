@@ -69,8 +69,6 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_current(nullptr),
       m_tabs(new QTabBar(m_terminal_page)),
       m_key_row(nullptr),
-      m_cols(0),
-      m_rows(0),
       m_asked_about_closing(false),
       m_background_on_close(false) {
 	setWindowTitle(QStringLiteral("BeerSSH"));
@@ -886,8 +884,6 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		}
 	}
 
-	m_cols = m_terminal_view->cols();
-	m_rows = m_terminal_view->rows();
 	update_status();
 }
 
@@ -1112,9 +1108,6 @@ void bssh_main_window::on_failed(const QString &reason) {
 }
 
 void bssh_main_window::on_grid_resized(int cols, int rows) {
-	m_cols = cols;
-	m_rows = rows;
-
 	/*
 	 * window-change for the session on screen only (sec 7). With panes at
 	 * M8 each computes its own geometry, so this stays per-session rather
@@ -1141,10 +1134,24 @@ void bssh_main_window::update_status() {
 	}
 	if (!m_error.isEmpty()) session_text += QStringLiteral(" -- ") + m_error;
 
+	/*
+	 * Asked of the view rather than kept in a member of this window.
+	 *
+	 * The copy went stale: the window read the grid once while the pane
+	 * was still being laid out and cached a one-column answer, and the
+	 * later resize that made it 47 arrived through a connection that was
+	 * not yet in place. The status line then reported "1x41 cells" on a
+	 * screen plainly showing more, for the whole life of the session.
+	 * Two places computing one thing, and only one of them right -- so
+	 * there is now one place, read at the moment it is displayed.
+	 */
+	const int cols = m_terminal_view ? m_terminal_view->cols() : 0;
+	const int rows = m_terminal_view ? m_terminal_view->rows() : 0;
+
 	m_status_text = QStringLiteral("%1  |  %2x%3 cells  |  %4")
 	                        .arg(platform->name())
-	                        .arg(m_cols)
-	                        .arg(m_rows)
+	                        .arg(cols)
+	                        .arg(rows)
 	                        .arg(session_text);
 	elide_status();
 }
