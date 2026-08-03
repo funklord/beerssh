@@ -1,5 +1,9 @@
 #include "platform/platform.h"
 
+#include <QGuiApplication>
+#include <QPalette>
+#include <QStyleHints>
+
 #include <QCoreApplication>
 #include <QJniObject>
 
@@ -158,6 +162,20 @@ public:
 		if (!data.isValid()) return QString();
 
 		return data.callObjectMethod("toString", "()Ljava/lang/String;").toString();
+	}
+
+	/*
+	 * Qt maps Android's UI_MODE_NIGHT onto colorScheme, so the hint is
+	 * the answer here and there is no portal to fall back to. The palette
+	 * check remains as a floor for the case where the style has themed
+	 * the app but the hint has not arrived yet.
+	 */
+	Qt::ColorScheme system_colour_scheme() const override {
+		const Qt::ColorScheme hinted = QGuiApplication::styleHints()->colorScheme();
+		if (hinted != Qt::ColorScheme::Unknown) return hinted;
+
+		const QColor window = QGuiApplication::palette().color(QPalette::Window);
+		return window.lightness() < 128 ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
 	}
 
 	bool is_touch_primary() const override {

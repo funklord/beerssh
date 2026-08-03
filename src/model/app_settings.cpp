@@ -66,3 +66,17 @@ void bssh_app_settings::set_key_row_visibility(key_row_visibility_t visibility) 
 	file.setValue(QStringLiteral("input/key_row"), to_text(visibility));
 	file.sync();
 }
+
+QString bssh_app_settings::theme() const {
+	if (m_path.isEmpty()) return QStringLiteral("system");
+
+	QSettings file(m_path, QSettings::IniFormat);
+	return file.value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString();
+}
+
+void bssh_app_settings::set_theme(const QString &theme) {
+	if (m_path.isEmpty()) return;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	file.setValue(QStringLiteral("appearance/theme"), theme);
+}

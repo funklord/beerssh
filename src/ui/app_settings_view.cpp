@@ -8,6 +8,7 @@
 
 #include "model/app_settings.h"
 #include "platform/platform.h"
+#include "ui/theme.h"
 
 bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
     : QWidget(parent) {
@@ -29,6 +30,19 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	if (touch) m_key_row->setMinimumHeight(48);
 
 	form->addRow(QStringLiteral("On-screen keys"), m_key_row);
+
+	/*
+	 * Light/dark, defaulting to whatever the desktop is asking for
+	 * (sec 6.2). Three states rather than a checkbox for the same reason
+	 * the key row has three: "follow the system" is a real answer and the
+	 * one most people want, but it is not the only one.
+	 */
+	m_theme = new QComboBox(this);
+	m_theme->addItem(QStringLiteral("Follow the system"), QStringLiteral("system"));
+	m_theme->addItem(QStringLiteral("Light"), QStringLiteral("light"));
+	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
+	if (touch) m_theme->setMinimumHeight(48);
+	form->addRow(QStringLiteral("Appearance"), m_theme);
 	outer->addLayout(form);
 
 	/*
@@ -54,6 +68,9 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	}
 
 	const bssh_app_settings settings;
+	const int theme_index = m_theme->findData(settings.theme());
+	if (theme_index >= 0) m_theme->setCurrentIndex(theme_index);
+
 	const int index = m_key_row->findData(int(settings.key_row_visibility()));
 	m_key_row->setCurrentIndex(index < 0 ? 0 : index);
 
@@ -61,6 +78,11 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		bssh_app_settings stored;
 		stored.set_key_row_visibility(
 		        bssh_app_settings::key_row_visibility_t(m_key_row->currentData().toInt()));
+		stored.set_theme(m_theme->currentData().toString());
+
+		/* Applied immediately: a theme that waits for a restart reads as
+		 * a setting that did not work. */
+		bssh_theme::apply(bssh_theme::from_text(m_theme->currentData().toString()));
 		emit changed();
 	});
 }

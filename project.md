@@ -507,6 +507,37 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
   only reachable state. It is now a device-level setting in `app.ini` (§10.6),
   edited from "This device" in the desktop dialog and from the Hosts overflow
   menu on Android — the first app-level setting, and the store M11 will need.
+- **Light and dark, defaulting to the system** — the second device-level setting,
+  same three states and the same reasoning: "follow the desktop" is a real answer
+  and the one most people want, but it is not the only one. It sits beside the
+  key row in `app.ini` and on the same two screens.
+  **Detection is the hard half, and Qt alone does not do it.** `QStyleHints::
+  colorScheme()` is authoritative where a platform theme is engaged and returns
+  `Unknown` where none is — which on this very machine meant Qt reported
+  `Unknown` and handed back a *light* Fusion palette while the XDG portal
+  reported `prefer-dark`. Believing Qt there paints a light window on a dark
+  desktop. So `bssh_platform::system_colour_scheme()` asks in order: Qt's hint,
+  then the portal's `org.freedesktop.appearance color-scheme` over DBus, then the
+  lightness of whatever palette we were handed, and only then guesses — **light**,
+  because guessing dark paints white text onto whatever the platform actually
+  drew if the guess is wrong, which is the more damaging way round.
+  **Applying it is ours too.** `QStyleHints::setColorScheme()` looks like the
+  right call and does nothing on Linux — measured under both offscreen and xcb,
+  with and without a platform theme: no signal, no palette change. `bssh_theme`
+  builds the palette itself, from fixed values rather than by darkening whatever
+  Qt started with, so the same setting gives the same result on a Fusion session,
+  a GTK-themed one and Android. Qt is still *told*, so anything asking it rather
+  than us agrees.
+  Both change sources are watched — Qt's signal and the portal's
+  `SettingChanged` — because either may be the one that notices, and a theme that
+  is only right at startup is one a user calls broken.
+- **The terminal's own colours are deliberately NOT tied to this.** A host's
+  `colour_scheme` (§10.2) describes what the remote's output should look like,
+  and a dark terminal in a light window is a common and deliberate choice. Making
+  it follow the desktop would silently overrule a per-host decision the user has
+  already made. **[OPEN]** whether the *default* scheme alone should follow —
+  there is currently one light scheme in the set (§10.2), so a light default
+  would need one designing first.
 - Keeping it buildable on desktop is also what makes it *testable* — a synthetic
   key row press is the cheapest way to exercise the router's sticky-modifier
   logic in a unit test.

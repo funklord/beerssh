@@ -13,7 +13,7 @@
 TEMPLATE = app
 TARGET = beerssh_test
 
-QT += widgets network testlib
+QT += widgets network testlib dbus
 
 CONFIG += link_pkgconfig
 PKGCONFIG += libsixel libssh libcrypto libsecret-1
@@ -91,6 +91,7 @@ SOURCES += \
     ../src/ui/licences_view.cpp \
     ../src/ui/key_row.cpp \
     ../src/ui/terminal_accessible.cpp \
+    ../src/ui/theme.cpp \
     ../src/ui/terminal_view.cpp
 
 HEADERS += \
@@ -148,4 +149,5 @@ HEADERS += \
     ../src/ui/licences_view.h \
     ../src/ui/key_row.h \
     ../src/ui/terminal_accessible.h \
+    ../src/ui/theme.h \
     ../src/ui/terminal_view.h

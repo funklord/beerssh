@@ -2,6 +2,7 @@
 #define BSSH_PLATFORM_H
 
 #include <QObject>
+#include <Qt>
 #include <QString>
 
 /*
@@ -98,7 +99,35 @@ public:
 	 */
 	virtual QString launch_document() const = 0;
 
+	/*
+	 * Whether the system is asking for a light or dark interface, or
+	 * Unknown when nothing will say (project.md sec 6.2).
+	 *
+	 * A platform question, and a surprisingly awkward one: Qt's own
+	 * QStyleHints::colorScheme() is authoritative where a platform theme
+	 * is wired up and returns Unknown where it is not -- which is a plain
+	 * Linux session with no platform-theme plugin engaged, where the
+	 * desktop's preference is still perfectly readable from the XDG
+	 * portal. Answering "Unknown" there and drawing a light window on a
+	 * dark desktop is the failure this method exists to avoid, so each
+	 * platform is allowed more than one way to find out.
+	 *
+	 * Qt's setColorScheme() is deliberately NOT used to apply the answer:
+	 * measured on this tree's own Qt 6.8.2, it is ignored on Linux under
+	 * both offscreen and xcb, with and without a platform theme -- no
+	 * signal, no palette change. The palette is set by bssh_theme
+	 * instead, which works the same everywhere.
+	 */
+	virtual Qt::ColorScheme system_colour_scheme() const = 0;
+
 signals:
+	/*
+	 * The system's light/dark preference changed while running. Following
+	 * it live is most of what "follows the system" means to a user: a
+	 * theme that is only right at startup is one they will call broken.
+	 */
+	void colour_scheme_changed();
+
 	/*
 	 * Connectivity changed and any live session should re-check itself:
 	 * ConnectivityManager callbacks on Android, QNetworkInformation on

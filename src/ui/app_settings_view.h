@@ -30,6 +30,7 @@ signals:
 
 private:
 	QComboBox *m_key_row;
+	QComboBox *m_theme;
 };
 
 #endif /* BSSH_APP_SETTINGS_VIEW_H */

@@ -5,7 +5,9 @@
 
 #include "platform/platform.h"
 #include "term/font_catalog.h"
+#include "model/app_settings.h"
 #include "ui/main_window.h"
+#include "ui/theme.h"
 
 /*
  * BeerSSH -- SSH terminal for Android and desktop (project.md sec 0.1).
@@ -92,6 +94,14 @@ int main(int argc, char *argv[]) {
 	 * only one: host profiles (sec 10) arrive at M6. --self-test never
 	 * takes a target, since CI has no server to reach.
 	 */
+	/*
+	 * Before the first window, so nothing is painted in one theme and
+	 * repainted in the other (sec 6.2). The default is to follow the
+	 * desktop, and the detection behind that is bssh_platform's -- Qt's
+	 * own hint is not enough on its own.
+	 */
+	bssh_theme::apply(bssh_theme::from_text(bssh_app_settings().theme()));
+
 	bssh_main_window window(self_test ? QString() : target);
 	window.resize(900, 600);
 	window.show();

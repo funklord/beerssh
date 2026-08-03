@@ -5,6 +5,8 @@
 #include "model/app_settings.h"
 #include <QTemporaryDir>
 #include <QFile>
+#include "ui/theme.h"
+#include <QPalette>
 #include "platform_test.h"
 #include "ui/main_window.h"
 
@@ -127,4 +129,84 @@ void platform_test::the_key_row_setting_survives_a_restart() {
 
 	bssh_app_settings mistyped(dir.path());
 	QCOMPARE(mistyped.key_row_visibility(), bssh_app_settings::KEY_ROW_AUTO);
+}
+
+void platform_test::the_system_scheme_is_never_unknown() {
+	/*
+	 * Qt's own hint is not enough on its own, which is the whole reason
+	 * bssh_platform answers this. Measured on this machine: with no
+	 * platform-theme plugin engaged QStyleHints reports Unknown while the
+	 * XDG portal reports "prefer dark" -- so trusting Qt alone draws a
+	 * light window on a dark desktop.
+	 *
+	 * What this asserts is the contract callers rely on: whatever the
+	 * sources say, a caller gets a usable answer and never has to invent
+	 * one for itself.
+	 */
+	const Qt::ColorScheme resolved = bssh_theme::resolved_system_scheme();
+	QVERIFY2(resolved == Qt::ColorScheme::Light || resolved == Qt::ColorScheme::Dark,
+	          "resolving the system scheme must always land on light or dark");
+
+	const bssh_platform *platform = bssh_platform::instance();
+	QVERIFY(platform);
+
+	/* Stable between calls -- a theme that flickers is worse than a wrong one. */
+	QCOMPARE(platform->system_colour_scheme(), platform->system_colour_scheme());
+}
+
+void platform_test::the_palettes_are_actually_light_and_dark() {
+	const QPalette dark = bssh_theme::palette_for(Qt::ColorScheme::Dark);
+	const QPalette light = bssh_theme::palette_for(Qt::ColorScheme::Light);
+
+	QVERIFY(dark.color(QPalette::Window).lightness() < 128);
+	QVERIFY(light.color(QPalette::Window).lightness() >= 128);
+
+	/* Text has to contrast with the window it sits on, in both. */
+	QVERIFY(dark.color(QPalette::WindowText).lightness() > 128);
+	QVERIFY(light.color(QPalette::WindowText).lightness() < 128);
+
+	/*
+	 * Disabled text needs its own colour in both. Qt derives one by
+	 * blending toward the window colour, which on a dark palette lands
+	 * close enough to the enabled colour that a greyed-out control looks
+	 * enabled.
+	 */
+	for (const QPalette &p : { dark, light }) {
+		QVERIFY(p.color(QPalette::Disabled, QPalette::WindowText) !=
+		         p.color(QPalette::Active, QPalette::WindowText));
+	}
+}
+
+void platform_test::an_explicit_mode_ignores_the_system() {
+	QCOMPARE(bssh_theme::effective_scheme(bssh_theme::MODE_LIGHT), Qt::ColorScheme::Light);
+	QCOMPARE(bssh_theme::effective_scheme(bssh_theme::MODE_DARK), Qt::ColorScheme::Dark);
+
+	/* System follows detection, whatever that turns out to be here. */
+	QCOMPARE(bssh_theme::effective_scheme(bssh_theme::MODE_SYSTEM),
+	          bssh_theme::resolved_system_scheme());
+
+	/* Applying a mode really repaints, rather than only recording it. */
+	bssh_theme::apply(bssh_theme::MODE_DARK);
+	QVERIFY(QApplication::palette().color(QPalette::Window).lightness() < 128);
+	bssh_theme::apply(bssh_theme::MODE_LIGHT);
+	QVERIFY(QApplication::palette().color(QPalette::Window).lightness() >= 128);
+}
+
+void platform_test::the_theme_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	{
+		bssh_app_settings settings(dir.path());
+		/* The default is to follow the desktop, not to pick one. */
+		QCOMPARE(settings.theme(), QStringLiteral("system"));
+		settings.set_theme(QStringLiteral("dark"));
+	}
+
+	bssh_app_settings reopened(dir.path());
+	QCOMPARE(reopened.theme(), QStringLiteral("dark"));
+	QCOMPARE(bssh_theme::from_text(reopened.theme()), bssh_theme::MODE_DARK);
+
+	/* Unreadable text in the file means "follow the system", not a crash. */
+	QCOMPARE(bssh_theme::from_text(QStringLiteral("chartreuse")), bssh_theme::MODE_SYSTEM);
+	QCOMPARE(bssh_theme::to_text(bssh_theme::MODE_SYSTEM), QStringLiteral("system"));
 }

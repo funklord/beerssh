@@ -24,6 +24,10 @@ isEmpty(BSSH_VERSION): BSSH_VERSION = 0.1.0
 DEFINES += BSSH_VERSION_STRING=\\\"$$BSSH_VERSION\\\"
 
 QT += widgets network
+
+# QtDBus is desktop-only: the XDG portal is where Linux keeps the
+# light/dark preference, and Qt does not always read it for us (sec 6.2).
+!android: QT += dbus
 CONFIG += c++17
 CONFIG -= app_bundle
 
@@ -68,6 +72,7 @@ SOURCES += \
     src/ui/ssh_config_import.cpp \
     src/ui/tab_status.cpp \
     src/ui/terminal_accessible.cpp \
+    src/ui/theme.cpp \
     src/ui/terminal_view.cpp
 
 HEADERS += \
@@ -109,6 +114,7 @@ HEADERS += \
     src/ui/ssh_config_import.h \
     src/ui/tab_status.h \
     src/ui/terminal_accessible.h \
+    src/ui/theme.h \
     src/ui/terminal_view.h
 
 # libssh is the only third-party dependency so far. It is named here and

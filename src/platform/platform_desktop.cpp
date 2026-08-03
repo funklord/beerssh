@@ -1,6 +1,12 @@
 #include "platform/platform.h"
 
 #include <QApplication>
+#include <QDBusConnection>
+#include <QDBusInterface>
+#include <QDBusReply>
+#include <QDBusVariant>
+#include <QPalette>
+#include <QStyleHints>
 #include <QDir>
 #include <QFileInfo>
 #include <QGuiApplication>
@@ -17,9 +23,46 @@
  * the prompt before backgrounding with live sessions, desktop
  * notifications, and treating suspend/resume as a network-change event.
  */
+
+/*
+ * org.freedesktop.appearance color-scheme: 0 no preference, 1 prefer
+ * dark, 2 prefer light. Read once per call rather than cached, because
+ * the value changes while running and this is a DBus round trip on a
+ * settings page, not on a paint.
+ */
+static Qt::ColorScheme portal_colour_scheme() {
+	if (!QDBusConnection::sessionBus().isConnected()) return Qt::ColorScheme::Unknown;
+
+	QDBusInterface settings(QStringLiteral("org.freedesktop.portal.Desktop"),
+	                         QStringLiteral("/org/freedesktop/portal/desktop"),
+	                         QStringLiteral("org.freedesktop.portal.Settings"),
+	                         QDBusConnection::sessionBus());
+	if (!settings.isValid()) return Qt::ColorScheme::Unknown;
+
+	const QDBusReply<QDBusVariant> reply =
+	        settings.call(QStringLiteral("Read"), QStringLiteral("org.freedesktop.appearance"),
+	                       QStringLiteral("color-scheme"));
+	if (!reply.isValid()) return Qt::ColorScheme::Unknown;
+
+	/* Doubly wrapped: Read returns a variant holding a variant. */
+	QVariant value = reply.value().variant();
+	if (value.metaType().id() == QMetaType::QVariantMap) return Qt::ColorScheme::Unknown;
+	while (value.canConvert<QDBusVariant>()) value = value.value<QDBusVariant>().variant();
+
+	switch (value.toUInt()) {
+	case 1: return Qt::ColorScheme::Dark;
+	case 2: return Qt::ColorScheme::Light;
+	default: return Qt::ColorScheme::Unknown;
+	}
+}
+
 class bssh_platform_desktop : public bssh_platform {
+	Q_OBJECT
+
 public:
 	bssh_platform_desktop() : m_tray(nullptr) {
+		watch_colour_scheme();
+
 		/*
 		 * Reachability changes are the desktop stand-in for Android's
 		 * connectivity callbacks. The case that actually matters is a
@@ -119,6 +162,68 @@ public:
 		return QString();
 	}
 
+
+	/*
+	 * Three sources, in decreasing order of authority, because no single
+	 * one of them answers everywhere (see the interface).
+	 */
+	/*
+	 * Both sources are watched, because either may be the one that
+	 * notices: Qt's hint where a platform theme is engaged, and the
+	 * portal's SettingChanged where it is not. Both funnel into one
+	 * signal, so a duplicate is a harmless repaint rather than a
+	 * behaviour.
+	 */
+	void watch_colour_scheme() {
+		connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
+		         this, [this](Qt::ColorScheme) { emit colour_scheme_changed(); });
+
+		QDBusConnection::sessionBus().connect(
+		        QString(), QStringLiteral("/org/freedesktop/portal/desktop"),
+		        QStringLiteral("org.freedesktop.portal.Settings"),
+		        QStringLiteral("SettingChanged"), this, SLOT(on_portal_setting_changed(QString, QString, QDBusVariant)));
+	}
+
+	Qt::ColorScheme system_colour_scheme() const override {
+		/*
+		 * 1. Qt, where a platform theme is engaged. Correct on Windows,
+		 *    macOS, and any Linux session with the KDE or GTK platform
+		 *    theme plugin loaded.
+		 */
+		const Qt::ColorScheme hinted = QGuiApplication::styleHints()->colorScheme();
+		if (hinted != Qt::ColorScheme::Unknown) return hinted;
+
+		/*
+		 * 2. The XDG desktop portal, which is where the preference
+		 *    actually lives on Linux and answers even when Qt does not:
+		 *    measured on this machine, styleHints said Unknown while the
+		 *    portal said "prefer dark", which is a light window on a dark
+		 *    desktop for anyone whose distribution has not wired the
+		 *    platform theme up.
+		 */
+		const Qt::ColorScheme from_portal = portal_colour_scheme();
+		if (from_portal != Qt::ColorScheme::Unknown) return from_portal;
+
+		/*
+		 * 3. The palette we were given. If something themed this app,
+		 *    its window colour says which way round it meant it -- a
+		 *    weaker signal than being told, but a true one, and it costs
+		 *    nothing when the first two have already answered.
+		 */
+		const QColor window = QGuiApplication::palette().color(QPalette::Window);
+		return window.lightness() < 128 ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
+	}
+
+private slots:
+	void on_portal_setting_changed(const QString &space, const QString &key,
+	                                const QDBusVariant &value) {
+		Q_UNUSED(value);
+		if (space != QStringLiteral("org.freedesktop.appearance")) return;
+		if (key != QStringLiteral("color-scheme")) return;
+		emit colour_scheme_changed();
+	}
+
+public:
 	QString launch_document() const override {
 		/*
 		 * A file named on the command line, which is what a desktop file
@@ -169,3 +274,5 @@ bssh_platform *bssh_platform::instance() {
 	static bssh_platform_desktop platform;
 	return &platform;
 }
+
+#include "platform_desktop.moc"

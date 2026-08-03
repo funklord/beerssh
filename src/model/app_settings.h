@@ -36,6 +36,14 @@ public:
 
 	explicit bssh_app_settings(const QString &directory = QString());
 
+	/*
+	 * sec 6.2's light/dark, stored as text rather than as the enum so the
+	 * file stays readable and a hand-edited "dark" works. The vocabulary
+	 * is bssh_theme's; this only remembers the choice.
+	 */
+	QString theme() const;
+	void set_theme(const QString &theme);
+
 	key_row_visibility_t key_row_visibility() const;
 	void set_key_row_visibility(key_row_visibility_t visibility);
 
