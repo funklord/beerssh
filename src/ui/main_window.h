@@ -97,6 +97,7 @@ public:
 	void import_launch_document();
 
 protected:
+	void changeEvent(QEvent *event) override;
 	void closeEvent(QCloseEvent *event) override;
 
 	/*

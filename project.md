@@ -531,6 +531,21 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
   Both change sources are watched — Qt's signal and the portal's
   `SettingChanged` — because either may be the one that notices, and a theme that
   is only right at startup is one a user calls broken.
+- **What the theme touched that nobody had looked at.** Adding a light palette
+  is the easy half; what it exposes is everything that was only ever seen against
+  a dark one. The four tab status dots (§8.3) — the only thing on a tab that says
+  whether a session is alive — **all failed WCAG's 3:1 for a graphical indicator**
+  on the light window: green 1.83:1, grey 2.22:1, and "connecting" yellow at
+  1.44:1, which is as good as invisible. They have light variants now, same hue
+  and saturation darkened until they pass, so green still reads as green in both.
+  A test asserts the ratio against the palette actually in force, rather than
+  against a table of constants.
+  The accent `#2b90d9` had been written in **three** files by the time the theme
+  landed; the focus border and the add button read it from `QPalette::Highlight`
+  now. A stylesheet cannot read the palette and does not re-evaluate when it
+  changes, so the add button is restyled on `PaletteChange` — and the tab dots are
+  pixmaps already handed to the tab bar, so those are rebuilt on the same event.
+  A repaint does not redraw a pixmap somebody else is holding.
 - **The terminal's own colours are deliberately NOT tied to this.** A host's
   `colour_scheme` (§10.2) describes what the remote's output should look like,
   and a dark terminal in a light window is a common and deliberate choice. Making

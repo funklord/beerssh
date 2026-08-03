@@ -725,7 +725,12 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		 * the whole line lands inside the widget rather than half of it
 		 * being clipped away by the neighbouring pane.
 		 */
-		QPen border(QColor(0x2b, 0x90, 0xd9));
+		/*
+		 * The theme's accent rather than a third copy of the literal
+		 * (sec 6.2). Read from the palette so it follows whatever is
+		 * applied, including a palette the platform supplied.
+		 */
+		QPen border(palette().color(QPalette::Highlight));
 		border.setWidth(2);
 		painter.setPen(border);
 		painter.drawRect(rect().adjusted(1, 1, -1, -1));

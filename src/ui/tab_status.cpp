@@ -1,5 +1,8 @@
 #include "ui/tab_status.h"
 
+#include <QApplication>
+#include <QPalette>
+
 #include <QPainter>
 
 #include "model/session.h"
@@ -26,18 +29,33 @@ state_t state_for(const bssh_session *session) {
 	}
 }
 
+/*
+ * Two sets, same four hues, because these were chosen against a dark tab
+ * bar and stopped working when sec 6.2's light theme arrived. Measured
+ * against the light window colour, every one of them failed WCAG's 3:1
+ * for a graphical indicator -- green 1.83:1, grey 2.22:1, and the
+ * "connecting" yellow 1.44:1, which is as good as invisible. They are
+ * the only thing on a tab that says whether a session is alive.
+ *
+ * The light variants are the same hue and saturation darkened until they
+ * pass with a little headroom, so a user moving between themes still
+ * reads green as green rather than learning two palettes.
+ */
 QColor colour_for(state_t state) {
+	const bool light =
+		      QApplication::palette().color(QPalette::Window).lightness() >= 128;
+
 	switch (state) {
 	case CONNECTED:
-		return QColor(0x2e, 0xcc, 0x71);
+		return light ? QColor(0x22, 0x97, 0x54) : QColor(0x2e, 0xcc, 0x71);
 	case CONNECTING:
-		return QColor(0xf1, 0xc4, 0x0f);
+		return light ? QColor(0xa0, 0x82, 0x09) : QColor(0xf1, 0xc4, 0x0f);
 	case BELL:
-		return QColor(0x2b, 0x90, 0xd9);
+		return light ? QColor(0x26, 0x89, 0xd1) : QColor(0x2b, 0x90, 0xd9);
 	case DISCONNECTED:
-		return QColor(0x95, 0xa5, 0xa6);
+		return light ? QColor(0x74, 0x89, 0x8b) : QColor(0x95, 0xa5, 0xa6);
 	}
-	return QColor(0x95, 0xa5, 0xa6);
+	return light ? QColor(0x74, 0x89, 0x8b) : QColor(0x95, 0xa5, 0xa6);
 }
 
 QPixmap dot(int size, state_t state) {

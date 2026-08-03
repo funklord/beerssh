@@ -6,6 +6,7 @@
 #include <QListWidget>
 #include <QResizeEvent>
 #include <QScroller>
+#include <QEvent>
 #include <QMenu>
 #include <QMessageBox>
 #include <QToolButton>
@@ -134,10 +135,7 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	m_add->setAccessibleName(QStringLiteral("Add host"));
 	m_add->setText(QStringLiteral("+"));
 	m_add->setFixedSize(56, 56);
-	m_add->setStyleSheet(QStringLiteral(
-	        "QToolButton { border-radius: 28px; background: #2b90d9; color: white;"
-	        " font-size: 28px; }"
-	        "QToolButton:pressed { background: #1c6ea4; }"));
+	style_add_button();
 	m_add->raise();
 
 	connect(m_add, &QToolButton::clicked, this, &bssh_host_list::add_requested);
@@ -211,6 +209,35 @@ void bssh_host_list::reload() {
 		item->setFlags(Qt::NoItemFlags);
 		item->setSizeHint(QSize(0, BSSH_ROW_HEIGHT_DP));
 	}
+}
+
+/*
+ * The accent comes from the palette rather than a literal, so the button
+ * matches whatever theme is applied (sec 6.2) -- it was the third copy of
+ * "#2b90d9" in the tree, and the one that would have been missed.
+ *
+ * A stylesheet cannot read the palette for itself, and does not
+ * re-evaluate when the palette changes, so it is rebuilt on the change
+ * event below.
+ */
+void bssh_host_list::style_add_button() {
+	if (!m_add) return;
+
+	const QColor accent = palette().color(QPalette::Highlight);
+	const QColor pressed = accent.darker(130);
+
+	m_add->setStyleSheet(QStringLiteral(
+	        "QToolButton { border-radius: 28px; background: %1; color: %2;"
+	        " font-size: 28px; }"
+	        "QToolButton:pressed { background: %3; }")
+	                              .arg(accent.name(),
+	                                    palette().color(QPalette::HighlightedText).name(),
+	                                    pressed.name()));
+}
+
+void bssh_host_list::changeEvent(QEvent *event) {
+	QWidget::changeEvent(event);
+	if (event && event->type() == QEvent::PaletteChange) style_add_button();
 }
 
 void bssh_host_list::on_row_menu(const QPoint &where) {

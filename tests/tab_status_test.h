@@ -16,6 +16,7 @@ private slots:
 	void reports_the_connection_state();
 	void a_bell_is_remembered_only_while_you_are_elsewhere();
 	void a_dead_session_outranks_its_own_bell();
+	void every_dot_is_visible_in_both_themes();
 };
 
 #endif /* BSSH_TAB_STATUS_TEST_H */

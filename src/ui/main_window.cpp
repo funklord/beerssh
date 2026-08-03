@@ -6,6 +6,7 @@
 #include <QDesktopServices>
 #include <QUrl>
 #include <QClipboard>
+#include <QEvent>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QGuiApplication>
@@ -851,6 +852,18 @@ void bssh_main_window::on_tab_changed(int index) {
 void bssh_main_window::on_tab_close_requested(int index) {
 	bssh_session *session = m_registry->at(index);
 	if (session) m_registry->close(session);
+}
+
+/*
+ * The tab dots are pixmaps, drawn once with the colours of the theme in
+ * force at the time (sec 6.2). A theme change repaints every widget but
+ * cannot repaint a pixmap somebody already handed to the tab bar, so the
+ * tabs are rebuilt -- otherwise switching to light leaves four dots that
+ * were chosen to be legible on a dark bar and are not on this one.
+ */
+void bssh_main_window::changeEvent(QEvent *event) {
+	QWidget::changeEvent(event);
+	if (event && event->type() == QEvent::PaletteChange) on_registry_changed();
 }
 
 void bssh_main_window::on_registry_changed() {

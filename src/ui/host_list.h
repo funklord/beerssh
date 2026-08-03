@@ -7,6 +7,7 @@
 #include "model/profile.h"
 
 class QListWidget;
+class QEvent;
 class QResizeEvent;
 class QToolButton;
 class bssh_profile_store;
@@ -38,6 +39,7 @@ public:
 
 protected:
 	void resizeEvent(QResizeEvent *event) override;
+	void changeEvent(QEvent *event) override;
 
 signals:
 	void open_requested(const bssh_profile_t &profile);
@@ -66,6 +68,8 @@ private slots:
 	void on_row_menu(const QPoint &where);
 
 private:
+	void style_add_button();
+
 	bssh_profile_store *m_store;
 	QListWidget *m_list;
 	QToolButton *m_add;
