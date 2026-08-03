@@ -45,6 +45,13 @@ public:
 	int rows() const { return m_rows; }
 
 	/* Cell metrics in pixels -- the emulator needs these to size images. */
+	/*
+	 * sec 9.3's contrast floor, applied when drawing rather than to the
+	 * palette (see bssh_raise_contrast). Set from the device setting.
+	 */
+	void set_raise_contrast(bool raise);
+	bool raise_contrast() const { return m_raise_contrast; }
+
 	int cell_width() const { return m_cell_width; }
 	int cell_height() const { return m_cell_height; }
 
@@ -275,6 +282,7 @@ private:
 
 	QColor m_background;
 	QColor m_foreground;
+	bool m_raise_contrast;
 	int m_cell_width;
 	int m_cell_height;
 	int m_baseline;

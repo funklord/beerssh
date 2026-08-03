@@ -80,3 +80,17 @@ void bssh_app_settings::set_theme(const QString &theme) {
 	QSettings file(m_path, QSettings::IniFormat);
 	file.setValue(QStringLiteral("appearance/theme"), theme);
 }
+
+bool bssh_app_settings::raise_contrast() const {
+	if (m_path.isEmpty()) return true;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	return file.value(QStringLiteral("appearance/raise_contrast"), true).toBool();
+}
+
+void bssh_app_settings::set_raise_contrast(bool raise) {
+	if (m_path.isEmpty()) return;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	file.setValue(QStringLiteral("appearance/raise_contrast"), raise);
+}

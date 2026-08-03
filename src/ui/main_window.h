@@ -133,6 +133,7 @@ private:
 
 	/* Reads sec 6.2's three-state setting and applies it to the key row. */
 	void apply_key_row_visibility();
+	void apply_device_settings();
 
 	/*
 	 * Adds a session to the visible panes rather than replacing them

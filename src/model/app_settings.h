@@ -41,6 +41,15 @@ public:
 	 * file stays readable and a hand-edited "dark" works. The vocabulary
 	 * is bssh_theme's; this only remembers the choice.
 	 */
+	/*
+	 * Whether to lift a drawn colour to sec 9.3's contrast floor when the
+	 * scheme's own value falls under it. ON by default: the schemes are
+	 * faithful reproductions and several of them, xterm's blue loudest,
+	 * are genuinely hard to read as published.
+	 */
+	bool raise_contrast() const;
+	void set_raise_contrast(bool raise);
+
 	QString theme() const;
 	void set_theme(const QString &theme);
 

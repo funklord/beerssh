@@ -56,6 +56,40 @@ struct bssh_colour_scheme_t {
 	bssh_colour_scheme_t() : dark(true), ansi(), background(0), foreground(0), cursor(0) {}
 };
 
+/*
+ * The minimum contrast a drawn colour is allowed to have against what it
+ * is drawn on, as a WCAG ratio (project.md sec 9.3).
+ *
+ * 3:1 rather than 4.5:1, and the difference is arithmetic rather than
+ * leniency: blue contributes 0.0722 of luminance, so against a near-black
+ * background no recognisably saturated red or blue can reach 4.5 at all
+ * -- pure red tops out at 4.26. A floor nothing can satisfy is not a
+ * standard, it is a way of getting the rule switched off.
+ */
+const double BSSH_CONTRAST_FLOOR = 3.0;
+
+/* WCAG relative luminance and contrast, exposed because three callers
+ * need them and a fourth copy is how they stop agreeing. */
+double bssh_relative_luminance(QRgb colour);
+double bssh_contrast_ratio(QRgb a, QRgb b);
+
+/*
+ * The same colour, lightened or darkened only as far as it takes to clear
+ * the floor against `against`, or returned untouched if it already does.
+ *
+ * Applied when DRAWING rather than stored in the palette, which is the
+ * whole point: the scheme keeps saying what its author published -- so a
+ * user can still check it against the source -- while what reaches the
+ * screen stays legible. It also means a scheme added later is covered
+ * without anybody editing it.
+ *
+ * Hue and saturation are preserved, so a red that has been lifted is
+ * still recognisably the red the program asked for. The direction is
+ * away from the background: lighter on a dark one, darker on a light one,
+ * which is the only direction that can gain contrast.
+ */
+QRgb bssh_raise_contrast(QRgb colour, QRgb against);
+
 class bssh_colour_scheme_catalog {
 public:
 	static bssh_colour_scheme_catalog &instance();

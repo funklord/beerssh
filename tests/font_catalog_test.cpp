@@ -383,75 +383,75 @@ void font_catalog_test::every_bundled_font_names_a_licence_file_that_exists() {
 	}
 }
 
-namespace {
-
-double srgb_channel(int value) {
-	const double c = value / 255.0;
-	return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
-}
-
-double relative_luminance(QRgb rgb) {
-	const QColor c(rgb);
-	return 0.2126 * srgb_channel(c.red()) + 0.7152 * srgb_channel(c.green()) +
-		      0.0722 * srgb_channel(c.blue());
-}
-
-double contrast_ratio(QRgb a, QRgb b) {
-	const double la = relative_luminance(a);
-	const double lb = relative_luminance(b);
-	return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
-}
-
-} /* namespace */
-
 void font_catalog_test::our_own_scheme_is_legible() {
 	/*
-	 * A contrast floor for the schemes this project AUTHORS, and only
-	 * those. The third-party sets are reproduced exactly on purpose --
-	 * a "Solarized Dark" whose values are not Solarized's is a
-	 * mislabelled scheme, and several of them do sit below this floor by
-	 * their designers' choice (Solarized's bright black IS its
-	 * background). Holding someone else's palette to our bar would mean
-	 * either failing the build over their decision or silently editing
-	 * their work; the licences recorded beside each set are why neither
-	 * is acceptable.
-	 *
-	 * 3:1 rather than 4.5:1 for the ANSI entries, and the reason is
-	 * arithmetic rather than laziness: blue contributes 0.0722 of
-	 * luminance, so on a near-black background no recognisably saturated
-	 * red or blue can reach 4.5 -- pure #ff0000 tops out at 4.26. The
-	 * default foreground, which is what most text actually is, is held to
-	 * the full 4.5.
+	 * The schemes are FAITHFUL reproductions and are deliberately not
+	 * held to a contrast floor -- several of them fail one as published,
+	 * xterm's blue at 1.81:1 loudest, and that is their authors' record
+	 * to keep rather than ours to edit. What is asserted instead is the
+	 * promise the app actually makes: whatever a scheme says, what
+	 * reaches the screen clears sec 9.3's floor once the lift is on.
 	 */
 	const bssh_colour_scheme_catalog &catalog = bssh_colour_scheme_catalog::instance();
 
-	int checked = 0;
+	int lifted = 0;
 	for (const bssh_colour_scheme_t &scheme : catalog.all()) {
-		if (scheme.licence != QStringLiteral("BeerSSH")) continue;
-		++checked;
-
-		const double fg = contrast_ratio(scheme.foreground, scheme.background);
-		QVERIFY2(fg >= 4.5,
-		          qPrintable(QStringLiteral("%1: default text is only %2:1")
-		                             .arg(scheme.id).arg(fg, 0, 'f', 2)));
-
 		for (int i = 0; i < 16; ++i) {
-			/*
-			 * The colour at the background's own end is meant to
-			 * disappear into it: ANSI black on a dark scheme, white on a
-			 * light one. A program printing colour 0 as text on a dark
-			 * terminal is the broken one, and every terminal in
-			 * existence renders it this way.
-			 */
-			if (scheme.dark && (i == 0 || i == 8)) continue;
-			if (!scheme.dark && (i == 7 || i == 15)) continue;
+			const QRgb published = scheme.ansi[i];
+			const QRgb drawn = bssh_raise_contrast(published, scheme.background);
 
-			const double ratio = contrast_ratio(scheme.ansi[i], scheme.background);
-			QVERIFY2(ratio >= 3.0,
-			          qPrintable(QStringLiteral("%1: ANSI %2 is only %3:1 on its background")
-			                             .arg(scheme.id).arg(i).arg(ratio, 0, 'f', 2)));
+			QVERIFY2(bssh_contrast_ratio(drawn, scheme.background) >= BSSH_CONTRAST_FLOOR,
+			          qPrintable(QStringLiteral("%1: ANSI %2 still under the floor after lifting")
+			                             .arg(scheme.id).arg(i)));
+
+			if (drawn != published) ++lifted;
+
+			/* A colour that already passes is returned untouched -- the
+			 * lift is a floor, not a filter over everything. */
+			if (bssh_contrast_ratio(published, scheme.background) >= BSSH_CONTRAST_FLOOR) {
+				QCOMPARE(drawn, published);
+			}
 		}
 	}
 
-	QVERIFY2(checked > 0, "no scheme was checked -- the licence marker must have changed");
+	QVERIFY2(lifted > 0, "nothing was lifted -- the faithful palettes must still need it");
+
+	/*
+	 * The published values are untouched, which is the other half of the
+	 * bargain: a user can check any scheme against its source. xterm's
+	 * blue is the one this whole design argued about, so it is named.
+	 */
+	const bssh_colour_scheme_t *fallback = catalog.by_id(catalog.default_id());
+	QVERIFY(fallback);
+	/* qRgb, not the bare literal: the catalog carries a full alpha byte. */
+	QCOMPARE(fallback->ansi[4], qRgb(0x00, 0x00, 0xee));
+	QCOMPARE(fallback->ansi[1], qRgb(0xcd, 0x00, 0x00));
+	QVERIFY(bssh_contrast_ratio(fallback->ansi[4], fallback->background) < 2.0);
+
+	/* And drawn, it is readable. */
+	QVERIFY(bssh_contrast_ratio(bssh_raise_contrast(fallback->ansi[4], fallback->background),
+	                             fallback->background) >= BSSH_CONTRAST_FLOOR);
+}
+
+void font_catalog_test::the_lift_keeps_a_colour_recognisable() {
+	const QRgb background = 0x1c1c1c;
+
+	/* Hue survives: a lifted red is still red, not a pale wash. */
+	const QColor lifted(bssh_raise_contrast(0xcd0000, background));
+	QVERIFY(lifted.hslHueF() < 0.05 || lifted.hslHueF() > 0.95);
+	QVERIFY(lifted.red() > lifted.green() && lifted.red() > lifted.blue());
+
+	/* On a LIGHT background the move is the other way. */
+	const QRgb pale = 0xf0f0f0;
+	const QColor darkened(bssh_raise_contrast(0xd0d0d0, pale));
+	QVERIFY(bssh_relative_luminance(darkened.rgb()) < bssh_relative_luminance(0xd0d0d0));
+	QVERIFY(bssh_contrast_ratio(darkened.rgb(), pale) >= BSSH_CONTRAST_FLOOR);
+
+	/*
+	 * Black on black is the case the floor exists for and the one a
+	 * scheme cannot help with: it comes back as something readable
+	 * rather than as black.
+	 */
+	QVERIFY(bssh_contrast_ratio(bssh_raise_contrast(0x000000, background), background)
+	         >= BSSH_CONTRAST_FLOOR);
 }

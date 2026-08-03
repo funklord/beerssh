@@ -1,5 +1,6 @@
 #include "ui/app_settings_view.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QLabel>
@@ -43,6 +44,21 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
 	if (touch) m_theme->setMinimumHeight(48);
 	form->addRow(QStringLiteral("Appearance"), m_theme);
+
+	/*
+	 * sec 9.3's contrast floor. The schemes are faithful reproductions
+	 * and several of them are genuinely hard to read as published --
+	 * xterm's blue measures 1.81:1 -- so this is on by default and lifts
+	 * the offending colour when DRAWING it, leaving the scheme itself
+	 * saying what its author published.
+	 */
+	m_raise_contrast = new QCheckBox(QStringLiteral("Raise low-contrast colours"), this);
+	m_raise_contrast->setToolTip(
+	        QStringLiteral("Colour schemes are reproduced exactly, and some of them are hard "
+	                        "to read. This lifts a colour only while drawing it, and only when "
+	                        "it falls below the readable minimum."));
+	if (touch) m_raise_contrast->setMinimumHeight(48);
+	form->addRow(QString(), m_raise_contrast);
 	outer->addLayout(form);
 
 	/*
@@ -68,21 +84,34 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	}
 
 	const bssh_app_settings settings;
+	m_raise_contrast->setChecked(settings.raise_contrast());
+
 	const int theme_index = m_theme->findData(settings.theme());
 	if (theme_index >= 0) m_theme->setCurrentIndex(theme_index);
 
 	const int index = m_key_row->findData(int(settings.key_row_visibility()));
 	m_key_row->setCurrentIndex(index < 0 ? 0 : index);
 
-	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] {
-		bssh_app_settings stored;
-		stored.set_key_row_visibility(
-		        bssh_app_settings::key_row_visibility_t(m_key_row->currentData().toInt()));
-		stored.set_theme(m_theme->currentData().toString());
+	/*
+	 * Every control commits, not just the first one. The lambda used to
+	 * hang off the key row alone, so once a second setting appeared here
+	 * changing IT saved nothing until the key row was also touched --
+	 * which looks exactly like a setting that does not work.
+	 */
+	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
+}
 
-		/* Applied immediately: a theme that waits for a restart reads as
-		 * a setting that did not work. */
-		bssh_theme::apply(bssh_theme::from_text(m_theme->currentData().toString()));
-		emit changed();
-	});
+void bssh_app_settings_view::commit() {
+	bssh_app_settings stored;
+	stored.set_key_row_visibility(
+	        bssh_app_settings::key_row_visibility_t(m_key_row->currentData().toInt()));
+	stored.set_theme(m_theme->currentData().toString());
+	stored.set_raise_contrast(m_raise_contrast->isChecked());
+
+	/* Applied immediately: a setting that waits for a restart reads as a
+	 * setting that did not work. */
+	bssh_theme::apply(bssh_theme::from_text(m_theme->currentData().toString()));
+	emit changed();
 }

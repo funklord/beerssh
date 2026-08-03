@@ -7,6 +7,7 @@
 #include <QTemporaryDir>
 #include "model/profile_store.h"
 #include "ui/session_dialog.h"
+#include "model/app_settings.h"
 #include "terminal_view_test.h"
 
 #include "fake_ssh_session.h"
@@ -633,4 +634,29 @@ void terminal_view_test::every_control_announces_a_name() {
 	}
 
 	QCOMPARE(anonymous, 0);
+}
+
+void terminal_view_test::the_contrast_floor_can_be_turned_off() {
+	/*
+	 * The floor is a property of the READER, not of the palette (sec 9.3):
+	 * schemes stay faithful to what their authors published, and the lift
+	 * happens while drawing. So it has to be switchable, and a view has to
+	 * change what it draws when it is switched.
+	 */
+	bssh_terminal_view view;
+	QVERIFY2(view.raise_contrast(), "on by default -- several shipped schemes need it");
+
+	view.set_raise_contrast(false);
+	QVERIFY(!view.raise_contrast());
+	view.set_raise_contrast(true);
+	QVERIFY(view.raise_contrast());
+
+	/* The setting itself round-trips, and defaults to on. */
+	QTemporaryDir dir;
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(settings.raise_contrast(), "the default must be on, not merely absent");
+		settings.set_raise_contrast(false);
+	}
+	QVERIFY(!bssh_app_settings(dir.path()).raise_contrast());
 }

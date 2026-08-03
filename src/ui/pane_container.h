@@ -36,6 +36,10 @@ public:
 	bssh_session *focused_session() const { return m_focused; }
 	bssh_terminal_view *focused_view() const;
 
+	/* Every visible pane's view, for settings that apply to all of them
+	 * rather than to the focused one (sec 6.2). */
+	const QList<bssh_terminal_view *> &views() const { return m_views; }
+
 	int pane_count() const { return m_views.size(); }
 	bssh_terminal_view *view_at(int index) const;
 

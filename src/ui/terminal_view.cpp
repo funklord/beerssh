@@ -75,6 +75,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_cursor_style(QStringLiteral("block")),
       m_cursor_on(true),
       m_blink_timer(nullptr),
+      m_raise_contrast(true),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_cell_width(1),
@@ -627,6 +628,15 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 
 			QColor fg = resolve(cell.fg, m_foreground);
 			QColor bg = resolve(cell.bg, m_background);
+
+			/*
+			 * Against the cell's OWN background rather than the
+			 * scheme's, so a coloured block is judged on what is
+			 * actually behind the glyph. Applied here, after both are
+			 * resolved and before inverse/selection swap them, so a
+			 * lifted colour cannot then be used as a background.
+			 */
+			if (m_raise_contrast) fg = QColor(bssh_raise_contrast(fg.rgb(), bg.rgb()));
 			if (cell.attrs & bssh_cell_t::INVERSE) std::swap(fg, bg);
 
 			/*
@@ -1092,4 +1102,11 @@ void bssh_terminal_view::on_screen_damaged() {
 
 	QAccessibleTextUpdateEvent event(this, 0, QString(), QString());
 	QAccessible::updateAccessibility(&event);
+}
+
+void bssh_terminal_view::set_raise_contrast(bool raise) {
+	if (m_raise_contrast == raise) return;
+
+	m_raise_contrast = raise;
+	update();
 }

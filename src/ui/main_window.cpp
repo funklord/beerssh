@@ -117,6 +117,14 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	         this, &bssh_main_window::on_pane_focus_changed);
 	connect(m_panes, &bssh_pane_container::panes_rebuilt, this, [this] {
 		on_pane_focus_changed(m_panes->focused_session());
+
+		/*
+		 * A pane built after the setting was changed starts from the
+		 * view's own default, so the device settings are re-applied to
+		 * every rebuild rather than only when the user edits them --
+		 * otherwise opening a second host quietly ignores the choice.
+		 */
+		apply_device_settings();
 	});
 
 	connect(m_tabs, &QTabBar::currentChanged, this, &bssh_main_window::on_tab_changed);
@@ -255,7 +263,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 			m_pages->setCurrentWidget(device);
 		});
 		connect(device, &bssh_app_settings_view::changed,
-		         this, &bssh_main_window::apply_key_row_visibility);
+		         this, &bssh_main_window::apply_device_settings);
 		connect(device, &bssh_app_settings_view::back_requested, this, [this] {
 			m_pages->setCurrentWidget(m_host_list);
 		});
@@ -275,7 +283,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		connect(m_session_dialog, &bssh_session_dialog::presets_changed,
 		         this, &bssh_main_window::reresolve_sessions);
 		connect(m_session_dialog, &bssh_session_dialog::device_settings_changed,
-		         this, &bssh_main_window::apply_key_row_visibility);
+		         this, &bssh_main_window::apply_device_settings);
 		m_pages->addWidget(m_session_dialog);
 	}
 
@@ -309,7 +317,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	 * convertible laptop could not ask for the row and a tablet with a
 	 * keyboard docked could not dismiss it.
 	 */
-	apply_key_row_visibility();
+	apply_device_settings();
 
 	/*
 	 * Shortcuts are the window's, because they act on the window: copy
@@ -728,6 +736,22 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	m_layout->set_width(int(width() / qMax(qreal(0.1), scale)));
 
 	if (m_panes) m_panes->rebuild();
+}
+
+/*
+ * Both device-level appearance settings, applied together because they
+ * arrive on the same signal and a caller that remembers one and forgets
+ * the other is the bug this function exists to not have.
+ */
+void bssh_main_window::apply_device_settings() {
+	apply_key_row_visibility();
+
+	const bool raise = bssh_app_settings().raise_contrast();
+	if (m_panes) {
+		for (bssh_terminal_view *view : m_panes->views()) {
+			if (view) view->set_raise_contrast(raise);
+		}
+	}
 }
 
 void bssh_main_window::apply_key_row_visibility() {

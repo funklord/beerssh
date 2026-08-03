@@ -1075,33 +1075,40 @@ is found:
   same cell are two chances to spell it differently**, and the one that is
   wrong is whichever the user is not looking at.
 
-**Contrast, measured, and only for the schemes this project authors.** The
-same WCAG arithmetic the tab dots are held to (§6.2), applied to what a user
-actually stares at. Two floors, and the difference between them is arithmetic
-rather than leniency: the default foreground must reach **4.5:1** against its
-background, but the sixteen ANSI entries only **3:1** — blue contributes 0.0722
-of luminance, so on a near-black background no recognisably saturated red or
-blue can reach 4.5 at all (pure `#ff0000` tops out at 4.26). The colour at the
-background's own end is exempt: ANSI black on a dark scheme is *meant* to
-disappear, and every terminal in existence renders it that way.
+**Contrast is a property of the reader, not of the palette.** Two things were
+wanted and they pull against each other: schemes faithful enough that a user can
+check one against its source, and output legible enough to read. Editing the
+numbers buys the second by destroying the first — and the argument that protects
+Solarized from us protects xterm too.
 
-It found the shipped default wanting. That scheme is xterm's palette, and
-xterm's blue `0x0000ee` measures **1.81:1** — the most notorious readability
-problem in terminal history, and why GNOME Terminal, iTerm2 and Windows
-Terminal all ship a brightened one. Blue is not a rare colour; it is directory
-names in `ls` and half of git's output. It is now `0x2472c8` (3.50:1), the value
-Windows Terminal settled on, and red moves from `0xcd0000` (2.92:1) to
-`0xe02020` (3.57:1) — the smallest step that clears the floor. The other
-thirteen already passed and are untouched.
+So **every scheme is reproduced exactly, including its unreadable entries**, and
+the floor is applied when **drawing**. `bssh_raise_contrast()` lifts a colour only
+as far as it takes to clear the floor against whatever is actually behind the
+glyph, preserving hue and saturation so a lifted red is still recognisably red,
+and moving away from the background because that is the only direction that gains
+anything. A colour already above the floor is returned untouched, so the lift is
+a floor rather than a filter over everything: rendered side by side, blue and
+black-on-background become readable while green, yellow, magenta and cyan do not
+move at all.
 
-**The third-party sets are exempt and must stay so.** Solarized, Nord, Gruvbox
-and Tango are reproduced exactly; a "Solarized Dark" whose values are not
-Solarized's is a mislabelled scheme, and several of them do sit below this floor
-by their designers' choice — Solarized's bright black *is* its background.
-Holding someone else's palette to our bar would mean either failing the build
-over their decision or silently editing their work, and the licences recorded
-beside each set are why neither is acceptable. The test selects on the licence
-marker for exactly this reason.
+It is a device setting (§6.2), **on by default**, because several shipped schemes
+are genuinely hard to read as published — xterm's blue `0x0000ee` measures
+**1.81:1** against the default background, the most notorious readability problem
+in terminal history and the reason GNOME Terminal, iTerm2 and Windows Terminal
+all ship a brightened one. Being a draw-time rule rather than a palette edit, it
+also covers any scheme added later without anybody editing it, and it can be
+turned off by someone who wants exactly what the author published.
+
+The floor is **3:1**, not 4.5:1, and the difference is arithmetic rather than
+leniency: blue contributes 0.0722 of luminance, so against a near-black
+background no recognisably saturated red or blue can reach 4.5 at all — pure
+`#ff0000` tops out at 4.26. A floor nothing can satisfy is not a standard, it is
+a way of getting the rule switched off.
+
+**[REJECTED]** Shipping a "readable" variant of each scheme alongside the
+faithful one. It doubles the picker, and an improved *Solarized Dark* is either
+mislabelled or an argument with its author; the same result is available from one
+setting that works on everything.
 
 ### 9.4 Packaging and size
 Bundling ~10 families × multiple weights is **tens of megabytes** — too much for

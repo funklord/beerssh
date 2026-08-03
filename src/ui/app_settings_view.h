@@ -3,6 +3,7 @@
 
 #include <QWidget>
 
+class QCheckBox;
 class QComboBox;
 
 /*
@@ -29,8 +30,11 @@ signals:
 	void back_requested();
 
 private:
+	void commit();
+
 	QComboBox *m_key_row;
 	QComboBox *m_theme;
+	QCheckBox *m_raise_contrast;
 };
 
 #endif /* BSSH_APP_SETTINGS_VIEW_H */

@@ -1,5 +1,8 @@
 #include "term/colour_scheme.h"
 
+#include <QColor>
+#include <cmath>
+
 namespace {
 
 /*
@@ -27,29 +30,22 @@ const entry_t BSSH_SCHEMES[] = {
 	{
 		"default", "Default", "BeerSSH", true,
 		/*
-		 * xterm's palette, with two values raised for legibility and
-		 * measured rather than eyeballed (sec 9.1).
+		 * xterm's palette, reproduced exactly -- including the blue at
+		 * 0x0000ee that measures 1.81:1 against this background and is
+		 * the most notorious readability problem in terminal history.
 		 *
-		 * xterm's blue is 0x0000ee, which lands at 1.81:1 against this
-		 * background -- the single most notorious readability problem in
-		 * terminal history, and the reason GNOME Terminal, iTerm2 and
-		 * Windows Terminal all ship a brightened one. Blue is not a rare
-		 * colour: it is directory names in ls and half of git's output.
-		 * 0x2472c8 is the azure-shifted value Windows Terminal settled
-		 * on, at 3.50:1.
-		 *
-		 * xterm's red at 0xcd0000 is 2.92:1, just under the floor, so it
-		 * moves the smallest distance that clears it. Both stay clearly
-		 * distinct from their bright counterparts, which is the other
-		 * thing a palette owes a program that asks for one of them.
-		 *
-		 * The other thirteen already pass and are left exactly as xterm
-		 * had them. Only the schemes this project AUTHORS get adjusted
-		 * like this -- see the note on the third-party sets below.
+		 * It is NOT corrected here, and that is the design. A scheme is
+		 * a record of what somebody published; editing the numbers makes
+		 * every scheme in this list a thing the user cannot check
+		 * against its source, and the argument that protects Solarized
+		 * from us protects xterm too. Legibility is fixed at DRAW time
+		 * instead, by the contrast floor in sec 9.3, which is a property
+		 * of the reader rather than of the palette -- and which works
+		 * for schemes added later without anybody editing them.
 		 */
 		{
-			0x000000, 0xe02020, 0x00cd00, 0xcdcd00,
-			0x2472c8, 0xcd00cd, 0x00cdcd, 0xe5e5e5,
+			0x000000, 0xcd0000, 0x00cd00, 0xcdcd00,
+			0x0000ee, 0xcd00cd, 0x00cdcd, 0xe5e5e5,
 			0x7f7f7f, 0xff0000, 0x00ff00, 0xffff00,
 			0x5c5cff, 0xff00ff, 0x00ffff, 0xffffff
 		},
@@ -184,4 +180,68 @@ QString bssh_colour_scheme_catalog::effective_id(const QString &stored) const {
 
 QString bssh_colour_scheme_catalog::default_id() const {
 	return QStringLiteral("default");
+}
+
+namespace {
+
+double srgb_channel(int value) {
+	const double c = value / 255.0;
+	return c <= 0.03928 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4);
+}
+
+} /* namespace */
+
+double bssh_relative_luminance(QRgb colour) {
+	const QColor c(colour);
+	return 0.2126 * srgb_channel(c.red()) + 0.7152 * srgb_channel(c.green()) +
+	        0.0722 * srgb_channel(c.blue());
+}
+
+double bssh_contrast_ratio(QRgb a, QRgb b) {
+	const double la = bssh_relative_luminance(a);
+	const double lb = bssh_relative_luminance(b);
+	return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
+}
+
+QRgb bssh_raise_contrast(QRgb colour, QRgb against) {
+	if (bssh_contrast_ratio(colour, against) >= BSSH_CONTRAST_FLOOR) return colour;
+
+	/*
+	 * Away from the background, because that is the only direction that
+	 * gains anything: a dark colour on a dark background has to get
+	 * lighter, and no amount of darkening will help it.
+	 */
+	const bool lighten = bssh_relative_luminance(against) < 0.5;
+
+	QColor start(colour);
+	float h = 0.0f;
+	float sat = 0.0f;
+	float l = 0.0f;
+	start.getHslF(&h, &sat, &l);
+
+	/*
+	 * Walked in small steps rather than solved, because the target is a
+	 * ratio in linear light and the knob is HSL lightness -- and because
+	 * stepping stops at the FIRST value that clears the floor, which is
+	 * the least the colour can be changed. A solved answer would be no
+	 * more accurate and would overshoot on saturated hues.
+	 */
+	for (int step = 1; step <= 100; ++step) {
+		const float moved = lighten ? l + (1.0f - l) * (step / 100.0f)
+		                             : l * (1.0f - step / 100.0f);
+
+		QColor candidate = QColor::fromHslF(h < 0.0f ? 0.0f : h, sat,
+		                                     qBound(0.0f, moved, 1.0f));
+		if (bssh_contrast_ratio(candidate.rgb(), against) >= BSSH_CONTRAST_FLOOR) {
+			return candidate.rgb();
+		}
+	}
+
+	/*
+	 * Nothing in the hue reached the floor -- a fully saturated blue on
+	 * mid grey cannot. White or black then, whichever side the background
+	 * is not: an ugly answer beats an unreadable one, and this is the
+	 * case the user turned the setting on for.
+	 */
+	return lighten ? qRgb(255, 255, 255) : qRgb(0, 0, 0);
 }
