@@ -143,20 +143,20 @@ void platform_test::the_system_scheme_is_never_unknown() {
 	 * sources say, a caller gets a usable answer and never has to invent
 	 * one for itself.
 	 */
-	const Qt::ColorScheme resolved = bssh_theme::resolved_system_scheme();
-	QVERIFY2(resolved == Qt::ColorScheme::Light || resolved == Qt::ColorScheme::Dark,
+	const bssh_appearance_t resolved = bssh_theme::resolved_system_appearance();
+	QVERIFY2(resolved == BSSH_APPEARANCE_LIGHT || resolved == BSSH_APPEARANCE_DARK,
 	          "resolving the system scheme must always land on light or dark");
 
 	const bssh_platform *platform = bssh_platform::instance();
 	QVERIFY(platform);
 
 	/* Stable between calls -- a theme that flickers is worse than a wrong one. */
-	QCOMPARE(platform->system_colour_scheme(), platform->system_colour_scheme());
+	QCOMPARE(platform->system_appearance(), platform->system_appearance());
 }
 
 void platform_test::the_palettes_are_actually_light_and_dark() {
-	const QPalette dark = bssh_theme::palette_for(Qt::ColorScheme::Dark);
-	const QPalette light = bssh_theme::palette_for(Qt::ColorScheme::Light);
+	const QPalette dark = bssh_theme::palette_for(BSSH_APPEARANCE_DARK);
+	const QPalette light = bssh_theme::palette_for(BSSH_APPEARANCE_LIGHT);
 
 	QVERIFY(dark.color(QPalette::Window).lightness() < 128);
 	QVERIFY(light.color(QPalette::Window).lightness() >= 128);
@@ -178,12 +178,12 @@ void platform_test::the_palettes_are_actually_light_and_dark() {
 }
 
 void platform_test::an_explicit_mode_ignores_the_system() {
-	QCOMPARE(bssh_theme::effective_scheme(bssh_theme::MODE_LIGHT), Qt::ColorScheme::Light);
-	QCOMPARE(bssh_theme::effective_scheme(bssh_theme::MODE_DARK), Qt::ColorScheme::Dark);
+	QCOMPARE(bssh_theme::effective_appearance(bssh_theme::MODE_LIGHT), BSSH_APPEARANCE_LIGHT);
+	QCOMPARE(bssh_theme::effective_appearance(bssh_theme::MODE_DARK), BSSH_APPEARANCE_DARK);
 
 	/* System follows detection, whatever that turns out to be here. */
-	QCOMPARE(bssh_theme::effective_scheme(bssh_theme::MODE_SYSTEM),
-	          bssh_theme::resolved_system_scheme());
+	QCOMPARE(bssh_theme::effective_appearance(bssh_theme::MODE_SYSTEM),
+	          bssh_theme::resolved_system_appearance());
 
 	/* Applying a mode really repaints, rather than only recording it. */
 	bssh_theme::apply(bssh_theme::MODE_DARK);

@@ -32,25 +32,25 @@ const char *const BSSH_SERVICE_CLASS = "se/vibes/beerssh/BsshService";
  * is right whenever it is asked. No Java is added for it (sec 17): this
  * is a field read through JNI, not glue that would be shorter in Kotlin.
  */
-Qt::ColorScheme android_night_mode() {
+bssh_appearance_t android_night_mode() {
 	const QJniObject context = QNativeInterface::QAndroidApplication::context();
-	if (!context.isValid()) return Qt::ColorScheme::Unknown;
+	if (!context.isValid()) return BSSH_APPEARANCE_UNKNOWN;
 
 	const QJniObject resources =
 		      context.callObjectMethod("getResources", "()Landroid/content/res/Resources;");
-	if (!resources.isValid()) return Qt::ColorScheme::Unknown;
+	if (!resources.isValid()) return BSSH_APPEARANCE_UNKNOWN;
 
 	const QJniObject config =
 		      resources.callObjectMethod("getConfiguration", "()Landroid/content/res/Configuration;");
-	if (!config.isValid()) return Qt::ColorScheme::Unknown;
+	if (!config.isValid()) return BSSH_APPEARANCE_UNKNOWN;
 
 	const int ui_mode = config.getField<jint>("uiMode");
 
 	/* Configuration.UI_MODE_NIGHT_MASK / _YES / _NO. */
 	switch (ui_mode & 0x30) {
-	case 0x20: return Qt::ColorScheme::Dark;
-	case 0x10: return Qt::ColorScheme::Light;
-	default:   return Qt::ColorScheme::Unknown;
+	case 0x20: return BSSH_APPEARANCE_DARK;
+	case 0x10: return BSSH_APPEARANCE_LIGHT;
+	default:   return BSSH_APPEARANCE_UNKNOWN;
 	}
 }
 
@@ -76,7 +76,7 @@ QJniObject android_context() {
 class bssh_platform_android : public bssh_platform {
 public:
 	bssh_platform_android() : m_keep_alive(false), m_status(QStringLiteral("Connected")) {
-		m_last_scheme = system_colour_scheme();
+		m_last_scheme = system_appearance();
 		if (qApp) qApp->installEventFilter(this);
 	}
 
@@ -225,29 +225,38 @@ public:
 	bool eventFilter(QObject *watched, QEvent *event) override {
 		if (event && (event->type() == QEvent::ThemeChange ||
 		               event->type() == QEvent::ApplicationPaletteChange)) {
-			const Qt::ColorScheme now = system_colour_scheme();
+			const bssh_appearance_t now = system_appearance();
 			if (now != m_last_scheme) {
 				m_last_scheme = now;
-				emit colour_scheme_changed();
+				emit appearance_changed();
 			}
 		}
 		return QObject::eventFilter(watched, event);
 	}
 
-	Qt::ColorScheme system_colour_scheme() const override {
+	bssh_appearance_t system_appearance() const override {
 		/*
 		 * Android's Configuration first, because it is the only source
 		 * here that is still correct after the user changes the setting
 		 * -- see android_night_mode().
 		 */
-		const Qt::ColorScheme night = android_night_mode();
-		if (night != Qt::ColorScheme::Unknown) return night;
+		const bssh_appearance_t night = android_night_mode();
+		if (night != BSSH_APPEARANCE_UNKNOWN) return night;
 
+		/*
+		 * Qt's hint, where the Qt being built against has one:
+		 * QStyleHints::colorScheme() arrived in 6.5 and the CI runner
+		 * ships 6.4. Everything below still answers without it, which is
+		 * why the chain has three sources rather than one.
+		 */
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 		const Qt::ColorScheme hinted = QGuiApplication::styleHints()->colorScheme();
-		if (hinted != Qt::ColorScheme::Unknown) return hinted;
+		if (hinted == Qt::ColorScheme::Dark) return BSSH_APPEARANCE_DARK;
+		if (hinted == Qt::ColorScheme::Light) return BSSH_APPEARANCE_LIGHT;
+#endif
 
 		const QColor window = startup_palette().color(QPalette::Window);
-		return window.lightness() < 128 ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
+		return window.lightness() < 128 ? BSSH_APPEARANCE_DARK : BSSH_APPEARANCE_LIGHT;
 	}
 
 	bool is_touch_primary() const override {
@@ -261,7 +270,7 @@ public:
 	}
 
 private:
-	mutable Qt::ColorScheme m_last_scheme = Qt::ColorScheme::Unknown;
+	mutable bssh_appearance_t m_last_scheme = BSSH_APPEARANCE_UNKNOWN;
 	bool m_keep_alive;
 	QString m_status;
 };

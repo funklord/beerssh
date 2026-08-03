@@ -3,7 +3,8 @@
 
 #include <QObject>
 #include <QPalette>
-#include <Qt>
+
+#include "platform/platform.h"
 
 /*
  * bssh_theme -- the app's light/dark appearance (project.md sec 6.2).
@@ -43,12 +44,12 @@ public:
 	static void apply(mode_t mode);
 
 	/* What MODE_SYSTEM currently resolves to; never Unknown. */
-	static Qt::ColorScheme resolved_system_scheme();
+	static bssh_appearance_t resolved_system_appearance();
 
 	/* What is actually being shown, whatever the mode asked for. */
-	static Qt::ColorScheme effective_scheme(mode_t mode);
+	static bssh_appearance_t effective_appearance(mode_t mode);
 
-	static QPalette palette_for(Qt::ColorScheme scheme);
+	static QPalette palette_for(bssh_appearance_t appearance);
 
 	static QString to_text(mode_t mode);
 	static mode_t from_text(const QString &text);

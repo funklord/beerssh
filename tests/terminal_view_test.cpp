@@ -532,10 +532,27 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 	QVERIFY2(ink_in_last_cell,
 	         "the last character of a full-width run must be drawn in the last column");
 
-	/* And nothing spills past the grid into the right-hand margin. */
+	/*
+	 * And nothing spills past the grid into the right-hand margin.
+	 *
+	 * Near the background rather than exactly it. Antialiasing bleeds a
+	 * little differently between Qt versions -- measured at 3/255 on
+	 * Qt 6.4 against 0 on 6.8 -- and an exact comparison turns that into
+	 * a failing build on the older one while testing nothing extra. A
+	 * glyph actually drawn here would be the foreground colour, which is
+	 * ~180/255 away, so the tolerance is nowhere near what this is
+	 * looking for.
+	 */
+	const int tolerance = 12;
 	for (int x = cols * cell_width; x < rendered.width(); ++x) {
 		for (int y = 0; y < view.cell_height(); ++y) {
-			QCOMPARE(rendered.pixelColor(x, y), background);
+			const QColor pixel = rendered.pixelColor(x, y);
+			const int drift = qMax(qAbs(pixel.red() - background.red()),
+			                        qMax(qAbs(pixel.green() - background.green()),
+			                              qAbs(pixel.blue() - background.blue())));
+			QVERIFY2(drift <= tolerance,
+			          qPrintable(QStringLiteral("ink at x=%1 y=%2: %3 against %4")
+			                             .arg(x).arg(y).arg(pixel.name(), background.name())));
 		}
 	}
 }

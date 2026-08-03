@@ -591,13 +591,27 @@ void bssh_libssh_worker::drain() {
 		 * machine saw only a dead session and reopened the shell the
 		 * user had just exited -- endlessly.
 		 */
-		uint32_t exit_code = 0;
+		/*
+		 * ssh_channel_get_exit_state arrived in libssh 0.11 and this has
+		 * to build against 0.10, which is what Ubuntu 24.04 -- and so
+		 * the CI runner -- ships. The older call returns only the code,
+		 * which is all this uses: the signal and core-dump flags are
+		 * read to be freed, not to be reported.
+		 */
+		int exit_code = 0;
+#if defined(LIBSSH_VERSION_INT) && LIBSSH_VERSION_INT >= SSH_VERSION_INT(0, 11, 0)
+		uint32_t code = 0;
 		char *exit_signal = nullptr;
 		int core_dumped = 0;
-		ssh_channel_get_exit_state(m_channel, &exit_code, &exit_signal, &core_dumped);
+		ssh_channel_get_exit_state(m_channel, &code, &exit_signal, &core_dumped);
 		if (exit_signal) ssh_string_free_char(exit_signal);
+		exit_code = int(code);
+#else
+		exit_code = ssh_channel_get_exit_status(m_channel);
+		if (exit_code < 0) exit_code = 0;
+#endif
 
-		emit exited(int(exit_code));
+		emit exited(exit_code);
 
 		teardown();
 		emit state_changed(bssh_ssh_session::DISCONNECTED);

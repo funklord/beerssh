@@ -1636,6 +1636,30 @@ The desktop build is what makes this project testable at all — use it.
   document is arranged to prevent, and only CI catches it reliably.
 - Run the host unit tests (§12.3) and the **font validation script** (§9.6).
 - Run the Android x86_64 emulator for smoke tests.
+- **The runner's toolchain is older than the developer's, and that is the whole
+  point of it.** `ubuntu-latest` is Ubuntu 24.04: **Qt 6.4.2** and **libssh
+  0.10.6**, against 6.8.2 and 0.11.2 on the machine this was written on. Two
+  build-breaking uses of newer APIs got in unnoticed because they compile
+  perfectly here — `Qt::ColorScheme` (6.5+) in the platform interface, and
+  `ssh_channel_get_exit_state` (libssh 0.11+) in the shell-exit path. Neither is
+  reachable by any amount of local testing.
+  The fix for the first is the rule the SSH layer already follows: **no library
+  type in an interface**. `bssh_appearance_t` is this project's own, so a Qt
+  version bump cannot pin every caller; the Qt calls that do exist are behind
+  `QT_VERSION_CHECK`, and the detection chain still answers without them —
+  which on Linux it was already doing better than Qt anyway (§6.2). The second is
+  a version guard falling back to `ssh_channel_get_exit_status`, which returns
+  the only field that path actually used.
+  **Reproduce the runner in a container before pushing** when anything touches a
+  platform or library API: `docker run ubuntu:24.04`, install exactly the
+  packages the workflow names, `make && make test`. That is what found all of
+  this, plus an indentation regression the local gate had not been re-run
+  against.
+- **Pixel assertions get a tolerance, not equality.** Antialiasing bleeds
+  differently between Qt versions — 3/255 on 6.4 against 0 on 6.8 — so a test
+  demanding an exact background colour in the margin fails on the older one while
+  testing nothing extra. A glyph genuinely drawn there is ~180/255 away, so the
+  tolerance is nowhere near what the test is looking for.
 - **Every `PKGCONFIG` line has a package named in the workflow, even when
   something else would drag it in.** `libsecret-1-dev` was satisfied for months
   only because the runner image happened to carry it, and `libssl-dev` still

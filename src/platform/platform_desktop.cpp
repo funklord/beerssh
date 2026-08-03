@@ -30,29 +30,29 @@
  * the value changes while running and this is a DBus round trip on a
  * settings page, not on a paint.
  */
-static Qt::ColorScheme portal_colour_scheme() {
-	if (!QDBusConnection::sessionBus().isConnected()) return Qt::ColorScheme::Unknown;
+static bssh_appearance_t portal_appearance() {
+	if (!QDBusConnection::sessionBus().isConnected()) return BSSH_APPEARANCE_UNKNOWN;
 
 	QDBusInterface settings(QStringLiteral("org.freedesktop.portal.Desktop"),
 	                         QStringLiteral("/org/freedesktop/portal/desktop"),
 	                         QStringLiteral("org.freedesktop.portal.Settings"),
 	                         QDBusConnection::sessionBus());
-	if (!settings.isValid()) return Qt::ColorScheme::Unknown;
+	if (!settings.isValid()) return BSSH_APPEARANCE_UNKNOWN;
 
 	const QDBusReply<QDBusVariant> reply =
 	        settings.call(QStringLiteral("Read"), QStringLiteral("org.freedesktop.appearance"),
 	                       QStringLiteral("color-scheme"));
-	if (!reply.isValid()) return Qt::ColorScheme::Unknown;
+	if (!reply.isValid()) return BSSH_APPEARANCE_UNKNOWN;
 
 	/* Doubly wrapped: Read returns a variant holding a variant. */
 	QVariant value = reply.value().variant();
-	if (value.metaType().id() == QMetaType::QVariantMap) return Qt::ColorScheme::Unknown;
+	if (value.metaType().id() == QMetaType::QVariantMap) return BSSH_APPEARANCE_UNKNOWN;
 	while (value.canConvert<QDBusVariant>()) value = value.value<QDBusVariant>().variant();
 
 	switch (value.toUInt()) {
-	case 1: return Qt::ColorScheme::Dark;
-	case 2: return Qt::ColorScheme::Light;
-	default: return Qt::ColorScheme::Unknown;
+	case 1: return BSSH_APPEARANCE_DARK;
+	case 2: return BSSH_APPEARANCE_LIGHT;
+	default: return BSSH_APPEARANCE_UNKNOWN;
 	}
 }
 
@@ -175,8 +175,10 @@ public:
 	 * behaviour.
 	 */
 	void watch_colour_scheme() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 		connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
-		         this, [this](Qt::ColorScheme) { emit colour_scheme_changed(); });
+		         this, [this](Qt::ColorScheme) { emit appearance_changed(); });
+#endif
 
 		QDBusConnection::sessionBus().connect(
 		        QString(), QStringLiteral("/org/freedesktop/portal/desktop"),
@@ -184,14 +186,23 @@ public:
 		        QStringLiteral("SettingChanged"), this, SLOT(on_portal_setting_changed(QString, QString, QDBusVariant)));
 	}
 
-	Qt::ColorScheme system_colour_scheme() const override {
+	bssh_appearance_t system_appearance() const override {
 		/*
 		 * 1. Qt, where a platform theme is engaged. Correct on Windows,
 		 *    macOS, and any Linux session with the KDE or GTK platform
 		 *    theme plugin loaded.
 		 */
+		/*
+		 * Qt's hint, where the Qt being built against has one:
+		 * QStyleHints::colorScheme() arrived in 6.5 and the CI runner
+		 * ships 6.4. Everything below still answers without it, which is
+		 * why the chain has three sources rather than one.
+		 */
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 		const Qt::ColorScheme hinted = QGuiApplication::styleHints()->colorScheme();
-		if (hinted != Qt::ColorScheme::Unknown) return hinted;
+		if (hinted == Qt::ColorScheme::Dark) return BSSH_APPEARANCE_DARK;
+		if (hinted == Qt::ColorScheme::Light) return BSSH_APPEARANCE_LIGHT;
+#endif
 
 		/*
 		 * 2. The XDG desktop portal, which is where the preference
@@ -201,8 +212,8 @@ public:
 		 *    desktop for anyone whose distribution has not wired the
 		 *    platform theme up.
 		 */
-		const Qt::ColorScheme from_portal = portal_colour_scheme();
-		if (from_portal != Qt::ColorScheme::Unknown) return from_portal;
+		const bssh_appearance_t from_portal = portal_appearance();
+		if (from_portal != BSSH_APPEARANCE_UNKNOWN) return from_portal;
 
 		/*
 		 * 3. The palette we were given. If something themed this app,
@@ -211,7 +222,7 @@ public:
 		 *    nothing when the first two have already answered.
 		 */
 		const QColor window = startup_palette().color(QPalette::Window);
-		return window.lightness() < 128 ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
+		return window.lightness() < 128 ? BSSH_APPEARANCE_DARK : BSSH_APPEARANCE_LIGHT;
 	}
 
 private slots:
@@ -220,7 +231,7 @@ private slots:
 		Q_UNUSED(value);
 		if (space != QStringLiteral("org.freedesktop.appearance")) return;
 		if (key != QStringLiteral("color-scheme")) return;
-		emit colour_scheme_changed();
+		emit appearance_changed();
 	}
 
 public:

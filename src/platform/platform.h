@@ -22,6 +22,26 @@
  *                                 Android, QNetworkInformation on desktop
  *   M6  secret_store()            bssh_secret_store, per project.md sec 11
  */
+/*
+ * Light or dark, as this project's own type (project.md sec 6.2).
+ *
+ * Deliberately NOT Qt::ColorScheme, which arrived in Qt 6.5 and is
+ * therefore absent from the Qt the CI runner ships -- Ubuntu 24.04 is on
+ * 6.4.2. The same rule the SSH layer follows applies here: a library type
+ * in an interface pins every caller to that library's version, and this
+ * one silently pinned the whole app to a Qt newer than the one it is
+ * built against.
+ *
+ * Named for appearance rather than "colour scheme" because a terminal
+ * colour scheme (sec 10.2) is an unrelated thing and having two of them
+ * under one name is how they get confused.
+ */
+enum bssh_appearance_t {
+	BSSH_APPEARANCE_UNKNOWN,
+	BSSH_APPEARANCE_LIGHT,
+	BSSH_APPEARANCE_DARK
+};
+
 class bssh_platform : public QObject {
 	Q_OBJECT
 
@@ -119,7 +139,7 @@ public:
 	 * signal, no palette change. The palette is set by bssh_theme
 	 * instead, which works the same everywhere.
 	 */
-	virtual Qt::ColorScheme system_colour_scheme() const = 0;
+	virtual bssh_appearance_t system_appearance() const = 0;
 
 protected:
 	/*
@@ -148,7 +168,7 @@ signals:
 	 * it live is most of what "follows the system" means to a user: a
 	 * theme that is only right at startup is one they will call broken.
 	 */
-	void colour_scheme_changed();
+	void appearance_changed();
 
 	/*
 	 * Connectivity changed and any live session should re-check itself:

@@ -90,9 +90,9 @@ QPalette build_light() {
 	return p;
 }
 
-Qt::ColorScheme g_applied = Qt::ColorScheme::Unknown;
+bssh_appearance_t g_applied = BSSH_APPEARANCE_UNKNOWN;
 
-void repaint_everything(Qt::ColorScheme scheme) {
+void repaint_everything(bssh_appearance_t appearance) {
 	/*
 	 * Nothing to do if it is already what is on screen. Repainting every
 	 * widget for no change is wasteful; more importantly, setPalette
@@ -100,10 +100,10 @@ void repaint_everything(Qt::ColorScheme scheme) {
 	 * notice a SYSTEM change, so an unguarded re-apply is a loop waiting
 	 * for a platform that reports both through one channel.
 	 */
-	if (scheme == g_applied) return;
-	g_applied = scheme;
+	if (appearance == g_applied) return;
+	g_applied = appearance;
 
-	QApplication::setPalette(bssh_theme::palette_for(scheme));
+	QApplication::setPalette(bssh_theme::palette_for(appearance));
 
 	/*
 	 * Qt is told as well, so anything that asks IT rather than us gets
@@ -111,17 +111,21 @@ void repaint_everything(Qt::ColorScheme scheme) {
 	 * disagree with the palette around it. Ignored on the platforms where
 	 * it does nothing, which is why it is not the mechanism.
 	 */
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
 	if (QGuiApplication::styleHints()) {
-		QGuiApplication::styleHints()->setColorScheme(scheme);
+		QGuiApplication::styleHints()->setColorScheme(
+			      appearance == BSSH_APPEARANCE_DARK ? Qt::ColorScheme::Dark
+			                                          : Qt::ColorScheme::Light);
 	}
+#endif
 }
 
 } /* namespace */
 
-Qt::ColorScheme bssh_theme::resolved_system_scheme() {
+bssh_appearance_t bssh_theme::resolved_system_appearance() {
 	const bssh_platform *platform = bssh_platform::instance();
-	const Qt::ColorScheme detected =
-	        platform ? platform->system_colour_scheme() : Qt::ColorScheme::Unknown;
+	const bssh_appearance_t detected =
+	        platform ? platform->system_appearance() : BSSH_APPEARANCE_UNKNOWN;
 
 	/*
 	 * Light when nothing will say. A guess is unavoidable at this point,
@@ -129,25 +133,25 @@ Qt::ColorScheme bssh_theme::resolved_system_scheme() {
 	 * actually drew if it turns out to be light -- the more damaging way
 	 * round to be wrong.
 	 */
-	return detected == Qt::ColorScheme::Unknown ? Qt::ColorScheme::Light : detected;
+	return detected == BSSH_APPEARANCE_UNKNOWN ? BSSH_APPEARANCE_LIGHT : detected;
 }
 
-Qt::ColorScheme bssh_theme::effective_scheme(mode_t mode) {
+bssh_appearance_t bssh_theme::effective_appearance(mode_t mode) {
 	switch (mode) {
-	case MODE_LIGHT: return Qt::ColorScheme::Light;
-	case MODE_DARK:  return Qt::ColorScheme::Dark;
+	case MODE_LIGHT: return BSSH_APPEARANCE_LIGHT;
+	case MODE_DARK:  return BSSH_APPEARANCE_DARK;
 	case MODE_SYSTEM: break;
 	}
-	return resolved_system_scheme();
+	return resolved_system_appearance();
 }
 
-QPalette bssh_theme::palette_for(Qt::ColorScheme scheme) {
-	return scheme == Qt::ColorScheme::Dark ? build_dark() : build_light();
+QPalette bssh_theme::palette_for(bssh_appearance_t appearance) {
+	return appearance == BSSH_APPEARANCE_DARK ? build_dark() : build_light();
 }
 
 void bssh_theme::apply(mode_t mode) {
 	g_mode = mode;
-	repaint_everything(effective_scheme(mode));
+	repaint_everything(effective_appearance(mode));
 
 	if (g_following) return;
 	g_following = true;
@@ -161,18 +165,20 @@ void bssh_theme::apply(mode_t mode) {
 	 */
 	const bssh_platform *platform = bssh_platform::instance();
 	if (platform) {
-		QObject::connect(platform, &bssh_platform::colour_scheme_changed,
+		QObject::connect(platform, &bssh_platform::appearance_changed,
 		                  qApp, [] {
-			if (g_mode == MODE_SYSTEM) repaint_everything(resolved_system_scheme());
+			if (g_mode == MODE_SYSTEM) repaint_everything(resolved_system_appearance());
 		});
 	}
 
+#if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
 	if (QGuiApplication::styleHints()) {
 		QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
 		                  qApp, [](Qt::ColorScheme) {
-			if (g_mode == MODE_SYSTEM) repaint_everything(resolved_system_scheme());
+			if (g_mode == MODE_SYSTEM) repaint_everything(resolved_system_appearance());
 		});
 	}
+#endif
 }
 
 QString bssh_theme::to_text(mode_t mode) {
