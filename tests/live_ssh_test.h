@@ -63,6 +63,18 @@ private slots:
 	 * FSM engages on a genuine drop and gets a session back afterwards.
 	 */
 	void a_dropped_session_reconnects_when_the_link_returns();
+
+	/*
+	 * sec 10.5's ProxyJump. The thing worth proving is not that the
+	 * option is stored -- a unit test does that -- but that an SSH
+	 * session really runs end-to-end inside a direct-tcpip channel that
+	 * another SSH session is carrying, with the target's key checked and
+	 * the target's shell answering. Nothing but a real server can show
+	 * that, and the failure mode if the pump is wrong is a handshake that
+	 * hangs rather than one that errors.
+	 */
+	void a_host_is_reachable_through_a_jump_host();
+	void an_unknown_jump_host_is_refused_rather_than_prompted_about();
 };
 
 #endif /* BSSH_LIVE_SSH_TEST_H */

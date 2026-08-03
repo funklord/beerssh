@@ -20,6 +20,7 @@ struct outcome_t {
 	bool key_unknown = false;
 	bool key_changed = false;
 	bool key_revoked = false;
+	QString reason;
 };
 
 /*
@@ -48,7 +49,8 @@ QString test_key() {
  * otherwise stall the whole run, and "the server never answered" is a
  * result worth reporting rather than one to wait forever for.
  */
-outcome_t attempt(const QString &identity, bool trust_host_key = true)
+outcome_t attempt(const QString &identity, bool trust_host_key = true,
+	                 const QString &jump = QString())
 {
 	outcome_t out;
 
@@ -84,7 +86,10 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true)
 	QObject::connect(session, &bssh_ssh_session::key_passphrase_required,
 		                [&out, &loop] { out.passphrase_asked = true; loop.quit(); });
 	QObject::connect(session, &bssh_ssh_session::failed,
-		                [&loop](const QString &) { loop.quit(); });
+		                [&out, &loop](const QString &reason) {
+		out.reason = reason;
+		loop.quit();
+	});
 
 	QObject::connect(session, &bssh_ssh_session::state_changed,
 		                [&](bssh_ssh_session::state_t state) {
@@ -104,6 +109,7 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true)
 	});
 
 	if (!identity.isEmpty()) session->set_identity_file(identity);
+	if (!jump.isEmpty()) session->set_proxy_jump(jump);
 	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
 		                        qEnvironmentVariable("USER"));
 
@@ -693,4 +699,91 @@ void live_ssh_test::a_revoked_key_is_refused_not_offered()
 	QVERIFY2(!out.key_unknown,
 	          "and must NOT be offered as a new host -- accepting would re-trust it");
 	QVERIFY2(!out.connected, "a revoked key must not connect");
+}
+
+void live_ssh_test::a_host_is_reachable_through_a_jump_host()
+{
+	if (!server_available()) return;
+	if (phase() == QStringLiteral("rekeyed")) {
+		QSKIP("the host key has been swapped; authentication is refused by design here");
+	}
+
+	/*
+	 * The one sshd is both bastion and target: it carries a direct-tcpip
+	 * channel to itself, and a SECOND, independent SSH session runs
+	 * inside that channel. Two hosts would prove nothing this does not --
+	 * the tunnel cannot tell where the far end is -- and needing two
+	 * servers would make this check something nobody runs.
+	 *
+	 * Trust first, deliberately. The bastion is verified and never
+	 * prompted about, so its key has to be recorded before it can be used
+	 * as one; doing it here rather than relying on an earlier test keeps
+	 * this from passing only in a particular order.
+	 */
+	const outcome_t direct = attempt(test_key());
+	QVERIFY2(direct.connected, "the server has to be reachable directly first");
+
+	const QString jump = QStringLiteral("%1@127.0.0.1:%2")
+	                             .arg(qEnvironmentVariable("USER"))
+	                             .arg(test_port());
+
+	/*
+	 * And a bastion that is not there must NOT connect. Without this the
+	 * check below passes on a build that ignores the jump host entirely
+	 * and simply dials the target -- which is exactly what it looked like
+	 * when this was written, since the target here is the same machine.
+	 */
+	const outcome_t nowhere =
+	        attempt(test_key(), true, QStringLiteral("127.0.0.1:1"));
+	QVERIFY2(!nowhere.connected,
+	          "a jump host that is not listening must stop the connection");
+
+	const outcome_t out = attempt(test_key(), true, jump);
+
+	QVERIFY2(out.connected, qPrintable(QStringLiteral(
+	                 "a session must run inside the jump host's channel: %1").arg(out.reason)));
+	QVERIFY2(out.shell_replied,
+	          "bytes must travel both ways through the tunnel, not just the handshake");
+	QVERIFY2(!out.password_asked,
+	          "the target's own key authentication must happen inside the tunnel");
+	/*
+	 * The target's key was already trusted by the direct attempt above,
+	 * and it is the SAME key seen through the tunnel -- which is the
+	 * point. A jump host that terminated the session would present its
+	 * own key here, and this would come back unknown.
+	 */
+	QVERIFY2(!out.key_unknown,
+	          "the key seen through the tunnel must be the target's own");
+}
+
+void live_ssh_test::an_unknown_jump_host_is_refused_rather_than_prompted_about()
+{
+	if (!server_available()) return;
+	if (phase() == QStringLiteral("rekeyed")) {
+		QSKIP("the host key has been swapped; there is no trusted state to remove");
+	}
+
+	/*
+	 * A trust-on-first-use prompt for a machine the user did not ask to
+	 * visit, while the connection they DID ask for waits behind it, is a
+	 * prompt nobody can answer sensibly -- so an unknown bastion is a
+	 * refusal with a reason. What this guards against is the easy
+	 * alternative: connecting to it anyway.
+	 */
+	hide_openssh_known_hosts(true);
+	forget_all_hosts();
+
+	const QString jump = QStringLiteral("%1@127.0.0.1:%2")
+	                             .arg(qEnvironmentVariable("USER"))
+	                             .arg(test_port());
+	const outcome_t out = attempt(test_key(), true, jump);
+
+	hide_openssh_known_hosts(false);
+
+	QVERIFY2(!out.connected, "an unknown jump host must not be used anyway");
+	QVERIFY2(!out.key_unknown,
+	          "an unknown jump host must be refused, not prompted about");
+	QVERIFY2(out.reason.contains(QStringLiteral("jump host")),
+	          qPrintable(QStringLiteral("the reason must name what went wrong: %1")
+	                             .arg(out.reason)));
 }

@@ -48,6 +48,7 @@ SOURCES += \
     src/platform/platform.cpp \
     src/platform/secret_store.cpp \
     src/ssh/ssh_session.cpp \
+    src/ssh/jump_tunnel.cpp \
     src/ssh/ssh_session_libssh.cpp \
     src/term/emulator_vterm.cpp \
     src/term/colour_scheme.cpp \
@@ -90,6 +91,7 @@ HEADERS += \
     src/platform/platform.h \
     src/platform/secret_store.h \
     src/ssh/ssh_session.h \
+    src/ssh/jump_tunnel.h \
     src/ssh/ssh_session_libssh.h \
     src/term/emulator.h \
     src/term/colour_scheme.h \

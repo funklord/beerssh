@@ -26,6 +26,16 @@ private slots:
 	void junk_does_not_produce_junk_hosts();
 	void only_the_ticked_hosts_are_imported();
 	void an_import_never_overwrites_an_existing_host();
+
+	/*
+	 * The jump-host spec, which is a string OpenSSH defines and this app
+	 * has to take apart before it can dial anything (sec 10.5). Getting
+	 * it wrong is not a parse error anyone sees -- it is a connection to
+	 * the wrong machine, or to the right one on the wrong port.
+	 */
+	void a_jump_host_spec_is_taken_apart();
+	void a_chain_of_jump_hosts_is_refused_not_truncated();
+
 };
 
 #endif /* BSSH_SSH_CONFIG_TEST_H */

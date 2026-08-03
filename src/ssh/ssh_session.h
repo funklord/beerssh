@@ -138,6 +138,21 @@ public:
 	 */
 	virtual void set_identity_file(const QString &path) = 0;
 
+	/*
+	 * The bastion to reach the host through, as OpenSSH's ProxyJump
+	 * writes it, or empty for a direct connection (sec 10.5). Set before
+	 * connecting -- the route to a host is chosen when the connection is
+	 * made and cannot be changed under a live one.
+	 *
+	 * The SSH session to the host runs end-to-end INSIDE the tunnel: the
+	 * host key checked, the credentials offered, and the shell opened are
+	 * all the target's, and the bastion carries bytes it cannot read.
+	 * That is the whole point of ProxyJump over logging in and typing
+	 * ssh again, and it is why this is a transport option rather than a
+	 * different way of spelling the host.
+	 */
+	virtual void set_proxy_jump(const QString &spec) = 0;
+
 	/* Answers host_key_unknown/host_key_changed: trust it and continue. */
 	virtual void accept_host_key() = 0;
 

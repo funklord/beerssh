@@ -81,7 +81,9 @@ public:
 	bool compression() const { return m_compression; }
 
 	void set_identity_file(const QString &path) override { m_identity_file = path; }
+	void set_proxy_jump(const QString &spec) override { m_proxy_jump = spec; }
 	QString identity_file() const { return m_identity_file; }
+	QString proxy_jump() const { return m_proxy_jump; }
 	void accept_host_key() override { m_host_key_accepted = true; }
 	void supply_key_passphrase(const QString &passphrase) override { m_passphrase = passphrase; }
 
@@ -95,6 +97,7 @@ public:
 
 private:
 	QString m_identity_file;
+	QString m_proxy_jump;
 	QList<QByteArray> m_script;
 	QByteArray m_written;
 	QString m_fail_reason;

@@ -2,6 +2,8 @@
 
 #include "ssh_config_test.h"
 #include "model/ssh_config.h"
+
+#include "ssh/jump_tunnel.h"
 #include "model/profile_store.h"
 #include "ui/ssh_config_import.h"
 
@@ -220,6 +222,65 @@ void ssh_config_test::unsupported_directives_are_reported_not_dropped() {
 	        "Host keyed\n  HostName keyed.example.com\n  IdentityFile ~/.ssh/id_only\n"));
 	QVERIFY2(!find(keyed, QStringLiteral("keyed")).has_unsupported(),
 	          "a named key is imported, so it must not be reported as lost");
+}
+
+void ssh_config_test::a_jump_host_spec_is_taken_apart() {
+	const QString me = QStringLiteral("local");
+
+	const bssh_jump_tunnel::hop_t bare =
+	        bssh_jump_tunnel::parse(QStringLiteral("bastion.example.com"), me);
+	QVERIFY(bare.valid);
+	QCOMPARE(bare.host, QStringLiteral("bastion.example.com"));
+	QCOMPARE(bare.port, quint16(22));
+	/*
+	 * The user we would have used anyway. OpenSSH's ProxyJump inherits
+	 * the connection's user when the spec does not name one, and a
+	 * bastion dialled as somebody else is a login failure with nothing on
+	 * screen to explain it.
+	 */
+	QCOMPARE(bare.user, me);
+
+	const bssh_jump_tunnel::hop_t full =
+	        bssh_jump_tunnel::parse(QStringLiteral("jane@bastion.example.com:2222"), me);
+	QVERIFY(full.valid);
+	QCOMPARE(full.host, QStringLiteral("bastion.example.com"));
+	QCOMPARE(full.user, QStringLiteral("jane"));
+	QCOMPARE(full.port, quint16(2222));
+
+	/* Whitespace around a pasted value is not part of the hostname. */
+	const bssh_jump_tunnel::hop_t padded =
+	        bssh_jump_tunnel::parse(QStringLiteral("  bastion.example.com  "), me);
+	QVERIFY(padded.valid);
+	QCOMPARE(padded.host, QStringLiteral("bastion.example.com"));
+
+	/*
+	 * A colon that is not a port. An IPv6 literal is written [::1] in
+	 * this position, and splitting it on its last colon would dial
+	 * something that is not a machine.
+	 */
+	const bssh_jump_tunnel::hop_t v6 =
+	        bssh_jump_tunnel::parse(QStringLiteral("[2001:db8::1]"), me);
+	QVERIFY(v6.valid);
+	QCOMPARE(v6.host, QStringLiteral("[2001:db8::1]"));
+	QCOMPARE(v6.port, quint16(22));
+
+	/* Nothing typed is a direct connection, not a broken jump host. */
+	QVERIFY(!bssh_jump_tunnel::parse(QString(), me).valid);
+	QVERIFY(!bssh_jump_tunnel::parse(QStringLiteral("   "), me).valid);
+}
+
+void ssh_config_test::a_chain_of_jump_hosts_is_refused_not_truncated() {
+	/*
+	 * Taking only the first hop of "a,b" would connect through a machine
+	 * the user named as a STEP and treat it as the destination's gateway.
+	 * That is a different route than the one they wrote, and it either
+	 * fails confusingly or -- worse -- works, by a path nobody chose.
+	 */
+	const bssh_jump_tunnel::hop_t chain = bssh_jump_tunnel::parse(
+	        QStringLiteral("one.example.com,two.example.com"), QStringLiteral("local"));
+	QVERIFY2(!chain.valid, "a chain must be refused rather than half-honoured");
+	QVERIFY2(chain.host != QStringLiteral("one.example.com"),
+	          "the first hop must not be mistaken for the whole route");
 }
 
 void ssh_config_test::junk_does_not_produce_junk_hosts() {

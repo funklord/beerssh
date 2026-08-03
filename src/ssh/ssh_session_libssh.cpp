@@ -1,5 +1,7 @@
 #include "ssh/ssh_session_libssh.h"
 
+#include "ssh/jump_tunnel.h"
+
 #include "platform/platform.h"
 
 #include <QDir>
@@ -212,6 +214,7 @@ public slots:
 	void do_set_term(const QString &term);
 	void do_set_compression(bool compression);
 	void do_set_identity_file(const QString &path);
+	void do_set_proxy_jump(const QString &spec);
 	void apply_identity_file();
 	void drain();
 
@@ -267,6 +270,10 @@ private:
 	 */
 	QString m_host;
 	quint16 m_port = 22;
+
+	/* ProxyJump, and the tunnel it needs while a session is up. */
+	QString m_proxy_jump;
+	bssh_jump_tunnel *m_jump = nullptr;
 	bool m_compression;
 };
 
@@ -282,6 +289,12 @@ void bssh_libssh_worker::fail(const QString &reason) {
 }
 
 void bssh_libssh_worker::teardown() {
+	/*
+	 * The tunnel goes after the session that was using it: the target's
+	 * descriptor is one end of its socket pair, and freeing the pump
+	 * first would pull the floor out from under ssh_disconnect.
+	 */
+
 	delete m_notifier;
 	m_notifier = nullptr;
 	delete m_poll;
@@ -298,6 +311,12 @@ void bssh_libssh_worker::teardown() {
 		ssh_disconnect(m_session);
 		ssh_free(m_session);
 		m_session = nullptr;
+	}
+
+	if (m_jump) {
+		m_jump->close();
+		delete m_jump;
+		m_jump = nullptr;
 	}
 }
 
@@ -665,6 +684,32 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	emit state_changed(bssh_ssh_session::RESOLVING);
 	emit state_changed(bssh_ssh_session::CONNECTING);
 
+	/*
+	 * Through a bastion, when one is named. The tunnel carries the whole
+	 * handshake below, so it has to be up and pumping before ssh_connect
+	 * is called -- and the session is handed a descriptor rather than a
+	 * host, which is why SSH_OPTIONS_HOST above stays the TARGET's name:
+	 * that is what the host key is checked against and what a
+	 * known_hosts entry is filed under.
+	 */
+	if (!m_proxy_jump.isEmpty()) {
+		m_jump = new bssh_jump_tunnel(this);
+
+		const bssh_jump_tunnel::hop_t hop =
+		        bssh_jump_tunnel::parse(m_proxy_jump, user);
+		const int fd = m_jump->open(hop, host, port, primary_known_hosts_path(),
+		                             m_identity_file);
+		if (fd < 0) {
+			const QString why = m_jump->why();
+			delete m_jump;
+			m_jump = nullptr;
+			fail(why);
+			return;
+		}
+
+		ssh_options_set(m_session, SSH_OPTIONS_FD, &fd);
+	}
+
 	if (ssh_connect(m_session) != SSH_OK) {
 		fail(session_error());
 		return;
@@ -827,6 +872,15 @@ void bssh_libssh_worker::do_set_identity_file(const QString &path) {
 
 	/* Applied now if there is a session, at connect time otherwise. */
 	apply_identity_file();
+}
+
+void bssh_libssh_worker::do_set_proxy_jump(const QString &spec) {
+	/*
+	 * Applied at connect time, like compression: the route to a host is
+	 * decided when the connection is made and cannot be changed under a
+	 * live one.
+	 */
+	m_proxy_jump = spec;
 }
 
 void bssh_libssh_worker::do_set_compression(bool compression) {
@@ -1044,6 +1098,12 @@ void bssh_ssh_session_libssh::set_compression(bool compression) {
 void bssh_ssh_session_libssh::set_identity_file(const QString &path) {
 	QMetaObject::invokeMethod(m_worker, [this, path] {
 		m_worker->do_set_identity_file(path);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::set_proxy_jump(const QString &spec) {
+	QMetaObject::invokeMethod(m_worker, [this, spec] {
+		m_worker->do_set_proxy_jump(spec);
 	}, Qt::QueuedConnection);
 }
 

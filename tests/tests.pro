@@ -53,6 +53,7 @@ SOURCES += \
     fake_ssh_session.cpp \
     ../src/input/input_router.cpp \
     ../src/ssh/ssh_session.cpp \
+    ../src/ssh/jump_tunnel.cpp \
     ../src/ssh/ssh_session_libssh.cpp \
     ../src/term/emulator_vterm.cpp \
     ../src/term/colour_scheme.cpp \
@@ -118,6 +119,7 @@ HEADERS += \
     terminal_view_test.h \
     ../src/input/input_router.h \
     ../src/ssh/ssh_session.h \
+    ../src/ssh/jump_tunnel.h \
     ../src/ssh/ssh_session_libssh.h \
     ../src/term/emulator.h \
     ../src/term/graphics_internal.h \

@@ -37,6 +37,7 @@ public:
 	void set_term(const QString &term) override;
 	void set_compression(bool compression) override;
 	void set_identity_file(const QString &path) override;
+	void set_proxy_jump(const QString &spec) override;
 	void disconnect_from_host() override;
 	void accept_host_key() override;
 	void supply_key_passphrase(const QString &passphrase) override;
