@@ -22,6 +22,8 @@
 #                        (needs docker; sec 12.4)
 #   make check-ssh    -- the SSH transport against a throwaway sshd
 #                        (needs sshd; sec 12.3)
+#   make check-keepalive -- dead-peer detection against a black-holed
+#                        link (needs docker + NET_ADMIN; sec 5.3)
 #   make fonts        -- fetch the curated font set (sec 9.2) into fonts/;
 #                        not needed to build, see FONTS below
 #   make fonts-list   -- show the set and its pinned versions
@@ -260,6 +262,13 @@ check-ci:
 # binding is the only layer a fake cannot exercise.
 check-ssh: $(TEST_BIN)
 	./tools/check-ssh.sh
+
+# sec 5.3's dead-peer detection against a link whose packets vanish.
+# Needs docker and NET_ADMIN -- a closed socket is not a dropped link, and
+# only iptables can make packets disappear rather than be refused. Slow by
+# construction: the budget it verifies is about a minute.
+check-keepalive:
+	./tools/check-keepalive.sh
 
 # --- the curated font set (project.md sec 9) --------------------------------
 # Not a build dependency: the app runs without it, falling back to whatever
@@ -546,7 +555,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style check-ci check-ssh fonts fonts-list check-fonts android-fonts uninstall \
+.PHONY: all run test bench style check-ci check-ssh check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help

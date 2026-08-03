@@ -1640,6 +1640,14 @@ The desktop build is what makes this project testable at all — use it.
   and an sshd on a spare loopback port taking that one key and no password. Nobody's real
   `~/.ssh` is read or written. Without the server the tests **skip** rather than
   fail, so running the binary by hand cannot report a false failure.
+- **`make check-keepalive` is the one check that needs the network to lie.**
+  Everything else can be proved with a server that answers or refuses; §5.3's
+  socket options exist for the case where packets simply stop arriving and
+  nothing says so, and simulating that needs them dropped rather than refused —
+  `iptables`, `NET_ADMIN`, and therefore a container. It builds inside the image
+  rather than mounting the host's binary, so it does not quietly depend on the
+  developer's Qt matching the image's. Slow by construction: the budget it
+  verifies is a minute, so the run is over one.
 - Device/emulator tests cover what only Android can break: IME and hardware-key
   delivery (§6.1), the foreground service surviving screen-off (§5.1), activity
   recreation on rotation.
@@ -1783,8 +1791,17 @@ background).
    for dead-peer detection, applied both when settings resolve and when the
    transport is built — they arrive in that order, and doing only the first
    leaves every first connection unprotected. The reconnect status is in the
-   UI. Still open: verifying the timings against a real dropped link rather
-   than against a unit test.
+   UI. **The timings are now verified against a real dropped link**
+   (`make check-keepalive`), which was the last thing open here. A closed
+   socket was never the hard case — a peer that goes away cleanly sends a FIN
+   and is noticed at once — so the check black-holes the port with `iptables`
+   inside a container and makes the packets genuinely vanish. Detected in
+   **62s**, against a budget of "about a minute"; the same link with the socket
+   options removed was **still believed connected after 240s**, which is what
+   says the options rather than the kernel's defaults are doing the work. Both
+   halves behave the same: 62s with a shell being typed into (where
+   `TCP_USER_TIMEOUT` bounds unacknowledged data) and 62s completely idle
+   (where the keepalive probes are the only thing on the wire).
 7. **M6 – Security & profiles.** `bssh_secret_store` with both backends, key
    auth, host-key verification, host profiles, biometric unlock where available.
    **Started:** public-key authentication is tried before any password

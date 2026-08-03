@@ -43,6 +43,15 @@ private slots:
 	void an_unknown_host_is_held_until_accepted();
 	void accepting_once_is_remembered();
 	void a_changed_host_key_is_refused();
+
+	/*
+	 * sec 5.3's dead-peer detection, against a link whose packets really
+	 * vanish. A closed socket is not a dropped link: a peer that goes
+	 * away cleanly sends a FIN and is noticed at once, which is the case
+	 * that was never in doubt. This needs the packets to disappear, so
+	 * tools/check-keepalive.sh black-holes the port with iptables.
+	 */
+	void a_black_holed_link_is_noticed();
 };
 
 #endif /* BSSH_LIVE_SSH_TEST_H */

@@ -1,5 +1,6 @@
 #include <QFile>
 #include <QStandardPaths>
+#include <QElapsedTimer>
 #include <QEventLoop>
 #include <QTimer>
 #include <QtTest>
@@ -296,4 +297,79 @@ void live_ssh_test::a_changed_host_key_is_refused()
 	QVERIFY2(!out.key_unknown, "a changed key is not an unknown one -- the difference is the warning");
 	QVERIFY2(!out.connected, "a changed host key must not connect silently");
 	QVERIFY2(!out.shell_replied, "and must not reach a shell");
+}
+
+void live_ssh_test::a_black_holed_link_is_noticed()
+{
+	if (!server_available()) return;
+	if (phase() != QStringLiteral("drop")) {
+		QSKIP("this phase needs the link black-holed from outside");
+	}
+
+	/*
+	 * sec 5.3's budget: TCP keepalive after 30s idle, three probes 10s
+	 * apart, and TCP_USER_TIMEOUT bounding unacknowledged data at 60s --
+	 * "fail in about a minute". Measured against a real black hole it is
+	 * 62s; with the socket options removed the same link is still
+	 * believed good after 240s, which is what says the options rather
+	 * than the defaults are doing the work.
+	 *
+	 * The window is wide because it is checking that the design holds,
+	 * not that a kernel timer is punctual: anything under half a minute
+	 * would mean something is failing early, and anything past two and a
+	 * half means the socket options stopped being applied.
+	 */
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	QElapsedTimer since_ready;
+	bool failed = false;
+
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed,
+	                  [&](const QString &) { failed = true; loop.quit(); });
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [&](bssh_ssh_session::state_t state) {
+		if (state == bssh_ssh_session::CONNECTED) {
+			session->open_shell(80, 24);
+			/*
+			 * The file is how the script knows the session is up and it
+			 * is safe to drop the link. Written after the shell rather
+			 * than on CONNECTED, so the drop lands on an established
+			 * session rather than mid-handshake.
+			 */
+			QTimer::singleShot(500, [&] {
+				QFile ready(qEnvironmentVariable("BSSH_TEST_SSH_READY"));
+				if (ready.open(QIODevice::WriteOnly)) ready.close();
+				since_ready.start();
+			});
+			return;
+		}
+		if (state == bssh_ssh_session::DISCONNECTED && since_ready.isValid()) {
+			failed = true;
+			loop.quit();
+		}
+	});
+
+	session->set_identity_file(test_key());
+	session->set_keepalive(0);
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
+	                          qEnvironmentVariable("USER"));
+
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(200000);
+	loop.exec();
+
+	const double seconds = since_ready.isValid() ? since_ready.elapsed() / 1000.0 : -1.0;
+	session->disconnect_from_host();
+	delete session;
+
+	QVERIFY2(failed,
+	          qPrintable(QStringLiteral("a black-holed link must be noticed; still alive after %1s")
+	                             .arg(seconds, 0, 'f', 1)));
+	QVERIFY2(seconds >= 30.0 && seconds <= 150.0,
+	          qPrintable(QStringLiteral("noticed after %1s, outside sec 5.3's budget")
+	                             .arg(seconds, 0, 'f', 1)));
 }
