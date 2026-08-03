@@ -463,3 +463,70 @@ void terminal_view_test::the_cell_lands_on_whole_device_pixels() {
 	 */
 	QCOMPARE(bssh_snap_to_device_pixels(9, 1.1), 9);
 }
+
+void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
+	/*
+	 * The renderer draws stretches of same-looking cells in one call
+	 * rather than one call per cell (sec 9.5's glyph runs) -- 94 ms per
+	 * full-screen repaint became 24. The risk it introduces is drift:
+	 * inside a single drawText Qt advances by the FONT's metrics, which
+	 * are fractional, while a cell is a whole number of device pixels, so
+	 * a long run creeps away from its columns. cell_font pins each
+	 * advance with absolute letter spacing; this checks the pin holds.
+	 *
+	 * A narrow glyph is the one that shows it. 'i' has far less ink than
+	 * its cell, so if the run were advancing by the glyph's own width
+	 * instead of the cell's, the last character would land nowhere near
+	 * the last column.
+	 */
+	bssh_terminal_view view;
+	view.resize(600, 60);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("font_family"), QStringLiteral("jetbrains-mono"));
+	settings.insert(QStringLiteral("font_size"), 12);
+	settings.insert(QStringLiteral("cursor_blink"), false);
+	bssh_apply_appearance(&view, settings);
+
+	const int cols = view.cols();
+	QVERIFY(cols > 30);
+
+	bssh_screen screen(cols, view.rows());
+	for (int col = 0; col < cols; ++col) {
+		bssh_cell_t cell;
+		cell.ch = U'i';
+		screen.set_cell(0, col, cell);
+	}
+	view.attach_screen(&screen);
+
+	const QImage rendered = view.grab().toImage();
+
+	/*
+	 * The background sampled from a row nothing was drawn in. Taking it
+	 * from near the origin instead was wrong: that pixel is inside the
+	 * first character.
+	 */
+	const QColor background = rendered.pixelColor(rendered.width() - 1,
+	                                               rendered.height() - 1);
+
+	/* Ink somewhere in the last column's own slice of the row. */
+	const int cell_width = view.cell_width();
+	const int last_left = (cols - 1) * cell_width;
+
+	bool ink_in_last_cell = false;
+	for (int x = last_left; x < last_left + cell_width && x < rendered.width(); ++x) {
+		for (int y = 0; y < view.cell_height(); ++y) {
+			if (rendered.pixelColor(x, y) != background) ink_in_last_cell = true;
+		}
+	}
+
+	QVERIFY2(ink_in_last_cell,
+	         "the last character of a full-width run must be drawn in the last column");
+
+	/* And nothing spills past the grid into the right-hand margin. */
+	for (int x = cols * cell_width; x < rendered.width(); ++x) {
+		for (int y = 0; y < view.cell_height(); ++y) {
+			QCOMPARE(rendered.pixelColor(x, y), background);
+		}
+	}
+}

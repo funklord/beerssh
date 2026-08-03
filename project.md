@@ -1033,7 +1033,18 @@ diverge on *delivery* but never on *which fonts exist*.
 
 ### 9.5 Rendering pipeline
 - **Shared glyph atlas/cache across all panes** (§8.4) keyed by (family, size,
-  weight, glyph) — critical when 4 panes render at once.
+  weight, glyph) — critical when 4 panes render at once. **Measured before
+  building one**, and the atlas turned out not to be the problem: drawing cell
+  by cell cost **94 ms for a full-screen repaint (11 fps)**, and it was the
+  per-cell `setFont`/`drawText` pair, not glyph rasterisation, which Qt already
+  caches. Drawing **runs** of same-looking cells brought that to 45 ms, and
+  removing a per-cell QString allocation in the fallback-chain cache took it to
+  **24 ms (42 fps)**; the four-pane case went from 42 ms to **5.9 ms**. A run
+  only lands on the grid because each glyph's advance is pinned to exactly one
+  cell with absolute letter spacing — inside one `drawText` Qt would otherwise
+  advance by the font's own fractional metrics and drift away from the columns.
+  A real atlas remains available if profiling ever points at rasterisation, but
+  it would have been the wrong fix for the actual cost.
 - Snap the cell grid to integer pixel metrics to avoid blurry text and
   accumulating rounding error across 200 columns.
 - Respect **display density / device pixel ratio** on every platform and expose a
@@ -1475,7 +1486,8 @@ background).
     Noto — 4.1 MB, 13 faces) ships inside the APK and is verified loading
     from `assets:/fonts` on a device. Still open: the shared glyph atlas
     (§9.5 — the renderer caches per-glyph *family* lookups and QFonts, not
-    rasterised glyphs), Play asset-pack delivery and subsetting for the rest
+    rasterised glyphs — see below), Play asset-pack delivery and subsetting
+    for the rest
     (Iosevka alone is 42 MB, so the condensed face cannot be the compact
     default until it ships), and the fractional-scaling and multi-monitor
     DPI checks — **the fractional-scaling half is done**: the cell now snaps

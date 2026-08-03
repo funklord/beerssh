@@ -224,7 +224,7 @@ private:
 	/* Families successfully registered from bundled files. */
 	QStringList m_loaded;
 
-	mutable QHash<QString, QString> m_glyph_cache;
+	mutable QHash<QString, QHash<char32_t, QString>> m_glyph_cache;
 };
 
 #endif /* BSSH_FONT_CATALOG_H */

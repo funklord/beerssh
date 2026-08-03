@@ -295,10 +295,17 @@ QString bssh_font_catalog::family_for(const QString &id) const {
 }
 
 QString bssh_font_catalog::family_for_glyph(const QString &id, char32_t ch) const {
-	const QString key = id + QLatin1Char(':') + QString::number(static_cast<uint>(ch));
+	/*
+	 * Keyed by id and then by codepoint, in two levels. It used to build
+	 * one key per call by concatenating the id with the number -- a
+	 * QString allocation for every character on screen, every repaint,
+	 * which is a hash lookup wearing the cost of a memory allocation. The
+	 * renderer asks this once per cell.
+	 */
+	QHash<char32_t, QString> &glyphs = m_glyph_cache[id];
 
-	const auto cached = m_glyph_cache.constFind(key);
-	if (cached != m_glyph_cache.constEnd()) return cached.value();
+	const auto cached = glyphs.constFind(ch);
+	if (cached != glyphs.constEnd()) return cached.value();
 
 	const QStringList chain = fallback_chain(id);
 	QString chosen = chain.isEmpty() ? QString() : chain.first();
@@ -311,7 +318,7 @@ QString bssh_font_catalog::family_for_glyph(const QString &id, char32_t ch) cons
 		}
 	}
 
-	m_glyph_cache.insert(key, chosen);
+	glyphs.insert(ch, chosen);
 	return chosen;
 }
 

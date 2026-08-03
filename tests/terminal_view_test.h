@@ -34,6 +34,7 @@ private slots:
 	void an_unset_font_means_the_default_not_the_fallback_chain();
 	void changing_a_hosts_font_changes_its_grid();
 	void the_cell_lands_on_whole_device_pixels();
+	void a_long_run_of_text_stays_on_the_grid();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */

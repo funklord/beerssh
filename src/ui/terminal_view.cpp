@@ -240,6 +240,18 @@ const QFont &bssh_terminal_view::cell_font(const QString &family, bool bold, boo
 	font.setBold(bold);
 	font.setItalic(italic);
 
+	/*
+	 * Forced onto the cell grid. Drawing a whole run in one call means Qt
+	 * advances by the font's own metrics, which are fractional, while the
+	 * cell is a whole number of device pixels (sec 9.5) -- so a run of
+	 * eighty characters would drift steadily away from its columns.
+	 * Absolute letter spacing pins each advance to exactly one cell, and
+	 * is why runs can be drawn at all rather than one glyph at a time.
+	 */
+	const QFontMetricsF metrics(font);
+	const qreal natural = metrics.horizontalAdvance(QLatin1Char('W'));
+	font.setLetterSpacing(QFont::AbsoluteSpacing, m_cell_width - natural);
+
 	return *m_font_cache.insert(key, font);
 }
 
@@ -561,6 +573,35 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		        from_history ? m_scrollback->line(history_index) : QList<bssh_cell_t>();
 		const int screen_row = row - offset;
 
+		/*
+		 * Drawn in RUNS rather than cell by cell (sec 9.5's "per-row
+		 * glyph runs"). One drawText per cell measured at 94 ms for a
+		 * full screen -- eleven frames a second, which is visible lag
+		 * while output is streaming -- because each call re-sets the
+		 * painter's font and re-lays out a one-character string.
+		 *
+		 * A run is a stretch of ordinary cells sharing everything that
+		 * decides how they are drawn. Anything that changes mid-row
+		 * (colour, weight, the family serving the glyph, a wide glyph,
+		 * the selection) ends the run and starts the next.
+		 */
+		QString run_text;
+		int run_start = 0;
+		QColor run_fg;
+		QString run_family;
+		bool run_bold = false;
+		bool run_italic = false;
+
+		auto flush_run = [&] {
+			if (run_text.isEmpty()) return;
+
+			painter.setFont(cell_font(run_family, run_bold, run_italic));
+			painter.setPen(run_fg);
+			painter.drawText(QPointF(run_start * m_cell_width, baseline), run_text);
+
+			run_text.clear();
+		};
+
 		for (int col = 0; col < cols; ++col) {
 			static const bssh_cell_t blank;
 			const bssh_cell_t &cell =
@@ -588,23 +629,58 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 
 			if (bg != m_background) painter.fillRect(x, y, width, m_cell_height, bg);
 
-			if (cell.ch != U'\0' && cell.ch != U' ') {
+			const bool blank_cell = cell.ch == U'\0' || cell.ch == U' ';
+			const bool wide = cell.width > 1;
+
+			if (!blank_cell) {
 				/*
-				 * Which family carries THIS character (sec 9.3). Asked per
-				 * cell because that is the granularity the answer changes
-				 * at, and cheap because the catalog caches coverage and
-				 * cell_font caches the resulting QFont -- the work here is
-				 * two hash lookups, not two font constructions.
+				 * Which family carries THIS character (sec 9.3). Asked
+				 * per cell because that is the granularity the answer
+				 * changes at, and cheap because the catalog caches
+				 * coverage: the work is a hash lookup, not a font
+				 * construction.
 				 */
 				const QString family =
 				        bssh_font_catalog::instance().family_for_glyph(m_font_id, cell.ch);
+				const bool bold = cell.attrs & bssh_cell_t::BOLD;
+				const bool italic = cell.attrs & bssh_cell_t::ITALIC;
 
-				painter.setFont(cell_font(family,
-				                          cell.attrs & bssh_cell_t::BOLD,
-				                          cell.attrs & bssh_cell_t::ITALIC));
+				const bool continues = !run_text.isEmpty() && !wide &&
+				                        run_start + run_text.size() == col &&
+				                        family == run_family && fg == run_fg &&
+				                        bold == run_bold && italic == run_italic;
 
-				painter.setPen(fg);
-				painter.drawText(QPointF(x, baseline), QString::fromUcs4(&cell.ch, 1));
+				if (!continues) {
+					flush_run();
+					run_start = col;
+					run_fg = fg;
+					run_family = family;
+					run_bold = bold;
+					run_italic = italic;
+				}
+
+				/*
+				 * Appended without building a temporary QString per
+				 * character: fromUcs4 allocates, and this runs once per
+				 * cell on screen per repaint. Only the rare non-BMP
+				 * codepoint needs the slow path.
+				 */
+				if (cell.ch < 0x10000) {
+					run_text.append(QChar(char16_t(cell.ch)));
+				} else {
+					run_text.append(QString::fromUcs4(&cell.ch, 1));
+				}
+
+				/*
+				 * A double-width glyph is drawn alone: the run relies on
+				 * every glyph advancing exactly one cell (see
+				 * cell_font's letter spacing), and a glyph that advances
+				 * two would push the rest of the run half a screen out
+				 * of line.
+				 */
+				if (wide) flush_run();
+			} else {
+				flush_run();
 			}
 
 			/*
@@ -613,17 +689,14 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			 * keeps the remote's own colours intact, which matters when
 			 * the link IS the output (ls --color, a compiler error).
 			 */
-			if (cell.link != 0 && !(cell.attrs & bssh_cell_t::UNDERLINE)) {
+			if (cell.link != 0 || (cell.attrs & bssh_cell_t::UNDERLINE)) {
 				painter.setPen(fg);
 				painter.drawLine(x, y + m_cell_height - 1, x + width - 1,
 				                  y + m_cell_height - 1);
 			}
-
-			if (cell.attrs & bssh_cell_t::UNDERLINE) {
-				painter.setPen(fg);
-				painter.drawLine(x, y + m_cell_height - 1, x + width - 1, y + m_cell_height - 1);
-			}
 		}
+
+		flush_run();
 	}
 
 	/* The second of the two image passes: everything at z >= 0, over the
