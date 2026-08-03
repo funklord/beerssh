@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QIcon>
 #include <QString>
 #include <QTimer>
 
@@ -27,6 +28,20 @@ int main(int argc, char *argv[]) {
 	QCoreApplication::setApplicationVersion(QStringLiteral(BSSH_VERSION_STRING));
 	/* Freedesktop app ID, so the window matches its .desktop entry (sec 0.1). */
 	QGuiApplication::setDesktopFileName(QStringLiteral("se.vibes.beerssh"));
+
+	/*
+	 * And the icon explicitly. setDesktopFileName is enough on Wayland,
+	 * where the compositor looks the entry up, and is NOT enough on X11:
+	 * the window manager wants _NET_WM_ICON on the window itself, so
+	 * without this the running window shows a generic placeholder while
+	 * the launcher that started it has a perfectly good icon. Seen on a
+	 * real X11 desktop, running the packaged build.
+	 *
+	 * From the icon theme rather than a compiled-in resource, because the
+	 * packaging installs it into hicolor (sec 12.2) and a second copy
+	 * inside the binary is a second thing to keep in step.
+	 */
+	QGuiApplication::setWindowIcon(QIcon::fromTheme(QStringLiteral("se.vibes.beerssh")));
 
 	/*
 	 * The curated font set (sec 9), before any widget is built: a view
