@@ -1091,6 +1091,20 @@ diverge on *delivery* but never on *which fonts exist*.
   default, 2,001 merged**. Note the shape of what is left — four per line, not
   one. Once damage is merged, most of what remains is **cursor movement**, which
   is the next thing to look at if this ever needs to go further.
+- **The scrollback stored a grid row per line, not a line.** libvterm hands over
+  a full-width row every time one scrolls off, so a 58-character line of build
+  output on a 200-column grid was converted and kept as 142 cells of nothing:
+  **2.82 of 3.99 million converted cells were trailing blanks**, and the cost
+  was set by the *window width* rather than by the output — the same log cost
+  more to scroll past a wider window. Dropping the tail took the default
+  5000-line buffer from **22.9 MB to 6.8 MB** at 200×50, and the useful part is
+  that 6.8 MB is now what it costs at 80×24 **as well**: scrollback is priced by
+  content instead of by how wide the window happens to be, which is the property
+  that matters on a phone. Throughput gained about a tenth (3.9 → 4.5 MB/s at
+  200×50), which is the smaller half of the result. "Blank" means *draws as
+  nothing* — a space with a background colour is a status bar and is kept, and
+  libvterm reports a wide glyph's continuation half as a character rather than a
+  blank, so a trim cannot cut a CJK character in two.
 - Snap the cell grid to integer pixel metrics to avoid blurry text and
   accumulating rounding error across 200 columns.
 - Respect **display density / device pixel ratio** on every platform and expose a

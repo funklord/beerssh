@@ -39,6 +39,7 @@ private slots:
 	void scrolling_moves_the_grid_without_losing_anything();
 	void a_write_is_on_the_screen_when_it_returns();
 	void damage_is_reported_per_row_not_per_cell();
+	void scrollback_drops_trailing_blanks_but_not_blank_colour();
 };
 
 #endif /* BSSH_EMULATOR_TEST_H */

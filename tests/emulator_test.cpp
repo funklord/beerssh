@@ -503,3 +503,52 @@ void emulator_test::damage_is_reported_per_row_not_per_cell() {
 	QVERIFY(damaged.count() >= lines / 4);
 	QCOMPARE(row(emulator, 22), QString(width, QLatin1Char('x')));
 }
+
+void emulator_test::scrollback_drops_trailing_blanks_but_not_blank_colour() {
+	/*
+	 * libvterm hands over a full grid row per scrolled line, so a short
+	 * line on a wide grid was mostly padding -- 2.82 of 3.99 million
+	 * converted cells on a 200-column run (sec 9.5). The tail is dropped
+	 * now, and every reader already bounds its column against size().
+	 */
+	{
+		bssh_emulator emulator(40, 2);
+		emulator.feed(QByteArrayLiteral("short\r\na\r\nb"));
+
+		QVERIFY(emulator.scrollback().count() >= 1);
+		QCOMPARE(emulator.scrollback().line(0).size(), 5);
+	}
+
+	/*
+	 * But "blank" is about what DRAWS, not about which character is in
+	 * the cell. A space carrying a background colour is how half the TUIs
+	 * in existence draw a bar across the screen, and trimming it would
+	 * turn a status line into nothing on the way into history.
+	 */
+	{
+		bssh_emulator emulator(10, 2);
+		emulator.feed(QByteArrayLiteral("\x1b[44m  \x1b[0m\r\na\r\nb"));
+
+		const QList<bssh_cell_t> line = emulator.scrollback().line(0);
+		QCOMPARE(line.size(), 2);
+		QCOMPARE(line.at(1).ch, U' ');
+		QCOMPARE(line.at(1).bg.kind, bssh_color_t::INDEXED);
+		QCOMPARE(int(line.at(1).bg.index), 4);
+	}
+
+	/*
+	 * And a double-width glyph in the last columns keeps both of its
+	 * cells. libvterm reports the continuation half as a character of its
+	 * own rather than as a blank, which is what stops the trim there --
+	 * if that ever changed, a CJK character at the end of a line would go
+	 * into history as a stray half.
+	 */
+	{
+		bssh_emulator emulator(4, 2);
+		emulator.feed(QByteArrayLiteral("ab\xe4\xb8\xad\r\nx\r\ny"));   /* ab中 */
+
+		const QList<bssh_cell_t> line = emulator.scrollback().line(0);
+		QCOMPARE(line.size(), 4);
+		QCOMPARE(line.at(2).ch, U'中');
+	}
+}

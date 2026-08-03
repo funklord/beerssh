@@ -18,6 +18,12 @@
  * keeps its colours and attributes. The cost is real -- a cell is ~20
  * bytes against ~1 for a character -- which is exactly why the cap
  * matters and why sec 10.2 makes the size a preset-owned setting.
+ *
+ * Lines here are RAGGED, not grid-width: the emulator drops trailing
+ * blanks before pushing, so a short line costs what it says rather than
+ * what the window is wide (sec 9.5). Every reader must therefore bound
+ * its column against the line's own size() -- line() returning an empty
+ * list for an out-of-range index is the same contract one step up.
  */
 class bssh_scrollback {
 public:
