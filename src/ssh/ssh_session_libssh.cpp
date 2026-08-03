@@ -166,6 +166,15 @@ QString known_hosts_path() {
  * libssh treats as an empty file. That is why this needs no platform
  * branch.
  */
+/*
+ * The file this app both reads and writes: the user's, when it can be
+ * reached, and its own otherwise.
+ *
+ * One decision rather than two, because the two must agree. If libssh is
+ * pointed at the user's file while the accept path writes to ours, a host
+ * is recorded in one place and looked for in the other -- and the second
+ * connection asks again about a host that was just accepted.
+ */
 QString openssh_known_hosts_path() {
 	const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
 	if (home.isEmpty()) return QString();
@@ -217,12 +226,15 @@ signals:
 	void key_passphrase_required();
 	void host_key_unknown(const QString &fingerprint);
 	void host_key_changed(const QString &fingerprint);
+	void host_key_revoked(const QString &fingerprint);
 
 private:
 	void teardown();
 	void fail(const QString &reason);
 	QString session_error() const;
 	bool verify_host_key();
+	bool server_key_is_revoked() const;
+	QStringList known_hosts_files() const;
 	QString server_fingerprint() const;
 	void authenticate();
 
@@ -244,6 +256,14 @@ private:
 
 	/* Empty means the default identities; see set_identity_file. */
 	QString m_identity_file;
+
+	/*
+	 * The destination as connected to. Kept because a revocation is filed
+	 * under the host's NAME, and by the time the key is checked libssh
+	 * only offers the key.
+	 */
+	QString m_host;
+	quint16 m_port = 22;
 	bool m_compression;
 };
 
@@ -298,7 +318,153 @@ QString bssh_libssh_worker::server_fingerprint() const {
 	return fingerprint;
 }
 
+/*
+ * Whether a known-hosts line marked @revoked names this server's key.
+ *
+ * libssh does not do this. It reports a revoked key as UNKNOWN, so
+ * without this the app would offer a friendly "trust this new host?"
+ * prompt for a key somebody went out of their way to revoke -- and
+ * accepting would then write it back as trusted. OpenSSH refuses
+ * outright, and reading the same file (sec 11) while disagreeing about
+ * what a line MEANS is worse than not reading it.
+ *
+ * The host field may be plain or hashed, so both are compared: hashed
+ * entries are the default on Debian and Ubuntu, and a revocation nobody
+ * can match is a revocation that does nothing.
+ */
+/*
+ * Every file a revocation could be recorded in, in the order they are
+ * consulted. All of them are read: a revocation in any one of them is a
+ * revocation, and picking only the first would let a stale trusted entry
+ * in one file mask a revocation in another.
+ */
+QStringList bssh_libssh_worker::known_hosts_files() const {
+	QStringList files;
+	files << openssh_known_hosts_path();
+	files << known_hosts_path();
+	files << QStringLiteral("/etc/ssh/ssh_known_hosts");
+	files.removeAll(QString());
+	return files;
+}
+
+static QString primary_known_hosts_path() {
+	const QString theirs = openssh_known_hosts_path();
+	if (!theirs.isEmpty()) {
+		const QFileInfo info(theirs);
+		if (QDir().mkpath(info.absolutePath())) {
+			/*
+			 * Writable, or creatable. Checked rather than assumed: a
+			 * sandboxed build may see the path and not be allowed to
+			 * open it, and discovering that at accept time would lose
+			 * the decision.
+			 */
+			QFile probe(theirs);
+			if (probe.open(QIODevice::Append | QIODevice::WriteOnly)) {
+				probe.close();
+				return theirs;
+			}
+		}
+	}
+	return known_hosts_path();
+}
+
+static bool bssh_host_field_matches(const QByteArray &field, const QList<QByteArray> &names) {
+	if (!field.startsWith("|1|")) {
+		/* Plain, possibly a comma-separated list of names. */
+		for (const QByteArray &candidate : field.split(',')) {
+			if (names.contains(candidate)) return true;
+		}
+		return false;
+	}
+
+	const QList<QByteArray> parts = field.split('|');
+	if (parts.size() < 4) return false;
+
+	const QByteArray salt = QByteArray::fromBase64(parts.at(2));
+	const QByteArray want = QByteArray::fromBase64(parts.at(3));
+	if (salt.isEmpty() || want.isEmpty()) return false;
+
+	for (const QByteArray &name : names) {
+		unsigned char mac[EVP_MAX_MD_SIZE];
+		unsigned int mac_len = 0;
+		if (!HMAC(EVP_sha1(), salt.constData(), int(salt.size()),
+		           reinterpret_cast<const unsigned char *>(name.constData()),
+		           size_t(name.size()), mac, &mac_len)) {
+			continue;
+		}
+		if (QByteArray(reinterpret_cast<const char *>(mac), int(mac_len)) == want) return true;
+	}
+	return false;
+}
+
+bool bssh_libssh_worker::server_key_is_revoked() const {
+	if (!m_session) return false;
+
+	ssh_key key = nullptr;
+	if (ssh_get_server_publickey(m_session, &key) != SSH_OK || !key) return false;
+
+	char *base64 = nullptr;
+	const int rc = ssh_pki_export_pubkey_base64(key, &base64);
+	const QByteArray type = QByteArray(ssh_key_type_to_char(ssh_key_type(key)));
+	ssh_key_free(key);
+
+	if (rc != SSH_OK || !base64) return false;
+	const QByteArray blob = QByteArray(base64).trimmed();
+	ssh_string_free_char(base64);
+
+	/*
+	 * The two spellings OpenSSH uses for a host: bare when the port is
+	 * 22, bracketed with the port otherwise. A revocation filed under one
+	 * must not be missed because the connection was described with the
+	 * other.
+	 */
+	const QByteArray host = m_host.toUtf8();
+	QList<QByteArray> names;
+	names << host;
+	names << '[' + host + "]:" + QByteArray::number(m_port);
+	if (m_port == 22) names << host;
+
+	for (const QString &path : known_hosts_files()) {
+		QFile file(path);
+		if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) continue;
+
+		while (!file.atEnd()) {
+			const QByteArray line = file.readLine().trimmed();
+			if (!line.startsWith("@revoked")) continue;
+
+			const QList<QByteArray> fields =
+			        line.split(' ');
+			QList<QByteArray> kept;
+			for (const QByteArray &field : fields) {
+				if (!field.isEmpty()) kept << field;
+			}
+			/* @revoked <host> <keytype> <key> */
+			if (kept.size() < 4) continue;
+			if (kept.at(2) != type) continue;
+			if (kept.at(3) != blob) continue;
+			if (!bssh_host_field_matches(kept.at(1), names)) continue;
+
+			file.close();
+			return true;
+		}
+		file.close();
+	}
+	return false;
+}
+
 bool bssh_libssh_worker::verify_host_key() {
+	/*
+	 * Revocation first, and it outranks every other verdict including
+	 * OK: a key can be both recorded as trusted and later revoked, and
+	 * the revocation is the newer statement. libssh has no opinion here
+	 * (see server_key_is_revoked), so this is checked before its verdict
+	 * is consulted at all.
+	 */
+	if (server_key_is_revoked()) {
+		emit host_key_revoked(server_fingerprint());
+		return false;
+	}
+
 	const enum ssh_known_hosts_e known = ssh_session_is_known_server(m_session);
 	if (known == SSH_KNOWN_HOSTS_OK) return true;
 
@@ -385,8 +551,8 @@ static QByteArray bssh_hash_host_field(const QByteArray &host) {
  * ~/.ssh is somewhere this process cannot reach. Android has no ~/.ssh at
  * all, and a sandboxed desktop build may not be allowed near it.
  */
-static bool bssh_append_to_openssh_known_hosts(ssh_session session) {
-	const QString path = openssh_known_hosts_path();
+static bool bssh_append_hashed_known_host(ssh_session session) {
+	const QString path = primary_known_hosts_path();
 	if (path.isEmpty()) return false;
 
 	char *exported = nullptr;
@@ -439,7 +605,7 @@ void bssh_libssh_worker::do_accept_host_key() {
 	 * Android has no ~/.ssh, and a trust decision must not be lost
 	 * because of where it could not be filed.
 	 */
-	if (!bssh_append_to_openssh_known_hosts(m_session) &&
+	if (!bssh_append_hashed_known_host(m_session) &&
 	     ssh_session_update_known_hosts(m_session) != SSH_OK) {
 		fail(session_error());
 		return;
@@ -457,26 +623,31 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 		return;
 	}
 
+	m_host = host;
+	m_port = port;
+
 	const QByteArray host_utf8 = host.toUtf8();
 	const QByteArray user_utf8 = user.toUtf8();
-	const QByteArray known_utf8 = known_hosts_path().toUtf8();
+	const QByteArray known_utf8 = primary_known_hosts_path().toUtf8();
 	int port_value = port;
 
 	ssh_options_set(m_session, SSH_OPTIONS_HOST, host_utf8.constData());
 	ssh_options_set(m_session, SSH_OPTIONS_PORT, &port_value);
 	ssh_options_set(m_session, SSH_OPTIONS_USER, user_utf8.constData());
+	/*
+	 * The user's own file where it is reachable, so one decision serves
+	 * both clients (sec 11); this app's store otherwise.
+	 */
 	ssh_options_set(m_session, SSH_OPTIONS_KNOWNHOSTS, known_utf8.constData());
 
 	/*
-	 * And the user's own, read-only, so a host they have already verified
-	 * in OpenSSH is recognised here rather than asked about again -- and
-	 * so a changed key is reported as CHANGED rather than as a host we
-	 * happen not to have met (see openssh_known_hosts_path).
+	 * The GLOBAL slot stays what libssh means by it:
+	 * /etc/ssh/ssh_known_hosts, which is how an administrator hands host
+	 * keys to every account on a managed machine. Putting the user's file
+	 * here -- as the first version of this did -- quietly displaced that,
+	 * so a host the admin had vouched for came back as unknown.
 	 */
-	const QByteArray openssh_utf8 = openssh_known_hosts_path().toUtf8();
-	if (!openssh_utf8.isEmpty()) {
-		ssh_options_set(m_session, SSH_OPTIONS_GLOBAL_KNOWNHOSTS, openssh_utf8.constData());
-	}
+	ssh_options_set(m_session, SSH_OPTIONS_GLOBAL_KNOWNHOSTS, "/etc/ssh/ssh_known_hosts");
 
 	/*
 	 * Before ssh_connect, because compression is negotiated during the
@@ -796,6 +967,8 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 	         this, &bssh_ssh_session::key_passphrase_required);
 	connect(m_worker, &bssh_libssh_worker::host_key_unknown,
 	         this, &bssh_ssh_session::host_key_unknown);
+	connect(m_worker, &bssh_libssh_worker::host_key_revoked,
+	         this, &bssh_ssh_session::host_key_revoked, Qt::QueuedConnection);
 	connect(m_worker, &bssh_libssh_worker::host_key_changed,
 	         this, &bssh_ssh_session::host_key_changed);
 	connect(m_worker, &bssh_libssh_worker::state_changed, this, [this](int state) {

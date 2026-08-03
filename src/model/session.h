@@ -148,6 +148,7 @@ signals:
 	/* A host key needs a person's answer -- see bssh_ssh_session. */
 	void host_key_unknown(const QString &fingerprint);
 	void host_key_changed(const QString &fingerprint);
+	void host_key_revoked(const QString &fingerprint);
 	void failed(const QString &reason);
 
 private:

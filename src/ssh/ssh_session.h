@@ -188,6 +188,16 @@ signals:
 	 */
 	void host_key_changed(const QString &fingerprint);
 
+	/*
+	 * The host's key appears in a known-hosts file marked @revoked
+	 * (sec 11). Not a prompt and never offered as one: somebody went out
+	 * of their way to mark this key as no longer trusted, and the answer
+	 * to "shall I trust it anyway?" is not the app's to ask. libssh
+	 * reports such a key as merely unknown, so this is detected here
+	 * rather than taken from it.
+	 */
+	void host_key_revoked(const QString &fingerprint);
+
 protected:
 	void set_state(state_t state);
 

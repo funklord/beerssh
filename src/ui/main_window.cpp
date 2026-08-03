@@ -525,6 +525,29 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 		}
 	});
 
+	/*
+	 * Revoked: told, not asked (sec 11). Somebody deliberately marked
+	 * this key as no longer trusted, and "shall I trust it anyway?" is
+	 * not a question this app gets to put to the user -- so there is no
+	 * accept button here, unlike the changed-key dialog above. The
+	 * connection is dropped.
+	 */
+	connect(session, &bssh_session::host_key_revoked, this, [this, session](const QString &fp) {
+		QMessageBox box(this);
+		box.setIcon(QMessageBox::Critical);
+		box.setWindowTitle(QStringLiteral("HOST KEY REVOKED"));
+		box.setText(QStringLiteral("The key for %1 has been revoked.")
+		                    .arg(session->profile().target()));
+		box.setInformativeText(QStringLiteral(
+		        "Fingerprint:\n%1\n\nThis key is marked @revoked in a known_hosts file, "
+		        "which means someone recorded that it must no longer be used. BeerSSH "
+		        "will not connect with it.").arg(fp));
+		box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+		box.exec();
+
+		session->disconnect_from_host();
+	});
+
 	connect(session, &bssh_session::needs_key_passphrase, this, [this, session] {
 		bool ok = false;
 		const QString passphrase = QInputDialog::getText(

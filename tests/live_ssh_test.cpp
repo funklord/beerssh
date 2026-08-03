@@ -19,6 +19,7 @@ struct outcome_t {
 	bool shell_replied = false;
 	bool key_unknown = false;
 	bool key_changed = false;
+	bool key_revoked = false;
 };
 
 /*
@@ -67,6 +68,11 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true)
 		 */
 		if (trust_host_key) session->accept_host_key();
 		else loop.quit();
+	});
+	QObject::connect(session, &bssh_ssh_session::host_key_revoked,
+		                [&out, &loop](const QString &) {
+		out.key_revoked = true;
+		loop.quit();
 	});
 	QObject::connect(session, &bssh_ssh_session::host_key_changed,
 		                [&out, &loop](const QString &) {
@@ -620,4 +626,71 @@ void live_ssh_test::accepting_writes_a_hashed_entry_openssh_can_use()
 		if (line.trimmed().isEmpty()) continue;
 		QVERIFY2(lines.contains(line), "an existing entry must not be disturbed");
 	}
+}
+
+void live_ssh_test::a_revoked_key_is_refused_not_offered()
+{
+	if (!server_available()) return;
+	if (phase() != QStringLiteral("trust")) {
+		QSKIP("this phase has the server whose key is being revoked");
+	}
+
+	const QString theirs = qEnvironmentVariable("BSSH_TEST_OPENSSH_KNOWN_HOSTS");
+	if (theirs.isEmpty()) QSKIP("no known_hosts location for this run");
+
+	/*
+	 * libssh reports a revoked key as UNKNOWN, so without the check this
+	 * covers the app would put a friendly "trust this new host?" prompt
+	 * in front of a key somebody went out of their way to revoke -- and
+	 * accepting would write it back as trusted. Reading OpenSSH's file
+	 * (sec 11) while disagreeing about what a line MEANS is worse than
+	 * not reading it at all.
+	 *
+	 * The entry is written the way ssh-keygen -R would leave it: the
+	 * host's own line, marked. Hashed, because that is what is actually
+	 * in these files, and a revocation nobody can match is a revocation
+	 * that does nothing.
+	 */
+	forget_all_hosts();
+	hide_openssh_known_hosts(true);
+	const outcome_t discover = attempt(test_key(), true);
+	hide_openssh_known_hosts(false);
+	QVERIFY2(discover.key_unknown, "the host had to be recorded before it can be revoked");
+
+	/* Whatever accepting wrote is now the entry to revoke. */
+	QFile written(theirs);
+	QVERIFY(written.open(QIODevice::ReadOnly));
+	QList<QByteArray> lines = written.readAll().split('\n');
+	written.close();
+
+	QByteArray ours;
+	for (const QByteArray &line : lines) {
+		if (line.startsWith("|1|")) ours = line.trimmed();
+	}
+	QVERIFY2(!ours.isEmpty(), "the accepted key should have been recorded hashed");
+
+	QFile revoke(theirs);
+	QVERIFY(revoke.open(QIODevice::WriteOnly | QIODevice::Truncate));
+	revoke.write("@revoked " + ours + "\n");
+	revoke.close();
+
+	forget_all_hosts();
+	const outcome_t out = attempt(test_key(), true);
+
+	/*
+	 * Put the file back before asserting. This test deliberately leaves a
+	 * revocation in a file other checks read afterwards, and a test that
+	 * changes the world and then fails leaves the next one failing for
+	 * its reason rather than its own.
+	 */
+	QFile restore(theirs);
+	if (restore.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+		restore.write(ours + "\n");
+		restore.close();
+	}
+
+	QVERIFY2(out.key_revoked, "a key marked @revoked must be reported as revoked");
+	QVERIFY2(!out.key_unknown,
+	          "and must NOT be offered as a new host -- accepting would re-trust it");
+	QVERIFY2(!out.connected, "a revoked key must not connect");
 }

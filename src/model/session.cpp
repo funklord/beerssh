@@ -145,6 +145,8 @@ void bssh_session::connect_to_host() {
 	         this, &bssh_session::host_key_unknown);
 	connect(m_transport, &bssh_ssh_session::host_key_changed,
 	         this, &bssh_session::host_key_changed);
+	connect(m_transport, &bssh_ssh_session::host_key_revoked,
+	         this, &bssh_session::host_key_revoked);
 
 	connect(m_transport, &bssh_ssh_session::password_required, this, [this] {
 		m_password_requested = true;

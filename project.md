@@ -1554,10 +1554,34 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   whenever `~/.ssh` is out of reach — Android has none, a sandboxed desktop build
   may not be allowed near it — because a trust decision the user made must never
   be lost over where it could not be filed.
-  **[OPEN]** `@revoked` is not honoured as such: libssh reports a revoked key as
-  *unknown*, so the user is offered a first-contact prompt for a key they
-  explicitly revoked. It is not silently accepted, but it is not the refusal it
-  should be.
+  **`@revoked` is honoured, and this app has to do it itself.** libssh reports a
+  revoked key as *unknown*, which would put a friendly "trust this new host?"
+  prompt in front of a key somebody went out of their way to revoke — and
+  accepting would write it back as trusted. Reading OpenSSH's file while
+  disagreeing about what a line *means* is worse than not reading it. The marker
+  is matched against the server's own key, with the host field compared plain
+  **and** hashed, since hashed is what these files actually contain and a
+  revocation nobody can match is a revocation that does nothing. It is checked
+  **before** libssh's verdict and outranks all of them including OK: a key can be
+  recorded as trusted and later revoked, and the revocation is the newer
+  statement. The UI is told, not asked — there is no accept button, unlike the
+  changed-key dialog.
+- **Which files are consulted, and in which slot.** The user's
+  `~/.ssh/known_hosts` is the *primary* (`SSH_OPTIONS_KNOWNHOSTS`) — read and
+  appended to — and `/etc/ssh/ssh_known_hosts` stays in libssh's *global* slot,
+  which is what that slot means: how an administrator hands host keys to every
+  account on a managed machine. An earlier version of this put the user's file in
+  the global slot and thereby displaced the system one, so a host the admin had
+  vouched for came back as unknown. One function decides the primary, because the
+  file libssh is pointed at and the file the accept path writes to must agree —
+  otherwise a host is recorded in one place, looked for in the other, and asked
+  about again on the next connection.
+- Other files in `~/.ssh` need no sharing decision: the private keys are already
+  offered (`ssh_userauth_publickey_auto` tries the agent then the default
+  identities), `authorized_keys` is the server's side of the question, and
+  `known_hosts.old` is `ssh-keygen -R`'s backup rather than a source of truth.
+  `~/.ssh/config` is the one genuinely open case, and it is §10.5's — imported
+  rather than followed.
 - **Preset export must be provably secret-free** — see §10.3. Export is more
   exposed on desktop, where the file lands in `~/Downloads` and gets attached to
   a chat window, so the §10.3 type-level guarantee earns its keep there.

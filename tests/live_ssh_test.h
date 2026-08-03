@@ -45,6 +45,7 @@ private slots:
 	void a_changed_host_key_is_refused();
 	void a_host_openssh_already_trusts_is_not_asked_about();
 	void accepting_writes_a_hashed_entry_openssh_can_use();
+	void a_revoked_key_is_refused_not_offered();
 
 	/*
 	 * sec 5.3's dead-peer detection, against a link whose packets really
