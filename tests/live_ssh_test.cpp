@@ -7,6 +7,8 @@
 
 #include "live_ssh_test.h"
 #include "ssh/ssh_session.h"
+#include "model/session.h"
+#include "model/conn_manager.h"
 
 namespace {
 
@@ -372,4 +374,91 @@ void live_ssh_test::a_black_holed_link_is_noticed()
 	QVERIFY2(seconds >= 30.0 && seconds <= 150.0,
 	          qPrintable(QStringLiteral("noticed after %1s, outside sec 5.3's budget")
 	                             .arg(seconds, 0, 'f', 1)));
+}
+
+void live_ssh_test::a_dropped_session_reconnects_when_the_link_returns()
+{
+	if (!server_available()) return;
+	if (phase() != QStringLiteral("reconnect")) {
+		QSKIP("this phase needs the link dropped and then restored from outside");
+	}
+
+	/*
+	 * The whole loop, end to end: a live session, a link whose packets
+	 * vanish, dead-peer detection noticing, the backoff scheduling a
+	 * retry, and a connection actually coming back when the link does.
+	 *
+	 * bssh_conn_manager's schedule is a pure function and is unit-tested
+	 * as one (sec 12.3). What no unit test can show is that it ENGAGES on
+	 * a real drop -- the failure mode being a session that goes quiet and
+	 * stays quiet -- or that what it reconnects is usable afterwards.
+	 *
+	 * Key authentication is what makes this seamless: the password was
+	 * consumed at first connect and deliberately not kept (sec 11), so a
+	 * password-authenticated session could only reconnect as far as
+	 * asking again. This host authenticates with a named key, which is
+	 * the case sec 5.3 says makes reconnection silent.
+	 */
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("drop-test");
+	profile.host = QStringLiteral("127.0.0.1");
+	profile.port = test_port();
+	profile.user = qEnvironmentVariable("USER");
+	profile.identity_file = test_key();
+
+	bssh_session session(profile);
+	bssh_conn_manager manager(&session);
+	manager.set_auto_reconnect(true);
+
+	QEventLoop loop;
+	QElapsedTimer since_ready;
+	bool scheduled = false;
+	int reconnects = 0;
+	bool back = false;
+
+	QObject::connect(&manager, &bssh_conn_manager::reconnect_scheduled,
+	                  [&](int, int) {
+		if (scheduled) return;
+		scheduled = true;
+
+		/*
+		 * Telling the script the drop has been noticed is what lets it
+		 * restore the link at the right moment. Restoring it earlier
+		 * would prove nothing about detection; leaving it dropped would
+		 * only ever prove the backoff can count.
+		 */
+		QFile noticed(qEnvironmentVariable("BSSH_TEST_SSH_NOTICED"));
+		if (noticed.open(QIODevice::WriteOnly)) noticed.close();
+	});
+	QObject::connect(&manager, &bssh_conn_manager::reconnect_started,
+	                  [&](int) { ++reconnects; });
+
+	QObject::connect(&session, &bssh_session::state_changed, [&] {
+		if (session.state() != bssh_ssh_session::CONNECTED) return;
+
+		if (!since_ready.isValid()) {
+			/* First connection: tell the script it may drop the link. */
+			QFile ready(qEnvironmentVariable("BSSH_TEST_SSH_READY"));
+			if (ready.open(QIODevice::WriteOnly)) ready.close();
+			since_ready.start();
+			return;
+		}
+
+		back = true;
+		loop.quit();
+	});
+
+	session.connect_to_host();
+
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(220000);
+	loop.exec();
+
+	QVERIFY2(since_ready.isValid(), "the session never came up in the first place");
+	QVERIFY2(scheduled, "a dropped link must schedule a reconnection, not go quiet");
+	QVERIFY2(reconnects > 0, "the scheduled reconnection must actually be attempted");
+	QVERIFY2(back, "the session must come back once the link does");
+	QCOMPARE(session.state(), bssh_ssh_session::CONNECTED);
 }

@@ -1802,6 +1802,18 @@ background).
    halves behave the same: 62s with a shell being typed into (where
    `TCP_USER_TIMEOUT` bounds unacknowledged data) and 62s completely idle
    (where the keepalive probes are the only thing on the wire).
+   **The reconnection machine is verified on the same link.** The backoff
+   schedule is a pure function and unit-tested as one; what that cannot show is
+   that the FSM *engages* on a genuine drop — the failure being a session that
+   goes quiet and stays quiet — or that what comes back is usable. The check
+   drops the link, waits for the session to notice and schedule a retry, and only
+   **then** restores it: restoring earlier would prove nothing about detection,
+   and never restoring would only prove the backoff can count. The session
+   reconnects. Neutering `attempt_reconnect()` fails exactly that assertion,
+   which is what says the test is measuring the machine and not the weather.
+   Key authentication is what makes it seamless, exactly as §5.3 claims: the
+   password is consumed at first connect and deliberately not kept (§11), so a
+   password-authenticated session could only reconnect as far as asking again.
 7. **M6 – Security & profiles.** `bssh_secret_store` with both backends, key
    auth, host-key verification, host profiles, biometric unlock where available.
    **Started:** public-key authentication is tried before any password

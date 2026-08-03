@@ -52,6 +52,14 @@ private slots:
 	 * tools/check-keepalive.sh black-holes the port with iptables.
 	 */
 	void a_black_holed_link_is_noticed();
+
+	/*
+	 * sec 5.3's reconnection machine, driven by a link that really drops
+	 * and then really comes back. The backoff schedule is a pure function
+	 * and unit-tested as one; what a unit test cannot show is that the
+	 * FSM engages on a genuine drop and gets a session back afterwards.
+	 */
+	void a_dropped_session_reconnects_when_the_link_returns();
 };
 
 #endif /* BSSH_LIVE_SSH_TEST_H */

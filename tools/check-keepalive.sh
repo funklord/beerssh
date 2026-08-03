@@ -67,32 +67,66 @@ EOF
 sleep 1
 
 READY=$D/ready
+NOTICED=$D/noticed
 export BSSH_TEST_SSH_PORT=$PORT
 export BSSH_TEST_SSH_KEY=$D/home/.ssh/id
-export BSSH_TEST_SSH_PHASE=drop
 export BSSH_TEST_SSH_READY=$READY
+export BSSH_TEST_SSH_NOTICED=$NOTICED
 export HOME=$D/home XDG_DATA_HOME=$D/home/.local/share USER=root
 export QT_QPA_PLATFORM=offscreen
 
-./build-tests/beerssh_test --live-ssh > $D/test.log 2>&1 &
-APP=$!
+drop_port() {
+	for chain in INPUT OUTPUT; do
+		iptables -I $chain -p tcp --dport $PORT -j DROP
+		iptables -I $chain -p tcp --sport $PORT -j DROP
+	done
+}
 
-# The test writes READY once its shell is up: the drop has to land on an
-# established session, not mid-handshake.
-for i in $(seq 1 120); do [ -f "$READY" ] && break; sleep 0.5; done
-if [ ! -f "$READY" ]; then
-	echo "check-keepalive: the session never came up"; cat $D/test.log; exit 1
+restore_port() {
+	for chain in INPUT OUTPUT; do
+		iptables -D $chain -p tcp --dport $PORT -j DROP 2>/dev/null || true
+		iptables -D $chain -p tcp --sport $PORT -j DROP 2>/dev/null || true
+	done
+}
+
+wait_for_file() {
+	for i in $(seq 1 "$2"); do [ -f "$1" ] && return 0; sleep 0.5; done
+	return 1
+}
+
+# ---- phase: the link goes away and stays away -------------------------
+rm -f "$READY" "$NOTICED"
+BSSH_TEST_SSH_PHASE=drop ./build-tests/beerssh_test --live-ssh > $D/drop.log 2>&1 &
+APP=$!
+wait_for_file "$READY" 120 || { echo "session never came up"; cat $D/drop.log; exit 1; }
+echo "check-keepalive: session up; black-holing port $PORT"
+drop_port
+wait $APP || true
+restore_port
+cat $D/drop.log
+grep -q "^Totals: .* 0 failed" $D/drop.log
+
+# ---- phase: it goes away, is noticed, and comes back ------------------
+rm -f "$READY" "$NOTICED"
+BSSH_TEST_SSH_PHASE=reconnect ./build-tests/beerssh_test --live-ssh > $D/reconnect.log 2>&1 &
+APP=$!
+wait_for_file "$READY" 120 || { echo "session never came up"; cat $D/reconnect.log; exit 1; }
+echo "check-keepalive: session up; dropping the link again"
+drop_port
+
+# Restored only once the drop has been NOTICED. Earlier would prove
+# nothing about detection; never would only prove the backoff can count.
+if wait_for_file "$NOTICED" 300; then
+	echo "check-keepalive: drop noticed; restoring the link"
+	restore_port
+else
+	echo "check-keepalive: the drop was never noticed"
+	restore_port
 fi
 
-echo "check-keepalive: session up; black-holing port $PORT"
-for chain in INPUT OUTPUT; do
-	iptables -I $chain -p tcp --dport $PORT -j DROP
-	iptables -I $chain -p tcp --sport $PORT -j DROP
-done
-
 wait $APP || true
-cat $D/test.log
-grep -q "^Totals: .* 0 failed" $D/test.log
+cat $D/reconnect.log
+grep -q "^Totals: .* 0 failed" $D/reconnect.log
 '
 
-echo "check-keepalive: a black-holed link is noticed inside sec 5.3's budget"
+echo "check-keepalive: a black-holed link is noticed, and the session comes back"
