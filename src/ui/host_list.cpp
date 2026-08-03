@@ -141,6 +141,17 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	 */
 	connect(m_list, &QListWidget::itemClicked, this, &bssh_host_list::on_row_activated);
 
+	/*
+	 * Press and hold for Edit and Delete. A tap still connects, which is
+	 * the everyday action and must stay the cheapest one -- so the rarer
+	 * pair goes behind the gesture Android already teaches for "act on
+	 * this item" rather than onto a row of buttons that would compete
+	 * with it on every row.
+	 */
+	m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(m_list, &QListWidget::customContextMenuRequested,
+	         this, &bssh_host_list::on_row_menu);
+
 	reload();
 }
 
@@ -192,6 +203,41 @@ void bssh_host_list::reload() {
 		item->setFlags(Qt::NoItemFlags);
 		item->setSizeHint(QSize(0, BSSH_ROW_HEIGHT_DP));
 	}
+}
+
+void bssh_host_list::on_row_menu(const QPoint &where) {
+	const QListWidgetItem *item = m_list->itemAt(where);
+	if (!item || !m_store) return;
+
+	const int id = item->data(Qt::UserRole).toInt();
+	if (id == 0) return;
+
+	const bssh_profile_t profile = m_store->profile(id);
+
+	QMenu menu(this);
+	menu.setMinimumWidth(240);
+	QAction *edit = menu.addAction(QStringLiteral("Edit"));
+	QAction *remove = menu.addAction(QStringLiteral("Delete"));
+
+	const QAction *chosen = menu.exec(m_list->viewport()->mapToGlobal(where));
+	if (chosen == edit) {
+		emit edit_requested(profile);
+		return;
+	}
+	if (chosen != remove) return;
+
+	/*
+	 * Confirmed, because the two menu entries are adjacent and one of
+	 * them is irreversible. Naming the host rather than asking "are you
+	 * sure": the question a misfire needs answered is WHICH one.
+	 */
+	const QMessageBox::StandardButton answer = QMessageBox::question(
+	        this, QStringLiteral("Delete host"),
+	        QStringLiteral("Remove \"%1\" from this device?\n\nIts saved settings go with "
+	                        "it. Nothing on the server changes.").arg(profile.name),
+	        QMessageBox::Cancel | QMessageBox::Yes, QMessageBox::Cancel);
+
+	if (answer == QMessageBox::Yes) emit delete_requested(profile);
 }
 
 void bssh_host_list::on_row_activated() {

@@ -5,6 +5,8 @@
 #include "model/profile_store.h"
 #include "profile_store_test.h"
 #include "ui/host_editor.h"
+#include "model/preset.h"
+#include "ui/font_picker.h"
 #include "ui/main_window.h"
 
 static bssh_profile_t make_profile(const QString &name, const QString &host) {
@@ -501,4 +503,127 @@ void profile_store_test::an_identity_file_survives_the_round_trip() {
 		QVERIFY2(!profile.overrides.contains(QStringLiteral("identity_file")),
 		          "identity_file is a host field, not a preset override");
 	}
+}
+
+void profile_store_test::the_touch_editor_resolves_through_the_preset() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("Chunky");
+	preset.font_family = QStringLiteral("hack");
+	preset.font_size = 17;
+	const int preset_id = store.save_preset(preset);
+	QVERIFY(preset_id != 0);
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("box");
+	host.host = QStringLiteral("box.example.com");
+	host.preset_id = preset_id;
+	const int host_id = store.save(host);
+	QVERIFY(host_id != 0);
+
+	/*
+	 * This page used to resolve against the app defaults alone, which was
+	 * right while it could only ADD a host and wrong the moment it could
+	 * open one that follows a preset.
+	 *
+	 * The visible symptom is what this asserts on: the picker showed a
+	 * font the host does not render in. Asserting only that saving
+	 * invents no override would NOT catch it -- the old code compared
+	 * against the app defaults on the way in and on the way out, so it
+	 * was self-consistently wrong and saved cleanly.
+	 */
+	bssh_host_editor editor(&store);
+	editor.set_profile(store.profile(host_id));
+
+	bssh_font_picker *picker = editor.findChild<bssh_font_picker *>();
+	QVERIFY(picker);
+	QCOMPARE(picker->font_id(), QStringLiteral("hack"));
+	QCOMPARE(picker->point_size(), 17);
+
+	/* And an untouched host still follows its preset after a save. */
+	const bssh_profile_t unchanged = editor.profile();
+	QVERIFY2(!unchanged.overrides.contains(QStringLiteral("font_family")),
+	          "opening a preset-following host and saving it must not invent an override");
+	QVERIFY2(!unchanged.overrides.contains(QStringLiteral("font_size")),
+	          "opening a preset-following host and saving it must not invent an override");
+	QCOMPARE(unchanged.preset_id, preset_id);
+
+	/*
+	 * The trap the old code set: a user who saw the wrong font and chose
+	 * the one the preset actually gives would have written an override
+	 * pinning it, silently detaching the host from the preset.
+	 */
+	picker->set_font_choice(QStringLiteral("hack"), 17);
+	QVERIFY2(!editor.profile().overrides.contains(QStringLiteral("font_family")),
+	          "choosing the value the preset already gives is not an override");
+}
+
+void profile_store_test::the_touch_editor_saves_the_colour_scheme() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("box");
+	host.host = QStringLiteral("box.example.com");
+	const int host_id = store.save(host);
+
+	bssh_host_editor editor(&store);
+	editor.set_profile(store.profile(host_id));
+
+	/*
+	 * The picker carried a colour scheme, the page showed it, and nothing
+	 * ever read it back -- so choosing one on a phone did nothing at all.
+	 * That is the inert setting sec 10 spends a paragraph refusing, and
+	 * the desktop had never had it.
+	 */
+	bssh_font_picker *picker = editor.findChild<bssh_font_picker *>();
+	QVERIFY(picker);
+
+	const QString chosen = QStringLiteral("solarized-dark");
+	picker->set_scheme(chosen);
+	QCOMPARE(picker->scheme_id(), chosen);
+
+	QCOMPARE(editor.profile().overrides.value(QStringLiteral("colour_scheme")).toString(),
+	          chosen);
+}
+
+void profile_store_test::the_touch_front_door_can_edit_a_host_it_created() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	/*
+	 * The touch front door had no edit and no delete at all: a tap
+	 * connected, the button added, and that was the whole vocabulary. So
+	 * a host imported from an SSH config could never be corrected and a
+	 * mistyped one could never be removed -- on the only front door
+	 * Android has (sec 8.5).
+	 */
+	bssh_profile_t typed;
+	typed.name = QStringLiteral("bulid");   /* the typo being fixed */
+	typed.host = QStringLiteral("build.example.com");
+	typed.identity_file = QStringLiteral("~/.ssh/id_work");
+	const int id = store.save(typed);
+	QVERIFY(id != 0);
+
+	bssh_host_editor editor(&store);
+	editor.set_profile(store.profile(id));
+	editor.set_editing(true);
+
+	const bssh_profile_t reopened = editor.profile();
+	QVERIFY2(reopened.id == id,
+	          "editing must carry the id, or saving adds a duplicate instead of updating");
+	QCOMPARE(reopened.identity_file, QStringLiteral("~/.ssh/id_work"));
+
+	/* Saving an edit updates in place rather than growing the list. */
+	bssh_profile_t corrected = reopened;
+	corrected.name = QStringLiteral("build");
+	QCOMPARE(store.save(corrected), id);
+	QCOMPARE(store.profiles().size(), 1);
+	QCOMPARE(store.profiles().first().name, QStringLiteral("build"));
+
+	/* And removing one is reachable, which it also was not. */
+	QVERIFY(store.remove(id));
+	QVERIFY(store.profiles().isEmpty());
 }

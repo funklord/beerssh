@@ -893,6 +893,18 @@ benefit.
 saved on one is a host listed on the other, and the preset system (§10)
 attaches to profiles rather than to either UI.
 
+**Both must offer the same VERBS, whatever shape they take.** The touch
+list had only two — tap to connect, button to add — for several
+milestones, so a host was write-once on the only front door Android has:
+one imported from an SSH config could never be corrected, and a mistyped
+one could never be removed. Edit and Delete now live behind press-and-hold
+on a row, which keeps the everyday action (tap to connect) the cheapest
+one and puts the rarer pair behind the gesture the platform already
+teaches for "act on this item" — rather than onto per-row buttons that
+would compete with the tap on every row. The lesson generalises past this
+screen: a front door that renders every field but cannot *do* half of what
+the other one does satisfies §14's rule only on paper.
+
 ### 8.4 Implementation notes
 - A **`bssh_layout_manager`** owns the tab-group → pane-tree mapping and is the
   single place that decides tabs-vs-splits from the current window size class. UI
@@ -1652,9 +1664,17 @@ background).
     is following its preset or overriding it — naming the preset and what
     that preset would give — and offers "Use the preset's font", which drops
     the override rather than copying the preset's current value, so the host
-    goes back to *following* rather than merely agreeing for now. Still open:
-    import/export through the UI (§10.5; the format is now INI, the same one
-    the store uses).
+    goes back to *following* rather than merely agreeing for now. That claim
+    was **half true for several milestones** and is worth recording as the
+    shape of drift §14's rule exists to catch: the badge, the revert and the
+    three-layer resolve behind them were built on the PuTTY-shaped dialog
+    only. The touch page resolved against the app defaults alone — correct
+    while it could only *add* a host, wrong the moment it could open one that
+    follows a preset, and invisible because the touch front door had **no way
+    to edit an existing host at all**. Both editors now call one
+    `bssh_font_override_badge()`, so the answer cannot depend on which front
+    door you opened. Still open: import/export through the UI (§10.5; the
+    format is now INI, the same one the store uses).
     **The settings now act.** `term` reaches the PTY request, `compression`
     the handshake, `keepalive_seconds` the transport, `scrollback_lines` the
     emulator, `cursor_style`/`cursor_blink` the renderer, `bell_enabled` the

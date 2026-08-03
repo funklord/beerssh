@@ -179,6 +179,21 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		         this, &bssh_main_window::open_profile);
 		connect(m_host_list, &bssh_host_list::add_requested,
 		         this, &bssh_main_window::on_add_host);
+
+		connect(m_host_list, &bssh_host_list::edit_requested,
+		         this, [this](const bssh_profile_t &profile) {
+			if (!m_host_editor) return;
+			m_host_editor->set_profile(profile);
+			m_host_editor->set_editing(true);
+			m_pages->setCurrentWidget(m_host_editor);
+		});
+
+		connect(m_host_list, &bssh_host_list::delete_requested,
+		         this, [this](const bssh_profile_t &profile) {
+			if (!m_profile_store || profile.id == 0) return;
+			m_profile_store->remove(profile.id);
+			m_host_list->reload();
+		});
 		m_pages->addWidget(m_host_list);
 
 		/*
@@ -186,7 +201,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		 * screen and the user is holding it; a form that covers it is
 		 * the native shape, and going back is the system's own gesture.
 		 */
-		m_host_editor = new bssh_host_editor(this);
+		m_host_editor = new bssh_host_editor(m_profile_store, this);
 		m_pages->addWidget(m_host_editor);
 
 		connect(m_host_editor, &bssh_host_editor::save_requested,
@@ -597,6 +612,7 @@ void bssh_main_window::on_add_host() {
 	if (!m_host_editor || !m_host_list) return;
 
 	m_host_editor->set_profile(bssh_profile_t());
+	m_host_editor->set_editing(false);
 	m_pages->setCurrentWidget(m_host_editor);
 }
 

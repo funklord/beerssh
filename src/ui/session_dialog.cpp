@@ -7,6 +7,7 @@
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
+#include "ui/override_badge.h"
 #include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
 #include "ui/preset_editor.h"
@@ -519,48 +520,9 @@ QWidget *bssh_session_dialog::build_window_page() {
 void bssh_session_dialog::update_override_badges() {
 	if (!m_font_scope || !m_font_picker) return;
 
-	const bssh_preset_t preset = m_store && m_current.preset_id != 0
-	        ? m_store->preset(m_current.preset_id)
-	        : bssh_preset_t();
+	const bssh_override_badge_t badge = bssh_font_override_badge(
+	        m_store, m_current, m_font_picker->font_id(), m_font_picker->point_size());
 
-	/*
-	 * Compared against what the host WOULD resolve to with no font
-	 * override of its own -- not against what it resolves to now, which
-	 * already includes the override and would always compare equal.
-	 */
-	QJsonObject without = m_current.overrides;
-	without.remove(QStringLiteral("font_family"));
-	without.remove(QStringLiteral("font_size"));
-
-	const QJsonObject followed = m_current.preset_id == 0
-	        ? bssh_settings_resolver::app_defaults()
-	        : bssh_settings_resolver::resolve(preset, without);
-
-	const bssh_platform *platform = bssh_platform::instance();
-	const bool compact = platform && platform->is_touch_primary();
-	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
-
-	const QString inherited = catalog.effective_id(
-	        followed.value(QStringLiteral("font_family")).toString(), compact);
-	const int inherited_size = followed.value(QStringLiteral("font_size")).toInt();
-
-	const bool overridden = m_font_picker->font_id() != inherited ||
-	                        m_font_picker->point_size() != inherited_size;
-
-	const QString source = m_current.preset_id == 0
-	        ? QStringLiteral("the app defaults")
-	        : QStringLiteral("preset \"%1\"").arg(preset.name);
-
-	if (overridden) {
-		const bssh_font_t *font = catalog.by_id(inherited);
-		m_font_scope->setText(
-		        QStringLiteral("<b>Overrides %1</b>, which uses %2 at %3 pt.")
-		                .arg(source,
-		                     font ? font->display_name : inherited,
-		                     QString::number(inherited_size)));
-	} else {
-		m_font_scope->setText(QStringLiteral("Following %1.").arg(source));
-	}
-
-	m_font_revert->setEnabled(overridden);
+	m_font_scope->setText(badge.text);
+	if (m_font_revert) m_font_revert->setEnabled(badge.overridden);
 }

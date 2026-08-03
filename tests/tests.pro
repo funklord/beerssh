@@ -77,6 +77,7 @@ SOURCES += \
     ../src/ui/font_picker.cpp \
     ../src/ui/preset_editor.cpp \
     ../src/ui/host_editor.cpp \
+    ../src/ui/override_badge.cpp \
     ../src/ui/host_list.cpp \
     ../src/ui/layout_manager.cpp \
     ../src/ui/pane_container.cpp \
@@ -134,6 +135,7 @@ HEADERS += \
     ../src/ui/font_picker.h \
     ../src/ui/preset_editor.h \
     ../src/ui/host_editor.h \
+    ../src/ui/override_badge.h \
     ../src/ui/host_list.h \
     ../src/ui/layout_manager.h \
     ../src/ui/pane_container.h \

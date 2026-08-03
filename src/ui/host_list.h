@@ -1,6 +1,7 @@
 #ifndef BSSH_HOST_LIST_H
 #define BSSH_HOST_LIST_H
 
+#include <QPoint>
 #include <QWidget>
 
 #include "model/profile.h"
@@ -42,6 +43,15 @@ signals:
 	void open_requested(const bssh_profile_t &profile);
 	void add_requested();
 
+	/*
+	 * Editing and removing a host, which this front door had no way to
+	 * do at all: a row connected and that was the whole vocabulary, so a
+	 * host imported from an SSH config could never be corrected and a
+	 * mistyped one could never be removed (sec 8.5).
+	 */
+	void edit_requested(const bssh_profile_t &profile);
+	void delete_requested(const bssh_profile_t &profile);
+
 	/* The preset editor, reached from the only screen a phone starts on. */
 	void presets_requested();
 
@@ -53,6 +63,7 @@ signals:
 
 private slots:
 	void on_row_activated();
+	void on_row_menu(const QPoint &where);
 
 private:
 	bssh_profile_store *m_store;
