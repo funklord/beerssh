@@ -1289,8 +1289,23 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   conditionals sprinkled through the file. A second scope appearing elsewhere in
   `beerssh.pro` is the same smell as an `#ifdef` in the sources.
 
-### 12.2 Desktop packaging — **[OPEN]** which formats to ship
-Decide before the first release; all of them want the app ID from §0.1.
+### 12.2 Desktop packaging — **[DECIDED]** upstream tarball + `make install`
+first; Flatpak next
+All of them want the app ID from §0.1.
+
+**Built:** `make install` now lays down what a Linux desktop actually needs —
+the binary, `se.vibes.beerssh.desktop`, the AppStream `.metainfo.xml`, a
+hicolor scalable icon, and the bundled fonts with their licence files under
+`$PREFIX/share/beerssh/fonts`. That last one was not optional: the app looks
+for its fonts there, so before this an installed copy silently fell back to
+system families and the licences screen had nothing to show — the binary alone
+was never an installation. `make uninstall` removes exactly what it put there.
+Distro packaging and a Flatpak manifest both build on this rather than
+replacing it, which is why it comes first.
+
+**The icon is a placeholder.** §0.1 leaves the branding direction open, and
+that is a decision to make rather than to default into; a `.desktop` entry
+without an icon is defective, so there is a plain one meant to be replaced.
 - **Linux:** an upstream tarball plus at least one self-contained format
   (Flatpak is the best fit — it also solves the Qt-version-skew problem across
   distros). Distro packaging is welcome but not something to block a release on.

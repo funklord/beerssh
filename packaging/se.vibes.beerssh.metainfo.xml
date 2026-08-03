@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	AppStream metadata (project.md sec 12.2). Without this the app is
+	invisible to software centres, which is where most people on a Linux
+	desktop look for anything.
+
+	The id, the launchable and the .desktop file's basename must all agree
+	with sec 0.1's app id; a mismatch shows up as an application that
+	installs, runs, and cannot be found.
+-->
+<component type="desktop-application">
+  <id>se.vibes.beerssh</id>
+
+  <name>BeerSSH</name>
+  <summary>SSH terminal for desktop and Android</summary>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+
+  <description>
+    <p>
+      An SSH client with a real terminal emulator, built from one codebase for
+      the desktop and for Android. Sessions live independently of the windows
+      showing them, so tabs, split panes and a phone rotating do not disturb a
+      connection.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>True-colour terminal emulation with images (sixel, kitty, iTerm2)</li>
+      <li>Tabs everywhere, split panes where the window is wide enough</li>
+      <li>Host presets that many hosts share, with per-host overrides</li>
+      <li>A curated set of terminal fonts and colour schemes</li>
+      <li>Reconnection with backoff, and keepalive for hostile networks</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">se.vibes.beerssh.desktop</launchable>
+
+  <provides>
+    <binary>beerssh</binary>
+  </provides>
+
+  <categories>
+    <category>Network</category>
+    <category>TerminalEmulator</category>
+  </categories>
+
+  <content_rating type="oars-1.1"/>
+</component>

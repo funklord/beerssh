@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+	PLACEHOLDER icon. project.md sec 0.1 leaves the branding direction open
+	(a mug, a bottle cap, foam, or something else entirely), and that is a
+	decision to be made rather than defaulted into by whoever wired up the
+	packaging.
+
+	It is here because a .desktop entry without an icon is a defective
+	.desktop entry: software centres show a blank tile and some shells
+	refuse the launcher altogether. So this is the plainest thing that
+	reads correctly at 32px (a glass, with a prompt inside it), and it is
+	meant to be replaced.
+
+	NOTE: XML forbids a double hyphen inside a comment, so the house style
+	of using one as an em dash cannot be used here. AndroidManifest.xml
+	carries the same note for the same reason, and this file still got it
+	wrong on the first try.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect x="4" y="4" width="56" height="56" rx="10" fill="#1c1c1c"/>
+
+  <!-- the glass -->
+  <path d="M20 16 h20 l-2 34 a4 4 0 0 1 -4 3 h-8 a4 4 0 0 1 -4 -3 z"
+        fill="none" stroke="#d0d0d0" stroke-width="2.5" stroke-linejoin="round"/>
+
+  <!-- the handle -->
+  <path d="M41 22 h5 a4 4 0 0 1 4 4 v8 a4 4 0 0 1 -4 4 h-4"
+        fill="none" stroke="#d0d0d0" stroke-width="2.5" stroke-linecap="round"/>
+
+  <!-- foam -->
+  <path d="M20 16 h20" stroke="#f0c419" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- the prompt: this is a terminal before it is a drink -->
+  <path d="M25 30 l5 4 -5 4" fill="none" stroke="#8ae234" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M33 39 h6" stroke="#8ae234" stroke-width="2.5" stroke-linecap="round"/>
+</svg>

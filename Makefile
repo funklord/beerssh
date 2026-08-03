@@ -24,7 +24,9 @@
 #                        and a JDK; see ANDROID below)
 #   make android-aab  -- the Play bundle instead of an APK
 #   make android-run  -- install and launch on the attached device
-#   make install      -- install the binary to $(DESTDIR)$(PREFIX)/bin
+#   make install      -- install the app, its desktop entry, icon,
+#                        AppStream metadata and bundled fonts
+#   make uninstall    -- remove what install put there
 #   make clean        -- remove compilation intermediates only; the built
 #                        binary is left in place, so `make install` stays
 #                        possible without a rebuild
@@ -74,6 +76,10 @@ CXX   ?= g++
 QMAKE ?= qmake6
 
 TARGET = beerssh
+
+# The app id from sec 0.1. Every packaging file is named after it, and a
+# mismatch shows up as an app that installs, runs, and cannot be found.
+APP_ID = se.vibes.beerssh
 
 BUILD_DIR         = build
 ANDROID_BUILD_DIR = build-android
@@ -344,9 +350,52 @@ android-run: android
 	$(ANDROID_SDK_ROOT)/platform-tools/adb shell am start -n \
 	        se.vibes.beerssh/org.qtproject.qt.android.bindings.QtActivity
 
+# sec 12.2's Linux baseline. The binary alone is not an installation: the
+# app looks for its fonts in $(PREFIX)/share/beerssh/fonts (that is what
+# bssh_platform_desktop::font_directory checks after the build tree), and
+# without the .desktop entry, the AppStream metadata and an icon the app
+# is invisible to every software centre and most launchers.
 install: all
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
 	install -m 0755 $(TARGET) $(DESTDIR)$(PREFIX)/bin/$(TARGET)
+
+	mkdir -p $(DESTDIR)$(PREFIX)/share/applications
+	install -m 0644 packaging/$(APP_ID).desktop \
+	        $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
+
+	mkdir -p $(DESTDIR)$(PREFIX)/share/metainfo
+	install -m 0644 packaging/$(APP_ID).metainfo.xml \
+	        $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml
+
+	mkdir -p $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps
+	install -m 0644 packaging/$(APP_ID).svg \
+	        $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/$(APP_ID).svg
+
+	# The fonts, if they were fetched. Not an error when they were not:
+	# `make install` must work on a checkout that never ran `make fonts`,
+	# and the app falls back to system families (sec 9.4).
+	@if [ -d fonts ]; then \
+		mkdir -p $(DESTDIR)$(PREFIX)/share/beerssh/fonts/licences; \
+		for face in fonts/*.ttf fonts/*.otf; do \
+			[ -f "$$face" ] || continue; \
+			install -m 0644 "$$face" $(DESTDIR)$(PREFIX)/share/beerssh/fonts/; \
+		done; \
+		for text in fonts/licences/*; do \
+			[ -f "$$text" ] || continue; \
+			install -m 0644 "$$text" \
+			        $(DESTDIR)$(PREFIX)/share/beerssh/fonts/licences/; \
+		done; \
+		echo "install: bundled $$(ls fonts/*.ttf fonts/*.otf 2>/dev/null | wc -l) font faces"; \
+	else \
+		echo "install: no fonts/ -- the app will use system monospace families"; \
+	fi
+
+uninstall:
+	rm -f $(DESTDIR)$(PREFIX)/bin/$(TARGET)
+	rm -f $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
+	rm -f $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml
+	rm -f $(DESTDIR)$(PREFIX)/share/icons/hicolor/scalable/apps/$(APP_ID).svg
+	rm -rf $(DESTDIR)$(PREFIX)/share/beerssh
 
 # clean removes intermediates only; $(TARGET) survives, matching the split
 # every Makefile in the sibling tree uses.
@@ -372,6 +421,6 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test style fonts fonts-list check-fonts android-fonts \
+.PHONY: all run test style fonts fonts-list check-fonts android-fonts uninstall \
         android android-check android-aab android-run install clean veryclean \
         distclean help

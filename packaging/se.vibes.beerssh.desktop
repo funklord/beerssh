@@ -1,0 +1,20 @@
+[Desktop Entry]
+Type=Application
+Name=BeerSSH
+GenericName=SSH Terminal
+Comment=SSH terminal for desktop and Android
+Exec=beerssh %f
+Icon=se.vibes.beerssh
+Terminal=false
+Categories=Network;RemoteAccess;TerminalEmulator;System;
+Keywords=ssh;terminal;shell;remote;console;
+
+# The app is the handler for its own preset files (project.md sec 10.5), which
+# is what lets a file manager open one INTO BeerSSH rather than making the user
+# find the import dialog. %f above is what carries the path.
+MimeType=application/x-beerssh-preset;
+
+# StartupWMClass has to match what the window actually reports, or the running
+# window is not associated with its launcher and appears as a second, unnamed
+# entry in the dock.
+StartupWMClass=beerssh
