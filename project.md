@@ -531,6 +531,21 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
   Both change sources are watched — Qt's signal and the portal's
   `SettingChanged` — because either may be the one that notices, and a theme that
   is only right at startup is one a user calls broken.
+  **On Android, Qt is right once and then stale.** Verified on an emulator with
+  the app running: `QStyleHints::colorScheme()` reports the correct value at
+  startup, and after the system switches to dark it goes on reporting Light while
+  Qt delivers a `ThemeChange` to the application. Right at startup and wrong
+  afterwards is the worst of the two — the app looks correct until the moment the
+  user changes their mind. So Android asks its **own** `Configuration.uiMode &
+  UI_MODE_NIGHT_MASK`, which is what the platform itself consults and is therefore
+  right whenever it is asked, and re-reads it on the theme event Qt does deliver.
+  No Java is added for it (§17): a field read through JNI, not glue that would be
+  shorter in Kotlin.
+  The last-resort palette check uses the palette captured at **construction**,
+  before the app has applied one of its own. Reading the current palette is a trap
+  that only shows up once the app can set it: "what is the system asking for"
+  would answer with what the app last decided, so forcing Light once would make
+  the fallback report Light as the system preference for the rest of the session.
 - **What the theme touched that nobody had looked at.** Adding a light palette
   is the easy half; what it exposes is everything that was only ever seen against
   a dark one. The four tab status dots (§8.3) — the only thing on a tab that says

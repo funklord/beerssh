@@ -210,7 +210,7 @@ public:
 		 *    weaker signal than being told, but a true one, and it costs
 		 *    nothing when the first two have already answered.
 		 */
-		const QColor window = QGuiApplication::palette().color(QPalette::Window);
+		const QColor window = startup_palette().color(QPalette::Window);
 		return window.lightness() < 128 ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
 	}
 

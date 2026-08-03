@@ -90,7 +90,19 @@ QPalette build_light() {
 	return p;
 }
 
+Qt::ColorScheme g_applied = Qt::ColorScheme::Unknown;
+
 void repaint_everything(Qt::ColorScheme scheme) {
+	/*
+	 * Nothing to do if it is already what is on screen. Repainting every
+	 * widget for no change is wasteful; more importantly, setPalette
+	 * raises the very application palette event the platforms watch to
+	 * notice a SYSTEM change, so an unguarded re-apply is a loop waiting
+	 * for a platform that reports both through one channel.
+	 */
+	if (scheme == g_applied) return;
+	g_applied = scheme;
+
 	QApplication::setPalette(bssh_theme::palette_for(scheme));
 
 	/*

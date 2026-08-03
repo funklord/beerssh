@@ -2,6 +2,7 @@
 #define BSSH_PLATFORM_H
 
 #include <QObject>
+#include <QPalette>
 #include <Qt>
 #include <QString>
 
@@ -119,6 +120,27 @@ public:
 	 * instead, which works the same everywhere.
 	 */
 	virtual Qt::ColorScheme system_colour_scheme() const = 0;
+
+protected:
+	/*
+	 * The palette the PLATFORM handed us, captured at construction --
+	 * before bssh_theme has applied one of its own.
+	 *
+	 * The last-resort half of the detection above reads a palette's
+	 * lightness, and reading the CURRENT one is a trap: the app
+	 * overwrites it with its own choice, so "what is the system asking
+	 * for" would answer with what the app last decided. Force the theme
+	 * to Light once and the fallback reports Light as the system
+	 * preference for the rest of the session.
+	 */
+	QPalette startup_palette() const { return m_startup_palette; }
+
+public:
+
+private:
+	QPalette m_startup_palette;
+
+public:
 
 signals:
 	/*

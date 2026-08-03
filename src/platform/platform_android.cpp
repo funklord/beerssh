@@ -17,6 +17,43 @@ namespace {
  */
 const char *const BSSH_SERVICE_CLASS = "se/vibes/beerssh/BsshService";
 
+/*
+ * Android's own answer to "is the system in night mode", read from the
+ * activity's current Configuration.
+ *
+ * Qt is asked first everywhere else, and on Android it cannot be trusted
+ * to stay current: measured on an emulator running Qt 6.11.1, switching
+ * the system to dark delivers a ThemeChange to the application while
+ * QStyleHints::colorScheme() goes on reporting Light. It is right at
+ * startup and stale from then on, which is the worst of both -- the app
+ * looks correct until the moment the user changes their mind.
+ *
+ * uiMode & UI_MODE_NIGHT_MASK is what the platform itself consults, so it
+ * is right whenever it is asked. No Java is added for it (sec 17): this
+ * is a field read through JNI, not glue that would be shorter in Kotlin.
+ */
+Qt::ColorScheme android_night_mode() {
+	const QJniObject context = QNativeInterface::QAndroidApplication::context();
+	if (!context.isValid()) return Qt::ColorScheme::Unknown;
+
+	const QJniObject resources =
+		      context.callObjectMethod("getResources", "()Landroid/content/res/Resources;");
+	if (!resources.isValid()) return Qt::ColorScheme::Unknown;
+
+	const QJniObject config =
+		      resources.callObjectMethod("getConfiguration", "()Landroid/content/res/Configuration;");
+	if (!config.isValid()) return Qt::ColorScheme::Unknown;
+
+	const int ui_mode = config.getField<jint>("uiMode");
+
+	/* Configuration.UI_MODE_NIGHT_MASK / _YES / _NO. */
+	switch (ui_mode & 0x30) {
+	case 0x20: return Qt::ColorScheme::Dark;
+	case 0x10: return Qt::ColorScheme::Light;
+	default:   return Qt::ColorScheme::Unknown;
+	}
+}
+
 QJniObject android_context() {
 	return QNativeInterface::QAndroidApplication::context();
 }
@@ -39,6 +76,8 @@ QJniObject android_context() {
 class bssh_platform_android : public bssh_platform {
 public:
 	bssh_platform_android() : m_keep_alive(false), m_status(QStringLiteral("Connected")) {
+		m_last_scheme = system_colour_scheme();
+		if (qApp) qApp->installEventFilter(this);
 	}
 
 	QString name() const override {
@@ -170,11 +209,44 @@ public:
 	 * check remains as a floor for the case where the style has themed
 	 * the app but the hint has not arrived yet.
 	 */
+	/*
+	 * Android delivers a uiMode change as a configuration change rather
+	 * than restarting us -- the manifest lists uiMode in configChanges,
+	 * deliberately -- and Qt does not turn that into a colorSchemeChanged
+	 * we ever saw. Measured on an emulator: switching the system to dark
+	 * left the app light until it was restarted, which is exactly the
+	 * "only right at startup" failure this signal exists to prevent.
+	 *
+	 * So the application's own theme/palette events are watched instead,
+	 * and the answer is re-read when one arrives. Only a real change is
+	 * reported: bssh_theme applies a palette of its own, which raises the
+	 * same events, and re-emitting on those would be a loop.
+	 */
+	bool eventFilter(QObject *watched, QEvent *event) override {
+		if (event && (event->type() == QEvent::ThemeChange ||
+		               event->type() == QEvent::ApplicationPaletteChange)) {
+			const Qt::ColorScheme now = system_colour_scheme();
+			if (now != m_last_scheme) {
+				m_last_scheme = now;
+				emit colour_scheme_changed();
+			}
+		}
+		return QObject::eventFilter(watched, event);
+	}
+
 	Qt::ColorScheme system_colour_scheme() const override {
+		/*
+		 * Android's Configuration first, because it is the only source
+		 * here that is still correct after the user changes the setting
+		 * -- see android_night_mode().
+		 */
+		const Qt::ColorScheme night = android_night_mode();
+		if (night != Qt::ColorScheme::Unknown) return night;
+
 		const Qt::ColorScheme hinted = QGuiApplication::styleHints()->colorScheme();
 		if (hinted != Qt::ColorScheme::Unknown) return hinted;
 
-		const QColor window = QGuiApplication::palette().color(QPalette::Window);
+		const QColor window = startup_palette().color(QPalette::Window);
 		return window.lightness() < 128 ? Qt::ColorScheme::Dark : Qt::ColorScheme::Light;
 	}
 
@@ -189,6 +261,7 @@ public:
 	}
 
 private:
+	mutable Qt::ColorScheme m_last_scheme = Qt::ColorScheme::Unknown;
 	bool m_keep_alive;
 	QString m_status;
 };
