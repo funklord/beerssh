@@ -278,6 +278,12 @@ void session_registry_test::every_resolved_setting_reaches_something_that_uses_i
 
 	bssh_profile_t profile;
 	profile.host = QStringLiteral("box.example.com");
+	/*
+	 * From the profile rather than the preset, because a key path names
+	 * one machine's access and sec 10.3 keeps that off the shareable
+	 * preset -- but it has to reach the transport by the same connect.
+	 */
+	profile.identity_file = QStringLiteral("~/.ssh/id_work");
 	bssh_session session(profile);
 
 	QJsonObject settings;
@@ -293,6 +299,7 @@ void session_registry_test::every_resolved_setting_reaches_something_that_uses_i
 	QCOMPARE(fake->term(), QStringLiteral("xterm-direct"));
 	QCOMPARE(fake->compression(), true);
 	QCOMPARE(fake->keepalive_seconds(), 45);
+	QCOMPARE(fake->identity_file(), QStringLiteral("~/.ssh/id_work"));
 	QCOMPARE(session.emulator()->scrollback().max_lines(), 12345);
 
 	bssh_ssh_session::set_factory(nullptr);

@@ -29,6 +29,19 @@ struct bssh_profile_t {
 	quint16 port;
 
 	/*
+	 * A specific private key to offer, or empty for the default
+	 * identities (sec 10.5). A PATH, never key material: the file stays
+	 * where it is, is read only by libssh at authentication time, and is
+	 * no more a secret than the name of the host it opens -- which is
+	 * what lets it live in this struct at all under sec 10.3.
+	 *
+	 * This is what an imported OpenSSH `IdentityFile` becomes. Without
+	 * it, a host whose key is not one of the four default names falls
+	 * through to a password prompt it may have no way to answer.
+	 */
+	QString identity_file;
+
+	/*
 	 * Whether a password for this host exists in the secret store. NOT a
 	 * secret -- it is the hint that lets the app know it is worth asking
 	 * for the store's passphrase, without unlocking the store to find

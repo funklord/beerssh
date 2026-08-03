@@ -1256,14 +1256,21 @@ double as documentation of what a preset can do.
   statically**, so its contents are skipped rather than attributed to the `Host`
   above it. `Include` is not followed — reaching into files nobody pointed at is
   the live-read behaviour this feature exists to avoid.
-  **`IdentityFile` and `ProxyJump` are parsed, carried and deliberately not
-  applied**: the SSH layer offers libssh's default identities and has no jump-host
-  support, so a profile field for either would be a setting that reaches nothing
-  (§10.2's rule). The import names them per host and says what it means for
+  **`IdentityFile` is honoured**: it becomes the profile's `identity_file` and
+  reaches libssh as `SSH_OPTIONS_ADD_IDENTITY` (§11). Verified against libssh
+  rather than assumed — the option **prepends**, so the named key is offered
+  first and the default identities still follow behind it, which is what
+  OpenSSH's `IdentityFile` means in the absence of `IdentitiesOnly`. The tilde is
+  expanded here rather than left to libssh, which stores the string as given
+  (`ssh_options_get` hands back `~/.ssh/id` unchanged) and expands only when
+  loading the key: a key that silently fails to load looks exactly like a server
+  refusing it. Only the **path** is stored, never key material — which is what
+  lets it sit on the profile at all under §10.3.
+  **`ProxyJump` is parsed, carried and deliberately not applied**: there is no
+  jump-host support for it to reach, and a field that reaches nothing is what
+  §10.2 refuses. The import names it per host and says what it means for
   connecting, since a host that silently loses its jump host looks like an app
-  that cannot reach the machine. Wiring `IdentityFile` through to
-  `SSH_OPTIONS_ADD_IDENTITY` is the obvious next step and would make that half of
-  the import real.
+  that cannot reach the machine. Jump-host support is the remaining gap.
 - **[OPEN]** Host groups/folders with inherited settings. Presets cover most of the
   need; add folders only if organising many hosts proves awkward.
 

@@ -407,6 +407,20 @@ void profile_store_test::the_host_editor_builds_a_profile() {
 	 */
 	QCOMPARE(built.name, QStringLiteral("10.0.0.42"));
 
+	/*
+	 * A field the editor does not SHOW still has to survive being edited.
+	 * The key an OpenSSH import put on a host has no widget here, so the
+	 * only thing keeping it is that profile() starts from the loaded
+	 * profile rather than building a fresh one -- rewrite that as a
+	 * constructor call and every imported host quietly loses its key the
+	 * first time someone corrects a typo in its name.
+	 */
+	bssh_profile_t imported;
+	imported.host = QStringLiteral("build.example.com");
+	imported.identity_file = QStringLiteral("~/.ssh/id_work");
+	editor.set_profile(imported);
+	QCOMPARE(editor.profile().identity_file, QStringLiteral("~/.ssh/id_work"));
+
 	/* Nothing typed is nothing to save, and the editor says so by being
 	 * invalid rather than by inventing a host. */
 	bssh_host_editor empty;
@@ -424,4 +438,62 @@ void profile_store_test::front_door_follows_the_input_device() {
 	          bssh_main_window::FRONT_DOOR_SESSION_DIALOG);
 	QCOMPARE(bssh_main_window::front_door_for(true),
 	          bssh_main_window::FRONT_DOOR_HOST_LIST);
+}
+
+void profile_store_test::an_identity_file_survives_the_round_trip() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("test.db"));
+
+	{
+		bssh_profile_store store(path);
+
+		bssh_profile_t keyed;
+		keyed.name = QStringLiteral("work");
+		keyed.host = QStringLiteral("work.example.com");
+		keyed.identity_file = QStringLiteral("~/.ssh/id_work");
+		QVERIFY(store.save(keyed) != 0);
+
+		bssh_profile_t plain;
+		plain.name = QStringLiteral("home");
+		plain.host = QStringLiteral("home.example.com");
+		QVERIFY(store.save(plain) != 0);
+	}
+
+	/*
+	 * Reopened, because this is the field an OpenSSH import fills in and
+	 * a key that survives until restart is a key the user is told about
+	 * once and then quietly loses.
+	 */
+	bssh_profile_store reopened(path);
+
+	bool checked_keyed = false;
+	bool checked_plain = false;
+	for (const bssh_profile_t &profile : reopened.profiles()) {
+		if (profile.name == QStringLiteral("work")) {
+			QCOMPARE(profile.identity_file, QStringLiteral("~/.ssh/id_work"));
+			checked_keyed = true;
+		}
+		if (profile.name == QStringLiteral("home")) {
+			/*
+			 * Absent, not empty-string-shaped: the key is written only
+			 * when set, so a host without one leaves nothing in the file
+			 * to misread later.
+			 */
+			QVERIFY(profile.identity_file.isEmpty());
+			checked_plain = true;
+		}
+	}
+	QVERIFY(checked_keyed);
+	QVERIFY(checked_plain);
+
+	/*
+	 * And it is not mistaken for a preset override. Anything in a host
+	 * section that is not one of the host's own keys is treated as one
+	 * (sec 10.1), so a new host field that was not added to that list
+	 * would silently become a bogus override on every host that has it.
+	 */
+	for (const bssh_profile_t &profile : reopened.profiles()) {
+		QVERIFY2(!profile.overrides.contains(QStringLiteral("identity_file")),
+		          "identity_file is a host field, not a preset override");
+	}
 }

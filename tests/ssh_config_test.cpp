@@ -191,10 +191,11 @@ void ssh_config_test::separators_and_comments_and_quotes() {
 
 void ssh_config_test::unsupported_directives_are_reported_not_dropped() {
 	/*
-	 * The SSH layer offers libssh's default identities and has no
-	 * ProxyJump, so neither can be honoured -- and a host that silently
-	 * loses its jump host looks like an app that cannot reach the
-	 * machine. They are parsed so the import can say so.
+	 * IdentityFile is honoured now -- it becomes the profile's key and
+	 * reaches libssh as SSH_OPTIONS_ADD_IDENTITY -- so it is no longer
+	 * "unsupported". ProxyJump still has nothing to be applied to, and a
+	 * host that silently loses its jump host looks like an app that
+	 * cannot reach the machine, so it is parsed to be reported.
 	 */
 	const QList<bssh_ssh_config_host_t> hosts = bssh_ssh_config::parse(QStringLiteral(
 	        "Host deep\n"
@@ -209,8 +210,16 @@ void ssh_config_test::unsupported_directives_are_reported_not_dropped() {
 	          QStringLiteral("~/.ssh/id_work"));
 	QCOMPARE(find(hosts, QStringLiteral("deep")).proxy_jump,
 	          QStringLiteral("bastion.example.com"));
+	/* The key rides along into the profile; the jump host cannot. */
+	QCOMPARE(find(hosts, QStringLiteral("deep")).to_profile().identity_file,
+	          QStringLiteral("~/.ssh/id_work"));
 	QVERIFY(find(hosts, QStringLiteral("deep")).has_unsupported());
 	QVERIFY(!find(hosts, QStringLiteral("plain")).has_unsupported());
+
+	const QList<bssh_ssh_config_host_t> keyed = bssh_ssh_config::parse(QStringLiteral(
+	        "Host keyed\n  HostName keyed.example.com\n  IdentityFile ~/.ssh/id_only\n"));
+	QVERIFY2(!find(keyed, QStringLiteral("keyed")).has_unsupported(),
+	          "a named key is imported, so it must not be reported as lost");
 }
 
 void ssh_config_test::junk_does_not_produce_junk_hosts() {

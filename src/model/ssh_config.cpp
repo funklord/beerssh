@@ -237,5 +237,12 @@ bssh_profile_t bssh_ssh_config_host_t::to_profile() const {
 	profile.host = hostname;
 	profile.user = user;
 	profile.port = port;
+
+	/*
+	 * Carried across now that the transport can offer a named key
+	 * (SSH_OPTIONS_ADD_IDENTITY). ProxyJump still cannot be honoured and
+	 * is still only reported.
+	 */
+	profile.identity_file = identity_file;
 	return profile;
 }

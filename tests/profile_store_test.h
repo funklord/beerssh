@@ -29,6 +29,7 @@ private slots:
 	void a_shipped_preset_cannot_be_edited();
 	void the_host_editor_builds_a_profile();
 	void front_door_follows_the_input_device();
+	void an_identity_file_survives_the_round_trip();
 };
 
 #endif /* BSSH_PROFILE_STORE_TEST_H */

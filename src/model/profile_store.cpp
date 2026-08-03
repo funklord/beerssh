@@ -18,7 +18,7 @@ namespace {
  * knowing some nested syntax.
  */
 const char *const BSSH_HOST_KEYS[] = {
-	"name", "host", "user", "port", "preset", "has_password"
+	"name", "host", "user", "port", "preset", "has_password", "identity_file"
 };
 
 QString slug_for(const QString &name) {
@@ -218,6 +218,7 @@ void bssh_profile_store::load_profiles() {
 		profile.host = file.value(QStringLiteral("host")).toString();
 		profile.user = file.value(QStringLiteral("user")).toString();
 		profile.port = static_cast<quint16>(file.value(QStringLiteral("port"), 22).toUInt());
+		profile.identity_file = file.value(QStringLiteral("identity_file")).toString();
 		profile.has_stored_password =
 		        file.value(QStringLiteral("has_password"), false).toBool();
 		profile.preset_id = id_for_slug(file.value(QStringLiteral("preset")).toString());
@@ -338,6 +339,9 @@ void bssh_profile_store::write_profiles() {
 		file.setValue(QStringLiteral("host"), profile.host);
 		file.setValue(QStringLiteral("user"), profile.user);
 		file.setValue(QStringLiteral("port"), profile.port);
+		if (!profile.identity_file.isEmpty()) {
+			file.setValue(QStringLiteral("identity_file"), profile.identity_file);
+		}
 
 		/*
 		 * Written only when true, and it is a FLAG, not a secret: it says

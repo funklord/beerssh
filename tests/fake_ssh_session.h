@@ -79,6 +79,9 @@ public:
 
 	void set_compression(bool compression) override { m_compression = compression; }
 	bool compression() const { return m_compression; }
+
+	void set_identity_file(const QString &path) override { m_identity_file = path; }
+	QString identity_file() const { return m_identity_file; }
 	void accept_host_key() override { m_host_key_accepted = true; }
 	void supply_key_passphrase(const QString &passphrase) override { m_passphrase = passphrase; }
 
@@ -91,6 +94,7 @@ public:
 	void simulate_host_key_changed(const QString &fingerprint) { emit host_key_changed(fingerprint); }
 
 private:
+	QString m_identity_file;
 	QList<QByteArray> m_script;
 	QByteArray m_written;
 	QString m_fail_reason;

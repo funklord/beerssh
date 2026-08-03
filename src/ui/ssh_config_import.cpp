@@ -19,11 +19,16 @@ namespace {
 /* Everything the app cannot honour, phrased for someone who did not write it. */
 QStringList caveats_of(const bssh_ssh_config_host_t &host) {
 	QStringList out;
+	/*
+	 * The key IS imported now, so it is shown as information rather than
+	 * as a warning -- it tells the user which host got which key without
+	 * implying something was lost.
+	 */
 	if (!host.identity_file.isEmpty()) {
-		out.append(QStringLiteral("uses a specific key (%1)").arg(host.identity_file));
+		out.append(QStringLiteral("key %1").arg(host.identity_file));
 	}
 	if (!host.proxy_jump.isEmpty()) {
-		out.append(QStringLiteral("connects via %1").arg(host.proxy_jump));
+		out.append(QStringLiteral("NOT imported: connects via %1").arg(host.proxy_jump));
 	}
 	return out;
 }
@@ -131,10 +136,10 @@ void bssh_ssh_config_import::update_summary() {
 	}
 
 	m_caveat->setText(QStringLiteral(
-	        "%1 of them use IdentityFile or ProxyJump, in brackets above. Those are "
-	        "not imported: BeerSSH offers your default keys and has no jump-host "
-	        "support yet, so a host needing either may not connect. The rest of its "
-	        "settings still come across.").arg(flagged));
+	        "%1 of them reach their machine through another host (ProxyJump). BeerSSH "
+	        "has no jump-host support yet, so those may not connect -- everything "
+	        "else about them, including any key they name, still comes across.")
+	                           .arg(flagged));
 }
 
 int bssh_ssh_config_import::import_selected() {

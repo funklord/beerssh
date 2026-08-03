@@ -32,14 +32,15 @@ struct bssh_ssh_config_host_t {
 	quint16 port;
 
 	/*
-	 * Recognised, carried, and deliberately NOT applied.
+	 * IdentityFile is carried into the profile and reaches libssh as
+	 * SSH_OPTIONS_ADD_IDENTITY (sec 11).
 	 *
-	 * The SSH layer offers libssh's default identities and has no
-	 * ProxyJump at all, so a profile field holding either would be a
-	 * setting that reaches nothing -- which sec 10 spends a paragraph
-	 * refusing. They are parsed so the import can SAY what it could not
-	 * bring across: a host that silently loses its jump host looks like
-	 * an app that cannot reach the machine.
+	 * ProxyJump is recognised, carried, and deliberately NOT applied:
+	 * there is no jump-host support to apply it to, and a profile field
+	 * that reaches nothing is what sec 10 spends a paragraph refusing. It
+	 * is parsed so the import can SAY it could not bring it across -- a
+	 * host that silently loses its jump host looks like an app that
+	 * cannot reach the machine.
 	 */
 	QString identity_file;
 	QString proxy_jump;
@@ -53,9 +54,7 @@ struct bssh_ssh_config_host_t {
 	 * caller can report it rather than the user discovering it at connect
 	 * time.
 	 */
-	bool has_unsupported() const {
-		return !identity_file.isEmpty() || !proxy_jump.isEmpty();
-	}
+	bool has_unsupported() const { return !proxy_jump.isEmpty(); }
 
 	bssh_profile_t to_profile() const;
 };

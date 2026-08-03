@@ -161,6 +161,8 @@ public slots:
 	void do_set_keepalive(int seconds);
 	void do_set_term(const QString &term);
 	void do_set_compression(bool compression);
+	void do_set_identity_file(const QString &path);
+	void apply_identity_file();
 	void drain();
 
 signals:
@@ -201,6 +203,9 @@ private:
 
 	/* Applied at connect time; see set_term's comment on the interface. */
 	QString m_term;
+
+	/* Empty means the default identities; see set_identity_file. */
+	QString m_identity_file;
 	bool m_compression;
 };
 
@@ -337,6 +342,7 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	 * mobile data and the wrong one on a LAN to a low-powered box.
 	 */
 	ssh_options_set(m_session, SSH_OPTIONS_COMPRESSION, m_compression ? "yes" : "no");
+	apply_identity_file();
 
 	emit state_changed(bssh_ssh_session::RESOLVING);
 	emit state_changed(bssh_ssh_session::CONNECTING);
@@ -465,6 +471,44 @@ void bssh_libssh_worker::do_set_term(const QString &term) {
 	 * useful, and a preset with the field cleared means "no opinion".
 	 */
 	m_term = term.isEmpty() ? QString::fromLatin1(BSSH_TERM) : term;
+}
+
+/*
+ * Hands the key path to libssh, expanding a leading ~ first.
+ *
+ * OpenSSH configs are written with tildes and this field's whole purpose
+ * is to carry one across from an imported config (sec 10.5). libssh
+ * stores the string as given -- ssh_options_get hands back "~/.ssh/id"
+ * unchanged -- and expands it only when it goes to load the key, so
+ * expanding here is what makes the path this app acts on the same path it
+ * could check and show. A key that silently does not load looks exactly
+ * like a server refusing the key.
+ */
+void bssh_libssh_worker::apply_identity_file() {
+	if (!m_session || m_identity_file.isEmpty()) return;
+
+	QString path = m_identity_file;
+	if (path == QStringLiteral("~") || path.startsWith(QStringLiteral("~/"))) {
+		path.replace(0, 1, QStandardPaths::writableLocation(QStandardPaths::HomeLocation));
+	}
+
+	/*
+	 * ADD_IDENTITY, not a replacement, and checked against libssh rather
+	 * than assumed: it PREPENDS, so the named key is offered first and the
+	 * defaults still follow behind it. That is what OpenSSH's IdentityFile
+	 * means without IdentitiesOnly, and a client that quietly stopped
+	 * trying the agent because a config named one key would break the
+	 * common case of having both.
+	 */
+	const QByteArray path_utf8 = path.toUtf8();
+	ssh_options_set(m_session, SSH_OPTIONS_ADD_IDENTITY, path_utf8.constData());
+}
+
+void bssh_libssh_worker::do_set_identity_file(const QString &path) {
+	m_identity_file = path;
+
+	/* Applied now if there is a session, at connect time otherwise. */
+	apply_identity_file();
 }
 
 void bssh_libssh_worker::do_set_compression(bool compression) {
@@ -660,6 +704,12 @@ void bssh_ssh_session_libssh::set_term(const QString &term) {
 void bssh_ssh_session_libssh::set_compression(bool compression) {
 	QMetaObject::invokeMethod(m_worker, [this, compression] {
 		m_worker->do_set_compression(compression);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::set_identity_file(const QString &path) {
+	QMetaObject::invokeMethod(m_worker, [this, path] {
+		m_worker->do_set_identity_file(path);
 	}, Qt::QueuedConnection);
 }
 

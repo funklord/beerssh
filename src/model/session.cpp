@@ -65,6 +65,7 @@ void bssh_session::set_settings(const QJsonObject &settings) {
 		m_transport->set_term(m_settings.value(QStringLiteral("term")).toString());
 		m_transport->set_compression(
 		        m_settings.value(QStringLiteral("compression")).toBool());
+		m_transport->set_identity_file(m_profile.identity_file);
 	}
 
 	/*
@@ -120,6 +121,14 @@ void bssh_session::connect_to_host() {
 	m_transport->set_term(m_settings.value(QStringLiteral("term")).toString());
 	m_transport->set_compression(
 	        m_settings.value(QStringLiteral("compression")).toBool());
+
+	/*
+	 * From the PROFILE, not the settings: a key path identifies one
+	 * machine's access, so sec 10.3 keeps it off the shareable preset.
+	 * Set in both places for the reason above -- this is the one that
+	 * covers the first connection.
+	 */
+	m_transport->set_identity_file(m_profile.identity_file);
 
 	connect(m_transport, &bssh_ssh_session::bytes_received,
 	         m_emulator, &bssh_emulator::feed);

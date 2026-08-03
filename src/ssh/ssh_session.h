@@ -120,6 +120,24 @@ public:
 	virtual void set_term(const QString &term) = 0;
 	virtual void set_compression(bool compression) = 0;
 
+	/*
+	 * A specific private key to offer, or empty for the default
+	 * identities (sec 10.5, sec 11). Set before authentication; it is an
+	 * ADDITION to what would be tried anyway rather than a restriction,
+	 * which is what OpenSSH's IdentityFile means in the absence of
+	 * IdentitiesOnly.
+	 *
+	 * On the interface for the same reason keepalive is: it is a property
+	 * of the connection rather than of the library. This is the field an
+	 * imported `~/.ssh/config` fills in -- without it, a host whose key is
+	 * not one of the four default names silently falls through to a
+	 * password prompt it may have no way to answer.
+	 *
+	 * The PATH only. The key itself is never read here, never copied into
+	 * the profile store, and never leaves the disk it lives on.
+	 */
+	virtual void set_identity_file(const QString &path) = 0;
+
 	/* Answers host_key_unknown/host_key_changed: trust it and continue. */
 	virtual void accept_host_key() = 0;
 
