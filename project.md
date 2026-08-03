@@ -1636,6 +1636,16 @@ The desktop build is what makes this project testable at all — use it.
   document is arranged to prevent, and only CI catches it reliably.
 - Run the host unit tests (§12.3) and the **font validation script** (§9.6).
 - Run the Android x86_64 emulator for smoke tests.
+- **Every `PKGCONFIG` line has a package named in the workflow, even when
+  something else would drag it in.** `libsecret-1-dev` was satisfied for months
+  only because the runner image happened to carry it, and `libssl-dev` still
+  arrives as a dependency of `libssh-dev`. Both are declared now: a build that
+  depends on a package nobody named fails one image update later, with a
+  pkg-config error that names the library and not the fix — and the failure lands
+  on whoever pushed next rather than on whoever added the dependency. There is
+  deliberately no tool checking this, because the case that bit is a package
+  present on the runner and absent from the file, which nothing run locally can
+  see.
 - Keep native dependency build scripts reproducible and pinned to versions.
 - Signing config for Play (upload key + Play App Signing).
 

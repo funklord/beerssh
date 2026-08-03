@@ -58,7 +58,16 @@ jobs:
       - name: Install Qt 6 (distro packages)
         run: |
           sudo apt-get update
-          sudo apt-get install -y qt6-base-dev libgl1-mesa-dev libssh-dev libsixel-dev
+          # Every -dev here answers a PKGCONFIG line in beerssh.pro, named
+          # explicitly even where something else would drag it in. libssl-dev
+          # currently arrives as a dependency of libssh-dev, and libsecret-1-dev
+          # arrived only because the runner image happened to carry it -- a
+          # build that depends on a package nobody declared fails one image
+          # update later, with a pkg-config error that names the library and
+          # not the fix. qt6-base-dev covers Qt6DBus, which the desktop build
+          # needs for the XDG appearance portal (sec 6.2).
+          sudo apt-get install -y qt6-base-dev libgl1-mesa-dev libssh-dev \
+                                  libsixel-dev libssl-dev libsecret-1-dev
       - name: Build
         run: make
       - name: Headless smoke test
