@@ -1045,6 +1045,14 @@ diverge on *delivery* but never on *which fonts exist*.
   advance by the font's own fractional metrics and drift away from the columns.
   A real atlas remains available if profiling ever points at rasterisation, but
   it would have been the wrong fix for the actual cost.
+- **Throughput, measured separately from painting.** Scrolling output ran at
+  **0.2 MB/s** while a full-screen TUI repaint — more bytes, no scrolling —
+  managed 21 MB/s, and the gap tracked the grid size rather than the output. A
+  scroll was handled by re-reading the whole destination out of libvterm and
+  converting every cell, so one scrolled line on a 200×50 grid cost ten
+  thousand cell reads. The mirror moves its own rows now (a memmove each) and
+  lets libvterm's damage fill in what the scroll exposed: **0.2 → 3.3 MB/s**,
+  and 9.6 MB/s on an 80×24 grid.
 - Snap the cell grid to integer pixel metrics to avoid blurry text and
   accumulating rounding error across 200 columns.
 - Respect **display density / device pixel ratio** on every platform and expose a

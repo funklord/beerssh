@@ -106,6 +106,19 @@ public:
 	void clear();
 	void clear_row(int row);
 
+	/*
+	 * Move a block of cells within the grid, which is what a scroll is.
+	 *
+	 * Here rather than in the emulator because the grid owns its own
+	 * storage and can move rows without looking at them: the emulator's
+	 * only other option is to re-read every moved cell from the parser
+	 * and convert it back, which is how a one-line scroll came to cost a
+	 * full-screen copy (sec 9.5). Overlapping source and destination are
+	 * expected -- that is the normal case -- and handled.
+	 */
+	void move_rect(int dest_row, int dest_col, int src_row, int src_col,
+	                int rows, int cols);
+
 	int cursor_row() const { return m_cursor_row; }
 	int cursor_col() const { return m_cursor_col; }
 	bool cursor_visible() const { return m_cursor_visible; }

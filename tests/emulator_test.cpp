@@ -381,3 +381,47 @@ void emulator_test::the_remote_may_ask_for_the_clipboard_but_never_read_it() {
 	 */
 	QCOMPARE(asked.count(), 1);
 }
+
+void emulator_test::scrolling_moves_the_grid_without_losing_anything() {
+	/*
+	 * A scroll used to be handled by re-reading the whole destination out
+	 * of libvterm, which was correct and cost a full-screen copy per
+	 * scrolled line: plain scrolling output ran at 0.2 MB/s while a
+	 * full-screen TUI repaint managed 21. The mirror moves its own rows
+	 * now, so this checks the move keeps what the copy kept.
+	 */
+	bssh_emulator emulator(20, 4);
+
+	for (int i = 1; i <= 6; ++i) {
+		emulator.feed(QByteArrayLiteral("line ") + QByteArray::number(i) +
+		               QByteArrayLiteral("\r\n"));
+	}
+
+	/* Six lines through a four-row screen: the last four survive, in order. */
+	const QStringList rows = emulator.screen().to_text().split(QLatin1Char('\n'));
+	QCOMPARE(rows.value(0).trimmed(), QStringLiteral("line 4"));
+	QCOMPARE(rows.value(1).trimmed(), QStringLiteral("line 5"));
+	QCOMPARE(rows.value(2).trimmed(), QStringLiteral("line 6"));
+
+	/* And the ones that fell off are in the scrollback, in order. */
+	QVERIFY(emulator.scrollback().count() >= 3);
+
+	/*
+	 * A double-width glyph scrolled up the screen. The old path advanced
+	 * cell by cell precisely so a continuation cell would not be
+	 * overwritten with a blank (sec 9.3); a row move has to preserve the
+	 * same markers, or a CJK character survives a scroll as a stray half.
+	 */
+	bssh_emulator wide(10, 4);
+	wide.feed(QByteArrayLiteral("a\r\n"));
+	wide.feed(QByteArrayLiteral("\xe4\xb8\xad\xe6\x96\x87\r\n"));   /* 中文 */
+	wide.feed(QByteArrayLiteral("b\r\n"));
+	wide.feed(QByteArrayLiteral("c\r\n"));   /* one scroll: the CJK row MOVES up */
+
+	const bssh_cell_t first = wide.screen().cell(0, 0);
+	const bssh_cell_t second = wide.screen().cell(0, 1);
+
+	QCOMPARE(first.ch, U'中');
+	QCOMPARE(int(first.width), 2);
+	QVERIFY2(second.width == 0, "the continuation cell must survive a scroll");
+}

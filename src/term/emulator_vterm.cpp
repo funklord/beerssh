@@ -222,14 +222,25 @@ int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user) {
 }
 
 int on_move_rect(VTermRect dest, VTermRect src, void *user) {
-	Q_UNUSED(src);
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	/*
-	 * A scroll. libvterm has already moved its own cells, so re-copying
-	 * the destination is enough -- there is no need to reimplement the
-	 * move, and doing so would be a second chance to get it wrong.
+	 * A scroll, done by moving the mirror's own rows.
+	 *
+	 * Re-copying the destination out of libvterm was correct and cost a
+	 * full-screen read per scrolled line: a 200x50 grid scrolling one
+	 * line re-read ten thousand cells and converted every one. Plain
+	 * scrolling output ran at 0.2 MB/s while a full-screen TUI repaint --
+	 * more bytes, no scrolling -- managed 21 MB/s, and the gap scaled
+	 * with the grid rather than with the output.
+	 *
+	 * The mirror already holds these cells; moving them is a memmove per
+	 * row. libvterm damages whatever the scroll exposed, so the newly
+	 * blank line arrives through on_damage as usual.
 	 */
-	self->copy_rect(dest);
+	self->screen.move_rect(dest.start_row, dest.start_col,
+		                      src.start_row, src.start_col,
+		                      qMin(dest.end_row - dest.start_row, src.end_row - src.start_row),
+		                      qMin(dest.end_col - dest.start_col, src.end_col - src.start_col));
 
 	/*
 	 * Images move with the text they were drawn beside. An image pinned
