@@ -58,6 +58,9 @@ signals:
 	 */
 	void presets_changed(int preset_id);
 
+	/* A device-level setting changed; the key row may need re-reading. */
+	void device_settings_changed();
+
 private slots:
 	void on_load();
 	void on_save();

@@ -63,6 +63,7 @@ SOURCES += \
     ../src/platform/secret_store_file.cpp \
     ../src/platform/secret_store_libsecret.cpp \
     ../src/platform/secret_store_select_desktop.cpp \
+    ../src/model/app_settings.cpp \
     ../src/model/conn_manager.cpp \
     ../src/model/preset.cpp \
     ../src/model/profile_store.cpp \
@@ -80,6 +81,7 @@ SOURCES += \
     ../src/ui/tab_status.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/key_row_layout.cpp \
+    ../src/ui/app_settings_view.cpp \
     ../src/ui/licences_view.cpp \
     ../src/ui/key_row.cpp \
     ../src/ui/terminal_view.cpp
@@ -113,6 +115,7 @@ HEADERS += \
     ../src/platform/platform.h \
     ../src/platform/secret_store.h \
     ../src/model/profile.h \
+    ../src/model/app_settings.h \
     ../src/model/conn_manager.h \
     ../src/model/preset.h \
     ../src/model/profile_store.h \
@@ -128,6 +131,7 @@ HEADERS += \
     ../src/ui/main_window.h \
     ../src/ui/session_dialog.h \
     ../src/ui/tab_status.h \
+    ../src/ui/app_settings_view.h \
     ../src/ui/licences_view.h \
     ../src/ui/key_row.h \
     ../src/ui/terminal_view.h

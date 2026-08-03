@@ -48,6 +48,9 @@ signals:
 	/* sec 9.4's licences screen, the only other app-level page. */
 	void licences_requested();
 
+	/* sec 6.2's device settings. */
+	void settings_requested();
+
 private slots:
 	void on_row_activated();
 
@@ -55,8 +58,7 @@ private:
 	bssh_profile_store *m_store;
 	QListWidget *m_list;
 	QToolButton *m_add;
-	QToolButton *m_presets;
-	QToolButton *m_about;
+	QToolButton *m_menu;
 };
 
 #endif /* BSSH_HOST_LIST_H */

@@ -130,6 +130,9 @@ private:
 	void reresolve_sessions(int preset_id);
 	void on_pane_focus_changed(bssh_session *session);
 
+	/* Reads sec 6.2's three-state setting and applies it to the key row. */
+	void apply_key_row_visibility();
+
 	/*
 	 * Adds a session to the visible panes rather than replacing them
 	 * (sec 8.3's "move to split"). Separate from show_session because a

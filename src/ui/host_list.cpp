@@ -4,6 +4,7 @@
 #include <QListWidget>
 #include <QResizeEvent>
 #include <QScroller>
+#include <QMenu>
 #include <QToolButton>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -45,17 +46,42 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	title->setMinimumHeight(56);
 	heading_row->addWidget(title, 1);
 
-	m_presets = new QToolButton(heading);
-	m_presets->setText(QStringLiteral("Presets"));
-	m_presets->setMinimumHeight(48);
-	connect(m_presets, &QToolButton::clicked, this, &bssh_host_list::presets_requested);
-	heading_row->addWidget(m_presets, 0);
+	/*
+	 * One overflow menu rather than a button per destination. There are
+	 * three app-level pages now, and three buttons across the top of a
+	 * phone leaves the heading fighting the host list for width -- while
+	 * the menu is the gesture this platform already teaches. The
+	 * destinations are the same ones the desktop dialog lists as
+	 * categories; only the shape differs (sec 8.5).
+	 */
+	m_menu = new QToolButton(heading);
+	/*
+	 * Built from the codepoint rather than written into the source.
+	 * Pasting the character in went through a Latin-1 round trip and
+	 * left three mojibake bytes in the file, which is what the button
+	 * then displayed.
+	 */
+	m_menu->setText(QString(QChar(0x22EE)));
+	m_menu->setMinimumSize(48, 48);
+	m_menu->setPopupMode(QToolButton::InstantPopup);
 
-	m_about = new QToolButton(heading);
-	m_about->setText(QStringLiteral("Licences"));
-	m_about->setMinimumHeight(48);
-	connect(m_about, &QToolButton::clicked, this, &bssh_host_list::licences_requested);
-	heading_row->addWidget(m_about, 0);
+	QMenu *menu = new QMenu(m_menu);
+	connect(menu->addAction(QStringLiteral("Presets")), &QAction::triggered,
+	         this, &bssh_host_list::presets_requested);
+	connect(menu->addAction(QStringLiteral("Settings")), &QAction::triggered,
+	         this, &bssh_host_list::settings_requested);
+	connect(menu->addAction(QStringLiteral("Licences")), &QAction::triggered,
+	         this, &bssh_host_list::licences_requested);
+
+	/*
+	 * A width, because the popup sized itself narrower than its own
+	 * entries and elided them: the menu read "Lic...ces", which is a menu
+	 * that has to be guessed at.
+	 */
+	menu->setMinimumWidth(240);
+
+	m_menu->setMenu(menu);
+	heading_row->addWidget(m_menu, 0);
 
 	layout->addWidget(heading);
 

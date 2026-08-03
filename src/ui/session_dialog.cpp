@@ -5,6 +5,7 @@
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
+#include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
 #include "ui/preset_editor.h"
 
@@ -68,6 +69,9 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	 * but a list of other people's terms, and those belong where settings
 	 * are read rather than behind a splash.
 	 */
+	QTreeWidgetItem *application = new QTreeWidgetItem(m_categories,
+	        QStringList(QStringLiteral("This device")));
+
 	QTreeWidgetItem *licences = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Licences")));
 	new QTreeWidgetItem(connection, QStringList(QStringLiteral("SSH")));
@@ -88,6 +92,11 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	                                           QStringLiteral("M5, with keepalive and reconnect")));
 	m_pages->addWidget(build_placeholder_page(QStringLiteral("SSH"),
 	                                           QStringLiteral("M6, with key authentication")));
+	bssh_app_settings_view *device = new bssh_app_settings_view(this);
+	m_pages->addWidget(device);
+	connect(device, &bssh_app_settings_view::changed,
+	         this, &bssh_session_dialog::device_settings_changed);
+
 	m_pages->addWidget(new bssh_licences_view(this));
 
 	Q_UNUSED(session);
@@ -95,6 +104,7 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	Q_UNUSED(window);
 	Q_UNUSED(presets);
 	Q_UNUSED(licences);
+	Q_UNUSED(application);
 
 	columns->addWidget(m_categories);
 	columns->addWidget(m_pages, 1);
@@ -227,7 +237,8 @@ void bssh_session_dialog::on_category_changed() {
 	else if (name == QStringLiteral("Presets")) m_pages->setCurrentIndex(3);
 	else if (name == QStringLiteral("Connection")) m_pages->setCurrentIndex(4);
 	else if (name == QStringLiteral("SSH")) m_pages->setCurrentIndex(5);
-	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(6);
+	else if (name == QStringLiteral("This device")) m_pages->setCurrentIndex(6);
+	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(7);
 }
 
 void bssh_session_dialog::reload_sessions() {

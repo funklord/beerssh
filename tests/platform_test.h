@@ -21,6 +21,7 @@ private slots:
 	void session_count_and_notify_are_safe_without_a_tray();
 	void close_policy_asks_only_when_something_is_live();
 	void the_window_opens_on_the_front_door();
+	void the_key_row_setting_survives_a_restart();
 };
 
 #endif /* BSSH_PLATFORM_TEST_H */

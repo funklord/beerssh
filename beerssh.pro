@@ -27,6 +27,7 @@ INCLUDEPATH += $$PWD/src
 
 SOURCES += \
     src/main.cpp \
+    src/model/app_settings.cpp \
     src/model/conn_manager.cpp \
     src/model/preset.cpp \
     src/model/profile_store.cpp \
@@ -52,6 +53,7 @@ SOURCES += \
     src/ui/layout_manager.cpp \
     src/ui/pane_container.cpp \
     src/ui/key_row_layout.cpp \
+    src/ui/app_settings_view.cpp \
     src/ui/licences_view.cpp \
     src/ui/key_row.cpp \
     src/ui/main_window.cpp \
@@ -62,6 +64,7 @@ SOURCES += \
 HEADERS += \
     src/input/input_router.h \
     src/model/profile.h \
+    src/model/app_settings.h \
     src/model/conn_manager.h \
     src/model/preset.h \
     src/model/profile_store.h \
@@ -86,6 +89,7 @@ HEADERS += \
     src/ui/layout_manager.h \
     src/ui/pane_container.h \
     src/ui/key_row_layout.h \
+    src/ui/app_settings_view.h \
     src/ui/licences_view.h \
     src/ui/key_row.h \
     src/ui/main_window.h \

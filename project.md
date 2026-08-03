@@ -502,7 +502,11 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
   "touch-primary input", not on the OS — a convertible laptop in tablet mode and
   an Android device with a Bluetooth keyboard are the two cases an OS check gets
   wrong in opposite directions. Make it a three-state setting (auto / always /
-  never); auto follows the primary input device.
+  never); auto follows the primary input device. **[BUILT]** The key row has
+  supported all three modes since M3 and nothing ever set one, so AUTO was the
+  only reachable state. It is now a device-level setting in `app.ini` (§10.6),
+  edited from "This device" in the desktop dialog and from the Hosts overflow
+  menu on Android — the first app-level setting, and the store M11 will need.
 - Keeping it buildable on desktop is also what makes it *testable* — a synthetic
   key row press is the cheapest way to exercise the router's sticky-modifier
   logic in a unit test.

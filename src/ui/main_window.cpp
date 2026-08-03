@@ -27,6 +27,7 @@
 #include "model/session.h"
 #include "model/conn_manager.h"
 #include "model/session_registry.h"
+#include "model/app_settings.h"
 #include "model/settings_resolver.h"
 #include "ui/layout_manager.h"
 #include "ui/pane_container.h"
@@ -41,6 +42,7 @@
 #include "ui/host_editor.h"
 #include "ui/host_list.h"
 #include "ui/key_row.h"
+#include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
 #include "model/preset.h"
 #include "ui/preset_editor.h"
@@ -229,6 +231,18 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		connect(licences, &bssh_licences_view::back_requested, this, [this] {
 			m_pages->setCurrentWidget(m_host_list);
 		});
+
+		bssh_app_settings_view *device = new bssh_app_settings_view(this);
+		m_pages->addWidget(device);
+
+		connect(m_host_list, &bssh_host_list::settings_requested, this, [this, device] {
+			m_pages->setCurrentWidget(device);
+		});
+		connect(device, &bssh_app_settings_view::changed,
+		         this, &bssh_main_window::apply_key_row_visibility);
+		connect(device, &bssh_app_settings_view::back_requested, this, [this] {
+			m_pages->setCurrentWidget(m_host_list);
+		});
 	} else {
 		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
 		connect(m_session_dialog, &bssh_session_dialog::open_requested,
@@ -244,6 +258,8 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 		 */
 		connect(m_session_dialog, &bssh_session_dialog::presets_changed,
 		         this, &bssh_main_window::reresolve_sessions);
+		connect(m_session_dialog, &bssh_session_dialog::device_settings_changed,
+		         this, &bssh_main_window::apply_key_row_visibility);
 		m_pages->addWidget(m_session_dialog);
 	}
 
@@ -270,6 +286,14 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	 */
 	m_key_row = new bssh_key_row(nullptr, this);
 	layout->insertWidget(2, m_key_row);
+
+	/*
+	 * sec 6.2's three-state setting, which the key row has supported since
+	 * M3 and nothing ever set: AUTO was the only reachable mode, so a
+	 * convertible laptop could not ask for the row and a tablet with a
+	 * keyboard docked could not dismiss it.
+	 */
+	apply_key_row_visibility();
 
 	/*
 	 * Shortcuts are the window's, because they act on the window: copy
@@ -665,6 +689,24 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	m_layout->set_width(int(width() / qMax(qreal(0.1), scale)));
 
 	if (m_panes) m_panes->rebuild();
+}
+
+void bssh_main_window::apply_key_row_visibility() {
+	if (!m_key_row) return;
+
+	const bssh_app_settings settings;
+
+	switch (settings.key_row_visibility()) {
+	case bssh_app_settings::KEY_ROW_ALWAYS:
+		m_key_row->set_visibility_mode(bssh_key_row::ALWAYS);
+		break;
+	case bssh_app_settings::KEY_ROW_NEVER:
+		m_key_row->set_visibility_mode(bssh_key_row::NEVER);
+		break;
+	case bssh_app_settings::KEY_ROW_AUTO:
+		m_key_row->set_visibility_mode(bssh_key_row::AUTO);
+		break;
+	}
 }
 
 void bssh_main_window::on_pane_focus_changed(bssh_session *session) {

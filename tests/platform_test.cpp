@@ -2,6 +2,9 @@
 #include <QtTest>
 
 #include "platform/platform.h"
+#include "model/app_settings.h"
+#include <QTemporaryDir>
+#include <QFile>
 #include "platform_test.h"
 #include "ui/main_window.h"
 
@@ -81,4 +84,47 @@ void platform_test::the_window_opens_on_the_front_door() {
 	 * reaches a modal password dialog, and a test that can block is worse
 	 * than a gap in coverage.
 	 */
+}
+
+void platform_test::the_key_row_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	/*
+	 * sec 6.2 asks for three states, not a checkbox, and names the two
+	 * cases that need them: a convertible laptop whose owner wants the
+	 * row, and a tablet with a keyboard docked whose owner does not. The
+	 * key row has supported all three since M3 and nothing ever set one,
+	 * so AUTO was the only reachable mode.
+	 */
+	{
+		bssh_app_settings settings(dir.path());
+		QCOMPARE(settings.key_row_visibility(), bssh_app_settings::KEY_ROW_AUTO);
+
+		settings.set_key_row_visibility(bssh_app_settings::KEY_ROW_NEVER);
+	}
+
+	{
+		bssh_app_settings reopened(dir.path());
+		QCOMPARE(reopened.key_row_visibility(), bssh_app_settings::KEY_ROW_NEVER);
+	}
+
+	/*
+	 * Written as a word, because app.ini is meant to be opened and edited
+	 * (sec 10.6): "key_row=never" says what it does and "key_row=2" needs
+	 * the source to decode.
+	 */
+	QFile file(dir.path() + QStringLiteral("/app.ini"));
+	QVERIFY(file.open(QIODevice::ReadOnly));
+	QVERIFY(QString::fromUtf8(file.readAll()).contains(QStringLiteral("key_row=never")));
+
+	/* A typo in a hand-edited file behaves like the default rather than
+	 * refusing to start. */
+	{
+		QFile broken(dir.path() + QStringLiteral("/app.ini"));
+		QVERIFY(broken.open(QIODevice::WriteOnly));
+		broken.write("[input]\nkey_row=alwyas\n");
+	}
+
+	bssh_app_settings mistyped(dir.path());
+	QCOMPARE(mistyped.key_row_visibility(), bssh_app_settings::KEY_ROW_AUTO);
 }
