@@ -20,6 +20,8 @@
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
 #   make check-ci     -- run the Linux CI job in the runner's own image
 #                        (needs docker; sec 12.4)
+#   make check-ssh    -- the SSH transport against a throwaway sshd
+#                        (needs sshd; sec 12.3)
 #   make fonts        -- fetch the curated font set (sec 9.2) into fonts/;
 #                        not needed to build, see FONTS below
 #   make fonts-list   -- show the set and its pinned versions
@@ -252,6 +254,12 @@ style:
 # API added later compiles here and fails there.
 check-ci:
 	./tools/check-ci.sh
+
+# sec 12.3's one test against a real server. Needs sshd; not part of
+# `test`, which runs entirely against the fake transport. The libssh
+# binding is the only layer a fake cannot exercise.
+check-ssh: $(TEST_BIN)
+	./tools/check-ssh.sh
 
 # --- the curated font set (project.md sec 9) --------------------------------
 # Not a build dependency: the app runs without it, falling back to whatever
@@ -538,7 +546,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style check-ci fonts fonts-list check-fonts android-fonts uninstall \
+.PHONY: all run test bench style check-ci check-ssh fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help

@@ -65,7 +65,10 @@ echo "check-ci: image    $IMAGE"
 echo "check-ci: packages $PACKAGES"
 
 STAGE=$(mktemp -d)
-trap 'rm -rf "$STAGE"' EXIT
+# INT and TERM as well as EXIT: an EXIT-only trap leaks the staging tree
+# whenever this is interrupted or hits a timeout, which is exactly when a
+# long docker run gets cut short.
+trap 'rm -rf "$STAGE"' EXIT INT TERM
 
 # Only what is committed, plus the vendored submodule: this checks what a
 # push would actually give the runner, not what happens to be lying in

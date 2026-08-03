@@ -3,6 +3,7 @@
 
 #include "conn_manager_test.h"
 #include "emulator_bench.h"
+#include "live_ssh_test.h"
 #include "emulator_test.h"
 #include "graphics_test.h"
 #include "platform_test.h"
@@ -54,9 +55,20 @@ int main(int argc, char *argv[]) {
 	 */
 	QList<char *> forwarded;
 	bool bench = false;
+	bool live_ssh = false;
 	for (int i = 0; i < argc; ++i) {
 		if (qstrcmp(argv[i], "--bench") == 0) {
 			bench = true;
+			continue;
+		}
+		/*
+		 * The transport against a real server (sec 12.3). Opt-in for the
+		 * same reason as --bench and for a stronger one: it needs an
+		 * sshd, which tools/check-ssh.sh supplies. Everything else here
+		 * runs against the fake.
+		 */
+		if (qstrcmp(argv[i], "--live-ssh") == 0) {
+			live_ssh = true;
 			continue;
 		}
 		forwarded.append(argv[i]);
@@ -67,6 +79,10 @@ int main(int argc, char *argv[]) {
 
 	if (bench) {
 		return run_test<emulator_bench>(forwarded_argc, forwarded_argv) == 0 ? 0 : 1;
+	}
+
+	if (live_ssh) {
+		return run_test<live_ssh_test>(forwarded_argc, forwarded_argv) == 0 ? 0 : 1;
 	}
 
 	argc = forwarded_argc;

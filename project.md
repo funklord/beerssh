@@ -1608,6 +1608,23 @@ The desktop build is what makes this project testable at all — use it.
 - **Golden-file emulator tests**: byte stream in, expected screen grid out.
   Cheap to write, and the only practical defence against a parser fix breaking
   three other sequences.
+- **One check runs against a real server** (`make check-ssh`, §12.4's sibling).
+  The fake is what makes the suite runnable with no server and no device, and it
+  leaves exactly one layer unexercised: the libssh binding. A fake proves the
+  emulator handles bytes; it cannot prove an option reached libssh, or that
+  libssh did what the option's name suggests. That gap was not theoretical —
+  `IdentityFile` was wired to `SSH_OPTIONS_ADD_IDENTITY`, shipped, and given a
+  widget on both front doors before anything checked that a named key
+  authenticates.
+  It proves both halves: with the key it connects **and the shell answers**, and
+  *without* it the server refuses — the negative is what stops the test passing
+  against a server that would let anyone in. The tilde form is checked against
+  the server too rather than by comparing strings, since carrying a `~` across
+  from an OpenSSH config is the field's whole purpose (§10.5).
+  Everything is thrown away: its own host key, user key, `HOME` and an sshd on a
+  spare loopback port taking that one key and no password. Nobody's real
+  `~/.ssh` is read or written. Without the server the tests **skip** rather than
+  fail, so running the binary by hand cannot report a false failure.
 - Device/emulator tests cover what only Android can break: IME and hardware-key
   delivery (§6.1), the foreground service surviving screen-off (§5.1), activity
   recreation on rotation.

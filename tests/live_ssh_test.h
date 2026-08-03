@@ -1,0 +1,37 @@
+#ifndef BSSH_LIVE_SSH_TEST_H
+#define BSSH_LIVE_SSH_TEST_H
+
+#include <QObject>
+
+/*
+ * The SSH transport against a real server (project.md sec 12.3).
+ *
+ * Everything else in tests/ runs against bssh_fake_ssh_session, which is
+ * what makes the suite runnable with no server and no device -- and what
+ * leaves exactly one layer unexercised: the libssh binding itself. A fake
+ * proves the emulator handles bytes; it cannot prove an option reached
+ * libssh, or that libssh did what the option name suggests.
+ *
+ * That gap was not theoretical. IdentityFile was wired through to
+ * SSH_OPTIONS_ADD_IDENTITY, shipped, and given a widget on both front
+ * doors before anything had checked that a named key actually
+ * authenticates.
+ *
+ * NOT part of `make test`: it needs an sshd. tools/check-ssh.sh starts a
+ * throwaway one on a spare port with a generated key and runs this
+ * against it; `make check-ssh` is the entry point. The port and key path
+ * arrive in BSSH_TEST_SSH_PORT and BSSH_TEST_SSH_KEY, and the tests skip
+ * rather than fail when they are unset, so running the binary by hand
+ * cannot report a false failure.
+ */
+class live_ssh_test : public QObject {
+	Q_OBJECT
+
+private slots:
+	void a_named_key_authenticates();
+	void the_same_key_works_through_a_tilde();
+	void without_the_key_it_does_not_get_in();
+	void a_missing_key_fails_rather_than_hangs();
+};
+
+#endif /* BSSH_LIVE_SSH_TEST_H */

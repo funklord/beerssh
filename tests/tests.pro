@@ -33,6 +33,7 @@ SOURCES += \
     main.cpp \
     conn_manager_test.cpp \
     emulator_bench.cpp \
+    live_ssh_test.cpp \
     emulator_test.cpp \
     graphics_test.cpp \
     platform_test.cpp \
@@ -98,6 +99,7 @@ HEADERS += \
     fake_ssh_session.h \
     conn_manager_test.h \
     emulator_bench.h \
+    live_ssh_test.h \
     emulator_test.h \
     graphics_test.h \
     platform_test.h \
