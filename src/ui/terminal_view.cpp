@@ -75,6 +75,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_cursor_style(QStringLiteral("block")),
       m_cursor_on(true),
       m_blink_timer(nullptr),
+      m_content_revision(1),
       m_raise_contrast(true),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -1095,6 +1096,7 @@ void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings
 }
 
 void bssh_terminal_view::on_screen_damaged() {
+	++m_content_revision;
 	update();
 
 	/*
@@ -1115,4 +1117,12 @@ void bssh_terminal_view::set_raise_contrast(bool raise) {
 
 	m_raise_contrast = raise;
 	update();
+}
+
+bool bssh_terminal_view::selection_range(qint64 &first_line, int &first_col,
+                                          qint64 &last_line, int &last_col) const {
+	if (!has_selection()) return false;
+
+	normalised_selection(first_line, first_col, last_line, last_col);
+	return true;
 }

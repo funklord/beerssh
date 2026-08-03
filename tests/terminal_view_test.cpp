@@ -719,3 +719,67 @@ void terminal_view_test::the_floor_lifts_glyphs_and_leaves_backgrounds_faithful(
 	QVERIFY2(commonest != bssh_raise_contrast(published, scheme->background),
 	          "an inverse cell's background must keep the palette's own colour");
 }
+
+void terminal_view_test::a_reader_can_reach_the_scrollback_and_the_selection() {
+	/*
+	 * History is most of what a terminal has to say. Exposing only the
+	 * visible screen (sec 14, M11) meant a reader's view stopped at
+	 * whatever happened to be on it -- a build log a sighted user can
+	 * scroll back through was simply gone.
+	 */
+	bssh_emulator emulator(30, 3);
+	for (int i = 1; i <= 8; ++i) {
+		emulator.feed(QByteArrayLiteral("line ") + QByteArray::number(i) +
+		               QByteArrayLiteral("\r\n"));
+	}
+	QVERIFY2(emulator.scrollback().count() >= 5, "the test needs lines to have scrolled off");
+
+	bssh_terminal_view view;
+	show_and_resize(view, 600, 120);
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+
+	QAccessibleInterface *a = QAccessible::queryAccessibleInterface(&view);
+	QVERIFY(a);
+	QAccessibleTextInterface *text = a->textInterface();
+	QVERIFY(text);
+
+	const QString all = a->text(QAccessible::Value);
+	QVERIFY2(all.contains(QStringLiteral("line 1")),
+	          "a line that scrolled into history must still be readable");
+	QVERIFY(all.contains(QStringLiteral("line 8")));
+
+	/* History comes first, so the reader meets it in the order it happened. */
+	QVERIFY(all.indexOf(QStringLiteral("line 1")) < all.indexOf(QStringLiteral("line 8")));
+	QCOMPARE(text->characterCount(), all.size());
+
+	/*
+	 * The cursor is on the SCREEN, which now starts partway through the
+	 * text rather than at zero -- getting that wrong puts the reader's
+	 * caret somewhere in the history.
+	 */
+	QVERIFY2(text->cursorPosition() > all.indexOf(QStringLiteral("line 8")),
+	          "the caret must land on the live screen, not in the scrollback");
+
+	/*
+	 * And the selection, which could not be reported at all while only
+	 * the screen was exposed: one starting in the scrollback had no
+	 * offset to start at.
+	 */
+	QCOMPARE(text->selectionCount(), 0);
+
+	/* Scrolled back, so the drag lands on a line that only exists in
+	 * history -- the case that had no offset to report before. */
+	view.scroll_by(3);
+	drag(view, 0, 0, 4, 0);
+	QVERIFY(view.has_selection());
+
+	QCOMPARE(text->selectionCount(), 1);
+
+	int start = -1;
+	int end = -1;
+	text->selection(0, &start, &end);
+	QVERIFY(start >= 0);
+	QVERIFY2(end > start, "a selection spanning the buffer must span offsets too");
+	QVERIFY(end <= text->characterCount());
+}

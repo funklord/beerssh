@@ -49,6 +49,15 @@ public:
 	 * sec 9.3's contrast floor, applied when drawing rather than to the
 	 * palette (see bssh_raise_contrast). Set from the device setting.
 	 */
+	/*
+	 * Bumped whenever what the widget would draw changes. The
+	 * accessibility interface flattens the screen AND the scrollback into
+	 * one string, which is hundreds of kilobytes on a full buffer and far
+	 * too much to rebuild on every query a screen reader makes -- so it
+	 * caches against this.
+	 */
+	quint64 content_revision() const { return m_content_revision; }
+
 	void set_raise_contrast(bool raise);
 	bool raise_contrast() const { return m_raise_contrast; }
 
@@ -120,6 +129,7 @@ public:
 
 	/* Lines that scrolled off, for scrolling back through (sec 7). */
 	void attach_scrollback(const bssh_scrollback *scrollback);
+	const bssh_scrollback *scrollback() const { return m_scrollback; }
 
 	/*
 	 * How many lines above the live screen the view is showing. 0 is
@@ -161,6 +171,15 @@ public:
 	 */
 	QString selection_text() const;
 	bool has_selection() const;
+
+	/*
+	 * The selection in absolute line coordinates, or false when there is
+	 * none. Public because the accessibility interface reports the same
+	 * range in its own offsets, and two ways of normalising one selection
+	 * is two ways for them to disagree.
+	 */
+	bool selection_range(qint64 &first_line, int &first_col,
+	                      qint64 &last_line, int &last_col) const;
 	void clear_selection();
 
 public slots:
@@ -282,6 +301,7 @@ private:
 
 	QColor m_background;
 	QColor m_foreground;
+	quint64 m_content_revision;
 	bool m_raise_contrast;
 	int m_cell_width;
 	int m_cell_height;

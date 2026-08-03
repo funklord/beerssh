@@ -78,9 +78,25 @@ private:
 		QString text;
 		QList<int> row_start;
 		QList<int> row_length;
+
+		/* How many of the rows above came from the scrollback, so an
+		 * offset can be turned back into an absolute line. */
+		int history_rows = 0;
+
+		/* The revision this was built from; see bssh_terminal_view. */
+		quint64 revision = 0;
+		bool valid = false;
 	};
 
-	flat_t flatten() const;
+	/*
+	 * Cached against the view's content revision. A full scrollback is
+	 * hundreds of kilobytes and a screen reader asks these questions
+	 * constantly -- rebuilding the string per query would put the cost of
+	 * the entire history on every keystroke.
+	 */
+	const flat_t &flatten() const;
+
+	mutable flat_t m_flat;
 	bssh_terminal_view *view() const;
 };
 

@@ -1831,11 +1831,22 @@ background).
     `setCursorPosition` does nothing rather than lie. Change notification is
     guarded by `QAccessible::isActive()`, so the flatten cost stays off the
     `damaged()` path that §9.5 spent two commits making cheap.
-    **[OPEN]** Selection is not reported — the view's own lives in scrollback
-    coordinates this interface does not expose yet, and a selection reported
-    against the wrong offsets is worse than none. Scrollback itself is likewise
-    not reachable through the text interface: what a reader sees is the visible
-    screen.
+    **Scrollback and selection are exposed too**, and they had to arrive
+    together: a selection starting in the history had no offset to start *at*
+    while only the visible screen was published, and a range reported against the
+    wrong coordinates is worse than none. History and screen are one stream,
+    because to somebody reading that is what they are — the boundary between them
+    is a scroll position, not a document break — and a build log a sighted user
+    can scroll back through was otherwise simply gone. Only the visible rows get
+    a `characterRect`: a line that has scrolled off is not on screen, and
+    inventing coordinates for it would send a magnifier somewhere blank.
+    The text is **cached against a revision counter** the view bumps when it
+    repaints. A full 5000-line buffer is ~257,000 characters, and a reader asks
+    these questions constantly, so rebuilding per query would put the cost of the
+    whole history on every keystroke. Building it once per change cost **16.7 ms**
+    until the per-character `QString::fromUcs4` — a whole QString allocated and
+    destroyed per cell — was replaced by appending code units directly: **1.4 ms**,
+    which is what makes exposing the history affordable at all.
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop
     packaging decided in §12.2, its `.desktop`/AppStream metadata, and a first

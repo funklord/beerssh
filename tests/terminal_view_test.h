@@ -39,6 +39,7 @@ private slots:
 	void every_control_announces_a_name();
 	void the_contrast_floor_can_be_turned_off();
 	void the_floor_lifts_glyphs_and_leaves_backgrounds_faithful();
+	void a_reader_can_reach_the_scrollback_and_the_selection();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */
