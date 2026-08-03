@@ -1,6 +1,7 @@
 #include "ui/main_window.h"
 
 #include <QCloseEvent>
+#include <QResizeEvent>
 #include <QFile>
 #include <QDesktopServices>
 #include <QUrl>
@@ -11,6 +12,7 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QMetaEnum>
 #include <QVBoxLayout>
 
@@ -27,6 +29,7 @@
 #include "model/session_registry.h"
 #include "model/settings_resolver.h"
 #include "ui/layout_manager.h"
+#include "ui/pane_container.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include <QCheckBox>
@@ -53,7 +56,9 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_host_list(nullptr),
       m_host_editor(nullptr),
       m_preset_editor(nullptr),
-      m_terminal_view(new bssh_terminal_view(this)),
+      m_terminal_view(nullptr),
+      m_panes(nullptr),
+      m_wired_view(nullptr),
       m_status_label(new QLabel(this)),
       m_registry(new bssh_session_registry(this)),
       m_layout(nullptr),
@@ -86,12 +91,63 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	m_tabs->setDrawBase(false);
 	m_tabs->hide();
 	layout->addWidget(m_tabs, 0);
-	layout->addWidget(m_terminal_view, 1);
+
+	/*
+	 * The pane container, not a lone terminal view. Both it and the layout
+	 * manager existed, tested, since M8 -- and nothing ever constructed
+	 * one, so every split, the size classes, the collapse-to-tabs rule and
+	 * the pane navigation chords were unreachable from the running app.
+	 * The window showed exactly one view because it only ever made one.
+	 *
+	 * m_terminal_view survives as a POINTER TO THE FOCUSED PANE rather
+	 * than as a widget this window owns: everything that acts on "the
+	 * terminal" -- copy, paste, scroll, the grid size in the status line
+	 * -- means the focused one.
+	 */
+	m_layout = new bssh_layout_manager(this);
+	m_panes = new bssh_pane_container(m_layout, m_terminal_page);
+	layout->addWidget(m_panes, 1);
 	layout->addWidget(m_status_label, 0);
+
+	connect(m_panes, &bssh_pane_container::focus_changed,
+	         this, &bssh_main_window::on_pane_focus_changed);
+	connect(m_panes, &bssh_pane_container::panes_rebuilt, this, [this] {
+		on_pane_focus_changed(m_panes->focused_session());
+	});
 
 	connect(m_tabs, &QTabBar::currentChanged, this, &bssh_main_window::on_tab_changed);
 	connect(m_tabs, &QTabBar::tabCloseRequested,
 	         this, &bssh_main_window::on_tab_close_requested);
+
+	/*
+	 * sec 8.3's tab context menu. "Show beside current" is how a split is
+	 * MADE -- until now the pane container could show four panes and
+	 * nothing in the app could ask it to show two.
+	 */
+	m_tabs->setContextMenuPolicy(Qt::CustomContextMenu);
+	connect(m_tabs, &QWidget::customContextMenuRequested, this, [this](const QPoint &at) {
+		const int index = m_tabs->tabAt(at);
+		bssh_session *session = m_registry->at(index);
+		if (!session) return;
+
+		QMenu menu(this);
+		QAction *split = menu.addAction(QStringLiteral("Show beside current"));
+		QAction *close = menu.addAction(QStringLiteral("Close"));
+
+		/*
+		 * Offered only when there is room for another pane. A menu entry
+		 * that does nothing on a phone is worse than one that is absent:
+		 * it invites the user to conclude the feature is broken rather
+		 * than that their window is narrow.
+		 */
+		const int fits = bssh_layout_manager::max_panes_for(m_layout->size_class());
+		split->setEnabled(m_layout->intent().size() < fits &&
+		                   !m_layout->intent().contains(session));
+
+		QAction *chosen = menu.exec(m_tabs->mapToGlobal(at));
+		if (chosen == split) split_with(session);
+		if (chosen == close) on_tab_close_requested(index);
+	});
 	connect(m_registry, &bssh_session_registry::changed,
 	         this, &bssh_main_window::on_registry_changed);
 
@@ -190,11 +246,11 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	 * session is. At M7 this space becomes the per-session status (sec
 	 * 8.3).
 	 */
-	connect(m_terminal_view, &bssh_terminal_view::grid_resized,
-	         this, &bssh_main_window::on_grid_resized);
-
-	m_cols = m_terminal_view->cols();
-	m_rows = m_terminal_view->rows();
+	/*
+	 * No grid yet: the views belong to the pane container and there are
+	 * no panes until a session is shown. on_pane_focus_changed connects
+	 * grid_resized and reads the size when one appears.
+	 */
 
 	/*
 	 * The key row is built with the window but its router is not: a
@@ -211,6 +267,23 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	 * show_session().
 	 */
 	auto handle_shortcut = [this](bssh_input_router::shortcut_t shortcut) {
+		if (!m_terminal_view) return;
+
+		/*
+		 * Pane navigation (sec 8.3). The chords were emitted by the
+		 * router and the container knew how to move focus; nothing
+		 * joined the two, so with four panes on screen the only way to
+		 * change pane was the mouse.
+		 */
+		if (shortcut == bssh_input_router::SHORTCUT_FOCUS_PANE_LEFT && m_panes) {
+			m_panes->focus_adjacent(-1);
+			return;
+		}
+		if (shortcut == bssh_input_router::SHORTCUT_FOCUS_PANE_RIGHT && m_panes) {
+			m_panes->focus_adjacent(1);
+			return;
+		}
+
 		if (shortcut == bssh_input_router::SHORTCUT_COPY) {
 			const QString selected = m_terminal_view->selection_text();
 			if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
@@ -273,31 +346,6 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	 * Qt reports the mode as unsupported on platforms that lack it, so
 	 * this needs no platform check of its own.
 	 */
-	/*
-	 * Opening a URL the remote chose is a decision, so it is made here
-	 * rather than in the widget, and it asks first. A terminal that opens
-	 * whatever a compromised host puts on screen is a terminal being used
-	 * as a delivery mechanism.
-	 */
-	connect(m_terminal_view, &bssh_terminal_view::link_activated,
-	         this, [this](const QString &uri) {
-		const QMessageBox::StandardButton answer = QMessageBox::question(
-		        this, QStringLiteral("Open link"),
-		        QStringLiteral("Open this address, sent by the remote host?\n\n%1").arg(uri),
-		        QMessageBox::Open | QMessageBox::Cancel, QMessageBox::Cancel);
-
-		if (answer == QMessageBox::Open) QDesktopServices::openUrl(QUrl(uri));
-	});
-
-	connect(m_terminal_view, &bssh_terminal_view::selection_changed, this, [this] {
-		if (!QGuiApplication::clipboard()->supportsSelection()) return;
-
-		const QString selected = m_terminal_view->selection_text();
-		if (selected.isEmpty()) return;
-
-		QGuiApplication::clipboard()->setText(selected, QClipboard::Selection);
-	});
-
 	update_status();
 
 	/*
@@ -518,52 +566,39 @@ void bssh_main_window::on_add_host() {
 }
 
 void bssh_main_window::show_session(bssh_session *session) {
-	if (!session) return;
+	if (!session || !m_layout || !m_panes) return;
 
 	/*
-	 * Only one session is on screen, and it is the one whose bell has
-	 * been heard. Telling the outgoing session first means a bell that
-	 * arrives during the switch lands on the right tab.
+	 * The window no longer attaches a view to a session: it says which
+	 * sessions should be on screen, and the pane container builds the
+	 * views for them. That indirection is the whole of M8 -- one pane or
+	 * four, collapsing to tabs when the window narrows, is a question
+	 * about the LIST rather than about any one view.
 	 */
-	if (m_current && m_current != session) m_current->set_on_screen(false);
+	QList<bssh_session *> intent = m_layout->intent();
 
-	m_current = session;
-	session->set_on_screen(true);
-
-	/*
-	 * Attaching is the whole operation: the view points at this session's
-	 * screen, scrollback, images and router, and nothing is copied or
-	 * moved. Switching tabs is four pointer assignments, which is what
-	 * core principle 2 buys.
-	 */
-	m_terminal_view->attach_screen(&session->emulator()->screen());
-	m_terminal_view->attach_scrollback(&session->emulator()->scrollback());
-	m_terminal_view->attach_images(&session->emulator()->images());
-	m_terminal_view->attach_emulator(session->emulator());
-	m_terminal_view->attach_input_router(session->input_router());
-
-	if (m_key_row) {
-		m_key_row->set_router(session->input_router());
-
+	if (!intent.contains(session)) {
 		/*
-		 * The row follows the session on screen, not the window: two
-		 * tabs on different presets get different keys, and switching
-		 * between them has to switch the row too (sec 6.2).
+		 * Selecting a tab shows that session alone. Adding it BESIDE the
+		 * others is a separate, deliberate act (the tab context menu's
+		 * "Show beside current"), because a tab switch that silently
+		 * split the window would be a click doing two things.
 		 */
-		m_key_row->set_layout(
-		        session->settings().value(QStringLiteral("key_row_layout")).toString());
+		intent = QList<bssh_session *>{ session };
+		m_layout->set_intent(intent);
 	}
 
-	/*
-	 * Before the geometry below, because the font decides the cell size and
-	 * therefore the column count. Two hosts on different fonts genuinely
-	 * have different grids in the same window, and each remote has to be
-	 * told about its own (sec 9.5).
-	 */
-	bssh_apply_appearance(m_terminal_view, session->settings());
+	m_panes->rebuild();
+	m_panes->focus_session(session);
 
+	/*
+	 * Per-session wiring that outlives any one view: the settings a host
+	 * resolves to, and the geometry the remote is told about. Reconnected
+	 * on every show because a pane rebuild replaces the view underneath.
+	 */
 	connect(session, &bssh_session::settings_changed, this, [this, session] {
-		if (m_current != session) return;
+		if (m_current != session || !m_terminal_view) return;
+
 		bssh_apply_appearance(m_terminal_view, session->settings());
 		if (m_key_row) {
 			m_key_row->set_layout(
@@ -575,30 +610,145 @@ void bssh_main_window::show_session(bssh_session *session) {
 		update_status();
 	}, Qt::UniqueConnection);
 
-	session->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
-	                                      m_terminal_view->cell_height());
-	session->resize(m_terminal_view->cols(), m_terminal_view->rows());
+	if (m_terminal_view) {
+		bssh_apply_appearance(m_terminal_view, session->settings());
+		m_terminal_view->setFocus();
+	}
 
-	connect(session->emulator(), &bssh_emulator::damaged,
-	         m_terminal_view, QOverload<>::of(&QWidget::update),
-	         Qt::UniqueConnection);
-	connect(session->emulator(), &bssh_emulator::images_changed,
-	         m_terminal_view, QOverload<>::of(&QWidget::update),
-	         Qt::UniqueConnection);
+	update_status();
+}
 
-	m_terminal_view->setFocus();
-	m_terminal_view->update();
+void bssh_main_window::split_with(bssh_session *session) {
+	if (!session || !m_layout || !m_panes) return;
+
+	QList<bssh_session *> intent = m_layout->intent();
+	if (intent.contains(session)) return;
+
+	intent.append(session);
+	m_layout->set_intent(intent);
+
+	/*
+	 * The layout decides how many of those actually fit: asking for a
+	 * fourth pane in a phone-width window is not refused, it is
+	 * REMEMBERED and shown when there is room (sec 8.2). What the user
+	 * gets now is whatever the current size class allows.
+	 */
+	m_panes->rebuild();
+	m_panes->focus_session(session);
+
+	update_status();
+}
+
+void bssh_main_window::resizeEvent(QResizeEvent *event) {
+	QWidget::resizeEvent(event);
+
+	if (!m_layout) return;
+
+	/*
+	 * Device-independent pixels, which is what sec 8.2's thresholds are
+	 * written in: 600 and 840dp mean the same physical width on a phone
+	 * and on a 4K monitor, and passing raw pixels would put a laptop in
+	 * the same class as a tablet purely because it has more of them.
+	 */
+	const qreal scale = devicePixelRatioF() > 0 ? logicalDpiX() / 160.0 : 1.0;
+	m_layout->set_width(int(width() / qMax(qreal(0.1), scale)));
+
+	if (m_panes) m_panes->rebuild();
+}
+
+void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
+	m_terminal_view = m_panes ? m_panes->focused_view() : nullptr;
+
+	if (!m_terminal_view) {
+		m_current = nullptr;
+		update_status();
+		return;
+	}
+
+	/*
+	 * Wired once per VIEW, not once per focus change. The view is
+	 * destroyed and rebuilt whenever the panes change -- that is what
+	 * makes a pane cheap -- so its signals have to be reconnected each
+	 * time one appears, while focus moving between two existing panes
+	 * must not connect anything twice.
+	 *
+	 * Qt::UniqueConnection cannot do this job: it is rejected outright
+	 * for lambdas ("unique connections require a pointer to member
+	 * function"), so the connection is not made AT ALL rather than made
+	 * once. That is how the link prompt and the primary-selection copy
+	 * quietly stopped working when this moved out of the constructor --
+	 * a warning on stderr and two features gone.
+	 */
+	if (m_terminal_view != m_wired_view) {
+		m_wired_view = m_terminal_view;
+
+		connect(m_terminal_view, &bssh_terminal_view::grid_resized,
+		         this, &bssh_main_window::on_grid_resized);
+
+	/*
+	 * Opening a URL the remote chose is a decision, so it is made here
+	 * rather than in the widget, and it asks first. A terminal that opens
+	 * whatever a compromised host puts on screen is a terminal being used
+	 * as a delivery mechanism.
+	 */
+	connect(m_terminal_view, &bssh_terminal_view::link_activated,
+		       this, [this](const QString &uri) {
+		const QMessageBox::StandardButton answer = QMessageBox::question(
+			      this, QStringLiteral("Open link"),
+			      QStringLiteral("Open this address, sent by the remote host?\n\n%1").arg(uri),
+			      QMessageBox::Open | QMessageBox::Cancel, QMessageBox::Cancel);
+
+		if (answer == QMessageBox::Open) QDesktopServices::openUrl(QUrl(uri));
+	});
+
+	connect(m_terminal_view, &bssh_terminal_view::selection_changed, this, [this] {
+		if (!QGuiApplication::clipboard()->supportsSelection()) return;
+
+		const QString selected = m_terminal_view->selection_text();
+		if (selected.isEmpty()) return;
+
+		QGuiApplication::clipboard()->setText(selected, QClipboard::Selection);
+		});
+	}
+
+
+	if (session && session != m_current) {
+		if (m_current) m_current->set_on_screen(false);
+		m_current = session;
+		session->set_on_screen(true);
+
+		if (m_key_row) {
+			m_key_row->set_router(session->input_router());
+			m_key_row->set_layout(
+			        session->settings().value(QStringLiteral("key_row_layout")).toString());
+		}
+
+		/* The tab bar follows the focused pane, not the other way round. */
+		const int index = m_registry->index_of(session);
+		if (index >= 0 && m_tabs->currentIndex() != index) {
+			const QSignalBlocker blocker(m_tabs);
+			m_tabs->setCurrentIndex(index);
+		}
+	}
+
+	m_cols = m_terminal_view->cols();
+	m_rows = m_terminal_view->rows();
 	update_status();
 }
 
 void bssh_main_window::detach_session() {
 	m_current = nullptr;
 
-	m_terminal_view->attach_screen(nullptr);
-	m_terminal_view->attach_scrollback(nullptr);
-	m_terminal_view->attach_images(nullptr);
-	m_terminal_view->attach_emulator(nullptr);
-	m_terminal_view->attach_input_router(nullptr);
+	/*
+	 * The panes own the views and attach them; letting go here is a
+	 * matter of dropping the session from the layout and rebuilding, so
+	 * that no view is left pointing into a session about to be freed
+	 * (sec 3, core principle 2).
+	 */
+	if (m_layout) m_layout->forget(m_current);
+	if (m_panes) m_panes->rebuild();
+
+	m_terminal_view = m_panes ? m_panes->focused_view() : nullptr;
 	if (m_key_row) m_key_row->set_router(nullptr);
 }
 

@@ -14,6 +14,7 @@ class bssh_host_editor;
 class bssh_preset_editor;
 class bssh_host_list;
 class bssh_layout_manager;
+class bssh_pane_container;
 class bssh_key_row;
 class bssh_profile_store;
 class bssh_session_dialog;
@@ -98,6 +99,14 @@ public:
 protected:
 	void closeEvent(QCloseEvent *event) override;
 
+	/*
+	 * The window's width in dp is what decides how many panes fit
+	 * (sec 8.2), so a resize is a layout question rather than only a
+	 * geometry one -- folding a foldable or tiling a window into a
+	 * half-screen column collapses the splits to tabs and remembers them.
+	 */
+	void resizeEvent(QResizeEvent *event) override;
+
 private slots:
 	void open_profile(const bssh_profile_t &profile);
 	void on_add_host();
@@ -119,6 +128,15 @@ private:
 
 	/* Re-applies a changed preset to the open sessions that follow it. */
 	void reresolve_sessions(int preset_id);
+	void on_pane_focus_changed(bssh_session *session);
+
+	/*
+	 * Adds a session to the visible panes rather than replacing them
+	 * (sec 8.3's "move to split"). Separate from show_session because a
+	 * tab click that silently split the window would be one click doing
+	 * two things.
+	 */
+	void split_with(bssh_session *session);
 
 	void connect_to(const QString &target);
 	/*
@@ -144,7 +162,21 @@ private:
 	bssh_host_list *m_host_list;
 	bssh_host_editor *m_host_editor;
 	bssh_preset_editor *m_preset_editor;
+	/*
+	 * The FOCUSED pane's view, owned by the container rather than by this
+	 * window, and null while no pane exists. Everything acting on "the
+	 * terminal" means the focused one.
+	 */
 	bssh_terminal_view *m_terminal_view;
+	bssh_pane_container *m_panes;
+
+	/*
+	 * The view whose signals are already connected. A plain pointer
+	 * compared for identity, never dereferenced: it may be dangling after
+	 * a pane rebuild, and comparing a dangling pointer against a fresh
+	 * one is exactly the test wanted -- they differ.
+	 */
+	bssh_terminal_view *m_wired_view;
 	QLabel *m_status_label;
 	bssh_session_registry *m_registry;
 	bssh_layout_manager *m_layout;

@@ -1388,9 +1388,17 @@ background).
 9. **M8 – Adaptive splits.** `bssh_layout_manager`, size classes, 2/4-pane
    splits, focus indication, collapse-to-tabs on shrink, per-pane
    `window-change`. Desktop window-drag resizing exercises this hardest — use it.
-   **Mostly built:** size classes, pane limits, the collapse/restore rule with
-   the layout intent remembered, per-pane geometry, the focus border, pane
-   navigation chords, and dividers snapping to whole cells. The arrangement
+   **Built, and reachable since the wiring landed.** Size classes, pane
+   limits, the collapse/restore rule with the layout intent remembered,
+   per-pane geometry, the focus border, pane navigation chords, and dividers
+   snapping to whole cells — all of it existed and was tested for several
+   milestones while **nothing in the app ever constructed a
+   `bssh_pane_container` or a `bssh_layout_manager`**, so the window showed
+   exactly one view and every one of those features was unreachable. The
+   window now holds a pane container, splits are made from the tab context
+   menu ("Show beside current", §8.3), the navigation chords reach
+   `focus_adjacent`, and a resize feeds the width in dp to the layout
+   manager so folding or tiling collapses the splits to tabs. The arrangement
    is persisted (profile ids, pane count, active tab) and the front door
    reopens with the last-active host selected. **[OPEN]** Reopening every
    remembered host at once needs key authentication (M6) to be anything
