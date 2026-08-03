@@ -263,6 +263,40 @@ void bssh_profile_store::sort_presets() {
 	});
 }
 
+namespace {
+
+/*
+ * "name", then "name (imported)", then "name (imported 2)" -- as many as
+ * it takes. The suffix says how the entry got here, which is the useful
+ * thing to know when two rows would otherwise look identical.
+ */
+QString unique_among(const QStringList &taken, const QString &wanted) {
+	if (!taken.contains(wanted, Qt::CaseInsensitive)) return wanted;
+
+	const QString base = wanted + QStringLiteral(" (imported");
+	QString candidate = base + QLatin1Char(')');
+
+	int suffix = 1;
+	while (taken.contains(candidate, Qt::CaseInsensitive)) {
+		candidate = base + QLatin1Char(' ') + QString::number(++suffix) + QLatin1Char(')');
+	}
+	return candidate;
+}
+
+} /* namespace */
+
+QString bssh_profile_store::unique_preset_name(const QString &wanted) const {
+	QStringList taken;
+	for (const bssh_preset_t &preset : m_presets) taken.append(preset.name);
+	return unique_among(taken, wanted);
+}
+
+QString bssh_profile_store::unique_profile_name(const QString &wanted) const {
+	QStringList taken;
+	for (const bssh_profile_t &profile : m_profiles) taken.append(profile.name);
+	return unique_among(taken, wanted);
+}
+
 QString bssh_profile_store::unique_slug(const QString &base, int except_id) const {
 	QString candidate = base;
 	int suffix = 1;

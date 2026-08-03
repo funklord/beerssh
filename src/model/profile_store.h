@@ -105,8 +105,25 @@ public:
 	 * between one run and the next. */
 	layout_state_t layout() const;
 
+	/*
+	 * A name nothing else in the store is already using, for imports
+	 * (sec 10.5).
+	 *
+	 * Here, beside unique_slug, because it is the same job one layer up:
+	 * that one keeps the storage KEY distinct, this one keeps what the
+	 * user reads distinct. Three call sites each spelled their own
+	 * version -- append " (imported)" once, without re-checking -- and
+	 * once is not enough. Importing the same preset three times produced
+	 * three rows all called "BSD (imported)", distinguishable only by a
+	 * slug nobody is shown, and sec 10.4 will not let a preset a host
+	 * still follows be deleted, so tidying up meant guessing.
+	 */
+	QString unique_preset_name(const QString &wanted) const;
+	QString unique_profile_name(const QString &wanted) const;
+
 signals:
 	void changed();
+
 
 private:
 	bool open(const QString &directory);

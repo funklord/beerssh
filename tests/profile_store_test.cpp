@@ -627,3 +627,51 @@ void profile_store_test::the_touch_front_door_can_edit_a_host_it_created() {
 	QVERIFY(store.remove(id));
 	QVERIFY(store.profiles().isEmpty());
 }
+
+void profile_store_test::repeated_imports_get_distinguishable_names() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.path());
+
+	/*
+	 * Three call sites each spelled this rule themselves -- append
+	 * " (imported)" once, without re-checking -- and once is not enough.
+	 * Importing the same preset three times produced three rows all
+	 * called "BSD (imported)", told apart only by a slug nobody is shown,
+	 * and sec 10.4 refuses to delete a preset a host still follows, so
+	 * tidying up meant guessing which was which.
+	 *
+	 * Note the FIRST import already collides: BSD is a shipped preset
+	 * (sec 10.4), so this is the ordinary case rather than an edge one.
+	 */
+	QStringList names;
+	for (int round = 0; round < 3; ++round) {
+		bssh_preset_t imported;
+		imported.name = store.unique_preset_name(QStringLiteral("BSD"));
+		QVERIFY(store.save_preset(imported) != 0);
+		names.append(imported.name);
+	}
+
+	QCOMPARE(names, QStringList({ QStringLiteral("BSD (imported)"),
+		                            QStringLiteral("BSD (imported 2)"),
+		                            QStringLiteral("BSD (imported 3)") }));
+
+	/* A name nothing uses is left alone -- the suffix is not decoration. */
+	QCOMPARE(store.unique_preset_name(QStringLiteral("Something else")),
+	          QStringLiteral("Something else"));
+
+	/* Hosts follow the same rule, from the same object. */
+	bssh_profile_t host;
+	host.name = QStringLiteral("build");
+	host.host = QStringLiteral("build.example.com");
+	QVERIFY(store.save(host) != 0);
+
+	QCOMPARE(store.unique_profile_name(QStringLiteral("build")),
+	          QStringLiteral("build (imported)"));
+
+	/*
+	 * Case-insensitively, because two rows differing only in capitals are
+	 * two rows a person cannot tell apart either.
+	 */
+	QCOMPARE(store.unique_profile_name(QStringLiteral("BUILD")),
+	          QStringLiteral("BUILD (imported)"));
+}

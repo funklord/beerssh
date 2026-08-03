@@ -151,20 +151,21 @@ int bssh_ssh_config_import::import_selected() {
 	 * point (see the dialog's own comment), so a second import must not
 	 * silently rewrite hosts the user has since edited here.
 	 */
-	QStringList existing;
-	for (const bssh_profile_t &profile : m_store->profiles()) existing.append(profile.name);
-
 	int added = 0;
 	for (int i = 0; i < m_list->count() && i < m_hosts.size(); ++i) {
 		if (m_list->item(i)->checkState() != Qt::Checked) continue;
 
 		bssh_profile_t profile = m_hosts.at(i).to_profile();
-		if (existing.contains(profile.name, Qt::CaseInsensitive)) {
-			profile.name += QStringLiteral(" (imported)");
-		}
+
+		/*
+		 * Asked of the store each time round rather than tracked here,
+		 * so a name taken by the host saved on the previous iteration
+		 * counts -- and so this agrees with the preset importers, which
+		 * ask the same question of the same object.
+		 */
+		profile.name = m_store->unique_profile_name(profile.name);
 
 		if (m_store->save(profile) == 0) continue;
-		existing.append(profile.name);
 		++added;
 	}
 

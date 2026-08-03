@@ -1261,6 +1261,16 @@ double as documentation of what a preset can do.
     no path pattern, which would put BeerSSH in the "open with" list of every
     unknown binary on the device — a rude thing to do, and a lie, since the only
     file this app can open is a preset.
+- **An imported name is made unique by the store, not by the importer**
+  (`unique_preset_name` / `unique_profile_name`). Three call sites each spelled
+  the rule themselves — append " (imported)" once, without re-checking — and once
+  is not enough: importing the same preset three times produced three rows all
+  called "BSD (imported)", told apart only by a slug nobody is shown, while §10.4
+  refuses to delete a preset a host still follows. It sits beside `unique_slug`
+  because it is the same job one layer up: that one keeps the storage key
+  distinct, this one keeps what the user *reads* distinct. Note the first import
+  of a starter preset already collides, so this is the ordinary path rather than
+  an edge case.
 - Presets export/import as **INI** — the same format they are stored in (§10.6),
   so exporting one is copying a section out and importing is pasting it back,
   with a `schema` key for forward compatibility. Human-readable, diffable and

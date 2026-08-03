@@ -560,11 +560,7 @@ void bssh_preset_editor::on_import() {
 	 * following it -- the propagation this editor otherwise asks about
 	 * explicitly, done invisibly by opening a file.
 	 */
-	for (const bssh_preset_t &existing : m_store->presets()) {
-		if (existing.name.compare(imported.name, Qt::CaseInsensitive) != 0) continue;
-		imported.name = imported.name + QStringLiteral(" (imported)");
-		break;
-	}
+	imported.name = m_store->unique_preset_name(imported.name);
 
 	const int id = m_store->save_preset(imported);
 	if (id == 0) return;

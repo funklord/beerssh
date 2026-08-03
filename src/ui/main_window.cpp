@@ -985,11 +985,7 @@ void bssh_main_window::import_launch_document() {
 	}
 
 	/* Never merged over an existing one -- see bssh_preset_editor. */
-	for (const bssh_preset_t &existing : m_profile_store->presets()) {
-		if (existing.name.compare(imported.name, Qt::CaseInsensitive) != 0) continue;
-		imported.name = imported.name + QStringLiteral(" (imported)");
-		break;
-	}
+	imported.name = m_profile_store->unique_preset_name(imported.name);
 
 	const int id = m_profile_store->save_preset(imported);
 	if (id == 0) return;
