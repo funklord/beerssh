@@ -101,6 +101,7 @@ private:
 	QLineEdit *m_host;
 	QSpinBox *m_port;
 	QLineEdit *m_user;
+	QLineEdit *m_identity;
 	QLineEdit *m_session_name;
 	QListWidget *m_sessions;
 	/*

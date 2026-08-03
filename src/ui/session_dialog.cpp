@@ -11,6 +11,8 @@
 #include "ui/licences_view.h"
 #include "ui/preset_editor.h"
 
+#include <QDir>
+#include <QFileDialog>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -144,6 +146,41 @@ QWidget *bssh_session_dialog::build_session_page() {
 	m_user = new QLineEdit(page);
 	user_row->addWidget(m_user, 1);
 	layout->addLayout(user_row);
+
+	/*
+	 * The key to offer this host, which is where an imported OpenSSH
+	 * IdentityFile lands (sec 10.5). PuTTY files this under
+	 * Connection > SSH > Auth; it sits with the destination here because
+	 * that page is still a placeholder and a field nobody can find is a
+	 * field that may as well not exist.
+	 *
+	 * Blank means the default identities, which is what almost everyone
+	 * wants, so the placeholder says so rather than leaving an empty box
+	 * looking unfinished. Browse is offered here and not on the touch
+	 * editor because here the key really is a file on this machine.
+	 */
+	QHBoxLayout *identity_row = new QHBoxLayout();
+	identity_row->addWidget(new QLabel(QStringLiteral("Private key file"), page));
+	m_identity = new QLineEdit(page);
+	m_identity->setPlaceholderText(QStringLiteral("default keys (~/.ssh/id_ed25519 and friends)"));
+	identity_row->addWidget(m_identity, 1);
+
+	QPushButton *browse_key = new QPushButton(QStringLiteral("Browse..."), page);
+	identity_row->addWidget(browse_key);
+	layout->addLayout(identity_row);
+
+	connect(browse_key, &QPushButton::clicked, this, [this] {
+		/*
+		 * Starting in ~/.ssh, and with no name filter: a private key has
+		 * no extension, so filtering by one would hide every file worth
+		 * choosing.
+		 */
+		const QString start = QDir::homePath() + QStringLiteral("/.ssh");
+		const QString chosen = QFileDialog::getOpenFileName(
+		        this, QStringLiteral("Private key file"),
+		        QDir(start).exists() ? start : QDir::homePath());
+		if (!chosen.isEmpty()) m_identity->setText(chosen);
+	});
 
 	/*
 	 * PuTTY offers Raw/Telnet/Rlogin/SSH/Serial here. This is an SSH
@@ -284,6 +321,7 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	profile.host = m_host->text().trimmed();
 	profile.user = m_user->text().trimmed();
 	profile.port = static_cast<quint16>(m_port->value());
+	profile.identity_file = m_identity->text().trimmed();
 
 	/*
 	 * The font is an override on this host (sec 10.1), written only when
@@ -345,6 +383,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 	m_host->setText(profile.host);
 	m_user->setText(profile.user);
 	m_port->setValue(profile.port);
+	m_identity->setText(profile.identity_file);
 
 	if (m_font_picker) {
 		const QJsonObject resolved = resolved_settings(profile);

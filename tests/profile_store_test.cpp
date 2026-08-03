@@ -408,18 +408,23 @@ void profile_store_test::the_host_editor_builds_a_profile() {
 	QCOMPARE(built.name, QStringLiteral("10.0.0.42"));
 
 	/*
-	 * A field the editor does not SHOW still has to survive being edited.
-	 * The key an OpenSSH import put on a host has no widget here, so the
-	 * only thing keeping it is that profile() starts from the loaded
-	 * profile rather than building a fresh one -- rewrite that as a
-	 * constructor call and every imported host quietly loses its key the
-	 * first time someone corrects a typo in its name.
+	 * The key an OpenSSH import put on a host is shown and comes back
+	 * unchanged when nobody touches it, and is editable when they do.
+	 * Round-tripping matters more than it looks: this field arrives
+	 * filled in from a config the user never typed here, so the failure
+	 * to watch for is the editor quietly dropping or rewriting it.
 	 */
 	bssh_profile_t imported;
 	imported.host = QStringLiteral("build.example.com");
 	imported.identity_file = QStringLiteral("~/.ssh/id_work");
 	editor.set_profile(imported);
 	QCOMPARE(editor.profile().identity_file, QStringLiteral("~/.ssh/id_work"));
+
+	/* Cleared means "the default identities", not an empty path. */
+	bssh_profile_t cleared = imported;
+	cleared.identity_file.clear();
+	editor.set_profile(cleared);
+	QVERIFY(editor.profile().identity_file.isEmpty());
 
 	/* Nothing typed is nothing to save, and the editor says so by being
 	 * invalid rather than by inventing a host. */

@@ -1266,6 +1266,18 @@ double as documentation of what a preset can do.
   loading the key: a key that silently fails to load looks exactly like a server
   refusing it. Only the **path** is stored, never key material — which is what
   lets it sit on the profile at all under §10.3.
+  **Editable on both front doors** (§8.5, §14): "Private key file" beside the
+  destination in the PuTTY-shaped dialog, with a Browse button starting in
+  `~/.ssh` and no name filter, since a private key has no extension and
+  filtering by one would hide every file worth choosing; "Key file" on the touch
+  form, typed, with no Browse — nothing in the app can get a key onto a phone
+  yet, so a picker there would promise a workflow that does not exist, and what
+  the field is really for on touch is reading and correcting what an import put
+  there. Blank means the default identities on both, and both say so in the
+  placeholder rather than leaving an empty box looking unfinished. It is filed
+  with the destination rather than under PuTTY's Connection → SSH → Auth because
+  that page is still a placeholder, and a field nobody can find may as well not
+  exist.
   **`ProxyJump` is parsed, carried and deliberately not applied**: there is no
   jump-host support for it to reach, and a field that reaches nothing is what
   §10.2 refuses. The import names it per host and says what it means for

@@ -56,6 +56,25 @@ bssh_host_editor::bssh_host_editor(QWidget *parent)
 	m_name->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
 
 	/*
+	 * The key this host should be offered, which is what an imported
+	 * OpenSSH IdentityFile lands in (sec 10.5). Blank means the default
+	 * identities, which is what almost everyone wants -- so the
+	 * placeholder says that rather than leaving an empty box looking like
+	 * something unfinished.
+	 *
+	 * A path, typed, and no Browse button -- unlike the desktop dialog,
+	 * where the key really is a file on the machine the dialog is running
+	 * on. There is no way to GET a key onto a phone through this app yet:
+	 * nothing imports one, and sec 11's key story stops at the default
+	 * identities and the agent. So on touch this field is mostly for
+	 * reading and correcting what an OpenSSH import (sec 10.5) put there,
+	 * and a file picker would promise a workflow that does not exist.
+	 */
+	m_identity = new QLineEdit(this);
+	m_identity->setPlaceholderText(QStringLiteral("default keys"));
+	m_identity->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+
+	/*
 	 * Host first, because it is the only field that must be filled in.
 	 * The name is last and optional: making someone name a thing before
 	 * they can connect to it is a form asking for tidiness rather than
@@ -65,6 +84,7 @@ bssh_host_editor::bssh_host_editor(QWidget *parent)
 	form->addRow(QStringLiteral("User"), m_user);
 	form->addRow(QStringLiteral("Port"), m_port);
 	form->addRow(QStringLiteral("Name"), m_name);
+	form->addRow(QStringLiteral("Key file"), m_identity);
 	outer->addLayout(form);
 
 	/*
@@ -112,6 +132,7 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_user->setText(profile.user);
 	m_port->setValue(profile.port);
 	m_name->setText(profile.name);
+	m_identity->setText(profile.identity_file);
 
 	/*
 	 * Hosts added here follow no preset yet, so what they resolve to is
@@ -136,6 +157,7 @@ bssh_profile_t bssh_host_editor::profile() const {
 	edited.user = m_user->text().trimmed();
 	edited.port = static_cast<quint16>(m_port->value());
 	edited.name = m_name->text().trimmed();
+	edited.identity_file = m_identity->text().trimmed();
 
 	/*
 	 * The font, as an override, and only where it differs from the

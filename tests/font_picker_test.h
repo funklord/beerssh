@@ -21,6 +21,7 @@ private slots:
 	void a_font_this_build_does_not_have_is_shown_not_swallowed();
 	void choosing_a_font_reports_its_id_rather_than_its_label();
 	void the_session_dialog_keeps_what_its_form_does_not_show();
+	void the_session_dialog_round_trips_the_key_file();
 	void a_font_matching_the_preset_is_not_recorded_as_an_override();
 	void reverting_drops_the_override_rather_than_copying_the_value();
 };

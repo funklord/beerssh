@@ -47,6 +47,7 @@ signals:
 private:
 	bssh_profile_t m_profile;
 	QLineEdit *m_name;
+	QLineEdit *m_identity;
 	QLineEdit *m_host;
 	QLineEdit *m_user;
 	QSpinBox *m_port;

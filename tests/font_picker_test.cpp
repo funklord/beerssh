@@ -201,3 +201,29 @@ void font_picker_test::reverting_drops_the_override_rather_than_copying_the_valu
 	QVERIFY(badged.contains(QStringLiteral("font_family")));
 	QVERIFY(!badged.contains(QStringLiteral("font_size")));
 }
+
+void font_picker_test::the_session_dialog_round_trips_the_key_file() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.db")));
+	bssh_session_dialog dialog(&store);
+
+	/*
+	 * The desktop half of the same field the touch editor carries
+	 * (sec 10.5). It is the one field on this form a user is likely to
+	 * arrive at already filled in -- an OpenSSH import put it there --
+	 * so what matters is that opening a host and pressing Save gives the
+	 * key back rather than a subtly different string.
+	 */
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("build.example.com");
+	profile.identity_file = QStringLiteral("~/.ssh/id_work");
+	dialog.set_current_profile(profile);
+
+	QCOMPARE(dialog.current_profile().identity_file, QStringLiteral("~/.ssh/id_work"));
+
+	/* Blank means the defaults, and must not become a path of its own. */
+	bssh_profile_t plain;
+	plain.host = QStringLiteral("home.example.com");
+	dialog.set_current_profile(plain);
+	QVERIFY(dialog.current_profile().identity_file.isEmpty());
+}
