@@ -1105,6 +1105,15 @@ background no recognisably saturated red or blue can reach 4.5 at all — pure
 `#ff0000` tops out at 4.26. A floor nothing can satisfy is not a standard, it is
 a way of getting the rule switched off.
 
+**Only text is lifted, and the order says so.** The floor is applied *after*
+inverse video and selection have swapped foreground and background, to whichever
+colour ends up drawing the glyph. Applied before the swaps, a lifted colour lands
+*behind* an inverse cell — repainting a block in a colour the scheme does not
+contain, for no readability gain, because what needs to be legible on that block
+is the text, which is the other colour entirely. Contrast is symmetric, so the
+mistake passes every ratio check and is only visible in the painted pixels; the
+test asserts on those.
+
 Anything that SHOWS a scheme has to show it through the same floor, or the one
 control whose job is judging contrast becomes the one place reporting it wrongly.
 The font picker's preview and its sixteen swatches go through

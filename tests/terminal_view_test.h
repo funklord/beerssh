@@ -38,6 +38,7 @@ private slots:
 	void the_terminal_reads_itself_to_assistive_technology();
 	void every_control_announces_a_name();
 	void the_contrast_floor_can_be_turned_off();
+	void the_floor_lifts_glyphs_and_leaves_backgrounds_faithful();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */

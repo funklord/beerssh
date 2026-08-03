@@ -629,14 +629,6 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			QColor fg = resolve(cell.fg, m_foreground);
 			QColor bg = resolve(cell.bg, m_background);
 
-			/*
-			 * Against the cell's OWN background rather than the
-			 * scheme's, so a coloured block is judged on what is
-			 * actually behind the glyph. Applied here, after both are
-			 * resolved and before inverse/selection swap them, so a
-			 * lifted colour cannot then be used as a background.
-			 */
-			if (m_raise_contrast) fg = QColor(bssh_raise_contrast(fg.rgb(), bg.rgb()));
 			if (cell.attrs & bssh_cell_t::INVERSE) std::swap(fg, bg);
 
 			/*
@@ -646,6 +638,20 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			 * backgrounds.
 			 */
 			if (is_selected(history - offset + row, col)) std::swap(fg, bg);
+
+			/*
+			 * sec 9.3's floor, applied AFTER both swaps and to the
+			 * colour that ends up drawing the glyph, against the one
+			 * that ends up behind it.
+			 *
+			 * The order is the whole point. Lifting before the swaps
+			 * puts a lifted colour behind an inverse cell, which
+			 * repaints a faithful palette's background block for no
+			 * readability gain -- the text on that block is the other
+			 * colour, and lifting THAT is what makes it readable. A
+			 * background is not text, and only text is lifted.
+			 */
+			if (m_raise_contrast) fg = QColor(bssh_raise_contrast(fg.rgb(), bg.rgb()));
 
 			const int x = col * m_cell_width;
 			const int y = row * m_cell_height;

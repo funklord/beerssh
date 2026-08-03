@@ -8,6 +8,8 @@
 #include "model/profile_store.h"
 #include "ui/session_dialog.h"
 #include "model/app_settings.h"
+#include <QHash>
+#include "term/colour_scheme.h"
 #include "terminal_view_test.h"
 
 #include "fake_ssh_session.h"
@@ -659,4 +661,61 @@ void terminal_view_test::the_contrast_floor_can_be_turned_off() {
 		settings.set_raise_contrast(false);
 	}
 	QVERIFY(!bssh_app_settings(dir.path()).raise_contrast());
+}
+
+void terminal_view_test::the_floor_lifts_glyphs_and_leaves_backgrounds_faithful() {
+	/*
+	 * Order matters, and the first version had it wrong. The floor
+	 * (sec 9.3) must be applied AFTER inverse and selection have swapped
+	 * foreground and background, to whatever ends up drawing the glyph.
+	 *
+	 * Applied before, a lifted colour lands behind an inverse cell: the
+	 * block is repainted a colour the scheme does not contain, for no
+	 * readability gain, because what needs to be readable on that block
+	 * is the text -- which is the other colour entirely. A background is
+	 * not text, and only text is lifted. Contrast being symmetric, the
+	 * bug was invisible to any ratio check, which is why this asserts on
+	 * the painted block instead.
+	 */
+	bssh_emulator emulator(24, 2);
+	emulator.feed(QByteArrayLiteral("\x1b[7;34mINVERSE BLUE\x1b[0m"));
+
+	bssh_terminal_view view;
+	view.attach_screen(&emulator.screen());
+	view.set_raise_contrast(true);
+	view.resize(24 * 16, 2 * 32);
+
+	const QImage painted = view.grab().toImage();
+
+	const bssh_colour_scheme_t *scheme =
+	        bssh_colour_scheme_catalog::instance().by_id(QStringLiteral("default"));
+	QVERIFY(scheme);
+	const QRgb published = scheme->ansi[4];
+	QVERIFY2(bssh_contrast_ratio(published, scheme->background) < BSSH_CONTRAST_FLOOR,
+	          "this test needs a colour that the floor would lift");
+
+	/*
+	 * The commonest colour across the inverse run is its background, and
+	 * it must be exactly what the scheme publishes.
+	 */
+	QHash<QRgb, int> seen;
+	/* The run's real rectangle, from the view's own cell metrics -- a
+	 * guessed pixel region samples whatever the font happened to make. */
+	const int run_width = qMin(painted.width(), 12 * view.cell_width());
+	const int run_height = qMin(painted.height(), view.cell_height());
+	QVERIFY(run_width > 0 && run_height > 0);
+
+	for (int y = 0; y < run_height; ++y) {
+		for (int x = 0; x < run_width; ++x) seen[painted.pixel(x, y)]++;
+	}
+
+	QRgb commonest = 0;
+	int best = 0;
+	for (auto it = seen.constBegin(); it != seen.constEnd(); ++it) {
+		if (it.value() > best) { best = it.value(); commonest = it.key(); }
+	}
+
+	QCOMPARE(commonest, published);
+	QVERIFY2(commonest != bssh_raise_contrast(published, scheme->background),
+	          "an inverse cell's background must keep the palette's own colour");
 }
