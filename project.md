@@ -1522,10 +1522,30 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   reach a new host was to hand-edit the store. The two prompts are deliberately
   not the same dialog: first contact asks, a *changed* key warns, says plainly
   that this is both what a rebuilt server and an interception attack look like,
-  and defaults to Cancel so leaning on Enter trusts nothing. Keep
-  BeerSSH's own known-hosts store — **do not** read or write the user's
-  `~/.ssh/known_hosts` on desktop; sharing that file across two tools with
-  different trust UIs is how a warning ends up silently pre-accepted.
+  and defaults to Cancel so leaning on Enter trusts nothing.
+- **The user's `~/.ssh/known_hosts` is read, never written.** The original rule
+  refused both, on the grounds that two tools sharing one file is how a warning
+  gets silently pre-accepted. Half of that was wrong. It is the same person
+  deciding about the same hosts, and not looking at their file costs twice: a
+  host they have already verified is put to them again — the prompt fatigue that
+  teaches people to stop reading prompts — and, worse, **a changed host key reads
+  as a first contact**, because with no previous key on file there is nothing to
+  notice a change against. Refusing to look does not make this safer than
+  OpenSSH; it makes it quieter about the one thing worth shouting about.
+  So their file goes in libssh's *global* slot, which is consulted during
+  verification and never written to. Its hashed-hostname support is real —
+  checked against a file OpenSSH itself wrote.
+  **Writing stays ours, and that half of the rule holds for a concrete reason.**
+  Debian and Ubuntu ship `HashKnownHosts yes`, so a real `known_hosts` is
+  entirely hashed — 12 of 12 entries on the machine this was written on — and
+  that hashing exists so a leaked copy cannot list which machines someone
+  connects to. **libssh writes entries unhashed.** Appending to their file would
+  silently undo that setting for exactly the hosts they used this app for, and
+  they would never see it happen.
+  **[OPEN]** `@revoked` is not honoured as such: libssh reports a revoked key as
+  *unknown*, so the user is offered a first-contact prompt for a key they
+  explicitly revoked. It is not silently accepted, but it is not the refusal it
+  should be.
 - **Preset export must be provably secret-free** — see §10.3. Export is more
   exposed on desktop, where the file lands in `~/Downloads` and gets attached to
   a chat window, so the §10.3 type-level guarantee earns its keep there.

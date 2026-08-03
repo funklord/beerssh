@@ -96,6 +96,8 @@ run_phase() {
 	BSSH_TEST_SSH_PORT=$PORT \
 	BSSH_TEST_SSH_KEY="$DIR/home/.ssh/id_test" \
 	BSSH_TEST_SSH_PHASE="$1" \
+	BSSH_TEST_OPENSSH_KNOWN_HOSTS="${BSSH_TEST_OPENSSH_KNOWN_HOSTS:-}" \
+	BSSH_TEST_OPENSSH_SNAPSHOT="${BSSH_TEST_OPENSSH_SNAPSHOT:-}" \
 	HOME="$DIR/home" \
 	XDG_DATA_HOME="$DIR/home/.local/share" \
 	XDG_CONFIG_HOME="$DIR/home/.config" \
@@ -104,6 +106,22 @@ run_phase() {
 }
 
 BIN_ABS="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
+
+# Let OpenSSH record this host in its own format -- hashed, because that
+# is what the system default does -- so the read-only consultation can be
+# checked against a file this app did not write.
+OPENSSH_KH="$DIR/home/.ssh/known_hosts"
+ssh -i "$DIR/home/.ssh/id_test" -p "$PORT" \
+    -o UserKnownHostsFile="$OPENSSH_KH" \
+    -o StrictHostKeyChecking=accept-new \
+    -o IdentitiesOnly=yes 127.0.0.1 true >/dev/null 2>&1 || true
+
+if [ -s "$OPENSSH_KH" ]; then
+	echo "check-ssh: OpenSSH recorded the host ($(grep -c '^|1|' "$OPENSSH_KH") hashed entries)"
+	BSSH_TEST_OPENSSH_KNOWN_HOSTS="$OPENSSH_KH"
+	BSSH_TEST_OPENSSH_SNAPSHOT="$(cat "$OPENSSH_KH")"
+	export BSSH_TEST_OPENSSH_KNOWN_HOSTS BSSH_TEST_OPENSSH_SNAPSHOT
+fi
 
 echo "check-ssh: phase 1 -- authentication, and trusting this host key"
 run_phase trust

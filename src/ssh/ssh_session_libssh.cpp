@@ -124,14 +124,49 @@ bool default_identity_exists() {
 
 QString known_hosts_path() {
 	/*
-	 * Our own store, deliberately NOT ~/.ssh/known_hosts (sec 11).
-	 * Sharing that file with OpenSSH means two tools with two different
-	 * trust prompts writing one database -- and an entry silently
-	 * accepted by one becomes an entry the other never asks about.
+	 * Where this app WRITES trust decisions -- its own file, never the
+	 * user's (sec 11).
+	 *
+	 * Not because their trust is different from ours: it is the same
+	 * person deciding about the same hosts. It is because of what writing
+	 * would do to their file. Debian and Ubuntu ship HashKnownHosts yes,
+	 * so a real ~/.ssh/known_hosts is entirely hashed -- measured on this
+	 * machine, 12 entries out of 12 -- and that hashing exists so a
+	 * leaked copy does not disclose which machines someone connects to.
+	 * libssh writes entries UNHASHED. Appending to their file would
+	 * silently undo that setting for exactly the hosts they used this app
+	 * for, and they would never see it happen.
 	 */
 	const QString dir = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
 	QDir().mkpath(dir);
 	return dir + QStringLiteral("/known_hosts");
+}
+
+/*
+ * The user's OpenSSH known_hosts, consulted READ-ONLY.
+ *
+ * Reading it is the half that was wrong to refuse. It is the same person
+ * who verified those fingerprints, and not looking at them costs twice:
+ * a host they have already checked gets asked about again, which is
+ * exactly the prompt-fatigue that makes people stop reading prompts; and
+ * worse, a host key that CHANGED reads as a first contact here rather
+ * than as the warning OpenSSH would give, because we had no previous key
+ * to compare against. Refusing to look does not make the app safer than
+ * OpenSSH -- it makes it quieter about the one thing worth shouting
+ * about.
+ *
+ * libssh's "global" slot is exactly this: consulted during verification,
+ * never written to. Its hashed-hostname support is real -- checked
+ * against a file OpenSSH itself wrote, which libssh recognised.
+ *
+ * On Android there is no ~/.ssh and the path simply does not exist, which
+ * libssh treats as an empty file. That is why this needs no platform
+ * branch.
+ */
+QString openssh_known_hosts_path() {
+	const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+	if (home.isEmpty()) return QString();
+	return home + QStringLiteral("/.ssh/known_hosts");
 }
 
 } /* namespace */
@@ -333,6 +368,17 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	ssh_options_set(m_session, SSH_OPTIONS_PORT, &port_value);
 	ssh_options_set(m_session, SSH_OPTIONS_USER, user_utf8.constData());
 	ssh_options_set(m_session, SSH_OPTIONS_KNOWNHOSTS, known_utf8.constData());
+
+	/*
+	 * And the user's own, read-only, so a host they have already verified
+	 * in OpenSSH is recognised here rather than asked about again -- and
+	 * so a changed key is reported as CHANGED rather than as a host we
+	 * happen not to have met (see openssh_known_hosts_path).
+	 */
+	const QByteArray openssh_utf8 = openssh_known_hosts_path().toUtf8();
+	if (!openssh_utf8.isEmpty()) {
+		ssh_options_set(m_session, SSH_OPTIONS_GLOBAL_KNOWNHOSTS, openssh_utf8.constData());
+	}
 
 	/*
 	 * Before ssh_connect, because compression is negotiated during the

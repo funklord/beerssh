@@ -43,6 +43,7 @@ private slots:
 	void an_unknown_host_is_held_until_accepted();
 	void accepting_once_is_remembered();
 	void a_changed_host_key_is_refused();
+	void a_host_openssh_already_trusts_is_not_asked_about();
 
 	/*
 	 * sec 5.3's dead-peer detection, against a link whose packets really

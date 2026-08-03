@@ -134,6 +134,27 @@ void forget_all_hosts() {
 	QFile::remove(known_hosts_file());
 }
 
+/*
+ * The user's OpenSSH file is consulted read-only during verification
+ * (sec 11), so a test that needs a genuinely UNKNOWN host has to put it
+ * out of reach -- otherwise it is testing a host something already
+ * vouches for. Moving it aside rather than deleting it keeps the file the
+ * later test needs.
+ */
+void hide_openssh_known_hosts(bool hidden) {
+	const QString real = qEnvironmentVariable("BSSH_TEST_OPENSSH_KNOWN_HOSTS");
+	if (real.isEmpty()) return;
+
+	const QString aside = real + QStringLiteral(".aside");
+	if (hidden) {
+		QFile::remove(aside);
+		QFile::rename(real, aside);
+	} else if (QFile::exists(aside)) {
+		QFile::remove(real);
+		QFile::rename(aside, real);
+	}
+}
+
 bool server_available()
 {
 	if (test_port() == 0 || test_key().isEmpty()) {
@@ -241,7 +262,9 @@ void live_ssh_test::an_unknown_host_is_held_until_accepted()
 	 * genuinely is unknown rather than merely assumed to be.
 	 */
 	forget_all_hosts();
+	hide_openssh_known_hosts(true);
 	const outcome_t out = attempt(test_key(), false);
+	hide_openssh_known_hosts(false);
 
 	QVERIFY2(out.key_unknown, "an unseen host key must be announced");
 	QVERIFY2(!out.connected, "nothing continues until the prompt is answered");
@@ -256,6 +279,7 @@ void live_ssh_test::accepting_once_is_remembered()
 	}
 
 	forget_all_hosts();
+	hide_openssh_known_hosts(true);
 
 	/* Accepting gets in... */
 	const outcome_t first = attempt(test_key(), true);
@@ -278,6 +302,8 @@ void live_ssh_test::accepting_once_is_remembered()
 
 	const QString theirs = qEnvironmentVariable("HOME") + QStringLiteral("/.ssh/known_hosts");
 	QVERIFY2(!QFile::exists(theirs), "and must not be written to OpenSSH's file");
+
+	hide_openssh_known_hosts(false);
 }
 
 void live_ssh_test::a_changed_host_key_is_refused()
@@ -461,4 +487,54 @@ void live_ssh_test::a_dropped_session_reconnects_when_the_link_returns()
 	QVERIFY2(reconnects > 0, "the scheduled reconnection must actually be attempted");
 	QVERIFY2(back, "the session must come back once the link does");
 	QCOMPARE(session.state(), bssh_ssh_session::CONNECTED);
+}
+
+void live_ssh_test::a_host_openssh_already_trusts_is_not_asked_about()
+{
+	if (!server_available()) return;
+	if (phase() != QStringLiteral("trust")) {
+		QSKIP("this phase has a server whose key is the one OpenSSH recorded");
+	}
+
+	/*
+	 * It is the same person deciding about the same hosts, so a
+	 * fingerprint they already checked in OpenSSH should not be put to
+	 * them again (sec 11). Two costs to asking: the prompt fatigue that
+	 * makes people stop reading prompts, and -- worse -- a CHANGED key
+	 * reading as a first contact, because with no previous key on file
+	 * there is nothing to notice a change against.
+	 *
+	 * The script hands us the file OpenSSH itself wrote, hashed by the
+	 * system's own HashKnownHosts default, so this also checks libssh
+	 * reads that format rather than quietly finding nothing.
+	 */
+	const QString openssh_file = qEnvironmentVariable("BSSH_TEST_OPENSSH_KNOWN_HOSTS");
+	if (openssh_file.isEmpty() || !QFile::exists(openssh_file)) {
+		QSKIP("no OpenSSH-written known_hosts to consult");
+	}
+
+	hide_openssh_known_hosts(false);
+	forget_all_hosts();
+	const outcome_t out = attempt(test_key(), false);
+
+	QVERIFY2(!out.key_unknown,
+	          "a host OpenSSH already trusts must not be presented as unknown");
+	QVERIFY2(out.connected, "and must connect without a prompt");
+
+	/*
+	 * Read, never written. Their file is hashed by system default and
+	 * libssh writes plaintext, so appending to it would silently undo
+	 * the setting that keeps a leaked copy from listing someone's
+	 * machines.
+	 */
+	QFile theirs(openssh_file);
+	QVERIFY(theirs.open(QIODevice::ReadOnly));
+	const QByteArray after = theirs.readAll();
+	theirs.close();
+
+	/* Trimmed: the snapshot travels through the environment, which drops
+	 * the trailing newline, and that is not a change to the file. */
+	QCOMPARE(after.trimmed(), qgetenv("BSSH_TEST_OPENSSH_SNAPSHOT").trimmed());
+	QVERIFY2(!after.contains("\n[127.0.0.1]"),
+	          "nothing unhashed may be appended to the user's file");
 }
