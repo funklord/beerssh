@@ -167,6 +167,7 @@ committed into the submodule.
 make          # build ./beerssh
 make run      # build and run it
 make test     # smoke test + unit tests (offscreen QPA, no server needed)
+make bench    # emulator throughput in MB/s; not a gate, run it on an idle box
 make style    # indentation gate
 ```
 

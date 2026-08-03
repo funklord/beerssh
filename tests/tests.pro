@@ -32,6 +32,7 @@ PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a
 SOURCES += \
     main.cpp \
     conn_manager_test.cpp \
+    emulator_bench.cpp \
     emulator_test.cpp \
     graphics_test.cpp \
     platform_test.cpp \
@@ -89,6 +90,7 @@ SOURCES += \
 HEADERS += \
     fake_ssh_session.h \
     conn_manager_test.h \
+    emulator_bench.h \
     emulator_test.h \
     graphics_test.h \
     platform_test.h \

@@ -15,6 +15,8 @@
 #   make SANITIZE=1   -- add ASan+UBSan, independent of DEBUG
 #   make run          -- build and run it
 #   make test         -- build and run the smoke test + unit tests
+#   make bench        -- emulator throughput in MB/s (sec 9.5); built by
+#                        `test` but not run by it, and not a CI gate
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
 #   make fonts        -- fetch the curated font set (sec 9.2) into fonts/;
 #                        not needed to build, see FONTS below
@@ -227,6 +229,16 @@ test: $(TARGET) $(TEST_BIN)
 	QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test
 	@echo "test: headless smoke test passed"
 	QT_QPA_PLATFORM=offscreen ./$(TEST_BIN)
+
+# Throughput through the emulator, in MB/s (project.md sec 9.5, sec 12.3).
+# Built by `test` but not run by it: these take seconds and their numbers
+# move with whatever else the machine is doing, which is not a thing to
+# fail a build over. Run on an idle machine, and compare a run against
+# another run of the same binary rather than against a number in a doc.
+bench: $(TEST_BIN)
+	@echo "bench: measuring on this machine -- load average is part of the result"
+	@uptime
+	QT_QPA_PLATFORM=offscreen ./$(TEST_BIN) --bench
 
 style:
 	./tools/check-indent.sh
@@ -516,7 +528,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test style fonts fonts-list check-fonts android-fonts uninstall \
+.PHONY: all run test bench style fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help

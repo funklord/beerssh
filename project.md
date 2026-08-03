@@ -1054,7 +1054,11 @@ diverge on *delivery* but never on *which fonts exist*.
   advance by the font's own fractional metrics and drift away from the columns.
   A real atlas remains available if profiling ever points at rasterisation, but
   it would have been the wrong fix for the actual cost.
-- **Throughput, measured separately from painting** Scrolling output ran at
+- **Throughput, measured separately from painting** — by `make bench`
+  (`tests/emulator_bench.cpp`, §12.3), which is where every MB/s figure below
+  comes from and how to re-derive it. They are timings on a particular machine,
+  so treat them as ratios and as a record of which change moved what, not as
+  numbers to compare against a fresh checkout on other hardware. Scrolling output ran at
   **0.2 MB/s** while a full-screen TUI repaint — more bytes, no scrolling —
   managed 21 MB/s, and the gap tracked the grid size rather than the output. A
   scroll was handled by re-reading the whole destination out of libvterm and
@@ -1387,6 +1391,19 @@ The desktop build is what makes this project testable at all — use it.
 - Device/emulator tests cover what only Android can break: IME and hardware-key
   delivery (§6.1), the foreground service surviving screen-off (§5.1), activity
   recreation on rotation.
+- **Benchmarks are built by `make test` and run by `make bench`.** Every
+  throughput figure in §9.5 was measured with a scratch harness that was then
+  thrown away, so each one cited a program nobody could re-run — a claim
+  wearing the clothes of evidence. `tests/emulator_bench.cpp` is that harness,
+  kept. It is **not a CI gate and must not become one**: the numbers move by
+  more than a real change does depending on what else the machine is compiling,
+  so a threshold would either sit so loose it catches nothing or fail builds
+  for reasons that are not the build's fault. Compare a run against another run
+  of the same binary. Each case also asserts on the resulting screen, because a
+  benchmark that only measures cannot tell "faster" from "stopped doing the
+  work". The measurement that *is* machine-independent is a **count** — damage
+  callbacks per line of output (§9.5) — and a count is what a regression test
+  should assert on if one is ever wanted here.
 
 ### 12.4 CI
 - **Build both platforms on every change** — Linux host build + all Android ABIs.

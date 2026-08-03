@@ -2,6 +2,7 @@
 #include <QtTest>
 
 #include "conn_manager_test.h"
+#include "emulator_bench.h"
 #include "emulator_test.h"
 #include "graphics_test.h"
 #include "platform_test.h"
@@ -38,6 +39,37 @@ static int run_test(int argc, char *argv[]) {
 
 int main(int argc, char *argv[]) {
 	QApplication app(argc, argv);
+
+	/*
+	 * `--bench` runs the throughput measurements INSTEAD of the suite
+	 * (sec 12.3). They take seconds rather than milliseconds and report
+	 * numbers that depend on what else the machine is doing, so they are
+	 * asked for rather than run by default -- but they are compiled and
+	 * linked either way, because a benchmark that has quietly stopped
+	 * building is found at exactly the wrong moment.
+	 *
+	 * Stripped from argv before qExec sees it, which rejects options it
+	 * does not know rather than ignoring them.
+	 */
+	QList<char *> forwarded;
+	bool bench = false;
+	for (int i = 0; i < argc; ++i) {
+		if (qstrcmp(argv[i], "--bench") == 0) {
+			bench = true;
+			continue;
+		}
+		forwarded.append(argv[i]);
+	}
+
+	int forwarded_argc = int(forwarded.size());
+	char **forwarded_argv = forwarded.data();
+
+	if (bench) {
+		return run_test<emulator_bench>(forwarded_argc, forwarded_argv) == 0 ? 0 : 1;
+	}
+
+	argc = forwarded_argc;
+	argv = forwarded_argv;
 
 	int failures = 0;
 	failures += run_test<font_catalog_test>(argc, argv);
