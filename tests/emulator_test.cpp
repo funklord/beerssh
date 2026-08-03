@@ -456,3 +456,50 @@ void emulator_test::a_write_is_on_the_screen_when_it_returns() {
 	QCOMPARE(rows.value(1), QStringLiteral("charlie"));
 	QCOMPARE(rows.value(2), QStringLiteral("delta"));
 }
+
+void emulator_test::damage_is_reported_per_row_not_per_cell() {
+	/*
+	 * libvterm's default reports one damage rectangle per printed CELL, so
+	 * ordinary output reached the mirror a character at a time: 20,000
+	 * lines of build output arrived as 1,188,841 callbacks where 20,001
+	 * would do, each one paying for a copy and a repaint request to carry
+	 * a single character (sec 9.5).
+	 *
+	 * This asserts on a COUNT rather than on a clock, which is the whole
+	 * reason it can live in the suite: it is the same number on a fast
+	 * machine, a loaded CI runner and a phone, so it cannot flake. The
+	 * throughput this protects is measured by `make bench` (sec 12.3),
+	 * which for the opposite reason cannot be a gate at all.
+	 */
+	const int lines = 500;
+	const int width = 60;
+
+	bssh_emulator emulator(80, 24);
+	QSignalSpy damaged(&emulator, &bssh_emulator::damaged);
+
+	QByteArray stream;
+	for (int i = 0; i < lines; ++i) {
+		stream += QByteArray(width, 'x') + QByteArrayLiteral("\r\n");
+	}
+	emulator.feed(stream);
+
+	/*
+	 * Measured: 2001 merged, 31977 on libvterm's default -- a factor of
+	 * 16, so the ceiling sits between them rather than on either. Pinning
+	 * the exact number would turn a libvterm update into a failing test
+	 * for no reason.
+	 *
+	 * Four per line rather than one because this counts repaint requests,
+	 * not damage rectangles, and a row's worth of text also moves the
+	 * cursor two or three times. Worth knowing before reading the number:
+	 * once damage is merged, what remains is mostly cursor movement.
+	 */
+	QVERIFY2(damaged.count() <= lines * 8,
+	          qPrintable(QStringLiteral("%1 repaint requests for %2 lines -- damage merging "
+	                                     "is off, or something below it regressed")
+	                         .arg(damaged.count()).arg(lines)));
+
+	/* And it did not get "efficient" by not reporting the output at all. */
+	QVERIFY(damaged.count() >= lines / 4);
+	QCOMPARE(row(emulator, 22), QString(width, QLatin1Char('x')));
+}

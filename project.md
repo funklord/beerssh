@@ -1086,6 +1086,11 @@ diverge on *delivery* but never on *which fonts exist*.
   rather than ours and is fixed in `vterm-patches/` (§7.1) — it is invisible
   under the default, because per-cell damage is delivered synchronously and
   nothing is ever pending when a scroll begins.
+  The count is what CI guards (§12.3), measured at the emulator's own
+  `damaged()` signal: **31,977 repaint requests for 500 lines of output on the
+  default, 2,001 merged**. Note the shape of what is left — four per line, not
+  one. Once damage is merged, most of what remains is **cursor movement**, which
+  is the next thing to look at if this ever needs to go further.
 - Snap the cell grid to integer pixel metrics to avoid blurry text and
   accumulating rounding error across 200 columns.
 - Respect **display density / device pixel ratio** on every platform and expose a
@@ -1401,9 +1406,14 @@ The desktop build is what makes this project testable at all — use it.
   for reasons that are not the build's fault. Compare a run against another run
   of the same binary. Each case also asserts on the resulting screen, because a
   benchmark that only measures cannot tell "faster" from "stopped doing the
-  work". The measurement that *is* machine-independent is a **count** — damage
-  callbacks per line of output (§9.5) — and a count is what a regression test
-  should assert on if one is ever wanted here.
+  work". The measurement that *is* machine-independent is a **count**, and that
+  is what guards the throughput in CI:
+  `emulator_test::damage_is_reported_per_row_not_per_cell` asserts on repaint
+  requests per line of output (§9.5) rather than on a clock, so it reads the
+  same on a fast desktop, a loaded runner and a phone and cannot flake. The
+  ceiling is set between the two measured figures rather than on either, because
+  pinning an exact count would turn a libvterm update into a failing test for no
+  reason.
 
 ### 12.4 CI
 - **Build both platforms on every change** — Linux host build + all Android ABIs.
