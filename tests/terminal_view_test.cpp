@@ -419,3 +419,47 @@ void terminal_view_test::changing_a_hosts_font_changes_its_grid() {
 	QVERIFY2(view.cell_width() > narrow_cell, "a bigger font must mean a wider cell");
 	QVERIFY2(view.cols() < narrow_cols, "a wider cell must mean fewer columns");
 }
+
+void terminal_view_test::the_cell_lands_on_whole_device_pixels() {
+	/*
+	 * sec 9.5 says to snap the grid to integer pixel metrics and that
+	 * fractional scaling is where it matters most. It was snapping to
+	 * integer LOGICAL pixels, which is not the same thing: at 150% a
+	 * 9-pixel cell is 13.5 device pixels, so every second column boundary
+	 * falls on a half pixel, adjacent glyphs are antialiased at different
+	 * sub-pixel offsets, and box-drawing characters stop meeting. A TUI's
+	 * borders come out seamed at every other column.
+	 *
+	 * Found by rendering the same box-drawing line at 100% and 150% and
+	 * looking at them: solid at 100%, visibly broken at 150%.
+	 */
+	for (int cell = 6; cell <= 24; ++cell) {
+		const struct { qreal ratio; int period; } cases[] = {
+			{ 1.0, 1 }, { 1.25, 4 }, { 1.5, 2 }, { 2.0, 1 }, { 3.0, 1 }
+		};
+
+		for (const auto &c : cases) {
+			const int snapped = bssh_snap_to_device_pixels(cell, c.ratio);
+
+			QVERIFY2(snapped >= 1, "a cell must never round away to nothing");
+			QCOMPARE(snapped % c.period, 0);
+
+			/* Whole device pixels is the property that matters. */
+			const qreal device = snapped * c.ratio;
+			QVERIFY2(qAbs(device - qRound(device)) < 0.001,
+			         qPrintable(QStringLiteral("cell %1 at %2x lands on %3 device px")
+			                            .arg(cell).arg(c.ratio).arg(device)));
+
+			/* And it stays close to what the font asked for. */
+			QVERIFY2(qAbs(snapped - cell) <= c.period,
+			         "snapping must not move the cell more than one period");
+		}
+	}
+
+	/*
+	 * An unusual ratio is left alone: 110% would need a period of ten,
+	 * and rounding a nine-pixel cell to ten costs more in glyph fidelity
+	 * than the seam costs in appearance.
+	 */
+	QCOMPARE(bssh_snap_to_device_pixels(9, 1.1), 9);
+}

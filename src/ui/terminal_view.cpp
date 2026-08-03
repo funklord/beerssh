@@ -376,6 +376,54 @@ void bssh_terminal_view::update_metrics() {
 	m_cell_width = qMax(1, qRound(metrics.horizontalAdvance(QLatin1Char('W'))));
 	m_cell_height = qMax(1, qRound(metrics.height()));
 	m_baseline = qRound(metrics.ascent());
+
+	/*
+	 * ...and whole DEVICE pixels, not merely whole logical ones, which is
+	 * what sec 9.5 means by fractional scaling being where this matters.
+	 *
+	 * At 150% a 9-pixel cell is 13.5 device pixels, so every second
+	 * column boundary lands on a half pixel. Each glyph is then
+	 * antialiased at a different sub-pixel offset from its neighbour, and
+	 * box-drawing characters -- whose whole job is to meet exactly at the
+	 * cell edge -- stop meeting. A TUI's borders come out with a faint
+	 * seam at every other column, which reads as a cheap terminal rather
+	 * than as a scaling artefact. It is plainly visible at 150% and
+	 * absent at 100%.
+	 *
+	 * So the cell is rounded to a multiple of however many logical pixels
+	 * it takes to land on a whole device pixel: 1 at 100% and 200%, 2 at
+	 * 150%, 4 at 125%. Beyond that the correction would cost more in
+	 * glyph fidelity than the seam costs in appearance, so an unusual
+	 * ratio is left alone.
+	 */
+	const qreal ratio = devicePixelRatioF();
+	m_cell_width = bssh_snap_to_device_pixels(m_cell_width, ratio);
+	m_cell_height = bssh_snap_to_device_pixels(m_cell_height, ratio);
+}
+
+int bssh_snap_to_device_pixels(int pixels, qreal device_ratio) {
+	if (pixels < 1 || device_ratio <= 0) return qMax(1, pixels);
+
+	/*
+	 * How many logical pixels it takes to land on a whole device pixel:
+	 * 1 at 100% and 200%, 2 at 150%, 4 at 125%.
+	 */
+	int period = 0;
+	for (int k = 1; k <= 4; ++k) {
+		if (qAbs(k * device_ratio - qRound(k * device_ratio)) < 0.001) {
+			period = k;
+			break;
+		}
+	}
+
+	/*
+	 * An unusual ratio (110%, say) would need a period of ten, and
+	 * rounding a nine-pixel cell to ten costs more in glyph fidelity than
+	 * the seam costs in appearance. Left alone.
+	 */
+	if (period <= 1) return pixels;
+
+	return qMax(period, int(qRound(pixels / qreal(period))) * period);
 }
 
 void bssh_terminal_view::recompute_grid() {

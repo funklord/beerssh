@@ -1419,7 +1419,13 @@ background).
     rasterised glyphs), Play asset-pack delivery and subsetting for the rest
     (Iosevka alone is 42 MB, so the condensed face cannot be the compact
     default until it ships), and the fractional-scaling and multi-monitor
-    DPI checks. The **font picker is built** and is one widget on both
+    DPI checks — **the fractional-scaling half is done**: the cell now snaps
+    to whole *device* pixels rather than whole logical ones, because at 150%
+    a 9-pixel cell is 13.5 device pixels and box-drawing characters stop
+    meeting at the cell edge. TUI borders came out seamed at every other
+    column; solid at 100%, visibly broken at 150%, found by rendering both
+    and looking. Multi-monitor DPI (dragging a window between screens of
+    different scaling) is still untested. The **font picker is built** and is one widget on both
     platforms (§9.4): Window → Appearance in the PuTTY-shaped dialog, the
     host page on Android, with a live preview, unavailable families listed
     and marked rather than hidden, and the choice stored as a per-host

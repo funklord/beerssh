@@ -287,4 +287,14 @@ private:
  */
 void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings);
 
+/*
+ * Round a cell dimension so the grid lands on whole DEVICE pixels, not
+ * merely whole logical ones (sec 9.5).
+ *
+ * A free function because it is arithmetic with no widget in it, and
+ * because the case it exists for -- fractional display scaling -- is one a
+ * test cannot reach by constructing a view: the test binary runs at 100%.
+ */
+int bssh_snap_to_device_pixels(int pixels, qreal device_ratio);
+
 #endif /* BSSH_TERMINAL_VIEW_H */
