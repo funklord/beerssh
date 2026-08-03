@@ -65,6 +65,7 @@ private slots:
 	void on_load();
 	void on_save();
 	void on_delete();
+	void on_import_ssh_config();
 	void on_open();
 	void on_category_changed();
 	void on_session_activated();

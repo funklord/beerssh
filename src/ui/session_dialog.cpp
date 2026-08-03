@@ -1,5 +1,7 @@
 #include "ui/session_dialog.h"
 
+#include "ui/ssh_config_import.h"
+
 #include "model/settings_resolver.h"
 #include "platform/platform.h"
 #include "term/colour_scheme.h"
@@ -14,6 +16,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
 #include <QSpinBox>
@@ -172,9 +175,20 @@ QWidget *bssh_session_dialog::build_session_page() {
 	QPushButton *load = new QPushButton(QStringLiteral("Load"), saved);
 	QPushButton *save = new QPushButton(QStringLiteral("Save"), saved);
 	QPushButton *remove = new QPushButton(QStringLiteral("Delete"), saved);
+	/*
+	 * Beside Load/Save/Delete because importing IS a way of getting a
+	 * saved session, and sec 10.5 notes this is worth most on the desktop
+	 * -- where the user's real ~/.ssh/config is usually sitting right
+	 * there.
+	 */
+	QPushButton *import_config = new QPushButton(QStringLiteral("From SSH config..."), saved);
+	import_config->setToolTip(
+	        QStringLiteral("Copy hosts in from an OpenSSH config file. Read once, "
+	                        "not followed afterwards."));
 	buttons->addWidget(load);
 	buttons->addWidget(save);
 	buttons->addWidget(remove);
+	buttons->addWidget(import_config);
 	buttons->addStretch(1);
 	list_row->addLayout(buttons);
 	saved_layout->addLayout(list_row);
@@ -193,6 +207,7 @@ QWidget *bssh_session_dialog::build_session_page() {
 	connect(load, &QPushButton::clicked, this, &bssh_session_dialog::on_load);
 	connect(save, &QPushButton::clicked, this, &bssh_session_dialog::on_save);
 	connect(remove, &QPushButton::clicked, this, &bssh_session_dialog::on_delete);
+	connect(import_config, &QPushButton::clicked, this, &bssh_session_dialog::on_import_ssh_config);
 	connect(open, &QPushButton::clicked, this, &bssh_session_dialog::on_open);
 	connect(cancel, &QPushButton::clicked, this, &bssh_session_dialog::cancelled);
 
@@ -370,6 +385,18 @@ void bssh_session_dialog::on_save() {
 
 	m_current.id = m_store->save(profile);
 	reload_sessions();
+}
+
+void bssh_session_dialog::on_import_ssh_config() {
+	const int added = bssh_ssh_config_import::run(m_store, this);
+	if (added < 0) return;   /* backed out; not an error */
+
+	reload_sessions();
+
+	QMessageBox::information(
+	        this, QStringLiteral("Hosts imported"),
+	        added == 1 ? QStringLiteral("1 host was added to your saved sessions.")
+	                   : QStringLiteral("%1 hosts were added to your saved sessions.").arg(added));
 }
 
 void bssh_session_dialog::on_delete() {

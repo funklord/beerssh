@@ -33,7 +33,9 @@ SOURCES += \
     src/main.cpp \
     src/model/app_settings.cpp \
     src/model/conn_manager.cpp \
+    src/model/document_path.cpp \
     src/model/preset.cpp \
+    src/model/ssh_config.cpp \
     src/model/profile_store.cpp \
     src/model/settings_resolver.cpp \
     src/model/session.cpp \
@@ -62,6 +64,7 @@ SOURCES += \
     src/ui/key_row.cpp \
     src/ui/main_window.cpp \
     src/ui/session_dialog.cpp \
+    src/ui/ssh_config_import.cpp \
     src/ui/tab_status.cpp \
     src/ui/terminal_view.cpp
 
@@ -70,7 +73,9 @@ HEADERS += \
     src/model/profile.h \
     src/model/app_settings.h \
     src/model/conn_manager.h \
+    src/model/document_path.h \
     src/model/preset.h \
+    src/model/ssh_config.h \
     src/model/profile_store.h \
     src/model/settings_resolver.h \
     src/model/session.h \
@@ -98,6 +103,7 @@ HEADERS += \
     src/ui/key_row.h \
     src/ui/main_window.h \
     src/ui/session_dialog.h \
+    src/ui/ssh_config_import.h \
     src/ui/tab_status.h \
     src/ui/terminal_view.h
 

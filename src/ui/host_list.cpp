@@ -1,10 +1,13 @@
 #include "ui/host_list.h"
 
+#include "ui/ssh_config_import.h"
+
 #include <QLabel>
 #include <QListWidget>
 #include <QResizeEvent>
 #include <QScroller>
 #include <QMenu>
+#include <QMessageBox>
 #include <QToolButton>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -66,6 +69,22 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	m_menu->setPopupMode(QToolButton::InstantPopup);
 
 	QMenu *menu = new QMenu(m_menu);
+	/*
+	 * In the overflow menu rather than beside the add button: importing
+	 * is a once-in-a-while gesture and the floating button belongs to the
+	 * everyday one (sec 8.5).
+	 */
+	connect(menu->addAction(QStringLiteral("Import from SSH config")), &QAction::triggered,
+	         this, [this] {
+		const int added = bssh_ssh_config_import::run(m_store, this);
+		if (added < 0) return;
+
+		reload();
+		QMessageBox::information(
+		        this, QStringLiteral("Hosts imported"),
+		        added == 1 ? QStringLiteral("1 host was added.")
+		                   : QStringLiteral("%1 hosts were added.").arg(added));
+	});
 	connect(menu->addAction(QStringLiteral("Presets")), &QAction::triggered,
 	         this, &bssh_host_list::presets_requested);
 	connect(menu->addAction(QStringLiteral("Settings")), &QAction::triggered,

@@ -1240,13 +1240,30 @@ double as documentation of what a preset can do.
   shareable were the reasons the format had to be one of those; being *the same*
   format as the store is what stops export from being a second serialiser that
   drifts from the first.
-- **[OPEN]** OpenSSH `~/.ssh/config` import — parse `Host` blocks (`HostName`,
-  `User`, `Port`, `IdentityFile`, `ProxyJump`) into host profiles. Not chosen for
-  v1, but design the profile schema so it maps cleanly onto those fields; it's a
-  high-value v2 feature and retrofitting a mismatched schema is painful. Note it
-  gets considerably more valuable now that there's a desktop build, where a real
-  `~/.ssh/config` is usually sitting right there — but if it lands, it stays an
-  explicit **import**, not a live read of the user's SSH config.
+- **OpenSSH `~/.ssh/config` import — built** (`bssh_ssh_config`). An explicit
+  import and never a live read: following the file at connect time would mean
+  BeerSSH's behaviour changed when a different tool's configuration did, with
+  nothing on screen to explain why. Hosts are copied in once and are this app's
+  to edit afterwards. Reached from the saved-sessions buttons on desktop and the
+  overflow menu on touch; the file is chosen, parsed, and offered as a ticklist,
+  because a real config accumulates dead machines and aliases for git forges that
+  are not shells, and importing all of it is the rude version of the feature.
+  Three pieces of OpenSSH's semantics are load-bearing and a parser that skips
+  them produces entries that look right and connect elsewhere: **the first value
+  for a keyword wins, not the last**; **patterns are not hosts** (`Host *`
+  configures the concrete aliases it matches but is not itself a machine, and a
+  matching `!negation` vetoes its whole block); and **`Match` cannot be evaluated
+  statically**, so its contents are skipped rather than attributed to the `Host`
+  above it. `Include` is not followed — reaching into files nobody pointed at is
+  the live-read behaviour this feature exists to avoid.
+  **`IdentityFile` and `ProxyJump` are parsed, carried and deliberately not
+  applied**: the SSH layer offers libssh's default identities and has no jump-host
+  support, so a profile field for either would be a setting that reaches nothing
+  (§10.2's rule). The import names them per host and says what it means for
+  connecting, since a host that silently loses its jump host looks like an app
+  that cannot reach the machine. Wiring `IdentityFile` through to
+  `SSH_OPTIONS_ADD_IDENTITY` is the obvious next step and would make that half of
+  the import real.
 - **[OPEN]** Host groups/folders with inherited settings. Presets cover most of the
   need; add folders only if organising many hosts proves awkward.
 

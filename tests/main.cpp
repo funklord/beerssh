@@ -17,6 +17,7 @@
 #include "font_picker_test.h"
 #include "preset_editor_test.h"
 #include "screen_test.h"
+#include "ssh_config_test.h"
 #include "terminal_view_test.h"
 
 /*
@@ -76,6 +77,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<font_picker_test>(argc, argv);
 	failures += run_test<preset_editor_test>(argc, argv);
 	failures += run_test<screen_test>(argc, argv);
+	failures += run_test<ssh_config_test>(argc, argv);
 	failures += run_test<conn_manager_test>(argc, argv);
 	failures += run_test<emulator_test>(argc, argv);
 	failures += run_test<graphics_test>(argc, argv);

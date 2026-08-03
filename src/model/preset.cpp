@@ -1,4 +1,6 @@
 #include "model/preset.h"
+
+#include "model/document_path.h"
 #include <QTemporaryDir>
 #include <QSettings>
 #include <QFile>
@@ -147,34 +149,14 @@ QList<bssh_preset_t> bssh_preset_t::builtins() {
  * content:// URIs, which QFile understands and QSettings does not. Rather
  * than write a second INI implementation for one platform, the bytes move
  * through a temporary file and QSettings stays the only thing that parses
- * the format.
+ * the format. The two path questions themselves live in
+ * model/document_path.h, shared with the OpenSSH config import (sec 10.5).
  */
-static bool bssh_is_local_path(const QString &path) {
-	/*
-	 * content:// is the only thing that genuinely is not a path. A file://
-	 * URL is one wearing a URL's clothes, and it arrives that way whenever
-	 * something hands the app a document by URL rather than by name -- so
-	 * it is converted rather than bridged.
-	 *
-	 * Getting this wrong is not subtle in its consequences and is silent
-	 * in its cause: QFile takes a PATH, opens "file:///sdcard/x.ini" as a
-	 * relative filename that does not exist, and the import reports "not a
-	 * preset" about a file that is a perfectly good preset.
-	 */
-	return !path.startsWith(QStringLiteral("content://"));
-}
-
-/* file:// to a path; anything else unchanged. */
-static QString bssh_normalise_path(const QString &path) {
-	if (!path.startsWith(QStringLiteral("file://"))) return path;
-	return QUrl(path).toLocalFile();
-}
-
 bool bssh_preset_t::write_ini(const QString &raw_path) const {
-	const QString path = bssh_normalise_path(raw_path);
+	const QString path = bssh_normalise_document_path(raw_path);
 
 	QTemporaryDir staging;
-	const QString target = bssh_is_local_path(path)
+	const QString target = bssh_is_local_document_path(path)
 	        ? path
 	        : staging.filePath(QStringLiteral("preset.ini"));
 
@@ -201,7 +183,7 @@ bool bssh_preset_t::write_ini(const QString &raw_path) const {
 		if (file.status() != QSettings::NoError) return false;
 	}
 
-	if (bssh_is_local_path(path)) return true;
+	if (bssh_is_local_document_path(path)) return true;
 
 	QFile source(target);
 	QFile destination(path);
@@ -214,12 +196,12 @@ bool bssh_preset_t::write_ini(const QString &raw_path) const {
 bssh_preset_t bssh_preset_t::read_ini(const QString &raw_path, bool *ok) {
 	if (ok) *ok = false;
 
-	const QString path = bssh_normalise_path(raw_path);
+	const QString path = bssh_normalise_document_path(raw_path);
 
 	QTemporaryDir staging;
 	QString source = path;
 
-	if (!bssh_is_local_path(path)) {
+	if (!bssh_is_local_document_path(path)) {
 		QFile incoming(path);
 		if (!incoming.open(QIODevice::ReadOnly)) return bssh_preset_t();
 

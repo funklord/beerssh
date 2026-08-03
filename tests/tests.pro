@@ -47,6 +47,7 @@ SOURCES += \
     font_picker_test.cpp \
     preset_editor_test.cpp \
     screen_test.cpp \
+    ssh_config_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
     ../src/input/input_router.cpp \
@@ -66,7 +67,9 @@ SOURCES += \
     ../src/platform/secret_store_select_desktop.cpp \
     ../src/model/app_settings.cpp \
     ../src/model/conn_manager.cpp \
+    ../src/model/document_path.cpp \
     ../src/model/preset.cpp \
+    ../src/model/ssh_config.cpp \
     ../src/model/profile_store.cpp \
     ../src/model/settings_resolver.cpp \
     ../src/model/session.cpp \
@@ -79,6 +82,7 @@ SOURCES += \
     ../src/ui/pane_container.cpp \
     ../src/ui/main_window.cpp \
     ../src/ui/session_dialog.cpp \
+    ../src/ui/ssh_config_import.cpp \
     ../src/ui/tab_status.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/key_row_layout.cpp \
@@ -105,6 +109,7 @@ HEADERS += \
     font_picker_test.h \
     preset_editor_test.h \
     screen_test.h \
+    ssh_config_test.h \
     terminal_view_test.h \
     ../src/input/input_router.h \
     ../src/ssh/ssh_session.h \
@@ -119,7 +124,9 @@ HEADERS += \
     ../src/model/profile.h \
     ../src/model/app_settings.h \
     ../src/model/conn_manager.h \
+    ../src/model/document_path.h \
     ../src/model/preset.h \
+    ../src/model/ssh_config.h \
     ../src/model/profile_store.h \
     ../src/model/settings_resolver.h \
     ../src/model/session.h \
@@ -132,6 +139,7 @@ HEADERS += \
     ../src/ui/pane_container.h \
     ../src/ui/main_window.h \
     ../src/ui/session_dialog.h \
+    ../src/ui/ssh_config_import.h \
     ../src/ui/tab_status.h \
     ../src/ui/app_settings_view.h \
     ../src/ui/licences_view.h \
