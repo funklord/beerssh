@@ -30,6 +30,25 @@ public class BsshService extends Service {
 	private static final String CHANNEL_ID = "beerssh_sessions";
 	private static final int NOTIFICATION_ID = 1;
 
+	/*
+	 * Stopping is a START. It reads backwards, and it is the whole fix for
+	 * a crash on the most ordinary error path there is.
+	 *
+	 * startForegroundService() opens a contract: this service has about
+	 * five seconds to call startForeground(), or Android throws
+	 * RemoteServiceException and kills the process. A plain stopService()
+	 * arriving first does NOT release that contract -- it destroys the
+	 * service before onStartCommand ever runs, so startForeground() is
+	 * never called and the app dies. That is exactly what a connection
+	 * that fails immediately looks like: the session goes live, the
+	 * service is asked to start, the connection is refused a moment
+	 * later, and the service is asked to stop before it existed.
+	 *
+	 * So a stop is delivered as another start, carrying this action.
+	 * onStartCommand honours the contract first and stops itself second.
+	 */
+	private static final String ACTION_STOP = "se.vibes.beerssh.STOP";
+
 	/* Text for the notification, set before start() and on each update. */
 	private static String s_status = "Connected";
 
@@ -51,7 +70,13 @@ public class BsshService extends Service {
 	}
 
 	public static void stop(Context context) {
-		context.stopService(new Intent(context, BsshService.class));
+		Intent intent = new Intent(context, BsshService.class);
+		intent.setAction(ACTION_STOP);
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+			context.startForegroundService(intent);
+		} else {
+			context.startService(intent);
+		}
 	}
 
 	/*
@@ -74,7 +99,24 @@ public class BsshService extends Service {
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		createChannel();
+
+		/*
+		 * Unconditionally, and before anything else: this is the call the
+		 * contract above is about, and it has to happen even when the
+		 * command that arrived is "stop". Making it conditional is what
+		 * turns a refused connection into a killed process.
+		 */
 		startForeground(NOTIFICATION_ID, buildNotification(this, s_status));
+
+		if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+			stopForeground(true);
+			stopSelf();
+			/*
+			 * NOT sticky: this one was asked to go away, so Android must
+			 * not helpfully bring it back.
+			 */
+			return START_NOT_STICKY;
+		}
 
 		/*
 		 * START_STICKY: if Android kills the process under memory
