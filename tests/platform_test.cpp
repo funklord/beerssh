@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QLabel>
 #include <QtTest>
 
 #include "platform/platform.h"
@@ -86,6 +87,43 @@ void platform_test::the_window_opens_on_the_front_door() {
 	 * reaches a modal password dialog, and a test that can block is worse
 	 * than a gap in coverage.
 	 */
+}
+
+void platform_test::a_long_failure_does_not_widen_the_window() {
+	bssh_main_window window;
+	window.resize(360, 640);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	const int before = window.minimumSizeHint().width();
+
+	/*
+	 * One of the app's own messages, at the length the app's own messages
+	 * reach. Made up text would only prove something about made up text.
+	 */
+	const QString reason = QStringLiteral(
+	        "the jump host bastion.example.com is not a known host yet -- ssh to it "
+	        "once so its key is recorded, then try again");
+	QVERIFY(QMetaObject::invokeMethod(&window, "on_failed", Qt::DirectConnection,
+	                                   Q_ARG(QString, reason)));
+
+	QCOMPARE(window.minimumSizeHint().width(), before);
+
+	QLabel *status = nullptr;
+	for (QLabel *candidate : window.findChildren<QLabel *>()) {
+		if (candidate->toolTip().contains(reason)) status = candidate;
+	}
+	QVERIFY2(status, "the failure must reach the status line");
+
+	/*
+	 * Shortened, not wrapped, and the whole thing still reachable: a
+	 * status line that grows takes the space from the terminal, and one
+	 * that silently drops the end tells the user less than it knows.
+	 */
+	QVERIFY2(status->text() != reason, "a long reason must be shortened to fit");
+	QVERIFY2(status->toolTip().contains(reason), "the full reason must stay reachable");
+	QVERIFY2(status->sizeHint().width() <= window.width(),
+	          "the status line must never ask for more room than the window has");
 }
 
 void platform_test::the_key_row_setting_survives_a_restart() {

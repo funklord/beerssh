@@ -312,6 +312,19 @@ A backgrounded app cannot reliably hold a socket open; Android will kill it.
 Solution: a **foreground service** with an ongoing notification, started when the
 first session connects and stopped when the last disconnects.
 
+**Stopping it is a START.** `startForegroundService()` opens a contract: the
+service has about five seconds to call `startForeground()` or Android throws
+`RemoteServiceException` and kills the process. A plain `stopService()` arriving
+first does not release that contract — it destroys the service before
+`onStartCommand` ever runs, so `startForeground()` is never called. That is
+exactly the shape of a connection that fails immediately: the session goes live,
+the service is asked to start, the connection is refused a moment later, and the
+service is asked to stop before it existed. **Found on a device**, where any
+refused connection killed the app. So a stop is delivered as another start
+carrying a `STOP` action, and `onStartCommand` honours the contract first and
+stops itself second — and the C++ side only crosses JNI when the state actually
+changes, since the window recomputes it on every session event.
+
 **Foreground-service TYPE — [OPEN], important for Play review:**
 Android 14+ requires a declared `foregroundServiceType`, and Google Play reviews
 the justification. Candidates for a persistent network/SSH connection:
@@ -908,6 +921,16 @@ collapse/restore is bookkeeping, not surgery.
   render a half column.
 - **Per-pane geometry:** each pane computes its own cols×rows from its own size and
   its session's font — panes may legitimately differ.
+- **The status line never decides how wide the window is.** A `QLabel` asks for
+  room for its whole text, and a failure reason is a sentence — the jump-host
+  messages (§10.5) run well past a phone's width. Left to itself the label pushed
+  the layout past the screen and everything in it, including the terminal, off
+  the right-hand edge: **a connection error blanked the app.** Found on a device.
+  It is given no say in the width (`QSizePolicy::Ignored`) and its text is
+  elided to whatever room it ends up with, re-elided on resize, with the full
+  text kept as the tooltip and the accessible name so nothing is actually lost.
+  Elided rather than wrapped: a status line that grows to three lines takes the
+  space from the terminal, which is where the user was looking.
 
 ### 8.5 The front door — **[DECIDED]**
 

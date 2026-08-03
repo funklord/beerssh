@@ -22,6 +22,14 @@ private slots:
 	void close_policy_asks_only_when_something_is_live();
 	void the_window_opens_on_the_front_door();
 	void the_key_row_setting_survives_a_restart();
+
+	/*
+	 * A failure reason is a sentence, and a QLabel asks for room for all
+	 * of it. Left unchecked that pushed the window wider than the screen
+	 * and everything in it -- including the terminal -- off the right
+	 * edge, so a connection error blanked the app on a phone.
+	 */
+	void a_long_failure_does_not_widen_the_window();
 	void the_system_scheme_is_never_unknown();
 	void the_palettes_are_actually_light_and_dark();
 	void an_explicit_mode_ignores_the_system();

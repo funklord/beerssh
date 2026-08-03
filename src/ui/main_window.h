@@ -159,6 +159,7 @@ private:
 	void show_session(bssh_session *session);
 	void detach_session();
 	void update_status();
+	void elide_status();
 
 	QStackedWidget *m_pages;
 	QWidget *m_terminal_page;
@@ -189,6 +190,13 @@ private:
 	QTabBar *m_tabs;
 	bssh_key_row *m_key_row;
 	QString m_error;
+
+	/*
+	 * The status line's text before it is shortened to fit. Kept because
+	 * the shortening depends on the width, so it has to be redone on
+	 * every resize from the original rather than from what is on screen.
+	 */
+	QString m_status_text;
 	int m_cols;
 	int m_rows;
 

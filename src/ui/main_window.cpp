@@ -292,6 +292,19 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	m_status_label->setContentsMargins(6, 3, 6, 3);
 
 	/*
+	 * The status line must never decide how wide the window is.
+	 *
+	 * A QLabel asks for room for its whole text, and a failure reason is
+	 * a sentence -- "the jump host X is not a known host yet, ssh to it
+	 * once so its key is recorded" is far wider than a phone. Left to
+	 * itself the label pushed the layout past the screen and everything
+	 * in it, including the terminal, went off the right-hand edge: a
+	 * connection error blanked the app. So it is given no say in the
+	 * width and its text is shortened to whatever room it ends up with.
+	 */
+	m_status_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+
+	/*
 	 * The status line is scaffolding, not a feature: it reports which
 	 * platform implementation was built in, the grid size, and where the
 	 * session is. At M7 this space becomes the per-session status (sec
@@ -747,6 +760,9 @@ void bssh_main_window::split_with(bssh_session *session) {
 void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
 
+	/* Re-shortened from the original: what fits changed. */
+	elide_status();
+
 	if (!m_layout) return;
 
 	/*
@@ -1125,11 +1141,30 @@ void bssh_main_window::update_status() {
 	}
 	if (!m_error.isEmpty()) session_text += QStringLiteral(" -- ") + m_error;
 
-	m_status_label->setText(QStringLiteral("%1  |  %2x%3 cells  |  %4")
-	                         .arg(platform->name())
-	                         .arg(m_cols)
-	                         .arg(m_rows)
-	                         .arg(session_text));
+	m_status_text = QStringLiteral("%1  |  %2x%3 cells  |  %4")
+	                        .arg(platform->name())
+	                        .arg(m_cols)
+	                        .arg(m_rows)
+	                        .arg(session_text);
+	elide_status();
+}
+
+void bssh_main_window::elide_status() {
+	/*
+	 * Shortened with an ellipsis rather than wrapped: a status line that
+	 * grows to three lines when something goes wrong takes the space away
+	 * from the terminal, which is where the user was looking. The full
+	 * text stays reachable as the tooltip and as what a screen reader
+	 * announces, so nothing is actually lost by making it fit.
+	 */
+	const int room = m_status_label->contentsRect().width();
+	const QFontMetrics metrics(m_status_label->font());
+
+	m_status_label->setText(room > 0
+	                                ? metrics.elidedText(m_status_text, Qt::ElideRight, room)
+	                                : m_status_text);
+	m_status_label->setToolTip(m_status_text);
+	m_status_label->setAccessibleName(m_status_text);
 }
 
 bssh_main_window::close_action_t bssh_main_window::close_action(bool sessions_live,
