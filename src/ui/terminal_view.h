@@ -48,8 +48,6 @@ public:
 	int cell_width() const { return m_cell_width; }
 	int cell_height() const { return m_cell_height; }
 
-	void set_terminal_font(const QFont &font);
-
 	/*
 	 * The curated set's way in (project.md sec 9): a stable font id and a
 	 * point size, resolved through bssh_font_catalog rather than by naming

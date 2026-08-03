@@ -35,6 +35,15 @@ static const int BSSH_DEFAULT_POINT_SIZE = 11;
 static const int BSSH_CURSOR_BLINK_MS = 500;
 
 /*
+ * Space kept clear at the edges for the focused-pane border (sec 8.3).
+ * Without it the border is drawn over the first column and the last, and
+ * the leftmost pixel of every line in the focused pane is clipped -- which
+ * looks like a rendering fault in the pane the user is working in, the one
+ * place they are most likely to notice.
+ */
+static const int BSSH_GRID_INSET_PX = 1;
+
+/*
  * The placeholder drawn into the empty grid. It exists to prove the cell
  * metrics are right -- it is painted one cell at a time, exactly the way
  * the emulator's row renderer will paint at M2, so a wrong advance width
@@ -108,13 +117,6 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	recompute_grid();
 }
 
-void bssh_terminal_view::set_terminal_font(const QFont &font) {
-	m_font = font;
-	m_font_cache.clear();
-	update_metrics();
-	recompute_grid();
-	update();
-}
 
 void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 	bssh_font_catalog &catalog = bssh_font_catalog::instance();
@@ -377,8 +379,15 @@ void bssh_terminal_view::update_metrics() {
 }
 
 void bssh_terminal_view::recompute_grid() {
-	const int cols = qMax(1, width() / m_cell_width);
-	const int rows = qMax(1, height() / m_cell_height);
+	/*
+	 * The focus border's width is reserved whether or not the border is
+	 * drawn. Reserving it only when focused would change the column count
+	 * as focus moved between panes -- a window-change message to the
+	 * remote every time the user clicked a different pane, and a reflow
+	 * of whatever they were reading.
+	 */
+	const int cols = qMax(1, (width() - 2 * BSSH_GRID_INSET_PX) / m_cell_width);
+	const int rows = qMax(1, (height() - 2 * BSSH_GRID_INSET_PX) / m_cell_height);
 
 	if (cols == m_cols && rows == m_rows) return;
 
@@ -441,6 +450,14 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	painter.fillRect(rect(), m_background);
 	painter.setFont(m_font);
 	painter.setPen(m_foreground);
+
+	/*
+	 * Everything below is drawn in GRID coordinates, inset far enough for
+	 * the focus border to sit beside the cells rather than on top of them.
+	 * The border itself is drawn at the end, after the transform is put
+	 * back.
+	 */
+	painter.translate(BSSH_GRID_INSET_PX, BSSH_GRID_INSET_PX);
 
 	if (!m_screen) {
 		/* No session yet: name the app rather than showing a blank void. */
@@ -565,6 +582,8 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	 * text it covers. The z < 0 pass ran before the cells were drawn. */
 	draw_images(painter, offset, false);
 
+	painter.resetTransform();
+
 	if (m_focus_border) {
 		/*
 		 * Drawn last, over everything, and inset by half a pen width so
@@ -641,8 +660,9 @@ const bssh_cell_t &bssh_terminal_view::cell_for_line(qint64 line, int col) const
 bool bssh_terminal_view::cell_at(const QPoint &point, qint64 &line, int &col) const {
 	if (m_cell_width <= 0 || m_cell_height <= 0) return false;
 
-	const int row = qBound(0, point.y() / m_cell_height, qMax(0, m_rows - 1));
-	col = qBound(0, point.x() / m_cell_width, qMax(0, m_cols - 1));
+	const int row = qBound(0, (point.y() - BSSH_GRID_INSET_PX) / m_cell_height,
+	                        qMax(0, m_rows - 1));
+	col = qBound(0, (point.x() - BSSH_GRID_INSET_PX) / m_cell_width, qMax(0, m_cols - 1));
 	line = line_for_row(row);
 	return true;
 }

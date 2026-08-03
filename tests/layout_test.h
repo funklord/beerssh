@@ -23,6 +23,7 @@ private slots:
 	void focus_is_visible_only_when_there_is_a_choice();
 	void pane_focus_moves_with_the_keyboard();
 	void dividers_snap_to_whole_cells();
+	void panes_collapse_to_tabs_and_come_back();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

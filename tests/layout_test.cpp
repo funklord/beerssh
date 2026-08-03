@@ -1,6 +1,7 @@
 #include <QSignalSpy>
 #include <QtTest>
 
+#include "model/profile.h"
 #include "layout_test.h"
 #include "model/session.h"
 #include "model/session_registry.h"
@@ -256,4 +257,57 @@ void layout_test::dividers_snap_to_whole_cells() {
 
 	const int width = container.view_at(0)->width();
 	QCOMPARE(width % cell, 0);
+}
+
+void layout_test::panes_collapse_to_tabs_and_come_back() {
+	/*
+	 * sec 8.2's hard case, through the real container rather than the
+	 * layout manager alone: the user has a two-pane split, then folds the
+	 * device or tiles the window into a narrow column. The panes become
+	 * tabs, and unfolding restores the split -- the intent is remembered,
+	 * not discarded.
+	 *
+	 * Worth testing at this level because the two halves were each
+	 * correct and unconnected for several milestones: nothing in the app
+	 * built a container or a layout manager, so none of this ran outside
+	 * a unit test of one piece.
+	 */
+	bssh_layout_manager layout;
+	bssh_pane_container panes(&layout);
+
+	bssh_profile_t a;
+	a.host = QStringLiteral("one.example.com");
+	bssh_profile_t b;
+	b.host = QStringLiteral("two.example.com");
+
+	bssh_session first(a);
+	bssh_session second(b);
+
+	layout.set_width(1200);
+	layout.set_intent({ &first, &second });
+	panes.rebuild();
+
+	QCOMPARE(panes.pane_count(), 2);
+	QVERIFY(!layout.is_collapsed());
+
+	/* Folded, or tiled into a phone-width column. */
+	layout.set_width(400);
+	panes.rebuild();
+
+	QCOMPARE(panes.pane_count(), 1);
+	QVERIFY2(layout.is_collapsed(), "a narrow window must report its splits as collapsed");
+
+	/*
+	 * The session that vanished is still in the intent -- it became a
+	 * tab, it was not closed. Losing it here would mean folding a phone
+	 * silently dropped a connection.
+	 */
+	QCOMPARE(layout.intent().size(), 2);
+	QVERIFY(layout.intent().contains(&second));
+
+	layout.set_width(1200);
+	panes.rebuild();
+
+	QCOMPARE(panes.pane_count(), 2);
+	QVERIFY(!layout.is_collapsed());
 }
