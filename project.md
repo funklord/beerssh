@@ -1002,6 +1002,20 @@ is found:
   width is genuinely inconsistent across terminals; pick a rule, document it, and
   make it a setting if it causes complaints.
 - **Combining marks** should compose into the base cell, not consume a new one.
+- **The far half of a wide glyph is one representation, built in one place.**
+  A continuation cell is *no character, width 0*, and the renderer skips it on
+  the width — everything else it draws. The screen and the scrollback each used
+  to build one for themselves and they disagreed: the screen synthesised it,
+  while the scrollback converted whatever libvterm had left in that column,
+  which is its own marker, `chars[0] == (uint32_t)-1`. That is width 1 (so not
+  skipped), not blank (so not treated as empty) and not valid Unicode (so the
+  fallback chain above was asked which family covers it) — a box drawn over the
+  right half of every CJK character in the history, while the live screen showed
+  it correctly. Both paths call `continuation_of()` now, so they cannot drift
+  again, and converting a stray marker fails safe rather than yielding
+  U+FFFFFFFF. The lesson generalises past this bug: **two paths that build the
+  same cell are two chances to spell it differently**, and the one that is
+  wrong is whichever the user is not looking at.
 
 ### 9.4 Packaging and size
 Bundling ~10 families × multiple weights is **tens of megabytes** — too much for

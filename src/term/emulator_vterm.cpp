@@ -193,6 +193,29 @@ bssh_color_t to_bssh_color(const VTermColor &color, bool foreground) {
 	return out;
 }
 
+/*
+ * The far half of a double-width glyph, built from the half that carries
+ * the character (sec 9.3).
+ *
+ * There is one of these rather than two because the screen and the
+ * scrollback have to agree: the renderer skips a continuation on
+ * `width == 0` and draws everything else, so a path that spells the
+ * continuation differently gets its cell drawn -- and libvterm's own
+ * marker for one is chars[0] == (uint32_t)-1, which is not a character at
+ * all. The colours come from the base cell because a background spans the
+ * whole glyph, and because libvterm leaves the marker cell's pen at
+ * whatever happened to be there before.
+ */
+bssh_cell_t continuation_of(const bssh_cell_t &base) {
+	bssh_cell_t out;
+	out.ch = U'\0';
+	out.width = 0;
+	out.attrs = base.attrs;
+	out.fg = base.fg;
+	out.bg = base.bg;
+	return out;
+}
+
 quint8 to_bssh_attrs(const VTermScreenCellAttrs &attrs) {
 	quint8 out = bssh_cell_t::NONE;
 
@@ -601,7 +624,20 @@ int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
 	QList<bssh_cell_t> line;
 	line.reserve(width);
 	for (int col = 0; col < width; ++col) {
-		line.append(self->convert_cell(cells[col]));
+		const bssh_cell_t cell = self->convert_cell(cells[col]);
+		line.append(cell);
+
+		/*
+		 * Synthesised here exactly as the screen synthesises it, rather
+		 * than converted from the cell libvterm left in the next column
+		 * -- that one holds the raw marker and a stale pen, and copying
+		 * it is what put an undrawable character into the scrollback
+		 * while the live screen showed the glyph correctly.
+		 */
+		if (cell.width == 2 && col + 1 < width) {
+			line.append(continuation_of(cell));
+			++col;
+		}
 	}
 
 	self->scrollback.push(line);
@@ -692,6 +728,16 @@ bssh_cell_t bssh_emulator_private::convert_cell(const VTermScreenCell &source) c
 	 * new one), and taking just the base is the honest subset until the
 	 * glyph pipeline at M9 can draw the rest.
 	 */
+	/*
+	 * A continuation marker is not a character and must never reach a
+	 * cell: it is not valid Unicode, so the renderer asks the font
+	 * catalog which family covers it and draws the answer. Callers skip
+	 * these -- the two that build cells both advance past the far half of
+	 * a wide glyph -- but converting one has to fail safe rather than
+	 * produce U+FFFFFFFF, because what it costs is a visible box.
+	 */
+	if (source.chars[0] == static_cast<uint32_t>(-1)) return continuation_of(cell);
+
 	cell.ch = source.chars[0] ? source.chars[0] : U' ';
 	cell.width = static_cast<quint8>(source.width);
 	cell.attrs = to_bssh_attrs(source.attrs);
@@ -718,13 +764,7 @@ int bssh_emulator_private::copy_cell(int row, int col) {
 	 * space (sec 9.3).
 	 */
 	if (source.width == 2) {
-		bssh_cell_t continuation;
-		continuation.ch = U'\0';
-		continuation.width = 0;
-		continuation.attrs = cell.attrs;
-		continuation.fg = cell.fg;
-		continuation.bg = cell.bg;
-		screen.set_cell(row, col + 1, continuation);
+		screen.set_cell(row, col + 1, continuation_of(cell));
 		return 2;
 	}
 

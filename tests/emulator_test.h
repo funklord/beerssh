@@ -40,6 +40,7 @@ private slots:
 	void a_write_is_on_the_screen_when_it_returns();
 	void damage_is_reported_per_row_not_per_cell();
 	void scrollback_drops_trailing_blanks_but_not_blank_colour();
+	void a_wide_glyph_scrolls_back_the_way_it_was_on_screen();
 };
 
 #endif /* BSSH_EMULATOR_TEST_H */

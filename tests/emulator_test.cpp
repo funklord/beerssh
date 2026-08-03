@@ -552,3 +552,41 @@ void emulator_test::scrollback_drops_trailing_blanks_but_not_blank_colour() {
 		QCOMPARE(line.at(2).ch, U'中');
 	}
 }
+
+void emulator_test::a_wide_glyph_scrolls_back_the_way_it_was_on_screen() {
+	/*
+	 * The screen and the scrollback are drawn by the same painter, so
+	 * they have to spell a wide glyph the same way. They did not: the
+	 * screen synthesised the far half as sec 9.3 asks -- no character,
+	 * width 0, which the renderer skips -- while the scrollback converted
+	 * whatever libvterm had left in that column, which is its own marker,
+	 * chars[0] == (uint32_t)-1.
+	 *
+	 * That is not a character. It has width 1, so the renderer did not
+	 * skip it; it is not blank, so it was not treated as empty; and it is
+	 * not valid Unicode, so the font catalog was asked which family
+	 * covers it and the answer was drawn -- a box over the right half of
+	 * every CJK character in the history.
+	 */
+	const QByteArray text = QByteArrayLiteral("a\xe4\xb8\xad""b");   /* a中b */
+
+	bssh_emulator live(6, 2);
+	live.feed(text);
+
+	bssh_emulator scrolled(6, 2);
+	scrolled.feed(text + QByteArrayLiteral("\r\nx\r\ny"));
+	const QList<bssh_cell_t> stored = scrolled.scrollback().line(0);
+
+	QCOMPARE(stored.size(), 4);
+	for (int col = 0; col < 4; ++col) {
+		const bssh_cell_t &on_screen = live.screen().cell(0, col);
+		QCOMPARE(stored.at(col).ch, on_screen.ch);
+		QCOMPARE(int(stored.at(col).width), int(on_screen.width));
+	}
+
+	/* Named explicitly, so the contract is readable without the loop. */
+	QCOMPARE(stored.at(1).ch, U'中');
+	QCOMPARE(int(stored.at(1).width), 2);
+	QCOMPARE(stored.at(2).ch, U'\0');
+	QVERIFY2(stored.at(2).width == 0, "the far half must be skippable, not drawable");
+}
