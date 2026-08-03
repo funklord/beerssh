@@ -126,6 +126,23 @@ fi
 echo "check-ssh: phase 1 -- authentication, and trusting this host key"
 run_phase trust
 
+# The decisive check on what beerssh wrote: ssh(1) itself, in a mode
+# that prompts for nothing, so it can only succeed on a match. This has
+# to happen BEFORE the host key is swapped below -- afterwards ssh would
+# refuse for the right reason and prove nothing about the entry.
+if [ -s "$OPENSSH_KH" ]; then
+	echo "check-ssh: asking ssh(1) to trust the entry beerssh wrote"
+	if ssh -i "$DIR/home/.ssh/id_test" -p "$PORT" \
+	       -o UserKnownHostsFile="$OPENSSH_KH" \
+	       -o StrictHostKeyChecking=yes \
+	       -o IdentitiesOnly=yes 127.0.0.1 true >/dev/null 2>&1; then
+		echo "check-ssh: ssh(1) accepted it"
+	else
+		echo "check-ssh: ssh(1) would not use the entry beerssh wrote" >&2
+		exit 1
+	fi
+fi
+
 # A host key can only be seen to CHANGE across a restart on the SAME port:
 # a different port is a different known-hosts entry and would be merely
 # unknown. So the server is stopped, given a new identity, and put back.

@@ -1535,13 +1535,25 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   So their file goes in libssh's *global* slot, which is consulted during
   verification and never written to. Its hashed-hostname support is real —
   checked against a file OpenSSH itself wrote.
-  **Writing stays ours, and that half of the rule holds for a concrete reason.**
-  Debian and Ubuntu ship `HashKnownHosts yes`, so a real `known_hosts` is
-  entirely hashed — 12 of 12 entries on the machine this was written on — and
-  that hashing exists so a leaked copy cannot list which machines someone
-  connects to. **libssh writes entries unhashed.** Appending to their file would
-  silently undo that setting for exactly the hosts they used this app for, and
-  they would never see it happen.
+  **Accepting writes there too — hashed, and appended.** One store, because the
+  same person is deciding about the same hosts: a decision only half their tools
+  know about is one they have to make twice, and a key that later *changes* is
+  only noticed by whichever tool recorded the first one.
+  The reason this was refused before was that **libssh writes entries unhashed**,
+  and Debian and Ubuntu ship `HashKnownHosts yes` — 12 of 12 entries hashed on
+  the machine this was written on — precisely so a leaked copy cannot be read as
+  a list of the machines someone connects to. That is a fact about libssh, not a
+  reason to keep two stores: the host field is hashed here instead
+  (`|1|salt|HMAC-SHA1`, via the OpenSSL already linked), and the result is
+  verified the only way that means anything — **`ssh(1)` itself accepts it with
+  `StrictHostKeyChecking=yes`**, a mode that prompts for nothing and so can only
+  succeed on a match.
+  **Append only.** Somebody else's file is not this app's to rewrite, reorder or
+  prune; it adds the one fact it was told, which is how OpenSSH writes too and
+  what makes two writers tolerable. And it **falls back** to this app's own store
+  whenever `~/.ssh` is out of reach — Android has none, a sandboxed desktop build
+  may not be allowed near it — because a trust decision the user made must never
+  be lost over where it could not be filed.
   **[OPEN]** `@revoked` is not honoured as such: libssh reports a revoked key as
   *unknown*, so the user is offered a first-contact prompt for a key they
   explicitly revoked. It is not silently accepted, but it is not the refusal it

@@ -1,6 +1,9 @@
 #include "ssh/ssh_session_libssh.h"
 
 #include <QDir>
+#include <QFileInfo>
+#include <openssl/rand.h>
+#include <openssl/hmac.h>
 #include <QFile>
 #include <QSocketNotifier>
 #include <QStandardPaths>
@@ -335,14 +338,109 @@ void bssh_libssh_worker::do_key_passphrase(const QString &passphrase) {
 	emit password_required();
 }
 
+/*
+ * A host field in OpenSSH's hashed form: |1|<b64 salt>|<b64 HMAC-SHA1>.
+ *
+ * Written by hand because libssh has no option to hash what it stores --
+ * it writes host names in the clear. Hashing is not decoration: Debian
+ * and Ubuntu ship HashKnownHosts yes precisely so a leaked or backed-up
+ * known_hosts cannot be read as a list of the machines someone connects
+ * to, and appending one plaintext line is enough to give that away for
+ * the host it names.
+ *
+ * Verified the only way that means anything: an entry hashed here is
+ * accepted by OpenSSH itself with StrictHostKeyChecking=yes, which
+ * prompts for nothing and so can only have matched.
+ */
+static QByteArray bssh_hash_host_field(const QByteArray &host) {
+	unsigned char salt[20];
+	if (RAND_bytes(salt, sizeof(salt)) != 1) return QByteArray();
+
+	unsigned char mac[EVP_MAX_MD_SIZE];
+	unsigned int mac_len = 0;
+	if (!HMAC(EVP_sha1(), salt, int(sizeof(salt)),
+	           reinterpret_cast<const unsigned char *>(host.constData()),
+	           size_t(host.size()), mac, &mac_len)) {
+		return QByteArray();
+	}
+
+	return QByteArrayLiteral("|1|") +
+	        QByteArray(reinterpret_cast<const char *>(salt), int(sizeof(salt))).toBase64() +
+	        QByteArrayLiteral("|") +
+	        QByteArray(reinterpret_cast<const char *>(mac), int(mac_len)).toBase64();
+}
+
+/*
+ * Appends one hashed entry to the user's ~/.ssh/known_hosts, or returns
+ * false so the caller can fall back to this app's own store.
+ *
+ * APPEND only. Never rewrite, never remove a line, never reorder: this is
+ * somebody else's file and the app's job in it is to add the one fact it
+ * was told. OpenSSH adds entries the same way, which is what makes two
+ * writers tolerable.
+ *
+ * Returns false whenever anything is not right -- no home directory, a
+ * directory that cannot be made, a file that cannot be opened -- because
+ * a trust decision the user made must never be lost just because their
+ * ~/.ssh is somewhere this process cannot reach. Android has no ~/.ssh at
+ * all, and a sandboxed desktop build may not be allowed near it.
+ */
+static bool bssh_append_to_openssh_known_hosts(ssh_session session) {
+	const QString path = openssh_known_hosts_path();
+	if (path.isEmpty()) return false;
+
+	char *exported = nullptr;
+	if (ssh_session_export_known_hosts_entry(session, &exported) != SSH_OK || !exported) {
+		return false;
+	}
+
+	const QByteArray entry = QByteArray(exported).trimmed();
+	ssh_string_free_char(exported);
+
+	/* "host keytype key" -- only the host field is hashed. */
+	const int split = entry.indexOf(' ');
+	if (split <= 0) return false;
+
+	const QByteArray hashed = bssh_hash_host_field(entry.left(split));
+	if (hashed.isEmpty()) return false;
+
+	const QFileInfo info(path);
+	if (!QDir().mkpath(info.absolutePath())) return false;
+	QFile::setPermissions(info.absolutePath(),
+	                       QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+
+	QFile file(path);
+	if (!file.open(QIODevice::Append | QIODevice::WriteOnly | QIODevice::Text)) return false;
+
+	const bool ok = file.write(hashed + entry.mid(split) + '\n') > 0;
+	file.close();
+
+	if (ok) {
+		QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner);
+	}
+	return ok;
+}
+
 void bssh_libssh_worker::do_accept_host_key() {
 	if (!m_session) return;
 
 	/*
-	 * Writes the key to OUR store (sec 11), not to ~/.ssh/known_hosts,
+	 * Recorded where the user's other SSH client will see it (sec 11),
 	 * and only ever in response to someone having said yes.
+	 *
+	 * One store rather than two: the same person is deciding about the
+	 * same hosts, and a decision that only half their tools know about is
+	 * a decision they have to make twice -- and a host key that later
+	 * CHANGES is only noticed by whichever tool recorded the first one.
+	 * Hashed on the way in, because libssh would otherwise write it in
+	 * the clear into a file the system hashes on purpose.
+	 *
+	 * Falls back to this app's own store when their file is out of reach:
+	 * Android has no ~/.ssh, and a trust decision must not be lost
+	 * because of where it could not be filed.
 	 */
-	if (ssh_session_update_known_hosts(m_session) != SSH_OK) {
+	if (!bssh_append_to_openssh_known_hosts(m_session) &&
+	     ssh_session_update_known_hosts(m_session) != SSH_OK) {
 		fail(session_error());
 		return;
 	}

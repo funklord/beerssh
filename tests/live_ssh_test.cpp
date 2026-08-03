@@ -297,11 +297,16 @@ void live_ssh_test::accepting_once_is_remembered()
 	 * database is how an entry accepted by one becomes an entry the other
 	 * never asks about.
 	 */
-	QVERIFY2(QFile::exists(known_hosts_file()),
-	          "the accepted key must land in this app's own store");
-
+	/*
+	 * Recorded somewhere the next attempt can find it. Which file that is
+	 * depends on whether ~/.ssh is reachable -- it is preferred, so the
+	 * user's other client sees the same decision, and this app's own
+	 * store is the fallback (sec 11). Either satisfies "remembered"; the
+	 * WHERE is the next test's business.
+	 */
 	const QString theirs = qEnvironmentVariable("HOME") + QStringLiteral("/.ssh/known_hosts");
-	QVERIFY2(!QFile::exists(theirs), "and must not be written to OpenSSH's file");
+	QVERIFY2(QFile::exists(known_hosts_file()) || QFile::exists(theirs),
+	          "an accepted key must be recorded somewhere");
 
 	hide_openssh_known_hosts(false);
 }
@@ -537,4 +542,82 @@ void live_ssh_test::a_host_openssh_already_trusts_is_not_asked_about()
 	QCOMPARE(after.trimmed(), qgetenv("BSSH_TEST_OPENSSH_SNAPSHOT").trimmed());
 	QVERIFY2(!after.contains("\n[127.0.0.1]"),
 	          "nothing unhashed may be appended to the user's file");
+}
+
+void live_ssh_test::accepting_writes_a_hashed_entry_openssh_can_use()
+{
+	if (!server_available()) return;
+	if (phase() != QStringLiteral("trust")) {
+		QSKIP("this phase has the server whose key is being recorded");
+	}
+
+	const QString theirs = qEnvironmentVariable("BSSH_TEST_OPENSSH_KNOWN_HOSTS");
+	if (theirs.isEmpty()) QSKIP("no OpenSSH known_hosts location for this run");
+
+	/*
+	 * Accepting a host records it where the user's other SSH client will
+	 * see it (sec 11) -- one store, because the same person is deciding
+	 * about the same hosts and a decision only half their tools know
+	 * about is one they have to make twice.
+	 *
+	 * Two things have to be true of what gets written, and neither is
+	 * obvious from the code: it must be HASHED, because libssh writes
+	 * host names in the clear and the system hashes them on purpose; and
+	 * it must be something OpenSSH can actually read back, which is
+	 * checked in check-ssh.sh by having ssh(1) connect against it with
+	 * StrictHostKeyChecking=yes -- a mode that prompts for nothing and so
+	 * can only succeed on a match.
+	 */
+	/*
+	 * The host has to be UNKNOWN for accepting to record anything, and it
+	 * is currently in this very file. So the file is replaced with one
+	 * unrelated entry: enough to make the host unknown again, and enough
+	 * that "appends rather than rewrites" has something to be true about.
+	 *
+	 * Hiding the file instead -- the trick the first-contact tests use --
+	 * cannot work here, because restoring it afterwards would discard the
+	 * entry this test exists to inspect. That is exactly what the first
+	 * version did.
+	 */
+	const QByteArray unrelated =
+	        QByteArrayLiteral("|1|dGVzdHNhbHRzYWx0c2FsdHNhbA==|dGVzdGhhc2hoYXNoaGFzaGhhcw== "
+	                           "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH0000000000000000000000"
+	                           "0000000000000000000\n");
+	{
+		QFile seed(theirs);
+		QVERIFY(seed.open(QIODevice::WriteOnly | QIODevice::Truncate));
+		seed.write(unrelated);
+		seed.close();
+	}
+	const QList<QByteArray> existing = QList<QByteArray>() << unrelated.trimmed();
+
+	forget_all_hosts();
+	const outcome_t out = attempt(test_key(), true);
+	QVERIFY2(out.key_unknown, "the host had to be unknown for this to record anything");
+
+	QFile after(theirs);
+	QVERIFY(after.open(QIODevice::ReadOnly));
+	const QList<QByteArray> lines = after.readAll().split('\n');
+	after.close();
+
+	int added = 0;
+	for (const QByteArray &line : lines) {
+		if (line.trimmed().isEmpty()) continue;
+		if (existing.contains(line)) continue;
+		++added;
+		QVERIFY2(line.startsWith("|1|"),
+		          "an entry written into the user's file must be hashed like the rest");
+		QVERIFY2(!line.contains("127.0.0.1"),
+		          "a hashed entry must not carry the host name in the clear");
+	}
+	QCOMPARE(added, 1);
+
+	/*
+	 * Append only. Somebody else's file is not ours to rewrite, and the
+	 * entries already in it must survive untouched.
+	 */
+	for (const QByteArray &line : existing) {
+		if (line.trimmed().isEmpty()) continue;
+		QVERIFY2(lines.contains(line), "an existing entry must not be disturbed");
+	}
 }
