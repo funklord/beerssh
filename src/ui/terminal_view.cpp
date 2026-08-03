@@ -306,6 +306,29 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
  * The 16 system colours are the one part that is a choice rather than a
  * formula, and at M10 they become a preset-owned colour scheme (sec 10.2).
  */
+void bssh_terminal_view::draw_images(QPainter &painter, int offset, bool below_text) const {
+	if (!m_images) return;
+
+	for (const bssh_image_placement_t &placement : m_images->placements()) {
+		if ((placement.z < 0) != below_text) continue;
+
+		/*
+		 * Shifted by the scroll offset, so an image scrolled into history
+		 * comes back with the text it was drawn beside. A negative row is
+		 * an image above the live screen (sec 7's image scrollback); with
+		 * the view scrolled back far enough it lands on screen again.
+		 */
+		const int row = placement.row + offset;
+		if (row + placement.rows <= 0 || row >= m_rows) continue;
+
+		const QRect target(placement.col * m_cell_width,
+		                    row * m_cell_height,
+		                    placement.cols * m_cell_width,
+		                    placement.rows * m_cell_height);
+		painter.drawImage(target, placement.image);
+	}
+}
+
 QColor bssh_terminal_view::resolve(const bssh_color_t &color, const QColor &fallback) const {
 	if (color.kind == bssh_color_t::RGB) return QColor(color.rgb);
 	if (color.kind != bssh_color_t::INDEXED) return fallback;
@@ -442,6 +465,18 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	const int offset = qBound(0, m_scroll_offset, history);
 
 	/*
+	 * Images the remote asked to put UNDER the text (kitty's z < 0, how a
+	 * program puts a background behind a TUI). This pass has to run before
+	 * the cells are drawn, which is why there are two of them.
+	 *
+	 * The comment here used to describe exactly this, next to a single
+	 * loop that drew everything over the text -- a comment describing an
+	 * intention rather than the code beneath it, which is worse than no
+	 * comment at all because it stops the reader looking.
+	 */
+	draw_images(painter, offset, true);
+
+	/*
 	 * Cell by cell, and per-cell QFont changes for bold/italic. That is
 	 * the naive renderer on purpose: sec 9.5's shared glyph atlas and
 	 * per-row glyph runs are M9, and building a cache now -- before the
@@ -526,22 +561,9 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		}
 	}
 
-	/*
-	 * Images over the cells they cover, except where the remote asked for
-	 * z < 0 -- kitty's way of putting a background behind a TUI. Drawn
-	 * after the text for the positive case, which is why the loop runs
-	 * twice rather than sorting: two passes over a handful of images is
-	 * cheaper to read than a comparator.
-	 */
-	if (m_images) {
-		for (const bssh_image_placement_t &placement : m_images->placements()) {
-			const QRect target(placement.col * m_cell_width,
-			                    placement.row * m_cell_height,
-			                    placement.cols * m_cell_width,
-			                    placement.rows * m_cell_height);
-			painter.drawImage(target, placement.image);
-		}
-	}
+	/* The second of the two image passes: everything at z >= 0, over the
+	 * text it covers. The z < 0 pass ran before the cells were drawn. */
+	draw_images(painter, offset, false);
 
 	if (m_focus_border) {
 		/*

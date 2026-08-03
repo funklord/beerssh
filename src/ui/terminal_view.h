@@ -14,6 +14,7 @@
 #include "term/scrollback.h"
 
 class QMouseEvent;
+class QPainter;
 class QTimer;
 class QWheelEvent;
 class bssh_emulator;
@@ -191,6 +192,13 @@ protected:
 private:
 	void update_metrics();
 	void recompute_grid();
+
+	/*
+	 * One pass for z < 0 (under the text) and one for the rest. Two passes
+	 * rather than a sort: a handful of images, and a comparator would be
+	 * more code to read than the second loop.
+	 */
+	void draw_images(QPainter &painter, int offset, bool below_text) const;
 
 	QColor resolve(const bssh_color_t &color, const QColor &fallback) const;
 

@@ -692,8 +692,17 @@ modifier, and BeerSSH additionally shows the address before opening it. The
 widget does not open anything itself: what to do with a remote's URL is the
 window's decision, not a terminal component's.
 
-**[OPEN]** Image scrollback, and a memory budget for it. Also `z < 0`
-placement is stored but the renderer draws everything over the text.
+**[DONE]** Image scrollback, its memory budget, and `z < 0`. A placement
+scrolled off the top keeps going into negative rows — row −3 means three lines
+above the live screen, where the text it belongs to now is — so scrolling back
+brings the picture back with its output instead of finding a hole where one
+used to be. What bounds it is **32 MB of decoded image per session**, not a
+count: one screenshot outweighs a thousand sparklines. Over budget, the images
+furthest back go first, and anything still on the live screen is never dropped
+however big it is — a budget that can blank the picture being looked at has
+misunderstood its job. `z < 0` now renders in its own pass before the cells,
+which is what the comment beside the single over-the-text loop had claimed all
+along.
 
 **Where this lives in the code:** libvterm handles the sequences it knows
 and hands everything else to `vterm_screen_set_unrecognised_fallbacks`, its

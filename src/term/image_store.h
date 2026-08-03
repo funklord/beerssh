@@ -56,11 +56,33 @@ public:
 	 * stays pinned to its original row while the output around it moves,
 	 * which looks like the terminal has come apart.
 	 *
-	 * Placements scrolled entirely off the top are dropped: there is no
-	 * scrollback for images yet, and holding every image a long-running
-	 * session ever drew is how a phone runs out of memory.
+	 * A placement scrolled off the top keeps going, into NEGATIVE rows:
+	 * row -3 means three lines above the live screen, which is where the
+	 * text it belongs to now is. That is image scrollback (sec 7), and it
+	 * is what stops a picture vanishing the moment one more line of output
+	 * arrives -- while the text it was drawn beside is still there to
+	 * scroll back to.
+	 *
+	 * What bounds it is the memory budget below, not the scroll: holding
+	 * every image a long-running session ever drew is how a phone runs
+	 * out of memory, and a count of images is the wrong bound because one
+	 * screenshot can outweigh a thousand sparklines.
 	 */
 	void scrolled(int top_row, int bottom_row, int lines);
+
+	/*
+	 * How many bytes of decoded image to keep, across the visible screen
+	 * and the scrollback together. Once over it, the images furthest back
+	 * are dropped first -- the ones the user would have to scroll longest
+	 * to reach, and the ones least likely to be looked at again.
+	 *
+	 * Anything still ON the live screen is never dropped, however big: a
+	 * budget that could blank the picture currently being looked at is a
+	 * budget that has misunderstood its job.
+	 */
+	void set_memory_budget(qint64 bytes);
+	qint64 memory_budget() const { return m_budget; }
+	qint64 memory_used() const;
 
 	/* Dropped when the grid shrinks past them. */
 	void trim_to(int rows);
@@ -69,8 +91,11 @@ public:
 	int count() const { return m_placements.size(); }
 
 private:
+	void enforce_budget();
+
 	QList<bssh_image_placement_t> m_placements;
 	int m_next_id;
+	qint64 m_budget;
 };
 
 #endif /* BSSH_IMAGE_STORE_H */

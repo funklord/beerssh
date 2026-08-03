@@ -1,6 +1,8 @@
 #include <QBuffer>
 #include <QtTest>
 
+#include "ui/terminal_view.h"
+#include "term/screen.h"
 #include "graphics_test.h"
 #include "term/emulator.h"
 #include "term/graphics_internal.h"
@@ -184,4 +186,125 @@ void graphics_test::images_are_dropped_when_the_grid_shrinks() {
 	/* The row it sits on no longer exists. Holding it would leak. */
 	emulator.resize(40, 4);
 	QCOMPARE(emulator.images().count(), 0);
+}
+
+void graphics_test::an_image_scrolled_off_the_top_survives_in_the_scrollback() {
+	bssh_image_store store;
+
+	bssh_image_placement_t placement;
+	placement.image = QImage(20, 20, QImage::Format_RGB32);
+	placement.row = 2;
+	placement.rows = 3;
+	placement.cols = 4;
+	store.place(placement);
+
+	/* Ten lines of output push it well above the live screen. */
+	store.scrolled(0, 24, 10);
+
+	/*
+	 * It used to be dropped the moment it left the screen, which meant a
+	 * plot vanished as soon as one more line of output arrived -- while
+	 * the text it was drawn beside was still there to scroll back to.
+	 */
+	QCOMPARE(store.count(), 1);
+	QCOMPARE(store.placements().first().row, -8);
+}
+
+void graphics_test::the_memory_budget_drops_the_oldest_but_never_the_visible() {
+	bssh_image_store store;
+
+	/* Two images of a known size; room for one and a half. */
+	const int bytes = QImage(100, 100, QImage::Format_RGB32).sizeInBytes();
+	store.set_memory_budget(bytes + bytes / 2);
+
+	bssh_image_placement_t old_one;
+	old_one.image = QImage(100, 100, QImage::Format_RGB32);
+	old_one.row = 1;
+	old_one.rows = 2;
+	store.place(old_one);
+
+	store.scrolled(0, 24, 20);          /* pushes it into the scrollback */
+
+	bssh_image_placement_t on_screen;
+	on_screen.image = QImage(100, 100, QImage::Format_RGB32);
+	on_screen.row = 5;
+	on_screen.rows = 2;
+	store.place(on_screen);
+
+	store.scrolled(0, 24, 0);           /* no movement; budget still applies */
+	store.set_memory_budget(bytes + bytes / 2);
+
+	/* The one in history went; the one being looked at stayed. */
+	QCOMPARE(store.count(), 1);
+	QCOMPARE(store.placements().first().row, 5);
+
+	/*
+	 * And a budget too small for even the visible image does not blank
+	 * it: over budget and unable to help it is the honest state, because
+	 * dropping what the user is reading to satisfy a number is a terminal
+	 * deleting its own output.
+	 */
+	store.set_memory_budget(1);
+	QCOMPARE(store.count(), 1);
+}
+
+void graphics_test::a_background_image_is_drawn_under_the_text() {
+	/*
+	 * kitty's z < 0 -- how a program puts a background behind a TUI. It
+	 * was stored and ignored: the renderer drew every image over the
+	 * text, beneath a comment claiming it ran two passes. This asserts
+	 * the pixels, because the previous evidence was a comment.
+	 */
+	bssh_terminal_view view;
+	view.resize(200, 80);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("default"));
+	bssh_apply_appearance(&view, settings);
+
+	bssh_screen screen(view.cols(), view.rows());
+	for (int i = 0; i < 4; ++i) {
+		bssh_cell_t cell;
+		cell.ch = U'W';
+		screen.set_cell(0, i, cell);
+	}
+	view.attach_screen(&screen);
+
+	bssh_image_store store;
+	bssh_image_placement_t background;
+	background.image = QImage(40, 20, QImage::Format_RGB32);
+	background.image.fill(QColor(Qt::red));
+	background.row = 0;
+	background.col = 0;
+	background.cols = 4;
+	background.rows = 1;
+	background.z = -1;
+	store.place(background);
+	view.attach_images(&store);
+
+	const QImage under = view.grab().toImage();
+
+	/* The same image at z >= 0 must cover the text instead. */
+	store.clear();
+	background.z = 1;
+	store.place(background);
+	const QImage over = view.grab().toImage();
+
+	QVERIFY2(under != over, "z < 0 must not render the same as z > 0");
+
+	/*
+	 * Under the text: some glyph pixels survive, so not every pixel in
+	 * the covered band is the image's red. Over the text: they are.
+	 */
+	int text_pixels_under = 0;
+	int text_pixels_over = 0;
+	for (int x = 0; x < 40; ++x) {
+		for (int y = 0; y < 16; ++y) {
+			if (under.pixelColor(x, y) != QColor(Qt::red)) ++text_pixels_under;
+			if (over.pixelColor(x, y) != QColor(Qt::red)) ++text_pixels_over;
+		}
+	}
+
+	QVERIFY2(text_pixels_under > text_pixels_over,
+	         "text must remain visible on top of a background image");
 }
