@@ -1,5 +1,7 @@
 #include "model/profile_store.h"
 
+#include "platform/platform.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -73,6 +75,16 @@ bssh_profile_store::bssh_profile_store(const QString &path, QObject *parent)
       m_open(false) {
 	QString dir = path;
 
+	/*
+	 * Whether this store is the app's own or one somebody pointed at a
+	 * directory. Only the app's own may put its host list in ~/.ssh: a
+	 * store constructed WITH a path was told where to live, and reaching
+	 * outside it makes every test in the suite -- and every caller with a
+	 * throwaway directory -- write into the real ~/.ssh instead. Which is
+	 * exactly what happened the first time this was written.
+	 */
+	m_uses_default_location = dir.isEmpty();
+
 	if (dir.isEmpty()) {
 		/*
 		 * AppConfigLocation, not AppDataLocation: this is configuration,
@@ -103,11 +115,81 @@ bool bssh_profile_store::open(const QString &directory) {
 		return false;
 	}
 
+	migrate_hosts_if_needed();
 	load();
 	return true;
 }
 
+/*
+ * Moves an existing hosts.ini to ~/.ssh/beerssh_hosts the first time this
+ * runs on a machine that has one.
+ *
+ * Renamed rather than copied. Two files that both claim to be the host
+ * list is precisely the drift this tree keeps getting caught by: the next
+ * reader cannot tell which one is authoritative, and edits land in
+ * whichever the code happened to pick. If the rename fails, nothing is
+ * lost -- hosts_path() will simply keep answering with the old location.
+ */
+void bssh_profile_store::migrate_hosts_if_needed() {
+	const QString target = hosts_path();
+	const QString legacy = m_directory + QStringLiteral("/hosts.ini");
+
+	if (target == legacy) return;
+	if (QFileInfo(legacy).size() <= 0) return;
+
+	/*
+	 * An EMPTY target counts as absent, not as "already migrated".
+	 * hosts_path() proves the location is writable by opening it, which
+	 * creates the file -- so by the time this runs the target always
+	 * exists, and testing existence would skip every migration there was
+	 * ever going to be. Nothing is lost by the looser test: a zero-byte
+	 * host list holds nothing to overwrite.
+	 */
+	if (QFileInfo(target).size() > 0) return;
+	QFile::remove(target);
+
+	QFile::rename(legacy, target);
+}
+
+/*
+ * The host list, in ~/.ssh where the rest of someone's SSH setup lives
+ * (sec 10.6) -- and in this app's own config directory anywhere that is
+ * not an ordinary desktop.
+ *
+ * Only the HOSTS move. They are SSH material: a name, a host, a user, a
+ * port and a key path, which is what ssh_config's Host blocks hold and
+ * what someone backing up ~/.ssh expects to take with them. Presets,
+ * layout and device settings stay put, because a font size, a colour
+ * scheme and which tabs were open are terminal furniture and have no
+ * business in ~/.ssh.
+ *
+ * Named beerssh_hosts rather than beerssh_config, which was the obvious
+ * choice and the wrong one: a file called *_config sitting beside
+ * OpenSSH's `config` promises ssh_config's grammar, and this is INI
+ * (sec 10.6). beerssh_hosts mirrors known_hosts, says what is in it, and
+ * promises nothing it does not deliver.
+ *
+ * Where ~/.ssh is not a real place -- Android, or a sandbox that cannot
+ * reach it -- bssh_platform says so and this stays in the config
+ * directory.
+ */
 QString bssh_profile_store::hosts_path() const {
+	if (!m_uses_default_location) return m_directory + QStringLiteral("/hosts.ini");
+
+	const bssh_platform *platform = bssh_platform::instance();
+	const QString ssh_dir = platform ? platform->openssh_directory() : QString();
+
+	if (!ssh_dir.isEmpty() && QDir().mkpath(ssh_dir)) {
+		const QString shared = ssh_dir + QStringLiteral("/beerssh_hosts");
+
+		QFile probe(shared);
+		if (probe.open(QIODevice::Append | QIODevice::WriteOnly)) {
+			probe.close();
+			QFile::setPermissions(shared, QFile::ReadOwner | QFile::WriteOwner);
+			return shared;
+		}
+	}
+
 	return m_directory + QStringLiteral("/hosts.ini");
 }
 

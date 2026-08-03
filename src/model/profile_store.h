@@ -146,6 +146,10 @@ private:
 	 * them, rebuilt on every load.
 	 */
 	QString unique_slug(const QString &base, int except_id) const;
+	void migrate_hosts_if_needed();
+
+	/* See the constructor: only the app's own store may use ~/.ssh. */
+	bool m_uses_default_location = false;
 	int id_for_slug(const QString &slug) const;
 
 	QString m_directory;

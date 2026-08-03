@@ -34,6 +34,8 @@ private slots:
 	void the_touch_editor_saves_the_colour_scheme();
 	void the_touch_front_door_can_edit_a_host_it_created();
 	void repeated_imports_get_distinguishable_names();
+	void an_explicit_directory_is_never_left();
+	void an_existing_host_list_is_migrated_once();
 };
 
 #endif /* BSSH_PROFILE_STORE_TEST_H */

@@ -231,8 +231,16 @@ $(TEST_BIN): $(VTERM_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wil
 
 # The offscreen QPA plugin is what makes both of these runnable in CI at
 # all -- a GUI that only starts with a display is a GUI CI never exercises.
+# The smoke test starts the REAL app, which owns a real profile store and
+# writes a real host list -- into ~/.ssh now (sec 10.6). A build step does
+# not get to edit the config of whoever ran it, so it runs against a
+# throwaway HOME. The unit tests sandbox themselves for the same reason;
+# see tests/main.cpp.
 test: $(TARGET) $(TEST_BIN)
-	QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test
+	@sandbox=$$(mktemp -d) && \
+	 HOME=$$sandbox XDG_CONFIG_HOME=$$sandbox/config XDG_DATA_HOME=$$sandbox/data \
+	 QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test; \
+	 status=$$?; rm -rf $$sandbox; exit $$status
 	@echo "test: headless smoke test passed"
 	QT_QPA_PLATFORM=offscreen ./$(TEST_BIN)
 

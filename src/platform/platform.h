@@ -105,6 +105,20 @@ public:
 	virtual QString font_directory() const = 0;
 
 	/*
+	 * The user's OpenSSH directory (~/.ssh), or empty where that is not a
+	 * meaningful place (project.md sec 10.6, sec 11).
+	 *
+	 * A platform question rather than a path question, which is why it is
+	 * asked here rather than derived from HomeLocation. Android HAS a
+	 * writable home -- the app's own sandbox -- so probing whether ~/.ssh
+	 * can be created succeeds there and produces a .ssh directory inside
+	 * the APK's private storage that no ssh client will ever read. Empty
+	 * means "this platform does not have one", and every caller falls
+	 * back to the app's own storage.
+	 */
+	virtual QString openssh_directory() const = 0;
+
+	/*
 	 * A document this app was ASKED to open, or empty (project.md sec
 	 * 10.5). A preset file, in practice -- the only file type BeerSSH
 	 * knows how to be handed.

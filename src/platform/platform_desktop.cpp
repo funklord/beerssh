@@ -186,6 +186,12 @@ public:
 		        QStringLiteral("SettingChanged"), this, SLOT(on_portal_setting_changed(QString, QString, QDBusVariant)));
 	}
 
+	QString openssh_directory() const override {
+		const QString home = QDir::homePath();
+		if (home.isEmpty()) return QString();
+		return home + QStringLiteral("/.ssh");
+	}
+
 	bssh_appearance_t system_appearance() const override {
 		/*
 		 * 1. Qt, where a platform theme is engaged. Correct on Windows,

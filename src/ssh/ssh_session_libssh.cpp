@@ -1,5 +1,7 @@
 #include "ssh/ssh_session_libssh.h"
 
+#include "platform/platform.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <openssl/rand.h>
@@ -176,9 +178,10 @@ QString known_hosts_path() {
  * connection asks again about a host that was just accepted.
  */
 QString openssh_known_hosts_path() {
-	const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
-	if (home.isEmpty()) return QString();
-	return home + QStringLiteral("/.ssh/known_hosts");
+	const bssh_platform *platform = bssh_platform::instance();
+	const QString dir = platform ? platform->openssh_directory() : QString();
+	if (dir.isEmpty()) return QString();
+	return dir + QStringLiteral("/known_hosts");
 }
 
 } /* namespace */

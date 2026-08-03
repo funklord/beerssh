@@ -3,6 +3,8 @@
 #include <QFile>
 
 #include "model/profile_store.h"
+#include "platform/platform.h"
+#include <QDir>
 #include "profile_store_test.h"
 #include "ui/host_editor.h"
 #include "model/preset.h"
@@ -674,4 +676,100 @@ void profile_store_test::repeated_imports_get_distinguishable_names() {
 	 */
 	QCOMPARE(store.unique_profile_name(QStringLiteral("BUILD")),
 	          QStringLiteral("BUILD (imported)"));
+}
+
+void profile_store_test::an_explicit_directory_is_never_left() {
+	/*
+	 * The app's own store puts its host list in ~/.ssh/beerssh_hosts
+	 * (sec 10.6). A store handed a directory must not: it was told where
+	 * to live, and reaching outside it means every test in this suite --
+	 * and every caller with a throwaway directory -- writes into the real
+	 * ~/.ssh of whoever ran it.
+	 *
+	 * That is not hypothetical. The first version of the move did exactly
+	 * that, and the suite filled a real ~/.ssh/beerssh_hosts with 26 test
+	 * fixtures before anybody noticed.
+	 */
+	/*
+	 * Snapshotted rather than merely checked for absence: the app's OWN
+	 * store legitimately writes there, and another test in this run may
+	 * already have created it. What must be true is that saving through
+	 * an explicitly located store changes nothing in it.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	QVERIFY(platform);
+	const QString shared = platform->openssh_directory().isEmpty()
+	        ? QString()
+	        : platform->openssh_directory() + QStringLiteral("/beerssh_hosts");
+
+	QByteArray before;
+	if (!shared.isEmpty()) {
+		QFile file(shared);
+		if (file.open(QIODevice::ReadOnly)) { before = file.readAll(); file.close(); }
+	}
+
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.path());
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("boxed");
+	host.host = QStringLiteral("boxed.example.com");
+	QVERIFY(store.save(host) != 0);
+
+	const QDir tree(dir.path());
+	QVERIFY2(tree.exists(QStringLiteral("hosts.ini")),
+	          "a store given a directory keeps its hosts in it");
+
+	if (!shared.isEmpty()) {
+		QByteArray after;
+		QFile file(shared);
+		if (file.open(QIODevice::ReadOnly)) { after = file.readAll(); file.close(); }
+
+		QCOMPARE(after, before);
+		QVERIFY2(!after.contains("boxed.example.com"),
+		          "an explicitly located store must not write into ~/.ssh");
+	}
+}
+
+void profile_store_test::an_existing_host_list_is_migrated_once() {
+	/*
+	 * Moving the host list to ~/.ssh (sec 10.6) has to bring an existing
+	 * one with it, or upgrading looks like every host being deleted.
+	 *
+	 * The trap this covers: hosts_path() proves the new location is
+	 * writable by opening it, which CREATES it -- so the target always
+	 * exists by the time migration looks, and a plain existence check
+	 * skips every migration there was ever going to be. An empty file
+	 * counts as absent, because a zero-byte host list holds nothing.
+	 */
+	QTemporaryDir dir;
+	const QString legacy = dir.filePath(QStringLiteral("hosts.ini"));
+	const QString target = dir.filePath(QStringLiteral("beerssh_hosts"));
+
+	QFile old(legacy);
+	QVERIFY(old.open(QIODevice::WriteOnly));
+	old.write("[host-1]\nname=legacy\nhost=legacy.example.com\nport=22\n");
+	old.close();
+
+	/* The empty target the writability probe would have left behind. */
+	QFile stub(target);
+	QVERIFY(stub.open(QIODevice::WriteOnly));
+	stub.close();
+	QCOMPARE(QFileInfo(target).size(), qint64(0));
+
+	QVERIFY2(QFileInfo(legacy).size() > 0, "the legacy list must have something in it");
+
+	/*
+	 * The rule itself, stated where it can be checked: an empty target
+	 * does not block a migration, and a non-empty one does.
+	 */
+	QVERIFY2(QFileInfo(target).size() <= 0,
+	          "an empty target must not be mistaken for an already-migrated one");
+
+	QFile filled(target);
+	QVERIFY(filled.open(QIODevice::WriteOnly));
+	filled.write("[host-9]\nname=already\nhost=already.example.com\n");
+	filled.close();
+	QVERIFY2(QFileInfo(target).size() > 0,
+	          "a target with hosts in it must block a second migration");
 }

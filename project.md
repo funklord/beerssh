@@ -1443,9 +1443,28 @@ double as documentation of what a preset can do.
 
   | file | holds |
   |---|---|
-  | `hosts.ini` | `[host-3]` — name, host, user, port, which preset it follows, and any per-field overrides as ordinary keys |
+  | `~/.ssh/beerssh_hosts` | `[host-3]` — name, host, user, port, key file, which preset it follows, and any per-field overrides as ordinary keys |
   | `presets.ini` | `[servers]` — the preset's fields, section named by slug |
   | `layout.ini` | `[layout]` — which hosts were open, and how |
+
+  **The host list lives in `~/.ssh`, and only the host list.** It is SSH
+  material — a name, a host, a user, a port, a key path, which is what
+  `ssh_config`'s `Host` blocks hold — and someone backing up `~/.ssh` expects to
+  take it with them. Presets, layout and device settings stay in the config
+  directory: a font size, a colour scheme and which tabs were open are terminal
+  furniture with no business in `~/.ssh`. The encrypted secret store stays out
+  too (§11).
+  Named `beerssh_hosts`, **not** `beerssh_config`, which was the obvious choice
+  and the wrong one: a file called `*_config` beside OpenSSH's `config` promises
+  `ssh_config`'s grammar, and this is INI. `beerssh_hosts` mirrors `known_hosts`
+  and promises only what it delivers.
+  **Ordinary desktops only.** `bssh_platform::openssh_directory()` answers empty
+  where `~/.ssh` is not a real place, and everything falls back to the config
+  directory. This is a platform question rather than a path one: Android *has* a
+  writable home — the app's own sandbox — so probing whether `~/.ssh` can be
+  created succeeds there and produces a directory no ssh client will ever read.
+  An existing `hosts.ini` is **renamed** on first run, not copied: two files both
+  claiming to be the host list is the drift this tree keeps getting caught by.
 
   This replaced an earlier SQLite decision, and the reasoning is worth keeping:
   the data is tens of rows, there is no query that is not a full scan and no

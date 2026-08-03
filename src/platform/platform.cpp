@@ -13,8 +13,16 @@ bssh_platform::bssh_platform(QObject *parent) : QObject(parent) {
 	/*
 	 * Captured now, before anything has applied a palette of its own;
 	 * see startup_palette().
+	 *
+	 * Only when there IS a GUI application. QGuiApplication::palette()
+	 * builds the platform theme on first call, which dereferences an
+	 * event dispatcher a QCoreApplication does not have -- so this
+	 * segfaults rather than returning a default. Anything console-shaped
+	 * that reaches the platform layer, and every non-GUI test, hits it.
 	 */
-	m_startup_palette = QGuiApplication::palette();
+	if (qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+		m_startup_palette = QGuiApplication::palette();
+	}
 
 }
 

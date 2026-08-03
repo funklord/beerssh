@@ -234,6 +234,15 @@ public:
 		return QObject::eventFilter(watched, event);
 	}
 
+	/*
+	 * Android has no OpenSSH directory. It does have a writable home --
+	 * the app's own sandbox -- so anything that probes for ~/.ssh finds
+	 * it creatable and puts files where no ssh client will look.
+	 */
+	QString openssh_directory() const override {
+		return QString();
+	}
+
 	bssh_appearance_t system_appearance() const override {
 		/*
 		 * Android's Configuration first, because it is the only source

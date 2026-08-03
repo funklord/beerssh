@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QTemporaryDir>
 #include <QtTest>
 
 #include "conn_manager_test.h"
@@ -40,6 +41,28 @@ static int run_test(int argc, char *argv[]) {
 }
 
 int main(int argc, char *argv[]) {
+	/*
+	 * Point every standard location at a throwaway tree, BEFORE
+	 * QApplication resolves any of them.
+	 *
+	 * Several tests build a bssh_main_window, which owns a
+	 * bssh_profile_store constructed with no directory -- the app's real
+	 * one. So the suite has been writing hosts, layout and device
+	 * settings into whoever ran it. That was invisible while everything
+	 * lived under ~/.config/beerssh; it stopped being invisible the day
+	 * the host list moved to ~/.ssh, which is not a directory a test
+	 * suite may write to under any circumstances.
+	 *
+	 * The live-SSH harness (tools/check-ssh.sh) sets up its own HOME and
+	 * needs to keep it, so it says so and this leaves it alone.
+	 */
+	static QTemporaryDir sandbox;
+	if (qEnvironmentVariableIsEmpty("BSSH_TEST_SSH_PORT") && sandbox.isValid()) {
+		qputenv("HOME", sandbox.path().toUtf8());
+		qputenv("XDG_CONFIG_HOME", (sandbox.path() + QStringLiteral("/config")).toUtf8());
+		qputenv("XDG_DATA_HOME", (sandbox.path() + QStringLiteral("/data")).toUtf8());
+	}
+
 	QApplication app(argc, argv);
 
 	/*
