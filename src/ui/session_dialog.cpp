@@ -84,8 +84,12 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 
 	m_pages = new QStackedWidget(this);
 	m_pages->addWidget(build_session_page());
-	m_pages->addWidget(build_placeholder_page(QStringLiteral("Terminal"),
-	                                           QStringLiteral("M10, with the preset system")));
+	m_pages->addWidget(build_signpost_page(
+	        QStringLiteral("Terminal"),
+	        QStringLiteral("TERM, scrollback size, the bell and the cursor are set by the "
+	                        "preset a host follows, not per session -- so that changing one "
+	                        "preset changes every host using it."),
+	        QStringLiteral("Presets")));
 	m_pages->addWidget(build_window_page());
 	m_preset_editor = new bssh_preset_editor(m_store, this);
 	m_pages->addWidget(m_preset_editor);
@@ -94,10 +98,20 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	connect(m_preset_editor, &bssh_preset_editor::preset_removed,
 	         this, &bssh_session_dialog::presets_changed);
 
-	m_pages->addWidget(build_placeholder_page(QStringLiteral("Connection"),
-	                                           QStringLiteral("M5, with keepalive and reconnect")));
-	m_pages->addWidget(build_placeholder_page(QStringLiteral("SSH"),
-	                                           QStringLiteral("M6, with key authentication")));
+	m_pages->addWidget(build_signpost_page(
+	        QStringLiteral("Connection"),
+	        QStringLiteral("Keepalive, compression and the command run on connect belong to "
+	                        "the preset a host follows. Reconnection after a drop needs no "
+	                        "setting: it is automatic, and backs off between attempts."),
+	        QStringLiteral("Presets")));
+	m_pages->addWidget(build_signpost_page(
+	        QStringLiteral("SSH"),
+	        QStringLiteral("Keys are offered before any password is asked for -- the agent "
+	                        "first, then your default identities. A host that needs a "
+	                        "particular key names it in <b>Private key file</b> on the "
+	                        "Session page. Host keys are trusted on first use and checked "
+	                        "every time after."),
+	        QStringLiteral("Session")));
 	bssh_app_settings_view *device = new bssh_app_settings_view(this);
 	m_pages->addWidget(device);
 	connect(device, &bssh_app_settings_view::changed,
@@ -260,24 +274,52 @@ QWidget *bssh_session_dialog::build_session_page() {
 	return page;
 }
 
-QWidget *bssh_session_dialog::build_placeholder_page(const QString &title,
-                                                      const QString &milestone) {
+/*
+ * A category whose settings live somewhere else, saying where and taking
+ * you there.
+ *
+ * These three were placeholders promising the settings "arrive at M5/M6/
+ * M10". All three milestones have since landed and every setting they
+ * named is real -- it just lives in Presets, because sec 10 made these
+ * properties of a preset rather than of one session. A page that still
+ * says "not built yet" about shipped work is worse than one that is
+ * merely empty: it sends the user away from the thing they were looking
+ * for, and it is the kind of stale text nobody re-reads.
+ */
+QWidget *bssh_session_dialog::build_signpost_page(const QString &title,
+                                                   const QString &body_text,
+                                                   const QString &destination) {
 	QWidget *page = new QWidget(this);
 	QVBoxLayout *layout = new QVBoxLayout(page);
 
 	QLabel *heading = new QLabel(QStringLiteral("<b>%1</b>").arg(title), page);
-	QLabel *body = new QLabel(
-	        QStringLiteral("These settings are not built yet — they arrive at %1.\n\n"
-	                        "They will be owned by the host's preset rather than set here "
-	                        "per host, so that editing one preset changes every host using it.")
-	                .arg(milestone), page);
+	QLabel *body = new QLabel(body_text, page);
 	body->setWordWrap(true);
 
 	layout->addWidget(heading);
 	layout->addWidget(body);
+
+	QPushButton *go = new QPushButton(QStringLiteral("Open %1").arg(destination), page);
+	go->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Fixed);
+	connect(go, &QPushButton::clicked, this, [this, destination] {
+		select_category(destination);
+	});
+	layout->addWidget(go);
+
 	layout->addStretch(1);
 	return page;
 }
+
+/* Selects a category by name, so a signpost can act rather than only point. */
+void bssh_session_dialog::select_category(const QString &name) {
+	const QList<QTreeWidgetItem *> found =
+	        m_categories->findItems(name, Qt::MatchExactly | Qt::MatchRecursive);
+	if (found.isEmpty()) return;
+
+	m_categories->setCurrentItem(found.first());
+	on_category_changed();
+}
+
 
 void bssh_session_dialog::on_category_changed() {
 	const QList<QTreeWidgetItem *> selected = m_categories->selectedItems();

@@ -87,7 +87,7 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	});
 	connect(menu->addAction(QStringLiteral("Presets")), &QAction::triggered,
 	         this, &bssh_host_list::presets_requested);
-	connect(menu->addAction(QStringLiteral("Settings")), &QAction::triggered,
+	connect(menu->addAction(QStringLiteral("This device")), &QAction::triggered,
 	         this, &bssh_host_list::settings_requested);
 	connect(menu->addAction(QStringLiteral("Licences")), &QAction::triggered,
 	         this, &bssh_host_list::licences_requested);

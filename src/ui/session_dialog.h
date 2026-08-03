@@ -72,7 +72,9 @@ private slots:
 
 private:
 	QWidget *build_session_page();
-	QWidget *build_placeholder_page(const QString &title, const QString &milestone);
+	QWidget *build_signpost_page(const QString &title, const QString &body_text,
+	                              const QString &destination);
+	void select_category(const QString &name);
 
 	/*
 	 * PuTTY keeps font selection under Window > Appearance, and so does
