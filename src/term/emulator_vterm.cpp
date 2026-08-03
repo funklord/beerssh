@@ -725,6 +725,24 @@ bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
 	vterm_screen_set_callbacks(m_private->vts, &screen_callbacks, m_private);
 
 	/*
+	 * Damage merged per row rather than per cell (sec 9.5).
+	 *
+	 * libvterm's default is VTERM_DAMAGE_CELL, which reports every printed
+	 * cell as its own rect: 20000 lines of ordinary build output through a
+	 * 200x50 grid arrived as 1.19 MILLION damage callbacks, each of them
+	 * paying for a copy_rect and a damaged() signal to report one
+	 * character. Merging to the row coalesces a printed line into one
+	 * rect, which is the granularity the mirror copies at anyway.
+	 *
+	 * The cost is that damage is no longer delivered synchronously -- a
+	 * row is held until something flushes it -- so feed() must flush
+	 * (below) or the last line of a write sits invisible until the next
+	 * one. libvterm flushes on its own before moverect and erase, which is
+	 * what keeps the mirror's rows correct when a scroll moves them.
+	 */
+	vterm_screen_set_damage_merge(m_private->vts, VTERM_DAMAGE_ROW);
+
+	/*
 	 * The alternate screen has to be asked for: libvterm does not
 	 * allocate its buffer unless told, and without it DECSET 1049 does
 	 * nothing at all. That is not merely a scrollback nicety -- it means
@@ -771,6 +789,16 @@ void bssh_emulator::feed(const QByteArray &bytes) {
 	vterm_input_write(m_private->vt, buffer.constData(), buffer.size());
 
 	/*
+	 * Row-merged damage is owed, not delivered (see the constructor), and
+	 * vterm_input_write does not settle it. Flushing here is what makes a
+	 * write's last row reach the mirror, and it has to happen BEFORE the
+	 * links below: copy_rect rewrites a damaged cell from libvterm's
+	 * screen, which knows nothing about links, so a row flushed after the
+	 * marking would quietly erase it.
+	 */
+	vterm_screen_flush_damage(m_private->vts);
+
+	/*
 	 * An image placed during that write leaves the cursor sitting on top
 	 * of it. Move it down past the image the only way libvterm accepts --
 	 * by parsing a cursor-down -- and do it here, after the write, rather
@@ -784,12 +812,19 @@ void bssh_emulator::feed(const QByteArray &bytes) {
 		                            + QByteArrayLiteral("B");
 		m_private->pending_cursor_advance = 0;
 		vterm_input_write(m_private->vt, advance.constData(), advance.size());
+		vterm_screen_flush_damage(m_private->vts);
 	}
 }
 
 void bssh_emulator::resize(int cols, int rows) {
 	cols = qMax(1, cols);
 	rows = qMax(1, rows);
+
+	/*
+	 * Settle what the old geometry owes before the coordinates it was
+	 * measured in stop being true (see the constructor).
+	 */
+	vterm_screen_flush_damage(m_private->vts);
 
 	vterm_set_size(m_private->vt, rows, cols);
 	m_private->screen.resize(cols, rows);

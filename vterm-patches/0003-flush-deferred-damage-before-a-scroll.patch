@@ -1,0 +1,58 @@
+Flush deferred damage before a scroll moves the cells it refers to
+
+libvterm's default damage merging is VTERM_DAMAGE_CELL -- one damage
+callback per printed cell, so an ordinary 80-column line of output
+arrives as eighty separate rectangles. VTERM_DAMAGE_ROW coalesces those
+into one rectangle per row, which is the granularity a consumer that
+mirrors the grid wants anyway. Turning it on is a one-line change and it
+is wrong, for a reason that is not the caller's fault:
+
+  scrollrect() {
+    vterm_scroll_rect(..., moverect_internal, ...);   /* buffer moves */
+    vterm_screen_flush_damage(screen);                /* THEN flush */
+    vterm_scroll_rect(..., moverect_user, ...);       /* then tell the user */
+  }
+
+Merged damage is held until something flushes it, so a row printed just
+before a scroll is still pending when the scroll arrives. Flushing after
+the internal move hands the damage callback a rectangle whose coordinates
+were recorded before the scroll and whose contents have already been
+scrolled away -- the consumer copies the wrong row and cannot tell.
+
+It is invisible under the default because VTERM_DAMAGE_CELL delivers each
+cell synchronously from putglyph(), so nothing is ever pending when a
+scroll begins. Any consumer that both merges damage and implements the
+moverect callback hits it immediately; one that ignores moverect is spared
+only because moverect_user() then damages the whole destination and it
+gets re-read.
+
+Flushing first is correct for both: the pending rectangle is delivered
+while it still describes the buffer, and the post-move damage that
+moverect_user() and erase_user() raise is still emitted afterwards, so
+nothing merges across the scroll in either direction.
+
+Applied to the vendored copy at build time (see the top-level Makefile);
+upstream is otherwise untouched. Worth sending upstream.
+
+diff --git a/src/screen.c b/src/screen.c
+index 6747acb..3c4cb33 100644
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -328,11 +328,15 @@ static int scrollrect(VTermRect rect, int downward, int rightward, void *user)
+   VTermScreen *screen = user;
+
+   if(screen->damage_merge != VTERM_DAMAGE_SCROLL) {
++    /* Deferred damage describes the screen as it is NOW, so it has to be
++     * delivered before the move rewrites the cells it refers to. Flushing
++     * after moverect_internal hands the callback a pre-scroll rectangle
++     * pointing at post-scroll content. */
++    vterm_screen_flush_damage(screen);
++
+     vterm_scroll_rect(rect, downward, rightward,
+         moverect_internal, erase_internal, screen);
+
+-    vterm_screen_flush_damage(screen);
+-
+     vterm_scroll_rect(rect, downward, rightward,
+         moverect_user, erase_user, screen);
+

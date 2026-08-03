@@ -750,8 +750,17 @@ time by the top-level Makefile — **not** committed into the submodule
 itself, because a submodule pinned to a commit that exists only on this
 machine is one nobody else can clone. An upstream update that conflicts
 fails loudly at the patch step rather than silently dropping the fix, and
-`make veryclean` hands the submodule back pristine. Both patches are worth
-sending upstream.
+`make veryclean` hands the submodule back pristine. All three patches are
+worth sending upstream.
+
+The third is not an extension hole but an ordering bug, and it is the one
+that shows why vendoring keeps earning its keep after the feature work is
+done: `scrollrect()` flushes merged damage *after* moving its own buffer,
+so a consumer that both merges damage and implements `moverect` is handed
+a rectangle whose coordinates predate the scroll and whose contents no
+longer do. Nothing in the extension hook could have worked around it —
+the damage arrives already wrong. See §9.5, which is where the merging
+that exposed it is explained.
 
 **Not everything libvterm does is a defect to patch, either.** Its keyboard
 encoder emits `CSI u` unconditionally for the ambiguous control keys
@@ -1045,7 +1054,7 @@ diverge on *delivery* but never on *which fonts exist*.
   advance by the font's own fractional metrics and drift away from the columns.
   A real atlas remains available if profiling ever points at rasterisation, but
   it would have been the wrong fix for the actual cost.
-- **Throughput, measured separately from painting.** Scrolling output ran at
+- **Throughput, measured separately from painting** Scrolling output ran at
   **0.2 MB/s** while a full-screen TUI repaint — more bytes, no scrolling —
   managed 21 MB/s, and the gap tracked the grid size rather than the output. A
   scroll was handled by re-reading the whole destination out of libvterm and
@@ -1053,6 +1062,26 @@ diverge on *delivery* but never on *which fonts exist*.
   thousand cell reads. The mirror moves its own rows now (a memmove each) and
   lets libvterm's damage fill in what the scroll exposed: **0.2 → 3.3 MB/s**,
   and 9.6 MB/s on an 80×24 grid.
+- **Damage merged per row, not per cell.** libvterm's default is
+  `VTERM_DAMAGE_CELL` — one damage callback per printed cell — so the mirror
+  was told about a screen's worth of output one character at a time:
+  **1,188,841 callbacks** for 20,000 lines of build output, and **19,900,000**
+  for 2,000 full-screen repaints. `VTERM_DAMAGE_ROW` coalesces each row into
+  one rectangle: **20,001** and **100,000** callbacks respectively, for
+  identical work. That is a count rather than a timing, so it is the same on
+  any machine; the timings that follow are not, and were taken interleaved on
+  a loaded desktop. A full-screen repaint went **28 → 38 MB/s**, 80×24
+  scrolling **10.4 → 13.0**, 200×50 scrolling 3.5 → 4.1, and coloured
+  scrolling not at all — the merge removes per-callback overhead, not the
+  per-cell conversion that dominates when every cell carries an SGR change.
+  Merging makes damage **deferred**, which costs two things: `feed()` must
+  flush, or the tail of every write sits invisible until the next one (a shell
+  prompt is a write with no newline followed by silence), and libvterm's own
+  `scrollrect()` flushed *after* moving its buffer, handing back a pre-scroll
+  rectangle pointing at post-scroll cells. That second one is upstream's bug
+  rather than ours and is fixed in `vterm-patches/` (§7.1) — it is invisible
+  under the default, because per-cell damage is delivered synchronously and
+  nothing is ever pending when a scroll begins.
 - Snap the cell grid to integer pixel metrics to avoid blurry text and
   accumulating rounding error across 200 columns.
 - Respect **display density / device pixel ratio** on every platform and expose a

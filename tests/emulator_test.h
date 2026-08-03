@@ -37,6 +37,7 @@ private slots:
 	void alternate_screen_does_not_pollute_the_scrollback();
 	void the_remote_may_ask_for_the_clipboard_but_never_read_it();
 	void scrolling_moves_the_grid_without_losing_anything();
+	void a_write_is_on_the_screen_when_it_returns();
 };
 
 #endif /* BSSH_EMULATOR_TEST_H */

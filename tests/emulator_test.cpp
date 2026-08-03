@@ -425,3 +425,34 @@ void emulator_test::scrolling_moves_the_grid_without_losing_anything() {
 	QCOMPARE(int(first.width), 2);
 	QVERIFY2(second.width == 0, "the continuation cell must survive a scroll");
 }
+
+void emulator_test::a_write_is_on_the_screen_when_it_returns() {
+	/*
+	 * Damage is merged per row rather than per cell, which means libvterm
+	 * holds a row until something asks for it -- so feed() flushes, and
+	 * without that the tail of every write would sit invisible until the
+	 * next one arrived. On a shell prompt, which is a write with no
+	 * trailing newline and then silence, "the next one" is whenever the
+	 * user next types.
+	 */
+	bssh_emulator emulator(20, 4);
+	emulator.feed(QByteArrayLiteral("$ "));
+
+	QCOMPARE(emulator.screen().to_text().split(QLatin1Char('\n')).value(0), QStringLiteral("$"));
+
+	/*
+	 * And the same across a scroll, which is where the merging is not
+	 * merely deferred but ordered: a row printed just before a scroll is
+	 * still owed when the scroll arrives, so it has to be delivered while
+	 * it still describes the grid. Reading it back afterwards yields the
+	 * row that scrolled INTO those coordinates -- the text is not lost,
+	 * it is replaced by its neighbour, which no blank-screen check finds.
+	 */
+	bssh_emulator scrolled(20, 3);
+	scrolled.feed(QByteArrayLiteral("alpha\r\nbravo\r\ncharlie\r\ndelta"));
+
+	const QStringList rows = scrolled.screen().to_text().split(QLatin1Char('\n'));
+	QCOMPARE(rows.value(0), QStringLiteral("bravo"));
+	QCOMPARE(rows.value(1), QStringLiteral("charlie"));
+	QCOMPARE(rows.value(2), QStringLiteral("delta"));
+}
