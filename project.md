@@ -1621,8 +1621,23 @@ The desktop build is what makes this project testable at all — use it.
   against a server that would let anyone in. The tilde form is checked against
   the server too rather than by comparing strings, since carrying a `~` across
   from an OpenSSH config is the field's whole purpose (§10.5).
-  Everything is thrown away: its own host key, user key, `HOME` and an sshd on a
-  spare loopback port taking that one key and no password. Nobody's real
+  It also covers **§11's trust-on-first-use against a server whose key can
+  really change** — the failure §11 names is a warning that ends up silently
+  pre-accepted, and a fake can be *told* to report a changed key while proving
+  nothing about whether the binding notices. An unknown host is announced and the
+  connection **held**, not failed and emphatically not accepted; accepting once
+  is remembered so the second attempt asks nothing; and the accepted key lands in
+  BeerSSH's own store with `~/.ssh/known_hosts` left untouched. Then the server is
+  restarted **on the same port with a new host key** — a different port would be a
+  different known-hosts entry and merely unknown — and the changed key is reported
+  as *changed* and refused. Sabotaging the `SSH_KNOWN_HOSTS_CHANGED` branch fails
+  exactly that test.
+  The run is two phases for that reason, and each trust test clears the store
+  itself rather than relying on running before the authentication tests, which
+  accept the key as a side effect: a test that passes only in one order fails
+  later for a reason nobody can see.
+  Everything is thrown away: its own host key, user key, `HOME`, `XDG_DATA_HOME`
+  and an sshd on a spare loopback port taking that one key and no password. Nobody's real
   `~/.ssh` is read or written. Without the server the tests **skip** rather than
   fail, so running the binary by hand cannot report a false failure.
 - Device/emulator tests cover what only Android can break: IME and hardware-key

@@ -32,6 +32,17 @@ private slots:
 	void the_same_key_works_through_a_tilde();
 	void without_the_key_it_does_not_get_in();
 	void a_missing_key_fails_rather_than_hangs();
+
+	/*
+	 * sec 11's trust-on-first-use, against a server whose host key can
+	 * actually change. The failure this guards against is the one sec 11
+	 * names: a warning that ends up silently pre-accepted. A fake can be
+	 * told to emit host_key_changed; only a real server can prove the
+	 * binding notices when it happens.
+	 */
+	void an_unknown_host_is_held_until_accepted();
+	void accepting_once_is_remembered();
+	void a_changed_host_key_is_refused();
 };
 
 #endif /* BSSH_LIVE_SSH_TEST_H */

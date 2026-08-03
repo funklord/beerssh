@@ -69,29 +69,62 @@ echo "check-ssh: sshd on 127.0.0.1:$PORT, one generated key, no passwords"
 "$SSHD" -f "$DIR/sshd_config" -E "$DIR/sshd.log"
 
 # Wait for the listener rather than sleeping a guessed interval.
-i=0
-while [ $i -lt 50 ]; do
-	if python3 -c "
+wait_for_port() {
+	i=0
+	while [ $i -lt 50 ]; do
+		if python3 -c "
 import socket,sys
 s=socket.socket()
 s.settimeout(0.2)
-sys.exit(0 if s.connect_ex(('127.0.0.1',$PORT))==0 else 1)"; then break; fi
-	i=$((i + 1))
+sys.exit(0 if s.connect_ex(('127.0.0.1',$PORT))==0 else 1)"; then return 0; fi
+		i=$((i + 1))
+		sleep 0.1
+	done
+
+	echo "check-ssh: sshd never came up on $PORT; its log follows." >&2
+	cat "$DIR/sshd.log" >&2
+	exit 1
+}
+
+wait_for_port
+
+# HOME and XDG_DATA_HOME are both the throwaway tree: the tilde test must
+# address the generated key, and the trust-on-first-use tests must write
+# their known-hosts into a store made for this run rather than into the
+# one belonging to whoever is running it.
+run_phase() {
+	BSSH_TEST_SSH_PORT=$PORT \
+	BSSH_TEST_SSH_KEY="$DIR/home/.ssh/id_test" \
+	BSSH_TEST_SSH_PHASE="$1" \
+	HOME="$DIR/home" \
+	XDG_DATA_HOME="$DIR/home/.local/share" \
+	XDG_CONFIG_HOME="$DIR/home/.config" \
+	QT_QPA_PLATFORM=offscreen \
+		"$BIN_ABS" --live-ssh
+}
+
+BIN_ABS="$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")"
+
+echo "check-ssh: phase 1 -- authentication, and trusting this host key"
+run_phase trust
+
+# A host key can only be seen to CHANGE across a restart on the SAME port:
+# a different port is a different known-hosts entry and would be merely
+# unknown. So the server is stopped, given a new identity, and put back.
+echo "check-ssh: swapping the server's host key and restarting"
+kill "$(cat "$DIR/sshd.pid")" 2>/dev/null || true
+wait_gone=0
+while [ $wait_gone -lt 50 ] && [ -f "$DIR/sshd.pid" ] && kill -0 "$(cat "$DIR/sshd.pid")" 2>/dev/null; do
+	wait_gone=$((wait_gone + 1))
 	sleep 0.1
 done
 
-if [ $i -ge 50 ]; then
-	echo "check-ssh: sshd never came up; its log follows." >&2
-	cat "$DIR/sshd.log" >&2
-	exit 1
-fi
+rm -f "$DIR/hostkey" "$DIR/hostkey.pub"
+ssh-keygen -q -t ed25519 -f "$DIR/hostkey" -N ''
+"$SSHD" -f "$DIR/sshd_config" -E "$DIR/sshd.log"
+wait_for_port
 
-# HOME is the throwaway tree so the tilde test addresses the generated key
-# and not anything belonging to the person running this.
-BSSH_TEST_SSH_PORT=$PORT \
-BSSH_TEST_SSH_KEY="$DIR/home/.ssh/id_test" \
-HOME="$DIR/home" \
-QT_QPA_PLATFORM=offscreen \
-	"$(cd "$(dirname "$BIN")" && pwd)/$(basename "$BIN")" --live-ssh
+echo "check-ssh: phase 2 -- the same host, a different key"
+run_phase rekeyed
 
-echo "check-ssh: the transport authenticates against a real server"
+echo "check-ssh: the transport authenticates, and refuses a changed host key"
