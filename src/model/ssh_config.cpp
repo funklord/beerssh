@@ -240,9 +240,11 @@ bssh_profile_t bssh_ssh_config_host_t::to_profile() const {
 
 	/*
 	 * Carried across now that the transport can offer a named key
-	 * (SSH_OPTIONS_ADD_IDENTITY). ProxyJump still cannot be honoured and
-	 * is still only reported.
+	 * (SSH_OPTIONS_ADD_IDENTITY), and so is ProxyJump: it becomes the
+	 * profile's jump host and reaches a tunnel at connect time. A CHAIN
+	 * of hosts still cannot be honoured and is still only reported.
 	 */
 	profile.identity_file = identity_file;
+	profile.proxy_jump = proxy_jump;
 	return profile;
 }

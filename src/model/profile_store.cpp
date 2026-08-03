@@ -20,7 +20,8 @@ namespace {
  * knowing some nested syntax.
  */
 const char *const BSSH_HOST_KEYS[] = {
-	"name", "host", "user", "port", "preset", "has_password", "identity_file"
+	"name", "host", "user", "port", "preset", "has_password", "identity_file",
+	"proxy_jump"
 };
 
 QString slug_for(const QString &name) {
@@ -301,6 +302,7 @@ void bssh_profile_store::load_profiles() {
 		profile.user = file.value(QStringLiteral("user")).toString();
 		profile.port = static_cast<quint16>(file.value(QStringLiteral("port"), 22).toUInt());
 		profile.identity_file = file.value(QStringLiteral("identity_file")).toString();
+		profile.proxy_jump = file.value(QStringLiteral("proxy_jump")).toString();
 		profile.has_stored_password =
 		        file.value(QStringLiteral("has_password"), false).toBool();
 		profile.preset_id = id_for_slug(file.value(QStringLiteral("preset")).toString());
@@ -457,6 +459,9 @@ void bssh_profile_store::write_profiles() {
 		file.setValue(QStringLiteral("port"), profile.port);
 		if (!profile.identity_file.isEmpty()) {
 			file.setValue(QStringLiteral("identity_file"), profile.identity_file);
+		}
+		if (!profile.proxy_jump.isEmpty()) {
+			file.setValue(QStringLiteral("proxy_jump"), profile.proxy_jump);
 		}
 
 		/*

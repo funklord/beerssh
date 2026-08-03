@@ -42,6 +42,17 @@ struct bssh_profile_t {
 	QString identity_file;
 
 	/*
+	 * The bastion to reach this host through, as OpenSSH's ProxyJump
+	 * writes it: [user@]host[:port], empty for a direct connection
+	 * (sec 10.5). One hop.
+	 *
+	 * A hostname, like the host field beside it, and no more a secret
+	 * than that one -- which is what lets it live here under sec 10.3.
+	 * This is what an imported OpenSSH `ProxyJump` becomes.
+	 */
+	QString proxy_jump;
+
+	/*
 	 * Whether a password for this host exists in the secret store. NOT a
 	 * secret -- it is the hint that lets the app know it is worth asking
 	 * for the store's passphrase, without unlocking the store to find

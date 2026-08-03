@@ -81,6 +81,7 @@ private:
 	QPushButton *m_save;
 	QLineEdit *m_name;
 	QLineEdit *m_identity;
+	QLineEdit *m_jump;
 	QLineEdit *m_host;
 	QLineEdit *m_user;
 	QSpinBox *m_port;

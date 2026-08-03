@@ -66,6 +66,7 @@ void bssh_session::set_settings(const QJsonObject &settings) {
 		m_transport->set_compression(
 		        m_settings.value(QStringLiteral("compression")).toBool());
 		m_transport->set_identity_file(m_profile.identity_file);
+		m_transport->set_proxy_jump(m_profile.proxy_jump);
 	}
 
 	/*
@@ -129,6 +130,7 @@ void bssh_session::connect_to_host() {
 	 * covers the first connection.
 	 */
 	m_transport->set_identity_file(m_profile.identity_file);
+	m_transport->set_proxy_jump(m_profile.proxy_jump);
 
 	connect(m_transport, &bssh_ssh_session::bytes_received,
 	         m_emulator, &bssh_emulator::feed);

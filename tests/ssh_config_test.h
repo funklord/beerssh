@@ -35,7 +35,6 @@ private slots:
 	 */
 	void a_jump_host_spec_is_taken_apart();
 	void a_chain_of_jump_hosts_is_refused_not_truncated();
-
 };
 
 #endif /* BSSH_SSH_CONFIG_TEST_H */

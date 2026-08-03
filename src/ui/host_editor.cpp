@@ -83,6 +83,21 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	m_identity->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
 
 	/*
+	 * The bastion, if this host sits behind one (sec 10.5). Blank is a
+	 * direct connection, which is what nearly every host is, so the
+	 * placeholder says so rather than leaving a box that looks like a
+	 * missing answer.
+	 *
+	 * Spelled the way OpenSSH spells it, because that is what the person
+	 * filling this in has already typed after -J or pasted out of a
+	 * config file, and because an import (sec 10.5) puts that exact
+	 * string here.
+	 */
+	m_jump = new QLineEdit(this);
+	m_jump->setPlaceholderText(QStringLiteral("direct"));
+	m_jump->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+
+	/*
 	 * Host first, because it is the only field that must be filled in.
 	 * The name is last and optional: making someone name a thing before
 	 * they can connect to it is a form asking for tidiness rather than
@@ -93,6 +108,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	form->addRow(QStringLiteral("Port"), m_port);
 	form->addRow(QStringLiteral("Name"), m_name);
 	form->addRow(QStringLiteral("Key file"), m_identity);
+	form->addRow(QStringLiteral("Via"), m_jump);
 	outer->addLayout(form);
 
 	/*
@@ -158,6 +174,7 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_port->setValue(profile.port);
 	m_name->setText(profile.name);
 	m_identity->setText(profile.identity_file);
+	m_jump->setText(profile.proxy_jump);
 
 	const QJsonObject resolved = resolved_settings();
 
@@ -248,6 +265,7 @@ bssh_profile_t bssh_host_editor::profile() const {
 	edited.port = static_cast<quint16>(m_port->value());
 	edited.name = m_name->text().trimmed();
 	edited.identity_file = m_identity->text().trimmed();
+	edited.proxy_jump = m_jump->text().trimmed();
 
 	/*
 	 * Sparse appearance overrides, computed by the same function the

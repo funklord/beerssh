@@ -284,6 +284,7 @@ void session_registry_test::every_resolved_setting_reaches_something_that_uses_i
 	 * preset -- but it has to reach the transport by the same connect.
 	 */
 	profile.identity_file = QStringLiteral("~/.ssh/id_work");
+	profile.proxy_jump = QStringLiteral("me@bastion.example.com");
 	bssh_session session(profile);
 
 	QJsonObject settings;
@@ -300,6 +301,7 @@ void session_registry_test::every_resolved_setting_reaches_something_that_uses_i
 	QCOMPARE(fake->compression(), true);
 	QCOMPARE(fake->keepalive_seconds(), 45);
 	QCOMPARE(fake->identity_file(), QStringLiteral("~/.ssh/id_work"));
+	QCOMPARE(fake->proxy_jump(), QStringLiteral("me@bastion.example.com"));
 	QCOMPARE(session.emulator()->scrollback().max_lines(), 12345);
 
 	bssh_ssh_session::set_factory(nullptr);

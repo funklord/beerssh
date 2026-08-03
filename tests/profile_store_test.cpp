@@ -421,14 +421,18 @@ void profile_store_test::the_host_editor_builds_a_profile() {
 	bssh_profile_t imported;
 	imported.host = QStringLiteral("build.example.com");
 	imported.identity_file = QStringLiteral("~/.ssh/id_work");
+	imported.proxy_jump = QStringLiteral("me@bastion.example.com");
 	editor.set_profile(imported);
 	QCOMPARE(editor.profile().identity_file, QStringLiteral("~/.ssh/id_work"));
+	QCOMPARE(editor.profile().proxy_jump, QStringLiteral("me@bastion.example.com"));
 
 	/* Cleared means "the default identities", not an empty path. */
 	bssh_profile_t cleared = imported;
 	cleared.identity_file.clear();
+	cleared.proxy_jump.clear();
 	editor.set_profile(cleared);
 	QVERIFY(editor.profile().identity_file.isEmpty());
+	QVERIFY(editor.profile().proxy_jump.isEmpty());
 
 	/* Nothing typed is nothing to save, and the editor says so by being
 	 * invalid rather than by inventing a host. */
@@ -504,6 +508,54 @@ void profile_store_test::an_identity_file_survives_the_round_trip() {
 	for (const bssh_profile_t &profile : reopened.profiles()) {
 		QVERIFY2(!profile.overrides.contains(QStringLiteral("identity_file")),
 		          "identity_file is a host field, not a preset override");
+	}
+}
+
+void profile_store_test::a_jump_host_survives_the_round_trip() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("test.db"));
+
+	{
+		bssh_profile_store store(path);
+
+		bssh_profile_t behind;
+		behind.name = QStringLiteral("inner");
+		behind.host = QStringLiteral("inner.internal");
+		behind.proxy_jump = QStringLiteral("me@bastion.example.com:2222");
+		QVERIFY(store.save(behind) != 0);
+
+		bssh_profile_t direct;
+		direct.name = QStringLiteral("edge");
+		direct.host = QStringLiteral("edge.example.com");
+		QVERIFY(store.save(direct) != 0);
+	}
+
+	/*
+	 * Reopened for the same reason the key is: this is the other field an
+	 * OpenSSH import fills in, and a route that survives until restart is
+	 * a host that stops being reachable one day for no visible reason.
+	 */
+	bssh_profile_store reopened(path);
+
+	bool checked_behind = false;
+	bool checked_direct = false;
+	for (const bssh_profile_t &profile : reopened.profiles()) {
+		if (profile.name == QStringLiteral("inner")) {
+			QCOMPARE(profile.proxy_jump, QStringLiteral("me@bastion.example.com:2222"));
+			checked_behind = true;
+		}
+		if (profile.name == QStringLiteral("edge")) {
+			QVERIFY(profile.proxy_jump.isEmpty());
+			checked_direct = true;
+		}
+	}
+	QVERIFY(checked_behind);
+	QVERIFY(checked_direct);
+
+	/* And not mistaken for a preset override (sec 10.1). */
+	for (const bssh_profile_t &profile : reopened.profiles()) {
+		QVERIFY2(!profile.overrides.contains(QStringLiteral("proxy_jump")),
+		          "proxy_jump is a host field, not a preset override");
 	}
 }
 

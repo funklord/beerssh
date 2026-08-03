@@ -104,6 +104,7 @@ private:
 	QSpinBox *m_port;
 	QLineEdit *m_user;
 	QLineEdit *m_identity;
+	QLineEdit *m_jump;
 	QLineEdit *m_session_name;
 	QListWidget *m_sessions;
 	/*

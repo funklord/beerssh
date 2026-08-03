@@ -1429,11 +1429,47 @@ double as documentation of what a preset can do.
   with the destination rather than under PuTTY's Connection → SSH → Auth because
   that page is still a placeholder, and a field nobody can find may as well not
   exist.
-  **`ProxyJump` is parsed, carried and deliberately not applied**: there is no
-  jump-host support for it to reach, and a field that reaches nothing is what
-  §10.2 refuses. The import names it per host and says what it means for
-  connecting, since a host that silently loses its jump host looks like an app
-  that cannot reach the machine. Jump-host support is the remaining gap.
+- **`ProxyJump`** — **[DECIDED]** carried onto the profile and honoured, one hop.
+  What `-J` does, and what makes it different from logging into the bastion and
+  typing `ssh` again: the SSH protocol to the **target** runs end-to-end inside a
+  plain TCP forward the bastion carries and cannot read. The target's host key is
+  checked here, the target's credentials are offered here, and no shell is ever
+  opened on the bastion. Hopping by hand gives the middle machine your session;
+  this does not.
+  **The shape libssh forces** (`bssh_jump_tunnel`): a session to the bastion, a
+  `direct-tcpip` channel from it to `target:port`, and a **socketpair** between
+  that channel and the target session — because libssh takes a file descriptor as
+  a session's transport and not a channel. The pump between the two runs on **its
+  own thread**: the target's `ssh_connect()` blocks through its handshake and
+  every byte of that handshake travels through this tunnel, so pumping it from the
+  same thread would deadlock on the first packet. `SSH_OPTIONS_HOST` stays the
+  **target's** name, which is what its key is checked against and what a
+  known-hosts entry is filed under.
+  **The bastion is checked, never prompted about.** It is verified against the
+  same known-hosts file as everything else, and an unknown or changed key is a
+  refusal with a reason ("ssh to it once so its key is recorded") rather than a
+  second trust-on-first-use dialog. A prompt about a machine the user did not ask
+  to visit, while the connection they *did* ask for waits behind it, is a prompt
+  nobody can answer sensibly, and the alternative — teaching people to click
+  through key warnings — is worse than the inconvenience. For the same reason it
+  authenticates with keys and the agent only: a bastion password would be a
+  second credential flow that a reconnect could not supply anyway (§11 keeps no
+  password past first use).
+  **One hop.** OpenSSH allows a comma-separated chain and the same mechanism
+  nests, but each hop needs its own host-key decision and its own credentials. A
+  chain is refused rather than truncated — taking only the first hop of `a,b`
+  would route through a machine the user named as a *step*, which either fails
+  confusingly or, worse, works by a path nobody chose. The import reports a chain
+  per host for that reason; a single jump host it simply brings across.
+  **Editable on both front doors** (§8.5, §14): "Connect via" beside the key in
+  the desktop dialog and "Via" on the touch form, both spelled the way OpenSSH
+  spells it, since that is the string the user already has. Blank is a direct
+  connection and both placeholders say so.
+  **Checked against a real server** (§12.3): `tools/check-ssh.sh` uses the one
+  throwaway sshd as *both* bastion and target — it carries a channel to itself,
+  and a second independent SSH session runs inside it. A bastion that is not
+  listening must stop the connection, which is what keeps the check from passing
+  on a build that ignores the jump host and simply dials the target.
 - **[OPEN]** Host groups/folders with inherited settings. Presets cover most of the
   need; add folders only if organising many hosts proves awkward.
 
@@ -1443,7 +1479,7 @@ double as documentation of what a preset can do.
 
   | file | holds |
   |---|---|
-  | `~/.ssh/beerssh_hosts` | `[host-3]` — name, host, user, port, key file, which preset it follows, and any per-field overrides as ordinary keys |
+  | `~/.ssh/beerssh_hosts` | `[host-3]` — name, host, user, port, key file, jump host, which preset it follows, and any per-field overrides as ordinary keys |
   | `presets.ini` | `[servers]` — the preset's fields, section named by slug |
   | `layout.ini` | `[layout]` — which hosts were open, and how |
 

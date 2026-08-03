@@ -222,15 +222,19 @@ void font_picker_test::the_session_dialog_round_trips_the_key_file() {
 	bssh_profile_t profile;
 	profile.host = QStringLiteral("build.example.com");
 	profile.identity_file = QStringLiteral("~/.ssh/id_work");
+	profile.proxy_jump = QStringLiteral("me@bastion.example.com");
 	dialog.set_current_profile(profile);
 
 	QCOMPARE(dialog.current_profile().identity_file, QStringLiteral("~/.ssh/id_work"));
+	QCOMPARE(dialog.current_profile().proxy_jump,
+	          QStringLiteral("me@bastion.example.com"));
 
 	/* Blank means the defaults, and must not become a path of its own. */
 	bssh_profile_t plain;
 	plain.host = QStringLiteral("home.example.com");
 	dialog.set_current_profile(plain);
 	QVERIFY(dialog.current_profile().identity_file.isEmpty());
+	QVERIFY(dialog.current_profile().proxy_jump.isEmpty());
 }
 
 void font_picker_test::agreeing_with_the_preset_clears_the_override() {

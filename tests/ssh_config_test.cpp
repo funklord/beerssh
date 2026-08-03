@@ -193,10 +193,11 @@ void ssh_config_test::separators_and_comments_and_quotes() {
 
 void ssh_config_test::unsupported_directives_are_reported_not_dropped() {
 	/*
-	 * IdentityFile is honoured now -- it becomes the profile's key and
-	 * reaches libssh as SSH_OPTIONS_ADD_IDENTITY -- so it is no longer
-	 * "unsupported". ProxyJump still has nothing to be applied to, and a
-	 * host that silently loses its jump host looks like an app that
+	 * IdentityFile and ProxyJump are both honoured now -- the key reaches
+	 * libssh as SSH_OPTIONS_ADD_IDENTITY, the jump host reaches a
+	 * direct-tcpip tunnel -- so neither is "unsupported" on its own. What
+	 * remains is a CHAIN: OpenSSH allows "a,b" and this does not, and a
+	 * host that silently loses half its route looks like an app that
 	 * cannot reach the machine, so it is parsed to be reported.
 	 */
 	const QList<bssh_ssh_config_host_t> hosts = bssh_ssh_config::parse(QStringLiteral(
@@ -212,11 +213,19 @@ void ssh_config_test::unsupported_directives_are_reported_not_dropped() {
 	          QStringLiteral("~/.ssh/id_work"));
 	QCOMPARE(find(hosts, QStringLiteral("deep")).proxy_jump,
 	          QStringLiteral("bastion.example.com"));
-	/* The key rides along into the profile; the jump host cannot. */
+	/* Both ride along into the profile. */
 	QCOMPARE(find(hosts, QStringLiteral("deep")).to_profile().identity_file,
 	          QStringLiteral("~/.ssh/id_work"));
-	QVERIFY(find(hosts, QStringLiteral("deep")).has_unsupported());
+	QCOMPARE(find(hosts, QStringLiteral("deep")).to_profile().proxy_jump,
+	          QStringLiteral("bastion.example.com"));
+	QVERIFY2(!find(hosts, QStringLiteral("deep")).has_unsupported(),
+	          "one jump host is honoured, so it must not be reported as lost");
 	QVERIFY(!find(hosts, QStringLiteral("plain")).has_unsupported());
+
+	/* A chain is the thing that cannot be honoured. */
+	const QList<bssh_ssh_config_host_t> chained = bssh_ssh_config::parse(QStringLiteral(
+	        "Host far\n  HostName far.internal\n  ProxyJump one.example.com,two.example.com\n"));
+	QVERIFY(find(chained, QStringLiteral("far")).has_unsupported());
 
 	const QList<bssh_ssh_config_host_t> keyed = bssh_ssh_config::parse(QStringLiteral(
 	        "Host keyed\n  HostName keyed.example.com\n  IdentityFile ~/.ssh/id_only\n"));

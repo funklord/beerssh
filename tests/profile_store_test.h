@@ -30,6 +30,7 @@ private slots:
 	void the_host_editor_builds_a_profile();
 	void front_door_follows_the_input_device();
 	void an_identity_file_survives_the_round_trip();
+	void a_jump_host_survives_the_round_trip();
 	void the_touch_editor_resolves_through_the_preset();
 	void the_touch_editor_saves_the_colour_scheme();
 	void the_touch_front_door_can_edit_a_host_it_created();

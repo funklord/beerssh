@@ -27,8 +27,15 @@ QStringList caveats_of(const bssh_ssh_config_host_t &host) {
 	if (!host.identity_file.isEmpty()) {
 		out.append(QStringLiteral("key %1").arg(host.identity_file));
 	}
+	/*
+	 * Same for the jump host, with one exception: a CHAIN cannot be
+	 * honoured, and that is what has_unsupported() now reports.
+	 */
 	if (!host.proxy_jump.isEmpty()) {
-		out.append(QStringLiteral("NOT imported: connects via %1").arg(host.proxy_jump));
+		out.append(host.has_unsupported()
+			                 ? QStringLiteral("NOT imported: connects via %1")
+			                           .arg(host.proxy_jump)
+			                 : QStringLiteral("via %1").arg(host.proxy_jump));
 	}
 	return out;
 }
@@ -136,10 +143,10 @@ void bssh_ssh_config_import::update_summary() {
 	}
 
 	m_caveat->setText(QStringLiteral(
-	        "%1 of them reach their machine through another host (ProxyJump). BeerSSH "
-	        "has no jump-host support yet, so those may not connect -- everything "
-	        "else about them, including any key they name, still comes across.")
-	                           .arg(flagged));
+	        "%1 of them reach their machine through a CHAIN of hosts. BeerSSH goes "
+	        "through one jump host, not several, so those may not connect -- "
+	        "everything else about them, including any key they name, still comes "
+	        "across.").arg(flagged));
 }
 
 int bssh_ssh_config_import::import_selected() {

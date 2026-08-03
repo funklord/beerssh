@@ -212,6 +212,25 @@ QWidget *bssh_session_dialog::build_session_page() {
 	});
 
 	/*
+	 * The bastion, if this host sits behind one (sec 10.5). Beside the
+	 * key rather than on a page of its own: both answer "how do I get in
+	 * to this machine", and both arrive together from an OpenSSH import.
+	 *
+	 * No Browse, because there is nothing to browse -- it is a host, and
+	 * the field is spelled the way OpenSSH's ProxyJump and -J are
+	 * spelled, since that is the string the user already has.
+	 */
+	QHBoxLayout *jump_row = new QHBoxLayout();
+	jump_row->addWidget(new QLabel(QStringLiteral("Connect via"), page));
+	m_jump = new QLineEdit(page);
+	m_jump->setPlaceholderText(QStringLiteral("direct (or user@bastion[:port])"));
+	m_jump->setAccessibleName(QStringLiteral("Connect via jump host"));
+	m_jump->setAccessibleDescription(
+	        QStringLiteral("Leave empty to connect straight to the host."));
+	jump_row->addWidget(m_jump, 1);
+	layout->addLayout(jump_row);
+
+	/*
 	 * PuTTY offers Raw/Telnet/Rlogin/SSH/Serial here. This is an SSH
 	 * client and sec 1 says so, so the row exists to sit where the eye
 	 * expects it and to say what it is, with nothing to choose.
@@ -380,6 +399,7 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	profile.user = m_user->text().trimmed();
 	profile.port = static_cast<quint16>(m_port->value());
 	profile.identity_file = m_identity->text().trimmed();
+	profile.proxy_jump = m_jump->text().trimmed();
 
 	/*
 	 * An unnamed host is named after itself, as the touch editor has
@@ -421,6 +441,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 	m_user->setText(profile.user);
 	m_port->setValue(profile.port);
 	m_identity->setText(profile.identity_file);
+	m_jump->setText(profile.proxy_jump);
 
 	if (m_font_picker) {
 		const QJsonObject resolved = resolved_settings(profile);
