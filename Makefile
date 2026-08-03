@@ -18,6 +18,8 @@
 #   make bench        -- emulator throughput in MB/s (sec 9.5); built by
 #                        `test` but not run by it, and not a CI gate
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
+#   make check-ci     -- run the Linux CI job in the runner's own image
+#                        (needs docker; sec 12.4)
 #   make fonts        -- fetch the curated font set (sec 9.2) into fonts/;
 #                        not needed to build, see FONTS below
 #   make fonts-list   -- show the set and its pinned versions
@@ -242,6 +244,14 @@ bench: $(TEST_BIN)
 
 style:
 	./tools/check-indent.sh
+
+# sec 12.4's runner-parity check. Needs docker; not part of `test`, and
+# deliberately not a CI step -- CI already IS the runner. Run it before
+# pushing anything that touches a platform or library API, because the
+# runner's Qt and libssh are older than any development machine's and an
+# API added later compiles here and fails there.
+check-ci:
+	./tools/check-ci.sh
 
 # --- the curated font set (project.md sec 9) --------------------------------
 # Not a build dependency: the app runs without it, falling back to whatever
@@ -528,7 +538,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style fonts fonts-list check-fonts android-fonts uninstall \
+.PHONY: all run test bench style check-ci fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help

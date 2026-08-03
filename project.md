@@ -1650,11 +1650,16 @@ The desktop build is what makes this project testable at all — use it.
   which on Linux it was already doing better than Qt anyway (§6.2). The second is
   a version guard falling back to `ssh_channel_get_exit_status`, which returns
   the only field that path actually used.
-  **Reproduce the runner in a container before pushing** when anything touches a
-  platform or library API: `docker run ubuntu:24.04`, install exactly the
-  packages the workflow names, `make && make test`. That is what found all of
-  this, plus an indentation regression the local gate had not been re-run
-  against.
+  **`make check-ci` reproduces the runner** in its own image, and is what found
+  all of this plus an indentation regression the local gate had not been re-run
+  against. It reads the package list **out of the workflow** rather than
+  repeating it: the failure it exists to catch is a dependency the runner image
+  happens to carry and the workflow never names, and a second copy of the list
+  would be a second thing to be wrong. If the workflow changes shape the parser
+  refuses to run rather than installing an empty list — a check that quietly
+  stopped looking reads exactly like a passing one, which is the same failure
+  `check-indent.sh` guards against with its file-count floor. Not a CI step: CI
+  already *is* the runner.
 - **Pixel assertions get a tolerance, not equality.** Antialiasing bleeds
   differently between Qt versions — 3/255 on 6.4 against 0 on 6.8 — so a test
   demanding an exact background colour in the margin fails on the older one while
