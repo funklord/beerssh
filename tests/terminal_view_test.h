@@ -35,6 +35,8 @@ private slots:
 	void changing_a_hosts_font_changes_its_grid();
 	void the_cell_lands_on_whole_device_pixels();
 	void a_long_run_of_text_stays_on_the_grid();
+	void the_terminal_reads_itself_to_assistive_technology();
+	void every_control_announces_a_name();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */

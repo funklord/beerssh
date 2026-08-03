@@ -156,6 +156,15 @@ public:
 	bool has_selection() const;
 	void clear_selection();
 
+public slots:
+	/*
+	 * Repaint, and tell assistive technology the text changed (sec 14,
+	 * M11). Both, from one slot, because a screen reader that is never
+	 * told is a screen reader still reading the login banner while a
+	 * build scrolls past.
+	 */
+	void on_screen_damaged();
+
 signals:
 	/*
 	 * Emitted only when the grid size actually changes, not on every

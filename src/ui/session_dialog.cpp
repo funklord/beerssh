@@ -147,18 +147,29 @@ QWidget *bssh_session_dialog::build_session_page() {
 	QHBoxLayout *destination = new QHBoxLayout();
 	destination->addWidget(new QLabel(QStringLiteral("Host Name (or IP address)"), page));
 	m_host = new QLineEdit(page);
+	/*
+	 * Named for the screen reader. These rows are a QLabel and a field
+	 * side by side in a box layout, which -- unlike QFormLayout::addRow,
+	 * which makes the label a buddy for you -- leaves the field
+	 * anonymous: it was announced as "edit box" with nothing to say WHICH
+	 * edit box. The touch form got this right by accident, by using the
+	 * layout that does it automatically.
+	 */
+	m_host->setAccessibleName(QStringLiteral("Host name or IP address"));
 	destination->addWidget(m_host, 1);
 	destination->addWidget(new QLabel(QStringLiteral("Port"), page));
 	m_port = new QSpinBox(page);
 	m_port->setRange(1, 65535);
 	m_port->setValue(22);
 	m_port->setMaximumWidth(80);
+	m_port->setAccessibleName(QStringLiteral("Port"));
 	destination->addWidget(m_port);
 	layout->addLayout(destination);
 
 	QHBoxLayout *user_row = new QHBoxLayout();
 	user_row->addWidget(new QLabel(QStringLiteral("User name"), page));
 	m_user = new QLineEdit(page);
+	m_user->setAccessibleName(QStringLiteral("User name"));
 	user_row->addWidget(m_user, 1);
 	layout->addLayout(user_row);
 
@@ -178,6 +189,9 @@ QWidget *bssh_session_dialog::build_session_page() {
 	identity_row->addWidget(new QLabel(QStringLiteral("Private key file"), page));
 	m_identity = new QLineEdit(page);
 	m_identity->setPlaceholderText(QStringLiteral("default keys (~/.ssh/id_ed25519 and friends)"));
+	m_identity->setAccessibleName(QStringLiteral("Private key file"));
+	m_identity->setAccessibleDescription(
+	        QStringLiteral("Leave empty to offer your default keys."));
 	identity_row->addWidget(m_identity, 1);
 
 	QPushButton *browse_key = new QPushButton(QStringLiteral("Browse..."), page);
@@ -217,6 +231,7 @@ QWidget *bssh_session_dialog::build_session_page() {
 
 	saved_layout->addWidget(new QLabel(QStringLiteral("Saved Sessions"), saved));
 	m_session_name = new QLineEdit(saved);
+	m_session_name->setAccessibleName(QStringLiteral("Saved session name"));
 	saved_layout->addWidget(m_session_name);
 
 	QHBoxLayout *list_row = new QHBoxLayout();

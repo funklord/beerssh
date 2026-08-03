@@ -111,7 +111,7 @@ void bssh_pane_container::rebuild() {
 		});
 
 		connect(session->emulator(), &bssh_emulator::damaged,
-		         view, QOverload<>::of(&QWidget::update));
+		         view, &bssh_terminal_view::on_screen_damaged);
 		connect(session->emulator(), &bssh_emulator::images_changed,
 		         view, QOverload<>::of(&QWidget::update));
 

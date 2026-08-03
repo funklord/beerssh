@@ -90,6 +90,7 @@ SOURCES += \
     ../src/ui/app_settings_view.cpp \
     ../src/ui/licences_view.cpp \
     ../src/ui/key_row.cpp \
+    ../src/ui/terminal_accessible.cpp \
     ../src/ui/terminal_view.cpp
 
 HEADERS += \
@@ -146,4 +147,5 @@ HEADERS += \
     ../src/ui/app_settings_view.h \
     ../src/ui/licences_view.h \
     ../src/ui/key_row.h \
+    ../src/ui/terminal_accessible.h \
     ../src/ui/terminal_view.h

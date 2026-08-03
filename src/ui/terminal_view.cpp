@@ -1,5 +1,9 @@
 #include "ui/terminal_view.h"
 
+#include "ui/terminal_accessible.h"
+
+#include <QAccessible>
+
 #include <QFontDatabase>
 #include <QPen>
 #include <QFontMetricsF>
@@ -99,6 +103,16 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	        bssh_font_catalog::instance().family_for(m_font_id), m_font_size);
 
 	setFocusPolicy(Qt::StrongFocus);
+
+	/*
+	 * Assistive technology sees a terminal rather than an anonymous
+	 * rectangle from here on (sec 14, M11). Installed from the view's own
+	 * constructor rather than from main() so that a terminal built in a
+	 * test is accessible too -- which is the only place this gets
+	 * exercised without a screen reader attached.
+	 */
+	bssh_terminal_accessible::install();
+	setAccessibleName(QStringLiteral("Terminal"));
 	setMouseTracking(false);
 	/* Without this Qt never routes input-method events here at all. */
 	setAttribute(Qt::WA_InputMethodEnabled);
@@ -1057,4 +1071,20 @@ void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings
 	const int size = settings.value(QStringLiteral("font_size")).toInt();
 
 	view->set_font_id(family, size);
+}
+
+void bssh_terminal_view::on_screen_damaged() {
+	update();
+
+	/*
+	 * Only when something is listening. QAccessible::isActive() is false
+	 * with no assistive client attached, which is the common case, and
+	 * flattening the screen for an event nobody receives would put that
+	 * cost on every damaged() -- the signal this project has spent two
+	 * commits making cheap.
+	 */
+	if (!QAccessible::isActive()) return;
+
+	QAccessibleTextUpdateEvent event(this, 0, QString(), QString());
+	QAccessible::updateAccessibility(&event);
 }

@@ -1711,6 +1711,32 @@ background).
     the terminal will actually look like, with the sixteen swatches drawn
     because a scheme's name tells a user nothing.
 12. **M11 – Settings, polish, accessibility.**
+    **Accessibility started, measured rather than assumed.** Querying
+    `QAccessible` for what a screen reader would actually be told found the
+    controls in three states: the touch host editor announced everything
+    correctly *by accident* (`QFormLayout::addRow` makes the label a buddy for
+    you), the desktop Session page left **4 of 13** controls anonymous because
+    its rows are a label and a field side by side in a box layout, and the touch
+    host list's **2 of 2** controls — every control on the phone's first screen —
+    were read out as "vertical ellipsis" and "plus", which is what they look like
+    and not what they do. All named now.
+    **The terminal itself was the real gap**, and naming would not have fixed it:
+    a widget that paints characters appeared as role `Client` with no name, no
+    value and no text interface, so the entire content of the application was
+    invisible. `bssh_terminal_accessible` gives it role `Terminal`, its screen as
+    the value, and a `QAccessibleTextInterface` with line navigation and the real
+    cursor position. Rows are joined with newlines rather than padded to the grid
+    width, because Qt's boundary navigation works on `\n` and a reader that
+    announces eighty spaces before every line break is one nobody will use.
+    Read-only and it says so: the cursor belongs to the remote program, so
+    `setCursorPosition` does nothing rather than lie. Change notification is
+    guarded by `QAccessible::isActive()`, so the flatten cost stays off the
+    `damaged()` path that §9.5 spent two commits making cheap.
+    **[OPEN]** Selection is not reported — the view's own lives in scrollback
+    coordinates this interface does not expose yet, and a selection reported
+    against the wrong offsets is worse than none. Scrollback itself is likewise
+    not reachable through the text interface: what a reader sees is the visible
+    screen.
 13. **M12 – Release readiness.** Play compliance checklist, data-safety, FGS
     justification, licence screen, signing, closed test — plus the desktop
     packaging decided in §12.2, its `.desktop`/AppStream metadata, and a first

@@ -67,6 +67,7 @@ SOURCES += \
     src/ui/session_dialog.cpp \
     src/ui/ssh_config_import.cpp \
     src/ui/tab_status.cpp \
+    src/ui/terminal_accessible.cpp \
     src/ui/terminal_view.cpp
 
 HEADERS += \
@@ -107,6 +108,7 @@ HEADERS += \
     src/ui/session_dialog.h \
     src/ui/ssh_config_import.h \
     src/ui/tab_status.h \
+    src/ui/terminal_accessible.h \
     src/ui/terminal_view.h
 
 # libssh is the only third-party dependency so far. It is named here and

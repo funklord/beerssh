@@ -1,6 +1,12 @@
 #include <QSignalSpy>
 #include <QtTest>
 
+#include <QAccessible>
+#include <QLineEdit>
+#include <QSpinBox>
+#include <QTemporaryDir>
+#include "model/profile_store.h"
+#include "ui/session_dialog.h"
 #include "terminal_view_test.h"
 
 #include "fake_ssh_session.h"
@@ -529,4 +535,102 @@ void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {
 			QCOMPARE(rendered.pixelColor(x, y), background);
 		}
 	}
+}
+
+void terminal_view_test::the_terminal_reads_itself_to_assistive_technology() {
+	/*
+	 * The terminal painted characters and told assistive technology
+	 * nothing: role Client, no name, no value, no text interface. Every
+	 * other control can be fixed by naming it; this one is different,
+	 * because what needs reading is not a label but the contents -- which
+	 * are the whole application (sec 14, M11).
+	 */
+	bssh_emulator emulator(40, 4);
+	emulator.feed(QByteArrayLiteral("login: nabbe\r\nlast login was Tuesday\r\n$ "));
+
+	bssh_terminal_view view;
+	view.attach_screen(&emulator.screen());
+	view.resize(600, 200);
+
+	QAccessibleInterface *a = QAccessible::queryAccessibleInterface(&view);
+	QVERIFY2(a, "the terminal must have an accessible interface at all");
+	QCOMPARE(a->role(), QAccessible::Terminal);
+	QCOMPARE(a->text(QAccessible::Name), QStringLiteral("Terminal"));
+
+	QAccessibleTextInterface *text = a->textInterface();
+	QVERIFY2(text, "without a text interface a reader has nothing to navigate");
+
+	/* What is on screen is what it reports. */
+	const QString value = a->text(QAccessible::Value);
+	QVERIFY(value.contains(QStringLiteral("login: nabbe")));
+	QVERIFY(value.contains(QStringLiteral("last login was Tuesday")));
+
+	/*
+	 * Line navigation is the gesture a reader actually uses, and it works
+	 * on '\n' -- which is why rows are joined rather than padded to the
+	 * grid width.
+	 */
+	int start = -1;
+	int end = -1;
+	/* Qt's line boundary includes the terminator, so the newline is part
+	 * of the line rather than a gap between two of them. */
+	QCOMPARE(text->textAtOffset(0, QAccessible::LineBoundary, &start, &end),
+	          QStringLiteral("login: nabbe\n"));
+	QCOMPARE(start, 0);
+
+	QCOMPARE(text->textAtOffset(end, QAccessible::LineBoundary, &start, &end),
+	          QStringLiteral("last login was Tuesday\n"));
+
+	/* The cursor lands where the terminal's is, not at zero. */
+	QVERIFY2(text->cursorPosition() > 0, "the cursor must be reported where it is");
+	QCOMPARE(text->text(0, 5), QStringLiteral("login"));
+	QCOMPARE(text->characterCount(), value.size());
+
+	/*
+	 * Read-only, and it says so: a reader that believes it can type here
+	 * offers an editing gesture that silently does nothing, because keys
+	 * reach the remote through the input router instead.
+	 */
+	QVERIFY(a->state().readOnly);
+
+	const int before = text->cursorPosition();
+	text->setCursorPosition(0);
+	QCOMPARE(text->cursorPosition(), before);
+}
+
+void terminal_view_test::every_control_announces_a_name() {
+	/*
+	 * A control with no accessible name is announced by its role alone --
+	 * "edit box", with nothing to say WHICH. The desktop rows are a label
+	 * and a field side by side in a box layout, which does not make the
+	 * label a buddy the way QFormLayout::addRow does, so four of them were
+	 * anonymous; the touch list's two controls are single glyphs and were
+	 * read out as "vertical ellipsis" and "plus".
+	 */
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.db")));
+
+	bssh_session_dialog dialog(&store);
+	dialog.resize(760, 520);
+	dialog.show();
+
+	int anonymous = 0;
+	for (QWidget *w : dialog.findChildren<QWidget *>()) {
+		const bool interesting = qobject_cast<QLineEdit *>(w) || qobject_cast<QSpinBox *>(w);
+		if (!interesting || !w->isVisible()) continue;
+
+		/* A spin box owns an internal line edit; the container is what a
+		 * reader lands on, not its guts. */
+		bool internal = false;
+		for (QWidget *up = w->parentWidget(); up; up = up->parentWidget()) {
+			if (qobject_cast<QSpinBox *>(up)) internal = true;
+		}
+		if (internal) continue;
+
+		QAccessibleInterface *a = QAccessible::queryAccessibleInterface(w);
+		if (!a) continue;
+		if (a->text(QAccessible::Name).trimmed().isEmpty()) ++anonymous;
+	}
+
+	QCOMPARE(anonymous, 0);
 }

@@ -65,6 +65,13 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	 * then displayed.
 	 */
 	m_menu->setText(QString(QChar(0x22EE)));
+	/*
+	 * Both controls on this screen are a single glyph, so a screen reader
+	 * had the two of them to work with and announced "vertical ellipsis"
+	 * and "plus" -- which is what they LOOK like and not what they do.
+	 * On the phone front door that was every control on the first screen.
+	 */
+	m_menu->setAccessibleName(QStringLiteral("More options"));
 	m_menu->setMinimumSize(48, 48);
 	m_menu->setPopupMode(QToolButton::InstantPopup);
 
@@ -124,6 +131,7 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	 * gets there without leaving Widgets.
 	 */
 	m_add = new QToolButton(this);
+	m_add->setAccessibleName(QStringLiteral("Add host"));
 	m_add->setText(QStringLiteral("+"));
 	m_add->setFixedSize(56, 56);
 	m_add->setStyleSheet(QStringLiteral(
