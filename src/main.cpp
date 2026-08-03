@@ -22,7 +22,9 @@ int main(int argc, char *argv[]) {
 
 	QCoreApplication::setOrganizationDomain(QStringLiteral("vibes.se"));
 	QCoreApplication::setApplicationName(QStringLiteral("beerssh"));
-	QCoreApplication::setApplicationVersion(QStringLiteral("0.1.0"));
+	/* Set by the build (see the Makefile's VERSION), so the app, the APK
+	 * and the Debian package cannot disagree about what this is. */
+	QCoreApplication::setApplicationVersion(QStringLiteral(BSSH_VERSION_STRING));
 	/* Freedesktop app ID, so the window matches its .desktop entry (sec 0.1). */
 	QGuiApplication::setDesktopFileName(QStringLiteral("se.vibes.beerssh"));
 

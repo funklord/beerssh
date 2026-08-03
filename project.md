@@ -1289,8 +1289,8 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   conditionals sprinkled through the file. A second scope appearing elsewhere in
   `beerssh.pro` is the same smell as an `#ifdef` in the sources.
 
-### 12.2 Desktop packaging — **[DECIDED]** upstream tarball + `make install`
-first; Flatpak next
+### 12.2 Desktop packaging — **[DECIDED]** tarball, `make install`, and a
+**`.deb`**; Flatpak and the rest deferred
 All of them want the app ID from §0.1.
 
 **Built:** `make install` now lays down what a Linux desktop actually needs —
@@ -1300,15 +1300,28 @@ hicolor scalable icon, and the bundled fonts with their licence files under
 for its fonts there, so before this an installed copy silently fell back to
 system families and the licences screen had nothing to show — the binary alone
 was never an installation. `make uninstall` removes exactly what it put there.
-Distro packaging and a Flatpak manifest both build on this rather than
-replacing it, which is why it comes first.
+Distro packaging and any self-contained format both build on this rather than
+replacing it, which is why it came first.
+
+**`make deb` builds two packages**, and the split is the point: `beerssh` is
+251 KB and `beerssh-fonts` is 9.7 MB, because a terminal client that costs
+54 MB to install is a terminal client people do not install. The fonts are
+genuinely optional — without them the app falls back to system monospace
+families (§9.4) — so they are `Recommends`, arch-independent, and packaged the
+way Debian ships fonts anyway. Dependencies come from `dpkg-shlibdeps` reading
+the binary rather than from a hand-kept list that drifts, and an empty result
+is a **fatal** build error: a package with no `Depends` installs happily onto a
+machine with no Qt and fails at first launch rather than at install time.
+
+Flatpak, `.dmg` and Windows installers are **deferred**. Nothing about the
+above blocks them later.
 
 **The icon is a placeholder.** §0.1 leaves the branding direction open, and
 that is a decision to make rather than to default into; a `.desktop` entry
 without an icon is defective, so there is a plain one meant to be replaced.
-- **Linux:** an upstream tarball plus at least one self-contained format
-  (Flatpak is the best fit — it also solves the Qt-version-skew problem across
-  distros). Distro packaging is welcome but not something to block a release on.
+- **Linux:** an upstream tarball, `make install`, and `make deb`. A
+  self-contained format (Flatpak would be the best fit, and would also solve
+  the Qt-version-skew problem across distros) is deferred rather than dropped.
   Ship a `.desktop` file, an AppStream `.metainfo.xml`, and hicolor icons —
   without them the app is invisible to software centres.
 - **macOS/Windows:** `.dmg` / installer, best-effort per §1, unsigned until

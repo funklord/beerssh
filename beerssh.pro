@@ -19,6 +19,10 @@
 TEMPLATE = app
 TARGET = beerssh
 
+# Passed in by the top-level Makefile so the version lives in one place.
+isEmpty(BSSH_VERSION): BSSH_VERSION = 0.1.0
+DEFINES += BSSH_VERSION_STRING=\\\"$$BSSH_VERSION\\\"
+
 QT += widgets network
 CONFIG += c++17
 CONFIG -= app_bundle
@@ -149,7 +153,7 @@ android {
 
     ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android
     ANDROID_VERSION_CODE = 1
-    ANDROID_VERSION_NAME = 0.1.0
+    ANDROID_VERSION_NAME = $$BSSH_VERSION
 
     # Set here rather than as <uses-sdk> in the manifest: the Gradle
     # plugin takes these from the build file and warns about (or

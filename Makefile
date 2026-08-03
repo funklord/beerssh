@@ -27,6 +27,7 @@
 #   make install      -- install the app, its desktop entry, icon,
 #                        AppStream metadata and bundled fonts
 #   make uninstall    -- remove what install put there
+#   make deb          -- build beerssh and beerssh-fonts Debian packages
 #   make clean        -- remove compilation intermediates only; the built
 #                        binary is left in place, so `make install` stays
 #                        possible without a rebuild
@@ -80,6 +81,13 @@ TARGET = beerssh
 # The app id from sec 0.1. Every packaging file is named after it, and a
 # mismatch shows up as an app that installs, runs, and cannot be found.
 APP_ID = se.vibes.beerssh
+
+# One version, passed into the build rather than repeated. It was written
+# in main.cpp and again in beerssh.pro for the Android package name, which
+# is two places to forget; a Debian package would have made it three, and
+# a package claiming a version the app denies is a support question nobody
+# can answer.
+VERSION ?= 0.1.0
 
 BUILD_DIR         = build
 ANDROID_BUILD_DIR = build-android
@@ -191,7 +199,8 @@ $(VTERM_SRCS):
 
 $(BUILD_DIR)/Makefile: beerssh.pro
 	mkdir -p $(BUILD_DIR)
-	cd $(BUILD_DIR) && $(QMAKE) ../beerssh.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX)
+	cd $(BUILD_DIR) && $(QMAKE) ../beerssh.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
+	        BSSH_VERSION=$(VERSION)
 
 $(TARGET): $(VTERM_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
 	$(MAKE) -C $(BUILD_DIR)
@@ -280,7 +289,8 @@ android-check:
 
 $(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) beerssh.pro
 	mkdir -p $(ANDROID_BUILD_DIR)
-	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../beerssh.pro $(QMAKE_CONFIG)
+	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../beerssh.pro $(QMAKE_CONFIG) \
+	        BSSH_VERSION=$(VERSION)
 
 # The base font set that ships inside the APK (project.md sec 9.4).
 #
@@ -390,6 +400,91 @@ install: all
 		echo "install: no fonts/ -- the app will use system monospace families"; \
 	fi
 
+# --- Debian packaging (project.md sec 12.2) --------------------------------
+#
+# Built with dpkg-deb from a staged install rather than through
+# debhelper: this repo's convention is plain Makefiles, `make install`
+# already lays down exactly the right tree, and dpkg-deb turns that tree
+# into a package without a second build system to keep working. Proper
+# debian/ packaging for upstream Debian is a different job with different
+# rules, and this does not pretend to be it.
+#
+# TWO packages, because the fonts are 54 MB and the app is not. A terminal
+# client that costs 54 MB to install is a terminal client people do not
+# install; the curated set is genuinely optional (sec 9.4 -- the app falls
+# back to system monospace families), so it is Recommends rather than
+# Depends and lives in its own arch-independent package, which is how
+# Debian ships fonts anyway.
+DEB_DIR      = build-deb
+DEB_ARCH    ?= $(shell dpkg --print-architecture)
+DEB_MAINTAINER ?= $(shell git config user.name) <$(shell git config user.email)>
+
+deb: all
+	rm -rf $(DEB_DIR)
+	$(MAKE) install DESTDIR=$(DEB_DIR)/beerssh PREFIX=/usr
+
+	# The fonts move to their own package; the app package keeps none.
+	@if [ -d $(DEB_DIR)/beerssh/usr/share/beerssh ]; then \
+		mkdir -p $(DEB_DIR)/beerssh-fonts/usr/share; \
+		mv $(DEB_DIR)/beerssh/usr/share/beerssh \
+		   $(DEB_DIR)/beerssh-fonts/usr/share/beerssh; \
+	fi
+
+	mkdir -p $(DEB_DIR)/beerssh/DEBIAN
+	@printf 'Package: beerssh\n' > $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf 'Version: %s\n' "$(VERSION)" >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf 'Architecture: %s\n' "$(DEB_ARCH)" >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf 'Maintainer: %s\n' "$(DEB_MAINTAINER)" >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf 'Section: net\nPriority: optional\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
+	# Dependencies from the binary itself rather than a hand-kept list,
+	# which would be a list that drifts every time a library is linked or
+	# dropped. dpkg-shlibdeps insists on a debian/control relative to the
+	# working directory, so it gets a minimal one; its output is FATAL if
+	# empty, because a package with no Depends installs happily onto a
+	# machine with no Qt and fails at the first launch with a linker
+	# error. That is exactly what shipped when this ran with its stderr
+	# sent to /dev/null.
+	@mkdir -p $(DEB_DIR)/beerssh/debian
+	@printf 'Source: beerssh\n\nPackage: beerssh\nArchitecture: %s\nDescription: x\n' \
+	        "$(DEB_ARCH)" > $(DEB_DIR)/beerssh/debian/control
+	@set -e; \
+	depends=$$(cd $(DEB_DIR)/beerssh && \
+	        dpkg-shlibdeps -O --ignore-missing-info usr/bin/beerssh 2>/dev/null \
+	        | sed 's/^shlibs:Depends=//'); \
+	if [ -z "$$depends" ]; then \
+		echo "deb: dpkg-shlibdeps produced no dependencies; refusing to build" >&2; \
+		echo "deb:   a package with no Depends fails at launch, not at install" >&2; \
+		exit 1; \
+	fi; \
+	printf 'Depends: %s\n' "$$depends" >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@rm -rf $(DEB_DIR)/beerssh/debian
+	@printf 'Recommends: beerssh-fonts\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf 'Description: SSH terminal for desktop and Android\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf ' An SSH client with a real terminal emulator, built from one\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf ' codebase for the desktop and for Android. Sessions live apart\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf ' from the windows showing them, so tabs, split panes and a phone\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
+	@printf ' rotating do not disturb a connection.\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
+	dpkg-deb --build --root-owner-group $(DEB_DIR)/beerssh \
+	        $(DEB_DIR)/beerssh_$(VERSION)_$(DEB_ARCH).deb
+
+	@if [ -d $(DEB_DIR)/beerssh-fonts ]; then \
+		mkdir -p $(DEB_DIR)/beerssh-fonts/DEBIAN; \
+		printf 'Package: beerssh-fonts\n' > $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf 'Version: %s\n' "$(VERSION)" >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf 'Architecture: all\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf 'Maintainer: %s\n' "$(DEB_MAINTAINER)" >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf 'Section: fonts\nPriority: optional\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf 'Depends: beerssh (>= %s)\n' "$(VERSION)" >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf 'Description: curated terminal fonts for BeerSSH\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf ' The terminal fonts BeerSSH ships with, each vetted for the\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf ' properties a character grid needs, with their licence texts.\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		printf ' Without this package BeerSSH uses the system monospace fonts.\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
+		dpkg-deb --build --root-owner-group $(DEB_DIR)/beerssh-fonts \
+		        $(DEB_DIR)/beerssh-fonts_$(VERSION)_all.deb; \
+	fi
+
+	@ls -lh $(DEB_DIR)/*.deb | awk '{print "  " $$9 "  " $$5}'
+
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(TARGET)
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
@@ -422,5 +517,6 @@ help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
 .PHONY: all run test style fonts fonts-list check-fonts android-fonts uninstall \
+        deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help
