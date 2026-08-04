@@ -33,6 +33,17 @@ private slots:
 	void plain_scrolling_output();
 	void coloured_scrolling_output();
 	void full_screen_repaint();
+
+	/*
+	 * PAINTING, which is a different cost from throughput and was never
+	 * measurable from here. sec 9.5's paint figures -- 94ms a frame down
+	 * to 24 -- came from ad-hoc timings that left nothing behind to
+	 * re-run, so the question they answered ("is a glyph atlas the right
+	 * fix") cannot be re-asked as the renderer changes. It can now.
+	 */
+	void painting_one_pane();
+	void painting_four_panes();
+	void painting_with_a_cold_glyph_cache();
 };
 
 #endif /* BSSH_EMULATOR_BENCH_H */

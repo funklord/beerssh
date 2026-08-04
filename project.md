@@ -1318,6 +1318,31 @@ diverge on *delivery* but never on *which fonts exist*.
   advance by the font's own fractional metrics and drift away from the columns.
   A real atlas remains available if profiling ever points at rasterisation, but
   it would have been the wrong fix for the actual cost.
+  **Re-measured, and the atlas is still not the fix — because it already
+  exists.** `make bench` now measures *painting* as well as throughput, which it
+  could not before: the figures above came from ad-hoc timings that left nothing
+  behind to re-run, so the question they settled could not be re-asked. It can
+  be now.
+  Rasterisation costs **1.9–2.7 ms once** and nothing on any frame after it,
+  against a steady-state repaint of **2.3 ms for a 200×50 pane (430 fps)** and
+  **3.5 ms for four panes**. And the sharing §9.5 asks for by name is already
+  happening: paint four panes in a size nothing has rasterised, one after the
+  other, and the first costs **1.74–1.88 ms** while the other three cost
+  **1.0–1.6 ms** — the first pays for the glyphs and the rest get them. Qt's
+  font-engine cache is keyed by exactly the tuple this section proposes,
+  (family, size, weight, glyph), and is shared process-wide. **An atlas of our
+  own would be a second cache in front of a working one**, for at most ~2 ms
+  recovered once per font change.
+  One measurement had to be thrown away first: forcing a cold cache by changing
+  the point size every frame reported the cold case as *faster* than the warm
+  one, because a different point size is a different cell size — a bigger font
+  simply drew fewer cells into the same pixels. It was measuring the grid, not
+  the cache. First-frame-versus-rest keeps the work identical and answers the
+  question the other way round.
+  **Where the time actually goes, if painting ever needs work:** not here.
+  Plain scrolling still runs at 3.7 MB/s on a 200×50 grid against 11.5 on an
+  80×24 one, so the emulator's scroll path remains three times more
+  grid-sensitive than anything in the renderer.
 - **Throughput, measured separately from painting** — by `make bench`
   (`tests/emulator_bench.cpp`, §12.3), which is where every MB/s figure below
   comes from and how to re-derive it. They are timings on a particular machine,
