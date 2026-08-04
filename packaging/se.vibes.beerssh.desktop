@@ -6,7 +6,7 @@ Comment=SSH terminal for desktop and Android
 Exec=beerssh %f
 Icon=se.vibes.beerssh
 Terminal=false
-Categories=Network;RemoteAccess;TerminalEmulator;System;
+Categories=Network;RemoteAccess;TerminalEmulator;
 Keywords=ssh;terminal;shell;remote;console;
 
 # The app is the handler for its own preset files (project.md sec 10.5), which

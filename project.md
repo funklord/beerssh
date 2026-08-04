@@ -1996,6 +1996,35 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
 **`.deb`**; Flatpak and the rest deferred
 All of them want the app ID from §0.1.
 
+**Both artifacts are checked by installing them, not by building them.**
+`make check-deb` puts the packages into a clean `debian:trixie` container, lets
+apt resolve the `Depends` the binary itself generated, runs the app, validates
+the desktop entry, confirms the icon it names is installed, and removes it
+again. `make check-apk` installs the APK on an attached device, launches it,
+and asserts the process is *still* alive a moment later, that a window belongs
+to it, and that it found its bundled fonts. A package that builds says nothing:
+the failure that matters is one that installs on the developer's own machine —
+where every library is present for other reasons — and dies at first launch on
+anybody else's. Both of the Android bugs this project has had (the
+networkinformation plugin shipped without its JAR, the foreground service
+breaking its lifecycle contract) were exactly that shape.
+
+**`make apk` names the artifact and says who signed it.** Gradle leaves it at
+`android-build/build/outputs/apk/debug/android-build-debug.apk`, which tells
+nobody which app, version or ABI they are holding; it comes out as
+`beerssh-<version>-<abi>.apk`. Debug-signed by default — installs anywhere,
+which is what an evaluation build wants — and **said out loud**, because a
+debug-signed APK mistaken for a release is a bad afternoon: Play rejects it and
+it can never replace a properly signed install. `BSSH_KEYSTORE` and
+`BSSH_KEY_ALIAS` produce a real signed release.
+That signing had to be *verified* rather than announced. The first version
+passed the flags to Qt's generated Makefile as a variable it does not have, so
+they were dropped in silence and the target printed "release build, signed
+with…" over a debug-signed APK — the one packaging mistake that looks
+identical to success. The flags now go to `androiddeployqt` directly, and the
+target reads the certificate back with `apksigner` and fails if a keystore was
+given but the Android debug key came out.
+
 **Built:** `make install` now lays down what a Linux desktop actually needs —
 the binary, `se.vibes.beerssh.desktop`, the AppStream `.metainfo.xml`, a
 hicolor scalable icon, and the bundled fonts with their licence files under

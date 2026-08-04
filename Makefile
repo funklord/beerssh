@@ -19,6 +19,8 @@
 #                        `test` but not run by it, and not a CI gate
 #   make shots        -- render every screen to build-shots/ for review;
 #                        not a test, and it cannot fail a build (sec 12.3)
+#   make check-deb    -- build the .debs, then install and run them in a
+#                        clean container (needs docker; sec 12.2)
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
 #   make check-ci     -- run the Linux CI job in the runner's own image
 #                        (needs docker; sec 12.4)
@@ -32,6 +34,10 @@
 #   make check-fonts  -- validate the fetched fonts against sec 9.1
 #   make android      -- build the Android APK (needs a Qt kit, NDK, SDK
 #                        and a JDK; see ANDROID below)
+#   make apk          -- the installable APK, named for its version and ABI;
+#                        debug-signed unless BSSH_KEYSTORE is set (sec 12.2)
+#   make check-apk    -- install that APK on an attached device and check it
+#                        starts (needs adb; sec 12.2)
 #   make android-aab  -- the Play bundle instead of an APK
 #   make android-run  -- install and launch on the attached device
 #   make install      -- install the app, its desktop entry, icon,
@@ -293,6 +299,14 @@ shots: $(TEST_BIN)
 		exit 1; \
 	fi
 
+# sec 12.2's other half: a package that BUILDS is not a package that
+# works. Installs both .debs into a clean container, lets apt resolve the
+# dependencies the binary itself declared, and then runs the app -- which
+# is where a missing library, a missing Qt plugin or an unreadable font
+# path actually shows up. Needs docker.
+check-deb: deb
+	./tools/check-deb.sh
+
 style:
 	./tools/check-indent.sh
 
@@ -450,6 +464,72 @@ android: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 
 android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
+
+# The installable artifact, under a name that says what it is (sec 12.2).
+#
+# `make android` leaves it at android-build/build/outputs/apk/debug/
+# android-build-debug.apk, which is Gradle's name for it and tells nobody
+# which app, which version or which ABI they are holding. This copies it
+# out as beerssh-<version>-<abi>.apk.
+#
+# Signing. Set BSSH_KEYSTORE (and BSSH_KEY_ALIAS, plus BSSH_KEYSTORE_PASS
+# and BSSH_KEY_PASS in the environment) for a release build signed with
+# your own key. WITHOUT it the artifact is the debug-signed one, which
+# installs on any device and is exactly what you want for evaluation --
+# and is said out loud, because a debug-signed APK that gets mistaken for
+# a release build is a bad afternoon: Play rejects it, and every install
+# of it conflicts with the real one's signature.
+APK_NAME = beerssh-$(VERSION)-$(ANDROID_ABI).apk
+
+apk: $(ANDROID_BUILD_DIR)/Makefile android-fonts
+ifneq ($(BSSH_KEYSTORE),)
+	@# The flags go to androiddeployqt itself, because Qt's generated
+	@# Makefile hardcodes its command line and accepts nothing from here.
+	@# Passing them to that Makefile as a variable -- which is what this
+	@# did first -- drops them silently and produces a DEBUG-SIGNED apk
+	@# under a message announcing a release build. Signed with the debug
+	@# key is the one packaging mistake nobody catches by looking.
+	$(MAKE) -C $(ANDROID_BUILD_DIR) apk_install_target
+	@set -e; \
+	deploy=$$(sed -n '/^apk: apk_install_target/,+1p' $(ANDROID_BUILD_DIR)/Makefile | tail -1); \
+	if [ -z "$$deploy" ]; then echo "apk: cannot find Qt's deploy command" >&2; exit 1; fi; \
+	$$deploy --release --sign $(BSSH_KEYSTORE) $(BSSH_KEY_ALIAS)
+else
+	$(MAKE) -C $(ANDROID_BUILD_DIR) apk
+	@echo "apk: DEBUG-SIGNED. Installs anywhere, and is not a release artifact:"
+	@echo "apk:   Play will reject it, and it conflicts with a real build's signature."
+	@echo "apk:   Set BSSH_KEYSTORE and BSSH_KEY_ALIAS for a signed release build."
+endif
+	@src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs/apk -name '*.apk' \
+	        -newer $(ANDROID_BUILD_DIR)/Makefile -print -quit); \
+	if [ -z "$$src" ]; then \
+		src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs/apk -name '*.apk' -print -quit); \
+	fi; \
+	if [ -z "$$src" ]; then echo "apk: no .apk was produced" >&2; exit 1; fi; \
+	cp "$$src" $(ANDROID_BUILD_DIR)/$(APK_NAME); \
+	echo "apk: $(ANDROID_BUILD_DIR)/$(APK_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(APK_NAME) | cut -f1))"
+	@# Who signed it, checked rather than announced. This target claimed a
+	@# release build while shipping the Android debug key, and the only
+	@# reason that was noticed is that somebody ran apksigner by hand.
+	@signer=$$(ls $(ANDROID_SDK_ROOT)/build-tools/*/apksigner 2>/dev/null | tail -1); \
+	if [ -z "$$signer" ]; then \
+		echo "apk: no apksigner in the SDK; cannot say who signed this"; \
+	else \
+		dn=$$($$signer verify --print-certs $(ANDROID_BUILD_DIR)/$(APK_NAME) 2>/dev/null \
+		      | sed -n 's/^Signer #1 certificate DN: //p'); \
+		echo "apk: signed by $$dn"; \
+		if [ -n "$(BSSH_KEYSTORE)" ] && echo "$$dn" | grep -q "Android Debug"; then \
+			echo "apk: a keystore was given but the artifact is DEBUG-signed" >&2; \
+			exit 1; \
+		fi; \
+	fi
+
+# sec 12.2's other half for Android: does the artifact install and run?
+# Needs a device or emulator on adb. Installs over whatever is there
+# (-r), which keeps its data -- a check that wiped the host list would be
+# a check nobody runs twice.
+check-apk: apk
+	./tools/check-apk.sh $(ANDROID_BUILD_DIR)/$(APK_NAME)
 
 # Installs onto whatever single device adb sees, and launches it.
 android-run: android
