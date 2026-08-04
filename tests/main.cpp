@@ -5,6 +5,7 @@
 #include "conn_manager_test.h"
 #include "emulator_bench.h"
 #include "live_ssh_test.h"
+#include "ui_shots.h"
 #include "emulator_test.h"
 #include "graphics_test.h"
 #include "platform_test.h"
@@ -79,6 +80,7 @@ int main(int argc, char *argv[]) {
 	QList<char *> forwarded;
 	bool bench = false;
 	bool live_ssh = false;
+	bool shots = false;
 	for (int i = 0; i < argc; ++i) {
 		if (qstrcmp(argv[i], "--bench") == 0) {
 			bench = true;
@@ -94,6 +96,16 @@ int main(int argc, char *argv[]) {
 			live_ssh = true;
 			continue;
 		}
+		/*
+		 * `--shots` renders every screen to a PNG instead of running the
+		 * suite (sec 12.3). Opt-in like the others, and for the same
+		 * reason they are: it writes files and answers a question nobody
+		 * asked on an ordinary `make test`.
+		 */
+		if (qstrcmp(argv[i], "--shots") == 0) {
+			shots = true;
+			continue;
+		}
 		forwarded.append(argv[i]);
 	}
 
@@ -106,6 +118,10 @@ int main(int argc, char *argv[]) {
 
 	if (live_ssh) {
 		return run_test<live_ssh_test>(forwarded_argc, forwarded_argv) == 0 ? 0 : 1;
+	}
+
+	if (shots) {
+		return run_test<bssh_ui_shots>(forwarded_argc, forwarded_argv) == 0 ? 0 : 1;
 	}
 
 	argc = forwarded_argc;

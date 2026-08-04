@@ -39,6 +39,7 @@ SOURCES += \
     platform_test.cpp \
     preset_test.cpp \
     secret_store_test.cpp \
+    ui_shots.cpp \
     profile_store_test.cpp \
     session_registry_test.cpp \
     tab_status_test.cpp \
@@ -107,6 +108,7 @@ HEADERS += \
     platform_test.h \
     preset_test.h \
     secret_store_test.h \
+    ui_shots.h \
     profile_store_test.h \
     session_registry_test.h \
     tab_status_test.h \

@@ -17,6 +17,8 @@
 #   make test         -- build and run the smoke test + unit tests
 #   make bench        -- emulator throughput in MB/s (sec 9.5); built by
 #                        `test` but not run by it, and not a CI gate
+#   make shots        -- render every screen to build-shots/ for review;
+#                        not a test, and it cannot fail a build (sec 12.3)
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
 #   make check-ci     -- run the Linux CI job in the runner's own image
 #                        (needs docker; sec 12.4)
@@ -253,6 +255,36 @@ bench: $(TEST_BIN)
 	@echo "bench: measuring on this machine -- load average is part of the result"
 	@uptime
 	QT_QPA_PLATFORM=offscreen ./$(TEST_BIN) --bench
+
+# Renders every screen to a PNG so somebody can look at them (sec 12.3).
+#
+# Not a test and it cannot fail: it writes pictures and prints the minimum
+# size each surface demands. It is here because looking is what kept
+# working -- every layout defect in this project so far was found by
+# rendering a screen and looking at it, and several had passed every test
+# that existed at the time. The tests came after the picture.
+#
+# Offscreen, so it needs no display and runs the same on a CI box as on a
+# laptop. Point BSSH_SHOT_DIR somewhere else to keep a set for comparison.
+SHOT_DIR ?= build-shots
+
+shots: $(TEST_BIN)
+	@echo "shots: rendering every screen into $(SHOT_DIR)/"
+	@mkdir -p $(SHOT_DIR)
+	@# Through a FILE rather than a pipe: a pipeline reports the exit
+	@# status of its last command, so `binary | grep` would report grep's
+	@# and swallow a crash into a clean-looking run.
+	@if BSSH_SHOT_DIR=$(SHOT_DIR) QT_QPA_PLATFORM=offscreen \
+	     ./$(TEST_BIN) --shots > $(SHOT_DIR)/.run.log 2>&1; then \
+		grep -vE '^(PASS|QWARN|Config|\*\*|Totals)' $(SHOT_DIR)/.run.log; \
+		rm -f $(SHOT_DIR)/.run.log; \
+		echo "shots: $$(ls $(SHOT_DIR)/*.png | wc -l) images in $(SHOT_DIR)/"; \
+	else \
+		cat $(SHOT_DIR)/.run.log; \
+		rm -f $(SHOT_DIR)/.run.log; \
+		echo "shots: rendering failed" >&2; \
+		exit 1; \
+	fi
 
 style:
 	./tools/check-indent.sh
@@ -550,7 +582,7 @@ clean:
 # contents, so removing them is a named delete, not a wildcard sweep.
 veryclean: clean
 	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR) $(VTERM_BUILD_DIR) \
-	        build-vterm-android
+	        build-vterm-android $(SHOT_DIR)
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
 	fi

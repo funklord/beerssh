@@ -965,6 +965,21 @@ collapse/restore is bookkeeping, not surgery.
   and passed a deliberately broken preset editor, because the orphaned scroll
   area was still a child of the page and `findChildren` cannot tell the
   difference. A working scroll area drops the page's own minimum on its own.
+- **`make shots` renders every screen to a PNG so somebody can look at them.**
+  Not a test: it asserts almost nothing and cannot fail a build. It exists
+  because *looking* is what kept working — every layout defect in this project
+  was found by rendering a screen and looking at it, and several had passed
+  every test that existed at the time. The tests came after the picture, so
+  the picture is worth a command rather than an afternoon.
+  It renders each surface twice over — the touch set at 360×640, the desktop set
+  at 800×600, the front door at its own minimum, and **every page of the front
+  door**, since the touch preset editor sat on its Presets page for as long as
+  it did because nobody had looked past the first screen. Alongside each it
+  prints the minimum size that surface demands, which is the measurement most of
+  those bugs showed up in, and marks any that does not fit.
+  Offscreen, so it needs no display. The output goes through a file rather than
+  a pipe: a pipeline reports its *last* command's status, so `binary | grep`
+  would have reported grep's and swallowed a crash into a clean-looking run.
 - **The desktop front door gets the same treatment, and it found worse.** Its
   minimums were fine at 800x600 — the small window §8.2 already contemplates when
   it talks about tiling one into a half-screen column — so nothing a size check
