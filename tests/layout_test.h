@@ -51,6 +51,14 @@ private slots:
 	 * touch editor, and both of them fit.
 	 */
 	void the_desktop_front_door_uses_the_desktop_preset_editor();
+
+	/*
+	 * sec 8.3's tab menu is reachable by BOTH gestures. The right-click
+	 * path moved out of a lambda into a method when press-and-hold was
+	 * added, and a signal left unconnected by that move would take the
+	 * desktop's only route to the menu with it.
+	 */
+	void the_tab_menu_is_reachable_by_both_gestures();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

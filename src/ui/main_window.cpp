@@ -69,6 +69,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_layout(nullptr),
       m_current(nullptr),
       m_tabs(new QTabBar(m_terminal_page)),
+      m_tab_long_press(nullptr),
       m_key_row(nullptr),
       m_asked_about_closing(false),
       m_background_on_close(false) {
@@ -136,29 +137,26 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	 * nothing in the app could ask it to show two.
 	 */
 	m_tabs->setContextMenuPolicy(Qt::CustomContextMenu);
-	connect(m_tabs, &QWidget::customContextMenuRequested, this, [this](const QPoint &at) {
-		const int index = m_tabs->tabAt(at);
-		bssh_session *session = m_registry->at(index);
-		if (!session) return;
+	connect(m_tabs, &QWidget::customContextMenuRequested,
+	         this, &bssh_main_window::show_tab_menu);
 
-		QMenu menu(this);
-		QAction *split = menu.addAction(QStringLiteral("Show beside current"));
-		QAction *close = menu.addAction(QStringLiteral("Close"));
+	/*
+	 * And by press-and-hold, which is the other half of sec 8.3's
+	 * "long-press (touch) or right-click (desktop)" and was the half with
+	 * no implementation: Qt does not raise a context-menu event from a
+	 * long press on Android. Same gesture as the host list and the
+	 * terminal, and enabled the same way -- only where touch is the
+	 * primary input, since with a pointer a held press on a tab means
+	 * nothing and should keep meaning nothing.
+	 */
+	m_tab_long_press = new bssh_long_press(m_tabs, this);
+	m_tab_long_press->set_enabled(bssh_platform::instance()
+	                               && bssh_platform::instance()->is_touch_primary());
 
-		/*
-		 * Offered only when there is room for another pane. A menu entry
-		 * that does nothing on a phone is worse than one that is absent:
-		 * it invites the user to conclude the feature is broken rather
-		 * than that their window is narrow.
-		 */
-		const int fits = bssh_layout_manager::max_panes_for(m_layout->size_class());
-		split->setEnabled(m_layout->intent().size() < fits &&
-		                   !m_layout->intent().contains(session));
-
-		QAction *chosen = menu.exec(m_tabs->mapToGlobal(at));
-		if (chosen == split) split_with(session);
-		if (chosen == close) on_tab_close_requested(index);
+	connect(m_tab_long_press, &bssh_long_press::triggered, this, [this](const QPoint &at) {
+		show_tab_menu(m_tabs->mapFromGlobal(at));
 	});
+
 	connect(m_registry, &bssh_session_registry::changed,
 	         this, &bssh_main_window::on_registry_changed);
 
@@ -1205,28 +1203,36 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	QAction *select_all = menu->addAction(QStringLiteral("Select &All"));
 	select_all->setObjectName(QStringLiteral("terminal_select_all"));
 
-	if (layout == bssh_app_settings::CONTEXT_MENU_TOUCH) {
-		/*
-		 * A thumb, not a pointer. sec 6.2's 48dp floor applies to a menu
-		 * row exactly as it does to a button, and a menu whose items are
-		 * a pointer's height is one that gets the wrong verb half the
-		 * time.
-		 */
-		for (QAction *action : menu->actions()) {
-			if (action->isSeparator()) continue;
-
-			/*
-			 * The shortcut text goes: it is telling somebody with no
-			 * keyboard which chord to press, and it is what makes a
-			 * touch row wide as well as short.
-			 */
-			action->setShortcut(QKeySequence());
-		}
-		menu->setStyleSheet(QStringLiteral("QMenu::item { min-height: %1px; padding: 8px 24px; }")
-		                            .arg(BSSH_TOUCH_TARGET_DP));
-	}
-
+	apply_menu_layout(menu, layout);
 	return menu;
+}
+
+/*
+ * A thumb, not a pointer. sec 6.2's 48dp floor applies to a menu row exactly
+ * as it does to a button, and a menu whose items are a pointer's height is
+ * one that gets the wrong verb half the time.
+ *
+ * Shared rather than written into each menu builder, because the metrics are
+ * the ONLY thing touch changes and every context menu in this app has to
+ * change the same way. The tab menu opens from the same press-and-hold, on
+ * the same phone, and had pointer-height rows until this was pulled out.
+ */
+void bssh_main_window::apply_menu_layout(QMenu *menu,
+        bssh_app_settings::context_menu_t layout) {
+	if (layout != bssh_app_settings::CONTEXT_MENU_TOUCH) return;
+
+	for (QAction *action : menu->actions()) {
+		if (action->isSeparator()) continue;
+
+		/*
+		 * The shortcut text goes: it is telling somebody with no
+		 * keyboard which chord to press, and it is what makes a touch
+		 * row wide as well as short.
+		 */
+		action->setShortcut(QKeySequence());
+	}
+	menu->setStyleSheet(QStringLiteral("QMenu::item { min-height: %1px; padding: 8px 24px; }")
+	                            .arg(BSSH_TOUCH_TARGET_DP));
 }
 
 void bssh_main_window::show_terminal_menu(const QPoint &at) {
@@ -1254,6 +1260,47 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
 	}
+}
+
+/*
+ * sec 8.3's tab context menu. "Show beside current" is how a split is
+ * MADE -- until this existed the pane container could show four panes and
+ * nothing in the app could ask it to show two.
+ *
+ * A method rather than a lambda on the right-click signal, because two
+ * gestures reach it now and the alternative is the same menu built in two
+ * places.
+ */
+void bssh_main_window::show_tab_menu(const QPoint &at) {
+	const int index = m_tabs->tabAt(at);
+	bssh_session *session = m_registry->at(index);
+	if (!session) return;
+
+	QMenu menu(this);
+	menu.setObjectName(QStringLiteral("tab_context_menu"));
+
+	/* Access keys, and the destructive verb last -- as in the terminal's. */
+	QAction *split = menu.addAction(QStringLiteral("Show &beside current"));
+	QAction *close = menu.addAction(QStringLiteral("&Close"));
+
+	/*
+	 * Offered only when there is room for another pane. A menu entry
+	 * that does nothing on a phone is worse than one that is absent:
+	 * it invites the user to conclude the feature is broken rather
+	 * than that their window is narrow.
+	 */
+	const int fits = bssh_layout_manager::max_panes_for(m_layout->size_class());
+	split->setEnabled(m_layout->intent().size() < fits &&
+	                   !m_layout->intent().contains(session));
+
+	apply_menu_layout(&menu, context_menu_layout(bssh_app_settings().context_menu(),
+	                                              bssh_platform::instance()
+	                                                      && bssh_platform::instance()
+	                                                                 ->is_touch_primary()));
+
+	QAction *chosen = menu.exec(m_tabs->mapToGlobal(at));
+	if (chosen == split) split_with(session);
+	if (chosen == close) on_tab_close_requested(index);
 }
 
 void bssh_main_window::update_status() {

@@ -51,6 +51,7 @@ private slots:
 	void the_remote_keeps_the_right_button_when_it_asked_for_the_mouse();
 	void the_menu_layout_follows_the_device_until_told_otherwise();
 	void the_terminal_menu_offers_the_three_verbs_in_order();
+	void the_touch_layout_grows_the_rows_and_drops_the_chords();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */

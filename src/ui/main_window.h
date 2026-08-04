@@ -6,6 +6,7 @@
 #include <QWidget>
 
 #include "model/app_settings.h"
+#include "ui/long_press.h"
 
 #include "input/input_router.h"
 #include "ssh/ssh_session.h"
@@ -174,6 +175,7 @@ public:
 
 private:
 	void show_terminal_menu(const QPoint &at);
+	void show_tab_menu(const QPoint &at);
 
 public:
 	/*
@@ -183,6 +185,14 @@ public:
 	 * which of them are available, and how big the rows are.
 	 */
 	QMenu *build_terminal_menu(QWidget *parent) const;
+
+	/*
+	 * The touch metrics, applied to any of this window's context menus.
+	 * Static and public for the same reason as context_menu_layout(): it
+	 * depends on nothing but the menu and the layout asked for, so a test
+	 * can hand it a menu of its own.
+	 */
+	static void apply_menu_layout(QMenu *menu, bssh_app_settings::context_menu_t layout);
 
 private:
 	void elide_status();
@@ -228,6 +238,7 @@ private:
 	bssh_layout_manager *m_layout;
 	bssh_session *m_current;
 	QTabBar *m_tabs;
+	bssh_long_press *m_tab_long_press;
 	bssh_key_row *m_key_row;
 	QString m_error;
 

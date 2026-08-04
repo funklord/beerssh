@@ -17,6 +17,10 @@
 #include "ui/password_prompt.h"
 #include "ui/session_dialog.h"
 #include "ui/ssh_config_import.h"
+#include <QTabBar>
+#include <QMetaMethod>
+#include "ui/long_press.h"
+#include "ui/main_window.h"
 #include "layout_test.h"
 #include "model/session.h"
 #include "model/session_registry.h"
@@ -627,4 +631,39 @@ void layout_test::the_desktop_front_door_uses_the_desktop_preset_editor()
 	bssh_session_dialog front_door(&store);
 	QVERIFY2(!has_button(&front_door, exit_button),
 	          "the front door embedded the TOUCH preset editor");
+}
+
+void layout_test::the_tab_menu_is_reachable_by_both_gestures() {
+	bssh_main_window window;
+
+	QTabBar *tabs = window.findChild<QTabBar *>();
+	QVERIFY2(tabs, "the window must have a tab bar");
+
+	/*
+	 * The right-click route: a custom context menu policy plus something
+	 * listening.
+	 *
+	 * The listening half is asserted with disconnect(), which returns
+	 * whether there was anything to disconnect. It is a destructive way
+	 * to ask a question -- and harmless here, because this window is
+	 * local and discarded -- but it is the only PUBLIC way to ask it:
+	 * isSignalConnected and receivers() are both protected. The question
+	 * is worth asking, since the failure guarded against is a connect
+	 * lost while moving the handler out of a lambda, which is exactly
+	 * what happened to the link prompt once before.
+	 */
+	QCOMPARE(tabs->contextMenuPolicy(), Qt::CustomContextMenu);
+	QVERIFY2(QObject::disconnect(tabs, &QWidget::customContextMenuRequested, nullptr, nullptr),
+	          "nothing listens for a right-click on the tab bar");
+
+	/*
+	 * And the press-and-hold route, which Qt does not provide: an event
+	 * filter of ours must be watching the bar itself.
+	 */
+	const QList<bssh_long_press *> holds = window.findChildren<bssh_long_press *>();
+	bool watches_tabs = false;
+	for (const bssh_long_press *hold : holds) {
+		if (hold->parent() == &window) watches_tabs = true;
+	}
+	QVERIFY2(watches_tabs, "no long-press gesture belongs to the window");
 }

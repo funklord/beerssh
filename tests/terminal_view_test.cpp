@@ -946,3 +946,39 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 
 	delete menu;
 }
+
+void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() {
+	/*
+	 * The metrics are the only thing touch changes, and they are shared:
+	 * this is driven through the same entry point the tab menu uses, so a
+	 * menu added later cannot quietly keep pointer-height rows.
+	 *
+	 * Its own test rather than one on build_terminal_menu(), because the
+	 * layout that function picks comes from the device and the stored
+	 * setting, and neither belongs in an assertion about row heights.
+	 */
+	QMenu menu;
+	QAction *verb = menu.addAction(QStringLiteral("&Close"));
+	verb->setShortcut(QKeySequence(QStringLiteral("Ctrl+W")));
+	menu.addSeparator();
+
+	bssh_main_window::apply_menu_layout(&menu, bssh_app_settings::CONTEXT_MENU_DESKTOP);
+	QVERIFY2(!verb->shortcut().isEmpty(), "a pointer keeps its chord");
+	QVERIFY2(menu.styleSheet().isEmpty(), "a pointer keeps its own metrics");
+
+	bssh_main_window::apply_menu_layout(&menu, bssh_app_settings::CONTEXT_MENU_TOUCH);
+
+	/*
+	 * The chord goes: it names a key nobody holding a phone has, and the
+	 * text is what makes a touch row wide as well as short.
+	 */
+	QVERIFY2(verb->shortcut().isEmpty(), "the touch layout must drop the chord");
+
+	/*
+	 * And the row reaches sec 6.2's floor. Asserted on the number, not
+	 * merely on the stylesheet being non-empty: 48 is the whole point.
+	 */
+	QVERIFY2(menu.styleSheet().contains(QStringLiteral("min-height: 48px")),
+	          qPrintable(QStringLiteral("touch rows must reach the 48dp floor, got: ")
+	                             + menu.styleSheet()));
+}
