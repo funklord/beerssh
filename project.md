@@ -1363,8 +1363,28 @@ diverge on *delivery* but never on *which fonts exist*.
   reached the scrollback while the screen showed the glyph correctly.
   **Measured A/B, interleaved**, because the machine was under load 44 and
   single runs swung 8×: **200×50 3.15 → 3.97 MB/s (+25%)**, **80×24 8.87 →
-  10.6 (+18%)**. The remaining grid-sensitivity is damage conversion, which is
-  width-proportional per scrolled line and is where a third round would go.
+  10.6 (+18%)**.
+- **Damage conversion is what remains, and it is not waste — [DECIDED] leave
+  it.** Ablating inside the per-cell path put it at roughly `vterm_screen_get_cell`
+  19%, the conversion 12%, and the store the rest, with **no single dominant
+  cost** to remove. Two things were tried against that and both were dropped:
+  **Writing through a row pointer** instead of `set_cell()` per column, to skip
+  the bounds check, the ring arithmetic and QList's per-write detach check.
+  Measured neutral — best of five, interleaved, 5.04 vs 5.14 MB/s. The
+  ablation's apparent 27% was the memory write itself, which no restructuring
+  removes. Reverted rather than kept: a longer function that inlines a helper
+  for no measured gain is churn.
+  **Converting fewer cells.** 20,000 lines of ~54 characters through a 200×50
+  grid convert **3.98 million cells**, and 19,811 of 20,000 damage rects are
+  full width — the same 3.99M/2.82M split the scrollback trimming already
+  exploits. But it is not the same opportunity: the scroll blanks the row and
+  the write fills part of it, the two damages merge, and the row genuinely did
+  change across its full width. Those blanks have to be written. Skipping them
+  would need to know they are blank, which needs the `get_cell` that is being
+  avoided.
+  Further gains here would need a vendored libvterm patch exposing bulk cell
+  access, which is a change to a dependency for a cost that is now spread thinly
+  across three unavoidable steps. Not worth it at this size.
 - **Throughput, measured separately from painting** — by `make bench`
   (`tests/emulator_bench.cpp`, §12.3), which is where every MB/s figure below
   comes from and how to re-derive it. They are timings on a particular machine,
