@@ -1335,6 +1335,17 @@ diverge on *delivery* but never on *which fonts exist*.
   rather than a name, since its LGPL is what makes the desktop build link it
   dynamically (§4).
 
+**The Android base set carries Unifont, and did not.** §9.3's chain ends at
+Unifont for a reason — it is what makes "no terminal output is ever
+unreadable" true — and the Android base set left it out on the stated grounds
+that Noto Sans Mono covered CJK. It does not: Noto Sans **Mono** is Latin,
+Greek and Cyrillic, and CJK lives in the separate Noto Sans CJK families that
+run to tens of megabytes. Checked with `fc-query`, then on a device, where a
+Japanese `ls` came back as a row of boxes — precisely the failure that
+justification said could not be allowed. Leaving it out silently truncated the
+chain on the one platform where the set is reduced. 4.9 MB covers the whole
+BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
+
 ### 9.5 Rendering pipeline
 - **Shared glyph atlas/cache across all panes** (§8.4) keyed by (family, size,
   weight, glyph) — critical when 4 panes render at once. **Measured before

@@ -386,18 +386,29 @@ $(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) beerssh.pro
 # would otherwise be the phone default (sec 9.2) cannot ship in a base
 # download and has to arrive later.
 #
-# Noto is in the base set despite being fallback-only: it is what stops CJK
-# rendering as tofu, and a terminal that cannot draw the output of a
-# remote `ls` in a Japanese directory is broken in a way no picker fixes.
-# Unifont is not -- 4.9 MB to cover what Noto already covers, for scripts
-# a phone will not meet.
+# Noto Sans Mono is in the base set as the box-drawing and symbol fallback.
+# It was put there to stop CJK rendering as tofu, which it does not do:
+# Noto Sans *Mono* is Latin, Greek and Cyrillic, and CJK lives in the
+# separate Noto Sans CJK families that are tens of megabytes each. Checked
+# with fc-query, and then on a device, where a Japanese `ls` came back as
+# a row of boxes -- which is precisely the failure that comment said could
+# not be allowed.
+#
+# So Unifont IS in the base set. It is the last resort sec 9.3's chain
+# already names, and leaving it out silently truncated that chain on the
+# one platform where the set is reduced. 4.9 MB covers the whole BMP,
+# which is a remarkable price for "no terminal output is ever unreadable"
+# -- and Japanese, Chinese and Korean are not scripts a phone will not
+# meet. Everything else stays an asset pack: the full set is 374 MB and
+# Iosevka alone is 10 MB of it.
 ANDROID_BASE_FONTS = \
 	JetBrainsMono-Regular.ttf JetBrainsMono-Bold.ttf \
 	JetBrainsMono-Italic.ttf JetBrainsMono-BoldItalic.ttf \
 	DejaVuSansMono.ttf DejaVuSansMono-Bold.ttf \
 	DejaVuSansMono-Oblique.ttf DejaVuSansMono-BoldOblique.ttf \
 	Hack-Regular.ttf Hack-Bold.ttf Hack-Italic.ttf Hack-BoldItalic.ttf \
-	NotoSansMono-Regular.ttf
+	NotoSansMono-Regular.ttf \
+	unifont.otf
 
 ANDROID_ASSET_DIR = android/assets/fonts
 
@@ -428,6 +439,7 @@ android-fonts:
 	      fonts/licences/LICENSE-DejaVu.txt \
 	      fonts/licences/LICENSE-Hack.md \
 	      fonts/licences/OFL-NotoSansMono.txt \
+	      fonts/licences/LICENSE-Unifont.txt \
 	      $(ANDROID_ASSET_DIR)/licences/ 2>/dev/null || true; \
 	echo "android-fonts: bundled $$(du -sh $(ANDROID_ASSET_DIR) | cut -f1) of fonts"
 
