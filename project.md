@@ -1634,6 +1634,20 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
 - Support key formats: OpenSSH, PEM; passphrase-protected keys; optional
   **biometric unlock** — `BiometricPrompt` on Android, the platform equivalent
   where one exists on desktop, and simply absent (not faked) where it doesn't.
+- **The `POST_NOTIFICATIONS` runtime request — [DECIDED]**, and it was missing.
+  The manifest had declared it since the service was written, and on Android 13+
+  a declaration is not a grant: the permission is denied until the user is asked,
+  and nothing asked. The service still runs — Android does not kill it — so this
+  failed in the quietest way available: the ongoing notification §5.2 says the
+  user must be able to see simply never appeared, and Play checks for the flow.
+  Asked at the moment the first session goes live rather than at launch, because
+  a permission dialog before the user has done anything is one they dismiss on
+  reflex. Done in C++ through the Activity's own methods — Qt has no typed
+  permission for notifications — rather than by adding a second Java file, which
+  §5.2 spends a paragraph avoiding. **Untested on a device:** the emulator here
+  is API 30, where the permission does not exist; what was verified there is that
+  the JNI plumbing makes both calls without throwing and that the version guard
+  makes it a clean no-op.
 - **[OPEN]** Desktop `ssh-agent` support (`SSH_AUTH_SOCK`). Not v1, but it is the
   single most-requested desktop feature for a client like this, and it fits the
   model cleanly: the agent is just another `bssh_secret_store` implementation

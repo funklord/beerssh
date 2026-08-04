@@ -5,9 +5,17 @@
 #include <QStyleHints>
 
 #include <QCoreApplication>
+#include <QJniEnvironment>
 #include <QJniObject>
 
 namespace {
+
+/*
+ * The request code handed to requestPermissions. Nothing reads the result
+ * -- the answer is checked by asking again next time rather than by
+ * catching a callback -- but the framework requires one.
+ */
+const int BSSH_NOTIFICATION_PERMISSION_REQUEST = 1;
 
 /*
  * The one JNI bridge in the project (project.md sec 5.2). Three calls
@@ -58,6 +66,71 @@ QJniObject android_context() {
 	return QNativeInterface::QAndroidApplication::context();
 }
 
+/*
+ * Asks for permission to post the notification the foreground service
+ * shows (project.md sec 5.1, sec 13).
+ *
+ * The manifest has declared POST_NOTIFICATIONS since the service was
+ * written, and on Android 13 and later a declaration is not a grant: the
+ * permission is denied until the user is asked, and nothing here ever
+ * asked. The service still runs -- Android does not kill it -- so this
+ * failed in the quietest way available: no error, no crash, just an
+ * ongoing notification that never appears, for the one thing sec 5.2
+ * says the user must be able to see. Play also checks for the flow.
+ *
+ * Done in C++ rather than by adding Java. sec 5.2 wants exactly one Java
+ * file holding "boilerplate plus one notification plus two calls", and
+ * a permission request is neither boilerplate nor a notification.
+ *
+ * Qt has no typed permission for notifications -- QPermission covers
+ * camera, microphone, location and the like -- so this goes through the
+ * Activity's own methods, which are the ones the platform documents.
+ */
+void request_notification_permission() {
+	/*
+	 * Below 33 the permission does not exist. Asking anyway is not an
+	 * error, but checkSelfPermission answers "denied" for a name the
+	 * system has never heard of, so the request would be made on every
+	 * connection forever and never granted.
+	 */
+	if (QNativeInterface::QAndroidApplication::sdkVersion() < 33) return;
+
+	const QJniObject activity = android_context();
+	if (!activity.isValid()) return;
+
+	const QJniObject name =
+		      QJniObject::fromString(QStringLiteral("android.permission.POST_NOTIFICATIONS"));
+
+	/* PackageManager.PERMISSION_GRANTED */
+	const jint granted = activity.callMethod<jint>(
+		      "checkSelfPermission", "(Ljava/lang/String;)I", name.object<jstring>());
+	if (granted == 0) return;
+
+	/*
+	 * On the Android main thread, because that is where the framework
+	 * expects a permission request to originate; from anywhere else the
+	 * dialog is the framework's to schedule and the call has been seen to
+	 * be dropped.
+	 */
+	QNativeInterface::QAndroidApplication::runOnAndroidMainThread([] {
+		const QJniObject ui_activity = android_context();
+		if (!ui_activity.isValid()) return;
+
+		QJniEnvironment env;
+		jclass string_class = env->FindClass("java/lang/String");
+		if (!string_class) return;
+
+		const QJniObject wanted =
+			      QJniObject::fromString(QStringLiteral("android.permission.POST_NOTIFICATIONS"));
+		jobjectArray names = env->NewObjectArray(1, string_class, wanted.object<jstring>());
+		if (!names) return;
+
+		ui_activity.callMethod<void>("requestPermissions", "([Ljava/lang/String;I)V",
+			                            names, jint(BSSH_NOTIFICATION_PERMISSION_REQUEST));
+		env->DeleteLocalRef(names);
+	});
+}
+
 } /* namespace */
 
 /*
@@ -93,6 +166,15 @@ public:
 		 * service nobody asked for.
 		 */
 		if (keep_alive == m_keep_alive) return;
+
+		/*
+		 * Asked here rather than at startup, and only when a session is
+		 * actually going to hold the process open: a permission dialog
+		 * on first launch, before the user has done anything, is the
+		 * kind users dismiss on reflex. This is the moment the
+		 * notification it governs is about to exist.
+		 */
+		if (keep_alive) request_notification_permission();
 
 		/*
 		 * Starts and stops the foreground service (sec 5.1). A
