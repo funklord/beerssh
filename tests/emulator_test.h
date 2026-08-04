@@ -40,6 +40,18 @@ private slots:
 	void a_write_is_on_the_screen_when_it_returns();
 	void damage_is_reported_per_row_not_per_cell();
 	void scrollback_drops_trailing_blanks_but_not_blank_colour();
+
+	/*
+	 * A line written and scrolled away in the same breath.
+	 *
+	 * The interesting case for where the scrollback's copy comes FROM.
+	 * Damage is row-merged (sec 9.5), so a row's contents reach the
+	 * mirror when writing moves off it -- and a program that addresses
+	 * row 0, writes, and immediately scrolls has not moved off anything.
+	 * If the scrollback took the mirror's row without that having landed,
+	 * it would file the PREVIOUS occupant of the row.
+	 */
+	void a_line_written_then_immediately_scrolled_lands_intact();
 	void a_wide_glyph_scrolls_back_the_way_it_was_on_screen();
 };
 

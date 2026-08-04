@@ -143,6 +143,25 @@ private:
 	int m_cursor_col;
 	bool m_cursor_visible;
 	QList<bssh_cell_t> m_cells;
+
+	/*
+	 * Which physical row logical row 0 lives in.
+	 *
+	 * The grid is a ring. Scrolling the whole screen up by one used to
+	 * memmove every row -- ten thousand cells on a 200x50 grid, per
+	 * scrolled line -- which is why throughput tracked the grid's AREA
+	 * rather than its width. Rotating this instead is one addition, and
+	 * the exposed row is filled by the damage libvterm already sends.
+	 *
+	 * Every access goes through physical(); nothing outside this class
+	 * touches m_cells, which is what made the change containable.
+	 */
+	int m_first_row;
+
+	int physical(int row) const {
+		const int mapped = row + m_first_row;
+		return mapped >= m_rows ? mapped - m_rows : mapped;
+	}
 };
 
 #endif /* BSSH_SCREEN_H */

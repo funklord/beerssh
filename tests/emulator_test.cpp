@@ -590,3 +590,30 @@ void emulator_test::a_wide_glyph_scrolls_back_the_way_it_was_on_screen() {
 	QCOMPARE(stored.at(2).ch, U'\0');
 	QVERIFY2(stored.at(2).width == 0, "the far half must be skippable, not drawable");
 }
+
+void emulator_test::a_line_written_then_immediately_scrolled_lands_intact() {
+	bssh_emulator emulator(20, 3);
+
+	/* Something to be the stale previous occupant of row 0. */
+	emulator.feed(QByteArrayLiteral("STALE-ONE\r\nSTALE-TWO\r\nSTALE-THREE"));
+
+	/*
+	 * Home, overwrite row 0, and force a scroll immediately -- without
+	 * ever writing to another row, which is what would flush row 0's
+	 * damage on the way past.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[H\x1b[2KFRESH-ROW-ZERO"));
+	emulator.feed(QByteArrayLiteral("\x1b[3;1H\r\n"));
+
+	const bssh_scrollback &scrollback = emulator.scrollback();
+	QVERIFY2(scrollback.count() > 0, "the scroll must have filed something");
+
+	QString filed;
+	for (const bssh_cell_t &cell : scrollback.line(scrollback.count() - 1)) {
+		filed.append(cell.ch ? QString::fromUcs4(&cell.ch, 1) : QStringLiteral(" "));
+	}
+
+	QVERIFY2(filed.startsWith(QStringLiteral("FRESH-ROW-ZERO")),
+	          qPrintable(QStringLiteral("the scrollback filed \"%1\" instead of the line that "
+	                                     "was actually on row 0").arg(filed)));
+}

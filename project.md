@@ -1339,10 +1339,32 @@ diverge on *delivery* but never on *which fonts exist*.
   simply drew fewer cells into the same pixels. It was measuring the grid, not
   the cache. First-frame-versus-rest keeps the work identical and answers the
   question the other way round.
-  **Where the time actually goes, if painting ever needs work:** not here.
-  Plain scrolling still runs at 3.7 MB/s on a 200×50 grid against 11.5 on an
-  80×24 one, so the emulator's scroll path remains three times more
-  grid-sensitive than anything in the renderer.
+  **Where the time actually goes, if painting ever needs work:** not here — the
+  emulator's scroll path, which is where the next round went.
+- **The grid is a ring, and the scrollback takes the mirror's own row.** Two
+  changes to the same cost, both found by ablation rather than by reading:
+  removing scrollback conversion was worth +44% and removing damage conversion
+  +97%, which said the remaining cost was per-cell conversion done *twice* per
+  scrolled line, not the row moves.
+  **The ring.** Scrolling the whole screen up by one memmoved every row — ten
+  thousand cells on a 200×50 grid, per scrolled line — which is why throughput
+  tracked the grid's *area*. A row offset makes it one addition. Only when the
+  move spans every column and reaches the top or bottom: a scroll inside DECSTBM
+  margins leaves rows outside the region that must not move, and those still go
+  row by row. The exposed rows keep their contents until libvterm's damage
+  fills them, exactly as the memmove left them. Verified firing by counting —
+  every scroll takes the fast path, none fall through.
+  **The scrollback.** `sb_pushline` arrives *before* `moverect` — checked, not
+  assumed — so the row leaving the top is still logical row 0 and the mirror
+  already holds it converted. Converting libvterm's cells a second time was the
+  larger half of the remaining cost. It also removed a duplicate: the wide-glyph
+  continuation was synthesised there "exactly as the screen synthesises it",
+  two places computing one thing, which is how an undrawable character once
+  reached the scrollback while the screen showed the glyph correctly.
+  **Measured A/B, interleaved**, because the machine was under load 44 and
+  single runs swung 8×: **200×50 3.15 → 3.97 MB/s (+25%)**, **80×24 8.87 →
+  10.6 (+18%)**. The remaining grid-sensitivity is damage conversion, which is
+  width-proportional per scrolled line and is where a third round would go.
 - **Throughput, measured separately from painting** — by `make bench`
   (`tests/emulator_bench.cpp`, §12.3), which is where every MB/s figure below
   comes from and how to re-derive it. They are timings on a particular machine,

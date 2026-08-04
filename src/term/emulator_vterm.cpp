@@ -586,6 +586,21 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
  * rather than as a blank, so a trim stops there and cannot cut a wide
  * character in half.
  */
+/*
+ * The same question asked of a mirror cell. Same rule -- blank in every
+ * respect, and never the continuation half of a wide glyph, which the
+ * screen records with width 0 rather than with libvterm's marker.
+ */
+bool is_invisible_cell(const bssh_cell_t &cell) {
+	if (cell.ch != 0 && cell.ch != U' ') return false;
+	if (cell.width != 1) return false;
+	if (cell.attrs != bssh_cell_t::NONE) return false;
+	if (cell.fg.kind != bssh_color_t::DEFAULT) return false;
+	if (cell.bg.kind != bssh_color_t::DEFAULT) return false;
+	if (cell.link != 0) return false;
+	return true;
+}
+
 bool is_invisible_cell(const VTermScreenCell &cell) {
 	if (cell.chars[0] != 0 && cell.chars[0] != U' ') return false;
 	if (cell.width != 1) return false;
@@ -616,28 +631,36 @@ bool is_invisible_cell(const VTermScreenCell &cell) {
  * column against size()), so a trimmed line reads back identically.
  */
 int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
+	Q_UNUSED(cells);
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 
-	int width = cols;
-	while (width > 0 && is_invisible_cell(cells[width - 1])) --width;
+	/*
+	 * Taken from the MIRROR's top row, not converted from libvterm's
+	 * cells a second time.
+	 *
+	 * This callback arrives before moverect -- checked, not assumed -- so
+	 * the row leaving the top of the screen is still logical row 0 here,
+	 * and the mirror already holds it converted. Converting it again cost
+	 * a second pass over every cell of every scrolled line: with damage
+	 * conversion it was the larger half of what plain scrolling spends on
+	 * a wide grid.
+	 *
+	 * It also removes a duplicate. The wide-glyph continuation used to be
+	 * synthesised here "exactly as the screen synthesises it" -- two
+	 * places computing one thing, which is precisely how an undrawable
+	 * character reached the scrollback while the live screen showed the
+	 * glyph correctly. There is one synthesis now, and the scrollback
+	 * gets whatever the screen decided.
+	 */
+	const int width_limit = qMin(cols, self->screen.cols());
+
+	int width = width_limit;
+	while (width > 0 && is_invisible_cell(self->screen.cell(0, width - 1))) --width;
 
 	QList<bssh_cell_t> line;
 	line.reserve(width);
 	for (int col = 0; col < width; ++col) {
-		const bssh_cell_t cell = self->convert_cell(cells[col]);
-		line.append(cell);
-
-		/*
-		 * Synthesised here exactly as the screen synthesises it, rather
-		 * than converted from the cell libvterm left in the next column
-		 * -- that one holds the raw marker and a stale pen, and copying
-		 * it is what put an undrawable character into the scrollback
-		 * while the live screen showed the glyph correctly.
-		 */
-		if (cell.width == 2 && col + 1 < width) {
-			line.append(continuation_of(cell));
-			++col;
-		}
+		line.append(self->screen.cell(0, col));
 	}
 
 	self->scrollback.push(line);
