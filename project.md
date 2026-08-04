@@ -965,6 +965,25 @@ collapse/restore is bookkeeping, not surgery.
   and passed a deliberately broken preset editor, because the orphaned scroll
   area was still a child of the page and `findChildren` cannot tell the
   difference. A working scroll area drops the page's own minimum on its own.
+- **The desktop front door gets the same treatment, and it found worse.** Its
+  minimums were fine at 800x600 — the small window §8.2 already contemplates when
+  it talks about tiling one into a half-screen column — so nothing a size check
+  could see was wrong. What was wrong needed looking at:
+  **It embedded the TOUCH preset editor.** The call read
+  `new bssh_preset_editor(m_store, this)`, with the `QWidget*` landing in what
+  was then a `bool touch` and converting to `true`. So the desktop dialog showed
+  the thumb-sized editor stacked in one column, with a "Back to hosts" button
+  inside a dialog whose navigation is a category tree down the left-hand side.
+  It compiled and it ran. The parameter is an enum now, so a pointer is a build
+  error rather than a silent wrong answer, and a test pins each arrangement by
+  the one control that only makes sense in one of them.
+  **Its four destination fields were four columns.** Each row was its own box
+  layout, so every field began wherever its own label happened to end, and "Host
+  Name (or IP address)" is twice the width of "User name". They are one form
+  layout now — which also makes each label the field's buddy, the thing the
+  hand-written accessible names had been compensating for. §8.5's whole argument
+  for this dialog is that it borrows an interface people already have in their
+  fingers, and PuTTY aligns them.
 - **The status line never decides how wide the window is.** A `QLabel` asks for
   room for its whole text, and a failure reason is a sentence — the jump-host
   messages (§10.5) run well past a phone's width. Left to itself the label pushed

@@ -47,7 +47,24 @@ public:
 	 * which the two-column version does not need because a dialog has a
 	 * category tree to click away to and a full-screen page has nothing.
 	 */
-	explicit bssh_preset_editor(bssh_profile_store *store, bool touch = false,
+	/*
+	 * Which arrangement to build, as a type rather than as a bool.
+	 *
+	 * It was a bool, and the desktop dialog said
+	 *   new bssh_preset_editor(m_store, this)
+	 * -- the QWidget* landing in the bool, converting to true, and giving
+	 * the desktop front door the TOUCH editor: list stacked above the
+	 * fields, controls sized for a thumb, and a "Back to hosts" button in
+	 * a dialog whose navigation is a category tree. It compiled, it ran,
+	 * and it took looking at the thing to notice. A pointer does not
+	 * convert to an enum, so the same slip is now a build error.
+	 */
+	enum layout_t {
+		DESKTOP,  /* list beside the fields, as PuTTY's pages are */
+		TOUCH     /* one column, thumb-sized, with its own way out */
+	};
+
+	explicit bssh_preset_editor(bssh_profile_store *store, layout_t layout = DESKTOP,
 	                             QWidget *parent = nullptr);
 
 	/* Re-reads the store -- after a save, or after a host changed which

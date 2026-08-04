@@ -18,6 +18,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QFormLayout>
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
@@ -91,7 +92,7 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	                        "preset changes every host using it."),
 	        QStringLiteral("Presets")));
 	m_pages->addWidget(build_window_page());
-	m_preset_editor = new bssh_preset_editor(m_store, this);
+	m_preset_editor = new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP, this);
 	m_pages->addWidget(m_preset_editor);
 	connect(m_preset_editor, &bssh_preset_editor::preset_saved,
 	         this, &bssh_session_dialog::presets_changed);
@@ -144,34 +145,46 @@ QWidget *bssh_session_dialog::build_session_page() {
 	        QStringLiteral("Specify the destination you want to connect to"), page);
 	layout->addWidget(heading);
 
-	QHBoxLayout *destination = new QHBoxLayout();
-	destination->addWidget(new QLabel(QStringLiteral("Host Name (or IP address)"), page));
-	m_host = new QLineEdit(page);
 	/*
-	 * Named for the screen reader. These rows are a QLabel and a field
-	 * side by side in a box layout, which -- unlike QFormLayout::addRow,
-	 * which makes the label a buddy for you -- leaves the field
-	 * anonymous: it was announced as "edit box" with nothing to say WHICH
-	 * edit box. The touch form got this right by accident, by using the
-	 * layout that does it automatically.
+	 * One form, not four rows of label-then-field.
+	 *
+	 * They were four independent QHBoxLayouts, so nothing lined the
+	 * fields up: "Host Name (or IP address)" is twice the width of "User
+	 * name", and each field started wherever its own label ended. Four
+	 * left edges for what reads as one column, on the front door, in a
+	 * dialog whose whole premise (sec 8.5) is that it borrows an
+	 * interface people already know -- and PuTTY aligns them.
+	 *
+	 * A form layout also makes each label the field's BUDDY, which is
+	 * what the accessible names below were compensating for by hand.
+	 * They stay, because they say more than the visible label does.
 	 */
+	QFormLayout *destination = new QFormLayout();
+	destination->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+	/*
+	 * Host and port on one row, because a port is part of a destination
+	 * rather than a setting of its own -- which is also where PuTTY puts
+	 * it.
+	 */
+	QHBoxLayout *host_row = new QHBoxLayout();
+	m_host = new QLineEdit(page);
 	m_host->setAccessibleName(QStringLiteral("Host name or IP address"));
-	destination->addWidget(m_host, 1);
-	destination->addWidget(new QLabel(QStringLiteral("Port"), page));
+	host_row->addWidget(m_host, 1);
+
+	host_row->addWidget(new QLabel(QStringLiteral("Port"), page));
 	m_port = new QSpinBox(page);
 	m_port->setRange(1, 65535);
 	m_port->setValue(22);
 	m_port->setMaximumWidth(80);
 	m_port->setAccessibleName(QStringLiteral("Port"));
-	destination->addWidget(m_port);
-	layout->addLayout(destination);
+	host_row->addWidget(m_port);
 
-	QHBoxLayout *user_row = new QHBoxLayout();
-	user_row->addWidget(new QLabel(QStringLiteral("User name"), page));
+	destination->addRow(QStringLiteral("Host Name (or IP address)"), host_row);
+
 	m_user = new QLineEdit(page);
 	m_user->setAccessibleName(QStringLiteral("User name"));
-	user_row->addWidget(m_user, 1);
-	layout->addLayout(user_row);
+	destination->addRow(QStringLiteral("User name"), m_user);
 
 	/*
 	 * The key to offer this host, which is where an imported OpenSSH
@@ -186,7 +199,6 @@ QWidget *bssh_session_dialog::build_session_page() {
 	 * editor because here the key really is a file on this machine.
 	 */
 	QHBoxLayout *identity_row = new QHBoxLayout();
-	identity_row->addWidget(new QLabel(QStringLiteral("Private key file"), page));
 	m_identity = new QLineEdit(page);
 	m_identity->setPlaceholderText(QStringLiteral("default keys (~/.ssh/id_ed25519 and friends)"));
 	m_identity->setAccessibleName(QStringLiteral("Private key file"));
@@ -196,7 +208,8 @@ QWidget *bssh_session_dialog::build_session_page() {
 
 	QPushButton *browse_key = new QPushButton(QStringLiteral("Browse..."), page);
 	identity_row->addWidget(browse_key);
-	layout->addLayout(identity_row);
+
+	destination->addRow(QStringLiteral("Private key file"), identity_row);
 
 	connect(browse_key, &QPushButton::clicked, this, [this] {
 		/*
@@ -220,15 +233,14 @@ QWidget *bssh_session_dialog::build_session_page() {
 	 * the field is spelled the way OpenSSH's ProxyJump and -J are
 	 * spelled, since that is the string the user already has.
 	 */
-	QHBoxLayout *jump_row = new QHBoxLayout();
-	jump_row->addWidget(new QLabel(QStringLiteral("Connect via"), page));
 	m_jump = new QLineEdit(page);
 	m_jump->setPlaceholderText(QStringLiteral("direct (or user@bastion[:port])"));
 	m_jump->setAccessibleName(QStringLiteral("Connect via jump host"));
 	m_jump->setAccessibleDescription(
 	        QStringLiteral("Leave empty to connect straight to the host."));
-	jump_row->addWidget(m_jump, 1);
-	layout->addLayout(jump_row);
+	destination->addRow(QStringLiteral("Connect via"), m_jump);
+
+	layout->addLayout(destination);
 
 	/*
 	 * PuTTY offers Raw/Telnet/Rlogin/SSH/Serial here. This is an SSH

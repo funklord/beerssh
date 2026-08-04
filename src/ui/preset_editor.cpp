@@ -34,10 +34,11 @@ static const int BSSH_MAX_SCROLLBACK = 200000;
 /* sec 6.2's floor, the same one the key row and the host page use. */
 static const int BSSH_TOUCH_HEIGHT_DP = 48;
 
-bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QWidget *parent)
+bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layout,
+                                        QWidget *parent)
     : QWidget(parent),
       m_store(store),
-      m_touch(touch) {
+      m_touch(layout == TOUCH) {
 	QHBoxLayout *columns = new QHBoxLayout(this);
 
 	/*

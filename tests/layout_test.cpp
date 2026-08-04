@@ -1,4 +1,6 @@
+#include <QAbstractButton>
 #include <QScrollArea>
+#include <QStackedWidget>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -12,6 +14,8 @@
 #include "ui/licences_view.h"
 #include "ui/font_picker.h"
 #include "ui/password_prompt.h"
+#include "ui/session_dialog.h"
+#include "ui/ssh_config_import.h"
 #include "layout_test.h"
 #include "model/session.h"
 #include "model/session_registry.h"
@@ -426,7 +430,7 @@ void layout_test::every_touch_surface_fits_a_phone()
 		check_fits(QStringLiteral("host editor"), &editor);
 	}
 	{
-		bssh_preset_editor editor(&store, true);
+		bssh_preset_editor editor(&store, bssh_preset_editor::TOUCH);
 		check_fits(QStringLiteral("preset editor"), &editor);
 	}
 	{
@@ -446,4 +450,150 @@ void layout_test::every_touch_surface_fits_a_phone()
 		                             true);
 		check_fits(QStringLiteral("password prompt"), &prompt);
 	}
+}
+
+namespace {
+
+/*
+ * The small desktop window sec 8.2 already contemplates: it names tiling
+ * a window into a half-screen column, which on a 1366px laptop is about
+ * 680 and lands in the MEDIUM size class. 800x600 is the round number
+ * safely inside that, and the classic floor besides.
+ */
+const int BSSH_SMALL_DESKTOP_W = 800;
+const int BSSH_SMALL_DESKTOP_H = 600;
+
+bool has_button(const QWidget *root, const QString &text)
+{
+	for (const QAbstractButton *button : root->findChildren<QAbstractButton *>()) {
+		if (button->text() == text) return true;
+	}
+	return false;
+}
+
+QWidget *by_accessible_name(const QWidget *root, const QString &name)
+{
+	for (QWidget *child : root->findChildren<QWidget *>()) {
+		if (child->accessibleName() == name) return child;
+	}
+	return nullptr;
+}
+
+} /* namespace */
+
+void layout_test::every_desktop_surface_fits_a_small_window()
+{
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("build server (europe)");
+	profile.host = QStringLiteral("build.internal.example.com");
+	profile.user = QStringLiteral("nabbe.testing");
+	profile.port = 2299;
+	QVERIFY(store.save(profile) != 0);
+
+	struct surface_t {
+		QString name;
+		QWidget *widget;
+	};
+
+	bssh_session_dialog front_door(&store);
+	bssh_preset_editor presets(&store, bssh_preset_editor::DESKTOP);
+	bssh_ssh_config_import import(&store);
+
+	const surface_t surfaces[] = {
+		{QStringLiteral("session dialog"), &front_door},
+		{QStringLiteral("preset editor (desktop)"), &presets},
+		{QStringLiteral("SSH config import"), &import},
+	};
+
+	for (const surface_t &surface : surfaces) {
+		surface.widget->resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
+		surface.widget->show();
+		QVERIFY2(QTest::qWaitForWindowExposed(surface.widget), qPrintable(surface.name));
+
+		const QSize needed = surface.widget->minimumSizeHint();
+		QVERIFY2(needed.width() <= BSSH_SMALL_DESKTOP_W && needed.height() <= BSSH_SMALL_DESKTOP_H,
+		          qPrintable(QStringLiteral("%1 needs %2x%3 in a %4x%5 window")
+		                             .arg(surface.name).arg(needed.width()).arg(needed.height())
+		                             .arg(BSSH_SMALL_DESKTOP_W).arg(BSSH_SMALL_DESKTOP_H)));
+	}
+}
+
+void layout_test::the_desktop_front_door_lines_its_fields_up()
+{
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	bssh_session_dialog dialog(&store);
+	dialog.resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
+	dialog.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+
+	/*
+	 * The four destination fields are one column to the eye, and they
+	 * were four: each row was its own box layout, so every field began
+	 * wherever its own label happened to end. "Host Name (or IP address)"
+	 * is twice the width of "User name", so the gap was not subtle.
+	 *
+	 * It matters here more than it would elsewhere. This is the front
+	 * door, and sec 8.5's whole argument for it is that it borrows an
+	 * interface people already have in their fingers -- PuTTY's, which
+	 * aligns them.
+	 */
+	const QStringList fields = {
+		QStringLiteral("Host name or IP address"),
+		QStringLiteral("User name"),
+		QStringLiteral("Private key file"),
+		QStringLiteral("Connect via jump host"),
+	};
+
+	int column = -1;
+	for (const QString &name : fields) {
+		const QWidget *field = by_accessible_name(&dialog, name);
+		QVERIFY2(field, qPrintable(QStringLiteral("no field named \"%1\"").arg(name)));
+
+		const int left = field->mapTo(&dialog, QPoint(0, 0)).x();
+		if (column < 0) column = left;
+
+		QCOMPARE(left, column);
+	}
+
+	QVERIFY2(column > 0, "the fields must be beside their labels, not on top of them");
+}
+
+void layout_test::the_desktop_front_door_uses_the_desktop_preset_editor()
+{
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	/*
+	 * The two arrangements, pinned by the one control that only makes
+	 * sense in one of them. A touch page has to carry its own way out --
+	 * the system back gesture is not wired to that stack -- and a dialog
+	 * with a category tree down its left-hand side does not.
+	 */
+	const QString exit_button = QStringLiteral("Back to hosts");
+
+	bssh_preset_editor touch(&store, bssh_preset_editor::TOUCH);
+	bssh_preset_editor desktop(&store, bssh_preset_editor::DESKTOP);
+
+	QVERIFY2(has_button(&touch, exit_button), "the touch page must carry its own way out");
+	QVERIFY2(!has_button(&desktop, exit_button),
+	          "the desktop page is navigated by the category tree");
+
+	/*
+	 * And the front door builds the desktop one. It did not: the call
+	 * read
+	 *   new bssh_preset_editor(m_store, this)
+	 * with the QWidget* landing in what was then a bool `touch`,
+	 * converting to true. The desktop dialog got the thumb-sized editor,
+	 * stacked in one column, with a "Back to hosts" button inside a
+	 * dialog that navigates by a tree. It compiled and it ran; it took
+	 * looking at the thing to notice.
+	 */
+	bssh_session_dialog front_door(&store);
+	QVERIFY2(!has_button(&front_door, exit_button),
+	          "the front door embedded the TOUCH preset editor");
 }

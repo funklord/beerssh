@@ -38,6 +38,19 @@ private slots:
 	 * before it ships rather than after.
 	 */
 	void every_touch_surface_fits_a_phone();
+	/*
+	 * And the desktop front door, at the small window sec 8.2 already
+	 * contemplates when it talks about tiling one into a half-screen
+	 * column.
+	 */
+	void every_desktop_surface_fits_a_small_window();
+	void the_desktop_front_door_lines_its_fields_up();
+	/*
+	 * Which ARRANGEMENT the front door embeds, which is a different
+	 * question from whether it fits: the desktop dialog was building the
+	 * touch editor, and both of them fit.
+	 */
+	void the_desktop_front_door_uses_the_desktop_preset_editor();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */
