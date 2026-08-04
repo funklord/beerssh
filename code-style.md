@@ -316,6 +316,19 @@ fixed.
 The project's `project.md` may state the three rules in brief and point
 here for the detail. It does not restate the precedence rule.
 
+## ASCII in source
+
+Source and comments are ASCII. Write `--` where prose would use an em dash,
+and "section" for a section sign.
+
+This governs the text the repository writes about itself, not the data the
+software handles. Documentation may use typographic punctuation; so may
+user-facing text in UI software, and anything that genuinely requires
+Unicode.
+
+**This project is excepted** and does not enable the check: it is a terminal
+emulator, and character tables are its subject matter.
+
 ## See also
 
 - **`project.md` §18** — the same rules in brief, plus the commit
