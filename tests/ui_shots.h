@@ -30,6 +30,15 @@ private slots:
 	void render_touch_surfaces();
 	void render_desktop_surfaces();
 	void render_front_door_pages();
+
+	/*
+	 * The terminal itself, which is the surface the app is FOR and the
+	 * one nothing rendered. Fed the things a terminal has to get right --
+	 * the sixteen colours, box drawing, wide glyphs, a selection, the
+	 * contrast floor on and off -- so that "does the renderer look right"
+	 * is a question somebody can answer by looking.
+	 */
+	void render_terminal();
 };
 
 #endif /* BSSH_UI_SHOTS_H */

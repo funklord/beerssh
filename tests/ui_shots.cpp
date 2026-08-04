@@ -14,7 +14,10 @@
 #include "ui/licences_view.h"
 #include "ui/password_prompt.h"
 #include "ui/preset_editor.h"
+#include "term/emulator.h"
+#include "term/font_catalog.h"
 #include "ui/session_dialog.h"
+#include "ui/terminal_view.h"
 #include "ui/ssh_config_import.h"
 #include "ui_shots.h"
 
@@ -216,4 +219,92 @@ void bssh_ui_shots::render_front_door_pages() {
 		                               .arg(path, -44).arg(needed.width()).arg(needed.height());
 	}
 
+}
+
+void bssh_ui_shots::render_terminal() {
+	/*
+	 * What a terminal has to get right, in one screen. Each line is here
+	 * because getting it wrong is a bug this project has either had or
+	 * spent a section of project.md avoiding.
+	 */
+	static const char *const BSSH_SAMPLE =
+	        "\x1b[1mBeerSSH\x1b[0m  the sixteen colours:\r\n"
+	        "\x1b[30m##\x1b[31m##\x1b[32m##\x1b[33m##\x1b[34m##\x1b[35m##\x1b[36m##\x1b[37m##"
+	        "\x1b[90m##\x1b[91m##\x1b[92m##\x1b[93m##\x1b[94m##\x1b[95m##\x1b[96m##\x1b[97m##"
+	        "\x1b[0m\r\n"
+	        "\x1b[7minverse\x1b[0m \x1b[4munderline\x1b[0m \x1b[1mbold\x1b[0m "
+	        "\x1b[2mfaint\x1b[0m\r\n"
+	        "\r\n"
+	        "box drawing:  \xe2\x94\x8c\xe2\x94\x80\xe2\x94\xac\xe2\x94\x80\xe2\x94\x90"
+	        "  \xe2\x94\x9c\xe2\x94\x80\xe2\x94\xbc\xe2\x94\x80\xe2\x94\xa4"
+	        "  \xe2\x96\x91\xe2\x96\x92\xe2\x96\x93\xe2\x96\x88\r\n"
+	        "wide glyphs:  \xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e "
+	        "\xed\x95\x9c\xea\xb5\xad\xec\x96\xb4\r\n"
+	        "disambiguate: 0O1lI5S2Z {}[]() `\xc2\xb4\r\n"
+	        "\r\n"
+	        "\x1b[32mnabbe@build\x1b[0m:\x1b[34m~\x1b[0m$ ";
+
+	struct sample_t {
+		QString name;
+		QString scheme;
+		bool raise;
+	};
+
+	const sample_t samples[] = {
+		{QStringLiteral("terminal-default"), QStringLiteral("default"), true},
+		{QStringLiteral("terminal-default-no-floor"), QStringLiteral("default"), false},
+		{QStringLiteral("terminal-solarized-dark"), QStringLiteral("solarized-dark"), true},
+		{QStringLiteral("terminal-solarized-light"), QStringLiteral("solarized-light"), true},
+	};
+
+	/*
+	 * The bundled set, exactly as main() loads it, and said out loud.
+	 *
+	 * Without this the terminal shots are drawn in whatever monospace the
+	 * machine happens to have -- so CJK arrives as tofu and the box
+	 * drawing is whatever the system font thinks, neither of which is
+	 * what the app does. A picture of a renderer is uninterpretable
+	 * without knowing which font drew it, and the same trap as rendering
+	 * the desktop arrangement under a "touch-" name.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	const int faces = platform
+	        ? bssh_font_catalog::instance().load_bundled(platform->font_directory())
+	        : 0;
+
+	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
+	const QString family = catalog.family_for(QString());
+
+	QTextStream(stdout) << QStringLiteral("\nterminal, in %1 (%2):\n")
+	                               .arg(family,
+	                                     faces > 0
+	                                             ? QStringLiteral("%1 bundled faces").arg(faces)
+	                                             : QStringLiteral("NO bundled fonts -- these "
+	                                                               "are the system's, not the "
+	                                                               "app's"));
+
+	for (const sample_t &sample : samples) {
+		bssh_emulator emulator(52, 12);
+		emulator.feed(QByteArray(BSSH_SAMPLE));
+
+		bssh_terminal_view view;
+		view.attach_screen(&emulator.screen());
+		view.set_colour_scheme(sample.scheme);
+		view.set_raise_contrast(sample.raise);
+		view.resize(52 * 10, 12 * 20);
+		view.show();
+		QTest::qWaitForWindowExposed(&view);
+		QTest::qWait(50);
+
+		const QString path = shot_dir() + QStringLiteral("/") + sample.name +
+		                      QStringLiteral(".png");
+		view.grab().save(path);
+
+		QTextStream(stdout) << QStringLiteral("  %1  %2, contrast floor %3\n")
+		                               .arg(path, -44)
+		                               .arg(sample.scheme)
+		                               .arg(sample.raise ? QStringLiteral("on")
+		                                                  : QStringLiteral("off"));
+		view.hide();
+	}
 }

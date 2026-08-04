@@ -274,7 +274,14 @@ shots: $(TEST_BIN)
 	@# Through a FILE rather than a pipe: a pipeline reports the exit
 	@# status of its last command, so `binary | grep` would report grep's
 	@# and swallow a crash into a clean-looking run.
-	@if BSSH_SHOT_DIR=$(SHOT_DIR) QT_QPA_PLATFORM=offscreen \
+	@# BSSH_FONT_DIR because the candidate paths are relative to the
+	@# BINARY, and the test binary lives in build-tests/ -- so it looks
+	@# one level above the checkout and finds nothing. Without it the
+	@# terminal shots are drawn in whatever monospace the machine has,
+	@# which is not what the app does. The renderer says which font it
+	@# used either way.
+	@if BSSH_SHOT_DIR=$(SHOT_DIR) BSSH_FONT_DIR=$(CURDIR)/fonts \
+	     QT_QPA_PLATFORM=offscreen \
 	     ./$(TEST_BIN) --shots > $(SHOT_DIR)/.run.log 2>&1; then \
 		grep -vE '^(PASS|QWARN|Config|\*\*|Totals)' $(SHOT_DIR)/.run.log; \
 		rm -f $(SHOT_DIR)/.run.log; \

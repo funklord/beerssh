@@ -971,6 +971,16 @@ collapse/restore is bookkeeping, not surgery.
   was found by rendering a screen and looking at it, and several had passed
   every test that existed at the time. The tests came after the picture, so
   the picture is worth a command rather than an afternoon.
+  **The terminal is in it too**, which is the surface the app is *for* and the
+  one nothing rendered: the sixteen colours, inverse/underline/bold/faint, box
+  drawing, wide glyphs, the disambiguation set, in several schemes with the §9.3
+  contrast floor on and off. It loads the bundled set through `BSSH_FONT_DIR`
+  and **prints which family actually drew the picture**, because the candidate
+  paths are relative to the *binary* and the test binary sits in `build-tests/`
+  — so it looked one level above the checkout, found nothing, and drew the
+  terminal in whatever monospace the machine had. CJK came out as tofu in a
+  picture of a renderer that handles it. A shot of a renderer is uninterpretable
+  without knowing what rendered it.
   It renders each surface twice over — the touch set at 360×640, the desktop set
   at 800×600, the front door at its own minimum, and **every page of the front
   door**, since the touch preset editor sat on its Presets page for as long as
