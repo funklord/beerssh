@@ -22,8 +22,9 @@ Vendored third-party code keeps its upstream style, and is exempt.
 **This is the same style as the sibling `fuzzypickles` tree -- which is now a
 consequence rather than a coincidence.** Both copy the same source. Both are
 Qt Widgets frontends over a C-ish core, and moving between them should cost
-nothing. `tools/tabify.py` is a straight copy of that project's; keep the two
-in sync rather than letting them drift.
+nothing. Both now run the same gate, copied verbatim from
+`~/.claude/tools/style_gate.py`, so keeping them alike is the sync rule
+doing its job rather than two trees agreeing by hand.
 
 ## The three rules
 
@@ -133,10 +134,14 @@ if (self_test) {                /* fine */
 }
 ```
 
-This is not an aesthetic preference — the indentation model counts brace
-nesting, so a braceless body is not a nesting level and `tools/tabify.py`
-will indent it with a tab *plus spaces*. Braces or a one-liner keeps the
-file conformant and says the same thing.
+**A braceless single-statement body is permitted, and sometimes better.**
+It used to be discouraged here for a tool's convenience: the old
+`tabify.py` counted braces only, so a body with no brace was not a nesting
+level to it and came out indented with a tab *plus spaces*. That was the
+tool failing to model C, and the advice had the fault backwards -- it asked
+the source to change shape so the checker would stop being wrong. The
+shared gate now tracks `if`/`for`/`while`/`else`/`do` bodies whether or not
+they carry braces, so write whichever reads better.
 
 ### Settled exceptions
 
@@ -214,26 +219,26 @@ tree the hard way:
 
 ## 4. Tooling
 
-Indentation is mechanically enforced; everything else here is a review item.
+Indentation and whitespace are mechanically enforced by the shared gate,
+copied verbatim into `tools/` from `~/.claude/tools/style_gate.py`:
 
 ```sh
-make style                              # the gate — run it before committing
-./tools/check-indent.sh                 # same thing, directly
-python3 tools/tabify.py PATHS           # convert to the convention
-python3 tools/tabify.py --check PATHS   # report only, don't modify
-make -C tools fix                       # tabify every source in src/
+make style                        # the gate -- run it before committing
+python3 tools/style_gate.py check # same thing, directly
+python3 tools/style_gate.py fix   # convert to the convention
+python3 tools/style_gate.py list  # what it looks at, and why
 ```
 
-`tabify.py` rewrites only leading whitespace and preserves the first
-non-whitespace column at tab width 2, so it cannot change code; it is
-idempotent and safe to re-run. `check-indent.sh` fails on an implausibly
-short file list as well as on non-conformant files — a gate that has
-quietly stopped looking reads exactly like a clean tree, which is the
-failure it most needs to avoid.
+`.style-gate.toml` says which files in this tree the rules apply to. The
+gate refuses to run against a file list that has collapsed below the floor
+there, because a gate that has quietly stopped looking reads exactly like a
+clean tree.
 
-`make style` runs in CI (`.github/workflows/build.yml`) alongside both
-platform builds.
+Each fixer carries a proof rather than a promise: C and C++ must re-expand
+to the original text, and Python must keep an identical AST. A fixer that
+cannot prove its edit refuses to make it.
 
+Naming and filename rules are review items, not automated ones.
 ## 5. Comments
 
 Match the surrounding density; the existing `src/` is the reference. What

@@ -308,7 +308,7 @@ check-deb: deb
 	./tools/check-deb.sh
 
 style:
-	./tools/check-indent.sh
+	python3 tools/style_gate.py check
 
 # sec 12.4's runner-parity check. Needs docker; not part of `test`, and
 # deliberately not a CI step -- CI already IS the runner. Run it before
