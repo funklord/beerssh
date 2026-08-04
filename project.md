@@ -944,6 +944,27 @@ collapse/restore is bookkeeping, not surgery.
   (§12.3) that ask a real shell `stty size` for both the opening size and a
   window-change on a live shell, at sizes that are not the pty's 80x24 fallback
   so an arriving size cannot be confused with a default.
+- **Every touch surface is checked against a phone, by a test rather than by
+  eye.** The same bug kept turning up one screen at a time and always by looking
+  at a device: the status line pushed the terminal off the right edge, the
+  password prompt demanded 508px on a 360px screen, the secret backend's name
+  was clipped mid-sentence. So the question is now asked of all of them at once,
+  in both directions, because they fail differently:
+  **Too wide** puts content past the right edge. It found two more immediately —
+  the host and preset editors, at 392 and 382px — and both for the same reason:
+  they embed the font picker, whose one-line preview sample is unbreakable and
+  demanded exactly 360px, so the picker alone consumed a phone and any label
+  column beside it overflowed. Wrapping the sample fixed both.
+  **Too tall** is worse: Qt squeezes rows past their minimums until they draw on
+  top of each other, so a phone showed "Name" over "TERM" and a spin box across
+  a checkbox. The host editor wanted 821px of a 640px screen and the preset
+  editor 1063. Their fields now scroll and their buttons stay pinned to the
+  bottom, where a thumb is, rather than becoming something to scroll down to.
+  The height is asserted as one question — does the minimum fit — and not as
+  "does it fit *or* is there a scroll area". The first version asked the second
+  and passed a deliberately broken preset editor, because the orphaned scroll
+  area was still a child of the page and `findChildren` cannot tell the
+  difference. A working scroll area drops the page's own minimum on its own.
 - **The status line never decides how wide the window is.** A `QLabel` asks for
   room for its whole text, and a failure reason is a sentence — the jump-host
   messages (§10.5) run well past a phone's width. Left to itself the label pushed

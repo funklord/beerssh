@@ -5,6 +5,8 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QScrollArea>
+#include <QScroller>
 #include <QVBoxLayout>
 
 #include "model/settings_resolver.h"
@@ -32,15 +34,42 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
       m_font_scope(nullptr),
       m_font_revert(nullptr),
       m_save(nullptr) {
+	/*
+	 * The fields scroll; the actions do not.
+	 *
+	 * This form needs 821px of height, and a phone has 640. Without
+	 * anywhere to scroll, Qt squeezes the rows past their minimums until
+	 * they overlap -- which is what a device showed: "Name" drawn on top
+	 * of "TERM", a spin box across a checkbox. The buttons stay pinned to
+	 * the bottom rather than becoming something to scroll down to, for
+	 * the same reason they are stacked full-width: a phone is held in one
+	 * hand and the bottom is what the thumb reaches.
+	 */
 	QVBoxLayout *outer = new QVBoxLayout(this);
-	outer->setContentsMargins(16, 16, 16, 16);
-	outer->setSpacing(12);
+	outer->setContentsMargins(0, 0, 0, 0);
+	outer->setSpacing(0);
+
+	QWidget *content = new QWidget(this);
+	QVBoxLayout *body = new QVBoxLayout(content);
+	body->setContentsMargins(16, 16, 16, 16);
+	body->setSpacing(12);
+
+	QScrollArea *scroll = new QScrollArea(this);
+	scroll->setWidget(content);
+	scroll->setWidgetResizable(true);
+	scroll->setFrameShape(QFrame::NoFrame);
+
+	/* Sideways scrolling would mean something above is too wide, which is
+	 * a bug rather than something to let the user work around. */
+	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	QScroller::grabGesture(scroll->viewport(), QScroller::LeftMouseButtonGesture);
+	outer->addWidget(scroll, 1);
 
 	m_title = new QLabel(QStringLiteral("Add host"), this);
 	QFont title_font = bssh_scaled_font(m_title->font(), 1.4);
 	title_font.setBold(true);
 	m_title->setFont(title_font);
-	outer->addWidget(m_title);
+	body->addWidget(m_title);
 
 	QFormLayout *form = new QFormLayout();
 	form->setSpacing(12);
@@ -109,7 +138,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	form->addRow(QStringLiteral("Name"), m_name);
 	form->addRow(QStringLiteral("Key file"), m_identity);
 	form->addRow(QStringLiteral("Via"), m_jump);
-	outer->addLayout(form);
+	body->addLayout(form);
 
 	/*
 	 * The same picker the desktop dialog embeds, sized for touch (sec
@@ -119,7 +148,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	 */
 	m_font_picker = new bssh_font_picker(this);
 	m_font_picker->set_touch_sized(true);
-	outer->addWidget(m_font_picker);
+	body->addWidget(m_font_picker);
 
 	/*
 	 * sec 10.1's badge and revert, the same pair the desktop Window page
@@ -130,15 +159,15 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	 */
 	m_font_scope = new QLabel(this);
 	m_font_scope->setWordWrap(true);
-	outer->addWidget(m_font_scope);
+	body->addWidget(m_font_scope);
 
 	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font"), this);
 	m_font_revert->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
-	outer->addWidget(m_font_revert);
+	body->addWidget(m_font_revert);
 	connect(m_font_revert, &QPushButton::clicked,
 	         this, &bssh_host_editor::revert_font_to_preset);
 
-	outer->addStretch(1);
+	body->addStretch(1);
 
 	m_save = new QPushButton(QStringLiteral("Add host"), this);
 	QPushButton *cancel = new QPushButton(QStringLiteral("Cancel"), this);
@@ -151,8 +180,13 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	 * held in one hand, and the reachable part of the screen is the
 	 * bottom, not its right-hand corner.
 	 */
-	outer->addWidget(m_save);
-	outer->addWidget(cancel);
+	QWidget *actions = new QWidget(this);
+	QVBoxLayout *action_row = new QVBoxLayout(actions);
+	action_row->setContentsMargins(16, 8, 16, 16);
+	action_row->setSpacing(8);
+	action_row->addWidget(m_save);
+	action_row->addWidget(cancel);
+	outer->addWidget(actions, 0);
 
 	connect(m_save, &QPushButton::clicked, this, [this] {
 		const bssh_profile_t edited = profile();

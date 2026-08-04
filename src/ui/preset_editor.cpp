@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QScroller>
+#include <QScrollArea>
 #include <QVBoxLayout>
 
 #include "model/profile_store.h"
@@ -59,6 +60,31 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 	m_presets->setTextElideMode(Qt::ElideRight);
 
 	QVBoxLayout *right = new QVBoxLayout();
+
+	/*
+	 * The fields scroll; the buttons do not.
+	 *
+	 * Sixteen settings, a font picker and a colour strip need 1063px of
+	 * height, and a phone has 640. Without anywhere to scroll, Qt squeezes
+	 * the rows past their minimums until they overlap -- which is what a
+	 * device showed: the scrollback spin box drawn across the bell
+	 * checkbox. Save and Delete stay pinned rather than becoming something
+	 * to scroll down to.
+	 */
+	QWidget *content = new QWidget(this);
+	QVBoxLayout *fields = new QVBoxLayout(content);
+	fields->setContentsMargins(0, 0, 0, 0);
+
+	QScrollArea *scroll = new QScrollArea(this);
+	scroll->setWidget(content);
+	scroll->setWidgetResizable(true);
+	scroll->setFrameShape(QFrame::NoFrame);
+
+	/* Sideways scrolling would mean something above is too wide, which is
+	 * a bug rather than something to let the user work around. */
+	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	QScroller::grabGesture(scroll->viewport(), QScroller::LeftMouseButtonGesture);
+	right->addWidget(scroll, 1);
 
 	if (m_touch) {
 		/*
@@ -155,9 +181,9 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 	form->addRow(QString(), m_clipboard);
 	form->addRow(QStringLiteral("On connect"), m_on_connect);
 	form->addRow(QStringLiteral("Key row"), m_key_row);
-	right->addLayout(form);
+	fields->addLayout(form);
 
-	right->addWidget(m_font);
+	fields->addWidget(m_font);
 
 	/*
 	 * The propagation count, always visible rather than only in the
@@ -167,9 +193,9 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, bool touch, QW
 	 */
 	m_usage = new QLabel(this);
 	m_usage->setWordWrap(true);
-	right->addWidget(m_usage);
+	fields->addWidget(m_usage);
 
-	right->addStretch(1);
+	fields->addStretch(1);
 
 	/*
 	 * sec 10.5. A preset is the one thing in this app that is safe to send

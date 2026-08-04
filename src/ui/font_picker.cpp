@@ -126,6 +126,19 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	m_preview->setFrameShape(QFrame::StyledPanel);
 	m_preview->setMargin(8);
 	m_preview->setMinimumHeight(48);
+
+	/*
+	 * Allowed to wrap, which is what keeps this picker off a phone's
+	 * right-hand edge.
+	 *
+	 * The sample is one long monospace line, and a QLabel asks for room
+	 * for all of it -- 360px of it, exactly a narrow phone, so the picker
+	 * alone consumed the whole width and both editors that EMBED it
+	 * demanded more than the screen once their label column was added.
+	 * Wrapping costs a second line at a narrow width and keeps every
+	 * glyph visible, which clipping would not.
+	 */
+	m_preview->setWordWrap(true);
 	/*
 	 * The terminal's colours, not the dialog's: a font is being judged for
 	 * how it reads as terminal output, and light-on-dark is a different

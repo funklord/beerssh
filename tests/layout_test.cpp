@@ -1,7 +1,17 @@
+#include <QScrollArea>
 #include <QSignalSpy>
 #include <QtTest>
 
 #include "model/profile.h"
+#include <QTemporaryDir>
+#include "model/profile_store.h"
+#include "ui/host_list.h"
+#include "ui/host_editor.h"
+#include "ui/preset_editor.h"
+#include "ui/app_settings_view.h"
+#include "ui/licences_view.h"
+#include "ui/font_picker.h"
+#include "ui/password_prompt.h"
 #include "layout_test.h"
 #include "model/session.h"
 #include "model/session_registry.h"
@@ -310,4 +320,130 @@ void layout_test::panes_collapse_to_tabs_and_come_back() {
 
 	QCOMPARE(panes.pane_count(), 2);
 	QVERIFY(!layout.is_collapsed());
+}
+
+namespace {
+
+/*
+ * The narrow phone width sec 8.2 designs to. Asked of the MINIMUM size
+ * hint: that is the width below which a layout refuses to go, so anything
+ * larger is content the user cannot reach on a screen this size.
+ */
+const int BSSH_PHONE_DP = 360;
+const int BSSH_PHONE_TALL_DP = 640;
+
+QString too_wide(const QString &name, const QWidget *widget)
+{
+	return QStringLiteral("%1 demands %2px on a %3px screen")
+		      .arg(name).arg(widget->minimumSizeHint().width()).arg(BSSH_PHONE_DP);
+}
+
+/*
+ * Anything that ends up beyond the right edge once the surface is squeezed
+ * to a phone. Reported by name, because "something is off-screen" is not
+ * a thing anybody can act on.
+ */
+QString overflowing_child(const QWidget *root)
+{
+	for (const QWidget *child : root->findChildren<QWidget *>()) {
+		if (!child->isVisible() || child->width() == 0) continue;
+
+		const QPoint corner = child->mapTo(root, QPoint(child->width() - 1, 0));
+		if (corner.x() > BSSH_PHONE_DP) {
+			return QStringLiteral("%1 \"%2\" ends at %3px")
+				      .arg(QString::fromLatin1(child->metaObject()->className()),
+				            child->accessibleName().isEmpty() ? child->objectName()
+				                                               : child->accessibleName())
+				      .arg(corner.x());
+		}
+	}
+	return QString();
+}
+
+void check_fits(const QString &name, QWidget *widget)
+{
+	widget->resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	widget->show();
+	QVERIFY2(QTest::qWaitForWindowExposed(widget), qPrintable(name));
+
+	/*
+	 * Height is the other half, and it fails differently: too WIDE puts
+	 * content off the right edge, too TALL makes Qt squeeze rows past
+	 * their minimums until they draw on top of each other. The host
+	 * editor wanted 821px of a 640px screen and the preset editor 1063,
+	 * and both overlapped on a device rather than clipping.
+	 *
+	 * Asked as one question -- does the MINIMUM fit -- rather than "does
+	 * it fit or is there a scroll area somewhere". The first version
+	 * asked the second, and passed a deliberately broken preset editor:
+	 * the scroll area was still a child of the page, just no longer the
+	 * thing the fields were inside, and findChildren cannot tell the
+	 * difference. A working scroll area drops the page's own minimum to
+	 * what its frame needs -- 1063px became 305 -- so the simpler
+	 * question is also the stronger one.
+	 */
+	QVERIFY2(widget->minimumSizeHint().height() <= BSSH_PHONE_TALL_DP,
+		        qPrintable(QStringLiteral("%1 needs %2px of a %3px screen, so its rows "
+		                                   "will be squeezed until they overlap")
+		                           .arg(name).arg(widget->minimumSizeHint().height())
+		                           .arg(BSSH_PHONE_TALL_DP)));
+
+	QVERIFY2(widget->minimumSizeHint().width() <= BSSH_PHONE_DP,
+		        qPrintable(too_wide(name, widget)));
+
+	const QString overflow = overflowing_child(widget);
+	QVERIFY2(overflow.isEmpty(), qPrintable(QStringLiteral("%1: %2").arg(name, overflow)));
+}
+
+} /* namespace */
+
+void layout_test::every_touch_surface_fits_a_phone()
+{
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	/*
+	 * A host with the kind of length people really have. An empty store
+	 * would let a list that cannot fit a real entry pass, which is the
+	 * mistake the password prompt's first test nearly made.
+	 */
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("build server (europe)");
+	profile.host = QStringLiteral("build.internal.example.com");
+	profile.user = QStringLiteral("nabbe.testing");
+	profile.port = 2299;
+	profile.identity_file = QStringLiteral("~/.ssh/id_ed25519_work");
+	profile.proxy_jump = QStringLiteral("nabbe@bastion.internal.example.com:2222");
+	QVERIFY(store.save(profile) != 0);
+
+	{
+		bssh_host_list list(&store);
+		check_fits(QStringLiteral("host list"), &list);
+	}
+	{
+		bssh_host_editor editor(&store);
+		editor.set_profile(profile);
+		check_fits(QStringLiteral("host editor"), &editor);
+	}
+	{
+		bssh_preset_editor editor(&store, true);
+		check_fits(QStringLiteral("preset editor"), &editor);
+	}
+	{
+		bssh_app_settings_view settings;
+		check_fits(QStringLiteral("settings"), &settings);
+	}
+	{
+		bssh_licences_view licences;
+		check_fits(QStringLiteral("licences"), &licences);
+	}
+	{
+		bssh_font_picker picker;
+		check_fits(QStringLiteral("font picker"), &picker);
+	}
+	{
+		bssh_password_prompt prompt(QStringLiteral("nabbe.testing@build.internal.example.com:2299"),
+		                             true);
+		check_fits(QStringLiteral("password prompt"), &prompt);
+	}
 }
