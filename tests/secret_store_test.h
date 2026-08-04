@@ -16,6 +16,24 @@ class secret_store_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	/*
+	 * sec 11 asks the UI to name the backend and say whether it is
+	 * hardware-backed, in as many words and without softening. Everything
+	 * needed for that existed from the start and nothing showed it: the
+	 * one place backend_name() appeared was the unlock prompt, which the
+	 * keyring backend never raises -- so the users who most needed to
+	 * know were the ones who could not find out.
+	 */
+	void the_settings_page_names_the_secret_backend();
+
+	/*
+	 * And shows all of it. A wrapped label in a form's field column is
+	 * clipped rather than grown -- the layout asks it for a height before
+	 * it knows the width it will get -- which on a phone cut the backend
+	 * name off at "passphrase-encrypted file (no". Losing the end of that
+	 * particular label changes what it says.
+	 */
+	void no_setting_is_cut_off_at_a_phone_width();
 	void stores_and_loads_a_secret();
 	void the_wrong_passphrase_is_rejected_not_guessed_at();
 	void the_file_does_not_contain_the_secret();

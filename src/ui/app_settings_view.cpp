@@ -9,6 +9,7 @@
 
 #include "model/app_settings.h"
 #include "platform/platform.h"
+#include "platform/secret_store.h"
 #include "ui/theme.h"
 
 bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
@@ -79,6 +80,68 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "it falls below the readable minimum."));
 	if (touch) m_raise_contrast->setMinimumHeight(48);
 	form->addRow(QString(), m_raise_contrast);
+
+	/*
+	 * Where stored passwords actually live (sec 11), stated rather than
+	 * implied.
+	 *
+	 * sec 11 asks for this in as many words: a hardware-backed keystore
+	 * and a file encrypted with a passphrase the user typed are not
+	 * equivalent security, and averaging them into a reassuring
+	 * "encrypted" is how somebody ends up trusting the weaker one. The
+	 * store has said which it is since it was written -- backend_name()
+	 * and is_hardware_backed() exist for this -- and nothing showed it.
+	 * The only place it appeared was the unlock prompt, which the keyring
+	 * backend never raises, so the users who most needed to know were the
+	 * ones who could not find out.
+	 *
+	 * Read once, at build: the backend is chosen at startup and does not
+	 * change under a running app.
+	 */
+	const bssh_secret_store *store = bssh_secret_store::instance();
+	if (store) {
+		QLabel *backend = new QLabel(store->backend_name(), this);
+		backend->setWordWrap(true);
+		backend->setTextInteractionFlags(Qt::TextSelectableByMouse);
+
+		/*
+		 * A wrapped label in a form's field column is clipped rather
+		 * than grown -- the layout asks it for a height before it knows
+		 * the width it will get. On a phone that cut this one off at
+		 * "passphrase-encrypted file (no", and losing the end of that
+		 * particular label changes what it says.
+		 */
+		backend->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
+		backend->setMinimumHeight(backend->sizeHint().height());
+		form->addRow(QStringLiteral("Stored passwords"), backend);
+
+		/*
+		 * Derived from what the store reports, never from which class it
+		 * is. needs_passphrase() is the honest dividing line: a store the
+		 * user has to unlock by typing something is only as strong as
+		 * that something, whoever wrote it.
+		 */
+		QString detail;
+		if (store->needs_passphrase()) {
+			detail = QStringLiteral(
+			        "Only as safe as the passphrase you choose and as this machine: "
+			        "anyone who can read the file and guess the passphrase can read "
+			        "what is in it.");
+		} else if (store->is_hardware_backed()) {
+			detail = QStringLiteral(
+			        "Held in hardware that will not hand the key back, and unlocked "
+			        "the way this device is.");
+		} else {
+			detail = QStringLiteral(
+			        "Held by the system and unlocked along with your session. Not "
+			        "hardware-backed.");
+		}
+
+		QLabel *backend_note = new QLabel(detail, this);
+		backend_note->setWordWrap(true);
+		form->addRow(QString(), backend_note);
+	}
+
 	outer->addLayout(form);
 
 

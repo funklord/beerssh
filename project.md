@@ -1631,6 +1631,16 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   fallback deserves to know their keys are only as safe as the passphrase and
   the machine. Surface it in settings; do not average the two into a reassuring
   "encrypted".
+  **Built**, and it was the last piece: `backend_name()` and
+  `is_hardware_backed()` existed from the start and nothing showed them. The one
+  place the name appeared was the unlock prompt — which the keyring backend
+  never raises — so the users who most needed to know were the ones who could
+  not find out. "This device" now names the backend verbatim and says what it
+  means, chosen from what the store REPORTS rather than from which class it is:
+  `needs_passphrase()` is the honest dividing line, since a store the user
+  unlocks by typing something is only as strong as that something. The test
+  asserts the name appears unsoftened, and fails if it is replaced with
+  "Encrypted".
 - Support key formats: OpenSSH, PEM; passphrase-protected keys; optional
   **biometric unlock** — `BiometricPrompt` on Android, the platform equivalent
   where one exists on desktop, and simply absent (not faked) where it doesn't.
@@ -2027,7 +2037,8 @@ background).
    **Mostly built:** registry, `bssh_session` owning transport + emulator +
    router, a tab bar rebuilt from the registry, and titles falling back
    OSC → profile name → target. Layout persistence and per-tab status dots
-   are still open.
+   landed too — `save_layout`/`restore_layout` and `bssh_tab_status::dot()` —
+   and this line went on saying they were open long after.
 9. **M8 – Adaptive splits.** `bssh_layout_manager`, size classes, 2/4-pane
    splits, focus indication, collapse-to-tabs on shrink, per-pane
    `window-change`. Desktop window-drag resizing exercises this hardest — use it.
@@ -2106,8 +2117,9 @@ background).
     follows a preset, and invisible because the touch front door had **no way
     to edit an existing host at all**. Both editors now call one
     `bssh_font_override_badge()`, so the answer cannot depend on which front
-    door you opened. Still open: import/export through the UI (§10.5; the
-    format is now INI, the same one the store uses).
+    door you opened. Preset import/export through the UI landed as well
+    (§10.5) — the buttons are on the preset editor and the format is INI, the
+    same one the store uses — and this line went on calling it open.
     **The settings now act.** `term` reaches the PTY request, `compression`
     the handshake, `keepalive_seconds` the transport, `scrollback_lines` the
     emulator, `cursor_style`/`cursor_blink` the renderer, `bell_enabled` the

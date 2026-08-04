@@ -1,9 +1,11 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QLabel>
 #include <QtTest>
 
 #include "platform/secret_store.h"
+#include "ui/app_settings_view.h"
 #include "secret_store_test.h"
 
 /*
@@ -186,5 +188,64 @@ void secret_store_test::the_selector_always_returns_a_working_store() {
 		QVERIFY(selected->backend_name().contains(QStringLiteral("passphrase")));
 	} else {
 		QVERIFY(selected->is_unlocked());
+	}
+}
+
+void secret_store_test::the_settings_page_names_the_secret_backend()
+{
+	const bssh_secret_store *store = bssh_secret_store::instance();
+	QVERIFY(store);
+
+	bssh_app_settings_view view;
+
+	/*
+	 * The name VERBATIM. Asserting on a substring, or on "some label
+	 * mentions a keyring", would pass a page that softened the wording --
+	 * which is the failure sec 11 actually warns about, not a missing
+	 * label.
+	 */
+	bool named = false;
+	bool explained = false;
+	for (const QLabel *label : view.findChildren<QLabel *>()) {
+		if (label->text() == store->backend_name()) named = true;
+
+		/*
+		 * And what it MEANS. A passphrase-derived store that says only
+		 * its own name reads like reassurance to anyone who does not
+		 * already know what it implies.
+		 */
+		if (store->needs_passphrase() && label->text().contains(QStringLiteral("passphrase"))
+		     && label->text().contains(QStringLiteral("machine"))) {
+			explained = true;
+		}
+		if (!store->needs_passphrase() && label->text().contains(QStringLiteral("hardware"))) {
+			explained = true;
+		}
+	}
+
+	QVERIFY2(named, "the settings page must show the backend's own name, unsoftened");
+	QVERIFY2(explained, "and say what that means for the passwords in it");
+}
+
+void secret_store_test::no_setting_is_cut_off_at_a_phone_width()
+{
+	bssh_app_settings_view view;
+	view.resize(360, 640);
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+	/*
+	 * Asked of every wrapped label rather than of the one that was
+	 * wrong: they are all explanatory text on a narrow screen, and the
+	 * next one added would fail the same way for the same reason.
+	 */
+	for (QLabel *label : view.findChildren<QLabel *>()) {
+		if (!label->isVisible() || !label->wordWrap() || label->text().isEmpty()) continue;
+
+		const int needed = label->heightForWidth(label->width());
+		QVERIFY2(label->height() >= needed,
+		          qPrintable(QStringLiteral("cut off: \"%1\" has %2px for %3px of text")
+		                             .arg(label->text().left(40))
+		                             .arg(label->height()).arg(needed)));
 	}
 }
