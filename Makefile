@@ -677,11 +677,34 @@ clean:
 	@if [ -f $(TEST_BUILD_DIR)/Makefile ]; then $(MAKE) -C $(TEST_BUILD_DIR) clean; fi
 	@if [ -f $(ANDROID_BUILD_DIR)/Makefile ]; then $(MAKE) -C $(ANDROID_BUILD_DIR) clean; fi
 
-# The build dirs are ours: this Makefile created them and qmake owns their
-# contents, so removing them is a named delete, not a wildcard sweep.
+# Removes a whole directory, having first checked it is one we could
+# plausibly have made.
+#
+# The build dirs are ours -- this Makefile created them and qmake owns
+# their contents -- so removing them wholesale is a named delete rather
+# than a wildcard sweep. That argument holds only for the path actually
+# passed, and `rm -rf $(VAR)` is exactly how a clean target eats something
+# it should not: a variable that is unset, mistyped, or overridden on the
+# command line with an absolute path. `make veryclean BUILD_DIR=$$HOME`
+# should not be a way to lose a home directory.
+#
+# So each one is checked before it goes: relative, and with no parent
+# escape. An empty variable disappears in the shell's word splitting and
+# removes nothing, which is the safe direction to fail in.
+define bssh_remove_tree
+	@for dir in $(1); do \
+		case "$$dir" in \
+			/*) echo "veryclean: refusing to remove the absolute path $$dir" >&2; exit 1 ;; \
+			*..*) echo "veryclean: refusing to remove $$dir -- it escapes the tree" >&2; exit 1 ;; \
+			.|./) echo "veryclean: refusing to remove the working directory" >&2; exit 1 ;; \
+		esac; \
+		rm -rf "$$dir"; \
+	done
+endef
+
 veryclean: clean
-	rm -rf $(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR) $(VTERM_BUILD_DIR) \
-	        build-vterm-android $(SHOT_DIR)
+	$(call bssh_remove_tree,$(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR) \
+	        $(VTERM_BUILD_DIR) build-vterm-android $(SHOT_DIR))
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
 	fi
