@@ -4,6 +4,8 @@
 #include <QPoint>
 #include <QWidget>
 
+#include "ui/long_press.h"
+
 #include "model/profile.h"
 
 class QListWidget;
@@ -72,6 +74,7 @@ private:
 
 	bssh_profile_store *m_store;
 	QListWidget *m_list;
+	bssh_long_press *m_long_press;
 	QToolButton *m_add;
 	QToolButton *m_menu;
 };

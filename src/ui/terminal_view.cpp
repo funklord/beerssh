@@ -66,7 +66,6 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_click_count(0),
       m_last_click_line(-1),
       m_selecting(false),
-      m_long_press_menu(false),
       m_long_press(nullptr),
       m_selection_anchor_line(-1),
       m_selection_anchor_col(0),
@@ -101,16 +100,16 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	set_colour_scheme(QString());
 
 	/*
-	 * The press-and-hold timer. Half a second is Android's own long-press
-	 * threshold, and matching it is what makes the gesture feel like the
-	 * rest of the system rather than like this app's idea of a hold.
+	 * Press-and-hold opens the menu where there is no right button to
+	 * open it with. The gesture itself is bssh_long_press, shared with
+	 * the host list, because Qt does not provide it and writing the timer
+	 * out twice is the shape this project keeps unpicking.
 	 */
-	m_long_press = new QTimer(this);
-	m_long_press->setSingleShot(true);
-	m_long_press->setInterval(500);
-	connect(m_long_press, &QTimer::timeout, this, [this] {
-		if (!m_long_press_menu) return;
-		emit context_menu_requested(mapToGlobal(m_long_press_at));
+	m_long_press = new bssh_long_press(this, this);
+	connect(m_long_press, &bssh_long_press::triggered, this, [this](const QPoint &at) {
+		/* The same guard the right button gets. */
+		if (m_emulator && m_emulator->mouse_reporting()) return;
+		emit context_menu_requested(at);
 	});
 
 	const bssh_platform *platform = bssh_platform::instance();
@@ -899,8 +898,7 @@ bool bssh_terminal_view::has_selection() const {
 }
 
 void bssh_terminal_view::set_long_press_menu(bool enabled) {
-	m_long_press_menu = enabled;
-	if (!enabled) m_long_press->stop();
+	m_long_press->set_enabled(enabled);
 }
 
 void bssh_terminal_view::select_all() {
@@ -1059,31 +1057,11 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	m_selection_focus_line = line;
 	m_selection_focus_col = col;
 
-	/*
-	 * A hold that has not moved is a request for the menu; one that moves
-	 * is a selection. Started here, cancelled by the first drag or by the
-	 * release, so the two can never both happen.
-	 */
-	if (m_long_press_menu) {
-		m_long_press_at = event->pos();
-		m_long_press->start();
-	}
-
 	update();
 	event->accept();
 }
 
 void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
-	/*
-	 * Any real movement means a drag, not a hold. A few pixels of slop,
-	 * because a thumb never holds perfectly still and cancelling on one
-	 * pixel would make the gesture impossible to perform.
-	 */
-	if (m_long_press->isActive()
-	     && (event->pos() - m_long_press_at).manhattanLength() > 12) {
-		m_long_press->stop();
-	}
-
 	if (!m_selecting) {
 		QWidget::mouseMoveEvent(event);
 		return;
@@ -1101,9 +1079,6 @@ void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
-	/* Released before the hold matured: an ordinary click. */
-	m_long_press->stop();
-
 	if (m_emulator && m_emulator->mouse_reporting()
 	    && !event->modifiers().testFlag(Qt::ShiftModifier)) {
 		m_emulator->send_mouse_button(1, false, 0);

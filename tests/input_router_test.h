@@ -20,6 +20,16 @@ class input_router_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	/*
+	 * Press-and-hold (sec 6.4, sec 8.3). Qt does not provide it and does
+	 * not synthesise a context-menu event from it on Android, so this is
+	 * the gesture both the terminal and the host list depend on.
+	 */
+	void a_hold_fires_once_it_has_been_held();
+	void a_hold_that_moves_is_a_drag();
+	void a_hold_released_early_is_a_click();
+	void a_hold_does_nothing_until_it_is_enabled();
+	void a_matured_hold_swallows_its_own_release();
 	void plain_characters_pass_through();
 	void ctrl_c_is_the_interrupt_byte();
 	void ctrl_letters_are_case_insensitive();

@@ -1,3 +1,4 @@
+#include "platform/platform.h"
 #include "ui/host_list.h"
 
 #include "ui/ssh_config_import.h"
@@ -157,6 +158,27 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	m_list->setContextMenuPolicy(Qt::CustomContextMenu);
 	connect(m_list, &QListWidget::customContextMenuRequested,
 	         this, &bssh_host_list::on_row_menu);
+
+	/*
+	 * And by press-and-hold, which is what sec 8.3 has always said and
+	 * what did not work: Qt raises customContextMenuRequested from a
+	 * right-click, and does NOT raise it from a long press on Android --
+	 * checked on a device, where holding a row opened the host as though
+	 * it had been tapped. So the touch half of "long-press or right-click"
+	 * had no implementation at all.
+	 *
+	 * Filtered on the VIEWPORT, which is where a scrolling view delivers
+	 * its mouse events, and enabled only where touch is the primary
+	 * input: with a pointer, press-and-hold on a list row means nothing
+	 * and should keep meaning nothing.
+	 */
+	m_long_press = new bssh_long_press(m_list->viewport(), this);
+	m_long_press->set_enabled(bssh_platform::instance()
+	                           && bssh_platform::instance()->is_touch_primary());
+
+	connect(m_long_press, &bssh_long_press::triggered, this, [this](const QPoint &at) {
+		on_row_menu(m_list->viewport()->mapFromGlobal(at));
+	});
 
 	reload();
 }

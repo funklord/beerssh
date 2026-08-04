@@ -951,7 +951,9 @@ collapse/restore is bookkeeping, not surgery.
   the profile name; a small **status dot** per tab (connected / reconnecting /
   disconnected / bell-rang-while-away). Long-press (touch) or right-click
   (desktop) for close/duplicate/move-to-split; desktop also gets a middle-click
-  close and drag-to-reorder.
+  close and drag-to-reorder. The host list's long-press is **built** (see §6.4 —
+  Qt does not provide the gesture, so it is `bssh_long_press`); the **tab bar's
+  is not**, and right-click is still the only way to reach that menu.
 - **Focus indicator:** the focused pane needs an unmistakable visual — a colored
   border or dimmed inactive panes. Non-negotiable for safety (§6.3), and *more*
   important on desktop, not less: four panes fit on a monitor, and a pointer
@@ -1092,6 +1094,21 @@ same three verbs from a long press, with much larger targets, so the rows grow
 to §6.2's 48dp floor and the keyboard shortcuts drop off the labels — they are
 telling somebody with no keyboard which chord to press. Which verbs they are,
 and in what order, does not change between the two.
+
+**Press-and-hold is ours, because Qt does not provide it.** Qt raises
+`customContextMenuRequested` from a right-click and does **not** synthesise a
+context-menu event from a long press on Android — checked on a device, where
+holding a host-list row simply opened that host. So the touch half of §8.3's
+"long-press (touch) or right-click (desktop)" had no implementation at all,
+here or on the host list, for as long as that sentence has been in this
+document. `bssh_long_press` is one event filter used by both.
+Two things it had to learn on a device. **It fires when the finger LIFTS, not
+when the hold matures**: a popup opened under a finger that is still down is
+dismissed by that finger's own release, so the menu appeared and vanished
+inside the same gesture and every screenshot showed nothing. And **it consumes
+that release**, or the widget behind it treats the gesture as a click too —
+which is how holding a host row opened the host, and how holding in the
+terminal left a selection behind the menu.
 
 **Switchable, defaulting per device** (`Terminal menu` under This device):
 Automatic / Pointer-sized / Touch-sized, the same three-state shape the key row

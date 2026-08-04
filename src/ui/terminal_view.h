@@ -15,7 +15,7 @@
 
 class QMouseEvent;
 class QPainter;
-class QTimer;
+#include "ui/long_press.h"
 class QWheelEvent;
 class bssh_emulator;
 class bssh_input_router;
@@ -300,9 +300,7 @@ private:
 	qint64 m_last_click_line;
 
 	bool m_selecting;
-	bool m_long_press_menu;
-	QTimer *m_long_press;
-	QPoint m_long_press_at;
+	bssh_long_press *m_long_press;
 	qint64 m_selection_anchor_line;
 	int m_selection_anchor_col;
 	qint64 m_selection_focus_line;

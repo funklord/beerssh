@@ -5,6 +5,7 @@
 
 #include "input/input_router.h"
 #include "ui/key_row_layout.h"
+#include "ui/long_press.h"
 #include "input_router_test.h"
 #include "term/emulator.h"
 #include "ui/key_row.h"
@@ -410,4 +411,141 @@ void input_router_test::a_chord_key_sends_one_press_not_a_sticky_modifier() {
 	 * the user was trying to create.
 	 */
 	QCOMPARE(router.sticky_modifiers(), quint8(bssh_emulator::MOD_NONE));
+}
+
+namespace {
+
+/* A press, a move and a release, delivered where the filter is watching. */
+void press_at(QWidget *target, const QPoint &at) {
+	QMouseEvent event(QEvent::MouseButtonPress, at, target->mapToGlobal(at),
+		                 Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(target, &event);
+}
+
+void move_to(QWidget *target, const QPoint &at) {
+	QMouseEvent event(QEvent::MouseMove, at, target->mapToGlobal(at),
+		                 Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(target, &event);
+}
+
+void release_at(QWidget *target, const QPoint &at) {
+	QMouseEvent event(QEvent::MouseButtonRelease, at, target->mapToGlobal(at),
+		                 Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(target, &event);
+}
+
+} /* namespace */
+
+void input_router_test::a_hold_fires_once_it_has_been_held() {
+	QWidget target;
+	target.resize(200, 200);
+
+	bssh_long_press hold(&target);
+	hold.set_enabled(true);
+	QSignalSpy fired(&hold, &bssh_long_press::triggered);
+
+	press_at(&target, QPoint(40, 40));
+
+	/* Not yet: a hold that fires immediately is a click. */
+	QCOMPARE(fired.count(), 0);
+
+	/*
+	 * Nor when the hold matures, which is the part a device taught. The
+	 * popup would open under a finger that is still down and be dismissed
+	 * by that finger's own release.
+	 */
+	QTest::qWait(700);
+	QCOMPARE(fired.count(), 0);
+
+	release_at(&target, QPoint(40, 40));
+	QCOMPARE(fired.count(), 1);
+
+	/*
+	 * Global coordinates, because what opens is a popup and a popup is
+	 * placed on the screen rather than in the widget.
+	 */
+	QCOMPARE(fired.at(0).at(0).toPoint(), target.mapToGlobal(QPoint(40, 40)));
+}
+
+void input_router_test::a_hold_that_moves_is_a_drag() {
+	QWidget target;
+	target.resize(200, 200);
+
+	bssh_long_press hold(&target);
+	hold.set_enabled(true);
+	QSignalSpy fired(&hold, &bssh_long_press::triggered);
+
+	press_at(&target, QPoint(40, 40));
+
+	/*
+	 * A thumb never holds perfectly still, so a few pixels must not
+	 * cancel it -- and a real drag must. Both, because getting the slop
+	 * wrong in either direction breaks one of selecting and holding.
+	 */
+	move_to(&target, QPoint(44, 42));
+	QTest::qWait(700);
+	release_at(&target, QPoint(44, 42));
+	QCOMPARE(fired.count(), 1);
+
+	QSignalSpy again(&hold, &bssh_long_press::triggered);
+	press_at(&target, QPoint(40, 40));
+	move_to(&target, QPoint(120, 40));
+	QTest::qWait(700);
+	release_at(&target, QPoint(120, 40));
+	QCOMPARE(again.count(), 0);
+}
+
+void input_router_test::a_hold_released_early_is_a_click() {
+	QWidget target;
+	target.resize(200, 200);
+
+	bssh_long_press hold(&target);
+	hold.set_enabled(true);
+	QSignalSpy fired(&hold, &bssh_long_press::triggered);
+
+	press_at(&target, QPoint(40, 40));
+	release_at(&target, QPoint(40, 40));
+	QTest::qWait(700);
+
+	QCOMPARE(fired.count(), 0);
+}
+
+void input_router_test::a_hold_does_nothing_until_it_is_enabled() {
+	QWidget target;
+	target.resize(200, 200);
+
+	bssh_long_press hold(&target);
+	QSignalSpy fired(&hold, &bssh_long_press::triggered);
+
+	/*
+	 * Off by default. With a pointer, press-and-hold means "start a
+	 * selection and think about it", and it has always meant that.
+	 */
+	QVERIFY(!hold.is_enabled());
+	press_at(&target, QPoint(40, 40));
+	QTest::qWait(700);
+	QCOMPARE(fired.count(), 0);
+}
+
+void input_router_test::a_matured_hold_swallows_its_own_release() {
+	QWidget target;
+	target.resize(200, 200);
+
+	bssh_long_press hold(&target);
+	hold.set_enabled(true);
+
+	press_at(&target, QPoint(40, 40));
+	QTest::qWait(700);
+
+	/*
+	 * The release is consumed, so the widget behind the filter does not
+	 * also see a click. Without this, holding a row in the host list
+	 * opened that host as well as offering the menu, and holding in the
+	 * terminal left a selection behind it.
+	 */
+	QMouseEvent release(QEvent::MouseButtonRelease, QPoint(40, 40),
+	                     target.mapToGlobal(QPoint(40, 40)),
+	                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(&target, &release);
+	QVERIFY2(release.isAccepted(), "a matured hold must swallow its release");
 }
