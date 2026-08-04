@@ -1,0 +1,44 @@
+Reach the fallback for DECRQM on modes libvterm does not model
+
+request_dec_mode() answers an unrecognised mode with "0" -- not
+recognised -- and returns, so vterm_screen_set_unrecognised_fallbacks
+never sees the query. This is the same defect 0002 fixed for
+set_dec_mode, on the other half of the same feature, and in practice it
+undoes that fix: 0002 lets an application implement DEC 2026 on top of
+libvterm, and this then tells every client that asks that the terminal
+does not support it.
+
+That is worse than not answering. A client probes with DECRQM precisely
+so it can use a feature without guessing from TERM; told "0" it takes the
+terminal at its word, falls back, and the implementation behind it is
+never reached.
+
+The fallback is handed the query in its own shape -- leader "?",
+intermediate "$", command 'p' -- so an application matches on exactly
+what it would have matched on had the sequence arrived unrecognised in
+the first place. Only when the fallback declines does libvterm send its
+own "0".
+
+Applied on top of 0001-0003 at build time (see the top-level Makefile);
+upstream is otherwise untouched. Worth sending upstream alongside 0002.
+
+--- a/src/state.c
++++ b/src/state.c
+@@ -938,6 +949,17 @@ static void request_dec_mode(VTermState *state, int num)
+       break;
+ 
+     default:
++      /* Give the application-level fallback a chance before answering
++       * "not recognised". A mode libvterm does not model may still be
++       * implemented above it -- 0002 exists so that it can be -- and
++       * answering 0 here tells every client that it is not, which is
++       * the one answer that stops them using it. */
++      if(state->fallbacks && state->fallbacks->csi) {
++        long fallback_args[1] = { num };
++        if((*state->fallbacks->csi)("?", fallback_args, 1, "$", 'p', state->fbdata))
++          return;
++      }
++
+       vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;%d$y", num, 0);
+       return;
+   }

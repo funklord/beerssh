@@ -63,6 +63,7 @@ void bssh_session::set_settings(const QJsonObject &settings) {
 		m_transport->set_keepalive(
 		        m_settings.value(QStringLiteral("keepalive_seconds")).toInt());
 		m_transport->set_term(m_settings.value(QStringLiteral("term")).toString());
+		m_emulator->set_term_name(m_settings.value(QStringLiteral("term")).toString());
 		m_transport->set_compression(
 		        m_settings.value(QStringLiteral("compression")).toBool());
 		m_transport->set_identity_file(m_profile.identity_file);

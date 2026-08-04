@@ -617,3 +617,92 @@ void emulator_test::a_line_written_then_immediately_scrolled_lands_intact() {
 	          qPrintable(QStringLiteral("the scrollback filed \"%1\" instead of the line that "
 	                                     "was actually on row 0").arg(filed)));
 }
+
+void emulator_test::decrqm_answers_for_modes_it_knows() {
+	bssh_emulator emulator(20, 4);
+
+	/*
+	 * 2026 is the mode this terminal implements and libvterm does not
+	 * model, and it is the one clients actually probe. "2" means
+	 * understood and currently off, which is how a client learns
+	 * synchronised output is available before it uses it.
+	 *
+	 * This is the whole reason vterm-patches/0004 exists: without it
+	 * libvterm answers the query itself with "0 -- not recognised",
+	 * telling every client the terminal lacks a feature it has.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[?2026$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2026;2$y"));
+
+	/* And "1" once it is on. */
+	emulator.feed(QByteArrayLiteral("\x1b[?2026h\x1b[?2026$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2026;1$y"));
+}
+
+void emulator_test::decrqm_says_nothing_it_cannot_stand_behind() {
+	bssh_emulator emulator(20, 4);
+
+	/*
+	 * Everything libvterm models is libvterm's to answer, and it does so
+	 * from the state it is actually keeping -- a second opinion here
+	 * would be two places computing one thing. These assert that the
+	 * answers come out right, not which layer produced them.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[?2004$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2004;2$y"));
+
+	emulator.feed(QByteArrayLiteral("\x1b[?2004h\x1b[?2004$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2004;1$y"));
+
+	emulator.feed(QByteArrayLiteral("\x1b[?25$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?25;1$y"));
+
+	/*
+	 * Mouse reporting answers for the mode that is actually set rather
+	 * than for "some mouse mode is on": a terminal that says 1000 while
+	 * 1003 is running has told the remote something worse than nothing.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[?1003h"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1003$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1003;1$y"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1000$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1000;2$y"));
+
+	/*
+	 * And a mode nobody here models is answered "0 -- not recognised",
+	 * which is the useful answer: a client told that knows to stop
+	 * asking, where one told "reset" would set the mode and then wonder
+	 * why nothing happened.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[?7727$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?7727;0$y"));
+}
+
+void emulator_test::xtgettcap_reports_what_this_terminal_is() {
+	bssh_emulator emulator(20, 4);
+	emulator.set_term_name(QStringLiteral("xterm-256color"));
+
+	/*
+	 * "TN" is 544E in hex, and the answer carries the name back hex-coded
+	 * too. It must be the TERM the app actually told the remote: naming
+	 * itself one thing in the environment and another when asked is worse
+	 * than not answering.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1bP+q544E\x1b\\"));
+	const QByteArray tn = emulator.take_output();
+	QVERIFY2(tn.startsWith(QByteArrayLiteral("\x1bP1+r544E=")), tn.constData());
+	QVERIFY2(tn.contains(QByteArray("xterm-256color").toHex().toUpper()), tn.constData());
+
+	/* Truecolor, which is true of this terminal wherever it runs. */
+	emulator.feed(QByteArrayLiteral("\x1bP+q524742\x1b\\"));   /* RGB */
+	QVERIFY2(emulator.take_output().startsWith(QByteArrayLiteral("\x1bP1+r524742=")),
+	          "RGB must be answered");
+
+	/*
+	 * And a capability this terminal will not vouch for comes back as
+	 * invalid rather than as a guess. "bce" is the trap: most terminals
+	 * like this one have it, and a client told so will use it.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1bP+q626365\x1b\\"));   /* bce */
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1bP0+r626365\x1b\\"));
+}

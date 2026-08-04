@@ -37,6 +37,23 @@ struct bssh_emulator_private {
 	bssh_emulator *owner;
 	int modify_other_keys;
 	bool mouse_reporting;
+
+	/*
+	 * Kept so DECRQM can answer for them (sec 7.1). A bool is enough to
+	 * decide whether to send mouse reports; it is not enough to say
+	 * WHICH mode is set, and a terminal that answers 1000 while 1003 is
+	 * what is running has told the remote something worse than nothing.
+	 */
+	int mouse_mode;
+	bool alt_screen;
+
+	/*
+	 * What TERM the app told the remote, so XTGETTCAP's TN answers with
+	 * the same string rather than a plausible guess. A terminal that
+	 * names itself one thing in the environment and another when asked
+	 * is worse than one that will not say.
+	 */
+	QString term_name;
 	bool sync_output;
 	bool sync_damage_pending;
 	QTimer *sync_timeout;
@@ -105,7 +122,8 @@ struct bssh_emulator_private {
 
 	bssh_emulator_private(int cols, int rows, bssh_emulator *owner)
 	    : vt(nullptr), vts(nullptr), screen(cols, rows), owner(owner),
-	      modify_other_keys(0), mouse_reporting(false), sync_output(false),
+	      modify_other_keys(0), mouse_reporting(false), mouse_mode(0), alt_screen(false),
+	    term_name(QStringLiteral("xterm-256color")), sync_output(false),
 	      sync_damage_pending(false), sync_timeout(nullptr),
 	      next_link_id(0), open_link_id(0), link_start_row(0), link_start_col(0), cell_width(8), cell_height(16),
 	      pending_cursor_advance(0) {
@@ -305,6 +323,15 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		 * changes twice a session.
 		 */
 		self->mouse_reporting = value->number != VTERM_PROP_MOUSE_NONE;
+		self->mouse_mode = int(value->number);
+		return 1;
+	case VTERM_PROP_ALTSCREEN:
+		/*
+		 * Tracked only so DECRQM can answer for 1049. libvterm owns the
+		 * screens themselves; returning 0 here would leave it to its own
+		 * default handling, and this returns 1 having done nothing else.
+		 */
+		self->alt_screen = value->boolean;
 		return 1;
 	case VTERM_PROP_CURSORVISIBLE:
 		self->screen.set_cursor_visible(value->boolean);
@@ -321,12 +348,66 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
  * which matters, because a patched dependency is one that has to be
  * re-patched on every update.
  */
+/*
+ * DECRQM's answer for one mode (sec 7.1), for the modes THIS terminal
+ * implements on top of libvterm.
+ *
+ * Almost nothing belongs here. libvterm answers DECRQM itself for every
+ * mode it models -- the cursor, autowrap, each mouse mode, bracketed
+ * paste -- and it knows their state better than this side does; a second
+ * opinion here would be the "two places computing one thing" that this
+ * project keeps having to unpick. What it cannot answer for is a mode it
+ * does not model, which is exactly the set an application implements on
+ * top of it. Those queries only arrive here at all because of patch 0004.
+ *
+ * Returns -1 for "not ours", which leaves libvterm to send its own "not
+ * recognised".
+ */
+int decrqm_state(const bssh_emulator_private *self, int mode) {
+	switch (mode) {
+	case 2026:
+		/*
+		 * Synchronised output, which this terminal implements and
+		 * libvterm does not model. It is the mode clients actually
+		 * probe, and answering it is the whole point: "2" means
+		 * understood and currently off, which is how a client learns
+		 * the feature is there before using it. Without patch 0004 the
+		 * answer was "0", telling every client the terminal lacked a
+		 * feature it has.
+		 */
+		return self->sync_output ? 1 : 2;
+	default:
+		return -1;
+	}
+}
+
 int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 	                       const char *intermed, char command, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
-	Q_UNUSED(intermed);
 
 	const QByteArray lead = QByteArray(leader ? leader : "");
+	const QByteArray inter = QByteArray(intermed ? intermed : "");
+
+	/*
+	 * DECRQM, for a DEC private mode libvterm does not model. Answered
+	 * with DECRPM, which echoes the mode back so a client with several
+	 * queries in flight can tell the answers apart.
+	 *
+	 * Declining leaves libvterm to answer, which for every mode it models
+	 * it already does correctly.
+	 */
+	if (command == 'p' && inter == "$" && lead == "?") {
+		const int mode = argcount > 0 ? int(args[0]) : 0;
+		const int state = decrqm_state(self, mode);
+		if (state < 0) return 0;
+
+		self->reply(QByteArrayLiteral("\x1b[?")
+			           + QByteArray::number(mode)
+			           + QByteArrayLiteral(";")
+			           + QByteArray::number(state)
+			           + QByteArrayLiteral("$y"));
+		return 1;
+	}
 
 	if (command == 'u') {
 		/* Kitty keyboard protocol: push, pop, set, query. */
@@ -551,11 +632,76 @@ const VTermSelectionCallbacks BSSH_SELECTION_CALLBACKS = {
 	on_selection_query
 };
 
-/* Sixel: DCS <params> q <data> ST. */
+/*
+ * What this terminal will tell a remote about itself (sec 7.1).
+ *
+ * Only things that are true of it whatever it is running on, and
+ * everything else is answered as unknown rather than guessed. A
+ * capability database is a promise: a client that is told "bce" will use
+ * it, and a terminal that answered by pattern-matching what terminals
+ * usually support has broken the program that believed it.
+ */
+QByteArray terminfo_capability(const QByteArray &name, const bssh_emulator_private *self) {
+	if (name == "TN") return self->term_name.toUtf8();
+	if (name == "Co" || name == "colors") return QByteArrayLiteral("256");
+	if (name == "RGB") return QByteArrayLiteral("8/8/8");
+	return QByteArray();
+}
+
+QByteArray to_hex(const QByteArray &raw) {
+	return raw.toHex().toUpper();
+}
+
+/*
+ * XTGETTCAP: DCS + q <hex name> ; <hex name> ... ST, answered per name
+ * with DCS 1 + r <hex>=<hex> ST, or DCS 0 + r <hex> ST for one this
+ * terminal will not vouch for.
+ *
+ * Answered one reply per name rather than one reply for all of them: a
+ * single reply carrying a mix of known and unknown names has to pick one
+ * status byte for the lot, and clients disagree about what that means.
+ */
+int on_xtgettcap(const QByteArray &payload, bssh_emulator_private *self) {
+	const QList<QByteArray> names = payload.split(';');
+
+	for (const QByteArray &hex : names) {
+		const QByteArray name = QByteArray::fromHex(hex);
+		const QByteArray value = terminfo_capability(name, self);
+
+		if (value.isEmpty()) {
+			self->reply(QByteArrayLiteral("\x1bP0+r") + to_hex(name)
+				           + QByteArrayLiteral("\x1b\\"));
+			continue;
+		}
+
+		self->reply(QByteArrayLiteral("\x1bP1+r") + to_hex(name)
+			           + QByteArrayLiteral("=") + to_hex(value)
+			           + QByteArrayLiteral("\x1b\\"));
+	}
+	return 1;
+}
+
+/* Sixel: DCS <params> q <data> ST. XTGETTCAP: DCS + q <names> ST. */
 int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 
 	if (commandlen < 1 || command[commandlen - 1] != 'q') return 0;
+
+	/*
+	 * Both of these end in 'q', which is why the introducer has to be
+	 * looked at rather than just its last byte: an XTGETTCAP query was
+	 * reaching the sixel parser, where it decoded to nothing and was
+	 * answered with silence.
+	 */
+	if (commandlen >= 2 && command[commandlen - 2] == '+') {
+		if (frag.initial) self->dcs_buffer.clear();
+		self->dcs_buffer.append(frag.str, int(frag.len));
+		if (!frag.final) return 1;
+
+		const int handled = on_xtgettcap(self->dcs_buffer, self);
+		self->dcs_buffer.clear();
+		return handled;
+	}
 
 	/*
 	 * Reassembled with its introducer, because libsixel needs it: given
@@ -1170,6 +1316,10 @@ void bssh_emulator::set_scrollback_lines(int lines) {
 
 const bssh_image_store &bssh_emulator::images() const {
 	return m_private->images;
+}
+
+void bssh_emulator::set_term_name(const QString &term) {
+	if (!term.isEmpty()) m_private->term_name = term;
 }
 
 void bssh_emulator::set_cell_pixels(int width, int height) {

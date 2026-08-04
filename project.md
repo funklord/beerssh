@@ -739,7 +739,38 @@ conversation, and should let it reach its best tier.
 | **Synchronized output** (DEC 2026) | Remote brackets a screen update so the terminal paints it in one frame instead of mid-redraw; removes tearing in full-screen apps | **Done** — with a 150 ms safety release, since a program that sets it and dies would otherwise freeze the display |
 | **OSC 8 hyperlinks** | Marks a run of cells as a clickable URL | **Done** — per-cell link id, underlined, opened on Ctrl+click after a confirmation |
 | **OSC 52 clipboard** | Remote sets the local clipboard | **Done, write only.** See below |
-| **XTGETTCAP / DECRQM** | Lets a remote query what the terminal supports rather than guessing from `TERM` | Small; pairs naturally with the tier-2 work |
+| **XTGETTCAP / DECRQM** | Lets a remote query what the terminal supports rather than guessing from `TERM` | **Done.** See below |
+
+**DECRQM, and how little of it is ours.** libvterm answers DECRQM itself for
+every mode it models — the cursor, autowrap, each mouse mode, bracketed paste —
+and it knows their state better than the layer above does, so almost nothing
+belongs on this side. A second opinion here would be the "two places computing
+one thing" this project keeps having to unpick. What libvterm *cannot* answer
+for is a mode it does not model, which is exactly the set an application
+implements on top of it: **DEC 2026, synchronised output, is the live example
+and the one clients actually probe.**
+And it was answering **"0 — not recognised"** for it, which is worse than
+silence: a client probes so it can use a feature without guessing from `TERM`,
+and told 0 it takes the terminal at its word and falls back. The implementation
+behind it was never reached. `request_dec_mode()` answered and returned without
+ever consulting the fallback — the same defect `0002` had already fixed for
+`set_dec_mode()`, on the other half of the same feature, quietly undoing it.
+**`vterm-patches/0004`** hands the query to the fallback in its own shape
+(leader `?`, intermediate `$`, command `p`) before answering 0. Worth sending
+upstream alongside 0002.
+
+**XTGETTCAP answers only what is true of this terminal wherever it runs** —
+`TN`, `Co`, `RGB` — and returns the invalid form for everything else rather
+than guessing. A capability database is a promise: a client told `bce` will use
+it, and a terminal that answered by pattern-matching what terminals like it
+usually support has broken the program that believed it. `TN` reports the TERM
+the app actually told the remote, mirrored into the emulator for the purpose,
+because a terminal that names itself one thing in the environment and another
+when asked is worse than one that will not say.
+One thing had to be fixed to reach it at all: sixel and XTGETTCAP are both DCS
+sequences ending in `q`, and the sixel handler tested only that last byte — so
+`DCS + q` was being fed to the sixel parser, decoding to nothing and answered
+with silence.
 
 **OSC 52, reviewed.** The write half is offered **per host and off by
 default**, because the useful case (yanking in vim over SSH and pasting

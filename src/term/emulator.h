@@ -144,6 +144,14 @@ public:
 	void set_cell_pixels(int width, int height);
 
 	/*
+	 * The TERM the app is telling the remote (sec 10.2). Mirrored here
+	 * only so XTGETTCAP's TN answers with the same string: a terminal
+	 * that names itself one thing in the environment and another when
+	 * asked directly is worse than one that will not say.
+	 */
+	void set_term_name(const QString &term);
+
+	/*
 	 * Bytes the terminal owes the remote: answers to device-status and
 	 * primary-attribute queries, and later the mouse and bracketed-paste
 	 * reports. A caller that never drains this hangs any program that

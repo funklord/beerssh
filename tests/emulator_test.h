@@ -52,6 +52,15 @@ private slots:
 	 * it would file the PREVIOUS occupant of the row.
 	 */
 	void a_line_written_then_immediately_scrolled_lands_intact();
+
+	/*
+	 * sec 7.1 tier 3: letting a remote ASK what this terminal supports
+	 * rather than guess it from TERM. The sibling fuzzypickles TUI probes
+	 * exactly these from the other side.
+	 */
+	void decrqm_answers_for_modes_it_knows();
+	void decrqm_says_nothing_it_cannot_stand_behind();
+	void xtgettcap_reports_what_this_terminal_is();
 	void a_wide_glyph_scrolls_back_the_way_it_was_on_screen();
 };
 
