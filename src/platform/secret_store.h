@@ -71,5 +71,6 @@ public:
  */
 bssh_secret_store *bssh_make_file_secret_store();
 bssh_secret_store *bssh_make_libsecret_store();   /* nullptr when unavailable */
+bssh_secret_store *bssh_make_keystore_secret_store();  /* Android; nullptr when unavailable */
 
 #endif /* BSSH_SECRET_STORE_H */

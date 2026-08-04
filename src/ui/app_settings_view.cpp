@@ -132,9 +132,16 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 			        "Held in hardware that will not hand the key back, and unlocked "
 			        "the way this device is.");
 		} else {
+			/*
+			 * True of both stores that reach this branch: a desktop
+			 * keyring unlocked by the login session, and an Android
+			 * Keystore whose key the system releases to this app. Saying
+			 * "your session" here, as this did, is a desktop idea that
+			 * does not survive the trip to a phone.
+			 */
 			detail = QStringLiteral(
-			        "Held by the system and unlocked along with your session. Not "
-			        "hardware-backed.");
+			        "Held by the system and released to this app with nothing for you "
+			        "to type. Not hardware-backed.");
 		}
 
 		QLabel *backend_note = new QLabel(detail, this);

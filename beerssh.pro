@@ -150,6 +150,7 @@ android {
     SOURCES += \
         src/platform/platform_android.cpp \
         src/platform/secret_store_file.cpp \
+        src/platform/secret_store_keystore.cpp \
         src/platform/secret_store_select_android.cpp
 
     # Cross-compiled, not system: an NDK sysroot has none of these.

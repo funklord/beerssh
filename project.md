@@ -1612,8 +1612,38 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
 
 - **Private keys / passwords** stored encrypted; never plaintext in app files,
   `SharedPreferences`, or the INI config files (§10.6).
-  - **Android:** wrap secrets with the **Android Keystore** (hardware-backed
-    where available).
+  - **Android [DECIDED, built]:** secrets are wrapped with a key generated
+    inside the **Android Keystore** — not derived from anything the user types,
+    not extractable, and on hardware that offers one held in a TEE or secure
+    element. The store keeps the same shape as the desktop fallback's: one
+    encrypted blob holding a JSON object rather than a file of encrypted rows,
+    since a per-record layout leaks how many credentials exist and which
+    profile each belongs to through the file layout alone.
+    **Chosen at runtime**, like the desktop pair and for the same reason: a
+    phone whose Keystore refuses to generate a key — it happens, and it happens
+    after an OS update — falls back to the passphrase file rather than silently
+    failing to save anything.
+    **`isHardwareBacked()` is asked of the key, not guessed from the device.**
+    An emulator and a phone with a secure element both have an "Android
+    Keystore", and only one of them means what a user would take that to mean,
+    so the name reports which: "Android Keystore (hardware-backed)" or
+    "(software-backed on this device)". Measured on an emulator, which
+    correctly says software.
+    **The second Java file in the project**, for the same reason as the first:
+    a platform limitation, not a design choice. The Keystore's whole point is
+    that the key never leaves it, so there is no handle to hand to OpenSSL and
+    no C API that reaches it — the encryption has to happen on that side of the
+    fence. It holds no logic worth testing: it wraps bytes and unwraps them.
+    **No user authentication on the key.** Biometric release is §11's [OPEN]
+    item and needs a decision about what happens on a reconnect at 3am with
+    nobody holding the phone; requiring it here would make that decision by
+    accident.
+    **Verified on a device**, since none of this can be exercised off one: a
+    password stored with "Remember" survives a full process restart and is
+    submitted without prompting; the plaintext does not appear in the file; and
+    a single flipped byte — what a store restored from another phone's backup
+    looks like — is rejected by the GCM tag, so the app asks again instead of
+    handing a caller garbage.
   - **Desktop [DECIDED, partly built]:** the platform secret service —
     Secret Service / `libsecret` (GNOME Keyring, KWallet) on Linux, Keychain on
     macOS, DPAPI/Credential Manager on Windows. **Fallback where no such service
