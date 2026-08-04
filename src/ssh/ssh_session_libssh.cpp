@@ -65,47 +65,6 @@ const int BSSH_TCP_KEEPALIVE_IDLE_S = 30;
 const int BSSH_TCP_KEEPALIVE_INTERVAL_S = 10;
 const int BSSH_TCP_KEEPALIVE_COUNT = 3;
 
-/*
- * Set the socket options that make a dead connection announce itself.
- *
- * The #ifdefs here are about which POSIX socket options this KERNEL has,
- * not about which platform the app is running on, so they do not belong
- * behind bssh_platform (sec 3): Android and desktop Linux take exactly
- * the same branch, and it is macOS and Windows that differ. Every one of
- * them is best-effort -- a failure means slower detection, never a
- * connection that does not work, so none of them is checked.
- */
-static void bssh_configure_tcp_keepalive(int fd) {
-	if (fd < 0) return;
-
-	const int on = 1;
-	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
-
-#ifdef TCP_KEEPIDLE
-	const int idle = BSSH_TCP_KEEPALIVE_IDLE_S;
-	setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
-#endif
-#ifdef TCP_KEEPINTVL
-	const int interval = BSSH_TCP_KEEPALIVE_INTERVAL_S;
-	setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
-#endif
-#ifdef TCP_KEEPCNT
-	const int count = BSSH_TCP_KEEPALIVE_COUNT;
-	setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
-#endif
-#ifdef TCP_USER_TIMEOUT
-	/*
-	 * The one that matters when the user is actually typing: it bounds
-	 * how long UNACKNOWLEDGED data may sit before the socket errors.
-	 * Without it, keystrokes sent into a dead link are retransmitted for
-	 * many minutes while the terminal looks merely slow.
-	 */
-	const int user_timeout_ms =
-		      (BSSH_TCP_KEEPALIVE_IDLE_S +
-		       BSSH_TCP_KEEPALIVE_INTERVAL_S * BSSH_TCP_KEEPALIVE_COUNT) * 1000;
-	setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, sizeof(user_timeout_ms));
-#endif
-}
 
 /*
  * Whether the user has a private key at all.
@@ -187,6 +146,48 @@ QString openssh_known_hosts_path() {
 }
 
 } /* namespace */
+
+/*
+ * Set the socket options that make a dead connection announce itself.
+ *
+ * The #ifdefs here are about which POSIX socket options this KERNEL has,
+ * not about which platform the app is running on, so they do not belong
+ * behind bssh_platform (sec 3): Android and desktop Linux take exactly
+ * the same branch, and it is macOS and Windows that differ. Every one of
+ * them is best-effort -- a failure means slower detection, never a
+ * connection that does not work, so none of them is checked.
+ */
+void bssh_configure_tcp_keepalive(int fd) {
+	if (fd < 0) return;
+
+	const int on = 1;
+	setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &on, sizeof(on));
+
+#ifdef TCP_KEEPIDLE
+	const int idle = BSSH_TCP_KEEPALIVE_IDLE_S;
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &idle, sizeof(idle));
+#endif
+#ifdef TCP_KEEPINTVL
+	const int interval = BSSH_TCP_KEEPALIVE_INTERVAL_S;
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &interval, sizeof(interval));
+#endif
+#ifdef TCP_KEEPCNT
+	const int count = BSSH_TCP_KEEPALIVE_COUNT;
+	setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &count, sizeof(count));
+#endif
+#ifdef TCP_USER_TIMEOUT
+	/*
+	 * The one that matters when the user is actually typing: it bounds
+	 * how long UNACKNOWLEDGED data may sit before the socket errors.
+	 * Without it, keystrokes sent into a dead link are retransmitted for
+	 * many minutes while the terminal looks merely slow.
+	 */
+	const int user_timeout_ms =
+	        (BSSH_TCP_KEEPALIVE_IDLE_S +
+	         BSSH_TCP_KEEPALIVE_INTERVAL_S * BSSH_TCP_KEEPALIVE_COUNT) * 1000;
+	setsockopt(fd, IPPROTO_TCP, TCP_USER_TIMEOUT, &user_timeout_ms, sizeof(user_timeout_ms));
+#endif
+}
 
 class bssh_libssh_worker : public QObject {
 	Q_OBJECT

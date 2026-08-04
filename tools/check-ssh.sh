@@ -96,6 +96,8 @@ run_phase() {
 	BSSH_TEST_SSH_PORT=$PORT \
 	BSSH_TEST_SSH_KEY="$DIR/home/.ssh/id_test" \
 	BSSH_TEST_SSH_PHASE="$1" \
+	BSSH_TEST_SSH_READY="${BSSH_TEST_SSH_READY:-}" \
+	BSSH_TEST_SSH_NOTICED="${BSSH_TEST_SSH_NOTICED:-}" \
 	BSSH_TEST_OPENSSH_KNOWN_HOSTS="${BSSH_TEST_OPENSSH_KNOWN_HOSTS:-}" \
 	BSSH_TEST_OPENSSH_SNAPSHOT="${BSSH_TEST_OPENSSH_SNAPSHOT:-}" \
 	HOME="$DIR/home" \
@@ -143,11 +145,58 @@ if [ -s "$OPENSSH_KH" ]; then
 	fi
 fi
 
+# ---- the jump host dies under a live session ------------------------
+# Killing this sshd kills both ends -- it is bastion and target at once --
+# and that is the case worth constructing: the news has to CROSS the
+# tunnel. A session that cannot be told apart from a healthy one is worse
+# than one that failed, and that is what this was before the pump learned
+# to shut its local end down on the way out.
+#
+# It goes here because it needs a live server and established trust, and
+# because the key swap below has to restart the server anyway.
+echo "check-ssh: phase 3 -- the jump host dies while a session is up"
+READY="$DIR/ready"
+NOTICED="$DIR/noticed"
+rm -f "$READY" "$NOTICED"
+export BSSH_TEST_SSH_READY="$READY" BSSH_TEST_SSH_NOTICED="$NOTICED"
+
+run_phase tunnel_drop > "$DIR/tunnel_drop.log" 2>&1 &
+DROP_APP=$!
+
+waited=0
+while [ $waited -lt 300 ] && [ ! -f "$READY" ]; do
+	waited=$((waited + 1))
+	sleep 0.1
+done
+
+if [ ! -f "$READY" ]; then
+	echo "check-ssh: the tunnelled session never came up" >&2
+	cat "$DIR/tunnel_drop.log" >&2
+	kill $DROP_APP 2>/dev/null || true
+	exit 1
+fi
+
+# The CHILDREN first, and that is the whole trick: sshd forks a process
+# per connection, so killing the listener alone leaves every established
+# session running -- including the one this phase is about. The first
+# version of this did exactly that and "proved" a session survives its
+# jump host dying, when nothing had died at all.
+echo "check-ssh: session up through the jump host; killing the server"
+LISTENER=$(cat "$DIR/sshd.pid")
+pkill -P "$LISTENER" 2>/dev/null || true
+kill "$LISTENER" 2>/dev/null || true
+
+wait $DROP_APP || true
+cat "$DIR/tunnel_drop.log"
+grep -q "^Totals: .* 0 failed" "$DIR/tunnel_drop.log"
+
+# The server is already down, so the swap below only has to give it a new
+# identity and start it again.
+echo "check-ssh: giving the server a new host key and restarting"
+
 # A host key can only be seen to CHANGE across a restart on the SAME port:
 # a different port is a different known-hosts entry and would be merely
 # unknown. So the server is stopped, given a new identity, and put back.
-echo "check-ssh: swapping the server's host key and restarting"
-kill "$(cat "$DIR/sshd.pid")" 2>/dev/null || true
 wait_gone=0
 while [ $wait_gone -lt 50 ] && [ -f "$DIR/sshd.pid" ] && kill -0 "$(cat "$DIR/sshd.pid")" 2>/dev/null; do
 	wait_gone=$((wait_gone + 1))

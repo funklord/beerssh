@@ -263,15 +263,45 @@ void ssh_config_test::a_jump_host_spec_is_taken_apart() {
 	QCOMPARE(padded.host, QStringLiteral("bastion.example.com"));
 
 	/*
-	 * A colon that is not a port. An IPv6 literal is written [::1] in
-	 * this position, and splitting it on its last colon would dial
-	 * something that is not a machine.
+	 * Colons that are not ports. An IPv6 literal is full of them, and
+	 * splitting on the last one dials somewhere that is not a machine --
+	 * quietly, because the result still looks like a hostname.
 	 */
 	const bssh_jump_tunnel::hop_t v6 =
 	        bssh_jump_tunnel::parse(QStringLiteral("[2001:db8::1]"), me);
 	QVERIFY(v6.valid);
 	QCOMPARE(v6.host, QStringLiteral("[2001:db8::1]"));
 	QCOMPARE(v6.port, quint16(22));
+
+	/* Bracketed WITH a port: the port is outside the brackets. */
+	const bssh_jump_tunnel::hop_t v6_port =
+	        bssh_jump_tunnel::parse(QStringLiteral("[2001:db8::1]:2222"), me);
+	QVERIFY(v6_port.valid);
+	QCOMPARE(v6_port.host, QStringLiteral("[2001:db8::1]"));
+	QCOMPARE(v6_port.port, quint16(2222));
+
+	/*
+	 * Bare, as OpenSSH also accepts it. It cannot carry a port -- there
+	 * is no way to tell one from another group of the address -- so the
+	 * whole string is the host. Read the other way this became the host
+	 * "2001:db8:" on port 1.
+	 */
+	const bssh_jump_tunnel::hop_t v6_bare =
+	        bssh_jump_tunnel::parse(QStringLiteral("2001:db8::1"), me);
+	QVERIFY(v6_bare.valid);
+	QCOMPARE(v6_bare.host, QStringLiteral("2001:db8::1"));
+	QCOMPARE(v6_bare.port, quint16(22));
+
+	/* A user in front of one still works. */
+	const bssh_jump_tunnel::hop_t v6_user =
+	        bssh_jump_tunnel::parse(QStringLiteral("jane@[2001:db8::1]:2222"), me);
+	QVERIFY(v6_user.valid);
+	QCOMPARE(v6_user.user, QStringLiteral("jane"));
+	QCOMPARE(v6_user.host, QStringLiteral("[2001:db8::1]"));
+	QCOMPARE(v6_user.port, quint16(2222));
+
+	/* An unclosed bracket is not understood, and says so. */
+	QVERIFY(!bssh_jump_tunnel::parse(QStringLiteral("[2001:db8::1"), me).valid);
 
 	/* Nothing typed is a direct connection, not a broken jump host. */
 	QVERIFY(!bssh_jump_tunnel::parse(QString(), me).valid);

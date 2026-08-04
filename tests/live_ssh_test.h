@@ -86,6 +86,33 @@ private slots:
 
 	void a_host_is_reachable_through_a_jump_host();
 	void an_unknown_jump_host_is_refused_rather_than_prompted_about();
+
+	/*
+	 * A tunnel costs a socket pair, and libssh does NOT close a
+	 * descriptor handed to it with SSH_OPTIONS_FD -- measured, not
+	 * assumed. Believing otherwise leaked one per attempt, and a host
+	 * behind a bastion on a flaky link retries for as long as it takes.
+	 */
+	void a_tunnel_gives_back_every_descriptor_it_took();
+
+	/*
+	 * When the BASTION goes away, the session on the far side of it has
+	 * to notice. The pump's three bastion-side exits used to leave the
+	 * socket pair open, so the target session held a descriptor that was
+	 * open and permanently silent: never readable, never an error, never
+	 * a drop. The UI said connected, the terminal was frozen, and the
+	 * reconnect machine (sec 5.3) was never told.
+	 */
+	void a_dead_jump_host_is_noticed_by_the_session();
+
+	/*
+	 * And the harder half: a link that goes SILENT rather than dying.
+	 * A bastion that is killed sends a FIN and libssh notices; a bastion
+	 * behind a phone that lost signal sends nothing at all, and the
+	 * kernel only notices because of sec 5.3's socket options -- which
+	 * the tunnel's own socket did not have.
+	 */
+	void a_black_holed_jump_host_is_noticed();
 };
 
 #endif /* BSSH_LIVE_SSH_TEST_H */

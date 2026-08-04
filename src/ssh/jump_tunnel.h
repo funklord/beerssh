@@ -76,6 +76,8 @@ protected:
 
 private:
 	bool authenticate();
+	bool write_to_channel(const char *data, int size);
+	bool drain_channel(char *buffer, int size);
 
 	ssh_session m_session = nullptr;
 	ssh_channel m_channel = nullptr;

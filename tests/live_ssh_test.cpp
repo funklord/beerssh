@@ -1,3 +1,4 @@
+#include <QDir>
 #include <QFile>
 #include <QStandardPaths>
 #include <QElapsedTimer>
@@ -31,6 +32,23 @@ struct outcome_t {
  */
 QString phase() {
 	return qEnvironmentVariable("BSSH_TEST_SSH_PHASE");
+}
+
+/*
+ * Whether this is a phase that should run the ordinary connection tests.
+ *
+ * The phases that break something from outside -- the black hole, the
+ * dropped link, the killed jump host -- are waiting on a file this binary
+ * writes once its session is up, and a script cannot wait forever. Running
+ * five tunnelled connections first pushes that past any sensible timeout,
+ * so tests that belong to the plain phase say so.
+ *
+ * An unset phase means somebody ran the binary by hand, which must still
+ * exercise everything it can rather than skipping in silence.
+ */
+bool ordinary_phase() {
+	const QString which = phase();
+	return which.isEmpty() || which == QStringLiteral("trust");
 }
 
 quint16 test_port() {
@@ -704,8 +722,8 @@ void live_ssh_test::a_revoked_key_is_refused_not_offered()
 void live_ssh_test::a_host_is_reachable_through_a_jump_host()
 {
 	if (!server_available()) return;
-	if (phase() == QStringLiteral("rekeyed")) {
-		QSKIP("the host key has been swapped; authentication is refused by design here");
+	if (!ordinary_phase()) {
+		QSKIP("this phase is waiting on a session of its own; see ordinary_phase()");
 	}
 
 	/*
@@ -759,8 +777,8 @@ void live_ssh_test::a_host_is_reachable_through_a_jump_host()
 void live_ssh_test::an_unknown_jump_host_is_refused_rather_than_prompted_about()
 {
 	if (!server_available()) return;
-	if (phase() == QStringLiteral("rekeyed")) {
-		QSKIP("the host key has been swapped; there is no trusted state to remove");
+	if (!ordinary_phase()) {
+		QSKIP("this phase is waiting on a session of its own; see ordinary_phase()");
 	}
 
 	/*
@@ -797,7 +815,7 @@ namespace {
  * the far end believes about the terminal it is drawing into.
  */
 QByteArray shell_output(int cols, int rows, const QByteArray &command,
-                         int resize_cols = 0, int resize_rows = 0)
+	                       int resize_cols = 0, int resize_rows = 0)
 {
 	bssh_ssh_session *session = bssh_ssh_session::create();
 	QEventLoop loop;
@@ -853,8 +871,8 @@ QByteArray shell_output(int cols, int rows, const QByteArray &command,
 void live_ssh_test::the_remote_is_told_the_size_it_was_given()
 {
 	if (!server_available()) return;
-	if (phase() == QStringLiteral("rekeyed")) {
-		QSKIP("the host key has been swapped; authentication is refused by design here");
+	if (!ordinary_phase()) {
+		QSKIP("this phase is waiting on a session of its own; see ordinary_phase()");
 	}
 
 	/*
@@ -872,8 +890,8 @@ void live_ssh_test::the_remote_is_told_the_size_it_was_given()
 void live_ssh_test::a_resize_reaches_the_remote()
 {
 	if (!server_available()) return;
-	if (phase() == QStringLiteral("rekeyed")) {
-		QSKIP("the host key has been swapped; authentication is refused by design here");
+	if (!ordinary_phase()) {
+		QSKIP("this phase is waiting on a session of its own; see ordinary_phase()");
 	}
 
 	/*
@@ -887,4 +905,201 @@ void live_ssh_test::a_resize_reaches_the_remote()
 	QVERIFY2(out.contains("19 61"),
 	          qPrintable(QStringLiteral("the remote reported: %1")
 	                             .arg(QString::fromUtf8(out.simplified()))));
+}
+
+namespace {
+
+/* How many descriptors this process is holding, straight from the kernel. */
+int open_descriptors()
+{
+	return QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::NoDotAndDotDot | QDir::AllEntries).size();
+}
+
+} /* namespace */
+
+void live_ssh_test::a_tunnel_gives_back_every_descriptor_it_took()
+{
+	if (!server_available()) return;
+	if (!ordinary_phase()) {
+		QSKIP("this phase is waiting on a session of its own; see ordinary_phase()");
+	}
+	if (!QFile::exists(QStringLiteral("/proc/self/fd"))) {
+		QSKIP("no /proc to count descriptors with");
+	}
+
+	const QString jump = QStringLiteral("%1@127.0.0.1:%2")
+	                             .arg(qEnvironmentVariable("USER"))
+	                             .arg(test_port());
+
+	/* Trusted first, so the runs below are all the same shape. */
+	QVERIFY(attempt(test_key()).connected);
+	QVERIFY(attempt(test_key(), true, jump).connected);
+
+	/*
+	 * Measured after a warm-up rather than from a cold start: the first
+	 * connection through a tunnel opens things that stay open on purpose
+	 * -- resolver sockets, libssh's own state -- and counting those as a
+	 * leak would make this fail for the wrong reason.
+	 */
+	const int before = open_descriptors();
+
+	for (int i = 0; i < 4; ++i) {
+		QVERIFY2(attempt(test_key(), true, jump).connected,
+		          "every round must actually go through the tunnel");
+	}
+
+	const int after = open_descriptors();
+
+	/*
+	 * A few is tolerance for anything the runtime keeps; FOUR MORE, one
+	 * per round, is the leak. That distinction is the whole test, which
+	 * is why the round count and the slack are not the same number.
+	 */
+	QVERIFY2(after - before < 4,
+	          qPrintable(QStringLiteral("4 tunnels leaked %1 descriptors (%2 -> %3)")
+	                             .arg(after - before).arg(before).arg(after)));
+}
+
+void live_ssh_test::a_dead_jump_host_is_noticed_by_the_session()
+{
+	if (!server_available()) return;
+	if (phase() != QStringLiteral("tunnel_drop")) {
+		QSKIP("this phase needs the jump host killed from outside");
+	}
+
+	/*
+	 * One server is both bastion and target here as everywhere else, so
+	 * killing it kills both -- which is the point. What is being checked
+	 * is not how the far end died but that its death CROSSES the tunnel:
+	 * a session that cannot be told apart from a healthy one is worse
+	 * than a session that failed.
+	 */
+	const QString jump = QStringLiteral("%1@127.0.0.1:%2")
+	                             .arg(qEnvironmentVariable("USER"))
+	                             .arg(test_port());
+
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	bool noticed = false;
+
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed,
+	                  [&](const QString &) { noticed = true; loop.quit(); });
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [&](bssh_ssh_session::state_t state) {
+		if (state == bssh_ssh_session::CONNECTED) {
+			session->open_shell(80, 24);
+			QTimer::singleShot(500, [] {
+				QFile ready(qEnvironmentVariable("BSSH_TEST_SSH_READY"));
+				if (ready.open(QIODevice::WriteOnly)) ready.close();
+			});
+			return;
+		}
+		if (state == bssh_ssh_session::DISCONNECTED ||
+		     state == bssh_ssh_session::FAILED) {
+			noticed = true;
+			loop.quit();
+		}
+	});
+	QObject::connect(session, &bssh_ssh_session::shell_exited,
+	                  [&](int) { noticed = true; loop.quit(); });
+
+	session->set_identity_file(test_key());
+	session->set_proxy_jump(jump);
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
+	                          qEnvironmentVariable("USER"));
+
+	/*
+	 * Generous, and deliberately not tuned: the point is that the news
+	 * arrives at all. Before the fix it never did -- the wait ran to the
+	 * end of the guard every time, because nothing was ever going to
+	 * happen.
+	 */
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(45000);
+	loop.exec();
+
+	QFile done(qEnvironmentVariable("BSSH_TEST_SSH_NOTICED"));
+	if (done.open(QIODevice::WriteOnly)) done.close();
+
+	session->disconnect_from_host();
+	delete session;
+
+	QVERIFY2(noticed,
+	          "a session must not stay 'connected' after its jump host dies");
+}
+
+void live_ssh_test::a_black_holed_jump_host_is_noticed()
+{
+	if (!server_available()) return;
+	if (phase() != QStringLiteral("tunnel_black_hole")) {
+		QSKIP("this phase needs the link black-holed from outside");
+	}
+
+	/*
+	 * The same budget as the direct case: sec 5.3 asks for about a
+	 * minute, and this allows two and a half. What is being checked is
+	 * that the budget applies to the socket the tunnel is built on at
+	 * all -- with the defaults, that socket probes after two hours, and
+	 * a session on a phone that walked into a lift would look connected
+	 * for the rest of the afternoon.
+	 */
+	const QString jump = QStringLiteral("%1@127.0.0.1:%2")
+	                             .arg(qEnvironmentVariable("USER"))
+	                             .arg(test_port());
+
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	QElapsedTimer since_ready;
+	bool noticed = false;
+
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed,
+	                  [&](const QString &) { noticed = true; loop.quit(); });
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [&](bssh_ssh_session::state_t state) {
+		if (state == bssh_ssh_session::CONNECTED) {
+			session->open_shell(80, 24);
+			QTimer::singleShot(500, [&] {
+				QFile ready(qEnvironmentVariable("BSSH_TEST_SSH_READY"));
+				if (ready.open(QIODevice::WriteOnly)) ready.close();
+				since_ready.start();
+			});
+			return;
+		}
+		if (state == bssh_ssh_session::DISCONNECTED ||
+		     state == bssh_ssh_session::FAILED) {
+			noticed = true;
+			loop.quit();
+		}
+	});
+
+	session->set_identity_file(test_key());
+	session->set_proxy_jump(jump);
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
+	                          qEnvironmentVariable("USER"));
+
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(210000);
+	loop.exec();
+
+	QFile done(qEnvironmentVariable("BSSH_TEST_SSH_NOTICED"));
+	if (done.open(QIODevice::WriteOnly)) done.close();
+
+	const qint64 took = since_ready.isValid() ? since_ready.elapsed() : -1;
+	session->disconnect_from_host();
+	delete session;
+
+	QVERIFY2(noticed,
+	          qPrintable(QStringLiteral("a black-holed jump host must be noticed; "
+	                                     "waited %1ms").arg(took)));
+	QVERIFY2(took < 150000,
+	          qPrintable(QStringLiteral("noticed after %1ms, which is past sec 5.3's budget")
+	                             .arg(took)));
 }

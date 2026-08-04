@@ -127,6 +127,23 @@ fi
 wait $APP || true
 cat $D/reconnect.log
 grep -q "^Totals: .* 0 failed" $D/reconnect.log
+
+# ---- phase: the same, through a jump host ----------------------------
+# A session reached through a bastion has TWO sockets, and the one the app
+# never sees is the one carrying everything. The socket options are applied
+# to the target socket by the transport; the tunnel opens its own, and
+# until that one was given the same treatment a black-holed link left the
+# session looking connected for as long as anyone cared to wait.
+rm -f "$READY" "$NOTICED"
+BSSH_TEST_SSH_PHASE=tunnel_black_hole ./build-tests/beerssh_test --live-ssh > $D/tunnel.log 2>&1 &
+APP=$!
+wait_for_file "$READY" 120 || { echo "tunnelled session never came up"; cat $D/tunnel.log; exit 1; }
+echo "check-keepalive: session up through a jump host; black-holing port $PORT"
+drop_port
+wait $APP || true
+restore_port
+cat $D/tunnel.log
+grep -q "^Totals: .* 0 failed" $D/tunnel.log
 '
 
 echo "check-keepalive: a black-holed link is noticed, and the session comes back"

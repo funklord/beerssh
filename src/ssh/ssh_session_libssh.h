@@ -21,6 +21,19 @@ class bssh_libssh_worker;
  * TCP handshake to an unreachable host is a UI that looks crashed --
  * which on Android is also a UI the system may kill for not responding.
  */
+/*
+ * sec 5.3's socket options, applied to a connected TCP socket.
+ *
+ * Shared with bssh_jump_tunnel rather than private to this file: a
+ * session reached through a bastion has TWO sockets, and the one the app
+ * never sees is the one carrying everything. Left with the defaults, a
+ * link that goes silent -- a phone losing signal rather than a server
+ * refusing -- would be noticed on the target's socket and not on the
+ * bastion's, and the tunnel would hold the session up on a link that no
+ * longer exists.
+ */
+void bssh_configure_tcp_keepalive(int fd);
+
 class bssh_ssh_session_libssh : public bssh_ssh_session {
 	Q_OBJECT
 

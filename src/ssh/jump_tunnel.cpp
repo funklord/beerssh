@@ -1,5 +1,8 @@
 #include "ssh/jump_tunnel.h"
 
+#include "ssh/ssh_session_libssh.h"
+
+#include <errno.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -34,13 +37,42 @@ bssh_jump_tunnel::hop_t bssh_jump_tunnel::parse(const QString &spec,
 		hop.user = fallback_user;
 	}
 
-	const int colon = rest.lastIndexOf(QLatin1Char(':'));
-	if (colon >= 0 && !rest.contains(QLatin1Char(']'))) {
-		bool ok = false;
-		const uint value = rest.mid(colon + 1).toUInt(&ok);
-		if (ok && value > 0 && value <= 65535) {
+	/*
+	 * Where the port is, and where it only looks like one.
+	 *
+	 * An IPv6 literal is full of colons, so splitting on the last one is
+	 * wrong twice over: "2001:db8::1" would become the host "2001:db8:"
+	 * on port 1, and "[2001:db8::1]:2222" would keep its port inside the
+	 * hostname. Both dial somewhere that is not a machine, and neither
+	 * says the spec was not understood.
+	 *
+	 * So the bracketed form is taken apart at the bracket, and an
+	 * unbracketed address with more than one colon is a bare IPv6
+	 * literal, which cannot carry a port at all.
+	 */
+	if (rest.startsWith(QLatin1Char('['))) {
+		const int end = rest.indexOf(QLatin1Char(']'));
+		if (end < 0) return hop;
+
+		const QString after = rest.mid(end + 1);
+		if (after.startsWith(QLatin1Char(':'))) {
+			bool ok = false;
+			const uint value = after.mid(1).toUInt(&ok);
+			if (!ok || value == 0 || value > 65535) return hop;
 			hop.port = quint16(value);
-			rest = rest.left(colon);
+		} else if (!after.isEmpty()) {
+			return hop;
+		}
+		rest = rest.left(end + 1);
+	} else if (rest.count(QLatin1Char(':')) <= 1) {
+		const int colon = rest.lastIndexOf(QLatin1Char(':'));
+		if (colon >= 0) {
+			bool ok = false;
+			const uint value = rest.mid(colon + 1).toUInt(&ok);
+			if (ok && value > 0 && value <= 65535) {
+				hop.port = quint16(value);
+				rest = rest.left(colon);
+			}
 		}
 	}
 
@@ -107,6 +139,15 @@ int bssh_jump_tunnel::open(const hop_t &hop, const QString &target_host, quint16
 	}
 
 	/*
+	 * The same socket options the target's connection gets (sec 5.3), on
+	 * the socket that actually carries it. Without them a bastion on a
+	 * link that stops passing packets is never noticed by the kernel, and
+	 * nothing above can notice either: the session simply stops, looking
+	 * connected.
+	 */
+	bssh_configure_tcp_keepalive(ssh_get_fd(m_session));
+
+	/*
 	 * The bastion is a host like any other and gets the same scrutiny --
 	 * but it is checked, never prompted about. A trust-on-first-use
 	 * dialog for a machine the user did not ask to visit, while the
@@ -161,6 +202,19 @@ int bssh_jump_tunnel::open(const hop_t &hop, const QString &target_host, quint16
 	m_ours = pair[0];
 	m_theirs = pair[1];
 
+	/*
+	 * Non-blocking from here on, and only from here on: the connect, the
+	 * authentication and the forward above all want to block, and each
+	 * would otherwise have to grow its own retry loop.
+	 *
+	 * What it buys is that no libssh call in the pump can sit
+	 * indefinitely. A blocked ssh_channel_write on a wedged link -- the
+	 * link stops passing packets rather than refusing them -- used to
+	 * mean close() timed out and killed the thread mid-call inside
+	 * libssh, and then walked the same session's structures to free them.
+	 */
+	ssh_set_blocking(m_session, 0);
+
 	m_stop = false;
 	start();
 	return m_theirs;
@@ -170,75 +224,141 @@ void bssh_jump_tunnel::run() {
 	char buffer[16384];
 
 	/*
-	 * Both directions, neither allowed to starve the other, and a short
-	 * poll timeout rather than a blocking read: the channel side has no
-	 * descriptor to select on, so it is checked by asking rather than by
-	 * waiting.
+	 * Both ends are polled, and that is the point: waiting on the bastion
+	 * socket as well as the local one means this sleeps until there is
+	 * something to do rather than waking up to ask. A short timeout is
+	 * kept only as a safety net for data libssh has already buffered out
+	 * of the socket, where the descriptor has nothing left to report.
+	 *
+	 * The old version polled the local end alone on a 20ms timer: fifty
+	 * wakeups a second for as long as a session was open, which on a
+	 * backgrounded phone holding a session under the foreground service
+	 * (sec 5.1) is a battery cost with nothing to show for it.
 	 */
 	while (!m_stop) {
-		struct pollfd fd;
-		fd.fd = m_ours;
-		fd.events = POLLIN;
-		fd.revents = 0;
+		struct pollfd fds[2];
+		fds[0].fd = m_ours;
+		fds[0].events = POLLIN;
+		fds[0].revents = 0;
+		fds[1].fd = ssh_get_fd(m_session);
+		fds[1].events = POLLIN;
+		fds[1].revents = 0;
 
-		const int ready = poll(&fd, 1, 20);
+		const int ready = poll(fds, 2, 200);
 		if (m_stop) break;
+		if (ready < 0 && errno != EINTR) break;
 
-		if (ready > 0 && (fd.revents & POLLIN)) {
+		if (ready > 0 && (fds[0].revents & POLLIN)) {
 			const ssize_t n = ::read(m_ours, buffer, sizeof(buffer));
-			if (n <= 0) break;
-			if (ssh_channel_write(m_channel, buffer, int(n)) == SSH_ERROR) break;
+			if (n == 0) break;
+			if (n < 0 && errno != EINTR && errno != EAGAIN) break;
+			if (n > 0 && !write_to_channel(buffer, int(n))) break;
 		}
-		if (ready > 0 && (fd.revents & (POLLHUP | POLLERR))) break;
+		if (ready > 0 && (fds[0].revents & (POLLHUP | POLLERR))) break;
 
-		while (!m_stop) {
-			const int n = ssh_channel_read_nonblocking(m_channel, buffer, sizeof(buffer), 0);
-			if (n == SSH_ERROR) return;
-			if (n <= 0) break;
-
-			ssize_t written = 0;
-			while (written < n) {
-				const ssize_t w = ::write(m_ours, buffer + written, size_t(n - written));
-				if (w <= 0) return;
-				written += w;
-			}
-		}
-
+		if (!drain_channel(buffer, sizeof(buffer))) break;
 		if (ssh_channel_is_eof(m_channel)) break;
+
+		/*
+		 * No socket-level death check here, and that is measured rather
+		 * than assumed. One was written -- peek at the bastion socket for
+		 * end-of-stream, since libssh's non-blocking read returns a
+		 * placid 0 for a connection that has been gone for minutes -- and
+		 * then removed: with the socket options above in place, BOTH a
+		 * killed bastion and a black-holed one are noticed without it.
+		 * Code no test can justify is code that gets believed later
+		 * without cause.
+		 */
 	}
+
+	/*
+	 * However this ended, the local end goes down.
+	 *
+	 * Three of the ways out are the BASTION dying -- a write error, a
+	 * read error, the channel reaching EOF -- and leaving the socketpair
+	 * open after them left the target session holding a descriptor that
+	 * was open and permanently silent: never readable, never an error, so
+	 * never a dropped connection. The UI said "connected", the terminal
+	 * was frozen, and the reconnect machine (sec 5.3) was never told
+	 * anything had happened. Shutting down here turns every one of those
+	 * into the ordinary drop it already handles.
+	 */
+	if (m_ours >= 0) ::shutdown(m_ours, SHUT_RDWR);
+}
+
+bool bssh_jump_tunnel::write_to_channel(const char *data, int size) {
+	int written = 0;
+
+	while (written < size && !m_stop) {
+		const int n = ssh_channel_write(m_channel, data + written, size - written);
+		if (n == SSH_ERROR) return false;
+		if (n == SSH_AGAIN || n == 0) {
+			/*
+			 * The channel's window is full: the far end has not read
+			 * what it already has. Waiting on the bastion socket rather
+			 * than spinning, since the window opens when a packet
+			 * arrives from it.
+			 */
+			struct pollfd fd;
+			fd.fd = ssh_get_fd(m_session);
+			fd.events = POLLIN;
+			fd.revents = 0;
+			if (poll(&fd, 1, 200) < 0 && errno != EINTR) return false;
+			continue;
+		}
+		written += n;
+	}
+
+	return !m_stop;
+}
+
+bool bssh_jump_tunnel::drain_channel(char *buffer, int size) {
+	while (!m_stop) {
+		const int n = ssh_channel_read_nonblocking(m_channel, buffer, size, 0);
+		if (n == SSH_ERROR) return false;
+		if (n <= 0) return true;
+
+		int written = 0;
+		while (written < n) {
+			const ssize_t w = ::write(m_ours, buffer + written, size_t(n - written));
+			if (w < 0 && (errno == EINTR || errno == EAGAIN)) continue;
+			if (w <= 0) return false;
+			written += int(w);
+		}
+	}
+
+	return true;
 }
 
 void bssh_jump_tunnel::close() {
 	m_stop = true;
 
 	/*
-	 * Our end first: the pump is sitting in poll() on it, and closing it
-	 * is what wakes the thread. Freeing the session out from under a
-	 * running pump would be a use-after-free with a plausible-looking
-	 * stack.
+	 * Our end first: the pump is waiting on it, and shutting it down is
+	 * what wakes the thread.
 	 */
-	if (m_ours >= 0) {
-		::shutdown(m_ours, SHUT_RDWR);
-	}
+	if (m_ours >= 0) ::shutdown(m_ours, SHUT_RDWR);
 
-	if (isRunning()) {
-		if (!wait(2000)) {
-			terminate();
-			wait(500);
-		}
-	}
-
-	if (m_ours >= 0) {
-		::close(m_ours);
+	if (isRunning() && !wait(5000)) {
+		/*
+		 * It should not get here: every libssh call the pump makes is
+		 * non-blocking and its longest wait is a 200ms poll. If it
+		 * somehow does, the thread keeps the session and the channel and
+		 * this walks away from both.
+		 *
+		 * Killing it instead -- which is what this did -- cancels it at
+		 * whatever point it has reached inside libssh and then frees the
+		 * structures it was halfway through mutating. Leaking a thread
+		 * and a session is a bounded cost; freeing memory another thread
+		 * is standing in is a crash that will be blamed on something
+		 * else entirely.
+		 */
+		m_channel = nullptr;
+		m_session = nullptr;
 		m_ours = -1;
+		m_theirs = -1;
+		return;
 	}
-	/*
-	 * NOT the other end. It was handed to the target session, which owns
-	 * it from that moment and closes it with ssh_free -- closing it here
-	 * as well is a double close, and on a busy process that is somebody
-	 * else's descriptor.
-	 */
-	m_theirs = -1;
 
 	if (m_channel) {
 		ssh_channel_close(m_channel);
@@ -249,5 +369,28 @@ void bssh_jump_tunnel::close() {
 		ssh_disconnect(m_session);
 		ssh_free(m_session);
 		m_session = nullptr;
+	}
+
+	if (m_ours >= 0) {
+		::close(m_ours);
+		m_ours = -1;
+	}
+
+	/*
+	 * And the other end too, AFTER the target session that was using it
+	 * has been freed -- which teardown() guarantees by freeing it before
+	 * it gets here.
+	 *
+	 * The comment that used to sit here said libssh owned this
+	 * descriptor and closed it with ssh_free. It does not: measured
+	 * against libssh 0.11.2, a socket handed over with SSH_OPTIONS_FD is
+	 * still open after a full handshake, ssh_disconnect and ssh_free.
+	 * Believing otherwise leaked one descriptor per connection attempt,
+	 * and a host behind a bastion on a flaky link retries for as long as
+	 * it takes -- until socketpair() itself starts failing.
+	 */
+	if (m_theirs >= 0) {
+		::close(m_theirs);
+		m_theirs = -1;
 	}
 }

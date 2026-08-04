@@ -1497,11 +1497,34 @@ double as documentation of what a preset can do.
   the desktop dialog and "Via" on the touch form, both spelled the way OpenSSH
   spells it, since that is the string the user already has. Blank is a direct
   connection and both placeholders say so.
+  **The tunnel's own socket gets §5.3's options too.** A session reached through
+  a bastion has *two* sockets, and the one the app never sees is the one carrying
+  everything. Left at the system defaults it probes after two hours, so a link
+  that goes silent — a phone losing signal, not a server refusing — was noticed
+  on the target's socket and never on the bastion's, and the session stayed
+  "connected" indefinitely. Measured: with the options, 66s; without them, still
+  believed good after 209s, at which point the test gave up.
+  **libssh does not own a descriptor given to it with `SSH_OPTIONS_FD`.** Measured
+  against 0.11.2: a socket handed over is still open after a full handshake,
+  `ssh_disconnect` and `ssh_free`. Believing otherwise leaked one descriptor per
+  connection *attempt*, and a host behind a bastion on a flaky link retries for
+  as long as it takes.
+  **The pump shuts its local end down however it exits.** Three of the ways out
+  are the bastion dying, and leaving the socket pair open after them left the
+  target session holding a descriptor that was open and permanently silent —
+  never readable, never an error, so never a drop. Shutting it down turns each
+  into the ordinary drop §5.3 already handles.
   **Checked against a real server** (§12.3): `tools/check-ssh.sh` uses the one
   throwaway sshd as *both* bastion and target — it carries a channel to itself,
   and a second independent SSH session runs inside it. A bastion that is not
   listening must stop the connection, which is what keeps the check from passing
-  on a build that ignores the jump host and simply dials the target.
+  on a build that ignores the jump host and simply dials the target. A third
+  phase kills the server under a live tunnelled session — its *children*, since
+  sshd forks per connection and killing the listener alone leaves every
+  established session running, which is how the first version of that phase
+  "proved" a session survives a death that never happened. `check-keepalive.sh`
+  adds the silent case, black-holing the port under a tunnelled session. And a
+  descriptor count across four tunnels catches the leak above.
 - **[OPEN]** Host groups/folders with inherited settings. Presets cover most of the
   need; add folders only if organising many hosts proves awkward.
 
