@@ -706,3 +706,82 @@ void emulator_test::xtgettcap_reports_what_this_terminal_is() {
 	emulator.feed(QByteArrayLiteral("\x1bP+q626365\x1b\\"));   /* bce */
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1bP0+r626365\x1b\\"));
 }
+
+void emulator_test::scrolling_past_a_full_screen_keeps_the_rows_in_order() {
+	const int rows = 4;
+	bssh_emulator emulator(20, rows);
+
+	/*
+	 * Fifty lines through a four-row screen: twelve full turns of the
+	 * ring rather than the two or three the other scroll tests do. An
+	 * offset that is right for the first lap and wrong after it -- the
+	 * classic ring mistake -- survives a short test and dies here.
+	 */
+	for (int i = 0; i < 50; ++i) {
+		emulator.feed(QByteArrayLiteral("line") + QByteArray::number(i)
+		               + QByteArrayLiteral("\r\n"));
+	}
+
+	const QStringList visible = emulator.screen().to_text().split(QLatin1Char('\n'));
+
+	/*
+	 * Three lines and a blank, not four lines. Every line here ends in a
+	 * newline, including the last, so the final one scrolls the screen
+	 * once more and leaves the cursor on a fresh blank row -- which is
+	 * what a shell prompt does too.
+	 *
+	 * Checked against the pre-ring implementation rather than reasoned
+	 * about: with the rotation disabled and the old row-by-row memmove
+	 * doing the work, the screen reads identically. That is what says
+	 * this expectation describes the terminal rather than the ring.
+	 */
+	QCOMPARE(visible.value(0), QStringLiteral("line47"));
+	QCOMPARE(visible.value(1), QStringLiteral("line48"));
+	QCOMPARE(visible.value(2), QStringLiteral("line49"));
+	QCOMPARE(visible.value(3), QString());
+}
+
+void emulator_test::scrolling_backwards_keeps_the_rows_in_order() {
+	bssh_emulator emulator(20, 4);
+
+	emulator.feed(QByteArrayLiteral("one\r\ntwo\r\nthree\r\nfour"));
+
+	/*
+	 * Reverse index at the top of the screen scrolls the other way, which
+	 * is the branch of the rotation that subtracts rather than adds. It
+	 * is the half a forward-only test never reaches, and getting its
+	 * modulo wrong puts the rows in a plausible but wrong order rather
+	 * than crashing.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[H\x1bM"));
+
+	const QStringList visible = emulator.screen().to_text().split(QLatin1Char('\n'));
+	QCOMPARE(visible.value(0), QString());
+	QCOMPARE(visible.value(1), QStringLiteral("one"));
+	QCOMPARE(visible.value(2), QStringLiteral("two"));
+	QCOMPARE(visible.value(3), QStringLiteral("three"));
+}
+
+void emulator_test::a_margin_scroll_leaves_the_rows_outside_it_alone() {
+	bssh_emulator emulator(20, 5);
+
+	emulator.feed(QByteArrayLiteral("top\r\nA\r\nB\r\nC\r\nbottom"));
+
+	/*
+	 * A scroll region covering rows 2-4 only (DECSTBM is 1-based), then a
+	 * scroll inside it. Rotating the whole ring would be wrong here: the
+	 * rows outside the margins must not move, so this has to fall back to
+	 * moving rows one at a time.
+	 *
+	 * "top" and "bottom" staying put is the whole assertion.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[2;4r"));
+	emulator.feed(QByteArrayLiteral("\x1b[4;1H\r\n"));
+
+	const QStringList visible = emulator.screen().to_text().split(QLatin1Char('\n'));
+	QCOMPARE(visible.value(0), QStringLiteral("top"));
+	QCOMPARE(visible.value(1), QStringLiteral("B"));
+	QCOMPARE(visible.value(2), QStringLiteral("C"));
+	QCOMPARE(visible.value(3), QString());
+	QCOMPARE(visible.value(4), QStringLiteral("bottom"));
+}

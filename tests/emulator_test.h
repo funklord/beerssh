@@ -54,6 +54,18 @@ private slots:
 	void a_line_written_then_immediately_scrolled_lands_intact();
 
 	/*
+	 * The screen mirror is a ring (sec 9.5): scrolling the whole screen
+	 * rotates an offset instead of moving every row. These are the cases
+	 * that offset gets wrong -- scrolling far enough to wrap it round
+	 * more than once, scrolling BACKWARDS, and scrolling inside margins,
+	 * where rotating the whole thing would take rows with it that must
+	 * not move.
+	 */
+	void scrolling_past_a_full_screen_keeps_the_rows_in_order();
+	void scrolling_backwards_keeps_the_rows_in_order();
+	void a_margin_scroll_leaves_the_rows_outside_it_alone();
+
+	/*
 	 * sec 7.1 tier 3: letting a remote ASK what this terminal supports
 	 * rather than guess it from TERM. The sibling fuzzypickles TUI probes
 	 * exactly these from the other side.
