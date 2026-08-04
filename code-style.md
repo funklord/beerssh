@@ -1,3 +1,7 @@
+<!-- The three rules and their detail are copied from
+     ~/.claude/guidelines/code-style.md -- the source. Keep in sync; fix
+     drift the moment you notice it. -->
+
 # code-style.md
 
 Code style for BeerSSH. Applies to everything this project writes — the Qt
@@ -6,13 +10,20 @@ native dependencies get wrapped later. `project.md` §18 states the rules in
 brief and points here for the detail; where the two ever disagree,
 `project.md` wins.
 
+**Above both sits the global source**, `~/.claude/guidelines/code-style.md`,
+which applies to every private project. Where this file or `project.md`
+disagrees with it, that is **drift to fix, not a local override**. A genuine
+divergence needs a technical reason and is raised rather than decided in
+passing -- and when a conflict between the three actually comes up, stop and
+ask instead of picking a winner.
+
 Vendored third-party code keeps its upstream style, and is exempt.
 
-**This is the same style as the sibling `fuzzypickles` tree, deliberately.**
-Both are Qt Widgets frontends over a C-ish core written by the same author,
-and moving between them should cost nothing. `tools/tabify.py` is a
-straight copy of that project's; keep the two in sync rather than letting
-them drift.
+**This is the same style as the sibling `fuzzypickles` tree -- which is now a
+consequence rather than a coincidence.** Both copy the same source. Both are
+Qt Widgets frontends over a C-ish core, and moving between them should cost
+nothing. `tools/tabify.py` is a straight copy of that project's; keep the two
+in sync rather than letting them drift.
 
 ## The three rules
 
@@ -43,6 +54,48 @@ file that mixes both is worse than either.
   in this project.
 - The component names in `project.md` §3 are the real ones. Use them rather
   than inventing synonyms, and update §3 if one genuinely needs renaming.
+
+### Prefixes, and visibility
+
+Prefixes exist to keep this project's symbols from colliding with a
+library's. So they follow **visibility**, and the choice is a matter of
+judgement rather than a mechanical rule:
+
+- **Anything with more than small visibility carries the project prefix** --
+  the public API, and anything a linker or importer outside its own module
+  can reach.
+- **Module-private symbols are left unprefixed**, precisely so that the
+  absence of a prefix reads as "this does not leave the module."
+
+The middle case decides itself on link safety, not on taste. A symbol that
+is internal by intent but still reaches the linker -- cross-file within a
+library, not `static`, not part of the API -- is *not* private for this
+purpose. Prefix it. A deliberate parallel copy of a function in two
+libraries needs a **distinct** name, not the same name in both on the
+assumption that nothing will ever link both sides; that assumption fails
+later, at a call site that changed nothing, and names files you did not
+touch.
+
+Where a language enforces its own scheme, accept it rather than fight it,
+and say in the project's copy that the toolchain is doing it:
+
+- **Rust** -- `non_snake_case` and `non_camel_case_types` are on by default,
+  so types are `PascalCase` and constants `SCREAMING_SNAKE_CASE`. That is
+  the toolchain's, not a choice. Package systems that demand kebab-case
+  (Cargo crate names, Debian package names) likewise read back with their
+  own spelling; do not invent a third by naming the directory differently
+  from the package.
+- **Python** -- a leading underscore (`_name`) is the language's private
+  marker and stands in for "unprefixed" above.
+
+**beerssh states this as a blanket rule instead**, and it is the same rule's
+answer for this codebase rather than a departure from it: every type this
+project owns is declared in a header and reachable across modules, so the
+visibility test comes out "prefix it" every time. Its 87 header types all
+carry `bssh_`; its file-local helpers live in anonymous namespaces, so they
+have internal linkage and no prefix, which is what the source means by
+leaving module-private symbols unprefixed. The Qt types forward-declared in
+headers keep their own names, as the paragraph above requires.
 
 ## 2. Indentation and alignment
 
@@ -85,6 +138,65 @@ nesting, so a braceless body is not a nesting level and `tools/tabify.py`
 will indent it with a tab *plus spaces*. Braces or a one-liner keeps the
 file conformant and says the same thing.
 
+### Settled exceptions
+
+Divergence needs a technical reason. These reasons are already accepted and
+need no discussion:
+
+- **Makefile recipe lines** -- `make` requires a literal tab. Compliant by
+  construction.
+- **YAML** -- the spec forbids tabs for indentation outright. Use spaces.
+- **Markdown** -- list continuation and code fences are space-indented by
+  specification. Exempt.
+- **Go** -- `gofmt` emits tabs natively. Compliant already.
+- **Vendored, generated and attic sources** -- exempt, per the header.
+
+Python deserves a note, because PEP 8 prefers spaces and the tension looks
+worse than it is: the language's only hard rule is that indentation must not
+be *ambiguous*, and tabs-then-spaces is unambiguous at every tab width.
+Continuation lines inside brackets are not indentation-significant at all.
+Never a space *before* a tab in leading whitespace -- that is the case that
+raises `TabError`.
+
+Anything else that seems to need spaces: raise it, get it settled, and add
+it here.
+
+## 3. Filenames
+
+Lowercase, `snake_case`, for everything this project names itself — sources,
+headers, docs. So `main_window.cpp`, not `MainWindow.cpp`, and
+`platform_android.cpp`, not `PlatformAndroid.cpp`.
+
+The exception is a name a tool will not accept lowercased: `Makefile`,
+`AndroidManifest.xml`, and similar. Note that qmake imposes no such
+constraint — `beerssh.pro` is lowercase because nothing forces otherwise.
+
+## Formatters
+
+A formatter is allowed **only if it can be configured to honour the three
+rules completely**. Configuration gaps are disqualifying, not something to
+work around: a formatter that gets indentation right and alignment wrong
+will rewrite the tree on somebody's next save.
+
+So the decision is per tool, per project, and it is a real evaluation:
+
+- If it can be made to comply, use it, and commit the config with a comment
+  saying which setting is load-bearing and what happens without it.
+- If it cannot, do not run it -- **not even ad hoc on a single file**. The
+  failure mode is a silent conversion of files that were already correct,
+  discovered later as a reverted commit rather than an error.
+- If no existing tool fits and the rule is worth mechanising, write our
+  own. A checker that only gates indentation is worth more than a formatter
+  that reflows everything.
+
+**Record the decision and the finding that produced it** in the project's
+copy of this file -- which tool, what specifically failed, what would change
+the answer. A verdict without its evidence gets re-litigated, and a tool
+that improves later never gets reconsidered because nobody remembers what
+was actually wrong with it.
+
+Naming and filename rules are review items, not automated ones.
+
 ### clang-format is deliberately NOT used
 
 There is no `.clang-format` in this repo, and adding one would be a mistake
@@ -99,16 +211,6 @@ tree the hard way:
   parameters one column past the open paren, which clang-format cannot
   express (`AlignAfterOpenBracket` aligns *to* the paren). Any config would
   therefore reflow nearly every multi-line signature in the tree.
-
-## 3. Filenames
-
-Lowercase, `snake_case`, for everything this project names itself — sources,
-headers, docs. So `main_window.cpp`, not `MainWindow.cpp`, and
-`platform_android.cpp`, not `PlatformAndroid.cpp`.
-
-The exception is a name a tool will not accept lowercased: `Makefile`,
-`AndroidManifest.xml`, and similar. Note that qmake imposes no such
-constraint — `beerssh.pro` is lowercase because nothing forces otherwise.
 
 ## 4. Tooling
 
@@ -148,10 +250,73 @@ this project's comments are *for*, in order of value:
 - **A pointer to the spec section** (`project.md` §7, §9.5, ...) rather than
   a paraphrase of it, so the two cannot drift.
 
+## Precedence
+
+Three layers, and they are not equals:
+
+1. **The global guidelines** (`~/.claude/CLAUDE.md` and the files it
+   imports) -- the source, and they win.
+2. **The project's `project.md`** -- project-specific design and conventions.
+3. **The project's `code-style.md`** -- this file, copied.
+
+A project copy that disagrees with the source is **drift, not an
+override**: fix it. A project that genuinely needs to diverge needs a
+technical reason, and that is a decision to raise with the user -- not one
+to make while working on something else.
+
+**When a conflict between layers actually comes up, stop and ask.** Do not
+silently pick a winner, even the global one.
+
+This precedence rule lives here and in the global guidelines only. It does
+not belong in a `project.md`.
+
+## Keeping the copies in sync
+
+Each private project keeps a copy of this file at its repo root, opening
+with a header that names the source:
+
+```markdown
+<!-- Copied from ~/.claude/guidelines/code-style.md -- the source. Keep in
+     sync; fix drift the moment you notice it. -->
+```
+
+Below the copied rules, a project adds only what is genuinely its own: its
+exempt paths, its formatter verdicts, its language-specific notes, its
+tooling commands.
+
+**This source is deliberately plain ASCII** -- no em dashes, no section
+signs, no arrows -- so that a copy can be byte-verbatim in every project,
+including one whose own rules restrict the characters its files may
+contain. Keep it that way when editing: a typographic character introduced
+here becomes a transliteration problem in seven repositories.
+
+Where a copy must still be adapted, **"do not diverge" means semantically
+identical, not byte-identical**: a project transliterating to satisfy its
+own character-set rule, or renumbering a heading to fit its own structure,
+is that project's rule working correctly, **not drift, and not something to
+reconcile back**. What must match is every rule and every exception, in
+substance.
+
+**If you notice a copy diverging from the source, reconcile it as soon as
+you notice** -- do not leave it for later and do not work around it. If the
+divergence looks deliberate rather than stale, that is the conflict case
+above: ask.
+
+Noticing requires looking. **Re-read this source before writing or
+reconciling any project's copy**, rather than working from what was loaded
+at the start of the session -- it may have changed since, and a copy
+reconciled against a stale source is drift being written rather than
+fixed.
+
+The project's `project.md` may state the three rules in brief and point
+here for the detail. It does not restate the precedence rule.
+
 ## See also
 
 - **`project.md` §18** — the same rules in brief, plus the commit
   conventions (no docs-only commits; no AI-attribution trailers).
 - **`project.md` §3** — the component names this document tells you to use.
+- **`~/.claude/guidelines/code-style.md`** -- the source both this file and
+  the sibling trees copy from.
 - **`../fuzzypickles/code-style.md`** — the sibling tree's copy, which this
   one deliberately tracks.
