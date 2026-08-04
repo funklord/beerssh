@@ -62,7 +62,29 @@ public:
 	 * convertible laptop in tablet mode and a phone with a Bluetooth
 	 * keyboard wrong in opposite directions.
 	 */
-	virtual bool is_touch_primary() const = 0;
+	bool is_touch_primary() const;
+
+	/*
+	 * Forces the answer, or -1 to go back to asking the platform.
+	 *
+	 * A testing seam, in the same spirit as bssh_ssh_session::set_factory,
+	 * and it earns its place: fourteen widgets decide their arrangement
+	 * from this one question, and a desktop build could not render or
+	 * test any of their touch forms. `make shots` was labelling a picture
+	 * "touch-licences" while showing the DESKTOP arrangement squeezed
+	 * into 360px -- a tool whose whole purpose is that you can trust what
+	 * you see, showing something the app never does.
+	 *
+	 * Never called by the app. Threading an explicit arrangement through
+	 * fourteen constructors would be a large change made entirely for the
+	 * benefit of a renderer.
+	 */
+	static void force_touch_primary(int touch);
+
+protected:
+	virtual bool platform_is_touch_primary() const = 0;
+
+public:
 
 	/*
 	 * Keep the process alive with no window on screen (sec 5.1 / 5.5).

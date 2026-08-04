@@ -56,3 +56,17 @@ bssh_platform::bssh_platform(QObject *parent) : QObject(parent) {
 
 bssh_platform::~bssh_platform() {
 }
+
+/*
+ * -1 until something says otherwise, which is every run of the app.
+ */
+static int bssh_forced_touch = -1;
+
+bool bssh_platform::is_touch_primary() const {
+	if (bssh_forced_touch >= 0) return bssh_forced_touch != 0;
+	return platform_is_touch_primary();
+}
+
+void bssh_platform::force_touch_primary(int touch) {
+	bssh_forced_touch = touch;
+}

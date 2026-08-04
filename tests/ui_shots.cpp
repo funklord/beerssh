@@ -5,6 +5,7 @@
 #include <QtTest>
 
 #include "model/profile.h"
+#include "platform/platform.h"
 #include "model/profile_store.h"
 #include "ui/app_settings_view.h"
 #include "ui/font_picker.h"
@@ -28,6 +29,15 @@ const int BSSH_PHONE_W = 360;
 const int BSSH_PHONE_H = 640;
 const int BSSH_DESKTOP_W = 800;
 const int BSSH_DESKTOP_H = 600;
+
+/*
+ * Forces the arrangement for as long as it is in scope, so an early
+ * return cannot leave the next run rendering the wrong one.
+ */
+struct forced_touch_t {
+	explicit forced_touch_t(int touch) { bssh_platform::force_touch_primary(touch); }
+	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
+};
 
 QString shot_dir() {
 	QString dir = qEnvironmentVariable("BSSH_SHOT_DIR");
@@ -84,6 +94,21 @@ void shoot(const QString &name, QWidget *widget, int width, int height) {
 } /* namespace */
 
 void bssh_ui_shots::render_touch_surfaces() {
+	/*
+	 * The TOUCH arrangement, forced.
+	 *
+	 * Fourteen widgets decide their shape from is_touch_primary(), and on
+	 * a desktop build it is false -- so these pictures were the DESKTOP
+	 * arrangement squeezed into 360px. The licences view looked broken in
+	 * a way it is not: side by side at that width its text arrives eight
+	 * characters wide, which is exactly the failure its own code already
+	 * avoids by stacking, on a phone, where the answer is true.
+	 *
+	 * A picture that shows something the app never does is worse than no
+	 * picture, in a tool whose whole argument is that you can trust it.
+	 */
+	const forced_touch_t arrangement(1);
+
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
 	const bssh_profile_t profile = sample_profile();
@@ -114,9 +139,13 @@ void bssh_ui_shots::render_touch_surfaces() {
 
 	bssh_licences_view licences;
 	shoot(QStringLiteral("touch-licences"), &licences, BSSH_PHONE_W, BSSH_PHONE_H);
+
 }
 
 void bssh_ui_shots::render_desktop_surfaces() {
+	/* And the desktop arrangement, said rather than assumed. */
+	const forced_touch_t arrangement(0);
+
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
 	store.save(sample_profile());
@@ -144,9 +173,16 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	const QSize floor = squeezed.minimumSizeHint();
 	shoot(QStringLiteral("desktop-front-door-minimum"), &squeezed,
 	       floor.width(), floor.height());
+
+	bssh_licences_view licences;
+	shoot(QStringLiteral("desktop-licences"), &licences,
+	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+
 }
 
 void bssh_ui_shots::render_front_door_pages() {
+	const forced_touch_t arrangement(0);
+
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
 	store.save(sample_profile());
@@ -179,4 +215,5 @@ void bssh_ui_shots::render_front_door_pages() {
 		QTextStream(stdout) << QStringLiteral("  %1  page needs %2x%3\n")
 		                               .arg(path, -44).arg(needed.width()).arg(needed.height());
 	}
+
 }

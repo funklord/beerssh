@@ -359,7 +359,7 @@ public:
 		return window.lightness() < 128 ? BSSH_APPEARANCE_DARK : BSSH_APPEARANCE_LIGHT;
 	}
 
-	bool is_touch_primary() const override {
+	bool platform_is_touch_primary() const override {
 		/*
 		 * True as the M0 default, but this is not a constant either: an
 		 * Android device with a Bluetooth keyboard docked is the case

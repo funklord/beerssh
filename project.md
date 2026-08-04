@@ -980,6 +980,19 @@ collapse/restore is bookkeeping, not surgery.
   Offscreen, so it needs no display. The output goes through a file rather than
   a pipe: a pipeline reports its *last* command's status, so `binary | grep`
   would have reported grep's and swallowed a crash into a clean-looking run.
+  **It forces the arrangement rather than inheriting it,** and the first version
+  did not. Fourteen widgets decide their shape from `is_touch_primary()`, which
+  is false on the desktop build that renders these — so every "touch-" picture
+  was the *desktop* arrangement squeezed into 360px. The licences view looked
+  broken in a way it is not: side by side at that width its text arrives eight
+  characters wide, which is exactly the failure its own code already avoids by
+  stacking on a phone. Checked against a device before changing anything, and
+  the device was fine. A picture that shows something the app never does is
+  worse than no picture, in a tool whose whole argument is that you can trust
+  it. `bssh_platform::force_touch_primary()` is the seam — never called by the
+  app, in the same spirit as `bssh_ssh_session::set_factory` — and the layout
+  tests use it too, since they had been holding desktop arrangements to a
+  phone's width and calling it a touch test.
 - **The desktop front door gets the same treatment, and it found worse.** Its
   minimums were fine at 800x600 — the small window §8.2 already contemplates when
   it talks about tiling one into a half-screen column — so nothing a size check

@@ -245,7 +245,7 @@ public:
 		return QString();
 	}
 
-	bool is_touch_primary() const override {
+	bool platform_is_touch_primary() const override {
 		/*
 		 * False for now, not forever. A convertible in tablet mode is a
 		 * real desktop case for the on-screen key row, so this becomes a

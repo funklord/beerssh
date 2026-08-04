@@ -5,6 +5,7 @@
 #include <QtTest>
 
 #include "model/profile.h"
+#include "platform/platform.h"
 #include <QTemporaryDir>
 #include "model/profile_store.h"
 #include "ui/host_list.h"
@@ -333,6 +334,20 @@ namespace {
  * hint: that is the width below which a layout refuses to go, so anything
  * larger is content the user cannot reach on a screen this size.
  */
+/*
+ * Forces the arrangement for as long as it is in scope.
+ *
+ * A guard rather than a call and a matching reset at the bottom: QVERIFY
+ * returns from the function it fails in, so the reset at the bottom is
+ * exactly the line that does not run on the day it matters -- and every
+ * test after it would then be measuring the wrong arrangement, reporting
+ * a failure somewhere else entirely.
+ */
+struct forced_touch_t {
+	explicit forced_touch_t(int touch) { bssh_platform::force_touch_primary(touch); }
+	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
+};
+
 const int BSSH_PHONE_DP = 360;
 const int BSSH_PHONE_TALL_DP = 640;
 
@@ -403,6 +418,17 @@ void check_fits(const QString &name, QWidget *widget)
 
 void layout_test::every_touch_surface_fits_a_phone()
 {
+	/*
+	 * In the TOUCH arrangement, which this was not asking for.
+	 *
+	 * Most of these widgets decide their shape from is_touch_primary(),
+	 * and on the desktop build that runs the suite it is false -- so this
+	 * had been holding the DESKTOP arrangement to a phone's width and
+	 * calling it a touch test. The touch forms, which are the ones with
+	 * 48dp controls and stacked columns, were never measured at all.
+	 */
+	const forced_touch_t arrangement(1);
+
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
 
@@ -450,6 +476,7 @@ void layout_test::every_touch_surface_fits_a_phone()
 		                             true);
 		check_fits(QStringLiteral("password prompt"), &prompt);
 	}
+
 }
 
 namespace {
@@ -483,6 +510,9 @@ QWidget *by_accessible_name(const QWidget *root, const QString &name)
 
 void layout_test::every_desktop_surface_fits_a_small_window()
 {
+	/* The desktop arrangement, said rather than assumed. */
+	const forced_touch_t arrangement(0);
+
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
 
@@ -519,6 +549,7 @@ void layout_test::every_desktop_surface_fits_a_small_window()
 		                             .arg(surface.name).arg(needed.width()).arg(needed.height())
 		                             .arg(BSSH_SMALL_DESKTOP_W).arg(BSSH_SMALL_DESKTOP_H)));
 	}
+
 }
 
 void layout_test::the_desktop_front_door_lines_its_fields_up()
