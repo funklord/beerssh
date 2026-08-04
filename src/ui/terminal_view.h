@@ -182,6 +182,30 @@ public:
 	                      qint64 &last_line, int &last_col) const;
 	void clear_selection();
 
+	/*
+	 * Everything the view can reach: the whole scrollback and the screen
+	 * below it. One coordinate space covers both (see line_for_row), so
+	 * this is line zero to the last line rather than anything special.
+	 */
+	void select_all();
+
+	/*
+	 * Whether a press-and-hold opens the menu.
+	 *
+	 * On by default nowhere: it is set from the resolved menu layout, so
+	 * a device using the touch layout gets the gesture that layout exists
+	 * for, and a pointer keeps press-and-hold meaning "start a selection
+	 * and think about it".
+	 *
+	 * Built on the mouse events a long press already arrives as, rather
+	 * than on Qt's tap-and-hold gesture. That was tried first and never
+	 * fired on Android: the recogniser wants real touch events, and what
+	 * reaches this widget is the synthesised mouse press -- which is
+	 * exactly why a long press on the host list registers as an ordinary
+	 * tap today.
+	 */
+	void set_long_press_menu(bool enabled);
+
 public slots:
 	/*
 	 * Repaint, and tell assistive technology the text changed (sec 14,
@@ -200,6 +224,15 @@ signals:
 	 */
 	void grid_resized(int cols, int rows);
 
+	/*
+	 * Where a context menu was asked for, in global coordinates, and a
+	 * middle-click paste. Raised rather than handled here because the
+	 * actions belong to the window: paste needs the clipboard and the
+	 * session's input router, exactly as the Ctrl+Shift+V shortcut does.
+	 */
+	void context_menu_requested(const QPoint &at);
+	void primary_paste_requested();
+
 	/* A selection was made or cleared -- the window updates the clipboard. */
 	void selection_changed();
 
@@ -214,6 +247,8 @@ signals:
 protected:
 	void paintEvent(QPaintEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
+	void contextMenuEvent(QContextMenuEvent *event) override;
+
 	void keyPressEvent(QKeyEvent *event) override;
 	void wheelEvent(QWheelEvent *event) override;
 	void mousePressEvent(QMouseEvent *event) override;
@@ -265,6 +300,9 @@ private:
 	qint64 m_last_click_line;
 
 	bool m_selecting;
+	bool m_long_press_menu;
+	QTimer *m_long_press;
+	QPoint m_long_press_at;
 	qint64 m_selection_anchor_line;
 	int m_selection_anchor_col;
 	qint64 m_selection_focus_line;

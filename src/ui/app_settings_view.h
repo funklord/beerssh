@@ -34,6 +34,7 @@ private:
 
 	QComboBox *m_key_row;
 	QComboBox *m_theme;
+	QComboBox *m_context_menu;
 	QCheckBox *m_raise_contrast;
 };
 

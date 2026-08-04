@@ -2,7 +2,10 @@
 #define BSSH_MAIN_WINDOW_H
 
 #include <QString>
+#include <QPointer>
 #include <QWidget>
+
+#include "model/app_settings.h"
 
 #include "input/input_router.h"
 #include "ssh/ssh_session.h"
@@ -159,6 +162,29 @@ private:
 	void show_session(bssh_session *session);
 	void detach_session();
 	void update_status();
+
+	/*
+	 * The terminal's own context menu (sec 6.4). Public so a test can
+	 * build it without synthesising a right-click, and static because it
+	 * depends on nothing but the layout asked for.
+	 */
+public:
+	static bssh_app_settings::context_menu_t context_menu_layout(
+	        bssh_app_settings::context_menu_t setting, bool touch_primary);
+
+private:
+	void show_terminal_menu(const QPoint &at);
+
+public:
+	/*
+	 * The menu, built but not shown. Separated from showing it because
+	 * exec() blocks until somebody clicks, which no test can do -- and
+	 * the part worth testing is the contents: which verbs, in what order,
+	 * which of them are available, and how big the rows are.
+	 */
+	QMenu *build_terminal_menu(QWidget *parent) const;
+
+private:
 	void elide_status();
 
 	QStackedWidget *m_pages;
@@ -182,7 +208,21 @@ private:
 	 * a pane rebuild, and comparing a dangling pointer against a fresh
 	 * one is exactly the test wanted -- they differ.
 	 */
-	bssh_terminal_view *m_wired_view;
+	/*
+	 * Which view's signals are already connected.
+	 *
+	 * A QPointer, not a raw one, and that is the whole fix for a bug this
+	 * found the hard way: panes are destroyed and rebuilt, the allocator
+	 * hands the replacement the address the old one had, and a raw
+	 * comparison then says "already wired" about an object that has never
+	 * been connected to anything. Every signal in that block -- the grid
+	 * size, the link prompt, the primary-selection copy, the context menu
+	 * -- is silently dead on that view.
+	 *
+	 * A QPointer is cleared when its object is destroyed, so the
+	 * replacement compares unequal however the allocator behaves.
+	 */
+	QPointer<bssh_terminal_view> m_wired_view;
 	QLabel *m_status_label;
 	bssh_session_registry *m_registry;
 	bssh_layout_manager *m_layout;

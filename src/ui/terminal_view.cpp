@@ -9,6 +9,7 @@
 #include <QFontMetricsF>
 
 #include <algorithm>
+#include <QContextMenuEvent>
 #include <QPainter>
 #include <QTimer>
 #include <QInputMethodEvent>
@@ -65,6 +66,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_click_count(0),
       m_last_click_line(-1),
       m_selecting(false),
+      m_long_press_menu(false),
+      m_long_press(nullptr),
       m_selection_anchor_line(-1),
       m_selection_anchor_col(0),
       m_selection_focus_line(-1),
@@ -96,6 +99,19 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 * so this is safe before any font has been fetched or bundled.
 	 */
 	set_colour_scheme(QString());
+
+	/*
+	 * The press-and-hold timer. Half a second is Android's own long-press
+	 * threshold, and matching it is what makes the gesture feel like the
+	 * rest of the system rather than like this app's idea of a hold.
+	 */
+	m_long_press = new QTimer(this);
+	m_long_press->setSingleShot(true);
+	m_long_press->setInterval(500);
+	connect(m_long_press, &QTimer::timeout, this, [this] {
+		if (!m_long_press_menu) return;
+		emit context_menu_requested(mapToGlobal(m_long_press_at));
+	});
 
 	const bssh_platform *platform = bssh_platform::instance();
 	const bool compact = platform && platform->is_touch_primary();
@@ -470,6 +486,29 @@ void bssh_terminal_view::recompute_grid() {
 	m_cols = cols;
 	m_rows = rows;
 	emit grid_resized(m_cols, m_rows);
+}
+
+void bssh_terminal_view::contextMenuEvent(QContextMenuEvent *event) {
+	/*
+	 * One handler for both gestures. Qt raises this from a right-click on
+	 * a desktop and from a long press on Android, which is how the host
+	 * list already gets its menu on both -- so the two do not need
+	 * separate code, only different LAYOUTS, which the window applies.
+	 *
+	 * Not raised while the remote is reading the mouse: a full-screen
+	 * program that asked for button events is entitled to the right
+	 * button, and a menu appearing over it would be the terminal
+	 * answering for it. Shift is the conventional override there and
+	 * reaches the selection path instead, as it does for clicks.
+	 */
+	if (m_emulator && m_emulator->mouse_reporting()
+	     && !(event->modifiers() & Qt::ShiftModifier)) {
+		event->ignore();
+		return;
+	}
+
+	emit context_menu_requested(event->globalPos());
+	event->accept();
 }
 
 void bssh_terminal_view::keyPressEvent(QKeyEvent *event) {
@@ -859,6 +898,24 @@ bool bssh_terminal_view::has_selection() const {
 	        || m_selection_anchor_col != m_selection_focus_col;
 }
 
+void bssh_terminal_view::set_long_press_menu(bool enabled) {
+	m_long_press_menu = enabled;
+	if (!enabled) m_long_press->stop();
+}
+
+void bssh_terminal_view::select_all() {
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	const qint64 last_line = history + qMax(0, m_rows - 1);
+
+	m_selection_anchor_line = 0;
+	m_selection_anchor_col = 0;
+	m_selection_focus_line = last_line;
+	m_selection_focus_col = qMax(0, m_cols - 1);
+
+	update();
+	emit selection_changed();
+}
+
 void bssh_terminal_view::clear_selection() {
 	if (m_selection_anchor_line < 0) return;
 
@@ -917,6 +974,20 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 			                               : event->button() == Qt::MiddleButton ? 2 : 1,
 			                               true, 0);
 		}
+		event->accept();
+		return;
+	}
+
+	/*
+	 * Middle-click pastes the primary selection: X11's own convention,
+	 * older than any of the menus below and still the fastest way to move
+	 * a word between two terminals. The selection half of it was already
+	 * here -- selecting text published it -- so only the receiving half
+	 * was missing, which made the convention work in one direction and
+	 * look broken in the other.
+	 */
+	if (event->button() == Qt::MiddleButton) {
+		emit primary_paste_requested();
 		event->accept();
 		return;
 	}
@@ -988,11 +1059,31 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	m_selection_focus_line = line;
 	m_selection_focus_col = col;
 
+	/*
+	 * A hold that has not moved is a request for the menu; one that moves
+	 * is a selection. Started here, cancelled by the first drag or by the
+	 * release, so the two can never both happen.
+	 */
+	if (m_long_press_menu) {
+		m_long_press_at = event->pos();
+		m_long_press->start();
+	}
+
 	update();
 	event->accept();
 }
 
 void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
+	/*
+	 * Any real movement means a drag, not a hold. A few pixels of slop,
+	 * because a thumb never holds perfectly still and cancelling on one
+	 * pixel would make the gesture impossible to perform.
+	 */
+	if (m_long_press->isActive()
+	     && (event->pos() - m_long_press_at).manhattanLength() > 12) {
+		m_long_press->stop();
+	}
+
 	if (!m_selecting) {
 		QWidget::mouseMoveEvent(event);
 		return;
@@ -1010,6 +1101,9 @@ void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
+	/* Released before the hold matured: an ordinary click. */
+	m_long_press->stop();
+
 	if (m_emulator && m_emulator->mouse_reporting()
 	    && !event->modifiers().testFlag(Qt::ShiftModifier)) {
 		m_emulator->send_mouse_button(1, false, 0);

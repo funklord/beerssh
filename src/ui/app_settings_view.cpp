@@ -73,6 +73,23 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * the offending colour when DRAWING it, leaving the scheme itself
 	 * saying what its author published.
 	 */
+	/*
+	 * How the terminal's right-click (or long-press) menu is laid out.
+	 * Automatic means a pointer gets pointer-sized rows and a thumb gets
+	 * thumb-sized ones; the override is here because the same device can
+	 * be both, and because a desktop user who wants the big menu is
+	 * entitled to it.
+	 */
+	m_context_menu = new QComboBox(this);
+	m_context_menu->addItem(QStringLiteral("Automatic"),
+	                         int(bssh_app_settings::CONTEXT_MENU_AUTO));
+	m_context_menu->addItem(QStringLiteral("Pointer-sized"),
+	                         int(bssh_app_settings::CONTEXT_MENU_DESKTOP));
+	m_context_menu->addItem(QStringLiteral("Touch-sized"),
+	                         int(bssh_app_settings::CONTEXT_MENU_TOUCH));
+	if (touch) m_context_menu->setMinimumHeight(48);
+	form->addRow(QStringLiteral("Terminal menu"), m_context_menu);
+
 	m_raise_contrast = new QCheckBox(QStringLiteral("Raise low-contrast colours"), this);
 	m_raise_contrast->setToolTip(
 	        QStringLiteral("Colour schemes are reproduced exactly, and some of them are hard "
@@ -164,6 +181,9 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	const bssh_app_settings settings;
 	m_raise_contrast->setChecked(settings.raise_contrast());
 
+	const int menu_index = m_context_menu->findData(int(settings.context_menu()));
+	m_context_menu->setCurrentIndex(menu_index < 0 ? 0 : menu_index);
+
 	const int theme_index = m_theme->findData(settings.theme());
 	if (theme_index >= 0) m_theme->setCurrentIndex(theme_index);
 
@@ -178,6 +198,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] { commit(); });
 	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+	connect(m_context_menu, &QComboBox::currentIndexChanged, this, [this] { commit(); });
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
 }
 
@@ -186,6 +207,8 @@ void bssh_app_settings_view::commit() {
 	stored.set_key_row_visibility(
 	        bssh_app_settings::key_row_visibility_t(m_key_row->currentData().toInt()));
 	stored.set_theme(m_theme->currentData().toString());
+	stored.set_context_menu(
+	        bssh_app_settings::context_menu_t(m_context_menu->currentData().toInt()));
 	stored.set_raise_contrast(m_raise_contrast->isChecked());
 
 	/* Applied immediately: a setting that waits for a restart reads as a

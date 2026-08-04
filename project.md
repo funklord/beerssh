@@ -1064,6 +1064,52 @@ collapse/restore is bookkeeping, not surgery.
   Elided rather than wrapped: a status line that grows to three lines takes the
   space from the terminal, which is where the user was looking.
 
+### 6.4 The terminal's context menu — **[DECIDED]**
+
+Right-click on the desktop, press-and-hold on touch: **Copy, Paste, Select All**.
+There was none at all before — the tab bar and the host list had menus and the
+thing the app is *for* did not, and right-click in the terminal did nothing
+whatsoever.
+
+**The desktop terminals of 1995-2010 never agreed about the right button**, and
+that disagreement is the design question. xterm gave it selection extension and
+put its menus behind Ctrl+click; PuTTY made it *paste*, in the Windows console
+tradition, and offered a three-way "Action of mouse buttons" setting because
+even it could not pick one; Konsole and GNOME Terminal put a menu there, and by
+the mid-2000s that had won on the desktop this app is built for. So: a menu —
+and PuTTY's answer to the disagreement, *a setting*, is the part worth copying
+rather than its default.
+
+**The order and the details are the Windows Interface Guidelines' (1995)**,
+which all of those programs were written against and which have not been
+improved on: edit verbs first in their canonical order, object-specific
+commands after a separator, access keys on every item, and **nothing hidden** —
+Copy with no selection is shown disabled rather than removed, so the menu is
+the same shape every time and the hand learns where Paste is.
+
+**Touch changes the metrics and nothing else.** iOS and Android converged on the
+same three verbs from a long press, with much larger targets, so the rows grow
+to §6.2's 48dp floor and the keyboard shortcuts drop off the labels — they are
+telling somebody with no keyboard which chord to press. Which verbs they are,
+and in what order, does not change between the two.
+
+**Switchable, defaulting per device** (`Terminal menu` under This device):
+Automatic / Pointer-sized / Touch-sized, the same three-state shape the key row
+and the theme use. Automatic asks `is_touch_primary()`, which is what makes the
+default differ between a desktop and a phone; the override exists because one
+device can be both.
+
+**Middle-click pastes the primary selection**, X11's own convention and older
+than any of these menus. The *publishing* half was already there — selecting
+text made it available to other programs — so the convention worked in one
+direction and looked broken in the other. It pastes PRIMARY, never the
+clipboard: conflating the two is what makes middle-click surprising.
+
+**A program that asked for the mouse keeps the right button.** No menu is raised
+while mouse reporting is on, since a full-screen program that requested button
+events is entitled to them; Shift is the conventional override there, exactly as
+it is for selection.
+
 ### 8.5 The front door — **[DECIDED]**
 
 **Desktop borrows PuTTY's interface. Touch gets a mobile one. Same model

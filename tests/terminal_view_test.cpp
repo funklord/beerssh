@@ -10,6 +10,9 @@
 #include "model/app_settings.h"
 #include <QHash>
 #include "term/colour_scheme.h"
+#include <QContextMenuEvent>
+#include <QMenu>
+#include "ui/main_window.h"
 #include "terminal_view_test.h"
 
 #include "fake_ssh_session.h"
@@ -799,4 +802,147 @@ void terminal_view_test::a_reader_can_reach_the_scrollback_and_the_selection() {
 	QVERIFY(start >= 0);
 	QVERIFY2(end > start, "a selection spanning the buffer must span offsets too");
 	QVERIFY(end <= text->characterCount());
+}
+
+void terminal_view_test::select_all_reaches_the_scrollback_and_the_screen() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < 20; ++i) {
+		emulator.feed(QByteArrayLiteral("row") + QByteArray::number(i)
+		               + QByteArrayLiteral("\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 0);
+
+	view.select_all();
+	QVERIFY(view.has_selection());
+
+	/*
+	 * Both halves, which is the whole point of the one coordinate space:
+	 * the oldest line is in the scrollback and the newest is on screen,
+	 * and a "select all" that stopped at the fold would quietly copy the
+	 * visible part only.
+	 */
+	const QString text = view.selection_text();
+	QVERIFY2(text.contains(QStringLiteral("row0")), qPrintable(text.left(60)));
+	QVERIFY2(text.contains(QStringLiteral("row19")), qPrintable(text.right(60)));
+}
+
+void terminal_view_test::middle_click_pastes_the_primary_selection() {
+	bssh_terminal_view view;
+	show_and_resize(view, 320, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_emulator(&emulator);
+
+	QSignalSpy asked(&view, &bssh_terminal_view::primary_paste_requested);
+
+	QTest::mouseClick(&view, Qt::MiddleButton, Qt::NoModifier, QPoint(20, 20));
+
+	/*
+	 * The view asks; the window reads the PRIMARY selection and pastes
+	 * it. Asserted at the ask, because the buffer itself is the
+	 * platform's and a headless test has no reliable one -- what was
+	 * broken was that the middle button did nothing whatsoever.
+	 */
+	QCOMPARE(asked.count(), 1);
+}
+
+void terminal_view_test::the_remote_keeps_the_right_button_when_it_asked_for_the_mouse() {
+	bssh_terminal_view view;
+	show_and_resize(view, 320, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_emulator(&emulator);
+
+	QSignalSpy menus(&view, &bssh_terminal_view::context_menu_requested);
+
+	/* Mouse reporting on: the right button is the program's. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h"));
+	QVERIFY(emulator.mouse_reporting());
+
+	QContextMenuEvent claimed(QContextMenuEvent::Mouse, QPoint(20, 20),
+	                           view.mapToGlobal(QPoint(20, 20)));
+	QApplication::sendEvent(&view, &claimed);
+	QCOMPARE(menus.count(), 0);
+
+	/*
+	 * Shift overrides it, the same convention that lets a user select
+	 * text out of a full-screen program (sec 6.4).
+	 */
+	QContextMenuEvent overridden(QContextMenuEvent::Mouse, QPoint(20, 20),
+	                              view.mapToGlobal(QPoint(20, 20)), Qt::ShiftModifier);
+	QApplication::sendEvent(&view, &overridden);
+	QCOMPARE(menus.count(), 1);
+}
+
+void terminal_view_test::the_menu_layout_follows_the_device_until_told_otherwise() {
+	/*
+	 * Automatic means the device decides, which is the default and
+	 * differs between a desktop and a phone. Anything else is the user
+	 * overruling it, and then the device does not get a say -- a
+	 * convertible in tablet mode is exactly why the override exists.
+	 */
+	QCOMPARE(bssh_main_window::context_menu_layout(
+	                 bssh_app_settings::CONTEXT_MENU_AUTO, false),
+	          bssh_app_settings::CONTEXT_MENU_DESKTOP);
+	QCOMPARE(bssh_main_window::context_menu_layout(
+	                 bssh_app_settings::CONTEXT_MENU_AUTO, true),
+	          bssh_app_settings::CONTEXT_MENU_TOUCH);
+
+	QCOMPARE(bssh_main_window::context_menu_layout(
+	                 bssh_app_settings::CONTEXT_MENU_TOUCH, false),
+	          bssh_app_settings::CONTEXT_MENU_TOUCH);
+	QCOMPARE(bssh_main_window::context_menu_layout(
+	                 bssh_app_settings::CONTEXT_MENU_DESKTOP, true),
+	          bssh_app_settings::CONTEXT_MENU_DESKTOP);
+}
+
+void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
+	bssh_main_window window;
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	const QList<QAction *> actions = menu->actions();
+	QCOMPARE(actions.size(), 4);
+
+	/*
+	 * The order is the Windows Interface Guidelines' and every desktop
+	 * terminal since: the edit verbs first in their canonical order, then
+	 * a separator, then what is specific to the object. Asserted because
+	 * it is the part a later edit would casually reorder, and because a
+	 * menu whose items move is one nobody can use without reading.
+	 */
+	QCOMPARE(actions.at(0)->text(), QStringLiteral("&Copy"));
+	QCOMPARE(actions.at(1)->text(), QStringLiteral("&Paste"));
+	QVERIFY(actions.at(2)->isSeparator());
+	QCOMPARE(actions.at(3)->text(), QStringLiteral("Select &All"));
+
+	/*
+	 * Access keys on every verb, which is what makes the menu usable from
+	 * the keyboard and is half of what those guidelines are about.
+	 */
+	for (const QAction *action : actions) {
+		if (action->isSeparator()) continue;
+		QVERIFY2(action->text().contains(QLatin1Char('&')),
+		          qPrintable(action->text() + QStringLiteral(" has no access key")));
+	}
+
+	/*
+	 * Copy with nothing selected is DISABLED, not absent. Items that come
+	 * and go change the menu's shape, and a hand that has learned where
+	 * Paste is should find it there every time.
+	 */
+	QVERIFY2(!actions.at(0)->isEnabled(), "Copy must be offered and disabled, not hidden");
+	QCOMPARE(actions.size(), 4);
+
+	delete menu;
 }

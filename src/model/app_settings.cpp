@@ -67,6 +67,34 @@ void bssh_app_settings::set_key_row_visibility(key_row_visibility_t visibility) 
 	file.sync();
 }
 
+namespace {
+
+const char *const BSSH_CONTEXT_MENU_KEYS[] = { "auto", "desktop", "touch" };
+
+} /* namespace */
+
+bssh_app_settings::context_menu_t bssh_app_settings::context_menu() const {
+	if (m_path.isEmpty()) return CONTEXT_MENU_AUTO;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	const QString text = file.value(QStringLiteral("input/context_menu"),
+	                                 QStringLiteral("auto")).toString();
+
+	for (int i = 0; i < 3; ++i) {
+		if (text == QLatin1String(BSSH_CONTEXT_MENU_KEYS[i])) return context_menu_t(i);
+	}
+	return CONTEXT_MENU_AUTO;
+}
+
+void bssh_app_settings::set_context_menu(context_menu_t layout) {
+	if (m_path.isEmpty()) return;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	file.setValue(QStringLiteral("input/context_menu"),
+	               QLatin1String(BSSH_CONTEXT_MENU_KEYS[int(layout)]));
+	file.sync();
+}
+
 QString bssh_app_settings::theme() const {
 	if (m_path.isEmpty()) return QStringLiteral("system");
 

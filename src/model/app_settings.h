@@ -28,6 +28,24 @@ public:
 	 * not. Those two cases are why the spec asks for three states rather
 	 * than a checkbox.
 	 */
+	/*
+	 * How the terminal's context menu is laid out (sec 6.4).
+	 *
+	 * Three states rather than a checkbox, and AUTO first, for the same
+	 * reason the key row and the theme have them: "follow this device" is
+	 * a real answer and the one most people want, and it is not the only
+	 * one. A convertible in tablet mode and a phone with a keyboard
+	 * docked want opposite things from the same OS.
+	 */
+	enum context_menu_t {
+		CONTEXT_MENU_AUTO,
+		CONTEXT_MENU_DESKTOP,
+		CONTEXT_MENU_TOUCH
+	};
+
+	context_menu_t context_menu() const;
+	void set_context_menu(context_menu_t layout);
+
 	enum key_row_visibility_t {
 		KEY_ROW_AUTO,
 		KEY_ROW_ALWAYS,

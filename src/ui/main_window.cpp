@@ -761,10 +761,26 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 void bssh_main_window::apply_device_settings() {
 	apply_key_row_visibility();
 
-	const bool raise = bssh_app_settings().raise_contrast();
+	const bssh_app_settings settings;
+	const bool raise = settings.raise_contrast();
+
+	/*
+	 * Press-and-hold opens the menu wherever the touch layout is in use,
+	 * which is where there is no right button to open it with. A pointer
+	 * keeps press-and-hold meaning "start a selection and think about
+	 * it", which is what it has always meant.
+	 */
+	const bool hold = context_menu_layout(settings.context_menu(),
+	                                       bssh_platform::instance()
+	                                               && bssh_platform::instance()
+	                                                          ->is_touch_primary())
+	        == bssh_app_settings::CONTEXT_MENU_TOUCH;
+
 	if (m_panes) {
 		for (bssh_terminal_view *view : m_panes->views()) {
-			if (view) view->set_raise_contrast(raise);
+			if (!view) continue;
+			view->set_raise_contrast(raise);
+			view->set_long_press_menu(hold);
 		}
 	}
 }
@@ -815,6 +831,26 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 
 		connect(m_terminal_view, &bssh_terminal_view::grid_resized,
 		         this, &bssh_main_window::on_grid_resized);
+
+		connect(m_terminal_view, &bssh_terminal_view::context_menu_requested,
+		         this, &bssh_main_window::show_terminal_menu);
+
+		/*
+		 * Middle-click pastes the PRIMARY selection, not the clipboard.
+		 * They are different buffers and conflating them is what makes
+		 * middle-click paste surprising: it should deliver whatever was
+		 * last selected, including in another program, and never what
+		 * was last copied.
+		 */
+		connect(m_terminal_view, &bssh_terminal_view::primary_paste_requested, this, [this] {
+			if (!m_current) return;
+
+			QClipboard *clipboard = QGuiApplication::clipboard();
+			if (!clipboard->supportsSelection()) return;
+
+			const QString text = clipboard->text(QClipboard::Selection);
+			if (!text.isEmpty()) m_current->input_router()->paste(text);
+		});
 
 	/*
 	 * Opening a URL the remote chose is a decision, so it is made here
@@ -1098,6 +1134,126 @@ void bssh_main_window::on_grid_resized(int cols, int rows) {
 	}
 
 	update_status();
+}
+
+/*
+ * Which layout the terminal menu gets, from the setting and the device.
+ *
+ * The same shape as the key row's and the theme's: AUTO asks the device,
+ * anything else is the user overruling it. Separated out so the rule is
+ * one function rather than a condition inside a menu builder.
+ */
+bssh_app_settings::context_menu_t bssh_main_window::context_menu_layout(
+        bssh_app_settings::context_menu_t setting, bool touch_primary) {
+	if (setting != bssh_app_settings::CONTEXT_MENU_AUTO) return setting;
+	return touch_primary ? bssh_app_settings::CONTEXT_MENU_TOUCH
+	                      : bssh_app_settings::CONTEXT_MENU_DESKTOP;
+}
+
+
+/* sec 6.2's touch floor, the same one the key row and the editors use. */
+static const int BSSH_TOUCH_TARGET_DP = 48;
+
+/*
+ * Copy, Paste, Select All -- and the arrangement is not arbitrary.
+ *
+ * The desktop terminals of the late 90s and 2000s disagreed about the
+ * right mouse button and never reconciled. xterm gave it selection
+ * extension and put its menus on Ctrl+click; PuTTY made it paste, in the
+ * Windows console tradition, and offered a three-way setting because even
+ * it could not pick; Konsole and GNOME Terminal put a menu there, and by
+ * the mid-2000s that had won on the desktop this app is built for. So a
+ * menu it is -- and PuTTY's answer to the disagreement, a setting, is the
+ * one worth copying rather than its default.
+ *
+ * The order and the details are the Windows Interface Guidelines' (1995),
+ * which every one of those programs was written against and which have
+ * not been improved on: the edit verbs first in their canonical order,
+ * object-specific commands after a separator, nothing hidden. Items stay
+ * VISIBLE and disabled rather than disappearing, so the menu is the same
+ * shape every time it opens and the hand learns where Paste is -- a menu
+ * that reflows around what happens to be available is one nobody can use
+ * without reading. Access keys on every item, for the same reason.
+ *
+ * Touch changes the metrics and nothing else. iOS and Android converged on
+ * the same three verbs from a long press -- and on much larger targets, so
+ * the rows grow to sec 6.2's floor. What does not change is which verbs
+ * they are: a phone user reaching for Paste should find the same word in
+ * the same place.
+ */
+QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
+	const bssh_app_settings::context_menu_t layout =
+	        context_menu_layout(bssh_app_settings().context_menu(),
+	                             bssh_platform::instance()
+	                                     && bssh_platform::instance()->is_touch_primary());
+
+	QMenu *menu = new QMenu(parent);
+	menu->setObjectName(QStringLiteral("terminal_context_menu"));
+
+	QAction *copy = menu->addAction(QStringLiteral("&Copy"));
+	copy->setObjectName(QStringLiteral("terminal_copy"));
+	copy->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+C")));
+	copy->setEnabled(m_terminal_view && m_terminal_view->has_selection());
+
+	QAction *paste = menu->addAction(QStringLiteral("&Paste"));
+	paste->setObjectName(QStringLiteral("terminal_paste"));
+	paste->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+V")));
+	paste->setEnabled(m_current && !QGuiApplication::clipboard()->text().isEmpty());
+
+	menu->addSeparator();
+
+	QAction *select_all = menu->addAction(QStringLiteral("Select &All"));
+	select_all->setObjectName(QStringLiteral("terminal_select_all"));
+
+	if (layout == bssh_app_settings::CONTEXT_MENU_TOUCH) {
+		/*
+		 * A thumb, not a pointer. sec 6.2's 48dp floor applies to a menu
+		 * row exactly as it does to a button, and a menu whose items are
+		 * a pointer's height is one that gets the wrong verb half the
+		 * time.
+		 */
+		for (QAction *action : menu->actions()) {
+			if (action->isSeparator()) continue;
+
+			/*
+			 * The shortcut text goes: it is telling somebody with no
+			 * keyboard which chord to press, and it is what makes a
+			 * touch row wide as well as short.
+			 */
+			action->setShortcut(QKeySequence());
+		}
+		menu->setStyleSheet(QStringLiteral("QMenu::item { min-height: %1px; padding: 8px 24px; }")
+		                            .arg(BSSH_TOUCH_TARGET_DP));
+	}
+
+	return menu;
+}
+
+void bssh_main_window::show_terminal_menu(const QPoint &at) {
+	if (!m_terminal_view) return;
+
+	QMenu *menu = build_terminal_menu(this);
+	const QAction *chosen = menu->exec(at);
+	menu->deleteLater();
+	if (!chosen) return;
+
+	const QAction *copy = menu->findChild<QAction *>(QStringLiteral("terminal_copy"));
+	const QAction *paste = menu->findChild<QAction *>(QStringLiteral("terminal_paste"));
+	const QAction *select_all =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_select_all"));
+
+	if (chosen == copy) {
+		const QString selected = m_terminal_view->selection_text();
+		if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
+		return;
+	}
+	if (chosen == paste && m_current) {
+		m_current->input_router()->paste(QGuiApplication::clipboard()->text());
+		return;
+	}
+	if (chosen == select_all) {
+		m_terminal_view->select_all();
+	}
 }
 
 void bssh_main_window::update_status() {

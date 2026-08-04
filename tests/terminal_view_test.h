@@ -40,6 +40,17 @@ private slots:
 	void the_contrast_floor_can_be_turned_off();
 	void the_floor_lifts_glyphs_and_leaves_backgrounds_faithful();
 	void a_reader_can_reach_the_scrollback_and_the_selection();
+
+	/*
+	 * sec 6.4's terminal menu, and the two mouse conventions around it.
+	 * Right-click had no effect at all before this: the menus existed for
+	 * the tab bar and the host list and not for the thing the app is for.
+	 */
+	void select_all_reaches_the_scrollback_and_the_screen();
+	void middle_click_pastes_the_primary_selection();
+	void the_remote_keeps_the_right_button_when_it_asked_for_the_mouse();
+	void the_menu_layout_follows_the_device_until_told_otherwise();
+	void the_terminal_menu_offers_the_three_verbs_in_order();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */
