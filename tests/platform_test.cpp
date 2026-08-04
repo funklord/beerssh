@@ -37,6 +37,28 @@ void platform_test::keep_alive_controls_quit_on_last_window() {
 	QApplication::setQuitOnLastWindowClosed(original);
 }
 
+void platform_test::going_out_of_sight_is_the_platforms_to_answer_for() {
+	bssh_platform *platform = bssh_platform::instance();
+
+	/*
+	 * On desktop, out of sight means the window hides and the tray icon
+	 * is the way back -- so the platform has nothing of its own to do and
+	 * must say so, or the window never hides and "keep running" leaves it
+	 * sitting there.
+	 *
+	 * The Android half -- moveTaskToBack, and true -- cannot be reached
+	 * from here: it is a JNI call into an Activity that does not exist in
+	 * a desktop test binary. It was checked on a device instead, which is
+	 * also where the bug it fixes was found: hiding the window there left
+	 * a blank Activity that relaunching could not recover.
+	 */
+	QVERIFY2(!platform->send_to_background(),
+	          "the desktop must leave the hiding to the window that closed");
+
+	/* And asking twice does not start meaning something else. */
+	QVERIFY(!platform->send_to_background());
+}
+
 void platform_test::session_count_and_notify_are_safe_without_a_tray() {
 	bssh_platform *platform = bssh_platform::instance();
 

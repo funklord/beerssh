@@ -97,6 +97,15 @@ public:
 		}
 	}
 
+	bool send_to_background() override {
+		/*
+		 * Nothing to do here: a desktop app goes out of sight by hiding
+		 * its window, and the window is the caller's. Answering false
+		 * says so.
+		 */
+		return false;
+	}
+
 	void set_session_count(int count) override {
 		if (!m_tray) return;
 

@@ -99,6 +99,30 @@ public:
 	virtual void set_keep_alive(bool keep_alive) = 0;
 
 	/*
+	 * Put the app out of sight without ending it (sec 5.5), and answer
+	 * whether the PLATFORM did it.
+	 *
+	 * The two are not the same operation, which is the whole reason this
+	 * is here. On desktop, out of sight means the window hides and the
+	 * tray icon is the way back -- that is the caller's own window to
+	 * hide, so this answers false and the caller hides it. On Android it
+	 * means the TASK moves to the back, exactly as the Home button does,
+	 * and the window goes with it intact.
+	 *
+	 * Hiding the window on Android instead is what this replaces, and it
+	 * did not survive contact with a device: a hidden top-level widget
+	 * leaves the Activity showing nothing, and the launcher then RESUMES
+	 * that Activity rather than starting it, so nothing ever calls show()
+	 * again. Choosing "keep running" left a blank white screen that no
+	 * amount of relaunching recovered -- only a force-stop, which is
+	 * precisely the thing sec 5.5 is trying to avoid asking of anyone.
+	 *
+	 * A bool rather than two methods because the caller states one intent
+	 * and only needs to know whether there is anything left for it to do.
+	 */
+	virtual bool send_to_background() = 0;
+
+	/*
 	 * How many sessions are connected -- notification text on Android,
 	 * the tray tooltip on desktop. Taken from the session registry, never
 	 * from the view state: panes and tabs come and go, sessions are what

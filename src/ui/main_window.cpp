@@ -1425,24 +1425,26 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 	if (action == CLOSE_TO_BACKGROUND) {
 		/*
 		 * The session is untouched: it lives in the registry, not in this
-		 * window (sec 3, core principle 2), so hiding the window is the
+		 * window (sec 3, core principle 2), so going out of sight is the
 		 * whole operation.
+		 *
+		 * sec 5.1: "started when the first session connects and stopped
+		 * when the last disconnects". On desktop that call means the tray
+		 * icon and staying resident; on Android it means the foreground
+		 * service. Neither is named here.
 		 */
-		bssh_platform::instance()->set_keep_alive(true);
+		const int live = m_registry->live_count();
+		bssh_platform::instance()->set_session_count(live);
+		bssh_platform::instance()->set_keep_alive(live > 0);
+
 		/*
-	 * sec 5.1: "started when the first session connects and stopped when
-	 * the last disconnects". Tying this to the window's close event, as
-	 * it was, is a desktop assumption -- Android has no close event,
-	 * because an app is backgrounded with the home button, so the service
-	 * would never have started where it matters most.
-	 *
-	 * On desktop the same call means the tray icon and staying resident;
-	 * on Android it means the foreground service. Neither is named here.
-	 */
-	const int live = m_registry->live_count();
-	bssh_platform::instance()->set_session_count(live);
-	bssh_platform::instance()->set_keep_alive(live > 0);
-		hide();
+		 * And the window hides only if the platform did not already put
+		 * the app away. On Android it did, and hiding as well is what
+		 * left a blank Activity nothing could recover -- see
+		 * send_to_background().
+		 */
+		if (!bssh_platform::instance()->send_to_background()) hide();
+
 		event->ignore();
 		return;
 	}

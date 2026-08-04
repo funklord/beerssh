@@ -18,6 +18,7 @@ class platform_test : public QObject {
 private slots:
 	void desktop_platform_is_selected_and_named();
 	void keep_alive_controls_quit_on_last_window();
+	void going_out_of_sight_is_the_platforms_to_answer_for();
 	void session_count_and_notify_are_safe_without_a_tray();
 	void close_policy_asks_only_when_something_is_live();
 	void the_window_opens_on_the_front_door();

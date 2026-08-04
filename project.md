@@ -453,6 +453,18 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   in the tray / disconnect and quit". A terminal that vanishes into the tray
   unannounced is how users lose work they thought they'd closed. Remember the
   answer as a setting.
+- **"Out of sight" is not the same operation on the two platforms**, and
+  assuming it was cost the Android build its way back in. Hiding the window is
+  the *desktop's* mechanism — the tray icon is the route back. On Android a
+  hidden top-level widget leaves the Activity showing nothing, and the launcher
+  then **resumes** that Activity rather than starting it, so nothing ever calls
+  `show()` again: choosing "keep running" left a blank white screen that no
+  amount of relaunching recovered, only a force-stop. Android's own answer is
+  `moveTaskToBack`, exactly what the Home button does, and the window goes with
+  the task intact. Both live behind `bssh_platform::send_to_background()`, which
+  answers whether the platform did it; false means the caller hides its own
+  window. Found by driving the prompt on a device — the desktop half is right
+  either way, which is why nothing on a desktop could have caught it.
 - **Suspend/resume, not screen-off, is the desktop analogue** of the Android
   background problem: a laptop lid closing kills every TCP connection in a way
   that looks exactly like a network flap on wake. Treat resume as a

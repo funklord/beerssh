@@ -200,6 +200,32 @@ public:
 		m_keep_alive = keep_alive;
 	}
 
+	bool send_to_background() override {
+		/*
+		 * Android's own answer to "out of sight, still running": the
+		 * task goes behind whatever the user was doing before, exactly
+		 * as the Home button does, and comes back from the launcher with
+		 * its window intact.
+		 *
+		 * On the Android main thread, like the permission request above
+		 * -- moveTaskToBack is an Activity method and the framework
+		 * expects it from the thread that owns the Activity.
+		 *
+		 * True is returned before the call has run, and that is the safe
+		 * way round: the caller's fallback is to hide its window, which
+		 * is the very thing that leaves a blank Activity here. If this
+		 * somehow fails the app stays on screen, which is wrong and
+		 * recoverable rather than wrong and terminal.
+		 */
+		QNativeInterface::QAndroidApplication::runOnAndroidMainThread([] {
+			const QJniObject activity = android_context();
+			if (!activity.isValid()) return;
+
+			activity.callMethod<jboolean>("moveTaskToBack", "(Z)Z", jboolean(true));
+		});
+		return true;
+	}
+
 	void set_session_count(int count) override {
 		m_status = count == 1
 		                   ? QStringLiteral("1 session connected")
