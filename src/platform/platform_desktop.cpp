@@ -11,7 +11,6 @@
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QMenu>
-#include <QNetworkInformation>
 #include <QSystemTrayIcon>
 
 /*
@@ -64,24 +63,11 @@ public:
 		watch_colour_scheme();
 
 		/*
-		 * Reachability changes are the desktop stand-in for Android's
-		 * connectivity callbacks. The case that actually matters is a
-		 * laptop waking from suspend: every TCP connection is already
-		 * dead and looks precisely like a network flap (sec 5.5).
-		 *
-		 * Loaded best-effort -- a machine with no backend for this is a
-		 * machine that simply reconnects on keepalive timeout instead,
-		 * which is slower but not broken.
+		 * Reachability is watched by the base class now, for both
+		 * platforms. The case that matters here is a laptop waking from
+		 * suspend: every TCP connection is already dead and looks
+		 * precisely like a network flap (sec 5.5).
 		 */
-		if (QNetworkInformation::loadDefaultBackend()) {
-			QNetworkInformation *info = QNetworkInformation::instance();
-			if (info) {
-				connect(info, &QNetworkInformation::reachabilityChanged,
-				         this, [this](QNetworkInformation::Reachability) {
-					emit network_changed();
-				});
-			}
-		}
 	}
 
 	QString name() const override {

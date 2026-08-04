@@ -196,13 +196,15 @@ android {
     ANDROID_DEPLOYMENT_DEPENDENCIES = \
         jar/Qt6Android.jar \
         jar/Qt6AndroidNetwork.jar \
+        jar/Qt6AndroidNetworkInformationBackend.jar \
         lib/libQt6Core_$${QT_ARCH}.so \
         lib/libQt6Gui_$${QT_ARCH}.so \
         lib/libQt6Widgets_$${QT_ARCH}.so \
         lib/libQt6Network_$${QT_ARCH}.so \
         plugins/platforms/libplugins_platforms_qtforandroid_$${QT_ARCH}.so \
         plugins/styles/libplugins_styles_qandroidstyle_$${QT_ARCH}.so \
-        plugins/imageformats/libplugins_imageformats_qjpeg_$${QT_ARCH}.so
+        plugins/imageformats/libplugins_imageformats_qjpeg_$${QT_ARCH}.so \
+        plugins/networkinformation/libplugins_networkinformation_qandroidnetworkinformation_$${QT_ARCH}.so
 
     # jar/Qt6Android          QtActivityBase and friends. Left out of the
     #                         first attempt, which is how this list taught
@@ -210,9 +212,24 @@ android {
     #                         shared objects: the build failed with twelve
     #                         javac errors about missing Qt classes.
     # jar/Qt6AndroidNetwork    QtNetwork's Java side
+    # jar/Qt6AndroidNetwork-  the networkinformation plugin's Java side, and
+    #   InformationBackend    the plugin is useless without it: it loads,
+    #                         fails to find its class, and Qt falls back to
+    #                         a "dummy" backend that reports nothing. That
+    #                         is silent -- no error, no missing feature,
+    #                         just a signal that never fires -- and only a
+    #                         device showed it.
     # platforms/qtforandroid  the platform plugin; nothing runs without it
     # styles/qandroidstyle    native-looking widgets rather than Fusion
     # imageformats/qjpeg      inline images (sec 7.1); PNG is inside QtGui
+    # networkinformation/     sec 5.3's network-change reconnect. This is
+    #   qandroidnetwork...    ConnectivityManager underneath, which is what
+    #                         sec 5.3 asks for by name, so no JNI and no
+    #                         second Java file are needed. It is exactly the
+    #                         cost this list warns about: QNetworkInformation
+    #                         compiles and links without it and simply finds
+    #                         no backend at runtime, so a Wi-Fi-to-mobile
+    #                         handover waits out the backoff in silence.
 } else {
     SOURCES += \
         src/platform/platform_desktop.cpp \

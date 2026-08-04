@@ -18,8 +18,8 @@
  *
  *   M4  keep_process_alive(bool)  foreground service / desktop tray residency
  *   M4  set_session_count(int)    notification text, from the registry count
- *   M5  network_changed()         signal; ConnectivityManager callbacks on
- *                                 Android, QNetworkInformation on desktop
+ *   M5  network_changed()         signal; QNetworkInformation on both, whose
+ *                                 Android backend is ConnectivityManager
  *   M6  secret_store()            bssh_secret_store, per project.md sec 11
  */
 /*

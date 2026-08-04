@@ -307,6 +307,20 @@ Android needs a foreground service to be allowed to keep running (§5.1–5.2),
 desktop needs a decision about not quitting when the last window closes (§5.5).
 `bssh_conn_manager` (§5.3) is shared and knows about neither.
 
+**Network-change reconnect is one implementation, not two.** This section used
+to promise `ConnectivityManager.NetworkCallback` on Android and
+`QNetworkInformation` on desktop; only the desktop half existed, so the platform
+§5 exists *for* was the one that waited out the backoff and the TCP timeout on a
+Wi-Fi-to-mobile handover, while a laptop waking from suspend reconnected at
+once. No JNI and no second Java file were needed after all — Qt ships an Android
+backend for `QNetworkInformation` that is `ConnectivityManager` underneath — so
+the watch now lives in the shared base class. Two things had to be added to the
+curated Android deployment list (§12.2) for it to work: the plugin *and* its
+JAR. Without the JAR the plugin loads, fails to find its Java class, and Qt falls
+back to a "dummy" backend that reports nothing — no error, no missing feature,
+just a signal that never fires. **Measured on a device:** with both, a session
+whose network is dropped and restored reconnects within about five seconds.
+
 ### 5.1 Foreground service (mandatory on modern Android)
 A backgrounded app cannot reliably hold a socket open; Android will kill it.
 Solution: a **foreground service** with an ongoing notification, started when the
