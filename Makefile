@@ -307,8 +307,16 @@ shots: $(TEST_BIN)
 check-deb: deb
 	./tools/check-deb.sh
 
-style:
+style: style-source style-docs
+
+style-source:
 	python3 tools/style_gate.py check
+
+# project.md is authoritative, so it is held to the tree: a heading
+# that appears twice means whichever one you find, the other is the
+# one with the answer.
+style-docs:
+	python3 tools/style_gate.py docs
 
 # sec 12.4's runner-parity check. Needs docker; not part of `test`, and
 # deliberately not a CI step -- CI already IS the runner. Run it before
@@ -720,4 +728,8 @@ help:
 .PHONY: all run test bench style check-ci check-ssh check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
-        distclean help
+        distclean help check style-source style-docs
+
+# `check` is everything that must pass before committing; `test` is the suite
+# alone. GNU's meaning of check, and what most of these projects already did.
+check: style test
