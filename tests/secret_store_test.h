@@ -34,6 +34,16 @@ private slots:
 	 * particular label changes what it says.
 	 */
 	void no_setting_is_cut_off_at_a_phone_width();
+
+	/*
+	 * And the prompt that asks for the password in the first place. It
+	 * used to put the whole "Password for user@host:port:" in a form
+	 * layout's LABEL column, so the dialog's width grew with the length
+	 * of the destination -- and on a phone the checkbox and the buttons
+	 * ran off the right-hand edge. A password prompt whose OK button is
+	 * off-screen is not a cosmetic problem.
+	 */
+	void the_password_prompt_fits_a_phone();
 	void stores_and_loads_a_secret();
 	void the_wrong_passphrase_is_rejected_not_guessed_at();
 	void the_file_does_not_contain_the_secret();

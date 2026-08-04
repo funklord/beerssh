@@ -1631,6 +1631,16 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   fallback deserves to know their keys are only as safe as the passphrase and
   the machine. Surface it in settings; do not average the two into a reassuring
   "encrypted".
+  **The password prompt is its own class** (`bssh_password_prompt`) for one
+  reason: it was a dialog assembled inline, and it did not fit a phone. The
+  whole string "Password for nabbe@10.0.2.2:2299:" sat in a form layout's
+  *label* column, so the dialog's width grew with the length of the
+  destination — 508px demanded on a 360px screen — and what ran off the
+  right-hand edge was the checkbox and the buttons. A password prompt whose OK
+  button is off-screen is not a cosmetic problem, and nothing could have caught
+  it while there was nothing to construct. The destination now goes on its own
+  wrapped line, and a test asks the prompt to fit 360dp with every button
+  inside it.
   **Built**, and it was the last piece: `backend_name()` and
   `is_hardware_backed()` existed from the start and nothing showed them. The one
   place the name appeared was the unlock prompt — which the keyring backend

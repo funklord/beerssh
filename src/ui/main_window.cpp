@@ -48,6 +48,7 @@
 #include "model/preset.h"
 #include "ui/preset_editor.h"
 #include "ui/session_dialog.h"
+#include "ui/password_prompt.h"
 #include "ui/tab_status.h"
 #include "ui/terminal_view.h"
 
@@ -587,41 +588,18 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 			return;
 		}
 
-		QDialog dialog(this);
-		dialog.setWindowTitle(QStringLiteral("BeerSSH"));
-
-		QFormLayout *form = new QFormLayout(&dialog);
-		QLineEdit *field = new QLineEdit(&dialog);
-		field->setEchoMode(QLineEdit::Password);
-		form->addRow(QStringLiteral("Password for %1:").arg(session->profile().target()), field);
-
-		QCheckBox *remember = new QCheckBox(QStringLiteral("Remember this password"), &dialog);
-		/*
-		 * Only offered for a SAVED host: there is nowhere to hang the
-		 * secret otherwise, since it is keyed by profile id. And it is
-		 * unchecked by default -- storing a credential is a decision, not
-		 * a default.
-		 */
-		remember->setEnabled(session->profile().id != 0);
-		form->addRow(QString(), remember);
-
-		QDialogButtonBox *buttons = new QDialogButtonBox(
-		        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
-		form->addRow(buttons);
-		connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
-		connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
-
-		field->setFocus();
+		bssh_password_prompt dialog(session->profile().target(),
+		                             session->profile().id != 0, this);
 
 		if (dialog.exec() != QDialog::Accepted) {
 			session->disconnect_from_host();
 			return;
 		}
 
-		const QString password = field->text();
+		const QString password = dialog.password();
 		session->supply_password(password);
 
-		if (remember->isChecked()) offer_to_remember(session, password);
+		if (dialog.remember()) offer_to_remember(session, password);
 	});
 
 	connect(session, &bssh_session::shell_exited, this, [this, session](int status) {

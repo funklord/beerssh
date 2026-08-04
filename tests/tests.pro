@@ -77,6 +77,7 @@ SOURCES += \
     ../src/model/session.cpp \
     ../src/model/session_registry.cpp \
     ../src/ui/font_picker.cpp \
+    ../src/ui/password_prompt.cpp \
     ../src/ui/preset_editor.cpp \
     ../src/ui/host_editor.cpp \
     ../src/ui/override_badge.cpp \
@@ -139,6 +140,7 @@ HEADERS += \
     ../src/model/session.h \
     ../src/model/session_registry.h \
     ../src/ui/font_picker.h \
+    ../src/ui/password_prompt.h \
     ../src/ui/preset_editor.h \
     ../src/ui/host_editor.h \
     ../src/ui/override_badge.h \

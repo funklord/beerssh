@@ -1,11 +1,13 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QAbstractButton>
 #include <QLabel>
 #include <QtTest>
 
 #include "platform/secret_store.h"
 #include "ui/app_settings_view.h"
+#include "ui/password_prompt.h"
 #include "secret_store_test.h"
 
 /*
@@ -247,5 +249,38 @@ void secret_store_test::no_setting_is_cut_off_at_a_phone_width()
 		          qPrintable(QStringLiteral("cut off: \"%1\" has %2px for %3px of text")
 		                             .arg(label->text().left(40))
 		                             .arg(label->height()).arg(needed)));
+	}
+}
+
+void secret_store_test::the_password_prompt_fits_a_phone()
+{
+	/*
+	 * A destination of the length people really have: a user, a host and
+	 * a non-default port. The old layout was fine for "box" and broke for
+	 * this, which is why a short one would prove nothing.
+	 */
+	bssh_password_prompt prompt(QStringLiteral("nabbe@build.internal.example.com:2299"),
+	                             true);
+	prompt.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&prompt));
+
+	/*
+	 * 360dp is the narrow phone width sec 8.2 designs to. Asked of the
+	 * MINIMUM size hint: that is what a window manager cannot go below,
+	 * so anything wider than the screen is content the user cannot reach.
+	 */
+	const int phone = 360;
+	QVERIFY2(prompt.minimumSizeHint().width() <= phone,
+	          qPrintable(QStringLiteral("the prompt demands %1px on a %2px screen")
+	                             .arg(prompt.minimumSizeHint().width()).arg(phone)));
+
+	/* And the buttons are inside it, not off the edge. */
+	prompt.resize(phone, prompt.sizeHint().height());
+	for (const QAbstractButton *button : prompt.findChildren<QAbstractButton *>()) {
+		if (!button->isVisible()) continue;
+		QVERIFY2(button->geometry().right() <= phone,
+		          qPrintable(QStringLiteral("\"%1\" ends at %2px on a %3px screen")
+		                             .arg(button->text()).arg(button->geometry().right())
+		                             .arg(phone)));
 	}
 }
