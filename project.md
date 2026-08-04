@@ -960,6 +960,12 @@ collapse/restore is bookkeeping, not surgery.
   does not do. It costs nothing today: the one verb that would care,
   *Show beside current*, is already disabled wherever the long-press is the
   input, because touch means COMPACT means one pane (§8.2).
+- **A session is not a dead end.** On the touch front door the terminal is not
+  the root — the host list is (§8.5) — so backing out of a session goes **up**
+  to the list rather than offering to quit. Opening a host used to be a one-way
+  door, and Android has no other route back: that made the second session
+  unreachable, and with it this whole section — the tab bar, its menu, and every
+  split. The app could show four panes and a phone could never ask for two.
 - **Focus indicator:** the focused pane needs an unmistakable visual — a colored
   border or dimmed inactive panes. Non-negotiable for safety (§6.3), and *more*
   important on desktop, not less: four panes fit on a monitor, and a pointer

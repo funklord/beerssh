@@ -59,6 +59,7 @@ private slots:
 	 * desktop's only route to the menu with it.
 	 */
 	void the_tab_menu_is_reachable_by_both_gestures();
+	void backing_out_of_a_session_reaches_the_host_list();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

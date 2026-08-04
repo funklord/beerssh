@@ -21,6 +21,7 @@
 #include <QMetaMethod>
 #include "ui/long_press.h"
 #include "ui/main_window.h"
+#include "fake_ssh_session.h"
 #include "layout_test.h"
 #include "model/session.h"
 #include "model/session_registry.h"
@@ -666,4 +667,48 @@ void layout_test::the_tab_menu_is_reachable_by_both_gestures() {
 		if (hold->parent() == &window) watches_tabs = true;
 	}
 	QVERIFY2(watches_tabs, "no long-press gesture belongs to the window");
+}
+
+void layout_test::backing_out_of_a_session_reaches_the_host_list() {
+	/*
+	 * The tab bar can only appear if a SECOND session can be opened, and
+	 * on the touch front door the only place to open one from is the host
+	 * list. Opening a host was a one-way door: Android's back button
+	 * offered to quit, and nothing else led back -- so the tab bar, its
+	 * context menu and every split were unreachable on the one device
+	 * they were designed for.
+	 */
+	const forced_touch_t arrangement(1);
+
+	/*
+	 * The connection is made to FAIL, which is not incidental. With a live
+	 * session the close event this test sends reaches the "keep it running
+	 * in the background?" prompt -- a modal nobody is there to answer --
+	 * so a regression in the rule below would HANG the suite instead of
+	 * failing it. Nothing here is about that prompt.
+	 */
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fake->set_fail_on_connect(QStringLiteral("no network in a test"));
+		return fake;
+	});
+
+	/* A command-line target opens straight into the terminal (sec 8.5). */
+	bssh_main_window window(QStringLiteral("nowhere.example"));
+	QVERIFY2(!window.showing_front_door(), "a target must open into the terminal");
+
+	QCloseEvent back;
+	QApplication::sendEvent(&window, &back);
+
+	QVERIFY2(window.showing_front_door(),
+	          "backing out of a session must go up to the host list");
+
+	/*
+	 * And the close is REFUSED, which is the other half: an accepted one
+	 * takes the window with it, so going up would be indistinguishable
+	 * from quitting for everything downstream of the event.
+	 */
+	QVERIFY2(!back.isAccepted(), "going up must not also close the window");
+
+	bssh_ssh_session::set_factory(nullptr);
 }

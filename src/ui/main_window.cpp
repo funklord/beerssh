@@ -1374,6 +1374,28 @@ bssh_main_window::close_action_t bssh_main_window::close_action(bool sessions_li
 }
 
 void bssh_main_window::closeEvent(QCloseEvent *event) {
+	/*
+	 * Back out of a session goes UP to the host list, not out of the app.
+	 *
+	 * On the touch front door the terminal is NOT the root: the host list
+	 * is (sec 8.5), and every other page here already carries its own way
+	 * back to it. The terminal did not, and Android has no other route --
+	 * so opening a host was a one-way door. That made the second session
+	 * unreachable, and with it the tab bar, its context menu, and every
+	 * split (sec 8.3): the app could show four panes and a phone could
+	 * never ask for two.
+	 *
+	 * Guarded on the host list EXISTING rather than on the platform, which
+	 * is the same rule as everywhere else here -- only the chosen front
+	 * door is constructed, so a desktop window has no m_host_list and
+	 * closing it still means closing it.
+	 */
+	if (m_host_list && m_pages->currentWidget() == m_terminal_page) {
+		m_pages->setCurrentWidget(m_host_list);
+		event->ignore();
+		return;
+	}
+
 	const bool sessions_live = m_registry->live_count() > 0;
 
 	close_action_t action = close_action(sessions_live,
