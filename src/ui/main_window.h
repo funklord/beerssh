@@ -229,6 +229,33 @@ private:
 	void show_front_door();
 	void show_tab_menu(const QPoint &at);
 
+	/* The session behind a tab of THIS window, or null (sec 8.4). */
+	bssh_session *session_at_tab(int index) const;
+
+public:
+	/*
+	 * Moves a session into this window, taking it out of whichever window
+	 * was showing it (sec 8.4).
+	 *
+	 * The SESSION does not move: it stays in the registry, connected,
+	 * with its scrollback and whatever is running. What moves is which
+	 * view shows it -- which is why a torn-out tab is a new window and
+	 * not a new process, and why this same call becomes a message when
+	 * the client/server split arrives.
+	 */
+	void adopt_session(bssh_session *session);
+
+	/*
+	 * Takes a tab out into a window of its own (sec 8.3's drag, sec 8.4's
+	 * multiple windows). Returns the new window, or null when there is
+	 * nothing to tear out -- a window will not empty itself, because a
+	 * window with no tabs and no front door showing is one nobody can do
+	 * anything with.
+	 */
+	bssh_main_window *tear_out_tab(int index);
+
+private:
+
 public:
 	/*
 	 * The menu, built but not shown. Separated from showing it because
@@ -296,6 +323,25 @@ private:
 	QPointer<bssh_terminal_view> m_wired_view;
 	QLabel *m_status_label;
 	bssh_session_registry *m_registry;
+
+	/*
+	 * The sessions THIS window shows, in tab order (sec 8.4).
+	 *
+	 * The registry holds every session in the process; a window is a view
+	 * onto some of them, and with more than one window a session appears
+	 * in exactly one. The tab bar was built from the whole registry,
+	 * which was indistinguishable from correct while there could only be
+	 * one window and wrong the moment there could be two -- both would
+	 * have shown every tab, and closing one anywhere would have closed it
+	 * everywhere.
+	 *
+	 * Tab ORDER lives here too, for the same reason: which order a window
+	 * shows its tabs in is that window's business, not a fact about the
+	 * process. Dragging one to reorder used to move it in the registry,
+	 * which was right while a window was the only view and would have
+	 * rearranged the other window's tabs as a side effect.
+	 */
+	QList<bssh_session *> m_shown;
 	bssh_layout_manager *m_layout;
 	bssh_session *m_current;
 	QTabBar *m_tabs;

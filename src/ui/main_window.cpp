@@ -53,6 +53,16 @@
 #include "ui/tab_status.h"
 #include "ui/terminal_view.h"
 
+/*
+ * How far below the tab bar a drag goes before the tab becomes its own
+ * window (sec 8.3, sec 8.4).
+ *
+ * Generous on purpose. A tab bar is thin and a pointer reordering tabs
+ * crosses its lower edge constantly, so tearing out on "left the widget"
+ * would make reordering nearly impossible to do without losing the tab.
+ */
+static const int BSSH_TEAR_OUT_DP = 40;
+
 bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
     : QWidget(parent),
       m_pages(new QStackedWidget(this)),
@@ -150,7 +160,15 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	m_tabs->setMovable(pointer);
 
 	connect(m_tabs, &QTabBar::tabMoved, this, [this](int from, int to) {
-		m_registry->move(from, to);
+		/*
+		 * The window's own order, not the registry's. Which order a
+		 * window shows its tabs in is that window's business; moving
+		 * them in the registry would rearrange every other window's
+		 * tabs as a side effect (sec 8.4).
+		 */
+		if (from < 0 || from >= m_shown.size()) return;
+		if (to < 0 || to >= m_shown.size()) return;
+		m_shown.move(from, to);
 	});
 
 	/*
@@ -506,6 +524,14 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 	 * the keys have actually failed.
 	 */
 	bssh_session *session = m_registry->create(profile);
+
+	/*
+	 * Shown by the window that opened it (sec 8.4). The registry holds
+	 * every session in the process; which window displays one is view
+	 * state, and it belongs to whichever window asked for it.
+	 */
+	if (!m_shown.contains(session)) m_shown.append(session);
+
 	connect(session, &bssh_session::failed, this, &bssh_main_window::on_failed);
 
 	/*
@@ -968,7 +994,7 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		}
 
 		/* The tab bar follows the focused pane, not the other way round. */
-		const int index = m_registry->index_of(session);
+		const int index = m_shown.indexOf(session);
 		if (index >= 0 && m_tabs->currentIndex() != index) {
 			const QSignalBlocker blocker(m_tabs);
 			m_tabs->setCurrentIndex(index);
@@ -994,13 +1020,66 @@ void bssh_main_window::detach_session() {
 	if (m_key_row) m_key_row->set_router(nullptr);
 }
 
+void bssh_main_window::adopt_session(bssh_session *session) {
+	if (!session || m_shown.contains(session)) return;
+
+	/*
+	 * Out of whoever had it first. A session is shown in exactly one
+	 * place (sec 8.4), so adopting is a move rather than a copy -- and
+	 * the window losing it is told through the registry's own signal
+	 * rather than by this window reaching into it, because windows are
+	 * meant to behave as though they were separate processes.
+	 */
+	emit m_registry->changed();
+
+	m_shown.append(session);
+	on_registry_changed();
+	show_session(session);
+}
+
+bssh_main_window *bssh_main_window::tear_out_tab(int index) {
+	bssh_session *session = session_at_tab(index);
+	if (!session) return nullptr;
+
+	/*
+	 * A window will not empty itself. Tearing out the last tab would
+	 * leave a window with nothing in it and, on desktop, no front door
+	 * showing either -- so the gesture does nothing rather than
+	 * producing two windows one of which is useless.
+	 */
+	if (m_shown.size() < 2) return nullptr;
+
+	m_shown.removeAll(session);
+	if (m_current == session) detach_session();
+	on_registry_changed();
+
+	bssh_main_window *window = new bssh_main_window;
+	window->setAttribute(Qt::WA_DeleteOnClose);
+	window->resize(size());
+	window->show();
+	window->adopt_session(session);
+
+	return window;
+}
+
+bssh_session *bssh_main_window::session_at_tab(int index) const {
+	/*
+	 * A tab index means a position in THIS window's list, not in the
+	 * registry (sec 8.4). They were the same thing while a window could
+	 * only be one, and with two windows the registry's index is somebody
+	 * else's tab.
+	 */
+	if (index < 0 || index >= m_shown.size()) return nullptr;
+	return m_shown.at(index);
+}
+
 void bssh_main_window::on_tab_changed(int index) {
-	bssh_session *session = m_registry->at(index);
+	bssh_session *session = session_at_tab(index);
 	if (session && session != m_current) show_session(session);
 }
 
 void bssh_main_window::on_tab_close_requested(int index) {
-	bssh_session *session = m_registry->at(index);
+	bssh_session *session = session_at_tab(index);
 	if (session) m_registry->close(session);
 }
 
@@ -1010,6 +1089,34 @@ void bssh_main_window::on_tab_close_requested(int index) {
  * -- so the button is read off the event here.
  */
 bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
+	/*
+	 * sec 8.3's drag, taken past the bar: a tab dragged well clear of the
+	 * tab bar becomes a window of its own (sec 8.4).
+	 *
+	 * Distance rather than "left the widget", because a tab bar is thin
+	 * and a pointer crosses its edge constantly while merely reordering
+	 * -- tearing out on that would make reordering nearly impossible. The
+	 * threshold is generous for the same reason.
+	 */
+	if (watched == m_tabs && event->type() == QEvent::MouseMove) {
+		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+		if (mouse->buttons().testFlag(Qt::LeftButton) && m_tabs->isMovable()) {
+			const QPoint at = mouse->position().toPoint();
+			const int below = at.y() - m_tabs->height();
+
+			if (below > BSSH_TEAR_OUT_DP && tear_out_tab(m_tabs->currentIndex())) {
+				/*
+				 * Consumed, and the drag is over: QTabBar is still
+				 * mid-move on a tab that has gone, so releasing the
+				 * grab is what stops it moving a tab that no longer
+				 * belongs to this bar.
+				 */
+				m_tabs->releaseMouse();
+				return true;
+			}
+		}
+	}
+
 	if (watched == m_tabs && event->type() == QEvent::MouseButtonRelease) {
 		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
 		if (mouse->button() == Qt::MiddleButton) {
@@ -1045,15 +1152,23 @@ void bssh_main_window::on_registry_changed() {
 	 */
 	const QSignalBlocker blocker(m_tabs);
 
-	while (m_tabs->count() > m_registry->count()) {
+	/*
+	 * Drop anything this window was showing that no longer exists --
+	 * closed here, or closed in another window (sec 8.4).
+	 */
+	for (int i = m_shown.size() - 1; i >= 0; --i) {
+		if (m_registry->index_of(m_shown.at(i)) < 0) m_shown.removeAt(i);
+	}
+
+	while (m_tabs->count() > m_shown.size()) {
 		m_tabs->removeTab(m_tabs->count() - 1);
 	}
-	while (m_tabs->count() < m_registry->count()) {
+	while (m_tabs->count() < m_shown.size()) {
 		m_tabs->addTab(QString());
 	}
 
-	for (int i = 0; i < m_registry->count(); ++i) {
-		bssh_session *session = m_registry->at(i);
+	for (int i = 0; i < m_shown.size(); ++i) {
+		bssh_session *session = m_shown.at(i);
 		m_tabs->setTabText(i, session->title());
 		m_tabs->setTabToolTip(i, session->profile().target());
 
@@ -1070,7 +1185,7 @@ void bssh_main_window::on_registry_changed() {
 	}
 
 	/* One tab is not worth a row of chrome, least of all on a phone. */
-	m_tabs->setVisible(m_registry->count() > 1);
+	m_tabs->setVisible(m_shown.size() > 1);
 
 	/*
 	 * The notification and tray tooltip count sessions, never panes or
@@ -1090,7 +1205,7 @@ void bssh_main_window::on_registry_changed() {
 	bssh_platform::instance()->set_session_count(live);
 	bssh_platform::instance()->set_keep_alive(live > 0);
 
-	if (m_registry->count() == 0) {
+	if (m_shown.isEmpty()) {
 		detach_session();
 		m_pages->setCurrentIndex(0);
 	}
@@ -1251,6 +1366,7 @@ bssh_app_settings::context_menu_t bssh_main_window::context_menu_layout(
 /* sec 6.2's touch floor, the same one the key row and the editors use. */
 static const int BSSH_TOUCH_TARGET_DP = 48;
 
+
 /*
  * Copy, Paste, Select All -- and the arrangement is not arbitrary.
  *
@@ -1405,7 +1521,7 @@ void bssh_main_window::show_front_door() {
  * places.
  */
 QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
-	bssh_session *session = m_registry->at(index);
+	bssh_session *session = session_at_tab(index);
 	if (!session) return nullptr;
 
 	QMenu *menu = new QMenu(parent);
@@ -1448,7 +1564,7 @@ QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
 
 void bssh_main_window::show_tab_menu(const QPoint &at) {
 	const int index = m_tabs->tabAt(at);
-	bssh_session *session = m_registry->at(index);
+	bssh_session *session = session_at_tab(index);
 	if (!session) return;
 
 	QMenu *menu = build_tab_menu(index, this);
@@ -1659,9 +1775,14 @@ void bssh_main_window::open_default_session() {
 		return;
 	}
 
-	/* Never on top of something already open -- a command-line target,
-	 * or a session restored from a previous run. */
-	if (m_registry->count() > 0) return;
+	/*
+	 * Never on top of something this window is already showing -- a
+	 * command-line target, or a session restored from a previous run.
+	 * Asked of this window rather than of the registry: with more than
+	 * one window, another window's session is not a reason for this one
+	 * to open empty (sec 8.4).
+	 */
+	if (!m_shown.isEmpty()) return;
 
 	open_profile(bssh_profile_t::local_shell());
 }

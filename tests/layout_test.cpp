@@ -834,8 +834,15 @@ void layout_test::middle_click_closes_the_tab_under_it() {
 	bssh_session_registry *registry = window.registry();
 	QVERIFY2(registry, "the window must own a session registry");
 
+	/*
+	 * Created in the registry and then SHOWN by this window: since
+	 * sec 8.4's per-window tab set, a session existing in the process is
+	 * not the same as a window displaying it.
+	 */
 	bssh_session *a = registry->create(named(QStringLiteral("a")));
 	bssh_session *b = registry->create(named(QStringLiteral("b")));
+	window.adopt_session(a);
+	window.adopt_session(b);
 	QCOMPARE(registry->count(), 2);
 
 	QTabBar *tabs = window.findChild<QTabBar *>();
@@ -887,7 +894,7 @@ void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
 	bssh_session_registry *registry = window.registry();
 	QVERIFY(registry);
 
-	registry->create(named(QStringLiteral("a")));
+	window.adopt_session(registry->create(named(QStringLiteral("a"))));
 
 	QMenu *menu = window.build_tab_menu(0, &window);
 	QVERIFY2(menu, "a tab with a session behind it must have a menu");
@@ -1574,5 +1581,87 @@ void layout_test::focus_follows_the_pointer_only_when_asked() {
 	QCOMPARE(container.view_at(1)->property("bssh_focused").toBool(), true);
 	QCOMPARE(container.view_at(0)->property("bssh_focused").toBool(), false);
 
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_window_shows_only_its_own_tabs() {
+	/*
+	 * sec 8.4: a session is shown in exactly one place. The tab bar was
+	 * built from the whole registry, which was indistinguishable from
+	 * correct while there could only be one window -- and wrong the
+	 * moment there could be two, since both would have shown every tab
+	 * and closing one anywhere would have closed it everywhere.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window first;
+	bssh_main_window second;
+
+	bssh_session *mine = first.registry()->create(named(QStringLiteral("mine")));
+	first.adopt_session(mine);
+
+	QTabBar *first_tabs = first.findChild<QTabBar *>();
+	QTabBar *second_tabs = second.findChild<QTabBar *>();
+	QVERIFY(first_tabs && second_tabs);
+
+	QCOMPARE(first_tabs->count(), 1);
+	QVERIFY2(second_tabs->count() == 0,
+	          "the other window must not show a session it was never given");
+
+	/* Both still see it in the registry -- one process, one set. */
+	QCOMPARE(second.registry()->count(), 1);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_torn_out_tab_becomes_a_window_without_moving_the_session() {
+	/*
+	 * The whole point of tearing out to a WINDOW rather than a process
+	 * (sec 8.4): the session does not move. It stays in the registry,
+	 * connected, with its scrollback and whatever is running -- only the
+	 * view showing it changes. A new process could not do that, because a
+	 * live SSH session cannot cross one.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	bssh_session *stay = window.registry()->create(named(QStringLiteral("stay")));
+	bssh_session *go = window.registry()->create(named(QStringLiteral("go")));
+	window.adopt_session(stay);
+	window.adopt_session(go);
+
+	/* Something in the scrollback, so "the session did not move" means
+	 * something a user would notice. */
+	go->emulator()->feed(QByteArrayLiteral("torn-out-marker\r\n"));
+
+	QTabBar *tabs = window.findChild<QTabBar *>();
+	QVERIFY(tabs);
+	QCOMPARE(tabs->count(), 2);
+
+	bssh_main_window *torn = window.tear_out_tab(1);
+	QVERIFY2(torn, "a tab that is not the last must tear out");
+	torn->setAttribute(Qt::WA_DeleteOnClose, false);
+
+	/* The session is the SAME object, still registered, still carrying
+	 * what was on its screen. */
+	QCOMPARE(shared->count(), 2);
+	QCOMPARE(shared->index_of(go) >= 0, true);
+	QVERIFY(go->emulator()->screen().to_text().contains(QStringLiteral("torn-out-marker")));
+
+	/* And it is shown in the new window and no longer in the old one. */
+	QTabBar *torn_tabs = torn->findChild<QTabBar *>();
+	QVERIFY(torn_tabs);
+	QCOMPARE(tabs->count(), 1);
+	QCOMPARE(torn_tabs->count(), 1);
+
+	/*
+	 * A window will not empty itself: tearing out the last tab would
+	 * leave a window with nothing in it, so the gesture declines.
+	 */
+	QVERIFY2(!torn->tear_out_tab(0), "the last tab must not tear out");
+
+	delete torn;
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

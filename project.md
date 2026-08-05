@@ -1521,6 +1521,29 @@ the other one does satisfies §14's rule only on paper.
   process would mean dropping the connection and reconnecting, losing the
   scrollback and whatever was running. Once the server is real, the same drag
   becomes a client attaching to a session that never moved.
+- **A window shows its OWN tabs, not the registry's.** The tab bar was built
+  from every session in the process, which was indistinguishable from correct
+  while there could be only one window and wrong the moment there could be two:
+  both would have shown every tab, and closing one anywhere would have closed
+  it everywhere. Each window keeps the sessions it displays, in its own order —
+  tab order is a fact about a window rather than about the process, so dragging
+  a tab to reorder moves it in that list and not in the registry, where it
+  would have rearranged the other window's tabs as a side effect.
+- **Tearing a tab out makes a window, and the session does not move.** It stays
+  in the registry, connected, with its scrollback and whatever is running; only
+  the view showing it changes. That is the whole reason a torn-out tab is not a
+  new *process* — a live SSH session cannot cross one — and it is why the same
+  operation becomes a message rather than a migration once the client/server
+  split arrives.
+  The gesture is a drag taken **40dp clear of the bar**, not "left the widget":
+  a tab bar is thin, a pointer reordering tabs crosses its lower edge
+  constantly, and tearing out on that would make reordering nearly impossible
+  without losing the tab.
+  **A window will not empty itself.** Tearing out the last tab is declined
+  rather than performed: it would leave a window with nothing in it and — on
+  desktop, where a terminal is what the app opens with — no front door showing
+  either. Two windows, one of them useless, is a worse answer than a gesture
+  that does nothing.
 - Rendering N panes means N terminal widgets repainting — keep the glyph cache
   **shared** across panes (§9.5) and throttle repaints to the display refresh
   rather than to data arrival, or a chatty `yes`-style output in one pane will
