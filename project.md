@@ -958,6 +958,30 @@ split threshold:
 This is exactly why §3's session/view separation matters — implemented that way,
 collapse/restore is bookkeeping, not surgery.
 
+**Rotation itself is checked on a device, and checked from the far end.** A
+session was opened on an emulator, a unique marker left in its scrollback, and
+the device rotated to landscape and back. The process is the same one
+throughout, the scrollback is intact, and the grid re-measures 48x41 → 93x17 →
+48x41. The part worth having is the last: the sizes were read from the
+**server's** pty, not from the app — `17 93` while landscape, `41 48` after
+rotating back — so the remote genuinely received a `window-change` in each
+direction rather than the view merely redrawing itself at a new size. Step 4
+above, and §7's resize, hold on the platform where the activity is torn down
+and rebuilt underneath them. Nothing on a desktop can show this: there is no
+activity recreation to survive.
+
+**Steps 2 and 3 are still unverified on a device** — panes converting to tabs
+on rotate-to-portrait, and the remembered intent restoring the split on
+rotate-back. Both are unit-tested against `bssh_layout_manager` and neither has
+been driven on hardware. The attempt was abandoned mid-test rather than
+completed, so nothing here should be read as evidence either way.
+
+An observation from the same run, not yet investigated: the app logged
+`Skipped 92 frames` and a 1886 ms frame across the orientation change. This
+section argues collapse/restore is bookkeeping rather than surgery, and a
+1.9-second frame is not obviously that. It may be Qt rebuilding its surface
+rather than anything here.
+
 ### 8.3 Tabs and focus
 - **Tab bar:** horizontally scrollable; label from **OSC title** with fallback to
   the profile name; a small **status dot** per tab (connected / reconnecting /
