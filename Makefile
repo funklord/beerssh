@@ -172,6 +172,22 @@ VTERM_CFLAGS = -std=c99 -O2 -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
 ifdef QT_ANDROID_ROOT
 ANDROID_KIT_ABI := $(shell sed -n 's/^DEFAULT_ANDROID_ABIS *= *//p' \
                             $(QT_ANDROID_ROOT)/mkspecs/qdevice.pri 2>/dev/null)
+
+# Second best: the kit's own directory name, which the Qt installer spells
+# android_arm64_v8a, android_armv7, android_x86 and android_x86_64.
+#
+# Here because making an unreadable qdevice.pri a hard ERROR would break a
+# build that used to work -- CI installs its kit with an action rather than
+# from this machine, and a layout that differs there would stop the Android
+# job dead. This is a fallback and not a second opinion: it is consulted
+# only when the authoritative file says nothing, and the disagreement check
+# below still applies to whatever comes out.
+ifeq ($(ANDROID_KIT_ABI),)
+ANDROID_KIT_ABI := $(patsubst android_%,%,$(notdir $(patsubst %/,%,$(QT_ANDROID_ROOT))))
+ANDROID_KIT_ABI := $(subst arm64_v8a,arm64-v8a,$(ANDROID_KIT_ABI))
+ANDROID_KIT_ABI := $(subst armv7,armeabi-v7a,$(ANDROID_KIT_ABI))
+ANDROID_KIT_ABI := $(filter arm64-v8a armeabi-v7a x86 x86_64,$(ANDROID_KIT_ABI))
+endif
 endif
 ANDROID_ABI ?= $(ANDROID_KIT_ABI)
 ANDROID_API ?= 26
@@ -439,9 +455,10 @@ android-check:
 	fi
 	@if [ -z "$(ANDROID_ABI)" ]; then \
 		echo "make android: cannot tell which ABI this kit builds."; \
-		echo "make android:   read from $(QT_ANDROID_ROOT)/mkspecs/qdevice.pri,"; \
-		echo "make android:   which has no DEFAULT_ANDROID_ABIS line. Is that a"; \
-		echo "make android:   Qt-for-Android kit? Otherwise say which it is:"; \
+		echo "make android:   Neither $(QT_ANDROID_ROOT)/mkspecs/qdevice.pri"; \
+		echo "make android:   (no DEFAULT_ANDROID_ABIS line) nor the kit's own"; \
+		echo "make android:   directory name says. Is that a Qt-for-Android"; \
+		echo "make android:   kit? Otherwise name the ABI yourself:"; \
 		echo "make android:   make apk ANDROID_ABI=arm64-v8a"; \
 		exit 1; \
 	fi

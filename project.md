@@ -2368,6 +2368,14 @@ reads the ABI from the kit's own `qdevice.pri`, which is where qmake gets it;
 an explicit `ANDROID_ABI` that contradicts the kit is refused rather than
 built; and the finished package is unzipped and its `lib/` compared against
 the name it was given.
+**With the kit's directory name as a fallback**, because making an unreadable
+`qdevice.pri` a hard error would have broken a build that used to work: CI
+installs its Qt with an action rather than from this machine, and a layout that
+differed there would have stopped the Android job dead — a regression
+introduced *by the fix*, in the job most likely to notice it last. It is a
+fallback and not a second opinion: consulted only when the authoritative file
+says nothing, with the contradiction check still applied to whatever comes out.
+A path that is not a kit at all still refuses, and names both sources it tried.
 
 **Built:** `make install` now lays down what a Linux desktop actually needs —
 the binary, `se.vibes.beerssh.desktop`, the AppStream `.metainfo.xml`, a
