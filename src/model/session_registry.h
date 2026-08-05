@@ -48,6 +48,20 @@ public:
 	bssh_session *at(int index) const;
 	int index_of(bssh_session *session) const;
 
+	/*
+	 * Reorders a session, for sec 8.3's drag-to-reorder.
+	 *
+	 * The ORDER lives here rather than in the tab bar, and that is the
+	 * whole point of the method. Everything that acts on a tab -- close,
+	 * the context menu, switching -- turns a tab index into a session
+	 * with at(), so tab order and registry order are one thing. Let a
+	 * dragged tab change only the bar and the two disagree until the next
+	 * rebuild, which reads the registry and silently puts the tabs back;
+	 * in between, closing a tab closes whichever session used to be
+	 * there. Out of range or a no-op move does nothing and says nothing.
+	 */
+	void move(int from, int to);
+
 signals:
 	void session_added(bssh_session *session);
 

@@ -59,6 +59,9 @@ private slots:
 	 * desktop's only route to the menu with it.
 	 */
 	void the_tab_menu_is_reachable_by_both_gestures();
+	void reordering_tabs_reorders_the_sessions_behind_them();
+	void a_dragged_tab_bar_is_a_pointers_affordance();
+	void middle_click_closes_the_tab_under_it();
 	void backing_out_of_a_session_reaches_the_host_list();
 };
 

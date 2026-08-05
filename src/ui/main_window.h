@@ -102,6 +102,13 @@ public:
 
 protected:
 	void changeEvent(QEvent *event) override;
+
+	/*
+	 * Watches the tab bar for sec 8.3's middle-click close, which QTabBar
+	 * raises no signal for -- tabCloseRequested comes from its own close
+	 * button and from nothing else.
+	 */
+	bool eventFilter(QObject *watched, QEvent *event) override;
 	void closeEvent(QCloseEvent *event) override;
 
 	/*

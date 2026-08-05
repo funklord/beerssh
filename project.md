@@ -1012,6 +1012,20 @@ the same number for a layout manager that had quietly stopped working.
   does not do. It costs nothing today: the one verb that would care,
   *Show beside current*, is already disabled wherever the long-press is the
   input, because touch means COMPACT means one pane (§8.2).
+- **Middle-click close and drag-to-reorder are built, and the reorder moves
+  the registry rather than the bar.** Tab index and registry index are one
+  thing here: every tab action — close, the context menu, switching — turns an
+  index into a session with `at()`, and `on_registry_changed` rebuilds the bar
+  from the registry. So a bar allowed to rearrange itself privately would point
+  Close at whichever session used to be in that slot, and then have its drag
+  silently undone at the next rebuild. `bssh_session_registry::move()` is where
+  a drag lands, and the bar redraws from the result. Reordering is **desktop
+  only**, as this section says: the bar scrolls horizontally under a thumb, and
+  one that both scrolls and rearranges under the same drag picks between them
+  by accident. Middle-click needs an event filter — `tabCloseRequested` belongs
+  to QTabBar's own close button and fires for nothing else — and acts on
+  release, since a press that drags away is a cancelled click everywhere else
+  and a close is the click that cannot be taken back.
 - **A session is not a dead end.** On the touch front door the terminal is not
   the root — the host list is (§8.5) — so backing out of a session goes **up**
   to the list rather than offering to quit. Opening a host used to be a one-way

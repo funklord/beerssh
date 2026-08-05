@@ -712,3 +712,123 @@ void layout_test::backing_out_of_a_session_reaches_the_host_list() {
 
 	bssh_ssh_session::set_factory(nullptr);
 }
+
+void layout_test::reordering_tabs_reorders_the_sessions_behind_them() {
+	/*
+	 * sec 8.3's drag-to-reorder, and the invariant it could quietly
+	 * break. Tab index and registry index are ONE thing here: every tab
+	 * action -- close, the context menu, switching -- turns an index into
+	 * a session with at(). A bar that reorders itself without telling the
+	 * registry leaves Close pointing at whichever session used to be in
+	 * that slot, and the next rebuild reads the registry and puts the
+	 * tabs back, so the drag appears to have been ignored as well.
+	 */
+	bssh_session_registry registry;
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+
+	QCOMPARE(registry.at(0), a);
+	QCOMPARE(registry.at(2), c);
+
+	QSignalSpy changed(&registry, &bssh_session_registry::changed);
+
+	/* The last tab dragged to the front. */
+	registry.move(2, 0);
+
+	QCOMPARE(registry.at(0), c);
+	QCOMPARE(registry.at(1), a);
+	QCOMPARE(registry.at(2), b);
+
+	/* index_of is the same answer read backwards, and must agree. */
+	QCOMPARE(registry.index_of(c), 0);
+	QCOMPARE(registry.index_of(b), 2);
+
+	/*
+	 * And it announces itself, because the tab bar is rebuilt from
+	 * changed() and nothing else -- a silent move would leave the labels
+	 * and the status dots one session out.
+	 */
+	QCOMPARE(changed.count(), 1);
+
+	/* Nothing was created or lost by moving. */
+	QCOMPARE(registry.count(), 3);
+
+	/*
+	 * Out of range does nothing rather than something surprising, and a
+	 * move to where it already is says nothing at all -- Qt emits
+	 * tabMoved for a drag that ends where it started.
+	 */
+	registry.move(0, 0);
+	registry.move(-1, 1);
+	registry.move(1, 99);
+	QCOMPARE(changed.count(), 1);
+	QCOMPARE(registry.at(0), c);
+}
+
+void layout_test::a_dragged_tab_bar_is_a_pointers_affordance() {
+	/*
+	 * sec 8.3 gives drag-to-reorder to the desktop only. The tab bar
+	 * scrolls horizontally where touch is the input, and a bar that both
+	 * scrolls and rearranges under one drag picks between them by
+	 * accident.
+	 */
+	{
+		const forced_touch_t pointer(0);
+		bssh_main_window window;
+		QTabBar *tabs = window.findChild<QTabBar *>();
+		QVERIFY(tabs);
+		QVERIFY2(tabs->isMovable(), "a pointer must be able to drag tabs");
+	}
+
+	const forced_touch_t thumb(1);
+	bssh_main_window window;
+	QTabBar *tabs = window.findChild<QTabBar *>();
+	QVERIFY(tabs);
+	QVERIFY2(!tabs->isMovable(), "a dragged tab must scroll the bar on touch, not reorder it");
+}
+
+void layout_test::middle_click_closes_the_tab_under_it() {
+	/*
+	 * sec 8.3's middle-click close, which QTabBar raises no signal for:
+	 * tabCloseRequested is its close button's, so this is an event filter
+	 * and an event filter is exactly the thing that goes missing without
+	 * anything failing to compile.
+	 */
+	const forced_touch_t pointer(0);
+
+	bssh_main_window window;
+	bssh_session_registry *registry = window.findChild<bssh_session_registry *>();
+	QVERIFY2(registry, "the window must own a session registry");
+
+	bssh_session *a = registry->create(named(QStringLiteral("a")));
+	bssh_session *b = registry->create(named(QStringLiteral("b")));
+	QCOMPARE(registry->count(), 2);
+
+	QTabBar *tabs = window.findChild<QTabBar *>();
+	QVERIFY(tabs);
+	QCOMPARE(tabs->count(), 2);
+
+	const QPoint on_second = tabs->tabRect(1).center();
+
+	/*
+	 * The LEFT button over the same tab must not close anything -- it
+	 * selects, which is what a tab bar is for. Asserted first, because a
+	 * filter that closes on any button would pass the middle-click half
+	 * and destroy a session on every click.
+	 */
+	QMouseEvent left(QEvent::MouseButtonRelease, on_second, tabs->mapToGlobal(on_second),
+	                  Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(tabs, &left);
+	QCOMPARE(registry->count(), 2);
+
+	QMouseEvent middle(QEvent::MouseButtonRelease, on_second, tabs->mapToGlobal(on_second),
+	                    Qt::MiddleButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(tabs, &middle);
+
+	/* The one under the pointer went, and the other did not. */
+	QCOMPARE(registry->count(), 1);
+	QCOMPARE(registry->at(0), a);
+	Q_UNUSED(b);
+}

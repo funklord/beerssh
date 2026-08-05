@@ -15,6 +15,7 @@
 #include <QLineEdit>
 #include <QMenu>
 #include <QMetaEnum>
+#include <QMouseEvent>
 #include <QVBoxLayout>
 
 #include <QStackedWidget>
@@ -130,6 +131,40 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	connect(m_tabs, &QTabBar::currentChanged, this, &bssh_main_window::on_tab_changed);
 	connect(m_tabs, &QTabBar::tabCloseRequested,
 	         this, &bssh_main_window::on_tab_close_requested);
+
+	/*
+	 * sec 8.3's drag-to-reorder, and it is DESKTOP ONLY because that
+	 * section says so: the tab bar scrolls horizontally on a phone, and a
+	 * bar that both scrolls and rearranges under the same drag picks one
+	 * of them by accident.
+	 *
+	 * The reorder is applied to the REGISTRY, not left in the bar. Tab
+	 * index and registry index are one thing here -- every tab action
+	 * turns an index into a session with at() -- and on_registry_changed
+	 * rebuilds the bar from the registry, so a drag the registry never
+	 * heard about is undone at the next repaint, having in the meantime
+	 * pointed Close at whichever session used to be in that slot.
+	 */
+	const bool pointer = bssh_platform::instance()
+	                      && !bssh_platform::instance()->is_touch_primary();
+	m_tabs->setMovable(pointer);
+
+	connect(m_tabs, &QTabBar::tabMoved, this, [this](int from, int to) {
+		m_registry->move(from, to);
+	});
+
+	/*
+	 * And sec 8.3's middle-click close, the other half of that sentence.
+	 * Every tabbed program since the browsers settled it does this, and a
+	 * user who has the habit tries it before they look for the small x.
+	 *
+	 * On RELEASE, like every other click: pressing over a tab and
+	 * dragging away is a cancelled click everywhere else, and a close
+	 * that fires under the finger is the one that cannot be taken back.
+	 * Not gated on the platform -- a phone has no middle button to press,
+	 * and a mouse plugged into one may as well work.
+	 */
+	m_tabs->installEventFilter(this);
 
 	/*
 	 * sec 8.3's tab context menu. "Show beside current" is how a split is
@@ -923,6 +958,26 @@ void bssh_main_window::on_tab_changed(int index) {
 void bssh_main_window::on_tab_close_requested(int index) {
 	bssh_session *session = m_registry->at(index);
 	if (session) m_registry->close(session);
+}
+
+/*
+ * sec 8.3's middle-click close. QTabBar raises no signal for it --
+ * tabCloseRequested comes from its own close button and from nothing else
+ * -- so the button is read off the event here.
+ */
+bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
+	if (watched == m_tabs && event->type() == QEvent::MouseButtonRelease) {
+		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+		if (mouse->button() == Qt::MiddleButton) {
+			const int index = m_tabs->tabAt(mouse->position().toPoint());
+			if (index >= 0) {
+				on_tab_close_requested(index);
+				return true;
+			}
+		}
+	}
+
+	return QWidget::eventFilter(watched, event);
 }
 
 /*

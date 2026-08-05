@@ -91,3 +91,18 @@ bssh_session *bssh_session_registry::at(int index) const {
 int bssh_session_registry::index_of(bssh_session *session) const {
 	return m_sessions.indexOf(session);
 }
+
+void bssh_session_registry::move(int from, int to) {
+	if (from == to) return;
+	if (from < 0 || from >= m_sessions.size()) return;
+	if (to < 0 || to >= m_sessions.size()) return;
+
+	m_sessions.move(from, to);
+
+	/*
+	 * changed() rather than a signal of its own: every listener rebuilds
+	 * from the list anyway, and the count is the same, so a second signal
+	 * would only be a second thing to forget to connect.
+	 */
+	emit changed();
+}
