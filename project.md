@@ -1054,6 +1054,23 @@ the same number for a layout manager that had quietly stopped working.
   off by default.
 - **Tap-to-focus** (or click-to-focus) on a pane; keyboard shortcuts for
   pane/tab navigation (§6.1).
+  **This was half-built in the way that is worse than not built at all.** Two
+  ideas of "focused" existed and only one of them moved: Qt gives a clicked
+  pane the keyboard on its own, since the view takes `StrongFocus`, while the
+  pane container's own idea — which drives the focus border, the status line,
+  and what copy and paste act on — was moved by the keyboard chords and by
+  nothing else. So clicking the other pane sent your typing there and left
+  every visible indication pointing at the pane you had left. That is precisely
+  the disagreement the bullet above calls non-negotiable, and it is worse than
+  a missing feature because the border actively asserts the wrong answer. The
+  view now emits on `focusInEvent`, which the container turns into
+  `focus_session()`: one hook for a click, a tap, Tab, and its own `setFocus`.
+  Testing it needed a finding of its own, recorded because it will catch the
+  next person: **Qt applies focus-on-click for spontaneous events only**, so a
+  synthesised `QMouseEvent` moves no focus at all and a test written the
+  obvious way fails whether or not the app works. Verified against a bare
+  `StrongFocus` widget in a scratch program before concluding it was the
+  synthetic event rather than this widget.
 - **Dividers:** draggable, double-click/double-tap to equalize. Hit target
   ≥48dp effective on touch; desktop can be tighter but must show a resize
   cursor. Snap divider positions to **whole character cells** so panes never

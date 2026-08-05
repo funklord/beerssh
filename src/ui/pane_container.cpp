@@ -110,6 +110,19 @@ void bssh_pane_container::rebuild() {
 			session->resize(cols, rows);
 		});
 
+		/*
+		 * sec 8.3's tap-to-focus. Qt moves the KEYBOARD to a clicked
+		 * pane on its own -- the view takes StrongFocus -- and moved
+		 * nothing else, so the focus border, the status line and what
+		 * copy and paste acted on all stayed with the pane the user had
+		 * left. That is the disagreement sec 8.3 calls non-negotiable,
+		 * since the panes are otherwise identical and the wrong one
+		 * taking a destructive command is a real outcome.
+		 */
+		connect(view, &bssh_terminal_view::focus_received, this, [this, session] {
+			focus_session(session);
+		});
+
 		connect(session->emulator(), &bssh_emulator::damaged,
 		         view, &bssh_terminal_view::on_screen_damaged);
 		connect(session->emulator(), &bssh_emulator::images_changed,

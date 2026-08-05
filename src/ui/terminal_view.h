@@ -225,6 +225,18 @@ signals:
 	void grid_resized(int cols, int rows);
 
 	/*
+	 * This pane has the keyboard, however it got it -- a click, a tap, Tab,
+	 * or somebody calling setFocus.
+	 *
+	 * The pane container needs telling because the two ideas of "focused"
+	 * are separate: Qt's, which follows the click on its own because this
+	 * widget takes StrongFocus, and the container's, which drives the focus
+	 * border, the status line and what copy and paste act on (sec 8.3).
+	 * They came apart on any click that was not also a keyboard chord.
+	 */
+	void focus_received();
+
+	/*
 	 * Where a context menu was asked for, in global coordinates, and a
 	 * middle-click paste. Raised rather than handled here because the
 	 * actions belong to the window: paste needs the clipboard and the
@@ -252,6 +264,7 @@ protected:
 	void keyPressEvent(QKeyEvent *event) override;
 	void wheelEvent(QWheelEvent *event) override;
 	void mousePressEvent(QMouseEvent *event) override;
+	void focusInEvent(QFocusEvent *event) override;
 	void mouseMoveEvent(QMouseEvent *event) override;
 	void mouseReleaseEvent(QMouseEvent *event) override;
 	void mouseDoubleClickEvent(QMouseEvent *event) override;

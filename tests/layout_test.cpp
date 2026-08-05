@@ -884,3 +884,69 @@ void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
 	/* An index with nothing behind it gets no menu rather than an empty one. */
 	QVERIFY2(!window.build_tab_menu(7, &window), "a menu was built for a tab that is not there");
 }
+
+void layout_test::clicking_a_pane_focuses_it() {
+	/*
+	 * sec 8.3's tap-to-focus, and it is a SAFETY property rather than a
+	 * convenience: the panes are identical, the focus border is what says
+	 * which one is live, and that section calls it non-negotiable because
+	 * the wrong pane taking a destructive command is a real outcome.
+	 *
+	 * Two ideas of "focused" existed and only one of them moved. Qt gives
+	 * a clicked pane the keyboard by itself -- the view takes StrongFocus
+	 * -- while the container's own idea, which drives the border, the
+	 * status line and what copy and paste act on, was moved by the
+	 * keyboard chords and by nothing else. So a click sent the typing to
+	 * one pane and left everything else pointing at another.
+	 *
+	 * Focus is moved with setFocus(MouseFocusReason) rather than by
+	 * sending a QMouseEvent, and that is a finding rather than a
+	 * shortcut: Qt applies focus-on-click for SPONTANEOUS events only, so
+	 * a sent press moves no focus at all. Checked against a bare
+	 * StrongFocus QWidget in a scratch program to be sure it was the
+	 * synthetic event and not this widget -- the plain widget did not take
+	 * focus either. A test written the obvious way fails whether or not
+	 * the app works.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+
+	QCOMPARE(container.pane_count(), 2);
+	QCOMPARE(container.focused_session(), a);
+
+	bssh_terminal_view *second = container.view_at(1);
+	QVERIFY(second);
+
+	QSignalSpy focus(&container, &bssh_pane_container::focus_changed);
+
+	/* What Qt does to the second pane when a user clicks in it. */
+	second->setFocus(Qt::MouseFocusReason);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(container.focused_session(), b);
+	QCOMPARE(focus.count(), 1);
+
+	/* And the border moved with it, which is the half a user can see. */
+	QCOMPARE(container.view_at(0)->property("bssh_focused").toBool(), false);
+	QCOMPARE(container.view_at(1)->property("bssh_focused").toBool(), true);
+
+	/*
+	 * Tab between panes is the same hook, which is why this hangs off
+	 * focusInEvent rather than off the mouse press: handling the click
+	 * alone would move the keyboard by Tab and leave the border behind.
+	 */
+	container.view_at(0)->setFocus(Qt::TabFocusReason);
+	QCoreApplication::processEvents();
+	QCOMPARE(container.focused_session(), a);
+	QCOMPARE(focus.count(), 2);
+}

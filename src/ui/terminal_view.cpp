@@ -956,6 +956,18 @@ QString bssh_terminal_view::selection_text() const {
 	return lines.join(QLatin1Char('\n'));
 }
 
+void bssh_terminal_view::focusInEvent(QFocusEvent *event) {
+	QWidget::focusInEvent(event);
+
+	/*
+	 * On focusIn rather than on the mouse press, so every route in is
+	 * covered by one hook: a click, a tap, Tab between panes, and the
+	 * container's own setFocus. Handling it in mousePressEvent would have
+	 * left Tab moving the keyboard without moving the border.
+	 */
+	emit focus_received();
+}
+
 void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	/*
 	 * When the remote has asked for the mouse, clicks are its business --
