@@ -148,7 +148,7 @@ VTERM_STAMP   = $(VTERM_BUILD_DIR)/.patched
 
 # -w: this is third-party code built to someone else's warning standard, and
 # a wall of warnings nobody will act on is a wall that hides ours.
-VTERM_CFLAGS = -std=c99 -O2 -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
+VTERM_CFLAGS = -std=c99 -Os -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
 
 # --- vendored libvterm, cross-compiled ------------------------------------
 # The host archive cannot be reused: it is x86_64, and the first Android

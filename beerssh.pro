@@ -31,6 +31,13 @@ QT += widgets network
 CONFIG += c++17
 CONFIG -= app_bundle
 
+# Size over speed. qmake's release default is -O2 and it is applied by the
+# generated Makefile, so saying it here is the only place it takes effect.
+QMAKE_CXXFLAGS_RELEASE -= -O2
+QMAKE_CXXFLAGS_RELEASE += -Os
+QMAKE_CFLAGS_RELEASE   -= -O2
+QMAKE_CFLAGS_RELEASE   += -Os
+
 INCLUDEPATH += $$PWD/src
 
 SOURCES += \
