@@ -59,6 +59,19 @@ public:
 	static bssh_ssh_session *create(QObject *parent = nullptr);
 
 	/*
+	 * Builds a LOCAL transport -- a shell on a pseudo-terminal rather
+	 * than an SSH connection (sec 2, sec 3). Empty shell means $SHELL,
+	 * then /bin/sh.
+	 *
+	 * Beside create() rather than a flag on it, because the two build
+	 * genuinely different things and a boolean parameter at every call
+	 * site reads as a mode rather than as a choice of backend. Consults
+	 * the same injected factory, so a test fakes a local session exactly
+	 * as it fakes an SSH one.
+	 */
+	static bssh_ssh_session *create_local(const QString &shell, QObject *parent = nullptr);
+
+	/*
 	 * Replaces what create() builds. This is the seam sec 12.3 asks for:
 	 * "a fake implementation of this one interface, replaying a captured
 	 * byte stream, is how the emulator gets tested without a server". The

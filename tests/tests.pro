@@ -26,6 +26,10 @@ INCLUDEPATH += $$PWD/../src $$PWD $$PWD/../vterm/include
 # The font tests skip themselves when it is not there, so a checkout that
 # has never run the fetch script still has a green test suite.
 DEFINES += BSSH_TEST_FONT_DIR=\\\"$$PWD/../fonts\\\"
+# forkpty(3) for the local shell transport (sec 2, sec 3); glibc puts
+# it in libutil.
+LIBS += -lutil
+
 LIBS += $$PWD/../build-vterm/libvterm.a
 PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a
 
@@ -44,6 +48,7 @@ SOURCES += \
     session_registry_test.cpp \
     tab_status_test.cpp \
     input_router_test.cpp \
+    pty_session_test.cpp \
     layout_test.cpp \
     font_catalog_test.cpp \
     font_picker_test.cpp \
@@ -53,6 +58,7 @@ SOURCES += \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
     ../src/input/input_router.cpp \
+    ../src/ssh/pty_session.cpp \
     ../src/ssh/ssh_session.cpp \
     ../src/ssh/jump_tunnel.cpp \
     ../src/ssh/ssh_session_libssh.cpp \
@@ -114,6 +120,7 @@ HEADERS += \
     session_registry_test.h \
     tab_status_test.h \
     input_router_test.h \
+    pty_session_test.h \
     layout_test.h \
     font_catalog_test.h \
     font_picker_test.h \
@@ -122,6 +129,7 @@ HEADERS += \
     ssh_config_test.h \
     terminal_view_test.h \
     ../src/input/input_router.h \
+    ../src/ssh/pty_session.h \
     ../src/ssh/ssh_session.h \
     ../src/ssh/jump_tunnel.h \
     ../src/ssh/ssh_session_libssh.h \

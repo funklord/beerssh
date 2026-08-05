@@ -54,6 +54,7 @@ SOURCES += \
     src/input/input_router.cpp \
     src/platform/platform.cpp \
     src/platform/secret_store.cpp \
+    src/ssh/pty_session.cpp \
     src/ssh/ssh_session.cpp \
     src/ssh/jump_tunnel.cpp \
     src/ssh/ssh_session_libssh.cpp \
@@ -99,6 +100,7 @@ HEADERS += \
     src/model/session_registry.h \
     src/platform/platform.h \
     src/platform/secret_store.h \
+    src/ssh/pty_session.h \
     src/ssh/ssh_session.h \
     src/ssh/jump_tunnel.h \
     src/ssh/ssh_session_libssh.h \
@@ -147,6 +149,11 @@ android {
 } else {
     BSSH_VTERM_LIB = $$PWD/build-vterm/libvterm.a
 }
+# forkpty(3) for the local shell transport (sec 2, sec 3). glibc puts it
+# in libutil; bionic has it in libc, so Android needs nothing and linking
+# -lutil there fails.
+!android: LIBS += -lutil
+
 LIBS += $$BSSH_VTERM_LIB
 PRE_TARGETDEPS += $$BSSH_VTERM_LIB
 

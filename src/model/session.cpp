@@ -107,7 +107,18 @@ void bssh_session::connect_to_host() {
 	m_exit_status = 0;
 	m_used_key_auth = false;
 	m_password_requested = false;
-	m_transport = bssh_ssh_session::create(this);
+	/*
+	 * A local shell is a different transport, not a different session
+	 * (sec 2, sec 3): everything above this line -- the emulator, the
+	 * router, the scrollback, the tab -- is the same object either way,
+	 * which is what keeps the terminal core free of any idea of a PTY.
+	 *
+	 * The injected factory still wins for both, so a test can fake a
+	 * local session exactly as it fakes an SSH one.
+	 */
+	m_transport = m_profile.local
+	        ? bssh_ssh_session::create_local(m_profile.shell, this)
+	        : bssh_ssh_session::create(this);
 
 	/*
 	 * The interval is applied HERE as well as in set_settings, because the

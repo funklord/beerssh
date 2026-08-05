@@ -119,10 +119,22 @@ run.
 - SFTP file browser / port forwarding / SSH tunneling (design so they can be
   added; don't build yet).
 - Mosh protocol (note as a future resilience option in §5).
-- Local terminal / on-device shell — this is an SSH client, not Termux and not
-  a desktop terminal emulator. Tempting on desktop, where a local PTY is right
-  there; still out of scope for v1, and §3's no-PTY principle exists partly to
-  stop it creeping in.
+- ~~Local terminal / on-device shell~~ — **this non-goal was reversed
+  deliberately.** It read: "this is an SSH client, not Termux and not a desktop
+  terminal emulator. Tempting on desktop, where a local PTY is right there;
+  still out of scope for v1, and §3's no-PTY principle exists partly to stop it
+  creeping in."
+  The decision now is that **the desktop opens a local shell by default** and
+  Android does not. It is kept here rather than deleted, because a non-goal
+  that quietly vanishes is one nobody can tell was ever considered — and the
+  reasoning it gave still holds for the platform it was written about. Android
+  gets no local shell: an unprivileged app sandbox has no useful userland,
+  which is what Termux exists to supply, so it opens its configuration instead.
+  **What the no-PTY principle protected is kept.** The PTY lives behind
+  `bssh_ssh_session` with the SSH transport, so the emulator, the renderer, the
+  input router and the scrollback still know nothing about one. §3's principle
+  is amended below rather than dropped: the *core* stays PTY-free; the desktop
+  gains a transport that is not a socket.
 - iOS (keep the core portable, but don't spend effort on it).
 - Arbitrary recursive tmux-style split trees (v1 caps pane count — see §8).
 - User-imported arbitrary fonts (v1 ships a curated set only; import is a v2
@@ -184,8 +196,13 @@ Identifiers below are the real names to use in code — `snake_case` with a
        └───────────────────────┘
 ```
 
-**Core principle 1:** keep SSH + terminal emulation in **portable C++** with **no
-local PTY dependency**. The SSH channel *is* the byte stream that feeds the
+**Core principle 1 (amended):** keep SSH + terminal emulation in **portable C++**
+with **no local PTY dependency in the core**. The desktop now opens a local
+shell by default (§2), and it does so through a `bssh_ssh_session`
+implementation like any other transport — so the emulator, renderer, input
+router and scrollback still have no idea a PTY exists, which is what this
+principle was actually protecting. The original wording, and the reason it was
+written, follow unchanged. The SSH channel *is* the byte stream that feeds the
 emulator; there is no `/dev/pts` on Android for an unprivileged app. This is why
 desktop widgets like `qtermwidget` (Konsole-derived, PTY-oriented) are a poor
 drop-in and a lighter VT emulator is preferred (see §7). Note that the desktop

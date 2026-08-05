@@ -70,9 +70,24 @@ struct bssh_profile_t {
 	int preset_id;
 	QJsonObject overrides;
 
-	bssh_profile_t() : id(0), port(22), has_stored_password(false), preset_id(0) {}
+	/*
+	 * A local shell rather than an SSH connection (sec 2, sec 3). The
+	 * desktop's default session is one of these; host, user, port and
+	 * everything under sec 11 are meaningless for it.
+	 */
+	bool local;
 
-	bool is_valid() const { return !host.isEmpty(); }
+	/* What the local shell runs. Empty means $SHELL, then /bin/sh. */
+	QString shell;
+
+	bssh_profile_t()
+	    : id(0), port(22), has_stored_password(false), preset_id(0), local(false) {}
+
+	/*
+	 * A local profile is valid without a host, which is the whole point
+	 * of it -- there is nothing to connect to.
+	 */
+	bool is_valid() const { return local || !host.isEmpty(); }
 
 	/* "user@host" or "user@host:port" when the port is not the default. */
 	QString target() const {
