@@ -110,7 +110,9 @@ APP_ID = se.vibes.beerssh
 # is two places to forget; a Debian package would have made it three, and
 # a package claiming a version the app denies is a support question nobody
 # can answer.
-VERSION ?= 0.1.0
+# The one place the version is stated. debian/changelog and any other
+# declaration are checked against it by `make version-check`.
+VERSION ?= $(shell cat VERSION)
 
 BUILD_DIR         = build
 ANDROID_BUILD_DIR = build-android
@@ -749,75 +751,37 @@ install: all
 # back to system monospace families), so it is Recommends rather than
 # Depends and lives in its own arch-independent package, which is how
 # Debian ships fonts anyway.
-DEB_DIR      = build-deb
 DEB_ARCH    ?= $(shell dpkg --print-architecture)
 DEB_MAINTAINER ?= $(shell git config user.name) <$(shell git config user.email)>
 
-deb: all
-	rm -rf $(DEB_DIR)
-	$(MAKE) install DESTDIR=$(DEB_DIR)/beerssh PREFIX=/usr
+# Native Debian packaging: debian/ holds the metadata, debhelper does the
+# work. dh_shlibdeps computes Depends from the linked binary; the previous
+# hand-rolled version had to be taught that the hard way, after a package
+# with an empty Depends shipped and failed at first launch rather than at
+# install.
+deb: version-check
+	dpkg-buildpackage -b -us -uc
+	@mkdir -p $(BUILD_DIR)
+	@for f in ../beerssh_$(VERSION)_*.deb ../beerssh-fonts_$(VERSION)_all.deb \
+	          ../beerssh_$(VERSION)_*.buildinfo ../beerssh_$(VERSION)_*.changes; do \
+		[ -e "$$f" ] && mv -f "$$f" $(BUILD_DIR)/ || true; \
+	done
+	@ls -1 $(BUILD_DIR)/*.deb
 
-	# The fonts move to their own package; the app package keeps none.
-	@if [ -d $(DEB_DIR)/beerssh/usr/share/beerssh ]; then \
-		mkdir -p $(DEB_DIR)/beerssh-fonts/usr/share; \
-		mv $(DEB_DIR)/beerssh/usr/share/beerssh \
-		   $(DEB_DIR)/beerssh-fonts/usr/share/beerssh; \
-	fi
-
-	mkdir -p $(DEB_DIR)/beerssh/DEBIAN
-	@printf 'Package: beerssh\n' > $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf 'Version: %s\n' "$(VERSION)" >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf 'Architecture: %s\n' "$(DEB_ARCH)" >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf 'Maintainer: %s\n' "$(DEB_MAINTAINER)" >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf 'Section: net\nPriority: optional\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
-	# Dependencies from the binary itself rather than a hand-kept list,
-	# which would be a list that drifts every time a library is linked or
-	# dropped. dpkg-shlibdeps insists on a debian/control relative to the
-	# working directory, so it gets a minimal one; its output is FATAL if
-	# empty, because a package with no Depends installs happily onto a
-	# machine with no Qt and fails at the first launch with a linker
-	# error. That is exactly what shipped when this ran with its stderr
-	# sent to /dev/null.
-	@mkdir -p $(DEB_DIR)/beerssh/debian
-	@printf 'Source: beerssh\n\nPackage: beerssh\nArchitecture: %s\nDescription: x\n' \
-	        "$(DEB_ARCH)" > $(DEB_DIR)/beerssh/debian/control
-	@set -e; \
-	depends=$$(cd $(DEB_DIR)/beerssh && \
-	        dpkg-shlibdeps -O --ignore-missing-info usr/bin/beerssh 2>/dev/null \
-	        | sed 's/^shlibs:Depends=//'); \
-	if [ -z "$$depends" ]; then \
-		echo "deb: dpkg-shlibdeps produced no dependencies; refusing to build" >&2; \
-		echo "deb:   a package with no Depends fails at launch, not at install" >&2; \
+# The VERSION file is the source; everything else is checked against it.
+version-check:
+	@file=$$(cat VERSION); \
+	changelog=$$(dpkg-parsechangelog -SVersion 2>/dev/null); \
+	if [ -z "$$changelog" ]; then \
+		echo "version-check: skipped (dpkg-parsechangelog unavailable)"; \
+	elif [ "$$file" != "$$changelog" ]; then \
+		echo "version-check: VERSION says $$file but"; \
+		echo "               debian/changelog says $$changelog"; \
+		echo "version-check:   add a changelog entry for $$file"; \
 		exit 1; \
-	fi; \
-	printf 'Depends: %s\n' "$$depends" >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@rm -rf $(DEB_DIR)/beerssh/debian
-	@printf 'Recommends: beerssh-fonts\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf 'Description: SSH terminal for desktop and Android\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf ' An SSH client with a real terminal emulator, built from one\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf ' codebase for the desktop and for Android. Sessions live apart\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf ' from the windows showing them, so tabs, split panes and a phone\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
-	@printf ' rotating do not disturb a connection.\n' >> $(DEB_DIR)/beerssh/DEBIAN/control
-	dpkg-deb --build --root-owner-group $(DEB_DIR)/beerssh \
-	        $(DEB_DIR)/beerssh_$(VERSION)_$(DEB_ARCH).deb
-
-	@if [ -d $(DEB_DIR)/beerssh-fonts ]; then \
-		mkdir -p $(DEB_DIR)/beerssh-fonts/DEBIAN; \
-		printf 'Package: beerssh-fonts\n' > $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf 'Version: %s\n' "$(VERSION)" >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf 'Architecture: all\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf 'Maintainer: %s\n' "$(DEB_MAINTAINER)" >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf 'Section: fonts\nPriority: optional\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf 'Depends: beerssh (>= %s)\n' "$(VERSION)" >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf 'Description: curated terminal fonts for BeerSSH\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf ' The terminal fonts BeerSSH ships with, each vetted for the\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf ' properties a character grid needs, with their licence texts.\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		printf ' Without this package BeerSSH uses the system monospace fonts.\n' >> $(DEB_DIR)/beerssh-fonts/DEBIAN/control; \
-		dpkg-deb --build --root-owner-group $(DEB_DIR)/beerssh-fonts \
-		        $(DEB_DIR)/beerssh-fonts_$(VERSION)_all.deb; \
+	else \
+		echo "version-check: $$file, in step"; \
 	fi
-
-	@ls -lh $(DEB_DIR)/*.deb | awk '{print "  " $$9 "  " $$5}'
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(TARGET)
@@ -876,7 +840,7 @@ help:
 .PHONY: all run test bench style check-ci check-ssh check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab aab android-run install clean veryclean \
-        distclean help check style-source style-docs hooks
+        distclean help check style-source style-docs hooks version-check
 
 # `check` is everything that must pass before committing; `test` is the suite
 # alone. GNU's meaning of check, and what most of these projects already did.

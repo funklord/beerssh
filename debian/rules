@@ -1,0 +1,13 @@
+#!/usr/bin/make -f
+#
+# The version comes from the VERSION file at the root, not from here and
+# not from debian/changelog; `make version-check` gates the three against
+# each other. dh_shlibdeps computes Depends from the linked binary, which
+# is why no dependency list is written by hand: one that is maintained by
+# hand is one that drifts every time a library is linked or dropped.
+
+%:
+	dh $@
+
+override_dh_auto_install:
+	$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp PREFIX=/usr

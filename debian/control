@@ -1,0 +1,25 @@
+Source: beerssh
+Section: net
+Priority: optional
+Maintainer: Nabeel Sowan <nabeel@vibes.se>
+Build-Depends: debhelper-compat (= 13), qt6-base-dev, qt6-base-dev-tools,
+               libssh-dev, libsecret-1-dev, libsixel-dev, pkgconf
+Rules-Requires-Root: no
+
+Package: beerssh
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Recommends: beerssh-fonts
+Description: SSH terminal for desktop and Android
+ An SSH client with a real terminal emulator, built from one
+ codebase for the desktop and for Android. Sessions live apart
+ from the windows showing them, so tabs, split panes and a phone
+ rotating do not disturb a connection.
+
+Package: beerssh-fonts
+Architecture: all
+Depends: beerssh (>= ${source:Version}), ${misc:Depends}
+Description: curated terminal fonts for BeerSSH
+ The terminal fonts BeerSSH ships with, each vetted for the
+ properties a character grid needs, with their licence texts.
+ Without this package BeerSSH uses the system monospace fonts.

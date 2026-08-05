@@ -1,0 +1,7 @@
+beerssh (1.0) unstable; urgency=medium
+
+  * Initial packaging through debhelper. The version is not stated here:
+    it comes from the VERSION file at the root, and `make version-check`
+    fails the build if the two disagree.
+
+ -- Nabeel Sowan <nabeel@vibes.se>  Wed, 05 Aug 2026 15:00:00 +0000
