@@ -18,6 +18,9 @@ private slots:
 	void an_exported_preset_contains_nothing_private();
 	void export_and_import_round_trip();
 	void an_imported_preset_cannot_claim_to_be_builtin();
+	void the_exported_file_contains_nothing_private();
+	void an_ini_round_trip_keeps_every_field();
+	void a_hostile_ini_cannot_claim_to_be_builtin();
 	void the_preset_beats_the_defaults();
 	void the_host_beats_the_preset();
 	void an_override_equal_to_the_preset_is_not_an_override();

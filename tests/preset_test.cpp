@@ -1,4 +1,6 @@
+#include <QFile>
 #include <QJsonDocument>
+#include <QTemporaryDir>
 #include <QtTest>
 
 #include "model/preset.h"
@@ -206,4 +208,141 @@ void preset_test::the_starter_presets_differ_where_it_matters() {
 	QVERIFY(by_name.value(QStringLiteral("tmux-first")).on_connect_command.contains(
 	                QStringLiteral("tmux")));
 	QVERIFY(by_name.value(QStringLiteral("Raspberry Pi / SBC")).compression);
+}
+
+void preset_test::the_exported_file_contains_nothing_private() {
+	/*
+	 * sec 10.3's guarantee, asserted on the artifact that actually
+	 * travels. Every other test here reads to_json(), which is an
+	 * intermediate nobody sends; what lands in ~/Downloads and gets
+	 * attached to a chat window is the INI, and nothing had ever looked
+	 * inside one.
+	 *
+	 * write_ini() is built on to_json(), so the property transfers -- but
+	 * transitively, and a field added straight to the writer would not be
+	 * caught by a test that reads the other end.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("shared.ini"));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("work-bastion");
+	preset.on_connect_command = QStringLiteral("tmux attach || tmux new");
+	QVERIFY(preset.write_ini(path));
+
+	QFile file(path);
+	QVERIFY(file.open(QIODevice::ReadOnly));
+	const QByteArray text = file.readAll();
+	QVERIFY(!text.isEmpty());
+
+	const QStringList forbidden = {
+		QStringLiteral("host"), QStringLiteral("hostname"), QStringLiteral("port"),
+		QStringLiteral("user"), QStringLiteral("username"), QStringLiteral("password"),
+		QStringLiteral("passphrase"), QStringLiteral("identity"),
+		QStringLiteral("secret"), QStringLiteral("known_hosts")
+	};
+
+	for (const QString &key : forbidden) {
+		QVERIFY2(!text.contains((key + QStringLiteral("=")).toUtf8()),
+		          qPrintable(QStringLiteral("the exported file carries %1=").arg(key)));
+	}
+
+	/* And the installation-local bookkeeping does not travel either. */
+	QVERIFY2(!text.contains("id="), "an exported preset must not carry an id");
+	QVERIFY2(!text.contains("builtin"), "an exported preset must not claim to be shipped");
+
+	/* What it does carry is behaviour. */
+	QVERIFY(text.contains("tmux attach"));
+}
+
+void preset_test::an_ini_round_trip_keeps_every_field() {
+	/*
+	 * The INI is a SECOND reader -- QSettings and a hand-written type
+	 * conversion, not from_json's -- and it was untested end to end while
+	 * the JSON round trip next door was covered. A field the writer emits
+	 * and the reader drops is a preset that imports subtly wrong, which
+	 * is the failure the one-format decision was meant to rule out.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("preset.ini"));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("slow link");
+	preset.term = QStringLiteral("vt100");
+	preset.scrollback_lines = 1234;
+	preset.bell_enabled = false;
+	preset.cursor_style = QStringLiteral("bar");
+	preset.cursor_blink = false;
+	preset.font_family = QStringLiteral("Iosevka");
+	preset.font_size = 17;
+	preset.colour_scheme = QStringLiteral("solarized-dark");
+	preset.allow_clipboard_write = true;
+	preset.keepalive_seconds = 15;
+	preset.compression = true;
+	preset.on_connect_command = QStringLiteral("tmux attach");
+	preset.key_row_layout = QStringLiteral("compact");
+
+	QVERIFY(preset.write_ini(path));
+
+	bool ok = false;
+	const bssh_preset_t restored = bssh_preset_t::read_ini(path, &ok);
+	QVERIFY2(ok, "a file this app just wrote must read back");
+
+	QCOMPARE(restored.name, preset.name);
+	QCOMPARE(restored.term, preset.term);
+	QCOMPARE(restored.scrollback_lines, preset.scrollback_lines);
+	QCOMPARE(restored.bell_enabled, preset.bell_enabled);
+	QCOMPARE(restored.cursor_style, preset.cursor_style);
+	QCOMPARE(restored.cursor_blink, preset.cursor_blink);
+	QCOMPARE(restored.font_family, preset.font_family);
+	QCOMPARE(restored.font_size, preset.font_size);
+	QCOMPARE(restored.colour_scheme, preset.colour_scheme);
+	QCOMPARE(restored.keepalive_seconds, preset.keepalive_seconds);
+	QCOMPARE(restored.compression, preset.compression);
+	QCOMPARE(restored.on_connect_command, preset.on_connect_command);
+	QCOMPARE(restored.key_row_layout, preset.key_row_layout);
+
+	/*
+	 * allow_clipboard_write is the one worth naming: it is a trust
+	 * decision (sec 7.1), and a round trip that quietly dropped it would
+	 * turn "yes, this host may write my clipboard" back into the default
+	 * without anybody being told.
+	 */
+	QCOMPARE(restored.allow_clipboard_write, preset.allow_clipboard_write);
+}
+
+void preset_test::a_hostile_ini_cannot_claim_to_be_builtin() {
+	/*
+	 * The same attack an_imported_preset_cannot_claim_to_be_builtin()
+	 * covers for JSON, aimed at the reader that actually opens files
+	 * somebody sent. A shared preset importing as one of the shipped ones
+	 * would take a read-only status and an id it was not given, and the
+	 * shipped set is what every other preset is cloned from.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("hostile.ini"));
+
+	{
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("[preset]\n"
+		            "name=Default Linux\n"
+		            "is_builtin=true\n"
+		            "builtin=true\n"
+		            "id=1\n"
+		            "term=vt100\n");
+	}
+
+	bool ok = false;
+	const bssh_preset_t imported = bssh_preset_t::read_ini(path, &ok);
+	QVERIFY(ok);
+
+	QVERIFY2(!imported.is_builtin, "an imported preset must never be shipped");
+	QCOMPARE(imported.id, 0);
+
+	/* The rest of it still imports -- it is a preset, just not a shipped one. */
+	QCOMPARE(imported.term, QStringLiteral("vt100"));
 }

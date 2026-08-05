@@ -1800,6 +1800,27 @@ infrastructure. Enforce it in the type system — a preset should be structurall
 incapable of holding a secret, so an export path can never accidentally serialise
 one.
 
+**Built, and now asserted on the artifact that actually travels.** The type has
+no field a secret could occupy, which is the guarantee — but the test read
+`to_json()`, an intermediate nobody sends. What lands in `~/Downloads` and gets
+attached to a chat window is the INI, and nothing had ever looked inside one.
+`write_ini()` is built on `to_json()` so the property does transfer, but
+transitively: a field added straight to the writer would not have been caught
+from the other end. The exported file's own bytes are checked now.
+
+**And the hostile direction is covered from both entry points.** A shared
+preset claiming `is_builtin` would take a read-only status and an id it was not
+given, and the shipped set is what every other preset is cloned from. That was
+tested against `from_json()` and not against `read_ini()` — the reader that
+actually opens a file somebody sent. Three layers turned out to be guarding it:
+`from_json()` hard-sets both fields, `read_ini()` sets them again afterwards,
+and a filter inside `read_ini()`'s loop skipped `id` and `builtin`. **The field
+is `is_builtin`, so that third one matched nothing** — and it was dead
+regardless, since either of the others is sufficient. It is gone: a guard that
+cannot fire still reads as protection, which is worse than no guard, because it
+invites the next reader to weaken the one doing the work. Removing each
+remaining layer in turn shows both are real.
+
 ### 10.4 Built-in starter presets
 Ship a handful of **read-only** presets that users clone rather than edit:
 *Default Linux*, *Raspberry Pi / SBC*, *OpenWrt / BusyBox router* (limited `TERM`,
@@ -2182,12 +2203,25 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   exposed on desktop, where the file lands in `~/Downloads` and gets attached to
   a chat window, so the §10.3 type-level guarantee earns its keep there.
 - No secrets in logs; scrub on crash reporting.
+  **Checked, and it holds by a wide margin**: the only logging anywhere in
+  `src/` is two lines in `main.cpp` reporting how many font faces were found.
+  There is no debug channel a credential could reach because there is
+  effectively no debug channel. Worth re-checking whenever one is added, since
+  the property currently rests on absence rather than on scrubbing.
 - Consider an app-lock (PIN/biometric/passphrase) for opening the app, and an
   **idle auto-lock** — more useful on desktop, where an unattended unlocked
   workstation is the realistic threat.
 - Hide terminal content from the OS screenshot/thumbnail path: `FLAG_SECURE` on
   Android (as a setting). No portable desktop equivalent exists — don't promise
   one in the UI.
+  **[NOT BUILT.]** Nothing in the tree sets it, and there is no setting for it.
+  Recorded rather than quietly implemented because it cannot be verified from
+  here: the whole point is what the OS puts in the recents thumbnail and lets a
+  screenshot capture, which only a device shows. Writing the JNI call and
+  claiming the property on the strength of it compiling would be exactly the
+  kind of unbacked assertion §12.3 exists to prevent. It is a small piece of
+  work — one window flag and one entry on the *This device* page — and it wants
+  a device to land against.
 
 ---
 

@@ -233,9 +233,17 @@ bssh_preset_t bssh_preset_t::read_ini(const QString &raw_path, bool *ok) {
 	json.insert(QStringLiteral("name"), section);
 
 	for (const QString &key : file.childKeys()) {
-		/* Never imported -- see write_ini. */
-		if (key == QStringLiteral("id") || key == QStringLiteral("builtin")) continue;
-
+		/*
+		 * Everything in the section is read; nothing is filtered here.
+		 *
+		 * This used to skip "id" and "builtin" with a comment saying
+		 * they are never imported. The field is called is_builtin, so
+		 * the second name matched nothing -- and the filter was dead
+		 * either way, because from_json() hard-sets both and this
+		 * function sets them again below. A guard that cannot fire
+		 * reads as protection, which is worse than no guard: it invites
+		 * the next reader to weaken the one that does the work.
+		 */
 		const QJsonValue reference = json.value(key);
 		const QString raw = file.value(key).toString();
 
