@@ -18,6 +18,8 @@
 #include "ui/session_dialog.h"
 #include "ui/ssh_config_import.h"
 #include <QMenu>
+#include <QSplitter>
+#include <QSplitterHandle>
 #include <QTabBar>
 #include <QMetaMethod>
 #include "ui/long_press.h"
@@ -949,4 +951,90 @@ void layout_test::clicking_a_pane_focuses_it() {
 	QCoreApplication::processEvents();
 	QCOMPARE(container.focused_session(), a);
 	QCOMPARE(focus.count(), 2);
+}
+
+void layout_test::a_divider_equalizes_on_a_double_click() {
+	/*
+	 * sec 8.3 asks for double-click/double-tap to equalize, and nothing
+	 * implemented it -- QSplitter raises no signal for a double click on
+	 * a handle, so the gesture went to the handle and stopped there.
+	 *
+	 * One handler covers both inputs: Qt synthesises a double-click from
+	 * a double tap, so the gesture arrives the same way either way.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 2);
+
+	QSplitter *splitter = container.findChild<QSplitter *>();
+	QVERIFY(splitter);
+
+	/* Dragged well off centre, as a user would leave it. */
+	splitter->setSizes({900, 300});
+	QCoreApplication::processEvents();
+	QVERIFY2(qAbs(splitter->sizes().at(0) - splitter->sizes().at(1)) > 200,
+	          "the panes were meant to start uneven");
+
+	QSplitterHandle *handle = splitter->handle(1);
+	QVERIFY(handle);
+
+	const QPoint at(2, 20);
+	QMouseEvent click(QEvent::MouseButtonDblClick, at, handle->mapToGlobal(at),
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(handle, &click);
+	QCoreApplication::processEvents();
+
+	/*
+	 * Equal to within a character cell, not to the pixel: the dividers
+	 * snap to whole columns (sec 8.3), so equal halves of an odd width
+	 * land one cell apart and that is the snap working, not a failure.
+	 */
+	const int cell = qMax(1, container.view_at(0)->cell_width());
+	const int difference = qAbs(splitter->sizes().at(0) - splitter->sizes().at(1));
+	QVERIFY2(difference <= cell,
+	          qPrintable(QStringLiteral("panes differ by %1px, one cell is %2px")
+	                             .arg(difference).arg(cell)));
+}
+
+void layout_test::a_divider_is_thumb_sized_only_where_a_thumb_uses_it() {
+	/*
+	 * sec 8.3 wants a 48dp effective target on touch and allows the
+	 * desktop to be tighter. A splitter's grab area IS its handle width
+	 * -- Qt has no separate hit region for it -- so the number is the
+	 * target, and this was 8 on both for as long as it existed, under a
+	 * comment claiming it honoured the 48dp rule.
+	 */
+	{
+		const forced_touch_t thumb(1);
+		bssh_layout_manager layout;
+		bssh_pane_container container(&layout);
+		QSplitter *splitter = container.findChild<QSplitter *>();
+		QVERIFY(splitter);
+		QVERIFY2(splitter->handleWidth() >= 48,
+		          qPrintable(QStringLiteral("a thumb gets %1dp, sec 6.2's floor is 48")
+		                             .arg(splitter->handleWidth())));
+	}
+
+	const forced_touch_t pointer(0);
+	bssh_layout_manager layout;
+	bssh_pane_container container(&layout);
+	QSplitter *splitter = container.findChild<QSplitter *>();
+	QVERIFY(splitter);
+
+	/*
+	 * And the desktop is NOT given the thumb-sized one: 48px of dead
+	 * space between two panes on a monitor is a gap, not a divider.
+	 */
+	QVERIFY2(splitter->handleWidth() < 48, "a pointer does not need a thumb's target");
+	QVERIFY2(splitter->handleWidth() > 0, "a divider nobody can grab is not a divider");
 }

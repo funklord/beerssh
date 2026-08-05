@@ -1075,6 +1075,21 @@ the same number for a layout manager that had quietly stopped working.
   ≥48dp effective on touch; desktop can be tighter but must show a resize
   cursor. Snap divider positions to **whole character cells** so panes never
   render a half column.
+  **Checked one claim at a time, and two of the four were not there.** Dragging
+  is QSplitter's, and the resize cursor is `QSplitterHandle`'s own with nothing
+  overriding it. Snapping to whole cells was built. **Equalize was not** — Qt
+  raises no signal for a double click on a handle, so the gesture reached the
+  handle and stopped; it is an event filter now, and one handler serves both
+  inputs because Qt synthesises a double-click from a double tap. Equalizing
+  re-snaps to cells afterwards, or it would undo the rule the drag handler
+  exists to enforce.
+  **And the touch target was 8dp, under a comment claiming it honoured the
+  48.** A splitter's grab area *is* its handle width — Qt has no separate hit
+  region — so the number is the target, and 8 is six times too small for a
+  thumb. It follows the input now, desktop staying narrow as this bullet
+  allows. The comment is the part worth remembering: it asserted compliance,
+  which is what stopped anyone checking. A claim in a comment is not evidence
+  either.
 - **Per-pane geometry:** each pane computes its own cols×rows from its own size and
   its session's font — panes may legitimately differ.
 - **The grid size in the status line is asked of the view, not remembered.** The

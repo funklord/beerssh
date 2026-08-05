@@ -46,6 +46,13 @@ public:
 	void focus_session(bssh_session *session);
 
 	/*
+	 * Restores every pane to the same width, for sec 8.3's double-click or
+	 * double-tap on a divider. Public because it is a plain command --
+	 * a menu or a chord could reasonably want it too.
+	 */
+	void equalize_panes();
+
+	/*
 	 * Moves focus one pane left or right. Stops at the ends rather than
 	 * wrapping: with two panes, wrapping makes "left" and "right" do the
 	 * same thing, and the user loses track of where focus is.
@@ -54,6 +61,15 @@ public:
 
 	/* Rounds pane widths down to whole cells (sec 8.3). */
 	void snap_divider_to_cells();
+
+protected:
+	/*
+	 * Watches the splitter's own handles for sec 8.3's double-click or
+	 * double-tap to equalize. QSplitter raises no signal for it, and the
+	 * handles are made and unmade with the panes, so the filter is
+	 * installed on each rebuild rather than once.
+	 */
+	bool eventFilter(QObject *watched, QEvent *event) override;
 
 signals:
 	/* The focused pane changed -- the window retargets its shortcuts. */

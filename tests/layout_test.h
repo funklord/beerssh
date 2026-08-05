@@ -64,6 +64,8 @@ private slots:
 	void middle_click_closes_the_tab_under_it();
 	void the_tab_menu_offers_sec_8_3s_three_verbs();
 	void clicking_a_pane_focuses_it();
+	void a_divider_equalizes_on_a_double_click();
+	void a_divider_is_thumb_sized_only_where_a_thumb_uses_it();
 	void backing_out_of_a_session_reaches_the_host_list();
 };
 

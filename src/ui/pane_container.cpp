@@ -1,13 +1,23 @@
 #include "ui/pane_container.h"
 
 #include <QMetaType>
+#include <QEvent>
 #include <QSplitter>
+#include <QSplitterHandle>
 #include <QVBoxLayout>
 
 #include "model/session.h"
 #include "term/emulator.h"
+#include "platform/platform.h"
 #include "ui/layout_manager.h"
 #include "ui/terminal_view.h"
+
+/*
+ * sec 6.2's touch floor. A file-static like the key row's and the preset
+ * editor's, which is the pattern this tree already uses -- see the note in
+ * project.md sec 18 about the eight places that spell this number.
+ */
+static const int BSSH_TOUCH_TARGET_DP = 48;
 
 bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *parent)
     : QWidget(parent),
@@ -22,12 +32,29 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
 	m_splitter = new QSplitter(Qt::Horizontal, this);
 
 	/*
-	 * A generous divider: sec 8.3 asks for a 48dp effective touch target,
-	 * and a handle thin enough to look elegant on a desktop is a handle
-	 * nobody can grab with a thumb.
+	 * sec 8.3's divider, sized for the input rather than for the look.
+	 *
+	 * This said it was giving touch a 48dp target and then set 8 for
+	 * everything -- six times too small on a thumb, and the comment
+	 * asserting compliance is what stops the next reader checking. A
+	 * splitter's grab area is exactly its handle width; Qt has no
+	 * separate hit region for it, so the number IS the target.
+	 *
+	 * Desktop stays narrow because sec 8.3 allows it to ("desktop can be
+	 * tighter"), and a pointer lands on 8 pixels without trying. What
+	 * desktop must keep is the resize cursor, which QSplitterHandle sets
+	 * for itself -- nothing here overrides it.
 	 */
-	m_splitter->setHandleWidth(8);
+	const bool thumb = bssh_platform::instance()
+	                    && bssh_platform::instance()->is_touch_primary();
+	m_splitter->setHandleWidth(thumb ? BSSH_TOUCH_TARGET_DP : 8);
 	m_splitter->setChildrenCollapsible(false);
+
+	/*
+	 * sec 8.3's double-click/double-tap to equalize. One handler covers
+	 * both: Qt synthesises a double-click from a double tap, so the
+	 * gesture arrives the same way on either input.
+	 */
 
 	/*
 	 * Dividers snap to whole character cells (sec 8.3): a pane that is
@@ -132,6 +159,18 @@ void bssh_pane_container::rebuild() {
 		view->show();
 	}
 
+	/*
+	 * The handles are QSplitter's own and are made and unmade with the
+	 * panes, so the filter goes on after every rebuild rather than once.
+	 * Handle 0 is a zero-width one before the first pane and is not a
+	 * divider anybody can grab.
+	 */
+	for (int i = 1; i < m_splitter->count(); ++i) {
+		if (QSplitterHandle *handle = m_splitter->handle(i)) {
+			handle->installEventFilter(this);
+		}
+	}
+
 	if (!panes.contains(m_focused)) m_focused = panes.isEmpty() ? nullptr : panes.first();
 
 	apply_focus_styling();
@@ -209,4 +248,37 @@ void bssh_pane_container::apply_focus_styling() {
 		view->setProperty("bssh_focused", many && focused);
 		view->set_focus_border(many && focused);
 	}
+}
+
+void bssh_pane_container::equalize_panes() {
+	const int count = m_splitter->count();
+	if (count < 2) return;
+
+	/*
+	 * Equal values rather than computed widths: setSizes treats them
+	 * proportionally when they do not add up to the space available, so
+	 * this stays right whatever the handles are eating.
+	 */
+	QList<int> sizes;
+	for (int i = 0; i < count; ++i) sizes.append(1);
+	m_splitter->setSizes(sizes);
+
+	/*
+	 * And then back onto whole cells, because equal halves of an odd
+	 * width are not both a whole number of columns -- equalizing without
+	 * this would undo the snap the drag handler exists to apply.
+	 */
+	snap_divider_to_cells();
+}
+
+bool bssh_pane_container::eventFilter(QObject *watched, QEvent *event) {
+	if (event->type() == QEvent::MouseButtonDblClick) {
+		QSplitterHandle *handle = qobject_cast<QSplitterHandle *>(watched);
+		if (handle && handle->splitter() == m_splitter) {
+			equalize_panes();
+			return true;
+		}
+	}
+
+	return QWidget::eventFilter(watched, event);
 }
