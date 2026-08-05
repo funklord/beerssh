@@ -2533,6 +2533,27 @@ honest data handling) apply to both packages.
 - Large-screen quality: Play surfaces tablet/foldable readiness — the §8 adaptive
   layout work directly helps store presentation.
 - Privacy policy URL.
+- **The versionCode is derived, not written.** It was hardcoded to 1 in
+  `beerssh.pro`, which is enough for exactly one upload: Play accepts a bundle
+  only if its versionCode strictly exceeds the last one it took, so every
+  update after the first would have been refused — and being updatable is most
+  of the point of being on a store. The Makefile computes it from `VERSION` as
+  `major*10000 + minor*100 + patch` (0.1.0 is 100, 1.2.3 is 10203) and passes
+  it to qmake, which keeps the fallback of 1 so a build opened straight in Qt
+  Creator still produces something installable. Computed in `make` because
+  qmake has no arithmetic — `num_add` exists and `multiply` does not, and
+  assembling the digits as a padded string gives `"00100"`, which is not an
+  integer a manifest should carry. `ANDROID_VERSION_CODE=` overrides it for the
+  case the scheme cannot serve: re-uploading the same version after Play has
+  already consumed a code, which is what a rejected release leaves you needing.
+- **`make aab` is the Play artifact and is treated like one.** It was a bare
+  recursion into Gradle, leaving its output under a generated name that says
+  nothing about which app or version it holds — while `make apk`, the artifact
+  that matters *less* here, had naming and a signing check. The bundle now
+  comes out as `beerssh-<version>.aab`, reports the versionCode it was built
+  with rather than leaving that to be discovered from the Console after the
+  upload, and **refuses to produce a debug-signed bundle at all**, since Play
+  will not take one.
 
 ---
 

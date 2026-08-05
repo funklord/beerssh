@@ -175,7 +175,23 @@ android {
     DEFINES += BSSH_NO_SIXEL
 
     ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android
-    ANDROID_VERSION_CODE = 1
+    # Play rejects any upload whose versionCode is not strictly greater
+    # than the last one it accepted, so a hardcoded number is fine for the
+    # first upload and blocks every update after it -- which is most of
+    # the point of being on a store.
+    #
+    # The number is computed by the Makefile from VERSION and passed in
+    # (major*10000 + minor*100 + patch, so 0.1.0 is 100 and 1.2.3 is
+    # 10203). It is done there rather than here because qmake has no
+    # arithmetic: num_add exists and multiply does not, and building the
+    # digits as a padded string yields "00100", which is not an integer
+    # any manifest should carry.
+    #
+    # The fallback matters. A qmake run without the Makefile -- opening
+    # this in Qt Creator, say -- must still produce something installable,
+    # and 1 is the value that was hardcoded here before.
+    isEmpty(BSSH_VERSION_CODE): BSSH_VERSION_CODE = 1
+    ANDROID_VERSION_CODE = $$BSSH_VERSION_CODE
     ANDROID_VERSION_NAME = $$BSSH_VERSION
 
     # Set here rather than as <uses-sdk> in the manifest: the Gradle

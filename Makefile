@@ -21,6 +21,8 @@
 #                        BSSH_BENCH_ANYWAY=1 to insist
 #   make shots        -- render every screen to build-shots/ for review;
 #                        not a test, and it cannot fail a build (sec 12.3)
+#   make aab          -- the Android App Bundle Play takes, named and with
+#                        its versionCode reported; needs BSSH_KEYSTORE
 #   make check-deb    -- build the .debs, then install and run them in a
 #                        clean container (needs docker; sec 12.2)
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
@@ -173,6 +175,20 @@ ANDROID_KIT_ABI := $(shell sed -n 's/^DEFAULT_ANDROID_ABIS *= *//p' \
 endif
 ANDROID_ABI ?= $(ANDROID_KIT_ABI)
 ANDROID_API ?= 26
+
+# The Play versionCode, computed from VERSION rather than written twice.
+#
+# Play accepts an upload only if this is strictly greater than the last
+# one it took, so the number that was hardcoded in beerssh.pro would have
+# allowed exactly one upload and rejected every update after it. Derived
+# as major*10000 + minor*100 + patch: 0.1.0 is 100, 1.2.3 is 10203, and it
+# rises for as long as the version does.
+#
+# Override it to re-upload the SAME version after Play has already taken
+# one -- which is what a rejected release leaves you needing:
+#   make aab ANDROID_VERSION_CODE=101
+ANDROID_VERSION_CODE ?= $(shell echo $(VERSION) | awk -F. \
+        '{printf "%d", ($$1 * 10000) + ($$2 * 100) + $$3}')
 
 ifeq ($(ANDROID_ABI),arm64-v8a)
     ANDROID_TRIPLE = aarch64-linux-android
@@ -462,7 +478,7 @@ android-check:
 $(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) beerssh.pro
 	mkdir -p $(ANDROID_BUILD_DIR)
 	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../beerssh.pro $(QMAKE_CONFIG) \
-	        BSSH_VERSION=$(VERSION)
+	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE)
 
 # The base font set that ships inside the APK (project.md sec 9.4).
 #
@@ -536,6 +552,37 @@ android: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 
 android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
+
+# The artifact Play actually takes (sec 13), named and checked like the
+# APK next door.
+#
+# `android-aab` leaves Gradle's own name somewhere under build/outputs,
+# which says nothing about which app or which version it holds -- and an
+# AAB matters more than an APK here, because it is the one that gets
+# uploaded to a store and cannot be taken back once a version code has
+# been consumed.
+#
+# The versionCode is echoed rather than assumed. Play refuses an upload
+# that does not exceed the last one it accepted, and finding that out
+# from the Console after a twenty-minute upload is a poor way to learn
+# what number you built.
+AAB_NAME = beerssh-$(VERSION).aab
+
+aab: android-aab
+	@src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs -name '*.aab' -print -quit); \
+	if [ -z "$$src" ]; then echo "aab: no .aab was produced" >&2; exit 1; fi; \
+	cp "$$src" $(ANDROID_BUILD_DIR)/$(AAB_NAME); \
+	echo "aab: $(ANDROID_BUILD_DIR)/$(AAB_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(AAB_NAME) | cut -f1))"
+	@echo "aab: versionName $(VERSION), versionCode $(ANDROID_VERSION_CODE)"
+	@if [ -z "$(BSSH_KEYSTORE)" ]; then \
+		echo "aab: DEBUG-SIGNED, which Play will not accept." >&2; \
+		echo "aab:   Set BSSH_KEYSTORE and BSSH_KEY_ALIAS to sign it with your" >&2; \
+		echo "aab:   upload key. Play App Signing holds the key that actually" >&2; \
+		echo "aab:   signs what users install; this one only proves the upload" >&2; \
+		echo "aab:   is yours, and losing it is recoverable where losing the" >&2; \
+		echo "aab:   other once was not." >&2; \
+		exit 1; \
+	fi
 
 # The installable artifact, under a name that says what it is (sec 12.2).
 #
@@ -811,7 +858,7 @@ help:
 
 .PHONY: all run test bench style check-ci check-ssh check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
         deb \
-        android android-check android-aab android-run install clean veryclean \
+        android android-check android-aab aab android-run install clean veryclean \
         distclean help check style-source style-docs hooks
 
 # `check` is everything that must pass before committing; `test` is the suite
