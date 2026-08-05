@@ -303,6 +303,44 @@ void emulator_bench::painting_four_panes() {
 	       first_frames.at(0), first_frames.at(1),
 	       first_frames.at(2), first_frames.at(3));
 
+	/*
+	 * The RATIO, which is the part that means anything on a machine
+	 * somebody else is also using.
+	 *
+	 * The absolute figures here have now failed to be comparable twice:
+	 * once at load 81, where they read fifteen times worse than sec 9.5
+	 * records and looked exactly like a regression, and once at load 6,
+	 * where they read two to three times worse and varied twofold
+	 * between runs of the same binary. sec 12.3 already makes this point
+	 * about throughput -- the measurement that survives a busy machine is
+	 * one with the machine divided out.
+	 *
+	 * First pane against the mean of the rest is precisely sec 9.5's
+	 * claim: if every view rasterised its own glyphs the four would cost
+	 * the same, and if the cache is shared the first pays and the others
+	 * do not. Above 1 says shared, and it does not care how fast the box
+	 * is.
+	 *
+	 * Note what cannot be done here: sabotaging the sharing directly.
+	 * Giving each pane its own point size defeats the cache and changes
+	 * the WORK at the same time -- a bigger font draws fewer cells into
+	 * the same pixels -- so the ratio stays above 1 for the wrong reason.
+	 * That is the identical confound sec 9.5 records throwing an earlier
+	 * cold-cache measurement away for. The threshold is a regression
+	 * guard rather than something a deliberate break can demonstrate.
+	 */
+	double rest = 0;
+	for (int i = 1; i < first_frames.size(); ++i) rest += first_frames.at(i);
+	rest /= double(first_frames.size() - 1);
+
+	const double sharing = rest > 0 ? first_frames.first() / rest : 0;
+	qInfo("first pane costs %.2fx the others -- above 1 is a shared cache (sec 9.5)",
+	       sharing);
+	QVERIFY2(sharing > 1.1,
+	          qPrintable(QStringLiteral("first pane %1x the rest: the glyph cache is "
+	                                     "not being shared between panes")
+	                             .arg(sharing, 0, 'f', 2)));
+
 	report_paint("paint, four panes", 4, cols, rows, fastest_paint_ms(views, 20));
 
 	qDeleteAll(views);
@@ -361,6 +399,19 @@ void emulator_bench::painting_with_a_cold_glyph_cache() {
 
 	qInfo("rasterisation costs %.2f ms of the first frame and nothing after it",
 	       first - best);
+
+	/*
+	 * And as a ratio, for the same reason as the four-pane case: what
+	 * sec 9.5 concluded is that rasterisation is paid ONCE, and that
+	 * survives being measured on a loaded machine while the milliseconds
+	 * do not.
+	 */
+	const double once = best > 0 ? first / best : 0;
+	qInfo("the cold frame costs %.2fx a warm one", once);
+	QVERIFY2(once > 1.05,
+	          qPrintable(QStringLiteral("cold frame %1x warm: rasterisation is not "
+	                                     "being cached at all")
+	                             .arg(once, 0, 'f', 2)));
 }
 
 void emulator_bench::crossing_a_size_class() {

@@ -1602,6 +1602,22 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   simply drew fewer cells into the same pixels. It was measuring the grid, not
   the cache. First-frame-versus-rest keeps the work identical and answers the
   question the other way round.
+  **The millisecond figures above have since failed to be comparable twice**,
+  and the benchmark now prints the ratios instead. At load 81 they read fifteen
+  times worse than recorded here — indistinguishable, from the output alone,
+  from a serious regression. At load 6 on twelve cores they read two to three
+  times worse and varied twofold between consecutive runs of the same binary.
+  Neither was a regression: no line of the paint path has changed since these
+  were taken. So `make bench` reports **first pane ÷ the mean of the rest**
+  (measured 1.75–1.78×, and asserted above 1.1) and **cold frame ÷ warm**
+  (1.37–2.74×, asserted above 1.05). Those are the claims this section actually
+  makes, and dividing the machine out is what makes them re-checkable on
+  somebody else's. §12.3 reaches the same conclusion for throughput by counting
+  repaints rather than timing them.
+  The sharing ratio cannot be demonstrated by breaking it, and the reason is
+  the confound above: giving each pane its own point size defeats the cache and
+  changes the work in the same move, so the ratio stays above 1 for the wrong
+  reason. It is a regression guard, not a claim a deliberate break can prove.
   **Where the time actually goes, if painting ever needs work:** not here — the
   emulator's scroll path, which is where the next round went.
 - **The grid is a ring, and the scrollback takes the mirror's own row.** Two
