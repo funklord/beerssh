@@ -1001,7 +1001,8 @@ the same number for a layout manager that had quietly stopped working.
 ### 8.3 Tabs and focus
 - **Tab bar:** horizontally scrollable; label from **OSC title** with fallback to
   the profile name; a small **status dot** per tab (connected / reconnecting /
-  disconnected / bell-rang-while-away). Long-press (touch) or right-click
+  disconnected / bell-rang-while-away — and *away* means **no pane**, not
+  *unfocused*; see below). Long-press (touch) or right-click
   (desktop) for close/duplicate/move-to-split; desktop also gets a middle-click
   close and drag-to-reorder. The long-press is **built** (see §6.4 — Qt does not
   provide the gesture, so it is `bssh_long_press`), and the tab bar is the last
@@ -1012,6 +1013,23 @@ the same number for a layout manager that had quietly stopped working.
   does not do. It costs nothing today: the one verb that would care,
   *Show beside current*, is already disabled wherever the long-press is the
   input, because touch means COMPACT means one pane (§8.2).
+- **"While away" means no pane on screen, not merely unfocused**, and it was
+  the second of those until a split made the difference visible. The flag was
+  driven by which session the *window* had made current, which is the same
+  thing only while there is one pane. With two, a bell in the pane beside the
+  one being typed in raised a you-missed-this dot on a pane the user was
+  looking straight at — and the pane that lost focus was marked away while
+  still visible. The pane container owns the answer now, because "which
+  sessions are on screen" is the question it exists to answer: a session with a
+  pane is on screen, one without is a tab. The four dot states, the rule that
+  **dead beats an unheard bell**, and the light/dark contrast floor for the
+  colours were all already built and tested.
+- **The OSC title chain was built, tested and correct** — OSC title, then the
+  profile name, then `user@host:port`, never blank. One edge now pinned that
+  was not: a remote *clearing* its title with an empty `OSC 0`, which tmux and
+  a bare shell both do on exit, has to fall back down the chain rather than
+  leave a nameless tab. That works because the fallback is evaluated on every
+  read; caching the resolved title would strand the empty one.
 - **All three verbs are built now, and *duplicate* was the missing one.** The
   menu carried close and move-to-split and nothing said the third was absent,
   because it was assembled inside the function that `exec()`s it — so its

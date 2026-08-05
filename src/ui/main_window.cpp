@@ -913,9 +913,12 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 
 
 	if (session && session != m_current) {
-		if (m_current) m_current->set_on_screen(false);
+		/*
+		 * On-screen is NOT set here. It follows the panes, not the
+		 * focus, and the pane container is what knows the difference --
+		 * with a split, the pane beside this one is on screen too.
+		 */
 		m_current = session;
-		session->set_on_screen(true);
 
 		if (m_key_row) {
 			m_key_row->set_router(session->input_router());

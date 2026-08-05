@@ -124,6 +124,16 @@ void session_registry_test::title_falls_back_from_osc_to_profile() {
 	QCOMPARE(titled.count(), 1);
 	QCOMPARE(session->title(), QStringLiteral("nabbe@bastion: ~"));
 
+	/*
+	 * A remote that CLEARS its title -- OSC 0 with an empty string, which
+	 * tmux and a bare shell both do on exit -- must fall back down the
+	 * chain again rather than leaving a nameless tab. The fallback is
+	 * evaluated on every read for this reason; caching the resolved title
+	 * would strand the empty one.
+	 */
+	session->emulator()->feed(QByteArrayLiteral("\x1b]0;\x07"));
+	QCOMPARE(session->title(), QStringLiteral("work bastion"));
+
 	/* A session with neither falls back to the target, never to blank. */
 	bssh_profile_t bare;
 	bare.host = QStringLiteral("plain.example");

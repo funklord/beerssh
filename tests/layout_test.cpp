@@ -1038,3 +1038,65 @@ void layout_test::a_divider_is_thumb_sized_only_where_a_thumb_uses_it() {
 	QVERIFY2(splitter->handleWidth() < 48, "a pointer does not need a thumb's target");
 	QVERIFY2(splitter->handleWidth() > 0, "a divider nobody can grab is not a divider");
 }
+
+void layout_test::a_bell_in_a_visible_pane_is_not_a_missed_one() {
+	/*
+	 * sec 8.3's fourth dot state is "bell-rang-while-AWAY", and the flag
+	 * behind it documents itself as a bell that rang "while this session
+	 * was not the one on screen".
+	 *
+	 * With a split, more than one session is on screen at once. Only the
+	 * FOCUSED one was ever marked so, so a bell in the pane beside the
+	 * one being typed in raised a you-missed-this dot on a pane the user
+	 * was looking at -- and the same rule marked a still-visible pane as
+	 * off screen the moment focus left it.
+	 *
+	 * Asserted on the FLAG rather than on the dot: these sessions never
+	 * connected, and state_for() answers DISCONNECTED for them whatever
+	 * the bell says -- deliberately, since a bell on a dead tab would
+	 * send someone to read output that stopped arriving. Which state wins
+	 * is tab_status_test's question; this one is about which sessions
+	 * count as on screen.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 2);
+
+	/* Focus is on the first; the second is beside it and plainly visible. */
+	QCOMPARE(container.focused_session(), a);
+
+	b->emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY2(!b->has_unseen_bell(),
+	          "a bell in a pane on screen beside the focused one is not missed");
+
+	/*
+	 * And a session the layout is NOT showing is away, which is the case
+	 * the state exists for: it is a tab, not a pane.
+	 */
+	layout.set_intent({a});
+	container.rebuild();
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 1);
+
+	b->emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY2(b->has_unseen_bell(), "a bell in a session with no pane is exactly what the dot is for");
+
+	/*
+	 * Bringing it back on screen clears it, because the point of the dot
+	 * is that you have not looked yet.
+	 */
+	layout.set_intent({a, b});
+	container.rebuild();
+	QCoreApplication::processEvents();
+	QVERIFY2(!b->has_unseen_bell(), "showing the pane again means it has been seen");
+}

@@ -97,6 +97,27 @@ void bssh_pane_container::rebuild() {
 	 */
 	qDeleteAll(m_views);
 	m_views.clear();
+
+	/*
+	 * Which sessions are ON SCREEN, which is this container's answer to
+	 * give and nobody else's (sec 8.3's bell dot).
+	 *
+	 * It used to follow the FOCUSED session, set by the window as the
+	 * focus moved -- which is the same thing only while there is one
+	 * pane. With a split it was wrong twice over: a bell in the pane
+	 * beside the one being typed in raised a you-missed-this dot on a
+	 * pane the user was looking straight at, and the pane that lost focus
+	 * was marked away while still visible.
+	 *
+	 * Marked before the new views exist, since the question is about the
+	 * layout rather than about any widget: a session with a pane is on
+	 * screen, one without is a tab.
+	 */
+	for (bssh_session *session : m_sessions) {
+		if (!panes.contains(session)) session->set_on_screen(false);
+	}
+	for (bssh_session *session : panes) session->set_on_screen(true);
+
 	m_sessions = panes;
 
 	for (bssh_session *session : panes) {

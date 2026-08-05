@@ -66,6 +66,7 @@ private slots:
 	void clicking_a_pane_focuses_it();
 	void a_divider_equalizes_on_a_double_click();
 	void a_divider_is_thumb_sized_only_where_a_thumb_uses_it();
+	void a_bell_in_a_visible_pane_is_not_a_missed_one();
 	void backing_out_of_a_session_reaches_the_host_list();
 };
 
