@@ -1,4 +1,5 @@
 #include <QAbstractButton>
+#include <QAbstractScrollArea>
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QSignalSpy>
@@ -33,6 +34,8 @@
 #include "model/session.h"
 #include "model/session_registry.h"
 #include "term/emulator.h"
+#include "ui/key_row.h"
+#include "ui/key_row_layout.h"
 #include "ui/layout_manager.h"
 #include "ui/pane_container.h"
 #include "ui/terminal_view.h"
@@ -378,6 +381,27 @@ QString overflowing_child(const QWidget *root)
 {
 	for (const QWidget *child : root->findChildren<QWidget *>()) {
 		if (!child->isVisible() || child->width() == 0) continue;
+
+		/*
+		 * Content inside a scroll area is ALLOWED to be wider than the
+		 * screen -- that is what a scroll area is for, and flagging it
+		 * would fail the fix for an overflow rather than the overflow.
+		 * What matters is that the scrolling widget itself fits, which
+		 * the minimum-width check above already asks.
+		 *
+		 * Found by adding the key row to this list: its keys legitimately
+		 * run to 652px inside a viewport 360px wide.
+		 */
+		bool inside_scroll_area = false;
+		const QWidget *up = child->parentWidget();
+		while (up && up != root) {
+			if (qobject_cast<const QAbstractScrollArea *>(up)) {
+				inside_scroll_area = true;
+				break;
+			}
+			up = up->parentWidget();
+		}
+		if (inside_scroll_area) continue;
 
 		const QPoint corner = child->mapTo(root, QPoint(child->width() - 1, 0));
 		if (corner.x() > BSSH_PHONE_DP) {
@@ -1267,4 +1291,53 @@ void layout_test::focus_reporting_follows_the_focused_pane() {
 	 * command line.
 	 */
 	QCOMPARE(b->emulator()->take_output(), QByteArray());
+}
+
+void layout_test::the_key_row_fits_a_phone() {
+	/*
+	 * The one touch surface that was not in every_touch_surface_fits_a_phone
+	 * and is the only one on that list which exists ONLY for touch. Every
+	 * other surface has a desktop form somebody looks at; this one is seen
+	 * on a device or not at all, and it asked for 652px of a 360px screen
+	 * for as long as sec 6.2's key list and sec 6.2's 48dp floor have both
+	 * been true.
+	 *
+	 * Its own test rather than another entry in that loop, because the
+	 * question differs: the row is allowed -- required -- to hold more keys
+	 * than fit, and what must be true is that the WIDGET fits while its
+	 * contents scroll.
+	 */
+	const forced_touch_t thumb(1);
+
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	const bssh_key_row_catalog catalog;
+	QVERIFY(!catalog.all().isEmpty());
+
+	for (const bssh_key_row_layout_t &layout : catalog.all()) {
+		bssh_key_row row(&router);
+		row.set_layout(layout.id);
+		check_fits(QStringLiteral("key row: ") + layout.id, &row);
+	}
+
+	/*
+	 * And the keys really are wider than the viewport -- otherwise this
+	 * would pass just as well on a row that had quietly lost its keys,
+	 * which is the failure a fits-the-screen check invites.
+	 */
+	bssh_key_row row(&router);
+	row.set_layout(QString());
+	row.resize(BSSH_PHONE_DP, 64);
+	row.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&row));
+
+	int widest = 0;
+	for (const QAbstractButton *button : row.findChildren<QAbstractButton *>()) {
+		widest = qMax(widest, button->mapTo(&row, QPoint(button->width(), 0)).x());
+	}
+	QVERIFY2(widest > BSSH_PHONE_DP,
+	          qPrintable(QStringLiteral("the keys end at %1px; nothing is being scrolled, "
+	                                     "so this row has lost keys rather than gained a "
+	                                     "scroll area").arg(widest)));
 }

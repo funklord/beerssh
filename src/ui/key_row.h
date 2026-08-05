@@ -4,6 +4,7 @@
 #include <QWidget>
 
 class QAbstractButton;
+class QScrollArea;
 class bssh_input_router;
 
 /*
@@ -72,6 +73,13 @@ private:
 
 	bssh_input_router *m_router;
 	visibility_t m_mode;
+	/*
+	 * The keys scroll horizontally: sec 6.2's own key list at sec 6.2's own
+	 * 48dp floor is nearly twice a phone's width. See the constructor.
+	 */
+	QScrollArea *m_scroll;
+	QWidget *m_keys;
+
 	QString m_layout_id;
 
 	/* Whether the row is currently showing F1..F12 rather than its keys. */

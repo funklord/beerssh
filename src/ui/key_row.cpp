@@ -1,6 +1,9 @@
 #include "ui/key_row.h"
 
 #include <QHBoxLayout>
+#include <QScrollArea>
+#include <QScroller>
+#include <QVBoxLayout>
 #include <QKeyEvent>
 #include <QToolButton>
 
@@ -22,10 +25,53 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
     : QWidget(parent),
       m_router(router),
       m_mode(AUTO),
-      m_function_mode(false) {
-	QHBoxLayout *layout = new QHBoxLayout(this);
+      m_function_mode(false),
+      m_scroll(nullptr),
+      m_keys(nullptr) {
+	/*
+	 * The keys scroll horizontally, because they do not fit and never did.
+	 *
+	 * sec 6.2 asks for Esc, Tab, Ctrl, Alt, four arrows, Fn and four
+	 * punctuation keys, and sec 6.2's own touch floor puts each at 48dp.
+	 * That is 624dp of keys on a 360dp phone before spacing -- measured
+	 * at 652 -- so the row demanded nearly twice the width of the screen
+	 * it exists for. The symptom did not look like a layout bug: Qt
+	 * squeezed the buttons past their minimum and the labels elided, so
+	 * "Ctrl" drew as "Ctr" and the row read as merely cramped. It is
+	 * visible in this project's own device screenshots.
+	 *
+	 * Scrolling rather than shrinking, because the alternative is going
+	 * under the touch floor, and a key too small to hit reliably is worse
+	 * than one you have to scroll to. It is what the tab bar does with
+	 * the same problem (sec 8.3), and what ConnectBot and Termux do with
+	 * this exact strip. Measured: 652px of minimum width becomes 92.
+	 */
+	QVBoxLayout *outer = new QVBoxLayout(this);
+	outer->setContentsMargins(0, 0, 0, 0);
+	outer->setSpacing(0);
+
+	m_scroll = new QScrollArea(this);
+	m_scroll->setFrameShape(QFrame::NoFrame);
+	m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	m_scroll->setWidgetResizable(true);
+	outer->addWidget(m_scroll);
+
+	m_keys = new QWidget(m_scroll);
+	m_scroll->setWidget(m_keys);
+
+	QHBoxLayout *layout = new QHBoxLayout(m_keys);
 	layout->setContentsMargins(2, 2, 2, 2);
 	layout->setSpacing(2);
+
+	/*
+	 * Dragged with a finger, like the host list (sec 8.5): a scrollbar
+	 * dragged with a thumb is the most obvious way a Widgets app
+	 * announces it was not written for touch. The bar itself is off --
+	 * there is no room for one under 48dp keys, and the drag is the
+	 * affordance.
+	 */
+	QScroller::grabGesture(m_scroll->viewport(), QScroller::LeftMouseButtonGesture);
 
 	/*
 	 * Built from a layout rather than hardcoded (sec 6.2, sec 10.2): the
@@ -65,7 +111,7 @@ void bssh_key_row::set_layout(const QString &id) {
 	m_modifier_buttons.clear();
 	m_modifier_values.clear();
 
-	QHBoxLayout *row = qobject_cast<QHBoxLayout *>(this->layout());
+	QHBoxLayout *row = qobject_cast<QHBoxLayout *>(m_keys->layout());
 	if (!row) return;
 
 	/* The stretch is re-added after the keys, so it stays last. */
@@ -162,7 +208,7 @@ void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier)
 }
 
 QAbstractButton *bssh_key_row::make_button(const QString &label) {
-	QToolButton *button = new QToolButton(this);
+	QToolButton *button = new QToolButton(m_keys);
 	button->setText(label);
 	m_buttons.append(button);
 	button->setMinimumSize(BSSH_TOUCH_TARGET_DP, BSSH_TOUCH_TARGET_DP);
@@ -174,7 +220,7 @@ QAbstractButton *bssh_key_row::make_button(const QString &label) {
 	 */
 	button->setFocusPolicy(Qt::NoFocus);
 
-	layout()->addWidget(button);
+	m_keys->layout()->addWidget(button);
 
 	/*
 	 * Explicitly shown, because adding a widget to a layout whose parent

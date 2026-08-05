@@ -38,6 +38,7 @@ private slots:
 	 * before it ships rather than after.
 	 */
 	void every_touch_surface_fits_a_phone();
+	void the_key_row_fits_a_phone();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already
 	 * contemplates when it talks about tiling one into a half-screen
