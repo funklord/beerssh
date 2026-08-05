@@ -549,3 +549,63 @@ void input_router_test::a_matured_hold_swallows_its_own_release() {
 	QApplication::sendEvent(&target, &release);
 	QVERIFY2(release.isAccepted(), "a matured hold must swallow its release");
 }
+
+void input_router_test::the_fn_key_reaches_the_function_keys() {
+	/*
+	 * sec 6.2 lists Fn among the keys the row must carry, and no layout
+	 * had one -- so F1..F12 were unreachable on a phone. The emulator has
+	 * understood KEY_FUNCTION_BASE + n since M3 and the router has
+	 * translated physical F1..F35 for as long; the only thing missing was
+	 * a way for a thumb to ask. htop, mc and vim's help all want them.
+	 */
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_key_row row(&router);
+	row.set_layout(QString());
+
+	QList<QAbstractButton *> buttons = row.findChildren<QAbstractButton *>();
+	QAbstractButton *fn = nullptr;
+	for (QAbstractButton *button : buttons) {
+		if (button->text() == QStringLiteral("Fn")) fn = button;
+		QVERIFY2(button->text() != QStringLiteral("F1"),
+		          "the ordinary row must not already be the function keys");
+	}
+	QVERIFY2(fn, "the default row must carry Fn (sec 6.2)");
+
+	fn->click();
+
+	/*
+	 * The row is now F1..F12 -- and still carries Fn, or there would be
+	 * no way back to the keys that send Escape.
+	 */
+	buttons = row.findChildren<QAbstractButton *>();
+	QStringList labels;
+	for (QAbstractButton *button : buttons) labels.append(button->text());
+
+	QVERIFY2(labels.contains(QStringLiteral("F1")), "Fn must reach F1");
+	QVERIFY2(labels.contains(QStringLiteral("F12")), "Fn must reach F12");
+	QVERIFY2(labels.contains(QStringLiteral("Fn")), "there must be a way back");
+	QVERIFY2(!labels.contains(QStringLiteral("Esc")),
+	          "the function row replaces the keys rather than crowding in beside them");
+
+	/* And the key it sends is the one the remote expects. */
+	QAbstractButton *f1 = nullptr;
+	for (QAbstractButton *button : buttons) {
+		if (button->text() == QStringLiteral("F1")) f1 = button;
+	}
+	QVERIFY(f1);
+
+	f1->click();
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1bOP"));
+
+	/* Pressing Fn again comes back to the ordinary row. */
+	for (QAbstractButton *button : row.findChildren<QAbstractButton *>()) {
+		if (button->text() == QStringLiteral("Fn")) { button->click(); break; }
+	}
+	labels.clear();
+	for (QAbstractButton *button : row.findChildren<QAbstractButton *>()) {
+		labels.append(button->text());
+	}
+	QVERIFY2(labels.contains(QStringLiteral("Esc")), "Fn must come back to the real row");
+	QVERIFY2(!labels.contains(QStringLiteral("F1")), "and leave the function keys behind");
+}

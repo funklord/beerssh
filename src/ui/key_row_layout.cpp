@@ -38,6 +38,13 @@ bssh_key_t chord(const QString &label, char32_t ch, quint8 mask) {
 }
 
 /* The arrows, which every layout wants and none wants to spell out. */
+bssh_key_t function_toggle() {
+	bssh_key_t key;
+	key.label = QStringLiteral("Fn");
+	key.kind = bssh_key_t::FUNCTION_TOGGLE;
+	return key;
+}
+
 QList<bssh_key_t> arrows() {
 	return {
 		named(QStringLiteral("←"), bssh_emulator::KEY_LEFT),
@@ -48,6 +55,15 @@ QList<bssh_key_t> arrows() {
 }
 
 } /* namespace */
+
+QList<bssh_key_t> bssh_function_keys() {
+	QList<bssh_key_t> keys;
+	for (int n = 1; n <= 12; ++n) {
+		keys.append(named(QStringLiteral("F%1").arg(n),
+		                   bssh_emulator::KEY_FUNCTION_BASE + n));
+	}
+	return keys;
+}
 
 bssh_key_row_catalog &bssh_key_row_catalog::instance() {
 	static bssh_key_row_catalog catalog;
@@ -75,6 +91,7 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 		};
 		layout.keys += arrows();
 		layout.keys += QList<bssh_key_t>{
+			function_toggle(),
 			text(QStringLiteral("-"), U'-'),
 			text(QStringLiteral("/"), U'/'),
 			text(QStringLiteral("|"), U'|'),

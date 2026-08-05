@@ -21,7 +21,8 @@ static const int BSSH_TOUCH_TARGET_DP = 48;
 bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
     : QWidget(parent),
       m_router(router),
-      m_mode(AUTO) {
+      m_mode(AUTO),
+      m_function_mode(false) {
 	QHBoxLayout *layout = new QHBoxLayout(this);
 	layout->setContentsMargins(2, 2, 2, 2);
 	layout->setSpacing(2);
@@ -70,7 +71,20 @@ void bssh_key_row::set_layout(const QString &id) {
 	/* The stretch is re-added after the keys, so it stays last. */
 	while (QLayoutItem *item = row->takeAt(0)) delete item;
 
-	for (const bssh_key_t &key : layout->keys) {
+	/*
+	 * Either the layout's own keys or F1..F12, depending on whether Fn is
+	 * held down -- and Fn itself stays on the row in both, or there
+	 * would be no way back.
+	 */
+	QList<bssh_key_t> keys = m_function_mode ? bssh_function_keys() : layout->keys;
+	if (m_function_mode) {
+		bssh_key_t back;
+		back.label = QStringLiteral("Fn");
+		back.kind = bssh_key_t::FUNCTION_TOGGLE;
+		keys.prepend(back);
+	}
+
+	for (const bssh_key_t &key : keys) {
 		switch (key.kind) {
 		case bssh_key_t::KEY:
 			add_key(key.label, key.value);
@@ -84,11 +98,34 @@ void bssh_key_row::set_layout(const QString &id) {
 		case bssh_key_t::CHORD:
 			add_chord(key.label, char32_t(key.value), key.modifier);
 			break;
+		case bssh_key_t::FUNCTION_TOGGLE:
+			add_function_toggle(key.label);
+			break;
 		}
 	}
 
 	row->addStretch(1);
 	refresh_modifier_buttons();
+}
+
+void bssh_key_row::add_function_toggle(const QString &label) {
+	QAbstractButton *button = make_button(label);
+	button->setCheckable(true);
+	button->setChecked(m_function_mode);
+
+	connect(button, &QAbstractButton::clicked, this, [this] {
+		/*
+		 * Rebuilds the row in place. set_layout() early-returns when the
+		 * id has not changed, which is right for every other caller and
+		 * wrong here -- the id is the same and the keys are not -- so
+		 * the flag is flipped and the layout forced.
+		 */
+		m_function_mode = !m_function_mode;
+
+		const QString id = m_layout_id;
+		m_layout_id.clear();
+		set_layout(id);
+	});
 }
 
 void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier) {

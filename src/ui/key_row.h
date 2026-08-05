@@ -64,12 +64,18 @@ private:
 	void add_modifier(const QString &label, quint8 modifier);
 	void add_text(const QString &label, char32_t ch);
 	void add_chord(const QString &label, char32_t ch, quint8 modifier);
+
+	/* Fn: swaps the row for F1..F12 and back (sec 6.2). */
+	void add_function_toggle(const QString &label);
 	QAbstractButton *make_button(const QString &label);
 	void refresh_modifier_buttons();
 
 	bssh_input_router *m_router;
 	visibility_t m_mode;
 	QString m_layout_id;
+
+	/* Whether the row is currently showing F1..F12 rather than its keys. */
+	bool m_function_mode;
 
 	/* Every button in the row, so a layout change can clear it. */
 	QList<QAbstractButton *> m_buttons;

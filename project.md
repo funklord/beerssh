@@ -537,6 +537,16 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
   **Minimal** (four keys and the arrows, for a narrow screen). Every layout is
   checked to carry Escape and a modifier — a row without those cannot drive a
   terminal at all. Still open: letting a user compose their own row.
+- **`Fn` was listed above and was not in any of them, so F1–F12 were
+  unreachable on a phone.** The emulator has understood `KEY_FUNCTION_BASE + n`
+  since M3 and the router has translated physical F1–F35 for as long; the only
+  missing piece was a way for a thumb to ask, and without it htop, `mc` and
+  vim's help were simply off the table on the platform this row exists for.
+  `Fn` swaps the row for F1–F12 and back, and stays on the row in both states
+  or there would be no way back to the keys that send Escape. A **toggle rather
+  than a sticky modifier**, because there is nothing on this row for it to
+  modify: the digits it would combine with live two layers down a soft
+  keyboard, which is the whole reason the row exists.
 - **Hidden by default on desktop, but not `#ifdef`-ed out.** Gate it on
   "touch-primary input", not on the OS — a convertible laptop in tablet mode and
   an Android device with a Bluetooth keyboard are the two cases an OS check gets

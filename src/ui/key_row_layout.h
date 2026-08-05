@@ -44,7 +44,22 @@ struct bssh_key_t {
 		 * dozens of times an hour, is the difference between usable and
 		 * not.
 		 */
-		CHORD
+		CHORD,
+
+		/*
+		 * Fn: swaps the row for F1..F12 and back (sec 6.2, which lists
+		 * it among the keys the row must carry).
+		 *
+		 * A toggle rather than a sticky modifier, because there is
+		 * nothing on this row for it to modify -- the digits it would
+		 * combine with live two layers down a soft keyboard, which is
+		 * the whole reason the row exists. The emulator has understood
+		 * KEY_FUNCTION_BASE + n since M3 and the router has translated
+		 * physical F1..F35 for as long; a touch user simply had no way
+		 * to reach any of them, so htop, mc and vim's F-keys were off
+		 * the table on a phone.
+		 */
+		FUNCTION_TOGGLE
 	};
 
 	QString label;
@@ -67,6 +82,17 @@ struct bssh_key_row_layout_t {
 
 	QList<bssh_key_t> keys;
 };
+
+/*
+ * F1..F12, which is what the Fn key swaps the row for.
+ *
+ * Prefixed and declared here because it crosses a translation unit: the
+ * layouts are built in one file and the row that shows them lives in
+ * another, and both need the same twelve keys. Twelve is what a keyboard
+ * has and what the programs asking for them expect -- htop labels F1
+ * through F10, mc the same, and vim's help is F1.
+ */
+QList<bssh_key_t> bssh_function_keys();
 
 class bssh_key_row_catalog {
 public:
