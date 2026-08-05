@@ -2261,7 +2261,17 @@ The desktop build is what makes this project testable at all — use it.
   more than a real change does depending on what else the machine is compiling,
   so a threshold would either sit so loose it catches nothing or fail builds
   for reasons that are not the build's fault. Compare a run against another run
-  of the same binary. Each case also asserts on the resulting screen, because a
+  of the same binary.
+  **And it refuses to measure a machine that cannot answer**, which "load
+  average is part of the result" printed above the numbers did not achieve. The
+  target reported a full-screen repaint at 35 ms against §9.5's 2.3 ms —
+  fifteen times worse, and nothing in the output separated a real regression
+  from a box at load 81 on twelve cores with 23 GB in swap, which is what it
+  was. A printed number outlives the run that produced it, so above half the
+  core count `make bench` stops rather than answering wrongly. `BSSH_BENCH_ANYWAY=1`
+  overrides it, and is the right thing for an interleaved A/B where both sides
+  see the same contention and only the ratio is claimed.
+  Each case also asserts on the resulting screen, because a
   benchmark that only measures cannot tell "faster" from "stopped doing the
   work". The measurement that *is* machine-independent is a **count**, and that
   is what guards the throughput in CI:

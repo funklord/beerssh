@@ -16,7 +16,9 @@
 #   make run          -- build and run it
 #   make test         -- build and run the smoke test + unit tests
 #   make bench        -- emulator throughput in MB/s (sec 9.5); built by
-#                        `test` but not run by it, and not a CI gate
+#                        `test` but not run by it, and not a CI gate.
+#                        Refuses a machine too loaded to measure;
+#                        BSSH_BENCH_ANYWAY=1 to insist
 #   make shots        -- render every screen to build-shots/ for review;
 #                        not a test, and it cannot fail a build (sec 12.3)
 #   make check-deb    -- build the .debs, then install and run them in a
@@ -280,9 +282,32 @@ test: $(TARGET) $(TEST_BIN)
 # move with whatever else the machine is doing, which is not a thing to
 # fail a build over. Run on an idle machine, and compare a run against
 # another run of the same binary rather than against a number in a doc.
+#
+# And it REFUSES when the machine cannot answer, rather than answering
+# wrongly. "Load average is part of the result" was printed above the
+# numbers and did not help: this target reported a full-screen repaint at
+# 35 ms against the 2.3 ms in sec 9.5 -- fifteen times worse, and nothing
+# in the output distinguished a real regression from a box at load 81 on
+# twelve cores with 23 GB in swap, which is what it actually was. A
+# printed number is a number somebody quotes later.
 bench: $(TEST_BIN)
 	@echo "bench: measuring on this machine -- load average is part of the result"
 	@uptime
+	@# Skipped where there is no /proc/loadavg to read, rather than
+	@# guessed at: refusing to measure on a machine whose load cannot be
+	@# read would make the check worse than useless off Linux.
+	@if [ -r /proc/loadavg ] && [ -z "$(BSSH_BENCH_ANYWAY)" ]; then \
+		load=$$(cut -d' ' -f1 /proc/loadavg | cut -d. -f1); \
+		cores=$$(nproc 2>/dev/null || echo 1); \
+		if [ "$$load" -gt $$((cores / 2 + 1)) ]; then \
+			echo "bench: load is $$load on $$cores cores; these numbers would not mean" >&2; \
+			echo "bench:   anything, and a wrong number outlives the run that made it." >&2; \
+			echo "bench:   Wait for the machine, or BSSH_BENCH_ANYWAY=1 to measure" >&2; \
+			echo "bench:   regardless -- which is right for an A/B where both sides" >&2; \
+			echo "bench:   are run interleaved and only the ratio is claimed." >&2; \
+			exit 1; \
+		fi; \
+	fi
 	QT_QPA_PLATFORM=offscreen ./$(TEST_BIN) --bench
 
 # Renders every screen to a PNG so somebody can look at them (sec 12.3).
