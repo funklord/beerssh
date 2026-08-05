@@ -968,6 +968,11 @@ void bssh_terminal_view::focusInEvent(QFocusEvent *event) {
 	emit focus_received();
 }
 
+void bssh_terminal_view::focusOutEvent(QFocusEvent *event) {
+	QWidget::focusOutEvent(event);
+	emit focus_lost();
+}
+
 void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	/*
 	 * When the remote has asked for the mouse, clicks are its business --

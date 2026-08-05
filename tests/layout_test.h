@@ -70,6 +70,7 @@ private slots:
 	void a_bell_with_the_window_away_is_a_missed_one();
 	void the_caps_setting_reaches_a_sessions_router();
 	void the_screenshot_setting_is_absent_where_it_cannot_work();
+	void focus_reporting_follows_the_focused_pane();
 	void backing_out_of_a_session_reaches_the_host_list();
 };
 

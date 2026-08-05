@@ -1212,3 +1212,59 @@ void layout_test::the_screenshot_setting_is_absent_where_it_cannot_work() {
 	}
 	QVERIFY2(found_caps, "the rest of the page must still be there");
 }
+
+void layout_test::focus_reporting_follows_the_focused_pane() {
+	/*
+	 * sec 7.1's mode 1004 reaching the SESSION, which an emulator test
+	 * cannot see. Removing this wiring leaves the emulator's own test
+	 * passing and the feature dead -- the same shape as sec 6.2's key row
+	 * supporting three modes with nothing setting one, and the reason the
+	 * caps setting grew a third test.
+	 *
+	 * Per pane, because that is the question the remote asked: an editor
+	 * in one pane wants to know when THAT pane is looked at.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 2);
+
+	/*
+	 * The first pane already holds focus: the container focuses it as it
+	 * builds, so asking for focus it already has raises no event and
+	 * reports nothing. That is correct -- focus did not move -- and it is
+	 * why this starts by moving focus AWAY.
+	 */
+	QCOMPARE(container.focused_session(), a);
+
+	/* Only the first session's remote asks to be told. */
+	a->emulator()->feed(QByteArrayLiteral("\x1b[?1004h"));
+	a->emulator()->take_output();
+	b->emulator()->take_output();
+
+	/* Focus leaves the first pane: it is told so. */
+	container.view_at(1)->setFocus(Qt::MouseFocusReason);
+	QCoreApplication::processEvents();
+	QCOMPARE(a->emulator()->take_output(), QByteArrayLiteral("\x1b[O"));
+
+	/* And coming back reports the other direction. */
+	container.view_at(0)->setFocus(Qt::MouseFocusReason);
+	QCoreApplication::processEvents();
+	QCOMPARE(a->emulator()->take_output(), QByteArrayLiteral("\x1b[I"));
+
+	/*
+	 * And the pane whose remote never enabled the mode hears nothing at
+	 * all, however much its focus moves -- those bytes would land on its
+	 * command line.
+	 */
+	QCOMPARE(b->emulator()->take_output(), QByteArray());
+}

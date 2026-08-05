@@ -169,6 +169,18 @@ void bssh_pane_container::rebuild() {
 		 */
 		connect(view, &bssh_terminal_view::focus_received, this, [this, session] {
 			focus_session(session);
+
+			/*
+			 * sec 7.1's focus reporting, told per session because that
+			 * is what the remote asked about: an editor in one pane
+			 * wants to know when THAT pane is being looked at, not
+			 * when some other one is.
+			 */
+			if (session->emulator()) session->emulator()->set_focused(true);
+		});
+
+		connect(view, &bssh_terminal_view::focus_lost, this, [session] {
+			if (session->emulator()) session->emulator()->set_focused(false);
 		});
 
 		connect(session->emulator(), &bssh_emulator::damaged,

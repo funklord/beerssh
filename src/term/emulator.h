@@ -116,6 +116,22 @@ public:
 	void send_mouse_move(int row, int col, quint8 modifiers);
 	void send_mouse_button(int button, bool pressed, quint8 modifiers);
 
+	/*
+	 * Focus reporting, DEC mode 1004 (sec 7.1, tier 1).
+	 *
+	 * The remote asks to be told when the terminal gains and loses focus,
+	 * and an editor uses it to reload a file changed underneath it -- vim
+	 * with autoread, and every editor with a "check for external changes"
+	 * behaviour. libvterm parses the mode and emits the reports; nothing
+	 * was telling it, so the mode could be enabled and no report ever
+	 * followed, which looks to the remote exactly like a terminal that
+	 * does not support it.
+	 *
+	 * Silent unless the remote asked: libvterm writes nothing when the
+	 * mode is off, so callers say what happened and never check first.
+	 */
+	void set_focused(bool focused);
+
 	void feed(const QByteArray &bytes);
 	void resize(int cols, int rows);
 

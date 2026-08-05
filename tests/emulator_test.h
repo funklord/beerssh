@@ -16,6 +16,7 @@ class emulator_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void focus_is_reported_only_when_the_remote_asked();
 	void plain_text_lands_on_the_first_row();
 	void newline_and_carriage_return_move_as_expected();
 	void cursor_addressing_places_text();

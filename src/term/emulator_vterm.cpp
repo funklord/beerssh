@@ -1347,6 +1347,17 @@ void bssh_emulator::send_mouse_button(int button, bool pressed, quint8 modifiers
 	vterm_mouse_button(m_private->vt, button, pressed, static_cast<VTermModifier>(modifiers));
 }
 
+void bssh_emulator::set_focused(bool focused) {
+	VTermState *state = vterm_obtain_state(m_private->vt);
+	if (!state) return;
+
+	if (focused) {
+		vterm_state_focus_in(state);
+	} else {
+		vterm_state_focus_out(state);
+	}
+}
+
 int bssh_emulator::kitty_keyboard_flags() const {
 	return m_private->kitty_flags();
 }

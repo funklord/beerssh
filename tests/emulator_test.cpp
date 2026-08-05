@@ -785,3 +785,45 @@ void emulator_test::a_margin_scroll_leaves_the_rows_outside_it_alone() {
 	QCOMPARE(visible.value(3), QString());
 	QCOMPARE(visible.value(4), QStringLiteral("bottom"));
 }
+
+void emulator_test::focus_is_reported_only_when_the_remote_asked() {
+	/*
+	 * sec 7.1 tier 1's focus reporting, DEC mode 1004. libvterm parsed
+	 * the mode from the start and emits the reports; nothing ever told it
+	 * the focus had moved, so a remote could enable the mode and never
+	 * hear anything -- indistinguishable, from the far end, from a
+	 * terminal that does not support it at all.
+	 *
+	 * What wants it: an editor reloading a file changed underneath it.
+	 * vim's autoread does nothing useful without this, because it only
+	 * checks when something tells it to look.
+	 */
+	bssh_emulator emulator(80, 24);
+
+	/*
+	 * Silent until asked. A terminal that volunteers CSI I to a shell
+	 * that never enabled 1004 is writing stray input into that shell --
+	 * the bytes land in the command line.
+	 */
+	emulator.set_focused(true);
+	emulator.set_focused(false);
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	/* The remote turns it on. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1004h"));
+	emulator.take_output();
+
+	emulator.set_focused(true);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[I"));
+
+	emulator.set_focused(false);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[O"));
+
+	/* And off again means silent again, which is the half people forget. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1004l"));
+	emulator.take_output();
+
+	emulator.set_focused(true);
+	emulator.set_focused(false);
+	QCOMPARE(emulator.take_output(), QByteArray());
+}

@@ -237,6 +237,14 @@ signals:
 	void focus_received();
 
 	/*
+	 * And focus leaving, which sec 7.1's focus reporting needs as much as
+	 * arrival. Qt sends a focus-out when the WINDOW is deactivated too, so
+	 * this one signal covers both switching panes and switching
+	 * applications -- which is what mode 1004 is actually asking about.
+	 */
+	void focus_lost();
+
+	/*
 	 * Where a context menu was asked for, in global coordinates, and a
 	 * middle-click paste. Raised rather than handled here because the
 	 * actions belong to the window: paste needs the clipboard and the
@@ -265,6 +273,7 @@ protected:
 	void wheelEvent(QWheelEvent *event) override;
 	void mousePressEvent(QMouseEvent *event) override;
 	void focusInEvent(QFocusEvent *event) override;
+	void focusOutEvent(QFocusEvent *event) override;
 	void mouseMoveEvent(QMouseEvent *event) override;
 	void mouseReleaseEvent(QMouseEvent *event) override;
 	void mouseDoubleClickEvent(QMouseEvent *event) override;

@@ -819,7 +819,24 @@ each says what it *is*, who needs it, and where it stands here.
 | **Truecolor** (SGR 38;2;r;g;b) | 24-bit colour instead of a 256-entry palette | **Done** — §7, carried per cell |
 | **Bracketed paste** (DEC 2004) | Wraps pasted text so a shell knows it was pasted rather than typed, instead of executing every newline | **Done** — §6.4 |
 | **SGR mouse** (1006) | Mouse reports that work past column 223, unlike the original X10 encoding | **Done** — libvterm encodes, §6.4 decides local-vs-remote |
-| **Focus reporting** (1004) | Tells the remote when the terminal gains/loses focus, so editors can reload changed files | libvterm parses it; needs the window events wired |
+| **Focus reporting** (1004) | Tells the remote when the terminal gains/loses focus, so editors can reload changed files | **Done** — wired per pane, see below |
+
+**Focus reporting was the only tier-1 gap, and it was wired to nothing.**
+libvterm has parsed mode 1004 and carried `vterm_state_focus_in/out` since it
+was vendored; no code in this project ever called either, so a remote could
+enable the mode and never hear a thing — indistinguishable, from the far end,
+from a terminal that does not support it. What wants it is an editor reloading
+a file changed underneath it: `vim`'s `autoread` does nothing useful without it,
+because it only looks when something tells it to.
+Reported **per pane**, because that is what the remote is asking about: an
+editor in one pane wants to know when *that* pane is being looked at, not when
+some other one is. It hangs off the view's focus events rather than the pane
+container's own idea of focus, which means Qt's focus-out on **window
+deactivation** carries it too — switching to another application reports
+focus-out, which is exactly the case mode 1004 exists for.
+Silent unless the remote asked, and that half is tested as carefully as the
+other: a terminal that volunteers `CSI I` to a shell which never enabled 1004
+is writing stray bytes onto that shell's command line.
 
 **Tier 2 — keyboard disambiguation. This is the big one.**
 
