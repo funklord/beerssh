@@ -106,3 +106,14 @@ void bssh_session_registry::move(int from, int to) {
 	 */
 	emit changed();
 }
+
+bssh_session_registry *bssh_session_registry::shared() {
+	/*
+	 * Constructed on first use and never destroyed, deliberately: the
+	 * sessions in it outlive every window (sec 3), and tearing it down at
+	 * static-destruction time would race the widgets still holding
+	 * pointers into their screens.
+	 */
+	static bssh_session_registry *registry = new bssh_session_registry;
+	return registry;
+}

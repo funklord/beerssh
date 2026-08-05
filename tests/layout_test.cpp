@@ -831,7 +831,7 @@ void layout_test::middle_click_closes_the_tab_under_it() {
 	const forced_touch_t pointer(0);
 
 	bssh_main_window window;
-	bssh_session_registry *registry = window.findChild<bssh_session_registry *>();
+	bssh_session_registry *registry = window.registry();
 	QVERIFY2(registry, "the window must own a session registry");
 
 	bssh_session *a = registry->create(named(QStringLiteral("a")));
@@ -863,6 +863,14 @@ void layout_test::middle_click_closes_the_tab_under_it() {
 	QCOMPARE(registry->count(), 1);
 	QCOMPARE(registry->at(0), a);
 	Q_UNUSED(b);
+
+	/*
+	 * The registry is process-wide now (sec 8.4), so a session left here
+	 * is one the next test inherits. Cleaned up explicitly rather than by
+	 * the window going away, which no longer owns it.
+	 */
+	registry->close(a);
+	QCOMPARE(registry->count(), 0);
 }
 
 void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
@@ -876,7 +884,7 @@ void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
 	const forced_touch_t pointer(0);
 
 	bssh_main_window window;
-	bssh_session_registry *registry = window.findChild<bssh_session_registry *>();
+	bssh_session_registry *registry = window.registry();
 	QVERIFY(registry);
 
 	registry->create(named(QStringLiteral("a")));
@@ -914,6 +922,9 @@ void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
 
 	/* An index with nothing behind it gets no menu rather than an empty one. */
 	QVERIFY2(!window.build_tab_menu(7, &window), "a menu was built for a tab that is not there");
+
+	/* Shared registry: leave it as it was found (sec 8.4). */
+	while (registry->count() > 0) registry->close(registry->at(0));
 }
 
 void layout_test::clicking_a_pane_focuses_it() {
@@ -1200,7 +1211,7 @@ void layout_test::the_caps_setting_reaches_a_sessions_router() {
 
 	{
 		bssh_main_window window;
-		bssh_session_registry *registry = window.findChild<bssh_session_registry *>();
+		bssh_session_registry *registry = window.registry();
 		QVERIFY(registry);
 
 		/* A session opened AFTER the setting was stored. */
@@ -1212,6 +1223,10 @@ void layout_test::the_caps_setting_reaches_a_sessions_router() {
 
 	bssh_app_settings().set_caps_as_ctrl(original);
 	QCOMPARE(bssh_app_settings().caps_as_ctrl(), original);
+
+	/* Shared registry: leave it as it was found (sec 8.4). */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
 void layout_test::the_screenshot_setting_is_absent_where_it_cannot_work() {
@@ -1460,4 +1475,51 @@ void layout_test::the_host_list_offers_the_local_shell() {
 	const bssh_profile_t host = opened.first().at(0).value<bssh_profile_t>();
 	QVERIFY2(!host.local, "a saved host must not open as a local shell");
 	QCOMPARE(host.host, QStringLiteral("build.example"));
+}
+
+void layout_test::two_windows_are_two_views_onto_one_registry() {
+	/*
+	 * sec 8.4, in as many words: "a window is just another view onto the
+	 * registry -- the registry stays single and process-wide... Do not
+	 * let a second window imply a second registry."
+	 *
+	 * The window used to OWN one, which made that impossible to honour: a
+	 * second window brought a second set of sessions, and a session
+	 * opened in one would have been invisible to the other. This is the
+	 * property every future window, and the drag of a tab between two of
+	 * them, rests on.
+	 *
+	 * It is also the seam a client/server split would cut along. Windows
+	 * are meant to behave as though they were separate processes talking
+	 * to a session server: they ask the registry and never reach into one
+	 * another. Today that call is a pointer dereference; later it can be
+	 * a message without the callers changing.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window first;
+	bssh_main_window second;
+
+	QVERIFY2(first.registry() == second.registry(),
+	          "two windows must share one registry, or a session opened in one "
+	          "is invisible to the other");
+	QCOMPARE(first.registry(), shared);
+
+	/* A session opened through one window is visible through the other. */
+	bssh_session *session = first.registry()->create(named(QStringLiteral("shared")));
+	QCOMPARE(second.registry()->count(), 1);
+	QCOMPARE(second.registry()->at(0), session);
+
+	/*
+	 * And closing the FIRST window does not take the session with it --
+	 * which is what "the window is a view" has to mean if a second window
+	 * is to survive the first going away.
+	 */
+	first.close();
+	QCOMPARE(shared->count(), 1);
+	QCOMPARE(shared->at(0), session);
+
+	shared->close(session);
+	QCOMPARE(shared->count(), 0);
 }

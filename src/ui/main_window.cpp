@@ -66,7 +66,7 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
       m_panes(nullptr),
       m_wired_view(nullptr),
       m_status_label(new QLabel(this)),
-      m_registry(new bssh_session_registry(this)),
+      m_registry(bssh_session_registry::shared()),
       m_layout(nullptr),
       m_current(nullptr),
       m_tabs(new QTabBar(m_terminal_page)),

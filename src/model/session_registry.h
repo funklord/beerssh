@@ -34,6 +34,28 @@ class bssh_session_registry : public QObject {
 public:
 	explicit bssh_session_registry(QObject *parent = nullptr);
 
+	/*
+	 * The one registry this process has (sec 3, core principle 2; sec
+	 * 8.4).
+	 *
+	 * A window is a VIEW onto it, never an owner of one. That was
+	 * already the design and the window owned one anyway, which made a
+	 * second top-level window impossible to add correctly: it would have
+	 * brought a second registry with it, and sec 8.4 says in as many
+	 * words not to let it.
+	 *
+	 * It is also the seam a client/server split would cut along. The
+	 * intention is that windows behave as though they were separate
+	 * processes talking to a session server -- so a window asks this
+	 * object for sessions and never reaches into another window. Today
+	 * the call is a pointer dereference; later it can be a message,
+	 * without every caller changing.
+	 *
+	 * Tests construct their own instead of using this, which is why it
+	 * is a shared default rather than the only way to get one.
+	 */
+	static bssh_session_registry *shared();
+
 	bssh_session *create(const bssh_profile_t &profile);
 
 	/* Destroys the session and its connection. */

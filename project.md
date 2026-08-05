@@ -1487,10 +1487,30 @@ the other one does satisfies §14's rule only on paper.
   session IDs) so it can be persisted and restored across app restarts. The
   format is **shared across platforms** — profiles synced or copied between a
   phone and a desktop must not trip over a platform-specific layout field.
-- **Multiple top-level windows are a desktop-only affordance** and **[OPEN]** for
-  v1. If added, a window is just another view onto the registry — the registry
-  stays single and process-wide, and a session can be shown in exactly one pane
-  at a time. Do not let a second window imply a second registry.
+- **Multiple top-level windows are a desktop-only affordance** and **[DECIDED]**
+  for v1: they are in. A window is just another view onto the registry — the
+  registry stays single and process-wide, and a session can be shown in exactly
+  one pane at a time. Do not let a second window imply a second registry.
+  **That was written before anything could honour it.** The window *owned* its
+  registry (`new bssh_session_registry(this)`), so a second window would have
+  brought a second set of sessions with it, and a session opened in one would
+  have been invisible to the other. It is `bssh_session_registry::shared()` now
+  and the window is handed it, so the property this bullet asserts is a test
+  rather than an intention.
+- **Windows pretend to be separate processes, because one day they may be.**
+  The intent is a transparent client/server split later: a session server
+  holding the connections, and windows as clients that could be separate
+  processes or even separate machines. So a window asks the registry and
+  **never reaches into another window** — no sibling pointers, no shared
+  widgets, no "the other window's current tab". Today every such call is a
+  pointer dereference; the discipline is what lets it become a message without
+  the callers changing.
+  This is also why a torn-out tab becomes a new **window** and not a new
+  **process**. A live SSH session cannot move between processes — libssh's
+  state, the channel and the crypto context are all in this one — so a new
+  process would mean dropping the connection and reconnecting, losing the
+  scrollback and whatever was running. Once the server is real, the same drag
+  becomes a client attaching to a session that never moved.
 - Rendering N panes means N terminal widgets repainting — keep the glyph cache
   **shared** across panes (§9.5) and throttle repaints to the display refresh
   rather than to data arrival, or a chatty `yes`-style output in one pane will

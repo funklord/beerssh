@@ -57,6 +57,17 @@ public:
 	explicit bssh_main_window(const QString &target = QString(), QWidget *parent = nullptr);
 
 	/*
+	 * The sessions this window is a view onto (sec 8.4). Process-wide and
+	 * shared with every other window; a window never owns it.
+	 *
+	 * Exposed because a test drives sessions through the window it is
+	 * asserting on, and because this is what a second window will be
+	 * handed. Reaching for it with findChild() worked only while the
+	 * window owned one, which is the arrangement being undone here.
+	 */
+	bssh_session_registry *registry() const { return m_registry; }
+
+	/*
 	 * What closing the window should do when sessions are still
 	 * connected. A pure decision, separated from the dialog that asks it,
 	 * so the policy can be tested without a message box on screen -- and
