@@ -59,6 +59,17 @@ public:
 	quint64 content_revision() const { return m_content_revision; }
 
 	void set_raise_contrast(bool raise);
+
+	/*
+	 * The pointer entering this pane gives it the keyboard (sec 8.3).
+	 *
+	 * Implemented by asking for focus rather than by telling the container
+	 * directly, so hover goes down the SAME path a click does -- the
+	 * border, the status line, what copy and paste act on, and sec 7.1's
+	 * focus reporting all follow from focusInEvent and none of them needs
+	 * to learn a second way of being focused.
+	 */
+	void set_focus_follows_mouse(bool follows) { m_focus_follows_mouse = follows; }
 	bool raise_contrast() const { return m_raise_contrast; }
 
 	int cell_width() const { return m_cell_width; }
@@ -273,6 +284,7 @@ protected:
 	void wheelEvent(QWheelEvent *event) override;
 	void mousePressEvent(QMouseEvent *event) override;
 	void focusInEvent(QFocusEvent *event) override;
+	void enterEvent(QEnterEvent *event) override;
 	void focusOutEvent(QFocusEvent *event) override;
 	void mouseMoveEvent(QMouseEvent *event) override;
 	void mouseReleaseEvent(QMouseEvent *event) override;
@@ -361,6 +373,7 @@ private:
 	QColor m_foreground;
 	quint64 m_content_revision;
 	bool m_raise_contrast;
+	bool m_focus_follows_mouse;
 	int m_cell_width;
 	int m_cell_height;
 	int m_baseline;

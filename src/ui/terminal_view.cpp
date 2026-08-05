@@ -79,6 +79,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_blink_timer(nullptr),
       m_content_revision(1),
       m_raise_contrast(true),
+      m_focus_follows_mouse(false),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_cell_width(1),
@@ -966,6 +967,19 @@ void bssh_terminal_view::focusInEvent(QFocusEvent *event) {
 	 * left Tab moving the keyboard without moving the border.
 	 */
 	emit focus_received();
+}
+
+void bssh_terminal_view::enterEvent(QEnterEvent *event) {
+	QWidget::enterEvent(event);
+
+	if (!m_focus_follows_mouse) return;
+
+	/*
+	 * MouseFocusReason, because that is what this is: the pointer chose
+	 * the pane. Anything downstream that distinguishes how focus arrived
+	 * sees a mouse, which is true.
+	 */
+	setFocus(Qt::MouseFocusReason);
 }
 
 void bssh_terminal_view::focusOutEvent(QFocusEvent *event) {

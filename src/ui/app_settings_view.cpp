@@ -110,6 +110,24 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		form->addRow(QString(), m_hide_from_screenshots);
 	}
 
+	/*
+	 * Offered only where there is a pointer to hover (sec 8.3). On touch
+	 * it would be a setting with nothing to act on, which is the same
+	 * dishonesty as offering to hide a window from screenshots where
+	 * nothing can.
+	 */
+	m_focus_follows_mouse = nullptr;
+	if (!touch) {
+		m_focus_follows_mouse =
+		        new QCheckBox(QStringLiteral("Focus the pane under the pointer"), this);
+		m_focus_follows_mouse->setToolTip(
+		        QStringLiteral("With more than one pane, moving the pointer over one "
+		                        "gives it the keyboard without clicking. Off by default: "
+		                        "it surprises anyone expecting click-to-focus, and the "
+		                        "cost of that surprise is typing into the wrong shell."));
+		form->addRow(QString(), m_focus_follows_mouse);
+	}
+
 	m_caps_as_ctrl = new QCheckBox(QStringLiteral("Caps Lock sends Ctrl"), this);
 	m_caps_as_ctrl->setToolTip(
 	        QStringLiteral("Caps Lock arms Ctrl for the next key, in this terminal only. "
@@ -211,6 +229,9 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	if (m_hide_from_screenshots) {
 		m_hide_from_screenshots->setChecked(settings.hide_from_screenshots());
 	}
+	if (m_focus_follows_mouse) {
+		m_focus_follows_mouse->setChecked(settings.focus_follows_mouse());
+	}
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 
@@ -235,6 +256,9 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	if (m_hide_from_screenshots) {
 		connect(m_hide_from_screenshots, &QCheckBox::toggled, this, [this] { commit(); });
 	}
+	if (m_focus_follows_mouse) {
+		connect(m_focus_follows_mouse, &QCheckBox::toggled, this, [this] { commit(); });
+	}
 	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] { commit(); });
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
 }
@@ -248,6 +272,9 @@ void bssh_app_settings_view::commit() {
 	        bssh_app_settings::context_menu_t(m_context_menu->currentData().toInt()));
 	stored.set_raise_contrast(m_raise_contrast->isChecked());
 	stored.set_caps_as_ctrl(m_caps_as_ctrl->isChecked());
+	if (m_focus_follows_mouse) {
+		stored.set_focus_follows_mouse(m_focus_follows_mouse->isChecked());
+	}
 	if (m_hide_from_screenshots) {
 		stored.set_hide_from_screenshots(m_hide_from_screenshots->isChecked());
 	}

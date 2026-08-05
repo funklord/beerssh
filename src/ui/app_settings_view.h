@@ -37,6 +37,9 @@ private:
 	QComboBox *m_context_menu;
 	QCheckBox *m_caps_as_ctrl;
 
+	/* Null where there is no pointer to hover (sec 8.3). */
+	QCheckBox *m_focus_follows_mouse;
+
 	/* Null where the platform cannot hide the window (sec 11). */
 	QCheckBox *m_hide_from_screenshots;
 	QCheckBox *m_raise_contrast;

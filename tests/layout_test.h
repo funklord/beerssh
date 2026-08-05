@@ -43,6 +43,7 @@ private slots:
 	void the_config_is_reachable_from_a_terminal();
 	void the_host_list_offers_the_local_shell();
 	void two_windows_are_two_views_onto_one_registry();
+	void focus_follows_the_pointer_only_when_asked();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already
 	 * contemplates when it talks about tiling one into a half-screen

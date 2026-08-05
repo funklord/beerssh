@@ -95,6 +95,15 @@ public:
 	bool hide_from_screenshots() const;
 	void set_hide_from_screenshots(bool hide);
 
+	/*
+	 * The pane under the pointer takes the keyboard, without a click
+	 * (sec 8.3). Off by default, which that section asked for before it
+	 * was built: it surprises anyone who expects click-to-focus, and the
+	 * cost of the surprise is typing into the wrong shell.
+	 */
+	bool focus_follows_mouse() const;
+	void set_focus_follows_mouse(bool follows);
+
 	/* Where app.ini lives; empty when no directory could be found. */
 	QString path() const { return m_path; }
 

@@ -819,11 +819,21 @@ void bssh_main_window::apply_device_settings() {
 	                                                          ->is_touch_primary())
 	        == bssh_app_settings::CONTEXT_MENU_TOUCH;
 
+	/*
+	 * sec 8.3's focus-follows-mouse, off unless asked for. Never where
+	 * touch is the input: there is no pointer to hover, and a stray
+	 * synthesised enter would move focus with nothing visible causing it.
+	 */
+	const bool follows = settings.focus_follows_mouse()
+	        && bssh_platform::instance()
+	        && !bssh_platform::instance()->is_touch_primary();
+
 	if (m_panes) {
 		for (bssh_terminal_view *view : m_panes->views()) {
 			if (!view) continue;
 			view->set_raise_contrast(raise);
 			view->set_long_press_menu(hold);
+			view->set_focus_follows_mouse(follows);
 		}
 	}
 

@@ -343,3 +343,31 @@ void platform_test::hiding_from_screenshots_is_not_promised_where_it_cannot_work
 		QVERIFY(reopened.hide_from_screenshots());
 	}
 }
+
+void platform_test::the_focus_follows_mouse_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	/*
+	 * sec 8.3 asked for this to be off by default before it existed, and
+	 * the default is the part worth pinning: a fresh install must behave
+	 * the way every other terminal does.
+	 */
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(!settings.focus_follows_mouse(), "off by default, per sec 8.3");
+
+		settings.set_focus_follows_mouse(true);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY(reopened.focus_follows_mouse());
+	}
+	{
+		bssh_app_settings settings(dir.path());
+		settings.set_focus_follows_mouse(false);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY2(!reopened.focus_follows_mouse(), "and it can be turned off again");
+	}
+}

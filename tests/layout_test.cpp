@@ -1523,3 +1523,56 @@ void layout_test::two_windows_are_two_views_onto_one_registry() {
 	shared->close(session);
 	QCOMPARE(shared->count(), 0);
 }
+
+void layout_test::focus_follows_the_pointer_only_when_asked() {
+	/*
+	 * sec 8.3's [OPEN] question, answered: offered, and off by default.
+	 * Off because it surprises anyone expecting click-to-focus, and the
+	 * cost of that surprise is typing into the wrong shell -- which is
+	 * the same hazard that section calls non-negotiable about the focus
+	 * border.
+	 *
+	 * Hover is implemented by asking for focus, so it goes down the same
+	 * path a click does: the border, the status line, what copy and paste
+	 * act on, and sec 7.1's focus reporting all follow from focusInEvent
+	 * and none of them learns a second way of being focused. That is why
+	 * asserting on focused_session() is enough here.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = shared->create(named(QStringLiteral("a")));
+	bssh_session *b = shared->create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 2);
+	QCOMPARE(container.focused_session(), a);
+
+	bssh_terminal_view *second = container.view_at(1);
+	QVERIFY(second);
+
+	/* Off: the pointer entering the other pane changes nothing. */
+	QEnterEvent enter(QPointF(5, 5), QPointF(5, 5), second->mapToGlobal(QPoint(5, 5)));
+	QApplication::sendEvent(second, &enter);
+	QCoreApplication::processEvents();
+	QCOMPARE(container.focused_session(), a);
+
+	/* On: it takes the keyboard without a click. */
+	second->set_focus_follows_mouse(true);
+	QApplication::sendEvent(second, &enter);
+	QCoreApplication::processEvents();
+	QCOMPARE(container.focused_session(), b);
+
+	/* And the border went with it, because hover used the same path. */
+	QCOMPARE(container.view_at(1)->property("bssh_focused").toBool(), true);
+	QCOMPARE(container.view_at(0)->property("bssh_focused").toBool(), false);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}

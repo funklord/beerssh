@@ -125,6 +125,21 @@ void bssh_app_settings::set_hide_from_screenshots(bool hide) {
 	file.sync();
 }
 
+bool bssh_app_settings::focus_follows_mouse() const {
+	if (m_path.isEmpty()) return false;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	return file.value(QStringLiteral("input/focus_follows_mouse"), false).toBool();
+}
+
+void bssh_app_settings::set_focus_follows_mouse(bool follows) {
+	if (m_path.isEmpty()) return;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	file.setValue(QStringLiteral("input/focus_follows_mouse"), follows);
+	file.sync();
+}
+
 QString bssh_app_settings::theme() const {
 	if (m_path.isEmpty()) return QStringLiteral("system");
 

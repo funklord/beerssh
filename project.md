@@ -1248,8 +1248,18 @@ the same number for a layout manager that had quietly stopped working.
   border or dimmed inactive panes. Non-negotiable for safety (§6.3), and *more*
   important on desktop, not less: four panes fit on a monitor, and a pointer
   moving over an unfocused pane invites the assumption that it's the live one.
-  **[OPEN]** whether desktop should offer focus-follows-mouse; if it does, it is
-  off by default.
+  **[DECIDED]** desktop offers focus-follows-mouse, **off by default** — which
+  is what this line asked for before it was built. Off because it surprises
+  anyone expecting click-to-focus, and the cost of that surprise is typing into
+  the wrong shell, which is the same hazard this bullet calls non-negotiable
+  about the border.
+  Implemented by **asking for focus** on pointer-enter rather than by telling
+  the pane container directly, so hover goes down the identical path a click
+  does: the border, the status line, what copy and paste act on, and §7.1's
+  focus reporting all follow from `focusInEvent`, and none of them learns a
+  second way of being focused. Offered only where there is a pointer to hover —
+  on touch it would be a setting with nothing to act on, which is the same
+  dishonesty as offering to hide a window from screenshots where nothing can.
 - **Tap-to-focus** (or click-to-focus) on a pane; keyboard shortcuts for
   pane/tab navigation (§6.1).
   **This was half-built in the way that is worse than not built at all.** Two
