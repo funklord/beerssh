@@ -976,11 +976,27 @@ rotate-back. Both are unit-tested against `bssh_layout_manager` and neither has
 been driven on hardware. The attempt was abandoned mid-test rather than
 completed, so nothing here should be read as evidence either way.
 
-An observation from the same run, not yet investigated: the app logged
-`Skipped 92 frames` and a 1886 ms frame across the orientation change. This
-section argues collapse/restore is bookkeeping rather than surgery, and a
-1.9-second frame is not obviously that. It may be Qt rebuilding its surface
-rather than anything here.
+**The 1886 ms frame that same run logged is not this section's**, and that is
+measured rather than assumed. The device reported `Skipped 92 frames` and a
+1886 ms frame across the orientation change, which is not obviously the
+"bookkeeping, not surgery" this section claims — but the figure contains
+Android destroying and recreating the surface, and Qt rebuilding its whole
+window, neither of which is ours. `make bench`'s `crossing_a_size_class`
+measures only the part that is: the class changing, the panes being destroyed
+and rebuilt, each new view resolving a font and remeasuring its cell.
+
+**Collapse 2→1 is 2.8–5.5 ms and expand 1→2 is 4.2–9.0 ms**, with a single
+view costing 0.6–1.2 ms of that — best-of-5, on a machine under a load average
+of 22–47, so the spread is the machine and the floor is the work. Three orders
+of magnitude below the frame. A phone is slower than this x86-64 box, but not
+by 300x, so the frame belongs to the surface teardown and not to the pane
+rebuild. Which also means the "destroy and rebuild rather than diff" decision
+in `bssh_pane_container` is not the thing to revisit if that frame ever needs
+shortening.
+
+The benchmark asserts the pane count in both directions as well as timing it:
+a measurement that cannot tell "faster" from "stopped collapsing" would report
+the same number for a layout manager that had quietly stopped working.
 
 ### 8.3 Tabs and focus
 - **Tab bar:** horizontally scrollable; label from **OSC title** with fallback to

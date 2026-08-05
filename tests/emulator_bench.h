@@ -44,6 +44,16 @@ private slots:
 	void painting_one_pane();
 	void painting_four_panes();
 	void painting_with_a_cold_glyph_cache();
+
+	/*
+	 * ROTATION, or rather this app's half of it. A device logged a 1886 ms
+	 * frame across an orientation change (sec 8.2), and that number
+	 * contains Android tearing down and rebuilding a surface as well as
+	 * anything of ours. This measures only what crossing a size class
+	 * costs here -- pane views destroyed and rebuilt, fonts resolved,
+	 * metrics remeasured -- which is the half that could be made better.
+	 */
+	void crossing_a_size_class();
 };
 
 #endif /* BSSH_EMULATOR_BENCH_H */

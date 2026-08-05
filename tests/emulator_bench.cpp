@@ -3,7 +3,12 @@
 #include <QElapsedTimer>
 #include <QtTest>
 
+#include "model/profile.h"
+#include "model/session.h"
+#include "model/session_registry.h"
 #include "term/emulator.h"
+#include "ui/layout_manager.h"
+#include "ui/pane_container.h"
 #include "ui/terminal_view.h"
 
 namespace {
@@ -356,4 +361,103 @@ void emulator_bench::painting_with_a_cold_glyph_cache() {
 
 	qInfo("rasterisation costs %.2f ms of the first frame and nothing after it",
 	       first - best);
+}
+
+void emulator_bench::crossing_a_size_class() {
+	/*
+	 * sec 8.2 claims collapse/restore is "bookkeeping, not surgery". A
+	 * device run put a 1886 ms frame across an orientation change, and
+	 * that figure cannot say how much of itself belongs here: Android
+	 * destroys and recreates the surface in the same frame, and Qt
+	 * rebuilds its whole window on top of that.
+	 *
+	 * So measure the part that is ours and nobody else's -- the size
+	 * class changing, the panes being rebuilt, each new view resolving a
+	 * font and remeasuring its cell. If this is a millisecond, the frame
+	 * is not this section's to answer for; if it is hundreds, it is.
+	 *
+	 * Best of REPEATS, like everything else here: on a loaded machine a
+	 * single run of this spread twelvefold, and the fastest is the one
+	 * least contaminated by things that are not the layout.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+
+	bssh_profile_t first_profile;
+	first_profile.name = QStringLiteral("a");
+	first_profile.host = QStringLiteral("a.example");
+	bssh_profile_t second_profile;
+	second_profile.name = QStringLiteral("b");
+	second_profile.host = QStringLiteral("b.example");
+
+	bssh_session *a = registry.create(first_profile);
+	bssh_session *b = registry.create(second_profile);
+
+	/*
+	 * Real content in both, because a rebuilt view repaints, and an empty
+	 * screen is the one case that never happens and is always fastest.
+	 */
+	const int cols = 100;
+	const int rows = 30;
+	a->emulator()->feed(painting_sample(cols, rows));
+	b->emulator()->feed(painting_sample(cols, rows));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 600);
+
+	layout.set_width(1200);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+	QCOMPARE(container.pane_count(), 2);
+
+	/*
+	 * A phone rotating to portrait: MEDIUM or wider down to COMPACT, so
+	 * the split collapses to one pane and the other session becomes a
+	 * tab. Timed with the event loop drained, since the splitter sizes
+	 * its children on the next pass and leaving that out would measure
+	 * half the work.
+	 */
+	double collapse = -1;
+	double expand = -1;
+	QElapsedTimer timer;
+
+	for (int repeat = 0; repeat < REPEATS; ++repeat) {
+		timer.restart();
+		layout.set_width(400);
+		QCoreApplication::processEvents();
+		const double down = double(timer.nsecsElapsed()) / 1e6;
+		QCOMPARE(container.pane_count(), 1);
+
+		timer.restart();
+		layout.set_width(1200);
+		QCoreApplication::processEvents();
+		const double up = double(timer.nsecsElapsed()) / 1e6;
+		QCOMPARE(container.pane_count(), 2);
+
+		if (collapse < 0 || down < collapse) collapse = down;
+		if (expand < 0 || up < expand) expand = up;
+	}
+
+	/*
+	 * And one view on its own, which is what a rebuild is made of: a
+	 * widget, an appearance applied, a font resolved and a cell
+	 * remeasured. Two panes cost about twice this, and if they do not,
+	 * the difference is the splitter and the repaint.
+	 */
+	double one_view = -1;
+	for (int repeat = 0; repeat < REPEATS; ++repeat) {
+		timer.restart();
+		bssh_terminal_view *probe = new bssh_terminal_view();
+		probe->attach_screen(&a->emulator()->screen());
+		probe->set_font_id(QString(), 13);
+		probe->resize(cols * 9, rows * 18);
+		const double ms = double(timer.nsecsElapsed()) / 1e6;
+		delete probe;
+		if (one_view < 0 || ms < one_view) one_view = ms;
+	}
+
+	qInfo("size class crossing: collapse 2->1 %.2f ms, expand 1->2 %.2f ms",
+	       collapse, expand);
+	qInfo("one view built and measured: %.2f ms", one_view);
 }
