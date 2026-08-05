@@ -564,6 +564,32 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
   **Minimal** (four keys and the arrows, for a narrow screen). Every layout is
   checked to carry Escape and a modifier — a row without those cannot drive a
   terminal at all. Still open: letting a user compose their own row.
+- **[BUG, measured, not yet fixed] The key row does not fit a phone, and never
+  did.** Its own key list at §6.2's own 48dp touch floor is twelve keys ×48dp
+  before spacing; the default row measures **652px of minimum width against a
+  360px screen**, and every one of the five curated layouts is over. Adding
+  `Fn` took it from 604 to 652 — this predates that key and is not caused by it.
+  **The symptom was on screen and did not look like a layout bug.** Qt squeezes
+  the buttons past their minimum and the labels elide, so `Ctrl` renders as
+  `Ctr` and the row reads as merely cramped rather than as a widget demanding
+  nearly twice the width it has. It appears that way in this project's own
+  device screenshots.
+  **Nothing caught it because the key row was not in
+  `every_touch_surface_fits_a_phone`** — which holds the host list, both
+  editors, settings, licences and the font picker to 360×640, and omitted the
+  one widget on that list which exists *only* for touch. Every other surface
+  has a desktop form somebody looks at; this one is only ever seen on a device.
+  **The intended fix is to scroll it horizontally**, as the tab bar does with
+  the same problem (§8.3) and as ConnectBot and Termux do with this exact
+  strip. Shrinking is not available: below the touch floor a key is one you
+  cannot reliably hit, which is worse than one you have to scroll to.
+  A first attempt — `QScrollArea` plus `QScroller` for the drag — **crashed in
+  the destructor and was reverted rather than committed half-working**. Two
+  things need settling before the next attempt: whether `QScroller` on the
+  viewport survives the widget being destroyed, and that `check_fits`'s
+  overflow walk flags a scroll area's content widget for being wider than its
+  viewport, which is what a scroll area is *for*. That check needs to ask a
+  different question of a scrolling widget than of a fixed one.
 - **`Fn` was listed above and was not in any of them, so F1–F12 were
   unreachable on a phone.** The emulator has understood `KEY_FUNCTION_BASE + n`
   since M3 and the router has translated physical F1–F35 for as long; the only
