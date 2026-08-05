@@ -728,8 +728,17 @@ help:
 .PHONY: all run test bench style check-ci check-ssh check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
-        distclean help check style-source style-docs
+        distclean help check style-source style-docs hooks
 
 # `check` is everything that must pass before committing; `test` is the suite
 # alone. GNU's meaning of check, and what most of these projects already did.
 check: style test
+
+# The commit-msg hook lives in the tree so it is reviewable, survives a
+# clone, and can be kept in sync. .git/hooks is untracked, so a hook that
+# exists only there enforces a rule nobody can see and vanishes silently on
+# a fresh clone.
+hooks:
+	@test -d .git || { echo "hooks: not a git repository" >&2; exit 1; }
+	@install -m 0755 tools/hooks/commit-msg .git/hooks/commit-msg
+	@echo "hooks: commit-msg installed from tools/hooks/"
