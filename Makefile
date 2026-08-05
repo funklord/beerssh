@@ -14,7 +14,9 @@
 #                        SET, not for a value -- see BUILD FLAGS.
 #   make SANITIZE=1   -- add ASan+UBSan, independent of DEBUG
 #   make run          -- build and run it
-#   make test         -- build and run the smoke test + unit tests
+#   make test         -- build and run the smoke test + unit tests.
+#                        A crashing test does NOT fork gdb; ask for a
+#                        backtrace with BSSH_TEST_STACK_DUMP=1
 #   make bench        -- emulator throughput in MB/s (sec 9.5); built by
 #                        `test` but not run by it, and not a CI gate.
 #                        Refuses a machine too loaded to measure;
@@ -309,7 +311,7 @@ test: $(TARGET) $(TEST_BIN)
 	 QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test; \
 	 status=$$?; rm -rf $$sandbox; exit $$status
 	@echo "test: headless smoke test passed"
-	QT_QPA_PLATFORM=offscreen ./$(TEST_BIN)
+	QT_QPA_PLATFORM=offscreen $(BSSH_TEST_CRASH_ENV) ./$(TEST_BIN)
 
 # Throughput through the emulator, in MB/s (project.md sec 9.5, sec 12.3).
 # Built by `test` but not run by it: these take seconds and their numbers
@@ -324,6 +326,28 @@ test: $(TARGET) $(TEST_BIN)
 # in the output distinguished a real regression from a box at load 81 on
 # twelve cores with 23 GB in swap, which is what it actually was. A
 # printed number is a number somebody quotes later.
+# QtTest forks gdb when a test crashes, and that is a poor trade in a tree
+# whose method is to break the code on purpose and watch a test fail.
+#
+# What happened: a crashing test left `gdb --batch --pid <self>` attached,
+# the binary stopped in state `t`, and neither ever exited. Because a
+# tracer becomes the reaping parent, the dead test showed as a zombie that
+# nothing could clear. Five of them accumulated over one session holding
+# **15 GB** of RSS between them, on a machine whose load and swap pressure
+# were then blamed on somebody else's build -- including in this file's own
+# `bench` guard. A stopped process also ignores SIGTERM, so the obvious
+# `pkill` cleaned up nothing.
+#
+# The signal number and the test that raised it are still reported, which
+# is enough to know where to look. Ask for the backtrace explicitly when a
+# crash is worth one:
+#   make test BSSH_TEST_STACK_DUMP=1
+ifdef BSSH_TEST_STACK_DUMP
+    BSSH_TEST_CRASH_ENV =
+else
+    BSSH_TEST_CRASH_ENV = QTEST_DISABLE_STACK_DUMP=1 QTEST_DISABLE_CORE_DUMP=1
+endif
+
 bench: $(TEST_BIN)
 	@echo "bench: measuring on this machine -- load average is part of the result"
 	@uptime
@@ -342,7 +366,7 @@ bench: $(TEST_BIN)
 			exit 1; \
 		fi; \
 	fi
-	QT_QPA_PLATFORM=offscreen ./$(TEST_BIN) --bench
+	QT_QPA_PLATFORM=offscreen $(BSSH_TEST_CRASH_ENV) ./$(TEST_BIN) --bench
 
 # Renders every screen to a PNG so somebody can look at them (sec 12.3).
 #

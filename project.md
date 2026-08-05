@@ -2489,6 +2489,23 @@ The desktop build is what makes this project testable at all — use it.
 - Device/emulator tests cover what only Android can break: IME and hardware-key
   delivery (§6.1), the foreground service surviving screen-off (§5.1), activity
   recreation on rotation.
+- **A crashing test does not fork a debugger**, and that is an incident rather
+  than a preference. QtTest's crash handler runs
+  `gdb --batch -ex "thread apply all bt" --pid <self>` on a fatal signal. In a
+  tree whose method is to break the code on purpose and watch a test fail,
+  crashes are routine — and each one left gdb attached with the binary stopped
+  in state `t`, neither ever exiting. Because **a tracer becomes the reaping
+  parent**, the dead test then showed as a zombie nothing could clear, and a
+  stopped process ignores `SIGTERM`, so the obvious `pkill` cleaned up nothing.
+  Five accumulated in a single session holding **15 GB of RSS between them** —
+  on a machine whose load and swap pressure were meanwhile being blamed on
+  another build, including by `make bench`'s own too-loaded guard. The
+  measurements that guard was protecting were being distorted by the test
+  runner that produced them.
+  `make test` sets `QTEST_DISABLE_STACK_DUMP` and `QTEST_DISABLE_CORE_DUMP`.
+  The signal and the test that raised it are still reported, which is enough to
+  know where to look; `make test BSSH_TEST_STACK_DUMP=1` asks for the backtrace
+  when a crash is worth one.
 - **Benchmarks are built by `make test` and run by `make bench`.** Every
   throughput figure in §9.5 was measured with a scratch harness that was then
   thrown away, so each one cited a program nobody could re-run — a claim
