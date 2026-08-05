@@ -1012,6 +1012,20 @@ the same number for a layout manager that had quietly stopped working.
   does not do. It costs nothing today: the one verb that would care,
   *Show beside current*, is already disabled wherever the long-press is the
   input, because touch means COMPACT means one pane (§8.2).
+- **All three verbs are built now, and *duplicate* was the missing one.** The
+  menu carried close and move-to-split and nothing said the third was absent,
+  because it was assembled inside the function that `exec()`s it — so its
+  contents were unreachable to a test, which is the same reason
+  `build_terminal_menu()` was separated out in §6.4. `build_tab_menu()` is that
+  split, and the verbs, their order, their access keys and which of them are
+  available are now pinned. *Move-to-split* is spelled **Show beside current**
+  on screen, and this section keeps the design name; they are the same verb.
+  Order is Duplicate, Show beside current, separator, Close — duplicate first
+  because a second shell on the same host is the everyday action and a split is
+  not, and the separator because Close is the only one here that cannot be
+  undone. **Duplicate opens a new session on the same profile** through the
+  front door's own path, so a host needing a password is asked for one; copying
+  the session would mean copying a connection, which SSH cannot do.
 - **Middle-click close and drag-to-reorder are built, and the reorder moves
   the registry rather than the bar.** Tab index and registry index are one
   thing here: every tab action — close, the context menu, switching — turns an

@@ -1326,17 +1326,25 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
  * gestures reach it now and the alternative is the same menu built in two
  * places.
  */
-void bssh_main_window::show_tab_menu(const QPoint &at) {
-	const int index = m_tabs->tabAt(at);
+QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
 	bssh_session *session = m_registry->at(index);
-	if (!session) return;
+	if (!session) return nullptr;
 
-	QMenu menu(this);
-	menu.setObjectName(QStringLiteral("tab_context_menu"));
+	QMenu *menu = new QMenu(parent);
+	menu->setObjectName(QStringLiteral("tab_context_menu"));
 
-	/* Access keys, and the destructive verb last -- as in the terminal's. */
-	QAction *split = menu.addAction(QStringLiteral("Show &beside current"));
-	QAction *close = menu.addAction(QStringLiteral("&Close"));
+	/*
+	 * sec 8.3's three verbs. Duplicate first because it is the one people
+	 * reach for most -- a second shell on the same host is the everyday
+	 * action, and a split is not -- then the split, then a separator and
+	 * the destructive one, which is the terminal menu's shape (sec 6.4)
+	 * and the Windows guidelines' before that. Access keys on all three.
+	 */
+	QAction *duplicate = menu->addAction(QStringLiteral("&Duplicate"));
+	duplicate->setObjectName(QStringLiteral("tab_duplicate"));
+
+	QAction *split = menu->addAction(QStringLiteral("Show &beside current"));
+	split->setObjectName(QStringLiteral("tab_split"));
 
 	/*
 	 * Offered only when there is room for another pane. A menu entry
@@ -1348,12 +1356,40 @@ void bssh_main_window::show_tab_menu(const QPoint &at) {
 	split->setEnabled(m_layout->intent().size() < fits &&
 	                   !m_layout->intent().contains(session));
 
-	apply_menu_layout(&menu, context_menu_layout(bssh_app_settings().context_menu(),
-	                                              bssh_platform::instance()
-	                                                      && bssh_platform::instance()
-	                                                                 ->is_touch_primary()));
+	menu->addSeparator();
 
-	QAction *chosen = menu.exec(m_tabs->mapToGlobal(at));
+	QAction *close = menu->addAction(QStringLiteral("&Close"));
+	close->setObjectName(QStringLiteral("tab_close"));
+
+	apply_menu_layout(menu, context_menu_layout(bssh_app_settings().context_menu(),
+	                                             bssh_platform::instance()
+	                                                     && bssh_platform::instance()
+	                                                                ->is_touch_primary()));
+	return menu;
+}
+
+void bssh_main_window::show_tab_menu(const QPoint &at) {
+	const int index = m_tabs->tabAt(at);
+	bssh_session *session = m_registry->at(index);
+	if (!session) return;
+
+	QMenu *menu = build_tab_menu(index, this);
+	if (!menu) return;
+
+	const QAction *chosen = menu->exec(m_tabs->mapToGlobal(at));
+	const QAction *duplicate = menu->findChild<QAction *>(QStringLiteral("tab_duplicate"));
+	const QAction *split = menu->findChild<QAction *>(QStringLiteral("tab_split"));
+	const QAction *close = menu->findChild<QAction *>(QStringLiteral("tab_close"));
+	menu->deleteLater();
+
+	/*
+	 * Duplicate opens another session on the same host, through the same
+	 * path the front door uses -- so a host that needs a password is
+	 * asked for one, and a key-authenticated host simply opens. Copying
+	 * the session would mean copying a connection, which SSH has no way
+	 * to do.
+	 */
+	if (chosen == duplicate) open_profile(session->profile());
 	if (chosen == split) split_with(session);
 	if (chosen == close) on_tab_close_requested(index);
 }

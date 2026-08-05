@@ -17,6 +17,7 @@
 #include "ui/password_prompt.h"
 #include "ui/session_dialog.h"
 #include "ui/ssh_config_import.h"
+#include <QMenu>
 #include <QTabBar>
 #include <QMetaMethod>
 #include "ui/long_press.h"
@@ -831,4 +832,55 @@ void layout_test::middle_click_closes_the_tab_under_it() {
 	QCOMPARE(registry->count(), 1);
 	QCOMPARE(registry->at(0), a);
 	Q_UNUSED(b);
+}
+
+void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
+	/*
+	 * sec 8.3 asks for close, duplicate and move-to-split. Duplicate was
+	 * missing for as long as that sentence has existed, and nothing said
+	 * so: the menu was built inside the function that exec()s it, so its
+	 * contents were unreachable -- the same reason build_terminal_menu()
+	 * was separated out next door.
+	 */
+	const forced_touch_t pointer(0);
+
+	bssh_main_window window;
+	bssh_session_registry *registry = window.findChild<bssh_session_registry *>();
+	QVERIFY(registry);
+
+	registry->create(named(QStringLiteral("a")));
+
+	QMenu *menu = window.build_tab_menu(0, &window);
+	QVERIFY2(menu, "a tab with a session behind it must have a menu");
+
+	const QList<QAction *> actions = menu->actions();
+	QCOMPARE(actions.size(), 4);
+
+	QCOMPARE(actions.at(0)->text(), QStringLiteral("&Duplicate"));
+	QCOMPARE(actions.at(1)->text(), QStringLiteral("Show &beside current"));
+
+	/*
+	 * The separator earns its place: Close is the one verb here that
+	 * cannot be undone, and a menu that puts it flush against the others
+	 * is one a slipped thumb closes a session with.
+	 */
+	QVERIFY2(actions.at(2)->isSeparator(), "the destructive verb needs separating");
+	QCOMPARE(actions.at(3)->text(), QStringLiteral("&Close"));
+
+	for (const QAction *action : actions) {
+		if (action->isSeparator()) continue;
+		QVERIFY2(action->text().contains(QLatin1Char('&')),
+		          qPrintable(action->text() + QStringLiteral(" has no access key")));
+	}
+
+	/*
+	 * Duplicate does not depend on room for a pane, which the split does
+	 * -- it opens a tab. A window with no room must still offer it.
+	 */
+	QVERIFY2(actions.at(0)->isEnabled(), "Duplicate must not depend on the window's width");
+
+	delete menu;
+
+	/* An index with nothing behind it gets no menu rather than an empty one. */
+	QVERIFY2(!window.build_tab_menu(7, &window), "a menu was built for a tab that is not there");
 }

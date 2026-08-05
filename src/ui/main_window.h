@@ -194,6 +194,15 @@ public:
 	QMenu *build_terminal_menu(QWidget *parent) const;
 
 	/*
+	 * The tab menu, likewise built but not shown, and for the same reason
+	 * -- it was a menu nothing could inspect, so which verbs it carried
+	 * and which of them were available went untested while the terminal's
+	 * next door had both pinned. Returns null for an index with no
+	 * session behind it.
+	 */
+	QMenu *build_tab_menu(int index, QWidget *parent) const;
+
+	/*
 	 * The touch metrics, applied to any of this window's context menus.
 	 * Static and public for the same reason as context_menu_layout(): it
 	 * depends on nothing but the menu and the layout asked for, so a test

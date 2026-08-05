@@ -62,6 +62,7 @@ private slots:
 	void reordering_tabs_reorders_the_sessions_behind_them();
 	void a_dragged_tab_bar_is_a_pointers_affordance();
 	void middle_click_closes_the_tab_under_it();
+	void the_tab_menu_offers_sec_8_3s_three_verbs();
 	void backing_out_of_a_session_reaches_the_host_list();
 };
 
