@@ -75,7 +75,10 @@
 #     ANDROID_SDK_ROOT  the SDK (packages); separate from the NDK
 #     a JDK on PATH     Gradle will not run on a JRE
 #
-#   The dependencies must be cross-compiled first:
+#   The kit decides the ABI -- qmake reads it from there and so does this
+#   Makefile, so there is one answer rather than two that can disagree.
+#
+#   The dependencies must be cross-compiled first, for that same ABI:
 #     tools/build-deps-android.sh arm64-v8a
 #
 # FONTS
@@ -146,7 +149,27 @@ VTERM_CFLAGS = -std=c99 -O2 -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
 # link said so in nine identical lines. One build per ABI, in its own
 # directory, because "the library" stops being one artifact the moment
 # there is more than one target.
-ANDROID_ABI ?= arm64-v8a
+# The ABI is the Qt KIT's, and is read from it rather than chosen again.
+#
+# beerssh.pro takes QT_ARCH from the kit, and everything real follows from
+# that: the dependency directory, the vterm archive it links, and the list
+# of Qt libraries deployed into the package. This variable used to default
+# to arm64-v8a independently, so the two could disagree and nothing said
+# so -- building against the x86_64 kit produced an APK named
+# beerssh-<version>-arm64-v8a.apk with lib/x86_64 inside it, built the
+# vterm archive into a directory the .pro never looks in, and checked the
+# dependencies of an ABI it was not building. Only the last two fail
+# loudly. The name is the one that ships, and the one nobody can check by
+# looking at it.
+#
+# qdevice.pri is where qmake gets the answer itself, so reading that file
+# is the same answer rather than a second one. Setting ANDROID_ABI by hand
+# still works, and android-check refuses it if it contradicts the kit.
+ifdef QT_ANDROID_ROOT
+ANDROID_KIT_ABI := $(shell sed -n 's/^DEFAULT_ANDROID_ABIS *= *//p' \
+                            $(QT_ANDROID_ROOT)/mkspecs/qdevice.pri 2>/dev/null)
+endif
+ANDROID_ABI ?= $(ANDROID_KIT_ABI)
 ANDROID_API ?= 26
 
 ifeq ($(ANDROID_ABI),arm64-v8a)
@@ -373,6 +396,22 @@ android-check:
 		echo "make android:   make android QT_ANDROID_ROOT=\$$HOME/Qt/6.11.1/android_arm64_v8a"; \
 		exit 1; \
 	fi
+	@if [ -z "$(ANDROID_ABI)" ]; then \
+		echo "make android: cannot tell which ABI this kit builds."; \
+		echo "make android:   read from $(QT_ANDROID_ROOT)/mkspecs/qdevice.pri,"; \
+		echo "make android:   which has no DEFAULT_ANDROID_ABIS line. Is that a"; \
+		echo "make android:   Qt-for-Android kit? Otherwise say which it is:"; \
+		echo "make android:   make apk ANDROID_ABI=arm64-v8a"; \
+		exit 1; \
+	fi
+	@if [ -n "$(ANDROID_KIT_ABI)" ] && [ "$(ANDROID_ABI)" != "$(ANDROID_KIT_ABI)" ]; then \
+		echo "make android: ANDROID_ABI is $(ANDROID_ABI), the kit builds $(ANDROID_KIT_ABI)."; \
+		echo "make android:   qmake follows the kit, so building on would name"; \
+		echo "make android:   the artifact after an ABI it does not contain."; \
+		echo "make android:   Point QT_ANDROID_ROOT at the $(ANDROID_ABI) kit, or"; \
+		echo "make android:   drop ANDROID_ABI and let the kit say."; \
+		exit 1; \
+	fi
 	@if [ -z "$(ANDROID_NDK_ROOT)" ]; then \
 		echo "make android: ANDROID_NDK_ROOT is not set (needed to compile)."; \
 		exit 1; \
@@ -516,6 +555,26 @@ endif
 	if [ -z "$$src" ]; then echo "apk: no .apk was produced" >&2; exit 1; fi; \
 	cp "$$src" $(ANDROID_BUILD_DIR)/$(APK_NAME); \
 	echo "apk: $(ANDROID_BUILD_DIR)/$(APK_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(APK_NAME) | cut -f1))"
+	@# And which ABI is in it, read from the package rather than trusted
+	@# from the variable that named the file. The two came apart once
+	@# already, and an APK whose name says arm64-v8a over x86_64 libraries
+	@# installs on nothing it claims to target -- with no way to tell
+	@# short of unzipping it, which is what this does.
+	@if ! command -v unzip >/dev/null 2>&1; then \
+		echo "apk: no unzip; cannot say which ABI is inside this"; \
+	else \
+		abis=$$(unzip -Z1 $(ANDROID_BUILD_DIR)/$(APK_NAME) 'lib/*' 2>/dev/null \
+		        | cut -d/ -f2 | sort -u | tr '\n' ' ' | sed 's/ *$$//'); \
+		if [ -z "$$abis" ]; then \
+			echo "apk: no native libraries in the package" >&2; \
+			exit 1; \
+		fi; \
+		if [ "$$abis" != "$(ANDROID_ABI)" ]; then \
+			echo "apk: named $(ANDROID_ABI), carries $$abis" >&2; \
+			exit 1; \
+		fi; \
+		echo "apk: carries $$abis, which is what the name says"; \
+	fi
 	@# Who signed it, checked rather than announced. This target claimed a
 	@# release build while shipping the Android debug key, and the only
 	@# reason that was noticed is that somebody ran apksigner by hand.

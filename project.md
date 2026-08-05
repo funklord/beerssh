@@ -2116,6 +2116,17 @@ identical to success. The flags now go to `androiddeployqt` directly, and the
 target reads the certificate back with `apksigner` and fails if a keystore was
 given but the Android debug key came out.
 
+**And the `<abi>` in that name is read back too, for the same reason.** It came
+from a Makefile variable defaulting to `arm64-v8a` on its own, while
+`beerssh.pro` took the real ABI from the Qt kit — so building against the
+x86_64 kit produced `beerssh-0.1.0-arm64-v8a.apk` containing `lib/x86_64`, an
+artifact that installs on nothing it claims to target and whose name is the
+only thing anyone will read. Two places computing one thing. The Makefile now
+reads the ABI from the kit's own `qdevice.pri`, which is where qmake gets it;
+an explicit `ANDROID_ABI` that contradicts the kit is refused rather than
+built; and the finished package is unzipped and its `lib/` compared against
+the name it was given.
+
 **Built:** `make install` now lays down what a Linux desktop actually needs —
 the binary, `se.vibes.beerssh.desktop`, the AppStream `.metainfo.xml`, a
 hicolor scalable icon, and the bundled fonts with their licence files under
