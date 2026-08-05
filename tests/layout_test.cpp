@@ -19,6 +19,7 @@
 #include "ui/ssh_config_import.h"
 #include <QMenu>
 #include <QSplitter>
+#include <QVBoxLayout>
 #include <QSplitterHandle>
 #include <QTabBar>
 #include <QMetaMethod>
@@ -1099,4 +1100,53 @@ void layout_test::a_bell_in_a_visible_pane_is_not_a_missed_one() {
 	container.rebuild();
 	QCoreApplication::processEvents();
 	QVERIFY2(!b->has_unseen_bell(), "showing the pane again means it has been seen");
+}
+
+void layout_test::a_bell_with_the_window_away_is_a_missed_one() {
+	/*
+	 * The case sec 8.3's dot most exists for, and the one having a pane
+	 * does not answer: the whole window is gone. On desktop that is
+	 * sec 5.5's hide-to-tray, on Android sec 5.5's move-to-back, and in
+	 * both the sessions keep running with nobody watching -- which is
+	 * precisely "away".
+	 *
+	 * A pane is necessary and not sufficient. Marking on-screen from the
+	 * layout alone left every pane on screen while the app was in the
+	 * background, so the bell that rang while the user was in another
+	 * app -- the one they most want to know about -- raised nothing.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+
+	/*
+	 * Parented, like the real one: the container lives inside the window,
+	 * so hiding the WINDOW is what has to reach it, not hiding itself.
+	 */
+	QWidget window;
+	QVBoxLayout *box = new QVBoxLayout(&window);
+	bssh_pane_container *container = new bssh_pane_container(&layout, &window);
+	box->addWidget(container);
+
+	window.show();
+	window.resize(1200, 400);
+	layout.set_intent({a});
+	QCoreApplication::processEvents();
+	QCOMPARE(container->pane_count(), 1);
+
+	a->emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY2(!a->has_unseen_bell(), "the window is up and the pane is on it");
+
+	window.hide();
+	QCoreApplication::processEvents();
+
+	a->emulator()->feed(QByteArrayLiteral("\a"));
+	QVERIFY2(a->has_unseen_bell(), "a bell with the window away is exactly what the dot is for");
+
+	/* And coming back is seeing it. */
+	window.show();
+	QCoreApplication::processEvents();
+	QVERIFY2(!a->has_unseen_bell(), "the window came back, so it has been seen");
 }

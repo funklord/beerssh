@@ -52,6 +52,12 @@ public:
 	 */
 	void equalize_panes();
 
+private:
+	/* Marks the panes on screen, or away if this widget is not showing. */
+	void update_on_screen();
+
+public:
+
 	/*
 	 * Moves focus one pane left or right. Stops at the ends rather than
 	 * wrapping: with two panes, wrapping makes "left" and "right" do the
@@ -70,6 +76,14 @@ protected:
 	 * installed on each rebuild rather than once.
 	 */
 	bool eventFilter(QObject *watched, QEvent *event) override;
+
+	/*
+	 * The window going and coming back is the other half of "on screen"
+	 * (sec 8.3): hidden to the tray or moved to the back, the panes are
+	 * still laid out and nobody is looking at them.
+	 */
+	void showEvent(QShowEvent *event) override;
+	void hideEvent(QHideEvent *event) override;
 
 signals:
 	/* The focused pane changed -- the window retargets its shortcuts. */

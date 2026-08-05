@@ -1024,6 +1024,18 @@ the same number for a layout manager that had quietly stopped working.
   pane is on screen, one without is a tab. The four dot states, the rule that
   **dead beats an unheard bell**, and the light/dark contrast floor for the
   colours were all already built and tested.
+  **A pane is necessary and not sufficient: the window has to be up too.**
+  Answering from the layout alone left every pane "on screen" while the whole
+  app was hidden — the tray on desktop, the task moved to the back on Android
+  (§5.5) — so the bell that rang while the user was in another program, the one
+  they most want to know about, raised nothing at all. `isVisible()` answers
+  for the widget and every ancestor, which is exactly the question, and coming
+  back counts as having seen it.
+  **[OPEN]** Whether a window that is *visible but not focused* — another app
+  in front on a desktop — should count as away as well. Arguably yes by the
+  same reading; equally, a dot that appears whenever you glance at a browser is
+  one people learn to ignore, which costs the state its whole value. Left as
+  the narrow rule (gone, not merely behind) until someone decides.
 - **The OSC title chain was built, tested and correct** — OSC title, then the
   profile name, then `user@host:port`, never blank. One edge now pinned that
   was not: a remote *clearing* its title with an empty `OSC 0`, which tmux and

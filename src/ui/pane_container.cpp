@@ -116,9 +116,9 @@ void bssh_pane_container::rebuild() {
 	for (bssh_session *session : m_sessions) {
 		if (!panes.contains(session)) session->set_on_screen(false);
 	}
-	for (bssh_session *session : panes) session->set_on_screen(true);
 
 	m_sessions = panes;
+	update_on_screen();
 
 	for (bssh_session *session : panes) {
 		bssh_terminal_view *view = new bssh_terminal_view(m_splitter);
@@ -302,4 +302,30 @@ bool bssh_pane_container::eventFilter(QObject *watched, QEvent *event) {
 	}
 
 	return QWidget::eventFilter(watched, event);
+}
+
+void bssh_pane_container::update_on_screen() {
+	/*
+	 * A pane is NECESSARY and not sufficient: the window showing it has
+	 * to be up as well.
+	 *
+	 * Marking on-screen from the layout alone left every pane "on screen"
+	 * while the whole app was hidden -- the tray on desktop (sec 5.5),
+	 * the task moved to the back on Android -- so the bell that rang
+	 * while the user was in another program, which is the one they most
+	 * want to know about, raised nothing at all. isVisible() answers for
+	 * this widget and every ancestor, which is exactly the question.
+	 */
+	const bool showing = isVisible();
+	for (bssh_session *session : m_sessions) session->set_on_screen(showing);
+}
+
+void bssh_pane_container::showEvent(QShowEvent *event) {
+	QWidget::showEvent(event);
+	update_on_screen();
+}
+
+void bssh_pane_container::hideEvent(QHideEvent *event) {
+	QWidget::hideEvent(event);
+	update_on_screen();
 }
