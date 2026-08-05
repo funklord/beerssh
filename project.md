@@ -514,6 +514,33 @@ quirks on Android.
   calling the input layer done.
 - Support **key repeat**, modifier chords, and a configurable **Caps→Ctrl / map
   keys** option (power-user expectation).
+  **Caps→Ctrl is built, and it is honestly partial.** Caps Lock arms Ctrl for
+  the next key — the same sticky modifier the on-screen row uses (§6.2), so a
+  user meets one behaviour rather than two — and a second press disarms it.
+  Off by default, stored in `app.ini` beside the key row and the theme, because
+  it is a fact about the keyboard in front of the user rather than about the
+  machine at the other end.
+  **Sticky rather than hold-to-Ctrl, and that is forced rather than chosen:**
+  only key *presses* reach `bssh_input_router` — the terminal view implements
+  `keyPressEvent` and not `keyReleaseEvent` — so a hold reading would set a
+  modifier with nothing able to clear it, and every key after it would become a
+  control character.
+  **What it cannot do is stop the OS toggling its own caps state.** The key
+  reaches the compositor before any application sees it, so the lock still
+  flips and still affects other programs; no Qt application can prevent that. A
+  permanent swap belongs in the keyboard layout (`setxkbmap`, `/etc/default/
+  keyboard`), and the setting's own tooltip says so rather than letting the
+  user discover it. This is the terminal doing what it can inside its own
+  window.
+  **The wiring is tested, not just the behaviour**, because that is the half
+  this project keeps getting wrong: §6.2 records the key row supporting three
+  visibility modes since M3 with nothing ever setting one, and §10.1 records
+  the override badge built on one editor while the other resolved against the
+  app defaults. A router test and a persistence test both pass with the window
+  never calling the setter, so a third test opens a session through an actual
+  window and asks the session's own router.
+  Still not built: general key remapping. `map keys` above is broader than one
+  key, and nothing yet lets a user say which.
 - **Pane navigation shortcuts** once splits exist (§8): e.g. `Ctrl+Alt+Arrow` to
   move focus between panes, `Ctrl+Shift+T` new tab. These must be **intercepted
   before** the byte translation and be **user-remappable**, because any chord you

@@ -405,6 +405,16 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	connect(m_registry, &bssh_session_registry::session_added,
 	         this, [this, handle_shortcut](bssh_session *session) {
 		/*
+		 * The device settings apply to a session opened AFTER they were
+		 * read, too. apply_device_settings() walks the registry, so a
+		 * session created later would otherwise start with the router's
+		 * own defaults and quietly ignore the choice (sec 6.1).
+		 */
+		if (session->input_router()) {
+			session->input_router()->set_caps_as_ctrl(bssh_app_settings().caps_as_ctrl());
+		}
+
+		/*
 		 * Reconnection is only real to the user if they can see it. A
 		 * terminal that has silently stopped receiving output looks
 		 * identical to one whose remote is merely quiet (sec 5.3).
@@ -815,6 +825,17 @@ void bssh_main_window::apply_device_settings() {
 			view->set_raise_contrast(raise);
 			view->set_long_press_menu(hold);
 		}
+	}
+
+	/*
+	 * Caps as Ctrl reaches every session's router, not just the focused
+	 * one (sec 6.1). It is a fact about the keyboard in front of the
+	 * user, so a setting that only took effect on the tab that happened
+	 * to be open would be one they had to set again by switching tabs.
+	 */
+	const bool caps = settings.caps_as_ctrl();
+	for (bssh_session *session : m_registry->sessions()) {
+		if (session->input_router()) session->input_router()->set_caps_as_ctrl(caps);
 	}
 }
 

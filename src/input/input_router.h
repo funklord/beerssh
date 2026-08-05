@@ -62,6 +62,28 @@ public:
 	void send_key(int key, quint8 modifiers);
 
 	/*
+	 * Caps Lock arms Ctrl for the next key, rather than sending itself
+	 * (sec 6.1). Off by default.
+	 *
+	 * STICKY rather than held-down, and that is forced rather than
+	 * chosen: only key PRESSES reach this router -- the terminal view
+	 * implements keyPressEvent and not keyReleaseEvent -- so a
+	 * hold-to-Ctrl reading would set a modifier with nothing able to
+	 * clear it, and every key after it would become a control character.
+	 * Sticky is also what the on-screen row already does for Ctrl and
+	 * Alt (sec 6.2), so a user meets one behaviour rather than two.
+	 *
+	 * What this CANNOT do is stop the operating system toggling its own
+	 * caps state: the key reaches the compositor before it reaches any
+	 * application, so the lock still flips and still affects other
+	 * programs. A real remap belongs in the OS keyboard layout; this is
+	 * the terminal doing what it can within its own window, and the
+	 * setting says so.
+	 */
+	void set_caps_as_ctrl(bool caps_as_ctrl) { m_caps_as_ctrl = caps_as_ctrl; }
+	bool caps_as_ctrl() const { return m_caps_as_ctrl; }
+
+	/*
 	 * Chords the application keeps rather than sending to the remote.
 	 * Deliberately a short list: every chord stolen here is one the
 	 * remote shell can never receive again (sec 6.1), so this stays
@@ -93,6 +115,7 @@ private:
 	quint8 modifiers_for(QKeyEvent *event) const;
 
 	bssh_emulator *m_emulator;
+	bool m_caps_as_ctrl;
 	quint8 m_sticky;
 };
 

@@ -7,7 +7,8 @@
 bssh_input_router::bssh_input_router(bssh_emulator *emulator, QObject *parent)
     : QObject(parent),
       m_emulator(emulator),
-      m_sticky(bssh_emulator::MOD_NONE) {
+      m_sticky(bssh_emulator::MOD_NONE),
+      m_caps_as_ctrl(false) {
 }
 
 quint8 bssh_input_router::modifiers_for(QKeyEvent *event) const {
@@ -22,6 +23,28 @@ quint8 bssh_input_router::modifiers_for(QKeyEvent *event) const {
 
 bool bssh_input_router::handle_key(QKeyEvent *event) {
 	if (!m_emulator) return false;
+
+	/*
+	 * Caps Lock as Ctrl (sec 6.1), before anything else looks at the key.
+	 *
+	 * It arms the same sticky modifier the on-screen row uses, so the
+	 * next key is Ctrl-something and the button on the row -- if there is
+	 * one -- lights up to say so. Consumed either way: Caps Lock has no
+	 * escape sequence of its own, so passing it on would send nothing
+	 * while leaving the modifier armed.
+	 *
+	 * Toggling rather than setting, so a second press disarms it. The
+	 * lock the operating system is keeping is beyond reach here (see the
+	 * header), and pressing Caps twice to undo a mistake is what a user
+	 * will try.
+	 */
+	if (event->key() == Qt::Key_CapsLock) {
+		if (!m_caps_as_ctrl) return false;
+
+		set_sticky_modifiers(m_sticky ^ bssh_emulator::MOD_CTRL);
+		emit sticky_modifiers_changed(m_sticky);
+		return true;
+	}
 
 	/*
 	 * Application chords first, before any translation: whatever is

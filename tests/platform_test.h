@@ -23,6 +23,7 @@ private slots:
 	void close_policy_asks_only_when_something_is_live();
 	void the_window_opens_on_the_front_door();
 	void the_key_row_setting_survives_a_restart();
+	void the_caps_setting_survives_a_restart();
 
 	/*
 	 * A failure reason is a sentence, and a QLabel asks for room for all

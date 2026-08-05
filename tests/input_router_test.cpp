@@ -609,3 +609,61 @@ void input_router_test::the_fn_key_reaches_the_function_keys() {
 	QVERIFY2(labels.contains(QStringLiteral("Esc")), "Fn must come back to the real row");
 	QVERIFY2(!labels.contains(QStringLiteral("F1")), "and leave the function keys behind");
 }
+
+void input_router_test::caps_lock_can_be_made_to_send_ctrl() {
+	/*
+	 * sec 6.1's Caps->Ctrl option, which was specified and absent. Off by
+	 * default, because the only honest default for a preference about
+	 * somebody's keyboard habit is the one that changes nothing.
+	 */
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	QVERIFY2(!router.caps_as_ctrl(), "this must be off until asked for");
+
+	/* Off: Caps is not the router's business and it says so. */
+	QKeyEvent caps(QEvent::KeyPress, Qt::Key_CapsLock, Qt::NoModifier);
+	QVERIFY2(!router.handle_key(&caps), "an unasked-for Caps must pass through untouched");
+	QCOMPARE(router.sticky_modifiers(), quint8(bssh_emulator::MOD_NONE));
+
+	router.set_caps_as_ctrl(true);
+
+	/*
+	 * On: Caps arms Ctrl for the next key, the same sticky modifier the
+	 * on-screen row uses, and is consumed -- Caps Lock has no escape
+	 * sequence of its own, so passing it on would send nothing while
+	 * leaving the modifier armed.
+	 */
+	QSignalSpy armed(&router, &bssh_input_router::sticky_modifiers_changed);
+	QVERIFY2(router.handle_key(&caps), "Caps must be consumed once it means Ctrl");
+	QCOMPARE(router.sticky_modifiers(), quint8(bssh_emulator::MOD_CTRL));
+	QCOMPARE(armed.count(), 1);
+
+	/* And the next key is Ctrl-something. */
+	QKeyEvent letter(QEvent::KeyPress, Qt::Key_C, Qt::NoModifier, QStringLiteral("c"));
+	router.handle_key(&letter);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x03"));
+
+	/* Spent, like every other sticky modifier. */
+	QCOMPARE(router.sticky_modifiers(), quint8(bssh_emulator::MOD_NONE));
+
+	/*
+	 * Pressing it twice disarms rather than arming harder: the operating
+	 * system's own caps lock is beyond reach here, so pressing Caps again
+	 * to undo a mistake is what a user will try.
+	 */
+	router.handle_key(&caps);
+	QCOMPARE(router.sticky_modifiers(), quint8(bssh_emulator::MOD_CTRL));
+	router.handle_key(&caps);
+	QCOMPARE(router.sticky_modifiers(), quint8(bssh_emulator::MOD_NONE));
+
+	/*
+	 * A letter typed with caps lock genuinely on still sends the control
+	 * byte, not a different one: the translation reads the KEY, and Qt
+	 * reports Key_C whether the text is "c" or "C".
+	 */
+	router.handle_key(&caps);
+	QKeyEvent shouted(QEvent::KeyPress, Qt::Key_C, Qt::NoModifier, QStringLiteral("C"));
+	router.handle_key(&shouted);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x03"));
+}

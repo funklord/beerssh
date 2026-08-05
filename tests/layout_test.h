@@ -68,6 +68,7 @@ private slots:
 	void a_divider_is_thumb_sized_only_where_a_thumb_uses_it();
 	void a_bell_in_a_visible_pane_is_not_a_missed_one();
 	void a_bell_with_the_window_away_is_a_missed_one();
+	void the_caps_setting_reaches_a_sessions_router();
 	void backing_out_of_a_session_reaches_the_host_list();
 };
 

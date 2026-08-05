@@ -95,6 +95,21 @@ void bssh_app_settings::set_context_menu(context_menu_t layout) {
 	file.sync();
 }
 
+bool bssh_app_settings::caps_as_ctrl() const {
+	if (m_path.isEmpty()) return false;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	return file.value(QStringLiteral("input/caps_as_ctrl"), false).toBool();
+}
+
+void bssh_app_settings::set_caps_as_ctrl(bool caps_as_ctrl) {
+	if (m_path.isEmpty()) return;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	file.setValue(QStringLiteral("input/caps_as_ctrl"), caps_as_ctrl);
+	file.sync();
+}
+
 QString bssh_app_settings::theme() const {
 	if (m_path.isEmpty()) return QStringLiteral("system");
 

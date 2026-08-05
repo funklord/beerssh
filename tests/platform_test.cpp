@@ -270,3 +270,35 @@ void platform_test::the_theme_setting_survives_a_restart() {
 	QCOMPARE(bssh_theme::from_text(QStringLiteral("chartreuse")), bssh_theme::MODE_SYSTEM);
 	QCOMPARE(bssh_theme::to_text(bssh_theme::MODE_SYSTEM), QStringLiteral("system"));
 }
+
+void platform_test::the_caps_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	/*
+	 * sec 6.1's Caps->Ctrl, stored beside the key row and the theme in
+	 * app.ini rather than on a preset: it is a fact about the keyboard in
+	 * front of the user, not about the machine at the other end, so it
+	 * must not change when they open a different host.
+	 */
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(!settings.caps_as_ctrl(), "the default must change nothing");
+
+		settings.set_caps_as_ctrl(true);
+	}
+
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY(reopened.caps_as_ctrl());
+	}
+
+	/* And it can be turned off again, which a write-once bug would hide. */
+	{
+		bssh_app_settings settings(dir.path());
+		settings.set_caps_as_ctrl(false);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY(!reopened.caps_as_ctrl());
+	}
+}

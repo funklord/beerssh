@@ -74,6 +74,17 @@ public:
 	key_row_visibility_t key_row_visibility() const;
 	void set_key_row_visibility(key_row_visibility_t visibility);
 
+	/*
+	 * Caps Lock sends Ctrl instead (sec 6.1), off by default.
+	 *
+	 * A plain bool rather than the three-state shape the others use:
+	 * there is no device that can be asked whether its owner wants this.
+	 * It is a preference about a keyboard habit, and the only honest
+	 * default is the one that changes nothing.
+	 */
+	bool caps_as_ctrl() const;
+	void set_caps_as_ctrl(bool caps_as_ctrl);
+
 	/* Where app.ini lives; empty when no directory could be found. */
 	QString path() const { return m_path; }
 

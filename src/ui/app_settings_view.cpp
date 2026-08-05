@@ -90,6 +90,15 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	if (touch) m_context_menu->setMinimumHeight(48);
 	form->addRow(QStringLiteral("Terminal menu"), m_context_menu);
 
+	m_caps_as_ctrl = new QCheckBox(QStringLiteral("Caps Lock sends Ctrl"), this);
+	m_caps_as_ctrl->setToolTip(
+	        QStringLiteral("Caps Lock arms Ctrl for the next key, in this terminal only. "
+	                        "Your system still toggles its own caps lock -- no application "
+	                        "can prevent that -- so a permanent swap belongs in your "
+	                        "keyboard layout instead."));
+	if (touch) m_caps_as_ctrl->setMinimumHeight(48);
+	form->addRow(QString(), m_caps_as_ctrl);
+
 	m_raise_contrast = new QCheckBox(QStringLiteral("Raise low-contrast colours"), this);
 	m_raise_contrast->setToolTip(
 	        QStringLiteral("Colour schemes are reproduced exactly, and some of them are hard "
@@ -179,6 +188,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	}
 
 	const bssh_app_settings settings;
+	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 
 	const int menu_index = m_context_menu->findData(int(settings.context_menu()));
@@ -199,6 +209,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] { commit(); });
 	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] { commit(); });
 	connect(m_context_menu, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] { commit(); });
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
 }
 
@@ -210,6 +221,7 @@ void bssh_app_settings_view::commit() {
 	stored.set_context_menu(
 	        bssh_app_settings::context_menu_t(m_context_menu->currentData().toInt()));
 	stored.set_raise_contrast(m_raise_contrast->isChecked());
+	stored.set_caps_as_ctrl(m_caps_as_ctrl->isChecked());
 
 	/* Applied immediately: a setting that waits for a restart reads as a
 	 * setting that did not work. */

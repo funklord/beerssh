@@ -27,6 +27,8 @@
 #include "ui/main_window.h"
 #include "fake_ssh_session.h"
 #include "layout_test.h"
+#include "input/input_router.h"
+#include "model/app_settings.h"
 #include "model/session.h"
 #include "model/session_registry.h"
 #include "term/emulator.h"
@@ -1149,4 +1151,39 @@ void layout_test::a_bell_with_the_window_away_is_a_missed_one() {
 	window.show();
 	QCoreApplication::processEvents();
 	QVERIFY2(!a->has_unseen_bell(), "the window came back, so it has been seen");
+}
+
+void layout_test::the_caps_setting_reaches_a_sessions_router() {
+	/*
+	 * The half that this project keeps getting wrong: a setting that is
+	 * stored, read and applied to nothing.
+	 *
+	 * sec 6.2 records it happening to the key row -- three visibility
+	 * modes supported since M3 with nothing ever setting one, so AUTO was
+	 * the only reachable state -- and sec 10.1 records it happening to the
+	 * override badge, built on one editor while the other resolved against
+	 * the app defaults. A router test and a persistence test would both
+	 * pass with the window never calling the setter.
+	 *
+	 * Safe to write because the suite sandboxes HOME and XDG_CONFIG_HOME
+	 * (tests/main.cpp); restored afterwards regardless, since it is a
+	 * process-wide file and the next test should not inherit it.
+	 */
+	const bool original = bssh_app_settings().caps_as_ctrl();
+	bssh_app_settings().set_caps_as_ctrl(true);
+
+	{
+		bssh_main_window window;
+		bssh_session_registry *registry = window.findChild<bssh_session_registry *>();
+		QVERIFY(registry);
+
+		/* A session opened AFTER the setting was stored. */
+		bssh_session *session = registry->create(named(QStringLiteral("a")));
+		QVERIFY(session->input_router());
+		QVERIFY2(session->input_router()->caps_as_ctrl(),
+		          "the stored setting never reached the session's router");
+	}
+
+	bssh_app_settings().set_caps_as_ctrl(original);
+	QCOMPARE(bssh_app_settings().caps_as_ctrl(), original);
 }
