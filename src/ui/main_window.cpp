@@ -1653,17 +1653,7 @@ void bssh_main_window::open_default_session() {
 	 * or a session restored from a previous run. */
 	if (m_registry->count() > 0) return;
 
-	bssh_profile_t local;
-	local.local = true;
-
-	/*
-	 * Named for what it is rather than left blank: this string becomes
-	 * the tab label and the window title until the shell sets its own
-	 * through OSC (sec 8.3), and "" would leave both empty.
-	 */
-	local.name = QStringLiteral("Local shell");
-
-	open_profile(local);
+	open_profile(bssh_profile_t::local_shell());
 }
 
 

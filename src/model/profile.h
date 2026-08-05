@@ -89,6 +89,22 @@ struct bssh_profile_t {
 	 */
 	bool is_valid() const { return local || !host.isEmpty(); }
 
+	/*
+	 * The shell on this machine (sec 2). One place, because two callers
+	 * want it -- what the desktop opens with, and the row at the top of
+	 * the host list -- and a second spelling of "what a local session is"
+	 * would be a second thing to keep in step.
+	 *
+	 * The name becomes the tab label and the window title until the shell
+	 * sets its own through OSC (sec 8.3), so it is not left empty.
+	 */
+	static bssh_profile_t local_shell() {
+		bssh_profile_t profile;
+		profile.local = true;
+		profile.name = QStringLiteral("Local shell");
+		return profile;
+	}
+
 	/* "user@host" or "user@host:port" when the port is not the default. */
 	QString target() const {
 		QString text = user.isEmpty() ? host : user + QLatin1Char('@') + host;

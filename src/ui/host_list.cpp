@@ -201,9 +201,38 @@ void bssh_host_list::resizeEvent(QResizeEvent *event) {
 	m_add->raise();
 }
 
+/*
+ * The row for the shell on this machine (sec 2). Negative because a stored
+ * profile's id is positive and the empty-list placeholder uses 0, so all
+ * three kinds of row stay distinguishable by one field.
+ */
+static const int BSSH_LOCAL_SHELL_ROW = -1;
+
 void bssh_host_list::reload() {
 	m_list->clear();
 	if (!m_store) return;
+
+	/*
+	 * The local shell first, and always present (sec 2).
+	 *
+	 * First because it is the one entry that is always available and
+	 * needs no setting up -- the same reason a browser puts a new tab at
+	 * the near end rather than sorted among the bookmarks. It is
+	 * synthetic rather than stored: there is nothing to save, and a row
+	 * that could be edited or deleted would let somebody remove the only
+	 * session that always works.
+	 *
+	 * Offered on touch as well, even though a phone does not OPEN with
+	 * one (sec 8.5): an Android sandbox has little for a shell to do, but
+	 * "little" is not "nothing", and being unable to reach it at all is a
+	 * different thing from it not being the default.
+	 */
+	{
+		QListWidgetItem *item = new QListWidgetItem(m_list);
+		item->setText(QStringLiteral("Local shell\nthis device"));
+		item->setData(Qt::UserRole, BSSH_LOCAL_SHELL_ROW);
+		item->setSizeHint(QSize(0, BSSH_ROW_HEIGHT_DP));
+	}
 
 	const QList<bssh_profile_t> profiles = m_store->profiles();
 	for (const bssh_profile_t &profile : profiles) {
@@ -269,6 +298,15 @@ void bssh_host_list::on_row_menu(const QPoint &where) {
 	const int id = item->data(Qt::UserRole).toInt();
 	if (id == 0) return;
 
+	/*
+	 * No menu on the local shell. Edit would have nothing to edit -- it
+	 * is not stored -- and Delete would offer to remove the one session
+	 * that always works, from a store it was never in. An absent menu is
+	 * the honest answer; a menu of two disabled entries would only invite
+	 * the question again.
+	 */
+	if (id == BSSH_LOCAL_SHELL_ROW) return;
+
 	const bssh_profile_t profile = m_store->profile(id);
 
 	QMenu menu(this);
@@ -303,6 +341,11 @@ void bssh_host_list::on_row_activated() {
 
 	const int id = item->data(Qt::UserRole).toInt();
 	if (id == 0) return;
+
+	if (id == BSSH_LOCAL_SHELL_ROW) {
+		emit open_requested(bssh_profile_t::local_shell());
+		return;
+	}
 
 	emit open_requested(m_store->profile(id));
 }

@@ -41,6 +41,7 @@ private slots:
 	void the_key_row_fits_a_phone();
 	void the_desktop_opens_a_shell_and_the_phone_opens_its_config();
 	void the_config_is_reachable_from_a_terminal();
+	void the_host_list_offers_the_local_shell();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already
 	 * contemplates when it talks about tiling one into a half-screen

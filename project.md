@@ -1408,6 +1408,18 @@ than making a second one. Categories beyond *Session* are listed and say
 which milestone fills them in, because a pane that looks finished and does
 nothing is worse than one that admits it is empty.
 
+**The local shell is the first row of the host list**, and always there (§2).
+Synthetic rather than stored: there is nothing to save, and a row that could be
+edited or deleted would let somebody remove the only session that always works
+— so it carries no context menu at all, since Edit would have nothing to edit
+and Delete would offer to remove it from a store it was never in. First in the
+list for the reason a browser puts a new tab at the near end rather than sorted
+among the bookmarks: it is the entry that needs no setting up, and it is what a
+first-run screen can offer before anything is configured. Present on touch as
+well, even though a phone does not *open* with one — an Android sandbox has
+little for a shell to do, but "little" is not "nothing", and being unable to
+reach it is a different thing from it not being the default.
+
 **Touch: a full-bleed host list**, and its editor is a **page, not a
 dialog**. The first Android build used a `QInputDialog` to add a host, and
 driving it on a device showed exactly what this section warns about: a

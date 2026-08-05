@@ -19,6 +19,7 @@
 #include "ui/session_dialog.h"
 #include "ui/ssh_config_import.h"
 #include <QCheckBox>
+#include <QListWidget>
 #include <QMenu>
 #include <QSplitter>
 #include <QVBoxLayout>
@@ -1402,4 +1403,61 @@ void layout_test::the_config_is_reachable_from_a_terminal() {
 
 		delete menu;
 	}
+}
+
+void layout_test::the_host_list_offers_the_local_shell() {
+	/*
+	 * sec 2's local shell, reachable from the list rather than only at
+	 * startup. A phone does not OPEN with one -- an Android sandbox has
+	 * little for a shell to do -- but "little" is not "nothing", and
+	 * being unable to reach it at all is a different thing from it not
+	 * being the default.
+	 */
+	const forced_touch_t thumb(1);
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	bssh_host_list list(&store);
+	QListWidget *rows = list.findChild<QListWidget *>();
+	QVERIFY(rows);
+
+	/*
+	 * Present with no hosts saved at all, which is the first screen a new
+	 * user sees: one thing that works before anything is configured.
+	 */
+	QVERIFY2(rows->count() >= 1, "the list must carry the local shell before any host");
+	QVERIFY2(rows->item(0)->text().contains(QStringLiteral("Local shell")),
+	          qPrintable(QStringLiteral("first row is \"%1\"").arg(rows->item(0)->text())));
+
+	/* Opening it asks for a LOCAL profile, not a lookup that would fail. */
+	QSignalSpy opened(&list, &bssh_host_list::open_requested);
+	rows->setCurrentRow(0);
+	emit rows->itemClicked(rows->item(0));
+
+	QCOMPARE(opened.count(), 1);
+	const bssh_profile_t asked = opened.first().at(0).value<bssh_profile_t>();
+	QVERIFY2(asked.local, "the row must open a local session");
+	QVERIFY2(asked.is_valid(), "and a local profile with no host is still valid");
+
+	/*
+	 * And a saved host still opens as itself -- the sentinel row must not
+	 * have made every row local.
+	 */
+	bssh_profile_t saved;
+	saved.name = QStringLiteral("build box");
+	saved.host = QStringLiteral("build.example");
+	store.save(saved);
+	list.reload();
+
+	QVERIFY(rows->count() >= 2);
+	opened.clear();
+	rows->setCurrentRow(1);
+	emit rows->itemClicked(rows->item(1));
+
+	QCOMPARE(opened.count(), 1);
+	const bssh_profile_t host = opened.first().at(0).value<bssh_profile_t>();
+	QVERIFY2(!host.local, "a saved host must not open as a local shell");
+	QCOMPARE(host.host, QStringLiteral("build.example"));
 }
