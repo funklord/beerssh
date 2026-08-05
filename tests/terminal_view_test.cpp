@@ -912,7 +912,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 4);
+	QCOMPARE(actions.size(), 6);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -925,6 +925,16 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QCOMPARE(actions.at(1)->text(), QStringLiteral("&Paste"));
 	QVERIFY(actions.at(2)->isSeparator());
 	QCOMPARE(actions.at(3)->text(), QStringLiteral("Select &All"));
+
+	/*
+	 * And the way to the configuration, behind its own separator (sec 2):
+	 * with the desktop opening straight into a local shell, this menu is
+	 * a pointer's only route to the host list and the settings. It is a
+	 * different kind of thing from the edit verbs and is separated from
+	 * them for the same reason Select All is separated from Copy.
+	 */
+	QVERIFY(actions.at(4)->isSeparator());
+	QCOMPARE(actions.at(5)->text(), QStringLiteral("&Hosts and Settings"));
 
 	/*
 	 * Access keys on every verb, which is what makes the menu usable from
@@ -942,7 +952,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * Paste is should find it there every time.
 	 */
 	QVERIFY2(!actions.at(0)->isEnabled(), "Copy must be offered and disabled, not hidden");
-	QCOMPARE(actions.size(), 4);
+	QCOMPARE(actions.size(), 6);
 
 	delete menu;
 }

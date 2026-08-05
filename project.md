@@ -1422,7 +1422,27 @@ thumb is the single most obvious way a Widgets app announces it was not
 written for touch. **Still Widgets, still no QML** (§2): the touch
 affordances here are a stylesheet, a row height and a gesture recogniser.
 
-**Which one appears is a capability question, not an OS question** —
+**What each device OPENS WITH is a second capability question**, asked the same
+way: `opens_a_local_shell(touch_primary)`. The desktop opens a local shell
+(§2) — a terminal that opens showing a connection dialog cannot be used as a
+terminal — and touch opens its configuration, because an Android app sandbox
+has no userland worth driving a shell from.
+**The configuration must therefore always be reachable from a terminal**, and
+on desktop that is now the *only* way to reach it. Touch has Back (§8.3); a
+pointer gets *Hosts and Settings* on the terminal's own context menu (§6.4),
+behind its own separator. That menu is the one surface both platforms already
+share, so one entry serves both. Without it the desktop would have exactly the
+one-way door that made the tab bar unreachable on Android — the same defect
+arriving on the other platform by the other road.
+**Opened by `main()`, never by the constructor.** Doing it in the constructor
+forked a real shell for every `bssh_main_window` anything built — the fifteen
+the suite constructs, and the one `--self-test` makes — and since a live
+session asks the platform to stay resident, `quitOnLastWindowClosed` went false
+and the smoke test never returned. A window is a widget tree, not a running
+program; `import_launch_document()` is called from `main()` for the same reason
+and said so first.
+
+**Which front door appears is a capability question, not an OS question** —
 `front_door_for(touch_primary)`, the same rule as the on-screen key row
 (§6.2). A convertible in tablet mode gets the list; a phone docked with a
 keyboard and a monitor does not. Only the chosen one is constructed: two

@@ -1341,3 +1341,65 @@ void layout_test::the_key_row_fits_a_phone() {
 	                                     "so this row has lost keys rather than gained a "
 	                                     "scroll area").arg(widest)));
 }
+
+void layout_test::the_desktop_opens_a_shell_and_the_phone_opens_its_config() {
+	/*
+	 * sec 2's reversed non-goal. The desktop opens a local shell, because
+	 * a terminal that opens showing a connection dialog cannot be used as
+	 * a terminal; touch opens its configuration, because an Android app
+	 * sandbox has no userland worth driving a shell from -- which is the
+	 * gap Termux exists to fill, and not one this app is filling.
+	 *
+	 * A capability question, asked the same way as the front door's: a
+	 * convertible in tablet mode gets the phone's answer.
+	 */
+	QVERIFY2(bssh_main_window::opens_a_local_shell(false),
+	          "a pointer device opens a shell");
+	QVERIFY2(!bssh_main_window::opens_a_local_shell(true),
+	          "a phone opens its configuration, not a shell it cannot use");
+
+	/* And the front door each device builds is unchanged by that. */
+	QCOMPARE(bssh_main_window::front_door_for(true), bssh_main_window::FRONT_DOOR_HOST_LIST);
+	QCOMPARE(bssh_main_window::front_door_for(false),
+	          bssh_main_window::FRONT_DOOR_SESSION_DIALOG);
+}
+
+void layout_test::the_config_is_reachable_from_a_terminal() {
+	/*
+	 * "The config menu should always be reachable." On touch that is Back
+	 * (sec 8.3); with the desktop now starting IN a terminal, a pointer
+	 * needs its own route or the window has none at all -- the same
+	 * one-way door that made the tab bar unreachable on Android, arriving
+	 * on the other platform by the other road.
+	 *
+	 * Checked on the assembled menu rather than on the handler, because
+	 * an entry that is not on the menu is not a route however well the
+	 * handler works.
+	 */
+	for (int touch = 0; touch <= 1; ++touch) {
+		const forced_touch_t arrangement(touch);
+
+		bssh_main_window window;
+		QMenu *menu = window.build_terminal_menu(&window);
+		QVERIFY(menu);
+
+		bool has_route = false;
+		for (const QAction *action : menu->actions()) {
+			if (action->objectName() == QStringLiteral("terminal_front_door")) {
+				has_route = true;
+				QVERIFY2(action->isEnabled(), "the way to the config must not be disabled");
+			}
+		}
+		QVERIFY2(has_route,
+		          touch ? "touch has no menu route to the configuration"
+		                 : "a pointer has no route to the configuration at all");
+
+		/* Separated from the edit verbs, which are a different kind of
+		 * thing -- the same shape sec 6.4 already uses for Select All. */
+		const QList<QAction *> actions = menu->actions();
+		QVERIFY2(actions.size() >= 2 && actions.at(actions.size() - 2)->isSeparator(),
+		          "the way out must not sit flush against Copy and Paste");
+
+		delete menu;
+	}
+}

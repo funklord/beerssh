@@ -1292,6 +1292,23 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	QAction *select_all = menu->addAction(QStringLiteral("Select &All"));
 	select_all->setObjectName(QStringLiteral("terminal_select_all"));
 
+	menu->addSeparator();
+
+	/*
+	 * The way back to the configuration, from the one surface both
+	 * platforms already have (sec 6.4).
+	 *
+	 * It has to be here because the desktop now opens straight into a
+	 * local shell (sec 2): without it, a window that starts in a terminal
+	 * has no route to the host list or the settings at all -- the same
+	 * one-way door that made the tab bar unreachable on Android, arriving
+	 * on the other platform by the other route. Touch reaches the same
+	 * page with Back (sec 8.3); this is what a pointer uses, and it works
+	 * on both.
+	 */
+	QAction *front_door = menu->addAction(QStringLiteral("&Hosts and Settings"));
+	front_door->setObjectName(QStringLiteral("terminal_front_door"));
+
 	apply_menu_layout(menu, layout);
 	return menu;
 }
@@ -1348,7 +1365,24 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	}
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
+		return;
 	}
+
+	const QAction *front_door =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_front_door"));
+	if (chosen == front_door) show_front_door();
+}
+
+void bssh_main_window::show_front_door() {
+	/*
+	 * Whichever one this device built (sec 8.5) -- only the chosen front
+	 * door is constructed, so this asks rather than deciding again.
+	 */
+	if (m_host_list) {
+		m_pages->setCurrentWidget(m_host_list);
+		return;
+	}
+	if (m_session_dialog) m_pages->setCurrentWidget(m_session_dialog);
 }
 
 /*
@@ -1589,6 +1623,47 @@ bool bssh_main_window::showing_front_door() const {
 
 bssh_main_window::front_door_t bssh_main_window::front_door_for(bool touch_primary) {
 	return touch_primary ? FRONT_DOOR_HOST_LIST : FRONT_DOOR_SESSION_DIALOG;
+}
+
+bool bssh_main_window::opens_a_local_shell(bool touch_primary) {
+	/*
+	 * The desktop opens a local shell; touch opens its configuration
+	 * instead (sec 2).
+	 *
+	 * Not because Android cannot run a shell -- /system/bin/sh is there --
+	 * but because an unprivileged app sandbox has no userland worth
+	 * driving from one, which is the gap Termux exists to fill. Opening a
+	 * shell that can do almost nothing would be worse than not offering
+	 * it, so the phone opens the host list, which is what it is for.
+	 *
+	 * A capability question like front_door_for()'s, and asked the same
+	 * way: a convertible in tablet mode gets the phone's answer and a
+	 * docked tablet with a keyboard gets the desktop's.
+	 */
+	return !touch_primary;
+}
+
+void bssh_main_window::open_default_session() {
+	if (!opens_a_local_shell(bssh_platform::instance()
+	                          && bssh_platform::instance()->is_touch_primary())) {
+		return;
+	}
+
+	/* Never on top of something already open -- a command-line target,
+	 * or a session restored from a previous run. */
+	if (m_registry->count() > 0) return;
+
+	bssh_profile_t local;
+	local.local = true;
+
+	/*
+	 * Named for what it is rather than left blank: this string becomes
+	 * the tab label and the window title until the shell sets its own
+	 * through OSC (sec 8.3), and "" would leave both empty.
+	 */
+	local.name = QStringLiteral("Local shell");
+
+	open_profile(local);
 }
 
 

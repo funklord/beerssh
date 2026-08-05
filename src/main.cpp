@@ -114,6 +114,15 @@ int main(int argc, char *argv[]) {
 		 * never under --self-test, which has nobody to dismiss it.
 		 */
 		window.import_launch_document();
+
+		/*
+		 * And what this device opens with: a local shell on desktop
+		 * (sec 2). Here rather than in the constructor because it
+		 * starts a real process -- under --self-test that forked a
+		 * shell and, since a live session asks the platform to stay
+		 * resident, the smoke test then never exited.
+		 */
+		if (target.isEmpty()) window.open_default_session();
 	}
 
 	return app.exec();

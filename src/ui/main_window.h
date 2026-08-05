@@ -83,6 +83,16 @@ public:
 	static front_door_t front_door_for(bool touch_primary);
 
 	/*
+	 * Whether this device opens a local shell at startup rather than its
+	 * configuration (sec 2). Desktop does; touch does not, because an
+	 * Android app sandbox has no userland worth driving a shell from.
+	 *
+	 * Static and beside front_door_for() for the same reason: it is a
+	 * decision about the device, testable without building a window.
+	 */
+	static bool opens_a_local_shell(bool touch_primary);
+
+	/*
 	 * Whether the front door is what is on screen. Exists because its
 	 * absence was not caught by anything: the widgets were tested and
 	 * screenshotted on their own, so a window that never built them
@@ -99,6 +109,21 @@ public:
 	 * happened the first time this ran from the constructor.
 	 */
 	void import_launch_document();
+
+	/*
+	 * Opens what this device starts with: a local shell on desktop, and
+	 * nothing on touch (sec 2).
+	 *
+	 * Called by main() rather than from the constructor, for the same
+	 * reason import_launch_document() is -- and the reason was learned
+	 * here the hard way. Opening it in the constructor forked a real
+	 * shell for every bssh_main_window anything built, including the
+	 * fifteen the test suite constructs and the one --self-test makes;
+	 * and since a live session asks the platform to stay resident,
+	 * quitOnLastWindowClosed went false and the smoke test never
+	 * returned. A window is a widget tree, not a running program.
+	 */
+	void open_default_session();
 
 protected:
 	void changeEvent(QEvent *event) override;
@@ -155,6 +180,8 @@ private:
 	void split_with(bssh_session *session);
 
 	void connect_to(const QString &target);
+
+
 	/*
 	 * The credential flow (sec 11). Split out because it is a sequence of
 	 * decisions -- is one stored, is the store unlocked, should this one
@@ -182,6 +209,13 @@ public:
 
 private:
 	void show_terminal_menu(const QPoint &at);
+
+	/*
+	 * Brings up whichever front door this device built (sec 8.5). The
+	 * configuration must be reachable from a terminal on both platforms,
+	 * and on desktop the terminal is now where the app starts.
+	 */
+	void show_front_door();
 	void show_tab_menu(const QPoint &at);
 
 public:
