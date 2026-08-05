@@ -692,6 +692,70 @@ model on a finger.
 - **Multi-line paste is a footgun**: a paste containing newlines executes
   commands. Warn on multi-line paste by default (a setting), on both platforms.
 
+**The terminal's own context menu — [DECIDED].**
+Right-click on the desktop, press-and-hold on touch: **Copy, Paste, Select All**.
+There was none at all before — the tab bar and the host list had menus and the
+thing the app is *for* did not, and right-click in the terminal did nothing
+whatsoever.
+
+**The desktop terminals of 1995-2010 never agreed about the right button**, and
+that disagreement is the design question. xterm gave it selection extension and
+put its menus behind Ctrl+click; PuTTY made it *paste*, in the Windows console
+tradition, and offered a three-way "Action of mouse buttons" setting because
+even it could not pick one; Konsole and GNOME Terminal put a menu there, and by
+the mid-2000s that had won on the desktop this app is built for. So: a menu —
+and PuTTY's answer to the disagreement, *a setting*, is the part worth copying
+rather than its default.
+
+**The order and the details are the Windows Interface Guidelines' (1995)**,
+which all of those programs were written against and which have not been
+improved on: edit verbs first in their canonical order, object-specific
+commands after a separator, access keys on every item, and **nothing hidden** —
+Copy with no selection is shown disabled rather than removed, so the menu is
+the same shape every time and the hand learns where Paste is.
+
+**Touch changes the metrics and nothing else.** iOS and Android converged on the
+same three verbs from a long press, with much larger targets, so the rows grow
+to §6.2's 48dp floor and the keyboard shortcuts drop off the labels — they are
+telling somebody with no keyboard which chord to press. Which verbs they are,
+and in what order, does not change between the two. Since that is *all* touch
+changes, it is one function (`apply_menu_layout`) applied to every context menu
+this window raises, rather than a rule written out inside each menu builder —
+the tab menu had pointer-height rows until it was pulled out.
+
+**Press-and-hold is ours, because Qt does not provide it.** Qt raises
+`customContextMenuRequested` from a right-click and does **not** synthesise a
+context-menu event from a long press on Android — checked on a device, where
+holding a host-list row simply opened that host. So the touch half of §8.3's
+"long-press (touch) or right-click (desktop)" had no implementation at all,
+here or on the host list, for as long as that sentence has been in this
+document. `bssh_long_press` is one event filter used by all three surfaces that
+carry a menu — the terminal, the host list and the tab bar.
+Two things it had to learn on a device. **It fires when the finger LIFTS, not
+when the hold matures**: a popup opened under a finger that is still down is
+dismissed by that finger's own release, so the menu appeared and vanished
+inside the same gesture and every screenshot showed nothing. And **it consumes
+that release**, or the widget behind it treats the gesture as a click too —
+which is how holding a host row opened the host, and how holding in the
+terminal left a selection behind the menu.
+
+**Switchable, defaulting per device** (`Terminal menu` under This device):
+Automatic / Pointer-sized / Touch-sized, the same three-state shape the key row
+and the theme use. Automatic asks `is_touch_primary()`, which is what makes the
+default differ between a desktop and a phone; the override exists because one
+device can be both.
+
+**Middle-click pastes the primary selection**, X11's own convention and older
+than any of these menus. The *publishing* half was already there — selecting
+text made it available to other programs — so the convention worked in one
+direction and looked broken in the other. It pastes PRIMARY, never the
+clipboard: conflating the two is what makes middle-click surprising.
+
+**A program that asked for the mouse keeps the right button.** No menu is raised
+while mouse reporting is on, since a full-screen program that requested button
+events is entitled to them; Shift is the conventional override there, exactly as
+it is for selection.
+
 ---
 
 ## 7. Terminal emulation
@@ -1256,71 +1320,6 @@ the same number for a layout manager that had quietly stopped working.
   text kept as the tooltip and the accessible name so nothing is actually lost.
   Elided rather than wrapped: a status line that grows to three lines takes the
   space from the terminal, which is where the user was looking.
-
-### 6.4 The terminal's context menu — **[DECIDED]**
-
-Right-click on the desktop, press-and-hold on touch: **Copy, Paste, Select All**.
-There was none at all before — the tab bar and the host list had menus and the
-thing the app is *for* did not, and right-click in the terminal did nothing
-whatsoever.
-
-**The desktop terminals of 1995-2010 never agreed about the right button**, and
-that disagreement is the design question. xterm gave it selection extension and
-put its menus behind Ctrl+click; PuTTY made it *paste*, in the Windows console
-tradition, and offered a three-way "Action of mouse buttons" setting because
-even it could not pick one; Konsole and GNOME Terminal put a menu there, and by
-the mid-2000s that had won on the desktop this app is built for. So: a menu —
-and PuTTY's answer to the disagreement, *a setting*, is the part worth copying
-rather than its default.
-
-**The order and the details are the Windows Interface Guidelines' (1995)**,
-which all of those programs were written against and which have not been
-improved on: edit verbs first in their canonical order, object-specific
-commands after a separator, access keys on every item, and **nothing hidden** —
-Copy with no selection is shown disabled rather than removed, so the menu is
-the same shape every time and the hand learns where Paste is.
-
-**Touch changes the metrics and nothing else.** iOS and Android converged on the
-same three verbs from a long press, with much larger targets, so the rows grow
-to §6.2's 48dp floor and the keyboard shortcuts drop off the labels — they are
-telling somebody with no keyboard which chord to press. Which verbs they are,
-and in what order, does not change between the two. Since that is *all* touch
-changes, it is one function (`apply_menu_layout`) applied to every context menu
-this window raises, rather than a rule written out inside each menu builder —
-the tab menu had pointer-height rows until it was pulled out.
-
-**Press-and-hold is ours, because Qt does not provide it.** Qt raises
-`customContextMenuRequested` from a right-click and does **not** synthesise a
-context-menu event from a long press on Android — checked on a device, where
-holding a host-list row simply opened that host. So the touch half of §8.3's
-"long-press (touch) or right-click (desktop)" had no implementation at all,
-here or on the host list, for as long as that sentence has been in this
-document. `bssh_long_press` is one event filter used by all three surfaces that
-carry a menu — the terminal, the host list and the tab bar.
-Two things it had to learn on a device. **It fires when the finger LIFTS, not
-when the hold matures**: a popup opened under a finger that is still down is
-dismissed by that finger's own release, so the menu appeared and vanished
-inside the same gesture and every screenshot showed nothing. And **it consumes
-that release**, or the widget behind it treats the gesture as a click too —
-which is how holding a host row opened the host, and how holding in the
-terminal left a selection behind the menu.
-
-**Switchable, defaulting per device** (`Terminal menu` under This device):
-Automatic / Pointer-sized / Touch-sized, the same three-state shape the key row
-and the theme use. Automatic asks `is_touch_primary()`, which is what makes the
-default differ between a desktop and a phone; the override exists because one
-device can be both.
-
-**Middle-click pastes the primary selection**, X11's own convention and older
-than any of these menus. The *publishing* half was already there — selecting
-text made it available to other programs — so the convention worked in one
-direction and looked broken in the other. It pastes PRIMARY, never the
-clipboard: conflating the two is what makes middle-click surprising.
-
-**A program that asked for the mouse keeps the right button.** No menu is raised
-while mouse reporting is on, since a full-screen program that requested button
-events is entitled to them; Shift is the conventional override there, exactly as
-it is for selection.
 
 ### 8.5 The front door — **[DECIDED]**
 
