@@ -2266,14 +2266,23 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
 - Hide terminal content from the OS screenshot/thumbnail path: `FLAG_SECURE` on
   Android (as a setting). No portable desktop equivalent exists — don't promise
   one in the UI.
-  **[NOT BUILT.]** Nothing in the tree sets it, and there is no setting for it.
-  Recorded rather than quietly implemented because it cannot be verified from
-  here: the whole point is what the OS puts in the recents thumbnail and lets a
-  screenshot capture, which only a device shows. Writing the JNI call and
-  claiming the property on the strength of it compiling would be exactly the
-  kind of unbacked assertion §12.3 exists to prevent. It is a small piece of
-  work — one window flag and one entry on the *This device* page — and it wants
-  a device to land against.
+  **Built, and the OS-level effect is UNTESTED ON A DEVICE** — the same
+  honest half-state as the `POST_NOTIFICATIONS` flow above. `FLAG_SECURE` goes
+  on the Activity's window through JNI, off by default because it restricts the
+  user as well (they cannot screenshot their own terminal either), stored in
+  `app.ini` under `security/`. What is verified here is the plumbing: the
+  setting persists, and the window applies it on every settings change. What
+  cannot be verified without a device is the thing that matters — whether the
+  recents thumbnail actually stops showing somebody's shell.
+  **The capability is asked, not assumed, and that is the load-bearing part.**
+  This section says there is no portable desktop equivalent and not to promise
+  one in the UI, so `can_hide_from_screenshots()` answers *no* on desktop and
+  the checkbox is **absent from the page entirely** rather than present and
+  ineffective. A security control that reports success while doing nothing is
+  worse than a missing one: it is the difference between a user knowing their
+  terminal is in the screenshot and believing it is not. A test asserts the
+  page has no such control on desktop, because "not offered" is a property of
+  the assembled page and nothing else can see it.
 
 ---
 

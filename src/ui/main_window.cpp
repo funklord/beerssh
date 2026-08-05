@@ -837,6 +837,16 @@ void bssh_main_window::apply_device_settings() {
 	for (bssh_session *session : m_registry->sessions()) {
 		if (session->input_router()) session->input_router()->set_caps_as_ctrl(caps);
 	}
+
+	/*
+	 * sec 11's FLAG_SECURE. Applied unconditionally rather than only
+	 * where the platform can honour it: the desktop implementation is a
+	 * no-op and says so, and a caller that had to check first would be
+	 * the second place deciding what each platform can do.
+	 */
+	if (bssh_platform::instance()) {
+		bssh_platform::instance()->set_hide_from_screenshots(settings.hide_from_screenshots());
+	}
 }
 
 void bssh_main_window::apply_key_row_visibility() {

@@ -17,6 +17,7 @@
 #include "ui/password_prompt.h"
 #include "ui/session_dialog.h"
 #include "ui/ssh_config_import.h"
+#include <QCheckBox>
 #include <QMenu>
 #include <QSplitter>
 #include <QVBoxLayout>
@@ -1186,4 +1187,28 @@ void layout_test::the_caps_setting_reaches_a_sessions_router() {
 
 	bssh_app_settings().set_caps_as_ctrl(original);
 	QCOMPARE(bssh_app_settings().caps_as_ctrl(), original);
+}
+
+void layout_test::the_screenshot_setting_is_absent_where_it_cannot_work() {
+	/*
+	 * sec 11's "don't promise one in the UI", asserted on the UI rather
+	 * than on the platform answer alone. The desktop cannot hide a window
+	 * from a screenshot, so the checkbox must not be on the page at all
+	 * -- present-but-ineffective is the failure being avoided, and it is
+	 * one only a test of the assembled page can see.
+	 */
+	const forced_touch_t pointer(0);
+
+	bssh_app_settings_view view;
+	for (const QCheckBox *box : view.findChildren<QCheckBox *>()) {
+		QVERIFY2(!box->text().contains(QStringLiteral("screenshot"), Qt::CaseInsensitive),
+		          "the desktop must not offer a control it cannot honour");
+	}
+
+	/* The page still carries the settings this platform CAN honour. */
+	bool found_caps = false;
+	for (const QCheckBox *box : view.findChildren<QCheckBox *>()) {
+		if (box->text().contains(QStringLiteral("Caps Lock"))) found_caps = true;
+	}
+	QVERIFY2(found_caps, "the rest of the page must still be there");
 }

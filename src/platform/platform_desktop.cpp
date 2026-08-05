@@ -106,6 +106,21 @@ public:
 		return false;
 	}
 
+	bool can_hide_from_screenshots() const override {
+		/*
+		 * No. X11 has no such concept, Wayland's screencopy protocols do
+		 * not offer an opt-out a client can rely on, and neither does
+		 * macOS or Windows in a form worth promising. sec 11 says not to
+		 * pretend otherwise in the UI, so this answers honestly and the
+		 * setting is not offered here at all.
+		 */
+		return false;
+	}
+
+	void set_hide_from_screenshots(bool hide) override {
+		Q_UNUSED(hide);
+	}
+
 	void set_session_count(int count) override {
 		if (!m_tray) return;
 

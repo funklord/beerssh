@@ -24,6 +24,7 @@ private slots:
 	void the_window_opens_on_the_front_door();
 	void the_key_row_setting_survives_a_restart();
 	void the_caps_setting_survives_a_restart();
+	void hiding_from_screenshots_is_not_promised_where_it_cannot_work();
 
 	/*
 	 * A failure reason is a sentence, and a QLabel asks for room for all

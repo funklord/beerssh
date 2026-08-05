@@ -226,6 +226,44 @@ public:
 		return true;
 	}
 
+	bool can_hide_from_screenshots() const override {
+		return true;
+	}
+
+	void set_hide_from_screenshots(bool hide) override {
+		/*
+		 * FLAG_SECURE on the Activity's window (sec 11): the system then
+		 * leaves this app out of screenshots, screen recordings and the
+		 * recents thumbnail. For a terminal that is not a nicety -- the
+		 * recents thumbnail is a picture of whatever was last on screen,
+		 * and on this app that is somebody's shell.
+		 *
+		 * 0x2000 is WindowManager.LayoutParams.FLAG_SECURE, written as
+		 * its value because reaching the constant through JNI costs a
+		 * class lookup and a static field read to learn a number that
+		 * has not changed since API 1.
+		 *
+		 * On the Android main thread, like every other window call here:
+		 * the framework expects window flags from the thread that owns
+		 * the Activity.
+		 */
+		QNativeInterface::QAndroidApplication::runOnAndroidMainThread([hide] {
+			const QJniObject activity = android_context();
+			if (!activity.isValid()) return;
+
+			const QJniObject window =
+			        activity.callObjectMethod("getWindow", "()Landroid/view/Window;");
+			if (!window.isValid()) return;
+
+			const jint flag_secure = 0x2000;
+			if (hide) {
+				window.callMethod<void>("addFlags", "(I)V", flag_secure);
+			} else {
+				window.callMethod<void>("clearFlags", "(I)V", flag_secure);
+			}
+		});
+	}
+
 	void set_session_count(int count) override {
 		m_status = count == 1
 		                   ? QStringLiteral("1 session connected")

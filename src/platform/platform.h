@@ -123,6 +123,25 @@ public:
 	virtual bool send_to_background() = 0;
 
 	/*
+	 * Whether this platform can keep the window out of the operating
+	 * system's screenshot and recents-thumbnail path (sec 11).
+	 *
+	 * Asked separately from doing it, because sec 11 is explicit that
+	 * there is no portable desktop equivalent and that one must not be
+	 * promised in the UI. A checkbox offering to hide a terminal from
+	 * screenshots, on a platform where nothing can, is worse than no
+	 * checkbox: it is a security control that reports success and does
+	 * nothing.
+	 */
+	virtual bool can_hide_from_screenshots() const = 0;
+
+	/*
+	 * Applies it. A no-op where the platform cannot -- callers state the
+	 * intent and ask the question above to decide whether to offer it.
+	 */
+	virtual void set_hide_from_screenshots(bool hide) = 0;
+
+	/*
 	 * How many sessions are connected -- notification text on Android,
 	 * the tray tooltip on desktop. Taken from the session registry, never
 	 * from the view state: panes and tabs come and go, sessions are what

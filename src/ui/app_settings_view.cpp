@@ -90,6 +90,26 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	if (touch) m_context_menu->setMinimumHeight(48);
 	form->addRow(QStringLiteral("Terminal menu"), m_context_menu);
 
+	/*
+	 * Offered only where the platform can actually do it (sec 11: "No
+	 * portable desktop equivalent exists -- don't promise one in the
+	 * UI"). A checkbox that claims to hide a terminal from screenshots
+	 * and cannot is worse than no checkbox: it is a security control
+	 * reporting success while doing nothing.
+	 */
+	m_hide_from_screenshots = nullptr;
+	if (bssh_platform::instance() && bssh_platform::instance()->can_hide_from_screenshots()) {
+		m_hide_from_screenshots =
+		        new QCheckBox(QStringLiteral("Hide the terminal from screenshots"), this);
+		m_hide_from_screenshots->setToolTip(
+		        QStringLiteral("Keeps this app out of screenshots, screen recordings and "
+		                        "the recent-apps thumbnail. That thumbnail is a picture of "
+		                        "whatever was last on screen, which here is your shell. It "
+		                        "stops you screenshotting the terminal too."));
+		if (touch) m_hide_from_screenshots->setMinimumHeight(48);
+		form->addRow(QString(), m_hide_from_screenshots);
+	}
+
 	m_caps_as_ctrl = new QCheckBox(QStringLiteral("Caps Lock sends Ctrl"), this);
 	m_caps_as_ctrl->setToolTip(
 	        QStringLiteral("Caps Lock arms Ctrl for the next key, in this terminal only. "
@@ -188,6 +208,9 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	}
 
 	const bssh_app_settings settings;
+	if (m_hide_from_screenshots) {
+		m_hide_from_screenshots->setChecked(settings.hide_from_screenshots());
+	}
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 
@@ -209,6 +232,9 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] { commit(); });
 	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] { commit(); });
 	connect(m_context_menu, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+	if (m_hide_from_screenshots) {
+		connect(m_hide_from_screenshots, &QCheckBox::toggled, this, [this] { commit(); });
+	}
 	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] { commit(); });
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
 }
@@ -222,6 +248,9 @@ void bssh_app_settings_view::commit() {
 	        bssh_app_settings::context_menu_t(m_context_menu->currentData().toInt()));
 	stored.set_raise_contrast(m_raise_contrast->isChecked());
 	stored.set_caps_as_ctrl(m_caps_as_ctrl->isChecked());
+	if (m_hide_from_screenshots) {
+		stored.set_hide_from_screenshots(m_hide_from_screenshots->isChecked());
+	}
 
 	/* Applied immediately: a setting that waits for a restart reads as a
 	 * setting that did not work. */

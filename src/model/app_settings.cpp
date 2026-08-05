@@ -110,6 +110,21 @@ void bssh_app_settings::set_caps_as_ctrl(bool caps_as_ctrl) {
 	file.sync();
 }
 
+bool bssh_app_settings::hide_from_screenshots() const {
+	if (m_path.isEmpty()) return false;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	return file.value(QStringLiteral("security/hide_from_screenshots"), false).toBool();
+}
+
+void bssh_app_settings::set_hide_from_screenshots(bool hide) {
+	if (m_path.isEmpty()) return;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	file.setValue(QStringLiteral("security/hide_from_screenshots"), hide);
+	file.sync();
+}
+
 QString bssh_app_settings::theme() const {
 	if (m_path.isEmpty()) return QStringLiteral("system");
 

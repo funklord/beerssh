@@ -36,6 +36,9 @@ private:
 	QComboBox *m_theme;
 	QComboBox *m_context_menu;
 	QCheckBox *m_caps_as_ctrl;
+
+	/* Null where the platform cannot hide the window (sec 11). */
+	QCheckBox *m_hide_from_screenshots;
 	QCheckBox *m_raise_contrast;
 };
 

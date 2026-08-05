@@ -85,6 +85,16 @@ public:
 	bool caps_as_ctrl() const;
 	void set_caps_as_ctrl(bool caps_as_ctrl);
 
+	/*
+	 * Keep the terminal out of the OS screenshot and recents-thumbnail
+	 * path (sec 11, sec 13). Off by default: it is a real restriction --
+	 * the user cannot screenshot their own terminal either -- and a
+	 * default that silently disables a system feature is one nobody
+	 * connects to a setting they never touched.
+	 */
+	bool hide_from_screenshots() const;
+	void set_hide_from_screenshots(bool hide);
+
 	/* Where app.ini lives; empty when no directory could be found. */
 	QString path() const { return m_path; }
 

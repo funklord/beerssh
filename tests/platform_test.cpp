@@ -302,3 +302,44 @@ void platform_test::the_caps_setting_survives_a_restart() {
 		QVERIFY(!reopened.caps_as_ctrl());
 	}
 }
+
+void platform_test::hiding_from_screenshots_is_not_promised_where_it_cannot_work() {
+	bssh_platform *platform = bssh_platform::instance();
+
+	/*
+	 * sec 11 asks for FLAG_SECURE on Android and says in as many words
+	 * that there is no portable desktop equivalent and not to promise one
+	 * in the UI. X11 has no such concept, and Wayland's screencopy
+	 * protocols offer no opt-out a client can rely on.
+	 *
+	 * So the desktop must ANSWER NO rather than accept the setting and do
+	 * nothing. A security control that reports success while having no
+	 * effect is worse than an absent one: it is the difference between a
+	 * user knowing their terminal is in the screenshot and believing it
+	 * is not.
+	 */
+	QVERIFY2(!platform->can_hide_from_screenshots(),
+	          "the desktop cannot do this and must not claim to");
+
+	/* And asking for it anyway is harmless rather than a crash. */
+	platform->set_hide_from_screenshots(true);
+	platform->set_hide_from_screenshots(false);
+
+	/*
+	 * The Android half -- FLAG_SECURE on the Activity's window -- cannot
+	 * be reached from a desktop test binary, and cannot be verified off a
+	 * device even there: what it governs is what the OS puts in the
+	 * recents thumbnail. It is recorded as untested in sec 11 rather than
+	 * claimed here.
+	 */
+	QTemporaryDir dir;
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(!settings.hide_from_screenshots(), "off by default: it restricts the user too");
+		settings.set_hide_from_screenshots(true);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY(reopened.hide_from_screenshots());
+	}
+}
