@@ -92,6 +92,7 @@ SOURCES += \
     ../src/ui/layout_manager.cpp \
     ../src/ui/pane_container.cpp \
     ../src/ui/long_press.cpp \
+    ../src/ui/wrapped_note.cpp \
     ../src/ui/main_window.cpp \
     ../src/ui/session_dialog.cpp \
     ../src/ui/ssh_config_import.cpp \
@@ -159,6 +160,7 @@ HEADERS += \
     ../src/ui/layout_manager.h \
     ../src/ui/pane_container.h \
     ../src/ui/long_press.h \
+    ../src/ui/wrapped_note.h \
     ../src/ui/main_window.h \
     ../src/ui/session_dialog.h \
     ../src/ui/ssh_config_import.h \

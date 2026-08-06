@@ -3,7 +3,12 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
+#include <QScrollArea>
+#include <QScroller>
+#include <QFrame>
 #include <QLabel>
+
+#include "ui/wrapped_note.h"
 #include "input/input_router.h"
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -19,9 +24,40 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	const bool touch = platform && platform->is_touch_primary();
 
 	QVBoxLayout *outer = new QVBoxLayout(this);
+	outer->setContentsMargins(0, 0, 0, 0);
+	outer->setSpacing(0);
+
+	/*
+	 * The fields scroll and Back stays pinned to the bottom, the same
+	 * shape the host and preset editors were given when sec 8.3 measured
+	 * them against a phone. This page was missed then and has grown since
+	 * -- it is the tallest touch surface in the app -- and it asks for
+	 * 752px of a 640px screen.
+	 *
+	 * It looked like it fitted until the wrapped notes stopped
+	 * under-reporting their height (bssh_wrapped_note). The page was
+	 * always this tall; what changed is that it now says so.
+	 */
+	QWidget *content = new QWidget(this);
+	QVBoxLayout *body = new QVBoxLayout(content);
+	body->setContentsMargins(16, 16, 16, 16);
+	body->setSpacing(12);
+
+	QScrollArea *scroll = new QScrollArea(this);
+	scroll->setWidget(content);
+	scroll->setWidgetResizable(true);
+	scroll->setFrameShape(QFrame::NoFrame);
+
+	/*
+	 * Sideways scrolling would mean something above is too wide, which is
+	 * a bug rather than something to let the user work around.
+	 */
+	scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	QScroller::grabGesture(scroll->viewport(), QScroller::LeftMouseButtonGesture);
+	outer->addWidget(scroll, 1);
 
 	QLabel *heading = new QLabel(QStringLiteral("<b>This device</b>"), this);
-	outer->addWidget(heading);
+	body->addWidget(heading);
 
 	QFormLayout *form = new QFormLayout();
 	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -47,11 +83,10 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * in tablet mode and a tablet with a keyboard docked wrong in
 	 * opposite directions.
 	 */
-	QLabel *note = new QLabel(
+	QLabel *note = bssh_wrapped_note(
 	        QStringLiteral("Automatic shows the key row when touch is this device's main "
 	                        "input. Override it if you have a keyboard attached to a "
 	                        "tablet, or a touchscreen on a laptop."), this);
-	note->setWordWrap(true);
 	form->addRow(QString(), note);
 
 	/*
@@ -165,8 +200,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	const bssh_secret_store *store = bssh_secret_store::instance();
 	if (store) {
-		QLabel *backend = new QLabel(store->backend_name(), this);
-		backend->setWordWrap(true);
+		QLabel *backend = bssh_wrapped_note(store->backend_name(), this);
 		backend->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
 		/*
@@ -209,12 +243,11 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 			        "to type. Not hardware-backed.");
 		}
 
-		QLabel *backend_note = new QLabel(detail, this);
-		backend_note->setWordWrap(true);
+		QLabel *backend_note = bssh_wrapped_note(detail, this);
 		form->addRow(QString(), backend_note);
 	}
 
-	outer->addLayout(form);
+	body->addLayout(form);
 
 	/*
 	 * The chords this app keeps for itself (sec 6.1), which asks that the
@@ -230,28 +263,32 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	QLabel *chords_heading = new QLabel(
 	        QStringLiteral("<b>Keys this app keeps</b>"), this);
-	outer->addWidget(chords_heading);
+	body->addWidget(chords_heading);
 
-	QLabel *chords_note = new QLabel(
+	QLabel *chords_note = bssh_wrapped_note(
 	        QStringLiteral("These never reach the remote shell."), this);
-	chords_note->setWordWrap(true);
-	outer->addWidget(chords_note);
+	body->addWidget(chords_note);
 
 	QFormLayout *chords = new QFormLayout;
 	for (const bssh_input_router::chord_t &chord : bssh_input_router::stolen_chords()) {
-		QLabel *what = new QLabel(QString::fromLatin1(chord.what), this);
-		what->setWordWrap(true);
+		QLabel *what = bssh_wrapped_note(QString::fromLatin1(chord.what), this);
 		what->setObjectName(QStringLiteral("stolen_chord"));
 		chords->addRow(QString::fromLatin1(chord.label), what);
 	}
-	outer->addLayout(chords);
+	body->addLayout(chords);
 
-	outer->addStretch(1);
+	body->addStretch(1);
 
 	if (touch) {
 		QPushButton *back = new QPushButton(QStringLiteral("Back"), this);
 		back->setMinimumHeight(48);
 		connect(back, &QPushButton::clicked, this, &bssh_app_settings_view::back_requested);
+
+		/*
+		 * Outside the scroll area on purpose: a way back that scrolls
+		 * off the bottom is one the user has to go looking for, and on
+		 * this page it would be past six chord rows.
+		 */
 		outer->addWidget(back);
 	}
 

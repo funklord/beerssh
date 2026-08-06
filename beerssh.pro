@@ -78,6 +78,7 @@ SOURCES += \
     src/ui/licences_view.cpp \
     src/ui/key_row.cpp \
     src/ui/long_press.cpp \
+    src/ui/wrapped_note.cpp \
     src/ui/main_window.cpp \
     src/ui/session_dialog.cpp \
     src/ui/ssh_config_import.cpp \
@@ -124,6 +125,7 @@ HEADERS += \
     src/ui/licences_view.h \
     src/ui/key_row.h \
     src/ui/long_press.h \
+    src/ui/wrapped_note.h \
     src/ui/main_window.h \
     src/ui/session_dialog.h \
     src/ui/ssh_config_import.h \

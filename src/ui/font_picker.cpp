@@ -5,6 +5,8 @@
 #include <QPixmap>
 #include <QFormLayout>
 #include <QLabel>
+
+#include "ui/wrapped_note.h"
 #include <QSpinBox>
 #include <QVBoxLayout>
 
@@ -138,7 +140,7 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	 * Wrapping costs a second line at a narrow width and keeps every
 	 * glyph visible, which clipping would not.
 	 */
-	m_preview->setWordWrap(true);
+	bssh_wrap_note(m_preview);
 	/*
 	 * The terminal's colours, not the dialog's: a font is being judged for
 	 * how it reads as terminal output, and light-on-dark is a different
@@ -158,7 +160,7 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	outer->addWidget(m_swatches);
 
 	m_note = new QLabel(this);
-	m_note->setWordWrap(true);
+	bssh_wrap_note(m_note);
 	outer->addWidget(m_note);
 
 	connect(m_family, &QComboBox::currentIndexChanged,

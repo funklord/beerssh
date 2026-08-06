@@ -1396,6 +1396,29 @@ the same number for a layout manager that had quietly stopped working.
   and passed a deliberately broken preset editor, because the orphaned scroll
   area was still a child of the page and `findChildren` cannot tell the
   difference. A working scroll area drops the page's own minimum on its own.
+  **And a page can pass this check while the text on it is unreadable.** A
+  `QLabel` with `setWordWrap(true)` knows its height only once it knows its
+  width, but its size policy does not advertise the dependency — so a layout
+  asking "how tall are you?" is told ONE LINE, believes it, and the rest of
+  the sentence is drawn over the next row. Two notes on the device settings
+  page were losing their tails that way: the key-row note stopped at
+  "Override it if you have a keyboard" with *Appearance* printed through its
+  remaining two lines. The minimum-size question above cannot see it, because
+  the label is exactly what is lying about its minimum — the page passed
+  while the words were cut in half. Found by rendering the screen and looking
+  at it, which is what `make shots` is for.
+  `bssh_wrapped_note()` sets `heightForWidth` on the policy, and every
+  wrapped note in the app is built through it — one function rather than
+  fourteen call sites, so a note added later cannot quietly miss it.
+  **Fixing it made a second defect visible, which is the point.** With the
+  labels reporting honestly, the device settings page asks for **752px of a
+  640px screen**: it was always that tall and had simply never said so. It is
+  the only touch surface that never got the scroll area the host and preset
+  editors were given here, and it has grown since — the key-row row, the
+  theme, the terminal menu, Caps Lock, the contrast floor, the secret
+  backend, and §6.1's six stolen chords. It scrolls now, with *Back* pinned
+  outside the scroll area, because a way back that scrolls off the bottom is
+  one the user has to go looking for.
 - **`make shots` renders every screen to a PNG so somebody can look at them.**
   Not a test: it asserts almost nothing and cannot fail a build. It exists
   because *looking* is what kept working — every layout defect in this project

@@ -5,6 +5,8 @@
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QLabel>
+
+#include "ui/wrapped_note.h"
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
@@ -53,19 +55,18 @@ bssh_ssh_config_import::bssh_ssh_config_import(bssh_profile_store *store, QWidge
 
 	QVBoxLayout *layout = new QVBoxLayout(this);
 
-	QLabel *intro = new QLabel(
+	QLabel *intro = bssh_wrapped_note(
 	        QStringLiteral("These hosts were found. Importing copies them in once -- "
 	                        "BeerSSH does not read the file again, so editing a host here "
 	                        "will not change your SSH config, and editing your SSH config "
 	                        "will not change these."),
 	        this);
-	intro->setWordWrap(true);
 	layout->addWidget(intro);
 
 	m_list->setSelectionMode(QAbstractItemView::NoSelection);
 	layout->addWidget(m_list, 1);
 
-	m_caveat->setWordWrap(true);
+	bssh_wrap_note(m_caveat);
 	layout->addWidget(m_caveat);
 
 	layout->addWidget(m_summary);

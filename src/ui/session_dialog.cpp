@@ -17,6 +17,8 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+
+#include "ui/wrapped_note.h"
 #include <QLineEdit>
 #include <QFormLayout>
 #include <QListWidget>
@@ -339,8 +341,7 @@ QWidget *bssh_session_dialog::build_signpost_page(const QString &title,
 	QVBoxLayout *layout = new QVBoxLayout(page);
 
 	QLabel *heading = new QLabel(QStringLiteral("<b>%1</b>").arg(title), page);
-	QLabel *body = new QLabel(body_text, page);
-	body->setWordWrap(true);
+	QLabel *body = bssh_wrapped_note(body_text, page);
 
 	layout->addWidget(heading);
 	layout->addWidget(body);
@@ -549,7 +550,7 @@ QWidget *bssh_session_dialog::build_window_page() {
 	QHBoxLayout *scope_row = new QHBoxLayout();
 
 	m_font_scope = new QLabel(page);
-	m_font_scope->setWordWrap(true);
+	bssh_wrap_note(m_font_scope);
 	scope_row->addWidget(m_font_scope, 1);
 
 	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font"), page);

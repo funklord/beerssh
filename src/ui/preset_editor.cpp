@@ -6,6 +6,8 @@
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+
+#include "ui/wrapped_note.h"
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
@@ -193,7 +195,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	 * (sec 10.1).
 	 */
 	m_usage = new QLabel(this);
-	m_usage->setWordWrap(true);
+	bssh_wrap_note(m_usage);
 	fields->addWidget(m_usage);
 
 	fields->addStretch(1);

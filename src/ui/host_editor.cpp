@@ -2,6 +2,8 @@
 
 #include <QFormLayout>
 #include <QLabel>
+
+#include "ui/wrapped_note.h"
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSpinBox>
@@ -158,7 +160,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	 * adding it again.
 	 */
 	m_font_scope = new QLabel(this);
-	m_font_scope->setWordWrap(true);
+	bssh_wrap_note(m_font_scope);
 	body->addWidget(m_font_scope);
 
 	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font"), this);

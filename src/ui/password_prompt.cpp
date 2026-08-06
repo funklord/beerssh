@@ -3,6 +3,8 @@
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QLabel>
+
+#include "ui/wrapped_note.h"
 #include <QLineEdit>
 #include <QVBoxLayout>
 
@@ -23,8 +25,7 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 	 * nabbe@10.0.2.2:2299:" plus a field is wider than a phone, and the
 	 * parts that ran off the edge were the checkbox and the buttons.
 	 */
-	QLabel *prompt = new QLabel(QStringLiteral("Password for %1").arg(target), this);
-	prompt->setWordWrap(true);
+	QLabel *prompt = bssh_wrapped_note(QStringLiteral("Password for %1").arg(target), this);
 	outer->addWidget(prompt);
 
 	m_field->setEchoMode(QLineEdit::Password);
