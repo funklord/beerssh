@@ -1481,6 +1481,13 @@ the same number for a layout manager that had quietly stopped working.
   Export were not named -- so they stayed pointer-height on a page built for
   a thumb while the eleven controls around them grew. Invisible in the
   source, obvious in the render.
+- **A surface is shot in a state the app can actually reach.** The SSH
+  config importer was rendered bare, so it said *These hosts were found*
+  over a blank box -- a state `run()` explicitly refuses to produce, since
+  an empty parse is reported with a message and the dialog never opens. It
+  is fed a parsed config now, which is also the only way the picture shows
+  the ticklist the surface exists for, with its key and jump-host
+  annotations.
 - **The category pages are driven through the TREE, not by setting the
   stack's index.** Setting the index leaves the tree highlighting whatever
   it highlighted before, so all eight page shots showed *Session* selected

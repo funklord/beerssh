@@ -193,7 +193,47 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	shoot(QStringLiteral("desktop-preset-editor"), &presets,
 	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
 
+	/*
+	 * Fed a parsed config, because the surface's whole job is the
+	 * ticklist and an empty one shows none of it.
+	 *
+	 * Shot bare, this dialog said "These hosts were found" over a blank
+	 * box -- a state the app refuses to produce: run() reports an empty
+	 * parse with a message and never opens the dialog at all. Another
+	 * picture of something the app never does, and one that also happened
+	 * to hide the only part worth looking at.
+	 *
+	 * The three entries are the cases sec 10.5 says a real config
+	 * contains: an ordinary host, one carrying an IdentityFile, and one
+	 * behind a jump host.
+	 */
+	QList<bssh_ssh_config_host_t> parsed;
+
+	bssh_ssh_config_host_t plain;
+	plain.alias = QStringLiteral("web");
+	plain.hostname = QStringLiteral("web01.internal.example.com");
+	plain.user = QStringLiteral("nabbe");
+	plain.port = 22;
+	parsed.append(plain);
+
+	bssh_ssh_config_host_t keyed;
+	keyed.alias = QStringLiteral("build");
+	keyed.hostname = QStringLiteral("build.internal.example.com");
+	keyed.user = QStringLiteral("nabbe.testing");
+	keyed.port = 2299;
+	keyed.identity_file = QStringLiteral("~/.ssh/id_ed25519_work");
+	parsed.append(keyed);
+
+	bssh_ssh_config_host_t jumped;
+	jumped.alias = QStringLiteral("db");
+	jumped.hostname = QStringLiteral("db01.internal.example.com");
+	jumped.user = QStringLiteral("nabbe");
+	jumped.port = 22;
+	jumped.proxy_jump = QStringLiteral("nabbe@bastion.internal.example.com:2222");
+	parsed.append(jumped);
+
 	bssh_ssh_config_import import(&store);
+	import.set_hosts(parsed);
 	shoot(QStringLiteral("desktop-config-import"), &import,
 	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
 
