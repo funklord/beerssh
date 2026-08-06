@@ -213,6 +213,7 @@ public slots:
 	void do_key_passphrase(const QString &passphrase);
 	void do_set_keepalive(int seconds);
 	void do_set_term(const QString &term);
+	void do_set_command(const QStringList &command);
 	void do_set_compression(bool compression);
 	void do_set_identity_file(const QString &path);
 	void do_set_proxy_jump(const QString &spec);
@@ -260,6 +261,9 @@ private:
 
 	/* Applied at connect time; see set_term's comment on the interface. */
 	QString m_term;
+
+	/* Empty asks for a shell; anything else is an exec request (sec 8.6). */
+	QString m_command;
 
 	/* Empty means the default identities; see set_identity_file. */
 	QString m_identity_file;
@@ -803,7 +807,23 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 		fail(session_error());
 		return;
 	}
-	if (ssh_channel_request_shell(m_channel) != SSH_OK) {
+	/*
+	 * A shell, or the command sec 8.6's -e named -- and the PTY above is
+	 * requested either way, which is what `ssh -t host htop` does and why
+	 * this app asks for one at all: htop, vim and less are exactly what
+	 * somebody runs this way, and every one of them needs a terminal.
+	 *
+	 * An exec request carries ONE string, which the far end passes to the
+	 * account's shell. So the words are joined here rather than sent as
+	 * argv, because there is no argv in the protocol to send -- the same
+	 * thing OpenSSH does with the words after a hostname, and the reason
+	 * a remote command needs quoting where a local one does not.
+	 */
+	const int requested = m_command.isEmpty()
+	        ? ssh_channel_request_shell(m_channel)
+	        : ssh_channel_request_exec(m_channel, m_command.toUtf8().constData());
+
+	if (requested != SSH_OK) {
 		fail(session_error());
 		return;
 	}
@@ -826,6 +846,17 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 	do_set_keepalive(m_keepalive_seconds);
 
 	drain();
+}
+
+void bssh_libssh_worker::do_set_command(const QStringList &command) {
+	/*
+	 * Joined with spaces, which is what the protocol can carry and what
+	 * ssh(1) itself does with the words after a hostname. Nothing is
+	 * quoted on the way: the remote shell will split this string, and a
+	 * caller who needs an argument with a space in it has to say so the
+	 * same way they would to ssh.
+	 */
+	m_command = command.join(QLatin1Char(' '));
 }
 
 void bssh_libssh_worker::do_set_term(const QString &term) {
@@ -1087,6 +1118,12 @@ void bssh_ssh_session_libssh::set_keepalive(int seconds) {
 void bssh_ssh_session_libssh::set_term(const QString &term) {
 	QMetaObject::invokeMethod(m_worker, [this, term] {
 		m_worker->do_set_term(term);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::set_command(const QStringList &command) {
+	QMetaObject::invokeMethod(m_worker, [this, command] {
+		m_worker->do_set_command(command);
 	}, Qt::QueuedConnection);
 }
 

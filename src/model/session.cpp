@@ -117,7 +117,8 @@ void bssh_session::connect_to_host() {
 	 * local session exactly as it fakes an SSH one.
 	 */
 	m_transport = m_profile.local
-	        ? bssh_ssh_session::create_local(m_profile.shell, this)
+	        ? bssh_ssh_session::create_local(m_profile.shell,
+	                                          m_profile.working_directory, this)
 	        : bssh_ssh_session::create(this);
 
 	/*
@@ -143,6 +144,14 @@ void bssh_session::connect_to_host() {
 	 */
 	m_transport->set_identity_file(m_profile.identity_file);
 	m_transport->set_proxy_jump(m_profile.proxy_jump);
+
+	/*
+	 * What to run instead of a shell (sec 8.6). From the profile like the
+	 * two above, and applied here rather than at create_local() because
+	 * the SSH transport wants it too -- the difference between the two is
+	 * theirs to keep, not this function's.
+	 */
+	m_transport->set_command(m_profile.command);
 
 	connect(m_transport, &bssh_ssh_session::bytes_received,
 	         m_emulator, &bssh_emulator::feed);

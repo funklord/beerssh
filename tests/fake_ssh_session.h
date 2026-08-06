@@ -77,6 +77,10 @@ public:
 	void set_term(const QString &term) override { m_term = term; }
 	QString term() const { return m_term; }
 
+	/* Recorded rather than run, so a test can ask what -e reached (sec 8.6). */
+	void set_command(const QStringList &command) override { m_command = command; }
+	QStringList command() const { return m_command; }
+
 	void set_compression(bool compression) override { m_compression = compression; }
 	bool compression() const { return m_compression; }
 
@@ -107,6 +111,7 @@ private:
 	bool m_host_key_accepted = false;
 	int m_keepalive_seconds = 0;
 	QString m_term;
+	QStringList m_command;
 	bool m_compression = false;
 	QString m_passphrase;
 };

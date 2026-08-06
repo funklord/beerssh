@@ -21,6 +21,8 @@ private slots:
 	void live_count_ignores_dead_sessions();
 	void title_falls_back_from_osc_to_profile();
 	void the_transport_reports_which_kind_of_ending_it_was();
+	void a_shell_that_ends_closes_its_session();
+	void a_held_session_stays_when_its_shell_ends();
 	void a_password_is_requested_only_when_keys_fail();
 	void a_host_key_is_never_trusted_without_an_answer();
 	void an_encrypted_key_is_offered_before_a_password();

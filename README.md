@@ -20,6 +20,26 @@ get in unaided it offers to unlock it, because for a server that only
 accepts keys a password prompt is not a fallback but a prompt that cannot
 succeed. The passphrase is used and not kept.
 
+**It takes xterm's and konsole's arguments**, because a terminal that opens a
+local shell has to answer to the vocabulary people already have:
+
+```sh
+beerssh                          # a local shell
+beerssh user@host:2222           # a shell on that host
+beerssh -e htop                  # a local shell running htop
+beerssh user@host -e htop        # htop over there, as `ssh -t` runs it
+beerssh --workdir /srv -T Logs -e tail -f app.log
+beerssh --geometry 120x40        # cells, as xterm counts them -- not pixels
+beerssh --load "prod bastion"    # a saved session, by name
+```
+
+`--hold` keeps a pane after the command exits, `--help` lists the rest, and
+everything after `-e` belongs to the command. A shell that ends closes its
+pane — and the window with it, if that was the last one. `project.md` §8.6
+records the whole set, including why Qt's own toolkit options are no longer
+accepted on the command line (its X11 plugin was eating `--geometry` and
+`--title` before the program saw them, and no other plugin did).
+
 **On desktop it opens a local shell by default**, so launching it with no
 arguments gives you a terminal rather than a connection dialog. That was a
 documented non-goal until it was deliberately reversed: the PTY is a

@@ -1,6 +1,8 @@
 #ifndef BSSH_PTY_SESSION_H
 #define BSSH_PTY_SESSION_H
 
+#include <QStringList>
+
 #include "ssh/ssh_session.h"
 
 class QSocketNotifier;
@@ -55,6 +57,36 @@ public:
 	void set_shell(const QString &shell) { m_shell = shell; }
 	QString shell() const { return m_shell; }
 
+	/*
+	 * A command to run INSTEAD of the shell (sec 8.6's -e), argv-style
+	 * and already split.
+	 *
+	 * Run directly, with no shell between: `-e ls *.c` is xterm's and
+	 * konsole's spelling and neither hands it to sh, so there is nothing
+	 * to quote against and a filename with a space in it survives being
+	 * an argument. The caller has already done the splitting -- the
+	 * command line handed it to us pre-split, which is the only place
+	 * word boundaries are known for certain.
+	 *
+	 * On the interface rather than only here, because SSH answers the
+	 * same request by asking the far end to run it.
+	 */
+	void set_command(const QStringList &command) override { m_command = command; }
+	QStringList command() const { return m_command; }
+
+	/*
+	 * Where the child starts (sec 8.6's --workdir); empty inherits this
+	 * process's directory, which is what a terminal launched from a shell
+	 * has always done.
+	 *
+	 * Local only, and deliberately not on the interface: SSH has no way
+	 * to ask a server to start somewhere, so an option that quietly did
+	 * nothing over SSH would be worse than one that refuses. The command
+	 * line refuses it.
+	 */
+	void set_working_directory(const QString &directory) { m_working_directory = directory; }
+	QString working_directory() const { return m_working_directory; }
+
 	/* TERM reaches the child's environment rather than a protocol field. */
 	void set_term(const QString &term) override { m_term = term; }
 
@@ -76,6 +108,8 @@ private:
 	void reap();
 
 	QString m_shell;
+	QStringList m_command;
+	QString m_working_directory;
 	QString m_term;
 
 	int m_master;

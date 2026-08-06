@@ -1751,6 +1751,114 @@ would compete with the tap on every row. The lesson generalises past this
 screen: a front door that renders every field but cannot *do* half of what
 the other one does satisfies §14's rule only on paper.
 
+### 8.6 The command line — **[DECIDED]**
+
+**BeerSSH takes xterm's and konsole's arguments, because it is now a terminal
+emulator as well as an SSH client.** The desktop opens a local shell (§2), and
+somebody typing `beerssh -e htop` is not experimenting: they are using the
+vocabulary every terminal since 1984 has answered to. An SSH client that
+ignored it would be one people have to write a wrapper script around.
+
+| option | from | what it does |
+|---|---|---|
+| `-e`, `--execute CMD…` | xterm, konsole | Run a command instead of a shell. **Everything after `-e` is the command**, so it comes last. |
+| `--hold` | xterm's `-hold`, konsole | Keep the pane when what it was running ends. |
+| `--workdir DIR` | konsole | Start the local shell there. Local sessions only. |
+| `-T`, `--title` | xterm | The name the session carries until the remote sets one with OSC. |
+| `--geometry COLSxROWS[+X+Y]` | xterm | The terminal size **in cells**; the position, where given, in pixels. |
+| `--load NAME` | PuTTY's `-load` | Open a saved session by name. |
+| `--self-test` | ours | §12.4's headless smoke test. |
+| `-h/--help`, `-v/--version` | everybody | |
+| `[user@]host[:port]` | ssh | The destination. Was already accepted; now parsed in one place (`bssh_profile_t::from_target`, beside the `target()` that writes one). |
+| `preset.ini` | §10.5 | A preset to import — what a file manager passes to a registered handler. |
+
+**One parser, and there were two.** `main()` had a hand-rolled loop that took
+`--self-test` and the first bare argument as a destination, while
+`platform_desktop::launch_document()` separately re-scanned `argv` for a
+`*.ini`. They agreed only by coincidence and could not report an error about
+each other's arguments — and they disagreed in one visible way: the document
+scan required the file to **exist**, so a mistyped preset path fell through to
+the other loop and was dialled as a hostname. `bssh_parse_command_line` is the
+only reader now, it decides a preset by its suffix alone, and whether the file
+is there is the importer's question, which has a message for the answer.
+
+**`-e` means two things, and that is the protocols' doing rather than ours.**
+Locally the words are `exec`ed as given, with no shell between them — xterm's
+behaviour, and why `-e ls *.c` needs no quoting and a filename with a space in
+it survives. Over SSH there is no argv on the wire: an exec request carries one
+string, which the far end hands to the account's shell, so the words are joined
+with spaces exactly as `ssh host ls -l` does. The PTY is requested either way,
+which is what `ssh -t` does and what `htop`, `vim` and `less` — the programs
+people actually run this way — all need.
+
+**`--geometry` is in cells, and Qt made that a fight worth recording.** Qt's XCB
+plugin **consumes `--geometry`, `--title` and `--name` out of `argv` before the
+program sees them**; the Wayland and offscreen plugins leave them alone.
+Measured, not assumed: `beerssh --title Logs` set a title on one desktop and
+vanished on another, and `--geometry 80x24` meant twenty-four *rows* under one
+plugin and twenty-four *pixels* under the other. A flag whose meaning depends
+on the display server is worse than one that does not exist. So the command
+line is read from `argv` **before `QApplication` is constructed**, and Qt is
+handed nothing but the program's own name.
+
+The cost is stated rather than hidden: **Qt's toolkit options are no longer
+accepted on the command line.** `-platform`, `-style` and the rest all have
+environment variables, and `QT_QPA_PLATFORM` is what `make test` and
+`tools/check-deb.sh` already use. `bssh_command_line()` is where the parsed
+result lives afterwards, because `QCoreApplication::arguments()` now holds only
+`argv[0]` and the desktop platform still has to answer `launch_document()`.
+
+**A shell that ends closes its pane, unless `--hold`.** Nothing did this before:
+the pane stayed with "session ended" written under it, which is xterm's `-hold`
+applied to everybody whether they asked for it or not — so `beerssh -e ls`
+would have printed its output into a window nobody asked to keep. The rule
+lives in `bssh_session_registry` rather than in a window, because it is a fact
+about a session rather than about a view of one: a tab torn into another window
+(§8.4), and a session no view is showing at all, have to end the same way. Only
+an **ending** closes. A dropped connection is §5.3's business and stays for the
+reconnect; a failure stays so its reason can be read.
+
+**And the last pane of a window whose session ended takes the window with it**,
+on a device that opens with a shell — `opens_a_local_shell()` again (§8.5),
+not an OS check. A terminal whose program has finished is done, and falling
+back to the PuTTY-shaped front door would mean `beerssh -e ls` printed its
+output and then offered a connection dialog. A tab closed **by hand** still
+goes up to the front door: the user is still driving the app, which is a
+different thing from the program being over.
+
+**Errors go to stderr and exit non-zero, before a window exists.** An unknown
+saved session, a `--geometry` that is not a grid, two destinations, a
+`--workdir` given with a destination — all of them are a line on the console
+and exit 2, because a console program's errors belong on the console and a
+dialog over a window that should not have opened is not an improvement.
+`--workdir` with a destination is **refused rather than ignored**: SSH has no
+way to ask a server to start somewhere, and an option that silently does
+nothing is how people stop trusting a program's arguments.
+
+**A small `--geometry` is clamped, and that is a defect this uncovered rather
+than a rule.** The window's pages — terminal, session dialog, host list, both
+editors — share one `QStackedWidget`, and a stack asks *every* page how small
+it may be, so the window inherits the front door's minimum even while showing a
+terminal. Measured at **520x460**, about 57 columns by 21 rows: `80x24` and
+anything larger is honoured exactly, and a smaller request comes out bigger than
+asked. It is also why a desktop user cannot drag the window down to a small
+terminal. The fix belongs to §8.5 rather than here — the pages that are not on
+screen should not be setting the floor — and is **[OPEN]**.
+
+**Considered and not built**, each for a reason rather than by omission:
+
+- **`-fn`/`-bg`/`-fg`-style appearance overrides.** A per-invocation font or
+  colour scheme would have to sit *above* a preset in §10.1's resolver — a
+  fourth layer, and a design change rather than an argument.
+- **`--tab`/`--window`** (konsole's, gnome-terminal's). Both mean "give this to
+  the instance already running", and there is no such mechanism here yet;
+  §8.4's client/server split is where that question belongs.
+- **A remote `--workdir`.** See above: the protocol has no way to ask.
+- **A man page.** `--help` is generated from the same option table the parser is
+  built from (`bssh_command_line_options()`), so a `beerssh.1` should be
+  generated from that too — `help2man` at package build time is the obvious
+  route — rather than hand-written into a second copy free to drift.
+
 ---
 
 ## 9. Fonts: a curated, terminal-suitable set

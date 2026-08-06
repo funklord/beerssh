@@ -53,13 +53,19 @@ class bssh_main_window : public QWidget {
 
 public:
 	/*
-	 * target is an optional [user@]host[:port] from the command line.
-	 * Empty means no connection: the app comes up showing an empty grid,
-	 * which is all it could do before M1 anyway. Host profiles replace
-	 * this at M6 (sec 10) -- a command-line target is a bring-up
-	 * affordance, not the intended way in.
+	 * launch is the session the command line asked for (sec 8.6), already
+	 * assembled by main(): a destination, a saved session, or a local
+	 * shell carrying a command, a working directory and a title.
+	 *
+	 * A default-constructed profile means it asked for none, and the
+	 * window comes up on the front door (sec 8.5). It used to be a bare
+	 * [user@]host[:port] string that this window parsed itself; a profile
+	 * carries the other five things -e and --title and --hold have to say,
+	 * and the parsing moved to bssh_profile_t::from_target where both
+	 * readers of a destination can share it.
 	 */
-	explicit bssh_main_window(const QString &target = QString(), QWidget *parent = nullptr);
+	explicit bssh_main_window(const bssh_profile_t &launch = bssh_profile_t(),
+	                           QWidget *parent = nullptr);
 
 	/*
 	 * The sessions this window is a view onto (sec 8.4). Process-wide and
@@ -141,6 +147,47 @@ public:
 	 */
 	void open_default_session();
 
+	/*
+	 * Reopens the hosts a previous run left open (sec 8.4), unconnected.
+	 *
+	 * Called by main() and not by the constructor, and it joins the other
+	 * two above for the reason they give: it creates sessions, and the
+	 * fifteen windows the test suite builds have no business reopening
+	 * whatever the person running them last had on screen. main() also
+	 * knows the one thing this cannot: whether the command line already
+	 * named a session, in which case a restore would bury it under the
+	 * tabs from last time.
+	 */
+	void restore_layout();
+
+	/*
+	 * How big this window has to be for a terminal of cols x rows
+	 * (sec 8.6's --geometry).
+	 *
+	 * Cells, because that is what a terminal is measured in: xterm has
+	 * counted its geometry this way since 1984, and a pixel size means a
+	 * different grid on every font and every display scale. The cell
+	 * comes from the focused view where there is one, so the answer
+	 * follows the font that view actually resolved (sec 9.5), and from a
+	 * throwaway view of the same class where there is not -- rather than
+	 * from a second copy of the metrics arithmetic, which would be free
+	 * to disagree with the one that draws.
+	 *
+	 * The chrome around the grid -- tab bar, status line, key row, the
+	 * pane's own border -- is whatever this window is currently wrapping
+	 * around its terminal, measured rather than enumerated: it is the
+	 * difference between the window and the view inside it, which needs
+	 * no list of the widgets in between and cannot go stale when one is
+	 * added. Only what is SHOWING counts, which is the point -- a window
+	 * with one tab hides its tab bar (sec 8.3), and reserving a strip for
+	 * one would make every --geometry a row short.
+	 *
+	 * Not const: it activates the layout, because main() asks before the
+	 * window has ever been shown and an unlaid-out window has no idea how
+	 * big anything in it is.
+	 */
+	QSize size_for_grid(int cols, int rows);
+
 protected:
 	void changeEvent(QEvent *event) override;
 
@@ -217,8 +264,6 @@ private:
 	 */
 	void split_with(bssh_session *session);
 
-	void connect_to(const QString &target);
-
 
 	/*
 	 * The credential flow (sec 11). Split out because it is a sequence of
@@ -231,7 +276,6 @@ private:
 	bool unlock_secret_store();
 
 	void save_layout();
-	void restore_layout();
 	void show_session(bssh_session *session);
 	void detach_session();
 	void update_status();

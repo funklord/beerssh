@@ -115,6 +115,83 @@ void pty_session_test::a_resize_reaches_the_shell() {
 	session.disconnect_from_host();
 }
 
+void pty_session_test::a_command_runs_instead_of_the_shell() {
+	/*
+	 * sec 8.6's -e, and the half of it that cannot be got from a shell:
+	 * the words are EXECED as given, with nothing between them and the
+	 * kernel. `-e echo one two` therefore prints "one two" and not
+	 * whatever a shell would have made of it.
+	 */
+	bssh_pty_session session;
+	session.set_command({
+		QStringLiteral("/bin/echo"), QStringLiteral("bssh-e-works"), QStringLiteral("*"),
+	});
+
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(80, 24);
+
+	QByteArray seen;
+	QVERIFY2(wait_for_output(&session, QByteArrayLiteral("bssh-e-works *"), &seen),
+	          qPrintable(QStringLiteral("the command did not run unexpanded; saw: %1")
+	                             .arg(QString::fromLocal8Bit(seen.left(200)))));
+
+	/*
+	 * The star is the assertion, not decoration. A command handed to a
+	 * shell would have had it expanded against the working directory --
+	 * which is precisely what xterm's -e does not do, and what a caller
+	 * passing a filename with a bracket in it is relying on.
+	 */
+	session.disconnect_from_host();
+}
+
+void pty_session_test::a_command_starts_where_it_was_told_to() {
+	/* sec 8.6's --workdir. */
+	bssh_pty_session session;
+	session.set_command(QStringList(QStringLiteral("/bin/pwd")));
+	session.set_working_directory(QStringLiteral("/tmp"));
+
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(80, 24);
+
+	QByteArray seen;
+	QVERIFY2(wait_for_output(&session, QByteArrayLiteral("/tmp"), &seen),
+	          qPrintable(QStringLiteral("the child did not start in /tmp; saw: %1")
+	                             .arg(QString::fromLocal8Bit(seen.left(200)))));
+
+	session.disconnect_from_host();
+}
+
+void pty_session_test::a_command_that_cannot_be_run_says_so() {
+	/*
+	 * A mistyped -e is the ordinary way to get here, and the child has
+	 * already replaced this process's view of the world by the time it
+	 * finds out. It writes to the pty -- which is the terminal that asked
+	 * -- and exits with the shell's own 127, so a pane that opens and
+	 * closes is not the only evidence.
+	 */
+	bssh_pty_session session;
+	session.set_command(QStringList(QStringLiteral("/nonexistent/bssh-not-a-command")));
+
+	QSignalSpy exited(&session, &bssh_ssh_session::shell_exited);
+
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(80, 24);
+
+	QByteArray seen;
+	QVERIFY2(wait_for_output(&session, QByteArrayLiteral("cannot run"), &seen),
+	          qPrintable(QStringLiteral("a command that will not run said nothing; saw: %1")
+	                             .arg(QString::fromLocal8Bit(seen.left(200)))));
+
+	QElapsedTimer timer;
+	timer.start();
+	while (exited.isEmpty() && timer.elapsed() < 5000) {
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+	}
+
+	QVERIFY2(!exited.isEmpty(), "a child that could not exec must still be reaped");
+	QCOMPARE(exited.first().at(0).toInt(), 127);
+}
+
 void pty_session_test::a_local_profile_is_valid_without_a_host() {
 	/*
 	 * is_valid() gates whether anything will open a profile at all, and

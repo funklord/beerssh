@@ -21,6 +21,14 @@ struct outcome_t {
 	bool key_unknown = false;
 	bool key_changed = false;
 	bool key_revoked = false;
+
+	/* The far end's channel closed on its own -- sec 8.6's -e finishing. */
+	bool exited = false;
+	int exit_status = -1;
+
+	/* Everything the far end sent, for a test that wants to read it. */
+	QByteArray output;
+
 	QString reason;
 };
 
@@ -68,7 +76,8 @@ QString test_key() {
  * result worth reporting rather than one to wait forever for.
  */
 outcome_t attempt(const QString &identity, bool trust_host_key = true,
-	                 const QString &jump = QString())
+	                 const QString &jump = QString(),
+	                 const QStringList &command = QStringList())
 {
 	outcome_t out;
 
@@ -108,6 +117,12 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true,
 		out.reason = reason;
 		loop.quit();
 	});
+	QObject::connect(session, &bssh_ssh_session::shell_exited,
+		                [&out, &loop](int status) {
+		out.exited = true;
+		out.exit_status = status;
+		loop.quit();
+	});
 
 	QObject::connect(session, &bssh_ssh_session::state_changed,
 		                [&](bssh_ssh_session::state_t state) {
@@ -119,15 +134,22 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true,
 		 * Echoed rather than merely connected: authentication succeeding
 		 * proves the key was accepted, and a shell answering proves the
 		 * channel and the byte path behind it work too.
+		 *
+		 * A command (sec 8.6's -e) needs none of that: it runs on its
+		 * own and its output is what comes back, so nothing is typed at
+		 * a shell that was never asked for.
 		 */
-		QTimer::singleShot(600, session, [session] {
-			session->send(QByteArrayLiteral("echo BSSH_LIVE_OK\n"));
-		});
+		if (command.isEmpty()) {
+			QTimer::singleShot(600, session, [session] {
+				session->send(QByteArrayLiteral("echo BSSH_LIVE_OK\n"));
+			});
+		}
 		QTimer::singleShot(2500, &loop, [&loop] { loop.quit(); });
 	});
 
 	if (!identity.isEmpty()) session->set_identity_file(identity);
 	if (!jump.isEmpty()) session->set_proxy_jump(jump);
+	if (!command.isEmpty()) session->set_command(command);
 	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
 		                        qEnvironmentVariable("USER"));
 
@@ -139,6 +161,7 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true,
 	loop.exec();
 
 	out.shell_replied = received.contains("BSSH_LIVE_OK");
+	out.output = received;
 	session->disconnect_from_host();
 	delete session;
 	return out;
@@ -867,6 +890,31 @@ QByteArray shell_output(int cols, int rows, const QByteArray &command,
 }
 
 } /* namespace */
+
+void live_ssh_test::a_remote_command_runs_instead_of_a_shell()
+{
+	if (!server_available()) return;
+	if (phase() == QStringLiteral("rekeyed")) {
+		QSKIP("the host key has been swapped; authentication is refused by design here");
+	}
+
+	/*
+	 * `beerssh user@host -e echo ...` (sec 8.6), which is what `ssh -t
+	 * host echo ...` does. Two things are being shown at once and both
+	 * matter: the words reach the far end joined, because an exec request
+	 * carries one string and its shell splits it; and the channel ENDS
+	 * when the command does, which is what closes the pane.
+	 */
+	const QStringList command({ QStringLiteral("echo"), QStringLiteral("BSSH_EXEC_OK") });
+	const outcome_t out = attempt(test_key(), true, QString(), command);
+
+	QVERIFY2(out.connected, "the command attempt must still authenticate");
+	QVERIFY2(out.output.contains("BSSH_EXEC_OK"),
+	          qPrintable(QStringLiteral("the remote command did not run; saw: %1")
+	                             .arg(QString::fromLocal8Bit(out.output.left(200)))));
+	QVERIFY2(out.exited, "a command that finished must report the channel closing");
+	QCOMPARE(out.exit_status, 0);
+}
 
 void live_ssh_test::the_remote_is_told_the_size_it_was_given()
 {

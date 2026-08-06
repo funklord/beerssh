@@ -3,6 +3,8 @@
 
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
+#include <QtGlobal>
 
 /*
  * bssh_profile_t -- one host you connect to (project.md sec 10).
@@ -80,8 +82,37 @@ struct bssh_profile_t {
 	/* What the local shell runs. Empty means $SHELL, then /bin/sh. */
 	QString shell;
 
+	/*
+	 * What to run instead of a shell, argv-style (sec 8.6's -e). Empty is
+	 * the ordinary case: the login shell locally, the remote's own shell
+	 * over SSH.
+	 *
+	 * Beside `shell` because it answers the same question -- what does
+	 * this session run -- and because putting it here is what lets it
+	 * reach the transport without a second channel from main() down
+	 * through the window, the registry and the session.
+	 */
+	QStringList command;
+
+	/* Where a local shell starts (sec 8.6's --workdir); empty inherits. */
+	QString working_directory;
+
+	/*
+	 * Keep the pane when what it was running ends, rather than closing it
+	 * (sec 8.6's --hold).
+	 *
+	 * A launch-time policy rather than a property of the host, and here
+	 * anyway: the window learns a session has ended from a signal that
+	 * carries the session, and a session carries its profile. The
+	 * alternative was a fourth thing for main() to thread through the
+	 * registry. Never written to the store -- profile_store saves the
+	 * fields it names, and this is not one of them.
+	 */
+	bool hold;
+
 	bssh_profile_t()
-	    : id(0), port(22), has_stored_password(false), preset_id(0), local(false) {}
+	    : id(0), port(22), has_stored_password(false), preset_id(0), local(false),
+	      hold(false) {}
 
 	/*
 	 * A local profile is valid without a host, which is the whole point
@@ -110,6 +141,39 @@ struct bssh_profile_t {
 		QString text = user.isEmpty() ? host : user + QLatin1Char('@') + host;
 		if (port != 22) text += QLatin1Char(':') + QString::number(port);
 		return text;
+	}
+
+	/*
+	 * target()'s inverse: the [user@]host[:port] somebody typed on the
+	 * command line (sec 8.6), as a profile with nothing else set.
+	 *
+	 * Here rather than in the window that used to hold it, next to the
+	 * function it undoes, because two things parse one now -- the window
+	 * and main() -- and a destination that round-trips differently
+	 * depending on which of them read it is a bug waiting for a port
+	 * number.
+	 *
+	 * The user falls back to this account's, which is what ssh does with
+	 * a bare hostname.
+	 */
+	static bssh_profile_t from_target(const QString &target) {
+		bssh_profile_t profile;
+		QString rest = target;
+
+		const int at = rest.lastIndexOf(QLatin1Char('@'));
+		if (at >= 0) {
+			profile.user = rest.left(at);
+			rest = rest.mid(at + 1);
+		}
+		const int colon = rest.lastIndexOf(QLatin1Char(':'));
+		if (colon >= 0) {
+			profile.port = static_cast<quint16>(rest.mid(colon + 1).toUShort());
+			rest = rest.left(colon);
+		}
+		profile.host = rest;
+		if (profile.user.isEmpty()) profile.user = qEnvironmentVariable("USER");
+
+		return profile;
 	}
 };
 

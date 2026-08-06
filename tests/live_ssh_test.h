@@ -81,6 +81,15 @@ private slots:
 	 * tests, and it is asked of the SHELL rather than of anything this
 	 * app kept a copy of.
 	 */
+	/*
+	 * sec 8.6's -e over SSH. Worth a real server rather than a fake for
+	 * the reason IdentityFile was: a fake proves the words were stored,
+	 * and only a server can show that the exec request was made instead
+	 * of a shell request, that the PTY was still asked for, and that the
+	 * far end's own shell did the splitting the protocol leaves to it.
+	 */
+	void a_remote_command_runs_instead_of_a_shell();
+
 	void the_remote_is_told_the_size_it_was_given();
 	void a_resize_reaches_the_remote();
 

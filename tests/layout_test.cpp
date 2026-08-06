@@ -730,7 +730,7 @@ void layout_test::backing_out_of_a_session_reaches_the_host_list() {
 	});
 
 	/* A command-line target opens straight into the terminal (sec 8.5). */
-	bssh_main_window window(QStringLiteral("nowhere.example"));
+	bssh_main_window window(bssh_profile_t::from_target(QStringLiteral("nowhere.example")));
 	QVERIFY2(!window.showing_front_door(), "a target must open into the terminal");
 
 	QCloseEvent back;
@@ -1944,6 +1944,60 @@ void layout_test::a_window_watches_for_a_screen_change() {
 
 	QCOMPARE(panes->views().first()->cols(), cols);
 	QCOMPARE(panes->views().first()->rows(), rows);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_window_can_be_sized_in_cells() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	/*
+	 * main()'s own order, which is the half that could go wrong on its
+	 * own: the session is opened and the window sized BEFORE it is ever
+	 * shown, so the measurement has to work against a widget tree that
+	 * has never been laid out.
+	 */
+	bssh_main_window window;
+	window.resize(900, 600);
+
+	bssh_session *session = window.registry()->create(named(QStringLiteral("sized")));
+	window.adopt_session(session);
+
+	window.resize(window.size_for_grid(100, 30));
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QVERIFY(!panes->views().isEmpty());
+
+	/*
+	 * Read back off the GRID rather than off the window. A window that is
+	 * a hundred cells wide plus a border's worth of chrome is a window
+	 * whose terminal is ninety-nine columns, and only the view can say
+	 * which happened -- which is what this caught the first time.
+	 */
+	QCOMPARE(panes->views().first()->cols(), 100);
+	QCOMPARE(panes->views().first()->rows(), 30);
+
+	/*
+	 * And again on a window that IS laid out, which takes the other path
+	 * -- the measured one. 80x24 rather than something smaller on
+	 * purpose: this window cannot shrink below the front door's own
+	 * minimum, because the pages share a QStackedWidget and a stack asks
+	 * every page how small it may be. Measured here at 520x460, which is
+	 * about 57 columns by 21 rows, so a --geometry under that is clamped
+	 * and the grid comes out bigger than asked for. Recorded in sec 8.6
+	 * rather than asserted, since freezing a defect into a test is how it
+	 * becomes the specification.
+	 */
+	window.resize(window.size_for_grid(80, 24));
+	QCoreApplication::processEvents();
+	panes->remeasure_panes();
+
+	QCOMPARE(panes->views().first()->cols(), 80);
+	QCOMPARE(panes->views().first()->rows(), 24);
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

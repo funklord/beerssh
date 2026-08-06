@@ -21,8 +21,10 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QShowEvent>
+#include <QTimer>
 #include <QWindow>
 #include <QScreen>
+#include <QLayout>
 #include <QVBoxLayout>
 
 #include <QStackedWidget>
@@ -70,7 +72,7 @@
  */
 static const int BSSH_TEAR_OUT_DP = 40;
 
-bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
+bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent)
     : QWidget(parent),
       m_pages(new QStackedWidget(this)),
       m_terminal_page(new QWidget(this)),
@@ -237,6 +239,31 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	connect(m_registry, &bssh_session_registry::session_closing,
 	         this, [this](bssh_session *session) {
 		if (m_current == session) detach_session();
+
+		/*
+		 * The last pane of a window whose session ENDED takes the
+		 * window with it, on a device that opens with a shell
+		 * (sec 8.6). A terminal whose program has finished is done,
+		 * and falling back to the PuTTY-shaped front door instead
+		 * would mean `beerssh -e ls` printed its output and then
+		 * offered a connection dialog.
+		 *
+		 * Asked of opens_a_local_shell() rather than of the OS: a
+		 * device that opens with its host list returns to that list,
+		 * which is where a phone's Back button already goes (sec 8.3).
+		 * And only for an ENDING -- closing a tab by hand leaves the
+		 * user driving the app, so that keeps going up to the front
+		 * door as it always has.
+		 */
+		if (!session->exited_cleanly()) return;
+		if (m_shown.size() != 1 || m_shown.first() != session) return;
+		if (!opens_a_local_shell(bssh_platform::instance()
+		                          && bssh_platform::instance()->is_touch_primary())) {
+			return;
+		}
+
+		/* Not from inside the registry's own signal. */
+		QTimer::singleShot(0, this, [this] { close(); });
 	});
 
 	/*
@@ -511,37 +538,15 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	update_status();
 
 	/*
-	 * A command-line target skips the front door entirely, which is what
-	 * anyone typing one wants. Otherwise the front door is the first
-	 * thing shown, as it is in PuTTY.
+	 * A session named on the command line skips the front door entirely,
+	 * which is what anyone typing one wants. Otherwise the front door is
+	 * the first thing shown, as it is in PuTTY, and main() decides
+	 * whether to restore last time's tabs on top of it.
 	 */
-	if (!target.isEmpty()) {
+	if (launch.is_valid()) {
 		m_pages->setCurrentWidget(m_terminal_page);
-		connect_to(target);
-	} else {
-		restore_layout();
+		open_profile(launch);
 	}
-}
-
-void bssh_main_window::connect_to(const QString &target) {
-	/* [user@]host[:port] from the command line -- see the header. */
-	bssh_profile_t profile;
-	QString rest = target;
-
-	const int at = rest.lastIndexOf(QLatin1Char('@'));
-	if (at >= 0) {
-		profile.user = rest.left(at);
-		rest = rest.mid(at + 1);
-	}
-	const int colon = rest.lastIndexOf(QLatin1Char(':'));
-	if (colon >= 0) {
-		profile.port = static_cast<quint16>(rest.mid(colon + 1).toUShort());
-		rest = rest.left(colon);
-	}
-	profile.host = rest;
-	if (profile.user.isEmpty()) profile.user = qEnvironmentVariable("USER");
-
-	open_profile(profile);
 }
 
 /*
@@ -709,6 +714,11 @@ bssh_session *bssh_main_window::prepare_profile(const bssh_profile_t &profile) {
 		if (dialog.remember()) offer_to_remember(session, password);
 	});
 
+	/*
+	 * What the status line says about an ending. Only worth anything
+	 * under --hold, which is the one case where the pane is still there
+	 * to read it -- the registry closes the rest (sec 8.6).
+	 */
 	connect(session, &bssh_session::shell_exited, this, [this, session](int status) {
 		if (session != m_current) return;
 
@@ -2037,6 +2047,57 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 	}
 	bssh_platform::instance()->set_keep_alive(false);
 	event->accept();
+}
+
+QSize bssh_main_window::size_for_grid(int cols, int rows) {
+	if (cols < 1 || rows < 1) return size();
+
+	/*
+	 * On a window that is up, measure. Whatever this one puts around its
+	 * terminal is exactly the difference between the two, so a hidden tab
+	 * bar costs nothing and a widget added later is counted without
+	 * anyone remembering to.
+	 *
+	 * With the panes split this sizes the window so that the FOCUSED pane
+	 * is the grid asked for, which is the honest reading of a request
+	 * naming one size -- and the case a command line reaches, since a
+	 * window opened from one has a single session in it.
+	 */
+	if (isVisible() && m_terminal_view && !m_terminal_view->size().isEmpty()) {
+		if (QLayout *tree = layout()) tree->activate();
+
+		return m_terminal_view->size_for_grid(cols, rows)
+		       + (size() - m_terminal_view->size());
+	}
+
+	/*
+	 * Before the window has ever been shown -- which is when main() asks,
+	 * so that --geometry takes effect without the window appearing at one
+	 * size and jumping to another -- there is nothing to measure. A
+	 * hidden widget tree is not laid out, and activating the layout by
+	 * hand reaches the top level and not the pages under it, so the view
+	 * still answers with whatever size it was constructed at. The first
+	 * version of this measured anyway and asked for a hundred columns of
+	 * a window that came up with a hundred and eighty-eight.
+	 *
+	 * So the chrome is NAMED here. It is a short list and this window is
+	 * the one place that knows it: the tab bar when it is showing, the
+	 * status line, the key row on a touch device. Everything else in
+	 * between -- the page stack, the pane container, its splitter -- has
+	 * zero margins by construction. The test that caught the measuring
+	 * asserts the grid this produces, both ways round.
+	 */
+	QSize wanted = m_terminal_view
+	        ? m_terminal_view->size_for_grid(cols, rows)
+	        : bssh_terminal_view().size_for_grid(cols, rows);
+
+	if (wanted.isEmpty()) return size();
+
+	if (m_tabs && !m_tabs->isHidden()) wanted.rheight() += m_tabs->sizeHint().height();
+	if (m_status_label) wanted.rheight() += m_status_label->sizeHint().height();
+	if (m_key_row && !m_key_row->isHidden()) wanted.rheight() += m_key_row->sizeHint().height();
+
+	return wanted;
 }
 
 bool bssh_main_window::showing_front_door() const {

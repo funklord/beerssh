@@ -163,6 +163,78 @@ void session_registry_test::the_transport_reports_which_kind_of_ending_it_was() 
 	QCOMPARE(exited.count(), 1);
 }
 
+void session_registry_test::a_shell_that_ends_closes_its_session() {
+	/*
+	 * sec 8.6: a terminal whose program has finished closes, which is
+	 * what every terminal since xterm does and what this did NOT do --
+	 * the pane stayed with "session ended" written under it, xterm's
+	 * -hold behaviour applied to everybody whether they asked or not.
+	 *
+	 * Asserted on the REGISTRY rather than on a window, because that is
+	 * where the rule lives: a tab torn into another window, and a session
+	 * no view is showing at all, have to end the same way.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_session_registry registry;
+	bssh_session *session = registry.create(profile_for(QStringLiteral("one"),
+	                                                     QStringLiteral("a.example")));
+	session->connect_to_host();
+	QVERIFY(fake);
+
+	QSignalSpy closing(&registry, &bssh_session_registry::session_closing);
+	fake->simulate_remote_exit(0);
+
+	/* Deferred by a turn of the event loop -- this arrives from inside
+	 * the transport's own signal. */
+	QTRY_COMPARE(registry.count(), 0);
+	QCOMPARE(closing.count(), 1);
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void session_registry_test::a_held_session_stays_when_its_shell_ends() {
+	/*
+	 * --hold, and the reason it exists: a command that fails prints why
+	 * and exits, and closing the pane takes the message with it.
+	 *
+	 * The other half of the rule is asserted here too -- a session that
+	 * DROPS is left alone whether it is held or not, because sec 5.3's
+	 * reconnection machine owns that case and a registry that closed
+	 * sessions on a lost link would undo it.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_profile_t profile = profile_for(QStringLiteral("held"), QStringLiteral("a.example"));
+	profile.hold = true;
+
+	bssh_session_registry registry;
+	bssh_session *session = registry.create(profile);
+	session->connect_to_host();
+	QVERIFY(fake);
+
+	fake->simulate_remote_exit(3);
+
+	/*
+	 * Waited out rather than checked once: the closing this asserts the
+	 * absence of would arrive one event-loop turn later, so a test that
+	 * looked immediately would pass even with --hold ignored entirely.
+	 */
+	QTest::qWait(50);
+	QCOMPARE(registry.count(), 1);
+	QVERIFY(session->exited_cleanly());
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void session_registry_test::a_password_is_requested_only_when_keys_fail() {
 	bssh_fake_ssh_session transport;
 	QSignalSpy asked(&transport, &bssh_ssh_session::password_required);

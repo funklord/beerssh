@@ -76,6 +76,20 @@ public:
 	int cell_height() const { return m_cell_height; }
 
 	/*
+	 * How big this widget has to be to hold a grid of cols x rows
+	 * (project.md sec 8.6's --geometry).
+	 *
+	 * Asked of the view rather than computed by the caller, because the
+	 * answer is not just the cell metrics: a pane keeps a pixel clear at
+	 * each edge for the focused-pane border (sec 8.3), so a window sized
+	 * to exactly cols * cell_width is a window one column short. That
+	 * inset is this class's, and a second copy of it in the window would
+	 * be a second thing to keep in step -- which is how the first version
+	 * of --geometry produced a 99-column terminal for `100x30`.
+	 */
+	QSize size_for_grid(int cols, int rows) const;
+
+	/*
 	 * The curated set's way in (project.md sec 9): a stable font id and a
 	 * point size, resolved through bssh_font_catalog rather than by naming
 	 * a family here. Going through the catalog is what gets the sec 9.3

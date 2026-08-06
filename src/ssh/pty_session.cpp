@@ -1,5 +1,6 @@
 #include "ssh/pty_session.h"
 
+#include <QList>
 #include <QProcessEnvironment>
 #include <QSocketNotifier>
 
@@ -11,6 +12,7 @@
 #include <fcntl.h>
 #include <pty.h>
 #include <sys/ioctl.h>
+#include <sys/uio.h>
 #include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
@@ -67,6 +69,40 @@ int collect(pid_t child) {
 	return 0;
 }
 
+/*
+ * Complains from the child, between fork and exec, and does not return.
+ *
+ * write(2) and _exit(2) only, because this process has more than one
+ * thread -- the SSH transport runs its own (sec 4) -- and after a fork the
+ * child holds whatever locks the other threads happened to be inside.
+ * dprintf and strerror can both take the allocator's, so a message about
+ * a command that would not run could hang the child forever instead of
+ * printing anything. strerror_r writes into the caller's buffer.
+ *
+ * The pty is this child's stderr, so what it writes lands in the terminal
+ * that asked for it -- with a CR, since nothing on the far side of a pty
+ * translates newlines for us.
+ */
+void child_fail(const char *what, const char *name, int code) {
+	char buffer[128];
+	const char *why = strerror_r(errno, buffer, sizeof(buffer));
+
+	const struct iovec parts[] = {
+		{ const_cast<char *>("beerssh: "), 9 },
+		{ const_cast<char *>(what), std::strlen(what) },
+		{ const_cast<char *>(name), std::strlen(name) },
+		{ const_cast<char *>(": "), 2 },
+		{ const_cast<char *>(why), std::strlen(why) },
+		{ const_cast<char *>("\r\n"), 2 },
+	};
+
+	/* Nothing to be done if it fails; the exit status still carries it. */
+	ssize_t ignored = ::writev(STDERR_FILENO, parts, 6);
+	(void)ignored;
+
+	_exit(code);
+}
+
 } /* namespace */
 
 bssh_pty_session::bssh_pty_session(QObject *parent)
@@ -103,6 +139,51 @@ void bssh_pty_session::open_shell(int cols, int rows) {
 	size.ws_col = ushort(cols > 0 ? cols : 80);
 	size.ws_row = ushort(rows > 0 ? rows : 24);
 
+	/*
+	 * Everything the child needs, converted BEFORE the fork.
+	 *
+	 * Between fork and exec only async-signal-safe calls are sound, and
+	 * QString::toLocal8Bit allocates. The child below therefore does
+	 * nothing but arrange descriptors, chdir and exec -- the strings it
+	 * hands to them were built here, in the parent, while there was still
+	 * one thread and one heap.
+	 */
+	QList<QByteArray> words;
+	if (m_command.isEmpty()) {
+		QByteArray shell = m_shell.toLocal8Bit();
+		if (shell.isEmpty()) shell = qgetenv("SHELL");
+		if (shell.isEmpty()) shell = QByteArrayLiteral("/bin/sh");
+		words.append(shell);
+	} else {
+		for (const QString &word : m_command) words.append(word.toLocal8Bit());
+	}
+
+	/*
+	 * A LOGIN shell -- argv[0] with a leading '-', which is what getty
+	 * and ssh both do and what makes a shell read its profile. A terminal
+	 * that opens without the user's own environment is one they have to
+	 * fix by hand every time.
+	 *
+	 * A COMMAND is not given the treatment: `-e ls` runs ls with argv[0]
+	 * of "ls", because a program reads its own argv[0] and "-ls" is a
+	 * different thing to several of them.
+	 */
+	const QByteArray program = words.first();
+	QByteArray arg0 = program;
+	if (m_command.isEmpty()) {
+		arg0 = QByteArrayLiteral("-") + program.mid(program.lastIndexOf('/') + 1);
+	}
+
+	QList<char *> argv;
+	argv.append(const_cast<char *>(arg0.constData()));
+	for (int i = 1; i < words.size(); ++i) {
+		argv.append(const_cast<char *>(words.at(i).constData()));
+	}
+	argv.append(nullptr);
+
+	const QByteArray directory = m_working_directory.toLocal8Bit();
+	const QByteArray term = m_term.toLocal8Bit();
+
 	int master = -1;
 	const pid_t child = forkpty(&master, nullptr, nullptr, &size);
 
@@ -119,23 +200,29 @@ void bssh_pty_session::open_shell(int cols, int rows) {
 		 * _exit rather than unwind back into Qt, which would leave two
 		 * processes running the same event loop.
 		 */
-		QByteArray shell = m_shell.toLocal8Bit();
-		if (shell.isEmpty()) shell = qgetenv("SHELL");
-		if (shell.isEmpty()) shell = QByteArrayLiteral("/bin/sh");
-
-		if (!m_term.isEmpty()) setenv("TERM", m_term.toLocal8Bit().constData(), 1);
+		if (!term.isEmpty()) setenv("TERM", term.constData(), 1);
 
 		/*
-		 * A LOGIN shell: argv[0] with a leading '-', which is what
-		 * getty and ssh both do and what makes a shell read its profile.
-		 * A terminal that opens without the user's own environment is
-		 * one they have to fix by hand every time.
+		 * chdir before exec, and refuse loudly (sec 8.6's --workdir).
+		 * A directory that cannot be entered would otherwise leave the
+		 * shell wherever beerssh was started, which looks like the
+		 * option having been ignored -- and the message reaches the
+		 * pty, so it is on screen in the terminal that asked for it.
 		 */
-		const QByteArray base = shell.mid(shell.lastIndexOf('/') + 1);
-		const QByteArray arg0 = QByteArrayLiteral("-") + base;
+		if (!directory.isEmpty() && chdir(directory.constData()) != 0) {
+			child_fail("cannot enter ", directory.constData(), 126);
+		}
 
-		execl(shell.constData(), arg0.constData(), nullptr);
-		_exit(127);
+		execvp(program.constData(), argv.data());
+
+		/*
+		 * 127 is the shell's code for "not found" and 126 for "found
+		 * and not runnable", which is what anything reading our exit
+		 * status already understands. Said out loud as well: a mistyped
+		 * -e is the ordinary way to get here, and a pane that opens and
+		 * closes with no message is indistinguishable from a crash.
+		 */
+		child_fail("cannot run ", program.constData(), errno == ENOENT ? 127 : 126);
 	}
 
 	m_master = master;
@@ -262,10 +349,13 @@ void bssh_pty_session::disconnect_from_host() {
 	reap();
 }
 
-bssh_ssh_session *bssh_ssh_session::create_local(const QString &shell, QObject *parent) {
+bssh_ssh_session *bssh_ssh_session::create_local(const QString &shell,
+                                                  const QString &working_directory,
+                                                  QObject *parent) {
 	if (bssh_ssh_session *injected = create_from_factory(parent)) return injected;
 
 	bssh_pty_session *session = new bssh_pty_session(parent);
 	session->set_shell(shell);
+	session->set_working_directory(working_directory);
 	return session;
 }

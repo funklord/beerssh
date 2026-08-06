@@ -35,6 +35,7 @@ PRE_TARGETDEPS += $$PWD/../build-vterm/libvterm.a
 
 SOURCES += \
     main.cpp \
+    command_line_test.cpp \
     conn_manager_test.cpp \
     emulator_bench.cpp \
     live_ssh_test.cpp \
@@ -76,6 +77,7 @@ SOURCES += \
     ../src/platform/secret_store_select_desktop.cpp \
     ../src/model/app_settings.cpp \
     ../src/model/conn_manager.cpp \
+    ../src/model/command_line.cpp \
     ../src/model/document_path.cpp \
     ../src/model/preset.cpp \
     ../src/model/ssh_config.cpp \
@@ -108,6 +110,7 @@ SOURCES += \
 
 HEADERS += \
     fake_ssh_session.h \
+    command_line_test.h \
     conn_manager_test.h \
     emulator_bench.h \
     live_ssh_test.h \
@@ -144,6 +147,7 @@ HEADERS += \
     ../src/model/profile.h \
     ../src/model/app_settings.h \
     ../src/model/conn_manager.h \
+    ../src/model/command_line.h \
     ../src/model/document_path.h \
     ../src/model/preset.h \
     ../src/model/ssh_config.h \

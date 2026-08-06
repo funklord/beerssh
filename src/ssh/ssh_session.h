@@ -2,6 +2,7 @@
 #define BSSH_SSH_SESSION_H
 
 #include <QByteArray>
+#include <QStringList>
 
 #include <functional>
 #include <QObject>
@@ -69,7 +70,9 @@ public:
 	 * the same injected factory, so a test fakes a local session exactly
 	 * as it fakes an SSH one.
 	 */
-	static bssh_ssh_session *create_local(const QString &shell, QObject *parent = nullptr);
+	static bssh_ssh_session *create_local(const QString &shell,
+	                                       const QString &working_directory = QString(),
+	                                       QObject *parent = nullptr);
 
 	/*
 	 * Replaces what create() builds. This is the seam sec 12.3 asks for:
@@ -99,6 +102,23 @@ public:
 
 	/* cols/rows, not pixels -- the remote side lays out a character grid. */
 	virtual void open_shell(int cols, int rows) = 0;
+
+	/*
+	 * Run this instead of a shell (project.md sec 8.6's -e), argv-style
+	 * and empty for the ordinary case. Set before the shell is opened;
+	 * afterwards there is nothing left to decide.
+	 *
+	 * On the interface because both transports answer it, and they answer
+	 * it the way their own tradition does. A local shell EXECS the words
+	 * as given, with no shell between them, which is what xterm's -e
+	 * means. SSH has no argv on the wire -- an exec request carries one
+	 * string, which the far end hands to the account's shell -- so the
+	 * words are joined with spaces there, which is what `ssh host ls -l`
+	 * does and is why that one needs quoting and the local one does not.
+	 * The difference is the protocols', not ours, and hiding it would
+	 * mean pretending one of them can do what it cannot.
+	 */
+	virtual void set_command(const QStringList &command) = 0;
 	virtual void resize(int cols, int rows) = 0;
 
 	virtual void send(const QByteArray &bytes) = 0;

@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 
+#include "command_line_test.h"
 #include "conn_manager_test.h"
 #include "emulator_bench.h"
 #include "live_ssh_test.h"
@@ -329,6 +330,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<preset_editor_test>(argc, argv);
 	failures += run_test<screen_test>(argc, argv);
 	failures += run_test<ssh_config_test>(argc, argv);
+	failures += run_test<command_line_test>(argc, argv);
 	failures += run_test<conn_manager_test>(argc, argv);
 	failures += run_test<emulator_test>(argc, argv);
 	failures += run_test<graphics_test>(argc, argv);

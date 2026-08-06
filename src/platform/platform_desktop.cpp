@@ -13,6 +13,8 @@
 #include <QMenu>
 #include <QSystemTrayIcon>
 
+#include "model/command_line.h"
+
 /*
  * Desktop implementation of bssh_platform (Linux primary; macOS and
  * Windows best-effort, per project.md sec 1).
@@ -255,18 +257,17 @@ public:
 		/*
 		 * A file named on the command line, which is what a desktop file
 		 * manager passes when BeerSSH is the handler for a .ini, and
-		 * what a shell passes when someone types it. Only .ini is
-		 * accepted: the first non-option argument is otherwise a
-		 * [user@]host[:port] target (sec 14, M1), and mistaking a
-		 * hostname for a file to import would be a strange way to fail.
+		 * what a shell passes when someone types it.
+		 *
+		 * Through the one command-line parser (sec 8.6), which is the
+		 * point of this being three lines. It used to be a second scan
+		 * of argv living here, with its own idea of what an option
+		 * looked like and its own rule for telling a path from a
+		 * hostname -- and the two could disagree: this one required the
+		 * file to EXIST, so a mistyped preset path fell through to
+		 * main()'s loop and was dialled as a hostname.
 		 */
-		for (const QString &argument : QCoreApplication::arguments().mid(1)) {
-			if (argument.startsWith(QLatin1Char('-'))) continue;
-			if (!argument.endsWith(QStringLiteral(".ini"), Qt::CaseInsensitive)) continue;
-			if (QFileInfo::exists(argument)) return argument;
-		}
-
-		return QString();
+		return bssh_command_line().document;
 	}
 
 	bool platform_is_touch_primary() const override {

@@ -44,6 +44,7 @@ SOURCES += \
     src/main.cpp \
     src/model/app_settings.cpp \
     src/model/conn_manager.cpp \
+    src/model/command_line.cpp \
     src/model/document_path.cpp \
     src/model/preset.cpp \
     src/model/ssh_config.cpp \
@@ -92,6 +93,7 @@ HEADERS += \
     src/model/profile.h \
     src/model/app_settings.h \
     src/model/conn_manager.h \
+    src/model/command_line.h \
     src/model/document_path.h \
     src/model/preset.h \
     src/model/ssh_config.h \

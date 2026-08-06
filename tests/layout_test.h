@@ -51,6 +51,14 @@ private slots:
 	void a_dragged_tab_lands_where_it_is_dropped();
 	void a_drop_naming_no_session_is_declined();
 	void a_window_watches_for_a_screen_change();
+
+	/*
+	 * sec 8.6's --geometry, which is a claim about CELLS and can only be
+	 * checked by asking the grid what it became. The arithmetic behind it
+	 * -- cell metrics plus whatever chrome is showing -- is exactly the
+	 * kind that looks right and lands a row short.
+	 */
+	void a_window_can_be_sized_in_cells();
 	void a_live_tab_is_not_offered_connect();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already

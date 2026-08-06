@@ -1,6 +1,8 @@
 #include "model/session_registry.h"
 
 #include <QMetaType>
+#include <QPointer>
+#include <QTimer>
 
 #include "model/conn_manager.h"
 #include "model/session.h"
@@ -43,6 +45,34 @@ bssh_session *bssh_session_registry::create(const bssh_profile_t &profile) {
 
 	connect(bssh_platform::instance(), &bssh_platform::network_changed,
 	         manager, &bssh_conn_manager::note_network_changed);
+
+	/*
+	 * A session whose shell ended closes itself, unless it was opened to
+	 * hold (sec 8.6). This is what every terminal since xterm does when
+	 * the thing it was running finishes, and until now nothing did it:
+	 * the pane stayed with "session ended" written under it, which is
+	 * xterm's -hold behaviour applied to everybody whether they asked for
+	 * it or not.
+	 *
+	 * Here rather than in the window, because it is a fact about a
+	 * session rather than about a view of one -- a tab torn into another
+	 * window, or one no view is showing at all, must end the same way.
+	 * Only an ENDING closes: a dropped connection is sec 5.3's business
+	 * and stays for the reconnect, and a failure stays so its reason can
+	 * be read.
+	 *
+	 * Deferred by a turn of the event loop, and through a QPointer,
+	 * because this arrives from inside the transport's own signal and the
+	 * session is what owns that transport.
+	 */
+	connect(session, &bssh_session::shell_exited, this, [this, session](int) {
+		if (session->profile().hold) return;
+
+		QPointer<bssh_session> alive(session);
+		QTimer::singleShot(0, this, [this, alive] {
+			if (alive) close(alive);
+		});
+	});
 
 	emit session_added(session);
 	emit changed();

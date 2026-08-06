@@ -481,6 +481,12 @@ int bssh_snap_to_device_pixels(int pixels, qreal device_ratio) {
 	return qMax(period, int(qRound(pixels / qreal(period))) * period);
 }
 
+QSize bssh_terminal_view::size_for_grid(int cols, int rows) const {
+	/* The exact inverse of recompute_grid below, inset included. */
+	return QSize(qMax(1, cols) * m_cell_width + 2 * BSSH_GRID_INSET_PX,
+	              qMax(1, rows) * m_cell_height + 2 * BSSH_GRID_INSET_PX);
+}
+
 void bssh_terminal_view::recompute_grid() {
 	/*
 	 * The focus border's width is reserved whether or not the border is

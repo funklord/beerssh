@@ -48,6 +48,7 @@ public:
 	void send(const QByteArray &bytes) override;
 	void set_keepalive(int seconds) override;
 	void set_term(const QString &term) override;
+	void set_command(const QStringList &command) override;
 	void set_compression(bool compression) override;
 	void set_identity_file(const QString &path) override;
 	void set_proxy_jump(const QString &spec) override;
