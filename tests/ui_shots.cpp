@@ -272,8 +272,16 @@ void bssh_ui_shots::render_terminal() {
 	        ? bssh_font_catalog::instance().load_bundled(platform->font_directory())
 	        : 0;
 
-	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
-	const QString family = catalog.family_for(QString());
+	/*
+	 * Asked of a view built exactly as the sample views below are, not
+	 * re-derived from the catalog. family_for(QString()) answers with the
+	 * fallback chain's first entry, while a view resolves an empty id
+	 * through default_id() -- so the caption named DejaVu Sans Mono over
+	 * pictures drawn in JetBrains Mono, which is the one thing this line
+	 * exists to get right.
+	 */
+	const bssh_terminal_view probe;
+	const QString family = probe.font_family();
 
 	QTextStream(stdout) << QStringLiteral("\nterminal, in %1 (%2):\n")
 	                               .arg(family,

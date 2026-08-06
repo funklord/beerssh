@@ -124,6 +124,16 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	 */
 	QScroller::grabGesture(m_list->viewport(), QScroller::LeftMouseButtonGesture);
 
+	/*
+	 * A target elides in the MIDDLE, not at the end. A row's second line
+	 * is user@host:port, and the two ends are what identify it -- who you
+	 * are, and which port -- while the middle of a long internal domain
+	 * is the part nobody needs. Elided at the end,
+	 * nabbe.testing@build.internal.example.com:2299 loses the port, which
+	 * is exactly the detail that tells two rows apart.
+	 */
+	m_list->setTextElideMode(Qt::ElideMiddle);
+
 	layout->addWidget(m_list, 1);
 
 	/*
@@ -137,6 +147,7 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	m_add->setText(QStringLiteral("+"));
 	m_add->setFixedSize(56, 56);
 	style_add_button();
+	style_rows();
 	m_add->raise();
 
 	connect(m_add, &QToolButton::clicked, this, &bssh_host_list::add_requested);
@@ -286,9 +297,46 @@ void bssh_host_list::style_add_button() {
 	                                    pressed.name()));
 }
 
+/*
+ * Row separators, for the same reason and by the same route as the button
+ * above: a stylesheet cannot read the palette and does not re-evaluate
+ * when it changes, so this is rebuilt on the change event too.
+ *
+ * The rows were 64dp touch targets carrying two lines of text and NOTHING
+ * saying they were rows -- no rule between them, no selection, no pressed
+ * state. The first screen an Android user meets read as two paragraphs of
+ * text rather than as a list you tap, against sec 8.5 asking for
+ * full-bleed rows and one tap to connect. Found by rendering it and
+ * looking: every size check was satisfied, because 64dp of nothing is
+ * still 64dp.
+ *
+ * Derived from the palette rather than picked. A fixed grey that reads as
+ * a hairline against the light theme is invisible against the dark one --
+ * the trap sec 6.2 records the tab status dots falling into -- and Mid
+ * sits between the window and its text in both.
+ *
+ * The list keeps its own Base background rather than being made
+ * transparent. Transparent looked tidier in isolation and cost the
+ * distinction between the heading band and the content under it: the
+ * screen became one flat panel with a title floating on it.
+ */
+void bssh_host_list::style_rows() {
+	if (!m_list) return;
+
+	m_list->setStyleSheet(QStringLiteral(
+	        "QListWidget::item { border-bottom: 1px solid %1; padding-left: 8px; }"
+	        "QListWidget::item:selected { background: %2; color: %3; }")
+	                               .arg(palette().color(QPalette::Mid).name(),
+	                                     palette().color(QPalette::Highlight).name(),
+	                                     palette().color(QPalette::HighlightedText).name()));
+}
+
 void bssh_host_list::changeEvent(QEvent *event) {
 	QWidget::changeEvent(event);
-	if (event && event->type() == QEvent::PaletteChange) style_add_button();
+	if (event && event->type() == QEvent::PaletteChange) {
+		style_add_button();
+		style_rows();
+	}
 }
 
 void bssh_host_list::on_row_menu(const QPoint &where) {

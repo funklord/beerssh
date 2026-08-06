@@ -1435,6 +1435,15 @@ the same number for a layout manager that had quietly stopped working.
   terminal in whatever monospace the machine had. CJK came out as tofu in a
   picture of a renderer that handles it. A shot of a renderer is uninterpretable
   without knowing what rendered it.
+  **Its caption named a font it had not drawn with.** The family is printed
+  because a shot of a renderer cannot be interpreted without knowing what
+  rendered it -- and the line re-derived it with `family_for(QString())`,
+  which answers with the *fallback chain's* first entry, while a view
+  resolves an empty id through `default_id()`. So every terminal picture
+  said **DejaVu Sans Mono** and was drawn in **JetBrains Mono**: the
+  safeguard against rendering in the wrong font was itself naming the wrong
+  one. It asks a view now (`bssh_terminal_view::font_family()`), which is
+  the only answer that cannot drift from what painted the pixels.
   It renders each surface twice over — the touch set at 360×640, the desktop set
   at 800×600, the front door at its own minimum, and **every page of the front
   door**, since the touch preset editor sat on its Presets page for as long as
@@ -1643,7 +1652,19 @@ little for a shell to do, but "little" is not "nothing", and being unable to
 reach it is a different thing from it not being the default.
 
 **Touch: a full-bleed host list**, and its editor is a **page, not a
-dialog**. The first Android build used a `QInputDialog` to add a host, and
+dialog**. **The rows are 64dp and, until they were looked at, said nothing
+about being rows** -- no rule between them, no selection, no pressed state
+-- so the first screen an Android user meets read as two paragraphs of text
+rather than as a list to tap. Every size check passed throughout, because
+64dp of nothing is still 64dp; it took rendering the screen. They carry a
+separator drawn from `QPalette::Mid` now, rebuilt on `PaletteChange` for
+the reason §6.2 gives about the tab dots -- a fixed grey that reads as a
+hairline on the light theme is invisible on the dark one -- over the list's
+own Base background, since making it transparent cost the distinction
+between the heading band and the content under it. A target elides in the
+**middle**: the ends of `user@host:port` are what identify a row, and
+eliding at the end drops the port, which is exactly what tells two rows
+apart. The first Android build used a `QInputDialog` to add a host, and
 driving it on a device showed exactly what this section warns about: a
 small floating box with one cramped field, mid-screen, on a device held in
 one hand. It worked, which was the problem — the desktop idiom had

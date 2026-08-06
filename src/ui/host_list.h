@@ -71,6 +71,7 @@ private slots:
 
 private:
 	void style_add_button();
+	void style_rows();
 
 	bssh_profile_store *m_store;
 	QListWidget *m_list;

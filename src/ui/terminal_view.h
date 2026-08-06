@@ -123,6 +123,23 @@ public:
 	 * grid_resized, which the pane container has wired to the session.
 	 */
 	void remeasure_cell();
+
+	/*
+	 * The family this view is actually drawing in.
+	 *
+	 * Exists because `make shots` captioned its terminal pictures by
+	 * re-deriving the font instead of asking, and got a different answer:
+	 * the view resolves an empty id through default_id(), while the
+	 * caption called family_for(QString()) and was handed the FALLBACK
+	 * chain's first entry. The pictures said DejaVu Sans Mono and were
+	 * drawn in JetBrains Mono.
+	 *
+	 * Sec 8.3 prints that family precisely because a shot of a renderer
+	 * cannot be interpreted without knowing what rendered it -- so the
+	 * safeguard against drawing in the wrong font was itself naming the
+	 * wrong font. Asking the view is the only answer that cannot drift.
+	 */
+	QString font_family() const { return m_font.family(); }
 	void set_cursor_blink(bool blink);
 	QString cursor_style() const { return m_cursor_style; }
 	bool cursor_blinks() const { return m_blink_timer != nullptr; }
