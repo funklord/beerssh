@@ -151,7 +151,7 @@ run.
 | Language | C++17 (Qt), plus the minimum Java/Kotlin Android's platform model forces | JNI bridge between them; see §5.2 for what "minimum" means. No JVM code at all in the desktop build. |
 | Build system | **[DECIDED]** **qmake** (`.pro`/`.pri`) for every target + Gradle for Android packaging only | One project file, scoped per platform; `androiddeployqt` drives the Android side. **Not CMake** — the sibling `fuzzypickles` GUI is qmake, and one build system across both trees is worth more than CMake being Qt 6's default. |
 | Desktop targets | **[DECIDED]** Linux (primary), macOS + Windows best-effort | Linux is the development platform; see §1. |
-| Min SDK | **[OPEN]** API 26 (Android 8) suggested | Below 26, foreground-service + Keystore APIs differ; 26 keeps code simple. Android-only concern. |
+| Min SDK | **[DECIDED]** API **26** (Android 8) | Below 26, foreground-service + Keystore APIs differ; 26 keeps code simple. Android-only concern. Set as `ANDROID_MIN_SDK_VERSION` in `beerssh.pro`, which is what settled it. |
 | Target SDK | **[DECIDED]** API **35 (Android 15)** | Required for new Google Play apps in 2026; new apps must target API 35. |
 | ABIs | arm64-v8a (primary), armeabi-v7a, x86_64 (emulator) | Google Play requires 64-bit; ship arm64 + optionally armv7. Desktop: x86_64 + aarch64. |
 | Package format | **AAB** (Android App Bundle); desktop per §12.2 | AAB required by Play, and enables per-ABI + asset-pack splits (see §9.4). |
@@ -164,20 +164,48 @@ run.
 Identifiers below are the real names to use in code — `snake_case` with a
 `bssh_` prefix, per §18, on both platforms.
 
+**They are checked against the tree, because for a long time they were not.**
+Five of them named nothing that existed: `bssh_tab_bar`, `bssh_pane_view`,
+`bssh_font_manager`, `bssh_preset_store` and `bssh_settings_ui` had all been
+built under other names or not as classes at all, while §18.2 went on telling
+readers these were the real ones and to update this section if a rename was
+genuinely needed. A naming rule nobody can check is a naming rule that has
+already drifted; the fix here was to take the code's answer, since the code is
+what a reader greps.
+
+Two of them are worth spelling out, because the diagram cannot:
+
+- **There is no tab-bar class.** It is a plain `QTabBar` owned by
+  `bssh_main_window`, and the per-tab status dot lives in the
+  `bssh_tab_status` *namespace* (`state_for`, `colour_for`, `dot`) so the rule
+  deciding which state wins can be tested apart from the painting (§8.3).
+- **There is no separate preset store.** `bssh_profile_store` holds hosts,
+  presets and layout together — one store over the three INI files of §10.6 —
+  which is why `bssh_preset_t` is a plain struct with no storage of its own.
+
+**The two columns group by role, not by directory.** `bssh_font_catalog` is
+drawn in the UI column and lives under `src/term` beside `bssh_emulator` and
+`bssh_screen`, which is where the renderer needs it. The split this section is
+about is the one that matters — a session is not a view — not the folder a
+file sits in.
+
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  Qt / C++ layer (portable core — identical on Android and desktop)       │
 │                                                                          │
 │  ┌─ UI ──────────────────────────────┐   ┌─ Domain ────────────────────┐ │
-│  │ bssh_tab_bar                      │   │ bssh_session_registry       │ │
+│  │ bssh_main_window (owns QTabBar)   │   │ bssh_session_registry       │ │
 │  │ bssh_layout_manager (tabs⇄splits) │◀─▶│  owns bssh_session[]        │ │
-│  │   └ bssh_pane_view[]              │   │  (survives view teardown)   │ │
-│  │       └ bssh_terminal_view        │◀─▶│   └ bssh_emulator (VT)      │ │
-│  │ bssh_input_router (focused pane)  │──▶│      screen + scrollback    │ │
+│  │   └ bssh_pane_container           │   │  (survives view teardown)   │ │
+│  │       └ bssh_terminal_view[]      │◀─▶│   └ bssh_emulator (VT)      │ │
+│  │ bssh_input_router (focused pane)  │──▶│     bssh_screen + scrollback│ │
 │  │ bssh_key_row (touch only)         │   │   └ bssh_ssh_session        │ │
-│  │ bssh_font_manager                 │   │ bssh_conn_manager (FSM)     │ │
-│  │ bssh_settings_ui                  │   │ bssh_preset_store           │ │
-│  │                                   │   │ bssh_profile_store          │ │
+│  │ bssh_session_dialog (desktop)     │   │ bssh_conn_manager (FSM)     │ │
+│  │ bssh_host_list (touch)            │   │ bssh_profile_store          │ │
+│  │ bssh_host_editor, bssh_font_picker│   │  hosts, presets and layout  │ │
+│  │ bssh_preset_editor                │   │ bssh_settings_resolver      │ │
+│  │ bssh_app_settings_view            │   │ bssh_ssh_config (import)    │ │
+│  │ bssh_font_catalog, bssh_theme     │   │                             │ │
 │  └───────────────────────────────────┘   └─────────────────────────────┘ │
 │                                                                          │
 │  ┌─ bssh_platform (one implementation chosen at build time) ───────────┐ │
@@ -211,7 +239,7 @@ fed from two kinds of source the Android path stops being the tested one.
 
 **Core principle 2 — sessions are not views.** A `bssh_session` (SSH connection +
 emulator state + scrollback) lives in the **`bssh_session_registry`**, independent
-of any widget. `bssh_pane_view`/`bssh_terminal_view` **attach to** a session and
+of any widget. `bssh_pane_container`/`bssh_terminal_view` **attach to** a session and
 can be destroyed and recreated freely. This one decision makes three otherwise-
 painful features fall out almost for free: collapsing splits back to tabs on a
 window-size change (§8.2), surviving Android activity recreation (rotation,
@@ -306,10 +334,10 @@ distro's shared `libssh` and the obligation is already satisfied. **Android is
 where it bites**, since an AAB wants everything statically linked — so decide the
 question on the Android build's terms, not the desktop one's.
 
-**Crypto backend: [OPEN]** — default to **OpenSSL** (best-tested with libssh).
-mbedTLS/wolfSSL are lighter but add integration risk. Decide at build setup.
-Desktop uses the system OpenSSL; only Android needs a cross-compiled copy
-pinned in-tree.
+**Crypto backend: [DECIDED] OpenSSL** — best-tested with libssh; mbedTLS and
+wolfSSL are lighter but add integration risk. Settled at build setup, which is
+where this said it would be: desktop links the system OpenSSL, and
+`tools/build-deps-android.sh` cross-builds a pinned copy for Android.
 
 ---
 
@@ -912,9 +940,12 @@ The sibling `fuzzypickles` TUI probes exactly these tiers from the client
 side (see its `gui/project.md`); BeerSSH is the other half of that
 conversation, and should let it reach its best tier.
 
-**Tier 3 — worth having, not yet built.**
+**Tier 3 — worth having, and all four are now built.** The heading said "not
+yet built" over a table of four **Done** rows for as long as the last of them
+took to land, which is the shape of staleness this document is most prone to:
+a summary line that stops being true while the detail under it is updated.
 
-| Extension | What it is | Why it is not built yet |
+| Extension | What it is | Status |
 |---|---|---|
 | **Synchronized output** (DEC 2026) | Remote brackets a screen update so the terminal paints it in one frame instead of mid-redraw; removes tearing in full-screen apps | **Done** — with a 150 ms safety release, since a program that sets it and dies would otherwise freeze the display |
 | **OSC 8 hyperlinks** | Marks a run of cells as a clickable URL | **Done** — per-cell link id, underlined, opened on Ctrl+click after a confirmation |
@@ -1005,9 +1036,11 @@ plausible).
 Two things images must do that are easy to miss, and both are tested:
 they **follow the text when the screen scrolls** (an image pinned to its
 original row while output moves past it looks like the terminal has come
-apart), and they are **dropped when scrolled off or when the grid shrinks
-past them** — there is no image scrollback, and holding every image a long
-session ever drew is how a phone runs out of memory.
+apart), and they are **dropped when the grid shrinks past them or the memory
+budget is reached**, because holding every image a long session ever drew is
+how a phone runs out of memory. This paragraph used to end "there is no image
+scrollback", and the **[DONE]** block below — which gives images a scrollback
+and a 32 MB budget — contradicted it directly a few lines later.
 
 **Ctrl+click, and a prompt, for hyperlinks.** The URL comes from the remote,
 so a plain tap on a line of output must not be able to launch a browser at
@@ -1126,9 +1159,9 @@ split threshold:
 This is exactly why §3's session/view separation matters — implemented that way,
 collapse/restore is bookkeeping, not surgery.
 
-**Rotation itself is checked on a device, and checked from the far end.** A
-session was opened on an emulator, a unique marker left in its scrollback, and
-the device rotated to landscape and back. The process is the same one
+**Rotation itself is checked on an emulator, and checked from the far end.** A
+session was opened, a unique marker left in its scrollback, and the emulator
+rotated to landscape and back. The process is the same one
 throughout, the scrollback is intact, and the grid re-measures 48x41 → 93x17 →
 48x41. The part worth having is the last: the sizes were read from the
 **server's** pty, not from the app — `17 93` while landscape, `41 48` after
@@ -1398,6 +1431,68 @@ the same number for a layout manager that had quietly stopped working.
   Elided rather than wrapped: a status line that grows to three lines takes the
   space from the terminal, which is where the user was looking.
 
+### 8.4 Implementation notes
+- A **`bssh_layout_manager`** owns the tab-group → pane-tree mapping and is the
+  single place that decides tabs-vs-splits from the current window size class. UI
+  widgets ask it; they don't decide independently. It takes a width in logical
+  pixels and knows nothing about which platform supplied it — which is what makes
+  it unit-testable by feeding it widths (§12.3).
+- Represent layout as a small serializable structure (split direction, ratio,
+  session IDs) so it can be persisted and restored across app restarts. The
+  format is **shared across platforms** — profiles synced or copied between a
+  phone and a desktop must not trip over a platform-specific layout field.
+- **Multiple top-level windows are a desktop-only affordance** and **[DECIDED]**
+  for v1: they are in. A window is just another view onto the registry — the
+  registry stays single and process-wide, and a session can be shown in exactly
+  one pane at a time. Do not let a second window imply a second registry.
+  **That was written before anything could honour it.** The window *owned* its
+  registry (`new bssh_session_registry(this)`), so a second window would have
+  brought a second set of sessions with it, and a session opened in one would
+  have been invisible to the other. It is `bssh_session_registry::shared()` now
+  and the window is handed it, so the property this bullet asserts is a test
+  rather than an intention.
+- **Windows pretend to be separate processes, because one day they may be.**
+  The intent is a transparent client/server split later: a session server
+  holding the connections, and windows as clients that could be separate
+  processes or even separate machines. So a window asks the registry and
+  **never reaches into another window** — no sibling pointers, no shared
+  widgets, no "the other window's current tab". Today every such call is a
+  pointer dereference; the discipline is what lets it become a message without
+  the callers changing.
+  This is also why a torn-out tab becomes a new **window** and not a new
+  **process**. A live SSH session cannot move between processes — libssh's
+  state, the channel and the crypto context are all in this one — so a new
+  process would mean dropping the connection and reconnecting, losing the
+  scrollback and whatever was running. Once the server is real, the same drag
+  becomes a client attaching to a session that never moved.
+- **A window shows its OWN tabs, not the registry's.** The tab bar was built
+  from every session in the process, which was indistinguishable from correct
+  while there could be only one window and wrong the moment there could be two:
+  both would have shown every tab, and closing one anywhere would have closed
+  it everywhere. Each window keeps the sessions it displays, in its own order —
+  tab order is a fact about a window rather than about the process, so dragging
+  a tab to reorder moves it in that list and not in the registry, where it
+  would have rearranged the other window's tabs as a side effect.
+- **Tearing a tab out makes a window, and the session does not move.** It stays
+  in the registry, connected, with its scrollback and whatever is running; only
+  the view showing it changes. That is the whole reason a torn-out tab is not a
+  new *process* — a live SSH session cannot cross one — and it is why the same
+  operation becomes a message rather than a migration once the client/server
+  split arrives.
+  The gesture is a drag taken **40dp clear of the bar**, not "left the widget":
+  a tab bar is thin, a pointer reordering tabs crosses its lower edge
+  constantly, and tearing out on that would make reordering nearly impossible
+  without losing the tab.
+  **A window will not empty itself.** Tearing out the last tab is declined
+  rather than performed: it would leave a window with nothing in it and — on
+  desktop, where a terminal is what the app opens with — no front door showing
+  either. Two windows, one of them useless, is a worse answer than a gesture
+  that does nothing.
+- Rendering N panes means N terminal widgets repainting — keep the glyph cache
+  **shared** across panes (§9.5) and throttle repaints to the display refresh
+  rather than to data arrival, or a chatty `yes`-style output in one pane will
+  starve the others.
+
 ### 8.5 The front door — **[DECIDED]**
 
 **Desktop borrows PuTTY's interface. Touch gets a mobile one. Same model
@@ -1486,68 +1581,6 @@ teaches for "act on this item" — rather than onto per-row buttons that
 would compete with the tap on every row. The lesson generalises past this
 screen: a front door that renders every field but cannot *do* half of what
 the other one does satisfies §14's rule only on paper.
-
-### 8.4 Implementation notes
-- A **`bssh_layout_manager`** owns the tab-group → pane-tree mapping and is the
-  single place that decides tabs-vs-splits from the current window size class. UI
-  widgets ask it; they don't decide independently. It takes a width in logical
-  pixels and knows nothing about which platform supplied it — which is what makes
-  it unit-testable by feeding it widths (§12.3).
-- Represent layout as a small serializable structure (split direction, ratio,
-  session IDs) so it can be persisted and restored across app restarts. The
-  format is **shared across platforms** — profiles synced or copied between a
-  phone and a desktop must not trip over a platform-specific layout field.
-- **Multiple top-level windows are a desktop-only affordance** and **[DECIDED]**
-  for v1: they are in. A window is just another view onto the registry — the
-  registry stays single and process-wide, and a session can be shown in exactly
-  one pane at a time. Do not let a second window imply a second registry.
-  **That was written before anything could honour it.** The window *owned* its
-  registry (`new bssh_session_registry(this)`), so a second window would have
-  brought a second set of sessions with it, and a session opened in one would
-  have been invisible to the other. It is `bssh_session_registry::shared()` now
-  and the window is handed it, so the property this bullet asserts is a test
-  rather than an intention.
-- **Windows pretend to be separate processes, because one day they may be.**
-  The intent is a transparent client/server split later: a session server
-  holding the connections, and windows as clients that could be separate
-  processes or even separate machines. So a window asks the registry and
-  **never reaches into another window** — no sibling pointers, no shared
-  widgets, no "the other window's current tab". Today every such call is a
-  pointer dereference; the discipline is what lets it become a message without
-  the callers changing.
-  This is also why a torn-out tab becomes a new **window** and not a new
-  **process**. A live SSH session cannot move between processes — libssh's
-  state, the channel and the crypto context are all in this one — so a new
-  process would mean dropping the connection and reconnecting, losing the
-  scrollback and whatever was running. Once the server is real, the same drag
-  becomes a client attaching to a session that never moved.
-- **A window shows its OWN tabs, not the registry's.** The tab bar was built
-  from every session in the process, which was indistinguishable from correct
-  while there could be only one window and wrong the moment there could be two:
-  both would have shown every tab, and closing one anywhere would have closed
-  it everywhere. Each window keeps the sessions it displays, in its own order —
-  tab order is a fact about a window rather than about the process, so dragging
-  a tab to reorder moves it in that list and not in the registry, where it
-  would have rearranged the other window's tabs as a side effect.
-- **Tearing a tab out makes a window, and the session does not move.** It stays
-  in the registry, connected, with its scrollback and whatever is running; only
-  the view showing it changes. That is the whole reason a torn-out tab is not a
-  new *process* — a live SSH session cannot cross one — and it is why the same
-  operation becomes a message rather than a migration once the client/server
-  split arrives.
-  The gesture is a drag taken **40dp clear of the bar**, not "left the widget":
-  a tab bar is thin, a pointer reordering tabs crosses its lower edge
-  constantly, and tearing out on that would make reordering nearly impossible
-  without losing the tab.
-  **A window will not empty itself.** Tearing out the last tab is declined
-  rather than performed: it would leave a window with nothing in it and — on
-  desktop, where a terminal is what the app opens with — no front door showing
-  either. Two windows, one of them useless, is a worse answer than a gesture
-  that does nothing.
-- Rendering N panes means N terminal widgets repainting — keep the glyph cache
-  **shared** across panes (§9.5) and throttle repaints to the display refresh
-  rather than to data arrival, or a chatty `yes`-style output in one pane will
-  starve the others.
 
 ---
 
@@ -1916,11 +1949,12 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   but do honour it for app chrome. Offer it as an explicit setting.
 
 ### 9.6 CI font validation
-Add a build-time script that, for every bundled font, asserts: uniform advance
-width, presence of required Unicode blocks (§9.1), required weights, and a
-recognised licence file. **Fail the build** if a font doesn't qualify. This is how
-"only fonts suitable for a terminal" stays true as the set evolves rather than
-being a one-time intention.
+**Built** (`tools/check-fonts.py`, `make check-fonts`, run in CI): for every
+bundled font it asserts uniform advance width, presence of the required
+Unicode blocks (§9.1), the required weights, and a recognised licence file,
+and it **fails the build** where a font doesn't qualify. This is how "only
+fonts suitable for a terminal" stays true as the set evolves rather than being
+a one-time intention.
 
 ---
 
@@ -2277,7 +2311,7 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
     a single flipped byte — what a store restored from another phone's backup
     looks like — is rejected by the GCM tag, so the app asks again instead of
     handing a caller garbage.
-  - **Desktop [DECIDED, partly built]:** the platform secret service —
+  - **Desktop [DECIDED, built]:** the platform secret service —
     Secret Service / `libsecret` (GNOME Keyring, KWallet) on Linux, Keychain on
     macOS, DPAPI/Credential Manager on Windows. **Fallback where no such service
     is running** (a headless or minimal session — common enough on Linux to plan
@@ -2344,7 +2378,10 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   not the same dialog: first contact asks, a *changed* key warns, says plainly
   that this is both what a rebuilt server and an interception attack look like,
   and defaults to Cancel so leaning on Enter trusts nothing.
-- **The user's `~/.ssh/known_hosts` is read, never written.** The original rule
+- **The user's `~/.ssh/known_hosts` is read, and an accepted key is appended
+  to it, hashed.** That is the settled answer; it arrived in two steps, and
+  the bold summary used to stop after the first, which left a reader
+  scanning this list with the superseded rule. The original rule
   refused both, on the grounds that two tools sharing one file is how a warning
   gets silently pre-accepted. Half of that was wrong. It is the same person
   deciding about the same hosts, and not looking at their file costs twice: a
@@ -2615,6 +2652,36 @@ The desktop build is what makes this project testable at all — use it.
   The signal and the test that raised it are still reported, which is enough to
   know where to look; `make test BSSH_TEST_STACK_DUMP=1` asks for the backtrace
   when a crash is worth one.
+- **A runaway test is bounded by the suite itself, not by whoever ran it**, and
+  that is an incident too. Three copies of the test binary were found orphaned
+  to init in state `R`, seven to ten hours old, with stdout and stderr
+  redirected into log files that had since been deleted. An unlinked file that
+  is still open belongs to no directory, so `du` could see none of it and
+  deleting the logs freed nothing — the space returns only when the last
+  descriptor closes. Between them they held **693 GB** and took a 905 GB
+  filesystem to 100% full, at which point the suite began reporting
+  `write_ini() returned FALSE` and settings that would not persist: a full disk
+  wearing the costume of a regression, which is the same disguise the `TMPDIR`
+  floor exists to strip off.
+  **None of the three was started by `make test`** — they were run directly, so
+  a `timeout` wrapped around the Makefile recipe would have caught none of them.
+  The bound lives in `tests/main.cpp` for exactly that reason: a wrapper only
+  guards the way somebody did not run it.
+  Two limits, because the failure has two shapes. `BSSH_TEST_TIMEOUT` (seconds
+  per test class, default 300) catches a test that spins in silence;
+  `BSSH_TEST_MAX_OUTPUT` (MB, default 256) catches one that spins printing, and
+  catches it far sooner — 530 GB of that 693 was a single process writing about
+  15 MB/s for nine hours. The cap reads the *size* of stdout and stderr rather
+  than counting what is written, so it costs nothing per line and still sees a
+  test that writes to the descriptor behind libc's back; it applies only when
+  they are regular files, since a terminal has no size to blow. Either limit is
+  off with `0`, for running under a debugger where a process sitting still is
+  the point.
+  A tripped watchdog exits **124**, the code `timeout(1)` uses, and **names the
+  class it died in** — which is precisely what nobody could recover from 693 GB
+  of deleted log. It calls `_exit` rather than `abort`, because `abort` raises
+  `SIGABRT` straight into the gdb-forking handler disabled above; a watchdog
+  that reproduced one incident while preventing the other would be no bargain.
 - **Benchmarks are built by `make test` and run by `make bench`.** Every
   throughput figure in §9.5 was measured with a scratch harness that was then
   thrown away, so each one cited a program nobody could re-run — a claim
@@ -2778,7 +2845,7 @@ background).
    close-with-sessions prompt (§5.5).
 6. **M5 – Reconnection & network awareness.** Connection FSM, keepalive, network-
    change reconnect (Android callbacks + desktop `QNetworkInformation`, including
-   suspend/resume), backoff, status UI. **Partly built:** `bssh_conn_manager`
+   suspend/resume), backoff, status UI. **Built:** `bssh_conn_manager`
    per session, exponential backoff capped and jittered, network-change
    retry, user-disconnect suppression, and an attempt limit so a dead host
    stops waking the radio. **Keepalive is built** (§4): a per-host
@@ -2811,7 +2878,7 @@ background).
    password-authenticated session could only reconnect as far as asking again.
 7. **M6 – Security & profiles.** `bssh_secret_store` with both backends, key
    auth, host-key verification, host profiles, biometric unlock where available.
-   **Started:** public-key authentication is tried before any password
+   **Built, except biometric unlock:** public-key authentication is tried before any password
    (agent, then the default identities), so a key-authenticated session holds
    no credential at all and can reconnect on its own; passphrase-protected
    keys are offered an unlock prompt before any password, since for a
@@ -2825,7 +2892,7 @@ background).
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,
    tab bar, OSC titles (and desktop window title), per-tab status, layout
    persistence. *(Do this before splits — the registry is the foundation.)*
-   **Mostly built:** registry, `bssh_session` owning transport + emulator +
+   **Built:** registry, `bssh_session` owning transport + emulator +
    router, a tab bar rebuilt from the registry, and titles falling back
    OSC → profile name → target. Layout persistence and per-tab status dots
    landed too — `save_layout`/`restore_layout` and `bssh_tab_status::dot()` —
@@ -2997,28 +3064,48 @@ expensive if it wasn't.
 ---
 
 ## 16. Open decisions to resolve during implementation
-- Crypto backend: OpenSSL (default) vs mbedTLS/wolfSSL.
+
+This list is a **register, not a backlog**: an entry leaves the open half by
+being decided somewhere in this document, and moves to the closed half with a
+pointer at where. It had gone stale in the way a register does — eight of its
+entries were settled elsewhere here while this section went on calling them
+open, which is worse than an out-of-date list, because a reader who trusts it
+relitigates a decision that has already been made and built.
+
+**Still open:**
+
 - libssh (LGPL, dynamic link) vs libssh2 (BSD) — licensing may decide it, and it
   is the Android build that decides it (§4).
-- Foreground-service type: `connectedDevice` (start here) vs `specialUse` (fallback).
-- Min SDK: 26 vs lower.
-- Desktop secret-store backend and its no-keyring fallback (§11).
-- Desktop packaging formats, and whether Flatpak is the primary Linux artifact
-  (§12.2).
+- Foreground-service type: `connectedDevice` (built and shipped in the manifest)
+  vs `specialUse` (prepared fallback). Open on Play review's opinion, not on
+  ours — §5.1.
 - Inhibit sleep on desktop while a session is connected? (Leaning no; per-session
   toggle instead — §5.5.)
-- Multiple top-level windows on desktop? (§8.4.)
 - Offer system-installed monospace fonts on desktop? (Not v1 — §9.4.)
 - Desktop `ssh-agent` support (§11) — v2, but the secret-store interface should
   already accommodate a backend that never releases key material.
-- Focus-follows-mouse on desktop? (Off by default if offered — §8.3.)
-- Final font shortlist (6–8 selectable + 2 fallback-only) and which is the phone
-  default (JetBrains Mono vs condensed Iosevka).
+- Which font is the **phone** default (JetBrains Mono vs condensed Iosevka).
+  The shortlist itself is settled; this half is not, and cannot be until
+  Iosevka's 42 MB ships by asset pack (§9.4, M9).
 - Honour system font-scale for the terminal grid? (Leaning no; setting instead.)
-- `~/.ssh/config` import — v2, but schema must be compatible now.
-- Host groups/folders in addition to presets?
-- Bundle an optional custom soft-keyboard? (Lean no for v1.)
+- Host groups/folders in addition to presets? (§10.5.)
+- Bundle an optional custom soft-keyboard? (Lean no for v1 — §6.2.)
 - Persist scrollback across restarts?
+- Icon and branding direction (§0.1), which the placeholder in §12.2 is waiting
+  on.
+
+**Decided, and kept here so they are not reopened:**
+
+| Decision | Where |
+|---|---|
+| Crypto backend — OpenSSL | §4 |
+| Min SDK — API 26 | §2 |
+| Desktop secret-store backend and its no-keyring fallback — both built, chosen at runtime | §11 |
+| Desktop packaging — tarball, `make install` and a `.deb`; Flatpak deferred | §12.2 |
+| Multiple top-level windows on desktop — in, one process-wide registry | §8.4 |
+| Focus-follows-mouse on desktop — offered, off by default | §8.3 |
+| Font shortlist — six selectable, two fallback-only | §9.2 |
+| `~/.ssh/config` import — built, an explicit import and never a live read | §10.5 |
 
 ---
 
@@ -3082,7 +3169,7 @@ your own names camelCase.
 
 - Types this project owns carry a **`bssh_` prefix**: `bssh_session_registry`,
   `bssh_input_router`, `bssh_ssh_session`. Plain structs/typedefs take a `_t`
-  suffix (`bssh_pane_geometry_t`); classes don't need it.
+  suffix (`bssh_preset_t`, `bssh_cell_t`); classes don't need it.
 - C++ member variables keep an `m_` prefix but are otherwise snake_case:
   `m_session_registry`, `m_scrollback_lines`.
 - Qt signals and slots are ordinary members: `bytes_received`, `on_resize`, not
@@ -3123,9 +3210,31 @@ so `beerssh.pro` is simply lowercase.
 
 ### 18.5 Commit conventions
 
-- **No docs-only commits.** Documentation changes ride along with the code commit
-  they describe. (This document's own revisions are the exception, since there is
-  no code yet.)
+Kernel format, and the detail lives in the global guidelines rather than being
+restated here; `code-style.md` carries what the hook itself does.
+
+- **`subsystem: summary`, imperative, no trailing period, 75 columns hard.**
+  The subsystem is the tree's own unit — `src/ui`, `src/model`, `src/term`,
+  `src/ssh`, `src/platform`, `src/input`, `tests`, `tools`, `build`,
+  `packaging`, `android`, `docs`, `project.md` — and a change genuinely
+  spanning the tree omits it. That is what makes the log filterable:
+  `git log --grep '^src/term:'` answers "what has happened to the emulator"
+  without a path list, and goes on answering after files move.
+- **The body explains why, wrapped at 75 columns.** The diff already says
+  what. A design document can be deleted or drift; the log cannot, so a
+  message that carries the reasoning and the alternative rejected is doing
+  its job, and length is not the constraint.
+- **The whole history was reformatted to this on 2026-08-06**, and three
+  indentation/debug fixups were squashed into their parents — 173 commits
+  became 170, and every hash changed. Worth knowing before concluding that
+  the discipline was there from the start, or that an old hash quoted
+  somewhere else is a typo.
+- **No docs-only commits.** Documentation changes ride along with the code
+  commit they describe. Two judgement calls earn their own: reconciling
+  `code-style.md` against its source, which is documentation-only by
+  construction, and editing this document ahead of the code it specifies.
 - **No AI-attribution trailers** in commit messages — no `Co-Authored-By:` for a
   tool, no generated-by footers. Messages end at their real content.
-- Commit messages describe the change and why it was made, in the imperative.
+- `tools/hooks/commit-msg`, installed by `make hooks`, enforces the two
+  mechanical halves: no generator attribution, and a subject within 75
+  columns. Everything else above is a review item.

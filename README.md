@@ -20,6 +20,15 @@ get in unaided it offers to unlock it, because for a server that only
 accepts keys a password prompt is not a fallback but a prompt that cannot
 succeed. The passphrase is used and not kept.
 
+**On desktop it opens a local shell by default**, so launching it with no
+arguments gives you a terminal rather than a connection dialog. That was a
+documented non-goal until it was deliberately reversed: the PTY is a
+`bssh_ssh_session` implementation like any other transport, so the emulator,
+the renderer, the input router and the scrollback still know nothing about
+one. Android gets no local shell — an unprivileged app sandbox has no useful
+userland, which is what Termux exists to supply — and opens its configuration
+instead.
+
 Typing works: keys, modifiers, function keys, arrows in both normal and
 application-cursor mode, Meta/Alt, bracketed paste (`Ctrl+Shift+V`), and
 input-method commit text. The on-screen key row for touch devices is
@@ -55,15 +64,21 @@ clicks instead — hold `Shift` to select anyway.
 Closing the window with a session still connected asks whether to keep it
 running in the background or disconnect and quit, and remembers the answer.
 On desktop "background" means a tray icon and a process that outlives its
-window; the Android half of that — the foreground service — is **not
-implemented**, and `platform_android.cpp` says so at the call site rather
-than stubbing it to look finished.
+window; on Android it means a foreground service and `moveTaskToBack`. The
+two are not the same operation, and assuming they were cost the Android
+build its way back in: a hidden top-level widget there leaves the launcher
+resuming an Activity that never shows itself again.
 
 Multiple sessions work: each lives in a registry rather than in a widget,
 with a tab bar that appears once there is more than one. Switching tabs
 re-points the view at another session's screen — nothing is copied, and a
 session keeps running (and keeps receiving output) while nothing is
 showing it.
+
+A tab can be **torn out into a window of its own**. The session registry is
+process-wide, so a second window is another view onto the same sessions
+rather than a second copy of them, and a session showing in neither keeps
+running. Focus-follows-mouse is available and off by default.
 
 Split panes follow the window, not the platform: under 600dp it is tabs
 only, up to 840dp two panes, above that four. Narrowing the window
@@ -97,10 +112,11 @@ remembered across restarts. The connections are not — plain SSH cannot
 resume a shell — so the front door reopens with the last host selected
 rather than pretending to have restored anything.
 
-Not built yet: SSH keepalive (see `project.md` §4 — libssh turns out not
-to expose one), reopening every remembered host at once (needs key auth),
-triple-click line selection, the Android background service, and the
-remaining tier-3/4 items in §7.1 (OSC 52, image scrollback).
+Not built yet: general key remapping (`project.md` §6.1), a user-composed
+key row (§6.2), reopening every remembered host at once (§8.4), and the
+shared glyph atlas (§9.5). SFTP, port forwarding and Mosh are deliberate v1
+non-goals rather than omissions — §1 says why, and §5.3 says what plain SSH
+cannot promise about a resumed shell.
 
 A password can be remembered per host — off by default, and only for a
 saved host, since the secret is keyed to it. Remembered passwords are
@@ -116,10 +132,30 @@ The choice is made at runtime, and the UI names the backend rather than
 calling everything "encrypted" — a passphrase file and a session keyring
 are not the same promise.
 
-Host keys go in BeerSSH's own store (`~/.local/share/beerssh/known_hosts`),
-never `~/.ssh/known_hosts`. An unknown host shows its fingerprint and waits
-for you to accept before anything is written; a *changed* key gets a
-louder, differently-worded warning and defaults to cancelling.
+Host keys are shared with `ssh(1)` rather than kept apart from it. All of
+`~/.ssh/known_hosts`, BeerSSH's own store and `/etc/ssh/ssh_known_hosts` are
+read, so a revocation in any one of them is a revocation. An accepted key is
+appended to `~/.ssh/known_hosts` **hashed** — `|1|salt|HMAC-SHA1`, which is
+what OpenSSH's own `HashKnownHosts` default writes — and falls back to
+BeerSSH's store where that file cannot be written, as on Android. An unknown
+host shows its fingerprint and waits for you to accept before anything is
+written; a *changed* key gets a louder, differently-worded warning and
+defaults to cancelling.
+
+A host can be reached **through a jump host** (OpenSSH's `ProxyJump`), with
+the protocol to the target running end-to-end inside the tunnel rather than
+the bastion seeing it. Hosts can be **imported from an OpenSSH config**,
+the key file each one names included.
+
+A curated set of terminal fonts ships with the app, vetted for monospace
+metrics and glyph coverage, with a fallback chain ending at Unifont so that
+no output is ever unreadable. Colour schemes are chosen per host. The window
+follows the system's light or dark preference — asked for over the XDG
+portal on Linux and from `Configuration.uiMode` on Android, because Qt alone
+answers `Unknown` on the one and goes stale on the other. The terminal's own
+colours deliberately do not follow it: a dark terminal in a light window is
+a choice somebody made, not a bug. A screen reader can read the terminal,
+scrollback and selection included.
 
 See `project.md` §14 for the milestone plan.
 
@@ -149,8 +185,12 @@ Two front doors over one set of saved hosts (`project.md` §8.5):
   dialog) for adding a host.
 
 Which appears follows the input device rather than the OS, so a
-convertible in tablet mode gets the touch one. Hosts live in SQLite under
-`AppDataLocation`; the schema has no column a credential could go in.
+convertible in tablet mode gets the touch one. Hosts live in
+`~/.ssh/beerssh_hosts` — an INI file, beside the rest of your SSH material
+and named after `known_hosts` so it says what is in it — with presets,
+layout and device settings in the app's own config directory. None of those
+files has anywhere a credential could go; secrets live only where the
+paragraphs above put them.
 
 ## Build (desktop)
 
@@ -167,8 +207,12 @@ committed into the submodule.
 make          # build ./beerssh
 make run      # build and run it
 make test     # smoke test + unit tests (offscreen QPA, no server needed)
+make check    # the umbrella: everything that must pass before committing
+make style    # the shared style gate, copied verbatim from the source
+make hooks    # install the git hooks, commit-msg among them
+make shots    # render every screen to PNG, because looking at it is the test
+make deb      # Debian packages, built with debhelper from VERSION
 make bench    # emulator throughput in MB/s; not a gate, run it on an idle box
-make style    # indentation gate
 ```
 
 `make` wraps qmake, which does the actual Qt build in `build/`; everything
@@ -200,7 +244,7 @@ python3 -m venv ~/.venv/aqt && ~/.venv/aqt/bin/pip install aqtinstall
 
 **It runs, and it connects.** Built, packaged and driven on an Android 11
 x86_64 emulator: the touch front door appears, the on-screen key row shows
-itself because touch is the primary input, adding a host writes the SQLite
+itself because touch is the primary input, adding a host writes the config
 store, and SSH reaches a real server — key exchange, the trust-on-first-use
 prompt showing the correct fingerprint, the key written to the device's own
 known-hosts store, then key auth attempted and a password requested. The
@@ -211,12 +255,16 @@ Backgrounding works: a foreground service starts with the first session and
 stops with the last, so sessions survive the home button. The notification
 it must show reports the session count.
 
-Not yet done on Android: no session has been carried through to a live
-shell, and the emulator runs API 30, where Android 14's foreground-service
-type rules are not enforced — so the `connectedDevice` choice is untested
-where it counts. Not
-yet exercised on a device: the SSH path, the foreground service (which is
-not implemented), and anything involving a real keyboard.
+A session has been carried through to a live shell and survived an
+orientation change: a marker was left in the scrollback, the emulator
+rotated, and the same scrollback found on the other side (`project.md`
+§8.2, which also records the two steps of that test still unverified).
+
+Not yet settled on Android: the emulator runs API 30, where Android 14's
+foreground-service type rules are not enforced, so the `connectedDevice`
+choice has never actually been adjudicated and Play review's opinion of the
+framing is unknown. Still unexercised on real hardware: a physical keyboard,
+and steps 2 and 3 of the rotation test.
 
 ## Layout
 
@@ -230,14 +278,21 @@ src/term/            bssh_screen + the libvterm-backed emulator
 src/input/           bssh_input_router -- every keystroke becomes bytes here
 vterm/               vendored libvterm (submodule, MIT, upstream untouched)
 src/platform/        bssh_platform + one implementation per platform
+src/model/           the session registry, host/preset stores, reconnection
 tests/               host unit tests + the fake SSH session they drive
-android/             AndroidManifest.xml
-tools/               indentation gate; font validation lands at M9
+android/             AndroidManifest.xml and the service shim
+debian/              debhelper packaging; VERSION at the root is the source
+vterm-patches/       applied to the submodule at build time, not committed to it
+tools/               the style gate, the git hooks, and the check-* scripts
 ```
 
 ## Documents
 
 - **`project.md`** — the specification and the source of truth. Read §3
   (architecture and its three core principles) before writing code.
-- **`code-style.md`** — snake_case, tabs, lowercase filenames, and why
-  `clang-format` is not used here.
+- **`code-style.md`** — snake_case, tabs, lowercase filenames, why
+  `clang-format` is not used here, and what the commit-msg hook does and
+  does not reject.
+- **`tools/hooks/commit-msg`** — installed by `make hooks`. Commit subjects
+  are `subsystem: summary`, imperative, within 75 columns; `project.md`
+  §18.5 has the rest.
