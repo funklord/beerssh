@@ -96,6 +96,33 @@ void shoot(const QString &name, QWidget *widget, int width, int height) {
 
 } /* namespace */
 
+void bssh_ui_shots::initTestCase() {
+	/*
+	 * Before anything is drawn. The candidate paths are relative to the
+	 * BINARY and the test binary lives in build-tests/, so BSSH_FONT_DIR
+	 * is what points it at the checkout -- `make shots` sets it.
+	 *
+	 * Without this the pictures are drawn in whatever monospace the
+	 * machine has, which sec 8.3 already recorded once for the terminal
+	 * and fixed there only: the load sat inside render_terminal(), the
+	 * last pass to run, so every widget shot before it had the bundled
+	 * set absent. The font picker showed DejaVu Sans Mono where the app
+	 * would have chosen Iosevka Term on touch or JetBrains Mono on the
+	 * desktop -- a picture of the font-choosing UI with the app's fonts
+	 * missing, which is the least interpretable shot of the lot.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	const int faces = platform
+	        ? bssh_font_catalog::instance().load_bundled(platform->font_directory())
+	        : 0;
+
+	QTextStream(stdout) << QStringLiteral("\nfonts: %1\n")
+	                               .arg(faces > 0
+	                                     ? QStringLiteral("%1 bundled faces").arg(faces)
+	                                     : QStringLiteral("NONE -- these are the system's, "
+	                                                       "not the app's"));
+}
+
 void bssh_ui_shots::render_touch_surfaces() {
 	/*
 	 * The TOUCH arrangement, forced.
@@ -267,11 +294,6 @@ void bssh_ui_shots::render_terminal() {
 	 * without knowing which font drew it, and the same trap as rendering
 	 * the desktop arrangement under a "touch-" name.
 	 */
-	const bssh_platform *platform = bssh_platform::instance();
-	const int faces = platform
-	        ? bssh_font_catalog::instance().load_bundled(platform->font_directory())
-	        : 0;
-
 	/*
 	 * Asked of a view built exactly as the sample views below are, not
 	 * re-derived from the catalog. family_for(QString()) answers with the
@@ -283,13 +305,7 @@ void bssh_ui_shots::render_terminal() {
 	const bssh_terminal_view probe;
 	const QString family = probe.font_family();
 
-	QTextStream(stdout) << QStringLiteral("\nterminal, in %1 (%2):\n")
-	                               .arg(family,
-	                                     faces > 0
-	                                             ? QStringLiteral("%1 bundled faces").arg(faces)
-	                                             : QStringLiteral("NO bundled fonts -- these "
-	                                                               "are the system's, not the "
-	                                                               "app's"));
+	QTextStream(stdout) << QStringLiteral("\nterminal, in %1:\n").arg(family);
 
 	for (const sample_t &sample : samples) {
 		bssh_emulator emulator(52, 12);

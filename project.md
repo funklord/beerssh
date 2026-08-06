@@ -1444,6 +1444,16 @@ the same number for a layout manager that had quietly stopped working.
   safeguard against rendering in the wrong font was itself naming the wrong
   one. It asks a view now (`bssh_terminal_view::font_family()`), which is
   the only answer that cannot drift from what painted the pixels.
+  **And it loaded the app's fonts too late for most of the pictures.** The
+  bundled set was loaded inside the terminal pass, which runs last, so every
+  widget shot before it was drawn with the app's fonts absent -- in whatever
+  monospace the machine happened to have. That is the same defect this
+  paragraph already records fixing for the terminal, fixed *there only*. The
+  worst of it was the font picker: it showed **DejaVu Sans Mono** where the
+  app would have chosen Iosevka Term on touch or JetBrains Mono on the
+  desktop, so the one picture of the font-choosing UI was the one taken with
+  no fonts to choose from. The load happens once now, before any surface is
+  drawn, and the count is printed where it cannot be missed.
   It renders each surface twice over — the touch set at 360×640, the desktop set
   at 800×600, the front door at its own minimum, and **every page of the front
   door**, since the touch preset editor sat on its Presets page for as long as
@@ -1466,6 +1476,11 @@ the same number for a layout manager that had quietly stopped working.
   app, in the same spirit as `bssh_ssh_session::set_factory` — and the layout
   tests use it too, since they had been holding desktop arrangements to a
   phone's width and calling it a touch test.
+- **Touch targets are a list, and a widget left off it is short.** The preset
+  editor applies §6.2's 48dp floor by naming every control, and Import and
+  Export were not named -- so they stayed pointer-height on a page built for
+  a thumb while the eleven controls around them grew. Invisible in the
+  source, obvious in the render.
 - **The desktop front door gets the same treatment, and it found worse.** Its
   minimums were fine at 800x600 — the small window §8.2 already contemplates when
   it talks about tiling one into a half-screen column — so nothing a size check

@@ -236,11 +236,19 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 		connect(back, &QPushButton::clicked, this, &bssh_preset_editor::back_requested);
 		right->addWidget(back);
 
+		/*
+		 * Every control on the page, and the list is the whole guarantee
+		 * -- a widget left out of it is a target under sec 6.2's 48dp
+		 * floor on a page built for a thumb, which is invisible in the
+		 * source and obvious the moment the screen is rendered. Import
+		 * and Export were left out and stayed short while the eleven
+		 * controls around them grew.
+		 */
 		for (QWidget *control : QList<QWidget *>{ m_name, m_term, m_scrollback,
 			                                         m_cursor_style, m_keepalive,
 			                                         m_on_connect, m_bell, m_cursor_blink,
 			                                         m_compression, m_save, m_clone,
-			                                         m_delete }) {
+			                                         m_delete, m_import, m_export }) {
 			control->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
 		}
 		m_font->set_touch_sized(true);

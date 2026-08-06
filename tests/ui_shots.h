@@ -27,6 +27,17 @@ class bssh_ui_shots : public QObject {
 	Q_OBJECT
 
 private slots:
+	/*
+	 * The app's own fonts, loaded before ANY surface is drawn.
+	 *
+	 * This used to happen inside render_terminal(), which runs last, so
+	 * every widget picture before it was drawn with the bundled set
+	 * absent -- the font picker among them, listing and selecting
+	 * whatever monospace the machine happened to have. A picture of the
+	 * font-choosing UI, taken with the app's fonts missing.
+	 */
+	void initTestCase();
+
 	void render_touch_surfaces();
 	void render_desktop_surfaces();
 	void render_front_door_pages();
