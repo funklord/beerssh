@@ -1,5 +1,6 @@
 #include "ui/password_prompt.h"
 
+#include <QAbstractButton>
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QLabel>
@@ -7,6 +8,15 @@
 #include "ui/wrapped_note.h"
 #include <QLineEdit>
 #include <QVBoxLayout>
+
+#include "platform/platform.h"
+
+/*
+ * Sec 6.2's touch floor. A third copy of this number -- font_picker.cpp
+ * and preset_editor.cpp carry their own -- which is a shared constant
+ * wanting a home rather than something to fix in passing.
+ */
+static const int BSSH_TOUCH_HEIGHT_DP = 48;
 
 bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_remember,
                                             QWidget *parent)
@@ -52,6 +62,33 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 
 	connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
 	connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
+
+	/*
+	 * Sec 6.2's 48dp floor, which this dialog never had.
+	 *
+	 * Sec 11 reshaped it once already, for WIDTH: the destination sat in
+	 * a form layout's label column and demanded 508px on a 360px screen,
+	 * pushing OK off the edge. That was fixed and the heights were not
+	 * looked at, so the field, the checkbox and both buttons stayed
+	 * pointer-sized on the one dialog a user cannot avoid -- you cannot
+	 * reach a password-authenticated host without it. A 20px checkbox is
+	 * a target you miss, and the thing you miss it into is a password
+	 * field.
+	 *
+	 * Gated on the input device rather than the OS, the same question the
+	 * key row and the front door ask (sec 6.2, sec 8.5): a tablet with a
+	 * keyboard and a laptop with a touchscreen are the two cases an OS
+	 * check gets wrong in opposite directions.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	if (platform && platform->is_touch_primary()) {
+		m_field->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
+		m_remember->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
+
+		for (QAbstractButton *button : buttons->buttons()) {
+			button->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
+		}
+	}
 
 	m_field->setFocus();
 }

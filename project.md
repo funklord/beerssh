@@ -2528,6 +2528,15 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
   it while there was nothing to construct. The destination now goes on its own
   wrapped line, and a test asks the prompt to fit 360dp with every button
   inside it.
+  **Its heights were never looked at, only its width.** The field, the
+  checkbox and both buttons stayed pointer-sized on the one dialog a user
+  cannot avoid -- there is no reaching a password-authenticated host
+  without it -- so a 20dp checkbox sat beside a password field, which is a
+  target you miss into somewhere that matters. They carry sec 6.2's 48dp
+  floor now, gated on the input device rather than the OS, the same
+  question the key row and the front door ask. Found by rendering it:
+  fixing a surface's width and calling the surface done is the shape of
+  this one.
   **Built**, and it was the last piece: `backend_name()` and
   `is_hardware_backed()` existed from the start and nothing showed them. The one
   place the name appeared was the unlock prompt — which the keyring backend
