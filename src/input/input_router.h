@@ -2,6 +2,7 @@
 #define BSSH_INPUT_ROUTER_H
 
 #include <QObject>
+#include <QList>
 #include <QString>
 
 class QKeyEvent;
@@ -106,6 +107,36 @@ public:
 		SHORTCUT_FOCUS_PANE_LEFT,
 		SHORTCUT_FOCUS_PANE_RIGHT
 	};
+
+	/*
+	 * One stolen chord: what it takes, what it does, and how to write it
+	 * down.
+	 *
+	 * Sec 6.1 asks for three things about this set -- keep it minimal,
+	 * make it user-remappable, and DOCUMENT it -- and the third was the
+	 * one nothing served. The list existed only as an if-ladder in
+	 * handle_key(), so the only way to find out which chords never reach
+	 * your shell was to press them and notice. Any list written anywhere
+	 * else would be a second copy free to drift from the behaviour, which
+	 * is the failure this tree keeps unpicking, so the ladder is gone and
+	 * the table below is what the router actually matches against.
+	 *
+	 * `label` is the chord as a person writes it, not as Qt spells it: it
+	 * is shown to somebody who wants to know what they cannot send.
+	 */
+	struct chord_t {
+		shortcut_t action;
+		Qt::KeyboardModifiers modifiers;
+		int key;
+		const char *label;
+		const char *what;
+	};
+
+	/*
+	 * Every chord this application takes for itself, in the order a
+	 * reader should meet them. Nothing else is intercepted.
+	 */
+	static const QList<chord_t> &stolen_chords();
 
 signals:
 	void shortcut_pressed(bssh_input_router::shortcut_t shortcut);

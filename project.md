@@ -591,6 +591,26 @@ quirks on Android.
   before** the byte translation and be **user-remappable**, because any chord you
   steal is a chord the remote shell can no longer receive. Keep the stolen set
   minimal and document it.
+  **The set is six chords, and it is now written down exactly once.**
+  Ctrl+Shift+C, Ctrl+Shift+V, Shift+PageUp, Shift+PageDown and
+  Ctrl+Alt+Left/Right. That list lived only as an if-ladder inside
+  `handle_key()`, so the only way to find out which chords never reach your
+  shell was to press one and notice — this section asked for it to be
+  documented and nothing did. It is `bssh_input_router::stolen_chords()`
+  now, which is **what the router matches against**, and "This device"
+  renders that same table under *Keys this app keeps*. A list written
+  anywhere else would be a second copy free to drift from the behaviour,
+  which is the failure this document keeps unpicking; a test walks the
+  table in both directions, asserting every entry really is intercepted and
+  sends the remote nothing, and that a near miss like Ctrl+Alt+Up still
+  gets through.
+  **Matching is exact, against the modifiers that mean something.** Qt sets
+  `Qt::KeypadModifier` on the keypad's own PageUp and `GroupSwitchModifier`
+  on X11 at the third level, and neither says anything about which chord was
+  pressed — so comparing the whole modifier set would steal Shift+PageUp on
+  the main block and pass it through on the keypad of the same keyboard.
+  Still not built: **remapping**. The table is read-only, and a chord a user
+  wants back is one they cannot yet have.
 
 ### 6.2 On-screen keyboard strategy (touch platforms)
 Android soft keyboards don't expose Ctrl/Esc/etc. Plan a **custom on-screen key

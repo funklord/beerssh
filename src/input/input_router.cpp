@@ -21,6 +21,38 @@ quint8 bssh_input_router::modifiers_for(QKeyEvent *event) const {
 	return modifiers;
 }
 
+/*
+ * The stolen set, and the only place it is written down (sec 6.1).
+ *
+ * Minimal, and each entry earns its place against the same test: a chord
+ * taken here is one the remote shell can never receive again.
+ *
+ * Ctrl+Shift+C/V rather than Ctrl+C/V, because Ctrl-C is SIGINT and a
+ * terminal that swallows it to mean "copy" cannot interrupt a runaway
+ * process. Shift+PageUp/PageDown is every terminal's convention, and
+ * plain PageUp deliberately still goes through because a pager needs it.
+ * Ctrl+Alt+Arrow for pane focus because Ctrl+Arrow and Alt+Arrow are both
+ * in daily use by readline and by editors, so the pair together is the
+ * cheapest chord available.
+ */
+const QList<bssh_input_router::chord_t> &bssh_input_router::stolen_chords() {
+	static const QList<chord_t> chords = {
+		{ SHORTCUT_COPY, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_C,
+			"Ctrl+Shift+C", "Copy the selection" },
+		{ SHORTCUT_PASTE, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_V,
+			"Ctrl+Shift+V", "Paste" },
+		{ SHORTCUT_SCROLL_PAGE_UP, Qt::ShiftModifier, Qt::Key_PageUp,
+			"Shift+PageUp", "Scroll back a page" },
+		{ SHORTCUT_SCROLL_PAGE_DOWN, Qt::ShiftModifier, Qt::Key_PageDown,
+			"Shift+PageDown", "Scroll forward a page" },
+		{ SHORTCUT_FOCUS_PANE_LEFT, Qt::ControlModifier | Qt::AltModifier, Qt::Key_Left,
+			"Ctrl+Alt+Left", "Focus the pane to the left" },
+		{ SHORTCUT_FOCUS_PANE_RIGHT, Qt::ControlModifier | Qt::AltModifier, Qt::Key_Right,
+			"Ctrl+Alt+Right", "Focus the pane to the right" },
+	};
+	return chords;
+}
+
 bool bssh_input_router::handle_key(QKeyEvent *event) {
 	if (!m_emulator) return false;
 
@@ -51,48 +83,29 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 	 * stolen here never reaches the remote, so the check has to happen
 	 * before the key becomes bytes (sec 6.1).
 	 *
-	 * Ctrl+Shift+C/V rather than Ctrl+C/V, because Ctrl-C is SIGINT and a
-	 * terminal that swallows it to mean "copy" is a terminal that cannot
-	 * interrupt a runaway process.
+	 * Walked from the table rather than written out as an if-ladder, so
+	 * the list a user is shown and the list the router acts on cannot be
+	 * two lists.
+	 *
+	 * The modifiers must match EXACTLY -- Ctrl+Alt+Shift+Left is not
+	 * Ctrl+Alt+Left -- because matching loosely steals chords nobody
+	 * declared and leaves the shown list quietly wrong. But exactly
+	 * against the four that MEAN something, not against the raw set: Qt
+	 * reports Qt::KeypadModifier for the keypad's own PageUp and
+	 * Qt::GroupSwitchModifier on X11 with a third level engaged, and
+	 * neither says anything about which chord was pressed. Comparing the
+	 * whole set would take Shift+PageUp on the main block and let it
+	 * through on the keypad, on the same keyboard.
 	 */
-	if (event->modifiers().testFlag(Qt::ControlModifier)
-	    && event->modifiers().testFlag(Qt::ShiftModifier)) {
-		if (event->key() == Qt::Key_C) {
-			emit shortcut_pressed(SHORTCUT_COPY);
-			return false;
-		}
-		if (event->key() == Qt::Key_V) {
-			emit shortcut_pressed(SHORTCUT_PASTE);
-			return false;
-		}
-	}
+	const Qt::KeyboardModifiers meaningful = Qt::ControlModifier | Qt::ShiftModifier
+	                                          | Qt::AltModifier | Qt::MetaModifier;
 
-	/*
-	 * Shift+PageUp/PageDown scroll the view rather than reaching the
-	 * remote -- the same convention as every terminal, and the reason
-	 * plain PageUp still goes through: a pager needs it.
-	 */
-	if (event->modifiers().testFlag(Qt::ShiftModifier)) {
-		if (event->key() == Qt::Key_PageUp) {
-			emit shortcut_pressed(SHORTCUT_SCROLL_PAGE_UP);
-			return false;
-		}
-		if (event->key() == Qt::Key_PageDown) {
-			emit shortcut_pressed(SHORTCUT_SCROLL_PAGE_DOWN);
-			return false;
-		}
-	}
+	for (const chord_t &chord : stolen_chords()) {
+		if (event->key() != chord.key) continue;
+		if ((event->modifiers() & meaningful) != chord.modifiers) continue;
 
-	if (event->modifiers().testFlag(Qt::ControlModifier)
-	    && event->modifiers().testFlag(Qt::AltModifier)) {
-		if (event->key() == Qt::Key_Left) {
-			emit shortcut_pressed(SHORTCUT_FOCUS_PANE_LEFT);
-			return false;
-		}
-		if (event->key() == Qt::Key_Right) {
-			emit shortcut_pressed(SHORTCUT_FOCUS_PANE_RIGHT);
-			return false;
-		}
+		emit shortcut_pressed(chord.action);
+		return false;
 	}
 
 	const quint8 modifiers = modifiers_for(event);

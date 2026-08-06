@@ -667,3 +667,64 @@ void input_router_test::caps_lock_can_be_made_to_send_ctrl() {
 	router.handle_key(&shouted);
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x03"));
 }
+
+void input_router_test::every_stolen_chord_is_the_table_and_nothing_else() {
+	/*
+	 * Sec 6.1 asks that the stolen set be documented, and a list written
+	 * down somewhere is only documentation while it still matches what
+	 * the code does. So the list IS the code -- bssh_input_router::
+	 * stolen_chords() is what handle_key walks -- and this holds the two
+	 * ends of that together in both directions.
+	 *
+	 * Forwards: every entry really is intercepted, emits the action it
+	 * claims, and sends the remote nothing.
+	 */
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	QVERIFY(!bssh_input_router::stolen_chords().isEmpty());
+
+	for (const bssh_input_router::chord_t &chord : bssh_input_router::stolen_chords()) {
+		QSignalSpy fired(&router, &bssh_input_router::shortcut_pressed);
+
+		const QByteArray sent = press(router, emulator, chord.key, chord.modifiers,
+		                               QString());
+
+		QVERIFY2(sent.isEmpty(),
+		          qPrintable(QStringLiteral("%1 is stolen, so it must send the remote "
+		                                     "nothing; sent %2 byte(s)")
+		                             .arg(QString::fromLatin1(chord.label))
+		                             .arg(sent.size())));
+		QCOMPARE(fired.size(), 1);
+		QCOMPARE(fired.first().first().toInt(), int(chord.action));
+
+		/* And it is written down in a form somebody can read. */
+		QVERIFY(chord.label && *chord.label);
+		QVERIFY(chord.what && *chord.what);
+	}
+
+	/*
+	 * Backwards, which is the half that would rot silently: a chord that
+	 * is NOT in the table must reach the remote. Ctrl+Alt+Up is the near
+	 * miss worth pinning -- same modifiers as pane focus, a different
+	 * key -- because a loose match would swallow it and the shown list
+	 * would be quietly wrong rather than visibly so.
+	 */
+	QSignalSpy quiet(&router, &bssh_input_router::shortcut_pressed);
+	const QByteArray through = press(router, emulator, Qt::Key_Up,
+	                                  Qt::ControlModifier | Qt::AltModifier, QString());
+	QVERIFY2(!through.isEmpty(), "a chord nobody declared must still reach the remote");
+	QCOMPARE(quiet.size(), 0);
+
+	/*
+	 * And the keypad's own PageUp is the same chord as the main block's.
+	 * Qt sets Qt::KeypadModifier there, which says nothing about which
+	 * chord was pressed, so a comparison against the whole modifier set
+	 * would steal one and pass the other on one keyboard.
+	 */
+	QSignalSpy keypad(&router, &bssh_input_router::shortcut_pressed);
+	const QByteArray nothing = press(router, emulator, Qt::Key_PageUp,
+	                                  Qt::ShiftModifier | Qt::KeypadModifier, QString());
+	QVERIFY(nothing.isEmpty());
+	QCOMPARE(keypad.size(), 1);
+}

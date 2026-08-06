@@ -4,6 +4,7 @@
 #include <QComboBox>
 #include <QFormLayout>
 #include <QLabel>
+#include "input/input_router.h"
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -215,6 +216,35 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 
 	outer->addLayout(form);
 
+	/*
+	 * The chords this app keeps for itself (sec 6.1), which asks that the
+	 * set be minimal AND documented. It was neither shown nor written
+	 * down anywhere a user could reach: the only way to discover that
+	 * Ctrl+Shift+C never reaches your shell was to press it and notice.
+	 *
+	 * Built from bssh_input_router::stolen_chords(), which is the same
+	 * list handle_key() matches against, so this cannot drift into
+	 * describing a set the router no longer takes. Read-only for now --
+	 * sec 6.1 also asks for these to be remappable, and that is not
+	 * built.
+	 */
+	QLabel *chords_heading = new QLabel(
+	        QStringLiteral("<b>Keys this app keeps</b>"), this);
+	outer->addWidget(chords_heading);
+
+	QLabel *chords_note = new QLabel(
+	        QStringLiteral("These never reach the remote shell."), this);
+	chords_note->setWordWrap(true);
+	outer->addWidget(chords_note);
+
+	QFormLayout *chords = new QFormLayout;
+	for (const bssh_input_router::chord_t &chord : bssh_input_router::stolen_chords()) {
+		QLabel *what = new QLabel(QString::fromLatin1(chord.what), this);
+		what->setWordWrap(true);
+		what->setObjectName(QStringLiteral("stolen_chord"));
+		chords->addRow(QString::fromLatin1(chord.label), what);
+	}
+	outer->addLayout(chords);
 
 	outer->addStretch(1);
 
