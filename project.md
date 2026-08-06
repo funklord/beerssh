@@ -1474,6 +1474,29 @@ the same number for a layout manager that had quietly stopped working.
   session IDs) so it can be persisted and restored across app restarts. The
   format is **shared across platforms** — profiles synced or copied between a
   phone and a desktop must not trip over a platform-specific layout field.
+- **A restore reopens every remembered host, and connects none of them.**
+  **[DECIDED]** This section used to leave it open on the grounds that
+  reopening them all would be "a queue of password prompts", waiting on key
+  authentication (M6). That arrived, and the decision taken is stronger than
+  the one it was waiting for: **a restore raises no prompt of any kind** --
+  not a password, not a key passphrase, not a trust-on-first-use question.
+  The reason is what a restore *is*. It happens before the user has asked
+  for anything: they launched the app, and that is all. Startup is the worst
+  moment to put a host-key warning on screen, because the one habit this app
+  must never teach is clicking through a warning to reach the thing you
+  actually wanted -- and on a phone, connecting several hosts unasked wakes
+  the radio for sessions nobody has looked at.
+  So the arrangement comes back and the connections wait. The saved split
+  arrangement is restored too, bounded by what the window can show now
+  (§8.2): reopened narrower, or on a smaller screen, it is tabs.
+  **A disconnected tab must not be a dead end**, which is the defect this
+  would otherwise have shipped: nothing in the app could connect a session
+  that was not already connecting. *Connect* is the tab menu's first verb
+  (§8.3), present only while the session is not live -- absent rather than
+  disabled on a live one, since "connect" on something connected is not a
+  state anyone should have to reason about. That absence is tested, because
+  it is the half that rots quietly: the entry appearing is visible the first
+  time anybody looks, while one lingering on a live session is not.
 - **Multiple top-level windows are a desktop-only affordance** and **[DECIDED]**
   for v1: they are in. A window is just another view onto the registry — the
   registry stays single and process-wide, and a session can be shown in exactly
@@ -3003,10 +3026,8 @@ background).
    menu ("Show beside current", §8.3), the navigation chords reach
    `focus_adjacent`, and a resize feeds the width in dp to the layout
    manager so folding or tiling collapses the splits to tabs. The arrangement
-   is persisted (profile ids, pane count, active tab) and the front door
-   reopens with the last-active host selected. **[OPEN]** Reopening every
-   remembered host at once needs key authentication (M6) to be anything
-   but a queue of password prompts.
+   is persisted (profile ids, pane count, active tab), and **every
+   remembered host now reopens** -- as a tab that is NOT connected.
 10. **M9 – Fonts.** Curated set, fallback chain, wide-char handling, shared glyph
     cache, asset-pack delivery (Android) / full set (desktop), CI validation
     script, fractional-scaling and multi-monitor DPI checks.

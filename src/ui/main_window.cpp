@@ -544,8 +544,16 @@ void bssh_main_window::connect_to(const QString &target) {
 	open_profile(profile);
 }
 
-void bssh_main_window::open_profile(const bssh_profile_t &profile) {
-	if (!profile.is_valid()) return;
+/*
+ * Everything opening a host involves except the connecting: the session,
+ * its resolved settings, the prompts it may raise, and showing it.
+ *
+ * Split out because a restore wants all of that and none of the last step
+ * (sec 8.4). A restored host arrives as a tab that is not connected, and
+ * nothing about it may put a credential prompt on screen at startup.
+ */
+bssh_session *bssh_main_window::prepare_profile(const bssh_profile_t &profile) {
+	if (!profile.is_valid()) return nullptr;
 
 	/*
 	 * No password prompt here. Keys are tried first and most people have
@@ -718,7 +726,12 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 	});
 
 	show_session(session);
-	session->connect_to_host();
+	return session;
+}
+
+void bssh_main_window::open_profile(const bssh_profile_t &profile) {
+	bssh_session *session = prepare_profile(profile);
+	if (session) session->connect_to_host();
 }
 
 void bssh_main_window::on_add_host() {
@@ -1465,22 +1478,63 @@ void bssh_main_window::restore_layout() {
 	if (layout.is_empty()) return;
 
 	/*
-	 * The arrangement comes back; the connections do not, and cannot --
-	 * each would need its password again. So the front door opens with
-	 * the host that was active last time already selected, which is one
-	 * keystroke from where the user left off without pretending to have
-	 * restored a session.
+	 * Every remembered host comes back as a tab, and **not one of them
+	 * connects** (sec 8.4).
 	 *
-	 * [OPEN] Reopening every remembered host at once needs key
-	 * authentication (M6) to be anything but a queue of password
-	 * prompts.
+	 * This used to reopen nothing at all and merely preselect the
+	 * last-active host in the front door, because reopening them was
+	 * "a queue of password prompts". Key authentication (M6) removed
+	 * most of that, but the decision taken here is stronger and simpler:
+	 * a restore raises NO prompt of any kind. Not a password, not a
+	 * passphrase, not a trust-on-first-use question.
+	 *
+	 * The reason is what a restore is. It happens before the user has
+	 * asked for anything -- they launched the app, and that is all. A
+	 * modal stack on startup is the worst possible moment to ask about a
+	 * host key, because the one habit this app must not teach is
+	 * clicking through a warning to get to the thing you actually wanted.
+	 * And on a phone, connecting several hosts unasked wakes the radio
+	 * for sessions nobody has looked at yet.
+	 *
+	 * So the arrangement comes back and the connections wait. A
+	 * disconnected tab is one click from live -- Connect, on the tab's
+	 * own menu (sec 8.3) -- which is a click the user makes knowing which
+	 * host it is for.
 	 */
-	const int active = layout.profile_ids.value(layout.active_index,
-	                                             layout.profile_ids.first());
-	const bssh_profile_t profile = m_profile_store->profile(active);
-	if (!profile.is_valid()) return;
+	for (int id : layout.profile_ids) {
+		const bssh_profile_t profile = m_profile_store->profile(id);
 
-	if (m_session_dialog) m_session_dialog->set_current_profile(profile);
+		/*
+		 * A host deleted since the last run simply does not come back.
+		 * Its id is left in the saved layout rather than repaired here:
+		 * the next save writes what is actually open.
+		 */
+		if (profile.is_valid()) prepare_profile(profile);
+	}
+
+	if (m_shown.isEmpty()) return;
+
+	/*
+	 * The split arrangement too, which was saved from M8 onward and never
+	 * restored, because nothing had ever reopened enough sessions for
+	 * there to be an arrangement. Bounded by what the current window can
+	 * actually show: the window may have been reopened narrower, or on a
+	 * smaller screen, and sec 8.2's answer to that is tabs.
+	 */
+	const int panes = qMin(layout.pane_count, m_shown.size());
+	for (int i = 1; i < panes; ++i) split_with(m_shown.at(i));
+
+	/*
+	 * Last, so it wins the focus: every prepare_profile above showed its
+	 * own session as it arrived, which is the same one-pane-at-a-time
+	 * path a tab switch takes.
+	 */
+	bssh_session *active = m_shown.value(layout.active_index, m_shown.first());
+	if (active && panes <= 1) show_session(active);
+
+	if (m_session_dialog && active) {
+		m_session_dialog->set_current_profile(active->profile());
+	}
 }
 
 void bssh_main_window::import_launch_document() {
@@ -1757,6 +1811,25 @@ QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
 	 * the destructive one, which is the terminal menu's shape (sec 6.4)
 	 * and the Windows guidelines' before that. Access keys on all three.
 	 */
+	/*
+	 * Connect, first, and only for a session that is not live.
+	 *
+	 * A restore reopens every remembered host as a tab and connects none
+	 * of them (sec 8.4), so without this a restored tab would be a dead
+	 * end -- the same one-way door that made the whole tab bar
+	 * unreachable on Android until sec 8.3's Back was added. Absent
+	 * rather than disabled on a live session, because "connect" on
+	 * something already connected is not a state a user should have to
+	 * reason about.
+	 */
+	if (!session->is_live()) {
+		QAction *connect_now = menu->addAction(QStringLiteral("Co&nnect"));
+		connect_now->setObjectName(QStringLiteral("tab_connect"));
+		connect(connect_now, &QAction::triggered, this, [session] {
+			session->connect_to_host();
+		});
+	}
+
 	QAction *duplicate = menu->addAction(QStringLiteral("&Duplicate"));
 	duplicate->setObjectName(QStringLiteral("tab_duplicate"));
 

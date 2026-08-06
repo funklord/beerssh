@@ -51,6 +51,7 @@ private slots:
 	void a_dragged_tab_lands_where_it_is_dropped();
 	void a_drop_naming_no_session_is_declined();
 	void a_window_watches_for_a_screen_change();
+	void a_live_tab_is_not_offered_connect();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already
 	 * contemplates when it talks about tiling one into a half-screen

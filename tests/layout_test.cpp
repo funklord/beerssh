@@ -904,18 +904,26 @@ void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
 	QVERIFY2(menu, "a tab with a session behind it must have a menu");
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 4);
 
-	QCOMPARE(actions.at(0)->text(), QStringLiteral("&Duplicate"));
-	QCOMPARE(actions.at(1)->text(), QStringLiteral("Show &beside current"));
+	/*
+	 * Five, not four: this session has never connected, and a restore
+	 * reopens every remembered host exactly like that (sec 8.4), so the
+	 * menu leads with Connect. Without it a restored tab would be a dead
+	 * end -- the one-way door sec 8.3 already had to fix once.
+	 */
+	QCOMPARE(actions.size(), 5);
+
+	QCOMPARE(actions.at(0)->text(), QStringLiteral("Co&nnect"));
+	QCOMPARE(actions.at(1)->text(), QStringLiteral("&Duplicate"));
+	QCOMPARE(actions.at(2)->text(), QStringLiteral("Show &beside current"));
 
 	/*
 	 * The separator earns its place: Close is the one verb here that
 	 * cannot be undone, and a menu that puts it flush against the others
 	 * is one a slipped thumb closes a session with.
 	 */
-	QVERIFY2(actions.at(2)->isSeparator(), "the destructive verb needs separating");
-	QCOMPARE(actions.at(3)->text(), QStringLiteral("&Close"));
+	QVERIFY2(actions.at(3)->isSeparator(), "the destructive verb needs separating");
+	QCOMPARE(actions.at(4)->text(), QStringLiteral("&Close"));
 
 	for (const QAction *action : actions) {
 		if (action->isSeparator()) continue;
@@ -927,7 +935,7 @@ void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
 	 * Duplicate does not depend on room for a pane, which the split does
 	 * -- it opens a tab. A window with no room must still offer it.
 	 */
-	QVERIFY2(actions.at(0)->isEnabled(), "Duplicate must not depend on the window's width");
+	QVERIFY2(actions.at(1)->isEnabled(), "Duplicate must not depend on the window's width");
 
 	delete menu;
 
@@ -1987,4 +1995,46 @@ void layout_test::a_drop_naming_no_session_is_declined() {
 	          "dropping text on the terminal is a separate feature and is not built");
 
 	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_live_tab_is_not_offered_connect() {
+	/*
+	 * Connect exists for the tab a restore leaves disconnected (sec 8.4),
+	 * and it must go away once the session is live. This is the half that
+	 * would rot silently: the entry appearing when it should is visible
+	 * the first time anybody looks, while an entry that lingers on a
+	 * connected session is a verb offering to do something already done.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_session *session = registry->create(named(QStringLiteral("live")));
+	window.adopt_session(session);
+	QVERIFY(!session->is_live());
+
+	QMenu *before = window.build_tab_menu(0, &window);
+	QVERIFY(before);
+	QCOMPARE(before->actions().first()->text(), QStringLiteral("Co&nnect"));
+	delete before;
+
+	session->connect_to_host();
+	QVERIFY2(session->is_live(), "the fake transport should bring the session up");
+
+	QMenu *after = window.build_tab_menu(0, &window);
+	QVERIFY(after);
+	for (const QAction *action : after->actions()) {
+		QVERIFY2(action->text() != QStringLiteral("Co&nnect"),
+		          "a live session must not be offered Connect");
+	}
+	delete after;
+
+	bssh_ssh_session::set_factory(nullptr);
+	while (registry->count() > 0) registry->close(registry->at(0));
 }

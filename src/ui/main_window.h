@@ -306,6 +306,13 @@ private:
 	 * the intent and declines. Separating the two is what lets a drop on
 	 * the panes append instead.
 	 */
+	/*
+	 * Opens a host as far as showing it, and stops short of connecting.
+	 * open_profile() is this plus connect_to_host(); a restore is this
+	 * alone (sec 8.4).
+	 */
+	bssh_session *prepare_profile(const bssh_profile_t &profile);
+
 	void take_session(bssh_session *session);
 
 	/*
