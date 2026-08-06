@@ -1995,6 +1995,27 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   150% — where integer cell snapping matters most) and **dragging a window
   between monitors of different DPI**, which must re-lay-out the grid rather
   than scale a stale one. Test both.
+  **The second was not merely untested — nothing was listening.** No file
+  under `src/` referred to `QScreen` at all, so a window dragged to a
+  differently-scaled monitor never recomputed anything: the cell is snapped
+  to whole *device* pixels, which makes it a function of the device pixel
+  ratio, and Qt simply rescaled what was already drawn. That is the "scale a
+  stale one" this bullet names, and it costs twice — box-drawing stops
+  meeting at the cell edge, exactly as it did at 150% before snapping, and
+  the remote goes on laying out for the column count the other monitor gave.
+  `QWindow::screenChanged` is the watch, armed on first show because
+  `windowHandle()` is null before that. `QEvent::DevicePixelRatioChange`
+  would be tidier and arrived in Qt 6.6, above the 6.4 the CI runner carries
+  (§12.4). The layout width is recomputed with it, since a move between
+  monitors can change a window's width in dp without any resize.
+  **What a test can hold is the wiring, and that is deliberate.** The
+  re-layout needs two screens of different scaling and the offscreen
+  platform has one, so the test asserts the window is *listening* — through
+  `disconnect()`'s return value, the way §8.3 pins the tab bar's menu
+  connection — and that a re-measure on an unchanged screen moves nothing,
+  since this fires on an event the window does not control and one that
+  resized every session each time would be sending window-change for no
+  reason. The behaviour on real hardware remains unverified.
 - **[OPEN]** Whether to honour the system font-scale accessibility setting. Leaning
   **no** by default for the terminal grid (it would silently change column count),
   but do honour it for app chrome. Offer it as an explicit setting.
@@ -2988,8 +3009,11 @@ background).
     a 9-pixel cell is 13.5 device pixels and box-drawing characters stop
     meeting at the cell edge. TUI borders came out seamed at every other
     column; solid at 100%, visibly broken at 150%, found by rendering both
-    and looking. Multi-monitor DPI (dragging a window between screens of
-    different scaling) is still untested. The **font picker is built** and is one widget on both
+    and looking. Multi-monitor DPI is **wired now** — the window watches
+    `QWindow::screenChanged` and re-measures every pane's cell, where
+    before nothing under `src/` referred to `QScreen` and no amount of
+    dragging could have reached any code. Still unverified on real
+    hardware, which needs two monitors of different scaling. The **font picker is built** and is one widget on both
     platforms (§9.4): Window → Appearance in the PuTTY-shaped dialog, the
     host page on Android, with a live preview, unavailable families listed
     and marked rather than hidden, and the choice stored as a per-host

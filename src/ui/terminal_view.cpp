@@ -179,6 +179,17 @@ void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 	update();
 }
 
+void bssh_terminal_view::remeasure_cell() {
+	/*
+	 * The same three steps a font change takes, and for the same reason:
+	 * a different cell is a different column count, which the remote has
+	 * to be told about.
+	 */
+	update_metrics();
+	recompute_grid();
+	update();
+}
+
 void bssh_terminal_view::set_colour_scheme(const QString &id) {
 	const bssh_colour_scheme_catalog &catalog = bssh_colour_scheme_catalog::instance();
 

@@ -4,6 +4,7 @@
 #include <QStackedWidget>
 #include <QSignalSpy>
 #include <QMimeData>
+#include <QWindow>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QtTest>
@@ -1877,6 +1878,64 @@ void layout_test::a_dragged_tab_lands_where_it_is_dropped() {
 	QVERIFY2(panes->pane_count() == 2,
 	          qPrintable(QStringLiteral("a drop on the panes must tile; got %1 pane(s)")
 	                             .arg(panes->pane_count())));
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_window_watches_for_a_screen_change() {
+	/*
+	 * sec 9.5 wants the grid re-laid-out when a window is dragged between
+	 * monitors of different scaling, rather than the old monitor's cell
+	 * stretched to fit. The re-layout itself needs two real screens and
+	 * cannot be driven under the offscreen platform, which has one -- so
+	 * what is held here is the half that was missing outright: nothing in
+	 * src/ referred to QScreen at all, so the window was not listening
+	 * and no amount of dragging could have reached the code.
+	 *
+	 * Asserted through disconnect()'s return value, the same way sec 8.3
+	 * pins the tab bar's context-menu connection, because a connection is
+	 * not something a widget can be asked about directly.
+	 */
+	bssh_main_window window;
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	QVERIFY2(window.windowHandle(),
+	          "no window handle means screenChanged could never have been connected");
+
+	const bool listening = QObject::disconnect(window.windowHandle(),
+	                                            &QWindow::screenChanged, &window, nullptr);
+	QVERIFY2(listening,
+	          "a window that does not watch for a screen change cannot re-measure on one");
+
+	/*
+	 * And a re-measure on the same screen changes nothing. Worth pinning:
+	 * this runs on an event the window does not control, so one that
+	 * resized every session each time it fired would be sending the
+	 * remote a window-change for no reason.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window sized;
+	sized.resize(1000, 700);
+	sized.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&sized));
+
+	bssh_session *session = sized.registry()->create(named(QStringLiteral("steady")));
+	sized.adopt_session(session);
+
+	bssh_pane_container *panes = sized.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QVERIFY(!panes->views().isEmpty());
+
+	const int cols = panes->views().first()->cols();
+	const int rows = panes->views().first()->rows();
+	QVERIFY(cols > 0 && rows > 0);
+
+	panes->remeasure_panes();
+
+	QCOMPARE(panes->views().first()->cols(), cols);
+	QCOMPARE(panes->views().first()->rows(), rows);
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

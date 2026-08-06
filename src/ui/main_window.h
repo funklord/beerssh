@@ -15,6 +15,8 @@ class QLabel;
 class QTabBar;
 class QStackedWidget;
 class QDragEnterEvent;
+class QShowEvent;
+class QScreen;
 class QDropEvent;
 class QMimeData;
 class bssh_host_editor;
@@ -159,6 +161,15 @@ protected:
 	void resizeEvent(QResizeEvent *event) override;
 
 	/*
+	 * Where the screen watch is armed (sec 9.5). The window handle does
+	 * not exist until the window is shown, and QWindow::screenChanged is
+	 * the only public signal that says a window has moved to a different
+	 * display -- QEvent::DevicePixelRatioChange would be tidier and
+	 * arrived in Qt 6.6, above the 6.4 the CI runner carries (sec 12.4).
+	 */
+	void showEvent(QShowEvent *event) override;
+
+	/*
 	 * A tab dragged out of another window (sec 8.3, sec 8.4).
 	 *
 	 * Qt's own drag-and-drop is what carries it, and that is the point
@@ -296,6 +307,13 @@ private:
 	 * the panes append instead.
 	 */
 	void take_session(bssh_session *session);
+
+	/*
+	 * The window moved to another display, so every pane re-measures its
+	 * cell against the new one (sec 9.5). Connected once, on first show.
+	 */
+	void on_screen_changed();
+	bool m_screen_watched = false;
 
 	/*
 	 * Starts the drag a tab pulled clear of the bar becomes (sec 8.3).

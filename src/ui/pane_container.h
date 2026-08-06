@@ -52,6 +52,14 @@ public:
 	 */
 	void equalize_panes();
 
+	/*
+	 * Re-measures every visible pane against the display it is on now
+	 * (sec 9.5's multi-monitor case). Each view snaps its cell to whole
+	 * device pixels, so a window dragged to a differently-scaled monitor
+	 * needs the cell recomputed rather than the old one stretched.
+	 */
+	void remeasure_panes();
+
 private:
 	/* Marks the panes on screen, or away if this widget is not showing. */
 	void update_on_screen();

@@ -109,6 +109,20 @@ public:
 
 	/* block | underline | bar, and whether it blinks (sec 10.2). */
 	void set_cursor_style(const QString &style);
+
+	/*
+	 * Re-measures the cell against the display it is on now (sec 9.5).
+	 *
+	 * The cell is snapped to whole DEVICE pixels, so it depends on the
+	 * device pixel ratio -- which changes under a window dragged between
+	 * monitors of different scaling. Nothing recomputed it there, so the
+	 * grid kept the old monitor's metrics and the glyphs were scaled from
+	 * a stale cell rather than laid out for the new one.
+	 *
+	 * Goes all the way through to window-change: recompute_grid() emits
+	 * grid_resized, which the pane container has wired to the session.
+	 */
+	void remeasure_cell();
 	void set_cursor_blink(bool blink);
 	QString cursor_style() const { return m_cursor_style; }
 	bool cursor_blinks() const { return m_blink_timer != nullptr; }

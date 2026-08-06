@@ -20,6 +20,9 @@
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
+#include <QShowEvent>
+#include <QWindow>
+#include <QScreen>
 #include <QVBoxLayout>
 
 #include <QStackedWidget>
@@ -840,6 +843,47 @@ void bssh_main_window::split_with(bssh_session *session) {
 	 */
 	m_panes->rebuild();
 	m_panes->focus_session(session);
+
+	update_status();
+}
+
+void bssh_main_window::showEvent(QShowEvent *event) {
+	QWidget::showEvent(event);
+
+	/*
+	 * Armed once, here rather than in the constructor: windowHandle() is
+	 * null until the window is created, so a connection made earlier is a
+	 * connection to nothing -- and one made on every show would stack up.
+	 */
+	if (m_screen_watched || !windowHandle()) return;
+
+	m_screen_watched = true;
+	connect(windowHandle(), &QWindow::screenChanged,
+	         this, &bssh_main_window::on_screen_changed);
+}
+
+void bssh_main_window::on_screen_changed() {
+	/*
+	 * sec 9.5: dragged between monitors of different scaling, the grid
+	 * must be re-laid-out rather than scaled from the old monitor's cell.
+	 *
+	 * The cell is snapped to whole DEVICE pixels, so it is a function of
+	 * the device pixel ratio -- and nothing recomputed it when that ratio
+	 * changed underneath. Qt rescales what is already drawn, which is the
+	 * "scale a stale one" that section names: box-drawing stops meeting
+	 * at the cell edge, and the remote is still laying out for the column
+	 * count the other monitor gave.
+	 */
+	if (m_panes) m_panes->remeasure_panes();
+
+	/*
+	 * And the layout class with it. Qt reports logical pixels, so a
+	 * window moved to a monitor with different scaling can change width
+	 * in dp without a resizeEvent -- which is what decides how many panes
+	 * fit (sec 8.2).
+	 */
+	if (m_layout) m_layout->set_width(width());
+	if (m_panes) m_panes->rebuild();
 
 	update_status();
 }

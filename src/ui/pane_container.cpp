@@ -283,6 +283,27 @@ void bssh_pane_container::apply_focus_styling() {
 	}
 }
 
+void bssh_pane_container::remeasure_panes() {
+	for (int i = 0; i < m_views.size(); ++i) {
+		bssh_terminal_view *view = m_views.at(i);
+		if (!view) continue;
+
+		view->remeasure_cell();
+
+		/*
+		 * The emulator is told the cell in pixels too, because inline
+		 * images (sec 7.1) are placed and scaled in cells and a stale
+		 * cell size draws them at the old monitor's scale. The column
+		 * count reaches the session on its own, through the
+		 * grid_resized connection made when the pane was built.
+		 */
+		bssh_session *session = m_sessions.value(i, nullptr);
+		if (session && session->emulator()) {
+			session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
+		}
+	}
+}
+
 void bssh_pane_container::equalize_panes() {
 	const int count = m_splitter->count();
 	if (count < 2) return;
