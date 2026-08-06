@@ -1,5 +1,7 @@
 #include <QAbstractButton>
 #include <QDir>
+#include <QTreeWidget>
+#include <QRegularExpression>
 #include <QStackedWidget>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -226,6 +228,31 @@ void bssh_ui_shots::render_front_door_pages() {
 	QVERIFY(pages);
 
 	/*
+	 * Driven through the CATEGORY TREE, not by setting the stack's index.
+	 *
+	 * Setting the index directly leaves the tree highlighting whatever it
+	 * highlighted before -- so every one of these pictures showed
+	 * "Session" selected beside a pane full of something else, which is a
+	 * state the app cannot produce. A picture that shows something the
+	 * app never does is worse than no picture, in a tool whose whole
+	 * argument is that you can trust it; the same rule that made this
+	 * pass force the touch arrangement rather than inherit it.
+	 *
+	 * Walking the tree also names the shots after the categories, so a
+	 * reader knows which page they are looking at without counting.
+	 */
+	QTreeWidget *categories = front_door.findChild<QTreeWidget *>();
+	QVERIFY(categories);
+
+	QList<QTreeWidgetItem *> items;
+	for (int i = 0; i < categories->topLevelItemCount(); ++i) {
+		QTreeWidgetItem *top = categories->topLevelItem(i);
+		items.append(top);
+		for (int j = 0; j < top->childCount(); ++j) items.append(top->child(j));
+	}
+	QVERIFY(!items.isEmpty());
+
+	/*
 	 * Every page, not just the one that opens. The touch preset editor
 	 * sat on the front door's Presets page for as long as it did because
 	 * nobody had looked past the first screen.
@@ -233,15 +260,21 @@ void bssh_ui_shots::render_front_door_pages() {
 	QTextStream(stdout) << QStringLiteral("\nfront door pages, at %1x%2:\n")
 	                               .arg(BSSH_DESKTOP_W).arg(BSSH_DESKTOP_H);
 
-	for (int i = 0; i < pages->count(); ++i) {
-		pages->setCurrentIndex(i);
+	for (QTreeWidgetItem *item : items) {
+		categories->setCurrentItem(item);
 		QTest::qWait(50);
 
-		const QString path = shot_dir() +
-		                      QStringLiteral("/desktop-page-%1.png").arg(i, 2, 10, QLatin1Char('0'));
+		QString slug = item->text(0).toLower();
+		slug.replace(QRegularExpression(QStringLiteral("[^a-z0-9]+")),
+		              QStringLiteral("-"));
+
+		const QString path = shot_dir() + QStringLiteral("/desktop-page-")
+		                      + slug + QStringLiteral(".png");
 		front_door.grab().save(path);
 
-		const QSize needed = pages->widget(i)->minimumSizeHint();
+		const QSize needed = pages->currentWidget()
+		        ? pages->currentWidget()->minimumSizeHint()
+		        : QSize();
 		QTextStream(stdout) << QStringLiteral("  %1  page needs %2x%3\n")
 		                               .arg(path, -44).arg(needed.width()).arg(needed.height());
 	}

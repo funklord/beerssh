@@ -1481,6 +1481,15 @@ the same number for a layout manager that had quietly stopped working.
   Export were not named -- so they stayed pointer-height on a page built for
   a thumb while the eleven controls around them grew. Invisible in the
   source, obvious in the render.
+- **The category pages are driven through the TREE, not by setting the
+  stack's index.** Setting the index leaves the tree highlighting whatever
+  it highlighted before, so all eight page shots showed *Session* selected
+  beside a pane full of something else -- a state the app cannot produce.
+  It is the same *picture that shows something the app never does* this
+  section already had to fix once, when the touch shots turned out to be
+  the desktop arrangement squeezed into 360px. Walking the tree also names
+  them after the categories, so a reader knows which page they are looking
+  at without counting.
 - **The desktop front door gets the same treatment, and it found worse.** Its
   minimums were fine at 800x600 — the small window §8.2 already contemplates when
   it talks about tiling one into a half-screen column — so nothing a size check
