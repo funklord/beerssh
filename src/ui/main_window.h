@@ -14,6 +14,9 @@
 class QLabel;
 class QTabBar;
 class QStackedWidget;
+class QDragEnterEvent;
+class QDropEvent;
+class QMimeData;
 class bssh_host_editor;
 class bssh_preset_editor;
 class bssh_host_list;
@@ -155,6 +158,19 @@ protected:
 	 */
 	void resizeEvent(QResizeEvent *event) override;
 
+	/*
+	 * A tab dragged out of another window (sec 8.3, sec 8.4).
+	 *
+	 * Qt's own drag-and-drop is what carries it, and that is the point
+	 * rather than a convenience: the source window never touches this one.
+	 * It offers a payload, this window decides whether it wants it, and
+	 * the session is resolved out of the shared registry here -- which is
+	 * the "windows behave as though they were separate processes" rule
+	 * (sec 8.4) holding for the one gesture most likely to break it.
+	 */
+	void dragEnterEvent(QDragEnterEvent *event) override;
+	void dropEvent(QDropEvent *event) override;
+
 private slots:
 	void open_profile(const bssh_profile_t &profile);
 	void on_add_host();
@@ -254,7 +270,55 @@ public:
 	 */
 	bssh_main_window *tear_out_tab(int index);
 
+	/*
+	 * Takes a session from another window and shows it here (sec 8.4).
+	 *
+	 * `beside` decides which: false makes it a tab, true puts it beside
+	 * whatever this window is already showing -- a tile. That is the
+	 * distinction a drop makes by where it lands, the tab bar or the
+	 * panes, and it is expressed here as a plain command so the model can
+	 * be driven and tested without synthesising a drag.
+	 *
+	 * Declines a tile where there is no room for another pane (sec 8.2's
+	 * size classes) and falls back to a tab, because the alternative is a
+	 * drop that appears to do nothing.
+	 */
+	void drop_session(bssh_session *session, bool beside);
+
 private:
+	/*
+	 * The ownership half of adopting, without deciding how it is shown.
+	 *
+	 * adopt_session() is this plus show_session(), and show_session()
+	 * REPLACES the intent with the one session -- right for a tab, wrong
+	 * for a tile, because split_with() then finds the session already in
+	 * the intent and declines. Separating the two is what lets a drop on
+	 * the panes append instead.
+	 */
+	void take_session(bssh_session *session);
+
+	/*
+	 * Starts the drag a tab pulled clear of the bar becomes (sec 8.3).
+	 *
+	 * Blocks in Qt's nested drag loop until the pointer is released, and
+	 * tears the tab out into its own window only when nobody accepted it
+	 * -- so the gesture keeps its old meaning where there is nothing to
+	 * drop onto, and gains a second one where there is.
+	 */
+	void start_tab_drag(int index);
+
+public:
+	/*
+	 * The drag payload's format, and the session it names.
+	 *
+	 * A session has no id of its own, so what travels is its index in the
+	 * process-wide registry, resolved at drop time rather than trusted: a
+	 * stale index names nothing and is declined. Exposed so a test can
+	 * build a drop without a window manager, since QDrag::exec() needs a
+	 * real pointer grab and the offscreen platform has none.
+	 */
+	static QString session_mime_type();
+	bssh_session *session_from_mime(const QMimeData *mime) const;
 
 public:
 	/*

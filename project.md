@@ -1130,6 +1130,19 @@ not the screen — multi-window, freeform and tiling WMs all matter:
 | 600–840dp | Medium (tablet portrait, unfolded foldable, phone landscape, half-screen desktop window) | **Up to 2 panes** (H or V split). |
 | ≥ 840dp | Expanded (tablet landscape, maximized desktop window, external display) | **Up to 4 panes**, one level of nesting. |
 
+**Qt's logical pixels ARE dp, and converting them again cost three panes.**
+`resizeEvent` divided `width()` by `logicalDpiX()/160` to reach the thresholds
+above, on the reasoning that 600 and 840dp must mean one physical width on a
+phone and on a 4K monitor. That converts twice: Qt folds display density into
+`devicePixelRatio` and reports logical pixels above it, which on Android is
+precisely the density bucket the table is written in. At 96 dpi the extra
+division inflated every desktop width by **1.67x**, so a 504-pixel window
+counted as 840dp and was given **four panes of about thirty columns each** —
+the arrangement the paragraph above calls worse than useless. Nothing measured
+it for as long as it stood, because every test that cared passed a width
+straight to `bssh_layout_manager` and only the window did the conversion. What
+found it was a drop onto a 360-pixel window that tiled instead of declining.
+
 **[DECIDED]** Cap at 4 panes with a single nesting level for v1 — no arbitrary
 recursive tmux-style tree. It covers the realistic cases and avoids a whole class
 of layout, focus, and drag-target bugs. Revisit for v2 if there's demand.
@@ -1483,6 +1496,44 @@ the same number for a layout manager that had quietly stopped working.
   a tab bar is thin, a pointer reordering tabs crosses its lower edge
   constantly, and tearing out on that would make reordering nearly impossible
   without losing the tab.
+  **And it can land on another window instead of on the desktop.** The same
+  drag now carries a payload, so a tab pulled clear of its bar can be dropped
+  onto a window that already exists: **onto the tab bar it becomes a tab,
+  onto the panes it becomes a tile** (§8.3's "Show beside current", reached
+  by pointing at it). Tearing out is what happens when **nobody accepted the
+  drop** — dropping on the desktop and dropping on nothing are one event to
+  Qt, which is exactly the fallback this needs, so the gesture keeps its old
+  meaning where there is nowhere to drop and gains a second where there is.
+  **Qt's own drag-and-drop carries it, and that is the design rather than a
+  convenience.** This bullet's rule is that a window never reaches into
+  another window, and a drag is the one gesture most likely to break it: the
+  obvious implementation finds the window under the pointer and calls
+  something on it. Instead the source offers a payload and the *target*
+  decides, resolving the session out of the shared registry in its own
+  `dropEvent`. No sibling pointer is taken, and the same gesture becomes a
+  message unchanged once the client/server split arrives.
+  **What travels is a registry index, not a pointer**, resolved at drop time
+  rather than trusted — a session closed while the pointer was still down
+  names nothing, and is declined rather than landing on whichever session
+  moved into that slot. A payload of any other kind is refused outright: the
+  window accepts `application/x-bssh-session` and nothing else, so dropping
+  text or a file on the terminal does nothing at all. That is a **separate
+  feature and is deliberately not built**; §6.4 describes what the terminal
+  does with the clipboard and says nothing about drops, and inventing an
+  answer here would be guessing at intent.
+  Offered only where there is a pointer, on the same answer that gates
+  reordering: a drag nothing can start needs no drop target.
+  **A torn-out window showed the FRONT DOOR, and had since the feature
+  landed.** `adopt_session()` is how both a torn-out tab and a dropped one
+  arrive, and only `open_profile()` switched the stack to the terminal page —
+  two places computing one thing, with the other three callers not doing it.
+  So the window a tab was torn out *for* came up showing the host list, with
+  the session loaded, connected and hidden behind it, and the tab bar hidden
+  with it. The page switch lives in `show_session()` now, which is the one
+  function that means "show this session". Found by a drop test asking
+  whether the tab bar it meant to aim at was actually on screen — the
+  assertion was incidental to what it was testing, which is how the
+  visible-half defects in this project keep getting caught.
   **A window will not empty itself.** Tearing out the last tab is declined
   rather than performed: it would leave a window with nothing in it and — on
   desktop, where a terminal is what the app opens with — no front door showing

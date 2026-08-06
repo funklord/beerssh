@@ -3,6 +3,9 @@
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QSignalSpy>
+#include <QMimeData>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QtTest>
 
 #include "model/profile.h"
@@ -1663,5 +1666,266 @@ void layout_test::a_torn_out_tab_becomes_a_window_without_moving_the_session() {
 	QVERIFY2(!torn->tear_out_tab(0), "the last tab must not tear out");
 
 	delete torn;
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_dropped_session_leaves_the_window_it_came_from() {
+	/*
+	 * sec 8.4: a session is shown in exactly one place. Dropping it onto
+	 * another window is a MOVE, and the window losing it has to be told.
+	 *
+	 * This is the defect the drop exposed. adopt_session() emitted
+	 * changed(), which prunes sessions no longer in the REGISTRY -- and a
+	 * moved session is still in it, so the old window went on showing it
+	 * and the same terminal appeared in two windows at once. Tearing out
+	 * hid the bug by removing the session itself before adopting; a drop
+	 * has no such step.
+	 *
+	 * The announcement goes through the registry rather than between
+	 * windows, because windows are meant to behave as though they were
+	 * separate processes.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window from;
+	bssh_main_window onto;
+
+	bssh_session *moving = from.registry()->create(named(QStringLiteral("moving")));
+	bssh_session *staying = from.registry()->create(named(QStringLiteral("staying")));
+	from.adopt_session(moving);
+	from.adopt_session(staying);
+
+	QTabBar *from_tabs = from.findChild<QTabBar *>();
+	QTabBar *onto_tabs = onto.findChild<QTabBar *>();
+	QVERIFY(from_tabs && onto_tabs);
+	QCOMPARE(from_tabs->count(), 2);
+	QCOMPARE(onto_tabs->count(), 0);
+
+	onto.drop_session(moving, false);
+
+	QCOMPARE(onto_tabs->count(), 1);
+	QVERIFY2(from_tabs->count() == 1,
+	          "the window it came from must let go, or the same terminal is "
+	          "shown in two windows at once");
+
+	/* The session itself is untouched: a move is not a close. */
+	QCOMPARE(shared->count(), 2);
+	QVERIFY(shared->index_of(moving) >= 0);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_drop_on_the_panes_tiles_where_there_is_room() {
+	/*
+	 * Where the drop LANDS is what it means: the tab bar makes a tab, the
+	 * panes make a tile. Expressed as a command rather than a synthesised
+	 * drag, so the model can be driven without a window manager.
+	 *
+	 * And a tile is declined where there is no room for another pane
+	 * (sec 8.2), falling back to a tab -- because a drop that appears to
+	 * do nothing is worse than one that does the possible thing.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral("first")));
+	window.adopt_session(first);
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QCOMPARE(panes->pane_count(), 1);
+
+	bssh_session *dropped = window.registry()->create(named(QStringLiteral("dropped")));
+	window.drop_session(dropped, true);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(panes->pane_count() == 2,
+	          qPrintable(QStringLiteral("a drop on the panes of a wide window must tile; "
+	                                     "got %1 pane(s)").arg(panes->pane_count())));
+
+	/*
+	 * Narrow: one pane is all that fits (sec 8.2), so the same drop is a
+	 * tab instead of nothing at all.
+	 */
+	bssh_main_window narrow;
+	narrow.resize(360, 640);
+	narrow.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&narrow));
+
+	bssh_session *only = narrow.registry()->create(named(QStringLiteral("only")));
+	narrow.adopt_session(only);
+
+	bssh_session *squeezed = narrow.registry()->create(named(QStringLiteral("squeezed")));
+	narrow.drop_session(squeezed, true);
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *narrow_panes = narrow.findChild<bssh_pane_container *>();
+	QVERIFY(narrow_panes);
+	QCOMPARE(narrow_panes->pane_count(), 1);
+
+	QTabBar *narrow_tabs = narrow.findChild<QTabBar *>();
+	QVERIFY(narrow_tabs);
+	QVERIFY2(narrow_tabs->count() == 2,
+	          "a tile that will not fit must still arrive as a tab");
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+/*
+ * Builds the payload a dragged tab carries, for the two tests below.
+ *
+ * QDrag::exec() needs a real pointer grab and a nested loop the offscreen
+ * platform cannot provide, so what is driven here is the half that decides
+ * anything: the window's own dragEnter/drop handling. The gesture that
+ * starts it is one line of eventFilter and is left to the device.
+ */
+static QMimeData *session_payload(int registry_index) {
+	QMimeData *mime = new QMimeData;
+	mime->setData(bssh_main_window::session_mime_type(),
+	               QByteArray::number(registry_index));
+	return mime;
+}
+
+void layout_test::a_dragged_tab_lands_where_it_is_dropped() {
+	/*
+	 * Where it lands is what it means (sec 8.3): on the tab bar it is a
+	 * tab, on the panes it is a tile. Same payload, same window, two
+	 * positions -- so the position is provably the only thing deciding.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	/*
+	 * Two, because the bar only appears with a second session (sec 8.3)
+	 * and a hidden bar is not something a drop can aim at. That is the
+	 * real shape of the gesture: you drop onto a bar you can see.
+	 */
+	bssh_session *sitting = window.registry()->create(named(QStringLiteral("sitting")));
+	bssh_session *beside = window.registry()->create(named(QStringLiteral("beside")));
+	window.adopt_session(sitting);
+	window.adopt_session(beside);
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QTabBar *tabs = window.findChild<QTabBar *>();
+	QVERIFY(panes && tabs);
+	QVERIFY2(tabs->isVisible(), "the bar must be showing or there is nothing to drop on");
+	QCOMPARE(panes->pane_count(), 1);
+
+	/* A drop offering a session this window can resolve is accepted. */
+	bssh_session *carried = window.registry()->create(named(QStringLiteral("carried")));
+	const int carried_index = shared->index_of(carried);
+	QVERIFY(carried_index >= 0);
+
+	QScopedPointer<QMimeData> onto_bar(session_payload(carried_index));
+	QDragEnterEvent enter(tabs->mapTo(&window, tabs->rect().center()), Qt::MoveAction, onto_bar.data(),
+	                       Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&window, &enter);
+	QVERIFY2(enter.isAccepted(),
+	          "a window that will not accept the payload can never be dropped on");
+
+	QDropEvent on_bar(QPointF(tabs->mapTo(&window, tabs->rect().center())), Qt::MoveAction, onto_bar.data(),
+	                   Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&window, &on_bar);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(panes->pane_count() == 1,
+	          "a drop on the tab bar makes a tab, so the panes must not split");
+	QCOMPARE(tabs->count(), 3);
+
+	/*
+	 * A different session, low in the window where the panes are.
+	 *
+	 * Different because a session cannot tile beside itself: the one just
+	 * dropped on the bar is now the only pane, and split_with() declines a
+	 * session the intent already holds. Dropping it on the panes is a
+	 * no-op by design, not a defect -- the payload has to name a session
+	 * that is somewhere else for "beside" to mean anything.
+	 */
+	bssh_session *tiled = window.registry()->create(named(QStringLiteral("tiled")));
+	const int tiled_index = shared->index_of(tiled);
+	QVERIFY(tiled_index >= 0);
+
+	QScopedPointer<QMimeData> onto_panes(session_payload(tiled_index));
+	/*
+	 * Entered before it is dropped, as a real drag does. QApplication
+	 * routes drag events through the current drop target, so a Drop
+	 * sent on its own is discarded before it reaches dropEvent() --
+	 * which reads exactly like a drop the window declined.
+	 */
+	const QPoint low(window.width() / 2, window.height() - 20);
+	QDragEnterEvent enter_panes(low, Qt::MoveAction, onto_panes.data(),
+	                             Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&window, &enter_panes);
+	QVERIFY(enter_panes.isAccepted());
+
+	QDropEvent on_panes(QPointF(low), Qt::MoveAction, onto_panes.data(),
+	                     Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&window, &on_panes);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(panes->pane_count() == 2,
+	          qPrintable(QStringLiteral("a drop on the panes must tile; got %1 pane(s)")
+	                             .arg(panes->pane_count())));
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_drop_naming_no_session_is_declined() {
+	/*
+	 * The payload is a registry index, not a pointer, so it can go stale
+	 * -- a session closed while the pointer was still down. An index that
+	 * names nothing must be refused rather than land on whichever session
+	 * moved into that slot, which is the difference between a drop that
+	 * does nothing and one that moves the wrong terminal.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *only = window.registry()->create(named(QStringLiteral("only")));
+	window.adopt_session(only);
+
+	QTabBar *tabs = window.findChild<QTabBar *>();
+	QVERIFY(tabs);
+	QCOMPARE(tabs->count(), 1);
+
+	QScopedPointer<QMimeData> stale(session_payload(shared->count() + 7));
+	QDragEnterEvent enter(tabs->mapTo(&window, tabs->rect().center()), Qt::MoveAction, stale.data(),
+	                       Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&window, &enter);
+	QVERIFY2(!enter.isAccepted(),
+	          "an index naming no session must not even be accepted for drop");
+
+	QDropEvent drop(QPointF(tabs->mapTo(&window, tabs->rect().center())), Qt::MoveAction, stale.data(),
+	                 Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&window, &drop);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(tabs->count(), 1);
+
+	/* And a payload of some other kind entirely is not ours to take. */
+	QScopedPointer<QMimeData> foreign(new QMimeData);
+	foreign->setText(QStringLiteral("/etc/passwd"));
+	QDragEnterEvent text(tabs->mapTo(&window, tabs->rect().center()), Qt::MoveAction, foreign.data(),
+	                      Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&window, &text);
+	QVERIFY2(!text.isAccepted(),
+	          "dropping text on the terminal is a separate feature and is not built");
+
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

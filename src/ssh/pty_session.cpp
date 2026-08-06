@@ -27,6 +27,46 @@ namespace {
  */
 const int BSSH_PTY_READ_SIZE = 8192;
 
+/*
+ * How long a shell is given to act on SIGHUP before SIGKILL, and how often
+ * it is checked meanwhile. Short: nothing useful happens in the window,
+ * and it is paid twice on every session that closes.
+ */
+const int BSSH_PTY_HANGUP_MS = 200;
+const int BSSH_PTY_POLL_MS = 10;
+
+/*
+ * Waits briefly for a child, then insists.
+ *
+ * Never an unbounded waitpid. This runs on the UI thread, and a child that
+ * ignores SIGHUP -- which any process may do, and nohup exists to arrange
+ * -- would otherwise hang the window, or the entire test suite, on one
+ * process declining to exit.
+ *
+ * So: poll for the length of BSSH_PTY_HANGUP_MS, then SIGKILL, which
+ * cannot be caught or ignored, then poll again for the same short while.
+ * If even that does not collect it the child is left to init rather than
+ * waited on -- an orphan is reaped by pid 1, while a blocked caller is
+ * not recovered by anything.
+ */
+int collect(pid_t child) {
+	int status = 0;
+
+	for (int stage = 0; stage < 2; ++stage) {
+		for (int waited = 0; waited < BSSH_PTY_HANGUP_MS; waited += BSSH_PTY_POLL_MS) {
+			const pid_t done = ::waitpid(child, &status, WNOHANG);
+			if (done == child) return WIFEXITED(status) ? WEXITSTATUS(status) : 0;
+			if (done < 0) return 0; /* already reaped, or never ours */
+
+			::usleep(BSSH_PTY_POLL_MS * 1000);
+		}
+
+		if (stage == 0) ::kill(child, SIGKILL);
+	}
+
+	return 0;
+}
+
 } /* namespace */
 
 bssh_pty_session::bssh_pty_session(QObject *parent)
@@ -150,12 +190,9 @@ void bssh_pty_session::reap() {
 		m_master = -1;
 	}
 
-	int status = 0;
 	int code = 0;
 	if (m_child > 0) {
-		if (::waitpid(pid_t(m_child), &status, 0) > 0 && WIFEXITED(status)) {
-			code = WEXITSTATUS(status);
-		}
+		code = collect(pid_t(m_child));
 		m_child = -1;
 	}
 
@@ -213,6 +250,12 @@ void bssh_pty_session::disconnect_from_host() {
 	 * SIGHUP, which is what closing a terminal window means to the
 	 * process group on the other side of it -- a shell treats it as the
 	 * line dropping and cleans up after itself.
+	 *
+	 * It is a REQUEST, and collect() below stops waiting for an answer.
+	 * A process is free to ignore SIGHUP -- that is what nohup exists to
+	 * arrange -- and the first version of this then blocked in waitpid
+	 * forever, on the UI thread. In a test run that is the whole suite
+	 * hung on one child that declined to die.
 	 */
 	if (m_child > 0) ::kill(pid_t(m_child), SIGHUP);
 

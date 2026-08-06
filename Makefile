@@ -16,7 +16,14 @@
 #   make run          -- build and run it
 #   make test         -- build and run the smoke test + unit tests.
 #                        A crashing test does NOT fork gdb; ask for a
-#                        backtrace with BSSH_TEST_STACK_DUMP=1
+#                        backtrace with BSSH_TEST_STACK_DUMP=1.
+#                        A test that never returns is stopped by the
+#                        suite itself -- BSSH_TEST_TIMEOUT (seconds per
+#                        class, default 300) and BSSH_TEST_MAX_OUTPUT
+#                        (MB, default 256), either off with 0. The
+#                        bound is in tests/main.cpp, not here, because
+#                        the run that filled a disk was the binary
+#                        invoked directly.
 #   make bench        -- emulator throughput in MB/s (sec 9.5); built by
 #                        `test` but not run by it, and not a CI gate.
 #                        Refuses a machine too loaded to measure;
@@ -311,6 +318,20 @@ test: $(TARGET) $(TEST_BIN)
 	 QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test; \
 	 status=$$?; rm -rf $$sandbox; exit $$status
 	@echo "test: headless smoke test passed"
+	@# Room to run in, checked before starting rather than discovered as
+	@# sixteen assertion failures.
+	@#
+	@# The suite sandboxes HOME and XDG_* into a temporary directory
+	@# (tests/main.cpp) so it cannot write into whoever ran it. On a full
+	@# filesystem those writes fail, and the suite reports things like
+	@# "write_ini() returned FALSE" and settings that do not persist --
+	@# which reads exactly like a regression in the code under test. That
+	@# cost an afternoon once. It writes only small INI files, so a small
+	@# floor is enough to tell "no room" from "broken".
+	@#
+	@# TMPDIR moves the sandbox, since QDir::tempPath honours it: that is
+	@# the fix when /tmp is a tmpfs somebody else is filling.
+	@tmp=$${TMPDIR:-/tmp}; 	free=$$(df -Pm "$$tmp" 2>/dev/null | awk 'NR==2 {print $$4}'); 	if [ -n "$$free" ] && [ "$$free" -lt 64 ]; then 		echo "test: only $${free}MB free on $$tmp -- refusing to run." >&2; 		echo "test:   The suite sandboxes into a temporary directory, so a full" >&2; 		echo "test:   filesystem surfaces as failing assertions rather than as a" >&2; 		echo "test:   disk error, and looks like a regression that is not there." >&2; 		echo "test:   Free some space, or point TMPDIR somewhere with room." >&2; 		exit 1; 	fi
 	QT_QPA_PLATFORM=offscreen $(BSSH_TEST_CRASH_ENV) ./$(TEST_BIN)
 
 # Throughput through the emulator, in MB/s (project.md sec 9.5, sec 12.3).

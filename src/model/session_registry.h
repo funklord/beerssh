@@ -90,6 +90,23 @@ signals:
 	/* Emitted before the session is destroyed, so views can detach. */
 	void session_closing(bssh_session *session);
 
+	/*
+	 * A view has taken this session over, and any other view showing it
+	 * must let go (sec 8.4: shown in exactly one place).
+	 *
+	 * Broadcast through the registry rather than passed between windows,
+	 * because windows are meant to behave as though they were separate
+	 * processes -- no window holds a pointer to another. The adopter
+	 * emits this and then takes the session, so it is unaffected by its
+	 * own announcement; everyone else drops it.
+	 *
+	 * The session is NOT closing and nothing about it changes. Only which
+	 * view shows it does, which is why this is separate from
+	 * session_closing: a view that treated a move as a close would tear
+	 * down the very session being handed to somebody else.
+	 */
+	void session_taken(bssh_session *session);
+
 	/* Any add, close, title or state change -- for the tab bar and the
 	 * platform's session count. */
 	void changed();

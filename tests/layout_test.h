@@ -46,6 +46,10 @@ private slots:
 	void focus_follows_the_pointer_only_when_asked();
 	void a_window_shows_only_its_own_tabs();
 	void a_torn_out_tab_becomes_a_window_without_moving_the_session();
+	void a_dropped_session_leaves_the_window_it_came_from();
+	void a_drop_on_the_panes_tiles_where_there_is_room();
+	void a_dragged_tab_lands_where_it_is_dropped();
+	void a_drop_naming_no_session_is_declined();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already
 	 * contemplates when it talks about tiling one into a half-screen

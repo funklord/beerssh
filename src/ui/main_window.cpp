@@ -16,6 +16,10 @@
 #include <QMenu>
 #include <QMetaEnum>
 #include <QMouseEvent>
+#include <QDrag>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QVBoxLayout>
 
 #include <QStackedWidget>
@@ -159,6 +163,15 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	                      && !bssh_platform::instance()->is_touch_primary();
 	m_tabs->setMovable(pointer);
 
+	/*
+	 * And the other end of that same gesture: a tab pulled clear of one
+	 * window's bar can land on another's (sec 8.4). Gated on the same
+	 * answer, because the drag it receives can only be started where
+	 * there is a pointer to start it -- offering to receive one on a
+	 * phone would be a capability nothing can exercise.
+	 */
+	setAcceptDrops(pointer);
+
 	connect(m_tabs, &QTabBar::tabMoved, this, [this](int from, int to) {
 		/*
 		 * The window's own order, not the registry's. Which order a
@@ -221,6 +234,20 @@ bssh_main_window::bssh_main_window(const QString &target, QWidget *parent)
 	connect(m_registry, &bssh_session_registry::session_closing,
 	         this, [this](bssh_session *session) {
 		if (m_current == session) detach_session();
+	});
+
+	/*
+	 * Another view has taken a session this window may be showing
+	 * (sec 8.4). Let go of it -- the session is untouched and is now
+	 * somebody else's to display.
+	 */
+	connect(m_registry, &bssh_session_registry::session_taken,
+	         this, [this](bssh_session *session) {
+		if (!m_shown.contains(session)) return;
+
+		m_shown.removeAll(session);
+		if (m_current == session) detach_session();
+		on_registry_changed();
 	});
 
 	/*
@@ -687,7 +714,6 @@ void bssh_main_window::open_profile(const bssh_profile_t &profile) {
 		}
 	});
 
-	m_pages->setCurrentWidget(m_terminal_page);
 	show_session(session);
 	session->connect_to_host();
 }
@@ -708,6 +734,22 @@ void bssh_main_window::on_add_host() {
 
 void bssh_main_window::show_session(bssh_session *session) {
 	if (!session || !m_layout || !m_panes) return;
+
+	/*
+	 * Showing a session means showing the page it is on, and this is the
+	 * one function that means "show this session" -- so it belongs here
+	 * rather than at each caller.
+	 *
+	 * open_profile() did it separately and the other three callers did
+	 * not, which is the two-places-computing-one-thing this document
+	 * keeps unpicking. What it cost: adopt_session() is how a torn-out
+	 * tab and a dropped one arrive, so a window made by tearing a tab out
+	 * came up showing the FRONT DOOR, with the session it was made for
+	 * loaded, connected and behind it -- and the tab bar hidden with it.
+	 * Found by a drop test asking whether the bar it meant to aim at was
+	 * on screen.
+	 */
+	m_pages->setCurrentWidget(m_terminal_page);
 
 	/*
 	 * The window no longer attaches a view to a session: it says which
@@ -812,12 +854,22 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 
 	/*
 	 * Device-independent pixels, which is what sec 8.2's thresholds are
-	 * written in: 600 and 840dp mean the same physical width on a phone
-	 * and on a 4K monitor, and passing raw pixels would put a laptop in
-	 * the same class as a tablet purely because it has more of them.
+	 * written in -- and Qt's logical pixels already ARE those, so this
+	 * hands width() over unconverted.
+	 *
+	 * It used to divide by logicalDpiX()/160, on the reasoning that 600
+	 * and 840dp must mean the same physical width on a phone and on a 4K
+	 * monitor. That converts twice. Qt folds display density into
+	 * devicePixelRatio and reports logical pixels above it, which on
+	 * Android is precisely the density bucket -- so width() is dp on the
+	 * platform the thresholds were borrowed from, and dividing again
+	 * inflated every desktop width by 1.67x at 96 dpi. A 504-pixel window
+	 * came out as 840dp and was given FOUR panes of about thirty columns
+	 * each, which is the arrangement sec 8 calls worse than useless. The
+	 * first thing ever to measure it was a drop onto a 360-pixel window
+	 * that tiled instead of declining.
 	 */
-	const qreal scale = devicePixelRatioF() > 0 ? logicalDpiX() / 160.0 : 1.0;
-	m_layout->set_width(int(width() / qMax(qreal(0.1), scale)));
+	m_layout->set_width(width());
 
 	if (m_panes) m_panes->rebuild();
 }
@@ -1020,21 +1072,149 @@ void bssh_main_window::detach_session() {
 	if (m_key_row) m_key_row->set_router(nullptr);
 }
 
-void bssh_main_window::adopt_session(bssh_session *session) {
+void bssh_main_window::take_session(bssh_session *session) {
 	if (!session || m_shown.contains(session)) return;
 
 	/*
 	 * Out of whoever had it first. A session is shown in exactly one
-	 * place (sec 8.4), so adopting is a move rather than a copy -- and
-	 * the window losing it is told through the registry's own signal
-	 * rather than by this window reaching into it, because windows are
-	 * meant to behave as though they were separate processes.
+	 * place (sec 8.4), so adopting is a MOVE rather than a copy.
+	 *
+	 * Announced through the registry rather than by reaching into the
+	 * other window, because windows are meant to behave as though they
+	 * were separate processes -- and emitted BEFORE this window takes it,
+	 * so the announcement finds only windows that should let go.
+	 *
+	 * This used to emit changed(), which did nothing: that handler prunes
+	 * sessions no longer in the REGISTRY, and a moved session is still in
+	 * it. The session stayed visible in both windows, which tear_out_tab
+	 * hid by removing it itself first and a drop would have exposed
+	 * immediately.
 	 */
-	emit m_registry->changed();
+	emit m_registry->session_taken(session);
 
 	m_shown.append(session);
 	on_registry_changed();
+}
+
+void bssh_main_window::adopt_session(bssh_session *session) {
+	if (!session || m_shown.contains(session)) return;
+
+	take_session(session);
 	show_session(session);
+}
+
+void bssh_main_window::drop_session(bssh_session *session, bool beside) {
+	if (!session) return;
+
+	/*
+	 * Taken before it is shown, and those are two decisions rather than
+	 * one. adopt_session() bundles them, and its "show" half replaces the
+	 * intent with this session alone -- correct for a tab, and fatal for a
+	 * tile: split_with() declines a session the intent already contains,
+	 * so a drop onto the panes of a wide window produced ONE pane showing
+	 * the dropped session, having just evicted the one it was meant to sit
+	 * beside. It looked like a drop that had done nothing, when in fact it
+	 * had done something worse.
+	 */
+	take_session(session);
+
+	/*
+	 * Beside, not instead: split_with() is what sec 8.3's "Show beside
+	 * current" does, and a drop onto the panes means the same thing.
+	 *
+	 * Declined where the size class has no room for another pane
+	 * (sec 8.2), and the fallback is to show it as a tab rather than to do
+	 * nothing -- a drop onto a phone-width window still puts the session
+	 * in front of the person who dropped it.
+	 */
+	const bool room = beside && m_layout
+	                  && m_layout->intent().size()
+	                             < bssh_layout_manager::max_panes_for(m_layout->size_class());
+
+	if (room) {
+		split_with(session);
+	} else {
+		show_session(session);
+	}
+}
+
+QString bssh_main_window::session_mime_type() {
+	return QStringLiteral("application/x-bssh-session");
+}
+
+bssh_session *bssh_main_window::session_from_mime(const QMimeData *mime) const {
+	if (!mime || !mime->hasFormat(session_mime_type())) return nullptr;
+
+	bool ok = false;
+	const int index = mime->data(session_mime_type()).toInt(&ok);
+	if (!ok) return nullptr;
+
+	/*
+	 * Resolved out of the registry rather than dereferenced: the payload
+	 * is an index, and an index that no longer names a session -- closed
+	 * mid-drag, say -- must decline rather than land on whichever session
+	 * moved into that slot.
+	 */
+	return m_registry ? m_registry->at(index) : nullptr;
+}
+
+void bssh_main_window::start_tab_drag(int index) {
+	bssh_session *session = session_at_tab(index);
+	if (!session || !m_registry) return;
+
+	const int in_registry = m_registry->index_of(session);
+	if (in_registry < 0) return;
+
+	QMimeData *mime = new QMimeData;
+	mime->setData(session_mime_type(), QByteArray::number(in_registry));
+
+	QDrag *drag = new QDrag(this);
+	drag->setMimeData(mime);
+
+	/*
+	 * A move, not a copy: a session is shown in exactly one place
+	 * (sec 8.4), and there is no meaning to be had from two views of one
+	 * connection.
+	 *
+	 * exec() runs a nested loop until the pointer is released. Whoever
+	 * accepted has already taken the session by the time it returns --
+	 * through their own dropEvent, never through anything this window
+	 * called on them.
+	 */
+	if (drag->exec(Qt::MoveAction) != Qt::IgnoreAction) return;
+
+	/*
+	 * Nobody wanted it, so the gesture means what it meant before there
+	 * was anywhere to drop: a window of its own (sec 8.4). Dropping on
+	 * the desktop and dropping on nothing are the same event to Qt, which
+	 * is exactly the behaviour this needs.
+	 */
+	tear_out_tab(index);
+}
+
+void bssh_main_window::dragEnterEvent(QDragEnterEvent *event) {
+	if (session_from_mime(event->mimeData())) event->acceptProposedAction();
+}
+
+void bssh_main_window::dropEvent(QDropEvent *event) {
+	bssh_session *session = session_from_mime(event->mimeData());
+	if (!session) return;
+
+	/*
+	 * Where it lands is what it means (sec 8.3): the tab bar makes a tab,
+	 * and anywhere else -- the panes, which is most of the window -- makes
+	 * a tile beside what is already showing.
+	 *
+	 * Mapped into the bar's own coordinates rather than compared against
+	 * its geometry(), which is expressed in its parent's and would be
+	 * offset by however the window is laid out.
+	 */
+	const QPoint at = event->position().toPoint();
+	const bool on_the_bar = m_tabs && m_tabs->isVisible()
+	                        && m_tabs->rect().contains(m_tabs->mapFrom(this, at));
+
+	drop_session(session, !on_the_bar);
+	event->acceptProposedAction();
 }
 
 bssh_main_window *bssh_main_window::tear_out_tab(int index) {
@@ -1048,10 +1228,6 @@ bssh_main_window *bssh_main_window::tear_out_tab(int index) {
 	 * producing two windows one of which is useless.
 	 */
 	if (m_shown.size() < 2) return nullptr;
-
-	m_shown.removeAll(session);
-	if (m_current == session) detach_session();
-	on_registry_changed();
 
 	bssh_main_window *window = new bssh_main_window;
 	window->setAttribute(Qt::WA_DeleteOnClose);
@@ -1104,14 +1280,17 @@ bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
 			const QPoint at = mouse->position().toPoint();
 			const int below = at.y() - m_tabs->height();
 
-			if (below > BSSH_TEAR_OUT_DP && tear_out_tab(m_tabs->currentIndex())) {
+			if (below > BSSH_TEAR_OUT_DP && m_tabs->count() > 0) {
 				/*
-				 * Consumed, and the drag is over: QTabBar is still
-				 * mid-move on a tab that has gone, so releasing the
-				 * grab is what stops it moving a tab that no longer
-				 * belongs to this bar.
+				 * Consumed, and the drag is over as far as QTabBar
+				 * is concerned: it is still mid-move on a tab that
+				 * may be about to leave this bar, so releasing the
+				 * grab is what stops it moving one that no longer
+				 * belongs here. Qt's drag takes the pointer from
+				 * this point on.
 				 */
 				m_tabs->releaseMouse();
+				start_tab_drag(m_tabs->currentIndex());
 				return true;
 			}
 		}
