@@ -149,6 +149,24 @@ QString bssh_colour_scheme_catalog::default_id() const {
 	return QStringLiteral("default");
 }
 
+void bssh_colour_scheme_catalog::set_custom(const bssh_colour_scheme_t &scheme) {
+	for (bssh_colour_scheme_t &entry : m_schemes) {
+		if (entry.id != QStringLiteral("custom")) continue;
+
+		/*
+		 * The colours only. The id, the display name and the licence
+		 * are this catalog's, not the caller's -- a custom scheme that
+		 * could rename itself would be one the picker cannot find.
+		 */
+		for (int i = 0; i < 16; ++i) entry.ansi[i] = scheme.ansi[i];
+		entry.background = scheme.background;
+		entry.foreground = scheme.foreground;
+		entry.cursor = scheme.cursor;
+		entry.dark = scheme.dark;
+		return;
+	}
+}
+
 namespace {
 
 double srgb_channel(int value) {

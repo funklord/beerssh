@@ -129,6 +129,17 @@ public:
 
 	QString default_id() const;
 
+	/*
+	 * Replaces the "custom" entry with the user's own palette.
+	 *
+	 * Pushed IN rather than read out: this lives in term/ and the setting
+	 * lives in model/, and a catalog of colours that reaches into the
+	 * settings store is a dependency running the wrong way. Whoever owns
+	 * the settings calls this, which is also the only moment the value
+	 * can change.
+	 */
+	void set_custom(const bssh_colour_scheme_t &scheme);
+
 private:
 	QList<bssh_colour_scheme_t> m_schemes;
 };

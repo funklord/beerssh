@@ -177,6 +177,14 @@ public:
 	QString colour_scheme() const { return m_scheme_id; }
 
 	/*
+	 * Re-reads the current scheme from the catalog. set_colour_scheme()
+	 * early-returns when the id has not changed, which is right for
+	 * switching between fixed schemes and wrong for the custom one: its
+	 * id stays "custom" while its sixteen colours change underneath.
+	 */
+	void reload_colour_scheme();
+
+	/*
 	 * Colour resolution, exposed for the tests that check a scheme
 	 * repaints the sixteen it owns and leaves the 256-colour cube alone.
 	 * The renderer's own path is private and stays that way.

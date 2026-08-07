@@ -1,5 +1,7 @@
 #include "model/app_settings.h"
 
+#include <QColor>
+
 #include <QDir>
 #include <QSettings>
 #include <QStandardPaths>
@@ -161,6 +163,70 @@ int bssh_app_settings::text_brightness() const {
 
 void bssh_app_settings::set_text_brightness(int percent) {
 	store(QStringLiteral("appearance/text_brightness"), qBound(10, percent, 100));
+}
+
+namespace {
+
+/*
+ * The keys, in one place. Sixteen numbered entries plus the three a
+ * scheme actually owns -- named rather than indexed, because "colour 17"
+ * in a config file tells a reader nothing about which one it is.
+ */
+QString ansi_key(int index) {
+	return QStringLiteral("custom_colours/ansi%1").arg(index);
+}
+
+QRgb from_name(const QString &name, QRgb fallback) {
+	const QColor colour(name);
+	return colour.isValid() ? colour.rgb() : fallback;
+}
+
+} /* namespace */
+
+bssh_colour_scheme_t bssh_app_settings::custom_scheme() const {
+	const bssh_colour_scheme_catalog &catalog = bssh_colour_scheme_catalog::instance();
+
+	/*
+	 * Started from the classic set rather than from nothing, so an unset
+	 * or half-written custom scheme is a mostly-standard one instead of a
+	 * black screen. by_id("default") is the shipped palette, which is the
+	 * same sixteen every scheme carries.
+	 */
+	bssh_colour_scheme_t scheme;
+	if (const bssh_colour_scheme_t *base = catalog.by_id(QStringLiteral("default"))) {
+		scheme = *base;
+	}
+	scheme.id = QStringLiteral("custom");
+	scheme.display_name = QStringLiteral("Custom");
+	scheme.licence = QStringLiteral("This device");
+
+	for (int i = 0; i < 16; ++i) {
+		scheme.ansi[i] = from_name(value(ansi_key(i), QString()).toString(), scheme.ansi[i]);
+	}
+
+	scheme.background = from_name(
+	        value(QStringLiteral("custom_colours/background"), QString()).toString(),
+	        scheme.background);
+	scheme.foreground = from_name(
+	        value(QStringLiteral("custom_colours/foreground"), QString()).toString(),
+	        scheme.foreground);
+	scheme.cursor = from_name(
+	        value(QStringLiteral("custom_colours/cursor"), QString()).toString(),
+	        scheme.cursor);
+
+	scheme.dark = bssh_relative_luminance(scheme.background) < 0.5;
+
+	return scheme;
+}
+
+void bssh_app_settings::set_custom_scheme(const bssh_colour_scheme_t &scheme) {
+	for (int i = 0; i < 16; ++i) {
+		store(ansi_key(i), QColor(scheme.ansi[i]).name());
+	}
+
+	store(QStringLiteral("custom_colours/background"), QColor(scheme.background).name());
+	store(QStringLiteral("custom_colours/foreground"), QColor(scheme.foreground).name());
+	store(QStringLiteral("custom_colours/cursor"), QColor(scheme.cursor).name());
 }
 
 namespace {

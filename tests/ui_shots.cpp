@@ -16,6 +16,7 @@
 #include "ui/host_list.h"
 #include "ui/licences_view.h"
 #include "ui/password_prompt.h"
+#include "ui/colour_editor.h"
 #include "ui/preset_editor.h"
 #include "term/emulator.h"
 #include "term/font_catalog.h"
@@ -193,6 +194,24 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	bssh_preset_editor presets(&store, bssh_preset_editor::DESKTOP);
 	shoot(QStringLiteral("desktop-preset-editor"), &presets,
 	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+
+	/*
+	 * The custom palette editor (sec 9.3). Shot at its own size rather
+	 * than the desktop's, because it is a dialog and its minimum is the
+	 * measurement worth having -- nineteen swatches and their labels
+	 * either fit in a sensible box or they do not.
+	 */
+	const bssh_colour_scheme_t custom =
+	        *bssh_colour_scheme_catalog::instance().by_id(QStringLiteral("default"));
+	bssh_colour_editor colours(custom);
+	/*
+	 * Its MINIMUM, not its sizeHint: the report below measures against
+	 * minimumSizeHint, so shooting at the smaller of the two reported
+	 * a dialog that does not fit inside itself.
+	 */
+	const QSize wanted = colours.minimumSizeHint();
+	shoot(QStringLiteral("desktop-colour-editor"), &colours,
+	       wanted.width(), wanted.height());
 
 	/*
 	 * Fed a parsed config, because the surface's whole job is the

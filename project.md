@@ -2419,6 +2419,46 @@ The stored value is bounded on the way *out* as well as in — a hand-edited
 config saying `0` would render an invisible terminal, and the first thing
 anybody does about an invisible terminal is not open the settings.
 
+**[BUILT] The custom scheme has an editor, and it is the only way in.** The
+shipped schemes deliberately cannot repaint the sixteen; this is the escape
+hatch for somebody who wants to anyway, and its being a separate dialog is the
+design rather than an implementation detail. Changing what red means has
+consequences for every program on every host, so it should cost a deliberate
+trip — a choice offered in a dropdown beside the font is one people make by
+accident.
+
+**Shaped after PuTTY's Colours panel**, which is where this problem was already
+solved: every colour visible at once, **named rather than numbered**, and the
+system picker for the actual choosing. PuTTY spells them out as a list with RGB
+spinners; a grid says the same in a quarter of the height and reads as a
+palette, which is what it is. Normal and bright are two ROWS rather than two
+blocks, because they are pairs — bright red belongs beside red, not eight
+squares away.
+
+**The palette is device-wide; which scheme a host uses stays with the host.**
+So `custom` means "this device's custom palette", and the two questions stay in
+the two places that already answer them — the same split the brightness slider
+uses.
+
+Three details that are each a decision:
+
+- **`Classic ANSI` resets the sixteen only.** Background, text and cursor are
+  what somebody came here to change, and discarding those alongside the palette
+  would make the button too dangerous to press.
+- **Cancel is the default button**, so a stray Return does not accept a palette
+  that was still being looked at.
+- **Every swatch carries an accessible name.** A grid of coloured squares is
+  unusable to a screen reader otherwise, and "which red is this" is precisely
+  the question that cannot be answered by looking (§14).
+
+The catalog does **not** read the setting. `term/` holds the palette and
+`model/` holds the store, so the value is pushed in by whoever owns the
+settings — a colour catalog reaching into a settings store is a dependency
+running the wrong way. That also makes the update point explicit, which
+matters: a view already showing `custom` has the id it wants and only its
+*contents* changed, so it needs a re-read rather than a re-set, and
+`set_colour_scheme()` early-returns on an unchanged id.
+
 **[REJECTED]** Shipping a "readable" variant of each scheme alongside the
 faithful one. It doubles the picker, and an improved *Solarized Dark* is either
 mislabelled or an argument with its author; the same result is available from one

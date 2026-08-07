@@ -14,6 +14,8 @@
 #include <QLabel>
 
 #include "ui/wrapped_note.h"
+#include "term/colour_scheme.h"
+#include "ui/colour_editor.h"
 #include "input/input_router.h"
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -317,6 +319,39 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "device, not to one host."),
 	        this);
 	form->addRow(brightness_note);
+
+	/*
+	 * The escape hatch (sec 9.3). A button to a dialog rather than
+	 * nineteen colour wells on this page: changing the sixteen is a
+	 * deliberate act with consequences for every program on every host,
+	 * and a control that takes a trip to get to is one somebody chose
+	 * rather than one they brushed past on the way to the font.
+	 *
+	 * The palette itself is device-wide, like the brightness above it,
+	 * while WHICH scheme a host uses stays with the host. So "custom"
+	 * means "this device's custom palette", and the two questions stay
+	 * in the two places that already answer them.
+	 */
+	m_custom_colours = new QPushButton(QStringLiteral("Custom colours..."), this);
+	m_custom_colours->setToolTip(
+	        QStringLiteral("Edit the palette the Custom scheme uses. Choose Custom for a "
+	                        "host in its Appearance settings to see it."));
+	connect(m_custom_colours, &QPushButton::clicked, this, [this] {
+		bssh_app_settings stored;
+		bssh_colour_editor editor(stored.custom_scheme(), this);
+		if (editor.exec() != QDialog::Accepted) return;
+
+		stored.set_custom_scheme(editor.scheme());
+
+		/*
+		 * Into the catalog immediately, or every view keeps drawing the
+		 * palette it copied when it resolved the scheme -- the id has
+		 * not changed, so nothing else would prompt a re-read.
+		 */
+		bssh_colour_scheme_catalog::instance().set_custom(editor.scheme());
+		emit changed();
+	});
+	form->addRow(QString(), m_custom_colours);
 
 	/*
 	 * Where stored passwords actually live (sec 11), stated rather than

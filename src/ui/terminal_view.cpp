@@ -228,19 +228,22 @@ void bssh_terminal_view::remeasure_cell() {
 }
 
 void bssh_terminal_view::set_colour_scheme(const QString &id) {
-	const bssh_colour_scheme_catalog &catalog = bssh_colour_scheme_catalog::instance();
-
-	const QString wanted = catalog.effective_id(id);
+	const QString wanted = bssh_colour_scheme_catalog::instance().effective_id(id);
 	if (wanted == m_scheme_id) return;
 
 	m_scheme_id = wanted;
+	reload_colour_scheme();
+}
+
+void bssh_terminal_view::reload_colour_scheme() {
+	const bssh_colour_scheme_catalog &catalog = bssh_colour_scheme_catalog::instance();
 
 	/*
 	 * An unknown scheme draws in the default rather than in nothing. The
 	 * id is kept as asked for, so the picker can still show what the
 	 * profile wanted and say it is not in this build (sec 10.1).
 	 */
-	const bssh_colour_scheme_t *scheme = catalog.by_id(wanted);
+	const bssh_colour_scheme_t *scheme = catalog.by_id(m_scheme_id);
 	if (!scheme) scheme = catalog.by_id(catalog.default_id());
 	if (!scheme) return;
 

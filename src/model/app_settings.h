@@ -2,6 +2,8 @@
 #define BSSH_APP_SETTINGS_H
 
 #include <QString>
+
+#include "term/colour_scheme.h"
 #include <QVariant>
 
 /*
@@ -77,6 +79,19 @@ public:
 	 */
 	int text_brightness() const;
 	void set_text_brightness(int percent);
+
+	/*
+	 * The user's own palette, for the "custom" scheme (sec 9.3). Stored
+	 * as #rrggbb strings rather than integers so the config file stays
+	 * something a person can read and edit, which is most of the point of
+	 * having an escape hatch at all.
+	 *
+	 * Reading one returns the classic ANSI values for anything unset, so
+	 * a half-written custom scheme is a mostly-standard one rather than a
+	 * black screen.
+	 */
+	bssh_colour_scheme_t custom_scheme() const;
+	void set_custom_scheme(const bssh_colour_scheme_t &scheme);
 
 	QString theme() const;
 	void set_theme(const QString &theme);

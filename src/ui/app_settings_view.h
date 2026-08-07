@@ -5,6 +5,7 @@
 
 class QCheckBox;
 class QLabel;
+class QPushButton;
 class QSlider;
 class QLineEdit;
 class QComboBox;
@@ -51,6 +52,7 @@ private:
 	QCheckBox *m_hide_from_screenshots;
 	QCheckBox *m_raise_contrast;
 	QSlider *m_text_brightness;
+	QPushButton *m_custom_colours;
 	QLabel *m_text_brightness_value;
 };
 

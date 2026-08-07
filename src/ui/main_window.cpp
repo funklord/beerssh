@@ -60,6 +60,7 @@
 #include "ui/licences_view.h"
 #include "model/preset.h"
 #include "ui/preset_editor.h"
+#include "term/colour_scheme.h"
 #include "ui/session_dialog.h"
 #include "ui/password_prompt.h"
 #include "ui/tab_status.h"
@@ -1010,6 +1011,14 @@ void bssh_main_window::apply_device_settings() {
 	const int brightness = settings.text_brightness();
 
 	/*
+	 * The custom palette, pushed into the catalog before anything reads a
+	 * scheme out of it. term/ does not reach into the settings store --
+	 * the dependency would run the wrong way -- so whoever owns the
+	 * settings hands it over, and this is the one place that happens.
+	 */
+	bssh_colour_scheme_catalog::instance().set_custom(settings.custom_scheme());
+
+	/*
 	 * Press-and-hold opens the menu wherever the touch layout is in use,
 	 * which is where there is no right button to open it with. A pointer
 	 * keeps press-and-hold meaning "start a selection and think about
@@ -1087,6 +1096,12 @@ void bssh_main_window::apply_device_settings() {
 			if (!view) continue;
 			view->set_raise_contrast(raise);
 			view->set_text_brightness(brightness);
+
+			/*
+			 * Re-read, not re-set: a view already showing "custom"
+			 * has the id it wants, and only its CONTENTS changed.
+			 */
+			view->reload_colour_scheme();
 			view->set_long_press_menu(hold);
 			view->set_focus_follows_mouse(follows);
 		}
