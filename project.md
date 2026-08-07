@@ -828,6 +828,31 @@ model on a finger.
   is unconditional and the setting is how somebody who lives inside bracketed
   paste turns it off.
 
+**OSC 52 had never once run, and neither had the settings handler beside it.**
+Both were wired with `Qt::UniqueConnection` and a lambda — a combination Qt
+**refuses**: in a release build it warns and hands back an invalid connection,
+and in a debug build it asserts. Measured with a ten-line probe against this Qt
+rather than taken from the warning text: `connection valid: false`, handler ran
+`0` times. So the preset switch existed, the emulator emitted the signal, and
+nothing was listening; a host the user had deliberately trusted could not set
+the clipboard, and a preset edit never reached the key row, the geometry or the
+status line. Appearance survived only because `bssh_pane_container` makes its
+own per-view connection.
+
+This is the **second** time that combination has cost this project a feature —
+§8.4 records the link prompt and the primary-selection copy going the same way,
+and the `m_wired_view` guard written to fix them sits twenty lines below the two
+connections that still had it. The lesson that did not carry: `UniqueConnection`
+is not a way to make repeated wiring safe, it is a thing that only works with a
+pointer-to-member. **Wire once, where the object arrives once.** Both moved to
+the registry's `session_added`, which fires exactly once per session, so no
+uniqueness trick is needed at all.
+
+Only the window **showing** a session honours its clipboard request. A session
+is on screen in exactly one place (§8.4), so one remote request produces one
+clipboard write and one line of status rather than one per window that has ever
+shown it.
+
 **The terminal's own context menu — [DECIDED].**
 Right-click on the desktop, press-and-hold on touch: **Copy, Paste, Select All**.
 There was none at all before — the tab bar and the host list had menus and the

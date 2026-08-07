@@ -546,6 +546,51 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		connect(session->input_router(), &bssh_input_router::shortcut_pressed,
 		         this, handle_shortcut);
 
+		/*
+		 * OSC 52 (sec 7.1): the remote asking to set the clipboard.
+		 * Honoured only where the host's preset says so -- off by
+		 * default -- and never silently: the status line says which host
+		 * did it, because a clipboard that changed without the user
+		 * acting is the whole hazard, and the useful case (yanking in
+		 * vim over ssh) is one they just caused deliberately.
+		 *
+		 * Only the window SHOWING that session reacts. A session is on
+		 * screen in exactly one place (sec 8.4), so this is what makes
+		 * one remote request produce one clipboard write and one line of
+		 * status, rather than one per window that has ever shown it.
+		 */
+		connect(session->emulator(), &bssh_emulator::clipboard_write_requested,
+		         this, [this, session](const QString &text) {
+			if (!m_shown.contains(session)) return;
+			if (!session->settings()
+			              .value(QStringLiteral("allow_clipboard_write")).toBool()) {
+				return;
+			}
+
+			QGuiApplication::clipboard()->setText(text);
+
+			m_error = QStringLiteral("%1 set the clipboard (%2 characters)")
+			                  .arg(session->title())
+			                  .arg(text.size());
+			update_status();
+		});
+
+		/* The settings a host resolves to, reaching the pane on screen. */
+		connect(session, &bssh_session::settings_changed, this, [this, session] {
+			if (m_current != session || !m_terminal_view) return;
+
+			bssh_apply_appearance(m_terminal_view, session->settings());
+			if (m_key_row) {
+				m_key_row->set_layout(session->settings()
+				                              .value(QStringLiteral("key_row_layout"))
+				                              .toString());
+			}
+			session->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
+			                                      m_terminal_view->cell_height());
+			session->resize(m_terminal_view->cols(), m_terminal_view->rows());
+			update_status();
+		});
+
 		/* OSC title also drives the window title on desktop (sec 8.3). */
 		connect(session, &bssh_session::title_changed, this, [this, session] {
 			if (session == m_current) update_window_title();
@@ -824,47 +869,6 @@ void bssh_main_window::show_session(bssh_session *session) {
 
 	m_panes->rebuild();
 	m_panes->focus_session(session);
-
-	/*
-	 * Per-session wiring that outlives any one view: the settings a host
-	 * resolves to, and the geometry the remote is told about. Reconnected
-	 * on every show because a pane rebuild replaces the view underneath.
-	 */
-	/*
-	 * OSC 52 (sec 7.1): the remote asking to set the clipboard. Honoured
-	 * only where the host's preset says so -- off by default -- and never
-	 * silently: the status line says which host did it, because a
-	 * clipboard that changed without the user acting is the whole hazard,
-	 * and the useful case (yanking in vim over ssh) is one they just
-	 * caused deliberately.
-	 */
-	connect(session->emulator(), &bssh_emulator::clipboard_write_requested,
-	         this, [this, session](const QString &text) {
-		if (!session->settings().value(QStringLiteral("allow_clipboard_write")).toBool()) {
-			return;
-		}
-
-		QGuiApplication::clipboard()->setText(text);
-
-		m_error = QStringLiteral("%1 set the clipboard (%2 characters)")
-		                  .arg(session->title())
-		                  .arg(text.size());
-		update_status();
-	}, Qt::UniqueConnection);
-
-	connect(session, &bssh_session::settings_changed, this, [this, session] {
-		if (m_current != session || !m_terminal_view) return;
-
-		bssh_apply_appearance(m_terminal_view, session->settings());
-		if (m_key_row) {
-			m_key_row->set_layout(
-			        session->settings().value(QStringLiteral("key_row_layout")).toString());
-		}
-		session->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
-		                                      m_terminal_view->cell_height());
-		session->resize(m_terminal_view->cols(), m_terminal_view->rows());
-		update_status();
-	}, Qt::UniqueConnection);
 
 	if (m_terminal_view) {
 		bssh_apply_appearance(m_terminal_view, session->settings());

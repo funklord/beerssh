@@ -1,4 +1,6 @@
 #include <QAbstractButton>
+#include <QClipboard>
+#include <QJsonObject>
 #include <QAbstractScrollArea>
 #include <QScrollArea>
 #include <QStackedWidget>
@@ -2108,4 +2110,51 @@ void layout_test::a_live_tab_is_not_offered_connect() {
 
 	bssh_ssh_session::set_factory(nullptr);
 	while (registry->count() > 0) registry->close(registry->at(0));
+}
+
+void layout_test::a_trusted_host_can_actually_set_the_clipboard() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *session = window.registry()->create(named(QStringLiteral("trusted")));
+	window.adopt_session(session);
+	QCoreApplication::processEvents();
+
+	QGuiApplication::clipboard()->setText(QStringLiteral("before"));
+
+	/*
+	 * Off by default (sec 7.1), and that half must keep working: a host
+	 * nobody trusted may not touch the clipboard.
+	 */
+	QJsonObject settings;
+	settings.insert(QStringLiteral("allow_clipboard_write"), false);
+	session->set_settings(settings);
+
+	session->emulator()->feed(QByteArrayLiteral("\x1b]52;c;aGVsbG8=\x1b\\"));
+	QCoreApplication::processEvents();
+	QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("before"));
+
+	/*
+	 * And with the host trusted it really happens. This is the assertion
+	 * the feature never passed: the window wired this up with
+	 * Qt::UniqueConnection and a lambda, which Qt REFUSES -- in a release
+	 * build it warns and returns an invalid connection, so the handler
+	 * ran zero times rather than once. Measured with a ten-line probe
+	 * against this Qt, because the failure is silent by construction:
+	 * everything compiles, the signal is emitted, and nothing listens.
+	 */
+	settings.insert(QStringLiteral("allow_clipboard_write"), true);
+	session->set_settings(settings);
+
+	session->emulator()->feed(QByteArrayLiteral("\x1b]52;c;aGVsbG8=\x1b\\"));
+	QCoreApplication::processEvents();
+
+	QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("hello"));
+
+	while (shared->count() > 0) shared->close(shared->at(0));
 }

@@ -59,6 +59,13 @@ private slots:
 	 * kind that looks right and lands a row short.
 	 */
 	void a_window_can_be_sized_in_cells();
+
+	/*
+	 * sec 7.1's OSC 52, end to end through the window that honours it.
+	 * The wiring was written with Qt::UniqueConnection and a lambda,
+	 * which Qt refuses outright -- so the feature had never once run.
+	 */
+	void a_trusted_host_can_actually_set_the_clipboard();
 	void a_live_tab_is_not_offered_connect();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already
