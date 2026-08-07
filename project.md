@@ -946,6 +946,14 @@ slot that resets it after **every** test in the class rather than after the
 guilty one: the next window-building test would otherwise rediscover this the
 same way, and the failure points nowhere near its cause.
 
+**[BUILT] The terminal menu carries the session verbs too.** Split, New Tab and
+New Window sat only on the TAB bar's menu — a different target, and one a window
+with a single session hides entirely, so from a lone terminal there was no route
+to a split but a chord nobody had been told about. Reported as exactly that.
+They come after the edit verbs and a separator, in the order the rest of this
+menu already follows, and Split is shown disabled rather than hidden when the
+size class has no room for another pane.
+
 **The terminal's own context menu — [DECIDED].**
 Right-click on the desktop, press-and-hold on touch: **Copy, Paste, Select All**.
 There was none at all before — the tab bar and the host list had menus and the
@@ -1331,6 +1339,22 @@ on a short timer, not on every pixel, or a window drag becomes a storm of
 `window-change` messages to every session.
 
 ### 8.2 Collapse & restore (the part that must not lose work)
+
+**[BUILT] The terminal declares a minimum, so a window cannot be all chrome.**
+It declared none, Qt gave it zero, and the window inherited a floor made
+entirely of furniture: rendered at its own claimed minimum of 214x77 it held a
+menu bar, a tab strip and a status line with no grid between them. That is not
+a harmless number — §8.3 records what Qt does when content is taller than the
+space it is given, which is to squeeze rows past their minimums until they draw
+on top of each other, and a window manager honouring 77px is asking for it.
+
+**Twenty columns by four rows**, and both are arguments rather than taste.
+Twenty columns is about the narrowest that holds a prompt and a short command
+without wrapping mid-word; four rows shows the prompt, what was typed, and two
+lines of what came back. It constrains nothing real: four panes side by side
+only happen above this section's 840dp class, and four twenty-column grids fit
+inside that comfortably.
+
 The hard case: the user has a 2-pane split on an unfolded foldable, then folds it
 — or rotates to portrait, drags the app into a narrow split-window, or (on
 desktop) tiles a 4-pane window into a half-screen column.
@@ -1389,6 +1413,21 @@ a measurement that cannot tell "faster" from "stopped collapsing" would report
 the same number for a layout manager that had quietly stopped working.
 
 ### 8.3 Tabs and focus
+
+**[BUILT] A tab tears out on DISTANCE, not on direction.** The gesture measured
+how far below the bar the pointer had gone and nothing else, so a tab could be
+pulled out downward and not upward, sideways, or off either end. Three of the
+four directions did nothing at all — and nothing at all is indistinguishable
+from a feature that does not exist, which is how it was reported: tabs cannot
+be dragged freely. Konsole and every browser detach on distance.
+
+The threshold stays generous, for the reason it was generous before: a tab bar
+is thin and a pointer reordering tabs crosses its edge constantly, so tearing
+out on "left the widget" would make reordering nearly impossible. Sideways is
+measured from the bar's full **width** rather than from the last tab, because
+dragging along a half-empty strip is still reordering — measured from the tabs,
+a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
+
 - **Tab bar:** horizontally scrollable; label from **OSC title** with fallback to
   the profile name; a small **status dot** per tab (connected / reconnecting /
   disconnected / bell-rang-while-away — and *away* means **no pane**, not
@@ -3383,6 +3422,27 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
 ## 12. Build, packaging, CI
 
 ### 12.1 Builds
+- **[BUILT] A missing submodule is fetched, not complained about**, and the
+  fetch happens while the Makefile is being READ. `VTERM_SRCS` is a wildcard and
+  a wildcard expands at parse time, so a checkout done from a recipe comes too
+  late for the run that needed it — the source list is still empty and make goes
+  on to build an archive with no members. An ordinary build pays nothing: the
+  test for a missing submodule is itself a `$(wildcard)` and spawns no process.
+  Targets that cannot need libvterm are excluded, because a style check has no
+  business reaching the network.
+  What it replaced could not work. The guard hung off `$(VTERM_SRCS)`, so with
+  the submodule absent that list was empty, the rule had no targets and never
+  fired; and with it present the list held only files that already existed, so
+  it could not fire then either. The same empty list also stripped the archive
+  rule's prerequisites, and a rule with none fires whenever its target is
+  missing — hence `ar: build-vterm/libvterm.a: No such file or directory`, which
+  names neither the submodule nor the fix.
+- **The fonts are a prerequisite of the PACKAGE though not of `make install`.**
+  Install is deliberately tolerant of a checkout that never ran `make fonts`
+  (§9.4 falls back to system families); `debian/beerssh-fonts.install` names
+  `usr/share/beerssh` outright and is not tolerant at all. Without them the
+  build does not produce fewer packages, it produces none — and it fails at
+  `dh_install`, after the whole app has compiled.
 - **One qmake project (`beerssh.pro`), two scopes.** The desktop build is a plain
   host `qmake6` against the system Qt, libssh and OpenSSL. The Android build runs
   the Qt-for-Android kit's qmake and hands off to `androiddeployqt`. No second
@@ -3561,6 +3621,51 @@ The desktop build is what makes this project testable at all — use it.
   in its own session and is killed by group; and a spec had gone stale and
   matched nothing, which aborts the batch, so every `find` string is checked
   to match exactly once before a run.
+- **A check can be vacuous in more than one way, and this one managed two in a
+  day.** §6.2's touch floor is enforced by a walk over a list of widget TYPES,
+  and the test that guards it went wrong twice.
+  First it kept its own copy of that list, which drifted: the copy omitted
+  `QAbstractSpinBox`, so a spin box was sized by the walk and checked by nobody.
+  Replacing the copy with a call to the same predicate looked like the obvious
+  fix and was worse — it made the check **unfalsifiable**, because deleting a
+  type then removes the requirement and the check in one edit, which is the one
+  failure it exists to report. The sabotage runner said so: dropping sliders
+  from the list was reported as caught by nothing.
+  Asking "does it take keyboard focus" instead is wrong in **both** directions,
+  and is worth writing down because it is such a tidy-looking idea. A `QLabel`
+  with selectable text takes focus and is read rather than tapped, so the
+  settings page failed on a paragraph; and the key row's buttons take **no**
+  focus deliberately — tapping a key must not steal focus from the terminal —
+  so the app's most important tap targets were skipped entirely.
+  What it does now: the test keeps its own list of interactive types for the
+  **requirement**, uses the code's list only for the nesting **exemption** —
+  where an incomplete list produces noise rather than silence — and asserts that
+  it examined something at all. The two uses are not symmetric, and that is the
+  general lesson: a list is safe where being incomplete is loud.
+- **Rendering the viewport shows a third of the truth**, on three surfaces so
+  far. The settings page hid the brightness slider below the fold, the host
+  editor hid the font picker, and the key row hid five keys in thirteen — where
+  `minimal` and `default` rendered *identically* at phone width while being
+  eight keys and thirteen. All three shoot the scroll area's CONTENT now, at its
+  natural size, which is the only view that contains what is being judged.
+- **The shots directory kept pictures of screens that had been removed** — an
+  SSH category, a *Window* page renamed to *Appearance*, two deleted Solarized
+  terminals — so anyone browsing it would have concluded all three still
+  existed. That is this section's own rule turned against it. Last run's output
+  goes before each run, with the directory checked non-empty, relative and free
+  of parent escapes, because the file names are not knowable when the set of
+  surfaces is the thing that changes.
+- **Panes, the key row and the menus have pictures now**, and each was a surface
+  where an assertion counts things a picture judges. Two panes side by side with
+  the focused border between them; all five key-row layouts at full width; and
+  the terminal menu in both arrangements, which is how §6.4's claim that touch
+  changes *the metrics and nothing else* became checkable by a person rather
+  than by a row count.
+  The split shot found something on its way in: whether a drop tiles or falls
+  back to a tab is decided by the size class, the size class arrives in a
+  resizeEvent, and Qt does not deliver one to a hidden widget — so a window
+  resized before being shown tiles nothing. That is a property of the code and
+  not only of the test.
 - **`make check-keepalive` is the one check that needs the network to lie.**
   Everything else can be proved with a server that answers or refuses; §5.3's
   socket options exist for the case where packets simply stop arriving and
