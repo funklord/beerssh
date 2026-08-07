@@ -54,7 +54,16 @@ jobs:
   linux:
     runs-on: ubuntu-latest
     steps:
+      # submodules, because libvterm IS one (sec 7) and the build compiles
+      # it from source. Without this the checkout leaves vterm/ empty, the
+      # object list expands to nothing, and the build dies on `ar rcs
+      # build-vterm/libvterm.a` with no members -- which is what every run
+      # of this job had been doing since it was written. The android job
+      # below had it from the start; this one never did, and the failure
+      # reads as an archiver problem rather than a checkout one.
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Install Qt 6 (distro packages)
         run: |
           sudo apt-get update
