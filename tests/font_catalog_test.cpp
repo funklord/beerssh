@@ -1,3 +1,4 @@
+#include <QFontMetricsF>
 #include <QtTest>
 #include <QDir>
 #include <QFile>
@@ -454,4 +455,65 @@ void font_catalog_test::the_lift_keeps_a_colour_recognisable() {
 	 */
 	QVERIFY(bssh_contrast_ratio(bssh_raise_contrast(0x000000, background), background)
 	         >= BSSH_CONTRAST_FLOOR);
+}
+
+void font_catalog_test::every_bundled_face_draws_a_box_the_width_of_its_cell() {
+	bssh_font_catalog catalog;
+	if (catalog.load_bundled(QString::fromLatin1(BSSH_TEST_FONT_DIR)) < 1) {
+		QSKIP("no bundled fonts fetched; tools/fetch-fonts.sh has not run");
+	}
+
+	/*
+	 * The property a box-drawing character actually needs, and the one
+	 * nobody had written down: its advance must equal the cell.
+	 *
+	 * The cell is measured from 'W' (see bssh_terminal_view), so a face
+	 * whose U+2500 advanced by even a fraction less would leave a hairline
+	 * at every cell boundary and a TUI's borders would come apart. It
+	 * matters most for the FALLBACK: sec 9.3 sends a missing box glyph to
+	 * DejaVu, and a DejaVu whose advance disagreed with the selected face
+	 * would break lines only for the faces that lack the glyph -- which is
+	 * the hardest kind of fault to see and the easiest to blame on the
+	 * wrong thing.
+	 *
+	 * This test exists because that blame was misplaced once already. A
+	 * note in this project claimed box drawing "does not meet in JetBrains
+	 * Mono", from looking at a screenshot scaled up with smooth
+	 * interpolation -- which turns the antialiased edge above a one-pixel
+	 * stroke into what reads as a gap. Measuring the pixels of every
+	 * terminal screenshot found the stroke continuous in all of them, and
+	 * measuring the advances found every face exact. An impression is not
+	 * evidence; this is what evidence looks like for this question.
+	 */
+	const char32_t box[] = {
+		U'\u2500', U'\u2502', U'\u250c', U'\u253c',
+		U'\u2534', U'\u2588', U'\u2592',
+	};
+
+	for (const bssh_font_t &face : catalog.all()) {
+		for (int size = 8; size <= 20; ++size) {
+			if (!catalog.is_available(face.id)) continue;
+
+			QFont font(catalog.family_for(face.id));
+			font.setPointSize(size);
+
+			const QFontMetricsF metrics(font);
+			const qreal cell = metrics.horizontalAdvance(QLatin1Char('W'));
+			QVERIFY(cell > 0);
+
+			for (char32_t glyph : box) {
+				const QString text = QString::fromUcs4(&glyph, 1);
+				const qreal advance = metrics.horizontalAdvance(text);
+
+				QString complaint = QStringLiteral(
+				        "%1 at %2pt: U+%3 advances %4 where the cell "
+				        "is %5 -- its lines would not meet");
+				complaint = complaint.arg(face.display_name).arg(size);
+				complaint = complaint.arg(uint(glyph), 4, 16, QLatin1Char('0'));
+				complaint = complaint.arg(advance).arg(cell);
+
+				QVERIFY2(qAbs(advance - cell) < 0.01, qPrintable(complaint));
+			}
+		}
+	}
 }

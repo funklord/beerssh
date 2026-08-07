@@ -2140,6 +2140,24 @@ is found:
 `selected font → DejaVu Sans Mono (box drawing) → Noto Sans Mono (broad Unicode / CJK) → GNU Unifont (last resort)`
 
 - **Never** fall back to a proportional system font — it breaks the grid.
+- **Box-drawing glyphs advance by exactly one cell, and that is now checked
+  rather than looked at.** The cell is measured from `W` (§9.5), so a face
+  whose `U+2500` advanced by even a fraction less would leave a hairline at
+  every cell boundary and a TUI's borders would come apart. It matters most for
+  the *fallback*: a DejaVu that disagreed with the selected face would break
+  lines only for the faces that lack the glyph, which is the hardest kind of
+  fault to see and the easiest to blame on the wrong thing. A test walks every
+  bundled face at every size from 8 to 20pt over `─ │ ┌ ┼ ┴ █ ▒`; all eight
+  faces and the fallback are exact.
+  **It is checked because the blame was misplaced once already.** This project
+  carried a note saying box drawing "does not meet in JetBrains Mono", from a
+  screenshot scaled up with smooth interpolation — which turns the antialiased
+  edge above a one-pixel stroke into what reads as a gap. Measured instead: the
+  stroke is a continuous run in all four terminal screenshots, dark and light;
+  the advances are exact for every face and size; and a whole-run `drawText`,
+  a per-cell draw and a clipped per-cell draw all produce an unbroken line at
+  the shipped 9px cell. There was no defect. The case that *does* break lines is
+  fractional scaling, and §9.5's device-pixel snapping already answers it.
 - **Double-width cells:** implement `wcwidth`-equivalent logic so CJK and many
   emoji occupy exactly two cells, matching what the remote program assumed when it
   laid out the screen. Getting this wrong misaligns every TUI. Note that emoji

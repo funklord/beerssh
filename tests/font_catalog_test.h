@@ -17,6 +17,12 @@ class font_catalog_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	/*
+	 * sec 9.3's whole promise: box-drawing characters meet at the cell
+	 * edge. Measured rather than looked at -- see the test.
+	 */
+	void every_bundled_face_draws_a_box_the_width_of_its_cell();
+
 	void ids_are_stable_and_unique();
 	void the_picker_never_offers_fallback_only_families();
 	void defaults_differ_by_form_factor_but_come_from_one_set();
