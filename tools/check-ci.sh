@@ -70,11 +70,53 @@ STAGE=$(mktemp -d)
 # long docker run gets cut short.
 trap 'rm -rf "$STAGE"' EXIT INT TERM
 
-# Only what is committed, plus the vendored submodule: this checks what a
-# push would actually give the runner, not what happens to be lying in
-# the working tree.
-git ls-files -z | tar --null -T - -cf "$STAGE/src.tar"
-tar -cf "$STAGE/vterm.tar" vterm
+# Only what is committed: this checks what a push would actually give the
+# runner, not what happens to be lying in the working tree.
+#
+# --no-recursion, because `git ls-files` prints the SUBMODULE as a bare
+# path -- `vterm` -- and tar given a directory name archives the whole
+# tree under it. So the submodule arrived inside src.tar however the
+# workflow was configured, which is a second way this reproduction was
+# fixing the bug on its way in. Every other entry ls-files prints is a
+# real file, so nothing else is lost by not descending.
+#
+# The option order matters: --no-recursion is POSITIONAL in GNU tar and
+# affects only the arguments after it, so it has to precede -T.
+git ls-files -z | tar -cf "$STAGE/src.tar" --null --no-recursion -T -
+
+# And the submodule ONLY IF THE WORKFLOW ASKS FOR IT, read out of the
+# workflow the same way the package list above is, and for the same
+# reason -- a second copy of a decision is a copy that can be wrong.
+#
+# This used to hand the container vterm/ unconditionally, and that made
+# the check blind to the one failure it should have caught first: the
+# linux job's checkout did not ask for submodules, so on the runner
+# vterm/ was empty, the object list expanded to nothing and the build
+# died on `ar rcs build-vterm/libvterm.a` with no members. Every run of
+# that job had failed since it was written while this reproduction
+# passed, because this reproduction was quietly fixing the bug on its
+# way in.
+WANTS_SUBMODULES=$(python3 - "$WORKFLOW" <<'PY'
+import re
+import sys
+
+text = open(sys.argv[1]).read()
+
+# The linux job's own block: from "  linux:" to the next job at that indent.
+block = re.search(r"^  linux:\n(.*?)(?=^  \S+:|\Z)", text, re.S | re.M)
+body = block.group(1) if block else ""
+
+print("yes" if re.search(r"^\s*submodules:\s*(recursive|true)\s*$", body, re.M)
+      else "no")
+PY
+)
+
+if [ "$WANTS_SUBMODULES" = yes ]; then
+	tar -cf "$STAGE/vterm.tar" vterm
+else
+	echo "check-ci: the linux job does not ask for submodules, so neither does this"
+	tar -cf "$STAGE/vterm.tar" --files-from /dev/null
+fi
 
 docker run --rm -v "$STAGE":/in:ro "$IMAGE" sh -c "
 set -e
