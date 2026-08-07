@@ -3,6 +3,7 @@
 #include <QScrollArea>
 #include <QTreeWidget>
 #include <QRegularExpression>
+#include <QMenu>
 #include <QStackedWidget>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -268,6 +269,30 @@ void bssh_ui_shots::render_touch_surfaces() {
 		}
 	}
 
+	/*
+	 * The same menu with a thumb in front of it (sec 6.4).
+	 *
+	 * Its claim is that touch changes the METRICS and nothing else: the
+	 * same verbs in the same order, rows grown to sec 6.2's floor, and
+	 * the chords dropped -- they tell somebody with no keyboard which
+	 * key to press. Two pictures side by side are what make that claim
+	 * checkable by a person; the assertion alongside them only counts
+	 * rows.
+	 */
+	{
+		bssh_main_window touch_window;
+		QMenu *menu = touch_window.build_terminal_menu(&touch_window);
+		menu->ensurePolished();
+		menu->resize(menu->sizeHint());
+		QTest::qWait(20);
+
+		const QString path = shot_dir() + QStringLiteral("/touch-terminal-menu.png");
+		menu->grab().save(path);
+		QTextStream(stdout) << QStringLiteral("  %1  %2x%3\n")
+		                               .arg(path, -44).arg(menu->width()).arg(menu->height());
+		delete menu;
+	}
+
 	bssh_font_picker picker;
 	shoot(QStringLiteral("touch-font-picker"), &picker, BSSH_PHONE_W, BSSH_PHONE_H);
 
@@ -338,6 +363,36 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	 * a window manager honouring this figure would produce. Rendered at
 	 * its own claim, so the claim can be looked at rather than trusted.
 	 */
+	/*
+	 * The terminal's context menu, in both arrangements.
+	 *
+	 * Sec 6.4's claim is that touch changes the METRICS and nothing else
+	 * -- same verbs, same order, bigger rows and no chords printed. That
+	 * is a claim about what a menu looks like, it has had a test since it
+	 * was written, and it has never had a picture. The rows either clear
+	 * sec 6.2's floor or they do not, and a menu whose items move is one
+	 * nobody can use without reading it every time.
+	 *
+	 * Grabbed from the menu widget rather than popped up: a popup is a
+	 * window of its own and the offscreen platform has nowhere to put it,
+	 * but the widget lays itself out the same either way.
+	 */
+	{
+		QMenu *desktop_menu = window.build_terminal_menu(&window);
+		desktop_menu->ensurePolished();
+		desktop_menu->resize(desktop_menu->sizeHint());
+		QTest::qWait(20);
+
+		const QString path = shot_dir()
+		        + QStringLiteral("/desktop-terminal-menu.png");
+		desktop_menu->grab().save(path);
+		QTextStream(stdout) << QStringLiteral("  %1  %2x%3\n")
+		                               .arg(path, -44)
+		                               .arg(desktop_menu->width())
+		                               .arg(desktop_menu->height());
+		delete desktop_menu;
+	}
+
 	const QSize window_floor = window.minimumSizeHint();
 	shoot(QStringLiteral("desktop-window-minimum"), &window,
 	       window_floor.width(), window_floor.height());
