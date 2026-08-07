@@ -141,6 +141,17 @@ public:
 	bool showing_front_door() const;
 
 	/*
+	 * Brings up whichever front door this device built (sec 8.5). The
+	 * configuration must be reachable from a terminal on both platforms,
+	 * and on desktop the terminal is now where the app starts.
+	 *
+	 * Public because it is a window ACTION rather than an internal step:
+	 * the terminal's context menu raises it, and so must anything else
+	 * that offers the settings.
+	 */
+	void show_front_door();
+
+	/*
 	 * Imports the preset file this app was launched to open, if any
 	 * (sec 10.5). Called by main() rather than from the constructor, and
 	 * deliberately: it can put a modal dialog on screen, and --self-test
@@ -350,13 +361,6 @@ public:
 
 private:
 	void show_terminal_menu(const QPoint &at);
-
-	/*
-	 * Brings up whichever front door this device built (sec 8.5). The
-	 * configuration must be reachable from a terminal on both platforms,
-	 * and on desktop the terminal is now where the app starts.
-	 */
-	void show_front_door();
 	void show_tab_menu(const QPoint &at);
 
 	/* The session behind a tab of THIS window, or null (sec 8.4). */

@@ -299,6 +299,8 @@ QWidget *bssh_session_dialog::build_session_page() {
 	actions->addStretch(1);
 	QPushButton *open = new QPushButton(QStringLiteral("Open"), page);
 	QPushButton *cancel = new QPushButton(QStringLiteral("Cancel"), page);
+	/* Named so a test can press it rather than emit the signal behind it. */
+	cancel->setObjectName(QStringLiteral("front_door_cancel"));
 	open->setDefault(true);
 	actions->addWidget(open);
 	actions->addWidget(cancel);

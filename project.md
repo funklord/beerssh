@@ -1968,6 +1968,28 @@ behind its own separator. That menu is the one surface both platforms already
 share, so one entry serves both. Without it the desktop would have exactly the
 one-way door that made the tab bar unreachable on Android — the same defect
 arriving on the other platform by the other road.
+**Leaving the front door must not take the terminal with it.** Cancel was
+wired straight to `close()`, so opening the settings from a working shell and
+pressing Cancel closed the window and every live session in it — and §5.3 is
+clear that a reconnect does not bring a shell back, so that is destroyed work
+rather than an inconvenience. Reported from use, and invisible here because
+the wiring is *correct for the screen it was written for*: on a desktop launch
+with no target named, the front door is the first thing shown, and declining
+it there has always meant "do not start". What changed underneath is that the
+same screen became reachable from a live session, and nobody revisited the
+Cancel. So it quits only when there is nothing behind it, and otherwise goes
+back to the terminal.
+**The touch side never had this bug**, which is the tell: its Back goes to
+the host list because it was written as navigation, while the desktop's was
+written as an answer to a startup question. Two idioms, one of which quietly
+acquired a second meaning.
+**And the same page-shaped front door lets a window exist with no terminal
+in it at all** — the converse complaint, from the same structure. A desktop
+window is supposed to *be* a terminal; the configuration living inside its
+stack is what allows a window that is only settings. Making the desktop
+configuration a window of its own (below) settles both directions at once,
+and the Cancel rule above survives it for the startup case.
+
 **Opened by `main()`, never by the constructor.** Doing it in the constructor
 forked a real shell for every `bssh_main_window` anything built — the fifteen
 the suite constructs, and the one `--self-test` makes — and since a live

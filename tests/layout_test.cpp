@@ -1,4 +1,5 @@
 #include <QAbstractButton>
+#include <QPushButton>
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QLineEdit>
@@ -1744,6 +1745,63 @@ void layout_test::focus_follows_the_pointer_only_when_asked() {
 	/* And the border went with it, because hover used the same path. */
 	QCOMPARE(container.view_at(1)->property("bssh_focused").toBool(), true);
 	QCOMPARE(container.view_at(0)->property("bssh_focused").toBool(), false);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::cancelling_the_settings_keeps_the_session() {
+	/*
+	 * Reported from use: open the settings from a working shell, press
+	 * Cancel, and the shell is gone. The front door is a PAGE in the same
+	 * stack as the terminal, and Cancel was wired straight to close() --
+	 * correct for the startup screen it was written for, fatal for the
+	 * same screen reached from a live session, because an SSH session is
+	 * not something a reconnect brings back (sec 5.3).
+	 */
+	bssh_platform::force_touch_primary(false);
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	bssh_session *live = window.registry()->create(named(QStringLiteral("live")));
+	window.adopt_session(live);
+	QVERIFY2(!window.showing_front_door(), "a session must be in front to start with");
+
+	window.show_front_door();
+	QVERIFY(window.showing_front_door());
+
+	QPushButton *cancel =
+	        window.findChild<QPushButton *>(QStringLiteral("front_door_cancel"));
+	QVERIFY2(cancel, "the front door must have a Cancel a user can press");
+	cancel->click();
+	QCoreApplication::processEvents();
+
+	QVERIFY2(!window.showing_front_door(),
+	          "Cancel must go back to the terminal, not out of the app");
+	QVERIFY2(window.registry()->index_of(live) >= 0,
+	          "the session must still exist after cancelling the settings");
+
+	/*
+	 * And the startup case still quits, which is what the close() was
+	 * there for: with nothing behind it, declining the front door means
+	 * "do not start" rather than "show me an empty terminal".
+	 */
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window empty;
+	QVERIFY(empty.showing_front_door());
+	empty.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&empty));
+
+	QPushButton *decline =
+	        empty.findChild<QPushButton *>(QStringLiteral("front_door_cancel"));
+	QVERIFY(decline);
+	decline->click();
+	QCoreApplication::processEvents();
+
+	QVERIFY2(!empty.isVisible(),
+	          "with no session behind it, Cancel still means do not start");
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

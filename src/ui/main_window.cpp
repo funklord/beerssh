@@ -383,7 +383,33 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
 		connect(m_session_dialog, &bssh_session_dialog::open_requested,
 		         this, &bssh_main_window::open_profile);
-		connect(m_session_dialog, &bssh_session_dialog::cancelled, this, &QWidget::close);
+		/*
+		 * Cancel means "I am done with the settings", not "throw away
+		 * my work". Wired straight to close() it took the window and
+		 * every live session in it: the config screen is a PAGE in the
+		 * same stack as the terminal, so leaving it looked to the code
+		 * like leaving the app. Reported from use -- open the settings
+		 * from a working shell, press Cancel, lose the shell, and an
+		 * SSH session is not something a reconnect brings back (sec
+		 * 5.3).
+		 *
+		 * Quitting is still right when there is nothing behind it,
+		 * which is the case it was written for: a desktop launch with
+		 * no target named shows the front door first, and declining it
+		 * there has always meant "do not start".
+		 *
+		 * The touch side never had this bug -- its Back goes to the
+		 * host list -- which is the tell that the wiring was about the
+		 * startup screen and got applied to a screen that is also
+		 * reachable mid-session.
+		 */
+		connect(m_session_dialog, &bssh_session_dialog::cancelled, this, [this] {
+			if (m_shown.isEmpty()) {
+				close();
+				return;
+			}
+			m_pages->setCurrentWidget(m_terminal_page);
+		});
 
 		/*
 		 * Propagation, made visible (sec 10.1). Editing a preset that

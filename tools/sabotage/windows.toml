@@ -42,3 +42,13 @@ file = "src/ui/main_window.cpp"
 find = "\tif (room) {\n\t\tsplit_with(session);"
 replace = "\tif (room) {\n\t\tshow_session(session);"
 expect = "a_drop_on_the_panes_tiles_where_there_is_room"
+
+# The reported bug: Cancel on the config page closed the whole window and
+# took every live session with it. Sabotaged by putting the old wiring
+# back, which is the smallest edit that reproduces it.
+[[sabotage]]
+name = "cancelling the settings closes the window"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tif (m_shown.isEmpty()) {\n\t\t\t\tclose();\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tm_pages->setCurrentWidget(m_terminal_page);"
+replace = "\t\t\tclose();"
+expect = "cancelling_the_settings_keeps_the_session"
