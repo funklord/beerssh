@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "platform/platform.h"
 #include "ui/host_list.h"
 
@@ -17,15 +18,6 @@
 #include "term/font_catalog.h"
 
 #include "model/profile_store.h"
-
-/*
- * Row height, and the reason it is not a paragraph of guidance: a list row
- * on a phone is a touch target, and 64dp gives a comfortable one with room
- * for a name and its user@host underneath. The key row uses 48dp because
- * its keys are small and many; a host row is large and few, and being
- * generous costs nothing (sec 6.2, sec 8.3).
- */
-static const int BSSH_ROW_HEIGHT_DP = 64;
 
 bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
     : QWidget(parent),
@@ -242,7 +234,7 @@ void bssh_host_list::reload() {
 		QListWidgetItem *item = new QListWidgetItem(m_list);
 		item->setText(QStringLiteral("Local shell\nthis device"));
 		item->setData(Qt::UserRole, BSSH_LOCAL_SHELL_ROW);
-		item->setSizeHint(QSize(0, BSSH_ROW_HEIGHT_DP));
+		item->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
 	}
 
 	const QList<bssh_profile_t> profiles = m_store->profiles();
@@ -258,7 +250,7 @@ void bssh_host_list::reload() {
 		item->setText(profile.name == target ? target
 		                                     : profile.name + QLatin1Char('\n') + target);
 		item->setData(Qt::UserRole, profile.id);
-		item->setSizeHint(QSize(0, BSSH_ROW_HEIGHT_DP));
+		item->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
 	}
 
 	if (profiles.isEmpty()) {
@@ -269,7 +261,7 @@ void bssh_host_list::reload() {
 		QListWidgetItem *item = new QListWidgetItem(
 		        QStringLiteral("No hosts yet\nTap + to add one"), m_list);
 		item->setFlags(Qt::NoItemFlags);
-		item->setSizeHint(QSize(0, BSSH_ROW_HEIGHT_DP));
+		item->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
 	}
 }
 

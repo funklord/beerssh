@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "ui/key_row.h"
 
 #include <QHBoxLayout>
@@ -11,15 +12,6 @@
 #include "platform/platform.h"
 #include "term/emulator.h"
 #include "ui/key_row_layout.h"
-
-/*
- * Minimum touch target. Android's own guidance is 48dp, and a terminal key
- * row is exactly the place where an undersized target hurts most: the keys
- * here are the ones pressed mid-command, where a miss sends the wrong
- * control character to a live shell (sec 8.3 asks for the same 48dp on
- * split dividers).
- */
-static const int BSSH_TOUCH_TARGET_DP = 48;
 
 bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
     : QWidget(parent),

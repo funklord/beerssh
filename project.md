@@ -691,6 +691,31 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
   than a sticky modifier**, because there is nothing on this row for it to
   modify: the digits it would combine with live two layers down a soft
   keyboard, which is the whole reason the row exists.
+- **The 48dp floor is one number now, and it is checked.** It had been a
+  static in seven files under four names — `BSSH_TOUCH_HEIGHT_DP` in the font
+  picker, the password prompt and the preset editor, `BSSH_TOUCH_TARGET_DP` in
+  the window, the key row and the pane container, `BSSH_FIELD_HEIGHT_DP` in the
+  host editor — plus a bare `48` fifteen times over. The duplication was not
+  the danger; a rule written in seven places is one that can be changed in six.
+  It lives in `ui/touch_metrics.h` with the 64dp list row beside it (§8.5).
+  **What the one number made possible is the check**, and the check found a
+  real defect immediately: the *Let this host set my clipboard* checkbox on the
+  touch preset editor stood **23dp**, half the floor, on the one layout built
+  for a thumb. `every_touch_surface_fits_a_phone` now holds every control a
+  finger aims at — a button, a field, a box you pick from, a switch — to the
+  floor, on every touch surface at once.
+  **The cause was a list, and the list is gone.** That page applied the floor
+  by naming fourteen controls, and the comment above it already recorded Import
+  and Export having been left out of that same list once before — so the
+  clipboard checkbox was the second to be missed the same way.
+  `bssh_apply_touch_heights()` walks the form instead, and a page that grows a
+  control no longer has to remember a second place.
+  **The check was wrong once before it was right**, which is worth recording
+  because it is the shape `evidence.md` warns about: it first flagged the
+  `QLineEdit` *inside* a `QSpinBox` at 42dp. The spin box was a correct 48 and
+  the 42 was its frame — you aim at the outer control — so the check skips
+  anything nested inside another target, walking the whole ancestor chain
+  rather than testing one parent.
 - **Hidden by default on desktop, but not `#ifdef`-ed out.** Gate it on
   "touch-primary input", not on the OS — a convertible laptop in tablet mode and
   an Android device with a Bluetooth keyboard are the two cases an OS check gets

@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "ui/host_editor.h"
 
 #include <QFormLayout>
@@ -21,12 +22,6 @@
 
 #include "term/font_catalog.h"
 
-/*
- * Touch target sizes. The same 48dp floor the key row uses (sec 6.2),
- * applied to text fields and buttons: a field a thumb cannot reliably
- * land in is a field that gets tapped twice.
- */
-static const int BSSH_FIELD_HEIGHT_DP = 48;
 static const int BSSH_BUTTON_HEIGHT_DP = 56;
 
 bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
@@ -79,20 +74,20 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 
 	m_host = new QLineEdit(this);
 	m_host->setPlaceholderText(QStringLiteral("example.com or 10.0.0.42"));
-	m_host->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+	m_host->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 
 	m_user = new QLineEdit(this);
 	m_user->setPlaceholderText(QStringLiteral("root"));
-	m_user->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+	m_user->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 
 	m_port = new QSpinBox(this);
 	m_port->setRange(1, 65535);
 	m_port->setValue(22);
-	m_port->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+	m_port->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 
 	m_name = new QLineEdit(this);
 	m_name->setPlaceholderText(QStringLiteral("optional"));
-	m_name->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+	m_name->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 
 	/*
 	 * The key this host should be offered, which is what an imported
@@ -111,7 +106,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	 */
 	m_identity = new QLineEdit(this);
 	m_identity->setPlaceholderText(QStringLiteral("default keys"));
-	m_identity->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+	m_identity->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 
 	/*
 	 * The bastion, if this host sits behind one (sec 10.5). Blank is a
@@ -126,7 +121,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	 */
 	m_jump = new QLineEdit(this);
 	m_jump->setPlaceholderText(QStringLiteral("direct"));
-	m_jump->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+	m_jump->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 
 	/*
 	 * Host first, because it is the only field that must be filled in.
@@ -164,7 +159,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	body->addWidget(m_font_scope);
 
 	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font"), this);
-	m_font_revert->setMinimumHeight(BSSH_FIELD_HEIGHT_DP);
+	m_font_revert->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 	body->addWidget(m_font_revert);
 	connect(m_font_revert, &QPushButton::clicked,
 	         this, &bssh_host_editor::revert_font_to_preset);

@@ -1,4 +1,8 @@
 #include <QAbstractButton>
+#include <QAbstractSpinBox>
+#include <QLineEdit>
+#include <QKeySequenceEdit>
+#include <QComboBox>
 #include <QClipboard>
 #include <QJsonObject>
 #include <QAbstractScrollArea>
@@ -44,6 +48,7 @@
 #include "ui/key_row.h"
 #include "ui/key_row_layout.h"
 #include "ui/layout_manager.h"
+#include "ui/touch_metrics.h"
 #include "ui/pane_container.h"
 #include "ui/terminal_view.h"
 
@@ -455,6 +460,66 @@ void check_fits(const QString &name, QWidget *widget)
 
 	const QString overflow = overflowing_child(widget);
 	QVERIFY2(overflow.isEmpty(), qPrintable(QStringLiteral("%1: %2").arg(name, overflow)));
+
+	/*
+	 * And every control on it can be hit (sec 6.2's floor).
+	 *
+	 * Fitting a phone is not the same as being usable on one: a form that
+	 * fits perfectly out of 24px rows is a form nobody can tap. The floor
+	 * was a static in seven files under four names and a bare 48 fifteen
+	 * times over, so nothing could have checked it -- there was no "it" to
+	 * check. Now there is one number, and this is what holds every touch
+	 * surface to it at once rather than each surface remembering.
+	 *
+	 * The things a finger AIMS at: a text field, a button, a box you pick
+	 * from, a switch. Labels and notes are read rather than hit and have
+	 * no floor. Anything hidden is skipped -- a control on a page this
+	 * surface is not showing is not on screen to be missed.
+	 */
+	for (QWidget *control : widget->findChildren<QWidget *>()) {
+		bool aimed_at = qobject_cast<QAbstractButton *>(control) != nullptr;
+		if (qobject_cast<QLineEdit *>(control)) aimed_at = true;
+		if (qobject_cast<QComboBox *>(control)) aimed_at = true;
+		if (qobject_cast<QKeySequenceEdit *>(control)) aimed_at = true;
+
+		if (!aimed_at || !control->isVisible()) continue;
+
+		/*
+		 * A control INSIDE another control is that one's business, and
+		 * this is the check being wrong rather than the code: a
+		 * QSpinBox that stands a correct 48 tall holds a QLineEdit of
+		 * 42 -- the difference is its own frame -- and a combo box and
+		 * a key-sequence editor are built the same way. What a thumb
+		 * aims at is the outermost of them, so an ANCESTOR that is
+		 * itself a target takes responsibility for the whole thing.
+		 *
+		 * Written as a walk rather than one parentWidget() test,
+		 * because a first version tested only the immediate parent and
+		 * would have gone on reporting whatever nests two deep.
+		 */
+		bool inside_a_target = false;
+		for (QWidget *up = control->parentWidget(); up; up = up->parentWidget()) {
+			bool target = qobject_cast<QAbstractButton *>(up) != nullptr;
+			if (qobject_cast<QComboBox *>(up)) target = true;
+			if (qobject_cast<QAbstractSpinBox *>(up)) target = true;
+			if (qobject_cast<QKeySequenceEdit *>(up)) target = true;
+
+			if (target) {
+				inside_a_target = true;
+				break;
+			}
+		}
+		if (inside_a_target) continue;
+
+		const QString what = QString::fromLatin1(control->metaObject()->className());
+		QString complaint = QStringLiteral(
+			"%1: a %2 is %3dp tall, and sec 6.2's floor is %4 -- "
+			"a thumb cannot reliably hit it");
+		complaint = complaint.arg(name, what).arg(control->height());
+		complaint = complaint.arg(BSSH_TOUCH_TARGET_DP);
+
+		QVERIFY2(control->height() >= BSSH_TOUCH_TARGET_DP, qPrintable(complaint));
+	}
 }
 
 } /* namespace */

@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "ui/licences_view.h"
 
 #include <QDir>
@@ -106,7 +107,7 @@ bssh_licences_view::bssh_licences_view(QWidget *parent)
 	if (touch) {
 		/* A full-screen page needs its own way out (sec 8.5). */
 		QPushButton *back = new QPushButton(QStringLiteral("Back"), this);
-		back->setMinimumHeight(48);
+		back->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 		connect(back, &QPushButton::clicked, this, &bssh_licences_view::back_requested);
 		outer->addWidget(back);
 	}

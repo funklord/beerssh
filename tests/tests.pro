@@ -100,6 +100,7 @@ SOURCES += \
     ../src/ui/session_dialog.cpp \
     ../src/ui/ssh_config_import.cpp \
     ../src/ui/tab_status.cpp \
+    ../src/ui/touch_metrics.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/key_row_layout.cpp \
     ../src/ui/app_settings_view.cpp \
@@ -171,6 +172,7 @@ HEADERS += \
     ../src/ui/session_dialog.h \
     ../src/ui/ssh_config_import.h \
     ../src/ui/tab_status.h \
+    ../src/ui/touch_metrics.h \
     ../src/ui/app_settings_view.h \
     ../src/ui/licences_view.h \
     ../src/ui/key_row.h \

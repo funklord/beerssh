@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "ui/password_prompt.h"
 
 #include <QAbstractButton>
@@ -10,13 +11,6 @@
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
-
-/*
- * Sec 6.2's touch floor. A third copy of this number -- font_picker.cpp
- * and preset_editor.cpp carry their own -- which is a shared constant
- * wanting a home rather than something to fix in passing.
- */
-static const int BSSH_TOUCH_HEIGHT_DP = 48;
 
 bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_remember,
                                             QWidget *parent)
@@ -82,11 +76,11 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 	 */
 	const bssh_platform *platform = bssh_platform::instance();
 	if (platform && platform->is_touch_primary()) {
-		m_field->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
-		m_remember->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
+		m_field->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+		m_remember->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 
 		for (QAbstractButton *button : buttons->buttons()) {
-			button->setMinimumHeight(BSSH_TOUCH_HEIGHT_DP);
+			button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 		}
 	}
 

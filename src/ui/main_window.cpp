@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "ui/main_window.h"
 
 #include <QCloseEvent>
@@ -1780,9 +1781,6 @@ bssh_app_settings::context_menu_t bssh_main_window::context_menu_layout(
 	                      : bssh_app_settings::CONTEXT_MENU_DESKTOP;
 }
 
-
-/* sec 6.2's touch floor, the same one the key row and the editors use. */
-static const int BSSH_TOUCH_TARGET_DP = 48;
 
 
 /*

@@ -85,6 +85,7 @@ SOURCES += \
     src/ui/session_dialog.cpp \
     src/ui/ssh_config_import.cpp \
     src/ui/tab_status.cpp \
+    src/ui/touch_metrics.cpp \
     src/ui/terminal_accessible.cpp \
     src/ui/theme.cpp \
     src/ui/terminal_view.cpp
@@ -134,6 +135,7 @@ HEADERS += \
     src/ui/session_dialog.h \
     src/ui/ssh_config_import.h \
     src/ui/tab_status.h \
+    src/ui/touch_metrics.h \
     src/ui/terminal_accessible.h \
     src/ui/theme.h \
     src/ui/terminal_view.h

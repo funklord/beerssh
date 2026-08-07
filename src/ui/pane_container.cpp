@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "ui/pane_container.h"
 
 #include <QMetaType>
@@ -11,13 +12,6 @@
 #include "platform/platform.h"
 #include "ui/layout_manager.h"
 #include "ui/terminal_view.h"
-
-/*
- * sec 6.2's touch floor. A file-static like the key row's and the preset
- * editor's, which is the pattern this tree already uses -- see the note in
- * project.md sec 18 about the eight places that spell this number.
- */
-static const int BSSH_TOUCH_TARGET_DP = 48;
 
 bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *parent)
     : QWidget(parent),

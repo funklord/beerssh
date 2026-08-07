@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "ui/font_picker.h"
 
 #include <QComboBox>
@@ -31,9 +32,6 @@ static const char *const BSSH_PREVIEW_TEXT =
 
 static const int BSSH_MIN_POINT_SIZE = 6;
 static const int BSSH_MAX_POINT_SIZE = 32;
-
-/* sec 6.2's floor, applied to the controls rather than only to the key row. */
-static const int BSSH_TOUCH_HEIGHT_DP = 48;
 
 /* Tall enough to read as colour rather than as a line. */
 static const int BSSH_SWATCH_HEIGHT = 18;
@@ -127,7 +125,7 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	m_preview = new QLabel(QString::fromUtf8(BSSH_PREVIEW_TEXT), this);
 	m_preview->setFrameShape(QFrame::StyledPanel);
 	m_preview->setMargin(8);
-	m_preview->setMinimumHeight(48);
+	m_preview->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 
 	/*
 	 * Allowed to wrap, which is what keeps this picker off a phone's
@@ -213,7 +211,7 @@ void bssh_font_picker::set_font_choice(const QString &id, int point_size) {
 }
 
 void bssh_font_picker::set_touch_sized(bool touch) {
-	const int height = touch ? BSSH_TOUCH_HEIGHT_DP : 0;
+	const int height = touch ? BSSH_TOUCH_TARGET_DP : 0;
 	m_family->setMinimumHeight(height);
 	m_size->setMinimumHeight(height);
 	m_scheme->setMinimumHeight(height);

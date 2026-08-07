@@ -1,3 +1,4 @@
+#include "ui/touch_metrics.h"
 #include "ui/app_settings_view.h"
 
 #include <QCheckBox>
@@ -68,7 +69,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_key_row->addItem(QStringLiteral("Automatic"), int(bssh_app_settings::KEY_ROW_AUTO));
 	m_key_row->addItem(QStringLiteral("Always show"), int(bssh_app_settings::KEY_ROW_ALWAYS));
 	m_key_row->addItem(QStringLiteral("Never show"), int(bssh_app_settings::KEY_ROW_NEVER));
-	if (touch) m_key_row->setMinimumHeight(48);
+	bssh_apply_touch_height(m_key_row, touch);
 
 	form->addRow(QStringLiteral("On-screen keys"), m_key_row);
 
@@ -101,7 +102,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_theme->addItem(QStringLiteral("Follow the system"), QStringLiteral("system"));
 	m_theme->addItem(QStringLiteral("Light"), QStringLiteral("light"));
 	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
-	if (touch) m_theme->setMinimumHeight(48);
+	bssh_apply_touch_height(m_theme, touch);
 	form->addRow(QStringLiteral("Appearance"), m_theme);
 
 	/*
@@ -132,7 +133,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                      int(bssh_app_settings::SCROLLBAR_LEFT));
 	m_scrollbar->addItem(QStringLiteral("Hidden"),
 	                      int(bssh_app_settings::SCROLLBAR_HIDDEN));
-	if (touch) m_scrollbar->setMinimumHeight(48);
+	bssh_apply_touch_height(m_scrollbar, touch);
 	form->addRow(QStringLiteral("Scrollbar"), m_scrollbar);
 
 	QLabel *scrollbar_note = bssh_wrapped_note(
@@ -154,7 +155,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        int(bssh_app_settings::STATUS_LINE_FULL));
 	m_status_line->addItem(QStringLiteral("Hidden"),
 	                        int(bssh_app_settings::STATUS_LINE_OFF));
-	if (touch) m_status_line->setMinimumHeight(48);
+	bssh_apply_touch_height(m_status_line, touch);
 	form->addRow(QStringLiteral("Status line"), m_status_line);
 
 	/*
@@ -165,7 +166,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	m_window_title = new QLineEdit(this);
 	m_window_title->setPlaceholderText(QStringLiteral("%t - BeerSSH"));
-	if (touch) m_window_title->setMinimumHeight(48);
+	bssh_apply_touch_height(m_window_title, touch);
 	form->addRow(QStringLiteral("Window title"), m_window_title);
 
 	QLabel *title_note = bssh_wrapped_note(
@@ -182,7 +183,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                         int(bssh_app_settings::CONTEXT_MENU_DESKTOP));
 	m_context_menu->addItem(QStringLiteral("Touch-sized"),
 	                         int(bssh_app_settings::CONTEXT_MENU_TOUCH));
-	if (touch) m_context_menu->setMinimumHeight(48);
+	bssh_apply_touch_height(m_context_menu, touch);
 	form->addRow(QStringLiteral("Terminal menu"), m_context_menu);
 
 	/*
@@ -201,7 +202,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		                        "the recent-apps thumbnail. That thumbnail is a picture of "
 		                        "whatever was last on screen, which here is your shell. It "
 		                        "stops you screenshotting the terminal too."));
-		if (touch) m_hide_from_screenshots->setMinimumHeight(48);
+		bssh_apply_touch_height(m_hide_from_screenshots, touch);
 		form->addRow(QString(), m_hide_from_screenshots);
 	}
 
@@ -230,7 +231,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	m_warn_multiline_paste = new QCheckBox(
 	        QStringLiteral("Ask before pasting more than one line"), this);
-	if (touch) m_warn_multiline_paste->setMinimumHeight(48);
+	bssh_apply_touch_height(m_warn_multiline_paste, touch);
 	form->addRow(QString(), m_warn_multiline_paste);
 
 	QLabel *paste_note = bssh_wrapped_note(
@@ -245,7 +246,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "Your system still toggles its own caps lock -- no application "
 	                        "can prevent that -- so a permanent swap belongs in your "
 	                        "keyboard layout instead."));
-	if (touch) m_caps_as_ctrl->setMinimumHeight(48);
+	bssh_apply_touch_height(m_caps_as_ctrl, touch);
 	form->addRow(QString(), m_caps_as_ctrl);
 
 	m_raise_contrast = new QCheckBox(QStringLiteral("Raise low-contrast colours"), this);
@@ -253,7 +254,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	        QStringLiteral("Colour schemes are reproduced exactly, and some of them are hard "
 	                        "to read. This lifts a colour only while drawing it, and only when "
 	                        "it falls below the readable minimum."));
-	if (touch) m_raise_contrast->setMinimumHeight(48);
+	bssh_apply_touch_height(m_raise_contrast, touch);
 	form->addRow(QString(), m_raise_contrast);
 
 	/*
@@ -368,7 +369,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		edit->setKeySequence(QKeySequence(bound.has_chord(name) ? bound.chord(name)
 		                                                         : chord.label,
 		                                   QKeySequence::PortableText));
-		if (touch) edit->setMinimumHeight(48);
+		bssh_apply_touch_height(edit, touch);
 
 		connect(edit, &QKeySequenceEdit::editingFinished, this, [this, name, edit] {
 			bssh_app_settings stored;
@@ -396,7 +397,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 
 	if (touch) {
 		QPushButton *back = new QPushButton(QStringLiteral("Back"), this);
-		back->setMinimumHeight(48);
+		back->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 		connect(back, &QPushButton::clicked, this, &bssh_app_settings_view::back_requested);
 
 		/*
