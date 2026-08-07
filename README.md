@@ -224,8 +224,35 @@ paragraphs above put them.
 
 ## Build (desktop)
 
-Needs Qt 6 (6.8 LTS or newer), libssh, and a C++17 compiler.
-On Debian/Ubuntu: `qt6-base-dev libssh-dev libsixel-dev`.
+Needs Qt 6 (6.8 LTS or newer), libssh, and a C++17 compiler. On
+Debian/Ubuntu that is:
+
+```sh
+sudo apt install build-essential pkgconf qt6-base-dev \
+                 libssh-dev libssl-dev libsixel-dev libsecret-1-dev
+```
+
+**One Qt package covers it.** The app asks for `widgets network dbus` and
+the tests add `testlib` — all of them Qt Base — so `qt6-base-dev` is the
+whole Qt requirement, and it brings `qmake6`, `qt6-base-dev-tools` (moc,
+uic, rcc) and `qt6-qpa-plugins` with it. Nothing outside Qt Base is used
+and there is no QML runtime, which is also why the APK is as small as it
+is.
+
+The rest answer the `PKGCONFIG` lines in `beerssh.pro` one for one:
+
+- `libssh-dev` — the SSH transport.
+- `libssl-dev` — `libcrypto`, for the passphrase-encrypted secret file.
+- `libsixel-dev` — sixel images (`project.md` §7.2).
+- `libsecret-1-dev` — the Secret Service keyring.
+
+The last two are worth naming even though a build often works without
+naming them. `libssl-dev` arrives today as a dependency of `libssh-dev`,
+and **nothing at all pulls in `libsecret-1-dev`** — it was satisfied here
+for months only because the CI runner image happened to carry it, which
+`project.md` §18 records. A build that leans on a package no file names
+fails one image update later, with a pkg-config error that reports the
+library and not the fix.
 
 libvterm is vendored as a submodule and built from source, so clone with
 `--recurse-submodules` (or run `git submodule update --init`). The build
@@ -247,6 +274,29 @@ make bench    # emulator throughput in MB/s; not a gate, run it on an idle box
 
 `make` wraps qmake, which does the actual Qt build in `build/`; everything
 else in the tree is a plain Makefile. `make help` lists the targets.
+
+### The Debian packages
+
+`make deb` builds with `dpkg-buildpackage` and debhelper, taking the
+version from `VERSION`, and collects two into `build/`:
+
+- **`beerssh`** — the program, its manual page, the desktop entry, the
+  icons and the AppStream metadata.
+- **`beerssh-fonts`** — the curated terminal fonts and their licence
+  texts. A `Recommends` rather than a `Depends`: without it the app falls
+  back to the system monospace fonts and still runs.
+
+debhelper also emits **`beerssh-dbgsym`**, the detached debug symbols,
+which `make deb` does not collect — it is left beside the source tree
+rather than in `build/`.
+
+`debian/control` is where the build-time list above is declared, and it
+must stay in step with `beerssh.pro`'s `PKGCONFIG` lines. **Runtime
+dependencies are not written by hand** — `dpkg-shlibdeps` computes them
+from what the binary actually links, which is the main reason packaging
+goes through `dpkg-buildpackage` rather than `dpkg-deb` or CPack.
+`make check-deb` installs the built packages in a container and checks
+the result, the manual page and a headless `--help` among it.
 
 ## Build (Android)
 
