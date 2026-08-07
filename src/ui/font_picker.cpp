@@ -126,6 +126,18 @@ void bssh_font_picker::align_labels(QFormLayout *host, bssh_font_picker *picker)
 	for (QWidget *label : host_labels) {
 		label->setMinimumWidth(width);
 	}
+
+	/*
+	 * And the SPACING between the columns, which equal label widths do
+	 * not settle. Two form layouts left to the style can resolve their
+	 * horizontal spacing differently, and the host editor's fields
+	 * started 6px right of the picker's with both label columns the same
+	 * width -- close enough to read as aligned and measurably not.
+	 *
+	 * Taken from the host, because the host is the page and the picker is
+	 * the guest.
+	 */
+	if (picker->m_form) picker->m_form->setHorizontalSpacing(host->horizontalSpacing());
 }
 
 bssh_font_picker::bssh_font_picker(QWidget *parent)

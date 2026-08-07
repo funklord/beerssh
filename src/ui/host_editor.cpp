@@ -148,6 +148,19 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	body->addWidget(m_font_picker);
 
 	/*
+	 * Line the picker's label column up with this form's (sec 8.5).
+	 *
+	 * They already agreed, and only by accident: this form's widest label
+	 * is "Key file" and the picker's is "Colours", which happen to be
+	 * within a few pixels of each other. Rename either -- or translate
+	 * the app -- and the page grows a second left edge, which is exactly
+	 * the defect the preset editor had and which took measuring a
+	 * screenshot to see. An accident that looks like a decision is worth
+	 * turning into one.
+	 */
+	bssh_font_picker::align_labels(form, m_font_picker);
+
+	/*
 	 * sec 10.1's badge and revert, the same pair the desktop Window page
 	 * carries. Without it "this host looks different from the others" and
 	 * "this host overrides its preset" are the same observation, and the
