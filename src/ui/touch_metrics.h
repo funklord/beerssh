@@ -41,6 +41,18 @@ const int BSSH_TOUCH_ROW_DP = 64;
  * control nobody can hit. Null is accepted: several of these widgets exist
  * only on one platform and the callers already check.
  */
+/*
+ * Whether a thumb aims at this widget, and therefore whether sec 6.2's
+ * floor applies to it.
+ *
+ * Exported so there is ONE list. The walk below used it privately while
+ * the layout test kept two hand-written copies -- and they had already
+ * drifted: the test's omitted QAbstractSpinBox, so a spin box was sized
+ * by the code and checked by nobody. Three lists of the same idea is
+ * three chances to add a control to two of them.
+ */
+bool bssh_is_touch_target(const QWidget *widget);
+
 void bssh_apply_touch_height(QWidget *widget, bool touch);
 
 /*

@@ -43,12 +43,28 @@ find = "\tif (room) {\n\t\tsplit_with(session);"
 replace = "\tif (room) {\n\t\tshow_session(session);"
 expect = "a_drop_on_the_panes_tiles_where_there_is_room"
 
-# The reported bug: Cancel on the config page closed the whole window and
-# took every live session with it. Sabotaged by putting the old wiring
-# back, which is the smallest edit that reproduces it.
+# The reported bug: leaving the settings closed the whole window and took
+# every live session with it. Sabotaged by making Cancel unconditional,
+# which is the smallest edit that reproduces it.
+#
+# Rewritten 2026-08-07: the original find string described the page-shaped
+# version, and making the settings a window of their own replaced it. A
+# spec that no longer matches stops the whole run, so every one is checked
+# to match exactly once before the runner is started.
 [[sabotage]]
 name = "cancelling the settings closes the window"
 file = "src/ui/main_window.cpp"
-find = "\t\t\tif (m_shown.isEmpty()) {\n\t\t\t\tclose();\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tm_pages->setCurrentWidget(m_terminal_page);"
+find = "\t\t\tif (m_shown.isEmpty()) close();"
 replace = "\t\t\tclose();"
 expect = "cancelling_the_settings_keeps_the_session"
+
+# The touch floor's list of TYPES. A slider is dragged, which is harder
+# than a tap and so not a smaller target -- and it was missing until the
+# brightness slider stood 33dp on a phone. Removing it again must fail the
+# floor check, or that check is not really covering sliders.
+[[sabotage]]
+name = "the touch floor forgets sliders"
+file = "src/ui/touch_metrics.cpp"
+find = "\treturn qobject_cast<const QSlider *>(widget) != nullptr;"
+replace = "\treturn false;"
+expect = "every_touch_surface_fits_a_phone"

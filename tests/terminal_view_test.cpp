@@ -995,7 +995,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 6);
+	QCOMPARE(actions.size(), 10);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -1010,14 +1010,26 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QCOMPARE(actions.at(3)->text(), QStringLiteral("Select &All"));
 
 	/*
+	 * Then the session verbs. These lived only on the TAB bar's menu,
+	 * which is a target you have to know about -- and a window with one
+	 * session hides its tab bar entirely, so splitting was unreachable
+	 * from anywhere but a chord. Reported as exactly that: a terminal
+	 * cannot be split from its right-click menu.
+	 */
+	QVERIFY(actions.at(4)->isSeparator());
+	QCOMPARE(actions.at(5)->text(), QStringLiteral("Split &Beside Current"));
+	QCOMPARE(actions.at(6)->text(), QStringLiteral("New &Tab"));
+	QCOMPARE(actions.at(7)->text(), QStringLiteral("New &Window"));
+
+	/*
 	 * And the way to the configuration, behind its own separator (sec 2):
 	 * with the desktop opening straight into a local shell, this menu is
 	 * a pointer's only route to the host list and the settings. It is a
-	 * different kind of thing from the edit verbs and is separated from
-	 * them for the same reason Select All is separated from Copy.
+	 * different kind of thing again, and separated for the same reason
+	 * Select All is separated from Copy.
 	 */
-	QVERIFY(actions.at(4)->isSeparator());
-	QCOMPARE(actions.at(5)->text(), QStringLiteral("&Hosts and Settings"));
+	QVERIFY(actions.at(8)->isSeparator());
+	QCOMPARE(actions.at(9)->text(), QStringLiteral("&Hosts and Settings"));
 
 	/*
 	 * Access keys on every verb, which is what makes the menu usable from
@@ -1035,7 +1047,14 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * Paste is should find it there every time.
 	 */
 	QVERIFY2(!actions.at(0)->isEnabled(), "Copy must be offered and disabled, not hidden");
-	QCOMPARE(actions.size(), 6);
+
+	/*
+	 * And the shape is unchanged by that: the count is asserted again
+	 * AFTER the enabled-state check, so an item that "went missing when
+	 * unavailable" would be caught here even if the order above still
+	 * lined up.
+	 */
+	QCOMPARE(actions.size(), 10);
 
 	delete menu;
 }

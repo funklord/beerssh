@@ -4,6 +4,7 @@
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QComboBox>
+#include <QSlider>
 #include <QKeySequenceEdit>
 #include <QLineEdit>
 #include <QStyledItemDelegate>
@@ -35,16 +36,24 @@ public:
 	}
 };
 
-bool aimed_at(const QWidget *widget) {
+} /* namespace */
+
+bool bssh_is_touch_target(const QWidget *widget) {
 	if (qobject_cast<const QAbstractButton *>(widget)) return true;
 	if (qobject_cast<const QLineEdit *>(widget)) return true;
 	if (qobject_cast<const QComboBox *>(widget)) return true;
 	if (qobject_cast<const QAbstractSpinBox *>(widget)) return true;
+	if (qobject_cast<const QKeySequenceEdit *>(widget)) return true;
 
-	return qobject_cast<const QKeySequenceEdit *>(widget) != nullptr;
+	/*
+	 * A slider is DRAGGED, which is a harder thing to do than a tap and
+	 * therefore not a smaller target. It was missing, and the brightness
+	 * slider that exposed it stood 33dp on a phone -- the same "a widget
+	 * left off the list is short" this walk was written to end, arriving
+	 * through the list of TYPES rather than the list of widgets.
+	 */
+	return qobject_cast<const QSlider *>(widget) != nullptr;
 }
-
-} /* namespace */
 
 void bssh_apply_touch_height(QWidget *widget, bool touch) {
 	if (!widget || !touch) return;
@@ -83,7 +92,7 @@ void bssh_apply_touch_heights(QWidget *root, bool touch) {
 	}
 
 	for (QWidget *control : root->findChildren<QWidget *>()) {
-		if (!aimed_at(control)) continue;
+		if (!bssh_is_touch_target(control)) continue;
 
 		/*
 		 * Skip what lives inside another target. Growing a spin box's
@@ -94,7 +103,7 @@ void bssh_apply_touch_heights(QWidget *root, bool touch) {
 		bool nested = false;
 		for (QWidget *up = control->parentWidget(); up && up != root;
 		      up = up->parentWidget()) {
-			if (aimed_at(up)) {
+			if (bssh_is_touch_target(up)) {
 				nested = true;
 				break;
 			}

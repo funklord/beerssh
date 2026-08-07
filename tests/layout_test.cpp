@@ -4,6 +4,7 @@
 #include <QAbstractSpinBox>
 #include <QLineEdit>
 #include <QKeySequenceEdit>
+#include <QSlider>
 #include <QComboBox>
 #include <QClipboard>
 #include <QJsonObject>
@@ -488,8 +489,12 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 	 * above cannot see them and the licences list stood at 17dp rows,
 	 * a third of the floor, with every check passing.
 	 */
+	int checked = 0;
+
 	for (QAbstractItemView *view : widget->findChildren<QAbstractItemView *>()) {
 		if (view->model() == nullptr || view->model()->rowCount() < 1) continue;
+
+		++checked;
 
 		QString complaint = QStringLiteral(
 			"%1: a %2 has %3dp rows, and sec 6.2's floor is %4 -- "
@@ -557,12 +562,31 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 	 * surface is not showing is not on screen to be missed.
 	 */
 	for (QWidget *control : widget->findChildren<QWidget *>()) {
-		bool aimed_at = qobject_cast<QAbstractButton *>(control) != nullptr;
-		if (qobject_cast<QLineEdit *>(control)) aimed_at = true;
-		if (qobject_cast<QComboBox *>(control)) aimed_at = true;
-		if (qobject_cast<QKeySequenceEdit *>(control)) aimed_at = true;
+		/*
+		 * This test's OWN list, deliberately not the one the code sizes
+		 * from. Sharing it made the check unfalsifiable: deleting a
+		 * type removed the requirement and the check in one edit, so
+		 * the one failure it exists for could never be reported. The
+		 * sabotage runner is what keeps the two honest -- a spec that
+		 * drops sliders from the code must fail here.
+		 *
+		 * Asking "does it take keyboard focus" instead was tried and is
+		 * wrong in BOTH directions, which is worth writing down because
+		 * it is such a tidy-looking idea. A QLabel with selectable text
+		 * takes focus and is read rather than tapped, so the settings
+		 * page failed on a paragraph. And the key row's buttons take
+		 * NO focus, deliberately -- tapping a key must not steal focus
+		 * from the terminal -- so the most important tap targets in the
+		 * app were skipped entirely.
+		 */
+		bool operable = qobject_cast<QAbstractButton *>(control) != nullptr;
+		if (qobject_cast<QLineEdit *>(control)) operable = true;
+		if (qobject_cast<QComboBox *>(control)) operable = true;
+		if (qobject_cast<QAbstractSpinBox *>(control)) operable = true;
+		if (qobject_cast<QKeySequenceEdit *>(control)) operable = true;
+		if (qobject_cast<QSlider *>(control)) operable = true;
 
-		if (!aimed_at || !control->isVisible()) continue;
+		if (!operable || !control->isVisible()) continue;
 
 		/*
 		 * A control INSIDE another control is that one's business, and
@@ -579,12 +603,25 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 		 */
 		bool inside_a_target = false;
 		for (QWidget *up = control->parentWidget(); up; up = up->parentWidget()) {
-			bool target = qobject_cast<QAbstractButton *>(up) != nullptr;
-			if (qobject_cast<QComboBox *>(up)) target = true;
-			if (qobject_cast<QAbstractSpinBox *>(up)) target = true;
-			if (qobject_cast<QKeySequenceEdit *>(up)) target = true;
-
-			if (target) {
+			/*
+			 * The type list here, deliberately, where the test above
+			 * refuses it.
+			 *
+			 * The two uses are not symmetric. Above, the list decides
+			 * what MUST be checked, so a type missing from it is a
+			 * control nobody checks -- silent. Here it decides what
+			 * may be SKIPPED, so a type missing from it means the
+			 * inner widget gets checked too, which at worst fails
+			 * loudly and is corrected. A list is safe when the cost
+			 * of it being incomplete is noise rather than silence.
+			 *
+			 * Asking "is this ancestor focusable" instead looked
+			 * neater and was much worse: QScrollArea takes focus, so
+			 * every control on a scrolling page was exempted and this
+			 * check quietly stopped examining the settings page
+			 * altogether.
+			 */
+			if (bssh_is_touch_target(up)) {
 				inside_a_target = true;
 				break;
 			}
@@ -599,7 +636,26 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 		complaint = complaint.arg(BSSH_TOUCH_TARGET_DP);
 
 		QVERIFY2(control->height() >= BSSH_TOUCH_TARGET_DP, qPrintable(complaint));
+		++checked;
 	}
+
+	/*
+	 * And it looked at SOMETHING. A loop that skipped everything reports
+	 * success exactly as loudly as one that examined forty, and this
+	 * check has been vacuous twice -- once because its type list was
+	 * short, once because an exemption swallowed everything inside a
+	 * scroll area. Both times the suite stayed green.
+	 *
+	 * One, not some larger number: a surface whose content is a LIST has
+	 * almost no controls of its own -- the licences view has a single
+	 * Back button and the host list two -- and its rows are counted here
+	 * as well, because they are what the row check above examined. A
+	 * threshold picked to feel thorough fails those honestly-small
+	 * surfaces and teaches whoever meets it to raise the number.
+	 */
+	QVERIFY2(checked > 0, qPrintable(QStringLiteral(
+		        "%1: the touch floor examined nothing at all, so it is not checking "
+		        "this surface").arg(name)));
 }
 
 } /* namespace */
@@ -1806,6 +1862,18 @@ void layout_test::cancelling_the_settings_keeps_the_session() {
 	window.adopt_session(live);
 	QVERIFY2(!window.showing_front_door(), "a session must be in front to start with");
 
+	/*
+	 * Shown, because the assertion that matters is that the WINDOW
+	 * survives -- and a window that was never on screen cannot be seen to
+	 * close. The first version of this test skipped that and asked only
+	 * whether the session still existed, which the sabotage runner
+	 * reported as caught by nothing: sessions are process-wide (sec 8.4),
+	 * so closing the window leaves the registry entry exactly where it
+	 * was. The test passed while the window it was written about died.
+	 */
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
 	window.show_front_door();
 	QVERIFY(window.showing_front_door());
 
@@ -1815,6 +1883,8 @@ void layout_test::cancelling_the_settings_keeps_the_session() {
 	cancel->click();
 	QCoreApplication::processEvents();
 
+	QVERIFY2(window.isVisible(),
+	          "Cancel must leave the settings, not close the window behind them");
 	QVERIFY2(!window.showing_front_door(),
 	          "Cancel must go back to the terminal, not out of the app");
 	QVERIFY2(window.registry()->index_of(live) >= 0,

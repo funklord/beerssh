@@ -168,6 +168,36 @@ void bssh_ui_shots::render_touch_surfaces() {
 	bssh_app_settings_view settings;
 	shoot(QStringLiteral("touch-settings"), &settings, BSSH_PHONE_W, BSSH_PHONE_H);
 
+	/*
+	 * And the whole of it, because this is the tallest surface in the app
+	 * and a 640px viewport shows about a third. The desktop page has had
+	 * a full-height shot since the settings outgrew a screen; the phone
+	 * -- the form factor where a control that is too wide actually breaks
+	 * something -- did not, so everything below the fold went to Android
+	 * having been looked at on a desktop or not at all.
+	 *
+	 * The CONTENT of the scroll area, not the page: a page that scrolls
+	 * reports a tiny minimum because the scroll area is happy to be
+	 * small, and its height says nothing about how much there is to read.
+	 */
+	if (QScrollArea *area = settings.findChild<QScrollArea *>()) {
+		if (QWidget *content = area->widget()) {
+			const QSize was = content->size();
+
+			content->resize(BSSH_PHONE_W - 20,
+			                 qMin(content->sizeHint().height(), 3000));
+			QTest::qWait(50);
+
+			const QString tall = shot_dir()
+			        + QStringLiteral("/touch-settings-full.png");
+			content->grab().save(tall);
+			QTextStream(stdout) << QStringLiteral("  %1  the whole page (%2 tall)\n")
+			                               .arg(tall, -44).arg(content->height());
+
+			content->resize(was);
+		}
+	}
+
 	bssh_font_picker picker;
 	shoot(QStringLiteral("touch-font-picker"), &picker, BSSH_PHONE_W, BSSH_PHONE_H);
 

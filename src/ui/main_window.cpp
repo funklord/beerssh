@@ -70,12 +70,12 @@
 #include "ui/terminal_view.h"
 
 /*
- * How far below the tab bar a drag goes before the tab becomes its own
+ * How far CLEAR of the tab bar a drag goes before the tab becomes its own
  * window (sec 8.3, sec 8.4).
  *
  * Generous on purpose. A tab bar is thin and a pointer reordering tabs
- * crosses its lower edge constantly, so tearing out on "left the widget"
- * would make reordering nearly impossible to do without losing the tab.
+ * crosses its edge constantly, so tearing out on "left the widget" would
+ * make reordering nearly impossible to do without losing the tab.
  */
 static const int BSSH_TEAR_OUT_DP = 40;
 
@@ -1672,9 +1672,32 @@ bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
 		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
 		if (mouse->buttons().testFlag(Qt::LeftButton) && m_tabs->isMovable()) {
 			const QPoint at = mouse->position().toPoint();
-			const int below = at.y() - m_tabs->height();
 
-			if (below > BSSH_TEAR_OUT_DP && m_tabs->count() > 0) {
+			/*
+			 * Clear of the bar in ANY direction, not just below it.
+			 *
+			 * This measured `at.y() - height()` and nothing else, so
+			 * a tab could only be torn out by dragging DOWNWARD.
+			 * Dragging one up, or off either end, did nothing at all
+			 * -- and "nothing at all" is indistinguishable from a
+			 * feature that does not exist, which is how it was
+			 * reported: tabs cannot be dragged freely. Konsole and
+			 * every browser detach on distance, not on direction.
+			 *
+			 * Sideways is measured from the bar's full WIDTH rather
+			 * than from the last tab, because dragging along a
+			 * half-empty strip is still reordering. Measured from
+			 * the tabs, a tab dragged to the end of a two-tab bar
+			 * would tear itself out mid-reorder.
+			 */
+			const int above = -at.y();
+			const int below = at.y() - m_tabs->height();
+			const int left = -at.x();
+			const int right = at.x() - m_tabs->width();
+
+			const int clear = qMax(qMax(above, below), qMax(left, right));
+
+			if (clear > BSSH_TEAR_OUT_DP && m_tabs->count() > 0) {
 				/*
 				 * Consumed, and the drag is over as far as QTabBar
 				 * is concerned: it is still mid-move on a tab that
@@ -2193,6 +2216,38 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	menu->addSeparator();
 
 	/*
+	 * The session verbs, on the surface a pointer is already over.
+	 *
+	 * These existed only on the TAB bar's menu, which is a different
+	 * target you have to know about -- and on a window with one session
+	 * the tab bar is hidden entirely, so splitting was unreachable from
+	 * anywhere except a chord nobody had been told. Reported as exactly
+	 * that: cannot split a terminal from the right-click menu.
+	 *
+	 * After the edit verbs and a separator, which is the Windows
+	 * Interface Guidelines order this menu already follows: the verbs
+	 * everybody expects first, object-specific commands after a rule.
+	 * Shown disabled rather than hidden for the same reason as the rest.
+	 */
+	QAction *split = menu->addAction(QStringLiteral("Split &Beside Current"));
+	split->setObjectName(QStringLiteral("terminal_split"));
+	split->setEnabled(m_current && m_layout
+	                   && m_layout->intent().size()
+	                              < bssh_layout_manager::max_panes_for(m_layout->size_class()));
+
+	QAction *new_tab = menu->addAction(QStringLiteral("New &Tab"));
+	new_tab->setObjectName(QStringLiteral("terminal_new_tab"));
+	new_tab->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("new-tab"))));
+
+	QAction *new_window = menu->addAction(QStringLiteral("New &Window"));
+	new_window->setObjectName(QStringLiteral("terminal_new_window"));
+	new_window->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("new-window"))));
+
+	menu->addSeparator();
+
+	/*
 	 * The way back to the configuration, from the one surface both
 	 * platforms already have (sec 6.4).
 	 *
@@ -2263,6 +2318,25 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	}
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
+		return;
+	}
+
+	const QAction *split = menu->findChild<QAction *>(QStringLiteral("terminal_split"));
+	if (chosen == split) {
+		if (m_current) split_with(m_current);
+		return;
+	}
+
+	const QAction *new_tab = menu->findChild<QAction *>(QStringLiteral("terminal_new_tab"));
+	if (chosen == new_tab) {
+		open_another_session(false);
+		return;
+	}
+
+	const QAction *new_window =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_new_window"));
+	if (chosen == new_window) {
+		open_another_session(true);
 		return;
 	}
 

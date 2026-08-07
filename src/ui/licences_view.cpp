@@ -177,16 +177,30 @@ void bssh_licences_view::load_fonts() {
 }
 
 void bssh_licences_view::load_schemes() {
-	for (const bssh_colour_scheme_t &scheme : bssh_colour_scheme_catalog::instance().all()) {
-		/*
-		 * Sixteen numbers each, and still somebody's design. The
-		 * attribution is short because there is no long version to give:
-		 * these are palettes, published under the licence named.
-		 */
-		add_entry(QStringLiteral("Colours: %1").arg(scheme.display_name), scheme.licence,
-		           QStringLiteral("The \"%1\" colour scheme.\n\nLicence: %2")
-		                   .arg(scheme.display_name, scheme.licence));
-	}
+	/*
+	 * ONE entry, because there is now one palette.
+	 *
+	 * This used to add a row per scheme, and it was right to: the list
+	 * carried Solarized, Gruvbox, Nord and Tango, each somebody's design
+	 * under somebody's licence, and sec 9.4's rule is that a set which
+	 * cannot say where each entry came from is a set nobody can check.
+	 *
+	 * Sec 9.3 then took the sixteen away from schemes entirely. What is
+	 * left is the classic ANSI palette every scheme shares, so five rows
+	 * would be one attribution repeated five times -- and one of them
+	 * would be "Colours: Custom", attributing the user's own palette to
+	 * the user, which is not a licence at all. A licences screen padded
+	 * with entries that say nothing is a licences screen people stop
+	 * reading, which is the opposite of what it is for.
+	 */
+	add_entry(QStringLiteral("Colours: Classic ANSI"),
+	           QStringLiteral("Public domain"),
+	           QStringLiteral("The sixteen ANSI colours, in the classic VGA text-mode "
+	                           "values.\n\nThese are the standard's, not a design: no "
+	                           "scheme in this app repaints them, so what a program "
+	                           "means by red is what every other terminal means by "
+	                           "it.\n\nA custom palette set on this device replaces "
+	                           "them locally and belongs to whoever set it."));
 }
 
 void bssh_licences_view::load_libraries() {

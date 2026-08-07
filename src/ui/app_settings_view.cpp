@@ -351,7 +351,24 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		bssh_colour_scheme_catalog::instance().set_custom(editor.scheme());
 		emit changed();
 	});
-	form->addRow(QString(), m_custom_colours);
+	/*
+	 * addRow(widget), not addRow(QString(), widget). An empty label
+	 * reserves the label column's width for nothing -- the waste that
+	 * pushed this page 40px off a phone once already -- and it also put
+	 * the button in the field column while every checkbox above it
+	 * starts at the margin, so the page had two left edges.
+	 *
+	 * In a row of its own with a stretch after it, because a spanning row
+	 * hands a button the whole width: a full-width button reads as the
+	 * page's primary action, and this one opens a dialog.
+	 */
+	QWidget *colours_row = new QWidget(this);
+	QHBoxLayout *colours_layout = new QHBoxLayout(colours_row);
+	colours_layout->setContentsMargins(0, 0, 0, 0);
+	colours_layout->addWidget(m_custom_colours);
+	colours_layout->addStretch(1);
+
+	form->addRow(colours_row);
 
 	/*
 	 * Where stored passwords actually live (sec 11), stated rather than
