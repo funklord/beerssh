@@ -16,6 +16,18 @@ class terminal_view_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	/*
+	 * The scrollbar's default position is process-wide, and a window
+	 * built by a test sets it from the settings. Put it back after
+	 * every test, or whichever test runs next inherits a bar it never
+	 * asked for and measures the wrong grid.
+	 */
+	void cleanup();
+
+	/* sec 6.4's drops: a file's path, shell-safe, or the text itself. */
+	void a_dropped_file_arrives_as_a_path_a_shell_can_read();
+	void a_drop_asks_the_window_to_paste_rather_than_pasting_itself();
+
 	/* sec 8.3's scrollbar: the grid gives up the width it takes. */
 	void the_scrollbar_takes_its_width_from_the_grid();
 	void the_scrollbar_follows_the_view_and_drives_it();

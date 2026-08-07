@@ -1,4 +1,7 @@
 #include <QScrollBar>
+#include <QUrl>
+#include <QMimeData>
+#include <QDropEvent>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -14,6 +17,7 @@
 #include <QContextMenuEvent>
 #include <QMenu>
 #include "ui/main_window.h"
+#include "model/session.h"
 #include "terminal_view_test.h"
 
 #include "fake_ssh_session.h"
@@ -21,6 +25,8 @@
 #include "term/emulator.h"
 #include "term/font_catalog.h"
 #include "ui/terminal_view.h"
+#include "model/session_registry.h"
+#include "ui/pane_container.h"
 
 
 /*
@@ -1081,4 +1087,150 @@ void terminal_view_test::the_scrollbar_follows_the_view_and_drives_it() {
 
 	bar->setValue(bar->maximum());
 	QCOMPARE(view.scroll_offset(), 0);
+}
+
+void terminal_view_test::cleanup() {
+	/*
+	 * Found the hard way: adding one test that builds a main window
+	 * broke three geometry tests further down the file, because the
+	 * window applied the settings' scrollbar position to the static
+	 * default and left it there. The failures read as grid-arithmetic
+	 * bugs and were nothing of the sort.
+	 */
+	bssh_terminal_view::set_default_scrollbar_position(bssh_terminal_view::SCROLLBAR_NONE);
+}
+
+void terminal_view_test::a_dropped_file_arrives_as_a_path_a_shell_can_read() {
+	/*
+	 * The plumbing is the easy half. What makes this worth testing is the
+	 * QUOTING: a path with a space pasted raw is two arguments, and a
+	 * path with a quote in it is a syntax error -- or worse, since the
+	 * text lands on a command line that is about to be run.
+	 */
+	QMimeData plain;
+	plain.setUrls({ QUrl::fromLocalFile(QStringLiteral("/etc/hosts")) });
+	QCOMPARE(bssh_terminal_view::text_for_drop(&plain), QStringLiteral("/etc/hosts"));
+
+	/* Quoted only where it has to be: an ordinary path stays readable. */
+	QMimeData spaced;
+	spaced.setUrls({ QUrl::fromLocalFile(QStringLiteral("/home/n/my notes.txt")) });
+	QCOMPARE(bssh_terminal_view::text_for_drop(&spaced),
+	          QStringLiteral("'/home/n/my notes.txt'"));
+
+	/*
+	 * The one character single quoting cannot contain. Closing the quote,
+	 * emitting an escaped one and reopening is the standard answer, and
+	 * getting it wrong ends the quoting early -- which hands the rest of
+	 * the filename to the shell as code.
+	 */
+	QMimeData quoted;
+	quoted.setUrls({ QUrl::fromLocalFile(QStringLiteral("/tmp/it's here")) });
+	QCOMPARE(bssh_terminal_view::text_for_drop(&quoted),
+	          QStringLiteral("'/tmp/it'\\''s here'"));
+
+	/* A shell metacharacter must not survive as one. */
+	QMimeData nasty;
+	nasty.setUrls({ QUrl::fromLocalFile(QStringLiteral("/tmp/$(reboot)")) });
+	QCOMPARE(bssh_terminal_view::text_for_drop(&nasty),
+	          QStringLiteral("'/tmp/$(reboot)'"));
+
+	/*
+	 * Several files are several ARGUMENTS to one command, so they are
+	 * joined with spaces. Newlines would run each of them instead.
+	 */
+	QMimeData several;
+	several.setUrls({
+		QUrl::fromLocalFile(QStringLiteral("/a")),
+		QUrl::fromLocalFile(QStringLiteral("/b c")),
+	});
+	QCOMPARE(bssh_terminal_view::text_for_drop(&several), QStringLiteral("/a '/b c'"));
+	QVERIFY(!bssh_terminal_view::text_for_drop(&several).contains(QLatin1Char('\n')));
+
+	/*
+	 * Text is taken as it stands -- but URLs win when both are offered,
+	 * which is what a file manager does: dragging a file carries its URL
+	 * and the same URL as text, and pasting "file:///home/..." is not
+	 * something a shell can act on.
+	 */
+	QMimeData text;
+	text.setText(QStringLiteral("echo hello"));
+	QCOMPARE(bssh_terminal_view::text_for_drop(&text), QStringLiteral("echo hello"));
+
+	QMimeData both;
+	both.setUrls({ QUrl::fromLocalFile(QStringLiteral("/etc/hosts")) });
+	both.setText(QStringLiteral("file:///etc/hosts"));
+	QCOMPARE(bssh_terminal_view::text_for_drop(&both), QStringLiteral("/etc/hosts"));
+
+	/* And a payload with neither is refused, which is what lets a dragged
+	 * TAB reach the window that knows how to adopt it (sec 8.4). */
+	QMimeData session;
+	session.setData(QStringLiteral("application/x-bssh-session"), QByteArrayLiteral("3"));
+	QVERIFY(bssh_terminal_view::text_for_drop(&session).isEmpty());
+	QVERIFY(bssh_terminal_view::text_for_drop(nullptr).isEmpty());
+}
+
+void terminal_view_test::a_drop_asks_the_window_to_paste_rather_than_pasting_itself() {
+	bssh_terminal_view view;
+
+	/*
+	 * Registered as a drop target, which is what makes the window manager
+	 * offer this pane a drag at all.
+	 */
+	QVERIFY2(view.acceptDrops(), "a pane that takes no drops never sees one");
+
+	/*
+	 * The delivery itself is NOT driven here, and that is measured rather
+	 * than assumed: Qt swallows a synthetic QDropEvent. Sending one with
+	 * QApplication::sendEvent never reaches dropEvent -- checked with a
+	 * twenty-line probe against a plain QWidget with acceptDrops(true),
+	 * which counted zero calls -- because QApplication::notify wants a
+	 * live drag session behind it. A test that sent one and passed would
+	 * be asserting nothing at all.
+	 *
+	 * So what is ours is tested: the pure mapping from a payload to text
+	 * (above), and the wiring below that carries it into a session.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("dropped on");
+	profile.host = QStringLiteral("host.example");
+	profile.user = QStringLiteral("nabbe");
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *session = window.registry()->create(profile);
+	session->connect_to_host();
+	window.adopt_session(session);
+	QCoreApplication::processEvents();
+	QVERIFY(fake);
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QVERIFY(!panes->views().isEmpty());
+
+	/*
+	 * What a drop does, once Qt has delivered it: the view asks, and the
+	 * window pastes -- through the same door as every other paste, so a
+	 * dropped path meets bracketed paste and sec 6.4's question about
+	 * more than one line.
+	 */
+	emit panes->views().first()->paste_requested(QStringLiteral("/tmp/notes.txt"));
+	QCoreApplication::processEvents();
+
+	QVERIFY2(fake->written().contains(QByteArrayLiteral("/tmp/notes.txt")),
+	          "a dropped path must reach the session as bytes");
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+	bssh_ssh_session::set_factory(nullptr);
 }

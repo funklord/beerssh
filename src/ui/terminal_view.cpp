@@ -1,6 +1,10 @@
 #include "ui/terminal_view.h"
 
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
 #include <QScrollBar>
+#include <QUrl>
 
 #include "ui/terminal_accessible.h"
 
@@ -81,11 +85,11 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_cursor_style(QStringLiteral("block")),
       m_cursor_on(true),
       m_blink_timer(nullptr),
+      m_background(QColor(0x1c, 0x1c, 0x1c)),
+      m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_content_revision(1),
       m_raise_contrast(true),
       m_focus_follows_mouse(false),
-      m_background(QColor(0x1c, 0x1c, 0x1c)),
-      m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_cell_width(1),
       m_cell_height(1),
       m_baseline(0),
@@ -114,6 +118,13 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 * offset is the view's, and scroll_by() is what already tells the
 	 * emulator and the repaint about it.
 	 */
+	/*
+	 * Files and text can be dropped here (sec 6.4). A session payload is
+	 * refused, so a tab dragged from another window still reaches the
+	 * window that knows how to adopt it (sec 8.4).
+	 */
+	setAcceptDrops(true);
+
 	m_scrollbar = new QScrollBar(Qt::Vertical, this);
 	m_scrollbar->setVisible(m_scrollbar_position != SCROLLBAR_NONE);
 
@@ -621,6 +632,105 @@ QSize bssh_terminal_view::size_for_grid(int cols, int rows) const {
 
 	return QSize(qMax(1, cols) * m_cell_width + extra,
 	              qMax(1, rows) * m_cell_height + 2 * BSSH_GRID_INSET_PX);
+}
+
+namespace {
+
+/*
+ * A path as a shell will read it back as ONE argument.
+ *
+ * Single quotes, because inside them a shell interprets nothing at all --
+ * no $, no backtick, no backslash, no glob. The one character that cannot
+ * appear is a single quote itself, and the standard trick closes the
+ * quoting, emits an escaped quote and opens it again: it's -> \'it\''s\'.
+ *
+ * Only when it is needed. Quoting every path would be safe and would also
+ * mean that dropping /etc/hosts pastes something the user then has to
+ * clean up, which is the kind of help that stops being help.
+ */
+QString shell_quoted(const QString &path) {
+	static const QString safe = QStringLiteral(
+		"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+		"@%+=:,./-_");
+
+	bool needs_quoting = path.isEmpty();
+	for (const QChar c : path) {
+		if (!safe.contains(c)) needs_quoting = true;
+	}
+
+	if (!needs_quoting) return path;
+
+	QString quoted = path;
+	quoted.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
+
+	return QLatin1Char('\'') + quoted + QLatin1Char('\'');
+}
+
+} /* namespace */
+
+QString bssh_terminal_view::text_for_drop(const QMimeData *mime) {
+	if (!mime) return QString();
+
+	/*
+	 * Files first, because a file manager offers BOTH: dragging a file
+	 * carries its URL and, as a courtesy, that URL as text. Taking the
+	 * text would paste "file:///home/nabbe/notes.txt", which is not a
+	 * thing a shell can do anything with.
+	 */
+	if (mime->hasUrls()) {
+		QStringList paths;
+
+		for (const QUrl &url : mime->urls()) {
+			/*
+			 * A remote URL is pasted as it stands: this terminal may
+			 * well be somewhere that can fetch it, and turning it
+			 * into a local path would be a guess about a machine
+			 * this app is not on.
+			 */
+			paths.append(url.isLocalFile() ? shell_quoted(url.toLocalFile())
+			                                : shell_quoted(url.toString()));
+		}
+
+		/*
+		 * Space-separated, never newline-separated: several files are
+		 * several ARGUMENTS to one command, and joining them with
+		 * newlines would run each of them as a command instead.
+		 */
+		return paths.join(QLatin1Char(' '));
+	}
+
+	if (mime->hasText()) return mime->text();
+
+	return QString();
+}
+
+void bssh_terminal_view::dragEnterEvent(QDragEnterEvent *event) {
+	/*
+	 * Only what this view can turn into text. A tab dragged from another
+	 * window is a SESSION payload (sec 8.4) and is refused here so that
+	 * it reaches the window, which is what knows how to adopt one.
+	 */
+	if (!text_for_drop(event->mimeData()).isEmpty()) event->acceptProposedAction();
+}
+
+void bssh_terminal_view::dropEvent(QDropEvent *event) {
+	const QString text = text_for_drop(event->mimeData());
+	if (text.isEmpty()) return;
+
+	event->acceptProposedAction();
+
+	/*
+	 * Focus first, and it matters. A drop lands on the pane under the
+	 * pointer, which need not be the focused one -- and the window pastes
+	 * into the session it considers current. Taking focus the way a click
+	 * does makes the pane that was dropped on the pane that receives it,
+	 * and it is also what wires this signal up: the window connects to
+	 * the FOCUSED view (see m_wired_view), so emitting first would emit
+	 * into nothing.
+	 */
+	setFocus(Qt::MouseFocusReason);
+
+	emit paste_requested(text);
 }
 
 void bssh_terminal_view::recompute_grid() {

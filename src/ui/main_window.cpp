@@ -1161,6 +1161,17 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		         this, &bssh_main_window::show_terminal_menu);
 
 		/*
+		 * Something dropped on this pane (sec 6.4). It comes through
+		 * the same door as every other paste, which is the point: a
+		 * dropped file's path is text on a command line about to be
+		 * run, and dropped TEXT can carry newlines -- so it has to meet
+		 * the same question about pasting more than one line, and the
+		 * same bracketed-paste handling in the router.
+		 */
+		connect(m_terminal_view, &bssh_terminal_view::paste_requested,
+		         this, [this](const QString &text) { paste_into_current(text); });
+
+		/*
 		 * Middle-click pastes the PRIMARY selection, not the clipboard.
 		 * They are different buffers and conflating them is what makes
 		 * middle-click paste surprising: it should deliver whatever was

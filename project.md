@@ -839,6 +839,7 @@ model on a finger.
 | Copy | `Ctrl+Shift+C` (never bare `Ctrl+C` — that's `SIGINT`) | Selection toolbar |
 | Paste | `Ctrl+Shift+V`, middle-click on X11/Wayland | Selection toolbar / key row |
 | Scroll | Wheel, `Shift+PgUp/PgDn` | Kinetic touch scroll (`QScroller`) |
+| Drop a file | Pastes its path, shell-quoted — **built** | No system drag source in practice |
 
 - **Paste always goes through the router** so bracketed-paste mode applies. A
   paste that bypasses it will silently break `vim` and any shell with bracketed
@@ -898,6 +899,52 @@ Only the window **showing** a session honours its clipboard request. A session
 is on screen in exactly one place (§8.4), so one remote request produces one
 clipboard write and one line of status rather than one per window that has ever
 shown it.
+
+**Dropping a file pastes its path — [BUILT].** Every desktop terminal since the
+1990s does this, it is how most people move a long path into a command line, and
+this one dropped everything on the floor. What arrives is text, so it goes
+through `paste_into_current()` like every other paste: bracketed paste applies,
+and the multi-line question above is asked. Four decisions, none of them free:
+
+- **Shell-quoted, and only when it needs to be.** `/etc/hosts` pastes as itself;
+  `/home/nabbe/my notes.txt` gains single quotes. The escape for an embedded
+  quote is the standard close-reopen (`'\''`), because a filename that ends the
+  quoting early hands its own tail to the shell **as code** — a file called
+  `';rm -rf ~;'` is a legal filename and dropping one must not be an execution.
+  Quoting unconditionally would be safer still and is rejected: a quoted path
+  cannot be tab-completed or edited comfortably, and the common case is a path
+  with nothing wrong with it.
+- **Several files join with spaces, never newlines.** They are arguments to one
+  command. Newline-separated, each would *run*.
+- **A URL wins over the text beside it.** File managers attach both, and the
+  text is `file:///home/nabbe/notes.txt`, which no shell can act on. A *remote*
+  URL is pasted as it stands — the machine at the far end may well be able to
+  fetch it, and rewriting it to a local path would be a guess about a filesystem
+  this app is not on.
+- **A session payload is refused here**, so a tab dragged from another window
+  falls through to the window, which is what knows how to adopt one (§8.4).
+
+The drop takes focus the way a click does, because the pane under the pointer
+need not be the focused one and the window pastes into the session it considers
+current — without that, a drop on the left pane lands in the right one.
+
+**The test asserts the wiring, not a synthetic event, and that is measured.**
+A `QDropEvent` sent with `QApplication::sendEvent` never reaches `dropEvent`:
+checked with a twenty-line probe against a plain `QWidget` with
+`acceptDrops(true)`, which counted **zero** calls, because `QApplication::notify`
+wants a live drag session behind it. The first version of the test did exactly
+that and would have passed while asserting nothing — the vacuous-pass shape
+§12.3 keeps finding. So the test covers what is ours: the payload-to-text
+mapping, and that a `paste_requested` reaches a fake transport as bytes.
+
+**It also cost three unrelated tests, which is the more useful finding.** The
+scrollbar's default position is a process-wide static, a window built by a test
+sets it from the settings, and it stays set — so adding one window-building test
+gave every later view in the file a scrollbar it never asked for, and three
+geometry tests failed reading as grid-arithmetic bugs. The fix is a `cleanup()`
+slot that resets it after **every** test in the class rather than after the
+guilty one: the next window-building test would otherwise rediscover this the
+same way, and the failure points nowhere near its cause.
 
 **The terminal's own context menu — [DECIDED].**
 Right-click on the desktop, press-and-hold on touch: **Copy, Paste, Select All**.

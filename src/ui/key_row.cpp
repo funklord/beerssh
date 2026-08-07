@@ -17,9 +17,9 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
     : QWidget(parent),
       m_router(router),
       m_mode(AUTO),
-      m_function_mode(false),
       m_scroll(nullptr),
-      m_keys(nullptr) {
+      m_keys(nullptr),
+      m_function_mode(false) {
 	/*
 	 * The keys scroll horizontally, because they do not fit and never did.
 	 *

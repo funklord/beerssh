@@ -13,6 +13,9 @@
 #include "term/screen.h"
 #include "term/scrollback.h"
 
+class QDragEnterEvent;
+class QDropEvent;
+class QMimeData;
 class QMouseEvent;
 class QPainter;
 class QScrollBar;
@@ -111,6 +114,17 @@ public:
 		SCROLLBAR_RIGHT,
 		SCROLLBAR_LEFT
 	};
+
+	/*
+	 * What a drop should put into the terminal (sec 6.4), or empty for a
+	 * payload this is not willing to take.
+	 *
+	 * Static and pure, so the quoting can be tested without a drag: what
+	 * makes this worth testing is not the plumbing but the SHELL
+	 * QUOTING -- a path with a space in it pasted raw is two arguments,
+	 * and a path with a quote in it is a syntax error at best.
+	 */
+	static QString text_for_drop(const QMimeData *mime);
 
 	void set_scrollbar_position(scrollbar_position_t where);
 	scrollbar_position_t scrollbar_position() const { return m_scrollbar_position; }
@@ -349,6 +363,14 @@ signals:
 	void context_menu_requested(const QPoint &at);
 	void primary_paste_requested();
 
+	/*
+	 * Something was dropped on this pane and it came out as text
+	 * (sec 6.4). The VIEW does not paste it: a paste has to go through
+	 * the window, which is what asks about more than one line and what
+	 * owns the router the bytes end up in.
+	 */
+	void paste_requested(const QString &text);
+
 	/* A selection was made or cleared -- the window updates the clipboard. */
 	void selection_changed();
 
@@ -375,6 +397,10 @@ protected:
 	void mouseReleaseEvent(QMouseEvent *event) override;
 	void mouseDoubleClickEvent(QMouseEvent *event) override;
 	void inputMethodEvent(QInputMethodEvent *event) override;
+
+	/* sec 6.4's drops: a file's path, or the text itself. */
+	void dragEnterEvent(QDragEnterEvent *event) override;
+	void dropEvent(QDropEvent *event) override;
 
 private:
 	void update_metrics();
