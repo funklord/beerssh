@@ -480,3 +480,39 @@ void platform_test::a_chord_can_be_rebound_and_given_back() {
 	          "a chord given back to the shell is a decision, not an absence");
 	QVERIFY(settings.chord(QStringLiteral("paste")).isEmpty());
 }
+
+void platform_test::a_paste_is_questioned_only_when_it_carries_more_than_a_line() {
+	/*
+	 * sec 6.4 asked for this "by default (a setting)" and nothing had
+	 * built it, so a paste carrying five commands ran all five.
+	 */
+	QTemporaryDir dir;
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(settings.warn_multiline_paste(),
+		          "a paste that runs commands must be questioned unless told not to");
+
+		settings.set_warn_multiline_paste(false);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY(!reopened.warn_multiline_paste());
+	}
+
+	/* One line, however it ends, is the ordinary case and is not asked
+	 * about -- a warning that fires on every paste is one people turn
+	 * off, after which it protects nobody. */
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls -l"), true));
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls -l\n"), true));
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QString(), true));
+
+	/* Two lines of content is the case that runs something unread. */
+	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /"), true));
+	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /\n"), true));
+
+	/* A bare carriage return is Enter to a terminal too. */
+	QVERIFY(bssh_main_window::paste_needs_confirming(QStringLiteral("ls\rwhoami"), true));
+
+	/* And the setting really is what turns it off. */
+	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /"), false));
+}

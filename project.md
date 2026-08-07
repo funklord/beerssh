@@ -808,6 +808,25 @@ model on a finger.
   highlight colour cannot stay legible against 256 possible backgrounds.
 - **Multi-line paste is a footgun**: a paste containing newlines executes
   commands. Warn on multi-line paste by default (a setting), on both platforms.
+  **[BUILT]**, and it had been asked for here and built nowhere: a paste
+  carrying five commands ran all five. The rule is `paste_needs_confirming()`,
+  a pure decision beside `close_action()` and testable without a message box,
+  and every paste goes through one path — the chord, the context menu and the
+  middle button were three call sites reaching the router directly, which is
+  three places to forget a warning and all three had.
+  **More than one LINE of content, not merely a trailing newline.** Copying a
+  command with its line ending is the ordinary case, and a warning that fires
+  on it is one people turn off — after which it protects nobody from the case
+  that matters. Cancel is the default button, so a stray Return dismisses the
+  dialog rather than running whatever was on the clipboard, and the dialog
+  carries "Do not ask again" so the setting is discoverable where it is
+  relevant rather than only on a settings page.
+  **It does not know whether bracketed paste is on**, and that would be the
+  better rule: with bracketing the newlines do not execute, so the question is
+  unnecessary. libvterm handles the mode internally and exposes no way to ask —
+  checked against the vendored headers, which have no getter — so the warning
+  is unconditional and the setting is how somebody who lives inside bracketed
+  paste turns it off.
 
 **The terminal's own context menu — [DECIDED].**
 Right-click on the desktop, press-and-hold on touch: **Copy, Paste, Select All**.

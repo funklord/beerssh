@@ -117,6 +117,22 @@ public:
 	static bool opens_a_local_shell(bool touch_primary);
 
 	/*
+	 * Whether this paste should be asked about first (sec 6.4).
+	 *
+	 * A pure decision, separated from the dialog that asks it, the same
+	 * way close_action() is -- so the rule can be tested without a
+	 * message box on screen, and so there is one rule rather than one per
+	 * place a paste can start.
+	 *
+	 * More than one LINE, not merely a trailing newline: copying a
+	 * command with its line ending is the ordinary case, and a warning
+	 * that fires on it is a warning people turn off -- after which it
+	 * protects nobody from the case that matters, which is several
+	 * commands arriving at once.
+	 */
+	static bool paste_needs_confirming(const QString &text, bool warn_enabled);
+
+	/*
 	 * Whether the front door is what is on screen. Exists because its
 	 * absence was not caught by anything: the widgets were tested and
 	 * screenshotted on their own, so a window that never built them
@@ -309,6 +325,14 @@ private:
 	 * new-tab and new-window chords).
 	 */
 	void open_another_session(bool in_a_window);
+
+	/*
+	 * Every paste goes through here: the shortcut, the context menu and
+	 * the middle button. Three call sites asking the router directly is
+	 * three places for sec 6.4's warning to be forgotten, and it was
+	 * missing from all three.
+	 */
+	void paste_into_current(const QString &text);
 
 	void save_layout();
 	void show_session(bssh_session *session);

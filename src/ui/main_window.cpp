@@ -7,6 +7,7 @@
 #include <QUrl>
 #include <QClipboard>
 #include <QEvent>
+#include <QCheckBox>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QGuiApplication>
@@ -479,7 +480,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 			if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
 		}
 		if (shortcut == bssh_input_router::SHORTCUT_PASTE && m_current) {
-			m_current->input_router()->paste(QGuiApplication::clipboard()->text());
+			paste_into_current(QGuiApplication::clipboard()->text());
 		}
 		if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_UP) {
 			m_terminal_view->scroll_by(m_terminal_view->rows() / 2);
@@ -1168,7 +1169,7 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 			if (!clipboard->supportsSelection()) return;
 
 			const QString text = clipboard->text(QClipboard::Selection);
-			if (!text.isEmpty()) m_current->input_router()->paste(text);
+			paste_into_current(text);
 		});
 
 	/*
@@ -1899,7 +1900,7 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 		return;
 	}
 	if (chosen == paste && m_current) {
-		m_current->input_router()->paste(QGuiApplication::clipboard()->text());
+		paste_into_current(QGuiApplication::clipboard()->text());
 		return;
 	}
 	if (chosen == select_all) {
@@ -2018,6 +2019,65 @@ void bssh_main_window::show_tab_menu(const QPoint &at) {
 	if (chosen == duplicate) open_profile(session->profile());
 	if (chosen == split) split_with(session);
 	if (chosen == close) on_tab_close_requested(index);
+}
+
+bool bssh_main_window::paste_needs_confirming(const QString &text, bool warn_enabled) {
+	if (!warn_enabled) return false;
+
+	/*
+	 * More than one line of CONTENT. A single trailing newline is how a
+	 * command arrives when it is copied from a page, and asking about
+	 * that is asking about nearly every paste anybody makes.
+	 */
+	const QString body = text.endsWith(QLatin1Char('\n'))
+	        ? text.left(text.size() - 1)
+	        : text;
+
+	return body.contains(QLatin1Char('\n')) || body.contains(QLatin1Char('\r'));
+}
+
+void bssh_main_window::paste_into_current(const QString &text) {
+	if (!m_current || text.isEmpty()) return;
+
+	if (paste_needs_confirming(text, bssh_app_settings().warn_multiline_paste())) {
+		/*
+		 * sec 6.4: "a paste containing newlines executes commands".
+		 * The count is in the question because it is the fact that
+		 * decides the answer -- two lines is usually a mistake worth
+		 * catching, forty is a script somebody meant to run.
+		 */
+		const int lines = text.count(QLatin1Char('\n'))
+		        + (text.endsWith(QLatin1Char('\n')) ? 0 : 1);
+
+		QMessageBox box(this);
+		box.setWindowTitle(QStringLiteral("Paste %1 lines?").arg(lines));
+		box.setIcon(QMessageBox::Warning);
+		box.setText(QStringLiteral("This paste is %1 lines long.").arg(lines));
+		box.setInformativeText(
+		        QStringLiteral("Each line ends with a newline, which the shell reads "
+		                        "as Enter -- so every line but the last will run "
+		                        "before you can look at it."));
+
+		QCheckBox *again = new QCheckBox(QStringLiteral("Do not ask again"), &box);
+		box.setCheckBox(again);
+
+		QPushButton *go = box.addButton(QStringLiteral("Paste"), QMessageBox::AcceptRole);
+		box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
+		box.setDefaultButton(qobject_cast<QPushButton *>(box.buttons().last()));
+
+		/*
+		 * Cancel is the default button, so Return dismisses the dialog
+		 * rather than running whatever was on the clipboard. The
+		 * dangerous answer should never be the one a stray keystroke
+		 * gives.
+		 */
+		box.exec();
+
+		if (again->isChecked()) bssh_app_settings().set_warn_multiline_paste(false);
+		if (box.clickedButton() != go) return;
+	}
+
+	m_current->input_router()->paste(text);
 }
 
 void bssh_main_window::update_window_title() {

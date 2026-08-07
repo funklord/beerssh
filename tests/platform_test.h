@@ -34,6 +34,9 @@ private slots:
 	void the_window_title_format_survives_a_restart();
 	void a_chord_can_be_rebound_and_given_back();
 
+	/* sec 6.4's multi-line paste warning: the rule, and that it persists. */
+	void a_paste_is_questioned_only_when_it_carries_more_than_a_line();
+
 	/*
 	 * A failure reason is a sentence, and a QLabel asks for room for all
 	 * of it. Left unchecked that pushed the window wider than the screen

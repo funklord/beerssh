@@ -173,6 +173,15 @@ public:
 	 */
 	bool has_chord(const QString &action) const;
 
+	/*
+	 * Ask before pasting more than one line (sec 6.4). ON by default,
+	 * which is what that section asks for and the only defensible
+	 * default: a paste containing a newline RUNS the command, and the
+	 * one it runs is one the user has not read.
+	 */
+	bool warn_multiline_paste() const;
+	void set_warn_multiline_paste(bool warn);
+
 	/* Where app.ini lives; empty when no directory could be found. */
 	QString path() const { return m_path; }
 

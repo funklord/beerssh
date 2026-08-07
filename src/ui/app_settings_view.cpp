@@ -223,6 +223,22 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		form->addRow(QString(), m_focus_follows_mouse);
 	}
 
+	/*
+	 * sec 6.4's multi-line paste warning, which that section asked for
+	 * "by default (a setting)" and which nothing had built -- so a paste
+	 * carrying five commands ran all five.
+	 */
+	m_warn_multiline_paste = new QCheckBox(
+	        QStringLiteral("Ask before pasting more than one line"), this);
+	if (touch) m_warn_multiline_paste->setMinimumHeight(48);
+	form->addRow(QString(), m_warn_multiline_paste);
+
+	QLabel *paste_note = bssh_wrapped_note(
+	        QStringLiteral("A newline in a paste is Enter to the shell, so every line "
+	                        "but the last runs before you can read it."),
+	        this);
+	form->addRow(QString(), paste_note);
+
 	m_caps_as_ctrl = new QCheckBox(QStringLiteral("Caps Lock sends Ctrl"), this);
 	m_caps_as_ctrl->setToolTip(
 	        QStringLiteral("Caps Lock arms Ctrl for the next key, in this terminal only. "
@@ -399,6 +415,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		m_focus_follows_mouse->setChecked(settings.focus_follows_mouse());
 	}
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
+	m_warn_multiline_paste->setChecked(settings.warn_multiline_paste());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 
 	const int bar_index = m_scrollbar->findData(int(settings.scrollbar()));
@@ -443,6 +460,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		connect(m_focus_follows_mouse, &QCheckBox::toggled, this, [this] { commit(); });
 	}
 	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] { commit(); });
+	connect(m_warn_multiline_paste, &QCheckBox::toggled, this, [this] { commit(); });
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
 }
 
@@ -460,6 +478,7 @@ void bssh_app_settings_view::commit() {
 	stored.set_window_title(m_window_title->text());
 	stored.set_raise_contrast(m_raise_contrast->isChecked());
 	stored.set_caps_as_ctrl(m_caps_as_ctrl->isChecked());
+	stored.set_warn_multiline_paste(m_warn_multiline_paste->isChecked());
 	if (m_focus_follows_mouse) {
 		stored.set_focus_follows_mouse(m_focus_follows_mouse->isChecked());
 	}

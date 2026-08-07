@@ -238,3 +238,11 @@ bool bssh_app_settings::has_chord(const QString &action) const {
 void bssh_app_settings::set_chord(const QString &action, const QString &binding) {
 	store(QStringLiteral("chords/") + action, binding);
 }
+
+bool bssh_app_settings::warn_multiline_paste() const {
+	return value(QStringLiteral("input/warn_multiline_paste"), true).toBool();
+}
+
+void bssh_app_settings::set_warn_multiline_paste(bool warn) {
+	store(QStringLiteral("input/warn_multiline_paste"), warn);
+}
