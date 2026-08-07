@@ -886,7 +886,29 @@ DEB_MAINTAINER ?= $(shell git config user.name) <$(shell git config user.email)>
 # hand-rolled version had to be taught that the hard way, after a package
 # with an empty Depends shipped and failed at first launch rather than at
 # install.
-deb: version-check
+# The fonts are a prerequisite of the PACKAGE even though they are not one
+# of `make install`, and the two are not in conflict. install is
+# deliberately tolerant of a checkout that never ran `make fonts` -- sec
+# 9.4 has the app fall back to system families -- while debian/beerssh-
+# fonts.install names usr/share/beerssh outright, so the packaging is not
+# tolerant at all. Without them the build does not produce a smaller set
+# of packages, it produces none:
+#
+#     dh_install: warning: Cannot find (any matches for) "usr/share/beerssh"
+#     dh_install: error: missing files, aborting
+#
+# and it does that at dh_install, after the whole app has been compiled.
+#
+# Fetching is a no-op when they are present: fetch-fonts.sh decides by
+# whether every member of a family is already on disk, so it neither
+# re-downloads nor re-hashes.
+deb: version-check fonts
+	@if ! ls fonts/*.ttf fonts/*.otf >/dev/null 2>&1; then \
+		echo "deb: fonts/ holds no faces, so beerssh-fonts would be empty"; \
+		echo "deb:   and dh_install would abort after building everything."; \
+		echo "deb:   Fetch them first: make fonts"; \
+		exit 1; \
+	fi
 	dpkg-buildpackage -b -us -uc
 	@mkdir -p $(BUILD_DIR)
 	@for f in ../beerssh_$(VERSION)_*.deb ../beerssh-fonts_$(VERSION)_all.deb \
