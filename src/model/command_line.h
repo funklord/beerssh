@@ -80,12 +80,13 @@ struct bssh_command_line_t {
 	 */
 	bool hold;
 
-	/* CI's headless smoke test (sec 12.4). Deliberately undocumented. */
+	/* CI's headless smoke test (sec 12.4). */
 	bool self_test;
 
 	/* Printing one of these is all the program does. */
 	bool help;
 	bool version;
+	bool man;
 
 	/*
 	 * Why the command line was refused, or empty. Non-empty means print
@@ -97,10 +98,12 @@ struct bssh_command_line_t {
 
 	bssh_command_line_t()
 	    : cols(0), rows(0), x(0), y(0), has_position(false), hold(false),
-	      self_test(false), help(false), version(false) {}
+	      self_test(false), help(false), version(false), man(false) {}
 
 	/* Nothing to open: the program prints something and stops. */
-	bool exits_immediately() const { return help || version || !error.isEmpty(); }
+	bool exits_immediately() const {
+		return help || version || man || !error.isEmpty();
+	}
 
 	/*
 	 * Whether the command line names a session to open at startup.
@@ -158,6 +161,21 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments);
  * not that everything after it belongs to the command.
  */
 QString bssh_command_line_usage();
+
+/*
+ * The manual page, in roff, built from the same table.
+ *
+ * Generated rather than kept as a file for the reason the help text is
+ * generated: a second copy of the option list is a copy that goes stale,
+ * and a manual page is exactly where nobody would notice -- it documents
+ * a flag that no longer exists and omits the one you wanted, and neither
+ * is an error. fmake does the same, from the same argument, and
+ * `make man` writes what this returns into beerssh.1.
+ *
+ * The version is passed in rather than read from QCoreApplication,
+ * because --man runs before there is one (see bssh_command_line()).
+ */
+QString bssh_command_line_man_page(const QString &version);
 
 /*
  * The command line THIS PROCESS was started with, parsed once.

@@ -85,6 +85,42 @@ int main(int argc, char *argv[]) {
 	bssh_command_line_t line = bssh_parse_command_line(raw);
 	bssh_set_command_line(line);
 
+	QTextStream out(stdout);
+	QTextStream err(stderr);
+
+	/*
+	 * Everything that only prints is answered HERE, before QApplication
+	 * exists -- because QApplication needs a display, and these are
+	 * exactly the invocations that happen without one.
+	 *
+	 * Found by running it: with DISPLAY unset, `beerssh --help` died with
+	 * "could not connect to display" and exit 141 rather than printing
+	 * anything. That is `--help` over SSH, `--help` in a container, and
+	 * `--man` in the package build that generates beerssh.1 -- three
+	 * places a terminal emulator has no business needing a screen.
+	 *
+	 * The version comes from the build's own define rather than from
+	 * QCoreApplication::applicationVersion(), which nothing has set yet;
+	 * it is the same string, and setApplicationVersion below reads it too.
+	 */
+	if (!line.error.isEmpty()) {
+		err << "beerssh: " << line.error << Qt::endl
+		     << "Try 'beerssh --help'." << Qt::endl;
+		return 2;
+	}
+	if (line.help) {
+		out << bssh_command_line_usage();
+		return 0;
+	}
+	if (line.version) {
+		out << "beerssh " << BSSH_VERSION_STRING << Qt::endl;
+		return 0;
+	}
+	if (line.man) {
+		out << bssh_command_line_man_page(QStringLiteral(BSSH_VERSION_STRING));
+		return 0;
+	}
+
 	int qt_argc = 1;
 	char *qt_argv[] = { argv[0], nullptr };
 	QApplication app(qt_argc, qt_argv);
@@ -96,29 +132,6 @@ int main(int argc, char *argv[]) {
 	QCoreApplication::setApplicationVersion(QStringLiteral(BSSH_VERSION_STRING));
 	/* Freedesktop app ID, so the window matches its .desktop entry (sec 0.1). */
 	QGuiApplication::setDesktopFileName(QStringLiteral("se.vibes.beerssh"));
-
-	/*
-	 * Answered before anything is built. --help and --version must not
-	 * depend on a font directory, a theme or a window: they are what
-	 * somebody runs when the app will not start, and doing real work
-	 * first is how a --help ends up printing a warning above the usage.
-	 */
-	QTextStream out(stdout);
-	QTextStream err(stderr);
-
-	if (!line.error.isEmpty()) {
-		err << "beerssh: " << line.error << Qt::endl
-		     << "Try 'beerssh --help'." << Qt::endl;
-		return 2;
-	}
-	if (line.help) {
-		out << bssh_command_line_usage();
-		return 0;
-	}
-	if (line.version) {
-		out << "beerssh " << QCoreApplication::applicationVersion() << Qt::endl;
-		return 0;
-	}
 
 	/*
 	 * And the icon explicitly. setDesktopFileName is enough on Wayland,

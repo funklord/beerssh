@@ -1,3 +1,4 @@
+#include <QRegularExpression>
 #include <QtTest>
 
 #include "model/command_line.h"
@@ -265,4 +266,61 @@ void command_line_test::every_option_is_documented_and_every_documented_option_p
 		          qPrintable(QStringLiteral("%1 is documented and not accepted: %2")
 		                             .arg(spelled, line.error)));
 	}
+}
+
+void command_line_test::the_manual_page_describes_the_options_the_parser_takes() {
+	/*
+	 * sec 8.6's manual page, held to the table it is generated from --
+	 * which is the whole reason it is generated. A page kept as a file
+	 * documents a flag that no longer exists and omits the one you
+	 * wanted, and neither is an error anybody sees.
+	 */
+	const QString page = bssh_command_line_man_page(QStringLiteral("9.9.9"));
+
+	QVERIFY2(page.startsWith(QStringLiteral(".TH BEERSSH 1 ")),
+	          "a manual page starts with its .TH header or man will not index it");
+	QVERIFY2(page.contains(QStringLiteral("beerssh 9.9.9")),
+	          "the version passed in must reach the header");
+
+	for (const bssh_option_t &option : bssh_command_line_options()) {
+		/*
+		 * Spelled as roff spells it: every hyphen escaped, or the
+		 * reader is shown a hyphenation point instead of the minus
+		 * they are meant to type.
+		 */
+		const QString spelled = QStringLiteral("\\fB\\-\\-%1\\fR")
+		                                .arg(QString::fromLatin1(option.name));
+
+		QVERIFY2(page.contains(spelled),
+		          qPrintable(QStringLiteral("--%1 is accepted and not in the manual page")
+		                             .arg(QString::fromLatin1(option.name))));
+	}
+
+	/*
+	 * And the other direction, which is the half that catches an option
+	 * REMOVED from the parser and left in the page. Every .TP entry
+	 * naming a long option has to be one the table still carries.
+	 */
+	static const QRegularExpression entry(
+	        QStringLiteral("\\\\fB\\\\-\\\\-([a-z-]+)\\\\fR"));
+
+	QRegularExpressionMatchIterator found = entry.globalMatch(page);
+	int seen = 0;
+
+	while (found.hasNext()) {
+		const QString named = found.next().captured(1);
+		bool known = false;
+
+		for (const bssh_option_t &option : bssh_command_line_options()) {
+			if (named == QString::fromLatin1(option.name)) known = true;
+		}
+
+		QVERIFY2(known, qPrintable(QStringLiteral("the manual page documents --%1, "
+		                                           "which the parser does not take")
+		                                   .arg(named)));
+		++seen;
+	}
+
+	QVERIFY2(seen >= bssh_command_line_options().size(),
+	          "the page must name every option, not a subset that happens to match");
 }

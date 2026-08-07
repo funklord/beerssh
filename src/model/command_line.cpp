@@ -112,6 +112,10 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 			"Build the window, run one turn of the event loop and exit. "
 			"What CI runs to check that a headless build comes up at "
 			"all." },
+		{ "man", "", "",
+			"Write this program's manual page to stdout and exit. It is "
+			"generated from the same table these options are read from, so "
+			"beerssh.1 cannot describe a flag the program does not take." },
 		{ "help", "h", "", "Show this help and exit." },
 		{ "version", "v", "", "Show the version and exit." },
 	};
@@ -158,6 +162,164 @@ QString bssh_command_line_usage() {
 	        "  beerssh preset.ini            import a preset file\n");
 
 	return text;
+}
+
+namespace {
+
+/*
+ * Escapes text for roff.
+ *
+ * Three things bite. A backslash starts an escape; a line beginning with a
+ * dot or a quote starts a MACRO, so a description opening with one would
+ * be swallowed rather than printed; and a hyphen is typeset as a
+ * hyphenation point rather than as the minus a reader is meant to type,
+ * which is what turns \-\-hold in a manual page into something that
+ * cannot be copied out of it.
+ */
+QString roff(const QString &text) {
+	QString out;
+	out.reserve(text.size() + 8);
+
+	for (int i = 0; i < text.size(); ++i) {
+		const QChar c = text.at(i);
+		if (c == QLatin1Char('\\')) {
+			out += QStringLiteral("\\e");
+		} else if (c == QLatin1Char('-')) {
+			out += QStringLiteral("\\-");
+		} else {
+			out += c;
+		}
+	}
+
+	if (out.startsWith(QLatin1Char('.')) || out.startsWith(QLatin1Char('\''))) {
+		out.prepend(QStringLiteral("\\&"));
+	}
+
+	return out;
+}
+
+/* One option as a .TP entry: the flags in bold, the value in italic. */
+QString man_option(const bssh_option_t &option) {
+	QString names;
+
+	if (*option.short_name) {
+		const QString letter = QString::fromLatin1(option.short_name);
+		names += QStringLiteral("\\fB\\-%1\\fR, ").arg(letter);
+	}
+
+	names += QStringLiteral("\\fB\\-\\-%1\\fR").arg(QString::fromLatin1(option.name));
+
+	if (*option.value_name) {
+		const QString value = roff(QString::fromLatin1(option.value_name));
+		names += QStringLiteral(" \\fI%1\\fR").arg(value);
+	}
+
+	const QString what = roff(QString::fromLatin1(option.description));
+
+	return QStringLiteral(".TP\n%1\n%2\n").arg(names, what);
+}
+
+} /* namespace */
+
+QString bssh_command_line_man_page(const QString &version) {
+	QString out = QStringLiteral(
+	        ".TH BEERSSH 1 \"\" \"beerssh %1\" \"User Commands\"\n"
+	        ".SH NAME\n"
+	        "beerssh \\- SSH terminal, and terminal, for desktop and Android\n"
+	        ".SH SYNOPSIS\n"
+	        ".B beerssh\n"
+	        ".RI [ options ]\n"
+	        ".RI [ user @] host [: port ]\n"
+	        ".br\n"
+	        ".B beerssh\n"
+	        ".RI [ options ]\n"
+	        ".I preset.ini\n"
+	        ".SH DESCRIPTION\n").arg(version);
+
+	out += roff("beerssh connects to SSH servers and renders the result "
+	             "through its own VT emulator -- colours, scrollback, the "
+	             "alternate screen, mouse reporting and inline images. On a "
+	             "desktop it also opens a local shell, which is why it takes "
+	             "the arguments a terminal emulator is expected to take.")
+	       + QStringLiteral("\n.PP\n");
+
+	out += roff("With no arguments it opens a local shell on a desktop and "
+	             "its host list on a phone. A destination connects to that "
+	             "host; a path ending in .ini is imported as a preset.")
+	       + QStringLiteral("\n.PP\n");
+
+	out += roff("Everything after -e belongs to the command, so -e comes "
+	             "last. Locally the command is run directly, with no shell "
+	             "between it and the kernel; over SSH the words are joined "
+	             "and handed to the remote's own shell, which is what ssh "
+	             "does and why that one needs quoting.")
+	       + QStringLiteral("\n.PP\n");
+
+	out += roff("A shell that ends closes its pane, and the window with it "
+	             "if that was the last one. --hold keeps it, which is what "
+	             "you want when a command has printed something worth "
+	             "reading on its way out.")
+	       + QStringLiteral("\n");
+
+	out += QStringLiteral(".SH OPTIONS\n");
+	for (const bssh_option_t &option : bssh_command_line_options()) {
+		out += man_option(option);
+	}
+
+	out += QStringLiteral(
+	        ".SH EXAMPLES\n"
+	        ".TP\n"
+	        "\\fBbeerssh\\fR\n"
+	        "A local shell.\n"
+	        ".TP\n"
+	        "\\fBbeerssh user@host:2222\\fR\n"
+	        "A shell on that host, over SSH.\n"
+	        ".TP\n"
+	        "\\fBbeerssh \\-e htop\\fR\n"
+	        "A local shell running htop, which closes when htop does.\n"
+	        ".TP\n"
+	        "\\fBbeerssh user@host \\-e htop\\fR\n"
+	        "htop over there, the way \\fBssh \\-t\\fR runs it.\n"
+	        ".TP\n"
+	        "\\fBbeerssh \\-\\-workdir /srv \\-T Logs \\-e tail \\-f app.log\\fR\n"
+	        "A named window, watching a file, started in /srv.\n"
+	        ".TP\n"
+	        "\\fBbeerssh \\-\\-geometry 120x40\\fR\n"
+	        "A hundred and twenty columns by forty rows, whatever the font.\n"
+	        ".SH FILES\n"
+	        ".TP\n"
+	        "\\fB~/.ssh/beerssh_hosts\\fR\n"
+	        "Saved sessions, in INI, one section per host. Meant to be "
+	        "readable and hand-editable.\n"
+	        ".TP\n"
+	        "\\fB~/.config/beerssh/presets.ini\\fR\n"
+	        "Host presets: the settings a saved session inherits.\n"
+	        ".TP\n"
+	        "\\fB~/.config/beerssh/layout.ini\\fR\n"
+	        "Which hosts were open last time, and how they were arranged.\n"
+	        ".SH ENVIRONMENT\n");
+
+	out += roff("Qt's own options are not accepted on the command line, "
+	             "because its X11 plugin consumes --geometry, --title and "
+	             "--name before this program sees them while its other "
+	             "plugins do not. Ask for them through Qt's environment "
+	             "variables instead -- QT_QPA_PLATFORM and the rest.")
+	       + QStringLiteral("\n");
+
+	out += QStringLiteral(
+	        ".SH EXIT STATUS\n"
+	        ".TP\n"
+	        "\\fB0\\fR\n"
+	        "The window was closed, or a printing option finished.\n"
+	        ".TP\n"
+	        "\\fB2\\fR\n"
+	        "The command line was refused; the reason is on stderr.\n"
+	        ".SH SEE ALSO\n"
+	        ".BR ssh (1),\n"
+	        ".BR ssh_config (5),\n"
+	        ".BR xterm (1)\n");
+
+	return out;
 }
 
 bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
@@ -218,6 +380,7 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 		return line;
 	}
 
+	line.man = parser.isSet(QStringLiteral("man"));
 	line.help = parser.isSet(QStringLiteral("help"));
 	line.version = parser.isSet(QStringLiteral("version"));
 	line.self_test = parser.isSet(QStringLiteral("self-test"));

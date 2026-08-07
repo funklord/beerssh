@@ -1859,6 +1859,33 @@ The consequence, and it is the right way round: opening the configuration on a
 window too small for it grows the window, because that page's minimum is real
 while it is the one on screen.
 
+**The manual page is generated, by the program, from the same table.**
+`beerssh --man` writes roff built from `bssh_command_line_options()`, and
+`make man` — which a plain `make` already runs — puts it in `beerssh.1`. It is
+**not committed**: a page kept as a file is a second copy of the option list,
+and a manual page is exactly where nobody notices the drift, because it
+documents a flag that no longer exists and omits the one you wanted and neither
+is an error. `fmake` does this, from the same argument and with a
+`--completion` on the same footing; harmonising with a sibling beat introducing
+a `help2man` build-dependency here, which would have been a new pattern for one
+project to set on its own. A test walks the table against the page **in both
+directions**, since either alone is satisfiable by generating nothing.
+
+The one limit worth stating: a **cross-built** package cannot generate its own
+page, because the rule runs the binary it just built. Native builds are what
+§12.2 describes and what the packaging does today; a cross build would need a
+host build first. Better than a committed copy that is silently wrong on every
+architecture at once.
+
+**And the printing options had to stop needing a screen.** `--help` was
+answered *after* `QApplication` was constructed, so with `DISPLAY` unset it
+died with "could not connect to display" and exit 141 rather than printing
+anything — measured, not supposed. That is `--help` over SSH, `--help` in a
+container, and `--man` in the package build that generates the page: three
+places a terminal emulator has no business needing a display. They are answered
+before Qt exists now, and `tools/check-deb.sh` runs `--help` with no display
+against the installed package rather than trusting that it works.
+
 **Considered and not built**, each for a reason rather than by omission:
 
 - **`-fn`/`-bg`/`-fg`-style appearance overrides.** A per-invocation font or
@@ -1868,10 +1895,6 @@ while it is the one on screen.
   the instance already running", and there is no such mechanism here yet;
   §8.4's client/server split is where that question belongs.
 - **A remote `--workdir`.** See above: the protocol has no way to ask.
-- **A man page.** `--help` is generated from the same option table the parser is
-  built from (`bssh_command_line_options()`), so a `beerssh.1` should be
-  generated from that too — `help2man` at package build time is the obvious
-  route — rather than hand-written into a second copy free to drift.
 
 ---
 

@@ -69,6 +69,39 @@ if [ "$faces" -lt 1 ]; then
 fi
 echo "check-deb: the app started and loaded $faces font faces"
 
+# The manual page. It is GENERATED at build time from the option table
+# (sec 8.6), so what is worth checking is that the generation ran and the
+# result installed -- a package that quietly shipped without one would
+# still install, run and uninstall.
+if [ ! -f /usr/share/man/man1/beerssh.1 ] && [ ! -f /usr/share/man/man1/beerssh.1.gz ]; then
+	echo "check-deb: the package has no manual page" >&2
+	exit 1
+fi
+
+# And that it describes the options this program takes, rather than an
+# empty skeleton. --execute is the entry nothing else would produce.
+if ! zcat -f /usr/share/man/man1/beerssh.1* | grep -q "execute"; then
+	echo "check-deb: the manual page does not document the options" >&2
+	exit 1
+fi
+echo "check-deb: the manual page is installed and documents the options"
+
+# --help with no display, which is how it is read over SSH and in a build
+# chroot -- and how the manual page above was generated. This died with
+# "could not connect to display" until QApplication stopped being built
+# before the printing options were answered.
+if ! beerssh --help > /tmp/help.log 2>&1; then
+	echo "check-deb: --help failed with no display" >&2
+	cat /tmp/help.log >&2
+	exit 1
+fi
+grep -q "^Usage: beerssh" /tmp/help.log || {
+	echo "check-deb: --help printed something that is not a usage" >&2
+	cat /tmp/help.log >&2
+	exit 1
+}
+echo "check-deb: --help works with no display"
+
 desktop-file-validate /usr/share/applications/se.vibes.beerssh.desktop
 echo "check-deb: the desktop entry validates"
 

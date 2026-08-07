@@ -30,6 +30,7 @@ private slots:
 	void an_unknown_option_is_refused();
 	void help_and_version_ask_for_nothing_else();
 	void every_option_is_documented_and_every_documented_option_parses();
+	void the_manual_page_describes_the_options_the_parser_takes();
 };
 
 #endif /* BSSH_COMMAND_LINE_TEST_H */

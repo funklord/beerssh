@@ -46,3 +46,8 @@ debian/beerssh-fonts/
 debian/*.substvars
 debian/*.debhelper.log
 debian/debhelper-build-stamp
+
+# The manual page. Generated from the option table by `beerssh --man`
+# (project.md sec 8.6), so committing it would be committing a copy of
+# the parser that is free to disagree with it.
+beerssh.1
