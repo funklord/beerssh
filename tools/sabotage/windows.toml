@@ -1,0 +1,44 @@
+# Sabotages for sec 8.4's multiple windows: the per-window tab set, tearing
+# a tab out, and dropping one window onto another.
+#
+# Each names the test that claims to cover it. A sabotage caught by some
+# OTHER test is reported as "WRONG TEST" rather than as a pass, because
+# that means the assertion which is supposed to hold this ground does not.
+#
+# NOT YET RUN against any of these.
+
+[[sabotage]]
+name = "tabs come from the whole registry"
+file = "src/ui/main_window.cpp"
+find = "bssh_session *session = m_shown.at(i);"
+replace = "bssh_session *session = m_registry->at(i);"
+expect = "a_window_shows_only_its_own_tabs"
+
+[[sabotage]]
+name = "the last tab may tear out"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_shown.size() < 2) return nullptr;"
+expect = "a_torn_out_tab_becomes_a_window"
+
+[[sabotage]]
+name = "a torn-out tab is not adopted"
+file = "src/ui/main_window.cpp"
+find = "\twindow->adopt_session(session);"
+expect = "a_torn_out_tab_becomes_a_window"
+
+[[sabotage]]
+name = "a move is not announced"
+file = "src/ui/main_window.cpp"
+find = "\temit m_registry->session_taken(session);"
+expect = "a_dropped_session_leaves_the_window_it_came_from"
+
+# Rewritten 2026-08-07: the original find string assumed split_with() was
+# the last statement before tear_out_tab, and the tiling decision has since
+# grown an if/else with the room check in it. A spec that no longer matches
+# stops the whole run, so this is checked rather than trusted.
+[[sabotage]]
+name = "a drop on the panes never tiles"
+file = "src/ui/main_window.cpp"
+find = "\tif (room) {\n\t\tsplit_with(session);"
+replace = "\tif (room) {\n\t\tshow_session(session);"
+expect = "a_drop_on_the_panes_tiles_where_there_is_room"

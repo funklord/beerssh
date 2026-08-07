@@ -1776,6 +1776,30 @@ void layout_test::a_window_shows_only_its_own_tabs() {
 	/* Both still see it in the registry -- one process, one set. */
 	QCOMPARE(second.registry()->count(), 1);
 
+	/*
+	 * And each tab must name the session THIS window holds, which the
+	 * counts above do not establish: the tab count comes from the shown
+	 * list while the label comes from a second lookup, so a rebuild that
+	 * indexed the whole registry for the text would keep both counts
+	 * right and put the wrong name on the tab.
+	 *
+	 * Not hypothetical. tools/sabotage.py made exactly that edit and this
+	 * test stayed green -- one window and one session cannot tell the two
+	 * lists apart, because they hold the same thing in the same order.
+	 * Two windows each holding a DIFFERENT session is the smallest case
+	 * that can, and the registry's order is what decides which name a
+	 * confused lookup would produce.
+	 */
+	bssh_session *theirs = second.registry()->create(named(QStringLiteral("theirs")));
+	second.adopt_session(theirs);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(first_tabs->count(), 1);
+	QCOMPARE(second_tabs->count(), 1);
+	QCOMPARE(first_tabs->tabText(0), QStringLiteral("mine"));
+	QVERIFY2(second_tabs->tabText(0) == QStringLiteral("theirs"),
+	          "a window's tab must name its own session, not the registry's first");
+
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 

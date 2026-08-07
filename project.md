@@ -3237,6 +3237,38 @@ The desktop build is what makes this project testable at all — use it.
   and an sshd on a spare loopback port taking that one key and no password. Nobody's real
   `~/.ssh` is read or written. Without the server the tests **skip** rather than
   fail, so running the binary by hand cannot report a false failure.
+- **Breaking the code on purpose is automated now — `tools/sabotage.py`.**
+  This section has asked since it was written for every test to be checked by
+  making it fail, and by hand that is three commands and an editor window per
+  assertion, which is why it got skipped exactly when there was least time. A
+  spec (`tools/sabotage/*.toml`) names a file, a string to break, and **the
+  test that must notice**; each edit gets its own suite run and a verdict of
+  `caught`, `MISSED`, `WRONG TEST` or `NO BUILD`. `NO BUILD` is a verdict
+  rather than a pass because a suite that did not compile prints no PASS and
+  no FAIL lines, which counts identically to green if you only look at
+  failures — the vacuous pass this project keeps finding, in the tool built
+  to find it.
+  **Its first run found one, and it was §8.4's.**
+  `a_window_shows_only_its_own_tabs` could not fail: the tab bar's count
+  comes from the shown list and only the *label* came from the sabotaged
+  lookup, so asserting counts tested nothing — and one window holding one
+  session cannot tell the shown list from the registry anyway, because both
+  hold the same thing in the same order. Two windows each holding a
+  different session is the smallest case that can, and the test builds it
+  now.
+  **Three defects in the tool itself, and the worst of them is a build
+  rule.** `shutil.copy2` preserves the mtime, so a restored file lands
+  *behind* the object compiled from the sabotaged text; make judges that
+  object current, and the next `make test` runs the sabotage against a tree
+  whose `git status` is clean. That is §12.1's "never conclude a test passes
+  from a binary the build step did not rebuild", reached through a timestamp
+  rather than a missing dependency, and it cost an hour of hunting a
+  test-contamination bug that did not exist. The others: the deadline killed
+  `make` and left the test binaries it spawned reparented to init — measured,
+  PPID 1 — which is the orphan that fills a disk invisibly, so the suite runs
+  in its own session and is killed by group; and a spec had gone stale and
+  matched nothing, which aborts the batch, so every `find` string is checked
+  to match exactly once before a run.
 - **`make check-keepalive` is the one check that needs the network to lie.**
   Everything else can be proved with a server that answers or refuses; §5.3's
   socket options exist for the case where packets simply stop arriving and
