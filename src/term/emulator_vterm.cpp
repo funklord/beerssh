@@ -797,7 +797,22 @@ int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
 	 * character reached the scrollback while the live screen showed the
 	 * glyph correctly. There is one synthesis now, and the scrollback
 	 * gets whatever the screen decided.
+	 *
+	 * Reading the mirror means reading something only as current as the
+	 * last damage flush, and damage is merged per ROW: a row stays
+	 * pending until a different row is touched. So a row written and
+	 * then scrolled away before anything else happened is still pending
+	 * HERE, and the mirror has never been told about it -- measured, and
+	 * the scrollback line came back EMPTY, not merely stale.
+	 *
+	 * This callback runs from the state layer's premove, which is before
+	 * the screen layer's scrollrect and therefore before its flush. So
+	 * ask for the flush now. The buffer has not moved yet, so the
+	 * pending rectangle still describes what is in it -- the same
+	 * ordering argument as vterm-patches/0003, one callback earlier.
 	 */
+	vterm_screen_flush_damage(self->vts);
+
 	const int width_limit = qMin(cols, self->screen.cols());
 
 	int width = width_limit;

@@ -175,6 +175,31 @@ void emulator_test::scrolled_lines_enter_the_scrollback() {
 	QCOMPARE(QString::fromUcs4(&oldest.at(2).ch, 1), QStringLiteral("e"));
 }
 
+void emulator_test::a_row_scrolled_off_before_its_damage_is_flushed_is_still_intact() {
+	bssh_emulator emulator(20, 3);
+
+	/*
+	 * The scrollback is taken from the MIRROR, and the mirror is only as
+	 * current as the last damage flush. Damage is merged per ROW, so a
+	 * row stays pending until something touches a different row -- which
+	 * means a scroll that happens while the TOP row is the pending one
+	 * reads a row the mirror has not been told about yet.
+	 *
+	 * Ordinary output never hits this: writing has moved down the screen
+	 * long before the scroll, so row 0 was flushed ages ago. Writing to
+	 * row 0 and scrolling immediately is the case that does.
+	 */
+	emulator.feed(QByteArrayLiteral("HELLO\x1b[S"));
+
+	QCOMPARE(emulator.scrollback().count(), 1);
+
+	const QList<bssh_cell_t> &pushed = emulator.scrollback().line(0);
+	QString text;
+	for (const bssh_cell_t &cell : pushed) text += QString::fromUcs4(&cell.ch, 1);
+
+	QCOMPARE(text, QStringLiteral("HELLO"));
+}
+
 void emulator_test::scrollback_is_capped() {
 	bssh_emulator emulator(20, 2);
 	emulator.set_scrollback_lines(3);

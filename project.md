@@ -2421,6 +2421,22 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   continuation was synthesised there "exactly as the screen synthesises it",
   two places computing one thing, which is how an undrawable character once
   reached the scrollback while the screen showed the glyph correctly.
+  **Reading the mirror means reading something only as current as the last
+  damage flush, and that was a bug** — found while reviewing the vterm patches
+  rather than by anything failing. Damage merges per ROW, so a row stays
+  pending until a different row is touched; `sb_pushline` runs from the state
+  layer's `premove`, which is *before* the screen layer's `scrollrect` and
+  therefore before the flush that `vterm-patches/0003` moved. A row written and
+  then scrolled away before anything else happened was still pending, and the
+  mirror had never been told: measured with `HELLO` then `CSI S`, the scrollback
+  line came back **empty**, not merely stale. Ordinary output cannot reach it,
+  since writing has moved down the screen long before the scroll — which is why
+  it survived every benchmark and every existing test. Fixed by asking for the
+  flush at the top of the callback, where the buffer has not moved yet and the
+  pending rectangle still describes it. **The same ordering argument as 0003,
+  one callback earlier**, and the fix belongs here rather than in a fifth patch:
+  upstream hands us correct cells in `cells[]`, and reading the mirror instead
+  is our optimisation, so its cost is ours to pay.
   **Measured A/B, interleaved**, because the machine was under load 44 and
   single runs swung 8×: **200×50 3.15 → 3.97 MB/s (+25%)**, **80×24 8.87 →
   10.6 (+18%)**.

@@ -33,6 +33,7 @@ private slots:
 	void synchronised_output_holds_the_repaint();
 	void synchronised_output_releases_itself_if_abandoned();
 	void scrolled_lines_enter_the_scrollback();
+	void a_row_scrolled_off_before_its_damage_is_flushed_is_still_intact();
 	void scrollback_is_capped();
 	void scrollback_keeps_colour();
 	void alternate_screen_does_not_pollute_the_scrollback();
