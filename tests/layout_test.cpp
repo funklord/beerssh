@@ -1749,6 +1749,44 @@ void layout_test::focus_follows_the_pointer_only_when_asked() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::closing_the_settings_window_means_cancel() {
+	/*
+	 * The settings are a window of their own on desktop (sec 8.5), which
+	 * gave them a control the page-shaped version never had: the frame's
+	 * close button. A window that hid itself without telling anybody
+	 * would leave the flag saying the front door is up, and -- with no
+	 * session behind it -- an app running with no terminal and no way
+	 * back to one, which is the exact complaint that made this a window.
+	 *
+	 * So the X means what Cancel means. Asserted through close(), which
+	 * is what a window manager sends, rather than by pressing the button.
+	 */
+	bssh_platform::force_touch_primary(false);
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	bssh_session *live = window.registry()->create(named(QStringLiteral("live")));
+	window.adopt_session(live);
+
+	window.show_front_door();
+	QVERIFY(window.showing_front_door());
+
+	bssh_session_dialog *settings = window.findChild<bssh_session_dialog *>();
+	QVERIFY2(settings, "the desktop front door must be a window of its own");
+
+	settings->close();
+	QCoreApplication::processEvents();
+
+	QVERIFY2(!window.showing_front_door(),
+	          "closing the settings window must count as leaving it");
+	QVERIFY2(window.registry()->index_of(live) >= 0,
+	          "and must not take the session with it");
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::cancelling_the_settings_keeps_the_session() {
 	/*
 	 * Reported from use: open the settings from a working shell, press

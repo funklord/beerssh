@@ -2055,6 +2055,14 @@ it, declining the front door still means "do not start".
 for the same reason: building a widget tree is not running a program, and the
 fifteen windows the suite constructs have no business opening anything.
 
+**The frame's close button means what Cancel means**, and that is a third
+control the page version never had. As a page there was no X: the only way out
+was the button that told the window about it. A window hiding itself without
+saying so leaves the flag claiming the front door is up and — with no session
+behind it — an app running with no terminal and no way back to one, which is
+the complaint that made this a window, arriving through the door the fix
+opened.
+
 **Two things broke on the way, and both were caught by tests written for the
 page-shaped version of the same bug.** The window used to open on the front
 door *by accident* — it was the stack's first page, so a window with nothing

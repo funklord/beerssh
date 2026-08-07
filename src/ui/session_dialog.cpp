@@ -1,5 +1,7 @@
 #include "ui/session_dialog.h"
 
+#include <QCloseEvent>
+
 #include "ui/ssh_config_import.h"
 
 #include "model/settings_resolver.h"
@@ -597,4 +599,9 @@ void bssh_session_dialog::update_override_badges() {
 
 	m_font_scope->setText(badge.text);
 	if (m_font_revert) m_font_revert->setEnabled(badge.overridden);
+}
+
+void bssh_session_dialog::closeEvent(QCloseEvent *event) {
+	QWidget::closeEvent(event);
+	emit cancelled();
 }

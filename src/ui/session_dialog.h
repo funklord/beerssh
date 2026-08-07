@@ -6,6 +6,7 @@
 
 #include "model/profile.h"
 
+class QCloseEvent;
 class QLineEdit;
 class QListWidget;
 class QSpinBox;
@@ -60,6 +61,19 @@ signals:
 
 	/* A device-level setting changed; the key row may need re-reading. */
 	void device_settings_changed();
+
+protected:
+	/*
+	 * The frame's close button means what Cancel means (sec 8.5).
+	 *
+	 * This grew a control the page-shaped version never had: as a page
+	 * there was no X, so the only way out was the button that told the
+	 * window about it. A window that hid itself without saying so would
+	 * leave the app running with no terminal and no way back to one --
+	 * which is the complaint that made this a window in the first place,
+	 * arriving through the door the fix opened.
+	 */
+	void closeEvent(QCloseEvent *event) override;
 
 private slots:
 	void on_load();
