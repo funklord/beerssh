@@ -277,7 +277,7 @@ void preset_test::an_ini_round_trip_keeps_every_field() {
 	preset.cursor_blink = false;
 	preset.font_family = QStringLiteral("Iosevka");
 	preset.font_size = 17;
-	preset.colour_scheme = QStringLiteral("solarized-dark");
+	preset.colour_scheme = QStringLiteral("green-on-black");
 	preset.allow_clipboard_write = true;
 	preset.keepalive_seconds = 15;
 	preset.compression = true;

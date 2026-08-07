@@ -2289,13 +2289,61 @@ is found:
   same cell are two chances to spell it differently**, and the one that is
   wrong is whichever the user is not looking at.
 
-**Contrast is a property of the reader, not of the palette.** Two things were
-wanted and they pull against each other: schemes faithful enough that a user can
-check one against its source, and output legible enough to read. Editing the
-numbers buys the second by destroying the first — and the argument that protects
-Solarized from us protects xterm too.
+**[DECIDED] A scheme owns the background and the colour of ordinary text. It
+does not own the sixteen.** This reverses what this section used to say, and
+the reason is that the old rule answered the wrong question.
 
-So **every scheme is reproduced exactly, including its unreadable entries**, and
+The list used to carry Solarized, Gruvbox, Nord and Tango, reproduced exactly,
+with a long argument below about faithfulness. They were faithful, and that
+was the problem: **each one redefines what red is.** A program emitting
+`\e[31m` means "the user's red", and it is entitled to assume red is red —
+`ls` colouring an archive, a compiler underlining an error, an ANSI art file
+from 1994. A palette that reassigns those makes every program's colour choices
+mean something the program did not choose. Faithfully reproducing somebody's
+redefinition is still a redefinition.
+
+So there is **one palette, classic ANSI**, the VGA text-mode values every
+console and every DOS program was written against: normal 0–7 dimmed, bright
+8–15 saturated, yellow-as-brown included, which is what makes bold mean
+something. Every scheme shares it, and a test asserts they do.
+
+What a user actually wants to change is the colour of **ordinary text**, which
+is the one colour the remote never sets. Hence the set:
+
+| id | background | ordinary text | for |
+|---|---|---|---|
+| `default` | `#000000` | `#ffffff` | the default |
+| `green-on-black` | `#000000` | `#00ff00` | the green phosphor |
+| `yellow-on-black` | `#000000` | `#ffff00` | the amber phosphor |
+| `black-on-white` | `#ffffff` | `#000000` | e-paper |
+| `custom` | from settings | from settings | the escape hatch |
+
+Three phosphors and an inverse. The inverse is named for **who it is for**
+rather than called "light mode": an e-paper panel holds a light background for
+free and pays for a dark one, which is the reverse of every other display, so
+it is what that hardware wants rather than a taste.
+
+Backgrounds are **pure** black or pure white. `#1c1c1c` was what this shipped
+with, and a near-black is the worst of both — it costs an OLED its
+switched-off pixels and buys no readability, because the contrast that matters
+is against the text.
+
+Anyone who wants Solarized's numbers can still have them through the custom
+scheme. They are simply no longer offered as though picking one were an
+ordinary thing to do. The id `default` is kept rather than renamed to what it
+now is, so every stored profile already saying `default` keeps working, and
+the removed ids pass through §10.1's resolver unchanged and draw in the
+default — a profile pinned to `solarized-dark` degrades rather than breaking.
+
+**Contrast is still a property of the reader.** The floor below was written to
+reconcile faithfulness with legibility, and it survives the change intact for
+a better reason than the one it was built for: **classic ANSI blue is worse
+than xterm's was.** `#0000aa` on `#000000` measures below what `#0000ee` on
+`#1c1c1c` did. The standard is not going to change and must not be edited, so
+the renderer is where the problem gets solved — which is what this section
+already said, now with a palette that cannot be quietly improved instead.
+
+So **the palette is reproduced exactly, including its unreadable entries**, and
 the floor is applied when **drawing**. `bssh_raise_contrast()` lifts a colour only
 as far as it takes to clear the floor against whatever is actually behind the
 glyph, preserving hue and saturation so a lifted red is still recognisably red,

@@ -397,8 +397,9 @@ void bssh_ui_shots::render_terminal() {
 	const sample_t samples[] = {
 		{QStringLiteral("terminal-default"), QStringLiteral("default"), true},
 		{QStringLiteral("terminal-default-no-floor"), QStringLiteral("default"), false},
-		{QStringLiteral("terminal-solarized-dark"), QStringLiteral("solarized-dark"), true},
-		{QStringLiteral("terminal-solarized-light"), QStringLiteral("solarized-light"), true},
+		{QStringLiteral("terminal-green-on-black"), QStringLiteral("green-on-black"), true},
+		{QStringLiteral("terminal-yellow-on-black"), QStringLiteral("yellow-on-black"), true},
+		{QStringLiteral("terminal-black-on-white"), QStringLiteral("black-on-white"), true},
 	};
 
 	/*

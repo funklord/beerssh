@@ -635,7 +635,7 @@ void profile_store_test::the_touch_editor_saves_the_colour_scheme() {
 	bssh_font_picker *picker = editor.findChild<bssh_font_picker *>();
 	QVERIFY(picker);
 
-	const QString chosen = QStringLiteral("solarized-dark");
+	const QString chosen = QStringLiteral("green-on-black");
 	picker->set_scheme(chosen);
 	QCOMPARE(picker->scheme_id(), chosen);
 

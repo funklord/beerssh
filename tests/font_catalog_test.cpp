@@ -263,18 +263,44 @@ void font_catalog_test::the_bundled_set_loads_and_covers_what_it_promises() {
 	QVERIFY(cjk == QStringLiteral("Noto Sans Mono") || cjk == QStringLiteral("Unifont"));
 }
 
-void font_catalog_test::a_colour_scheme_repaints_only_the_sixteen_it_owns() {
+void font_catalog_test::a_scheme_owns_the_background_and_the_text_not_the_palette() {
 	const bssh_colour_scheme_catalog catalog;
 
-	QVERIFY(catalog.all().size() >= 4);
-	QVERIFY(catalog.by_id(QStringLiteral("solarized-dark")) != nullptr);
+	/*
+	 * The set is named rather than counted, so removing one is a decision
+	 * somebody has to make here as well as there: three phosphors on
+	 * black, one inverse for e-paper, and the custom escape hatch.
+	 */
+	QVERIFY(catalog.by_id(QStringLiteral("default")) != nullptr);
+	QVERIFY(catalog.by_id(QStringLiteral("green-on-black")) != nullptr);
+	QVERIFY(catalog.by_id(QStringLiteral("yellow-on-black")) != nullptr);
+	QVERIFY(catalog.by_id(QStringLiteral("black-on-white")) != nullptr);
+	QVERIFY(catalog.by_id(QStringLiteral("custom")) != nullptr);
+
+	/*
+	 * ONE palette across all of them, which is the point of the set. A
+	 * scheme chooses the background and the colour of ordinary text; what
+	 * a program meant by red is not its to redefine, and a scheme that
+	 * repainted the sixteen would make every other program's colour
+	 * choices mean something else.
+	 */
+	const bssh_colour_scheme_t *shared = catalog.by_id(catalog.default_id());
+	QVERIFY(shared);
+	for (const bssh_colour_scheme_t &scheme : catalog.all()) {
+		for (int i = 0; i < 16; ++i) {
+			QVERIFY2(scheme.ansi[i] == shared->ansi[i],
+			          qPrintable(QStringLiteral("%1 repaints ANSI %2")
+			                             .arg(scheme.id).arg(i)));
+		}
+	}
 
 	for (const bssh_colour_scheme_t &scheme : catalog.all()) {
 		QVERIFY(!scheme.id.isEmpty());
 		QVERIFY(!scheme.display_name.isEmpty());
 
-		/* Somebody else's design: it has to say whose (sec 9.4's rule,
-		 * applied to colours). */
+		/* Where the numbers came from, still recorded (sec 9.4's rule,
+		 * applied to colours) -- now "Classic ANSI" rather than a list
+		 * of other people's designs. */
 		QVERIFY2(!scheme.licence.isEmpty(), qPrintable("no licence: " + scheme.id));
 
 		/* Opaque, or every cell is drawn transparent onto whatever was
@@ -308,16 +334,35 @@ void font_catalog_test::a_colour_scheme_repaints_only_the_sixteen_it_owns() {
 	bssh_apply_appearance(&view, settings);
 	const QColor before = view.colour_for_test(cube);
 
-	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("gruvbox-dark"));
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("yellow-on-black"));
 	bssh_apply_appearance(&view, settings);
 
 	QCOMPARE(view.colour_for_test(cube), before);
 
-	/* While colour 1 -- which the scheme DOES own -- changes with it. */
+	/*
+	 * And colour 1 does not change either, which is the rule that
+	 * replaced the old one. A scheme used to own the sixteen; now it owns
+	 * the background and the colour of ordinary text, and what a program
+	 * meant by red survives switching between them.
+	 *
+	 * Compared between two schemes rather than against the raw palette
+	 * value, because what reaches the screen has been through sec 9.3's
+	 * contrast lift -- and both of these sit on pure black, so the lift
+	 * produces the same answer for both. That is the invariant worth
+	 * asserting: the drawn red is a property of the palette and the
+	 * background, not of which scheme was picked.
+	 */
 	bssh_color_t red;
 	red.kind = bssh_color_t::INDEXED;
 	red.index = 1;
-	QVERIFY(view.colour_for_test(red) != QColor(catalog.by_id(QStringLiteral("default"))->ansi[1]));
+
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("default"));
+	bssh_apply_appearance(&view, settings);
+	const QColor red_on_default = view.colour_for_test(red);
+
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("yellow-on-black"));
+	bssh_apply_appearance(&view, settings);
+	QCOMPARE(view.colour_for_test(red), red_on_default);
 }
 
 void font_catalog_test::an_unknown_scheme_is_kept_but_drawn_in_the_default() {
@@ -415,18 +460,29 @@ void font_catalog_test::our_own_scheme_is_legible() {
 		}
 	}
 
-	QVERIFY2(lifted > 0, "nothing was lifted -- the faithful palettes must still need it");
+	QVERIFY2(lifted > 0, "nothing was lifted -- classic ANSI blue must still need it");
 
 	/*
-	 * The published values are untouched, which is the other half of the
-	 * bargain: a user can check any scheme against its source. xterm's
-	 * blue is the one this whole design argued about, so it is named.
+	 * The palette is untouched, which is the other half of the bargain: a
+	 * program asking for blue gets the blue the standard defines, and the
+	 * fix for its legibility happens at draw time.
+	 *
+	 * Classic ANSI blue is the one this whole design argued about, so it
+	 * is named. On pure black it is WORSE than xterm's was -- 0x0000aa
+	 * against 0x000000 rather than 0x0000ee against 0x1c1c1c -- which is
+	 * the argument for the contrast floor rather than against the
+	 * palette: the standard is not going to change, so the renderer is
+	 * where the problem gets solved.
 	 */
 	const bssh_colour_scheme_t *fallback = catalog.by_id(catalog.default_id());
 	QVERIFY(fallback);
 	/* qRgb, not the bare literal: the catalog carries a full alpha byte. */
-	QCOMPARE(fallback->ansi[4], qRgb(0x00, 0x00, 0xee));
-	QCOMPARE(fallback->ansi[1], qRgb(0xcd, 0x00, 0x00));
+	QCOMPARE(fallback->ansi[4], qRgb(0x00, 0x00, 0xaa));
+	QCOMPARE(fallback->ansi[1], qRgb(0xaa, 0x00, 0x00));
+
+	/* Pure black, not a near-black: an OLED's switched-off pixel is free. */
+	QCOMPARE(fallback->background, qRgb(0x00, 0x00, 0x00));
+	QCOMPARE(fallback->foreground, qRgb(0xff, 0xff, 0xff));
 	QVERIFY(bssh_contrast_ratio(fallback->ansi[4], fallback->background) < 2.0);
 
 	/* And drawn, it is readable. */
