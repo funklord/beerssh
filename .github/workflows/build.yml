@@ -121,15 +121,27 @@ jobs:
           path: deps/android
           key: android-deps-${{ runner.os }}-${{ hashFiles('tools/build-deps-android.sh') }}
 
+      # ANDROID_NDK_ROOT comes from the RUNNER, and is read in the shell
+      # rather than through ${{ env.* }}.
+      #
+      # That expression context holds what a workflow, job or step has set
+      # -- not what the image exported -- so it expanded to nothing and the
+      # env: block then CLOBBERED the perfectly good ANDROID_NDK_ROOT the
+      # image provides. The script said "ANDROID_NDK_ROOT is not set" and
+      # exited 1, which reads as a missing NDK rather than as a workflow
+      # overwriting a variable with an empty string.
       - name: Cross-compile libssh + OpenSSL
         if: steps.deps-cache.outputs.cache-hit != 'true'
-        env:
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
-        run: tools/build-deps-android.sh arm64-v8a
+        run: |
+          : "${ANDROID_NDK_ROOT:=$ANDROID_NDK_LATEST_HOME}"
+          export ANDROID_NDK_ROOT
+          echo "using NDK at $ANDROID_NDK_ROOT"
+          tools/build-deps-android.sh arm64-v8a
 
       # Compiles and links libbeerssh_arm64-v8a.so. Packaging into an AAB
       # additionally needs the SDK, which the runner image provides.
       - name: Build
-        env:
-          ANDROID_NDK_ROOT: ${{ env.ANDROID_NDK_LATEST_HOME }}
-        run: make android QT_ANDROID_ROOT="$QT_ROOT_DIR"
+        run: |
+          : "${ANDROID_NDK_ROOT:=$ANDROID_NDK_LATEST_HOME}"
+          export ANDROID_NDK_ROOT
+          make android QT_ANDROID_ROOT="$QT_ROOT_DIR"
