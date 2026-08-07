@@ -69,6 +69,15 @@ public:
 	bool raise_contrast() const;
 	void set_raise_contrast(bool raise);
 
+	/*
+	 * How bright terminal text is drawn, 10-100 (sec 9.3). Device-wide
+	 * rather than per host: it answers "what is the room like", which is
+	 * a property of where you are sitting and not of what you connected
+	 * to.
+	 */
+	int text_brightness() const;
+	void set_text_brightness(int percent);
+
 	QString theme() const;
 	void set_theme(const QString &theme);
 

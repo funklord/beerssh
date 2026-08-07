@@ -90,6 +90,24 @@ double bssh_contrast_ratio(QRgb a, QRgb b);
  */
 QRgb bssh_raise_contrast(QRgb colour, QRgb against);
 
+/*
+ * The same colour, scaled toward black (project.md sec 9.3).
+ *
+ * `percent` is 100 for untouched and 0 for black. Applied to whatever
+ * DRAWS -- glyphs and the cursor -- and never to a background, so the
+ * black stays pure black at every setting and only the light on it comes
+ * down. Dimming the background too would grey the screen out, which is
+ * the opposite of what a dark room wants.
+ *
+ * Applied AFTER the contrast floor, deliberately. The floor is a default
+ * for legibility; this is the user saying they want it dimmer than that,
+ * and a slider the floor could veto would be a slider that stops working
+ * exactly where somebody reached for it. Order matters the other way too:
+ * dimming first would simply be undone, since the floor lifts until it
+ * clears.
+ */
+QRgb bssh_dim(QRgb colour, int percent);
+
 class bssh_colour_scheme_catalog {
 public:
 	static bssh_colour_scheme_catalog &instance();

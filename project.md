@@ -2385,6 +2385,40 @@ own comment that what is on screen is what the terminal will look like. Two
 schemes whose blues both get lifted really will look alike in use, so a strip
 that says so is being accurate rather than losing information.
 
+**[BUILT] A text-brightness slider, for reading at night.** The floor answers
+"can this be read"; it has nothing to say about "is this a lamp in a dark
+room", which is a different complaint with a different answer. A terminal that
+is comfortable at a desk at noon is genuinely painful at 2am, and where the
+line falls depends on the room and the panel — so it is a slider (10–100%) and
+not a light/dark toggle.
+
+It **dims what draws and never the background**, so pure black stays pure
+black and only the light on it comes down. Dimming the background too would
+grey the screen out, which is the opposite of what a dark room wants.
+
+**Order: the floor first, then the dim, and the dim may take text below the
+floor.** Dimming first would simply be undone, since the floor lifts until it
+clears. Dimming after means the user can go below the readable minimum — which
+is correct, because the floor is a *default* and this is somebody explicitly
+asking for less light. A slider the default could veto would stop working
+exactly where somebody reached for it.
+
+**Blocks dim too, and that was a bug first.** The dim was applied to the glyph
+colour only, so an inverse cell — a solid rectangle drawn in what was the
+foreground, and the brightest object on the screen — stayed at full strength
+while everything around it came down. The night setting missed the one thing
+most likely to have prompted it. Found by measuring the rendered pixels, not
+by looking: at 50% the text went 255→127 and the block stayed 255. The test
+asserts on painted pixels for that reason, since that is the only place the
+difference between a colour we computed and a colour that reached the screen
+shows up.
+
+It is **device-wide**, not per host: it answers "what is the room like", which
+is a property of where you are sitting rather than of what you connected to.
+The stored value is bounded on the way *out* as well as in — a hand-edited
+config saying `0` would render an invisible terminal, and the first thing
+anybody does about an invisible terminal is not open the settings.
+
 **[REJECTED]** Shipping a "readable" variant of each scheme alongside the
 faithful one. It doubles the picker, and an improved *Solarized Dark* is either
 mislabelled or an argument with its author; the same result is available from one

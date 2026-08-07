@@ -1007,6 +1007,7 @@ void bssh_main_window::apply_device_settings() {
 
 	const bssh_app_settings settings;
 	const bool raise = settings.raise_contrast();
+	const int brightness = settings.text_brightness();
 
 	/*
 	 * Press-and-hold opens the menu wherever the touch layout is in use,
@@ -1085,6 +1086,7 @@ void bssh_main_window::apply_device_settings() {
 		for (bssh_terminal_view *view : m_panes->views()) {
 			if (!view) continue;
 			view->set_raise_contrast(raise);
+			view->set_text_brightness(brightness);
 			view->set_long_press_menu(hold);
 			view->set_focus_follows_mouse(follows);
 		}

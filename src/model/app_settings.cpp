@@ -150,6 +150,19 @@ void bssh_app_settings::set_raise_contrast(bool raise) {
 	store(QStringLiteral("appearance/raise_contrast"), raise);
 }
 
+int bssh_app_settings::text_brightness() const {
+	/*
+	 * Bounded on the way OUT as well as in. A hand-edited config saying 0
+	 * would otherwise render an invisible terminal, and the first thing
+	 * somebody does about an invisible terminal is not open the settings.
+	 */
+	return qBound(10, value(QStringLiteral("appearance/text_brightness"), 100).toInt(), 100);
+}
+
+void bssh_app_settings::set_text_brightness(int percent) {
+	store(QStringLiteral("appearance/text_brightness"), qBound(10, percent, 100));
+}
+
 namespace {
 
 /*

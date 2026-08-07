@@ -65,6 +65,14 @@ public:
 	void set_raise_contrast(bool raise);
 
 	/*
+	 * How bright drawn text is, 10-100 (sec 9.3). The background is not
+	 * touched, so black stays black and only the light on it comes down --
+	 * which is what a dark room wants.
+	 */
+	void set_text_brightness(int percent);
+	int text_brightness() const { return m_text_brightness; }
+
+	/*
 	 * The pointer entering this pane gives it the keyboard (sec 8.3).
 	 *
 	 * Implemented by asking for focus rather than by telling the container
@@ -505,6 +513,7 @@ private:
 	QColor m_foreground;
 	quint64 m_content_revision;
 	bool m_raise_contrast;
+	int m_text_brightness;
 	bool m_focus_follows_mouse;
 	int m_cell_width;
 	int m_cell_height;

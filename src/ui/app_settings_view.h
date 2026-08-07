@@ -4,6 +4,8 @@
 #include <QWidget>
 
 class QCheckBox;
+class QLabel;
+class QSlider;
 class QLineEdit;
 class QComboBox;
 
@@ -48,6 +50,8 @@ private:
 	/* Null where the platform cannot hide the window (sec 11). */
 	QCheckBox *m_hide_from_screenshots;
 	QCheckBox *m_raise_contrast;
+	QSlider *m_text_brightness;
+	QLabel *m_text_brightness_value;
 };
 
 #endif /* BSSH_APP_SETTINGS_VIEW_H */

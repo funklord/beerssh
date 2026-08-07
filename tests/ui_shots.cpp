@@ -392,14 +392,23 @@ void bssh_ui_shots::render_terminal() {
 		QString name;
 		QString scheme;
 		bool raise;
+		int brightness;
 	};
 
 	const sample_t samples[] = {
-		{QStringLiteral("terminal-default"), QStringLiteral("default"), true},
-		{QStringLiteral("terminal-default-no-floor"), QStringLiteral("default"), false},
-		{QStringLiteral("terminal-green-on-black"), QStringLiteral("green-on-black"), true},
-		{QStringLiteral("terminal-yellow-on-black"), QStringLiteral("yellow-on-black"), true},
-		{QStringLiteral("terminal-black-on-white"), QStringLiteral("black-on-white"), true},
+		{QStringLiteral("terminal-default"), QStringLiteral("default"), true, 100},
+		{QStringLiteral("terminal-default-no-floor"), QStringLiteral("default"), false, 100},
+		{QStringLiteral("terminal-green-on-black"), QStringLiteral("green-on-black"), true, 100},
+		{QStringLiteral("terminal-yellow-on-black"), QStringLiteral("yellow-on-black"), true, 100},
+		{QStringLiteral("terminal-black-on-white"), QStringLiteral("black-on-white"), true, 100},
+
+		/*
+		 * The night knob, at a setting somebody would actually use. Worth
+		 * a picture rather than a number: whether 50% is comfortable or
+		 * murky is not a thing the code can tell you.
+		 */
+		{QStringLiteral("terminal-dimmed-50"), QStringLiteral("default"), true, 50},
+		{QStringLiteral("terminal-dimmed-25"), QStringLiteral("default"), true, 25},
 	};
 
 	/*
@@ -433,6 +442,7 @@ void bssh_ui_shots::render_terminal() {
 		view.attach_screen(&emulator.screen());
 		view.set_colour_scheme(sample.scheme);
 		view.set_raise_contrast(sample.raise);
+		view.set_text_brightness(sample.brightness);
 		view.resize(52 * 10, 12 * 20);
 		view.show();
 		QTest::qWaitForWindowExposed(&view);
@@ -442,11 +452,12 @@ void bssh_ui_shots::render_terminal() {
 		                      QStringLiteral(".png");
 		view.grab().save(path);
 
-		QTextStream(stdout) << QStringLiteral("  %1  %2, contrast floor %3\n")
+		QTextStream(stdout) << QStringLiteral("  %1  %2, contrast floor %3, text at %4%\n")
 		                               .arg(path, -44)
 		                               .arg(sample.scheme)
 		                               .arg(sample.raise ? QStringLiteral("on")
-		                                                  : QStringLiteral("off"));
+		                                                  : QStringLiteral("off"))
+		                               .arg(sample.brightness);
 		view.hide();
 	}
 }

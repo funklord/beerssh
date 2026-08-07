@@ -690,6 +690,82 @@ void terminal_view_test::the_contrast_floor_can_be_turned_off() {
 	QVERIFY(!bssh_app_settings(dir.path()).raise_contrast());
 }
 
+void terminal_view_test::dimming_takes_the_text_and_the_blocks_but_never_the_background() {
+	/*
+	 * sec 9.3's night knob. Three things have to be true at once, and the
+	 * first version of it only managed two.
+	 *
+	 * What went wrong is worth keeping: the dim was applied to the glyph
+	 * colour only, so an INVERSE cell -- a solid rectangle drawn in what
+	 * was the foreground, and the brightest object on the screen -- came
+	 * out at full strength while everything around it dimmed. The setting
+	 * missed the one thing most likely to have prompted it. Measured
+	 * rather than noticed: text went 255 to 127 and the block stayed 255.
+	 *
+	 * So this asserts on painted pixels, which is the only place the
+	 * distinction between "a colour we computed" and "a colour that
+	 * reached the screen" is visible.
+	 */
+	bssh_emulator emulator(24, 2);
+	emulator.feed(QByteArrayLiteral("\x1b[7mINVERSE\x1b[0m WHITE"));
+
+	bssh_terminal_view view;
+	view.attach_screen(&emulator.screen());
+	view.set_colour_scheme(QStringLiteral("default"));
+	view.resize(24 * 16, 2 * 32);
+
+	const auto brightest = [](const QImage &image, int x0, int x1, int y0, int y1) {
+		int best = -1;
+		QRgb found = 0;
+		for (int y = y0; y < y1; ++y) {
+			for (int x = x0; x < x1; ++x) {
+				const QRgb p = image.pixel(x, y);
+				const int sum = qRed(p) + qGreen(p) + qBlue(p);
+				if (sum > best) {
+					best = sum;
+					found = p;
+				}
+			}
+		}
+		return found;
+	};
+
+	const int run = qMin(view.width(), 7 * view.cell_width());
+	const int row = qMin(view.height(), view.cell_height());
+	QVERIFY(run > 0 && row > 0);
+
+	view.set_text_brightness(100);
+	const QImage full = view.grab().toImage();
+
+	view.set_text_brightness(50);
+	const QImage half = view.grab().toImage();
+
+	/* The inverse block: white at full strength, halved when dimmed. */
+	const QRgb block_full = brightest(full, 0, run, 0, row);
+	const QRgb block_half = brightest(half, 0, run, 0, row);
+	QCOMPARE(qRed(block_full), 255);
+	QVERIFY2(qRed(block_half) < 200,
+	          "an inverse block is the brightest thing on screen and must dim with it");
+
+	/* Ordinary text on the same row, past the inverse run. */
+	const QRgb text_full = brightest(full, run, view.width(), 0, row);
+	const QRgb text_half = brightest(half, run, view.width(), 0, row);
+	QVERIFY(qRed(text_full) > qRed(text_half));
+
+	/*
+	 * And the background is untouched at every setting, which is what
+	 * makes this a night mode rather than a washed-out one: pure black
+	 * stays pure black, and only the light on it comes down.
+	 */
+	const int deep_y = view.height() - 2;
+	QCOMPARE(qRed(full.pixel(view.width() - 2, deep_y)), 0);
+	QCOMPARE(qRed(half.pixel(view.width() - 2, deep_y)), 0);
+
+	/* 100 is genuinely untouched, not merely close. */
+	view.set_text_brightness(100);
+	QCOMPARE(view.grab().toImage(), full);
+}
+
 void terminal_view_test::the_floor_lifts_glyphs_and_leaves_backgrounds_faithful() {
 	/*
 	 * Order matters, and the first version had it wrong. The floor

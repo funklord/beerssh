@@ -2,6 +2,8 @@
 #include "ui/app_settings_view.h"
 
 #include <QCheckBox>
+#include <QHBoxLayout>
+#include <QSlider>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QKeySequenceEdit>
@@ -272,6 +274,51 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	form->addRow(m_raise_contrast);
 
 	/*
+	 * The night knob (sec 9.3). A slider rather than a light/dark toggle
+	 * because the complaint it answers is a matter of degree: a terminal
+	 * that is comfortable at a desk at noon is a lamp in a dark room, and
+	 * where the line falls depends on the room and the panel.
+	 *
+	 * It dims the TEXT and leaves the background alone, so pure black
+	 * stays pure black -- turning the light down rather than greying the
+	 * screen out. The floor above still applies first; this is allowed to
+	 * take it below that, because a slider a legibility default could
+	 * veto would stop working exactly where somebody reached for it.
+	 */
+	QWidget *brightness_row = new QWidget(this);
+	QHBoxLayout *brightness_layout = new QHBoxLayout(brightness_row);
+	brightness_layout->setContentsMargins(0, 0, 0, 0);
+
+	m_text_brightness = new QSlider(Qt::Horizontal, brightness_row);
+	m_text_brightness->setRange(10, 100);
+	m_text_brightness->setSingleStep(5);
+	m_text_brightness->setPageStep(10);
+	m_text_brightness->setToolTip(
+	        QStringLiteral("How bright terminal text is drawn. The background is not "
+	                        "touched, so black stays black and only the text comes down."));
+
+	/*
+	 * The number, beside it. A slider with no read-out is a control you
+	 * cannot return to a setting you liked, and "about two thirds" is not
+	 * a thing anyone can write down.
+	 */
+	m_text_brightness_value = new QLabel(brightness_row);
+	m_text_brightness_value->setMinimumWidth(
+	        m_text_brightness_value->fontMetrics().horizontalAdvance(QStringLiteral("100%")));
+
+	brightness_layout->addWidget(m_text_brightness, 1);
+	brightness_layout->addWidget(m_text_brightness_value);
+
+	/* Sized by the walk at the end of this constructor, never by name. */
+	form->addRow(QStringLiteral("Text brightness"), brightness_row);
+
+	QLabel *brightness_note = bssh_wrapped_note(
+	        QStringLiteral("For reading at night. Applies to every terminal on this "
+	                        "device, not to one host."),
+	        this);
+	form->addRow(brightness_note);
+
+	/*
 	 * Where stored passwords actually live (sec 11), stated rather than
 	 * implied.
 	 *
@@ -430,6 +477,8 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_warn_multiline_paste->setChecked(settings.warn_multiline_paste());
 	m_raise_contrast->setChecked(settings.raise_contrast());
+	m_text_brightness->setValue(settings.text_brightness());
+	m_text_brightness_value->setText(QStringLiteral("%1%").arg(settings.text_brightness()));
 
 	const int bar_index = m_scrollbar->findData(int(settings.scrollbar()));
 	m_scrollbar->setCurrentIndex(bar_index < 0 ? 0 : bar_index);
@@ -475,6 +524,10 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] { commit(); });
 	connect(m_warn_multiline_paste, &QCheckBox::toggled, this, [this] { commit(); });
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
+	connect(m_text_brightness, &QSlider::valueChanged, this, [this](int value) {
+		m_text_brightness_value->setText(QStringLiteral("%1%").arg(value));
+		commit();
+	});
 
 	/*
 	 * The floor, once, for everything on the page (sec 6.2).
@@ -502,6 +555,7 @@ void bssh_app_settings_view::commit() {
 	        bssh_app_settings::status_line_t(m_status_line->currentData().toInt()));
 	stored.set_window_title(m_window_title->text());
 	stored.set_raise_contrast(m_raise_contrast->isChecked());
+	stored.set_text_brightness(m_text_brightness->value());
 	stored.set_caps_as_ctrl(m_caps_as_ctrl->isChecked());
 	stored.set_warn_multiline_paste(m_warn_multiline_paste->isChecked());
 	if (m_focus_follows_mouse) {

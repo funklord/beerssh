@@ -170,6 +170,23 @@ double bssh_contrast_ratio(QRgb a, QRgb b) {
 	return (qMax(la, lb) + 0.05) / (qMin(la, lb) + 0.05);
 }
 
+QRgb bssh_dim(QRgb colour, int percent) {
+	const int scale = qBound(0, percent, 100);
+	if (scale == 100) return colour;
+
+	const QColor c(colour);
+
+	/*
+	 * Scaled in sRGB rather than linear light, because this is a
+	 * brightness knob and a brightness knob should behave like the one on
+	 * a monitor: halfway looks halfway. Scaling linear light instead
+	 * measures correctly and feels wrong, since perception is roughly the
+	 * curve sRGB already encodes.
+	 */
+	return qRgba(c.red() * scale / 100, c.green() * scale / 100,
+	              c.blue() * scale / 100, qAlpha(colour));
+}
+
 QRgb bssh_raise_contrast(QRgb colour, QRgb against) {
 	if (bssh_contrast_ratio(colour, against) >= BSSH_CONTRAST_FLOOR) return colour;
 

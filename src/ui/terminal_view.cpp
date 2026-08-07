@@ -89,6 +89,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_content_revision(1),
       m_raise_contrast(true),
+      m_text_brightness(100),
       m_focus_follows_mouse(false),
       m_cell_width(1),
       m_cell_height(1),
@@ -1001,6 +1002,36 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			 */
 			if (m_raise_contrast) fg = QColor(bssh_raise_contrast(fg.rgb(), bg.rgb()));
 
+			/*
+			 * And dimmed after the floor, never before: the floor
+			 * lifts until it clears, so a dim applied first is simply
+			 * undone. Text only -- the background keeps its pure
+			 * black, so this turns the light down rather than
+			 * greying the screen out.
+			 */
+			if (m_text_brightness != 100) {
+				fg = QColor(bssh_dim(fg.rgb(), m_text_brightness));
+
+				/*
+				 * And the block behind it, where there is one. An
+				 * inverse cell and a selection both draw a solid
+				 * rectangle in what was the FOREGROUND -- the
+				 * brightest object on the screen -- so leaving it
+				 * alone made the night setting miss the one thing
+				 * most likely to have prompted it. Measured: at 50%
+				 * the text went 255 -> 127 and the inverse block
+				 * stayed 255.
+				 *
+				 * The terminal's own background is excluded by the
+				 * same test the fill below uses, so pure black stays
+				 * pure black and only a cell that asked for a colour
+				 * of its own comes down.
+				 */
+				if (bg != m_background) {
+					bg = QColor(bssh_dim(bg.rgb(), m_text_brightness));
+				}
+			}
+
 			const int x = col * m_cell_width;
 			const int y = row * m_cell_height;
 			const int width = qMax(1, int(cell.width)) * m_cell_width;
@@ -1115,7 +1146,13 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		 * the glyph out of itself: a solid block that simply covered the
 		 * cell would hide the one character the user is looking at.
 		 */
-		const QColor cursor_colour(m_scheme.cursor);
+		/*
+		 * Dimmed with everything else. A block cursor is the brightest
+		 * thing on the screen and it BLINKS, so leaving it at full
+		 * strength would leave the one object most likely to be the
+		 * reason somebody reached for the slider.
+		 */
+		const QColor cursor_colour(bssh_dim(m_scheme.cursor, m_text_brightness));
 
 		if (m_cursor_style == QStringLiteral("underline")) {
 			const int thickness = qMax(1, m_cell_height / 10);
@@ -1527,6 +1564,14 @@ void bssh_terminal_view::set_raise_contrast(bool raise) {
 	if (m_raise_contrast == raise) return;
 
 	m_raise_contrast = raise;
+	update();
+}
+
+void bssh_terminal_view::set_text_brightness(int percent) {
+	const int wanted = qBound(10, percent, 100);
+	if (m_text_brightness == wanted) return;
+
+	m_text_brightness = wanted;
 	update();
 }
 
