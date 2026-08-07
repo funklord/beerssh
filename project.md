@@ -1653,6 +1653,26 @@ the same number for a layout manager that had quietly stopped working.
   the desktop arrangement squeezed into 360px. Walking the tree also names
   them after the categories, so a reader knows which page they are looking
   at without counting.
+- **A note printed above the control it explains.** The device settings page
+  puts each explanation under the row it belongs to — every one of them, so
+  the eye learns the rhythm — except the status line's, whose `addRow` was
+  called one line too early. The result reads as a stray sentence hanging off
+  the scrollbar's note: *"Everything adds the terminal's size in cells"*
+  above a row that has not yet offered *Everything*. No test can see this,
+  because every widget is present, sized correctly and inside the page; only
+  the order is wrong, and order is what a picture shows.
+- **Two form layouts start two label columns.** `QFormLayout` sizes its label
+  column from its own widest label, and nothing tells a second one about the
+  first — so the font picker, embedded below the preset editor's form,
+  started a column of its own. The rows above put their fields at **x=72**
+  and the picker put its at **x=50**, which reads as the page losing its
+  alignment half way down. Measured off the PNG by detecting the widget
+  frames, after eyeballing it produced a first answer that was wrong; a
+  22px offset is exactly the size that looks like carelessness and argues
+  about whether it is really there.
+  `bssh_font_picker::align_labels()` widens **both** sides to the larger of
+  the two, so no caller has to know which is wider, and a picker used alone
+  — the desktop *Window* page — is untouched because nothing calls it.
 - **The desktop front door gets the same treatment, and it found worse.** Its
   minimums were fine at 800x600 — the small window §8.2 already contemplates when
   it talks about tiling one into a half-screen column — so nothing a size check

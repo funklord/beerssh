@@ -175,8 +175,8 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	        QStringLiteral("Everything adds the terminal's size in cells and which "
 	                        "windowing system this build is using."),
 	        this);
-	form->addRow(status_note);
 	form->addRow(QStringLiteral("Status line"), m_status_line);
+	form->addRow(status_note);
 
 	/*
 	 * The window title, as a format. A list of three canned choices would

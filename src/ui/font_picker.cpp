@@ -73,13 +73,70 @@ static QPixmap bssh_swatch_strip(const bssh_colour_scheme_t &scheme, int height,
 	return strip;
 }
 
+/*
+ * The three label widgets QFormLayout made for us. Asked for by field
+ * rather than by row index, so adding a row above them cannot silently
+ * shift what this returns.
+ */
+QList<QWidget *> bssh_font_picker::label_widgets() const {
+	QList<QWidget *> labels;
+	if (!m_form) return labels;
+
+	QWidget *const fields[] = { m_family, m_size, m_scheme };
+	for (QWidget *field : fields) {
+		if (QWidget *label = m_form->labelForField(field)) labels.append(label);
+	}
+
+	return labels;
+}
+
+int bssh_font_picker::label_column_width() const {
+	int width = 0;
+	for (QWidget *label : label_widgets()) {
+		width = qMax(width, label->sizeHint().width());
+	}
+	return width;
+}
+
+void bssh_font_picker::set_label_column_width(int width) {
+	for (QWidget *label : label_widgets()) {
+		label->setMinimumWidth(width);
+	}
+}
+
+void bssh_font_picker::align_labels(QFormLayout *host, bssh_font_picker *picker) {
+	if (!host || !picker) return;
+
+	int width = picker->label_column_width();
+	QList<QWidget *> host_labels;
+
+	for (int row = 0; row < host->rowCount(); ++row) {
+		QLayoutItem *item = host->itemAt(row, QFormLayout::LabelRole);
+		if (!item || !item->widget()) continue;
+
+		host_labels.append(item->widget());
+		width = qMax(width, item->widget()->sizeHint().width());
+	}
+
+	/*
+	 * Both sides, not just the picker: the host form may be the narrower
+	 * of the two, and a caller should not have to work out which.
+	 */
+	picker->set_label_column_width(width);
+	for (QWidget *label : host_labels) {
+		label->setMinimumWidth(width);
+	}
+}
+
 bssh_font_picker::bssh_font_picker(QWidget *parent)
-    : QWidget(parent) {
+    : QWidget(parent),
+      m_form(nullptr) {
 	QVBoxLayout *outer = new QVBoxLayout(this);
 	outer->setContentsMargins(0, 0, 0, 0);
 
 	QFormLayout *form = new QFormLayout();
 	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+	m_form = form;
 
 	m_family = new QComboBox(this);
 

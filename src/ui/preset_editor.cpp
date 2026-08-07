@@ -187,6 +187,15 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	fields->addWidget(m_font);
 
 	/*
+	 * The picker brings its own form layout, and two of those size their
+	 * label columns independently -- so without this its rows sit 22px
+	 * left of every row above them (measured on the shot). Done after
+	 * both are populated, because it is the labels' size hints that
+	 * decide the width.
+	 */
+	bssh_font_picker::align_labels(form, m_font);
+
+	/*
 	 * The propagation count, always visible rather than only in the
 	 * confirmation. Knowing a preset is shared by seven hosts BEFORE
 	 * typing into it is what stops the edit from being a surprise at all

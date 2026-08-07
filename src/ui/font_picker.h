@@ -1,9 +1,11 @@
 #ifndef BSSH_FONT_PICKER_H
 #define BSSH_FONT_PICKER_H
 
+#include <QList>
 #include <QWidget>
 
 class QComboBox;
+class QFormLayout;
 class QLabel;
 class QSpinBox;
 
@@ -44,6 +46,26 @@ public:
 	void set_touch_sized(bool touch);
 
 	/*
+	 * Line this picker's label column up with the form it is embedded in.
+	 *
+	 * A form layout sizes its label column from its OWN widest label, and
+	 * two form layouts know nothing about each other -- so a picker
+	 * dropped below a form starts a second column of its own. Measured on
+	 * the preset editor: the rows above put their fields at x=72 and the
+	 * picker put its at x=50, which reads as the page losing its
+	 * alignment half way down.
+	 *
+	 * Widening is mutual and takes the larger of the two, so neither side
+	 * has to know which one is wider. A picker used on its own -- the
+	 * Window page of the desktop dialog -- is left exactly as it was,
+	 * since nothing calls this.
+	 */
+	static void align_labels(QFormLayout *host, bssh_font_picker *picker);
+
+	int label_column_width() const;
+	void set_label_column_width(int width);
+
+	/*
 	 * The colour scheme lives here too, because it and the font are the
 	 * same question asked twice -- "what does this host look like" -- and
 	 * splitting them across two widgets would mean two previews, neither
@@ -61,6 +83,9 @@ private slots:
 
 private:
 	void refresh_preview();
+	QList<QWidget *> label_widgets() const;
+
+	QFormLayout *m_form;
 
 	QComboBox *m_family;
 	QComboBox *m_scheme;
