@@ -1,5 +1,6 @@
 #include <QAbstractButton>
 #include <QDir>
+#include <QScrollArea>
 #include <QTreeWidget>
 #include <QRegularExpression>
 #include <QStackedWidget>
@@ -317,6 +318,49 @@ void bssh_ui_shots::render_front_door_pages() {
 		        : QSize();
 		QTextStream(stdout) << QStringLiteral("  %1  page needs %2x%3\n")
 		                               .arg(path, -44).arg(needed.width()).arg(needed.height());
+
+		/*
+		 * And the WHOLE page where it is taller than the window, which
+		 * is the half nobody could look at.
+		 *
+		 * The shot above is the dialog, so it stops at 600 pixels and
+		 * everything past the fold goes unseen -- which is exactly the
+		 * failure the comment above this loop describes, arriving one
+		 * level down. This project's own settings page grew a scrollbar
+		 * control, a status-line control, a title format and eight
+		 * rebindable chords in one sitting, and not one of them below
+		 * the fold would have appeared in any picture.
+		 *
+		 * Capped, because a page that asks for something absurd should
+		 * produce a large picture rather than exhaust memory.
+		 */
+		/*
+		 * The CONTENT of the scroll area, not the page: a page that
+		 * scrolls reports a tiny minimum -- 68x68 here -- because the
+		 * scroll area is happy to be small, and its height says nothing
+		 * about how much there is to read.
+		 */
+		QScrollArea *area = pages->currentWidget()
+		        ? pages->currentWidget()->findChild<QScrollArea *>()
+		        : nullptr;
+		QWidget *content = area ? area->widget() : nullptr;
+
+		if (content && content->sizeHint().height() > BSSH_DESKTOP_H) {
+			const QSize was = content->size();
+
+			content->resize(content->width() > 0 ? content->width()
+			                                      : BSSH_DESKTOP_W - 220,
+			                 qMin(content->sizeHint().height(), 3000));
+			QTest::qWait(50);
+
+			const QString tall = shot_dir() + QStringLiteral("/desktop-page-")
+			                      + slug + QStringLiteral("-full.png");
+			content->grab().save(tall);
+			QTextStream(stdout) << QStringLiteral("  %1  the whole page (%2 tall)\n")
+			                               .arg(tall, -44).arg(content->height());
+
+			content->resize(was);
+		}
 	}
 
 }
