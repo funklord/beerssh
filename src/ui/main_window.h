@@ -1,6 +1,8 @@
 #ifndef BSSH_MAIN_WINDOW_H
 #define BSSH_MAIN_WINDOW_H
 
+#include <QHash>
+#include <QSizePolicy>
 #include <QString>
 #include <QPointer>
 #include <QWidget>
@@ -251,6 +253,27 @@ private:
 	/* Re-applies a changed preset to the open sessions that follow it. */
 	void reresolve_sessions(int preset_id);
 	void on_pane_focus_changed(bssh_session *session);
+
+	/*
+	 * Lets only the page on screen set this window's minimum size
+	 * (sec 8.5, sec 8.6).
+	 *
+	 * A QStackedWidget asks EVERY page how small it may be and takes the
+	 * largest answer, so the front door's category tree and form were
+	 * setting a floor of 520x460 on a window showing a terminal --
+	 * which meant a desktop user could not drag a terminal window small,
+	 * and --geometry below about 57 by 21 came out bigger than it was
+	 * asked for. The pages that are not on screen have nothing to say
+	 * about it: their size policy goes to Ignored, which is exactly the
+	 * "this widget's hint does not count" that qSmartMinSize reads, and
+	 * comes back when the page is shown again.
+	 *
+	 * Kept per page rather than assumed, because a page that had a policy
+	 * of its own would otherwise silently acquire the default on its
+	 * first hiding.
+	 */
+	void keep_the_minimum_to_the_shown_page();
+	QHash<QWidget *, QSizePolicy> m_page_policies;
 
 	/* Reads sec 6.2's three-state setting and applies it to the key row. */
 	void apply_key_row_visibility();

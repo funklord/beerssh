@@ -1981,23 +1981,32 @@ void layout_test::a_window_can_be_sized_in_cells() {
 	QCOMPARE(panes->views().first()->cols(), 100);
 	QCOMPARE(panes->views().first()->rows(), 30);
 
-	/*
-	 * And again on a window that IS laid out, which takes the other path
-	 * -- the measured one. 80x24 rather than something smaller on
-	 * purpose: this window cannot shrink below the front door's own
-	 * minimum, because the pages share a QStackedWidget and a stack asks
-	 * every page how small it may be. Measured here at 520x460, which is
-	 * about 57 columns by 21 rows, so a --geometry under that is clamped
-	 * and the grid comes out bigger than asked for. Recorded in sec 8.6
-	 * rather than asserted, since freezing a defect into a test is how it
-	 * becomes the specification.
-	 */
+	/* And again on a window that IS laid out, which takes the other path. */
 	window.resize(window.size_for_grid(80, 24));
 	QCoreApplication::processEvents();
 	panes->remeasure_panes();
 
 	QCOMPARE(panes->views().first()->cols(), 80);
 	QCOMPARE(panes->views().first()->rows(), 24);
+
+	/*
+	 * And a SMALL one, which is the case that did not work. The pages
+	 * share a QStackedWidget and a stack asks every page how small it may
+	 * be, so the front door's category tree and form set a floor of
+	 * 520x460 -- about 57 by 21 -- on a window showing a terminal.
+	 * Anything under that came out bigger than it was asked for, and a
+	 * desktop user could not drag a terminal window small either.
+	 *
+	 * 40x12 is well under the old floor in both directions, so a window
+	 * that has gone back to obeying the hidden pages fails here rather
+	 * than passing by a pixel.
+	 */
+	window.resize(window.size_for_grid(40, 12));
+	QCoreApplication::processEvents();
+	panes->remeasure_panes();
+
+	QCOMPARE(panes->views().first()->cols(), 40);
+	QCOMPARE(panes->views().first()->rows(), 12);
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

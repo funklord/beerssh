@@ -1835,15 +1835,29 @@ dialog over a window that should not have opened is not an improvement.
 way to ask a server to start somewhere, and an option that silently does
 nothing is how people stop trusting a program's arguments.
 
-**A small `--geometry` is clamped, and that is a defect this uncovered rather
-than a rule.** The window's pages — terminal, session dialog, host list, both
-editors — share one `QStackedWidget`, and a stack asks *every* page how small
-it may be, so the window inherits the front door's minimum even while showing a
-terminal. Measured at **520x460**, about 57 columns by 21 rows: `80x24` and
-anything larger is honoured exactly, and a smaller request comes out bigger than
-asked. It is also why a desktop user cannot drag the window down to a small
-terminal. The fix belongs to §8.5 rather than here — the pages that are not on
-screen should not be setting the floor — and is **[OPEN]**.
+**A small `--geometry` was clamped, by a defect this uncovered.** The window's
+pages — terminal, session dialog, host list, both editors — share one
+`QStackedWidget`, and a stack asks *every* page how small it may be and takes
+the largest answer. So the window inherited the front door's minimum while
+showing a terminal: measured at **520x460**, about 57 columns by 21 rows.
+Anything smaller came out bigger than it was asked for, and a desktop user
+could not drag a terminal window small either — the same bug wearing the other
+hat, and the one nobody had reported because nobody connects a resize limit to
+a configuration page they cannot see.
+
+**Fixed where it belongs, in §8.5's page stack rather than in the geometry
+arithmetic**: a page that is not on screen has its size policy set to
+`Ignored`, which is exactly the "this widget's hint does not count" that Qt's
+own `qSmartMinSize` reads, and gets its policy back when it is shown again. The
+policies are remembered per page rather than assumed, or a page with a policy
+of its own would silently acquire the default the first time it was hidden. A
+window showing a terminal is now bounded by the terminal, and `--geometry 40x12`
+is honoured — which is what the test asserts, well under the old floor in both
+directions so that a regression fails rather than passing by a pixel.
+
+The consequence, and it is the right way round: opening the configuration on a
+window too small for it grows the window, because that page's minimum is real
+while it is the one on screen.
 
 **Considered and not built**, each for a reason rather than by omission:
 

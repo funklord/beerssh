@@ -396,6 +396,14 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 	m_pages->addWidget(m_terminal_page);
 
+	/*
+	 * With every page built, take the hidden ones out of the window's
+	 * minimum -- and keep doing it as the shown page changes.
+	 */
+	connect(m_pages, &QStackedWidget::currentChanged,
+	         this, [this](int) { keep_the_minimum_to_the_shown_page(); });
+	keep_the_minimum_to_the_shown_page();
+
 	m_status_label->setContentsMargins(6, 3, 6, 3);
 
 	/*
@@ -2047,6 +2055,23 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 	}
 	bssh_platform::instance()->set_keep_alive(false);
 	event->accept();
+}
+
+void bssh_main_window::keep_the_minimum_to_the_shown_page() {
+	if (!m_pages) return;
+
+	const QWidget *shown = m_pages->currentWidget();
+
+	for (int i = 0; i < m_pages->count(); ++i) {
+		QWidget *page = m_pages->widget(i);
+		if (!page) continue;
+
+		if (!m_page_policies.contains(page)) m_page_policies.insert(page, page->sizePolicy());
+
+		page->setSizePolicy(page == shown
+		                            ? m_page_policies.value(page)
+		                            : QSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored));
+	}
 }
 
 QSize bssh_main_window::size_for_grid(int cols, int rows) {
