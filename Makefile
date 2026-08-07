@@ -475,6 +475,25 @@ SHOT_DIR ?= build-shots
 shots: $(TEST_BIN)
 	@echo "shots: rendering every screen into $(SHOT_DIR)/"
 	@mkdir -p $(SHOT_DIR)
+	@# Last run's pictures go first, or the directory accumulates
+	@# screens the app no longer has. It held desktop-page-ssh.png
+	@# after that category was removed, desktop-page-window.png after
+	@# it was renamed, and two Solarized terminals after those schemes
+	@# were deleted -- so a reader browsing it would have concluded all
+	@# three still existed. A picture of something the app never does is
+	@# worse than no picture, which is this tool's own rule.
+	@#
+	@# A wildcard, because the names are not knowable: the set changes
+	@# whenever a surface is added or dropped, which is the case
+	@# build-and-commit.md allows it for. The directory is checked
+	@# first all the same -- non-empty and relative, and one this build
+	@# made.
+	@case "$(SHOT_DIR)" in \
+		"" ) echo "shots: SHOT_DIR is empty" >&2; exit 1 ;; \
+		/* ) echo "shots: refusing to clear the absolute path $(SHOT_DIR)" >&2; exit 1 ;; \
+		*..* ) echo "shots: refusing to clear $(SHOT_DIR) -- it escapes the tree" >&2; exit 1 ;; \
+	esac
+	@rm -f $(SHOT_DIR)/*.png
 	@# Through a FILE rather than a pipe: a pipeline reports the exit
 	@# status of its last command, so `binary | grep` would report grep's
 	@# and swallow a crash into a clean-looking run.

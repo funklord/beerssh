@@ -279,6 +279,44 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	shoot(QStringLiteral("desktop-window-minimum"), &window,
 	       window_floor.width(), window_floor.height());
 
+	/*
+	 * And SPLIT, which nothing had ever rendered.
+	 *
+	 * Panes are sec 8.2's whole feature -- the divider, the focused
+	 * pane's border, the grid each pane ends up with -- and every picture
+	 * of this app showed one terminal filling the window. The one part of
+	 * the layout that can look wrong in a way no size check sees is two
+	 * panes beside each other, and it was the part with no picture.
+	 *
+	 * Through drop_session(), which sec 8.3 exposes precisely so the
+	 * model can be driven without synthesising a drag.
+	 */
+	bssh_profile_t third = sample_profile();
+	third.name = QStringLiteral("db primary");
+	third.host = QStringLiteral("db01.internal.example.com");
+
+	/*
+	 * Shown and laid out BEFORE the drop, which is not ceremony.
+	 *
+	 * Whether a drop tiles or falls back to a tab is decided by the size
+	 * class, and the size class comes from a resizeEvent -- which Qt does
+	 * not deliver to a hidden widget. Resizing this window while it was
+	 * still hidden left the layout manager holding the previous shot's
+	 * 214px, so the drop found a COMPACT window with room for one pane
+	 * and made a tab. The picture showed a single terminal and was
+	 * perfectly honest about it: the wrong thing had happened.
+	 */
+	window.resize(BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	window.show();
+	QTest::qWaitForWindowExposed(&window);
+	QTest::qWait(50);
+
+	window.drop_session(window.registry()->create(third), true);
+	QTest::qWait(50);
+
+	shoot(QStringLiteral("desktop-window-split"), &window,
+	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+
 	while (shared->count() > 0) shared->close(shared->at(0));
 	bssh_ssh_session::set_factory(nullptr);
 
