@@ -17,7 +17,9 @@ divergence needs a technical reason and is raised rather than decided in
 passing -- and when a conflict between the three actually comes up, stop and
 ask instead of picking a winner.
 
-Vendored third-party code keeps its upstream style, and is exempt.
+Vendored submodules, generated sources and attic/historical material are
+exempt: they keep whatever their upstream or generator produces. Here that
+is `vterm/` above all.
 
 **This is the same style as the sibling `fuzzypickles` tree -- which is now a
 consequence rather than a coincidence.** Both copy the same source. Both are
@@ -53,6 +55,15 @@ file that mixes both is worse than either.
   interface is `bssh_ssh_session`, not `ISshSession` or
   `AbstractSshBackend`; the `I`-for-interface prefix is not used anywhere
   in this project.
+- **No abbreviations that are not already vocabulary.** `observed`, not
+  `obs`; `interface`, not `iff`. This matters most wherever an internal
+  name escapes into something you cannot rename later -- a wire format, a
+  config key, a CLI output, an on-disk path. Here that means the settings
+  keys, the `beerssh_hosts` fields and the command-line options above all:
+  a name chosen carelessly in one of those is a name kept forever.
+- **One word per concept, everywhere.** The same word in the type name, the
+  file path, the subcommand and the documentation. A synonym introduced for
+  variety reads as a second concept.
 - The component names in `project.md` §3 are the real ones. Use them rather
   than inventing synonyms, and update §3 if one genuinely needs renaming.
 
@@ -181,9 +192,15 @@ Lowercase, `snake_case`, for everything this project names itself — sources,
 headers, docs. So `main_window.cpp`, not `MainWindow.cpp`, and
 `platform_android.cpp`, not `PlatformAndroid.cpp`.
 
-The exception is a name a tool will not accept lowercased: `Makefile`,
-`AndroidManifest.xml`, and similar. Note that qmake imposes no such
-constraint — `beerssh.pro` is lowercase because nothing forces otherwise.
+Settled exceptions:
+
+- **Names a tool will not accept lowercased** -- `Makefile`,
+  `AndroidManifest.xml`, and similar. Note that qmake imposes no such
+  constraint — `beerssh.pro` is lowercase because nothing forces otherwise.
+- **Root files with an established convention** -- `README.md`, `LICENSE`,
+  `CHANGELOG.md`, `AUTHORS`. `VERSION` is this project's, and is the same
+  case.
+- **Package-system spellings** -- kebab-case where Debian requires it.
 
 ## Formatters
 
@@ -335,8 +352,10 @@ software handles. Documentation may use typographic punctuation; so may
 user-facing text in UI software, and anything that genuinely requires
 Unicode.
 
-**This project is excepted** and does not enable the check: it is a terminal
-emulator, and character tables are its subject matter.
+The check is `ascii_only` in `.style-gate.toml`, and **this project does not
+turn it on**: it is a terminal emulator, and character tables are its
+subject matter -- which is the source's own third exception, "anything that
+genuinely requires Unicode".
 
 
 The commit-msg hook is `tools/hooks/commit-msg`, installed with `make hooks`.
