@@ -865,12 +865,20 @@ install: all
 
 # --- Debian packaging (project.md sec 12.2) --------------------------------
 #
-# Built with dpkg-deb from a staged install rather than through
-# debhelper: this repo's convention is plain Makefiles, `make install`
-# already lays down exactly the right tree, and dpkg-deb turns that tree
-# into a package without a second build system to keep working. Proper
-# debian/ packaging for upstream Debian is a different job with different
-# rules, and this does not pretend to be it.
+# Built with dpkg-buildpackage driving debian/rules, which is three lines
+# of dh. The `deb` recipe below is the whole of it.
+#
+# This said the opposite until the comment was read against the recipe it
+# sits above: dpkg-deb over a staged `make install` tree, chosen so there
+# was no second build system to keep working and no pretence at upstream
+# Debian packaging. That argument lost to `dh_shlibdeps`. The Depends for
+# a Qt and libssh binary is not a list worth maintaining by hand, and it
+# is the one thing a staged tree and dpkg-deb cannot work out -- which is
+# why debian/rules says so where the dependencies would otherwise be.
+#
+# `make install` is still the only thing that decides what lands where;
+# dh_auto_install calls it with DESTDIR, so the packages contain exactly
+# what installing by hand does.
 #
 # TWO packages, because the fonts are 54 MB and the app is not. A terminal
 # client that costs 54 MB to install is a terminal client people do not
