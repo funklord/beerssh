@@ -12,6 +12,9 @@
 #include "model/profile_store.h"
 #include "ui/app_settings_view.h"
 #include "ui/font_picker.h"
+#include "input/input_router.h"
+#include "ui/key_row_layout.h"
+#include "ui/key_row.h"
 #include "ui/host_editor.h"
 #include "ui/host_list.h"
 #include "ui/licences_view.h"
@@ -204,6 +207,66 @@ void bssh_ui_shots::render_touch_surfaces() {
 	shoot(QStringLiteral("touch-settings"), &settings, BSSH_PHONE_W, BSSH_PHONE_H);
 
 	shoot_whole_page(QStringLiteral("touch-settings"), &settings);
+
+	/*
+	 * The on-screen key row (sec 6.2), which nothing had ever rendered.
+	 *
+	 * It is the surface a phone user touches most and the only one in
+	 * this app that exists ONLY for touch -- every other screen has a
+	 * desktop form somebody looks at, so this one is seen on a device or
+	 * not at all. It asked for 652px of a 360px screen for as long as
+	 * sec 6.2's key list and its 48dp floor were both true, and that was
+	 * found by measuring rather than by looking, because there was
+	 * nothing to look at.
+	 *
+	 * Every layout, not just the default: they are different key SETS,
+	 * and a row is a thin strip, so the whole catalogue costs five
+	 * pictures of 360x64 and answers "does this layout hold what its
+	 * name promises" in a way no assertion does.
+	 */
+	bssh_emulator key_emulator(80, 24);
+	bssh_input_router key_router(&key_emulator);
+
+	for (const bssh_key_row_layout_t &layout : bssh_key_row_catalog::instance().all()) {
+		bssh_key_row row(&key_router);
+		row.set_layout(layout.id);
+
+		shoot(QStringLiteral("touch-key-row-") + layout.id, &row,
+		       BSSH_PHONE_W, row.sizeHint().height());
+
+		/*
+		 * And the whole row, not the seven keys a phone shows.
+		 *
+		 * This surface's design is that it holds more keys than fit and
+		 * scrolls sideways (sec 6.2), so a 360px picture shows the
+		 * first seven of every layout -- and the first seven of
+		 * "minimal" and of "default" are the same four keys and three
+		 * arrows. Two layouts rendered identically while differing
+		 * entirely, which is a picture answering a question it was not
+		 * asked.
+		 *
+		 * The scroll area's CONTENT at its natural width, the same
+		 * answer the scrolling pages got vertically.
+		 */
+		if (QScrollArea *area = row.findChild<QScrollArea *>()) {
+			if (QWidget *keys = area->widget()) {
+				const QSize was = keys->size();
+				keys->resize(qMin(keys->sizeHint().width(), 3000),
+				              keys->sizeHint().height());
+				QTest::qWait(20);
+
+				const QString path = shot_dir()
+				        + QStringLiteral("/touch-key-row-") + layout.id
+				        + QStringLiteral("-full.png");
+				keys->grab().save(path);
+				QTextStream(stdout)
+				        << QStringLiteral("  %1  every key (%2 wide)\n")
+				                   .arg(path, -44).arg(keys->width());
+
+				keys->resize(was);
+			}
+		}
+	}
 
 	bssh_font_picker picker;
 	shoot(QStringLiteral("touch-font-picker"), &picker, BSSH_PHONE_W, BSSH_PHONE_H);
