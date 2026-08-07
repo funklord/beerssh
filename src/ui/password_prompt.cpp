@@ -50,6 +50,23 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 	m_remember->setEnabled(allow_remember);
 	outer->addWidget(m_remember);
 
+	/*
+	 * All the slack in ONE place, between the question and the buttons.
+	 *
+	 * There was none, and a vertical layout with nowhere to put spare
+	 * height gives it to whichever widget will take it -- here the
+	 * wrapped label, whose policy allows growth. On a phone-sized dialog
+	 * that put roughly 200px of nothing above the label and 250px between
+	 * the label and the field it belongs to, so a question and its answer
+	 * box read as two unrelated things at opposite ends of the screen.
+	 *
+	 * Invisible on the desktop, where the dialog is only as tall as its
+	 * contents and there is no slack to misplace. Found by rendering it
+	 * at 360x640, which is the size it actually appears at on the
+	 * platform that has to type into it.
+	 */
+	outer->addStretch(1);
+
 	QDialogButtonBox *buttons = new QDialogButtonBox(
 	        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
 	outer->addWidget(buttons);

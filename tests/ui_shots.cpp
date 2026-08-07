@@ -264,6 +264,21 @@ void bssh_ui_shots::render_desktop_surfaces() {
 
 	shoot(QStringLiteral("desktop-window"), &window, BSSH_DESKTOP_W, BSSH_DESKTOP_H);
 
+	/*
+	 * And at the size the window SAYS it can be.
+	 *
+	 * It reports a minimum of about 214x77, which cannot be true of a
+	 * thing holding a menu bar, a tab strip, a terminal and a status
+	 * line -- and a minimum that is too small is not a harmless number:
+	 * sec 8.3 records that too-tall content makes Qt squeeze rows past
+	 * their minimums until they draw on top of each other, which is what
+	 * a window manager honouring this figure would produce. Rendered at
+	 * its own claim, so the claim can be looked at rather than trusted.
+	 */
+	const QSize window_floor = window.minimumSizeHint();
+	shoot(QStringLiteral("desktop-window-minimum"), &window,
+	       window_floor.width(), window_floor.height());
+
 	while (shared->count() > 0) shared->close(shared->at(0));
 	bssh_ssh_session::set_factory(nullptr);
 

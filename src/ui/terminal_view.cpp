@@ -625,6 +625,27 @@ void bssh_terminal_view::sync_scrollbar() {
 	m_scrollbar->setValue(history - qBound(0, m_scroll_offset, history));
 }
 
+/*
+ * Twenty by four, and both numbers are arguments rather than taste.
+ *
+ * Twenty columns is about the narrowest that holds a prompt and a short
+ * command without wrapping mid-word; four rows shows the prompt, what was
+ * typed, and two lines of what came back. Below that a window is not a
+ * terminal in any useful sense, and the point of a minimum is to stop the
+ * window becoming something it is not.
+ *
+ * Small enough to constrain nothing that matters: four panes side by side
+ * only happen above sec 8.2's 840dp class, and four twenty-column grids
+ * fit inside that comfortably.
+ */
+static const int BSSH_MIN_GRID_COLS = 20;
+static const int BSSH_MIN_GRID_ROWS = 4;
+
+QSize bssh_terminal_view::minimumSizeHint() const {
+	const QSize wanted = size_for_grid(BSSH_MIN_GRID_COLS, BSSH_MIN_GRID_ROWS);
+	return wanted.isEmpty() ? QWidget::minimumSizeHint() : wanted;
+}
+
 QSize bssh_terminal_view::size_for_grid(int cols, int rows) const {
 	/*
 	 * The exact inverse of recompute_grid below: the inset, and the bar

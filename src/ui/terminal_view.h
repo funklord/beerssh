@@ -102,6 +102,19 @@ public:
 	QSize size_for_grid(int cols, int rows) const;
 
 	/*
+	 * The smallest this is still a terminal (sec 8.2).
+	 *
+	 * The view declared no minimum at all, so Qt gave it zero and the
+	 * window inherited a minimum made entirely of chrome: a menu bar, a
+	 * tab strip and a status line with no terminal between them. Rendered
+	 * at its own claimed minimum the window contained no grid whatever.
+	 * A minimum that small is not a harmless number -- a window manager
+	 * honouring it squeezes rows past their minimums until they draw on
+	 * top of each other, which sec 8.3 already records for other layouts.
+	 */
+	QSize minimumSizeHint() const override;
+
+	/*
 	 * Where this pane's scrollbar sits, or that it has none (sec 8.3).
 	 *
 	 * Konsole's three answers, and the reason it is a real QScrollBar
