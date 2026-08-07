@@ -107,9 +107,17 @@ bssh_licences_view::bssh_licences_view(QWidget *parent)
 	if (touch) {
 		/* A full-screen page needs its own way out (sec 8.5). */
 		QPushButton *back = new QPushButton(QStringLiteral("Back"), this);
-		back->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 		connect(back, &QPushButton::clicked, this, &bssh_licences_view::back_requested);
 		outer->addWidget(back);
+
+		/*
+		 * Including the LIST, whose rows are what a finger taps to pick
+		 * a licence and which stood 17dp -- a third of sec 6.2's floor.
+		 * Nothing caught it because rows are not widgets: every check
+		 * that looks for child widgets walks straight past them, and it
+		 * took rendering the page to see it.
+		 */
+		bssh_apply_touch_heights(this, true);
 	}
 }
 

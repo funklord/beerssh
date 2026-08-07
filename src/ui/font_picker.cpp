@@ -211,10 +211,21 @@ void bssh_font_picker::set_font_choice(const QString &id, int point_size) {
 }
 
 void bssh_font_picker::set_touch_sized(bool touch) {
-	const int height = touch ? BSSH_TOUCH_TARGET_DP : 0;
-	m_family->setMinimumHeight(height);
-	m_size->setMinimumHeight(height);
-	m_scheme->setMinimumHeight(height);
+	/*
+	 * The walk rather than three named controls, so that this picker
+	 * grows a fourth without also having to be told about it -- and so
+	 * that the rows of the popups these combo boxes drop down get the
+	 * floor as well. Those stood 25dp: what a finger taps when choosing
+	 * a font is a row in a list, not the closed box.
+	 */
+	bssh_apply_touch_heights(this, touch);
+
+	/* Back to the style's own size when touch is turned off again. */
+	if (touch) return;
+
+	m_family->setMinimumHeight(0);
+	m_size->setMinimumHeight(0);
+	m_scheme->setMinimumHeight(0);
 }
 
 QString bssh_font_picker::scheme_id() const {

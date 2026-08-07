@@ -1,4 +1,5 @@
 #include <QAbstractButton>
+#include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QLineEdit>
 #include <QKeySequenceEdit>
@@ -427,7 +428,13 @@ QString overflowing_child(const QWidget *root)
 	return QString();
 }
 
-void check_fits(const QString &name, QWidget *widget)
+/*
+ * `sideways` is for the one surface whose design IS horizontal scrolling:
+ * sec 6.2's key row, whose keys must run past the edge rather than shrink
+ * under the touch floor. Every other surface is a form, and a form that
+ * scrolls sideways on a phone is a form nobody reads.
+ */
+void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 {
 	widget->resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	widget->show();
@@ -460,6 +467,78 @@ void check_fits(const QString &name, QWidget *widget)
 
 	const QString overflow = overflowing_child(widget);
 	QVERIFY2(overflow.isEmpty(), qPrintable(QStringLiteral("%1: %2").arg(name, overflow)));
+
+	/*
+	 * A page may scroll DOWN. It may not scroll sideways.
+	 *
+	 * The overflow walk above skips whatever is inside a scroll area,
+	 * because a scroll area's content legitimately IS taller than its
+	 * viewport (sec 6.2) -- and that exemption was hiding a form wider
+	 * than the phone it is drawn on. The settings page came out with its
+	 * notes cut mid-word and its combo boxes running off the right edge,
+	 * and every width assertion here passed while it did.
+	 *
+	 * So the exemption is for HEIGHT only: a scroll area's content has to
+	 * fit the width it was given, or the user is reading a form through a
+	 * letterbox.
+	 */
+	/*
+	 * A list's ROWS are tapped, and they are not widgets -- so the walk
+	 * above cannot see them and the licences list stood at 17dp rows,
+	 * a third of the floor, with every check passing.
+	 */
+	for (QAbstractItemView *view : widget->findChildren<QAbstractItemView *>()) {
+		if (view->model() == nullptr || view->model()->rowCount() < 1) continue;
+
+		QString complaint = QStringLiteral(
+			"%1: a %2 has %3dp rows, and sec 6.2's floor is %4 -- "
+			"a row is tapped, so it is a target like any other");
+		complaint = complaint.arg(name);
+		complaint = complaint.arg(QString::fromLatin1(view->metaObject()->className()));
+		complaint = complaint.arg(view->sizeHintForRow(0)).arg(BSSH_TOUCH_TARGET_DP);
+
+		QVERIFY2(view->sizeHintForRow(0) >= BSSH_TOUCH_TARGET_DP, qPrintable(complaint));
+	}
+
+	for (QScrollArea *area : widget->findChildren<QScrollArea *>()) {
+		QWidget *content = area->widget();
+		if (!content || sideways) continue;
+
+		const int room = area->viewport()->width();
+		const int wanted = content->minimumSizeHint().width();
+
+		/*
+		 * Name the widest thing on the page, because the number alone
+		 * sends the reader hunting: a form is one column of labels and
+		 * one of fields, and which widget is asking is the whole answer.
+		 */
+		QString widest;
+		int widest_px = 0;
+
+		for (QWidget *child : content->findChildren<QWidget *>()) {
+			if (child->isHidden()) continue;
+
+			const int needs = child->minimumSizeHint().width();
+			if (needs <= widest_px) continue;
+
+			widest_px = needs;
+			widest = QString::fromLatin1(child->metaObject()->className());
+
+			const QString label = child->property("text").toString();
+			if (!label.isEmpty()) {
+				widest += QStringLiteral(" \"") + label.left(40) + QLatin1Char('"');
+			}
+		}
+
+		QString complaint = QStringLiteral(
+			"%1: the page inside its scroll area wants %2px of %3 -- "
+			"a form that scrolls sideways on a phone is a form nobody "
+			"reads. The widest thing on it is %4, asking %5px");
+		complaint = complaint.arg(name).arg(wanted).arg(room);
+		complaint = complaint.arg(widest).arg(widest_px);
+
+		QVERIFY2(wanted <= room, qPrintable(complaint));
+	}
 
 	/*
 	 * And every control on it can be hit (sec 6.2's floor).
@@ -1420,7 +1499,13 @@ void layout_test::the_key_row_fits_a_phone() {
 	for (const bssh_key_row_layout_t &layout : catalog.all()) {
 		bssh_key_row row(&router);
 		row.set_layout(layout.id);
-		check_fits(QStringLiteral("key row: ") + layout.id, &row);
+		/*
+		 * Sideways is this one surface's whole design (sec 6.2): its
+		 * keys run past the edge and scroll, because shrinking them
+		 * under the touch floor would make a key nobody can hit -- and
+		 * the assertions below check exactly that they DO run past.
+		 */
+		check_fits(QStringLiteral("key row: ") + layout.id, &row, true);
 	}
 
 	/*

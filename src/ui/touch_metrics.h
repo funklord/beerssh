@@ -57,6 +57,16 @@ void bssh_apply_touch_height(QWidget *widget, bool touch);
  * switch, a number you step. Labels are read rather than hit. Anything
  * INSIDE one of those is that control's own business -- a spin box holds
  * a line edit, and the thing being aimed at is the outer one.
+ *
+ * A LIST is walked too, and it has to be: its rows are tapped and they
+ * are not widgets, so nothing that looks for child widgets can see them.
+ * The licences list came out with 17dp rows on a phone for exactly that
+ * reason -- every check passed, and the picture showed a column nobody
+ * could hit. Rows get the floor through an item delegate rather than a
+ * stylesheet, so it composes with the stylesheet a list may already have
+ * (the host list draws its own separators with one), and a row that
+ * carries its own size hint still wins -- sec 8.5's 64dp host rows are
+ * taller than the floor on purpose.
  */
 void bssh_apply_touch_heights(QWidget *root, bool touch);
 

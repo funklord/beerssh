@@ -716,6 +716,27 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
   the 42 was its frame — you aim at the outer control — so the check skips
   anything nested inside another target, walking the whole ancestor chain
   rather than testing one parent.
+- **A row is a target, and a form must fit the width it is given.** Two
+  defects that no check could have caught, both found by looking at the
+  screenshots. The **licences list stood at 17dp rows** and the combo boxes'
+  **dropdowns at 25dp**: rows are not widgets, so everything that looks for
+  child widgets walks straight past them, and a combo builds its popup lazily
+  so it does not exist when a form is constructed. Rows take the floor from an
+  item delegate, which composes with the stylesheet a list may already carry
+  (§8.5's host list draws its separators with one) and leaves its deliberately
+  taller 64dp rows alone.
+  **And the settings page did not fit a phone** — 386px of a 346px screen, its
+  notes cut mid-word — while every width assertion passed, because
+  `check_fits` skips whatever is inside a `QScrollArea`. That exemption exists
+  for the key row's scrolling content and was hiding a form wider than the
+  screen; it is a *height* exemption now. A page may scroll down. A form that
+  scrolls sideways on a phone is a form nobody reads, and the key row is the
+  one exception because sideways is its whole design.
+  **The cause was an empty label**: `addRow(QString(), widget)` reserves the
+  label column's width — 145px — for nothing, next to a checkbox asking 241.
+  Every checkbox and every note on that page had been paying it. The check
+  names the widest widget now, because a number on its own sends the reader
+  hunting; it was what turned two wrong guesses into the answer.
 - **Hidden by default on desktop, but not `#ifdef`-ed out.** Gate it on
   "touch-primary input", not on the OS — a convertible laptop in tablet mode and
   an Android device with a Bluetooth keyboard are the two cases an OS check gets

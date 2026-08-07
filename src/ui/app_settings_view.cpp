@@ -69,7 +69,6 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_key_row->addItem(QStringLiteral("Automatic"), int(bssh_app_settings::KEY_ROW_AUTO));
 	m_key_row->addItem(QStringLiteral("Always show"), int(bssh_app_settings::KEY_ROW_ALWAYS));
 	m_key_row->addItem(QStringLiteral("Never show"), int(bssh_app_settings::KEY_ROW_NEVER));
-	bssh_apply_touch_height(m_key_row, touch);
 
 	form->addRow(QStringLiteral("On-screen keys"), m_key_row);
 
@@ -86,11 +85,22 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * in tablet mode and a tablet with a keyboard docked wrong in
 	 * opposite directions.
 	 */
+	/*
+	 * addRow(widget) rather than addRow(QString(), widget): a row with no
+	 * label SPANS both columns, where an empty label reserves the label
+	 * column's width for nothing.
+	 *
+	 * That waste is what pushed this page off a phone. The paste warning's
+	 * checkbox asks 241px, the label column costs 145, and 386 of a 346px
+	 * screen put every note beside it off the right edge -- a form nobody
+	 * could read, on the one layout built for a thumb. Every checkbox and
+	 * every note on this page had been paying it.
+	 */
 	QLabel *note = bssh_wrapped_note(
 	        QStringLiteral("Automatic shows the key row when touch is this device's main "
 	                        "input. Override it if you have a keyboard attached to a "
 	                        "tablet, or a touchscreen on a laptop."), this);
-	form->addRow(QString(), note);
+	form->addRow(note);
 
 	/*
 	 * Light/dark, defaulting to whatever the desktop is asking for
@@ -102,7 +112,6 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_theme->addItem(QStringLiteral("Follow the system"), QStringLiteral("system"));
 	m_theme->addItem(QStringLiteral("Light"), QStringLiteral("light"));
 	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
-	bssh_apply_touch_height(m_theme, touch);
 	form->addRow(QStringLiteral("Appearance"), m_theme);
 
 	/*
@@ -133,7 +142,6 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                      int(bssh_app_settings::SCROLLBAR_LEFT));
 	m_scrollbar->addItem(QStringLiteral("Hidden"),
 	                      int(bssh_app_settings::SCROLLBAR_HIDDEN));
-	bssh_apply_touch_height(m_scrollbar, touch);
 	form->addRow(QStringLiteral("Scrollbar"), m_scrollbar);
 
 	QLabel *scrollbar_note = bssh_wrapped_note(
@@ -141,7 +149,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "with. How much there is to scroll through is the host's "
 	                        "own setting."),
 	        this);
-	form->addRow(QString(), scrollbar_note);
+	form->addRow(scrollbar_note);
 
 	/*
 	 * What the status line says, or that it says nothing (sec 8.4). It
@@ -151,11 +159,23 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_status_line = new QComboBox(this);
 	m_status_line->addItem(QStringLiteral("Session and state"),
 	                        int(bssh_app_settings::STATUS_LINE_SESSION));
-	m_status_line->addItem(QStringLiteral("Everything, including the grid size"),
+	m_status_line->addItem(QStringLiteral("Everything"),
 	                        int(bssh_app_settings::STATUS_LINE_FULL));
 	m_status_line->addItem(QStringLiteral("Hidden"),
 	                        int(bssh_app_settings::STATUS_LINE_OFF));
-	bssh_apply_touch_height(m_status_line, touch);
+
+	/*
+	 * A combo box asks for the width of its widest item, and a phone form
+	 * has no width to spare: "Everything, including the grid size" read
+	 * well and dragged the whole page 40px past the screen, which put the
+	 * notes beside it off the right edge. What the choices mean belongs in
+	 * the note below, which wraps; the item labels stay short.
+	 */
+	QLabel *status_note = bssh_wrapped_note(
+	        QStringLiteral("Everything adds the terminal's size in cells and which "
+	                        "windowing system this build is using."),
+	        this);
+	form->addRow(status_note);
 	form->addRow(QStringLiteral("Status line"), m_status_line);
 
 	/*
@@ -166,7 +186,6 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	m_window_title = new QLineEdit(this);
 	m_window_title->setPlaceholderText(QStringLiteral("%t - BeerSSH"));
-	bssh_apply_touch_height(m_window_title, touch);
 	form->addRow(QStringLiteral("Window title"), m_window_title);
 
 	QLabel *title_note = bssh_wrapped_note(
@@ -174,7 +193,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "%u the user, %h the host, %p the port, %a this app. "
 	                        "Empty means the default."),
 	        this);
-	form->addRow(QString(), title_note);
+	form->addRow(title_note);
 
 	m_context_menu = new QComboBox(this);
 	m_context_menu->addItem(QStringLiteral("Automatic"),
@@ -183,7 +202,6 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                         int(bssh_app_settings::CONTEXT_MENU_DESKTOP));
 	m_context_menu->addItem(QStringLiteral("Touch-sized"),
 	                         int(bssh_app_settings::CONTEXT_MENU_TOUCH));
-	bssh_apply_touch_height(m_context_menu, touch);
 	form->addRow(QStringLiteral("Terminal menu"), m_context_menu);
 
 	/*
@@ -202,8 +220,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		                        "the recent-apps thumbnail. That thumbnail is a picture of "
 		                        "whatever was last on screen, which here is your shell. It "
 		                        "stops you screenshotting the terminal too."));
-		bssh_apply_touch_height(m_hide_from_screenshots, touch);
-		form->addRow(QString(), m_hide_from_screenshots);
+		form->addRow(m_hide_from_screenshots);
 	}
 
 	/*
@@ -221,7 +238,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		                        "gives it the keyboard without clicking. Off by default: "
 		                        "it surprises anyone expecting click-to-focus, and the "
 		                        "cost of that surprise is typing into the wrong shell."));
-		form->addRow(QString(), m_focus_follows_mouse);
+		form->addRow(m_focus_follows_mouse);
 	}
 
 	/*
@@ -231,14 +248,13 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	m_warn_multiline_paste = new QCheckBox(
 	        QStringLiteral("Ask before pasting more than one line"), this);
-	bssh_apply_touch_height(m_warn_multiline_paste, touch);
-	form->addRow(QString(), m_warn_multiline_paste);
+	form->addRow(m_warn_multiline_paste);
 
 	QLabel *paste_note = bssh_wrapped_note(
 	        QStringLiteral("A newline in a paste is Enter to the shell, so every line "
 	                        "but the last runs before you can read it."),
 	        this);
-	form->addRow(QString(), paste_note);
+	form->addRow(paste_note);
 
 	m_caps_as_ctrl = new QCheckBox(QStringLiteral("Caps Lock sends Ctrl"), this);
 	m_caps_as_ctrl->setToolTip(
@@ -246,16 +262,14 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "Your system still toggles its own caps lock -- no application "
 	                        "can prevent that -- so a permanent swap belongs in your "
 	                        "keyboard layout instead."));
-	bssh_apply_touch_height(m_caps_as_ctrl, touch);
-	form->addRow(QString(), m_caps_as_ctrl);
+	form->addRow(m_caps_as_ctrl);
 
 	m_raise_contrast = new QCheckBox(QStringLiteral("Raise low-contrast colours"), this);
 	m_raise_contrast->setToolTip(
 	        QStringLiteral("Colour schemes are reproduced exactly, and some of them are hard "
 	                        "to read. This lifts a colour only while drawing it, and only when "
 	                        "it falls below the readable minimum."));
-	bssh_apply_touch_height(m_raise_contrast, touch);
-	form->addRow(QString(), m_raise_contrast);
+	form->addRow(m_raise_contrast);
 
 	/*
 	 * Where stored passwords actually live (sec 11), stated rather than
@@ -320,7 +334,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		}
 
 		QLabel *backend_note = bssh_wrapped_note(detail, this);
-		form->addRow(QString(), backend_note);
+		form->addRow(backend_note);
 	}
 
 	body->addLayout(form);
@@ -369,7 +383,6 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		edit->setKeySequence(QKeySequence(bound.has_chord(name) ? bound.chord(name)
 		                                                         : chord.label,
 		                                   QKeySequence::PortableText));
-		bssh_apply_touch_height(edit, touch);
 
 		connect(edit, &QKeySequenceEdit::editingFinished, this, [this, name, edit] {
 			bssh_app_settings stored;
@@ -397,7 +410,6 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 
 	if (touch) {
 		QPushButton *back = new QPushButton(QStringLiteral("Back"), this);
-		back->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 		connect(back, &QPushButton::clicked, this, &bssh_app_settings_view::back_requested);
 
 		/*
@@ -463,6 +475,18 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] { commit(); });
 	connect(m_warn_multiline_paste, &QCheckBox::toggled, this, [this] { commit(); });
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
+
+	/*
+	 * The floor, once, for everything on the page (sec 6.2).
+	 *
+	 * It was eleven `if (touch) x->setMinimumHeight(...)` lines, which is
+	 * the shape that keeps going wrong here -- the preset editor's
+	 * fourteen-item list missed two controls in turn. It also missed what
+	 * no per-widget line could reach: the rows of the popups these combo
+	 * boxes drop down, which stood 25dp. What a finger taps when choosing
+	 * a setting is a row in a list, not the closed box.
+	 */
+	bssh_apply_touch_heights(this, touch);
 }
 
 void bssh_app_settings_view::commit() {

@@ -195,6 +195,14 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 		emit save_requested(edited);
 	});
 	connect(cancel, &QPushButton::clicked, this, &bssh_host_editor::cancelled);
+
+	/*
+	 * The floor, for everything on the page at once (sec 6.2). This form
+	 * is touch-only -- the desktop reaches the same profile through the
+	 * PuTTY-shaped dialog (sec 8.5) -- so there is no condition to ask.
+	 */
+	bssh_apply_touch_heights(this, true);
+
 }
 
 void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
