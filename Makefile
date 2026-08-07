@@ -146,6 +146,41 @@ HEADERS = $(wildcard src/*.h src/*/*.h)
 # The submodule is upstream, untouched, and stays that way -- vendored code
 # keeps its own style and its own history (code-style.md).
 VTERM_DIR  = vterm
+
+# A missing submodule is fetched rather than complained about, and this
+# has to happen while the Makefile is being READ.
+#
+# VTERM_SRCS below is a wildcard, and a wildcard is expanded at parse
+# time. A checkout done from a recipe would therefore come too late for
+# the run that needed it: the source list would still be empty, and make
+# would go on to build an archive with no members in it. So the fetch
+# is a parse-time $(shell), placed above the wildcard that depends on it.
+#
+# An ordinary build pays nothing for this. The $(wildcard) test below
+# spawns no process, so the shell runs only in a tree that actually lacks
+# the submodule -- once, and then never again.
+#
+# Targets that cannot need libvterm are excluded, because a style check
+# has no business reaching the network. Goals not on this list are
+# assumed to need it, which is the safe direction: the cost of being
+# wrong is one unnecessary fetch, against a build that fails.
+BSSH_VTERM_FREE_GOALS = help style hooks clean veryclean version-check
+
+ifneq ($(filter-out $(BSSH_VTERM_FREE_GOALS),$(or $(MAKECMDGOALS),all)),)
+ifeq ($(wildcard $(VTERM_DIR)/src/vterm.c),)
+BSSH_VTERM_FETCH := $(shell \
+	if [ ! -e .git ]; then \
+		echo "make: $(VTERM_DIR)/ is empty and this is not a git checkout," >&2; \
+		echo "make:   so there is nothing to fetch it from." >&2; \
+	elif ! command -v git >/dev/null 2>&1; then \
+		echo "make: $(VTERM_DIR)/ is empty and git is not installed." >&2; \
+	else \
+		echo "make: fetching the $(VTERM_DIR) submodule" >&2; \
+		git submodule update --init --recursive $(VTERM_DIR) >&2; \
+	fi)
+endif
+endif
+
 VTERM_SRCS = $(wildcard $(VTERM_DIR)/src/*.c)
 VTERM_OBJS = $(patsubst $(VTERM_DIR)/src/%.c,$(VTERM_BUILD_DIR)/%.o,$(VTERM_SRCS))
 VTERM_BUILD_DIR = build-vterm
@@ -284,18 +319,38 @@ $(VTERM_BUILD_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
 	@mkdir -p $(VTERM_BUILD_DIR)
 	$(CC) $(VTERM_CFLAGS) -c $< -o $@
 
+# A missing submodule is the one failure worth catching by hand, and the
+# guard that used to sit here could not do it.
+#
+# It hung off $(VTERM_SRCS), which comes from a wildcard: when the
+# submodule is absent that list is EMPTY, so the rule had no targets and
+# never fired -- a check over an empty file list, which reports success
+# exactly as loudly as a real pass. With the submodule present the list
+# holds only files that already exist, so it could not fire then either.
+# It was dead in both directions.
+#
+# The empty list does something worse than nothing, though: it strips this
+# rule's prerequisites, and a rule with none fires whenever its target is
+# missing. So make ran `ar rcs build-vterm/libvterm.a` with no members, and
+# nothing had created the directory either, giving
+#
+#     ar: build-vterm/libvterm.a: No such file or directory
+#
+# which names neither the submodule nor the fix. The check therefore lives
+# in the recipe, where it runs whether or not the list is empty, and the
+# mkdir is here rather than only in the object rule, which does not run
+# when there are no objects to build.
 $(VTERM_LIB): $(VTERM_OBJS)
-	$(AR) rcs $@ $(VTERM_OBJS)
-
-# A missing submodule is the one failure worth catching by hand: without
-# this, make reports "no rule to make target vterm/src/vterm.c" at whoever
-# forgot --recurse-submodules, which names the symptom and not the fix.
-$(VTERM_SRCS):
-	@if [ ! -f $(VTERM_DIR)/src/vterm.c ]; then \
-		echo "make: the vterm submodule is not checked out."; \
-		echo "make:   run: git submodule update --init"; \
+	@mkdir -p $(VTERM_BUILD_DIR)
+	@if [ -z "$(strip $(VTERM_OBJS))" ]; then \
+		echo "make: there are no $(VTERM_DIR) sources to put in $@."; \
+		echo "make:   The submodule is fetched automatically when it is"; \
+		echo "make:   missing, so reaching here means that failed -- no"; \
+		echo "make:   network, or not a git checkout. Recover it with:"; \
+		echo "make:     git submodule update --init"; \
 		exit 1; \
 	fi
+	$(AR) rcs $@ $(VTERM_OBJS)
 
 $(BUILD_DIR)/Makefile: beerssh.pro
 	mkdir -p $(BUILD_DIR)
@@ -835,6 +890,7 @@ deb: version-check
 	dpkg-buildpackage -b -us -uc
 	@mkdir -p $(BUILD_DIR)
 	@for f in ../beerssh_$(VERSION)_*.deb ../beerssh-fonts_$(VERSION)_all.deb \
+	          ../beerssh-dbgsym_$(VERSION)_*.deb \
 	          ../beerssh_$(VERSION)_*.buildinfo ../beerssh_$(VERSION)_*.changes; do \
 		[ -e "$$f" ] && mv -f "$$f" $(BUILD_DIR)/ || true; \
 	done

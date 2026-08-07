@@ -254,9 +254,11 @@ for months only because the CI runner image happened to carry it, which
 fails one image update later, with a pkg-config error that reports the
 library and not the fix.
 
-libvterm is vendored as a submodule and built from source, so clone with
-`--recurse-submodules` (or run `git submodule update --init`). The build
-applies the patches in `vterm-patches/` to it; `make veryclean` reverts
+libvterm is vendored as a submodule and built from source. **You do not
+have to remember `--recurse-submodules`** — a build that needs libvterm
+and cannot find it fetches the submodule itself, once. `make style` and
+the other targets that do not need it never reach the network. The build
+then applies the patches in `vterm-patches/`; `make veryclean` reverts
 them. See `project.md` §7.1 for what they fix and why they are not
 committed into the submodule.
 
@@ -287,8 +289,7 @@ version from `VERSION`, and collects two into `build/`:
   back to the system monospace fonts and still runs.
 
 debhelper also emits **`beerssh-dbgsym`**, the detached debug symbols,
-which `make deb` does not collect — it is left beside the source tree
-rather than in `build/`.
+collected into `build/` alongside the other two.
 
 `debian/control` is where the build-time list above is declared, and it
 must stay in step with `beerssh.pro`'s `PKGCONFIG` lines. **Runtime
