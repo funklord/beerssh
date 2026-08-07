@@ -153,6 +153,9 @@ public:
 	 */
 	void show_front_door();
 
+	/* Puts it away without touching whatever is behind it. */
+	void hide_front_door();
+
 	/*
 	 * Imports the preset file this app was launched to open, if any
 	 * (sec 10.5). Called by main() rather than from the constructor, and
@@ -492,6 +495,7 @@ private:
 	void elide_status();
 
 	QStackedWidget *m_pages;
+	bool m_front_door_up;
 	QMenuBar *m_menu_bar;
 	QWidget *m_tab_row;
 	QList<QAction *> m_session_actions;

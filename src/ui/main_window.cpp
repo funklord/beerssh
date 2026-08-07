@@ -100,6 +100,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_key_row(nullptr),
       m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
       m_window_title_format(QStringLiteral("%t - BeerSSH")),
+      m_front_door_up(false),
       m_menu_bar(nullptr),
       m_tab_row(nullptr),
       m_copy_action(nullptr),
@@ -448,7 +449,10 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	} else {
 		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
 		connect(m_session_dialog, &bssh_session_dialog::open_requested,
-		         this, &bssh_main_window::open_profile);
+		         this, [this](const bssh_profile_t &profile) {
+			open_profile(profile);
+			hide_front_door();
+		});
 		/*
 		 * Cancel means "I am done with the settings", not "throw away
 		 * my work". Wired straight to close() it took the window and
@@ -470,11 +474,15 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 * reachable mid-session.
 		 */
 		connect(m_session_dialog, &bssh_session_dialog::cancelled, this, [this] {
-			if (m_shown.isEmpty()) {
-				close();
-				return;
-			}
-			m_pages->setCurrentWidget(m_terminal_page);
+			hide_front_door();
+
+			/*
+			 * With nothing behind it, declining the front door still
+			 * means "do not start" -- the startup case the original
+			 * close() was written for, and the only one it was ever
+			 * right about.
+			 */
+			if (m_shown.isEmpty()) close();
 		});
 
 		/*
@@ -488,7 +496,27 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		         this, &bssh_main_window::reresolve_sessions);
 		connect(m_session_dialog, &bssh_session_dialog::device_settings_changed,
 		         this, &bssh_main_window::apply_device_settings);
-		m_pages->addWidget(m_session_dialog);
+		/*
+		 * A WINDOW, not a page in the same stack as the terminal.
+		 *
+		 * As a page it produced both halves of one complaint. Leaving
+		 * it closed the window and every live session in it, because
+		 * "done with the settings" and "done with the app" were the
+		 * same gesture. And a window could exist containing nothing but
+		 * configuration, because the stack was happy to show that --
+		 * so the app stayed running with no terminal in it, which is
+		 * the opposite failure from the same cause.
+		 *
+		 * As a window neither is expressible: closing it cannot reach
+		 * the terminal, and a main window is a terminal by
+		 * construction. Parented to this one so it stays associated
+		 * with it and is destroyed with it, but Qt::Window so it gets
+		 * its own frame, its own place in the task bar and its own
+		 * close button.
+		 */
+		m_session_dialog->setParent(this, Qt::Window);
+		m_session_dialog->setWindowTitle(QStringLiteral("BeerSSH Configuration"));
+		m_session_dialog->hide();
 	}
 
 	m_pages->addWidget(m_terminal_page);
@@ -709,7 +737,20 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	if (launch.is_valid()) {
 		m_pages->setCurrentWidget(m_terminal_page);
 		open_profile(launch);
+		return;
 	}
+
+	/*
+	 * No target named, so this window opens on the front door.
+	 *
+	 * Recorded here and acted on in showEvent(). It used to happen by
+	 * accident: the front door was the stack's first page, so a window
+	 * with nothing else in it showed one without anybody saying so. Now
+	 * that the desktop's is a window of its own, the intent has to be
+	 * stated -- and the two tests that guard "the app must not open
+	 * straight into an empty terminal" are what caught its absence.
+	 */
+	show_front_door();
 }
 
 /*
@@ -941,6 +982,18 @@ void bssh_main_window::show_session(bssh_session *session) {
 	m_pages->setCurrentWidget(m_terminal_page);
 
 	/*
+	 * And on desktop the front door is a WINDOW, so bringing the terminal
+	 * to the front means putting that away too -- a page swap does
+	 * nothing to a separate window sitting over it.
+	 *
+	 * The comment above records this exact bug in its page-stack form: a
+	 * window made by tearing out a tab came up showing the front door
+	 * with its session behind it. The same mistake is available again in
+	 * a new shape, which is what a structural change buys you.
+	 */
+	hide_front_door();
+
+	/*
 	 * The window no longer attaches a view to a session: it says which
 	 * sessions should be on screen, and the pane container builds the
 	 * views for them. That indirection is the whole of M8 -- one pane or
@@ -1000,6 +1053,16 @@ void bssh_main_window::showEvent(QShowEvent *event) {
 	 * null until the window is created, so a connection made earlier is a
 	 * connection to nothing -- and one made on every show would stack up.
 	 */
+	/*
+	 * The front door, if the constructor decided this window opens on one
+	 * (sec 8.5). Here rather than there, so that constructing a window
+	 * never puts anything on screen.
+	 */
+	if (m_front_door_up && m_session_dialog && !m_session_dialog->isVisible()) {
+		m_session_dialog->show();
+		m_session_dialog->raise();
+	}
+
 	if (m_screen_watched || !windowHandle()) return;
 
 	m_screen_watched = true;
@@ -2217,7 +2280,28 @@ void bssh_main_window::show_front_door() {
 		m_pages->setCurrentWidget(m_host_list);
 		return;
 	}
-	if (m_session_dialog) m_pages->setCurrentWidget(m_session_dialog);
+	if (!m_session_dialog) return;
+
+	/*
+	 * The intent is recorded whether or not this window is on screen yet,
+	 * and the showing happens in showEvent(). A constructor that put a
+	 * window on screen would be the same mistake open_default_session()
+	 * and import_launch_document() were moved out of the constructor to
+	 * avoid: building a widget tree is not running a program, and the
+	 * fifteen windows the suite constructs have no business opening
+	 * anything.
+	 */
+	m_front_door_up = true;
+	if (!isVisible()) return;
+
+	m_session_dialog->show();
+	m_session_dialog->raise();
+	m_session_dialog->activateWindow();
+}
+
+void bssh_main_window::hide_front_door() {
+	m_front_door_up = false;
+	if (m_session_dialog) m_session_dialog->hide();
 }
 
 /*
@@ -2657,6 +2741,14 @@ QSize bssh_main_window::size_for_grid(int cols, int rows) {
 }
 
 bool bssh_main_window::showing_front_door() const {
+	/*
+	 * Two shapes, one question. On touch the front door is a page in the
+	 * stack; on desktop it is a window of its own, and a window that has
+	 * been asked for but not yet shown -- this window not being on screen
+	 * either -- still counts, because the question is what the user is
+	 * being offered rather than what the compositor has drawn.
+	 */
+	if (m_session_dialog) return m_front_door_up;
 	return m_pages->currentWidget() != m_terminal_page;
 }
 

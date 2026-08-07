@@ -2036,9 +2036,34 @@ acquired a second meaning.
 **And the same page-shaped front door lets a window exist with no terminal
 in it at all** — the converse complaint, from the same structure. A desktop
 window is supposed to *be* a terminal; the configuration living inside its
-stack is what allows a window that is only settings. Making the desktop
-configuration a window of its own (below) settles both directions at once,
-and the Cancel rule above survives it for the startup case.
+stack is what allows a window that is only settings.
+
+**[BUILT] So on desktop the configuration is a window of its own**, and that
+settles both directions at once. Closing it cannot reach the terminal, and a
+main window is a terminal by construction — neither failure is expressible any
+more, rather than each being guarded against. It is parented to the main window
+with `Qt::Window`, so it stays associated with it and is destroyed with it
+while getting its own frame, its own task-bar entry and its own close button.
+Touch keeps its page and its Back, which was never the shape with the problem.
+
+The Cancel rule above survives intact for the startup case: with nothing behind
+it, declining the front door still means "do not start".
+
+**The constructor still puts nothing on screen.** It records the intent and
+`showEvent()` does the showing — the same rule that moved
+`open_default_session()` and `import_launch_document()` out of the constructor,
+for the same reason: building a widget tree is not running a program, and the
+fifteen windows the suite constructs have no business opening anything.
+
+**Two things broke on the way, and both were caught by tests written for the
+page-shaped version of the same bug.** The window used to open on the front
+door *by accident* — it was the stack's first page, so a window with nothing
+else in it showed one without anybody saying so; stated explicitly now. And
+bringing the terminal forward stopped working, because a page swap does
+nothing to a separate window sitting over it — which is the tear-out bug this
+section already records, arriving again in a new shape. That is what a
+structural change buys: the old mistakes become impossible and their
+neighbours become available.
 
 **Opened by `main()`, never by the constructor.** Doing it in the constructor
 forked a real shell for every `bssh_main_window` anything built — the fifteen
