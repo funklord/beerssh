@@ -10,8 +10,8 @@
 bssh_input_router::bssh_input_router(bssh_emulator *emulator, QObject *parent)
     : QObject(parent),
       m_emulator(emulator),
-      m_sticky(bssh_emulator::MOD_NONE),
-      m_caps_as_ctrl(false) {
+      m_caps_as_ctrl(false),
+      m_sticky(bssh_emulator::MOD_NONE) {
 }
 
 quint8 bssh_input_router::modifiers_for(QKeyEvent *event) const {
