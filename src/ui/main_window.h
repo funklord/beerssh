@@ -13,7 +13,9 @@
 #include "input/input_router.h"
 #include "ssh/ssh_session.h"
 
+class QAction;
 class QLabel;
+class QMenuBar;
 class QTabBar;
 class QStackedWidget;
 class QDragEnterEvent;
@@ -363,6 +365,14 @@ private:
 	void show_terminal_menu(const QPoint &at);
 	void show_tab_menu(const QPoint &at);
 
+	/*
+	 * The desktop menu bar (sec 8.3). Built once and kept, so that
+	 * refresh_menu_bar() can re-label the shortcuts when a chord is
+	 * rebound and enable or disable the items as the session changes.
+	 */
+	void build_menu_bar();
+	void refresh_menu_bar();
+
 	/* The session behind a tab of THIS window, or null (sec 8.4). */
 	bssh_session *session_at_tab(int index) const;
 
@@ -482,6 +492,13 @@ private:
 	void elide_status();
 
 	QStackedWidget *m_pages;
+	QMenuBar *m_menu_bar;
+	QWidget *m_tab_row;
+	QList<QAction *> m_session_actions;
+	QAction *m_copy_action;
+	QAction *m_paste_action;
+	QAction *m_split_action;
+	QAction *m_detach_action;
 	QWidget *m_terminal_page;
 	bssh_profile_store *m_profile_store;
 	bssh_session_dialog *m_session_dialog;

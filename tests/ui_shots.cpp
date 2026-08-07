@@ -18,6 +18,10 @@
 #include "ui/password_prompt.h"
 #include "ui/colour_editor.h"
 #include "ui/preset_editor.h"
+#include "fake_ssh_session.h"
+#include "model/session.h"
+#include "model/session_registry.h"
+#include "ui/main_window.h"
 #include "term/emulator.h"
 #include "term/font_catalog.h"
 #include "ui/session_dialog.h"
@@ -194,6 +198,37 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	bssh_preset_editor presets(&store, bssh_preset_editor::DESKTOP);
 	shoot(QStringLiteral("desktop-preset-editor"), &presets,
 	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+
+	/*
+	 * The assembled WINDOW, which nothing rendered until now -- every
+	 * desktop shot above is one widget on its own. So the menu bar, the
+	 * tab strip and its "+" button, the terminal and the status line had
+	 * never been seen together, which is the arrangement a user actually
+	 * meets and the only place their spacing can be judged.
+	 *
+	 * Two sessions, because one hides the tab strip: a shot of a window
+	 * with its tab bar deliberately absent says nothing about the tab
+	 * bar.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		return new bssh_fake_ssh_session(parent);
+	});
+
+	bssh_main_window window;
+	window.adopt_session(window.registry()->create(sample_profile()));
+
+	bssh_profile_t second = sample_profile();
+	second.name = QStringLiteral("web front end");
+	second.host = QStringLiteral("web.internal.example.com");
+	window.adopt_session(window.registry()->create(second));
+
+	shoot(QStringLiteral("desktop-window"), &window, BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+	bssh_ssh_session::set_factory(nullptr);
 
 	/*
 	 * The custom palette editor (sec 9.3). Shot at its own size rather

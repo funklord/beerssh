@@ -27,6 +27,9 @@
 #include <QWindow>
 #include <QScreen>
 #include <QLayout>
+#include <QMenuBar>
+#include <QToolButton>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 
 #include <QStackedWidget>
@@ -97,6 +100,12 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_key_row(nullptr),
       m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
       m_window_title_format(QStringLiteral("%t - BeerSSH")),
+      m_menu_bar(nullptr),
+      m_tab_row(nullptr),
+      m_copy_action(nullptr),
+      m_paste_action(nullptr),
+      m_split_action(nullptr),
+      m_detach_action(nullptr),
       m_asked_about_closing(false),
       m_background_on_close(false) {
 	setWindowTitle(QStringLiteral("BeerSSH"));
@@ -104,6 +113,29 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	QVBoxLayout *outer = new QVBoxLayout(this);
 	outer->setContentsMargins(0, 0, 0, 0);
 	outer->setSpacing(0);
+
+	/*
+	 * The menu bar, on desktop only (sec 8.3).
+	 *
+	 * This class is deliberately a plain QWidget rather than a
+	 * QMainWindow, and that decision stands: what was rejected was
+	 * QMainWindow's menubar/toolbar/statusbar/dock scaffolding, which has
+	 * to be fought on a phone. A QMenuBar dropped into this layout is not
+	 * that -- it is one widget, added on the platform that wants one, and
+	 * both platforms still run the same window class.
+	 *
+	 * Why it exists at all: every way to open a tab, a window or a split
+	 * was a right-click or a chord. Both are things you have to be told
+	 * about, and the complaint that produced this was exactly that -- no
+	 * visible way to add windows, tabs or tiles. A menu bar is how a
+	 * desktop application says what it can do without being asked.
+	 */
+	if (front_door_for(bssh_platform::instance()->is_touch_primary())
+	    == FRONT_DOOR_SESSION_DIALOG) {
+		build_menu_bar();
+		if (m_menu_bar) outer->addWidget(m_menu_bar, 0);
+	}
+
 	outer->addWidget(m_pages, 1);
 
 	QVBoxLayout *layout = new QVBoxLayout(m_terminal_page);
@@ -120,7 +152,40 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_tabs->setTabsClosable(true);
 	m_tabs->setDrawBase(false);
 	m_tabs->hide();
-	layout->addWidget(m_tabs, 0);
+
+	/*
+	 * A "+" at the end of the tab strip, which is where every browser and
+	 * every terminal since the mid-2000s has put it -- so it needs no
+	 * explaining, and it is the one affordance that is visible at the
+	 * moment somebody wants it rather than filed under a menu.
+	 *
+	 * The menu bar carries the same action with its chord beside it; this
+	 * is the shortcut for the hand already on the mouse. Both, not either:
+	 * a menu teaches the chord and a button is quicker once you know.
+	 *
+	 * It lives in the tab bar's corner, so it appears and disappears with
+	 * the strip -- a lone "+" floating above a single-session window
+	 * would be chrome with nothing to sit beside.
+	 */
+	QToolButton *add_tab = new QToolButton(m_tabs);
+	add_tab->setText(QStringLiteral("+"));
+	add_tab->setAutoRaise(true);
+	add_tab->setToolTip(QStringLiteral("Open another session in a tab"));
+	add_tab->setAccessibleName(QStringLiteral("New tab"));
+	connect(add_tab, &QToolButton::clicked, this, [this] { open_another_session(false); });
+	m_tabs->setDrawBase(false);
+
+	QHBoxLayout *tab_row = new QHBoxLayout();
+	tab_row->setContentsMargins(0, 0, 0, 0);
+	tab_row->setSpacing(0);
+	tab_row->addWidget(m_tabs, 0);
+	tab_row->addWidget(add_tab, 0);
+	tab_row->addStretch(1);
+
+	m_tab_row = new QWidget(m_terminal_page);
+	m_tab_row->setLayout(tab_row);
+	m_tab_row->hide();
+	layout->addWidget(m_tab_row, 0);
 
 	/*
 	 * The pane container, not a lone terminal view. Both it and the layout
@@ -1177,6 +1242,9 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 	if (!m_terminal_view) {
 		m_current = nullptr;
 		update_status();
+
+		/* After the state changed, never before: this reads m_current. */
+		refresh_menu_bar();
 		return;
 	}
 
@@ -1248,6 +1316,13 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 	});
 
 	connect(m_terminal_view, &bssh_terminal_view::selection_changed, this, [this] {
+		/*
+		 * Copy is greyed out with nothing selected, which is why this
+		 * runs before the primary-selection work below and not inside
+		 * its early returns.
+		 */
+		refresh_menu_bar();
+
 		if (!QGuiApplication::clipboard()->supportsSelection()) return;
 
 		const QString selected = m_terminal_view->selection_text();
@@ -1281,6 +1356,9 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 	}
 
 	update_status();
+
+	/* After the state changed, never before: this reads m_current. */
+	refresh_menu_bar();
 }
 
 void bssh_main_window::detach_session() {
@@ -1618,6 +1696,10 @@ void bssh_main_window::on_registry_changed() {
 
 	/* One tab is not worth a row of chrome, least of all on a phone. */
 	m_tabs->setVisible(m_shown.size() > 1);
+	if (m_tab_row) m_tab_row->setVisible(m_shown.size() > 1);
+
+	/* Detach needs more than one tab, and this is where that changed. */
+	refresh_menu_bar();
 
 	/*
 	 * The notification and tray tooltip count sessions, never panes or
@@ -1864,6 +1946,163 @@ bssh_app_settings::context_menu_t bssh_main_window::context_menu_layout(
  * they are: a phone user reaching for Paste should find the same word in
  * the same place.
  */
+/*
+ * The menu bar (sec 8.3), and its shape is the 1995 Windows Interface
+ * Guidelines' rather than anything invented here -- the same authority
+ * the terminal's context menu already follows, and the one every desktop
+ * program this app is modelled on was written against.
+ *
+ * File, Edit, View, Settings, Help, in that order. Konsole is the closest
+ * sibling and uses the same set; mIRC and PuTTY differ in their middles
+ * but not in their ends, because File-first and Help-last is the part
+ * everybody agreed on and the part a hand learns.
+ *
+ * Items are VISIBLE and disabled rather than hidden, for the reason the
+ * context menu gives: a menu that reflows around what happens to be
+ * available is one nobody can use without reading it every time. Access
+ * keys on every item, likewise.
+ *
+ * The shortcut text comes from the ROUTER rather than being written here.
+ * Chords are rebindable (sec 6.1), and a menu that printed Ctrl+Shift+T
+ * beside an item bound to something else would be the most confidently
+ * wrong thing on the screen.
+ */
+void bssh_main_window::build_menu_bar() {
+	m_menu_bar = new QMenuBar(this);
+
+	const auto chord = [](const char *name) {
+		return QKeySequence(bssh_input_router::binding_for(QString::fromLatin1(name)));
+	};
+
+	QMenu *file = m_menu_bar->addMenu(QStringLiteral("&File"));
+
+	QAction *new_tab = file->addAction(QStringLiteral("New &Tab"));
+	new_tab->setShortcut(chord("new-tab"));
+	connect(new_tab, &QAction::triggered, this, [this] { open_another_session(false); });
+
+	QAction *new_window = file->addAction(QStringLiteral("New &Window"));
+	new_window->setShortcut(chord("new-window"));
+	connect(new_window, &QAction::triggered, this, [this] { open_another_session(true); });
+
+	file->addSeparator();
+
+	QAction *close_tab = file->addAction(QStringLiteral("&Close Tab"));
+	connect(close_tab, &QAction::triggered, this, [this] {
+		const int index = m_tabs->currentIndex();
+		if (index >= 0) on_tab_close_requested(index);
+	});
+	m_session_actions.append(close_tab);
+
+	file->addSeparator();
+
+	QAction *quit = file->addAction(QStringLiteral("E&xit"));
+	connect(quit, &QAction::triggered, this, &QWidget::close);
+
+	QMenu *edit = m_menu_bar->addMenu(QStringLiteral("&Edit"));
+
+	m_copy_action = edit->addAction(QStringLiteral("&Copy"));
+	m_copy_action->setShortcut(chord("copy"));
+	connect(m_copy_action, &QAction::triggered, this, [this] {
+		if (!m_terminal_view) return;
+		const QString selected = m_terminal_view->selection_text();
+		if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
+	});
+
+	m_paste_action = edit->addAction(QStringLiteral("&Paste"));
+	m_paste_action->setShortcut(chord("paste"));
+	connect(m_paste_action, &QAction::triggered, this, [this] {
+		paste_into_current(QGuiApplication::clipboard()->text());
+	});
+
+	edit->addSeparator();
+
+	QAction *select_all = edit->addAction(QStringLiteral("Select &All"));
+	connect(select_all, &QAction::triggered, this, [this] {
+		if (m_terminal_view) m_terminal_view->select_all();
+	});
+	m_session_actions.append(select_all);
+
+	QMenu *view = m_menu_bar->addMenu(QStringLiteral("&View"));
+
+	m_split_action = view->addAction(QStringLiteral("Split &Beside Current"));
+	connect(m_split_action, &QAction::triggered, this, [this] {
+		if (m_current) split_with(m_current);
+	});
+
+	m_detach_action = view->addAction(QStringLiteral("&Detach Tab to a Window"));
+	connect(m_detach_action, &QAction::triggered, this, [this] {
+		const int index = m_tabs->currentIndex();
+		if (index >= 0) tear_out_tab(index);
+	});
+
+	QMenu *settings = m_menu_bar->addMenu(QStringLiteral("&Settings"));
+
+	QAction *front_door = settings->addAction(QStringLiteral("&Hosts and Settings..."));
+	connect(front_door, &QAction::triggered, this, &bssh_main_window::show_front_door);
+
+	QMenu *help = m_menu_bar->addMenu(QStringLiteral("&Help"));
+
+	QAction *about = help->addAction(QStringLiteral("&About BeerSSH"));
+	connect(about, &QAction::triggered, this, [this] {
+		/*
+		 * The version is a define the APP's .pro sets, and the test
+		 * build does not. Guarded rather than added to the second
+		 * project file, because the version belongs to what ships.
+		 */
+#ifdef BSSH_VERSION_STRING
+		const QString version = QStringLiteral(BSSH_VERSION_STRING);
+#else
+		const QString version = QStringLiteral("development build");
+#endif
+		QMessageBox::about(this, QStringLiteral("About BeerSSH"),
+		                    QStringLiteral("<b>BeerSSH</b><br><br>"
+		                                    "An SSH terminal for desktop and Android."
+		                                    "<br>Version %1").arg(version));
+	});
+
+	refresh_menu_bar();
+}
+
+/*
+ * Enabled state and shortcut labels, re-derived rather than remembered.
+ * Called whenever the session or the bindings change, because both can:
+ * a chord is rebindable and a window can have no session at all.
+ */
+void bssh_main_window::refresh_menu_bar() {
+	if (!m_menu_bar) return;
+
+	const bool has_session = m_current != nullptr;
+
+	for (QAction *action : m_session_actions) action->setEnabled(has_session);
+
+	if (m_copy_action) {
+		m_copy_action->setEnabled(m_terminal_view && m_terminal_view->has_selection());
+		m_copy_action->setShortcut(
+		        QKeySequence(bssh_input_router::binding_for(QStringLiteral("copy"))));
+	}
+
+	if (m_paste_action) {
+		m_paste_action->setEnabled(has_session);
+		m_paste_action->setShortcut(
+		        QKeySequence(bssh_input_router::binding_for(QStringLiteral("paste"))));
+	}
+
+	/*
+	 * A split needs somewhere to put the pane, which is the same question
+	 * drop_session() asks -- so the menu says no in the case where the
+	 * action would silently fall back to a tab.
+	 */
+	if (m_split_action) {
+		const bool room = m_layout
+		        && m_layout->intent().size()
+		                   < bssh_layout_manager::max_panes_for(m_layout->size_class());
+		m_split_action->setEnabled(has_session && room);
+	}
+
+	/* Detaching the only tab would leave an empty window behind. */
+	if (m_detach_action) m_detach_action->setEnabled(m_shown.size() > 1);
+}
+
 QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	const bssh_app_settings::context_menu_t layout =
 	        context_menu_layout(bssh_app_settings().context_menu(),
@@ -2391,7 +2630,26 @@ QSize bssh_main_window::size_for_grid(int cols, int rows) {
 
 	if (wanted.isEmpty()) return size();
 
-	if (m_tabs && !m_tabs->isHidden()) wanted.rheight() += m_tabs->sizeHint().height();
+	/*
+	 * A named list, and it has now been wrong once for the reason a named
+	 * list is always wrong: the menu bar was added above and nothing here
+	 * knew, so --geometry asked for a window one menu bar too short. The
+	 * geometry test caught it, which is why that test names the grid both
+	 * ways round rather than trusting the arithmetic.
+	 *
+	 * Left as a list rather than converted to a walk because the two are
+	 * not equivalent here: a walk would have to know which widgets sit
+	 * BESIDE the terminal and which sit above it, and getting that wrong
+	 * is a silent wrong answer instead of a loud one.
+	 */
+	if (m_menu_bar && !m_menu_bar->isHidden()) {
+		wanted.rheight() += m_menu_bar->sizeHint().height();
+	}
+	if (m_tab_row && !m_tab_row->isHidden()) {
+		wanted.rheight() += m_tab_row->sizeHint().height();
+	} else if (m_tabs && !m_tabs->isHidden()) {
+		wanted.rheight() += m_tabs->sizeHint().height();
+	}
 	if (m_status_label) wanted.rheight() += m_status_label->sizeHint().height();
 	if (m_key_row && !m_key_row->isHidden()) wanted.rheight() += m_key_row->sizeHint().height();
 

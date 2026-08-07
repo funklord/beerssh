@@ -1898,6 +1898,56 @@ window with no name is a blank row in the task switcher.
   rather than to data arrival, or a chatty `yes`-style output in one pane will
   starve the others.
 
+**[BUILT] A menu bar on desktop, and a "+" on the tab strip.** Until this,
+every way to open a tab, a window or a split was a right-click or a chord —
+both things somebody has to be *told*, and the complaint that produced this
+said exactly that: no visible way to add windows, tabs or tiles. A desktop
+application says what it can do without being asked; that is what a menu bar
+is for.
+
+**File, Edit, View, Settings, Help**, which is Konsole's set and the 1995
+Windows Interface Guidelines' shape — the same authority §6.4's context menu
+already follows. mIRC and PuTTY differ in their middles and not in their ends,
+because File-first and Help-last is the part everyone agreed on and the part a
+hand learns. Items stay **visible and disabled** rather than vanishing, and
+carry access keys, for the reasons that section already gives.
+
+**The shortcut text comes from the router, not from the menu.** Chords are
+rebindable (§6.1), so a menu printing `Ctrl+Shift+T` beside an item bound to
+something else would be the most confidently wrong thing on the screen.
+`refresh_menu_bar()` re-derives both the labels and the enabled states, and
+runs on the three events that change what a window can do: which pane has
+focus, what the registry holds, and whether there is a selection. It runs
+**after** those settle — the first version ran at the top of
+`on_pane_focus_changed()` and read the previous session.
+
+**The window stays a plain `QWidget`.** What §8.3 rejected was QMainWindow's
+menubar/toolbar/statusbar/dock scaffolding, which has to be fought on a phone;
+a `QMenuBar` added to this layout on the platform that wants one is not that,
+and both platforms still run the same window class.
+
+**The "+" sits at the end of the tab strip**, where every browser and terminal
+since the mid-2000s has put it, and appears and disappears with the strip — a
+lone "+" above a single-session window would be chrome with nothing to sit
+beside. Both it and the menu item exist deliberately: a menu teaches the chord,
+a button is quicker once you know it.
+
+**It broke `--geometry`, and that is the useful part.** The window computes its
+size from a **named list** of the chrome above the terminal, the menu bar was
+not on it, and `--geometry 120x40` would have asked for a window one menu bar
+too short. The geometry test caught it because it asserts the resulting grid
+both ways round instead of trusting the arithmetic. Left as a list rather than
+converted to a walk: a walk would have to distinguish widgets sitting *beside*
+the terminal from those above it, and getting that wrong is a silent wrong
+answer instead of a loud one.
+
+**Nothing had ever rendered the assembled window.** Every desktop shot is one
+widget on its own, so the menu bar, tab strip, terminal and status line had
+never been seen together — the arrangement a user actually meets, and the only
+place their spacing can be judged. `desktop-window` shoots it with **two**
+sessions, since one hides the tab strip and a picture of a deliberately-absent
+tab bar says nothing about it.
+
 ### 8.5 The front door — **[DECIDED]**
 
 **Desktop borrows PuTTY's interface. Touch gets a mobile one. Same model
