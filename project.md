@@ -591,9 +591,16 @@ quirks on Android.
   before** the byte translation and be **user-remappable**, because any chord you
   steal is a chord the remote shell can no longer receive. Keep the stolen set
   minimal and document it.
-  **The set is six chords, and it is now written down exactly once.**
-  Ctrl+Shift+C, Ctrl+Shift+V, Shift+PageUp, Shift+PageDown and
-  Ctrl+Alt+Left/Right. That list lived only as an if-ladder inside
+  **The set is eight chords, and it is now written down exactly once.**
+  Ctrl+Shift+C, Ctrl+Shift+V, Shift+PageUp, Shift+PageDown,
+  Ctrl+Alt+Left/Right, and — Konsole's, and named here long before anything
+  took them — Ctrl+Shift+T and Ctrl+Shift+N for another session in a tab or
+  a window. Without those two, a desktop user's only route to a second
+  session was the context menu, the front door and a dialog: three steps for
+  the commonest thing a terminal does. What they open is what the device
+  opens with (§8.5), which is what makes the chord predictable; duplicating
+  the host you are on is a different intent and has its own entry on the tab
+  menu. That list lived only as an if-ladder inside
   `handle_key()`, so the only way to find out which chords never reach your
   shell was to press one and notice — this section asked for it to be
   documented and nothing did. It is `bssh_input_router::stolen_chords()`
@@ -609,8 +616,20 @@ quirks on Android.
   on X11 at the third level, and neither says anything about which chord was
   pressed — so comparing the whole modifier set would steal Shift+PageUp on
   the main block and pass it through on the keypad of the same keyboard.
-  Still not built: **remapping**. The table is read-only, and a chord a user
-  wants back is one they cannot yet have.
+  **Remapping is built, and giving a chord BACK is the point of it.** Each
+  chord has a stable name — `copy`, `new-tab` — and app.ini's `[chords]`
+  section binds it, so a hand-edited file survives the list being reordered.
+  A name bound to **nothing** is not stolen at all and reaches the remote
+  shell, which is what this section has always implied: "any chord you steal
+  is a chord the remote shell can no longer receive", so handing one back has
+  to be sayable. An unknown name or an unparseable sequence leaves the
+  built-in, because a hand-edited file with a typo in it should behave like
+  the default rather than lose the binding. *Keys this app keeps* is a column
+  of `QKeySequenceEdit`s now — the control the platform already has for this,
+  which records the chord you press rather than making you spell it — and it
+  is built from the **defaults** rather than from the effective list, or an
+  action whose chord had been given back would vanish from the page and could
+  never be bound again.
 
 ### 6.2 On-screen keyboard strategy (touch platforms)
 Android soft keyboards don't expose Ctrl/Esc/etc. Plan a **custom on-screen key
@@ -1516,6 +1535,17 @@ the same number for a layout manager that had quietly stopped working.
   hand-written accessible names had been compensating for. §8.5's whole argument
   for this dialog is that it borrows an interface people already have in their
   fingers, and PuTTY aligns them.
+- **What the status line says is the user's to decide, including nothing.**
+  It was unconditional, and it opened with the QPA platform name --
+  `desktop/xcb`, a fact a developer wants and a user has no use for -- on a row
+  of screen taken from the terminal. Konsole has no status line at all and shows
+  the size transiently while resizing. Three states in `app.ini`: **session**
+  (where you are connected and how it is going, the default), **full** (adds the
+  grid size and the platform, for whoever is diagnosing a build), and **off**.
+  Read once in `apply_device_settings` and kept, because `update_status()` runs
+  on every state change, every resize and every keystroke that scrolls -- opening
+  an INI file to answer a question whose answer changes twice a year would be a
+  file read in the paint path.
 - **The status line never decides how wide the window is.** A `QLabel` asks for
   room for its whole text, and a failure reason is a sentence — the jump-host
   messages (§10.5) run well past a phone's width. Left to itself the label pushed
@@ -1526,6 +1556,67 @@ the same number for a layout manager that had quietly stopped working.
   text kept as the tooltip and the accessible name so nothing is actually lost.
   Elided rather than wrapped: a status line that grows to three lines takes the
   space from the terminal, which is where the user was looking.
+
+**The scrollbar is Konsole's, and it is a real one — [DECIDED].** There was
+none at all: 5000 lines of scrollback (§10.2) and no way to see where you were
+in them or to drag to a point, only the wheel and Shift+PageUp. It is a
+`QScrollBar` rather than something painted, because a scrollbar is the one part
+of a terminal a user expects to behave exactly like every other scrollbar on
+their desktop — the wheel over it, the page-jump click, the theme's own arrows.
+
+It lives **inside `bssh_terminal_view`**, not beside it, because the view owns
+the grid arithmetic: the columns it can show are the ones left after the bar has
+taken its width, and the code that maps a click to a cell has to start where the
+grid starts. A wrapper widget would have split that arithmetic across two
+classes; instead the view grew `grid_origin_x()` and `grid_width()`, which the
+column count, the painter, the point-to-cell mapping and `size_for_grid()` (§8.6)
+all ask.
+
+Four states in `app.ini`, Konsole's three plus this app's usual one:
+**automatic** is the right-hand side where there is a pointer to drag it with and
+nothing where there is not — a thumb scrolls the terminal itself (§8.5), and a
+bar it would have to hit is a strip of screen a phone cannot spare.
+
+**It is set as the default a view is BUILT with**, and the panes are rebuilt once
+when the setting actually changes — never poked into each live view. Poking it in
+place cannot be done safely from `apply_device_settings`: that runs on
+`panes_rebuilt`, changing a view's width re-measures the grid, and a re-measure
+can cross the size class that decides how many panes fit (§8.2), which rebuilds
+the panes, which calls it again. **That loop ran for five minutes and died on a
+stack overflow.** Rebuilding only on a real change terminates, because the second
+pass finds the default already right.
+
+**A view nobody is showing must not tell its session how big it is.** A
+window-change message is a claim about what the user can see, and Qt lays out a
+widget in an unshown window with whatever the splitter had before it had a real
+size. The measured symptom: a session told it was **1x2**, which made the remote
+reflow every line it had to one column — so a tab torn into a new window had its
+screen in the scrollback, a character per line. `recompute_grid()` computes either
+way, so anything asking the view what it holds still gets an answer; what is
+withheld is the message to the far end, until the window is shown and the resize
+that follows says it properly. The floor of one column and one row is right — a
+terminal is never zero columns — but it answers "how small can a grid be", not
+"does this widget have one yet", and §8.4 records the same shape once already in
+a status line that reported "1x41 cells" on a screen plainly showing more.
+
+**The window title is a format, and it follows the tab — [DECIDED].** It was set
+once in the constructor and updated only from the remote's OSC title, guarded on
+that session being the current one. Two defects with one cause: a window showed
+plain "BeerSSH" until a remote spoke up — several windows gave a task switcher
+identical rows — and switching tabs kept the old tab's name until the new one
+happened to set a title of its own. The title was a side effect of an event
+rather than a function of what is on screen, so it is recomputed wherever that
+changes.
+
+The format is `%t - BeerSSH` by default, with `%t` the session's own name (the
+OSC title, or the saved name until there is one), `%n` the saved name, `%u`/`%h`/
+`%p` the destination and `%a` the app. A format rather than a list of canned
+choices, which is where Konsole, xterm and tmux all arrived: everybody wants a
+different one of the same four facts, and a list long enough to cover them is
+longer than the format it replaces. An unknown placeholder is left as written
+rather than swallowed — a title that silently loses characters cannot be debugged
+from outside the program — and an empty format means the default, because a
+window with no name is a blank row in the task switcher.
 
 ### 8.4 Implementation notes
 - A **`bssh_layout_manager`** owns the tab-group → pane-tree mapping and is the
@@ -2553,6 +2644,13 @@ double as documentation of what a preset can do.
   | `~/.ssh/beerssh_hosts` | `[host-3]` — name, host, user, port, key file, jump host, which preset it follows, and any per-field overrides as ordinary keys |
   | `presets.ini` | `[servers]` — the preset's fields, section named by slug |
   | `layout.ini` | `[layout]` — which hosts were open, and how |
+  | `app.ini` | this device's own: `[appearance]` theme, scrollbar, status line, window-title format, contrast floor; `[input]` key row, terminal menu, Caps-as-Ctrl, focus-follows-mouse; `[chords]` one line per rebindable chord (§6.1); `[security]` hide-from-screenshots |
+
+  **Everything in `app.ini` is written as WORDS**, not as the enum's number:
+  `scrollbar=left` says what it does where Konsole's own `scrollbar=2` needs a
+  source file to decode, and these files exist to be opened in an editor. A value
+  nobody recognises reads as the default rather than refusing to start, which is
+  what a hand-edited file with a typo in it deserves.
 
   **The host list lives in `~/.ssh`, and only the host list.** It is SSH
   material — a name, a host, a user, a port, a key path, which is what

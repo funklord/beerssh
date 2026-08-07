@@ -27,6 +27,13 @@ private slots:
 	void hiding_from_screenshots_is_not_promised_where_it_cannot_work();
 	void the_focus_follows_mouse_setting_survives_a_restart();
 
+	/* sec 8.3, sec 8.4, sec 6.1: the settings this app grew for its
+	 * desktop furniture, each stored as words a person can hand-edit. */
+	void the_scrollbar_setting_survives_a_restart();
+	void the_status_line_setting_survives_a_restart();
+	void the_window_title_format_survives_a_restart();
+	void a_chord_can_be_rebound_and_given_back();
+
 	/*
 	 * A failure reason is a sentence, and a QLabel asks for room for all
 	 * of it. Left unchecked that pushed the window wider than the screen

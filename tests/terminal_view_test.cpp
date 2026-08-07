@@ -1,3 +1,4 @@
+#include <QScrollBar>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -991,4 +992,93 @@ void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() 
 	QVERIFY2(menu.styleSheet().contains(QStringLiteral("min-height: 48px")),
 	          qPrintable(QStringLiteral("touch rows must reach the 48dp floor, got: ")
 	                             + menu.styleSheet()));
+}
+
+void terminal_view_test::the_scrollbar_takes_its_width_from_the_grid() {
+	bssh_terminal_view view;
+	view.resize(800, 400);
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+	const int bare = view.cols();
+	QVERIFY(bare > 0);
+
+	/*
+	 * A scrollbar is not drawn over the terminal: it takes its width from
+	 * the grid, and the remote has to be told, or the far end lays out
+	 * for a column that is no longer on screen (sec 7).
+	 */
+	QSignalSpy resized(&view, &bssh_terminal_view::grid_resized);
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_RIGHT);
+
+	QVERIFY2(view.cols() < bare, "a scrollbar must cost the grid its width");
+	QVERIFY2(!resized.isEmpty(), "the remote must be told the width changed");
+
+	/* And the same on the left, where the grid also has to MOVE. */
+	const int with_bar = view.cols();
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_LEFT);
+	QCOMPARE(view.cols(), with_bar);
+
+	/*
+	 * The point-to-cell mapping has to have moved with it. Column zero on
+	 * the left-hand layout starts after the bar, so a click at the very
+	 * left edge is inside the BAR and must not read as a cell in the
+	 * middle of the line.
+	 */
+	QSize needed = view.size_for_grid(20, 5);
+	QVERIFY2(needed.width() > 20 * view.cell_width(),
+	          "size_for_grid must account for the bar it will have to draw");
+
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_NONE);
+	QCOMPARE(view.cols(), bare);
+}
+
+void terminal_view_test::the_scrollbar_follows_the_view_and_drives_it() {
+	bssh_emulator emulator(20, 4);
+
+	bssh_terminal_view view;
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/*
+	 * The same connection bssh_pane_container makes for every pane: the
+	 * bar learns how much history there is from the damage signal, which
+	 * is what tells it the scrollback grew. Attaching the objects without
+	 * this is a view that never hears about output.
+	 */
+	connect(&emulator, &bssh_emulator::damaged, &view,
+	         &bssh_terminal_view::on_screen_damaged);
+
+	view.resize(400, 200);
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_RIGHT);
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+	/* Enough output to push lines into the scrollback. */
+	for (int i = 0; i < 40; ++i) {
+		emulator.feed(QStringLiteral("line %1\r\n").arg(i).toUtf8());
+	}
+	QCoreApplication::processEvents();
+
+	QScrollBar *bar = view.findChild<QScrollBar *>();
+	QVERIFY2(bar, "a view told to show a scrollbar must have one");
+	QVERIFY2(bar->maximum() > 0, "the bar must know how much history there is");
+
+	/*
+	 * The BOTTOM is the live screen, which is where every terminal since
+	 * xterm puts it and the opposite of how the offset is counted. A bar
+	 * that works and moves the wrong way is worse than no bar.
+	 */
+	QCOMPARE(bar->value(), bar->maximum());
+
+	view.scroll_by(5);
+	QCOMPARE(bar->value(), bar->maximum() - 5);
+
+	/* And dragging it scrolls the view, which is the other direction. */
+	bar->setValue(bar->maximum() - 12);
+	QCOMPARE(view.scroll_offset(), 12);
+
+	bar->setValue(bar->maximum());
+	QCOMPARE(view.scroll_offset(), 0);
 }

@@ -693,14 +693,16 @@ void input_router_test::every_stolen_chord_is_the_table_and_nothing_else() {
 		QVERIFY2(sent.isEmpty(),
 		          qPrintable(QStringLiteral("%1 is stolen, so it must send the remote "
 		                                     "nothing; sent %2 byte(s)")
-		                             .arg(QString::fromLatin1(chord.label))
+		                             .arg(chord.label)
 		                             .arg(sent.size())));
 		QCOMPARE(fired.size(), 1);
 		QCOMPARE(fired.first().first().toInt(), int(chord.action));
 
 		/* And it is written down in a form somebody can read. */
-		QVERIFY(chord.label && *chord.label);
+		QVERIFY(!chord.label.isEmpty());
 		QVERIFY(chord.what && *chord.what);
+		QVERIFY2(chord.name && *chord.name,
+		          "a chord needs a stable name, or a rebinding cannot be filed");
 	}
 
 	/*
@@ -727,4 +729,81 @@ void input_router_test::every_stolen_chord_is_the_table_and_nothing_else() {
 	                                  Qt::ShiftModifier | Qt::KeypadModifier, QString());
 	QVERIFY(nothing.isEmpty());
 	QCOMPARE(keypad.size(), 1);
+}
+
+void input_router_test::a_rebound_chord_is_the_one_that_is_stolen() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	QHash<QString, QString> bindings;
+	bindings.insert(QStringLiteral("copy"), QStringLiteral("Ctrl+Alt+K"));
+	bssh_input_router::set_bindings(bindings);
+
+	QSignalSpy fired(&router, &bssh_input_router::shortcut_pressed);
+
+	/* The new chord is taken... */
+	const QByteArray stolen = press(router, emulator, Qt::Key_K,
+	                                 Qt::ControlModifier | Qt::AltModifier, QString());
+	QVERIFY2(stolen.isEmpty(), "a rebound chord must not reach the remote");
+	QCOMPARE(fired.size(), 1);
+	QCOMPARE(fired.first().first().toInt(), int(bssh_input_router::SHORTCUT_COPY));
+
+	/* ...and the one it replaced is not, which is the half that matters:
+	 * a rebinding that ADDED a chord would quietly keep stealing the old
+	 * one, and the list on screen would be wrong about it. */
+	QSignalSpy quiet(&router, &bssh_input_router::shortcut_pressed);
+	const QByteArray through = press(router, emulator, Qt::Key_C,
+	                                  Qt::ControlModifier | Qt::ShiftModifier, QString());
+	QVERIFY2(!through.isEmpty(), "the chord that was replaced must reach the remote");
+	QVERIFY(quiet.isEmpty());
+
+	/* And what the settings page shows is what the router matches. */
+	QCOMPARE(bssh_input_router::binding_for(QStringLiteral("copy")),
+	          QStringLiteral("Ctrl+Alt+K"));
+
+	bssh_input_router::set_bindings(QHash<QString, QString>());
+}
+
+void input_router_test::a_chord_given_back_reaches_the_remote() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/*
+	 * sec 6.1: "any chord you steal is a chord the remote shell can no
+	 * longer receive". Handing one back has to be sayable, and an empty
+	 * binding is how it is said.
+	 */
+	QHash<QString, QString> bindings;
+	bindings.insert(QStringLiteral("scroll-page-up"), QString());
+	bssh_input_router::set_bindings(bindings);
+
+	QSignalSpy fired(&router, &bssh_input_router::shortcut_pressed);
+	const QByteArray sent = press(router, emulator, Qt::Key_PageUp, Qt::ShiftModifier,
+	                               QString());
+
+	QVERIFY2(!sent.isEmpty(), "an unbound chord must reach the remote");
+	QVERIFY(fired.isEmpty());
+
+	/* It is off the list this app shows, too, since it keeps it no more. */
+	for (const bssh_input_router::chord_t &chord : bssh_input_router::stolen_chords()) {
+		QVERIFY2(QLatin1String(chord.name) != QLatin1String("scroll-page-up"),
+		          "a chord given back must not still be listed as kept");
+	}
+
+	/*
+	 * A typo is not a rebinding: an unparseable sequence leaves the
+	 * built-in, because a hand-edited file with a mistake in it should
+	 * behave like the default rather than lose the chord.
+	 */
+	bindings.clear();
+	bindings.insert(QStringLiteral("copy"), QStringLiteral("Ctrl+Shift+Nonsense"));
+	bssh_input_router::set_bindings(bindings);
+
+	QSignalSpy again(&router, &bssh_input_router::shortcut_pressed);
+	const QByteArray still = press(router, emulator, Qt::Key_C,
+	                                Qt::ControlModifier | Qt::ShiftModifier, QString());
+	QVERIFY2(still.isEmpty(), "a mistyped binding must leave the built-in chord alone");
+	QCOMPARE(again.size(), 1);
+
+	bssh_input_router::set_bindings(QHash<QString, QString>());
 }

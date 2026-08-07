@@ -1936,9 +1936,17 @@ void layout_test::a_window_watches_for_a_screen_change() {
 	QVERIFY(panes);
 	QVERIFY(!panes->views().isEmpty());
 
+	/*
+	 * A turn of the event loop, because a view added to the splitter has
+	 * no width until the layout runs -- and a view with no width no
+	 * longer invents a grid to report (see recompute_grid). It used to
+	 * answer "1 column" here and this read that as a real answer.
+	 */
+	QCoreApplication::processEvents();
+
 	const int cols = panes->views().first()->cols();
 	const int rows = panes->views().first()->rows();
-	QVERIFY(cols > 0 && rows > 0);
+	QVERIFY2(cols > 0 && rows > 0, "a shown pane must have measured itself");
 
 	panes->remeasure_panes();
 

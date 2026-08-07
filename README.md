@@ -42,6 +42,14 @@ records the whole set, including why Qt's own toolkit options are no longer
 accepted on the command line (its X11 plugin was eating `--geometry` and
 `--title` before the program saw them, and no other plugin did).
 
+**The desktop furniture is configurable**, under *This device*: a scrollbar
+(automatic, left, right or hidden — automatic means wherever there is a pointer
+to drag it with), what the status line says or whether it says anything, the
+window-title format (`%t - BeerSSH` by default, with `%n %u %h %p %a` available),
+and every chord this app keeps for itself. `Ctrl+Shift+T` and `Ctrl+Shift+N` open
+another session in a tab or a window. **Clear a chord and it goes back to the
+remote shell** — whatever BeerSSH keeps, your shell never sees.
+
 **On desktop it opens a local shell by default**, so launching it with no
 arguments gives you a terminal rather than a connection dialog. That was a
 documented non-goal until it was deliberately reversed: the PTY is a

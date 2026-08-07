@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QLabel>
+#include <QSettings>
 #include <QtTest>
 
 #include "platform/platform.h"
@@ -370,4 +371,112 @@ void platform_test::the_focus_follows_mouse_setting_survives_a_restart() {
 		bssh_app_settings reopened(dir.path());
 		QVERIFY2(!reopened.focus_follows_mouse(), "and it can be turned off again");
 	}
+}
+
+void platform_test::the_scrollbar_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	{
+		bssh_app_settings settings(dir.path());
+
+		/*
+		 * AUTOMATIC by default, which is the right-hand side where
+		 * there is a pointer and nothing where there is not (sec 8.3).
+		 * Konsole's own default is a visible bar; ours has to answer
+		 * for a phone as well.
+		 */
+		QCOMPARE(settings.scrollbar(), bssh_app_settings::SCROLLBAR_AUTO);
+		settings.set_scrollbar(bssh_app_settings::SCROLLBAR_LEFT);
+	}
+
+	{
+		bssh_app_settings reopened(dir.path());
+		QCOMPARE(reopened.scrollbar(), bssh_app_settings::SCROLLBAR_LEFT);
+	}
+
+	/*
+	 * Written as a WORD, and read back as one. app.ini is meant to be
+	 * opened in an editor (sec 10.6), and Konsole storing this exact
+	 * setting as an integer is a small daily annoyance to anyone who
+	 * does.
+	 */
+	QSettings file(dir.path() + QStringLiteral("/app.ini"), QSettings::IniFormat);
+	QCOMPARE(file.value(QStringLiteral("appearance/scrollbar")).toString(),
+	          QStringLiteral("left"));
+
+	/* And a typo behaves as the default rather than refusing to start. */
+	file.setValue(QStringLiteral("appearance/scrollbar"), QStringLiteral("riht"));
+	file.sync();
+
+	bssh_app_settings mistyped(dir.path());
+	QCOMPARE(mistyped.scrollbar(), bssh_app_settings::SCROLLBAR_AUTO);
+}
+
+void platform_test::the_status_line_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	{
+		bssh_app_settings settings(dir.path());
+
+		/*
+		 * The session and its state by default -- not the QPA platform
+		 * name, which is what this line used to open with and is a fact
+		 * only a developer wants (sec 8.4).
+		 */
+		QCOMPARE(settings.status_line(), bssh_app_settings::STATUS_LINE_SESSION);
+		settings.set_status_line(bssh_app_settings::STATUS_LINE_OFF);
+	}
+
+	bssh_app_settings reopened(dir.path());
+	QCOMPARE(reopened.status_line(), bssh_app_settings::STATUS_LINE_OFF);
+}
+
+void platform_test::the_window_title_format_survives_a_restart() {
+	QTemporaryDir dir;
+
+	{
+		bssh_app_settings settings(dir.path());
+		QCOMPARE(settings.window_title(), QStringLiteral("%t - BeerSSH"));
+
+		settings.set_window_title(QStringLiteral("%u@%h"));
+	}
+
+	{
+		bssh_app_settings reopened(dir.path());
+		QCOMPARE(reopened.window_title(), QStringLiteral("%u@%h"));
+
+		/*
+		 * Cleared means the DEFAULT, not an empty title: a window with
+		 * no name is a blank row in the task switcher, and somebody who
+		 * emptied the field by accident would have no way to tell their
+		 * windows apart.
+		 */
+		reopened.set_window_title(QString());
+	}
+
+	bssh_app_settings cleared(dir.path());
+	QCOMPARE(cleared.window_title(), QStringLiteral("%t - BeerSSH"));
+}
+
+void platform_test::a_chord_can_be_rebound_and_given_back() {
+	QTemporaryDir dir;
+	bssh_app_settings settings(dir.path());
+
+	/*
+	 * Absent and empty are different answers, and the difference is the
+	 * whole feature: absent is the built-in chord, empty is one the user
+	 * has handed back to the remote shell (sec 6.1). Leaning on
+	 * QString's null-versus-empty to carry that through a file is leaning
+	 * on something QSettings does not promise.
+	 */
+	QVERIFY(!settings.has_chord(QStringLiteral("copy")));
+
+	settings.set_chord(QStringLiteral("copy"), QStringLiteral("Ctrl+Alt+C"));
+	QVERIFY(settings.has_chord(QStringLiteral("copy")));
+	QCOMPARE(settings.chord(QStringLiteral("copy")), QStringLiteral("Ctrl+Alt+C"));
+
+	settings.set_chord(QStringLiteral("paste"), QString());
+	QVERIFY2(settings.has_chord(QStringLiteral("paste")),
+	          "a chord given back to the shell is a decision, not an absence");
+	QVERIFY(settings.chord(QStringLiteral("paste")).isEmpty());
 }

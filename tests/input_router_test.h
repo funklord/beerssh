@@ -20,6 +20,10 @@ class input_router_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	/* sec 6.1: the stolen set is the user's to change, and to refuse. */
+	void a_rebound_chord_is_the_one_that_is_stolen();
+	void a_chord_given_back_reaches_the_remote();
+
 	/*
 	 * Press-and-hold (sec 6.4, sec 8.3). Qt does not provide it and does
 	 * not synthesise a context-menu event from it on Android, so this is

@@ -3,6 +3,7 @@
 
 #include "model/session.h"
 #include "model/session_registry.h"
+#include "model/window_title.h"
 #include "session_registry_test.h"
 #include "fake_ssh_session.h"
 #include "term/emulator.h"
@@ -448,4 +449,42 @@ void session_registry_test::a_silenced_bell_does_not_mark_the_tab() {
 	session.set_settings(settings);
 	session.emulator()->feed(QByteArrayLiteral("\a"));
 	QVERIFY(session.has_unseen_bell());
+}
+
+void session_registry_test::the_window_title_expands_what_the_session_knows() {
+	bssh_session_registry registry;
+
+	bssh_profile_t profile = profile_for(QStringLiteral("build box"),
+	                                      QStringLiteral("build.example"));
+	profile.port = 2222;
+
+	bssh_session *session = registry.create(profile);
+
+	/*
+	 * %t is what the session calls itself, which until the remote sets an
+	 * OSC title is the saved name -- and that is the whole fix: a window
+	 * showed "BeerSSH" and nothing else until a remote spoke up.
+	 */
+	QCOMPARE(bssh_expand_window_title(QStringLiteral("%t - BeerSSH"), session),
+	          QStringLiteral("build box - BeerSSH"));
+
+	QCOMPARE(bssh_expand_window_title(QStringLiteral("%u@%h:%p"), session),
+	          QStringLiteral("nabbe@build.example:2222"));
+
+	QCOMPARE(bssh_expand_window_title(QStringLiteral("%n on %a"), session),
+	          QStringLiteral("build box on BeerSSH"));
+
+	/* A literal per cent, and an unknown placeholder left as written --
+	 * a title that silently loses characters cannot be debugged from
+	 * outside the program. */
+	QCOMPARE(bssh_expand_window_title(QStringLiteral("100%% %z"), session),
+	          QStringLiteral("100% %z"));
+
+	/*
+	 * No session at all is the app's own name, not a format with holes in
+	 * it: "%t - BeerSSH" with an empty %t leaves a stray dash in the task
+	 * switcher.
+	 */
+	QCOMPARE(bssh_expand_window_title(QStringLiteral("%t - BeerSSH"), nullptr),
+	          QStringLiteral("BeerSSH"));
 }

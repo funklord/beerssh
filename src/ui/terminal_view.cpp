@@ -1,5 +1,7 @@
 #include "ui/terminal_view.h"
 
+#include <QScrollBar>
+
 #include "ui/terminal_accessible.h"
 
 #include <QAccessible>
@@ -62,6 +64,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_images(nullptr),
       m_scrollback(nullptr),
       m_scroll_offset(0),
+      m_scrollbar(nullptr),
+      m_scrollbar_position(default_scrollbar_position()),
       m_focus_border(false),
       m_click_count(0),
       m_last_click_line(-1),
@@ -99,6 +103,27 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 * so this is safe before any font has been fetched or bundled.
 	 */
 	set_colour_scheme(QString());
+
+	/*
+	 * The scrollbar, built now and shown when asked for (sec 8.3). A
+	 * child of this widget rather than a sibling, so the grid arithmetic
+	 * that has to account for it lives with the code that does the
+	 * arithmetic.
+	 *
+	 * Dragging it scrolls the view rather than the other way round: the
+	 * offset is the view's, and scroll_by() is what already tells the
+	 * emulator and the repaint about it.
+	 */
+	m_scrollbar = new QScrollBar(Qt::Vertical, this);
+	m_scrollbar->setVisible(m_scrollbar_position != SCROLLBAR_NONE);
+
+	connect(m_scrollbar, &QScrollBar::valueChanged, this, [this](int value) {
+		const int history = m_scrollback ? m_scrollback->count() : 0;
+		const int wanted = qBound(0, history - value, history);
+
+		if (wanted == m_scroll_offset) return;
+		scroll_by(wanted - m_scroll_offset);
+	});
 
 	/*
 	 * Press-and-hold opens the menu where there is no right button to
@@ -320,6 +345,13 @@ void bssh_terminal_view::set_scroll_offset(int lines) {
 	if (clamped == m_scroll_offset) return;
 
 	m_scroll_offset = clamped;
+
+	/*
+	 * The bar follows the view however the view was scrolled -- a wheel,
+	 * Shift+PageUp, a click that jumped to live. A bar that only moved
+	 * when dragged would sit still while the terminal scrolled under it.
+	 */
+	sync_scrollbar();
 	update();
 }
 
@@ -481,13 +513,137 @@ int bssh_snap_to_device_pixels(int pixels, qreal device_ratio) {
 	return qMax(period, int(qRound(pixels / qreal(period))) * period);
 }
 
+namespace {
+
+/*
+ * What a new view starts with. A static rather than a constructor
+ * argument, because the views are built by the pane container in a loop
+ * that has no business knowing about device settings -- and because it is
+ * a fact about the device, like the chords (sec 6.1).
+ */
+bssh_terminal_view::scrollbar_position_t default_position = bssh_terminal_view::SCROLLBAR_NONE;
+
+} /* namespace */
+
+void bssh_terminal_view::set_default_scrollbar_position(scrollbar_position_t where) {
+	default_position = where;
+}
+
+bssh_terminal_view::scrollbar_position_t bssh_terminal_view::default_scrollbar_position() {
+	return default_position;
+}
+
+int bssh_terminal_view::grid_origin_x() const {
+	/*
+	 * The grid starts after the inset, and after the bar as well when the
+	 * bar is on the left. Everything that converts between pixels and
+	 * cells asks this rather than adding the inset itself, which is what
+	 * kept a left-hand scrollbar from being a rewrite of the mouse code.
+	 */
+	if (m_scrollbar_position == SCROLLBAR_LEFT && m_scrollbar && !m_scrollbar->isHidden()) {
+		return BSSH_GRID_INSET_PX + m_scrollbar->sizeHint().width();
+	}
+	return BSSH_GRID_INSET_PX;
+}
+
+int bssh_terminal_view::grid_width() const {
+	int taken = 2 * BSSH_GRID_INSET_PX;
+	if (m_scrollbar && !m_scrollbar->isHidden()) taken += m_scrollbar->sizeHint().width();
+
+	return qMax(0, width() - taken);
+}
+
+void bssh_terminal_view::set_scrollbar_position(scrollbar_position_t where) {
+	if (where == m_scrollbar_position) return;
+
+	m_scrollbar_position = where;
+	m_scrollbar->setVisible(where != SCROLLBAR_NONE);
+
+	place_scrollbar();
+
+	/*
+	 * The grid is a different width now, so a view that is ON SCREEN has
+	 * to tell the remote -- recompute_grid emits grid_resized, which is
+	 * what carries a window-change (sec 7). Without it the far end lays
+	 * out for a column that is no longer there.
+	 *
+	 * And only on screen. A widget that has never been laid out is still
+	 * at QWidget's default 100x30, which is about one row: recomputing
+	 * there sends the remote a geometry nobody has, and the line that was
+	 * on the screen goes into the scrollback to make room for it. Found
+	 * by a tear-out test whose windows are never shown -- the same shape
+	 * as an Android activity that has not been resumed yet. The next
+	 * resizeEvent recomputes with the bar included, which is where a
+	 * window that IS shown gets its answer anyway.
+	 */
+	if (isVisible()) recompute_grid();
+	update();
+}
+
+void bssh_terminal_view::place_scrollbar() {
+	if (!m_scrollbar) return;
+
+	const int bar = m_scrollbar->sizeHint().width();
+	const int x = m_scrollbar_position == SCROLLBAR_LEFT ? 0 : width() - bar;
+
+	m_scrollbar->setGeometry(x, 0, bar, height());
+	sync_scrollbar();
+}
+
+void bssh_terminal_view::sync_scrollbar() {
+	if (!m_scrollbar || m_scrollbar->isHidden()) return;
+
+	const int history = m_scrollback ? m_scrollback->count() : 0;
+
+	/*
+	 * The BOTTOM is the live screen, which is where every terminal since
+	 * xterm puts it and the opposite of how the offset is counted -- so
+	 * the value is the history minus how far back the view is. Getting
+	 * this backwards produces a scrollbar that works and moves the wrong
+	 * way, which is worse than none.
+	 */
+	const QSignalBlocker quiet(m_scrollbar);
+
+	m_scrollbar->setRange(0, history);
+	m_scrollbar->setPageStep(qMax(1, m_rows));
+	m_scrollbar->setSingleStep(1);
+	m_scrollbar->setValue(history - qBound(0, m_scroll_offset, history));
+}
+
 QSize bssh_terminal_view::size_for_grid(int cols, int rows) const {
-	/* The exact inverse of recompute_grid below, inset included. */
-	return QSize(qMax(1, cols) * m_cell_width + 2 * BSSH_GRID_INSET_PX,
+	/*
+	 * The exact inverse of recompute_grid below: the inset, and the bar
+	 * where there is one. A --geometry that ignored the scrollbar would
+	 * be a column short the moment somebody turned one on (sec 8.6).
+	 */
+	int extra = 2 * BSSH_GRID_INSET_PX;
+	if (m_scrollbar && !m_scrollbar->isHidden()) extra += m_scrollbar->sizeHint().width();
+
+	return QSize(qMax(1, cols) * m_cell_width + extra,
 	              qMax(1, rows) * m_cell_height + 2 * BSSH_GRID_INSET_PX);
 }
 
 void bssh_terminal_view::recompute_grid() {
+	/*
+	 * A widget with no width has no grid, and must not claim one.
+	 *
+	 * The arithmetic below floors at one column and one row, so a view
+	 * that has not been given a size yet -- a pane in a window nobody has
+	 * shown, a splitter child squeezed to nothing mid-layout -- would
+	 * announce a 1-column terminal and the remote would reflow every line
+	 * it has to match. Found exactly that way: a tab torn into an unshown
+	 * window came out 0 pixels wide, told its session it was one column,
+	 * and the line that had been on screen went into the scrollback a
+	 * character at a time.
+	 *
+	 * The floor itself is right -- a terminal is never zero columns -- but
+	 * it is an answer to "how small can a grid be", not to "does this
+	 * widget have one yet". sec 8.4 records the same shape once already,
+	 * in a status line that reported "1x41 cells" on a screen plainly
+	 * showing more.
+	 */
+	if (width() <= 0 || height() <= 0) return;
+
 	/*
 	 * The focus border's width is reserved whether or not the border is
 	 * drawn. Reserving it only when focused would change the column count
@@ -495,14 +651,35 @@ void bssh_terminal_view::recompute_grid() {
 	 * remote every time the user clicked a different pane, and a reflow
 	 * of whatever they were reading.
 	 */
-	const int cols = qMax(1, (width() - 2 * BSSH_GRID_INSET_PX) / m_cell_width);
+	const int cols = qMax(1, grid_width() / m_cell_width);
 	const int rows = qMax(1, (height() - 2 * BSSH_GRID_INSET_PX) / m_cell_height);
 
 	if (cols == m_cols && rows == m_rows) return;
 
 	m_cols = cols;
 	m_rows = rows;
-	emit grid_resized(m_cols, m_rows);
+
+	/* The page step is a screenful, and a screenful just changed. */
+	sync_scrollbar();
+
+	/*
+	 * Only a view that is ON SCREEN tells its session how big it is.
+	 *
+	 * A window-change message is a claim about what the user can see, and
+	 * a pane in a window nobody has shown is not showing anything. Qt
+	 * still lays such a widget out -- with whatever the splitter had
+	 * before it had a real size -- and this used to pass that on: the
+	 * measured symptom was a session told it was 1x2, which made the
+	 * remote reflow every line it had to one column. A tab torn into an
+	 * unshown window then had its screen in the scrollback, a character
+	 * per line.
+	 *
+	 * The computed cols and rows above are kept either way, so anything
+	 * asking this view what it holds gets an answer; what is withheld is
+	 * only the message to the far end. When the window is shown, the
+	 * resize that follows says it properly.
+	 */
+	if (isVisible()) emit grid_resized(m_cols, m_rows);
 }
 
 void bssh_terminal_view::contextMenuEvent(QContextMenuEvent *event) {
@@ -572,6 +749,10 @@ void bssh_terminal_view::inputMethodEvent(QInputMethodEvent *event) {
 
 void bssh_terminal_view::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
+
+	/* Placed before the grid is recomputed: the bar's width is part of
+	 * the arithmetic, not a decoration applied afterwards. */
+	place_scrollbar();
 	recompute_grid();
 }
 
@@ -589,7 +770,7 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	 * The border itself is drawn at the end, after the transform is put
 	 * back.
 	 */
-	painter.translate(BSSH_GRID_INSET_PX, BSSH_GRID_INSET_PX);
+	painter.translate(grid_origin_x(), BSSH_GRID_INSET_PX);
 
 	if (!m_screen) {
 		/* No session yet: name the app rather than showing a blank void. */
@@ -875,7 +1056,7 @@ bool bssh_terminal_view::cell_at(const QPoint &point, qint64 &line, int &col) co
 
 	const int row = qBound(0, (point.y() - BSSH_GRID_INSET_PX) / m_cell_height,
 	                        qMax(0, m_rows - 1));
-	col = qBound(0, (point.x() - BSSH_GRID_INSET_PX) / m_cell_width, qMax(0, m_cols - 1));
+	col = qBound(0, (point.x() - grid_origin_x()) / m_cell_width, qMax(0, m_cols - 1));
 	line = line_for_row(row);
 	return true;
 }
@@ -1214,6 +1395,9 @@ void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings
 
 void bssh_terminal_view::on_screen_damaged() {
 	++m_content_revision;
+
+	/* Output scrolling off the top is more history to point at. */
+	sync_scrollbar();
 	update();
 
 	/*

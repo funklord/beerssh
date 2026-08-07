@@ -15,6 +15,7 @@
 
 class QMouseEvent;
 class QPainter;
+class QScrollBar;
 #include "ui/long_press.h"
 class QWheelEvent;
 class bssh_emulator;
@@ -88,6 +89,45 @@ public:
 	 * of --geometry produced a 99-column terminal for `100x30`.
 	 */
 	QSize size_for_grid(int cols, int rows) const;
+
+	/*
+	 * Where this pane's scrollbar sits, or that it has none (sec 8.3).
+	 *
+	 * Konsole's three answers, and the reason it is a real QScrollBar
+	 * rather than something painted: a scrollbar is the one part of a
+	 * terminal a user expects to behave exactly like every other
+	 * scrollbar on their desktop -- the wheel over it, the page-jump
+	 * click, the drag, the theme's own arrows.
+	 *
+	 * It lives INSIDE the view rather than beside it, because the view is
+	 * what owns the grid arithmetic: the columns it can show are the ones
+	 * left after the bar has taken its width, and the code that maps a
+	 * click to a cell has to start where the grid starts. Putting the bar
+	 * in a wrapper widget would have split that arithmetic across two
+	 * classes.
+	 */
+	enum scrollbar_position_t {
+		SCROLLBAR_NONE,
+		SCROLLBAR_RIGHT,
+		SCROLLBAR_LEFT
+	};
+
+	void set_scrollbar_position(scrollbar_position_t where);
+	scrollbar_position_t scrollbar_position() const { return m_scrollbar_position; }
+
+	/*
+	 * What a view is BUILT with, so that none of them ever lives a moment
+	 * at the wrong width.
+	 *
+	 * Views are destroyed and rebuilt on every layout change (sec 8.2),
+	 * and the device settings used to be applied a beat afterwards -- so
+	 * a new pane came up with no bar, measured its columns, told the
+	 * remote, and then acquired one and did it again. The second resize
+	 * reflowed the text: a tab torn into a new window pushed the line
+	 * that was on screen into the scrollback, which is what caught it.
+	 */
+	static void set_default_scrollbar_position(scrollbar_position_t where);
+	static scrollbar_position_t default_scrollbar_position();
 
 	/*
 	 * The curated set's way in (project.md sec 9): a stable font id and a
@@ -361,6 +401,27 @@ private:
 	const bssh_image_store *m_images;
 	const bssh_scrollback *m_scrollback;
 	int m_scroll_offset;
+
+	/*
+	 * Always built, shown only where it is wanted. A widget created on
+	 * demand would have to be wired up on demand too, and the wiring is
+	 * what goes wrong.
+	 */
+	QScrollBar *m_scrollbar;
+	scrollbar_position_t m_scrollbar_position;
+
+	/*
+	 * Where the grid starts and how wide it is, once the bar has taken
+	 * its side. One place, because four things have to agree about it:
+	 * the column count, the painter's origin, the point-to-cell mapping
+	 * and size_for_grid's answer.
+	 */
+	int grid_origin_x() const;
+	int grid_width() const;
+
+	/* Range, value and page step from the scrollback and the offset. */
+	void sync_scrollbar();
+	void place_scrollbar();
 	bool m_focus_border;
 
 	/*

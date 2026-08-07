@@ -1,5 +1,8 @@
 #include "input/input_router.h"
 
+#include <QKeyCombination>
+#include <QKeySequence>
+
 #include <QKeyEvent>
 
 #include "term/emulator.h"
@@ -35,22 +38,112 @@ quint8 bssh_input_router::modifiers_for(QKeyEvent *event) const {
  * in daily use by readline and by editors, so the pair together is the
  * cheapest chord available.
  */
-const QList<bssh_input_router::chord_t> &bssh_input_router::stolen_chords() {
+namespace {
+
+/* How a chord is written for a reader, from what it actually matches. */
+QString chord_label(Qt::KeyboardModifiers modifiers, int key) {
+	const QKeySequence sequence(QKeyCombination(modifiers, Qt::Key(key)));
+
+	return sequence.toString(QKeySequence::NativeText);
+}
+
+/*
+ * The bindings somebody has set, by action name. Empty for a fresh
+ * process, which is every process until the window reads app.ini.
+ */
+QHash<QString, QString> user_bindings;
+
+/* Rebuilt whenever the bindings change; see stolen_chords(). */
+QList<bssh_input_router::chord_t> effective_chords;
+bool effective_current = false;
+
+} /* namespace */
+
+const QList<bssh_input_router::chord_t> &bssh_input_router::default_chords() {
 	static const QList<chord_t> chords = {
 		{ SHORTCUT_COPY, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_C,
-			"Ctrl+Shift+C", "Copy the selection" },
+			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_C),
+			"copy", "Copy the selection" },
 		{ SHORTCUT_PASTE, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_V,
-			"Ctrl+Shift+V", "Paste" },
+			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_V),
+			"paste", "Paste" },
 		{ SHORTCUT_SCROLL_PAGE_UP, Qt::ShiftModifier, Qt::Key_PageUp,
-			"Shift+PageUp", "Scroll back a page" },
+			chord_label(Qt::ShiftModifier, Qt::Key_PageUp),
+			"scroll-page-up", "Scroll back a page" },
 		{ SHORTCUT_SCROLL_PAGE_DOWN, Qt::ShiftModifier, Qt::Key_PageDown,
-			"Shift+PageDown", "Scroll forward a page" },
+			chord_label(Qt::ShiftModifier, Qt::Key_PageDown),
+			"scroll-page-down", "Scroll forward a page" },
 		{ SHORTCUT_FOCUS_PANE_LEFT, Qt::ControlModifier | Qt::AltModifier, Qt::Key_Left,
-			"Ctrl+Alt+Left", "Focus the pane to the left" },
+			chord_label(Qt::ControlModifier | Qt::AltModifier, Qt::Key_Left),
+			"focus-pane-left", "Focus the pane to the left" },
 		{ SHORTCUT_FOCUS_PANE_RIGHT, Qt::ControlModifier | Qt::AltModifier, Qt::Key_Right,
-			"Ctrl+Alt+Right", "Focus the pane to the right" },
+			chord_label(Qt::ControlModifier | Qt::AltModifier, Qt::Key_Right),
+			"focus-pane-right", "Focus the pane to the right" },
+		{ SHORTCUT_NEW_TAB, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_T,
+			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_T),
+			"new-tab", "Open another session in a tab" },
+		{ SHORTCUT_NEW_WINDOW, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_N,
+			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_N),
+			"new-window", "Open another session in a window" },
 	};
 	return chords;
+}
+
+void bssh_input_router::set_bindings(const QHash<QString, QString> &bindings) {
+	user_bindings = bindings;
+	effective_current = false;
+}
+
+QString bssh_input_router::binding_for(const QString &action_name) {
+	for (const chord_t &chord : stolen_chords()) {
+		if (QLatin1String(chord.name) == action_name) return chord.label;
+	}
+	return QString();
+}
+
+const QList<bssh_input_router::chord_t> &bssh_input_router::stolen_chords() {
+	if (effective_current) return effective_chords;
+
+	effective_chords.clear();
+
+	for (const chord_t &chord : default_chords()) {
+		const QString bound = user_bindings.value(QString::fromLatin1(chord.name));
+
+		if (!user_bindings.contains(QString::fromLatin1(chord.name))) {
+			effective_chords.append(chord);
+			continue;
+		}
+
+		/*
+		 * Bound to nothing: the chord goes back to the remote shell.
+		 * Dropped from the list rather than kept with a null key,
+		 * because this list is both what handle_key matches against and
+		 * what "Keys this app keeps" shows -- and a chord this app no
+		 * longer keeps has no business in either.
+		 */
+		if (bound.trimmed().isEmpty()) continue;
+
+		const QKeySequence sequence(bound, QKeySequence::PortableText);
+		if (sequence.isEmpty()) {
+			effective_chords.append(chord);
+			continue;
+		}
+
+		const QKeyCombination combination = sequence[0];
+		if (combination.key() == Qt::Key_unknown) {
+			effective_chords.append(chord);
+			continue;
+		}
+
+		chord_t rebound = chord;
+		rebound.modifiers = combination.keyboardModifiers();
+		rebound.key = combination.key();
+		rebound.label = chord_label(rebound.modifiers, rebound.key);
+		effective_chords.append(rebound);
+	}
+
+	effective_current = true;
+	return effective_chords;
 }
 
 bool bssh_input_router::handle_key(QKeyEvent *event) {

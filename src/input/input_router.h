@@ -2,6 +2,7 @@
 #define BSSH_INPUT_ROUTER_H
 
 #include <QObject>
+#include <QHash>
 #include <QList>
 #include <QString>
 
@@ -105,7 +106,17 @@ public:
 		 * available.
 		 */
 		SHORTCUT_FOCUS_PANE_LEFT,
-		SHORTCUT_FOCUS_PANE_RIGHT
+		SHORTCUT_FOCUS_PANE_RIGHT,
+
+		/*
+		 * Konsole's Ctrl+Shift+T and Ctrl+Shift+N, which sec 6.1 named
+		 * as chords to steal and nothing ever took. Without them a
+		 * desktop user's only way to a second session was the context
+		 * menu, the front door and a dialog -- three steps for the
+		 * commonest thing a terminal does.
+		 */
+		SHORTCUT_NEW_TAB,
+		SHORTCUT_NEW_WINDOW
 	};
 
 	/*
@@ -128,15 +139,55 @@ public:
 		shortcut_t action;
 		Qt::KeyboardModifiers modifiers;
 		int key;
-		const char *label;
+
+		/*
+		 * How it is written for a reader -- and COMPUTED, not stored,
+		 * once a chord can be rebound: a label kept beside a binding is
+		 * a label that describes the old one.
+		 */
+		QString label;
+
+		/*
+		 * The name this chord has in app.ini, and it never changes.
+		 * Bindings are filed under it rather than under a position in
+		 * the list, so a hand-edited file survives the list being
+		 * reordered or added to.
+		 */
+		const char *name;
+
 		const char *what;
 	};
 
 	/*
 	 * Every chord this application takes for itself, in the order a
-	 * reader should meet them. Nothing else is intercepted.
+	 * reader should meet them, with whatever the user has rebound
+	 * applied. Nothing else is intercepted.
 	 */
 	static const QList<chord_t> &stolen_chords();
+
+	/* The built-in bindings, for showing a default and offering a reset. */
+	static const QList<chord_t> &default_chords();
+
+	/*
+	 * Rebinds the chords (sec 6.1), by action name to key sequence.
+	 *
+	 * A name with an EMPTY sequence is not stolen at all, and that is the
+	 * feature rather than an edge case: the section this implements says
+	 * "any chord you steal is a chord the remote shell can no longer
+	 * receive", so giving one back has to be sayable. An unknown name and
+	 * an unparseable sequence are ignored, leaving the built-in -- a
+	 * hand-edited file with a typo in it should behave like the default
+	 * rather than lose the binding.
+	 *
+	 * Process-wide, because it is a fact about the keyboard in front of
+	 * the user rather than about one session. Tests set it back to an
+	 * empty map in cleanup, the same way they clear the transport
+	 * factory.
+	 */
+	static void set_bindings(const QHash<QString, QString> &bindings);
+
+	/* What a chord is bound to now, as text -- empty when unbound. */
+	static QString binding_for(const QString &action_name);
 
 signals:
 	void shortcut_pressed(bssh_input_router::shortcut_t shortcut);

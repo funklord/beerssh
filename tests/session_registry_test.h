@@ -30,6 +30,9 @@ private slots:
 	void every_resolved_setting_reaches_something_that_uses_it();
 	void the_on_connect_command_runs_on_every_connect();
 	void a_silenced_bell_does_not_mark_the_tab();
+
+	/* sec 8.3's window title, which is a format rather than a choice. */
+	void the_window_title_expands_what_the_session_knows();
 };
 
 #endif /* BSSH_SESSION_REGISTRY_TEST_H */

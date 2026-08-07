@@ -51,20 +51,42 @@ bssh_app_settings::bssh_app_settings(const QString &directory) {
 	m_path = dir + QStringLiteral("/app.ini");
 }
 
-bssh_app_settings::key_row_visibility_t bssh_app_settings::key_row_visibility() const {
-	if (m_path.isEmpty()) return KEY_ROW_AUTO;
+QVariant bssh_app_settings::value(const QString &key, const QVariant &fallback) const {
+	if (m_path.isEmpty()) return fallback;
 
 	QSettings file(m_path, QSettings::IniFormat);
-	return from_text(file.value(QStringLiteral("input/key_row"),
-	                             QStringLiteral("auto")).toString());
+	return file.value(key, fallback);
 }
 
-void bssh_app_settings::set_key_row_visibility(key_row_visibility_t visibility) {
+bool bssh_app_settings::contains(const QString &key) const {
+	if (m_path.isEmpty()) return false;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	return file.contains(key);
+}
+
+void bssh_app_settings::store(const QString &key, const QVariant &value) {
 	if (m_path.isEmpty()) return;
 
 	QSettings file(m_path, QSettings::IniFormat);
-	file.setValue(QStringLiteral("input/key_row"), to_text(visibility));
+	file.setValue(key, value);
+
+	/*
+	 * Synced rather than left to QSettings' own timer. Two of these
+	 * objects exist at once all the time -- the settings page holds one
+	 * and the window reads another -- and a write that is still in
+	 * memory is a setting the other one cannot see (sec 10.6).
+	 */
 	file.sync();
+}
+
+bssh_app_settings::key_row_visibility_t bssh_app_settings::key_row_visibility() const {
+	return from_text(value(QStringLiteral("input/key_row"),
+	                        QStringLiteral("auto")).toString());
+}
+
+void bssh_app_settings::set_key_row_visibility(key_row_visibility_t visibility) {
+	store(QStringLiteral("input/key_row"), to_text(visibility));
 }
 
 namespace {
@@ -74,11 +96,8 @@ const char *const BSSH_CONTEXT_MENU_KEYS[] = { "auto", "desktop", "touch" };
 } /* namespace */
 
 bssh_app_settings::context_menu_t bssh_app_settings::context_menu() const {
-	if (m_path.isEmpty()) return CONTEXT_MENU_AUTO;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	const QString text = file.value(QStringLiteral("input/context_menu"),
-	                                 QStringLiteral("auto")).toString();
+	const QString text = value(QStringLiteral("input/context_menu"),
+	                            QStringLiteral("auto")).toString();
 
 	for (int i = 0; i < 3; ++i) {
 		if (text == QLatin1String(BSSH_CONTEXT_MENU_KEYS[i])) return context_menu_t(i);
@@ -87,83 +106,135 @@ bssh_app_settings::context_menu_t bssh_app_settings::context_menu() const {
 }
 
 void bssh_app_settings::set_context_menu(context_menu_t layout) {
-	if (m_path.isEmpty()) return;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	file.setValue(QStringLiteral("input/context_menu"),
-	               QLatin1String(BSSH_CONTEXT_MENU_KEYS[int(layout)]));
-	file.sync();
+	store(QStringLiteral("input/context_menu"),
+	       QString::fromLatin1(BSSH_CONTEXT_MENU_KEYS[int(layout)]));
 }
 
 bool bssh_app_settings::caps_as_ctrl() const {
-	if (m_path.isEmpty()) return false;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	return file.value(QStringLiteral("input/caps_as_ctrl"), false).toBool();
+	return value(QStringLiteral("input/caps_as_ctrl"), false).toBool();
 }
 
 void bssh_app_settings::set_caps_as_ctrl(bool caps_as_ctrl) {
-	if (m_path.isEmpty()) return;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	file.setValue(QStringLiteral("input/caps_as_ctrl"), caps_as_ctrl);
-	file.sync();
+	store(QStringLiteral("input/caps_as_ctrl"), caps_as_ctrl);
 }
 
 bool bssh_app_settings::hide_from_screenshots() const {
-	if (m_path.isEmpty()) return false;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	return file.value(QStringLiteral("security/hide_from_screenshots"), false).toBool();
+	return value(QStringLiteral("security/hide_from_screenshots"), false).toBool();
 }
 
 void bssh_app_settings::set_hide_from_screenshots(bool hide) {
-	if (m_path.isEmpty()) return;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	file.setValue(QStringLiteral("security/hide_from_screenshots"), hide);
-	file.sync();
+	store(QStringLiteral("security/hide_from_screenshots"), hide);
 }
 
 bool bssh_app_settings::focus_follows_mouse() const {
-	if (m_path.isEmpty()) return false;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	return file.value(QStringLiteral("input/focus_follows_mouse"), false).toBool();
+	return value(QStringLiteral("input/focus_follows_mouse"), false).toBool();
 }
 
 void bssh_app_settings::set_focus_follows_mouse(bool follows) {
-	if (m_path.isEmpty()) return;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	file.setValue(QStringLiteral("input/focus_follows_mouse"), follows);
-	file.sync();
+	store(QStringLiteral("input/focus_follows_mouse"), follows);
 }
 
 QString bssh_app_settings::theme() const {
-	if (m_path.isEmpty()) return QStringLiteral("system");
-
-	QSettings file(m_path, QSettings::IniFormat);
-	return file.value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString();
+	return value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString();
 }
 
 void bssh_app_settings::set_theme(const QString &theme) {
-	if (m_path.isEmpty()) return;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	file.setValue(QStringLiteral("appearance/theme"), theme);
+	store(QStringLiteral("appearance/theme"), theme);
 }
 
 bool bssh_app_settings::raise_contrast() const {
-	if (m_path.isEmpty()) return true;
-
-	QSettings file(m_path, QSettings::IniFormat);
-	return file.value(QStringLiteral("appearance/raise_contrast"), true).toBool();
+	return value(QStringLiteral("appearance/raise_contrast"), true).toBool();
 }
 
 void bssh_app_settings::set_raise_contrast(bool raise) {
-	if (m_path.isEmpty()) return;
+	store(QStringLiteral("appearance/raise_contrast"), raise);
+}
 
-	QSettings file(m_path, QSettings::IniFormat);
-	file.setValue(QStringLiteral("appearance/raise_contrast"), raise);
+namespace {
+
+/*
+ * Words, not numbers, for the reason the key row's are words: app.ini is
+ * meant to be opened and edited (sec 10.6), and "scrollbar=left" says
+ * what it does where "scrollbar=2" needs this file to decode.
+ *
+ * Konsole stores this exact setting as an integer and it is a small
+ * daily annoyance to anyone reading the file.
+ */
+const char *const BSSH_SCROLLBAR_KEYS[] = { "auto", "right", "left", "hidden" };
+const char *const BSSH_STATUS_LINE_KEYS[] = { "session", "full", "off" };
+
+/*
+ * The default window title, in the same placeholder language Konsole,
+ * xterm and tmux all grew: %t is what the session calls itself, which is
+ * the OSC title the remote set or the profile name until it does.
+ */
+const char *const BSSH_DEFAULT_WINDOW_TITLE = "%t - BeerSSH";
+
+} /* namespace */
+
+bssh_app_settings::scrollbar_t bssh_app_settings::scrollbar() const {
+	const QString text = value(QStringLiteral("appearance/scrollbar"),
+	                            QStringLiteral("auto")).toString();
+
+	for (int i = 0; i < 4; ++i) {
+		if (text.compare(QLatin1String(BSSH_SCROLLBAR_KEYS[i]), Qt::CaseInsensitive) == 0) {
+			return scrollbar_t(i);
+		}
+	}
+
+	/* A typo behaves as the default rather than refusing to start. */
+	return SCROLLBAR_AUTO;
+}
+
+void bssh_app_settings::set_scrollbar(scrollbar_t where) {
+	store(QStringLiteral("appearance/scrollbar"),
+	       QString::fromLatin1(BSSH_SCROLLBAR_KEYS[int(where)]));
+}
+
+bssh_app_settings::status_line_t bssh_app_settings::status_line() const {
+	const QString text = value(QStringLiteral("appearance/status_line"),
+	                            QStringLiteral("session")).toString();
+
+	for (int i = 0; i < 3; ++i) {
+		if (text.compare(QLatin1String(BSSH_STATUS_LINE_KEYS[i]), Qt::CaseInsensitive) == 0) {
+			return status_line_t(i);
+		}
+	}
+
+	return STATUS_LINE_SESSION;
+}
+
+void bssh_app_settings::set_status_line(status_line_t what) {
+	store(QStringLiteral("appearance/status_line"),
+	       QString::fromLatin1(BSSH_STATUS_LINE_KEYS[int(what)]));
+}
+
+QString bssh_app_settings::window_title() const {
+	const QString format = value(QStringLiteral("appearance/window_title"),
+	                              QString::fromLatin1(BSSH_DEFAULT_WINDOW_TITLE)).toString();
+
+	/*
+	 * An EMPTY format is not an empty title: a window with no name at all
+	 * is one the task switcher lists as a blank row, and a user who
+	 * cleared the field by accident would have no way to tell which
+	 * window they were looking at. It means the default.
+	 */
+	return format.trimmed().isEmpty() ? QString::fromLatin1(BSSH_DEFAULT_WINDOW_TITLE)
+	                                   : format;
+}
+
+void bssh_app_settings::set_window_title(const QString &format) {
+	store(QStringLiteral("appearance/window_title"), format);
+}
+
+QString bssh_app_settings::chord(const QString &action) const {
+	return value(QStringLiteral("chords/") + action, QString()).toString();
+}
+
+bool bssh_app_settings::has_chord(const QString &action) const {
+	return contains(QStringLiteral("chords/") + action);
+}
+
+void bssh_app_settings::set_chord(const QString &action, const QString &binding) {
+	store(QStringLiteral("chords/") + action, binding);
 }

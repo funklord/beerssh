@@ -50,6 +50,7 @@ SOURCES += \
     src/model/ssh_config.cpp \
     src/model/profile_store.cpp \
     src/model/settings_resolver.cpp \
+    src/model/window_title.cpp \
     src/model/session.cpp \
     src/model/session_registry.cpp \
     src/input/input_router.cpp \
@@ -99,6 +100,7 @@ HEADERS += \
     src/model/ssh_config.h \
     src/model/profile_store.h \
     src/model/settings_resolver.h \
+    src/model/window_title.h \
     src/model/session.h \
     src/model/session_registry.h \
     src/platform/platform.h \

@@ -2,6 +2,7 @@
 #define BSSH_APP_SETTINGS_H
 
 #include <QString>
+#include <QVariant>
 
 /*
  * bssh_app_settings -- the preferences that belong to the DEVICE rather
@@ -104,10 +105,88 @@ public:
 	bool focus_follows_mouse() const;
 	void set_focus_follows_mouse(bool follows);
 
+	/*
+	 * Where the scrollbar goes (sec 8.3), Konsole's own three answers
+	 * plus the one this app keeps asking: AUTOMATIC is the right-hand
+	 * side where there is a pointer and hidden where there is not,
+	 * because a scrollbar is a thing you drag with a mouse and a thumb
+	 * scrolls the terminal itself (sec 8.5).
+	 */
+	enum scrollbar_t {
+		SCROLLBAR_AUTO,
+		SCROLLBAR_RIGHT,
+		SCROLLBAR_LEFT,
+		SCROLLBAR_HIDDEN
+	};
+
+	scrollbar_t scrollbar() const;
+	void set_scrollbar(scrollbar_t where);
+
+	/*
+	 * How much the status line says (sec 8.4), or nothing at all.
+	 *
+	 * Konsole has no status line and this had one that could not be
+	 * turned off, whose first field was the QPA platform name -- which is
+	 * a thing a developer wants and a user has no use for. So: OFF is a
+	 * terminal and nothing else, SESSION is where you are connected and
+	 * how it is going, and FULL adds the grid size and the platform for
+	 * the person diagnosing a build.
+	 */
+	enum status_line_t {
+		STATUS_LINE_SESSION,
+		STATUS_LINE_FULL,
+		STATUS_LINE_OFF
+	};
+
+	status_line_t status_line() const;
+	void set_status_line(status_line_t what);
+
+	/*
+	 * What the window is called (sec 8.3), as a format rather than a
+	 * choice from a list -- which is what Konsole, xterm and tmux all
+	 * settled on, because everybody wants a different one of the same
+	 * four facts. bssh_window_title() expands it.
+	 */
+	QString window_title() const;
+	void set_window_title(const QString &format);
+
+	/*
+	 * The chords this app keeps for itself (sec 6.1), as the user has
+	 * bound them. Empty means the built-in binding; a binding set to
+	 * nothing at all gives the chord back to the remote shell, which is
+	 * the whole point of making them editable.
+	 *
+	 * Keyed by the action's stable name -- "copy", "new-tab" -- so a file
+	 * somebody has hand-edited survives the list being reordered.
+	 */
+	QString chord(const QString &action) const;
+	void set_chord(const QString &action, const QString &binding);
+
+	/*
+	 * Whether this action has been bound at all, which is a different
+	 * question from what it is bound TO.
+	 *
+	 * Absent means the built-in chord; present and empty means the user
+	 * gave that chord back to the remote shell. Leaning on QString's
+	 * null-versus-empty to tell those apart would be leaning on a
+	 * distinction QSettings does not promise to preserve through a file.
+	 */
+	bool has_chord(const QString &action) const;
+
 	/* Where app.ini lives; empty when no directory could be found. */
 	QString path() const { return m_path; }
 
 private:
+	/*
+	 * One reader and one writer, because every setting above was eleven
+	 * lines of the same QSettings dance and this file is going to keep
+	 * growing. The default is passed rather than assumed, so a setting's
+	 * default still lives with the setting.
+	 */
+	QVariant value(const QString &key, const QVariant &fallback) const;
+	void store(const QString &key, const QVariant &value);
+	bool contains(const QString &key) const;
+
 	QString m_path;
 };
 

@@ -39,6 +39,7 @@
 #include "model/conn_manager.h"
 #include "model/session_registry.h"
 #include "model/app_settings.h"
+#include "model/window_title.h"
 #include "model/settings_resolver.h"
 #include "ui/layout_manager.h"
 #include "ui/pane_container.h"
@@ -91,6 +92,8 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_tabs(new QTabBar(m_terminal_page)),
       m_tab_long_press(nullptr),
       m_key_row(nullptr),
+      m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
+      m_window_title_format(QStringLiteral("%t - BeerSSH")),
       m_asked_about_closing(false),
       m_background_on_close(false) {
 	setWindowTitle(QStringLiteral("BeerSSH"));
@@ -484,6 +487,21 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_DOWN) {
 			m_terminal_view->scroll_by(-m_terminal_view->rows() / 2);
 		}
+
+		/*
+		 * Konsole's Ctrl+Shift+T and Ctrl+Shift+N (sec 6.1). What they
+		 * open is what this device opens with -- a local shell on a
+		 * desktop (sec 8.5) -- because that is what every terminal's new
+		 * tab does and what makes the chord predictable. Duplicating the
+		 * host you are on is a different intent and already has its own
+		 * entry on the tab menu.
+		 *
+		 * Where the device does NOT open with a shell, the front door is
+		 * the honest answer: a phone has nothing for a second shell to
+		 * do, and offering the host list is what its Back button does.
+		 */
+		if (shortcut == bssh_input_router::SHORTCUT_NEW_TAB) open_another_session(false);
+		if (shortcut == bssh_input_router::SHORTCUT_NEW_WINDOW) open_another_session(true);
 	};
 	connect(m_registry, &bssh_session_registry::session_added,
 	         this, [this, handle_shortcut](bssh_session *session) {
@@ -529,9 +547,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 		/* OSC title also drives the window title on desktop (sec 8.3). */
 		connect(session, &bssh_session::title_changed, this, [this, session] {
-			if (session == m_current) {
-				setWindowTitle(QStringLiteral("%1 - BeerSSH").arg(session->title()));
-			}
+			if (session == m_current) update_window_title();
 		});
 	});
 
@@ -981,6 +997,58 @@ void bssh_main_window::apply_device_settings() {
 	        && bssh_platform::instance()
 	        && !bssh_platform::instance()->is_touch_primary();
 
+	/*
+	 * Where the scrollbar goes (sec 8.3). AUTOMATIC is the right-hand
+	 * side where there is a pointer to drag it with and nothing where
+	 * there is not -- a thumb scrolls the terminal itself (sec 8.5), and
+	 * a bar it would have to hit is a strip of screen a phone cannot
+	 * spare.
+	 */
+	const bool touch = bssh_platform::instance()
+	        && bssh_platform::instance()->is_touch_primary();
+
+	bssh_terminal_view::scrollbar_position_t bar = bssh_terminal_view::SCROLLBAR_NONE;
+	switch (settings.scrollbar()) {
+	case bssh_app_settings::SCROLLBAR_RIGHT:
+		bar = bssh_terminal_view::SCROLLBAR_RIGHT;
+		break;
+	case bssh_app_settings::SCROLLBAR_LEFT:
+		bar = bssh_terminal_view::SCROLLBAR_LEFT;
+		break;
+	case bssh_app_settings::SCROLLBAR_HIDDEN:
+		break;
+	case bssh_app_settings::SCROLLBAR_AUTO:
+		if (!touch) bar = bssh_terminal_view::SCROLLBAR_RIGHT;
+		break;
+	}
+
+	/*
+	 * Both of these are read once here and kept, for the reason
+	 * update_status gives: they are consulted far too often to be a file
+	 * read each time, and they change when somebody edits them -- which
+	 * is exactly when this function runs.
+	 */
+	m_status_line = settings.status_line();
+	m_window_title_format = settings.window_title();
+	update_window_title();
+
+	/*
+	 * The scrollbar is a view's shape rather than one of its properties,
+	 * so it is set as the DEFAULT and the panes are rebuilt once when it
+	 * actually changes -- never poked into each live view.
+	 *
+	 * Poking it in place is what this did first, and it cannot be done
+	 * safely from here: this function runs on panes_rebuilt, changing a
+	 * view's width re-measures the grid, and a re-measure can cross the
+	 * size class that decides how many panes fit (sec 8.2) -- which
+	 * rebuilds the panes, which calls this again. That loop ran for five
+	 * minutes and died on a stack overflow. Rebuilding only on a real
+	 * change terminates, because the second pass finds the default
+	 * already right.
+	 */
+	const bool bar_changed = bssh_terminal_view::default_scrollbar_position() != bar;
+	bssh_terminal_view::set_default_scrollbar_position(bar);
+
 	if (m_panes) {
 		for (bssh_terminal_view *view : m_panes->views()) {
 			if (!view) continue;
@@ -989,6 +1057,8 @@ void bssh_main_window::apply_device_settings() {
 			view->set_focus_follows_mouse(follows);
 		}
 	}
+
+	if (bar_changed && m_panes) m_panes->rebuild();
 
 	/*
 	 * Caps as Ctrl reaches every session's router, not just the focused
@@ -1000,6 +1070,28 @@ void bssh_main_window::apply_device_settings() {
 	for (bssh_session *session : m_registry->sessions()) {
 		if (session->input_router()) session->input_router()->set_caps_as_ctrl(caps);
 	}
+
+	/*
+	 * And the chords the user has rebound (sec 6.1). Process-wide rather
+	 * than per-router, because the set this app keeps for itself is a
+	 * fact about the keyboard rather than about a session -- and because
+	 * "Keys this app keeps" has to show the same list the router
+	 * matches against, from anywhere.
+	 */
+	QHash<QString, QString> bindings;
+	for (const bssh_input_router::chord_t &chord : bssh_input_router::default_chords()) {
+		const QString name = QString::fromLatin1(chord.name);
+
+		/*
+		 * Only what has actually been written. An absent key is the
+		 * built-in binding, and an empty one is a chord deliberately
+		 * given back to the shell -- two different things, and asked
+		 * as two different questions rather than through whether a
+		 * QString came back null.
+		 */
+		if (settings.has_chord(name)) bindings.insert(name, settings.chord(name));
+	}
+	bssh_input_router::set_bindings(bindings);
 
 	/*
 	 * sec 11's FLAG_SECURE. Applied unconditionally rather than only
@@ -1290,6 +1382,32 @@ void bssh_main_window::dropEvent(QDropEvent *event) {
 
 	drop_session(session, !on_the_bar);
 	event->acceptProposedAction();
+}
+
+void bssh_main_window::open_another_session(bool in_a_window) {
+	const bool touch = bssh_platform::instance()
+	        && bssh_platform::instance()->is_touch_primary();
+
+	if (!opens_a_local_shell(touch)) {
+		show_front_door();
+		return;
+	}
+
+	if (!in_a_window) {
+		open_profile(bssh_profile_t::local_shell());
+		return;
+	}
+
+	/*
+	 * A second window is a second VIEW, never a second registry
+	 * (sec 8.4) -- which is what bssh_main_window already arranges, so
+	 * this is the tear-out gesture's window without the tearing.
+	 */
+	bssh_main_window *window = new bssh_main_window;
+	window->setAttribute(Qt::WA_DeleteOnClose);
+	window->resize(size());
+	window->show();
+	window->open_profile(bssh_profile_t::local_shell());
 }
 
 bssh_main_window *bssh_main_window::tear_out_tab(int index) {
@@ -1902,7 +2020,30 @@ void bssh_main_window::show_tab_menu(const QPoint &at) {
 	if (chosen == close) on_tab_close_requested(index);
 }
 
+void bssh_main_window::update_window_title() {
+	/*
+	 * Whatever is on screen names the window, and it is recomputed HERE
+	 * rather than at the one signal that used to drive it.
+	 *
+	 * That signal was the remote's OSC title, guarded on the session
+	 * being the current one -- so a window showed "BeerSSH" until a
+	 * remote spoke, and switching tabs kept the old tab's name until the
+	 * new one happened to set a title of its own. Two defects with one
+	 * cause: the title was a side effect of an event rather than a
+	 * function of what is on screen.
+	 */
+	setWindowTitle(bssh_expand_window_title(m_window_title_format, m_current));
+}
+
 void bssh_main_window::update_status() {
+	/*
+	 * The title comes along, because this function already runs wherever
+	 * what the window is showing changes -- a tab switch, a state change,
+	 * a session going away. Hanging the title off its own set of signals
+	 * is how it came to be updated by exactly one of them.
+	 */
+	update_window_title();
+
 	const bssh_platform *platform = bssh_platform::instance();
 
 	QString session_text = QStringLiteral("no session");
@@ -1928,11 +2069,27 @@ void bssh_main_window::update_status() {
 	const int cols = m_terminal_view ? m_terminal_view->cols() : 0;
 	const int rows = m_terminal_view ? m_terminal_view->rows() : 0;
 
-	m_status_text = QStringLiteral("%1  |  %2x%3 cells  |  %4")
-	                        .arg(platform->name())
-	                        .arg(cols)
-	                        .arg(rows)
-	                        .arg(session_text);
+	/*
+	 * What the line says is the user's to decide (sec 8.4). It was
+	 * unconditional, and its first field was the QPA platform name --
+	 * which is a fact a developer wants and a user has no use for, on a
+	 * row of screen taken from the terminal.
+	 *
+	 * The setting is read in apply_device_settings rather than here: this
+	 * runs on every state change, every resize and every keystroke that
+	 * scrolls, and opening an INI file that often to answer a question
+	 * whose answer changes twice a year is a file read in the paint path.
+	 */
+	m_status_label->setVisible(m_status_line != bssh_app_settings::STATUS_LINE_OFF);
+
+	m_status_text = m_status_line == bssh_app_settings::STATUS_LINE_FULL
+	        ? QStringLiteral("%1  |  %2x%3 cells  |  %4")
+	                  .arg(platform->name())
+	                  .arg(cols)
+	                  .arg(rows)
+	                  .arg(session_text)
+	        : session_text;
+
 	elide_status();
 }
 

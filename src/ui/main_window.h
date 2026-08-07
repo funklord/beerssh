@@ -298,6 +298,18 @@ private:
 	void offer_to_remember(bssh_session *session, const QString &password);
 	bool unlock_secret_store();
 
+	/*
+	 * What this window is called (sec 8.3), from the format the device
+	 * setting carries and whatever session is on screen.
+	 */
+	void update_window_title();
+
+	/*
+	 * Another session, in a tab or in a window of its own (sec 6.1's
+	 * new-tab and new-window chords).
+	 */
+	void open_another_session(bool in_a_window);
+
 	void save_layout();
 	void show_session(bssh_session *session);
 	void detach_session();
@@ -513,6 +525,14 @@ private:
 	QString m_status_text;
 
 	/* Remembered answer to the close prompt; unset until asked once. */
+	/*
+	 * Read once by apply_device_settings and kept: update_status runs on
+	 * every state change and every resize, and an INI read there is a
+	 * file opened in the paint path.
+	 */
+	bssh_app_settings::status_line_t m_status_line;
+	QString m_window_title_format;
+
 	bool m_asked_about_closing;
 	bool m_background_on_close;
 };

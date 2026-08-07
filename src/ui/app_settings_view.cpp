@@ -3,6 +3,8 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QFormLayout>
+#include <QKeySequenceEdit>
+#include <QLineEdit>
 #include <QScrollArea>
 #include <QScroller>
 #include <QFrame>
@@ -116,6 +118,63 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * be both, and because a desktop user who wants the big menu is
 	 * entitled to it.
 	 */
+	/*
+	 * The scrollbar (sec 8.3), Konsole's three answers plus this app's
+	 * usual "ask the device". Filed under appearance beside the theme,
+	 * because that is what the user came here looking for.
+	 */
+	m_scrollbar = new QComboBox(this);
+	m_scrollbar->addItem(QStringLiteral("Automatic"),
+	                      int(bssh_app_settings::SCROLLBAR_AUTO));
+	m_scrollbar->addItem(QStringLiteral("On the right"),
+	                      int(bssh_app_settings::SCROLLBAR_RIGHT));
+	m_scrollbar->addItem(QStringLiteral("On the left"),
+	                      int(bssh_app_settings::SCROLLBAR_LEFT));
+	m_scrollbar->addItem(QStringLiteral("Hidden"),
+	                      int(bssh_app_settings::SCROLLBAR_HIDDEN));
+	if (touch) m_scrollbar->setMinimumHeight(48);
+	form->addRow(QStringLiteral("Scrollbar"), m_scrollbar);
+
+	QLabel *scrollbar_note = bssh_wrapped_note(
+	        QStringLiteral("Automatic shows one where there is a pointer to drag it "
+	                        "with. How much there is to scroll through is the host's "
+	                        "own setting."),
+	        this);
+	form->addRow(QString(), scrollbar_note);
+
+	/*
+	 * What the status line says, or that it says nothing (sec 8.4). It
+	 * used to be unconditional, and its first field was the QPA platform
+	 * name -- a fact a developer wants and a user has no use for.
+	 */
+	m_status_line = new QComboBox(this);
+	m_status_line->addItem(QStringLiteral("Session and state"),
+	                        int(bssh_app_settings::STATUS_LINE_SESSION));
+	m_status_line->addItem(QStringLiteral("Everything, including the grid size"),
+	                        int(bssh_app_settings::STATUS_LINE_FULL));
+	m_status_line->addItem(QStringLiteral("Hidden"),
+	                        int(bssh_app_settings::STATUS_LINE_OFF));
+	if (touch) m_status_line->setMinimumHeight(48);
+	form->addRow(QStringLiteral("Status line"), m_status_line);
+
+	/*
+	 * The window title, as a format. A list of three canned choices would
+	 * have been less code and would have fitted nobody: everyone wants a
+	 * different one of the same four facts, which is why Konsole, xterm
+	 * and tmux all ended up with a format string.
+	 */
+	m_window_title = new QLineEdit(this);
+	m_window_title->setPlaceholderText(QStringLiteral("%t - BeerSSH"));
+	if (touch) m_window_title->setMinimumHeight(48);
+	form->addRow(QStringLiteral("Window title"), m_window_title);
+
+	QLabel *title_note = bssh_wrapped_note(
+	        QStringLiteral("%t is what the session calls itself, %n its saved name, "
+	                        "%u the user, %h the host, %p the port, %a this app. "
+	                        "Empty means the default."),
+	        this);
+	form->addRow(QString(), title_note);
+
 	m_context_menu = new QComboBox(this);
 	m_context_menu->addItem(QStringLiteral("Automatic"),
 	                         int(bssh_app_settings::CONTEXT_MENU_AUTO));
@@ -269,13 +328,53 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	        QStringLiteral("These never reach the remote shell."), this);
 	body->addWidget(chords_note);
 
+	/*
+	 * Editable, which sec 6.1 asked for and nothing had built: "a chord a
+	 * user wants back is one they cannot yet have". A QKeySequenceEdit
+	 * because it is the control the platform already has for this job --
+	 * it records the chord you press rather than making you spell it,
+	 * which is the difference between a setting people use and one they
+	 * read about.
+	 *
+	 * Built from default_chords() rather than from the effective list, so
+	 * every action has a row even when the user has given its chord back
+	 * -- an action that vanished from the page once unbound could never
+	 * be bound again.
+	 */
 	QFormLayout *chords = new QFormLayout;
-	for (const bssh_input_router::chord_t &chord : bssh_input_router::stolen_chords()) {
-		QLabel *what = bssh_wrapped_note(QString::fromLatin1(chord.what), this);
-		what->setObjectName(QStringLiteral("stolen_chord"));
-		chords->addRow(QString::fromLatin1(chord.label), what);
+	const bssh_app_settings bound;
+
+	for (const bssh_input_router::chord_t &chord : bssh_input_router::default_chords()) {
+		const QString name = QString::fromLatin1(chord.name);
+
+		QKeySequenceEdit *edit = new QKeySequenceEdit(this);
+		edit->setObjectName(QStringLiteral("chord_") + name);
+		edit->setKeySequence(QKeySequence(bound.has_chord(name) ? bound.chord(name)
+		                                                         : chord.label,
+		                                   QKeySequence::PortableText));
+		if (touch) edit->setMinimumHeight(48);
+
+		connect(edit, &QKeySequenceEdit::editingFinished, this, [this, name, edit] {
+			bssh_app_settings stored;
+			stored.set_chord(name, edit->keySequence().toString(QKeySequence::PortableText));
+			emit changed();
+		});
+
+		/*
+		 * The description IS the row label, which is how every shortcut
+		 * editor from Konsole's onwards lays this out: the reader is
+		 * looking for the action and wants to see what it is bound to,
+		 * not the other way round.
+		 */
+		chords->addRow(QString::fromLatin1(chord.what), edit);
 	}
 	body->addLayout(chords);
+
+	QLabel *chords_reset_note = bssh_wrapped_note(
+	        QStringLiteral("Clear a chord to give it back to the remote shell. "
+	                        "Whatever this app keeps, the shell never sees."),
+	        this);
+	body->addWidget(chords_reset_note);
 
 	body->addStretch(1);
 
@@ -302,6 +401,14 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 
+	const int bar_index = m_scrollbar->findData(int(settings.scrollbar()));
+	m_scrollbar->setCurrentIndex(bar_index < 0 ? 0 : bar_index);
+
+	const int status_index = m_status_line->findData(int(settings.status_line()));
+	m_status_line->setCurrentIndex(status_index < 0 ? 0 : status_index);
+
+	m_window_title->setText(settings.window_title());
+
 	const int menu_index = m_context_menu->findData(int(settings.context_menu()));
 	m_context_menu->setCurrentIndex(menu_index < 0 ? 0 : menu_index);
 
@@ -320,6 +427,15 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] { commit(); });
 	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] { commit(); });
 	connect(m_context_menu, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+	connect(m_scrollbar, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+	connect(m_status_line, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+
+	/*
+	 * On editingFinished rather than on every keystroke: a format is
+	 * typed a character at a time and "%" alone is not a title anybody
+	 * meant to see in their task switcher.
+	 */
+	connect(m_window_title, &QLineEdit::editingFinished, this, [this] { commit(); });
 	if (m_hide_from_screenshots) {
 		connect(m_hide_from_screenshots, &QCheckBox::toggled, this, [this] { commit(); });
 	}
@@ -337,6 +453,11 @@ void bssh_app_settings_view::commit() {
 	stored.set_theme(m_theme->currentData().toString());
 	stored.set_context_menu(
 	        bssh_app_settings::context_menu_t(m_context_menu->currentData().toInt()));
+	stored.set_scrollbar(
+	        bssh_app_settings::scrollbar_t(m_scrollbar->currentData().toInt()));
+	stored.set_status_line(
+	        bssh_app_settings::status_line_t(m_status_line->currentData().toInt()));
+	stored.set_window_title(m_window_title->text());
 	stored.set_raise_contrast(m_raise_contrast->isChecked());
 	stored.set_caps_as_ctrl(m_caps_as_ctrl->isChecked());
 	if (m_focus_follows_mouse) {

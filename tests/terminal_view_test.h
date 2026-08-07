@@ -16,6 +16,10 @@ class terminal_view_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	/* sec 8.3's scrollbar: the grid gives up the width it takes. */
+	void the_scrollbar_takes_its_width_from_the_grid();
+	void the_scrollbar_follows_the_view_and_drives_it();
+
 	void grid_scales_with_widget_size();
 	void grid_resized_fires_only_on_real_change();
 	void renders_without_a_screen_attached();
