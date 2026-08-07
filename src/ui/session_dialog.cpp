@@ -60,8 +60,16 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	        QStringList(QStringLiteral("Session")));
 	QTreeWidgetItem *terminal = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Terminal")));
+	/*
+	 * "Appearance", not "Window". The page has always been headed
+	 * Appearance and holds the font, its size and the colours; the tree
+	 * said Window, so the two words disagreed and the category named
+	 * something the page does not set. PuTTY nests Appearance UNDER
+	 * Window, which needs a sub-tree to be worth doing -- one accurate
+	 * word is better than two that argue.
+	 */
 	QTreeWidgetItem *window = new QTreeWidgetItem(m_categories,
-	        QStringList(QStringLiteral("Window")));
+	        QStringList(QStringLiteral("Appearance")));
 	/*
 	 * Not a category PuTTY has, because presets are not a concept PuTTY
 	 * has (sec 10). It sits at the top level rather than under Session
@@ -85,38 +93,45 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 
 	QTreeWidgetItem *licences = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Licences")));
-	new QTreeWidgetItem(connection, QStringList(QStringLiteral("SSH")));
+	/*
+	 * No SSH child any more. It was a signpost -- prose about keys and a
+	 * button to the Session page -- and what it explained belongs beside
+	 * the key field it is explaining, which is where it is now. A
+	 * category that sets nothing is a category that reads as unfinished,
+	 * and this one could not be given settings because it had none to
+	 * give: the key is per host and lives on Session, and keepalive and
+	 * compression are per preset and live on Connection.
+	 */
 
 	m_pages = new QStackedWidget(this);
 	m_pages->addWidget(build_session_page());
-	m_pages->addWidget(build_signpost_page(
-	        QStringLiteral("Terminal"),
-	        QStringLiteral("TERM, scrollback size, the bell and the cursor are set by the "
-	                        "preset a host follows, not per session -- so that changing one "
-	                        "preset changes every host using it."),
-	        QStringLiteral("Presets")));
+	/*
+	 * Terminal and Connection are REAL pages now (sec 8.5). They were
+	 * prose plus a button reading "Open Presets", because what they name
+	 * lives in a preset rather than in a session -- but PuTTY has both
+	 * categories and both hold settings, so a tree that borrows PuTTY's
+	 * shape and then leads nowhere reads as unfinished. Reported as
+	 * exactly that.
+	 *
+	 * They are the same preset editor showing a subset of its fields, so
+	 * there is one implementation of what TERM means, one save and one
+	 * propagation -- and the preset list stays visible on each, which is
+	 * what tells a reader they are editing something SHARED rather than
+	 * this one session.
+	 */
+	m_pages->addWidget(new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP,
+	                                           bssh_preset_editor::TERMINAL, this));
 	m_pages->addWidget(build_window_page());
-	m_preset_editor = new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP, this);
+	m_preset_editor = new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP,
+	                                          bssh_preset_editor::EVERYTHING, this);
 	m_pages->addWidget(m_preset_editor);
 	connect(m_preset_editor, &bssh_preset_editor::preset_saved,
 	         this, &bssh_session_dialog::presets_changed);
 	connect(m_preset_editor, &bssh_preset_editor::preset_removed,
 	         this, &bssh_session_dialog::presets_changed);
 
-	m_pages->addWidget(build_signpost_page(
-	        QStringLiteral("Connection"),
-	        QStringLiteral("Keepalive, compression and the command run on connect belong to "
-	                        "the preset a host follows. Reconnection after a drop needs no "
-	                        "setting: it is automatic, and backs off between attempts."),
-	        QStringLiteral("Presets")));
-	m_pages->addWidget(build_signpost_page(
-	        QStringLiteral("SSH"),
-	        QStringLiteral("Keys are offered before any password is asked for -- the agent "
-	                        "first, then your default identities. A host that needs a "
-	                        "particular key names it in <b>Private key file</b> on the "
-	                        "Session page. Host keys are trusted on first use and checked "
-	                        "every time after."),
-	        QStringLiteral("Session")));
+	m_pages->addWidget(new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP,
+	                                           bssh_preset_editor::CONNECTION, this));
 	bssh_app_settings_view *device = new bssh_app_settings_view(this);
 	m_pages->addWidget(device);
 	connect(device, &bssh_app_settings_view::changed,
@@ -243,6 +258,20 @@ QWidget *bssh_session_dialog::build_session_page() {
 	m_jump->setAccessibleDescription(
 	        QStringLiteral("Leave empty to connect straight to the host."));
 	destination->addRow(QStringLiteral("Connect via"), m_jump);
+
+	/*
+	 * What the key field means, beside the key field (sec 8.5). This was
+	 * a whole category of its own -- an SSH page holding a paragraph and
+	 * a button back to here -- which put the explanation one click away
+	 * from the control it explains.
+	 */
+	QLabel *keys_note = bssh_wrapped_note(
+	        QStringLiteral("Keys are offered before any password is asked for: the agent "
+	                        "first, then your default identities. Name a file above only "
+	                        "if this host needs a particular key. Host keys are trusted "
+	                        "on first use and checked every time after."),
+	        page);
+	destination->addRow(keys_note);
 
 	layout->addLayout(destination);
 
@@ -377,14 +406,19 @@ void bssh_session_dialog::on_category_changed() {
 	if (selected.isEmpty()) return;
 
 	const QString name = selected.first()->text(0);
+	/*
+	 * Indices, and they must match the order the pages were added in the
+	 * constructor. Removing the SSH page shifted the two below it, which
+	 * a list of magic numbers cannot notice -- so the categories are
+	 * asserted against these by a test rather than trusted.
+	 */
 	if (name == QStringLiteral("Session")) m_pages->setCurrentIndex(0);
 	else if (name == QStringLiteral("Terminal")) m_pages->setCurrentIndex(1);
-	else if (name == QStringLiteral("Window")) m_pages->setCurrentIndex(2);
+	else if (name == QStringLiteral("Appearance")) m_pages->setCurrentIndex(2);
 	else if (name == QStringLiteral("Presets")) m_pages->setCurrentIndex(3);
 	else if (name == QStringLiteral("Connection")) m_pages->setCurrentIndex(4);
-	else if (name == QStringLiteral("SSH")) m_pages->setCurrentIndex(5);
-	else if (name == QStringLiteral("This device")) m_pages->setCurrentIndex(6);
-	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(7);
+	else if (name == QStringLiteral("This device")) m_pages->setCurrentIndex(5);
+	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(6);
 }
 
 void bssh_session_dialog::reload_sessions() {
@@ -542,6 +576,16 @@ QWidget *bssh_session_dialog::build_window_page() {
 	layout->addWidget(heading);
 
 	m_font_picker = new bssh_font_picker(page);
+
+	/*
+	 * Named, because the dialog contains several pickers -- this one and
+	 * one inside each embedded preset editor -- and a test that finds it
+	 * by what it is DISPLAYING is guessing. That guess held while there
+	 * were two and broke when Terminal and Connection became real pages:
+	 * a preset with no font of its own shows the platform default, so
+	 * more than one picker started reporting the same family.
+	 */
+	m_font_picker->setObjectName(QStringLiteral("host_font_picker"));
 	layout->addWidget(m_font_picker);
 
 	/*

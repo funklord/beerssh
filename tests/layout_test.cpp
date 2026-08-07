@@ -11,6 +11,8 @@
 #include <QAbstractScrollArea>
 #include <QScrollArea>
 #include <QStackedWidget>
+#include <QSet>
+#include <QTreeWidget>
 #include <QSignalSpy>
 #include <QMimeData>
 #include <QWindow>
@@ -1803,6 +1805,71 @@ void layout_test::focus_follows_the_pointer_only_when_asked() {
 	QCOMPARE(container.view_at(0)->property("bssh_focused").toBool(), false);
 
 	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::every_config_category_shows_its_own_page() {
+	/*
+	 * The tree and the stack are joined by a list of magic indices, and
+	 * removing the SSH page shifted the two below it -- which a list of
+	 * numbers cannot notice. Clicking every category and asserting the
+	 * page that arrives is what makes that list checkable at all.
+	 *
+	 * And every category must SET something. Three of them used to be
+	 * signposts: a paragraph and a button reading "Open Presets", because
+	 * what they name lives in a preset rather than a session. A tree that
+	 * borrows PuTTY's shape and then leads nowhere reads as unfinished,
+	 * which is how it was reported. So a page with no control on it is a
+	 * failure here.
+	 */
+	bssh_platform::force_touch_primary(false);
+
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+	bssh_session_dialog dialog(&store);
+
+	QTreeWidget *tree = dialog.findChild<QTreeWidget *>();
+	QStackedWidget *pages = dialog.findChild<QStackedWidget *>();
+	QVERIFY(tree && pages);
+
+	QList<QTreeWidgetItem *> items;
+	for (int i = 0; i < tree->topLevelItemCount(); ++i) {
+		items.append(tree->topLevelItem(i));
+		for (int child = 0; child < tree->topLevelItem(i)->childCount(); ++child) {
+			items.append(tree->topLevelItem(i)->child(child));
+		}
+	}
+	QVERIFY2(items.size() >= 6, "the category tree lost its categories");
+
+	QSet<QWidget *> seen;
+	for (QTreeWidgetItem *item : items) {
+		tree->setCurrentItem(item);
+		QCoreApplication::processEvents();
+
+		QWidget *page = pages->currentWidget();
+		const QString name = item->text(0);
+
+		QVERIFY2(page, qPrintable(name + QStringLiteral(" selects no page")));
+		QVERIFY2(!seen.contains(page),
+		          qPrintable(name + QStringLiteral(" shows a page another category "
+		                                            "already showed -- the indices have "
+		                                            "shifted")));
+		seen.insert(page);
+
+		/*
+		 * Something to operate. Licences is the one page that is meant
+		 * to be read rather than set, and it has a list, so asking for
+		 * "a control or a list" covers every category honestly.
+		 */
+		const bool has_control = !page->findChildren<QAbstractButton *>().isEmpty()
+		        || !page->findChildren<QLineEdit *>().isEmpty()
+		        || !page->findChildren<QComboBox *>().isEmpty()
+		        || !page->findChildren<QAbstractItemView *>().isEmpty();
+
+		QVERIFY2(has_control,
+		          qPrintable(name + QStringLiteral(" sets nothing -- a category that "
+		                                            "only points somewhere else reads as "
+		                                            "unfinished")));
+	}
 }
 
 void layout_test::closing_the_settings_window_means_cancel() {

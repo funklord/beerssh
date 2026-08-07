@@ -1980,6 +1980,51 @@ well, even though a phone does not *open* with one — an Android sandbox has
 little for a shell to do, but "little" is not "nothing", and being unable to
 reach it is a different thing from it not being the default.
 
+**[BUILT] Every category sets something, and every category is named after
+what it sets.** Reported as a confusing dialog, and the two specific
+complaints were these.
+
+*Terminal*, *Connection* and *SSH* were **signposts** -- a paragraph and a
+button reading "Open Presets" -- because what they name lives in a preset
+rather than in a session. That is a true fact about the model and a bad
+answer to a category tree: PuTTY has Terminal and Connection and both hold
+settings, so borrowing PuTTY's shape and then leading nowhere reads as
+unfinished rather than as principled.
+
+Terminal and Connection hold their settings now, as the **same preset editor
+showing a subset of its fields** -- one implementation of what TERM means, one
+save, one propagation. Every field is still *built* in every view, because a
+field that existed only on one page would be one the other page silently
+discarded on save; only what reaches the form differs. The preset list stays
+visible on both, which is what tells a reader they are editing something
+**shared** rather than this one session.
+
+*SSH* is gone. It could not be given settings because it had none to give:
+the key is per host and lives on *Session*, keepalive and compression are per
+preset and live on *Connection*. Its paragraph moved beside the key field it
+explains, which is where it was pointing anyway.
+
+*Window* is **Appearance**, because the page has always been headed Appearance
+and holds the font, its size and the colours. PuTTY nests Appearance under
+Window, which needs a sub-tree to be worth doing; one accurate word beats two
+that argue.
+
+Import and Export are hidden outside the *Presets* category: they move whole
+preset files between machines, and on a page about four terminal settings they
+are two more buttons between a reader and what they came for.
+
+**A field left out of a form is not thereby invisible.** Each is built with the
+editor as its parent, and a parented widget with no layout is drawn at its
+default geometry -- the top-left corner. The first version left the unshown
+fields out of the form and painted the key-row combo over the preset list's
+first row. Nothing could have asserted it: every widget was present, sized and
+inside the page. Found by rendering the page and looking at it.
+
+**The tree and the stack are joined by magic indices**, so removing a page
+shifted the two below it. A test clicks every category, asserts a distinct
+page arrives, and asserts each page has a control on it -- which is what stops
+a category quietly becoming a signpost again.
+
 **Touch: a full-bleed host list**, and its editor is a **page, not a
 dialog**. **The rows are 64dp and, until they were looked at, said nothing
 about being rows** -- no rule between them, no selection, no pressed state

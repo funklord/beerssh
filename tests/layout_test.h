@@ -47,6 +47,7 @@ private slots:
 	void a_window_shows_only_its_own_tabs();
 	void cancelling_the_settings_keeps_the_session();
 	void closing_the_settings_window_means_cancel();
+	void every_config_category_shows_its_own_page();
 	void a_torn_out_tab_becomes_a_window_without_moving_the_session();
 	void a_dropped_session_leaves_the_window_it_came_from();
 	void a_drop_on_the_panes_tiles_where_there_is_room();

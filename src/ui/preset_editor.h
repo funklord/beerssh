@@ -64,7 +64,31 @@ public:
 		TOUCH     /* one column, thumb-sized, with its own way out */
 	};
 
+	/*
+	 * Which FIELDS to show, so that the dialog's Terminal and Connection
+	 * categories can be real pages instead of prose (sec 8.5).
+	 *
+	 * Those two categories used to be signposts -- a paragraph and a
+	 * button reading "Open Presets" -- because the settings they name
+	 * live in a preset rather than in a session. PuTTY has both
+	 * categories and they hold settings, so a tree that borrows PuTTY's
+	 * shape and leads nowhere reads as unfinished, which is how it was
+	 * reported.
+	 *
+	 * A SECTION rather than a second widget: the same editor, the same
+	 * fields, the same save and the same propagation, showing a subset.
+	 * Building the terminal fields twice would be two places that must
+	 * agree about what TERM means, which is the shape this project keeps
+	 * unpicking.
+	 */
+	enum section_t {
+		EVERYTHING,  /* the Presets category: the whole preset */
+		TERMINAL,    /* TERM, scrollback, bell, cursor */
+		CONNECTION   /* keepalive, compression, clipboard, on connect */
+	};
+
 	explicit bssh_preset_editor(bssh_profile_store *store, layout_t layout = DESKTOP,
+	                             section_t section = EVERYTHING,
 	                             QWidget *parent = nullptr);
 
 	/* Re-reads the store -- after a save, or after a host changed which
@@ -100,6 +124,7 @@ private:
 	void update_controls();
 
 	bssh_profile_store *m_store;
+	section_t m_section;
 
 	QListWidget *m_presets;
 	QLabel *m_usage;

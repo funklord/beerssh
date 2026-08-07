@@ -35,9 +35,10 @@ static const int BSSH_MIN_SCROLLBACK = 0;
 static const int BSSH_MAX_SCROLLBACK = 200000;
 
 bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layout,
-                                        QWidget *parent)
+                                        section_t section, QWidget *parent)
     : QWidget(parent),
       m_store(store),
+      m_section(section),
       m_touch(layout == TOUCH) {
 	QHBoxLayout *columns = new QHBoxLayout(this);
 
@@ -171,20 +172,56 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 		m_key_row->setItemData(m_key_row->count() - 1, layout.description, Qt::ToolTipRole);
 	}
 
-	form->addRow(QStringLiteral("Name"), m_name);
-	form->addRow(QStringLiteral("TERM"), m_term);
-	form->addRow(QStringLiteral("Scrollback"), m_scrollback);
-	form->addRow(QString(), m_bell);
-	form->addRow(QStringLiteral("Cursor"), m_cursor_style);
-	form->addRow(QString(), m_cursor_blink);
-	form->addRow(QStringLiteral("Keepalive"), m_keepalive);
-	form->addRow(QString(), m_compression);
-	form->addRow(QString(), m_clipboard);
-	form->addRow(QStringLiteral("On connect"), m_on_connect);
-	form->addRow(QStringLiteral("Key row"), m_key_row);
+	/*
+	 * Which rows this view shows (sec 8.5). Every field is BUILT either
+	 * way -- load() and save() address them all, and a field that existed
+	 * only on one page would be a field the other page silently discarded
+	 * on save. Only what is added to the form differs.
+	 */
+	const bool all = m_section == EVERYTHING;
+	const bool terminal = all || m_section == TERMINAL;
+	const bool connection = all || m_section == CONNECTION;
+
+	/*
+	 * A field this view does not show is HIDDEN, not merely left out of
+	 * the form.
+	 *
+	 * Every one of them was built with this widget as its parent, and a
+	 * widget with a parent and no layout is drawn wherever its default
+	 * geometry puts it -- which is the top-left corner. Leaving them out
+	 * of the form painted the key-row combo and the name field over the
+	 * preset list, on top of its first row. Found by looking at the
+	 * page; no assertion here would have said a word, because every
+	 * widget was present, sized and inside the page.
+	 */
+	const auto shown = [](QWidget *field, bool visible) {
+		if (!visible) field->hide();
+		return visible;
+	};
+
+	if (shown(m_name, all)) form->addRow(QStringLiteral("Name"), m_name);
+
+	if (shown(m_term, terminal)) form->addRow(QStringLiteral("TERM"), m_term);
+	if (shown(m_scrollback, terminal)) form->addRow(QStringLiteral("Scrollback"), m_scrollback);
+	if (shown(m_bell, terminal)) form->addRow(QString(), m_bell);
+	if (shown(m_cursor_style, terminal)) form->addRow(QStringLiteral("Cursor"), m_cursor_style);
+	if (shown(m_cursor_blink, terminal)) form->addRow(QString(), m_cursor_blink);
+
+	if (shown(m_keepalive, connection)) form->addRow(QStringLiteral("Keepalive"), m_keepalive);
+	if (shown(m_compression, connection)) form->addRow(QString(), m_compression);
+	if (shown(m_clipboard, connection)) form->addRow(QString(), m_clipboard);
+	if (shown(m_on_connect, connection)) form->addRow(QStringLiteral("On connect"), m_on_connect);
+
+	if (shown(m_key_row, all)) form->addRow(QStringLiteral("Key row"), m_key_row);
 	fields->addLayout(form);
 
+	/*
+	 * The font and colours belong to the Appearance category, not to
+	 * Terminal or Connection -- so a section view builds the picker (save
+	 * writes its values back) and does not show it twice.
+	 */
 	fields->addWidget(m_font);
+	if (m_section != EVERYTHING) m_font->hide();
 
 	/*
 	 * The picker brings its own form layout, and two of those size their
@@ -221,6 +258,23 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	transfer->addWidget(m_import);
 	transfer->addWidget(m_export);
 	right->addLayout(transfer);
+
+	/*
+	 * Import and Export move whole preset FILES between machines, which
+	 * is the Presets category's business. On the Terminal and Connection
+	 * pages they are two more buttons between a reader and the four
+	 * settings they came for -- and this dialog was reported as
+	 * confusing, so an operation offered in three places when it belongs
+	 * in one is worth removing rather than defending.
+	 *
+	 * Hidden rather than left unbuilt: save() and the shipped-preset
+	 * rules address them, and a pointer that exists on one page and not
+	 * another is a null nobody remembers to check.
+	 */
+	if (m_section != EVERYTHING) {
+		m_import->hide();
+		m_export->hide();
+	}
 
 	QHBoxLayout *buttons = new QHBoxLayout();
 	m_save = new QPushButton(QStringLiteral("Save"), this);

@@ -410,7 +410,9 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 * phone -- the device this app is mostly for -- stuck with
 		 * whatever was shipped.
 		 */
-		m_preset_editor = new bssh_preset_editor(m_profile_store, bssh_preset_editor::TOUCH, this);
+		m_preset_editor = new bssh_preset_editor(m_profile_store,
+		                                          bssh_preset_editor::TOUCH,
+		                                          bssh_preset_editor::EVERYTHING, this);
 		m_pages->addWidget(m_preset_editor);
 
 		connect(m_host_list, &bssh_host_list::presets_requested, this, [this] {

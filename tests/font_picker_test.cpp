@@ -258,15 +258,17 @@ void font_picker_test::agreeing_with_the_preset_clears_the_override() {
 	dialog.set_current_profile(store.profile(id));
 
 	/*
-	 * The dialog embeds two pickers -- its own and the preset editor's --
-	 * so the one under test is identified by what it is showing rather
-	 * than by findChild order, which is not a contract.
+	 * By NAME, which is a contract. This asked for whichever picker was
+	 * showing jetbrains-mono, and said in as many words that findChild
+	 * order is not a contract -- but "what it is displaying" is not one
+	 * either. It held while the dialog had two pickers and broke when
+	 * Terminal and Connection became real pages, because a preset with no
+	 * font of its own shows the platform default and several pickers
+	 * started reporting the same family.
 	 */
-	bssh_font_picker *picker = nullptr;
-	for (bssh_font_picker *candidate : dialog.findChildren<bssh_font_picker *>()) {
-		if (candidate->font_id() == QStringLiteral("jetbrains-mono")) picker = candidate;
-	}
-	QVERIFY(picker);
+	bssh_font_picker *picker =
+	        dialog.findChild<bssh_font_picker *>(QStringLiteral("host_font_picker"));
+	QVERIFY2(picker, "the host's own font picker must be findable by name");
 
 	/* The user picks what the preset gives, meaning "go back to following it". */
 	picker->set_font_choice(QStringLiteral("hack"), 17);
