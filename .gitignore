@@ -51,3 +51,4 @@ debian/debhelper-build-stamp
 # (project.md sec 8.6), so committing it would be committing a copy of
 # the parser that is free to disagree with it.
 beerssh.1
+.fmake/
