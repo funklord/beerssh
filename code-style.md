@@ -264,7 +264,6 @@ Each fixer carries a proof rather than a promise: C and C++ must re-expand
 to the original text, and Python must keep an identical AST. A fixer that
 cannot prove its edit refuses to make it.
 
-Naming and filename rules are review items, not automated ones.
 ## 5. Comments
 
 Match the surrounding density; the existing `src/` is the reference. What
@@ -358,6 +357,19 @@ turn it on**: it is a terminal emulator, and character tables are its
 subject matter -- which is the source's own third exception, "anything that
 genuinely requires Unicode".
 
+Where a project does enforce it, the check is not a byte scan. In Python it
+enforces exactly the shape above -- ASCII outside string literals, Unicode
+allowed inside them -- because the gate reads the file with `tokenize`.
+Other languages get a whole-file byte check, having no tokenizer here, and
+so does a Python file that will not tokenise: a file nobody can parse is not
+a file that has been cleared.
+
+It was the whole file for everyone until a project that prints two status
+ticks had to switch the check off to keep them, which switched it off for
+its comments as well, and an em dash arrived in one. **An exception wider
+than its reason is how a rule stops being enforced.**
+
+## The commit-msg hook
 
 The commit-msg hook is `tools/hooks/commit-msg`, installed with `make hooks`.
 It rejects generator attribution and a subject over 75 columns. It lives in
