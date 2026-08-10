@@ -3783,6 +3783,25 @@ The desktop build is what makes this project testable at all — use it.
   stopped looking reads exactly like a passing one, which is the same failure
   `check-indent.sh` guards against with its file-count floor. Not a CI step: CI
   already *is* the runner.
+- **`check-ci` sends the submodule from the working tree, not from HEAD — the
+  one place its "only what is committed" promise does not hold.** The main tree
+  is tarred from `git ls-files`, deliberately, so that the container gets what a
+  push would actually give the runner. The submodule cannot come that way, since
+  `git ls-files` prints `vterm` as a bare path; the script therefore takes a
+  plain `tar -cf vterm.tar vterm` of the directory as it currently sits. So
+  uncommitted libvterm changes ride into the reproduction, and a green run says
+  "HEAD plus whatever is in the tree builds", not "HEAD builds". Found on
+  2026-08-10 by a run that passed on `ubuntu:24.04` while carrying 38
+  uncommitted lines in `vterm/src/screen.c` and `src/state.c` from a parallel
+  session.
+  This is the same failure family as everything else in this section, and the
+  script's own comments describe it happening once already in the other
+  direction: it used to hand the container `vterm/` unconditionally, which hid
+  that the workflow's checkout was not asking for submodules at all — the
+  reproduction was fixing the bug on its way in. The direction is inverted now
+  (the local run is more permissive than the runner rather than less) but the
+  shape is identical, and it is **still open**. `git archive` against the
+  submodule's own HEAD is the obvious fix and has not been made.
 - **Pixel assertions get a tolerance, not equality.** Antialiasing bleeds
   differently between Qt versions — 3/255 on 6.4 against 0 on 6.8 — so a test
   demanding an exact background colour in the margin fails on the older one while

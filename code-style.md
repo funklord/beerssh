@@ -353,16 +353,41 @@ user-facing text in UI software, and anything that genuinely requires
 Unicode.
 
 The check is `ascii_only` in `.style-gate.toml`, and **this project does not
-turn it on**: it is a terminal emulator, and character tables are its
-subject matter -- which is the source's own third exception, "anything that
-genuinely requires Unicode".
+turn it on**. The reason has changed, and the old one no longer holds.
 
-Where a project does enforce it, the check is not a byte scan. In Python it
-enforces exactly the shape above -- ASCII outside string literals, Unicode
-allowed inside them -- because the gate reads the file with `tokenize`.
-Other languages get a whole-file byte check, having no tokenizer here, and
-so does a Python file that will not tokenise: a file nobody can parse is not
-a file that has been cleared.
+Where a project does enforce it, the check is not a byte scan. In Python and
+in C/C++ it enforces exactly the shape above -- ASCII outside string
+literals, Unicode allowed inside them. Python is read with `tokenize`; C and
+C++ get a scanner written for the purpose, nothing in the standard library
+lexing them. Every other language still gets a whole-file byte check, having
+no lexer here, and so does a file in either of those two that will not lex:
+a file nobody can parse is not a file that has been cleared.
+
+It used to be off here because the check could not tell a character table
+from prose, and this is a terminal emulator whose subject matter is
+character tables. The C/C++ scanner removes that reason, so the question was
+measured rather than argued (2026-08-10, using the gate's own
+`c_ascii_problems` over its own file list). Of **28 non-ASCII characters in
+the 152 C and C++ files the gate reads, 21 are inside literals** and are
+data the emulator handles; **7 in 4 files** are what turning the flag on
+would report.
+
+Only one of those seven is what the rule is aimed at -- an em dash in a
+comment in `src/platform/secret_store.h`. The other six are **glosses on
+escaped bytes**: `/* 中文 */` written beside
+`QByteArrayLiteral("\xe4\xb8\xad\xe6\x96\x87")` in the emulator and view
+tests, and `"héllo"` and `"é"` naming what a split UTF-8 sequence and a
+compose-key sequence are meant to produce. Those comments are the only
+thing making the escapes readable, and a rule that deleted them would be
+buying its own enforcement with the tests' legibility.
+
+**So this is a decision, not a chore, and it is open.** The source's third
+exception covers "a terminal emulator's character tables", but it is written
+about *data* and these are *comments*. Either the exception grows to cover a
+comment that glosses data it sits beside, or those six get spelled some
+other way, or the flag stays off. Seven characters is a small enough job
+that the answer should be decided rather than inherited -- unlike the
+sibling Qt tree, where the same count came to 854 across 163 files.
 
 It was the whole file for everyone until a project that prints two status
 ticks had to switch the check off to keep them, which switched it off for
