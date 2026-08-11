@@ -4205,6 +4205,31 @@ relitigates a decision that has already been made and built.
   desktop, test Wayland *and* X11, and a fractional-scaling display.
 - **Follow §18 for style.** It is the same style as the `fuzzypickles` tree next
   door, deliberately, so moving between them costs nothing.
+- **Reach for a library first, vendor it second, reimplement last.** Use what
+  exists; where it is only 90% right, vendor it and fix the wall in the vendored
+  copy; write it from scratch only when neither works. Vendoring is the escape
+  hatch that makes committing to a library safe. It is why key→bytes translation
+  calls libvterm's own `vterm_keyboard_*` rather than a hand-written escape table
+  — libvterm was already vendored for the emulator, so the table would have been
+  a second implementation of something the tree already carried.
+
+### `make shots` finds layout defects; measuring the pixels settles them
+
+Every layout defect here was found by rendering a screen, and several had passed
+every test that existed. But **eyeballing a rendered screen has produced a
+confident wrong answer four times**, so the render finds the candidate and a
+measurement decides it:
+
+- Box drawing "did not meet" — it did. The gap was smooth interpolation on a
+  zoomed screenshot. Point-sample, or measure.
+- The settings page was 386px wide "because a combo item was too long" — wrong
+  twice; it was `addRow(QString(), w)` reserving the label column for nothing.
+- The font picker "aligned at x=68" — it was 72 against 66, and stayed 6px out
+  after the first fix, because equal label widths do not settle horizontal
+  *spacing*.
+
+Read the pixels out of the image rather than looking at it. A screenshot is
+evidence of what rendered; an opinion about a screenshot is not.
 
 ---
 
@@ -4290,7 +4315,16 @@ restated here; `code-style.md` carries what the hook itself does.
   indentation/debug fixups were squashed into their parents — 173 commits
   became 170, and every hash changed. Worth knowing before concluding that
   the discipline was there from the start, or that an old hash quoted
-  somewhere else is a typo.
+  somewhere else is a typo. It was force-pushed, so a clone taken before it
+  holds the dead history and cannot fast-forward. The old head was `2ceaa25`
+  and the rewritten one `3ca7d82`; `refs/backup/master-pre-reformat` still
+  holds the old head locally, which is the only way to translate between the
+  two, and is safe to delete once nothing needs to.
+- **Rebase onto the remote; never merge into it.** This history has zero merge
+  commits and is meant to keep it that way. Two sessions run in this tree and
+  both push, so a divergence is ordinary rather than a surprise: fetch and
+  read `git rev-list --left-right --count origin/master...master` before
+  assuming a push fast-forwards, and rebase when it does not.
 - **No docs-only commits.** Documentation changes ride along with the code
   commit they describe. Two judgement calls earn their own: reconciling
   `code-style.md` against its source, which is documentation-only by
