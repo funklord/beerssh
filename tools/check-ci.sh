@@ -73,16 +73,22 @@ trap 'rm -rf "$STAGE"' EXIT INT TERM
 # Only what is committed: this checks what a push would actually give the
 # runner, not what happens to be lying in the working tree.
 #
-# --no-recursion, because `git ls-files` prints the SUBMODULE as a bare
-# path -- `vterm` -- and tar given a directory name archives the whole
-# tree under it. So the submodule arrived inside src.tar however the
-# workflow was configured, which is a second way this reproduction was
-# fixing the bug on its way in. Every other entry ls-files prints is a
-# real file, so nothing else is lost by not descending.
+# `git archive HEAD` rather than `git ls-files | tar`, and the difference
+# is the whole claim above. ls-files names TRACKED PATHS; the tar that
+# follows then reads those paths off the DISK, so every uncommitted edit
+# to a tracked file went into the container while the comment here said
+# it did not. Measured rather than argued: a marker line appended to a
+# tracked file and left uncommitted arrived in the tar, and did not
+# arrive in `git archive HEAD` of the same file.
 #
-# The option order matters: --no-recursion is POSITIONAL in GNU tar and
-# affects only the arguments after it, so it has to precede -T.
-git ls-files -z | tar -cf "$STAGE/src.tar" --null --no-recursion -T -
+# git archive reads the tree object, so it can only produce committed
+# content. It also omits submodules entirely, which is what the old
+# --no-recursion flag was for: ls-files prints the submodule as a bare
+# path -- `vterm` -- and tar given a directory name archives everything
+# under it, so the submodule used to arrive inside src.tar however the
+# workflow was configured. That is now a property of the tool instead of
+# a flag somebody has to remember to keep in front of -T.
+git archive --format=tar HEAD > "$STAGE/src.tar"
 
 # And the submodule ONLY IF THE WORKFLOW ASKS FOR IT, read out of the
 # workflow the same way the package list above is, and for the same
@@ -111,8 +117,21 @@ print("yes" if re.search(r"^\s*submodules:\s*(recursive|true)\s*$", body, re.M)
 PY
 )
 
+# And from the submodule's own HEAD, for the reason src.tar is: `tar -cf
+# vterm.tar vterm` read the working tree, which here is never what the
+# runner gets. The build APPLIES vterm-patches/ to the submodule in
+# place, so the tree carries 38 modified lines at all times, and handing
+# those to the container made a green run mean "HEAD plus whatever is
+# lying in vterm/" rather than HEAD. It also hid the patch step: the
+# container was given an already-patched tree and then stamped the step
+# as done, so the one rule that could break when upstream moves was the
+# one rule this reproduction never ran.
+#
+# git archive against the submodule gives what the runner's checkout
+# gives -- the gitlink commit, unpatched -- and `make` then applies the
+# patches in the container exactly as it does on the runner.
 if [ "$WANTS_SUBMODULES" = yes ]; then
-	tar -cf "$STAGE/vterm.tar" vterm
+	git -C vterm archive --format=tar --prefix=vterm/ HEAD > "$STAGE/vterm.tar"
 else
 	echo "check-ci: the linux job does not ask for submodules, so neither does this"
 	tar -cf "$STAGE/vterm.tar" --files-from /dev/null
@@ -122,16 +141,18 @@ docker run --rm -v "$STAGE":/in:ro "$IMAGE" sh -c "
 set -e
 apt-get update -qq >/dev/null 2>&1
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PACKAGES \
-	build-essential pkg-config python3 >/dev/null 2>&1
+	build-essential pkg-config python3 git >/dev/null 2>&1
 
 echo \"check-ci: Qt \$(pkg-config --modversion Qt6Core), libssh \$(pkg-config --modversion libssh)\"
 
 mkdir -p /build && cd /build
 tar xf /in/src.tar
 tar xf /in/vterm.tar
-# The vendored patches are already applied in the tree that was tarred;
-# stamp them so the patch step, which wants a git repo, is skipped.
-mkdir -p build-vterm && touch build-vterm/.patched
+# No patch stamp here any more. vterm.tar is the submodule at its gitlink
+# commit, so the patches are NOT applied and make has to apply them --
+# which is the point, since that is what the runner does too. git is
+# installed above for it: 'git apply' needs no repository, and the
+# extracted tree is not one.
 
 make style
 make -j\"\$(nproc)\"

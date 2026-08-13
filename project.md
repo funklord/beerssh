@@ -3783,25 +3783,39 @@ The desktop build is what makes this project testable at all — use it.
   stopped looking reads exactly like a passing one, which is the same failure
   `check-indent.sh` guards against with its file-count floor. Not a CI step: CI
   already *is* the runner.
-- **`check-ci` sends the submodule from the working tree, not from HEAD — the
-  one place its "only what is committed" promise does not hold.** The main tree
-  is tarred from `git ls-files`, deliberately, so that the container gets what a
-  push would actually give the runner. The submodule cannot come that way, since
-  `git ls-files` prints `vterm` as a bare path; the script therefore takes a
-  plain `tar -cf vterm.tar vterm` of the directory as it currently sits. So
-  uncommitted libvterm changes ride into the reproduction, and a green run says
-  "HEAD plus whatever is in the tree builds", not "HEAD builds". Found on
-  2026-08-10 by a run that passed on `ubuntu:24.04` while carrying 38
-  uncommitted lines in `vterm/src/screen.c` and `src/state.c` from a parallel
-  session.
-  This is the same failure family as everything else in this section, and the
-  script's own comments describe it happening once already in the other
-  direction: it used to hand the container `vterm/` unconditionally, which hid
-  that the workflow's checkout was not asking for submodules at all — the
-  reproduction was fixing the bug on its way in. The direction is inverted now
-  (the local run is more permissive than the runner rather than less) but the
-  shape is identical, and it is **still open**. `git archive` against the
-  submodule's own HEAD is the obvious fix and has not been made.
+- **`check-ci` sent the working tree rather than HEAD, and the "only what is
+  committed" promise held nowhere — not just for the submodule.** Found on
+  2026-08-10, scope corrected and fixed on 2026-08-13.
+  As first recorded, this was a submodule problem: the main tree was tarred from
+  `git ls-files` *deliberately*, so the container got what a push would give the
+  runner, while the submodule could not come that way — `git ls-files` prints
+  `vterm` as a bare path — so the script took a plain `tar -cf vterm.tar vterm`
+  of the directory as it sat. A green run therefore said "HEAD plus whatever is
+  in the tree builds". It surfaced on a run that passed on `ubuntu:24.04` while
+  carrying 38 uncommitted lines in `vterm/src/screen.c` and `src/state.c` from a
+  parallel session.
+  **The main tree had the identical hole, and the comment three lines above the
+  code denied it.** `git ls-files` names tracked *paths*; the `tar` that follows
+  reads those paths off the disk, so every uncommitted edit to a tracked file
+  rode in exactly as the submodule's did. Measured rather than argued: a marker
+  line appended to a tracked file and left uncommitted arrived in the tar, and
+  did not arrive in `git archive HEAD` of the same file. Worth recording as its
+  own lesson — the original diagnosis was right about the symptom and wrong
+  about the scope, because it trusted a comment instead of the line under it.
+  Both halves are `git archive` now: `HEAD` for the main tree, and `vterm`'s own
+  `HEAD` for the submodule when the workflow asks for submodules. Archive reads
+  the tree object, so it cannot emit uncommitted content, and it omits
+  submodules on its own — which retires the positional `--no-recursion` the old
+  line depended on being kept in front of `-T`.
+  **The patch step was the third thing this hid.** Because the submodule arrived
+  already patched, the container stamped `build-vterm/.patched` to skip the
+  patch rule — so the one rule that breaks when upstream moves under
+  `vterm-patches/` was never exercised by the reproduction that exists to catch
+  exactly that class of divergence. The submodule now arrives unpatched, as the
+  runner's checkout leaves it, and `make` applies the patches in the container
+  the way it does on the runner. `git` joins the container's package list for
+  it; `git apply` needs no repository, which is what makes this work on an
+  extracted tree.
 - **Pixel assertions get a tolerance, not equality.** Antialiasing bleeds
   differently between Qt versions — 3/255 on 6.4 against 0 on 6.8 — so a test
   demanding an exact background colour in the margin fails on the older one while
