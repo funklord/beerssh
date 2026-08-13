@@ -82,6 +82,13 @@ static const int BSSH_TEAR_OUT_DP = 40;
 bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent)
     : QWidget(parent),
       m_pages(new QStackedWidget(this)),
+      m_front_door_up(false),
+      m_menu_bar(nullptr),
+      m_tab_row(nullptr),
+      m_copy_action(nullptr),
+      m_paste_action(nullptr),
+      m_split_action(nullptr),
+      m_detach_action(nullptr),
       m_terminal_page(new QWidget(this)),
       m_profile_store(new bssh_profile_store(QString(), this)),
       m_session_dialog(nullptr),
@@ -100,13 +107,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_key_row(nullptr),
       m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
       m_window_title_format(QStringLiteral("%t - BeerSSH")),
-      m_front_door_up(false),
-      m_menu_bar(nullptr),
-      m_tab_row(nullptr),
-      m_copy_action(nullptr),
-      m_paste_action(nullptr),
-      m_split_action(nullptr),
-      m_detach_action(nullptr),
       m_asked_about_closing(false),
       m_background_on_close(false) {
 	setWindowTitle(QStringLiteral("BeerSSH"));

@@ -143,6 +143,7 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	Q_UNUSED(terminal);
 	Q_UNUSED(window);
 	Q_UNUSED(presets);
+	Q_UNUSED(connection);
 	Q_UNUSED(licences);
 	Q_UNUSED(application);
 
