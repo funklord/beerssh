@@ -1004,4 +1004,5 @@ check: style test
 hooks:
 	@test -d .git || { echo "hooks: not a git repository" >&2; exit 1; }
 	@install -m 0755 tools/hooks/commit-msg .git/hooks/commit-msg
-	@echo "hooks: commit-msg installed from tools/hooks/"
+	@install -m 0755 tools/hooks/pre-push .git/hooks/pre-push
+	@echo "hooks: commit-msg and pre-push installed from tools/hooks/"

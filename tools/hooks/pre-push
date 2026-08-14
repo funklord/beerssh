@@ -1,0 +1,95 @@
+#!/bin/sh
+# Refuse to push what check-ci has not passed (project.md sec 12.4).
+#
+# This one is beerssh's own -- it is NOT one of the files spread from
+# ~/.claude/tools, because what it runs, `make check-ci`, is this project's
+# script against this project's workflow. It lives in the tree for the same
+# reasons commit-msg does: the copy that runs is in .git/hooks, which is
+# untracked, so a hook that exists only there enforces a rule nobody can
+# see, does not survive a clone, and cannot be diffed. `make hooks`
+# installs it.
+#
+# Why a hook rather than a habit. The habit existed and worked, for the one
+# session that had it: everything it pushed was gated, and a commit pushed
+# by a second session working in the same tree was not. A rule kept in a
+# person's head binds that person, and these trees routinely have more than
+# one worker in them. The gate had to be in the repository to be the
+# repository's.
+#
+# Bypass with `git push --no-verify`, which is at least a decision rather
+# than an accident.
+
+set -eu
+
+cd "$(git rev-parse --show-toplevel)"
+
+head_sha=$(git rev-parse HEAD)
+stamp="$(git rev-parse --git-dir)/check-ci-passed"
+
+# git feeds a pre-push hook one line per ref:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# An all-zero local sha is a deletion, which builds nothing and is not this
+# hook's business.
+pushing=""
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+	case "$local_sha" in
+		"" | *[!0]*) ;;
+		*) continue ;;
+	esac
+	[ -n "$local_sha" ] && pushing="$pushing $local_sha"
+done
+
+[ -n "$pushing" ] || exit 0
+
+# check-ci stages with `git archive HEAD`, so HEAD is the only commit it can
+# report on. Gating a push of some other commit would run the check against
+# the wrong tree and pass, which is worse than not checking: it would put a
+# green result against sources nobody built.
+for sha in $pushing; do
+	if [ "$sha" != "$head_sha" ]; then
+		echo "pre-push: refusing -- $(git rev-parse --short "$sha") is not HEAD." >&2
+		echo "pre-push:   check-ci stages with \`git archive HEAD\`, so it can only" >&2
+		echo "pre-push:   report on HEAD. Check that commit out and push from" >&2
+		echo "pre-push:   there, or bypass with --no-verify." >&2
+		exit 1
+	fi
+done
+
+# Refusing rather than skipping when the check cannot run at all.
+#
+# The tempting shape is to let the push through with a warning when there is
+# no docker. That makes the gate disappear on exactly the machines that
+# cannot run it, silently, and a gate that has stopped running reads exactly
+# like one that keeps passing -- which is the failure this project has found
+# in its own tooling more than once. So the absence is a refusal, and taking
+# the gap is something somebody types.
+if ! command -v docker >/dev/null 2>&1; then
+	echo "pre-push: refusing -- docker is not installed, so check-ci cannot run." >&2
+	echo "pre-push:   Skipping quietly would leave a gate that looks like it is" >&2
+	echo "pre-push:   passing while it is not running at all." >&2
+	echo "pre-push:   Push with --no-verify if you accept the gap." >&2
+	exit 1
+fi
+
+# A run costs several minutes, and the ordinary sequence here is to gate a
+# commit and then push it. Remembering which commit passed turns the second
+# half of that into nothing. Keyed on the exact sha, in .git so it is local
+# to the clone and never committed: a stamp that survived a clone would
+# vouch for a build that machine never did.
+if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$head_sha" ]; then
+	echo "pre-push: check-ci already passed for $(git rev-parse --short HEAD)"
+	exit 0
+fi
+
+echo "pre-push: running check-ci against $(git rev-parse --short HEAD)."
+echo "pre-push:   Several minutes: it builds and tests in the runner's image,"
+echo "pre-push:   whose Qt and libssh are older than this machine's."
+
+if make check-ci; then
+	printf '%s\n' "$head_sha" > "$stamp"
+	exit 0
+fi
+
+echo "pre-push: refusing -- check-ci failed against $(git rev-parse --short HEAD)." >&2
+echo "pre-push:   Fix it, or push with --no-verify if you mean to." >&2
+exit 1
