@@ -123,6 +123,17 @@ APP_ID = se.vibes.beerssh
 VERSION ?= $(shell cat VERSION)
 
 BUILD_DIR         = build
+
+# Where the finished packages land. `dpkg-buildpackage` writes to the PARENT
+# directory, so they have to be moved somewhere regardless; this names it.
+#
+# A `deb/` subdirectory of the build tree rather than the build tree itself,
+# which is what five of the ten packaging projects already did and is now the
+# settled answer. Two reasons beyond consistency: it keeps a set of artifacts
+# separable from object files, so `ls` and `clean` can both speak about them
+# by name; and it is the only spelling that still works when BUILD_DIR is `.`,
+# as openmlx4 sets it, where the build tree and the source tree are one.
+DEB_DIR ?= $(BUILD_DIR)/deb
 ANDROID_BUILD_DIR = build-android
 
 PREFIX  ?= /usr/local
@@ -884,13 +895,13 @@ deb: version-check fonts
 		exit 1; \
 	fi
 	dpkg-buildpackage -b -us -uc
-	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(DEB_DIR)
 	@for f in ../beerssh_$(VERSION)_*.deb ../beerssh-fonts_$(VERSION)_all.deb \
 	          ../beerssh-dbgsym_$(VERSION)_*.deb \
 	          ../beerssh_$(VERSION)_*.buildinfo ../beerssh_$(VERSION)_*.changes; do \
-		[ -e "$$f" ] && mv -f "$$f" $(BUILD_DIR)/ || true; \
+		[ -e "$$f" ] && mv -f "$$f" $(DEB_DIR)/ || true; \
 	done
-	@ls -1 $(BUILD_DIR)/*.deb
+	@ls -1 $(DEB_DIR)/*.deb
 
 # The VERSION file is the source; everything else is checked against it.
 version-check:
