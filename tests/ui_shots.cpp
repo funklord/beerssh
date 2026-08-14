@@ -89,7 +89,7 @@ bssh_profile_t sample_profile() {
 void shoot(const QString &name, QWidget *widget, int width, int height) {
 	widget->resize(width, height);
 	widget->show();
-	QTest::qWaitForWindowExposed(widget);
+	QVERIFY(QTest::qWaitForWindowExposed(widget));
 	QTest::qWait(50);
 
 	const QSize needed = widget->minimumSizeHint();
@@ -426,7 +426,7 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	 */
 	window.resize(BSSH_DESKTOP_W, BSSH_DESKTOP_H);
 	window.show();
-	QTest::qWaitForWindowExposed(&window);
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
 	QTest::qWait(50);
 
 	window.drop_session(window.registry()->create(third), true);
@@ -707,7 +707,7 @@ void bssh_ui_shots::render_terminal() {
 		view.set_text_brightness(sample.brightness);
 		view.resize(52 * 10, 12 * 20);
 		view.show();
-		QTest::qWaitForWindowExposed(&view);
+		QVERIFY(QTest::qWaitForWindowExposed(&view));
 		QTest::qWait(50);
 
 		const QString path = shot_dir() + QStringLiteral("/") + sample.name +
