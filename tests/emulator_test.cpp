@@ -439,7 +439,7 @@ void emulator_test::scrolling_moves_the_grid_without_losing_anything() {
 	 */
 	bssh_emulator wide(10, 4);
 	wide.feed(QByteArrayLiteral("a\r\n"));
-	wide.feed(QByteArrayLiteral("\xe4\xb8\xad\xe6\x96\x87\r\n"));   /* 中文 */
+	wide.feed(QByteArrayLiteral("\xe4\xb8\xad\xe6\x96\x87\r\n"));   /* U+4E2D U+6587 */
 	wide.feed(QByteArrayLiteral("b\r\n"));
 	wide.feed(QByteArrayLiteral("c\r\n"));   /* one scroll: the CJK row MOVES up */
 
@@ -570,7 +570,7 @@ void emulator_test::scrollback_drops_trailing_blanks_but_not_blank_colour() {
 	 */
 	{
 		bssh_emulator emulator(4, 2);
-		emulator.feed(QByteArrayLiteral("ab\xe4\xb8\xad\r\nx\r\ny"));   /* ab中 */
+		emulator.feed(QByteArrayLiteral("ab\xe4\xb8\xad\r\nx\r\ny"));   /* ab U+4E2D */
 
 		const QList<bssh_cell_t> line = emulator.scrollback().line(0);
 		QCOMPARE(line.size(), 4);
@@ -593,7 +593,7 @@ void emulator_test::a_wide_glyph_scrolls_back_the_way_it_was_on_screen() {
 	 * covers it and the answer was drawn -- a box over the right half of
 	 * every CJK character in the history.
 	 */
-	const QByteArray text = QByteArrayLiteral("a\xe4\xb8\xad""b");   /* a中b */
+	const QByteArray text = QByteArrayLiteral("a\xe4\xb8\xad""b");   /* a U+4E2D b */
 
 	bssh_emulator live(6, 2);
 	live.feed(text);

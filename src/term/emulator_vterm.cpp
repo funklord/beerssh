@@ -159,9 +159,9 @@ int utf8_sequence_length(unsigned char byte) {
  * libvterm does NOT tolerate a sequence split across two
  * vterm_input_write() calls -- verified against the library directly: the
  * bytes "68 c3" then "a9 6c 6c 6f" decode to h,U+FFFD,l,l,o rather than
- * "héllo". Since SSH reads split wherever the network happened to put a
- * packet boundary, holding the tail back until it is complete is the
- * caller's job, and this is that caller.
+ * h,U+00E9,l,l,o. Since SSH reads split wherever the network happened to
+ * put a packet boundary, holding the tail back until it is complete is
+ * the caller's job, and this is that caller.
  */
 int incomplete_tail_length(const QByteArray &bytes) {
 	const int max_sequence = 4;

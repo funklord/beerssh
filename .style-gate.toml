@@ -15,3 +15,22 @@ floor = 100
 exclude = ["attic", "third_party", "vendor", "build", "target",
            "dist", ".pytest_cache", ".claude",
            "deps", "vterm", "vterm-patches"]
+
+# ASCII outside string literals, which is the rule in code-style.md and is
+# the last of the fourteen projects to take it.
+#
+# The seven that had to move were all COMMENTS, and six of them annotated
+# UTF-8 test data -- the characters an escape sequence spells, written
+# beside it. The rule's own exception covers "a fixture for a UTF-8 parser,
+# a terminal emulator's character tables", which is this project exactly,
+# and the fixtures are untouched: they live in string and character
+# literals, which the gate reads as output rather than prose.
+#
+# What moved is the prose about them, into codepoint form -- U+4E2D rather
+# than the character itself. That loses nothing and is this file's own
+# convention already: emulator_vterm.cpp described a broken decode as
+# "h,U+FFFD,l,l,o" in the same sentence that spelled the correct one with a
+# literal e-acute. The codepoint is also the more precise of the two, since
+# reading it needs neither a font nor the ability to tell one CJK glyph
+# from another.
+ascii_only = true

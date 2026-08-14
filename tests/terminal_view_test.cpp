@@ -157,7 +157,7 @@ void terminal_view_test::ime_commit_text_becomes_input() {
 
 	/*
 	 * Android delivers some keys only as IME commit text (sec 6.1), and
-	 * desktop dead keys arrive the same way -- "é" typed as a compose
+	 * desktop dead keys arrive the same way -- U+00E9 typed as a compose
 	 * sequence is one commit string, not a key event.
 	 */
 	QInputMethodEvent event;

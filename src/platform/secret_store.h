@@ -11,7 +11,7 @@
  * this becomes Keystore-wrapped blobs, on desktop the platform's secret
  * service where one is running, and a passphrase-derived encrypted file
  * where none is. The profile database holds ids only, and its schema has
- * nowhere to put a secret (sec 10.6) — that separation is the point.
+ * nowhere to put a secret (sec 10.6) -- that separation is the point.
  *
  * **The backend is not an implementation detail to hide.** A
  * hardware-backed keystore and a file encrypted with a passphrase the user
