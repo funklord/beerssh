@@ -496,15 +496,22 @@ shots: $(TEST_BIN)
 # is where a missing library, a missing Qt plugin or an unreadable font
 # path actually shows up. Needs docker.
 #
-# DEB_DIR is passed rather than left to the script's default, which was
-# `build-deb` and has been wrong since the packaging moved to debhelper:
-# `make deb` puts its output in $(BUILD_DIR), so the check refused to run
-# with "no packages in build-deb. Run: make deb". It failed loudly rather
-# than passing vacuously, which is the right direction -- but the message
-# reads as user error, so nobody read it as a gate that had stopped
-# running.
+# DEB_DIR is passed rather than left to the script's default of
+# `build-deb`, which has never been where this tree puts packages. It is
+# passed as $(DEB_DIR) rather than as a second spelling of that path,
+# which is the whole lesson here: it said $(BUILD_DIR), correctly, until
+# the packages moved into $(BUILD_DIR)/deb and nothing updated this line.
+#
+# `make check-deb` would then have built the packages and looked in the
+# directory above them -- "no packages in build. Run: make deb", straight
+# after running it. That is the SECOND time this gate has been left
+# pointing at the wrong directory, and both times it failed loudly rather
+# than vacuously, which is the right direction; but the message reads as
+# user error, so it does not sound like a gate reporting that it has
+# stopped running. A path repeated in two places is a path that will
+# disagree with itself, so this names the variable instead.
 check-deb: deb
-	DEB_DIR=$(BUILD_DIR) ./tools/check-deb.sh
+	DEB_DIR=$(DEB_DIR) ./tools/check-deb.sh
 
 style: style-source style-docs
 
