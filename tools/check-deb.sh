@@ -20,12 +20,57 @@
 set -eu
 
 IMAGE=${BSSH_DEB_IMAGE:-debian:trixie}
-DEB_DIR=${DEB_DIR:-build-deb}
 
 if ! command -v docker >/dev/null 2>&1; then
 	echo "check-deb: docker is not installed." >&2
 	echo "check-deb:   a clean machine is the whole point of this check." >&2
 	exit 1
+fi
+
+# Built from HEAD in a throwaway export rather than in the tree.
+#
+# dpkg-buildpackage builds where it is run, so this check had no staging
+# step at all. check-ci and check-keepalive were each given one; this was
+# the third door into the same room, and the last of the three.
+#
+# Not theoretical. A run here was building while another session committed
+# underneath it, and the package that came out was made of sources from
+# both sides of that commit -- a tree that never existed, reported on as
+# though it had. The other two scripts are immune because git archive
+# reads the object store; this one had to be given the same footing.
+#
+# fonts/ is SYMLINKED rather than exported. It is hundreds of megabytes of
+# upstream release archives, deliberately untracked (sec 9), so git
+# archive cannot carry it and copying it would cost more than the build
+# does. Read-only here, and dh_install follows it.
+#
+# DEB_DIR still overrides, for checking packages that are already built:
+#   make deb && DEB_DIR=build/deb ./tools/check-deb.sh
+# which is the faster loop when the question is about the container half
+# rather than about the sources.
+if [ -n "${DEB_DIR:-}" ]; then
+	echo "check-deb: using the packages already in $DEB_DIR"
+else
+	STAGE=$(mktemp -d)
+	trap 'rm -rf "$STAGE"' EXIT INT TERM
+
+	git archive --format=tar --prefix=src/ HEAD | tar -xf - -C "$STAGE"
+	git -C vterm archive --format=tar --prefix=src/vterm/ HEAD \
+		| tar -xf - -C "$STAGE"
+	ln -s "$PWD/fonts" "$STAGE/src/fonts"
+
+	echo "check-deb: building $(git rev-parse --short HEAD) in a throwaway export"
+
+	# DEB_DIR named rather than defaulted, so this knows where to look
+	# without repeating the Makefile's spelling of it -- a path written in
+	# two places is one that will disagree with itself, which is how this
+	# check spent a while pointed at the directory above its packages.
+	if ! ( cd "$STAGE/src" && make deb DEB_DIR=out ) >"$STAGE/build.log" 2>&1; then
+		echo "check-deb: the package build failed in the export" >&2
+		tail -30 "$STAGE/build.log" >&2
+		exit 1
+	fi
+	DEB_DIR="$STAGE/src/out"
 fi
 
 if ! ls "$DEB_DIR"/*.deb >/dev/null 2>&1; then

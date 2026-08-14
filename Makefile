@@ -496,22 +496,19 @@ shots: $(TEST_BIN)
 # is where a missing library, a missing Qt plugin or an unreadable font
 # path actually shows up. Needs docker.
 #
-# DEB_DIR is passed rather than left to the script's default of
-# `build-deb`, which has never been where this tree puts packages. It is
-# passed as $(DEB_DIR) rather than as a second spelling of that path,
-# which is the whole lesson here: it said $(BUILD_DIR), correctly, until
-# the packages moved into $(BUILD_DIR)/deb and nothing updated this line.
+# No `deb` prerequisite and no DEB_DIR: the script exports HEAD to a
+# throwaway tree and builds there, so what it installs is a commit rather
+# than whatever the working tree held while dpkg-buildpackage ran. That
+# closes the last of the three staging gaps -- check-ci and
+# check-keepalive have the same footing -- and it retires this line's
+# habit of naming the output directory, which had twice drifted away from
+# where `deb` actually writes.
 #
-# `make check-deb` would then have built the packages and looked in the
-# directory above them -- "no packages in build. Run: make deb", straight
-# after running it. That is the SECOND time this gate has been left
-# pointing at the wrong directory, and both times it failed loudly rather
-# than vacuously, which is the right direction; but the message reads as
-# user error, so it does not sound like a gate reporting that it has
-# stopped running. A path repeated in two places is a path that will
-# disagree with itself, so this names the variable instead.
-check-deb: deb
-	DEB_DIR=$(DEB_DIR) ./tools/check-deb.sh
+# Building here instead would be faster and is still available when the
+# question is about the container half rather than the sources:
+#   make deb && DEB_DIR=$(DEB_DIR) ./tools/check-deb.sh
+check-deb:
+	./tools/check-deb.sh
 
 style: style-source style-docs
 
