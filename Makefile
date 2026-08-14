@@ -30,8 +30,6 @@
 #                        BSSH_BENCH_ANYWAY=1 to insist
 #   make shots        -- render every screen to build-shots/ for review;
 #                        not a test, and it cannot fail a build (sec 12.3)
-#   make aab          -- the Android App Bundle Play takes, named and with
-#                        its versionCode reported; needs ANDROID_KEYSTORE
 #   make check-deb    -- build the .debs, then install and run them in a
 #                        clean container (needs docker; sec 12.2)
 #   make style        -- gate the tree's indentation (tools/check-indent.sh)
@@ -51,7 +49,8 @@
 #                        debug-signed unless ANDROID_KEYSTORE is set (sec 12.2)
 #   make check-apk    -- install that APK on an attached device and check it
 #                        starts (needs adb; sec 12.2)
-#   make android-aab  -- the Play bundle instead of an APK
+#   make android-aab  -- the Android App Bundle Play takes, named and with
+#                        its versionCode reported; needs ANDROID_KEYSTORE
 #   make android-run  -- install and launch on the attached device
 #   make install      -- install the app, its desktop entry, icon,
 #                        AppStream metadata and bundled fonts
@@ -649,8 +648,6 @@ android-fonts:
 android: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 	$(MAKE) -C $(ANDROID_BUILD_DIR) apk
 
-android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
-	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
 
 # The artifact Play actually takes (sec 13), named and checked like the
 # APK next door.
@@ -667,19 +664,20 @@ android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 # what number you built.
 AAB_NAME = beerssh-$(VERSION).aab
 
-aab: android-aab
+android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
+	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
 	@src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs -name '*.aab' -print -quit); \
-	if [ -z "$$src" ]; then echo "aab: no .aab was produced" >&2; exit 1; fi; \
+	if [ -z "$$src" ]; then echo "android-aab: no .aab was produced" >&2; exit 1; fi; \
 	cp "$$src" $(ANDROID_BUILD_DIR)/$(AAB_NAME); \
-	echo "aab: $(ANDROID_BUILD_DIR)/$(AAB_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(AAB_NAME) | cut -f1))"
-	@echo "aab: versionName $(VERSION), versionCode $(ANDROID_VERSION_CODE)"
+	echo "android-aab: $(ANDROID_BUILD_DIR)/$(AAB_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(AAB_NAME) | cut -f1))"
+	@echo "android-aab: versionName $(VERSION), versionCode $(ANDROID_VERSION_CODE)"
 	@if [ -z "$(ANDROID_KEYSTORE)" ]; then \
-		echo "aab: DEBUG-SIGNED, which Play will not accept." >&2; \
-		echo "aab:   Set ANDROID_KEYSTORE and ANDROID_KEY_ALIAS to sign it with your" >&2; \
-		echo "aab:   upload key. Play App Signing holds the key that actually" >&2; \
-		echo "aab:   signs what users install; this one only proves the upload" >&2; \
-		echo "aab:   is yours, and losing it is recoverable where losing the" >&2; \
-		echo "aab:   other once was not." >&2; \
+		echo "android-aab: DEBUG-SIGNED, which Play will not accept." >&2; \
+		echo "android-aab:   Set ANDROID_KEYSTORE and ANDROID_KEY_ALIAS to sign it with your" >&2; \
+		echo "android-aab:   upload key. Play App Signing holds the key that actually" >&2; \
+		echo "android-aab:   signs what users install; this one only proves the upload" >&2; \
+		echo "android-aab:   is yours, and losing it is recoverable where losing the" >&2; \
+		echo "android-aab:   other once was not." >&2; \
 		exit 1; \
 	fi
 
@@ -976,7 +974,7 @@ help:
 
 .PHONY: all run test bench style check-ci check-ssh check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
         deb \
-        android android-check android-aab aab android-run install clean veryclean \
+        android android-check android-aab android-run install clean veryclean \
         distclean help check style-source style-docs hooks version-check
 
 # `check` is everything that must pass before committing; `test` is the suite

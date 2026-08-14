@@ -3882,7 +3882,7 @@ honest data handling) apply to both packages.
   integer a manifest should carry. `ANDROID_VERSION_CODE=` overrides it for the
   case the scheme cannot serve: re-uploading the same version after Play has
   already consumed a code, which is what a rejected release leaves you needing.
-- **`make aab` is the Play artifact and is treated like one.** It was a bare
+- **`make android-aab` is the Play artifact and is treated like one.** It was a bare
   recursion into Gradle, leaving its output under a generated name that says
   nothing about which app or version it holds — while `make apk`, the artifact
   that matters *less* here, had naming and a signing check. The bundle now
