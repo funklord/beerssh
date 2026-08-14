@@ -5,7 +5,9 @@
 # OTHER test is reported as "WRONG TEST" rather than as a pass, because
 # that means the assertion which is supposed to hold this ground does not.
 #
-# NOT YET RUN against any of these.
+# Last run 2026-08-14: all seven caught, each by the test it names, from a
+# 366-passing baseline. The slider entry was MISSED on an earlier run (sec
+# 12.3), which is what rewrote the check now holding that ground.
 
 [[sabotage]]
 name = "tabs come from the whole registry"

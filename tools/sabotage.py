@@ -6,8 +6,20 @@ that cannot fail is not evidence, and this tree has shipped several that
 could not. Doing it by hand is three commands per assertion and an editor
 window, which is why it gets skipped exactly when there is least time.
 
-NOT YET RUN. Neither this version nor the one before it has ever executed.
-Read it before trusting it.
+Last run 2026-08-14 against tools/sabotage/windows.toml: all seven edits
+caught by the test each one names, from a 366-passing baseline, with the
+tree back byte-for-byte afterwards.
+
+This used to say the script had never executed, which was stale rather
+than cautious. sec 12.3 of project.md records what earlier runs found,
+and the fixes they produced are in the code below -- the mtime stamp in
+restore(), the session-and-group kill, the checked spec. restore()'s own
+comment describes what a run found while this paragraph was still saying
+no run had happened.
+
+Read it before trusting it anyway. What it does when it goes wrong is
+leave the source deliberately broken, which is a cost paid by whoever
+builds next rather than by whoever ran it.
 
 WHAT THIS HAS TO GET RIGHT, because the hand method got each of them wrong
 at least once in a single afternoon:
@@ -97,16 +109,37 @@ class Edit:
 		self.source = source
 		self.parked: Path | None = None
 
+	def check(self) -> None:
+		"""Refuses a spec that does not match EXACTLY ONCE.
+
+		Presence used to be the only test, and apply() replaces the FIRST
+		occurrence -- so a find string matching twice sabotaged whichever
+		came first, which need not be the line the spec meant, and every
+		verdict after it described an edit nobody asked for. A sabotage
+		aimed at the wrong line is the vacuous pass in its most expensive
+		form: it reports on a test that was never put under any pressure.
+
+		The spec file's own comment already claimed each entry "is checked
+		to match exactly once before the runner is started". It was not;
+		this is that claim becoming true.
+		"""
+		found = self.path.read_text().count(self.find)
+		if found == 1:
+			return
+
+		problem = "is not in" if found == 0 else f"appears {found} times in"
+		raise SystemExit(
+			f"{self.source}: {self.name}: the text to break {problem} "
+			f"{self.path.relative_to(ROOT)}.\n"
+			f"  Looking for: {self.find[:70]}\n"
+			f"  A spec that does not match exactly once is a sabotage that "
+			f"tests nothing, or tests the wrong line, so this stops rather "
+			f"than reporting a verdict."
+		)
+
 	def apply(self) -> None:
+		self.check()
 		text = self.path.read_text()
-		if self.find not in text:
-			raise SystemExit(
-				f"{self.source}: {self.name}: the text to break is not in "
-				f"{self.path.relative_to(ROOT)}.\n"
-				f"  Looking for: {self.find[:70]}\n"
-				f"  A spec that no longer matches is a sabotage that tests "
-				f"nothing, so this stops rather than reporting a pass."
-			)
 
 		# Journal first, edit second. The other order leaves a window in
 		# which the file is broken and nothing on disk says what it was.
@@ -281,6 +314,14 @@ def main(argv: list[str]) -> int:
 	if not edits:
 		say("sabotage: no edits in the given specs")
 		return 2
+
+	# Every spec checked before anything is built or broken. Checking at
+	# edit time instead means a stale find string surfaces at edit five,
+	# having already spent five suite runs to get there -- and two entries
+	# in windows.toml have been rewritten for exactly that staleness, so
+	# this is the common case rather than the paranoid one.
+	for edit in edits:
+		edit.check()
 
 	for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
 		signal.signal(number, functools.partial(on_signal, edits))

@@ -3621,6 +3621,14 @@ The desktop build is what makes this project testable at all — use it.
   in its own session and is killed by group; and a spec had gone stale and
   matched nothing, which aborts the batch, so every `find` string is checked
   to match exactly once before a run.
+  **That last check was a claim rather than a check until 2026-08-14.** The
+  runner tested only that the string was *present* and then replaced the
+  first of however many matched, so a spec matching twice broke a line it
+  did not mean and every verdict after it described an edit nobody had asked
+  for — a report on a test that was never put under pressure, delivered as
+  confidently as a real one. It is the runner's own job now, over every edit
+  before the baseline rather than at the moment each is applied: a stale
+  string otherwise surfaces at edit five, five suite runs in.
 - **A check can be vacuous in more than one way, and this one managed two in a
   day.** §6.2's touch floor is enforced by a walk over a list of widget TYPES,
   and the test that guards it went wrong twice.
