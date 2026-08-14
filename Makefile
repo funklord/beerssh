@@ -43,10 +43,10 @@
 #                        not needed to build, see FONTS below
 #   make fonts-list   -- show the set and its pinned versions
 #   make check-fonts  -- validate the fetched fonts against sec 9.1
-#   make android      -- build the Android APK (needs a Qt kit, NDK, SDK
-#                        and a JDK; see ANDROID below)
-#   make apk          -- the installable APK, named for its version and ABI;
-#                        debug-signed unless ANDROID_KEYSTORE is set (sec 12.2)
+#   make android      -- the installable APK, named for its version and ABI
+#                        and checked for both; debug-signed unless
+#                        ANDROID_KEYSTORE is set (sec 12.2). Needs a Qt kit,
+#                        NDK, SDK and a JDK; see ANDROID below
 #   make check-apk    -- install that APK on an attached device and check it
 #                        starts (needs adb; sec 12.2)
 #   make android-aab  -- the Android App Bundle Play takes, named and with
@@ -656,8 +656,6 @@ android-fonts:
 
 # The APK is what gets installed on a device or emulator, so it is the
 # default. The AAB is what Play wants (sec 2) and is its own target.
-android: $(ANDROID_BUILD_DIR)/Makefile android-fonts
-	$(MAKE) -C $(ANDROID_BUILD_DIR) apk
 
 
 # The artifact Play actually takes (sec 13), named and checked like the
@@ -713,7 +711,7 @@ APK_NAME = beerssh-$(VERSION)-$(ANDROID_ABI).apk
 # the file.
 ANDROID_ARTIFACT = $(ANDROID_BUILD_DIR)/$(APK_NAME)
 
-apk: $(ANDROID_BUILD_DIR)/Makefile android-fonts
+android: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 ifneq ($(ANDROID_KEYSTORE),)
 	@# The flags go to androiddeployqt itself, because Qt's generated
 	@# Makefile hardcodes its command line and accepts nothing from here.
@@ -723,42 +721,45 @@ ifneq ($(ANDROID_KEYSTORE),)
 	@# key is the one packaging mistake nobody catches by looking.
 	$(MAKE) -C $(ANDROID_BUILD_DIR) apk_install_target
 	@set -e; \
+	@# `apk` here is QT'S generated target, not one of ours -- ours is
+	@# `android` now, and this line reads Qt's Makefile to lift the
+	@# androiddeployqt command out of it.
 	deploy=$$(sed -n '/^apk: apk_install_target/,+1p' $(ANDROID_BUILD_DIR)/Makefile | tail -1); \
-	if [ -z "$$deploy" ]; then echo "apk: cannot find Qt's deploy command" >&2; exit 1; fi; \
+	if [ -z "$$deploy" ]; then echo "android: cannot find Qt's deploy command" >&2; exit 1; fi; \
 	$$deploy --release --sign $(ANDROID_KEYSTORE) $(ANDROID_KEY_ALIAS)
 else
 	$(MAKE) -C $(ANDROID_BUILD_DIR) apk
-	@echo "apk: DEBUG-SIGNED. Installs anywhere, and is not a release artifact:"
-	@echo "apk:   Play will reject it, and it conflicts with a real build's signature."
-	@echo "apk:   Set ANDROID_KEYSTORE and ANDROID_KEY_ALIAS for a signed release build."
+	@echo "android: DEBUG-SIGNED. Installs anywhere, and is not a release artifact:"
+	@echo "android:   Play will reject it, and it conflicts with a real build's signature."
+	@echo "android:   Set ANDROID_KEYSTORE and ANDROID_KEY_ALIAS for a signed release build."
 endif
 	@src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs/apk -name '*.apk' \
 	        -newer $(ANDROID_BUILD_DIR)/Makefile -print -quit); \
 	if [ -z "$$src" ]; then \
 		src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs/apk -name '*.apk' -print -quit); \
 	fi; \
-	if [ -z "$$src" ]; then echo "apk: no .apk was produced" >&2; exit 1; fi; \
+	if [ -z "$$src" ]; then echo "android: no .apk was produced" >&2; exit 1; fi; \
 	cp "$$src" $(ANDROID_BUILD_DIR)/$(APK_NAME); \
-	echo "apk: $(ANDROID_BUILD_DIR)/$(APK_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(APK_NAME) | cut -f1))"
+	echo "android: $(ANDROID_BUILD_DIR)/$(APK_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(APK_NAME) | cut -f1))"
 	@# And which ABI is in it, read from the package rather than trusted
 	@# from the variable that named the file. The two came apart once
 	@# already, and an APK whose name says arm64-v8a over x86_64 libraries
 	@# installs on nothing it claims to target -- with no way to tell
 	@# short of unzipping it, which is what this does.
 	@if ! command -v unzip >/dev/null 2>&1; then \
-		echo "apk: no unzip; cannot say which ABI is inside this"; \
+		echo "android: no unzip; cannot say which ABI is inside this"; \
 	else \
 		abis=$$(unzip -Z1 $(ANDROID_BUILD_DIR)/$(APK_NAME) 'lib/*' 2>/dev/null \
 		        | cut -d/ -f2 | sort -u | tr '\n' ' ' | sed 's/ *$$//'); \
 		if [ -z "$$abis" ]; then \
-			echo "apk: no native libraries in the package" >&2; \
+			echo "android: no native libraries in the package" >&2; \
 			exit 1; \
 		fi; \
 		if [ "$$abis" != "$(ANDROID_ABI)" ]; then \
-			echo "apk: named $(ANDROID_ABI), carries $$abis" >&2; \
+			echo "android: named $(ANDROID_ABI), carries $$abis" >&2; \
 			exit 1; \
 		fi; \
-		echo "apk: carries $$abis, which is what the name says"; \
+		echo "android: carries $$abis, which is what the name says"; \
 	fi
 	@# Who signed it, checked rather than announced. This target claimed a
 	@# release build while shipping the Android debug key, and the only
@@ -788,7 +789,7 @@ endif
 # reaches for when they want to know an artifact is sound before it goes
 # anywhere, and a name that promises a check should perform it rather than
 # inherit it from a prerequisite that may or may not have rerun.
-check-apk: apk
+check-apk: android
 	$(call android_verify_signature,$(ANDROID_BUILD_DIR)/$(APK_NAME))
 	./tools/check-apk.sh $(ANDROID_BUILD_DIR)/$(APK_NAME)
 

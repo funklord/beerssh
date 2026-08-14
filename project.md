@@ -3479,7 +3479,7 @@ anybody else's. Both of the Android bugs this project has had (the
 networkinformation plugin shipped without its JAR, the foreground service
 breaking its lifecycle contract) were exactly that shape.
 
-**`make apk` names the artifact and says who signed it.** Gradle leaves it at
+**`make android` names the artifact and says who signed it.** Gradle leaves it at
 `android-build/build/outputs/apk/debug/android-build-debug.apk`, which tells
 nobody which app, version or ABI they are holding; it comes out as
 `beerssh-<version>-<abi>.apk`. Debug-signed by default — installs anywhere,
@@ -3884,7 +3884,7 @@ honest data handling) apply to both packages.
   already consumed a code, which is what a rejected release leaves you needing.
 - **`make android-aab` is the Play artifact and is treated like one.** It was a bare
   recursion into Gradle, leaving its output under a generated name that says
-  nothing about which app or version it holds — while `make apk`, the artifact
+  nothing about which app or version it holds — while `make android`, the artifact
   that matters *less* here, had naming and a signing check. The bundle now
   comes out as `beerssh-<version>.aab`, reports the versionCode it was built
   with rather than leaving that to be discovered from the Console after the
