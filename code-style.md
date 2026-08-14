@@ -13,8 +13,8 @@ brief and points here for the detail; where the two ever disagree,
 **Above both sits the global source**, `~/.claude/guidelines/code-style.md`,
 which applies to every private project. Where this file or `project.md`
 disagrees with it, that is **drift to fix, not a local override**. A genuine
-divergence needs a technical reason and is raised rather than decided in
-passing -- and when a conflict between the three actually comes up, stop and
+divergence needs a technical reason and is signalled to the list in `claude-guidelines`' `project.md` rather
+than decided in passing -- and when a conflict between the three actually comes up, stop and
 ask instead of picking a winner.
 
 Vendored submodules, generated sources and attic/historical material are
@@ -183,14 +183,31 @@ Continuation lines inside brackets are not indentation-significant at all.
 Never a space *before* a tab in leading whitespace -- that is the case that
 raises `TabError`.
 
-Anything else that seems to need spaces: raise it, get it settled, and add
-it here.
+Anything else that seems to need spaces: signal it to the list in
+`claude-guidelines`' `project.md`, follow the rule meanwhile, and it gets
+settled and added here in a pass rather than in whichever project met it
+first.
 
 ## 3. Filenames
 
-Lowercase, `snake_case`, for everything this project names itself — sources,
-headers, docs. So `main_window.cpp`, not `MainWindow.cpp`, and
-`platform_android.cpp`, not `PlatformAndroid.cpp`.
+**Lowercase, always**, for everything this project names itself. So
+`main_window.cpp`, not `MainWindow.cpp`, and `platform_android.cpp`, not
+`PlatformAndroid.cpp`.
+
+**The separator follows what the name binds to**, and the two cases are a
+technical difference rather than a matter of taste:
+
+- **`snake_case` where the filename becomes an identifier** — a source
+  file, a header, a module. A C++ source is not imported by its name, but
+  it keeps the spelling so one rule covers the whole of `src/`.
+- **`kebab-case` for prose** — documentation, design notes, decision
+  records. Nothing imports `code-style.md`, so no identifier is at stake,
+  and kebab-case is what markdown and URLs settled on long ago.
+
+The rule used to say `snake_case` for prose too, and every private project
+was quietly ignoring it. It was rewritten after measuring all fourteen
+trees: of 197 tracked markdown basenames, 174 were already kebab-case. Both
+halves already hold here, so nothing has to move.
 
 Settled exceptions:
 
@@ -291,8 +308,9 @@ Three layers, and they are not equals:
 
 A project copy that disagrees with the source is **drift, not an
 override**: fix it. A project that genuinely needs to diverge needs a
-technical reason, and that is a decision to raise with the user -- not one
-to make while working on something else.
+technical reason, and that is not a decision to make while working
+on something else -- signal it to the list in `claude-guidelines`'
+`project.md` and keep following the source meanwhile.
 
 **When a conflict between layers actually comes up, stop and ask.** Do not
 silently pick a winner, even the global one.
