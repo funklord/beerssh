@@ -28,8 +28,20 @@ fi
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT INT TERM
 
-git ls-files -z | tar --null -T - -cf "$STAGE/src.tar"
-tar -cf "$STAGE/vterm.tar" vterm
+# Only what is committed, for the reason check-ci.sh carries at length:
+# `git ls-files` names tracked PATHS and the tar that follows reads them off
+# the DISK, so every uncommitted edit to a tracked file rode into the
+# container. git archive reads the tree object and cannot emit uncommitted
+# content. It also omits submodules, so vterm comes separately.
+git archive --format=tar HEAD > "$STAGE/src.tar"
+
+# From the submodule's own HEAD, unpatched -- the build applies
+# vterm-patches/ in place, so the working tree is never what a checkout
+# gives. Unconditional here, unlike check-ci: that script asks the workflow
+# whether the runner wants submodules because its job is to reproduce the
+# runner exactly, empty vterm/ included. This one builds the app to test
+# dead-peer detection and always needs libvterm.
+git -C vterm archive --format=tar --prefix=vterm/ HEAD > "$STAGE/vterm.tar"
 
 echo "check-keepalive: building and running inside $IMAGE"
 
@@ -38,11 +50,14 @@ set -e
 apt-get update -qq >/dev/null 2>&1
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
 	qt6-base-dev libgl1-mesa-dev libssh-dev libsixel-dev libssl-dev libsecret-1-dev \
-	build-essential pkg-config python3 openssh-server iptables >/dev/null 2>&1
+	build-essential pkg-config python3 git openssh-server iptables >/dev/null 2>&1
 
 mkdir -p /build && cd /build
 tar xf /in/src.tar && tar xf /in/vterm.tar
-mkdir -p build-vterm && touch build-vterm/.patched
+# No patch stamp: vterm.tar is the submodule at its gitlink commit, so make
+# applies vterm-patches/ here rather than being handed a patched tree with
+# the step stamped away. git is installed above for it; git apply needs no
+# repository, and an extracted tree is not one.
 make -j"$(nproc)" test >/tmp/build.log 2>&1 || { tail -20 /tmp/build.log; exit 1; }
 
 D=/tmp/k && mkdir -p $D/home/.ssh && mkdir -p /run/sshd
