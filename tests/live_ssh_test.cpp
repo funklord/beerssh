@@ -59,6 +59,36 @@ bool ordinary_phase() {
 	return which.isEmpty() || which == QStringLiteral("trust");
 }
 
+/*
+ * Whether a test that opens a FRESH connection can still expect one, which
+ * is a weaker question than ordinary_phase() and a different one.
+ *
+ * QTest runs slots in declaration order, so it is decided by where a
+ * phase's link-killing test sits relative to the test asking. `drop` and
+ * `reconnect` black-hole the link from slots above this file's midpoint,
+ * so anything below them meets a dead server; `tunnel_drop` and
+ * `tunnel_black_hole` kill from slots below, so a test in between still
+ * gets a working one. `rekeyed` leaves the link up and the key wrong,
+ * which refuses authentication just as thoroughly.
+ *
+ * Named positively so an unrecognised phase SKIPS rather than fails. The
+ * guard this replaces named `rekeyed` alone, and check-keepalive's three
+ * phases -- which did not exist when it was written -- therefore ran a
+ * connection test through a link the harness had just black-holed on
+ * purpose. It failed on `out.connected`, an assertion about
+ * authentication, describing a link that was dead by design. A phase
+ * added later would do the same again; skipping an unknown one costs
+ * coverage that a run says out loud, and this cost a red check nobody
+ * could read.
+ */
+bool fresh_connection_expected() {
+	const QString which = phase();
+	return which.isEmpty() ||
+		      which == QStringLiteral("trust") ||
+		      which == QStringLiteral("tunnel_drop") ||
+		      which == QStringLiteral("tunnel_black_hole");
+}
+
 quint16 test_port() {
 	return static_cast<quint16>(qEnvironmentVariableIntValue("BSSH_TEST_SSH_PORT"));
 }
@@ -894,8 +924,9 @@ QByteArray shell_output(int cols, int rows, const QByteArray &command,
 void live_ssh_test::a_remote_command_runs_instead_of_a_shell()
 {
 	if (!server_available()) return;
-	if (phase() == QStringLiteral("rekeyed")) {
-		QSKIP("the host key has been swapped; authentication is refused by design here");
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
 	}
 
 	/*
