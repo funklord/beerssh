@@ -12,10 +12,11 @@ brief and points here for the detail; where the two ever disagree,
 
 **Above both sits the global source**, `~/.claude/guidelines/code-style.md`,
 which applies to every private project. Where this file or `project.md`
-disagrees with it, that is **drift to fix, not a local override**. A genuine
-divergence needs a technical reason and is signalled to the list in `claude-guidelines`' `project.md` rather
-than decided in passing -- and when a conflict between the three actually comes up, stop and
-ask instead of picking a winner.
+disagrees with it, that is **drift to fix, not a local override**. A
+genuine divergence needs a technical reason and is signalled to the list in
+`claude-guidelines`' `project.md` rather than decided in passing -- and
+when a conflict between the three actually comes up, stop and ask instead
+of picking a winner.
 
 Vendored submodules, generated sources and attic/historical material are
 exempt: they keep whatever their upstream or generator produces. Here that
