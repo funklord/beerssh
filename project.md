@@ -3485,8 +3485,8 @@ nobody which app, version or ABI they are holding; it comes out as
 `beerssh-<version>-<abi>.apk`. Debug-signed by default — installs anywhere,
 which is what an evaluation build wants — and **said out loud**, because a
 debug-signed APK mistaken for a release is a bad afternoon: Play rejects it and
-it can never replace a properly signed install. `BSSH_KEYSTORE` and
-`BSSH_KEY_ALIAS` produce a real signed release.
+it can never replace a properly signed install. `ANDROID_KEYSTORE` and
+`ANDROID_KEY_ALIAS` produce a real signed release.
 That signing had to be *verified* rather than announced. The first version
 passed the flags to Qt's generated Makefile as a variable it does not have, so
 they were dropped in silence and the target printed "release build, signed
