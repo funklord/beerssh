@@ -727,15 +727,10 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
  * Deliberately strict. A space carrying a background colour is a visible
  * thing -- half the TUIs in existence draw a bar that way -- and so is one
  * under a hyperlink, so only a cell that is blank in EVERY respect
- * qualifies. Note what the two character tests exclude: libvterm reports
- * the continuation half of a double-width glyph as chars[0] == (uint32_t)-1
- * rather than as a blank, so a trim stops there and cannot cut a wide
- * character in half.
- */
-/*
- * The same question asked of a mirror cell. Same rule -- blank in every
- * respect, and never the continuation half of a wide glyph, which the
- * screen records with width 0 rather than with libvterm's marker.
+ * qualifies. Note what the width test excludes: the continuation half of a
+ * double-width glyph, which the mirror records with width 0 rather than
+ * with libvterm's chars[0] == (uint32_t)-1 marker, so a trim stops there
+ * and cannot cut a wide character in half.
  */
 bool is_invisible_cell(const bssh_cell_t &cell) {
 	if (cell.ch != 0 && cell.ch != U' ') return false;
@@ -744,16 +739,6 @@ bool is_invisible_cell(const bssh_cell_t &cell) {
 	if (cell.fg.kind != bssh_color_t::DEFAULT) return false;
 	if (cell.bg.kind != bssh_color_t::DEFAULT) return false;
 	if (cell.link != 0) return false;
-	return true;
-}
-
-bool is_invisible_cell(const VTermScreenCell &cell) {
-	if (cell.chars[0] != 0 && cell.chars[0] != U' ') return false;
-	if (cell.width != 1) return false;
-	if (cell.attrs.bold || cell.attrs.italic || cell.attrs.underline ||
-		   cell.attrs.reverse || cell.attrs.blink || cell.attrs.strike) return false;
-	if (!VTERM_COLOR_IS_DEFAULT_FG(&cell.fg)) return false;
-	if (!VTERM_COLOR_IS_DEFAULT_BG(&cell.bg)) return false;
 	return true;
 }
 
