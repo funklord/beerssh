@@ -12,9 +12,12 @@
 # -- pinning versions and reusing upstream's build is the whole point of
 # scripting this instead of documenting it.
 #
-# NOT YET RUN. This was written without an NDK on the machine, like the
-# manifest and the CI Android job. Treat its first execution as part of the
-# work rather than as a regression, and expect to fix it.
+# First run 2026-08-19, against NDK 27.2.12479018 and Qt 6.12.0, and it
+# worked unchanged -- OpenSSL 3.5.4 and libssh 0.11.5 cross-compiled to
+# arm64-v8a static archives, checked as ELF aarch64 rather than host
+# objects, which is the failure a cross-build hides best. What it produced
+# then failed to link, and that was the Makefile choosing the wrong NDK
+# triple rather than anything here.
 set -e
 
 abi=${1:-arm64-v8a}
@@ -56,6 +59,54 @@ work="$root/build-deps-android/$abi"
 openssl_version=3.5.4
 libssh_version=0.11.5
 
+# And checksummed, which the version pin alone does not do: a pinned
+# version says WHICH artifact was wanted, not that the bytes that arrived
+# are the ones upstream published. tools/fetch-fonts.sh has verified its
+# downloads since it was written; this script fetches the TLS and SSH
+# stack and verified nothing, so the cosmetic downloads were checked and
+# the cryptography was not.
+#
+# Where these came from, because a hash nobody can retrace is a hash
+# nobody can update:
+#
+#   OpenSSL  publishes openssl-<version>.tar.gz.sha256 beside the tarball.
+#            The download matched it.
+#   libssh   publishes a detached GPG signature instead of a sum. Its
+#            signing key 88A228D89B07C2C77D0C780903D5DF8CFDD3E8E7 is named
+#            on libssh.org/get-it/ -- which is what stops the check being
+#            circular, the signature naming its own key otherwise. The key
+#            with that fingerprint verifies the .asc as "libssh release
+#            key", and this is the sha256 of the tarball it covers.
+openssl_sha256=967311f84955316969bdb1d8d4b983718ef42338639c621ec4c34fddef355e99
+libssh_sha256=6898ba9dd836d618b71dc7a4bb786a502c173cef5cafbf20fe5e0567ba4ea30c
+
+# sha256sum on Linux, shasum -a 256 on the BSDs and macOS -- the same split
+# fetch-fonts.sh handles, for the same reason.
+if command -v sha256sum >/dev/null 2>&1; then
+	checksum() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then
+	checksum() { shasum -a 256 "$1" | cut -d' ' -f1; }
+else
+	echo "build-deps-android: no sha256 tool found" >&2
+	exit 1
+fi
+
+# Deletes the archive it rejects. The downloads above are skipped when the
+# file is already there, so a mismatched archive left on disk is one every
+# later run reuses without fetching -- a check that fails once and is then
+# stepped around forever.
+verify() {
+	got=$(checksum "$1")
+	[ "$got" = "$2" ] && return 0
+	echo "build-deps-android: $1 does not match its pinned sha256." >&2
+	echo "  expected $2" >&2
+	echo "  got      $got" >&2
+	echo "  Removing it. If upstream reissued the archive, change the pin in" >&2
+	echo "  this script deliberately rather than to whatever turned up." >&2
+	rm -f "$1"
+	exit 1
+}
+
 mkdir -p "$prefix" "$work"
 cd "$work"
 
@@ -67,6 +118,7 @@ if [ ! -f "$prefix/lib/libcrypto.a" ]; then
 
 	[ -f "openssl-$openssl_version.tar.gz" ] ||
 		curl -fsSLO "https://www.openssl.org/source/openssl-$openssl_version.tar.gz"
+	verify "openssl-$openssl_version.tar.gz" "$openssl_sha256"
 	rm -rf "openssl-$openssl_version"
 	tar xf "openssl-$openssl_version.tar.gz"
 	cd "openssl-$openssl_version"
@@ -96,6 +148,7 @@ if [ ! -f "$prefix/lib/libssh.a" ]; then
 
 	[ -f "libssh-$libssh_version.tar.xz" ] ||
 		curl -fsSLO "https://www.libssh.org/files/0.11/libssh-$libssh_version.tar.xz"
+	verify "libssh-$libssh_version.tar.xz" "$libssh_sha256"
 	rm -rf "libssh-$libssh_version"
 	tar xf "libssh-$libssh_version.tar.xz"
 
