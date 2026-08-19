@@ -160,3 +160,19 @@ QT_QPA_PLATFORM=offscreen make test
 "
 
 echo "check-ci: the linux job passes on $IMAGE"
+
+# The receipt the pre-push hook reads, naming the commit this run actually
+# built -- which is HEAD, because that is what git archive staged above.
+#
+# The check writes its own receipt rather than the hook running the check,
+# and that is not a preference. The hook used to run this script, and a
+# push to GitHub then died with SIGPIPE while reporting that the check had
+# passed: git opens the connection to the remote BEFORE running pre-push
+# and sends the pack after, so five minutes of hook holds an idle socket
+# that the far end closes. Measured -- the same push to a local bare repo
+# succeeds with the same hook and the same run, twice, so it is the remote
+# that goes away and not the check that breaks anything.
+#
+# In .git, so it is local to the clone and never committed: a receipt that
+# survived a clone would vouch for a build that machine never did.
+printf '%s\n' "$(git rev-parse HEAD)" > "$(git rev-parse --git-dir)/check-ci-passed"

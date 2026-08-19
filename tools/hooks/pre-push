@@ -55,41 +55,37 @@ for sha in $pushing; do
 	fi
 done
 
-# Refusing rather than skipping when the check cannot run at all.
+# This hook CHECKS the receipt. It does not run the check, and that is the
+# whole design rather than an economy.
 #
-# The tempting shape is to let the push through with a warning when there is
-# no docker. That makes the gate disappear on exactly the machines that
-# cannot run it, silently, and a gate that has stopped running reads exactly
-# like one that keeps passing -- which is the failure this project has found
-# in its own tooling more than once. So the absence is a refusal, and taking
-# the gap is something somebody types.
-if ! command -v docker >/dev/null 2>&1; then
-	echo "pre-push: refusing -- docker is not installed, so check-ci cannot run." >&2
-	echo "pre-push:   Skipping quietly would leave a gate that looks like it is" >&2
-	echo "pre-push:   passing while it is not running at all." >&2
-	echo "pre-push:   Push with --no-verify if you accept the gap." >&2
-	exit 1
-fi
-
-# A run costs several minutes, and the ordinary sequence here is to gate a
-# commit and then push it. Remembering which commit passed turns the second
-# half of that into nothing. Keyed on the exact sha, in .git so it is local
-# to the clone and never committed: a stamp that survived a clone would
-# vouch for a build that machine never did.
+# It used to run `make check-ci` here, and doing so broke the push it was
+# guarding. git opens the connection to the remote BEFORE running pre-push
+# and sends the pack afterwards, so five minutes of hook left an idle
+# socket that the far end closed: the push died with SIGPIPE having just
+# printed that the check passed. Twice, and the second time it reported
+# success while landing nothing.
+#
+# Measured against the alternatives rather than guessed. The same hook and
+# the same full run push cleanly to a local bare repo, twice, so the check
+# breaks nothing; and a stamped push wrapped in `timeout` succeeds, so the
+# wrapper was not it either. What the two failures had in common was a
+# remote reached over the network.
+#
+# So the slow work lives outside, and tools/check-ci.sh writes the receipt
+# when it passes. Nothing here takes longer than reading a file, and the
+# connection is never left idle.
+#
+# Absent docker needs no special case now: check-ci refuses to run without
+# it, so no receipt is written and this refuses in turn.
 if [ -f "$stamp" ] && [ "$(cat "$stamp")" = "$head_sha" ]; then
-	echo "pre-push: check-ci already passed for $(git rev-parse --short HEAD)"
+	echo "pre-push: check-ci passed for $(git rev-parse --short HEAD)"
 	exit 0
 fi
 
-echo "pre-push: running check-ci against $(git rev-parse --short HEAD)."
-echo "pre-push:   Several minutes: it builds and tests in the runner's image,"
-echo "pre-push:   whose Qt and libssh are older than this machine's."
-
-if make check-ci; then
-	printf '%s\n' "$head_sha" > "$stamp"
-	exit 0
-fi
-
-echo "pre-push: refusing -- check-ci failed against $(git rev-parse --short HEAD)." >&2
-echo "pre-push:   Fix it, or push with --no-verify if you mean to." >&2
+echo "pre-push: refusing -- check-ci has not passed for $(git rev-parse --short HEAD)." >&2
+echo "pre-push:   Run it, then push:" >&2
+echo "pre-push:     make check-ci && git push" >&2
+echo "pre-push:   It builds and tests in the runner's image, whose Qt and libssh" >&2
+echo "pre-push:   are older than this machine's, and writes the receipt this hook" >&2
+echo "pre-push:   reads. Bypass with --no-verify if you mean to." >&2
 exit 1
