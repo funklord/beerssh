@@ -180,7 +180,7 @@ android {
         src/platform/secret_store_select_android.cpp
 
     # Cross-compiled, not system: an NDK sysroot has none of these.
-    # tools/build-deps-android.sh builds them into deps/android/<abi>.
+    # tool/build-deps-android.sh builds them into deps/android/<abi>.
     BSSH_ANDROID_DEPS = $$PWD/deps/android/$$QT_ARCH
     INCLUDEPATH += $$BSSH_ANDROID_DEPS/include
     LIBS += -L$$BSSH_ANDROID_DEPS/lib -lssh -lssl -lcrypto
@@ -189,7 +189,7 @@ android {
     # at link time -- which is what the first Android build would otherwise
     # produce and spend an afternoon on.
     !exists($$BSSH_ANDROID_DEPS/lib/libssh.a) {
-        error("Android dependencies are missing. Run: tools/build-deps-android.sh $$QT_ARCH")
+        error("Android dependencies are missing. Run: tool/build-deps-android.sh $$QT_ARCH")
     }
 
     # Sixel is NOT built for Android yet: libsixel needs its own cross

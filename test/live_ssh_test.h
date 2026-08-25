@@ -17,7 +17,7 @@
  * doors before anything had checked that a named key actually
  * authenticates.
  *
- * NOT part of `make test`: it needs an sshd. tools/check-ssh.sh starts a
+ * NOT part of `make test`: it needs an sshd. tool/check-ssh.sh starts a
  * throwaway one on a spare port with a generated key and runs this
  * against it; `make check-ssh` is the entry point. The port and key path
  * arrive in BSSH_TEST_SSH_PORT and BSSH_TEST_SSH_KEY, and the tests skip
@@ -52,7 +52,7 @@ private slots:
 	 * vanish. A closed socket is not a dropped link: a peer that goes
 	 * away cleanly sends a FIN and is noticed at once, which is the case
 	 * that was never in doubt. This needs the packets to disappear, so
-	 * tools/check-keepalive.sh black-holes the port with iptables.
+	 * tool/check-keepalive.sh black-holes the port with iptables.
 	 */
 	void a_black_holed_link_is_noticed();
 

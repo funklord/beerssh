@@ -39,7 +39,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: fonts
-          key: fonts-${{ hashFiles('tools/fetch-fonts.sh') }}
+          key: fonts-${{ hashFiles('tool/fetch-fonts.sh') }}
 
       - name: Fetch fonts
         if: steps.font-cache.outputs.cache-hit != 'true'
@@ -119,7 +119,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: deps/android
-          key: android-deps-${{ runner.os }}-${{ hashFiles('tools/build-deps-android.sh') }}
+          key: android-deps-${{ runner.os }}-${{ hashFiles('tool/build-deps-android.sh') }}
 
       # ANDROID_NDK_ROOT comes from the RUNNER, and is read in the shell
       # rather than through ${{ env.* }}.
@@ -136,7 +136,7 @@ jobs:
           : "${ANDROID_NDK_ROOT:=$ANDROID_NDK_LATEST_HOME}"
           export ANDROID_NDK_ROOT
           echo "using NDK at $ANDROID_NDK_ROOT"
-          tools/build-deps-android.sh arm64-v8a
+          tool/build-deps-android.sh arm64-v8a
 
       # Compiles and links libbeerssh_arm64-v8a.so. Packaging into an AAB
       # additionally needs the SDK, which the runner image provides.

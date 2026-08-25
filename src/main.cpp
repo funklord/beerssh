@@ -75,7 +75,7 @@ int main(int argc, char *argv[]) {
 	 *
 	 * The cost is that Qt's toolkit options are no longer accepted on the
 	 * command line. They all have environment variables -- QT_QPA_PLATFORM
-	 * is what `make test` and tools/check-deb.sh already use -- and an
+	 * is what `make test` and tool/check-deb.sh already use -- and an
 	 * option that works on one display server is worse than one that is
 	 * not offered.
 	 */
@@ -155,7 +155,7 @@ int main(int argc, char *argv[]) {
 	 * where fonts come from.
 	 *
 	 * Silent when the directory is missing. On a developer's checkout
-	 * before tools/fetch-fonts.sh has run, the catalog falls back to
+	 * before tool/fetch-fonts.sh has run, the catalog falls back to
 	 * whatever monospace families the system already has (sec 9.4), and a
 	 * warning on every start would be noise about a state that renders
 	 * perfectly well.

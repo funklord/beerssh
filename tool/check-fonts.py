@@ -19,7 +19,7 @@ and is a build-time dependency only: nothing in the shipped app reads a
 font table by hand.
 
 Usage:
-  tools/check-fonts.py [font-directory]     default: fonts/
+  tool/check-fonts.py [font-directory]     default: fonts/
 """
 
 import sys
@@ -38,7 +38,7 @@ except ImportError:
 
 # The families sec 9.2 selected, by the base name their files carry, with
 # the faces sec 9.1 requires. Kept in step with bssh_font_catalog and
-# tools/fetch-fonts.sh by name: a font in one and not the others shows up
+# tool/fetch-fonts.sh by name: a font in one and not the others shows up
 # here as a missing file rather than as a silent gap in the set.
 FAMILIES = {
 	"JetBrains Mono": {
@@ -273,7 +273,7 @@ def main():
 	if not os.path.isdir(directory):
 		sys.stderr.write(
 			"check-fonts: no font directory at %s\n"
-			"  run tools/fetch-fonts.sh first\n" % directory)
+			"  run tool/fetch-fonts.sh first\n" % directory)
 		return 2
 
 	result = result_t()

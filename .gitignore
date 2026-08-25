@@ -10,11 +10,11 @@ build/
 build-*/
 .qmake.stash
 
-# Cross-compiled dependency install prefixes (tools/build-deps-android.sh).
+# Cross-compiled dependency install prefixes (tool/build-deps-android.sh).
 # Reproducible from the script, and several hundred MB if committed.
 deps/
 
-# The curated font set (tools/fetch-fonts.sh, project.md sec 9.2).
+# The curated font set (tool/fetch-fonts.sh, project.md sec 9.2).
 #
 # Fetched, not committed: 54 MB of the set is font files and Iosevka alone
 # is 42 MB of that, none of which ever diffs usefully. The script pins a
@@ -26,7 +26,7 @@ fonts/
 # The built binary, copied out of build/ by `make`
 /beerssh
 
-# Python bytecode from tools/
+# Python bytecode from tool/
 __pycache__/
 
 # Editor and OS litter

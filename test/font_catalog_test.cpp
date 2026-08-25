@@ -223,7 +223,7 @@ void font_catalog_test::the_bundled_set_loads_and_covers_what_it_promises() {
 	 */
 	const QString directory = QStringLiteral(BSSH_TEST_FONT_DIR);
 	if (!QDir(directory).exists()) {
-		QSKIP("no bundled fonts -- run tools/fetch-fonts.sh");
+		QSKIP("no bundled fonts -- run tool/fetch-fonts.sh");
 	}
 
 	bssh_font_catalog catalog;
@@ -409,7 +409,7 @@ void font_catalog_test::every_bundled_font_names_a_licence_file_that_exists() {
 
 	const QString directory = QStringLiteral(BSSH_TEST_FONT_DIR);
 	if (!QDir(directory).exists()) {
-		QSKIP("no bundled fonts -- run tools/fetch-fonts.sh");
+		QSKIP("no bundled fonts -- run tool/fetch-fonts.sh");
 	}
 
 	for (const bssh_font_t &font : catalog.all()) {
@@ -516,7 +516,7 @@ void font_catalog_test::the_lift_keeps_a_colour_recognisable() {
 void font_catalog_test::every_bundled_face_draws_a_box_the_width_of_its_cell() {
 	bssh_font_catalog catalog;
 	if (catalog.load_bundled(QString::fromLatin1(BSSH_TEST_FONT_DIR)) < 1) {
-		QSKIP("no bundled fonts fetched; tools/fetch-fonts.sh has not run");
+		QSKIP("no bundled fonts fetched; tool/fetch-fonts.sh has not run");
 	}
 
 	/*

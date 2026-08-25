@@ -1,6 +1,6 @@
 #!/bin/sh
 # =============================================================================
-# tools/fetch-fonts.sh -- fetch the curated terminal font set (project.md sec 9)
+# tool/fetch-fonts.sh -- fetch the curated terminal font set (project.md sec 9)
 #
 # The fonts are NOT in the repository, and that is deliberate. They are
 # tens of megabytes of binary that never diff usefully, they are already
@@ -20,9 +20,9 @@
 # built from files rather than from memory.
 #
 # Usage:
-#   tools/fetch-fonts.sh          fetch anything missing
-#   tools/fetch-fonts.sh --force  re-fetch everything
-#   tools/fetch-fonts.sh --list   show what would be fetched
+#   tool/fetch-fonts.sh          fetch anything missing
+#   tool/fetch-fonts.sh --force  re-fetch everything
+#   tool/fetch-fonts.sh --list   show what would be fetched
 # =============================================================================
 
 set -eu
@@ -177,4 +177,4 @@ records | while IFS='|' read -r id url sha licence_url licence_file members; do
 done
 
 echo "fonts in $out"
-echo "run tools/check-fonts.py to verify them against sec 9.1"
+echo "run tool/check-fonts.py to verify them against sec 9.1"

@@ -34,7 +34,7 @@ struct outcome_t {
 
 /*
  * Which half of the run this is. The host key can only be seen to CHANGE
- * across a restart of the server on the same port, so tools/check-ssh.sh
+ * across a restart of the server on the same port, so tool/check-ssh.sh
  * runs the binary twice -- once to establish trust, once after swapping
  * the host key -- and the tests that do not belong to a phase skip.
  */
@@ -199,7 +199,7 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true,
 
 /*
  * The known-hosts store this run is using -- a throwaway one, put in
- * place by tools/check-ssh.sh through XDG_DATA_HOME.
+ * place by tool/check-ssh.sh through XDG_DATA_HOME.
  */
 QString known_hosts_file() {
 	return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
@@ -241,7 +241,7 @@ void hide_openssh_known_hosts(bool hidden) {
 bool server_available()
 {
 	if (test_port() == 0 || test_key().isEmpty()) {
-		QTest::qSkip("no live sshd; run via tools/check-ssh.sh (make check-ssh)",
+		QTest::qSkip("no live sshd; run via tool/check-ssh.sh (make check-ssh)",
 			            __FILE__, __LINE__);
 		return false;
 	}

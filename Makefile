@@ -32,7 +32,7 @@
 #                        not a test, and it cannot fail a build (sec 12.3)
 #   make check-deb    -- build the .debs, then install and run them in a
 #                        clean container (needs docker; sec 12.2)
-#   make style        -- gate the tree's indentation (tools/check-indent.sh)
+#   make style        -- gate the tree's indentation (tool/check-indent.sh)
 #   make check-ci     -- run the Linux CI job in the runner's own image
 #                        (needs docker; sec 12.4)
 #   make check-ssh    -- the SSH transport against a throwaway sshd
@@ -83,7 +83,7 @@
 #   Four things are needed and each is checked for by name, because every
 #   one of them fails unhelpfully when missing:
 #     QT_ANDROID_ROOT   the Qt kit for the target ABI
-#     ANDROID_NDK_ROOT  the NDK (compiles); tools/build-deps-android.sh too
+#     ANDROID_NDK_ROOT  the NDK (compiles); tool/build-deps-android.sh too
 #     ANDROID_SDK_ROOT  the SDK (packages); separate from the NDK
 #     a JDK on PATH     Gradle will not run on a JRE
 #
@@ -91,7 +91,7 @@
 #   Makefile, so there is one answer rather than two that can disagree.
 #
 #   The dependencies must be cross-compiled first, for that same ABI:
-#     tools/build-deps-android.sh arm64-v8a
+#     tool/build-deps-android.sh arm64-v8a
 #
 # FONTS
 #   The curated set (sec 9.2) is fetched, not committed: `make fonts` pulls
@@ -214,7 +214,7 @@ VTERM_CFLAGS = -std=c99 -Os -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
 # directory, because "the library" stops being one artifact the moment
 # there is more than one target.
 # The ABI, the API levels, the versionCode, the SDK and NDK paths, the adb
-# location and the signature check all come from tools/android.mk, included
+# location and the signature check all come from tool/android.mk, included
 # below `all`. They used to be stated here, and the fragment was written from
 # this file -- so what is gone is this project's own text, moved to where the
 # other three Android projects read the same words.
@@ -240,14 +240,14 @@ all: $(TARGET) $(MAN_PAGE)
 
 # The shared Android vocabulary: android, android-aab, android-install,
 # android-run, android-log, android-uninstall, android-check, and every
-# variable they need. Copied verbatim from ~/.claude/tools/android.mk.
+# variable they need. Copied verbatim from ~/.claude/tool/android.mk.
 #
 # Included AFTER `all` deliberately. `include` is where make first sees a
 # target, so pulling it in above would make android-check the default goal:
 # a plain `make` would run the preflight, fail for want of QT_ANDROID_ROOT,
 # and build nothing. bbq-predictor did exactly that and did not notice for
 # four sessions.
-include tools/android.mk
+include tool/android.mk
 
 # The NDK triple for the ABI, chosen BELOW the include because that is
 # where ANDROID_ABI acquires a value.
@@ -267,7 +267,7 @@ include tools/android.mk
 # The else no longer guesses. An unrecognised ABI leaves the triple empty
 # and the compile rule refuses, because the cost of guessing here is an
 # archive that looks built and is for the wrong machine -- the same reason
-# tools/android.mk refuses a kit that will not say what it is. It cannot
+# tool/android.mk refuses a kit that will not say what it is. It cannot
 # be an $(error): this file is read by every plain `make`, where
 # ANDROID_ABI is legitimately empty and nothing Android is being asked
 # for.
@@ -530,20 +530,20 @@ shots: $(TEST_BIN)
 #
 # Building here instead would be faster and is still available when the
 # question is about the container half rather than the sources:
-#   make deb && DEB_DIR=$(DEB_DIR) ./tools/check-deb.sh
+#   make deb && DEB_DIR=$(DEB_DIR) ./tool/check-deb.sh
 check-deb:
-	./tools/check-deb.sh
+	./tool/check-deb.sh
 
 style: style-source style-docs
 
 style-source:
-	python3 tools/style_gate.py check
+	python3 tool/style_gate.py check
 
 # project.md is authoritative, so it is held to the tree: a heading
 # that appears twice means whichever one you find, the other is the
 # one with the answer.
 style-docs:
-	python3 tools/style_gate.py docs
+	python3 tool/style_gate.py docs
 
 # sec 12.4's runner-parity check. Needs docker; not part of `test`, and
 # deliberately not a CI step -- CI already IS the runner. Run it before
@@ -551,20 +551,20 @@ style-docs:
 # runner's Qt and libssh are older than any development machine's and an
 # API added later compiles here and fails there.
 check-ci:
-	./tools/check-ci.sh
+	./tool/check-ci.sh
 
 # sec 12.3's one test against a real server. Needs sshd; not part of
 # `test`, which runs entirely against the fake transport. The libssh
 # binding is the only layer a fake cannot exercise.
 check-ssh: $(TEST_BIN)
-	./tools/check-ssh.sh
+	./tool/check-ssh.sh
 
 # sec 5.3's dead-peer detection against a link whose packets vanish.
 # Needs docker and NET_ADMIN -- a closed socket is not a dropped link, and
 # only iptables can make packets disappear rather than be refused. Slow by
 # construction: the budget it verifies is about a minute.
 check-keepalive:
-	./tools/check-keepalive.sh
+	./tool/check-keepalive.sh
 
 # --- the curated font set (project.md sec 9) --------------------------------
 # Not a build dependency: the app runs without it, falling back to whatever
@@ -572,15 +572,15 @@ check-keepalive:
 # 300 MB download would be a rude first build for a change that touches one
 # line of the emulator.
 fonts:
-	./tools/fetch-fonts.sh
+	./tool/fetch-fonts.sh
 
 fonts-list:
-	@./tools/fetch-fonts.sh --list
+	@./tool/fetch-fonts.sh --list
 
 # sec 9.6's gate. Separate from `style` because it needs the fonts present
 # and fontTools installed, neither of which a plain checkout has.
 check-fonts:
-	@python3 tools/check-fonts.py $(FONT_DIR)
+	@python3 tool/check-fonts.py $(FONT_DIR)
 
 $(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
 	@mkdir -p $(VTERM_ANDROID_DIR)
@@ -599,7 +599,7 @@ $(VTERM_ANDROID_LIB): $(VTERM_ANDROID_OBJS)
 # unhelpfully when missing: a bare qmake error, a wall of missing symbols,
 # a Gradle stack trace about JAVA_COMPILER, or a "platforms does not
 # exist" from a path nobody set.
-# This project's own preflight, run by android-check in tools/android.mk.
+# This project's own preflight, run by android-check in tool/android.mk.
 #
 # Named through ANDROID_CHECK_LOCAL rather than by redefining android-check:
 # make takes the LAST definition of a target it reads, silently, so a second
@@ -612,7 +612,7 @@ ANDROID_CHECK_LOCAL = android-check-beerssh
 android-check-beerssh:
 	@if [ ! -f deps/android/$(ANDROID_ABI)/lib/libssh.a ]; then \
 		echo "android: dependencies for $(ANDROID_ABI) are not built." >&2; \
-		echo "android:   run: tools/build-deps-android.sh $(ANDROID_ABI)" >&2; \
+		echo "android:   run: tool/build-deps-android.sh $(ANDROID_ABI)" >&2; \
 		exit 1; \
 	fi
 
@@ -740,7 +740,7 @@ android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 # of it conflicts with the real one's signature.
 APK_NAME = beerssh-$(VERSION)-$(ANDROID_ABI).apk
 
-# What android-install and android-run in tools/android.mk reach for.
+# What android-install and android-run in tool/android.mk reach for.
 # Named here because only this project knows where its build rule leaves
 # the file.
 ANDROID_ARTIFACT = $(ANDROID_BUILD_DIR)/$(APK_NAME)
@@ -799,7 +799,7 @@ endif
 	@# release build while shipping the Android debug key, and the only
 	@# reason that was noticed is that somebody ran apksigner by hand.
 	@#
-	@# The check itself now comes from tools/android.mk. The copy that used
+	@# The check itself now comes from tool/android.mk. The copy that used
 	@# to live here read only "Signer #1 certificate DN:", and build-tools 37
 	@# prints "V2 Signer: certificate DN:" -- so on any current SDK it
 	@# matched nothing, printed "signed by" with a blank after it, and the
@@ -825,10 +825,10 @@ endif
 # inherit it from a prerequisite that may or may not have rerun.
 check-apk: android
 	$(call android_verify_signature,$(ANDROID_BUILD_DIR)/$(APK_NAME))
-	./tools/check-apk.sh $(ANDROID_BUILD_DIR)/$(APK_NAME)
+	./tool/check-apk.sh $(ANDROID_BUILD_DIR)/$(APK_NAME)
 
 # android-run, android-install, android-log and android-uninstall come from
-# tools/android.mk. The versions that were here hardcoded the Gradle output
+# tool/android.mk. The versions that were here hardcoded the Gradle output
 # path and the application id as literals; the fragment reads ANDROID_ARTIFACT
 # and APP_ID, which this file already states once each.
 
@@ -1033,6 +1033,6 @@ check: style test
 # a fresh clone.
 hooks:
 	@test -d .git || { echo "hooks: not a git repository" >&2; exit 1; }
-	@install -m 0755 tools/hooks/commit-msg .git/hooks/commit-msg
-	@install -m 0755 tools/hooks/pre-push .git/hooks/pre-push
-	@echo "hooks: commit-msg and pre-push installed from tools/hooks/"
+	@install -m 0755 tool/hooks/commit-msg .git/hooks/commit-msg
+	@install -m 0755 tool/hooks/pre-push .git/hooks/pre-push
+	@echo "hooks: commit-msg and pre-push installed from tool/hooks/"

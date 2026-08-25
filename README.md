@@ -306,7 +306,7 @@ requires:
 
 ```sh
 export ANDROID_NDK_ROOT=$HOME/android-ndk-r29
-tools/build-deps-android.sh arm64-v8a          # cross-builds libssh + OpenSSL
+tool/build-deps-android.sh arm64-v8a          # cross-builds libssh + OpenSSL
 make android QT_ANDROID_ROOT=$HOME/Qt/6.11.1/android_arm64_v8a
 ```
 
@@ -364,7 +364,7 @@ test/               host unit tests + the fake SSH session they drive
 android/             AndroidManifest.xml and the service shim
 debian/              debhelper packaging; VERSION at the root is the source
 vterm-patch/       applied to the submodule at build time, not committed to it
-tools/               the style gate, the git hooks, and the check-* scripts
+tool/               the style gate, the git hooks, and the check-* scripts
 ```
 
 ## Documents
@@ -374,6 +374,6 @@ tools/               the style gate, the git hooks, and the check-* scripts
 - **`code-style.md`** — snake_case, tabs, lowercase filenames, why
   `clang-format` is not used here, and what the commit-msg hook does and
   does not reject.
-- **`tools/hooks/commit-msg`** — installed by `make hooks`. Commit subjects
+- **`tool/hooks/commit-msg`** — installed by `make hooks`. Commit subjects
   are `subsystem: summary`, imperative, within 75 columns; `project.md`
   §18.5 has the rest.

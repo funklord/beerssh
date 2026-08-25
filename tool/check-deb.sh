@@ -45,7 +45,7 @@ fi
 # does. Read-only here, and dh_install follows it.
 #
 # DEB_DIR still overrides, for checking packages that are already built:
-#   make deb && DEB_DIR=build/deb ./tools/check-deb.sh
+#   make deb && DEB_DIR=build/deb ./tool/check-deb.sh
 # which is the faster loop when the question is about the container half
 # rather than about the sources.
 if [ -n "${DEB_DIR:-}" ]; then

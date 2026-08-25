@@ -71,7 +71,7 @@ done
 # wrapper was not it either. What the two failures had in common was a
 # remote reached over the network.
 #
-# So the slow work lives outside, and tools/check-ci.sh writes the receipt
+# So the slow work lives outside, and tool/check-ci.sh writes the receipt
 # when it passes. Nothing here takes longer than reading a file, and the
 # connection is never left idle.
 #

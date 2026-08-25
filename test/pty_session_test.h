@@ -8,7 +8,7 @@
  *
  * This is the one transport that can be tested for real without a server,
  * because the far end is a process on this machine. The SSH one needs
- * either a fake or tools/check-ssh.sh's throwaway sshd; a pty needs
+ * either a fake or tool/check-ssh.sh's throwaway sshd; a pty needs
  * /bin/sh, which is present wherever this suite runs at all.
  */
 class pty_session_test : public QObject {

@@ -243,7 +243,7 @@ int main(int argc, char *argv[]) {
 	 * the host list moved to ~/.ssh, which is not a directory a test
 	 * suite may write to under any circumstances.
 	 *
-	 * The live-SSH harness (tools/check-ssh.sh) sets up its own HOME and
+	 * The live-SSH harness (tool/check-ssh.sh) sets up its own HOME and
 	 * needs to keep it, so it says so and this leaves it alone.
 	 */
 	static QTemporaryDir sandbox;
@@ -286,7 +286,7 @@ int main(int argc, char *argv[]) {
 		/*
 		 * The transport against a real server (sec 12.3). Opt-in for the
 		 * same reason as --bench and for a stronger one: it needs an
-		 * sshd, which tools/check-ssh.sh supplies. Everything else here
+		 * sshd, which tool/check-ssh.sh supplies. Everything else here
 		 * runs against the fake.
 		 */
 		if (qstrcmp(argv[i], "--live-ssh") == 0) {

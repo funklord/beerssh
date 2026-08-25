@@ -22,7 +22,7 @@ CONFIG -= app_bundle
 
 INCLUDEPATH += $$PWD/../src $$PWD $$PWD/../vterm/include
 
-# Where tools/fetch-fonts.sh puts the curated set (project.md sec 9.2).
+# Where tool/fetch-fonts.sh puts the curated set (project.md sec 9.2).
 # The font tests skip themselves when it is not there, so a checkout that
 # has never run the fetch script still has a green test suite.
 DEFINES += BSSH_TEST_FONT_DIR=\\\"$$PWD/../fonts\\\"

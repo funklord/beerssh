@@ -6,7 +6,7 @@ that cannot fail is not evidence, and this tree has shipped several that
 could not. Doing it by hand is three commands per assertion and an editor
 window, which is why it gets skipped exactly when there is least time.
 
-Last run 2026-08-14 against tools/sabotage/windows.toml: all seven edits
+Last run 2026-08-14 against tool/sabotage/windows.toml: all seven edits
 caught by the test each one names, from a 366-passing baseline, with the
 tree back byte-for-byte afterwards.
 
@@ -47,7 +47,7 @@ Piping the first version through `tail` buffered every line until the end
 and then the run was killed, so hours of work reported nothing at all.
 
 Usage:
-    tools/sabotage.py tools/sabotage/<spec>.toml [...]
+    tool/sabotage.py tool/sabotage/<spec>.toml [...]
 
 A spec is a list of edits, each naming the test that must notice it:
 

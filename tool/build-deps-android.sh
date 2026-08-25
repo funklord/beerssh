@@ -4,7 +4,7 @@
 # beerssh.pro expects, and the thing it errors out naming when missing.
 #
 # Usage:
-#   tools/build-deps-android.sh [abi]        # default arm64-v8a
+#   tool/build-deps-android.sh [abi]        # default arm64-v8a
 #
 # Needs ANDROID_NDK_ROOT. The NDK ships a CMake toolchain file and a full
 # clang cross-toolchain, so both libraries are built with their own build
@@ -61,7 +61,7 @@ libssh_version=0.11.5
 
 # And checksummed, which the version pin alone does not do: a pinned
 # version says WHICH artifact was wanted, not that the bytes that arrived
-# are the ones upstream published. tools/fetch-fonts.sh has verified its
+# are the ones upstream published. tool/fetch-fonts.sh has verified its
 # downloads since it was written; this script fetches the TLS and SSH
 # stack and verified nothing, so the cosmetic downloads were checked and
 # the cryptography was not.

@@ -337,7 +337,7 @@ question on the Android build's terms, not the desktop one's.
 **Crypto backend: [DECIDED] OpenSSL** — best-tested with libssh; mbedTLS and
 wolfSSL are lighter but add integration risk. Settled at build setup, which is
 where this said it would be: desktop links the system OpenSSL, and
-`tools/build-deps-android.sh` cross-builds a pinned copy for Android.
+`tool/build-deps-android.sh` cross-builds a pinned copy for Android.
 
 ---
 
@@ -2241,7 +2241,7 @@ handed nothing but the program's own name.
 The cost is stated rather than hidden: **Qt's toolkit options are no longer
 accepted on the command line.** `-platform`, `-style` and the rest all have
 environment variables, and `QT_QPA_PLATFORM` is what `make test` and
-`tools/check-deb.sh` already use. `bssh_command_line()` is where the parsed
+`tool/check-deb.sh` already use. `bssh_command_line()` is where the parsed
 result lives afterwards, because `QCoreApplication::arguments()` now holds only
 `argv[0]` and the desktop platform still has to answer `launch_document()`.
 
@@ -2320,7 +2320,7 @@ died with "could not connect to display" and exit 141 rather than printing
 anything — measured, not supposed. That is `--help` over SSH, `--help` in a
 container, and `--man` in the package build that generates the page: three
 places a terminal emulator has no business needing a display. They are answered
-before Qt exists now, and `tools/check-deb.sh` runs `--help` with no display
+before Qt exists now, and `tool/check-deb.sh` runs `--help` with no display
 against the installed package rather than trusting that it works.
 
 **Considered and not built**, each for a reason rather than by omission:
@@ -2388,7 +2388,7 @@ but because a picker of eight near-equivalent faces is a picker nobody reaches
 the bottom of, and each one is a licence to track and megabytes to ship.
 
 The set lives in one table in `bssh_font_catalog` and is fetched by
-`tools/fetch-fonts.sh`, which pins a version *and* a SHA-256 per family. The
+`tool/fetch-fonts.sh`, which pins a version *and* a SHA-256 per family. The
 fonts are deliberately **not committed**: 54 MB that never diffs usefully, and
 a pinned checksum gives the same reproducibility a committed copy would.
 Specific choices worth recording: **Iosevka Term**, not plain Iosevka, because
@@ -2877,7 +2877,7 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   but do honour it for app chrome. Offer it as an explicit setting.
 
 ### 9.6 CI font validation
-**Built** (`tools/check-fonts.py`, `make check-fonts`, run in CI): for every
+**Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every
 bundled font it asserts uniform advance width, presence of the required
 Unicode blocks (§9.1), the required weights, and a recognised licence file,
 and it **fails the build** where a font doesn't qualify. This is how "only
@@ -3123,7 +3123,7 @@ double as documentation of what a preset can do.
   target session holding a descriptor that was open and permanently silent —
   never readable, never an error, so never a drop. Shutting it down turns each
   into the ordinary drop §5.3 already handles.
-  **Checked against a real server** (§12.3): `tools/check-ssh.sh` uses the one
+  **Checked against a real server** (§12.3): `tool/check-ssh.sh` uses the one
   throwaway sshd as *both* bastion and target — it carries a channel to itself,
   and a second independent SSH session runs inside it. A bastion that is not
   listening must stop the connection, which is what keeps the check from passing
@@ -3200,7 +3200,7 @@ double as documentation of what a preset can do.
   opened. Assume they will be inspected and hand-edited: that is an argument for
   readable keys and for keeping the secret/non-secret split (§10.3) obvious,
   not for obfuscating anything.
-- `tools/migrate-db-to-ini.py` converts a database written by an earlier build.
+- `tool/migrate-db-to-ini.py` converts a database written by an earlier build.
   A script rather than app code, because the app no longer links Qt SQL at all
   and carrying a database driver forever to read one file once is a poor trade.
 
@@ -3589,11 +3589,11 @@ The desktop build is what makes this project testable at all — use it.
   and an sshd on a spare loopback port taking that one key and no password. Nobody's real
   `~/.ssh` is read or written. Without the server the tests **skip** rather than
   fail, so running the binary by hand cannot report a false failure.
-- **Breaking the code on purpose is automated now — `tools/sabotage.py`.**
+- **Breaking the code on purpose is automated now — `tool/sabotage.py`.**
   This section has asked since it was written for every test to be checked by
   making it fail, and by hand that is three commands and an editor window per
   assertion, which is why it got skipped exactly when there was least time. A
-  spec (`tools/sabotage/*.toml`) names a file, a string to break, and **the
+  spec (`tool/sabotage/*.toml`) names a file, a string to break, and **the
   test that must notice**; each edit gets its own suite run and a verdict of
   `caught`, `MISSED`, `WRONG TEST` or `NO BUILD`. `NO BUILD` is a verdict
   rather than a pass because a suite that did not compile prints no PASS and
@@ -4306,7 +4306,7 @@ than its brace nesting, since C and C++ labels open no brace.
 which are spaces, and silently converts the whole tree; a config doesn't fix it
 either, because `AlignAfterOpenBracket` can't express the continuation alignment
 above and would reflow nearly every multi-line signature. The mechanical check
-that *is* wanted lives in `tools/` (`tabify.py` + `check-indent.sh`, carried over
+that *is* wanted lives in `tool/` (`tabify.py` + `check-indent.sh`, carried over
 from `fuzzypickles`) and runs as `make style`, in CI alongside both builds.
 
 ### 18.4 Filenames
@@ -4353,6 +4353,6 @@ restated here; `code-style.md` carries what the hook itself does.
   construction, and editing this document ahead of the code it specifies.
 - **No AI-attribution trailers** in commit messages — no `Co-Authored-By:` for a
   tool, no generated-by footers. Messages end at their real content.
-- `tools/hooks/commit-msg`, installed by `make hooks`, enforces the two
+- `tool/hooks/commit-msg`, installed by `make hooks`, enforces the two
   mechanical halves: no generator attribution, and a subject within 75
   columns. Everything else above is a review item.

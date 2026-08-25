@@ -2016,7 +2016,7 @@ void layout_test::a_window_shows_only_its_own_tabs() {
 	 * indexed the whole registry for the text would keep both counts
 	 * right and put the wrong name on the tab.
 	 *
-	 * Not hypothetical. tools/sabotage.py made exactly that edit and this
+	 * Not hypothetical. tool/sabotage.py made exactly that edit and this
 	 * test stayed green -- one window and one session cannot tell the two
 	 * lists apart, because they hold the same thing in the same order.
 	 * Two windows each holding a DIFFERENT session is the smallest case

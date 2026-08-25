@@ -1,5 +1,5 @@
 # =============================================================================
-# tools/Makefile -- the repo's own tooling
+# tool/Makefile -- the repo's own tooling
 #
 # Nothing here is compiled; these are the checks that keep conventions true
 # mechanically rather than by review. Kept as a Makefile so the tools have

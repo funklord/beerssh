@@ -16,7 +16,7 @@ INI files already exist the script refuses rather than merging, because
 merging two sets of hosts silently is worse than doing nothing.
 
 Usage:
-  tools/migrate-db-to-ini.py [--dry-run] [database] [config-dir]
+  tool/migrate-db-to-ini.py [--dry-run] [database] [config-dir]
 
 Defaults match where each version put its files:
   database    ~/.local/share/beerssh/beerssh.db

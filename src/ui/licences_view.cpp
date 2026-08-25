@@ -161,7 +161,7 @@ void bssh_licences_view::load_fonts() {
 
 		/*
 		 * The full text where it shipped, and an honest line where it did
-		 * not: on a checkout that never ran tools/fetch-fonts.sh, or an
+		 * not: on a checkout that never ran tool/fetch-fonts.sh, or an
 		 * Android build whose asset pack has not arrived, there is
 		 * nothing to show and saying so beats an empty pane.
 		 */
