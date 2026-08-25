@@ -6,7 +6,7 @@
 /*
  * The SSH transport against a real server (project.md sec 12.3).
  *
- * Everything else in tests/ runs against bssh_fake_ssh_session, which is
+ * Everything else in test/ runs against bssh_fake_ssh_session, which is
  * what makes the suite runnable with no server and no device -- and what
  * leaves exactly one layer unexercised: the libssh binding itself. A fake
  * proves the emulator handles bytes; it cannot prove an option reached

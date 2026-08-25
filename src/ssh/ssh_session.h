@@ -22,7 +22,7 @@
  * The second reason for the interface is testing: a fake implementation
  * replaying a captured byte stream is how the emulator and the input
  * router get tested without a server (sec 12.3). That fake lives in
- * tests/, not here -- the shipping binary has no business carrying a
+ * test/, not here -- the shipping binary has no business carrying a
  * pretend SSH backend.
  *
  * There is no local PTY anywhere in this picture, on either platform. The

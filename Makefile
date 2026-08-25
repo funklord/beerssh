@@ -21,7 +21,7 @@
 #                        suite itself -- BSSH_TEST_TIMEOUT (seconds per
 #                        class, default 300) and BSSH_TEST_MAX_OUTPUT
 #                        (MB, default 256), either off with 0. The
-#                        bound is in tests/main.cpp, not here, because
+#                        bound is in test/main.cpp, not here, because
 #                        the run that filled a disk was the binary
 #                        invoked directly.
 #   make bench        -- emulator throughput in MB/s (sec 9.5); built by
@@ -196,12 +196,12 @@ VTERM_OBJS = $(patsubst $(VTERM_DIR)/src/%.c,$(VTERM_BUILD_DIR)/%.o,$(VTERM_SRCS
 VTERM_BUILD_DIR = build-vterm
 VTERM_LIB  = $(VTERM_BUILD_DIR)/libvterm.a
 
-# Patches applied to the vendored copy at build time (vterm-patches/), kept
+# Patches applied to the vendored copy at build time (vterm-patch/), kept
 # as files rather than as edits committed into the submodule: a submodule
 # pinned to a commit that exists only locally is a submodule nobody else can
 # clone. Applying them here means an upstream update that conflicts fails
 # loudly at the patch step instead of silently dropping the fix.
-VTERM_PATCHES = $(sort $(wildcard vterm-patches/*.patch))
+VTERM_PATCHES = $(sort $(wildcard vterm-patch/*.patch))
 VTERM_STAMP   = $(VTERM_BUILD_DIR)/.patched
 
 # -w: this is third-party code built to someone else's warning standard, and
@@ -367,11 +367,11 @@ run: $(TARGET)
 TEST_BUILD_DIR = build-tests
 TEST_BIN       = $(TEST_BUILD_DIR)/beerssh_test
 
-$(TEST_BUILD_DIR)/Makefile: tests/tests.pro
+$(TEST_BUILD_DIR)/Makefile: test/tests.pro
 	mkdir -p $(TEST_BUILD_DIR)
-	cd $(TEST_BUILD_DIR) && $(QMAKE) ../tests/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX)
+	cd $(TEST_BUILD_DIR) && $(QMAKE) ../test/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX)
 
-$(TEST_BIN): $(VTERM_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard tests/*.cpp tests/*.h)
+$(TEST_BIN): $(VTERM_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
 	$(MAKE) -C $(TEST_BUILD_DIR)
 
 # The offscreen QPA plugin is what makes both of these runnable in CI at
@@ -380,7 +380,7 @@ $(TEST_BIN): $(VTERM_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wil
 # writes a real host list -- into ~/.ssh now (sec 10.6). A build step does
 # not get to edit the config of whoever ran it, so it runs against a
 # throwaway HOME. The unit tests sandbox themselves for the same reason;
-# see tests/main.cpp.
+# see test/main.cpp.
 test: $(TARGET) $(TEST_BIN)
 	@sandbox=$$(mktemp -d) && \
 	 HOME=$$sandbox XDG_CONFIG_HOME=$$sandbox/config XDG_DATA_HOME=$$sandbox/data \
@@ -391,7 +391,7 @@ test: $(TARGET) $(TEST_BIN)
 	@# sixteen assertion failures.
 	@#
 	@# The suite sandboxes HOME and XDG_* into a temporary directory
-	@# (tests/main.cpp) so it cannot write into whoever ran it. On a full
+	@# (test/main.cpp) so it cannot write into whoever ran it. On a full
 	@# filesystem those writes fail, and the suite reports things like
 	@# "write_ini() returned FALSE" and settings that do not persist --
 	@# which reads exactly like a regression in the code under test. That
@@ -496,7 +496,7 @@ shots: $(TEST_BIN)
 	@# status of its last command, so `binary | grep` would report grep's
 	@# and swallow a crash into a clean-looking run.
 	@# BSSH_FONT_DIR because the candidate paths are relative to the
-	@# BINARY, and the test binary lives in build-tests/ -- so it looks
+	@# BINARY, and the test binary lives in build-test/ -- so it looks
 	@# one level above the checkout and finds nothing. Without it the
 	@# terminal shots are drawn in whatever monospace the machine has,
 	@# which is not what the app does. The renderer says which font it
@@ -1009,7 +1009,7 @@ veryclean: clean
 # not build output: they belong to somebody's editor, and the build system
 # has no business deleting files it did not create. The sweep was also
 # unbounded -- `find .` from here walks `.git`, `vterm/` and
-# `vterm-patches/`, and it was measured deleting files inside a submodule
+# `vterm-patch/`, and it was measured deleting files inside a submodule
 # and inside `.git` itself, neither of which this project owns. `git clean
 # -xdn` lists that class of file and is the person's call, not the build's.
 distclean: veryclean

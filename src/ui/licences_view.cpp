@@ -39,7 +39,7 @@ const library_t BSSH_LIBRARIES[] = {
 		"the relinking terms in view (project.md sec 4)." },
 	{ "libvterm", "MIT",
 		"The terminal emulation core, vendored as a submodule and built "
-		"with the patches in vterm-patches/, which are ours." },
+		"with the patches in vterm-patch/, which are ours." },
 	{ "OpenSSL", "Apache-2.0",
 		"The crypto backend libssh is built against. Cross-compiled for "
 		"Android; the system copy is used on desktop." },

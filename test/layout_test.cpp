@@ -1427,7 +1427,7 @@ void layout_test::the_caps_setting_reaches_a_sessions_router() {
 	 * pass with the window never calling the setter.
 	 *
 	 * Safe to write because the suite sandboxes HOME and XDG_CONFIG_HOME
-	 * (tests/main.cpp); restored afterwards regardless, since it is a
+	 * (test/main.cpp); restored afterwards regardless, since it is a
 	 * process-wide file and the next test should not inherit it.
 	 */
 	const bool original = bssh_app_settings().caps_as_ctrl();

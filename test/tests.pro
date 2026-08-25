@@ -1,5 +1,5 @@
 # =============================================================================
-# tests/tests.pro -- host unit tests (project.md sec 12.3)
+# test/tests.pro -- host unit tests (project.md sec 12.3)
 #
 # Built in its own directory from its own .pro, for the reason every Qt
 # test project needs one: the test binary needs the app's sources but not

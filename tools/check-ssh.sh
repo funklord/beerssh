@@ -1,7 +1,7 @@
 #!/bin/sh
 # Run the SSH transport against a real sshd (project.md sec 12.3).
 #
-# Everything in tests/ otherwise runs against bssh_fake_ssh_session, which
+# Everything in test/ otherwise runs against bssh_fake_ssh_session, which
 # is what makes the suite runnable with no server -- and what leaves the
 # libssh binding itself unexercised. A fake proves the emulator handles
 # bytes; it cannot prove an option reached libssh, or that libssh did what
@@ -15,7 +15,7 @@
 
 set -eu
 
-BIN=${BSSH_TEST_BIN:-./build-tests/beerssh_test}
+BIN=${BSSH_TEST_BIN:-./build-test/beerssh_test}
 
 if [ ! -x "$BIN" ]; then
 	echo "check-ssh: $BIN is not built. Run: make test" >&2

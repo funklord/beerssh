@@ -794,7 +794,7 @@ int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
 	 * the screen layer's scrollrect and therefore before its flush. So
 	 * ask for the flush now. The buffer has not moved yet, so the
 	 * pending rectangle still describes what is in it -- the same
-	 * ordering argument as vterm-patches/0003, one callback earlier.
+	 * ordering argument as vterm-patch/0003, one callback earlier.
 	 */
 	vterm_screen_flush_damage(self->vts);
 

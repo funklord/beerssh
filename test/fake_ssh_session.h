@@ -14,7 +14,7 @@
  * screen out), the input router (keys in, bytes out -- M3), and the
  * reconnection FSM (state transitions without a network to flap).
  *
- * It lives in tests/ on purpose. The shipping app must not carry a
+ * It lives in test/ on purpose. The shipping app must not carry a
  * pretend SSH backend that could ever be selected by accident.
  *
  * Delivery is synchronous: open_shell() emits the script immediately

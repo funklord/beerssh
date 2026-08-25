@@ -119,7 +119,7 @@ PY
 
 # And from the submodule's own HEAD, for the reason src.tar is: `tar -cf
 # vterm.tar vterm` read the working tree, which here is never what the
-# runner gets. The build APPLIES vterm-patches/ to the submodule in
+# runner gets. The build APPLIES vterm-patch/ to the submodule in
 # place, so the tree carries 38 modified lines at all times, and handing
 # those to the container made a green run mean "HEAD plus whatever is
 # lying in vterm/" rather than HEAD. It also hid the patch step: the

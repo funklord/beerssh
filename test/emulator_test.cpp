@@ -652,7 +652,7 @@ void emulator_test::decrqm_answers_for_modes_it_knows() {
 	 * understood and currently off, which is how a client learns
 	 * synchronised output is available before it uses it.
 	 *
-	 * This is the whole reason vterm-patches/0004 exists: without it
+	 * This is the whole reason vterm-patch/0004 exists: without it
 	 * libvterm answers the query itself with "0 -- not recognised",
 	 * telling every client the terminal lacks a feature it has.
 	 */

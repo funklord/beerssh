@@ -36,7 +36,7 @@ trap 'rm -rf "$STAGE"' EXIT INT TERM
 git archive --format=tar HEAD > "$STAGE/src.tar"
 
 # From the submodule's own HEAD, unpatched -- the build applies
-# vterm-patches/ in place, so the working tree is never what a checkout
+# vterm-patch/ in place, so the working tree is never what a checkout
 # gives. Unconditional here, unlike check-ci: that script asks the workflow
 # whether the runner wants submodules because its job is to reproduce the
 # runner exactly, empty vterm/ included. This one builds the app to test
@@ -55,7 +55,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
 mkdir -p /build && cd /build
 tar xf /in/src.tar && tar xf /in/vterm.tar
 # No patch stamp: vterm.tar is the submodule at its gitlink commit, so make
-# applies vterm-patches/ here rather than being handed a patched tree with
+# applies vterm-patch/ here rather than being handed a patched tree with
 # the step stamped away. git is installed above for it; git apply needs no
 # repository, and an extracted tree is not one.
 make -j"$(nproc)" test >/tmp/build.log 2>&1 || { tail -20 /tmp/build.log; exit 1; }
@@ -111,7 +111,7 @@ wait_for_file() {
 
 # ---- phase: the link goes away and stays away -------------------------
 rm -f "$READY" "$NOTICED"
-BSSH_TEST_SSH_PHASE=drop ./build-tests/beerssh_test --live-ssh > $D/drop.log 2>&1 &
+BSSH_TEST_SSH_PHASE=drop ./build-test/beerssh_test --live-ssh > $D/drop.log 2>&1 &
 APP=$!
 wait_for_file "$READY" 120 || { echo "session never came up"; cat $D/drop.log; exit 1; }
 echo "check-keepalive: session up; black-holing port $PORT"
@@ -123,7 +123,7 @@ grep -q "^Totals: .* 0 failed" $D/drop.log
 
 # ---- phase: it goes away, is noticed, and comes back ------------------
 rm -f "$READY" "$NOTICED"
-BSSH_TEST_SSH_PHASE=reconnect ./build-tests/beerssh_test --live-ssh > $D/reconnect.log 2>&1 &
+BSSH_TEST_SSH_PHASE=reconnect ./build-test/beerssh_test --live-ssh > $D/reconnect.log 2>&1 &
 APP=$!
 wait_for_file "$READY" 120 || { echo "session never came up"; cat $D/reconnect.log; exit 1; }
 echo "check-keepalive: session up; dropping the link again"
@@ -150,7 +150,7 @@ grep -q "^Totals: .* 0 failed" $D/reconnect.log
 # until that one was given the same treatment a black-holed link left the
 # session looking connected for as long as anyone cared to wait.
 rm -f "$READY" "$NOTICED"
-BSSH_TEST_SSH_PHASE=tunnel_black_hole ./build-tests/beerssh_test --live-ssh > $D/tunnel.log 2>&1 &
+BSSH_TEST_SSH_PHASE=tunnel_black_hole ./build-test/beerssh_test --live-ssh > $D/tunnel.log 2>&1 &
 APP=$!
 wait_for_file "$READY" 120 || { echo "tunnelled session never came up"; cat $D/tunnel.log; exit 1; }
 echo "check-keepalive: session up through a jump host; black-holing port $PORT"

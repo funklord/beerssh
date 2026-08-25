@@ -258,7 +258,7 @@ libvterm is vendored as a submodule and built from source. **You do not
 have to remember `--recurse-submodules`** — a build that needs libvterm
 and cannot find it fetches the submodule itself, once. `make style` and
 the other targets that do not need it never reach the network. The build
-then applies the patches in `vterm-patches/`; `make veryclean` reverts
+then applies the patches in `vterm-patch/`; `make veryclean` reverts
 them. See `project.md` §7.1 for what they fix and why they are not
 committed into the submodule.
 
@@ -360,10 +360,10 @@ src/input/           bssh_input_router -- every keystroke becomes bytes here
 vterm/               vendored libvterm (submodule, MIT, upstream untouched)
 src/platform/        bssh_platform + one implementation per platform
 src/model/           the session registry, host/preset stores, reconnection
-tests/               host unit tests + the fake SSH session they drive
+test/               host unit tests + the fake SSH session they drive
 android/             AndroidManifest.xml and the service shim
 debian/              debhelper packaging; VERSION at the root is the source
-vterm-patches/       applied to the submodule at build time, not committed to it
+vterm-patch/       applied to the submodule at build time, not committed to it
 tools/               the style gate, the git hooks, and the check-* scripts
 ```
 

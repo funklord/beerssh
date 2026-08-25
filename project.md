@@ -1150,7 +1150,7 @@ and told 0 it takes the terminal at its word and falls back. The implementation
 behind it was never reached. `request_dec_mode()` answered and returned without
 ever consulting the fallback — the same defect `0002` had already fixed for
 `set_dec_mode()`, on the other half of the same feature, quietly undoing it.
-**`vterm-patches/0004`** hands the query to the fallback in its own shape
+**`vterm-patch/0004`** hands the query to the fallback in its own shape
 (leader `?`, intermediate `$`, command `p`) before answering 0. Worth sending
 upstream alongside 0002.
 
@@ -1261,7 +1261,7 @@ needed a patch before it could be implemented at all. All three are
 *unreachable*, not merely unhandled, so no amount of application code
 could have implemented them.
 
-The fix lives in **`vterm-patches/`**, applied to the submodule at build
+The fix lives in **`vterm-patch/`**, applied to the submodule at build
 time by the top-level Makefile — **not** committed into the submodule
 itself, because a submodule pinned to a commit that exists only on this
 machine is one nobody else can clone. An upstream update that conflicts
@@ -1625,7 +1625,7 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   drawing, wide glyphs, the disambiguation set, in several schemes with the §9.3
   contrast floor on and off. It loads the bundled set through `BSSH_FONT_DIR`
   and **prints which family actually drew the picture**, because the candidate
-  paths are relative to the *binary* and the test binary sits in `build-tests/`
+  paths are relative to the *binary* and the test binary sits in `build-test/`
   — so it looked one level above the checkout, found nothing, and drew the
   terminal in whatever monospace the machine had. CJK came out as tofu in a
   picture of a renderer that handles it. A shot of a renderer is uninterpretable
@@ -2757,7 +2757,7 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   rather than by anything failing. Damage merges per ROW, so a row stays
   pending until a different row is touched; `sb_pushline` runs from the state
   layer's `premove`, which is *before* the screen layer's `scrollrect` and
-  therefore before the flush that `vterm-patches/0003` moved. A row written and
+  therefore before the flush that `vterm-patch/0003` moved. A row written and
   then scrolled away before anything else happened was still pending, and the
   mirror had never been told: measured with `HELLO` then `CSI S`, the scrollback
   line came back **empty**, not merely stale. Ordinary output cannot reach it,
@@ -2793,7 +2793,7 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   access, which is a change to a dependency for a cost that is now spread thinly
   across three unavoidable steps. Not worth it at this size.
 - **Throughput, measured separately from painting** — by `make bench`
-  (`tests/emulator_bench.cpp`, §12.3), which is where every MB/s figure below
+  (`test/emulator_bench.cpp`, §12.3), which is where every MB/s figure below
   comes from and how to re-derive it. They are timings on a particular machine,
   so treat them as ratios and as a record of which change moved what, not as
   numbers to compare against a fresh checkout on other hardware. Scrolling output ran at
@@ -2821,7 +2821,7 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   prompt is a write with no newline followed by silence), and libvterm's own
   `scrollrect()` flushed *after* moving its buffer, handing back a pre-scroll
   rectangle pointing at post-scroll cells. That second one is upstream's bug
-  rather than ours and is fixed in `vterm-patches/` (§7.1) — it is invisible
+  rather than ours and is fixed in `vterm-patch/` (§7.1) — it is invisible
   under the default, because per-cell damage is delivered synchronously and
   nothing is ever pending when a scroll begins.
   The count is what CI guards (§12.3), measured at the emulator's own
@@ -3715,7 +3715,7 @@ The desktop build is what makes this project testable at all — use it.
   floor exists to strip off.
   **None of the three was started by `make test`** — they were run directly, so
   a `timeout` wrapped around the Makefile recipe would have caught none of them.
-  The bound lives in `tests/main.cpp` for exactly that reason: a wrapper only
+  The bound lives in `test/main.cpp` for exactly that reason: a wrapper only
   guards the way somebody did not run it.
   Two limits, because the failure has two shapes. `BSSH_TEST_TIMEOUT` (seconds
   per test class, default 300) catches a test that spins in silence;
@@ -3735,7 +3735,7 @@ The desktop build is what makes this project testable at all — use it.
 - **Benchmarks are built by `make test` and run by `make bench`.** Every
   throughput figure in §9.5 was measured with a scratch harness that was then
   thrown away, so each one cited a program nobody could re-run — a claim
-  wearing the clothes of evidence. `tests/emulator_bench.cpp` is that harness,
+  wearing the clothes of evidence. `test/emulator_bench.cpp` is that harness,
   kept. It is **not a CI gate and must not become one**: the numbers move by
   more than a real change does depending on what else the machine is compiling,
   so a threshold would either sit so loose it catches nothing or fail builds
@@ -3818,7 +3818,7 @@ The desktop build is what makes this project testable at all — use it.
   **The patch step was the third thing this hid.** Because the submodule arrived
   already patched, the container stamped `build-vterm/.patched` to skip the
   patch rule — so the one rule that breaks when upstream moves under
-  `vterm-patches/` was never exercised by the reproduction that exists to catch
+  `vterm-patch/` was never exercised by the reproduction that exists to catch
   exactly that class of divergence. The submodule now arrives unpatched, as the
   runner's checkout leaves it, and `make` applies the patches in the container
   the way it does on the runner. `git` joins the container's package list for
