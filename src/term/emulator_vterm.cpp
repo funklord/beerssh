@@ -1344,6 +1344,42 @@ bool bssh_emulator::mouse_reporting() const {
 	return m_private->mouse_reporting;
 }
 
+void bssh_emulator::reset_modes() {
+	/*
+	 * The alternate screen comes off through libvterm's OWN path rather
+	 * than through the reset, because vterm_state_reset() sets
+	 * state->mode.alt_screen directly without going through
+	 * VTERM_PROP_ALTSCREEN -- so the state would say "primary" while the
+	 * screen layer still pointed at the alternate buffer, and our mirror
+	 * and alternate_screen_changed() would never hear about it either.
+	 * Feeding the sequence keeps all four in step.
+	 */
+	if (m_private->alt_screen) feed(QByteArrayLiteral("\x1b[?1049l"));
+
+	/*
+	 * Soft, not hard: the hard branch homes the cursor and erases the
+	 * screen, which is exactly the history a reconnect exists to keep.
+	 * Soft resets the modes and nothing else -- keypad, DECCKM, autowrap,
+	 * insert, newline, origin, margins, bracketed paste, focus reporting,
+	 * the mouse flags, the tab stops, the pen and the encodings.
+	 */
+	vterm_screen_reset(m_private->vts, 0);
+
+	/*
+	 * And the shadows we keep beside libvterm's, which it has never heard
+	 * of: the ones that exist so DECRQM can answer, plus the two
+	 * protocols libvterm does not model at all.
+	 */
+	m_private->mouse_reporting = false;
+	m_private->mouse_mode = 0;
+	m_private->modify_other_keys = 0;
+	m_private->kitty_stack.clear();
+	m_private->kitty_stack.append(0);
+	m_private->end_sync();
+
+	emit damaged();
+}
+
 bool bssh_emulator::alternate_screen() const {
 	return m_private->alt_screen;
 }

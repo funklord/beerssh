@@ -1,0 +1,46 @@
+# Sabotages for sec 5.3's reconnect: the emulator survives a drop so the
+# user keeps their history, which means every mode the OLD shell's
+# programs set has to be taken off it deliberately.
+#
+# Each names the test that must notice. A sabotage caught by some OTHER
+# test is reported as "WRONG TEST" rather than as a pass.
+
+# The reset itself. Without it the new shell inherits mouse reporting,
+# bracketed paste, application cursor keys and the rest -- modes it never
+# asked for and cannot know to disable.
+[[sabotage]]
+name = "the new shell inherits the old one's modes"
+file = "src/term/emulator_vterm.cpp"
+find = "\tvterm_screen_reset(m_private->vts, 0);"
+expect = "a_reconnect_keeps_the_history_and_drops_the_modes"
+
+# Leaving the alternate screen through libvterm's own path.
+# vterm_state_reset() sets state->mode.alt_screen directly and never goes
+# through VTERM_PROP_ALTSCREEN, so without this the state says primary
+# while the screen layer still points at the alternate buffer -- and the
+# history the reconnect exists to keep stays hidden behind it.
+[[sabotage]]
+name = "the alternate buffer stays up across a reconnect"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (m_private->alt_screen) feed(QByteArrayLiteral(\"\\x1b[?1049l\"));"
+expect = "a_reconnect_keeps_the_history_and_drops_the_modes"
+
+# The shadow libvterm has never heard of. It is what the view asks before
+# deciding whether a click is a report or a selection, so a stale one
+# survives the reset that cleared libvterm's own flags.
+[[sabotage]]
+name = "the mouse shadow outlives the reset"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->mouse_reporting = false;"
+expect = "a_reconnect_keeps_the_history_and_drops_the_modes"
+
+# And the call site, which the emulator-level test could not see: it was
+# reported MISSED on the first run, with the three edits above all caught,
+# because a test that asks the emulator directly says nothing about
+# whether anything invokes it. A reset nothing calls reads as fixed in
+# every review. This one is held by a session-level test instead.
+[[sabotage]]
+name = "reconnect never asks for the reset"
+file = "src/model/session.cpp"
+find = "\tif (m_emulator) m_emulator->reset_modes();"
+expect = "a_reconnect_hands_the_new_shell_a_clean_terminal"

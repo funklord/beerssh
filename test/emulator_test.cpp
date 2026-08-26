@@ -60,6 +60,47 @@ void emulator_test::a_line_longer_than_the_grid_wraps_without_debris() {
  * Every row is checked for characters that were never sent. The feed is
  * only 'A', 'B' and newlines, so anything else on the grid is debris.
  */
+void emulator_test::a_reconnect_keeps_the_history_and_drops_the_modes() {
+	bssh_emulator emulator(40, 6);
+
+	emulator.feed(QByteArrayLiteral("history worth keeping\r\n"));
+
+	/*
+	 * What a full-screen program leaves behind when the link dies under
+	 * it: it never got to disable any of this. sec 5.3 keeps the emulator
+	 * across a reconnect so the user keeps that history -- which means
+	 * the modes come too unless something takes them.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	emulator.feed(QByteArrayLiteral("\x1b[?2004h"));
+	QVERIFY(emulator.mouse_reporting());
+	QVERIFY(emulator.alternate_screen());
+	emulator.take_output();
+
+	emulator.reset_modes();
+
+	QVERIFY(!emulator.mouse_reporting());
+	QVERIFY(!emulator.alternate_screen());
+
+	/*
+	 * And the history survived, which is the whole reason the emulator is
+	 * kept rather than rebuilt. Leaving the alternate screen is what
+	 * brings it back into view: while that buffer was up it was there but
+	 * not visible, so this checks the screen rather than the scrollback.
+	 */
+	QVERIFY2(emulator.screen().to_text().contains(QStringLiteral("history worth keeping")),
+	          qPrintable(emulator.screen().to_text()));
+
+	/*
+	 * A paste is no longer wrapped in markers the new shell would print
+	 * as text. Asked through send_paste rather than by reading a flag,
+	 * because the flag is not what a shell sees.
+	 */
+	emulator.send_paste(QStringLiteral("ls"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("ls"));
+}
+
 void emulator_test::a_wrapped_line_redrawn_shorter_leaves_no_debris() {
 	/*
 	 * What a line EDITOR does, which neither wrap test above does: it

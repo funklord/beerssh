@@ -4128,6 +4128,30 @@ background).
    Key authentication is what makes it seamless, exactly as §5.3 claims: the
    password is consumed at first connect and deliberately not kept (§11), so a
    password-authenticated session could only reconnect as far as asking again.
+   **And the shell that comes back gets a clean terminal, which it did not.**
+   The emulator survives a reconnect on purpose so the user keeps their
+   history — and that meant every MODE the old shell's programs set survived
+   with it, into a shell that set none of them and cannot know to turn them
+   off. Mouse reporting, so every click writes a report onto the new command
+   line; bracketed paste, so a paste arrives wrapped in markers the shell
+   prints as text; application cursor keys, so the arrows send bytes it does
+   not understand; and the alternate screen, so a link that dropped inside an
+   editor came back with the shell drawing into the editor's buffer and the
+   history hidden behind it. `reset_modes()` is a **soft** reset —
+   `vterm_screen_reset(vts, 0)` — because the hard branch homes the cursor and
+   erases the screen, which is the history the reconnect exists to keep.
+   Two things libvterm will not do here, both found by breaking them: it sets
+   `state->mode.alt_screen` directly without going through
+   `VTERM_PROP_ALTSCREEN`, so the alternate buffer has to be left through
+   libvterm's own path first or the state says primary while the screen layer
+   still points at the alternate buffer; and the shadows kept beside it to
+   answer DECRQM — the mouse mode, `modifyOtherKeys`, the kitty stack — are
+   ours to clear.
+   **The sabotage runner earned its keep here.** The first spec had four
+   edits: the three inside the reset were caught, and removing the CALL SITE
+   was MISSED — because the test asked the emulator directly, and a reset
+   nothing invokes is indistinguishable from a working one. A session-level
+   test holds that ground now.
 7. **M6 – Security & profiles.** `bssh_secret_store` with both backends, key
    auth, host-key verification, host profiles, biometric unlock where available.
    **Built, except biometric unlock:** public-key authentication is tried before any password

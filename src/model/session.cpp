@@ -246,10 +246,16 @@ void bssh_session::reconnect() {
 	 * A fresh transport rather than a revived one: the old libssh
 	 * session's socket, channel and state are gone, and reusing the
 	 * object would mean reasoning about which parts of it survived a
-	 * failure. The emulator, screen and scrollback are untouched, so the
-	 * user keeps their history across the drop -- but the remote shell
-	 * is genuinely new (sec 5.3).
+	 * failure. The screen and scrollback are untouched, so the user keeps
+	 * their history across the drop -- but the remote shell is genuinely
+	 * new (sec 5.3), and every MODE the old shell's programs set has to
+	 * go with it. Left standing they belong to nobody: a stale mouse mode
+	 * writes a report onto the new shell's command line at every click,
+	 * and a link that dropped inside an editor comes back with the shell
+	 * drawing into the alternate buffer.
 	 */
+	if (m_emulator) m_emulator->reset_modes();
+
 	if (m_transport) {
 		m_transport->disconnect_from_host();
 		m_transport->deleteLater();

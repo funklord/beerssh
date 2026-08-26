@@ -425,6 +425,52 @@ void session_registry_test::the_on_connect_command_runs_on_every_connect() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void session_registry_test::a_reconnect_hands_the_new_shell_a_clean_terminal() {
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_session_registry registry;
+	bssh_session *session = registry.create(profile_for(QStringLiteral("drops"),
+	                                                     QStringLiteral("a.example")));
+	session->connect_to_host();
+	QVERIFY(fake);
+
+	bssh_emulator *emulator = session->emulator();
+	QVERIFY(emulator);
+
+	emulator->feed(QByteArrayLiteral("history worth keeping\r\n"));
+
+	/*
+	 * What a full-screen program leaves behind when the link dies under
+	 * it -- it never got to disable any of this.
+	 */
+	emulator->feed(QByteArrayLiteral("\x1b[?1049h\x1b[?1000h\x1b[?1006h\x1b[?2004h"));
+	QVERIFY(emulator->mouse_reporting());
+	QVERIFY(emulator->alternate_screen());
+
+	/*
+	 * sec 5.3 keeps the emulator across a reconnect so the user keeps
+	 * their history, and the shell that comes back is genuinely new. This
+	 * asserts on the SESSION rather than on the emulator, because
+	 * emulator::reset_modes() being correct says nothing about whether
+	 * anything calls it -- and a reset nothing invokes reads as fixed in
+	 * every review. The sabotage runner reported exactly that: the three
+	 * edits inside the reset were caught and removing the call site was
+	 * MISSED, by a test that only ever asked the emulator directly.
+	 */
+	session->reconnect();
+
+	QVERIFY(!emulator->mouse_reporting());
+	QVERIFY(!emulator->alternate_screen());
+	QVERIFY2(emulator->screen().to_text().contains(QStringLiteral("history worth keeping")),
+	          qPrintable(emulator->screen().to_text()));
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void session_registry_test::a_silenced_bell_does_not_mark_the_tab() {
 	bssh_profile_t profile;
 	profile.host = QStringLiteral("noisy.example.com");

@@ -140,6 +140,23 @@ public:
 	 */
 	void set_focused(bool focused);
 
+	/*
+	 * Put every MODE back the way a terminal starts, and leave the screen
+	 * and the scrollback alone (sec 5.3).
+	 *
+	 * A reconnect keeps this emulator on purpose, so the user keeps their
+	 * history across a drop -- but the shell that comes back is genuinely
+	 * new and set none of the modes the old one's programs did. Left
+	 * alone they carry over: mouse reporting, so every click writes a
+	 * report onto a command line that never asked; bracketed paste, so a
+	 * paste arrives wrapped in markers the new shell prints; application
+	 * cursor keys, so the arrows send bytes it does not know; and the
+	 * alternate screen, so a link that dropped while an editor was up
+	 * comes back with the shell drawing into the editor's buffer and the
+	 * history hidden behind it.
+	 */
+	void reset_modes();
+
 	void feed(const QByteArray &bytes);
 	void resize(int cols, int rows);
 
