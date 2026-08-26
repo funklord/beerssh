@@ -44,6 +44,8 @@ private slots:
 	void triple_click_selects_the_line();
 	void mouse_goes_to_the_remote_when_it_asks_for_it();
 	void shift_overrides_mouse_reporting_to_select();
+	void the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse();
+	void the_alternate_screen_has_no_history_to_scroll_into();
 	void session_records_what_the_client_wrote();
 	void session_reports_every_state_on_the_way_up();
 	void a_hosts_resolved_font_reaches_its_view();

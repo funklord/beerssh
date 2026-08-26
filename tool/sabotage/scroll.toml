@@ -1,0 +1,37 @@
+# Sabotages for sec 6.4's scrolling: who the wheel belongs to when the
+# remote has asked for the mouse, and whose history the scrollback holds
+# while a full-screen program is up.
+#
+# Each names the test that claims to cover it. A sabotage caught by some
+# OTHER test is reported as "WRONG TEST" rather than as a pass, because
+# that means the assertion which is supposed to hold this ground does not.
+
+# The wheel reaching the remote at all. Deleting the report leaves the
+# gate, the position and the button arithmetic in place and sends
+# nothing -- which is the state the code was in before, and which looked
+# from the outside exactly like a wheel that did not work.
+[[sabotage]]
+name = "the wheel never reaches the remote"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\t\tm_emulator->send_mouse_button(button, true, 0);"
+expect = "the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse"
+
+# The alternate screen having no history. Without this the scrollback --
+# which belongs to the shell underneath -- is offered as though it were
+# the program's own, and scrolling draws one over the other.
+[[sabotage]]
+name = "the alternate screen offers the shell's history"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_emulator && m_emulator->alternate_screen()) return 0;"
+expect = "the_alternate_screen_has_no_history_to_scroll_into"
+
+# Coming forward when a program takes the screen. The clamp above stops
+# a NEW scroll; this is what moves a view that was already scrolled back
+# when the program started, and it is the half a damage-driven re-clamp
+# would have left to whoever happened to wire damaged().
+[[sabotage]]
+name = "a view scrolled back stays there when a program starts"
+file = "src/ui/terminal_view.cpp"
+find = "this, [this] { set_scroll_offset(m_scroll_offset); });"
+replace = "this, [this] {});"
+expect = "the_alternate_screen_has_no_history_to_scroll_into"

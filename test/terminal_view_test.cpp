@@ -39,6 +39,20 @@ static void show_and_resize(bssh_terminal_view &view, int w, int h) {
 	view.resize(w, h);
 }
 
+/*
+ * A wheel notch is 120 eighths of a degree, which is what every mouse on
+ * the desktop sends and what the view divides by.
+ */
+static void wheel(bssh_terminal_view &view, int notches,
+                   Qt::KeyboardModifiers modifiers = Qt::NoModifier) {
+	const QPointF at(2 * view.cell_width() + 1, view.cell_height() + 1);
+
+	QWheelEvent event(at, view.mapToGlobal(at.toPoint()), QPoint(0, 0),
+	                   QPoint(0, notches * 120), Qt::NoButton, modifiers,
+	                   Qt::NoScrollPhase, false);
+	QCoreApplication::sendEvent(&view, &event);
+}
+
 void terminal_view_test::grid_scales_with_widget_size() {
 	bssh_terminal_view view;
 
@@ -344,6 +358,90 @@ void terminal_view_test::shift_overrides_mouse_reporting_to_select() {
 	QVERIFY(view.has_selection());
 	QCOMPARE(view.selection_text(), QStringLiteral("select"));
 	QCOMPARE(emulator.take_output(), QByteArray());
+}
+
+void terminal_view_test::the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/* History to scroll into, so a view that ignored the remote would move. */
+	for (int i = 0; i < view.rows() + 10; ++i) {
+		emulator.feed(QByteArrayLiteral("shell line\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 3);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	QVERIFY(emulator.mouse_reporting());
+	emulator.take_output();
+
+	wheel(view, 1);
+
+	/*
+	 * SGR encodes the wheel as buttons 4 and 5 with 0x40 added, so 64 is
+	 * up and 65 is down. The report is read rather than merely counted:
+	 * a wheel sent as button 1 would also be "not empty" and would land
+	 * as a click wherever the pointer happened to be.
+	 */
+	const QByteArray up = emulator.take_output();
+	QVERIFY2(up.startsWith(QByteArrayLiteral("\x1b[<64;")), up.toHex().constData());
+	QVERIFY(up.endsWith('M'));
+
+	wheel(view, -1);
+	QVERIFY(emulator.take_output().startsWith(QByteArrayLiteral("\x1b[<65;")));
+
+	/* And the view did not scroll: the wheel was the remote's, not ours. */
+	QCOMPARE(view.scroll_offset(), 0);
+
+	/*
+	 * Shift takes it back, exactly as it does for a click -- otherwise a
+	 * program that grabs the mouse also takes away the scrollback.
+	 */
+	wheel(view, 1, Qt::ShiftModifier);
+	QCOMPARE(emulator.take_output(), QByteArray());
+	QVERIFY(view.scroll_offset() > 0);
+}
+
+void terminal_view_test::the_alternate_screen_has_no_history_to_scroll_into() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < view.rows() + 10; ++i) {
+		emulator.feed(QByteArrayLiteral("shell line\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 3);
+
+	/* On the primary screen that history is what the wheel is for. */
+	wheel(view, 1);
+	QVERIFY(view.scroll_offset() > 0);
+
+	/*
+	 * A full-screen program starts while the view is scrolled back --
+	 * DECSET 1049, which is what vim, less and htop send. The offset has
+	 * to go with it, or the shell stays on screen over the program.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h"));
+	QVERIFY(emulator.alternate_screen());
+	QCOMPARE(view.scroll_offset(), 0);
+
+	/* And it cannot be scrolled back into while the program is up. */
+	wheel(view, 1);
+	QCOMPARE(view.scroll_offset(), 0);
+
+	/* Kept, not dropped: leaving the program gives the history back. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1049l"));
+	QVERIFY(!emulator.alternate_screen());
+	wheel(view, 1);
+	QVERIFY(view.scroll_offset() > 0);
 }
 
 void terminal_view_test::session_records_what_the_client_wrote() {

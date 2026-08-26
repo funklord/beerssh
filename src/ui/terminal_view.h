@@ -302,7 +302,7 @@ public:
 	 * it has asked for the mouse, and selects text otherwise (sec 6.4).
 	 * The view needs to ask which, per click.
 	 */
-	void attach_emulator(bssh_emulator *emulator) { m_emulator = emulator; }
+	void attach_emulator(bssh_emulator *emulator);
 
 	/*
 	 * The current selection as text, with trailing blanks trimmed per
@@ -473,6 +473,22 @@ private:
 	 */
 	int grid_origin_x() const;
 	int grid_width() const;
+
+	/*
+	 * How far back the view may scroll, which is NOT simply how many
+	 * lines the scrollback holds: on the alternate screen it is nothing.
+	 * One place, because the offset, the scrollbar's range and the
+	 * re-clamp on damage all have to agree about it.
+	 */
+	int available_history() const;
+
+	/*
+	 * Held so the view can drop its OWN connection to an emulator it is
+	 * letting go of. A blanket disconnect(emulator, nullptr, this,
+	 * nullptr) would take the pane container's damage wiring with it,
+	 * which is somebody else's connection between the same two objects.
+	 */
+	QMetaObject::Connection m_alternate_screen_connection;
 
 	/* Range, value and page step from the scrollback and the offset. */
 	void sync_scrollbar();

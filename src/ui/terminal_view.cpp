@@ -353,9 +353,49 @@ void bssh_terminal_view::attach_scrollback(const bssh_scrollback *scrollback) {
 	update();
 }
 
+void bssh_terminal_view::attach_emulator(bssh_emulator *emulator) {
+	if (m_emulator == emulator) return;
+
+	disconnect(m_alternate_screen_connection);
+	m_emulator = emulator;
+
+	/*
+	 * Entering the alternate screen takes the history away (see
+	 * available_history), so a view left scrolled back when a program
+	 * starts has to come forward -- otherwise the shell stays on screen
+	 * over the program that just took it.
+	 *
+	 * Wired here rather than left to whoever connects damaged(), because
+	 * the rule is the view's own: a view attached by a test, or by any
+	 * future caller that does not happen to wire damage, would otherwise
+	 * keep an offset it is no longer entitled to.
+	 */
+	if (m_emulator) {
+		m_alternate_screen_connection =
+		        connect(m_emulator, &bssh_emulator::alternate_screen_changed,
+		                 this, [this] { set_scroll_offset(m_scroll_offset); });
+	}
+
+	sync_scrollbar();
+	update();
+}
+
+int bssh_terminal_view::available_history() const {
+	/*
+	 * The alternate screen has no history of its own -- libvterm pushes
+	 * nothing off it -- so everything in the scrollback belongs to the
+	 * shell UNDERNEATH the full-screen program. Showing it is not
+	 * scrolling back; it is drawing the shell's output over vim's screen.
+	 * The lines are kept rather than dropped: leaving the program gives
+	 * them back, which is the whole point of the alternate screen.
+	 */
+	if (m_emulator && m_emulator->alternate_screen()) return 0;
+
+	return m_scrollback ? m_scrollback->count() : 0;
+}
+
 void bssh_terminal_view::set_scroll_offset(int lines) {
-	const int available = m_scrollback ? m_scrollback->count() : 0;
-	const int clamped = qBound(0, lines, available);
+	const int clamped = qBound(0, lines, available_history());
 
 	if (clamped == m_scroll_offset) return;
 
@@ -386,6 +426,43 @@ void bssh_terminal_view::scroll_to_live() {
 }
 
 void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
+	const int notches = event->angleDelta().y() / 120;
+
+	/*
+	 * When the remote asked for the mouse, the wheel is ITS wheel -- the
+	 * same rule a click follows, and Shift is the same escape hatch
+	 * (sec 6.4). This is how less, vim and htop scroll, and none of them
+	 * has anything in this terminal's scrollback to offer instead: they
+	 * are on the alternate screen, where the history belongs to the shell
+	 * underneath. Without this the wheel did nothing at all inside a
+	 * full-screen program, which is the one place a user reaches for it.
+	 *
+	 * Buttons 4 and 5 are wheel up and down. The position goes first
+	 * because libvterm reports the wheel at the last position it was
+	 * told about, so a wheel with no move ahead of it lands wherever the
+	 * previous click did.
+	 */
+	if (m_emulator && m_emulator->mouse_reporting()
+	     && !event->modifiers().testFlag(Qt::ShiftModifier)) {
+		qint64 line = 0;
+		int col = 0;
+		if (notches != 0 && cell_at(event->position().toPoint(), line, col)) {
+			m_emulator->send_mouse_move(int(line - line_for_row(0)), col, 0);
+
+			/*
+			 * One report per notch, and PRESS only: a wheel has no
+			 * release, and libvterm emits one for buttons 4 and 5 if
+			 * asked, which every client would read as a second turn.
+			 */
+			const int button = notches > 0 ? 4 : 5;
+			for (int i = 0; i < qAbs(notches); ++i) {
+				m_emulator->send_mouse_button(button, true, 0);
+			}
+		}
+		event->accept();
+		return;
+	}
+
 	if (!m_scrollback) {
 		QWidget::wheelEvent(event);
 		return;
@@ -396,7 +473,6 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 	 * (QScroller, sec 6.4) will drive the same set_scroll_offset rather
 	 * than growing a second scrolling path.
 	 */
-	const int notches = event->angleDelta().y() / 120;
 	if (notches != 0) scroll_by(notches * 3);
 
 	event->accept();
@@ -608,7 +684,7 @@ void bssh_terminal_view::place_scrollbar() {
 void bssh_terminal_view::sync_scrollbar() {
 	if (!m_scrollbar || m_scrollbar->isHidden()) return;
 
-	const int history = m_scrollback ? m_scrollback->count() : 0;
+	const int history = available_history();
 
 	/*
 	 * The BOTTOM is the live screen, which is where every terminal since
@@ -1566,6 +1642,14 @@ void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings
 
 void bssh_terminal_view::on_screen_damaged() {
 	++m_content_revision;
+
+	/*
+	 * Entering the alternate screen takes the history away, so an offset
+	 * that was legal a moment ago need not be now -- and a view left
+	 * scrolled back when a program starts would keep the shell on screen
+	 * over it.
+	 */
+	set_scroll_offset(m_scroll_offset);
 
 	/* Output scrolling off the top is more history to point at. */
 	sync_scrollbar();

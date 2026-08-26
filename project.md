@@ -849,6 +849,35 @@ model on a finger.
   to the remote — with a modifier (conventionally `Shift`) to override and select
   locally. On touch, keep local selection winning. **Done**, encoding delegated
   to libvterm, which already tracks which mouse modes the remote enabled.
+- **The wheel is the remote's on the same terms, and it was not.** Clicks were
+  gated on the mode and the wheel was not, so inside `less`, `vim` or `htop`
+  the wheel did nothing whatever — not "scrolled the wrong thing", nothing.
+  Those programs are on the alternate screen, where this terminal has no
+  history to offer instead, so the gesture had no local meaning either: the
+  one place a user most expects to scroll was the one place that could not.
+  Buttons 4 and 5, one report per notch, **press only** — a wheel has no
+  release, and libvterm will emit one for those buttons if asked, which a
+  client reads as a second turn. The position goes first, because libvterm
+  reports the wheel wherever it was last told the pointer was, so a wheel with
+  no move ahead of it lands where the previous click did. `Shift` overrides,
+  the same escape hatch a click has.
+- **The alternate screen has no history, and offering the shell's was worse
+  than offering none.** libvterm pushes nothing off the alternate buffer, so
+  everything in the scrollback belongs to the shell *underneath* the program
+  — scrolling back drew that shell's output over the program's screen rather
+  than showing anything earlier. The lines are kept rather than dropped:
+  leaving the program gives them back, which is what the alternate screen is
+  for. The scrollbar's range goes with it, since a bar offering lines the view
+  will refuse is a control that does not work.
+  A view **already** scrolled back when a program starts is brought forward,
+  and that arrives as a signal from the emulator rather than as something
+  noticed on the next damage — a program that takes the screen and has not
+  drawn into it yet produces no damage to notice it on. It is wired where the
+  view is attached to the emulator rather than beside the damage wiring,
+  because the rule is the view's own: any caller that did not happen to
+  connect `damaged()` would otherwise leave the view holding an offset it is
+  no longer entitled to. That seam is not hypothetical — it is how the test
+  for it failed first.
 - **Selection is anchored to absolute lines**, not to view rows: it spans the
   fold into scrollback, and scrolling must not drag the highlight across the
   text. It renders by **inverting** the cell rather than tinting it — a fixed

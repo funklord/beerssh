@@ -327,11 +327,16 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		return 1;
 	case VTERM_PROP_ALTSCREEN:
 		/*
-		 * Tracked only so DECRQM can answer for 1049. libvterm owns the
-		 * screens themselves; returning 0 here would leave it to its own
-		 * default handling, and this returns 1 having done nothing else.
+		 * libvterm owns the screens themselves; returning 0 here would
+		 * leave it to its own default handling, and this returns 1
+		 * having only recorded which one is up. That answers DECRQM for
+		 * 1049, and it tells the view whose history the scrollback
+		 * currently holds (sec 6.4).
 		 */
-		self->alt_screen = value->boolean;
+		if (value->boolean != self->alt_screen) {
+			self->alt_screen = value->boolean;
+			emit self->owner->alternate_screen_changed(self->alt_screen);
+		}
 		return 1;
 	case VTERM_PROP_CURSORVISIBLE:
 		self->screen.set_cursor_visible(value->boolean);
@@ -1337,6 +1342,10 @@ bool bssh_emulator::synchronised_output() const {
 
 bool bssh_emulator::mouse_reporting() const {
 	return m_private->mouse_reporting;
+}
+
+bool bssh_emulator::alternate_screen() const {
+	return m_private->alt_screen;
 }
 
 void bssh_emulator::send_mouse_move(int row, int col, quint8 modifiers) {

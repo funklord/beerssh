@@ -117,6 +117,14 @@ public:
 	void send_mouse_button(int button, bool pressed, quint8 modifiers);
 
 	/*
+	 * Whether the remote is on the ALTERNATE screen -- vim, less, htop
+	 * (sec 7). Nothing scrolls off it, so while it is up the scrollback
+	 * holds the SHELL's output rather than the program's, and a view
+	 * that scrolls back into it draws two programs at once.
+	 */
+	bool alternate_screen() const;
+
+	/*
 	 * Focus reporting, DEC mode 1004 (sec 7.1, tier 1).
 	 *
 	 * The remote asks to be told when the terminal gains and loses focus,
@@ -206,6 +214,15 @@ signals:
 
 	/* A line entered or left the scrollback. */
 	void scrollback_changed();
+
+	/*
+	 * The remote moved between the primary and the alternate screen.
+	 * A signal rather than something to notice on the next damage: what
+	 * depends on it is the view's scroll position, and a program that
+	 * takes the screen and has not drawn yet gives no damage to notice
+	 * it on.
+	 */
+	void alternate_screen_changed(bool alternate);
 
 private:
 	bssh_emulator_private *m_private;
