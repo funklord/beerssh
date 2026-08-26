@@ -203,7 +203,6 @@ void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 	m_font_size = point_size > 0 ? point_size : BSSH_DEFAULT_POINT_SIZE;
 
 	m_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id), m_font_size);
-	m_font_cache.clear();
 
 	/*
 	 * A different font is a different cell size, which is a different
@@ -542,6 +541,37 @@ QColor bssh_terminal_view::resolve(const bssh_color_t &color, const QColor &fall
 }
 
 void bssh_terminal_view::update_metrics() {
+	/*
+	 * Every cached font carries a letter spacing computed from the cell
+	 * width it was built against (see cell_font), and the key does not
+	 * carry that width -- so a stale entry is indistinguishable from a
+	 * fresh one. This is the only function that moves m_cell_width, so
+	 * clearing here makes "no cached font outlives the width it was built
+	 * against" an invariant rather than a duty each caller remembers.
+	 *
+	 * It used to be a duty, discharged in set_font_id() alone, and
+	 * remeasure_cell() -- the screen-change path from pane_container --
+	 * did not discharge it. Its own comment says it takes "the same three
+	 * steps a font change takes"; it took three of the four. A window
+	 * dragged between monitors of different scaling then drew every glyph
+	 * of a run at the OLD advance while the run's origin, the cell
+	 * backgrounds, the underlines and the cursor all used the new one:
+	 * error zero at the run's first column and growing by the difference
+	 * per column after it, so text separated visibly from its own
+	 * background and overran the right margin.
+	 *
+	 * Cheap to throw away: an entry is one QFont plus one advance
+	 * measurement, the cache is keyed by family-bold-italic so it is
+	 * bounded by the fallback chain, and this runs on construction, on a
+	 * font change and on a screen change -- never per frame.
+	 *
+	 * NOT pinned by a test, and deliberately recorded as such: driving it
+	 * needs a device-pixel-ratio change, which the offscreen platform
+	 * cannot produce -- the same gap layout_test already records for the
+	 * two-screen re-layout it cannot drive either.
+	 */
+	m_font_cache.clear();
+
 	const QFontMetricsF metrics(m_font);
 
 	/*

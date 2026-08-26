@@ -3903,9 +3903,44 @@ The desktop build is what makes this project testable at all — use it.
   a tap is how you focus a pane on a phone and happens constantly, while on
   a desktop a click is deliberate and rare. It also explains the wrapping,
   since a command line with escape debris inserted into it is a long one.
-  **Testing it needs the device**, and it is a hypothesis rather than a
-  finding until then: what a shell does with those bytes is readline's
-  business and cannot be settled from here.
+  **It is a finding now, and it reproduces on demand.** Measured 2026-08-26
+  on the SM-N960F over `adb`, with the app's own *Local shell* row so no
+  server is involved:
+
+      tap "Local shell"
+      . ./m                     # a file holding: printf '\033[?1000h\033[?1006h'
+      tap the terminal three or four times
+
+  Nothing consumes the reports, so each tap writes `CSI < 0 ; c ; r M` and
+  its release onto the shell's command line; the shell's editor puts most
+  of those bytes back on screen as text; the line grows past the width and
+  wraps; and **a lone `<` appears at the last column of the wrapped row**,
+  separated from the text by blanks. That is the reported symptom exactly.
+  Four taps is enough. It does not appear before the line wraps.
+  **It is content, not a repaint artifact.** Typing one more character makes
+  the shell echo it, which fires `damaged()`, which is a FULL `update()` --
+  the whole grid repainted from the mirror -- and the `<` survives it. So the
+  renderer is exonerated by measurement rather than by reading, which
+  matters, because eliminating the paint path by inspection is one of the
+  three things the earlier note listed as possibly wrong.
+  **The obvious next hypothesis was wrong, and is recorded so nobody spends
+  the afternoon on it again.** A stray character stranded at the right edge
+  looks exactly like a terminal and a shell disagreeing about the width, so
+  `stty size` was run inside the session: **46 58**, and the grid measured
+  from the prompt's own glyph pitch is also 58. They agree. `bssh_pty_session`
+  does apply `TIOCSWINSZ`, and `recompute_grid()`'s refusal to announce a
+  size while the view is invisible is not a hole either, because Qt delivers
+  no `resizeEvent` to a hidden widget at all -- so the grid is not recomputed
+  behind the session's back. A speculative fix for that non-defect was
+  written, failed to be pinned by any test that could isolate it, and was
+  reverted rather than kept.
+  **What is left is narrow and host-shaped.** The shell and the terminal
+  agree on the width; the cell is in the emulator's mirror; the two existing
+  wrap tests pass because they only ever WRITE text. What they never do is
+  what a line editor does -- redraw a wrapped line shorter, with cursor
+  moves and an erase -- and the last column of a wrapped row is where
+  autowrap's pending-wrap state lives. That is the next thing to reproduce
+  on the host, and it no longer needs the device to find.
   It sits next to a contradiction this document is on the losing side of --
   sec 6.4 says "on touch, keep local selection winning", and the pointer path
   never asks `is_touch_primary()` at all. Flagged rather than resolved; which
