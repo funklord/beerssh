@@ -4018,6 +4018,25 @@ The desktop build is what makes this project testable at all — use it.
   path never asks `is_touch_primary()`.** The document and the code
   contradict each other; flagged, not resolved.
 ### 12.4 CI
+- **The receipt binds HEAD-at-archive; the hook compares HEAD-at-push. In a
+  tree with two writers that is a thirteen-minute window, and only a quiet
+  tree closes it.** `check-ci` resolves HEAD once, beside the `git archive`
+  that consumes it — which is 5e9b540's fix and is right — and the pre-push
+  hook then refuses anything that is not the commit the receipt names. Both
+  halves are correct and the failure is in neither: a commit landing from
+  another session while the container builds makes the receipt stale, and the
+  push is refused for a tree that would have passed.
+  Measured 2026-08-26, during a spread pass running alongside this session:
+  **five container runs, over an hour, spent on receipts that went stale
+  between the archive and the push.** Every refusal was the gate working.
+  The protocol that ended it, derived the expensive way: **ask for the hold
+  before the run, not after the refusal.** A message to the other session
+  naming the commit being gated, and an explicit release afterwards, cost one
+  round trip and saved the sixth run. Retrying without asking is what turns a
+  ten-minute cost into an hour.
+  Not a thing to fix in the gate. A receipt that tolerated a moved HEAD would
+  be a receipt for a tree nobody built, which is the whole failure 9bc3395 and
+  5e9b540 exist to prevent.
 - **Build both platforms on every change** — Linux host build + all Android ABIs.
   A change that builds on one and breaks the other is the failure mode this whole
   document is arranged to prevent, and only CI catches it reliably.
