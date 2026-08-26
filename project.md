@@ -3799,6 +3799,15 @@ The desktop build is what makes this project testable at all — use it.
   No frame of ours appears in any trace. That is not the same as the fault
   not being ours: the bridge is asking sec 6.4's accessible interface for
   values, and a pending exception could start there.
+  **The obvious mitigation does not work, and that is a relief rather than
+  a loss.** hydra built with `QAccessible::setActive(false)` called before
+  any widget, confirmed by its own log that `isActive()` was 0, and ran its
+  deterministic procedure three times: aborted all three, identical message.
+  Qt's Java `QtAccessibilityDelegate` is installed by the Activity whatever
+  the C++ flag says, so `runInObjectContext()` still runs and still takes
+  the lock. So there is no application-side lever here -- and no trade to
+  put to anybody either, since the option that looked like it cost screen
+  reader support turns out to buy nothing.
   Untestable on the host. Offscreen Qt never instantiates the Android
   accessibility delegate, so sec 6.4's accessibility tests exercise our side
   of that interface and nothing that calls into it. They pass, and their
