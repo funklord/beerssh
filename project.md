@@ -915,10 +915,13 @@ the clipboard, and a preset edit never reached the key row, the geometry or the
 status line. Appearance survived only because `bssh_pane_container` makes its
 own per-view connection.
 
-This is the **second** time that combination has cost this project a feature —
-§8.4 records the link prompt and the primary-selection copy going the same way,
-and the `m_wired_view` guard written to fix them sits twenty lines below the two
-connections that still had it. The lesson that did not carry: `UniqueConnection`
+This is the **second** time that combination has cost this project a feature.
+The first was the link prompt and the primary-selection copy, wired the same
+way, and the `m_wired_view` guard written to fix them sits twenty lines below
+the two connections that still had it. That first occurrence was **never
+written down anywhere** — this sentence used to say §8.4 recorded it, and §8.4
+says nothing about it; nor did any other section, which is a fair part of why
+the lesson did not carry the twenty lines it needed to. The lesson: `UniqueConnection`
 is not a way to make repeated wiring safe, it is a thing that only works with a
 pointer-to-member. **Wire once, where the object arrives once.** Both moved to
 the registry's `session_added`, which fires exactly once per session, so no
