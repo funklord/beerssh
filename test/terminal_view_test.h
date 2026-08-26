@@ -69,6 +69,8 @@ private slots:
 	void select_all_reaches_the_scrollback_and_the_screen();
 	void middle_click_pastes_the_primary_selection();
 	void the_remote_keeps_the_right_button_when_it_asked_for_the_mouse();
+	void a_release_names_the_button_the_press_reported();
+	void a_click_while_scrolled_back_reports_the_screen_row();
 	void the_menu_layout_follows_the_device_until_told_otherwise();
 	void the_terminal_menu_offers_the_three_verbs_in_order();
 	void the_touch_layout_grows_the_rows_and_drops_the_chords();

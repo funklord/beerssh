@@ -849,6 +849,24 @@ model on a finger.
   to the remote — with a modifier (conventionally `Shift`) to override and select
   locally. On touch, keep local selection winning. **Done**, encoding delegated
   to libvterm, which already tracks which mouse modes the remote enabled.
+- **A release answers the PRESS, which it did not.** It hardcoded button 1
+  whatever had been pressed, and re-read `Shift` at release time rather than
+  honouring what the press decided. libvterm keeps a button **mask**, so a
+  release naming a button that was never pressed clears the wrong bit and
+  leaves the real one set — after which its "no change" early return swallows
+  every later press of that button. **Right-click worked exactly once per
+  session** inside a mouse-reporting program, and the remote never saw the
+  release at all, so `mc` and `vim` sat holding a button down. The press now
+  records what it reported and the release names that; it is deliberately
+  *not* re-gated on `mouse_reporting()`, because if the remote turned the mode
+  off in between, the release still has to run — libvterm drops the bytes but
+  clears the mask first, and that is what stops the bit being stranded.
+- **A click reports a LIVE SCREEN row, not a view row.** The mapping went
+  through `line_for_row()`, which carries the scroll offset, so a click while
+  scrolled back named a row that far down the screen and a mouse-aware program
+  on the primary screen acted on the wrong line. `screen_row_for_line()` is
+  the conversion, named once, because it is not `line_for_row`'s inverse and
+  the difference is exactly the offset.
 - **The wheel is the remote's on the same terms, and it was not.** Clicks were
   gated on the mode and the wheel was not, so inside `less`, `vim` or `htop`
   the wheel did nothing whatever — not "scrolled the wrong thing", nothing.
@@ -3921,6 +3939,62 @@ The desktop build is what makes this project testable at all — use it.
   So it was content, not a repaint artifact. Re-deriving the paint path by
   inspection had been listed as one of the three things that might be wrong;
   it was not.
+- **A reset does not reach the state we keep beside libvterm's, and that is
+  the largest thing still open here.** Measured, not fixed — it wants a
+  vendored `vterm-patch/` and is its own piece of work.
+  `vterm_state_reset()` clears `mouse_flags` and `mode.alt_screen` by **direct
+  assignment**, never through `settermprop`, so our copies never hear about it.
+  This is the same wart `reset_modes()` already works around locally by
+  feeding `CSI ? 1049 l` before the reset; nothing does the equivalent for a
+  reset the **remote** issues. After a remote `reset` (RIS `ESC c`, or DECSTR
+  `CSI ! p`): `mouse_reporting()` still answers true while libvterm's flags
+  are zero, so clicks are routed to a remote that drops them, the wheel is
+  swallowed, the context menu never opens and text cannot be selected — the
+  terminal echoes normally and the mouse is inert until reconnect, with
+  `Shift` the only workaround and no way to discover it. And an RIS issued
+  while on the alternate screen leaves libvterm drawing into the alternate
+  buffer with its state claiming primary, which pins `available_history()` at
+  zero and makes the scrollback permanently unreachable.
+  **Worse, the two protocols libvterm does not model are ours alone**, so
+  *nothing* clears them — not RIS, not DECSTR, not leaving the alternate
+  screen, not a new shell on the same transport. Only `reset_modes()` does,
+  and its one caller is a reconnect. A kitty-aware program that dies before it
+  pops its flags leaves **Ctrl+C sending `CSI 99;5u`** instead of `0x03`
+  for ever: no SIGINT, and `[99;5u` deposited on the command line. `Escape`
+  goes the same way as `CSI 27u`, so vi-mode readline never leaves insert.
+  `modifyOtherKeys` behaves identically. Both the kitty specification and
+  xterm clear these on RIS; the user's only escape here is dropping the
+  connection. This is §7.1's own rule — bytes onto a shell's command line for
+  a protocol that shell never enabled — reached by a route §7.1 did not
+  consider.
+  A dead field turned up beside it: `mouse_mode` is documented as kept "so
+  DECRQM can answer for them" and is read nowhere. The answers for 1000/1002/
+  1003 come from libvterm's own `mouse_flags`, so no wrong reply is emitted;
+  the field is a comment describing an intention rather than the code beneath
+  it, which is the shape this document keeps finding.
+- **The accessibility interface converts between three spaces and gets each
+  one wrong.** Also measured rather than fixed, and listed because a screen
+  reader is the one surface where a wrong answer is invisible to whoever
+  wrote it. `characterRect()` uses the bare `BSSH_GRID_INSET_PX` rather than
+  `grid_origin_x()` — the cursor bug over again, in a second copy, because
+  `grid_origin_x()` is private and the file could not ask; it ignores the
+  scroll offset, so every rect is wrong by that many rows while scrolled back
+  and history rows that ARE on screen report nothing; and it treats a
+  character index as a cell column, so a line with wide glyphs walks one cell
+  further left per preceding glyph. `offsetAtPoint()` has all three inverted,
+  `cursorPosition()` reports a cell column as a character offset, and
+  `selection()` does the same. None of it is covered: `characterRect` appears
+  nowhere in `test/`, and the selection test asserts only that the range is
+  ordered and in bounds, which is vacuous against any column error.
+- **"Absolute" lines stop being absolute when the scrollback evicts.**
+  `line_for_row()` counts from the start of the current buffer and `push()`
+  drops the front at the cap, so once the buffer is full every new line
+  renumbers every old one — while the stored selection anchor does not move.
+  With a build streaming into a full buffer, a selection made in the history
+  walks down the content one line per line of output, and Copy yields text the
+  user never highlighted. It is invisible because the painting agrees with the
+  anchor: the highlight itself has moved.
+
   **What the hunt did turn up is a real defect, and it is not this one.**
   Reproducing the long line the first time used mouse reports: with a mode
   left on by a program that exited without disabling it, every tap writes

@@ -67,6 +67,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_screen(nullptr),
       m_images(nullptr),
       m_scrollback(nullptr),
+      m_reported_button(0),
       m_scroll_offset(0),
       m_scrollbar(nullptr),
       m_scrollbar_position(default_scrollbar_position()),
@@ -452,7 +453,7 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 		qint64 line = 0;
 		int col = 0;
 		if (notches != 0 && cell_at(event->position().toPoint(), line, col)) {
-			m_emulator->send_mouse_move(int(line - line_for_row(0)), col, 0);
+			m_emulator->send_mouse_move(screen_row_for_line(line), col, 0);
 
 			/*
 			 * One report per notch, and PRESS only: a wheel has no
@@ -1355,6 +1356,18 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
  * continues straight on from them. One coordinate space for both is what
  * lets a selection span the fold and survive scrolling.
  */
+int bssh_terminal_view::screen_row_for_line(qint64 line) const {
+	/*
+	 * libvterm's mouse reports are in LIVE SCREEN rows, so the scroll
+	 * offset must come out -- `line - line_for_row(0)` leaves it in, and
+	 * a click while scrolled back then named a row that far down the
+	 * screen. Scrolled back five lines, a mouse-aware program on the
+	 * primary screen acted on the wrong line every time.
+	 */
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	return int(line - history);
+}
+
 qint64 bssh_terminal_view::line_for_row(int row) const {
 	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
 	return history - m_scroll_offset + row;
@@ -1520,10 +1533,14 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 		qint64 line = 0;
 		int col = 0;
 		if (cell_at(event->pos(), line, col)) {
-			m_emulator->send_mouse_move(int(line - line_for_row(0)), col, 0);
-			m_emulator->send_mouse_button(event->button() == Qt::RightButton ? 3
-			                               : event->button() == Qt::MiddleButton ? 2 : 1,
-			                               true, 0);
+			const int button = event->button() == Qt::RightButton ? 3
+			                    : event->button() == Qt::MiddleButton ? 2 : 1;
+
+			m_emulator->send_mouse_move(screen_row_for_line(line), col, 0);
+			m_emulator->send_mouse_button(button, true, 0);
+
+			/* The release is the press's business -- see below. */
+			m_reported_button = button;
 		}
 		event->accept();
 		return;
@@ -1632,9 +1649,24 @@ void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
-	if (m_emulator && m_emulator->mouse_reporting()
-	    && !event->modifiers().testFlag(Qt::ShiftModifier)) {
-		m_emulator->send_mouse_button(1, false, 0);
+	/*
+	 * A release answers the PRESS. It used to hardcode button 1 and to
+	 * re-read Shift at release time, and both are wrong for the same
+	 * reason: libvterm keeps a button MASK, so a release naming a button
+	 * that was never pressed clears the wrong bit and leaves the real one
+	 * set. After one right-click inside a mouse-reporting program the
+	 * remote never saw the release, and every later right-click hit
+	 * libvterm's "no change" early return and vanished -- right-click
+	 * worked exactly once per session.
+	 *
+	 * Not re-checked against mouse_reporting() either. If the remote
+	 * turned the mode off between the press and the release, the release
+	 * still has to go: libvterm drops the bytes but clears the mask
+	 * first, which is what stops the bit being stranded.
+	 */
+	if (m_reported_button != 0) {
+		if (m_emulator) m_emulator->send_mouse_button(m_reported_button, false, 0);
+		m_reported_button = 0;
 		event->accept();
 		return;
 	}

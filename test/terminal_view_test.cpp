@@ -445,6 +445,96 @@ void terminal_view_test::the_alternate_screen_has_no_history_to_scroll_into() {
 	QVERIFY(view.scroll_offset() > 0);
 }
 
+/* One press and one release of a given button, at a cell. */
+static void click(bssh_terminal_view &view, Qt::MouseButton button, int col, int row) {
+	const QPoint at(col * view.cell_width() + 1, row * view.cell_height() + 1);
+
+	QMouseEvent press(QEvent::MouseButtonPress, at, view.mapToGlobal(at),
+	                   button, button, Qt::NoModifier);
+	QMouseEvent release(QEvent::MouseButtonRelease, at, view.mapToGlobal(at),
+	                     button, Qt::NoButton, Qt::NoModifier);
+
+	QCoreApplication::sendEvent(&view, &press);
+	QCoreApplication::sendEvent(&view, &release);
+}
+
+void terminal_view_test::a_release_names_the_button_the_press_reported() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	QVERIFY(emulator.mouse_reporting());
+	emulator.take_output();
+
+	/*
+	 * SGR spells the buttons 0, 1, 2 for left, middle, right, with `M`
+	 * for a press and `m` for a release. The release used to be hardcoded
+	 * to button 1 whatever was pressed -- and libvterm keeps a button
+	 * MASK, so that cleared the wrong bit and left the right-button bit
+	 * set for ever.
+	 */
+	click(view, Qt::RightButton, 3, 1);
+
+	const QByteArray first = emulator.take_output();
+	QVERIFY2(first.contains(QByteArrayLiteral("\x1b[<2;")), first.toHex().constData());
+	QVERIFY2(first.endsWith('m'), first.toHex().constData());
+
+	/*
+	 * And again. This is the assertion that matters: with the bit
+	 * stranded, libvterm's "no change" early return swallowed every
+	 * later right-click, so the button worked exactly once per session
+	 * and the first click alone would have passed.
+	 */
+	click(view, Qt::RightButton, 4, 1);
+
+	const QByteArray second = emulator.take_output();
+	QVERIFY2(second.contains(QByteArrayLiteral("\x1b[<2;")), second.toHex().constData());
+	QVERIFY2(second.endsWith('m'), second.toHex().constData());
+}
+
+void terminal_view_test::a_click_while_scrolled_back_reports_the_screen_row() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < view.rows() + 10; ++i) {
+		emulator.feed(QByteArrayLiteral("line\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 3);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	emulator.take_output();
+
+	/* Row 2 of the view, live, with nothing scrolled back yet. */
+	click(view, Qt::LeftButton, 0, 2);
+	const QByteArray live = emulator.take_output();
+
+	/*
+	 * Scroll back, then click the SAME view row. libvterm's reports are
+	 * in live-screen rows, so the answer must be two rows further UP the
+	 * screen -- and it used to be the view row either way, because the
+	 * mapping went through line_for_row(), which carries the offset.
+	 */
+	view.set_scroll_offset(2);
+	QCOMPARE(view.scroll_offset(), 2);
+
+	click(view, Qt::LeftButton, 0, 2);
+	const QByteArray scrolled = emulator.take_output();
+
+	QVERIFY(!live.isEmpty());
+	QVERIFY(!scrolled.isEmpty());
+	QVERIFY2(live != scrolled, live.toHex().constData());
+}
+
 void terminal_view_test::session_records_what_the_client_wrote() {
 	bssh_fake_ssh_session session;
 

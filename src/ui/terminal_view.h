@@ -446,6 +446,13 @@ private:
 
 	/* View row/col <-> absolute line, the one conversion selection needs. */
 	qint64 line_for_row(int row) const;
+
+	/*
+	 * An absolute line as a LIVE SCREEN row, which is what libvterm's
+	 * mouse reports are in. Not line_for_row's inverse: that one carries
+	 * the scroll offset and this one must not.
+	 */
+	int screen_row_for_line(qint64 line) const;
 	bool cell_at(const QPoint &point, qint64 &line, int &col) const;
 	const bssh_cell_t &cell_for_line(qint64 line, int col) const;
 	bool is_selected(qint64 line, int col) const;
@@ -455,6 +462,15 @@ private:
 	const bssh_screen *m_screen;
 	const bssh_image_store *m_images;
 	const bssh_scrollback *m_scrollback;
+	/*
+	 * The button the PRESS reported to the remote, or 0 when the press
+	 * was ours. The release has to name the same button -- libvterm
+	 * tracks a button mask, so a release naming a different one clears
+	 * the wrong bit and leaves the real one set for ever, after which
+	 * every further press of that button is swallowed as "no change".
+	 */
+	int m_reported_button;
+
 	int m_scroll_offset;
 
 	/*

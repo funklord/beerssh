@@ -55,3 +55,26 @@ file = "src/ui/terminal_view.cpp"
 find = "\t\t\t\t                  QString::fromUcs4(&cell.ch, 1));"
 replace = "\t\t\t\t                  QString());"
 expect = "the_cursor_lands_on_the_cell_it_marks"
+
+# The release naming the button the PRESS reported. libvterm keeps a
+# button MASK, so a release naming a different button clears the wrong
+# bit and strands the real one -- after which its "no change" early
+# return swallows every later press of that button. Right-click worked
+# exactly once per session.
+[[sabotage]]
+name = "the release always claims button 1"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (m_emulator) m_emulator->send_mouse_button(m_reported_button, false, 0);"
+replace = "\t\tif (m_emulator) m_emulator->send_mouse_button(1, false, 0);"
+expect = "a_release_names_the_button_the_press_reported"
+
+# And the row a click reports. libvterm's mouse reports are in live
+# SCREEN rows; putting the scroll offset back in is what the old
+# line_for_row() route did, and it made a click while scrolled back act
+# that many lines down the screen.
+[[sabotage]]
+name = "a click reports the view row, not the screen row"
+file = "src/ui/terminal_view.cpp"
+find = "\treturn int(line - history);"
+replace = "\treturn int(line - history + m_scroll_offset);"
+expect = "a_click_while_scrolled_back_reports_the_screen_row"
