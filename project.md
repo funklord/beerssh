@@ -1241,6 +1241,28 @@ image decoder written here at all, and sixel — whose payload is not a
 container Qt knows — is decoded by **libsixel**, which is exactly the work
 not worth repeating.
 
+**The cell footprint is the remote's claim, and it is bounded now.** Both
+kitty's `c`/`r` and iTerm2's `width`/`height` say how many CELLS an image
+occupies, and both were taken with nothing but a "greater than zero" check.
+The renderer forms `cols * cell_width` into an `int` for its target
+rectangle, so `c=300000000` at a 9-pixel cell is signed overflow — undefined
+behaviour reached from bytes anything upstream can send, a file somebody
+`cat`s included — and the row count is worse than equal, since it also
+drives the cursor advance written back to the remote. Capped at 10000 cells
+in either direction, far above any real terminal and far below where the
+arithmetic downstream can wrap. **Bounded rather than rejected**, because an
+oversized footprint is not by itself malformed: an image may legitimately
+hang off the right of a small window.
+That crop is real now too. `draw_images` culled on ROWS only, so an image
+placed near the right edge was drawn stretched across everything the widget
+would accept rather than cropped at the grid the way a terminal does. Most
+of the overrun was invisible — a `QPainter` on a widget is clipped to the
+widget, and a child scrollbar paints over its own strip afterwards — so what
+it cost was fidelity and rasterising work repeated on every repaint, not a
+visible mess. Worth knowing which of those was true: the audit that found it
+first reported it as painting over the scrollbar, and that part did not
+survive checking.
+
 Two parts of libsixel's contract are established by experiment rather than
 by its header, and **both fail silently when got wrong**, so they are
 written down here as well as at the call site: the **DCS introducer must be

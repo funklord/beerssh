@@ -3,6 +3,8 @@
 
 #include "ui/terminal_view.h"
 #include "term/screen.h"
+#include <climits>
+
 #include "graphics_test.h"
 #include "term/emulator.h"
 #include "term/graphics_internal.h"
@@ -172,6 +174,55 @@ void graphics_test::images_follow_the_text_when_the_screen_scrolls() {
 	if (emulator.images().count() == 1) {
 		QVERIFY(emulator.images().placements().first().row < placed_row);
 	}
+}
+
+void graphics_test::an_absurd_cell_footprint_is_refused_by_both_protocols() {
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+
+	/*
+	 * `c` and `r` are the remote's claim about how many CELLS its image
+	 * occupies, and both protocols used to hand them over with only a
+	 * "greater than zero" check. The renderer then computes
+	 * `cols * cell_width` into an int for its target rectangle, so
+	 * 300000000 cells at 8 pixels is signed overflow -- undefined
+	 * behaviour reached from bytes anything upstream can send, including
+	 * a file somebody cats. The row count is worse than equal: it also
+	 * drives the cursor advance the emulator writes back.
+	 *
+	 * Bounded rather than rejected, because an oversized footprint is not
+	 * by itself malformed -- an image may legitimately hang off the right
+	 * of a small window, and the renderer crops it.
+	 */
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100,c=300000000,r=300000000"),
+	                            png_of(8, 16, qRgb(0, 255, 0))));
+
+	QCOMPARE(emulator.images().count(), 1);
+
+	const bssh_image_placement_t &kitty = emulator.images().placements().first();
+	QVERIFY(kitty.cols > 0);
+	QVERIFY(kitty.rows > 0);
+	QVERIFY2(kitty.cols <= 10000, qPrintable(QString::number(kitty.cols)));
+	QVERIFY2(kitty.rows <= 10000, qPrintable(QString::number(kitty.rows)));
+
+	/*
+	 * And the product a renderer forms from it still fits, which is the
+	 * property that actually matters -- a bound that stopped short of
+	 * this would look like a fix and not be one.
+	 */
+	QVERIFY(kitty.cols < INT_MAX / 64);
+	QVERIFY(kitty.rows < INT_MAX / 64);
+
+	/* iTerm2 says the same thing with different spelling. */
+	bssh_emulator other(40, 10);
+	other.set_cell_pixels(8, 16);
+	other.feed(QByteArrayLiteral("\x1b]1337;File=inline=1;width=999999999;height=999999999:")
+	            + png_of(8, 16, qRgb(0, 0, 255)).toBase64() + QByteArrayLiteral("\x07"));
+
+	QCOMPARE(other.images().count(), 1);
+	const bssh_image_placement_t &iterm = other.images().placements().first();
+	QVERIFY2(iterm.cols <= 10000, qPrintable(QString::number(iterm.cols)));
+	QVERIFY2(iterm.rows <= 10000, qPrintable(QString::number(iterm.rows)));
 }
 
 void graphics_test::images_are_dropped_when_the_grid_shrinks() {

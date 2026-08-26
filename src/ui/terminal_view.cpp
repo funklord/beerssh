@@ -494,6 +494,21 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 void bssh_terminal_view::draw_images(QPainter &painter, int offset, bool below_text) const {
 	if (!m_images) return;
 
+	/*
+	 * Cropped at the grid, which is what a terminal does with an image
+	 * wider than the room left for it -- and what this did not do. The
+	 * cull below is on ROWS only, so an image placed near the right edge,
+	 * or one whose cell footprint the remote simply overstated, was drawn
+	 * stretched across everything the widget would accept: the grid's own
+	 * inset, the scrollbar's strip, and the partial row at the bottom.
+	 * Most of that was invisible -- a QPainter on a widget is clipped to
+	 * the widget, and a child scrollbar paints over its own rectangle
+	 * afterwards -- so what it cost was fidelity and wasted rasterising
+	 * on every repaint rather than a visible mess.
+	 */
+	painter.save();
+	painter.setClipRect(0, 0, m_cols * m_cell_width, m_rows * m_cell_height);
+
 	for (const bssh_image_placement_t &placement : m_images->placements()) {
 		if ((placement.z < 0) != below_text) continue;
 
@@ -512,6 +527,8 @@ void bssh_terminal_view::draw_images(QPainter &painter, int offset, bool below_t
 		                    placement.rows * m_cell_height);
 		painter.drawImage(target, placement.image);
 	}
+
+	painter.restore();
 }
 
 QColor bssh_terminal_view::resolve(const bssh_color_t &color, const QColor &fallback) const {

@@ -1,0 +1,25 @@
+# Sabotages for sec 7.1's inline images: the bound on a cell footprint the
+# remote asks for. Both protocols hand that number over, and the renderer
+# multiplies it by the cell size into an int.
+#
+# Each names the test that must notice. A sabotage caught by some OTHER
+# test is reported as "WRONG TEST" rather than as a pass.
+
+# The ceiling itself. Raising it past where the renderer's arithmetic
+# stays in range is the smallest edit that restores the defect without
+# touching either parser.
+[[sabotage]]
+name = "the footprint ceiling stops bounding anything"
+file = "src/term/graphics.cpp"
+find = "const int BSSH_MAX_IMAGE_CELLS = 10000;"
+replace = "const int BSSH_MAX_IMAGE_CELLS = 2000000000;"
+expect = "an_absurd_cell_footprint_is_refused_by_both_protocols"
+
+# And the iTerm2 spelling on its own, since it is a separate parser and a
+# bound applied to only one of the two would look like a fix.
+[[sabotage]]
+name = "iterm2 takes the width the remote claims"
+file = "src/term/graphics.cpp"
+find = "\t\tif (key == \"width\") result.placement.cols = qMin(cells, BSSH_MAX_IMAGE_CELLS);"
+replace = "\t\tif (key == \"width\") result.placement.cols = cells;"
+expect = "an_absurd_cell_footprint_is_refused_by_both_protocols"

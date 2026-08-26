@@ -24,6 +24,7 @@ private slots:
 	void malformed_sixel_is_declined_not_guessed();
 	void images_follow_the_text_when_the_screen_scrolls();
 	void images_are_dropped_when_the_grid_shrinks();
+	void an_absurd_cell_footprint_is_refused_by_both_protocols();
 	void an_image_scrolled_off_the_top_survives_in_the_scrollback();
 	void the_memory_budget_drops_the_oldest_but_never_the_visible();
 	void a_background_image_is_drawn_under_the_text();

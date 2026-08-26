@@ -27,6 +27,24 @@
 
 namespace {
 
+/*
+ * The largest cell footprint an image may claim, in either direction.
+ *
+ * A ceiling rather than a clamp to the grid: the parsers are given a cell
+ * size and nothing else, and an image placed off the right of a small
+ * window is legitimate -- the renderer crops it. What is not legitimate is
+ * a number this side of a `int` multiplication, and both protocols hand
+ * one straight over. `c=300000000` on a 9-pixel cell overflows
+ * `cols * cell_width` in the renderer's target rectangle, which is
+ * undefined behaviour reached from bytes a remote sent; the row count has
+ * the same shape and also drives the cursor advance the emulator emits
+ * afterwards.
+ *
+ * 10000 is chosen to be far above any real terminal and far below the
+ * point where the arithmetic downstream can wrap.
+ */
+const int BSSH_MAX_IMAGE_CELLS = 10000;
+
 /* "a=T,f=100,c=2,r=1" -> {a: T, f: 100, ...} */
 QMap<QString, QString> parse_kitty_controls(const QString &text) {
 	QMap<QString, QString> controls;
@@ -133,10 +151,12 @@ bssh_graphics_result_t bssh_parse_kitty(const QByteArray &payload,
 	 */
 	const int cols = controls.value(QStringLiteral("c")).toInt();
 	const int rows = controls.value(QStringLiteral("r")).toInt();
-	result.placement.cols = cols > 0 ? cols
-	                                 : (image.width() + cell_width - 1) / qMax(1, cell_width);
-	result.placement.rows = rows > 0 ? rows
-	                                 : (image.height() + cell_height - 1) / qMax(1, cell_height);
+	result.placement.cols = qMin(cols > 0 ? cols
+	                                       : (image.width() + cell_width - 1) / qMax(1, cell_width),
+	                             BSSH_MAX_IMAGE_CELLS);
+	result.placement.rows = qMin(rows > 0 ? rows
+	                                       : (image.height() + cell_height - 1) / qMax(1, cell_height),
+	                             BSSH_MAX_IMAGE_CELLS);
 
 	return result;
 }
@@ -178,8 +198,8 @@ bssh_graphics_result_t bssh_parse_iterm2(const QByteArray &payload,
 		const int cells = value.toInt(&numeric);
 		if (!numeric || cells <= 0) continue;
 
-		if (key == "width") result.placement.cols = cells;
-		if (key == "height") result.placement.rows = cells;
+		if (key == "width") result.placement.cols = qMin(cells, BSSH_MAX_IMAGE_CELLS);
+		if (key == "height") result.placement.rows = qMin(cells, BSSH_MAX_IMAGE_CELLS);
 	}
 
 	return result;
