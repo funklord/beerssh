@@ -18,6 +18,34 @@ void emulator_test::plain_text_lands_on_the_first_row() {
 	QCOMPARE(emulator.screen().cursor_row(), 0);
 }
 
+/*
+ * A line wider than the grid, checked cell by cell rather than by eye.
+ *
+ * Written after a stray `<` appeared at the last column of a wrapped row
+ * on the device (sec 12.3). The renderer cannot be the source -- its whole
+ * paint path is background, text runs, cell backgrounds, underline, focus
+ * border and cursor, and none of them draws that -- so whatever is there
+ * is a cell the emulator placed. This asks the emulator directly, on the
+ * host, where the grid can be read instead of photographed.
+ *
+ * 45 columns because that is what the phone reports at its default font
+ * size, and the debris appeared at column 44.
+ */
+void emulator_test::a_line_longer_than_the_grid_wraps_without_debris() {
+	bssh_emulator emulator(45, 5);
+
+	emulator.feed(QByteArray(60, 'A'));
+
+	/* 45 across, then the remaining 15 on the next row. */
+	QCOMPARE(row(emulator, 0), QString(45, QLatin1Char('A')));
+	QCOMPARE(row(emulator, 1), QString(15, QLatin1Char('A')));
+
+	/* And nothing anywhere else -- the debris was on a row of its own. */
+	QCOMPARE(row(emulator, 2), QString());
+	QCOMPARE(row(emulator, 3), QString());
+	QCOMPARE(row(emulator, 4), QString());
+}
+
 void emulator_test::newline_and_carriage_return_move_as_expected() {
 	bssh_emulator emulator(20, 5);
 
