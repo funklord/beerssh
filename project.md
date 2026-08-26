@@ -3842,6 +3842,60 @@ The desktop build is what makes this project testable at all — use it.
   of that interface and nothing that calls into it. They pass, and their
   passing says nothing about this.
 
+- **A stray `<` at the last column of a wrapped row, on the device only.**
+  Not explained yet. This is the record 76538ec and 43f0e2c point at, which
+  they said was here and was not -- both commits were tests, both said "what
+  remains open is recorded in sec 12.3", and neither wrote it. A pointer to
+  nothing is worse than no pointer, because the reader concludes they have
+  misread the section rather than that it was never written.
+  What is seen: a `<` at column 44 of a 45-column grid (45 being what the
+  phone reports at its default font size), only on a row continuing a line
+  whose beginning has scrolled off the top, never on a row printed whole.
+  **Ruled out, each by measurement rather than by reading the code:**
+  - *Plain-text wrapping in the emulator* --
+    `emulator_test::a_line_longer_than_the_grid_wraps_without_debris`, 60
+    characters into a 45-column grid, read as text rather than photographed.
+  - *Wrapping under repeated scrolling* --
+    `emulator_test::wrapped_lines_scrolling_off_leave_no_debris`, eight
+    wrapped lines through five rows, every cell checked against what was
+    actually sent.
+  - *The device's libvterm being unpatched.* The patch stamp gating the
+    Android objects lives in the HOST build directory -- `VTERM_STAMP` is
+    `$(VTERM_BUILD_DIR)/.patched`, and it is a prerequisite of both the
+    `$(VTERM_BUILD_DIR)/%.o` rule and the `$(VTERM_ANDROID_DIR)/%.o` one --
+    which looked like a way for the device to get unpatched sources. Named
+    rather than cited by line, since a build-hygiene pass is renumbering
+    that file as this is written. It is not what happened: the shipped `arm64-v8a/state.o`
+    disassembles to `(leader[0] & 0xfc) == 0x3c`, the four-wide leader test
+    that accepts `< = > ?`, which is patch 0001's switch and not the
+    two-value one it replaced. The **binary** was asked, not the source tree.
+  - *An unpatched libvterm printing a rejected CSI leader.* Impossible by
+    construction: `vterm/src/parser.c` consumes leader bytes 0x3c-0x3f into
+    `csi.leader` and breaks, and the text callback's only call site is
+    reachable solely from the NORMAL state. A rejected CSI reaches a
+    compiled-out `DEBUG_LOG` and nothing else.
+  - *The wide-glyph continuation being written past the grid.*
+    `copy_cell()` does `set_cell(row, col + 1, ...)` for a width-2 glyph,
+    which at the last column is out of range -- and `bssh_screen::set_cell`
+    bounds-checks and drops it, so nothing is written and nothing is stale.
+  **The candidate that fits, and it is ours rather than the device's:** an
+  SGR mouse report *is* `CSI < b ; x ; y M`, and this terminal writes one on
+  every tap while a mouse mode is set. Nothing clears a mode left behind by a
+  program that exited without disabling it -- a crash, a dropped link
+  mid-`htop` -- so from then on every tap puts `\x1b[<0;44;5M` onto the
+  shell's command line, where a shell echoes back whatever readline made of
+  it. That is device-shaped without being Android-specific in the renderer:
+  a tap is how you focus a pane on a phone and happens constantly, while on
+  a desktop a click is deliberate and rare. It also explains the wrapping,
+  since a command line with escape debris inserted into it is a long one.
+  **Testing it needs the device**, and it is a hypothesis rather than a
+  finding until then: what a shell does with those bytes is readline's
+  business and cannot be settled from here.
+  It sits next to a contradiction this document is on the losing side of --
+  sec 6.4 says "on touch, keep local selection winning", and the pointer path
+  never asks `is_touch_primary()` at all. Flagged rather than resolved; which
+  half is wrong is a real question and not one to settle while chasing a `<`.
+
 ### 12.4 CI
 - **Build both platforms on every change** — Linux host build + all Android ABIs.
   A change that builds on one and breaks the other is the failure mode this whole
