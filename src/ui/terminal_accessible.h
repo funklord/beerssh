@@ -79,6 +79,16 @@ private:
 		QList<int> row_start;
 		QList<int> row_length;
 
+		/*
+		 * The CELL column of each character of a row -- but only for the
+		 * rows that need it, and an empty list means "column equals
+		 * index". flatten() drops the far half of a wide glyph, because
+		 * it is not a character, so from the first wide glyph on a row
+		 * the character index and the cell column run apart by one per
+		 * glyph. Every row of ordinary text therefore costs nothing.
+		 */
+		QList<QList<int> > row_cells;
+
 		/* How many of the rows above came from the scrollback, so an
 		 * offset can be turned back into an absolute line. */
 		int history_rows = 0;

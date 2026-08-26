@@ -1,0 +1,39 @@
+# Sabotages for sec 6.4's accessibility interface: the conversions between
+# a point on the widget, a cell on the grid, and a character offset in the
+# text a reader is given.
+#
+# This is the surface where a wrong answer is invisible to whoever wrote
+# it -- there is no screenshot to look at and no shell to disagree -- so
+# every one of the three conversions is checked by making it fail.
+
+# The grid origin. The interface used to compute its own rectangle from
+# the bare inset, so a LEFT-hand scrollbar put every rectangle two columns
+# from the glyph it named. The view owns the mapping now; this puts the
+# second copy back.
+[[sabotage]]
+name = "a rectangle forgets the scrollbar's side"
+file = "src/ui/terminal_view.cpp"
+find = "\treturn QRect(grid_origin_x() + col * m_cell_width,"
+replace = "\treturn QRect(BSSH_GRID_INSET_PX + col * m_cell_width,"
+expect = "a_readers_rectangles_follow_the_grid_and_the_scroll"
+
+# The scroll offset. cell_rect answers "where is it drawn", so the offset
+# belongs in -- screen_row_for_line is the other conversion, one line
+# below it, and picking that one is the mistake this guards.
+[[sabotage]]
+name = "a rectangle ignores how far back the view is"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst qint64 row = line - line_for_row(0);"
+replace = "\tconst qint64 row = screen_row_for_line(line);"
+expect = "a_readers_rectangles_follow_the_grid_and_the_scroll"
+
+# Characters against cells. The far half of a wide glyph is not a
+# character, so from the first one a row's indices and its columns run
+# apart -- and treating either as the other walks a magnifier one cell
+# further left per glyph.
+[[sabotage]]
+name = "a character index is used as a cell column"
+file = "src/ui/terminal_accessible.cpp"
+find = "\tif (map.isEmpty()) return index;"
+replace = "\treturn index;"
+expect = "a_reader_counts_characters_where_the_grid_counts_cells"

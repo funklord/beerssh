@@ -1195,6 +1195,122 @@ void terminal_view_test::a_reader_can_reach_the_scrollback_and_the_selection() {
 	QVERIFY(end <= text->characterCount());
 }
 
+void terminal_view_test::a_readers_rectangles_follow_the_grid_and_the_scroll() {
+	bssh_terminal_view view;
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_LEFT);
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < view.rows() + 6; ++i) {
+		emulator.feed(QByteArrayLiteral("a line of text\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 3);
+
+	QAccessibleInterface *a = QAccessible::queryAccessibleInterface(&view);
+	QVERIFY(a);
+	QAccessibleTextInterface *text = a->textInterface();
+	QVERIFY(text);
+
+	/*
+	 * A character on the FIRST screen row: it is on screen now and stays
+	 * on screen when the view scrolls back a line, which is what lets the
+	 * two assertions below be about the mapping rather than about a
+	 * character that fell off the bottom.
+	 */
+	const QStringList rows = a->text(QAccessible::Value).split(QLatin1Char('\n'));
+	QVERIFY(rows.size() > view.rows());
+
+	int probe = 0;
+	for (int i = 0; i < rows.size() - view.rows(); ++i) probe += rows.at(i).size() + 1;
+
+	/*
+	 * And five columns IN, not at the row start. Column 0 is the one
+	 * place a horizontal error is invisible: cell_at clamps a negative
+	 * column to zero, so a rectangle shifted left by a whole scrollbar
+	 * still maps back to the character it named. The sabotage runner said
+	 * so -- "a rectangle forgets the scrollbar's side" was reported MISSED
+	 * against the first version of this test, which probed column 0.
+	 */
+	probe += 5;
+	QVERIFY(probe > 0);
+
+	const QRect rect = text->characterRect(probe);
+	QVERIFY2(!rect.isNull(), "the first screen row must have a rectangle");
+
+	/*
+	 * Round trip: the middle of a character's rectangle must map back to
+	 * that character. This is what a magnifier does, and it is the only
+	 * form that cannot pass by agreeing with a second copy of the
+	 * arithmetic -- which is precisely what the old code was.
+	 *
+	 * The scrollbar is on the LEFT deliberately: the old code used the
+	 * bare grid inset rather than the origin, so every rectangle sat a
+	 * scrollbar's width -- two columns -- left of the glyph it named, and
+	 * a right-hand bar would have hidden that behind a single pixel.
+	 */
+	QCOMPARE(text->offsetAtPoint(rect.center()), probe);
+
+	/*
+	 * And it follows the view. Scrolled back one line, the same character
+	 * is drawn one row further down; the old code ignored the offset, so
+	 * every rectangle stayed where it was.
+	 */
+	view.set_scroll_offset(1);
+	QCOMPARE(view.scroll_offset(), 1);
+
+	const QRect moved = text->characterRect(probe);
+	QVERIFY2(!moved.isNull(), "one line back, the row is still on screen");
+	QCOMPARE(moved, rect.translated(0, view.cell_height()));
+	QCOMPARE(text->offsetAtPoint(moved.center()), probe);
+}
+
+void terminal_view_test::a_reader_counts_characters_where_the_grid_counts_cells() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/*
+	 * Two double-width glyphs and then an ASCII marker. The far half of a
+	 * wide glyph is not a character, so it is absent from the text a
+	 * reader is given -- which means the marker is character 2 and cell
+	 * column 4, and every place that used one number for the other put a
+	 * magnifier two cells left of the glyph it was naming.
+	 */
+	emulator.feed(QString::fromUtf8("\xe6\x96\x87\xe6\x9b\xb8X").toUtf8());
+
+	QAccessibleInterface *a = QAccessible::queryAccessibleInterface(&view);
+	QVERIFY(a);
+	QAccessibleTextInterface *text = a->textInterface();
+	QVERIFY(text);
+
+	const QString value = a->text(QAccessible::Value);
+	const int marker = value.indexOf(QLatin1Char('X'));
+	QVERIFY2(marker >= 0, qPrintable(value.left(20)));
+
+	const QRect rect = text->characterRect(marker);
+	QVERIFY(!rect.isNull());
+
+	/*
+	 * Column 4, not column 2. Measured against the view's own cell width
+	 * rather than a literal, so the assertion holds whatever font the
+	 * host happens to have.
+	 */
+	const QRect origin = text->characterRect(0);
+	QVERIFY(!origin.isNull());
+	QCOMPARE(rect.left() - origin.left(), 4 * view.cell_width());
+
+	/* And back again, which is what a touch-exploration gesture does. */
+	QCOMPARE(text->offsetAtPoint(rect.center()), marker);
+}
+
 void terminal_view_test::select_all_reaches_the_scrollback_and_the_screen() {
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 96);

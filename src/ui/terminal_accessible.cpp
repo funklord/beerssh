@@ -4,8 +4,31 @@
 #include "term/scrollback.h"
 #include "ui/terminal_view.h"
 
-/* Matches the inset the painter uses; see terminal_view.cpp. */
-static const int BSSH_GRID_INSET_PX = 1;
+/*
+ * A row's CHARACTER index as a cell COLUMN, and back. An empty map means
+ * the row has no wide glyph and the two are the same number; see flat_t.
+ *
+ * These exist because a reader asks in characters and the grid answers in
+ * cells, and every place that confused the two got a line of CJK wrong by
+ * one cell per preceding glyph -- silently, on the one surface where the
+ * person who wrote it cannot see the answer.
+ */
+static int cell_for_index(const QList<int> &map, int index) {
+	if (map.isEmpty()) return index;
+	if (index < map.size()) return map.at(index);
+
+	/* Past the last character: keep counting columns from where it ended. */
+	return map.last() + 1 + (index - map.size());
+}
+
+static int index_for_cell(const QList<int> &map, int cell) {
+	if (map.isEmpty()) return cell;
+
+	for (int i = 0; i < map.size(); ++i) {
+		if (map.at(i) >= cell) return i;
+	}
+	return map.size();
+}
 
 bssh_terminal_accessible::bssh_terminal_accessible(bssh_terminal_view *view)
     : QAccessibleWidget(view, QAccessible::Terminal) {
@@ -87,11 +110,25 @@ const bssh_terminal_accessible::flat_t &bssh_terminal_accessible::flatten() cons
 
 	if (!terminal) return m_flat;
 
-	const auto append_row = [this](const QString &line) {
+	const auto append_row = [this](const QString &line, QList<int> cells) {
 		if (!m_flat.row_start.isEmpty()) m_flat.text.append(QLatin1Char('\n'));
 		m_flat.row_start.append(m_flat.text.size());
 		m_flat.row_length.append(line.size());
 		m_flat.text.append(line);
+
+		/*
+		 * Trailing blanks are trimmed off the text, so the map goes with
+		 * them; and a row whose columns are its indices is stored as
+		 * nothing at all, which is every row of ordinary text.
+		 */
+		cells.resize(qMin(cells.size(), line.size()));
+
+		bool identity = true;
+		for (int i = 0; i < cells.size(); ++i) {
+			if (cells.at(i) != i) { identity = false; break; }
+		}
+
+		m_flat.row_cells.append(identity ? QList<int>() : cells);
 	};
 
 	const auto trimmed = [](QString line) {
@@ -119,13 +156,20 @@ const bssh_terminal_accessible::flat_t &bssh_terminal_accessible::flatten() cons
 	if (history) {
 		for (int i = 0; i < history->count(); ++i) {
 			QString line;
+			QList<int> columns;
 			const QList<bssh_cell_t> &cells = history->line(i);
 			line.reserve(cells.size());
-			for (const bssh_cell_t &cell : cells) {
-				if (cell.width == 0) continue;
-				append_char(line, cell.ch);
+			for (int col = 0; col < cells.size(); ++col) {
+				if (cells.at(col).width == 0) continue;
+
+				const int before = line.size();
+				append_char(line, cells.at(col).ch);
+
+				/* One entry per CODE UNIT: offsets into the text are
+				 * UTF-16, so a surrogate pair maps twice to one cell. */
+				for (int unit = before; unit < line.size(); ++unit) columns.append(col);
 			}
-			append_row(trimmed(line));
+			append_row(trimmed(line), columns);
 		}
 		m_flat.history_rows = history->count();
 	}
@@ -135,14 +179,18 @@ const bssh_terminal_accessible::flat_t &bssh_terminal_accessible::flatten() cons
 
 	for (int row = 0; row < screen->rows(); ++row) {
 		QString line;
+		QList<int> columns;
 		line.reserve(screen->cols());
 		for (int col = 0; col < screen->cols(); ++col) {
 			const bssh_cell_t &cell = screen->cell(row, col);
 			/* The far half of a wide glyph is not a character (sec 9.3). */
 			if (cell.width == 0) continue;
+
+			const int before = line.size();
 			append_char(line, cell.ch);
+			for (int unit = before; unit < line.size(); ++unit) columns.append(col);
 		}
-		append_row(trimmed(line));
+		append_row(trimmed(line), columns);
 	}
 
 	return m_flat;
@@ -177,8 +225,8 @@ int bssh_terminal_accessible::cursorPosition() const {
 	 * the text: a cursor sitting past the last character of its line
 	 * belongs at the end of that line, not inside the next one.
 	 */
-	const int col = qBound(0, screen->cursor_col(), flat.row_length.at(row));
-	return flat.row_start.at(row) + col;
+	const int index = index_for_cell(flat.row_cells.at(row), screen->cursor_col());
+	return flat.row_start.at(row) + qBound(0, index, flat.row_length.at(row));
 }
 
 void bssh_terminal_accessible::setCursorPosition(int position) {
@@ -203,14 +251,26 @@ QRect bssh_terminal_accessible::characterRect(int offset) const {
 		 * scrolled into history is not on screen at all, and inventing
 		 * coordinates for it would send a magnifier somewhere blank.
 		 */
-		const int screen_row = row - flat.history_rows;
-		if (screen_row < 0) return QRect();
+		/*
+		 * Asked of the VIEW, which owns the mapping and accounts for the
+		 * grid origin, the inset and the scroll offset. This used to
+		 * compute its own, and got all three wrong: the bare inset
+		 * rather than grid_origin_x(), so a left-hand scrollbar put
+		 * every rectangle two columns out; a screen row rather than a
+		 * view row, so everything moved while scrolled back and history
+		 * rows plainly on screen reported nothing; and a character index
+		 * used as a cell column.
+		 *
+		 * A null rectangle is the honest answer for a line that is not
+		 * on screen -- inventing coordinates sends a magnifier somewhere
+		 * blank.
+		 */
+		const int cell = cell_for_index(flat.row_cells.at(row),
+		                                 offset - flat.row_start.at(row));
+		const QRect local = terminal->cell_rect(row, cell);
+		if (local.isNull()) return QRect();
 
-		const int col = offset - flat.row_start.at(row);
-		const QPoint origin = terminal->mapToGlobal(QPoint(0, 0));
-		return QRect(origin.x() + BSSH_GRID_INSET_PX + col * terminal->cell_width(),
-		              origin.y() + BSSH_GRID_INSET_PX + screen_row * terminal->cell_height(),
-		              terminal->cell_width(), terminal->cell_height());
+		return local.translated(terminal->mapToGlobal(QPoint(0, 0)));
 	}
 	return QRect();
 }
@@ -219,16 +279,24 @@ int bssh_terminal_accessible::offsetAtPoint(const QPoint &point) const {
 	const bssh_terminal_view *terminal = view();
 	if (!terminal || terminal->cell_width() <= 0 || terminal->cell_height() <= 0) return -1;
 
-	const QPoint local = terminal->mapFromGlobal(point);
 	const flat_t &flat = flatten();
 	if (flat.row_start.isEmpty()) return -1;
 
-	const int screen_row = qBound(0, (local.y() - BSSH_GRID_INSET_PX) / terminal->cell_height(),
-	                               qMax(0, flat.row_start.size() - flat.history_rows - 1));
-	const int row = qBound(0, flat.history_rows + screen_row, flat.row_start.size() - 1);
-	const int col = qBound(0, (local.x() - BSSH_GRID_INSET_PX) / terminal->cell_width(),
-	                        flat.row_length.at(row));
-	return flat.row_start.at(row) + col;
+	/*
+	 * The view's own hit test, for the reason characterRect uses its own
+	 * rectangle: it already knows about the grid origin and the scroll
+	 * offset, and it answers in ABSOLUTE lines, which is how the rows
+	 * below are numbered. The copy that used to live here knew about
+	 * neither, so touch exploration announced the wrong line whenever the
+	 * view was scrolled back and could never reach the history at all.
+	 */
+	qint64 line = 0;
+	int cell = 0;
+	if (!terminal->cell_at(terminal->mapFromGlobal(point), line, cell)) return -1;
+
+	const int row = int(qBound<qint64>(0, line, flat.row_start.size() - 1));
+	const int index = index_for_cell(flat.row_cells.at(row), cell);
+	return flat.row_start.at(row) + qBound(0, index, flat.row_length.at(row));
 }
 
 /*
@@ -269,7 +337,10 @@ void bssh_terminal_accessible::selection(int index, int *start_offset, int *end_
 
 	const auto offset_of = [&flat](qint64 line, int col) {
 		const int row = int(qBound<qint64>(0, line, flat.row_start.size() - 1));
-		return flat.row_start.at(row) + qBound(0, col, flat.row_length.at(row));
+
+		/* A cell column from the view, an offset for the reader. */
+		const int index = index_for_cell(flat.row_cells.at(row), col);
+		return flat.row_start.at(row) + qBound(0, index, flat.row_length.at(row));
 	};
 
 	if (start_offset) *start_offset = offset_of(first_line, first_col);

@@ -3972,20 +3972,33 @@ The desktop build is what makes this project testable at all — use it.
   1003 come from libvterm's own `mouse_flags`, so no wrong reply is emitted;
   the field is a comment describing an intention rather than the code beneath
   it, which is the shape this document keeps finding.
-- **The accessibility interface converts between three spaces and gets each
-  one wrong.** Also measured rather than fixed, and listed because a screen
-  reader is the one surface where a wrong answer is invisible to whoever
-  wrote it. `characterRect()` uses the bare `BSSH_GRID_INSET_PX` rather than
-  `grid_origin_x()` — the cursor bug over again, in a second copy, because
-  `grid_origin_x()` is private and the file could not ask; it ignores the
-  scroll offset, so every rect is wrong by that many rows while scrolled back
-  and history rows that ARE on screen report nothing; and it treats a
-  character index as a cell column, so a line with wide glyphs walks one cell
-  further left per preceding glyph. `offsetAtPoint()` has all three inverted,
-  `cursorPosition()` reports a cell column as a character offset, and
-  `selection()` does the same. None of it is covered: `characterRect` appears
-  nowhere in `test/`, and the selection test asserts only that the range is
-  ordered and in bounds, which is vacuous against any column error.
+- **The accessibility interface converted between three spaces and got each
+  one wrong — fixed, and the fix is that it no longer converts.**
+  `characterRect()` used the bare `BSSH_GRID_INSET_PX` rather than
+  `grid_origin_x()` — the cursor bug over again, in a second copy, and the
+  copy existed because `grid_origin_x()` was private and the file could not
+  ask. It ignored the scroll offset, so every rectangle was wrong by that
+  many rows while scrolled back and history rows plainly on screen reported
+  nothing. And it treated a character index as a cell column, so a line with
+  wide glyphs walked one cell further left per preceding glyph.
+  `offsetAtPoint()` had all three inverted; `cursorPosition()` and
+  `selection()` reported cell columns as character offsets.
+  **`cell_at()` and a new `cell_rect()` are public on the view now**, and the
+  interface asks rather than computing: one implementation, or two answers
+  that drift. The character-versus-cell half cannot be delegated, since only
+  this interface knows what it dropped, so `flat_t` records the cell column
+  of each character — **per code unit, and only for rows that contain a wide
+  glyph**, an empty list meaning "column equals index", so ordinary text
+  costs nothing.
+  **The round-trip test found its own blind spot.** Asking that the middle of
+  a character's rectangle map back to that character is the only form that
+  cannot pass by agreeing with a second copy of the arithmetic — but the
+  first version probed **column 0**, and `cell_at` clamps a negative column
+  to zero, so a rectangle shifted left by an entire scrollbar still mapped
+  back correctly. The sabotage runner reported it MISSED. It probes five
+  columns in now, with a left-hand scrollbar, which is the configuration
+  nobody looks at and the one where the error is a whole bar wide rather
+  than a pixel.
 - **"Absolute" lines stop being absolute when the scrollback evicts.**
   `line_for_row()` counts from the start of the current buffer and `push()`
   drops the front at the cap, so once the buffer is full every new line

@@ -277,6 +277,22 @@ public:
 	 * history.
 	 */
 	int scroll_offset() const { return m_scroll_offset; }
+
+	/*
+	 * The two conversions between a point on this widget and a cell, in
+	 * public because more than this class needs them -- sec 6.4's
+	 * accessibility interface asks the same questions a mouse does, and
+	 * when it could not ask, it grew its own copy of the arithmetic and
+	 * inherited every bug the copy did not know about. One implementation
+	 * or two answers.
+	 *
+	 * Both work in ABSOLUTE lines, so they span the scrollback, and both
+	 * account for the grid origin, the inset and the scroll offset.
+	 * cell_rect returns a widget-local rectangle, or a null one when the
+	 * line is not currently on screen.
+	 */
+	bool cell_at(const QPoint &point, qint64 &line, int &col) const;
+	QRect cell_rect(qint64 line, int col) const;
 	void set_scroll_offset(int lines);
 	void scroll_by(int lines);
 	void scroll_to_live();
@@ -453,7 +469,7 @@ private:
 	 * the scroll offset and this one must not.
 	 */
 	int screen_row_for_line(qint64 line) const;
-	bool cell_at(const QPoint &point, qint64 &line, int &col) const;
+
 	const bssh_cell_t &cell_for_line(qint64 line, int col) const;
 	bool is_selected(qint64 line, int col) const;
 	void normalised_selection(qint64 &first_line, int &first_col,

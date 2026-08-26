@@ -1356,6 +1356,22 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
  * continues straight on from them. One coordinate space for both is what
  * lets a selection span the fold and survive scrolling.
  */
+QRect bssh_terminal_view::cell_rect(qint64 line, int col) const {
+	/*
+	 * A VIEW row here, unlike screen_row_for_line below: this answers
+	 * "where is it drawn", and what is drawn includes the scrollback, so
+	 * the offset belongs in. The two conversions sit next to each other
+	 * deliberately -- they differ by exactly that offset, and picking the
+	 * wrong one is how a click while scrolled back named the wrong line.
+	 */
+	const qint64 row = line - line_for_row(0);
+	if (row < 0 || row >= m_rows || col < 0 || col >= m_cols) return QRect();
+
+	return QRect(grid_origin_x() + col * m_cell_width,
+	              BSSH_GRID_INSET_PX + int(row) * m_cell_height,
+	              m_cell_width, m_cell_height);
+}
+
 int bssh_terminal_view::screen_row_for_line(qint64 line) const {
 	/*
 	 * libvterm's mouse reports are in LIVE SCREEN rows, so the scroll
