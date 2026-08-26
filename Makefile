@@ -122,7 +122,7 @@ APP_ID = se.vibes.beerssh
 # declaration are checked against it by `make version-check`.
 VERSION ?= $(shell cat VERSION)
 
-BUILD_DIR         = build
+BUILD_DIR         ?= build
 
 # Where the finished packages land. `dpkg-buildpackage` writes to the PARENT
 # directory, so they have to be moved somewhere regardless; this names it.
@@ -134,7 +134,14 @@ BUILD_DIR         = build
 # by name; and it is the only spelling that still works when BUILD_DIR is `.`,
 # as openmlx4 sets it, where the build tree and the source tree are one.
 DEB_DIR ?= $(BUILD_DIR)/deb
-ANDROID_BUILD_DIR = build-android
+
+# ABI-suffixed, the settled spelling (harmonization.md): the same `?=`
+# line every Android sibling carries, because the fragment deliberately
+# defaults nothing. The plain `build-android` this used to say meant an
+# emulator build and a device build clobbered each other in silence.
+# ANDROID_ABI acquires its value in tool/android.mk, included below `all`;
+# this expands late, so stating it here is safe.
+ANDROID_BUILD_DIR ?= build-android-$(ANDROID_ABI)
 
 PREFIX  ?= /usr/local
 DESTDIR ?=
@@ -202,7 +209,13 @@ VTERM_LIB  = $(VTERM_BUILD_DIR)/libvterm.a
 # clone. Applying them here means an upstream update that conflicts fails
 # loudly at the patch step instead of silently dropping the fix.
 VTERM_PATCHES = $(sort $(wildcard vterm-patch/*.patch))
-VTERM_STAMP   = $(VTERM_BUILD_DIR)/.patched
+
+# One stamp per build tree, not one for both. There used to be a single
+# stamp here gating the host AND the Android objects, which put the
+# Android build's correctness in the host tree's hands: removing
+# build-vterm/ re-patched nothing the Android objects could see, and the
+# Android archive was gated on a file that said nothing about it.
+VTERM_STAMP = $(VTERM_BUILD_DIR)/.patched
 
 # -w: this is third-party code built to someone else's warning standard, and
 # a wall of warnings nobody will act on is a wall that hides ours.
@@ -220,9 +233,41 @@ VTERM_CFLAGS = -std=c99 -Os -w -I$(VTERM_DIR)/include -I$(VTERM_DIR)/src
 # other three Android projects read the same words.
 
 NDK_BIN = $(ANDROID_NDK_ROOT)/toolchains/llvm/prebuilt/linux-x86_64/bin
-VTERM_ANDROID_DIR  = build-vterm-android/$(ANDROID_ABI)
-VTERM_ANDROID_LIB  = $(VTERM_ANDROID_DIR)/libvterm.a
-VTERM_ANDROID_OBJS = $(patsubst $(VTERM_DIR)/src/%.c,$(VTERM_ANDROID_DIR)/%.o,$(VTERM_SRCS))
+VTERM_ANDROID_BASE  = build-vterm-android
+VTERM_ANDROID_DIR   = $(VTERM_ANDROID_BASE)/$(ANDROID_ABI)
+VTERM_ANDROID_LIB   = $(VTERM_ANDROID_DIR)/libvterm.a
+VTERM_ANDROID_OBJS  = $(patsubst $(VTERM_DIR)/src/%.c,$(VTERM_ANDROID_DIR)/%.o,$(VTERM_SRCS))
+VTERM_ANDROID_STAMP = $(VTERM_ANDROID_DIR)/.patched
+
+# The stamps say the sources WERE patched, and nothing more. `git -C
+# vterm checkout -- .` or `git submodule update` rewrites the sources
+# while every stamp survives, and the next build then compiles each
+# object from UNPATCHED source without a word -- no CSI-leader fallback,
+# no DEC-mode fallbacks, no deferred-damage flush. Measured in this tree
+# by restoring exactly that way with the archive already built.
+#
+# So the stamps are witnessed at parse time, before any rule is
+# considered: one grep per patched file for a token only the patches put
+# there (XTQMODKEYS arrives in state.c with the same edit whose
+# four-wide leader check is the `0xfc` mask in the compiled object;
+# "pre-scroll rectangle" is 0003's comment in screen.c). Per file rather
+# than one marker for both, so a partial restore cannot hide behind the
+# file that kept its patch. A marker missing while any stamp exists
+# means the sources were restored out of band: every stamp goes -- all
+# ABIs, since all are equally stale -- and the stamp rules re-patch
+# before anything compiles. Two processes, spawned only when a stamp
+# exists to check; a clean tree pays one `ls`.
+BSSH_VTERM_WITNESS := $(shell \
+	stamps=$$(ls $(VTERM_BUILD_DIR)/.patched \
+	           $(VTERM_ANDROID_BASE)/*/.patched 2>/dev/null); \
+	if [ -n "$$stamps" ] \
+	   && ! { grep -q XTQMODKEYS $(VTERM_DIR)/src/state.c 2>/dev/null \
+	          && grep -q 'pre-scroll rectangle' $(VTERM_DIR)/src/screen.c \
+	             2>/dev/null; }; then \
+		echo "make: vterm sources were restored under their patch stamps;" >&2; \
+		echo "make:   discarding the stamps so the patches re-apply." >&2; \
+		rm -f $$stamps; \
+	fi)
 
 ifdef DEBUG
     QMAKE_CONFIG = CONFIG+=debug CONFIG-=release
@@ -295,8 +340,16 @@ endif
 $(MAN_PAGE): $(TARGET)
 	./$(TARGET) --man > $@
 
-$(VTERM_STAMP): $(VTERM_PATCHES)
-	@mkdir -p $(VTERM_BUILD_DIR)
+# One rule, two stamps: both trees compile the same patched source, so
+# both run the same recipe, and each stamp records only that ITS tree's
+# objects were built from patched source. The loop is idempotent -- a
+# patch already in the tree is recognised and skipped -- so whichever
+# stamp is made first applies and the other confirms. Building both
+# archives stale under -j can race two apply loops; the loser fails
+# loudly at `git apply` and a rerun succeeds, which is the right
+# direction to fail in.
+$(VTERM_STAMP) $(VTERM_ANDROID_STAMP): $(VTERM_PATCHES)
+	@mkdir -p $(@D)
 	@echo "applying $(words $(VTERM_PATCHES)) patch(es) to vendored libvterm"
 	@for patch in $(VTERM_PATCHES); do \
 		if ! git -C $(VTERM_DIR) apply --check "$(CURDIR)/$$patch" 2>/dev/null; then \
@@ -315,7 +368,14 @@ $(VTERM_STAMP): $(VTERM_PATCHES)
 
 $(VTERM_BUILD_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
 	@mkdir -p $(VTERM_BUILD_DIR)
-	$(CC) $(VTERM_CFLAGS) -c $< -o $@
+	$(CC) $(VTERM_CFLAGS) -MMD -MP -c $< -o $@
+
+# Read back what -MMD wrote, or it wrote nothing worth having: a .d file
+# nobody includes is dependency tracking that looks on and is off, and
+# an object stale against a header surfaces as nonsense far from here.
+# These objects include vterm_internal.h; before this line, touching it
+# rebuilt nothing.
+-include $(VTERM_OBJS:.o=.d)
 
 # A missing submodule is the one failure worth catching by hand, and the
 # guard that used to sit here could not do it.
@@ -582,7 +642,7 @@ fonts-list:
 check-fonts:
 	@python3 tool/check-fonts.py $(FONT_DIR)
 
-$(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
+$(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_ANDROID_STAMP)
 	@mkdir -p $(VTERM_ANDROID_DIR)
 	@test -n "$(ANDROID_TRIPLE)" || { \
 		echo "android: ANDROID_ABI is '$(ANDROID_ABI)', which names no NDK triple." >&2; \
@@ -590,7 +650,12 @@ $(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)
 		echo "android:   an archive for the wrong machine that only fails at link." >&2; \
 		exit 1; \
 	}
-	$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_API) $(VTERM_CFLAGS) -c $< -o $@
+	$(NDK_BIN)/clang --target=$(ANDROID_TRIPLE)$(ANDROID_API) $(VTERM_CFLAGS) \
+	        -MMD -MP -c $< -o $@
+
+# The host tree's .d files are read back beside the host rule; these are
+# this tree's, for the same reason and with the same failure behind it.
+-include $(VTERM_ANDROID_OBJS:.o=.d)
 
 $(VTERM_ANDROID_LIB): $(VTERM_ANDROID_OBJS)
 	$(NDK_BIN)/llvm-ar rcs $@ $(VTERM_ANDROID_OBJS)
@@ -738,12 +803,13 @@ android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 # and is said out loud, because a debug-signed APK that gets mistaken for
 # a release build is a bad afternoon: Play rejects it, and every install
 # of it conflicts with the real one's signature.
-APK_NAME = beerssh-$(VERSION)-$(ANDROID_ABI).apk
-
-# What android-install and android-run in tool/android.mk reach for.
-# Named here because only this project knows where its build rule leaves
-# the file.
-ANDROID_ARTIFACT = $(ANDROID_BUILD_DIR)/$(APK_NAME)
+#
+# What android-install and android-run in tool/android.mk reach for, and
+# the settled spelling every Android sibling uses (harmonization.md):
+# <program>-<version>-<abi>.apk, in the android build directory. One
+# variable rather than an APK_NAME plus the directory it lands in -- two
+# halves recombined per recipe is how a name and a path drift apart.
+ANDROID_ARTIFACT = $(ANDROID_BUILD_DIR)/$(TARGET)-$(VERSION)-$(ANDROID_ABI).apk
 
 android: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 ifneq ($(ANDROID_KEYSTORE),)
@@ -773,8 +839,8 @@ endif
 		src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs/apk -name '*.apk' -print -quit); \
 	fi; \
 	if [ -z "$$src" ]; then echo "android: no .apk was produced" >&2; exit 1; fi; \
-	cp "$$src" $(ANDROID_BUILD_DIR)/$(APK_NAME); \
-	echo "android: $(ANDROID_BUILD_DIR)/$(APK_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(APK_NAME) | cut -f1))"
+	cp "$$src" $(ANDROID_ARTIFACT); \
+	echo "android: $(ANDROID_ARTIFACT)  ($$(du -h $(ANDROID_ARTIFACT) | cut -f1))"
 	@# And which ABI is in it, read from the package rather than trusted
 	@# from the variable that named the file. The two came apart once
 	@# already, and an APK whose name says arm64-v8a over x86_64 libraries
@@ -783,7 +849,7 @@ endif
 	@if ! command -v unzip >/dev/null 2>&1; then \
 		echo "android: no unzip; cannot say which ABI is inside this"; \
 	else \
-		abis=$$(unzip -Z1 $(ANDROID_BUILD_DIR)/$(APK_NAME) 'lib/*' 2>/dev/null \
+		abis=$$(unzip -Z1 $(ANDROID_ARTIFACT) 'lib/*' 2>/dev/null \
 		        | cut -d/ -f2 | sort -u | tr '\n' ' ' | sed 's/ *$$//'); \
 		if [ -z "$$abis" ]; then \
 			echo "android: no native libraries in the package" >&2; \
@@ -809,7 +875,7 @@ endif
 	@# "C=US, O=Android, CN=Android Debug". That is this project's own
 	@# failure, re-armed by a tool update and invisible because an
 	@# unreadable signature read as a pass.
-	$(call android_verify_signature,$(ANDROID_BUILD_DIR)/$(APK_NAME))
+	$(call android_verify_signature,$(ANDROID_ARTIFACT))
 
 # sec 12.2's other half for Android: is it signed by who you think, and
 # does the artifact install and run?
@@ -824,8 +890,8 @@ endif
 # anywhere, and a name that promises a check should perform it rather than
 # inherit it from a prerequisite that may or may not have rerun.
 check-apk: android
-	$(call android_verify_signature,$(ANDROID_BUILD_DIR)/$(APK_NAME))
-	./tool/check-apk.sh $(ANDROID_BUILD_DIR)/$(APK_NAME)
+	$(call android_verify_signature,$(ANDROID_ARTIFACT))
+	./tool/check-apk.sh $(ANDROID_ARTIFACT)
 
 # android-run, android-install, android-log and android-uninstall come from
 # tool/android.mk. The versions that were here hardcoded the Gradle output
@@ -994,9 +1060,13 @@ define bssh_remove_tree
 	done
 endef
 
+# `build-android-*` beside $(ANDROID_BUILD_DIR): the variable names only
+# the current ABI's tree, and which other ABIs were built is exactly the
+# unknowable-names case -- the same shape .gitignore already declares as
+# this build's own. Each expansion still goes through the checks above.
 veryclean: clean
-	$(call bssh_remove_tree,$(BUILD_DIR) $(ANDROID_BUILD_DIR) $(TEST_BUILD_DIR) \
-	        $(VTERM_BUILD_DIR) build-vterm-android $(SHOT_DIR))
+	$(call bssh_remove_tree,$(BUILD_DIR) $(ANDROID_BUILD_DIR) build-android-* \
+	        $(TEST_BUILD_DIR) $(VTERM_BUILD_DIR) $(VTERM_ANDROID_BASE) $(SHOT_DIR))
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
 	fi
