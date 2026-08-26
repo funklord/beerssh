@@ -88,6 +88,17 @@ trap 'rm -rf "$STAGE"' EXIT INT TERM
 # under it, so the submodule used to arrive inside src.tar however the
 # workflow was configured. That is now a property of the tool instead of
 # a flag somebody has to remember to keep in front of -T.
+# The commit being staged, captured HERE rather than read again at the end.
+#
+# `git archive HEAD` resolves HEAD once, now. The receipt at the bottom used
+# to resolve it a second time when the run finished, and in a tree with more
+# than one writer those are not the same commit: measured 2026-08-26, a run
+# staged 43f0e2c, another session committed 8001a5b five minutes later while
+# the container was building, and the receipt named 8001a5b -- a commit that
+# had never been inside it. The pre-push hook would then have passed it as
+# verified. One resolution, used twice.
+STAGED=$(git rev-parse HEAD)
+
 git archive --format=tar HEAD > "$STAGE/src.tar"
 
 # And the submodule ONLY IF THE WORKFLOW ASKS FOR IT, read out of the
@@ -175,4 +186,4 @@ echo "check-ci: the linux job passes on $IMAGE"
 #
 # In .git, so it is local to the clone and never committed: a receipt that
 # survived a clone would vouch for a build that machine never did.
-printf '%s\n' "$(git rev-parse HEAD)" > "$(git rev-parse --git-dir)/check-ci-passed"
+printf '%s\n' "$STAGED" > "$(git rev-parse --git-dir)/check-ci-passed"
