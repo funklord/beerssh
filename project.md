@@ -3863,15 +3863,27 @@ The desktop build is what makes this project testable at all — use it.
     wrapped lines through five rows, every cell checked against what was
     actually sent.
   - *The device's libvterm being unpatched.* The patch stamp gating the
-    Android objects lives in the HOST build directory -- `VTERM_STAMP` is
-    `$(VTERM_BUILD_DIR)/.patched`, and it is a prerequisite of both the
-    `$(VTERM_BUILD_DIR)/%.o` rule and the `$(VTERM_ANDROID_DIR)/%.o` one --
-    which looked like a way for the device to get unpatched sources. Named
-    rather than cited by line, since a build-hygiene pass is renumbering
-    that file as this is written. It is not what happened: the shipped `arm64-v8a/state.o`
-    disassembles to `(leader[0] & 0xfc) == 0x3c`, the four-wide leader test
-    that accepts `< = > ?`, which is patch 0001's switch and not the
-    two-value one it replaced. The **binary** was asked, not the source tree.
+    Android objects used to live in the HOST build directory -- one
+    `VTERM_STAMP` was a prerequisite of both the host and the Android object
+    rules -- which looked like a way for the device to get unpatched sources.
+    A build-hygiene pass has since given each tree its own stamp and a
+    per-file witness, so this cannot happen now; it had not happened then
+    either. **Proved by byte identity rather than by reading anything:** the
+    shipped `build-vterm-android/arm64-v8a/state.o` is byte-for-byte
+    identical to a fresh build from the patched sources, and 424 bytes
+    different from a fresh build from sources whose blobs were checked equal
+    to `git show HEAD:src/state.c` -- pristine upstream, not merely
+    "`patch` said OK". Both built in scratch with the Android rule's own
+    command line, nothing in the tree touched.
+    The disassembly agrees and says why the two differ: patched, the
+    `leader[0]` test is `and #0xfc` / `cmp #0x3c`, accepting 0x3c..0x3f
+    (`< = > ?`); unpatched it is `and #0xfe` / `cmp #0x3e`, accepting only
+    `> ?`. **The trap, recorded because it nearly landed in this document as
+    a fact:** grepping an object for `0xfc` is vacuous -- it matches
+    branch-target symbol offsets like `<on_csi+0xfc>` in the *unpatched*
+    object too. What discriminates is the (mask, compare) pair at the
+    instruction that loads `leader[0]`, and neither constant alone will do:
+    `#0xfe` appears as an immediate in both builds, at an unrelated field.
   - *An unpatched libvterm printing a rejected CSI leader.* Impossible by
     construction: `vterm/src/parser.c` consumes leader bytes 0x3c-0x3f into
     `csi.leader` and breaks, and the text callback's only call site is
