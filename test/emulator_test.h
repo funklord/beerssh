@@ -19,6 +19,7 @@ private slots:
 	void focus_is_reported_only_when_the_remote_asked();
 	void plain_text_lands_on_the_first_row();
 	void a_line_longer_than_the_grid_wraps_without_debris();
+	void wrapped_lines_scrolling_off_leave_no_debris();
 	void newline_and_carriage_return_move_as_expected();
 	void cursor_addressing_places_text();
 	void erase_display_clears_everything();

@@ -46,6 +46,41 @@ void emulator_test::a_line_longer_than_the_grid_wraps_without_debris() {
 	QCOMPARE(row(emulator, 4), QString());
 }
 
+/*
+ * The same question once the grid has SCROLLED, which the test above does
+ * not reach: 60 characters in a 45x5 grid is two rows and never touches
+ * the bottom.
+ *
+ * On the device the stray `<` (sec 12.3) always sits on a row that
+ * continues a line whose beginning has scrolled off the top, and never on
+ * a row printed whole. Scrolling is also where vterm-patch/0003 lives --
+ * deferred damage flushed before a scroll -- so a stale cell surviving a
+ * scroll is the shape worth asking about.
+ *
+ * Every row is checked for characters that were never sent. The feed is
+ * only 'A', 'B' and newlines, so anything else on the grid is debris.
+ */
+void emulator_test::wrapped_lines_scrolling_off_leave_no_debris() {
+	bssh_emulator emulator(45, 5);
+
+	/* Eight wrapped lines through a five-row grid: it scrolls repeatedly. */
+	for (int i = 0; i < 8; ++i) {
+		emulator.feed(QByteArray(60, char('A' + (i % 2))));
+		emulator.feed(QByteArrayLiteral("\r\n"));
+	}
+
+	const QString grid = emulator.screen().to_text();
+	for (int i = 0; i < grid.size(); ++i) {
+		const QChar ch = grid.at(i);
+		const bool sent = ch == QLatin1Char('A') || ch == QLatin1Char('B')
+		                   || ch == QLatin1Char('\n') || ch == QLatin1Char(' ');
+		QVERIFY2(sent, qPrintable(QStringLiteral("debris on the grid at %1: U+%2 in [%3]")
+		                                   .arg(i)
+		                                   .arg(ch.unicode(), 4, 16, QLatin1Char('0'))
+		                                   .arg(grid)));
+	}
+}
+
 void emulator_test::newline_and_carriage_return_move_as_expected() {
 	bssh_emulator emulator(20, 5);
 
