@@ -4388,6 +4388,30 @@ measurement decides it:
 Read the pixels out of the image rather than looking at it. A screenshot is
 evidence of what rendered; an opinion about a screenshot is not.
 
+**And the fourth was found by an audit rather than by a render.** The cursor
+was drawn *after* `painter.resetTransform()`, in raw widget coordinates,
+while every cell above it is drawn under a `translate()` past the grid inset
+and past a left-hand scrollbar. So the block sat one pixel left and up of the
+cell it marks — and a whole scrollbar's width away with the bar on the left,
+which is the configuration nobody looks at. Measured before it was moved: the
+cell painted at x 1..9 and the block at 0..9.
+The blink's partial `update()` — the only non-full repaint in the class —
+carried the same un-inset rectangle, so a band of the cursor cell was never
+repainted while it blinked. It moved with the draw; a repaint region that
+disagrees with what it repaints is the same bug wearing the other hat.
+The punch-out went with them. It used `m_font` rather than the font the CELL
+was drawn with, so it had neither §9.3's per-glyph family nor `cell_font`'s
+letter spacing: a different shape and a different width from the glyph it is
+cutting out of the block, and the notdef box for anything outside the chosen
+family, since `make_font` sets `NoFontMerging`. **That half is not pinned by
+a pixel assertion** — the test proves the block is punched rather than
+covered, and which family answers is the fallback chain's question rather
+than a measurable one.
+Worth keeping as method: this was three defects in eleven lines that every
+existing test walked past, and none of them came from rendering a screen.
+They came from asking, of each primitive in the paint path, *what coordinate
+space is this in* — a question a screenshot cannot be asked.
+
 ---
 
 ## 18. Code style and repo conventions — **[DECIDED]**

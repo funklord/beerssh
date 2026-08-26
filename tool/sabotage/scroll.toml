@@ -1,6 +1,6 @@
-# Sabotages for sec 6.4's scrolling: who the wheel belongs to when the
-# remote has asked for the mouse, and whose history the scrollback holds
-# while a full-screen program is up.
+# Sabotages for sec 6.4's pointer and scrolling: who the wheel belongs to
+# when the remote has asked for the mouse, whose history the scrollback
+# holds while a full-screen program is up, and where the cursor lands.
 #
 # Each names the test that claims to cover it. A sabotage caught by some
 # OTHER test is reported as "WRONG TEST" rather than as a pass, because
@@ -35,3 +35,23 @@ file = "src/ui/terminal_view.cpp"
 find = "this, [this] { set_scroll_offset(m_scroll_offset); });"
 replace = "this, [this] {});"
 expect = "the_alternate_screen_has_no_history_to_scroll_into"
+
+# The cursor's coordinates. It was drawn after resetTransform() in raw
+# widget coordinates while every cell was drawn translated, so it sat one
+# pixel out -- and a whole scrollbar's width out with the bar on the left.
+# Putting the offset back by hand is the smallest edit that reproduces it.
+[[sabotage]]
+name = "the cursor misses its cell by a pixel"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tconst int x = m_screen->cursor_col() * m_cell_width;"
+replace = "\t\tconst int x = m_screen->cursor_col() * m_cell_width - 1;"
+expect = "the_cursor_lands_on_the_cell_it_marks"
+
+# The block punching the character out of itself. Without it a block
+# cursor hides the one cell the user is looking at.
+[[sabotage]]
+name = "the block cursor covers its character"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\t\t                  QString::fromUcs4(&cell.ch, 1));"
+replace = "\t\t\t\t                  QString());"
+expect = "the_cursor_lands_on_the_cell_it_marks"

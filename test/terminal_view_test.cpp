@@ -13,6 +13,7 @@
 #include "ui/session_dialog.h"
 #include "model/app_settings.h"
 #include <QHash>
+#include <QSet>
 #include "term/colour_scheme.h"
 #include <QContextMenuEvent>
 #include <QMenu>
@@ -579,6 +580,125 @@ void terminal_view_test::the_cell_lands_on_whole_device_pixels() {
 	 * than the seam costs in appearance.
 	 */
 	QCOMPARE(bssh_snap_to_device_pixels(9, 1.1), 9);
+}
+
+/*
+ * The x range of a horizontal run of pixels that are not the terminal's
+ * background, sampled down the middle of the first row. Returns false when
+ * the row is empty, so a test cannot pass on having measured nothing.
+ */
+static bool ink_span(const QImage &frame, int y, int width, const QColor &background,
+                      int &first, int &last) {
+	first = -1;
+	last = -1;
+
+	for (int x = 0; x < width; ++x) {
+		if (frame.pixelColor(x, y) == background) continue;
+		if (first < 0) first = x;
+		last = x;
+	}
+
+	return first >= 0;
+}
+
+void terminal_view_test::the_cursor_lands_on_the_cell_it_marks() {
+	bssh_terminal_view view;
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_RIGHT);
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/*
+	 * One cell with a background of its own, at the top left, and the
+	 * cursor put back on it. The cell is what says where the grid starts;
+	 * the cursor has to agree with it, and nothing else in this test
+	 * needs to know what that number is.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[41m \x1b[0m\x1b[H"));
+
+	const int y = view.cell_height() / 2;
+
+	/*
+	 * The terminal's own background, read off a blank cell at the far end
+	 * of the same row rather than taken from the palette. The palette's
+	 * Window colour is not what the terminal fills with, and using it made
+	 * every pixel count as ink -- both spans came back as the whole widget
+	 * and the comparison below passed while measuring nothing.
+	 */
+	const QColor background = view.grab().toImage().pixelColor(view.width() / 2, y);
+
+	/*
+	 * Only the first few columns are looked at, and the bar is on the
+	 * right, so a grab() -- which renders child widgets too -- cannot
+	 * offer the scrollbar as though it were terminal content. It did:
+	 * with the bar on the LEFT the whole measured span was the bar.
+	 */
+	const int scan = 4 * view.cell_width();
+
+	/* The cell alone: the cursor is off. */
+	emulator.feed(QByteArrayLiteral("\x1b[?25l"));
+	int cell_first = 0;
+	int cell_last = 0;
+	QVERIFY(ink_span(view.grab().toImage(), y, scan, background, cell_first, cell_last));
+
+	/* And with the cursor on it, over the same cell. */
+	emulator.feed(QByteArrayLiteral("\x1b[?25h"));
+	int cursor_first = 0;
+	int cursor_last = 0;
+	QVERIFY(ink_span(view.grab().toImage(), y, scan, background, cursor_first, cursor_last));
+
+	/*
+	 * Every cell is painted through a translate() that steps past the
+	 * grid inset and, with a left-hand bar, past the bar as well. The
+	 * cursor was painted after resetTransform() in raw widget
+	 * coordinates, so it landed one pixel left and up of the cell it was
+	 * marking -- and a whole scrollbar's width away when the bar is on
+	 * the left. One pixel is what this measures, because it is the case
+	 * that can be measured without the bar itself being in the frame.
+	 */
+	/*
+	 * Both spans must be about one cell wide. Without this the test
+	 * passes when the whole row reads as ink -- which is exactly what it
+	 * did on the first attempt, with the background taken from the
+	 * palette rather than from the screen.
+	 */
+	QVERIFY(cell_last - cell_first < 2 * view.cell_width());
+	QVERIFY(cursor_last - cursor_first < 2 * view.cell_width());
+
+	QCOMPARE(cursor_first, cell_first);
+	QCOMPARE(cursor_last, cell_last);
+
+	/*
+	 * And the block punches the character out of itself rather than
+	 * covering it -- the cell being looked at is the one the user is
+	 * looking at. A space cannot show that, so this asks with a glyph:
+	 * inside the block there must be pixels back at the terminal's
+	 * background, which is what the punch-out draws in.
+	 *
+	 * What this does NOT pin is which FAMILY the punch-out picks. That is
+	 * the fallback chain's answer per glyph (sec 9.3) and it is a font
+	 * question rather than a pixel one.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[H\x1b[41mM\x1b[0m\x1b[H"));
+
+	const QImage glyph = view.grab().toImage();
+	QSet<QRgb> inside;
+	for (int row = 1; row < view.cell_height() - 1; ++row) {
+		for (int x = cursor_first; x <= cursor_last; ++x) {
+			inside.insert(glyph.pixel(x, row));
+		}
+	}
+
+	/*
+	 * More than one colour inside the block. Asked that way rather than
+	 * "some pixel is exactly the background", which is what this tried
+	 * first and which fails on antialiasing: a punched stroke blends with
+	 * the block and need never reach the pure colour it is drawn in.
+	 */
+	QVERIFY2(inside.size() > 1, "the block covered the character instead of punching it out");
 }
 
 void terminal_view_test::a_long_run_of_text_stays_on_the_grid() {

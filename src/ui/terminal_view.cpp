@@ -295,8 +295,14 @@ void bssh_terminal_view::set_cursor_blink(bool blink) {
 		 * cell is exactly the kind of idle wakeup sec 5.1 cares about.
 		 */
 		if (!m_screen) return;
-		update(m_screen->cursor_col() * m_cell_width,
-		        m_screen->cursor_row() * m_cell_height,
+		/*
+		 * In the same coordinates the cursor is drawn in. This is the
+		 * only partial update in the class, so a region that did not
+		 * match left a band of the cursor cell never repainted while
+		 * it blinked -- twice a second, until a full update came.
+		 */
+		update(grid_origin_x() + m_screen->cursor_col() * m_cell_width,
+		        BSSH_GRID_INSET_PX + m_screen->cursor_row() * m_cell_height,
 		        m_cell_width, m_cell_height);
 	});
 	m_blink_timer->start();
@@ -1212,25 +1218,6 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	 * text it covers. The z < 0 pass ran before the cells were drawn. */
 	draw_images(painter, offset, false);
 
-	painter.resetTransform();
-
-	if (m_focus_border) {
-		/*
-		 * Drawn last, over everything, and inset by half a pen width so
-		 * the whole line lands inside the widget rather than half of it
-		 * being clipped away by the neighbouring pane.
-		 */
-		/*
-		 * The theme's accent rather than a third copy of the literal
-		 * (sec 6.2). Read from the palette so it follows whatever is
-		 * applied, including a palette the platform supplied.
-		 */
-		QPen border(palette().color(QPalette::Highlight));
-		border.setWidth(2);
-		painter.setPen(border);
-		painter.drawRect(rect().adjusted(1, 1, -1, -1));
-	}
-
 	/*
 	 * No cursor while reading history: it belongs to the live screen. And
 	 * none on the dark half of a blink (sec 10.2).
@@ -1264,13 +1251,56 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		} else {
 			painter.fillRect(x, y, m_cell_width, m_cell_height, cursor_colour);
 			if (cell.ch != U'\0' && cell.ch != U' ') {
-				painter.setFont(m_font);
+				/*
+				 * The font the CELL was drawn with, not m_font:
+				 * the family that actually covers this glyph
+				 * (sec 9.3) and cell_font's letter spacing.
+				 * m_font is neither, so the punch-out was a
+				 * different shape and a different width from the
+				 * glyph it is cutting out of the block -- and for
+				 * anything outside the chosen family it was the
+				 * notdef box, since make_font sets NoFontMerging.
+				 */
+				const QString family = bssh_font_catalog::instance()
+				        .family_for_glyph(m_font_id, cell.ch);
+				painter.setFont(cell_font(family,
+				                            cell.attrs & bssh_cell_t::BOLD,
+				                            cell.attrs & bssh_cell_t::ITALIC));
 				painter.setPen(m_background);
 				painter.drawText(QPointF(x, m_baseline + m_screen->cursor_row() * m_cell_height),
 				                  QString::fromUcs4(&cell.ch, 1));
 			}
 		}
 	}
+
+	/*
+	 * The grid transform comes off only now. Everything above is in GRID
+	 * coordinates -- including the cursor, which used to be drawn below
+	 * this line in raw widget coordinates and therefore landed one pixel
+	 * left and up of the cell it marks, or a whole scrollbar's width away
+	 * with the bar on the left. Measured: the cell painted at x 1..9 and
+	 * the block at 0..9. Only the focus border belongs outside, because
+	 * it frames the widget rather than the grid.
+	 */
+	painter.resetTransform();
+
+	if (m_focus_border) {
+		/*
+		 * Drawn last, over everything, and inset by half a pen width so
+		 * the whole line lands inside the widget rather than half of it
+		 * being clipped away by the neighbouring pane.
+		 */
+		/*
+		 * The theme's accent rather than a third copy of the literal
+		 * (sec 6.2). Read from the palette so it follows whatever is
+		 * applied, including a palette the platform supplied.
+		 */
+		QPen border(palette().color(QPalette::Highlight));
+		border.setWidth(2);
+		painter.setPen(border);
+		painter.drawRect(rect().adjusted(1, 1, -1, -1));
+	}
+
 }
 
 /*
