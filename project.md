@@ -3761,6 +3761,49 @@ The desktop build is what makes this project testable at all — use it.
   pinning an exact count would turn a libvterm update into a failing test for no
   reason.
 
+- **Qt 6.12's Android accessibility bridge aborts beerssh on this phone,
+  and the condition is NOT isolated.** Stated that way deliberately: the
+  trigger has been mis-stated twice already, and a wrong one here sends the
+  next reader to test the wrong thing.
+  What reproduces, on demand: about nine cycles of `am start` to another
+  app, 0.6s, `am start` back, 0.6s, opening the overflow menu every other
+  cycle. That run gave two tombstones six seconds apart, the second on the
+  process that had just restarted.
+  Every abort is identical -- `signal 6 (SIGABRT)`, Android's JNI checker
+  reporting `JNI DETECTED ERROR IN APPLICATION: JNI CallVoidMethodV called
+  with pending exception`, through `QtNativeAccessibility.populateNode`
+  under `QtAccessibilityDelegate.notifyValueChanged`. Measured 2026-08-26 on
+  SM-N960F, Android 10, arm64-v8a, Qt 6.12.0, debug-signed.
+  **Four hypotheses, each falsified with five clean trials**: the first
+  launch after an install; backgrounding via KEYCODE_HOME; opening the
+  overflow menu and dismissing it with BACK; and rapid text input alone
+  (three commands per launch, through `adb input text`).
+  **And one occurrence the reproducing procedure does not explain.** The
+  fourth crash happened while typing into the terminal with no app
+  switching at all -- so focus churn is not necessary; and since typing on
+  its own does not reproduce, it is not sufficient either. Both
+  characterisations tried so far are approximations of something not yet
+  named. Four crashes happened by accident, all while working quickly; the
+  fifteen scripted trials that isolated one step at a time, with generous
+  sleeps, produced nothing. Whatever it is, it is lost by slowing down.
+  The delegate is live because `com.jamworks.bxactions` is enabled -- a
+  Bixby-button remapper, not a screen reader -- so this is an ordinary
+  configuration and not an assistive-technology corner.
+  **hydra aborts in the same subsystem on the same phone, deterministically
+  on every menu open**, and the pair is worth more than either half. Its
+  trace runs QRhi -> QOpenGL -> `QAndroidPlatformOpenGLWindow::eglSurface()`
+  and dies on a deadlock protector; ours has no OpenGL in it at all, this
+  front door being plain widgets on a raster surface. One lock-ordering
+  fault reaching two victims by two routes, or two bugs in one bridge --
+  nothing measured distinguishes those, and neither project asserts one.
+  No frame of ours appears in any trace. That is not the same as the fault
+  not being ours: the bridge is asking sec 6.4's accessible interface for
+  values, and a pending exception could start there.
+  Untestable on the host. Offscreen Qt never instantiates the Android
+  accessibility delegate, so sec 6.4's accessibility tests exercise our side
+  of that interface and nothing that calls into it. They pass, and their
+  passing says nothing about this.
+
 ### 12.4 CI
 - **Build both platforms on every change** — Linux host build + all Android ABIs.
   A change that builds on one and breaks the other is the failure mode this whole
