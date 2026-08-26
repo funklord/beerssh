@@ -3867,107 +3867,69 @@ The desktop build is what makes this project testable at all — use it.
   of that interface and nothing that calls into it. They pass, and their
   passing says nothing about this.
 
-- **A stray `<` at the last column of a wrapped row, on the device only.**
-  Not explained yet. This is the record 76538ec and 43f0e2c point at, which
-  they said was here and was not -- both commits were tests, both said "what
-  remains open is recorded in sec 12.3", and neither wrote it. A pointer to
-  nothing is worse than no pointer, because the reader concludes they have
-  misread the section rather than that it was never written.
-  What is seen: a `<` at column 44 of a 45-column grid (45 being what the
-  phone reports at its default font size), only on a row continuing a line
-  whose beginning has scrolled off the top, never on a row printed whole.
-  **Ruled out, each by measurement rather than by reading the code:**
-  - *Plain-text wrapping in the emulator* --
-    `emulator_test::a_line_longer_than_the_grid_wraps_without_debris`, 60
-    characters into a 45-column grid, read as text rather than photographed.
-  - *Wrapping under repeated scrolling* --
-    `emulator_test::wrapped_lines_scrolling_off_leave_no_debris`, eight
-    wrapped lines through five rows, every cell checked against what was
-    actually sent.
-  - *The device's libvterm being unpatched.* The patch stamp gating the
-    Android objects used to live in the HOST build directory -- one
-    `VTERM_STAMP` was a prerequisite of both the host and the Android object
-    rules -- which looked like a way for the device to get unpatched sources.
-    A build-hygiene pass has since given each tree its own stamp and a
-    per-file witness, so this cannot happen now; it had not happened then
-    either. **Proved by byte identity rather than by reading anything:** the
+- **The stray `<` at the last column of a wrapped row: solved, and it was
+  never ours.** It is **mksh's own horizontal-scroll marker**. The device's
+  shell pads the line out to the last column and writes a literal `<` there
+  to say the line extends past what is shown; beerssh draws exactly what it
+  was sent. Nothing in the emulator, the mirror or the renderer was at
+  fault, and the two tests that went in hunting it (76538ec, 43f0e2c) were
+  measuring a terminal that was already behaving.
+  **The proof is the byte stream, taken from the device's own shell.**
+  `adb shell` allocates a pty when its own stdin is one, so the shell was
+  driven under a local pty at `stty rows 46 cols 58` and its output
+  captured. Typing nothing but printable characters -- `abcdefghij` seven
+  times, no escape sequence anywhere in the input -- comes back as:
+
+      abcdefghijabcdefghijabcdefghijabcdefghijabc
+      \r fghij...abc          <  \b x19
+
+  a carriage return, the visible window of the line, padding spaces, the
+  `<` in the last cell, then nineteen backspaces to put the cursor back.
+  That is the whole phenomenon, and it needs no mouse report, no wrap bug
+  and no repaint theory to produce it.
+  **The road there is worth keeping, because most of it was wrong.** Four
+  hypotheses were eliminated by measurement before the right question was
+  asked, and each cost something:
+  - *The emulator's wrapping and scrolling* --
+    `emulator_test::a_line_longer_than_the_grid_wraps_without_debris` and
+    `wrapped_lines_scrolling_off_leave_no_debris`, which pass.
+  - *A redraw of a full row.*
+    `emulator_test::a_wrapped_line_redrawn_shorter_leaves_no_debris` fills a
+    row exactly to its last column -- where autowrap is left PENDING rather
+    than the cursor moving -- and redraws it shorter four ways. All four
+    clear the last column.
+  - *The device's libvterm being unpatched.* Proved by byte identity: the
     shipped `build-vterm-android/arm64-v8a/state.o` is byte-for-byte
-    identical to a fresh build from the patched sources, and 424 bytes
-    different from a fresh build from sources whose blobs were checked equal
-    to `git show HEAD:src/state.c` -- pristine upstream, not merely
-    "`patch` said OK". Both built in scratch with the Android rule's own
-    command line, nothing in the tree touched.
-    The disassembly agrees and says why the two differ: patched, the
-    `leader[0]` test is `and #0xfc` / `cmp #0x3c`, accepting 0x3c..0x3f
-    (`< = > ?`); unpatched it is `and #0xfe` / `cmp #0x3e`, accepting only
-    `> ?`. **The trap, recorded because it nearly landed in this document as
-    a fact:** grepping an object for `0xfc` is vacuous -- it matches
-    branch-target symbol offsets like `<on_csi+0xfc>` in the *unpatched*
-    object too. What discriminates is the (mask, compare) pair at the
-    instruction that loads `leader[0]`, and neither constant alone will do:
-    `#0xfe` appears as an immediate in both builds, at an unrelated field.
-  - *An unpatched libvterm printing a rejected CSI leader.* Impossible by
-    construction: `vterm/src/parser.c` consumes leader bytes 0x3c-0x3f into
-    `csi.leader` and breaks, and the text callback's only call site is
-    reachable solely from the NORMAL state. A rejected CSI reaches a
-    compiled-out `DEBUG_LOG` and nothing else.
-  - *The wide-glyph continuation being written past the grid.*
-    `copy_cell()` does `set_cell(row, col + 1, ...)` for a width-2 glyph,
-    which at the last column is out of range -- and `bssh_screen::set_cell`
-    bounds-checks and drops it, so nothing is written and nothing is stale.
-  **The candidate that fits, and it is ours rather than the device's:** an
-  SGR mouse report *is* `CSI < b ; x ; y M`, and this terminal writes one on
-  every tap while a mouse mode is set. Nothing clears a mode left behind by a
-  program that exited without disabling it -- a crash, a dropped link
-  mid-`htop` -- so from then on every tap puts `\x1b[<0;44;5M` onto the
-  shell's command line, where a shell echoes back whatever readline made of
-  it. That is device-shaped without being Android-specific in the renderer:
-  a tap is how you focus a pane on a phone and happens constantly, while on
-  a desktop a click is deliberate and rare. It also explains the wrapping,
-  since a command line with escape debris inserted into it is a long one.
-  **It is a finding now, and it reproduces on demand.** Measured 2026-08-26
-  on the SM-N960F over `adb`, with the app's own *Local shell* row so no
-  server is involved:
-
-      tap "Local shell"
-      . ./m                     # a file holding: printf '\033[?1000h\033[?1006h'
-      tap the terminal three or four times
-
-  Nothing consumes the reports, so each tap writes `CSI < 0 ; c ; r M` and
-  its release onto the shell's command line; the shell's editor puts most
-  of those bytes back on screen as text; the line grows past the width and
-  wraps; and **a lone `<` appears at the last column of the wrapped row**,
-  separated from the text by blanks. That is the reported symptom exactly.
-  Four taps is enough. It does not appear before the line wraps.
-  **It is content, not a repaint artifact.** Typing one more character makes
-  the shell echo it, which fires `damaged()`, which is a FULL `update()` --
-  the whole grid repainted from the mirror -- and the `<` survives it. So the
-  renderer is exonerated by measurement rather than by reading, which
-  matters, because eliminating the paint path by inspection is one of the
-  three things the earlier note listed as possibly wrong.
-  **The obvious next hypothesis was wrong, and is recorded so nobody spends
-  the afternoon on it again.** A stray character stranded at the right edge
-  looks exactly like a terminal and a shell disagreeing about the width, so
-  `stty size` was run inside the session: **46 58**, and the grid measured
-  from the prompt's own glyph pitch is also 58. They agree. `bssh_pty_session`
-  does apply `TIOCSWINSZ`, and `recompute_grid()`'s refusal to announce a
-  size while the view is invisible is not a hole either, because Qt delivers
-  no `resizeEvent` to a hidden widget at all -- so the grid is not recomputed
-  behind the session's back. A speculative fix for that non-defect was
-  written, failed to be pinned by any test that could isolate it, and was
-  reverted rather than kept.
-  **What is left is narrow and host-shaped.** The shell and the terminal
-  agree on the width; the cell is in the emulator's mirror; the two existing
-  wrap tests pass because they only ever WRITE text. What they never do is
-  what a line editor does -- redraw a wrapped line shorter, with cursor
-  moves and an erase -- and the last column of a wrapped row is where
-  autowrap's pending-wrap state lives. That is the next thing to reproduce
-  on the host, and it no longer needs the device to find.
-  It sits next to a contradiction this document is on the losing side of --
-  sec 6.4 says "on touch, keep local selection winning", and the pointer path
-  never asks `is_touch_primary()` at all. Flagged rather than resolved; which
-  half is wrong is a real question and not one to settle while chasing a `<`.
-
+    identical to a fresh build from the patched sources and 424 bytes
+    different from one built from blobs checked equal to
+    `git show HEAD:src/state.c`. **The grep trap next to it nearly became a
+    fact in this document:** `0xfc` matches branch-target symbol offsets
+    like `<on_csi+0xfc>` in an *unpatched* object, so grepping for the
+    constant is vacuous; as an immediate operand it appears zero times
+    there and once in the patched build. Neither constant alone
+    discriminates -- `#0xfe` is an immediate in both -- what does is the
+    (mask, compare) pair at the instruction that loads `leader[0]`.
+  - *A width disagreement between the terminal and the shell.* The obvious
+    one, and false: `stty size` inside the session answers **46 58** and the
+    grid measured off the prompt's own glyph pitch is 58. A speculative fix
+    for that non-defect was written, could not be pinned by any test that
+    isolated it, and was reverted rather than kept.
+  **And the renderer was exonerated by measurement rather than by reading**,
+  which was worth having independently of the answer: with the character on
+  screen, typing one more key makes the shell echo, which fires `damaged()`
+  and repaints the whole grid from the mirror -- and the character survives.
+  So it was content, not a repaint artifact. Re-deriving the paint path by
+  inspection had been listed as one of the three things that might be wrong;
+  it was not.
+  **What the hunt did turn up is a real defect, and it is not this one.**
+  Reproducing the long line the first time used mouse reports: with a mode
+  left on by a program that exited without disabling it, every tap writes
+  `CSI < 0 ; c ; r M` onto the shell's command line. That is not what draws
+  the `<` -- plain typing does -- but it is beerssh writing bytes to a
+  remote that never asked, and on a phone a tap is how a pane gets focus.
+  **sec 6.4 says "on touch, keep local selection winning" and the pointer
+  path never asks `is_touch_primary()`.** The document and the code
+  contradict each other; flagged, not resolved.
 ### 12.4 CI
 - **Build both platforms on every change** — Linux host build + all Android ABIs.
   A change that builds on one and breaks the other is the failure mode this whole

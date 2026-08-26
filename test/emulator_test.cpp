@@ -60,6 +60,58 @@ void emulator_test::a_line_longer_than_the_grid_wraps_without_debris() {
  * Every row is checked for characters that were never sent. The feed is
  * only 'A', 'B' and newlines, so anything else on the grid is debris.
  */
+void emulator_test::a_wrapped_line_redrawn_shorter_leaves_no_debris() {
+	/*
+	 * What a line EDITOR does, which neither wrap test above does: it
+	 * rewrites a line in place, and the rewrite is often shorter. sec
+	 * 12.3's stray `<` sits at the last column of such a row with blanks
+	 * between it and the new text, and the device says the character is
+	 * in the GRID rather than on the glass -- so if it is reproducible at
+	 * all it is reproducible here, with no device and no shell.
+	 *
+	 * The row is filled exactly to its last column, which is the case
+	 * worth asking about: writing the last cell leaves the cursor there
+	 * with autowrap PENDING rather than moving it, and an erase issued
+	 * afterwards has to account for that.
+	 *
+	 * It passes, all four shapes -- the erase before the write, after it,
+	 * whole-line, and issued from the pending position.
+	 *
+	 * The `<` it was written to hunt turned out to be mksh's own
+	 * horizontal-scroll marker, sent as a literal character (sec 12.3),
+	 * so there was never anything here to find. Kept anyway: a full row
+	 * redrawn shorter is the shape every line editor produces, the
+	 * pending-wrap state is the fiddliest thing on that path, and neither
+	 * of the two wrap tests beside it covers either.
+	 */
+	const int cols = 45;
+
+	struct { const char *name; QByteArray redraw; } cases[] = {
+		{ "cr, write, erase to end", QByteArrayLiteral("\rSHORT\x1b[K") },
+		{ "cr, erase to end, write", QByteArrayLiteral("\r\x1b[KSHORT") },
+		{ "cr, write, erase whole",  QByteArrayLiteral("\rSHORT\x1b[2K") },
+		{ "erase to end from here",  QByteArrayLiteral("\x1b[K") },
+	};
+
+	for (const auto &shape : cases) {
+		bssh_emulator emulator(cols, 5);
+
+		/* Exactly one row, ending in the character being hunted. */
+		QByteArray line(cols - 1, 'A');
+		line.append('<');
+		emulator.feed(line);
+		QCOMPARE(row(emulator, 0).size(), cols);
+		QCOMPARE(row(emulator, 0).at(cols - 1), QLatin1Char('<'));
+
+		emulator.feed(shape.redraw);
+
+		const QString text = row(emulator, 0);
+		QVERIFY2(!text.contains(QLatin1Char('<')),
+		          qPrintable(QStringLiteral("%1: row 0 kept a '<': \"%2\"")
+		                      .arg(QLatin1String(shape.name)).arg(text)));
+	}
+}
+
 void emulator_test::wrapped_lines_scrolling_off_leave_no_debris() {
 	bssh_emulator emulator(45, 5);
 
