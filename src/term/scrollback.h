@@ -47,9 +47,27 @@ public:
 	int count() const { return m_lines.size(); }
 	const QList<bssh_cell_t> &line(int index) const;
 
+	/*
+	 * How many lines this ring has dropped off the front, which makes
+	 * `base() + index` a name for a line that does not change when the
+	 * ring evicts.
+	 *
+	 * Without it "absolute line" was a lie the moment the buffer filled:
+	 * every push renumbered every line by one, while a selection anchored
+	 * against the old numbers did not move -- so a selection made in the
+	 * history walked down the content, one line per line of output, and
+	 * Copy yielded text the user never highlighted. It was invisible
+	 * because the painting agreed with the anchor: what had moved was the
+	 * highlight itself.
+	 */
+	qint64 base() const { return m_base; }
+
 private:
 	QList<QList<bssh_cell_t> > m_lines;
 	int m_max_lines;
+
+	/* Only ever grows; see base(). */
+	qint64 m_base = 0;
 };
 
 #endif /* BSSH_SCROLLBACK_H */

@@ -1140,7 +1140,7 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			 * highlight colour cannot promise against 256 possible
 			 * backgrounds.
 			 */
-			if (is_selected(history - offset + row, col)) std::swap(fg, bg);
+			if (is_selected(line_for_row(row), col)) std::swap(fg, bg);
 
 			/*
 			 * sec 9.3's floor, applied AFTER both swaps and to the
@@ -1381,27 +1381,44 @@ int bssh_terminal_view::screen_row_for_line(qint64 line) const {
 	 * primary screen acted on the wrong line every time.
 	 */
 	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
-	return int(line - history);
+	return int(line - history_base() - history);
+}
+
+qint64 bssh_terminal_view::history_base() const {
+	/*
+	 * Where the scrollback's own line 0 sits in absolute numbering. Zero
+	 * until the ring first evicts, and then one higher per line dropped
+	 * -- which is what stops an anchored selection sliding down the
+	 * content as output arrives (see bssh_scrollback::base).
+	 */
+	return m_scrollback ? m_scrollback->base() : 0;
 }
 
 qint64 bssh_terminal_view::line_for_row(int row) const {
 	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
-	return history - m_scroll_offset + row;
+	return history_base() + history - m_scroll_offset + row;
 }
 
 const bssh_cell_t &bssh_terminal_view::cell_for_line(qint64 line, int col) const {
 	static const bssh_cell_t blank;
 
 	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
-	if (line < 0) return blank;
 
-	if (line < history) {
-		const QList<bssh_cell_t> &stored = m_scrollback->line(int(line));
+	/*
+	 * Absolute in, buffer index out. A line whose name is below the base
+	 * has been evicted -- it is gone rather than renumbered, so the
+	 * honest answer is blank rather than whatever now sits at that index.
+	 */
+	const qint64 index = line - history_base();
+	if (index < 0) return blank;
+
+	if (index < history) {
+		const QList<bssh_cell_t> &stored = m_scrollback->line(int(index));
 		return col >= 0 && col < stored.size() ? stored.at(col) : blank;
 	}
 
 	if (!m_screen) return blank;
-	return m_screen->cell(int(line - history), col);
+	return m_screen->cell(screen_row_for_line(line), col);
 }
 
 bool bssh_terminal_view::cell_at(const QPoint &point, qint64 &line, int &col) const {

@@ -4020,14 +4020,28 @@ The desktop build is what makes this project testable at all — use it.
   columns in now, with a left-hand scrollbar, which is the configuration
   nobody looks at and the one where the error is a whole bar wide rather
   than a pixel.
-- **"Absolute" lines stop being absolute when the scrollback evicts.**
-  `line_for_row()` counts from the start of the current buffer and `push()`
-  drops the front at the cap, so once the buffer is full every new line
-  renumbers every old one — while the stored selection anchor does not move.
-  With a build streaming into a full buffer, a selection made in the history
-  walks down the content one line per line of output, and Copy yields text the
-  user never highlighted. It is invisible because the painting agrees with the
-  anchor: the highlight itself has moved.
+- **"Absolute" lines stopped being absolute when the scrollback evicted —
+  fixed by giving the ring a base.** `line_for_row()` counted from the start
+  of the current buffer, and `push()` drops the front at the cap, so once the
+  buffer was full every new line renumbered every old one while the stored
+  selection anchor did not move. With a build streaming into a full buffer, a
+  selection made in the history walked down the content one line per line of
+  output, and Copy yielded text the user never highlighted.
+  **It was invisible for the reason that matters here: the painting agreed
+  with the anchor.** The highlight moved *with* the error, so the screen
+  looked right and only the copied text disagreed — which is why the test
+  asserts on `selection_text()` and not on a coordinate, and why a screenshot
+  could never have caught it.
+  `bssh_scrollback::base()` is the count of lines the ring has dropped, so
+  `base() + index` names a line that does not change. It advances wherever
+  the front is dropped — `push()` at the cap, `set_max_lines()` when
+  shrinking, and `clear()` by the whole count, because a cleared line is gone
+  rather than renumbered and anything still holding its name must fail to
+  find it rather than find a different line under it. `pop()` takes from the
+  back and leaves the base alone.
+  Everything that crosses between a buffer index and a line's name goes
+  through it now, including the accessibility interface, whose flat rows had
+  coincided with absolute lines only because the base had always been zero.
 
   **What the hunt did turn up is a real defect, and it is not this one.**
   Reproducing the long line the first time used mouse reports: with a mode
@@ -4055,6 +4069,13 @@ The desktop build is what makes this project testable at all — use it.
   naming the commit being gated, and an explicit release afterwards, cost one
   round trip and saved the sixth run. Retrying without asking is what turns a
   ten-minute cost into an hour.
+  **And ask the TREE, not the session you happen to be talking to.** That
+  sentence above is understated, and the understatement was caught by the
+  other session rather than by this one: the hold covered the peer who had
+  been committing, and a third session nobody had mentioned could have moved
+  HEAD out from under the same run. Knowing who can write to the tree is the
+  hard part, so the workable form is that whoever is about to gate says so
+  somewhere every writer can see, rather than to one peer by name.
   Not a thing to fix in the gate. A receipt that tolerated a moved HEAD would
   be a receipt for a tree nobody built, which is the whole failure 9bc3395 and
   5e9b540 exist to prevent.

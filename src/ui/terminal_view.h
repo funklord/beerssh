@@ -461,6 +461,13 @@ private:
 	QColor resolve(const bssh_color_t &color, const QColor &fallback) const;
 
 	/* View row/col <-> absolute line, the one conversion selection needs. */
+	/*
+	 * Where the scrollback's line 0 sits in absolute numbering. Every
+	 * conversion below goes through it, because "absolute" stopped being
+	 * true the moment the ring evicted.
+	 */
+	qint64 history_base() const;
+
 	qint64 line_for_row(int row) const;
 
 	/*

@@ -1,0 +1,25 @@
+# Sabotages for the absolute-line base: the number that stops a selection
+# sliding down the content when the scrollback ring evicts.
+#
+# The defect these guard was invisible in the ordinary way -- the painting
+# agreed with the anchor, so the highlight moved and looked right, and
+# only the copied TEXT disagreed. Every assertion here is therefore on
+# text rather than on coordinates.
+
+# The base itself. Returning zero is the old behaviour exactly: every
+# push renumbers every line and nothing that holds a line's name is told.
+[[sabotage]]
+name = "a line's name changes when the ring evicts"
+file = "src/term/scrollback.h"
+find = "\tqint64 base() const { return m_base; }"
+replace = "\tqint64 base() const { return 0; }"
+expect = "a_selection_stays_on_its_text_when_the_scrollback_evicts"
+
+# And the view applying it. The scrollback can keep perfect count while
+# the view still names lines from the front of the buffer.
+[[sabotage]]
+name = "the view names lines from the buffer, not the base"
+file = "src/ui/terminal_view.cpp"
+find = "\treturn history_base() + history - m_scroll_offset + row;"
+replace = "\treturn history - m_scroll_offset + row;"
+expect = "a_selection_stays_on_its_text_when_the_scrollback_evicts"

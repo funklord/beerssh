@@ -19,6 +19,7 @@ void bssh_scrollback::set_max_lines(int max_lines) {
 	/* Shrinking drops the oldest, which is what "keep the last N" means. */
 	while (m_lines.size() > m_max_lines) {
 		m_lines.removeFirst();
+		++m_base;
 	}
 }
 
@@ -28,6 +29,7 @@ void bssh_scrollback::push(const QList<bssh_cell_t> &line) {
 	m_lines.append(line);
 	while (m_lines.size() > m_max_lines) {
 		m_lines.removeFirst();
+		++m_base;
 	}
 }
 
@@ -39,6 +41,13 @@ bool bssh_scrollback::pop(QList<bssh_cell_t> &line) {
 }
 
 void bssh_scrollback::clear() {
+	/*
+	 * The base goes with them. A cleared line is gone rather than
+	 * renumbered, so anything still holding a name for one must fail to
+	 * find it rather than find a different line under the same name --
+	 * which is exactly what resetting the base to zero would arrange.
+	 */
+	m_base += m_lines.size();
 	m_lines.clear();
 }
 

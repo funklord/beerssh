@@ -262,6 +262,57 @@ void terminal_view_test::selection_spans_the_scrollback() {
 	QCOMPARE(view.selection_text(), before);
 }
 
+void terminal_view_test::a_selection_stays_on_its_text_when_the_scrollback_evicts() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	emulator.set_scrollback_lines(8);
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/*
+	 * Fill the ring to its cap first, so that everything after this point
+	 * evicts. FINDME goes in AFTER that and is then scrolled off, which
+	 * puts it among the most recent lines -- far enough from the front to
+	 * survive the three evictions below, which is what makes the
+	 * assertion about renumbering rather than about deletion.
+	 */
+	for (int i = 0; i < view.rows() + 12; ++i) {
+		emulator.feed(QByteArrayLiteral("filler\r\n"));
+	}
+	emulator.feed(QByteArrayLiteral("FINDME\r\n"));
+	for (int i = 0; i < view.rows(); ++i) {
+		emulator.feed(QByteArrayLiteral("filler\r\n"));
+	}
+	QCOMPARE(emulator.scrollback().count(), 8);
+
+	/* Scroll back until it is the top row, and select it. */
+	bool found = false;
+	for (int back = 1; back <= 8 && !found; ++back) {
+		view.clear_selection();
+		view.set_scroll_offset(back);
+		drag(view, 0, 0, 5, 0);
+		found = view.selection_text() == QStringLiteral("FINDME");
+	}
+	QVERIFY2(found, qPrintable(view.selection_text()));
+
+	/*
+	 * Now output arrives while the ring is already full, so every push
+	 * evicts. The ring renumbered every line by one per push and the
+	 * anchor did not move, so the highlight walked down the content and
+	 * Copy handed back text the user never selected. It was invisible
+	 * because the painting agreed with the anchor -- what had moved was
+	 * the highlight itself, which is why this asserts on the TEXT.
+	 */
+	const qint64 base_before = emulator.scrollback().base();
+	for (int i = 0; i < 3; ++i) emulator.feed(QByteArrayLiteral("more\r\n"));
+	QCOMPARE(emulator.scrollback().base(), base_before + 3);
+
+	QCOMPARE(view.selection_text(), QStringLiteral("FINDME"));
+}
+
 void terminal_view_test::double_click_selects_a_word() {
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 320);

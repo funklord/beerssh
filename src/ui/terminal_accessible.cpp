@@ -21,6 +21,17 @@ static int cell_for_index(const QList<int> &map, int index) {
 	return map.last() + 1 + (index - map.size());
 }
 
+/*
+ * A flat row is the Nth line this interface publishes; an absolute line is
+ * what the view calls it. They coincided until the scrollback started
+ * evicting, and now they differ by exactly the ring's base -- so every
+ * crossing between the two goes through here rather than assuming.
+ */
+static qint64 flat_base(const bssh_terminal_view *terminal) {
+	const bssh_scrollback *history = terminal ? terminal->scrollback() : nullptr;
+	return history ? history->base() : 0;
+}
+
 static int index_for_cell(const QList<int> &map, int cell) {
 	if (map.isEmpty()) return cell;
 
@@ -267,7 +278,7 @@ QRect bssh_terminal_accessible::characterRect(int offset) const {
 		 */
 		const int cell = cell_for_index(flat.row_cells.at(row),
 		                                 offset - flat.row_start.at(row));
-		const QRect local = terminal->cell_rect(row, cell);
+		const QRect local = terminal->cell_rect(flat_base(terminal) + row, cell);
 		if (local.isNull()) return QRect();
 
 		return local.translated(terminal->mapToGlobal(QPoint(0, 0)));
@@ -294,7 +305,8 @@ int bssh_terminal_accessible::offsetAtPoint(const QPoint &point) const {
 	int cell = 0;
 	if (!terminal->cell_at(terminal->mapFromGlobal(point), line, cell)) return -1;
 
-	const int row = int(qBound<qint64>(0, line, flat.row_start.size() - 1));
+	const int row = int(qBound<qint64>(0, line - flat_base(terminal),
+	                                    flat.row_start.size() - 1));
 	const int index = index_for_cell(flat.row_cells.at(row), cell);
 	return flat.row_start.at(row) + qBound(0, index, flat.row_length.at(row));
 }
@@ -335,8 +347,9 @@ void bssh_terminal_accessible::selection(int index, int *start_offset, int *end_
 	const flat_t &flat = flatten();
 	if (flat.row_start.isEmpty()) return;
 
-	const auto offset_of = [&flat](qint64 line, int col) {
-		const int row = int(qBound<qint64>(0, line, flat.row_start.size() - 1));
+	const qint64 base = flat_base(terminal);
+	const auto offset_of = [&flat, base](qint64 line, int col) {
+		const int row = int(qBound<qint64>(0, line - base, flat.row_start.size() - 1));
 
 		/* A cell column from the view, an offset for the reader. */
 		const int index = index_for_cell(flat.row_cells.at(row), col);
