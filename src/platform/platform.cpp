@@ -70,3 +70,15 @@ bool bssh_platform::is_touch_primary() const {
 void bssh_platform::force_touch_primary(int touch) {
 	bssh_forced_touch = touch;
 }
+
+/* -1 until something says otherwise, exactly as above. */
+static int bssh_forced_biometric = -1;
+
+bool bssh_platform::has_biometric() const {
+	if (bssh_forced_biometric >= 0) return bssh_forced_biometric != 0;
+	return platform_has_biometric();
+}
+
+void bssh_platform::force_biometric(int available) {
+	bssh_forced_biometric = available;
+}

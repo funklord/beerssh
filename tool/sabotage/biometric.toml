@@ -1,0 +1,33 @@
+# Sabotages for sec 11's per-host biometric gate.
+#
+# Only the portable half exists yet -- the flag, the capability question
+# and the decision path. The Android prompt is the next piece, and until
+# it lands has_biometric() answers false on both platforms so the option
+# is offered nowhere. That is sec 11's "absent, not faked".
+
+# The flag reaching the file. Without it a host asks for the prompt until
+# the app restarts and then quietly stops asking, which is the worst
+# possible failure for a thing whose job is to withhold a password.
+[[sabotage]]
+name = "the biometric flag is not persisted"
+file = "src/model/profile_store.cpp"
+find = "\t\t\tfile.setValue(QStringLiteral(\"require_biometric\"), true);"
+expect = "the_biometric_flag_survives_the_round_trip"
+
+# The testing seam. Without it the whole decision path is unreachable on a
+# desktop, which is the only place it can be exercised today.
+[[sabotage]]
+name = "the capability cannot be forced for a test"
+file = "src/platform/platform.cpp"
+find = "\tif (bssh_forced_biometric >= 0) return bssh_forced_biometric != 0;"
+expect = "the_capability_decides_whether_the_option_exists"
+
+# Failing CLOSED. A platform that cannot ask must answer NO: a caller who
+# forgets the capability check has to withhold a password rather than
+# release one, because that is the direction an error here must fall.
+[[sabotage]]
+name = "a platform that cannot ask answers yes"
+file = "src/platform/platform_desktop.cpp"
+find = "\t\tif (done) done(false);"
+replace = "\t\tif (done) done(true);"
+expect = "the_capability_decides_whether_the_option_exists"

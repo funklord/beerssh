@@ -3485,10 +3485,33 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
     that the key never leaves it, so there is no handle to hand to OpenSSL and
     no C API that reaches it — the encryption has to happen on that side of the
     fence. It holds no logic worth testing: it wraps bytes and unwraps them.
-    **No user authentication on the key.** Biometric release is §11's [OPEN]
-    item and needs a decision about what happens on a reconnect at 3am with
-    nobody holding the phone; requiring it here would make that decision by
-    accident.
+    **No user authentication on the key**, and that is now a decision rather
+    than a gap. §11's [OPEN] item asked what happens on a reconnect at 3am
+    with nobody holding the phone, and the answer taken 2026-08-27 is that
+    **it depends on the host, so it is a per-host flag defaulting to off** —
+    right for the box running tmux and wrong for the production database, and
+    they are not the same host. Requiring it on the Keystore key would still
+    make that decision by accident, so the key stays unauthenticated and the
+    gate sits where the choice can be expressed.
+    One fact settled how much the strict reading would cost, and it was
+    measured rather than assumed: **a key-authenticated reconnect never reads
+    the store at all** — `stored_password_for()` returns before touching it
+    unless `has_stored_password` is set — so no shape of this can stop a
+    key-authenticated session reconnecting. Only a remembered password is
+    ever gated.
+    **Built so far: the flag, the capability question and the decision
+    path.** `bssh_platform::has_biometric()` answers false on both platforms
+    today, so the option is offered nowhere — §11's *absent, not faked*, and
+    the Android `BiometricPrompt` is the next piece. Two properties are held
+    by tests rather than intent: the gate is on the capability **and** the
+    flag, so a profile carrying the flag to a machine that cannot ask falls
+    through to the typed prompt instead of locking its own password away; and
+    `authenticate()` on a platform that cannot ask calls back **false**, so a
+    caller who forgets the check withholds a password rather than releasing
+    one. An error here has a direction, and that is the one it must fall in.
+    A refused or cancelled prompt takes the same road as no stored password
+    at all: it asks for one to be typed. Biometric protects the STORED
+    password, not the account, and somebody who knows it can always type it.
     **Verified on a device**, since none of this can be exercised off one: a
     password stored with "Remember" survives a full process restart and is
     submitted without prompting; the plaintext does not appear in the file; and

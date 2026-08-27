@@ -64,6 +64,24 @@ struct bssh_profile_t {
 	bool has_stored_password;
 
 	/*
+	 * Whether releasing this host's remembered password needs the user to
+	 * prove it is them first -- BiometricPrompt on Android (sec 11).
+	 *
+	 * PER HOST, and off by default, because the question sec 11 blocked
+	 * this on has no single answer: a reconnect at 3am with nobody
+	 * holding the phone is right for the box running tmux and wrong for
+	 * the production database, and they are not the same host. Off by
+	 * default keeps every existing profile behaving exactly as it did.
+	 *
+	 * Not a secret, like the flag above, so it lives in the profile row
+	 * without giving the database anywhere to put a credential (sec 10.3).
+	 * It only ever gates a password the store already holds: a
+	 * key-authenticated session never reads the store at all, so this
+	 * cannot make one fail to reconnect.
+	 */
+	bool require_biometric;
+
+	/*
 	 * The preset this host follows (sec 10.1), and the fields where it
 	 * disagrees. Overrides are sparse on purpose: a field absent here
 	 * takes the preset's value, which is what makes editing a preset
@@ -111,7 +129,8 @@ struct bssh_profile_t {
 	bool hold;
 
 	bssh_profile_t()
-	    : id(0), port(22), has_stored_password(false), preset_id(0), local(false),
+	    : id(0), port(22), has_stored_password(false), require_biometric(false),
+	      preset_id(0), local(false),
 	      hold(false) {}
 
 	/*

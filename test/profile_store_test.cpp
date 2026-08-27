@@ -646,6 +646,70 @@ void profile_store_test::the_touch_editor_saves_the_colour_scheme() {
 	          chosen);
 }
 
+void profile_store_test::the_biometric_flag_survives_the_round_trip() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+
+	int id = 0;
+	{
+		bssh_profile_store store(dir.path());
+		bssh_profile_t host;
+		host.name = QStringLiteral("prod-db");
+		host.host = QStringLiteral("db.example");
+		host.require_biometric = true;
+		id = store.save(host);
+		QVERIFY(id > 0);
+	}
+
+	/*
+	 * Reopened, so this reads the file rather than the object that wrote
+	 * it. The flag is not a secret -- it says a prompt is wanted, never
+	 * what the prompt protects -- so it belongs in the profile row and
+	 * the row still has nowhere to put a credential (sec 10.3).
+	 */
+	bssh_profile_store reopened(dir.path());
+	QCOMPARE(reopened.profile(id).require_biometric, true);
+
+	/* And off is the default, for every host that predates the field. */
+	bssh_profile_t plain;
+	plain.name = QStringLiteral("tmux-box");
+	plain.host = QStringLiteral("a.example");
+	const int plain_id = reopened.save(plain);
+	QCOMPARE(reopened.profile(plain_id).require_biometric, false);
+}
+
+void profile_store_test::the_capability_decides_whether_the_option_exists() {
+	const bssh_platform *platform = bssh_platform::instance();
+	QVERIFY(platform);
+
+	/*
+	 * sec 11 asks for the platform equivalent where one exists and for it
+	 * to be ABSENT rather than faked where one does not. A desktop has no
+	 * reachable one, so the honest answer is false and the option is
+	 * offered nowhere.
+	 */
+	QCOMPARE(platform->has_biometric(), false);
+
+	/*
+	 * And asking anyway fails CLOSED. A caller that forgets the
+	 * capability check must withhold a password rather than release one,
+	 * which is the direction an error in this code has to fall.
+	 */
+	bool answered = false;
+	bool result = true;
+	const_cast<bssh_platform *>(platform)->authenticate(
+	        QStringLiteral("test"), [&](bool ok) { answered = true; result = ok; });
+
+	QVERIFY2(answered, "the callback must run exactly once, even when it cannot ask");
+	QCOMPARE(result, false);
+
+	/* The seam, so the decision path above is reachable at all here. */
+	bssh_platform::force_biometric(1);
+	QCOMPARE(platform->has_biometric(), true);
+	bssh_platform::force_biometric(-1);
+	QCOMPARE(platform->has_biometric(), false);
+}
+
 void profile_store_test::a_list_follows_a_host_added_in_another_window() {
 	QTemporaryDir dir;
 	QVERIFY(dir.isValid());

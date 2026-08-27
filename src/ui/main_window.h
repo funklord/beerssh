@@ -312,6 +312,12 @@ private:
 	 * session is created and again when one is ADOPTED from another
 	 * window, which is the road that used to wire nothing at all.
 	 */
+	/*
+	 * The typed-password prompt. Two roads reach it: a host with nothing
+	 * stored, and one whose stored password was not unlocked (sec 11).
+	 */
+	void ask_for_password(bssh_session *session);
+
 	void wire_session(bssh_session *session);
 
 	/* The chords, acting on whichever session this window is showing. */

@@ -423,6 +423,24 @@ public:
 		return window.lightness() < 128 ? BSSH_APPEARANCE_DARK : BSSH_APPEARANCE_LIGHT;
 	}
 
+	/*
+	 * Not yet: the JNI half is the next piece of this feature, and until
+	 * it exists this answers honestly so the option is offered nowhere.
+	 * sec 11's rule is absent rather than faked, and a checkbox that
+	 * promised a prompt nothing can show would be the faking.
+	 */
+	bool platform_has_biometric() const override {
+		return false;
+	}
+
+	void authenticate(const QString &reason, std::function<void(bool)> done) override {
+		Q_UNUSED(reason);
+
+		/* False, so a caller that forgets the capability check fails
+		 * CLOSED: it withholds a password rather than releasing one. */
+		if (done) done(false);
+	}
+
 	bool platform_is_touch_primary() const override {
 		/*
 		 * True as the M0 default, but this is not a constant either: an

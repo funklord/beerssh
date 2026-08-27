@@ -791,22 +791,55 @@ bssh_session *bssh_main_window::prepare_profile(const bssh_profile_t &profile) {
 		 */
 		const QString stored = stored_password_for(session->profile());
 		if (!stored.isEmpty()) {
-			session->supply_password(stored);
+			/*
+			 * Unless this host asks the user to prove it is them first
+			 * (sec 11). Per host and off by default, because the
+			 * question it was blocked on -- a reconnect at 3am with
+			 * nobody holding the phone -- has no single answer: right
+			 * for the box running tmux, wrong for the production
+			 * database, and they are not the same host.
+			 *
+			 * Gated on the CAPABILITY as well as the flag, so a
+			 * profile carrying the flag onto a machine that cannot ask
+			 * does not lock its own password away for good. It falls
+			 * through to the typed prompt in that case, which is the
+			 * same road a failed or cancelled prompt takes: biometric
+			 * protects the STORED password, not the account, and
+			 * somebody who knows it can always type it.
+			 */
+			const bssh_platform *platform = bssh_platform::instance();
+			const bool ask_first = session->profile().require_biometric
+			        && platform && platform->has_biometric();
+
+			if (!ask_first) {
+				session->supply_password(stored);
+				return;
+			}
+
+			QPointer<bssh_session> alive(session);
+			const_cast<bssh_platform *>(platform)->authenticate(
+			        QStringLiteral("Unlock the password for %1")
+			                .arg(session->profile().target()),
+			        [this, alive, stored](bool ok) {
+				/* The session can be gone by the time a system
+				 * dialog is answered -- the tab closed, the app
+				 * backgrounded and killed. */
+				if (!alive) return;
+
+				if (ok) {
+					alive->supply_password(stored);
+					return;
+				}
+
+				/* Refused or cancelled: ask for it the ordinary
+				 * way rather than leaving the session waiting on
+				 * nothing. */
+				ask_for_password(alive);
+			});
 			return;
 		}
 
-		bssh_password_prompt dialog(session->profile().target(),
-		                             session->profile().id != 0, this);
-
-		if (dialog.exec() != QDialog::Accepted) {
-			session->disconnect_from_host();
-			return;
-		}
-
-		const QString password = dialog.password();
-		session->supply_password(password);
-
-		if (dialog.remember()) offer_to_remember(session, password);
+		ask_for_password(session);
 	});
 
 	/*
@@ -1401,6 +1434,29 @@ void bssh_main_window::handle_shortcut(bssh_input_router::shortcut_t shortcut) {
 	 */
 	if (shortcut == bssh_input_router::SHORTCUT_NEW_TAB) open_another_session(false);
 	if (shortcut == bssh_input_router::SHORTCUT_NEW_WINDOW) open_another_session(true);
+}
+
+void bssh_main_window::ask_for_password(bssh_session *session) {
+	if (!session) return;
+
+	/*
+	 * One implementation, because two roads now arrive here: a host with
+	 * no stored password, and one whose stored password the user declined
+	 * or failed to unlock (sec 11). A second copy of this would be a
+	 * second place to forget the remember-me offer.
+	 */
+	bssh_password_prompt dialog(session->profile().target(),
+	                             session->profile().id != 0, this);
+
+	if (dialog.exec() != QDialog::Accepted) {
+		session->disconnect_from_host();
+		return;
+	}
+
+	const QString password = dialog.password();
+	session->supply_password(password);
+
+	if (dialog.remember()) offer_to_remember(session, password);
 }
 
 void bssh_main_window::wire_session(bssh_session *session) {

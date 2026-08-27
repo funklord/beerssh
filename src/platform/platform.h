@@ -5,6 +5,7 @@
 #include <QPalette>
 #include <Qt>
 #include <QString>
+#include <functional>
 
 /*
  * bssh_platform -- everything that differs between Android and desktop,
@@ -81,8 +82,34 @@ public:
 	 */
 	static void force_touch_primary(int touch);
 
+	/*
+	 * Whether this platform can ask the user to prove it is them --
+	 * BiometricPrompt on Android, and nothing on the desktops this
+	 * targets. sec 11 asks for the platform equivalent where one exists
+	 * and for it to be **absent rather than faked** where one does not,
+	 * so this gates whether the option is offered at all: a checkbox that
+	 * promises a prompt the device cannot show is worse than no checkbox.
+	 */
+	bool has_biometric() const;
+
+	/* The same seam, and it earns its place for the same reason: the
+	 * whole decision path is unreachable on a desktop otherwise. */
+	static void force_biometric(int available);
+
+	/*
+	 * Ask, and hear the answer later.
+	 *
+	 * Asynchronous because every platform that has this shows a system
+	 * dialog: there is no version of the question that returns a bool.
+	 * `done` is called exactly once, with false where the user failed,
+	 * cancelled, or the platform cannot ask at all.
+	 */
+	virtual void authenticate(const QString &reason,
+	                           std::function<void(bool)> done) = 0;
+
 protected:
 	virtual bool platform_is_touch_primary() const = 0;
+	virtual bool platform_has_biometric() const = 0;
 
 public:
 

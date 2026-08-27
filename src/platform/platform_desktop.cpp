@@ -270,6 +270,25 @@ public:
 		return bssh_command_line().document;
 	}
 
+	/*
+	 * Absent, not faked (sec 11). Linux, macOS and Windows all have some
+	 * user-verification API, but none of them is reachable through Qt and
+	 * each is a different piece of platform work -- so until one is
+	 * written this answers honestly and the option is offered nowhere.
+	 */
+	bool platform_has_biometric() const override {
+		return false;
+	}
+
+	void authenticate(const QString &reason, std::function<void(bool)> done) override {
+		Q_UNUSED(reason);
+
+		/* Never reached while has_biometric() is false, and false rather
+		 * than true so that a caller which forgets to check fails
+		 * CLOSED -- it withholds a password rather than releasing one. */
+		if (done) done(false);
+	}
+
 	bool platform_is_touch_primary() const override {
 		/*
 		 * False for now, not forever. A convertible in tablet mode is a
