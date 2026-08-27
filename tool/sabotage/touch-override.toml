@@ -1,0 +1,35 @@
+# Sabotages for sec 6.4's touch escape hatch: the way out of a program
+# that has grabbed the mouse, on a device with no Shift key to hold.
+#
+# The defect these guard was a lockout rather than a nuisance -- inside a
+# mouse-reporting program a phone had no selection, no clipboard and no
+# menu, and every override in the file was gated on a modifier that
+# surface cannot produce.
+
+# The sticky modifier reaching the pointer at all. Without it the key
+# row's Shift is a keyboard-only thing and the override does not exist on
+# touch.
+[[sabotage]]
+name = "the key row's Shift does not reach a tap"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (!(m_input_router->sticky_modifiers() & bssh_emulator::MOD_SHIFT)) return false;"
+replace = "\treturn false;"
+expect = "a_sticky_shift_overrides_mouse_reporting_on_touch"
+
+# And the press consulting it rather than the raw Qt modifiers.
+[[sabotage]]
+name = "the press reads only the hardware modifiers"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst bool shift = take_shift_override(event->modifiers());"
+replace = "\tconst bool shift = event->modifiers().testFlag(Qt::ShiftModifier);"
+expect = "a_sticky_shift_overrides_mouse_reporting_on_touch"
+
+# The long press reaching the menu. A long press is not a gesture any
+# terminal protocol carries, so it cannot be the remote's to take --
+# which is why it does not get the guard the right button gets.
+[[sabotage]]
+name = "the long press is swallowed by mouse reporting"
+file = "src/ui/terminal_view.cpp"
+find = "\t\temit context_menu_requested(at);"
+replace = "\t\tif (m_emulator && m_emulator->mouse_reporting()) return;\n\t\temit context_menu_requested(at);"
+expect = "a_long_press_reaches_the_menu_even_when_the_remote_has_the_mouse"

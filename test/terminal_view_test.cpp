@@ -626,6 +626,95 @@ void terminal_view_test::a_click_while_scrolled_back_reports_the_screen_row() {
 	QVERIFY2(live != scrolled, live.toHex().constData());
 }
 
+void terminal_view_test::a_sticky_shift_overrides_mouse_reporting_on_touch() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	bssh_input_router router(&emulator);
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+	view.attach_input_router(&router);
+
+	emulator.feed(QByteArrayLiteral("selectable"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	QVERIFY(emulator.mouse_reporting());
+	emulator.take_output();
+
+	/*
+	 * Without it the tap is the remote's, which is correct and is what a
+	 * desktop click does too.
+	 */
+	drag(view, 0, 0, 5, 0);
+	QVERIFY(!view.has_selection());
+	QVERIFY(!emulator.take_output().isEmpty());
+
+	/*
+	 * Shift is the conventional override, and a phone has no Shift to
+	 * hold -- so on touch the override did not exist at all and a
+	 * mouse-reporting program took the selection, the clipboard and the
+	 * menu with it, with no way back. The key row's sticky modifier is
+	 * the Shift a touch device has (sec 6.2).
+	 */
+	router.set_sticky_modifiers(bssh_emulator::MOD_SHIFT);
+	drag(view, 0, 0, 5, 0);
+
+	QVERIFY2(view.has_selection(), "a sticky Shift must reach the pointer, not only keys");
+	QCOMPARE(view.selection_text(), QStringLiteral("select"));
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	/*
+	 * And consumed, exactly as a key consumes it: one shot means one.
+	 * Leaving it set would make every following tap select as well.
+	 */
+	QCOMPARE(router.sticky_modifiers(), quint8(bssh_emulator::MOD_NONE));
+
+	view.clear_selection();
+	drag(view, 0, 0, 5, 0);
+	QVERIFY2(!view.has_selection(), "the next tap is the remote's again");
+}
+
+void terminal_view_test::a_long_press_reaches_the_menu_even_when_the_remote_has_the_mouse() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_emulator(&emulator);
+	view.set_long_press_menu(true);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	QVERIFY(emulator.mouse_reporting());
+
+	QSignalSpy menu(&view, &bssh_terminal_view::context_menu_requested);
+
+	/*
+	 * A real hold, not an emitted signal: what was removed is a guard
+	 * inside the long-press handler, so a test that emits the signal
+	 * itself would pass with the guard still in place.
+	 *
+	 * The gesture is the whole argument. A long press is not carried by
+	 * any terminal protocol, so it cannot be the remote's to take --
+	 * unlike a right-click, which is something a program that grabbed
+	 * the mouse asked for and can act on. Suppressing it left a phone
+	 * inside such a program with no menu, no clipboard, and no way to
+	 * reach either (sec 6.4).
+	 */
+	const QPoint at(40, 40);
+	QMouseEvent press(QEvent::MouseButtonPress, at, view.mapToGlobal(at),
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&view, &press);
+
+	QTest::qWait(700);
+
+	QMouseEvent release(QEvent::MouseButtonRelease, at, view.mapToGlobal(at),
+	                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&view, &release);
+
+	QCOMPARE(menu.count(), 1);
+}
+
 void terminal_view_test::session_records_what_the_client_wrote() {
 	bssh_fake_ssh_session session;
 

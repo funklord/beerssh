@@ -146,8 +146,16 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 */
 	m_long_press = new bssh_long_press(this, this);
 	connect(m_long_press, &bssh_long_press::triggered, this, [this](const QPoint &at) {
-		/* The same guard the right button gets. */
-		if (m_emulator && m_emulator->mouse_reporting()) return;
+		/*
+		 * NOT the guard the right button gets, and the difference is
+		 * the gesture rather than the platform. A right-click is
+		 * something the remote asked for and can act on, so it belongs
+		 * to a program that grabbed the mouse. A LONG PRESS is not a
+		 * thing the remote has any concept of -- no terminal protocol
+		 * carries it -- so it cannot be the remote's to take, and
+		 * suppressing it left a phone with no menu, no clipboard and no
+		 * way to reach either (sec 6.4).
+		 */
 		emit context_menu_requested(at);
 	});
 
@@ -1391,6 +1399,23 @@ QRect bssh_terminal_view::cell_rect(qint64 line, int col) const {
 	              m_cell_width, m_cell_height);
 }
 
+bool bssh_terminal_view::take_shift_override(Qt::KeyboardModifiers modifiers) {
+	if (modifiers.testFlag(Qt::ShiftModifier)) return true;
+
+	if (!m_input_router) return false;
+	if (!(m_input_router->sticky_modifiers() & bssh_emulator::MOD_SHIFT)) return false;
+
+	/*
+	 * Consumed, like a key consumes it. Leaving it set would make the
+	 * next tap select too, which is not what "one shot" means anywhere
+	 * else in the key row.
+	 */
+	m_input_router->set_sticky_modifiers(
+	        m_input_router->sticky_modifiers() & ~quint8(bssh_emulator::MOD_SHIFT));
+
+	return true;
+}
+
 int bssh_terminal_view::screen_row_for_line(qint64 line) const {
 	/*
 	 * libvterm's mouse reports are in LIVE SCREEN rows, so the scroll
@@ -1580,7 +1605,7 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	 * unless Shift is held, the conventional override that lets a user
 	 * select text out of a full-screen program (sec 6.4).
 	 */
-	const bool shift = event->modifiers().testFlag(Qt::ShiftModifier);
+	const bool shift = take_shift_override(event->modifiers());
 	if (m_emulator && m_emulator->mouse_reporting() && !shift) {
 		qint64 line = 0;
 		int col = 0;

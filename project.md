@@ -847,8 +847,33 @@ model on a finger.
 - **Mouse reporting** (SGR 1006 et al.) matters mainly on desktop, where TUIs
   expect clicks to reach the remote app. When the remote enables it, clicks go
   to the remote — with a modifier (conventionally `Shift`) to override and select
-  locally. On touch, keep local selection winning. **Done**, encoding delegated
-  to libvterm, which already tracks which mouse modes the remote enabled.
+  locally. **Done**, encoding delegated to libvterm, which already tracks
+  which mouse modes the remote enabled.
+- **"On touch, keep local selection winning" was this document's answer and it
+  was wrong — the code was right and the rule was not.** Settled 2026-08-27,
+  after the two had contradicted each other for as long as both existed.
+  Refusing to forward a tap would mean a phone could never use `mc`, `htop` or
+  a mouse-aware `vim` at all, which is worse than what it was protecting
+  against; the code forwards taps exactly as it forwards clicks, and that part
+  stands.
+  **What was actually broken is that the override did not exist on touch.**
+  Shift is the conventional way out of a program that grabbed the mouse, and
+  every override in the pointer path was gated on it — on a surface with no
+  Shift to hold. Measured before deciding: inside a mouse-reporting program a
+  phone had **no selection, no clipboard, no context menu and no way back**
+  short of the program exiting, because the long press was suppressed by the
+  same guard as the right button.
+  Two changes, and each is about a gesture rather than a platform. **The key
+  row's sticky modifier now reaches the pointer**, so sticky-Shift then tap
+  selects, and it is consumed on use exactly as a key consumes it — one shot
+  means one. **And a long press is not the remote's to take**: no terminal
+  protocol carries one, so unlike a right-click it is not something a program
+  that grabbed the mouse asked for or can act on. The right-click guard is
+  unchanged and still correct.
+  The general form, because this document was the one that had to give way:
+  an override that only one input device can produce is not an override on the
+  other, and the rule that assumed it was had answered the wrong question —
+  not "who owns the tap" but "what can the user still reach".
 - **Every view onto the profile store followed only its own edits.**
   `bssh_profile_store::changed()` had one listener — the session refresh
   above — while three objects hold a copy of what the store contains. So

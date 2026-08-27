@@ -46,6 +46,8 @@ private slots:
 	void triple_click_selects_the_line();
 	void mouse_goes_to_the_remote_when_it_asks_for_it();
 	void shift_overrides_mouse_reporting_to_select();
+	void a_sticky_shift_overrides_mouse_reporting_on_touch();
+	void a_long_press_reaches_the_menu_even_when_the_remote_has_the_mouse();
 	void the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse();
 	void the_alternate_screen_has_no_history_to_scroll_into();
 	void session_records_what_the_client_wrote();

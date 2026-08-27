@@ -477,6 +477,22 @@ private:
 	 */
 	int screen_row_for_line(qint64 line) const;
 
+	/*
+	 * Whether a Shift is in force for THIS gesture, counting the key
+	 * row's sticky one, and consuming it if so.
+	 *
+	 * Shift is the conventional override that lets a user select text
+	 * out of a program that grabbed the mouse (sec 6.4) -- and a phone
+	 * has no Shift to hold, so on touch that override did not exist and
+	 * a mouse-reporting program took the selection, the clipboard and
+	 * the menu with it, with no way back. The key row's sticky modifier
+	 * is the Shift a touch device has; this is what lets it reach a
+	 * gesture rather than only a keystroke.
+	 *
+	 * One-shot, exactly as it is for a key: pressed, used once, cleared.
+	 */
+	bool take_shift_override(Qt::KeyboardModifiers modifiers);
+
 	const bssh_cell_t &cell_for_line(qint64 line, int col) const;
 	bool is_selected(qint64 line, int col) const;
 	void normalised_selection(qint64 &first_line, int &first_col,
