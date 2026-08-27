@@ -1,3 +1,4 @@
+#include <QApplication>
 #include <QAbstractButton>
 #include <QPushButton>
 #include <QAbstractItemView>
@@ -2781,6 +2782,88 @@ void layout_test::a_session_adopted_from_another_window_is_wired_to_this_one() {
 
 	QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("hello"));
 
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::closing_a_window_leaves_the_other_windows_sessions_alone() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	/*
+	 * A transport that connects, so that one of the two sessions is
+	 * genuinely LIVE. The default fake in this file fails on connect,
+	 * and against a dead session the defect is invisible: disconnecting
+	 * something already disconnected does nothing anybody can see.
+	 */
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		return new bssh_fake_ssh_session(parent);
+	});
+
+	bssh_main_window keeper;
+	keeper.resize(900, 600);
+	keeper.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&keeper));
+
+	bssh_session *stays = keeper.registry()->create(named(QStringLiteral("stays")));
+	keeper.adopt_session(stays);
+	stays->connect_to_host();
+	QCoreApplication::processEvents();
+	QVERIFY(stays->is_live());
+
+	bssh_main_window going;
+	going.resize(900, 600);
+	going.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&going));
+
+	bssh_session *leaves = going.registry()->create(named(QStringLiteral("leaves")));
+	going.adopt_session(leaves);
+	QCoreApplication::processEvents();
+
+	/*
+	 * Deliberately NOT connected. Closing a window with nothing live
+	 * takes the quiet path -- no question asked -- which is what makes
+	 * this runnable at all: a live session raises a modal box, and a
+	 * test that has to click one is testing the box.
+	 *
+	 * It is also the sharpest form of the fault. The user closed the
+	 * window that had nothing running, and the window that did lost its
+	 * connection.
+	 */
+	QVERIFY(!leaves->is_live());
+
+	going.close();
+	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+	QCoreApplication::processEvents();
+
+	/*
+	 * The whole report: "when I close one window it closes both". The
+	 * close loop walked the REGISTRY, so every session in every window
+	 * was disconnected by whichever window the user shut.
+	 */
+	QVERIFY(stays->is_live());
+	QVERIFY(shared->index_of(stays) >= 0);
+
+	/*
+	 * And the closed window's own session is gone rather than merely
+	 * disconnected. Nothing shows it now -- a session is on screen in
+	 * exactly one place (sec 8.4) -- so leaving it in the registry
+	 * leaves it counted by the tray and written into the saved layout
+	 * while being reachable from nothing.
+	 */
+	QCOMPARE(shared->index_of(leaves), -1);
+
+	/*
+	 * Residency is the PROCESS's fact, and this is the reachable half of
+	 * it: set_keep_alive() turns straight into quitOnLastWindowClosed on
+	 * desktop. Said false unconditionally -- which is what the close did
+	 * -- shutting an idle window would quit an app whose other window
+	 * was hidden in the tray with a build running, because Qt counts
+	 * VISIBLE windows and a backgrounded one is not one.
+	 */
+	QVERIFY(!QApplication::quitOnLastWindowClosed());
+	QApplication::setQuitOnLastWindowClosed(true);
+
+	bssh_ssh_session::set_factory(nullptr);
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 

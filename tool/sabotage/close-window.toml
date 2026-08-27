@@ -1,0 +1,39 @@
+# Sabotages for closing a WINDOW: whose sessions it ends.
+#
+# Reported from use as "when I close one window it closes both". The
+# close loop walked the registry rather than what this window shows, so
+# whichever window the user shut disconnected every session in the
+# process. It dates to a single-window app, where the two were the same
+# set -- the tab bar had already been fixed for two windows and the close
+# had not.
+
+# The reported fault itself.
+[[sabotage]]
+name = "closing a window disconnects every session in the process"
+file = "src/ui/main_window.cpp"
+find = "\tconst QList<bssh_session *> mine = m_shown;\n\tfor (bssh_session *session : mine) m_registry->close(session);"
+replace = "\tfor (bssh_session *session : m_registry->sessions()) {\n\t\tsession->disconnect_from_host();\n\t}"
+expect = "closing_a_window_leaves_the_other_windows_sessions_alone"
+
+# And the other half: a window's own sessions are CLOSED, not merely
+# disconnected. Nothing shows them once the window is gone -- a session
+# is on screen in exactly one place (sec 8.4) -- so a disconnect leaves
+# them in the registry, counted by the tray and written into the saved
+# layout, reachable from nothing.
+[[sabotage]]
+name = "a closed window's sessions are left in the registry"
+file = "src/ui/main_window.cpp"
+find = "\tfor (bssh_session *session : mine) m_registry->close(session);"
+replace = "\tfor (bssh_session *session : mine) session->disconnect_from_host();"
+expect = "closing_a_window_leaves_the_other_windows_sessions_alone"
+
+# Residency is the PROCESS's fact. Saying false unconditionally is what
+# lets closing an idle window quit an app whose other window is hidden in
+# the tray: Qt quits when the last VISIBLE window closes, and a
+# backgrounded one is not visible.
+[[sabotage]]
+name = "closing a window drops residency while sessions are live elsewhere"
+file = "src/ui/main_window.cpp"
+find = "\tconst int live = m_registry->live_count();\n\tbssh_platform::instance()->set_session_count(live);\n\tbssh_platform::instance()->set_keep_alive(live > 0);\n\tevent->accept();"
+replace = "\tbssh_platform::instance()->set_keep_alive(false);\n\tevent->accept();"
+expect = "closing_a_window_leaves_the_other_windows_sessions_alone"

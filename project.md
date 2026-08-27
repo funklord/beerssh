@@ -976,6 +976,33 @@ model on a finger.
   what the framework will deliver. All three defects lived in that gap, and
   two of them were *stated in a comment that was wrong about the framework* —
   which is the one kind of error reading the code more carefully cannot find.
+- **Closing one window closed both windows' sessions.** Reported as "when I
+  close one window it closes both". `closeEvent` ended with
+  `for (session : registry->sessions()) session->disconnect_from_host()` --
+  every session in the process, whichever window the user shut. It is the
+  same defect §8.4 already names for the tab bar ("closing one anywhere would
+  have closed it everywhere"), arriving through the other half of the window:
+  the bar had been fixed for two windows and the close had not, because in a
+  single-window app the registry and `m_shown` are the same set and the line
+  was correct when it was written.
+  Two more followed from reading it. **The question was asked of the wrong
+  set too** -- `live_count()` is process-wide, so closing an idle window
+  raised "a session is still connected" about a *different* window's shell
+  and offered a "disconnect and quit" that would have taken it down.
+  **And residency was asserted rather than read:** `set_keep_alive(false)`
+  unconditionally, when keep-alive is what stops Qt quitting as the last
+  *visible* window closes -- so shutting an idle window would have quit an
+  app whose other window was hidden in the tray with a build running. It
+  comes off the registry now, which is the process-wide fact it was always
+  meant to express.
+  A window's own sessions are **closed**, not merely disconnected: nothing
+  shows them once the window is gone (§8.4, exactly one pane at a time), so
+  a disconnect left them in the registry -- counted by the tray, written
+  into the saved layout, reachable from nothing.
+  The test needed one session live and one not, and the *closing* window is
+  the dead one: that is both the sharpest form of the fault (the window with
+  nothing running took down the one that had something) and the only version
+  runnable unattended, since a live session raises a modal box.
 - **A session torn into another window was still wired to the window it came
   from.** The per-session wiring hung off `session_added`, which fires once,
   at creation — so `adopt_session()`, the road a torn-out or dropped tab

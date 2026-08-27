@@ -399,6 +399,14 @@ private:
 	void paste_into_current(const QString &text);
 
 	void save_layout();
+
+	/*
+	 * How many of the sessions THIS window shows are live. Closing a
+	 * window is a question about the window, not about the process
+	 * (sec 8.4), and the registry's own live_count() answers the other
+	 * one.
+	 */
+	int live_shown_count() const;
 	void show_session(bssh_session *session);
 	void detach_session();
 	void update_status();

@@ -2939,18 +2939,25 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 		return;
 	}
 
-	const bool sessions_live = m_registry->live_count() > 0;
+	/*
+	 * Asked about THIS window's sessions, not the process's (sec 8.4).
+	 * A window is a view; what closing one ends is what it was showing,
+	 * and a second window's live shell is no reason to interrogate
+	 * somebody closing an idle one -- nor, worse, to offer them a
+	 * "disconnect and quit" that would take it down.
+	 */
+	const int live_here = live_shown_count();
 
-	close_action_t action = close_action(sessions_live,
+	close_action_t action = close_action(live_here > 0,
 	                                      m_asked_about_closing && m_background_on_close);
 
 	if (action == ASK_FIRST) {
 		QMessageBox box(this);
 		box.setWindowTitle(QStringLiteral("BeerSSH"));
-		box.setText(m_registry->live_count() == 1
+		box.setText(live_here == 1
 		                    ? QStringLiteral("A session is still connected.")
 		                    : QStringLiteral("%1 sessions are still connected.")
-		                              .arg(m_registry->live_count()));
+		                              .arg(live_here));
 		box.setInformativeText(QStringLiteral(
 		        "Keep it running in the background, or disconnect and quit?"));
 
@@ -2994,11 +3001,45 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 
 	save_layout();
 
-	for (bssh_session *session : m_registry->sessions()) {
-		session->disconnect_from_host();
-	}
-	bssh_platform::instance()->set_keep_alive(false);
+	/*
+	 * ONLY what this window shows. This iterated the registry, so
+	 * closing either of two windows disconnected every session in both
+	 * -- the exact failure sec 8.4 names ("closing one anywhere would
+	 * have closed it everywhere") arriving by the other half of the
+	 * window, since the tab bar had been fixed and the close had not.
+	 *
+	 * Closed rather than merely disconnected, because a window is the
+	 * only thing showing its sessions (sec 8.4: exactly one pane at a
+	 * time). Disconnecting left them in the registry with no view
+	 * anywhere -- counted by the tray, written into the saved layout,
+	 * reachable from nothing.
+	 *
+	 * Over a copy: the registry's session_closing handler edits m_shown
+	 * as each one goes.
+	 */
+	const QList<bssh_session *> mine = m_shown;
+	for (bssh_session *session : mine) m_registry->close(session);
+
+	/*
+	 * And residency is the PROCESS's fact, so it is read back off the
+	 * registry rather than asserted. Saying false here unconditionally
+	 * is what would have let closing an idle window quit an app whose
+	 * other window was hidden in the tray with a build running: Qt
+	 * quits when the last VISIBLE window closes, and a backgrounded one
+	 * is not visible.
+	 */
+	const int live = m_registry->live_count();
+	bssh_platform::instance()->set_session_count(live);
+	bssh_platform::instance()->set_keep_alive(live > 0);
 	event->accept();
+}
+
+int bssh_main_window::live_shown_count() const {
+	int live = 0;
+	for (bssh_session *session : m_shown) {
+		if (session && session->is_live()) ++live;
+	}
+	return live;
 }
 
 void bssh_main_window::keep_the_minimum_to_the_shown_page() {
