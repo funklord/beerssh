@@ -1835,6 +1835,17 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   second way of being focused. Offered only where there is a pointer to hover —
   on touch it would be a setting with nothing to act on, which is the same
   dishonesty as offering to hide a window from screenshots where nothing can.
+  **The join is pinned between TILED PANES, which is where it was asked for
+  and where nothing tested it.** The stored value had a persistence test and
+  the view had a setter; neither said the two were connected, and the setting
+  reaches a view only through `apply_device_settings()`, so a pane built after
+  the choice was made would read its own constructor default. It does not --
+  the settings are re-applied on every `panes_rebuilt` -- but that was an
+  unasserted property of code written for a different reason, which is the
+  "stored, read and applied to nothing" shape §6.2 records for the key row and
+  §10.1 for the override badge. Both halves are sabotaged now.
+  It remains **off by default**, so it does nothing until it is turned on in
+  Settings; that default is the [DECIDED] above rather than an oversight.
 - **Tap-to-focus** (or click-to-focus) on a pane; keyboard shortcuts for
   pane/tab navigation (§6.1).
   **This was half-built in the way that is worse than not built at all.** Two

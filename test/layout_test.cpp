@@ -17,6 +17,7 @@
 #include <QSignalSpy>
 #include <QMimeData>
 #include <QWindow>
+#include <QEnterEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QtTest>
@@ -2864,6 +2865,75 @@ void layout_test::closing_a_window_leaves_the_other_windows_sessions_alone() {
 	QApplication::setQuitOnLastWindowClosed(true);
 
 	bssh_ssh_session::set_factory(nullptr);
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::hovering_a_tiled_pane_moves_focus_to_it() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	/*
+	 * sec 8.3's focus-follows-mouse, asserted between TILED PANES rather
+	 * than on the setting. The stored value has a persistence test and
+	 * the view has a setter, and neither says the two are joined: the
+	 * setting is pushed into the views from apply_device_settings(), and
+	 * a pane built later reads its own constructor default.
+	 *
+	 * Safe to write because the suite sandboxes HOME and XDG_CONFIG_HOME
+	 * (test/main.cpp); restored afterwards regardless, since it is a
+	 * process-wide file.
+	 */
+	const bool original = bssh_app_settings().focus_follows_mouse();
+	bssh_app_settings().set_focus_follows_mouse(true);
+
+	{
+		bssh_main_window window;
+		window.resize(900, 600);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		window.activateWindow();
+
+		bssh_session *left = window.registry()->create(named(QStringLiteral("left")));
+		window.adopt_session(left);
+
+		/*
+		 * Tiled, not tabbed -- drop_session's "beside" half, which is
+		 * what a tab dropped onto the panes does (sec 8.4).
+		 */
+		bssh_session *right = window.registry()->create(named(QStringLiteral("right")));
+		window.drop_session(right, true);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(window.panes()->views().size(), 2);
+
+		window.panes()->focus_session(left);
+		QCoreApplication::processEvents();
+		QCOMPARE(window.panes()->focused_session(), left);
+
+		bssh_terminal_view *hovered = nullptr;
+		for (bssh_terminal_view *view : window.panes()->views()) {
+			if (view != window.panes()->focused_view()) hovered = view;
+		}
+		QVERIFY(hovered);
+
+		/*
+		 * The enter is synthesised at the view, which is as far down the
+		 * route as a test reaches: whether the platform delivers Enter to
+		 * the pane under the pointer is Qt's business and an offscreen
+		 * cursor has no position to leave. What this pins is everything
+		 * from the handler onwards -- that the pane asks for focus rather
+		 * than telling the container, so the border, the status line and
+		 * what copy acts on all follow from focusInEvent (sec 8.3).
+		 */
+		const QPointF at(5, 5);
+		QEnterEvent enter(at, at, hovered->mapToGlobal(QPoint(5, 5)));
+		QCoreApplication::sendEvent(hovered, &enter);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(window.panes()->focused_session(), right);
+	}
+
+	bssh_app_settings().set_focus_follows_mouse(original);
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 

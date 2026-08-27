@@ -1,0 +1,26 @@
+# Sabotages for sec 8.3's focus-follows-mouse BETWEEN TILED PANES.
+#
+# The setting had a persistence test and the view had a setter, and
+# nothing said the two were joined -- the same "stored, read and applied
+# to nothing" shape sec 6.2 records for the key row and sec 10.1 for the
+# override badge. Both halves of the join are broken here.
+
+# The push. A pane is destroyed and rebuilt whenever the layout changes,
+# so the setting has to reach every rebuild and not only the views that
+# existed when the user chose it.
+[[sabotage]]
+name = "the setting never reaches a pane"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tview->set_focus_follows_mouse(follows);"
+replace = "\t\t\t(void)follows;"
+expect = "hovering_a_tiled_pane_moves_focus_to_it"
+
+# And the act. Asking for focus rather than telling the container is what
+# makes the border, the status line, what copy acts on and sec 7.1's
+# focus reporting all follow from focusInEvent.
+[[sabotage]]
+name = "a hovered pane does not ask for focus"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (!m_focus_follows_mouse) return;"
+replace = "\treturn;"
+expect = "hovering_a_tiled_pane_moves_focus_to_it"
