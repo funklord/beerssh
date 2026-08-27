@@ -849,6 +849,43 @@ model on a finger.
   to the remote — with a modifier (conventionally `Shift`) to override and select
   locally. On touch, keep local selection winning. **Done**, encoding delegated
   to libvterm, which already tracks which mouse modes the remote enabled.
+- **A host edited while it was open reached nothing, and one of the ways it
+  failed lost data.** `bssh_session` takes a copy of its profile row at
+  construction and there was no way to refresh it — `bssh_profile_store`'s
+  `changed()` signal had **no listener anywhere in `src/`**. So an edit made
+  while connected was inert until the tab was closed, and three things were
+  worse than inert: a reconnect went on dialling the old host, identity file
+  and jump host; a later preset edit re-resolved against the **stale**
+  overrides and put the reverted override back for good; and storing a
+  password took `session->profile()`, set one flag and wrote the **whole
+  stale row** back, silently undoing a hostname or port corrected minutes
+  earlier.
+  Wired once, to the store's own signal, rather than at each of the four
+  places that write a row — the desktop dialog, the touch editor, the
+  `ssh_config` import and the password write-back. Four call sites are four
+  chances to forget, which is the lesson §6.4 paid for already. The password
+  path also reads its row back out of the store rather than from the session,
+  because it writes a whole row and taking it from anywhere but the row
+  itself is how an edit in between gets reverted.
+  The test drives the window's **own** store, and says so: a second store
+  pointing at the same file is a different object, emits nothing that window
+  hears, and would have passed against no wiring at all.
+- **`term` had two consumers and only one was wired.** The channel got the
+  resolved `TERM` while the emulator's own copy — kept so XTGETTCAP's `TN`
+  answers with the same string — stayed at its default. `set_settings()`
+  applies that block only when a transport exists, and settings resolve
+  before anyone presses connect, so `connect_to_host()` re-applies every
+  member of it by hand; this was the one line not copied down. A preset
+  naming `screen-256color` therefore put that in the environment while the
+  terminal answered `xterm-256color` when asked, which §7.1 calls worse than
+  declining to answer.
+  **The test that exists to catch exactly this came within one line of it.**
+  `every_resolved_setting_reaches_something_that_uses_it` set `term`,
+  connected, and checked the transport — the wired consumer. It asks the
+  emulator now, the way a client does, through XTGETTCAP rather than a
+  getter; and it reads the reply off the transport, because a live session
+  drains the emulator into the channel and asking the emulator returns
+  nothing, which would have passed against any answer at all.
 - **A release answers the PRESS, which it did not.** It hardcoded button 1
   whatever had been pressed, and re-read `Shift` at release time rather than
   honouring what the press decided. libvterm keeps a button **mask**, so a

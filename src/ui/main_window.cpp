@@ -304,6 +304,15 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::on_registry_changed);
 
 	/*
+	 * A host row changing has to reach the sessions already open on it.
+	 * The store announces every write through one signal, and this is the
+	 * only listener it has ever had -- before this, an edit made while
+	 * connected was inert until the tab was closed.
+	 */
+	connect(m_profile_store, &bssh_profile_store::changed,
+	         this, &bssh_main_window::refresh_sessions_from_store);
+
+	/*
 	 * A session about to be destroyed must be let go of first: the view
 	 * holds pointers into its screen, scrollback and images, and the next
 	 * repaint would read freed cells (sec 3, core principle 2).
@@ -1939,6 +1948,21 @@ void bssh_main_window::import_launch_document() {
 	reresolve_sessions(id);
 }
 
+void bssh_main_window::refresh_sessions_from_store() {
+	if (!m_registry || !m_profile_store) return;
+
+	for (bssh_session *session : m_registry->sessions()) {
+		const int id = session->profile().id;
+		if (id <= 0) continue;   /* a local shell has no row to follow */
+
+		const bssh_profile_t stored = m_profile_store->profile(id);
+		if (stored.id != id) continue;   /* deleted while open: leave it alone */
+
+		session->set_profile(stored);
+		session->set_settings(resolved_settings(stored));
+	}
+}
+
 void bssh_main_window::reresolve_sessions(int preset_id) {
 	if (!m_registry) return;
 
@@ -2926,7 +2950,17 @@ void bssh_main_window::offer_to_remember(bssh_session *session, const QString &p
 	 * or a failed write would leave the app hunting for a password that
 	 * was never saved.
 	 */
-	bssh_profile_t updated = session->profile();
+	/*
+	 * Read the row back out of the STORE rather than using the session's
+	 * copy of it. The two agree now that a save refreshes live sessions,
+	 * but this writes a whole row back, so taking it from anywhere other
+	 * than the row itself means an edit made in between is silently
+	 * reverted -- a hostname corrected while connected, undone by storing
+	 * a password. Only the one flag this function owns is changed.
+	 */
+	bssh_profile_t updated = m_profile_store->profile(session->profile().id);
+	if (updated.id != session->profile().id) return;
+
 	updated.has_stored_password = true;
 	m_profile_store->save(updated);
 }

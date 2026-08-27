@@ -83,6 +83,18 @@ public:
 	bssh_session_registry *registry() const { return m_registry; }
 
 	/*
+	 * The host and preset rows this window reads and writes. Owned by the
+	 * window, unlike the registry above.
+	 *
+	 * Exposed for the same reason: an edit to a row has to reach the
+	 * sessions already open on it, and that wiring cannot be asserted on
+	 * without the store the window actually listens to. A second store
+	 * pointing at the same file is a different object and emits nothing
+	 * this window hears, so the test would pass against no wiring at all.
+	 */
+	bssh_profile_store *profile_store() const { return m_profile_store; }
+
+	/*
 	 * What closing the window should do when sessions are still
 	 * connected. A pure decision, separated from the dialog that asks it,
 	 * so the policy can be tested without a message box on screen -- and
@@ -284,6 +296,16 @@ private:
 
 	/* Re-applies a changed preset to the open sessions that follow it. */
 	void reresolve_sessions(int preset_id);
+
+	/*
+	 * Every live session takes its host row from the store again, and
+	 * re-resolves against it. Wired once to the store's own `changed()`
+	 * rather than to each of the four places that write a row -- the
+	 * desktop dialog, the touch editor, the ssh_config import and the
+	 * password write-back -- because four call sites are four chances to
+	 * forget, and sec 6.4 already records what that costs.
+	 */
+	void refresh_sessions_from_store();
 	void on_pane_focus_changed(bssh_session *session);
 
 	/*

@@ -1,8 +1,12 @@
 #include <QSignalSpy>
 #include <QtTest>
 
+#include <QTemporaryDir>
+
 #include "model/session.h"
+#include "model/profile_store.h"
 #include "model/session_registry.h"
+#include "ui/main_window.h"
 #include "model/window_title.h"
 #include "session_registry_test.h"
 #include "fake_ssh_session.h"
@@ -387,6 +391,31 @@ void session_registry_test::every_resolved_setting_reaches_something_that_uses_i
 	QCOMPARE(fake->proxy_jump(), QStringLiteral("me@bastion.example.com"));
 	QCOMPARE(session.emulator()->scrollback().max_lines(), 12345);
 
+	/*
+	 * `term` has TWO consumers and this test used to check only one. The
+	 * channel got the resolved TERM while the emulator's own copy stayed
+	 * at its default, so XTGETTCAP answered a different name than the
+	 * environment carried -- which sec 7.1 calls worse than declining to
+	 * answer, and which a terminfo-querying client (ncurses 6.3+, tmux)
+	 * sees as the terminal contradicting itself.
+	 *
+	 * Asked the way a client asks -- DCS + q <hex name> ST, "TN" being
+	 * 544E -- rather than through a getter, so what is checked is the
+	 * answer that actually goes on the wire.
+	 */
+	const int written_before = fake->written().size();
+	session.emulator()->feed(QByteArrayLiteral("\x1bP+q544E\x1b\\"));
+
+	/*
+	 * Read off the TRANSPORT, not the emulator: a live session drains
+	 * take_output() into the channel itself, so asking the emulator here
+	 * returns nothing and would have passed against any answer at all.
+	 */
+	const QByteArray reply = fake->written().mid(written_before);
+	QCOMPARE(reply, QByteArrayLiteral("\x1bP1+r544E=")
+	                 + QByteArrayLiteral("xterm-direct").toHex().toUpper()
+	                 + QByteArrayLiteral("\x1b\\"));
+
 	bssh_ssh_session::set_factory(nullptr);
 }
 
@@ -422,6 +451,64 @@ void session_registry_test::the_on_connect_command_runs_on_every_connect() {
 	fake->simulate_key_auth_success();
 	QVERIFY2(fake->written().size() > first, "it must run again on a reconnect");
 
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void session_registry_test::editing_a_host_reaches_the_session_already_open_on_it() {
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_main_window window;
+
+	/*
+	 * The window's OWN store, not a second one pointing at the same file:
+	 * a different object emits nothing this window hears, and the test
+	 * would then pass against no wiring at all.
+	 */
+	bssh_profile_store *store = window.profile_store();
+	QVERIFY(store);
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("prod");
+	host.host = QStringLiteral("wrong.example");
+	host.user = QStringLiteral("nabbe");
+	QVERIFY(store->save(host));
+
+	int id = 0;
+	for (const bssh_profile_t &row : store->profiles()) {
+		if (row.name == QStringLiteral("prod")) id = row.id;
+	}
+	QVERIFY(id > 0);
+
+	/*
+	 * Through the registry the WINDOW watches, which is process-wide, so
+	 * the refresh reaches it exactly as it would for a session the window
+	 * opened itself.
+	 */
+	bssh_session *session = window.registry()->create(store->profile(id));
+	QVERIFY(session);
+	QCOMPARE(session->profile().host, QStringLiteral("wrong.example"));
+
+	/*
+	 * The hostname is corrected while the session is open. Nothing used
+	 * to carry that across: the session's profile is a copy taken at
+	 * construction, and the store's changed() signal had no listener
+	 * anywhere in src/. So a reconnect kept dialling the old name, a
+	 * later preset edit re-resolved against the stale overrides and undid
+	 * the correction for good, and storing a password wrote the whole
+	 * stale row back over it.
+	 */
+	bssh_profile_t edited = store->profile(id);
+	edited.host = QStringLiteral("right.example");
+	QVERIFY(store->save(edited));
+
+	QCOMPARE(session->profile().host, QStringLiteral("right.example"));
+
+	/* The registry is shared, so this session must not outlive the test. */
+	window.registry()->close(session);
 	bssh_ssh_session::set_factory(nullptr);
 }
 

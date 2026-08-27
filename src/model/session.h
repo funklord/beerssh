@@ -34,6 +34,24 @@ public:
 	const bssh_profile_t &profile() const { return m_profile; }
 
 	/*
+	 * The host row was edited under a session that is already open.
+	 *
+	 * This copy is taken once, at construction, and used for everything
+	 * the session does afterwards -- what a reconnect dials, which
+	 * identity file and jump host it uses, what the tab is called, and
+	 * which preset a propagation pass thinks it follows. Nothing used to
+	 * refresh it, so an edit made while connected was inert until the tab
+	 * was closed, and worse than inert in two places: a later preset edit
+	 * re-resolved against the STALE overrides and undid the change for
+	 * good, and storing a password wrote the whole stale row back over
+	 * the edited one.
+	 *
+	 * The id is not allowed to change -- that would make this a different
+	 * host rather than an edited one.
+	 */
+	void set_profile(const bssh_profile_t &profile);
+
+	/*
 	 * The resolved settings for this host: the preset's values with the
 	 * host's own overrides applied (sec 10.1), as bssh_settings_resolver
 	 * produced them.

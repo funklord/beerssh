@@ -133,6 +133,19 @@ void bssh_session::connect_to_host() {
 	m_transport->set_keepalive(
 	        m_settings.value(QStringLiteral("keepalive_seconds")).toInt());
 	m_transport->set_term(m_settings.value(QStringLiteral("term")).toString());
+
+	/*
+	 * The emulator's copy too, and for the same reason the line above is
+	 * here: settings resolve before anyone presses connect, so at
+	 * set_settings() time there is no transport and that whole block is
+	 * skipped. Every other member of it is re-applied here; this one was
+	 * missed, so a preset naming a TERM of its own put it in the
+	 * environment while XTGETTCAP went on answering "xterm-256color" --
+	 * the terminal naming itself one thing to the shell and another when
+	 * asked, which sec 7.1 calls worse than declining to answer.
+	 */
+	m_emulator->set_term_name(m_settings.value(QStringLiteral("term")).toString());
+
 	m_transport->set_compression(
 	        m_settings.value(QStringLiteral("compression")).toBool());
 
@@ -237,6 +250,20 @@ void bssh_session::connect_to_host() {
 void bssh_session::disconnect_from_host() {
 	m_user_disconnected = true;
 	if (m_transport) m_transport->disconnect_from_host();
+}
+
+void bssh_session::set_profile(const bssh_profile_t &profile) {
+	if (profile.id != m_profile.id) return;
+
+	const QString before = title();
+	m_profile = profile;
+
+	/*
+	 * The title is derived from the profile (sec 8.3), so it can change
+	 * with it -- but only when the remote has not set one of its own
+	 * through OSC, which title() already decides.
+	 */
+	if (title() != before) emit title_changed();
 }
 
 void bssh_session::reconnect() {

@@ -1,0 +1,37 @@
+# Sabotages for a setting or a row reaching what actually consumes it.
+#
+# Both defects here are the same shape: a value with TWO consumers, where
+# only one of them was wired. That is the shape sec 6.4 already records
+# once, and it survives review because the wired half works.
+
+# The emulator's copy of TERM. The channel gets the resolved value and the
+# emulator kept its default, so XTGETTCAP answered a different name than
+# the environment carried -- the terminal contradicting itself, which
+# sec 7.1 calls worse than declining to answer.
+#
+# The find carries the blank line after it, because the same call appears
+# in set_settings() where it is correct and unguarded by this.
+[[sabotage]]
+name = "the emulator never hears the resolved TERM"
+file = "src/model/session.cpp"
+find = "\tm_emulator->set_term_name(m_settings.value(QStringLiteral(\"term\")).toString());\n\n\tm_transport->set_compression("
+replace = "\tm_transport->set_compression("
+expect = "every_resolved_setting_reaches_something_that_uses_it"
+
+# The store's changed() signal reaching live sessions. It had no listener
+# anywhere in src/, so a host edited while connected was inert -- and
+# worse than inert, since a later preset edit re-resolved against the
+# stale overrides and undid it for good.
+[[sabotage]]
+name = "a host edit reaches no open session"
+file = "src/ui/main_window.cpp"
+find = "\tconnect(m_profile_store, &bssh_profile_store::changed,\n\t         this, &bssh_main_window::refresh_sessions_from_store);"
+expect = "editing_a_host_reaches_the_session_already_open_on_it"
+
+# And the session taking the row. The refresh can run, re-resolve the
+# settings and still leave the session dialling the old hostname.
+[[sabotage]]
+name = "the refresh re-resolves but keeps the old row"
+file = "src/ui/main_window.cpp"
+find = "\t\tsession->set_profile(stored);"
+expect = "editing_a_host_reaches_the_session_already_open_on_it"

@@ -30,6 +30,7 @@ private slots:
 	void every_resolved_setting_reaches_something_that_uses_it();
 	void the_on_connect_command_runs_on_every_connect();
 	void a_reconnect_hands_the_new_shell_a_clean_terminal();
+	void editing_a_host_reaches_the_session_already_open_on_it();
 	void a_silenced_bell_does_not_mark_the_tab();
 
 	/* sec 8.3's window title, which is a format rather than a choice. */
