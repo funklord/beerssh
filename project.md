@@ -2201,6 +2201,43 @@ window with no name is a blank row in the task switcher.
   state anyone should have to reason about. That absence is tested, because
   it is the half that rots quietly: the entry appearing is visible the first
   time anybody looks, while one lingering on a live session is not.
+- **A tab, a split pane and a window are three states, and a terminal moves
+  between all three by dragging.** **[DECIDED]**, from use: "tabs, splits and
+  windows are supposed to be different things and movable between those
+  states by drag and drop".
+  The states had not been distinct. The tab bar was built from the window's
+  session list outright, so a session tiled into a pane was listed in the bar
+  directly above itself, and splitting a window in two produced two tabs for
+  two terminals both already on screen. §8.3 had said otherwise since M8 --
+  *"a session with a pane is on screen, one without is a tab"* -- and nothing
+  had ever read it that way. The bar is now the window's list **minus what is
+  on screen**, computed from `visible_panes()` rather than from the intent, so
+  a window narrowed past its size class puts the panes it can no longer show
+  back into the bar. That is §8.2's "panes convert to tabs, preserving order"
+  expressed once instead of by a second list somebody has to keep in step.
+  **The gesture that was missing is picking up a PANE.** A tab could always be
+  pulled clear of the bar; a pane could not be picked up at all, so a terminal
+  that had been tiled was stuck there -- and a window with two panes and
+  nothing else has no bar to drag from either. **Alt and the left button** is
+  the gesture: it costs no screen space, it is what every Linux window manager
+  already means by "move this", and Alt+click is not something a terminal
+  program expects, so the meta prefix stays on the keyboard where it belongs.
+  A plain drag still selects text, which is the half that would have made the
+  app unusable if it were wrong.
+  It goes through the same code a dragged tab does, deliberately: **what a
+  drop means must not depend on which state the terminal was picked up
+  from.** Onto a tab bar it is a tab, onto panes it is a tile, onto nothing at
+  all it is a window.
+  **The un-split has two front doors**, and the second is not decoration: with
+  two panes and nothing else there is no tab bar to aim at, so the gesture
+  alone would leave a split with no way out. *Show as Tab* sits beside *Split
+  Beside Current* on the terminal menu for the same reason that one is there
+  -- a one-session window has no tab bar either. The **last** pane will not
+  become a tab: a window with no pane shows nothing, which is `tear_out`'s "a
+  window will not empty itself" one level in.
+  The press starts nothing; movement past Qt's drag threshold does. Pressing a
+  modifier and clicking is something people do by accident, and a window that
+  rearranges itself on one is worse than a window that cannot be rearranged.
 - **Multiple top-level windows are a desktop-only affordance** and **[DECIDED]**
   for v1: they are in. A window is just another view onto the registry — the
   registry stays single and process-wide, and a session can be shown in exactly

@@ -1054,9 +1054,18 @@ void layout_test::middle_click_closes_the_tab_under_it() {
 	 */
 	bssh_session *a = registry->create(named(QStringLiteral("a")));
 	bssh_session *b = registry->create(named(QStringLiteral("b")));
+
+	/*
+	 * A third, adopted last, to be the pane. The two under test are then
+	 * the bar's two tabs -- a pane is not in the bar (sec 8.3), so two
+	 * sessions would give one tab and there would be no "second" to
+	 * middle-click.
+	 */
+	bssh_session *shown = registry->create(named(QStringLiteral("shown")));
 	window.adopt_session(a);
 	window.adopt_session(b);
-	QCOMPARE(registry->count(), 2);
+	window.adopt_session(shown);
+	QCOMPARE(registry->count(), 3);
 
 	QTabBar *tabs = window.findChild<QTabBar *>();
 	QVERIFY(tabs);
@@ -1073,23 +1082,35 @@ void layout_test::middle_click_closes_the_tab_under_it() {
 	QMouseEvent left(QEvent::MouseButtonRelease, on_second, tabs->mapToGlobal(on_second),
 	                  Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
 	QApplication::sendEvent(tabs, &left);
-	QCOMPARE(registry->count(), 2);
+	QCOMPARE(registry->count(), 3);
 
-	QMouseEvent middle(QEvent::MouseButtonRelease, on_second, tabs->mapToGlobal(on_second),
+	/*
+	 * And the left click SELECTED it, which is the other half of "a tab
+	 * bar is for selecting": tab 1 is now the pane, so the bar has
+	 * rebuilt and `b` has left it. Re-read rather than assumed, because
+	 * the middle click below is aimed at a rectangle.
+	 */
+	QCoreApplication::processEvents();
+	QCOMPARE(tabs->count(), 2);
+
+	const QPoint on_first = tabs->tabRect(0).center();
+	QMouseEvent middle(QEvent::MouseButtonRelease, on_first, tabs->mapToGlobal(on_first),
 	                    Qt::MiddleButton, Qt::NoButton, Qt::NoModifier);
 	QApplication::sendEvent(tabs, &middle);
 
-	/* The one under the pointer went, and the other did not. */
-	QCOMPARE(registry->count(), 1);
-	QCOMPARE(registry->at(0), a);
-	Q_UNUSED(b);
+	/* The one under the pointer went, and the others did not. */
+	QCOMPARE(registry->count(), 2);
+	QVERIFY(registry->index_of(a) < 0);
+	QVERIFY(registry->index_of(b) >= 0);
+	QVERIFY(registry->index_of(shown) >= 0);
 
 	/*
 	 * The registry is process-wide now (sec 8.4), so a session left here
 	 * is one the next test inherits. Cleaned up explicitly rather than by
 	 * the window going away, which no longer owns it.
 	 */
-	registry->close(a);
+	registry->close(b);
+	registry->close(shown);
 	QCOMPARE(registry->count(), 0);
 }
 
@@ -1107,7 +1128,14 @@ void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
 	bssh_session_registry *registry = window.registry();
 	QVERIFY(registry);
 
+	/*
+	 * Two sessions, and the one under test is adopted FIRST. The second
+	 * takes the screen, which leaves the first as the window's only tab
+	 * -- a window holding one terminal has no tab bar at all now, since
+	 * a pane and a tab are different states (sec 8.3).
+	 */
 	window.adopt_session(registry->create(named(QStringLiteral("a"))));
+	window.adopt_session(registry->create(named(QStringLiteral("on-screen"))));
 
 	QMenu *menu = window.build_tab_menu(0, &window);
 	QVERIFY2(menu, "a tab with a session behind it must have a menu");
@@ -1454,6 +1482,179 @@ void layout_test::the_caps_setting_reaches_a_sessions_router() {
 
 	/* Shared registry: leave it as it was found (sec 8.4). */
 	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_tiled_session_leaves_the_tab_bar() {
+	/*
+	 * Reported from use: "they become tabs. tabs, splits and windows are
+	 * supposed to be different things". They were not -- the bar was
+	 * built from m_shown outright, so a session tiled into a pane was
+	 * listed in the bar directly above itself, and splitting a window in
+	 * two produced two tabs for two terminals both already on screen.
+	 *
+	 * sec 8.3 had said otherwise since M8 ("a session with a pane is on
+	 * screen, one without is a tab") and nothing had ever read it that
+	 * way, which is why this is asserted rather than left to the
+	 * document.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *tiled = window.registry()->create(named(QStringLiteral("tiled")));
+	bssh_session *waiting = window.registry()->create(named(QStringLiteral("waiting")));
+	bssh_session *shown = window.registry()->create(named(QStringLiteral("shown")));
+	window.adopt_session(tiled);
+	window.adopt_session(waiting);
+	window.adopt_session(shown);
+	QCoreApplication::processEvents();
+
+	QTabBar *bar = window.findChild<QTabBar *>();
+	QVERIFY(bar);
+
+	/*
+	 * Three terminals, one on screen: two tabs. The window holds all
+	 * three either way, which is the pair of facts the old model could
+	 * not tell apart.
+	 */
+	QCOMPARE(window.shown_sessions().size(), 3);
+	QCOMPARE(bar->count(), 2);
+	QCOMPARE(window.panes()->views().size(), 1);
+
+	/* Tiled beside what is already there -- the drop-on-the-panes half. */
+	window.drop_session(tiled, true);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->views().size(), 2);
+	QCOMPARE(window.shown_sessions().size(), 3);
+
+	/*
+	 * And it is gone from the bar. This is the assertion the whole change
+	 * is about: same three terminals, one more of them on screen, one
+	 * fewer in the bar.
+	 */
+	QCOMPARE(bar->count(), 1);
+	QCOMPARE(bar->tabText(0), QStringLiteral("waiting"));
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_pane_dropped_on_the_tab_bar_becomes_a_tab() {
+	/*
+	 * The other direction, and the one that makes a split escapable: a
+	 * pane dropped on the tab bar goes back to being a tab (sec 8.3).
+	 * Without it a tiled terminal could only be un-tiled by clicking some
+	 * OTHER tab and letting show_session wipe the whole arrangement,
+	 * which is a destructive answer to a question nobody asked
+	 * destructively.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral("first")));
+	window.adopt_session(first);
+	window.split_beside_current();
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->views().size(), 2);
+
+	QTabBar *bar = window.findChild<QTabBar *>();
+	QVERIFY(bar);
+	QVERIFY2(bar->count() == 0,
+	          "two panes and nothing else is a window with no tabs at all");
+
+	window.drop_session(first, false);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->views().size(), 1);
+	QCOMPARE(bar->count(), 1);
+	QCOMPARE(bar->tabText(0), first->title());
+	QVERIFY2(window.shown_sessions().contains(first),
+	          "un-tiling must not close the terminal, only stop showing it");
+
+	/*
+	 * And the LAST pane will not go. A window with no pane is a window
+	 * showing nothing, and every route back to its terminals would be
+	 * through a bar it grew by emptying itself -- the same answer
+	 * tear_out gives one level out ("a window will not empty itself").
+	 */
+	bssh_session *last = window.panes()->focused_session();
+	QVERIFY(last);
+
+	window.drop_session(last, false);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->views().size(), 1);
+	QCOMPARE(window.panes()->focused_session(), last);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::narrowing_a_window_turns_its_extra_panes_into_tabs() {
+	/*
+	 * sec 8.2 step 2: "panes convert to tabs, preserving order". Now that
+	 * a pane and a tab are different states, that sentence has an
+	 * observable consequence it did not have before -- the terminal that
+	 * stops being a pane has to APPEAR in the bar, and the arrangement is
+	 * remembered so widening brings it back.
+	 *
+	 * This is the case the tab bar's rebuild-on-panes-rebuilt exists for,
+	 * and the reason it is not redundant with the one in the focus
+	 * handler: a collapse changes what is on screen without changing the
+	 * registry, without changing the window's session list, and often
+	 * without changing which pane is focused. Nothing else would notice.
+	 * The sabotage runner found that gap by reporting MISSED against a
+	 * test that only ever split a window, which is a rebuild that DOES
+	 * move focus.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral("first")));
+	window.adopt_session(first);
+	window.split_beside_current();
+	QCoreApplication::processEvents();
+
+	QTabBar *bar = window.findChild<QTabBar *>();
+	QVERIFY(bar);
+	QCOMPARE(window.panes()->views().size(), 2);
+	QCOMPARE(bar->count(), 0);
+
+	/* Phone width: one pane is all that fits (sec 8.2). */
+	window.resize(360, 640);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->views().size(), 1);
+	QVERIFY2(bar->count() == 1,
+	          "the terminal that stopped being a pane has to become a tab, "
+	          "or it is on the window's list and reachable from nothing");
+
+	/*
+	 * And back. The intent is remembered rather than truncated (sec 8.2),
+	 * so widening restores the split and the bar empties again -- which
+	 * is the half that proves the collapse did not DELETE anything.
+	 */
+	window.resize(900, 600);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->views().size(), 2);
+	QCOMPARE(bar->count(), 0);
+
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
@@ -2076,8 +2277,16 @@ void layout_test::a_window_shows_only_its_own_tabs() {
 	bssh_main_window first;
 	bssh_main_window second;
 
+	/*
+	 * TWO sessions per window, because one of them is on screen. A pane
+	 * and a tab are different states (sec 8.3), so a window holding a
+	 * single terminal has no tab at all -- and a test that counted one
+	 * would be asserting the old model rather than this one.
+	 */
 	bssh_session *mine = first.registry()->create(named(QStringLiteral("mine")));
 	first.adopt_session(mine);
+	bssh_session *mine_shown = first.registry()->create(named(QStringLiteral("mine-shown")));
+	first.adopt_session(mine_shown);
 
 	QTabBar *first_tabs = first.findChild<QTabBar *>();
 	QTabBar *second_tabs = second.findChild<QTabBar *>();
@@ -2087,8 +2296,8 @@ void layout_test::a_window_shows_only_its_own_tabs() {
 	QVERIFY2(second_tabs->count() == 0,
 	          "the other window must not show a session it was never given");
 
-	/* Both still see it in the registry -- one process, one set. */
-	QCOMPARE(second.registry()->count(), 1);
+	/* Both still see them in the registry -- one process, one set. */
+	QCOMPARE(second.registry()->count(), 2);
 
 	/*
 	 * And each tab must name the session THIS window holds, which the
@@ -2106,6 +2315,9 @@ void layout_test::a_window_shows_only_its_own_tabs() {
 	 */
 	bssh_session *theirs = second.registry()->create(named(QStringLiteral("theirs")));
 	second.adopt_session(theirs);
+	bssh_session *theirs_shown =
+	        second.registry()->create(named(QStringLiteral("theirs-shown")));
+	second.adopt_session(theirs_shown);
 	QCoreApplication::processEvents();
 
 	QCOMPARE(first_tabs->count(), 1);
@@ -2138,12 +2350,16 @@ void layout_test::a_torn_out_tab_becomes_a_window_without_moving_the_session() {
 	 * something a user would notice. */
 	go->emulator()->feed(QByteArrayLiteral("torn-out-marker\r\n"));
 
-	QTabBar *tabs = window.findChild<QTabBar *>();
-	QVERIFY(tabs);
-	QCOMPARE(tabs->count(), 2);
+	QCOMPARE(window.shown_sessions().size(), 2);
 
-	bssh_main_window *torn = window.tear_out_tab(1);
-	QVERIFY2(torn, "a tab that is not the last must tear out");
+	/*
+	 * Named rather than indexed. `go` was adopted second, so it is the
+	 * pane and `stay` is the one tab -- a tab INDEX would tear out the
+	 * wrong terminal, and silently, since either one satisfies every
+	 * assertion below except the scrollback.
+	 */
+	bssh_main_window *torn = window.tear_out(go);
+	QVERIFY2(torn, "a session that is not the window's last must tear out");
 	torn->setAttribute(Qt::WA_DeleteOnClose, false);
 
 	/* The session is the SAME object, still registered, still carrying
@@ -2153,10 +2369,8 @@ void layout_test::a_torn_out_tab_becomes_a_window_without_moving_the_session() {
 	QVERIFY(go->emulator()->screen().to_text().contains(QStringLiteral("torn-out-marker")));
 
 	/* And it is shown in the new window and no longer in the old one. */
-	QTabBar *torn_tabs = torn->findChild<QTabBar *>();
-	QVERIFY(torn_tabs);
-	QCOMPARE(tabs->count(), 1);
-	QCOMPARE(torn_tabs->count(), 1);
+	QCOMPARE(window.shown_sessions(), QList<bssh_session *>{ stay });
+	QCOMPARE(torn->shown_sessions(), QList<bssh_session *>{ go });
 
 	/*
 	 * A window will not empty itself: tearing out the last tab would
@@ -2198,13 +2412,15 @@ void layout_test::a_dropped_session_leaves_the_window_it_came_from() {
 	QTabBar *from_tabs = from.findChild<QTabBar *>();
 	QTabBar *onto_tabs = onto.findChild<QTabBar *>();
 	QVERIFY(from_tabs && onto_tabs);
-	QCOMPARE(from_tabs->count(), 2);
+	QCOMPARE(from.shown_sessions().size(), 2);
+	QCOMPARE(onto.shown_sessions().size(), 0);
+	QCOMPARE(from_tabs->count(), 1);
 	QCOMPARE(onto_tabs->count(), 0);
 
 	onto.drop_session(moving, false);
 
-	QCOMPARE(onto_tabs->count(), 1);
-	QVERIFY2(from_tabs->count() == 1,
+	QCOMPARE(onto.shown_sessions(), QList<bssh_session *>{ moving });
+	QVERIFY2(from.shown_sessions() == QList<bssh_session *>{ staying },
 	          "the window it came from must let go, or the same terminal is "
 	          "shown in two windows at once");
 
@@ -2268,10 +2484,20 @@ void layout_test::a_drop_on_the_panes_tiles_where_there_is_room() {
 	QVERIFY(narrow_panes);
 	QCOMPARE(narrow_panes->pane_count(), 1);
 
+	/*
+	 * It ARRIVES -- that is the assertion, and it is now made on the
+	 * window's own list rather than on the tab bar. One pane fits, so
+	 * the dropped session is the pane and the one it displaced is the
+	 * tab; counting tabs would say 1 and mean nothing, because a pane
+	 * and a tab are different states (sec 8.3).
+	 */
+	QCOMPARE(narrow.shown_sessions().size(), 2);
+	QVERIFY(narrow.shown_sessions().contains(squeezed));
+
 	QTabBar *narrow_tabs = narrow.findChild<QTabBar *>();
 	QVERIFY(narrow_tabs);
-	QVERIFY2(narrow_tabs->count() == 2,
-	          "a tile that will not fit must still arrive as a tab");
+	QVERIFY2(narrow_tabs->count() == 1,
+	          "the terminal the drop displaced must still be reachable");
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
@@ -2340,7 +2566,8 @@ void layout_test::a_dragged_tab_lands_where_it_is_dropped() {
 
 	QVERIFY2(panes->pane_count() == 1,
 	          "a drop on the tab bar makes a tab, so the panes must not split");
-	QCOMPARE(tabs->count(), 3);
+	QCOMPARE(window.shown_sessions().size(), 3);
+	QCOMPARE(tabs->count(), 2);
 
 	/*
 	 * A different session, low in the window where the panes are.
@@ -2528,6 +2755,13 @@ void layout_test::a_drop_naming_no_session_is_declined() {
 	bssh_session *only = window.registry()->create(named(QStringLiteral("only")));
 	window.adopt_session(only);
 
+	/*
+	 * A second one so the bar exists to aim at: `only` is the pane and
+	 * this is the tab. The drop below is aimed at the bar's rectangle,
+	 * and a hidden bar has none.
+	 */
+	window.adopt_session(window.registry()->create(named(QStringLiteral("tabbed"))));
+
 	QTabBar *tabs = window.findChild<QTabBar *>();
 	QVERIFY(tabs);
 	QCOMPARE(tabs->count(), 1);
@@ -2544,6 +2778,7 @@ void layout_test::a_drop_naming_no_session_is_declined() {
 	QCoreApplication::sendEvent(&window, &drop);
 	QCoreApplication::processEvents();
 
+	QCOMPARE(window.shown_sessions().size(), 2);
 	QCOMPARE(tabs->count(), 1);
 
 	/* And a payload of some other kind entirely is not ours to take. */
@@ -2578,6 +2813,9 @@ void layout_test::a_live_tab_is_not_offered_connect() {
 
 	bssh_session *session = registry->create(named(QStringLiteral("live")));
 	window.adopt_session(session);
+
+	/* Adopted after it, so `session` is the tab and this is the pane. */
+	window.adopt_session(registry->create(named(QStringLiteral("on-screen"))));
 	QVERIFY(!session->is_live());
 
 	QMenu *before = window.build_tab_menu(0, &window);
@@ -2704,8 +2942,14 @@ void layout_test::a_reorder_along_the_strip_is_not_a_tear_out() {
 	window.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 
+	/*
+	 * THREE sessions to get two tabs: the last one adopted is the pane,
+	 * and a pane is not in the bar (sec 8.3). Two tabs is the smallest
+	 * bar a reorder can happen in.
+	 */
 	window.adopt_session(window.registry()->create(named(QStringLiteral("one"))));
 	window.adopt_session(window.registry()->create(named(QStringLiteral("two"))));
+	window.adopt_session(window.registry()->create(named(QStringLiteral("shown"))));
 	QCoreApplication::processEvents();
 
 	QTabBar *bar = window.findChild<QTabBar *>();
@@ -2733,9 +2977,9 @@ void layout_test::a_reorder_along_the_strip_is_not_a_tear_out() {
 	QCoreApplication::sendEvent(bar, &move);
 	QCoreApplication::processEvents();
 
-	/* Still one window's worth of tabs: dragging along the strip did not
-	 * detach anything. */
-	QCOMPARE(window.registry()->count(), 2);
+	/* Still one window's worth of terminals: dragging along the strip did
+	 * not detach anything. */
+	QCOMPARE(window.shown_sessions().size(), 3);
 	QCOMPARE(bar->count(), 2);
 
 	while (shared->count() > 0) shared->close(shared->at(0));

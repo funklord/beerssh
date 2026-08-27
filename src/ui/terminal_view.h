@@ -391,6 +391,14 @@ public slots:
 
 signals:
 	/*
+	 * Alt+drag: this pane wants to be picked up and dropped somewhere
+	 * else -- another window, the tab bar, or the desktop (sec 8.4).
+	 * The view does not know which session it shows, so it says only
+	 * that the gesture happened and lets the container name it.
+	 */
+	void pane_drag_requested();
+
+	/*
 	 * Emitted only when the grid size actually changes, not on every
 	 * resize event -- at M5 this is what triggers window-change for one
 	 * session, and a desktop window drag would otherwise fire a storm of
@@ -633,6 +641,10 @@ private:
 	QString m_cursor_style;
 	bool m_cursor_on;
 	bool m_cursor_blink_wanted;
+
+	/* Alt+drag picks the pane up (sec 8.4); see mousePressEvent. */
+	bool m_maybe_pane_drag;
+	QPoint m_pane_drag_from;
 	QTimer *m_blink_timer;
 
 	/*

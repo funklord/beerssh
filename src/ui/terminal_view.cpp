@@ -86,6 +86,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_cursor_style(QStringLiteral("block")),
       m_cursor_on(true),
       m_cursor_blink_wanted(false),
+      m_maybe_pane_drag(false),
       m_blink_timer(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -1692,6 +1693,26 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	 * unless Shift is held, the conventional override that lets a user
 	 * select text out of a full-screen program (sec 6.4).
 	 */
+	/*
+	 * Alt and the left button picks the PANE up (sec 8.4). Before
+	 * anything else, including the remote's mouse reporting: a drag that
+	 * only works outside vim is not a way to rearrange a window, and
+	 * Alt+click is not a gesture any terminal program expects -- the meta
+	 * prefix belongs to the keyboard, where it still goes.
+	 *
+	 * The drag is not started here. It starts when the pointer has
+	 * actually moved, so that Alt+click on its own is not a gesture at
+	 * all: pressing a modifier and clicking is something people do by
+	 * accident, and a window that rearranges itself on one is worse than
+	 * one that cannot be rearranged.
+	 */
+	if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::AltModifier)) {
+		m_pane_drag_from = event->pos();
+		m_maybe_pane_drag = true;
+		event->accept();
+		return;
+	}
+
 	const bool shift = take_shift_override(event->modifiers());
 	if (m_emulator && m_emulator->mouse_reporting() && !shift) {
 		qint64 line = 0;
@@ -1796,6 +1817,30 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 }
 
 void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
+	/*
+	 * The pane drag begins once the pointer has moved far enough to be a
+	 * drag rather than a click -- Qt's own threshold, so it agrees with
+	 * every other drag the user has ever started.
+	 *
+	 * The view emits and does not act. It has no idea which session it is
+	 * showing, which window holds it, or what a drop would mean; the
+	 * container knows the first and the window knows the rest (sec 8.4's
+	 * "a window asks the registry and never reaches into another
+	 * window"). One flag, one signal.
+	 */
+	if (m_maybe_pane_drag) {
+		if ((event->pos() - m_pane_drag_from).manhattanLength()
+		    < QApplication::startDragDistance()) {
+			event->accept();
+			return;
+		}
+
+		m_maybe_pane_drag = false;
+		emit pane_drag_requested();
+		event->accept();
+		return;
+	}
+
 	if (!m_selecting) {
 		QWidget::mouseMoveEvent(event);
 		return;
@@ -1813,6 +1858,13 @@ void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
+	/* An Alt+click that never moved is not a gesture. */
+	if (m_maybe_pane_drag) {
+		m_maybe_pane_drag = false;
+		event->accept();
+		return;
+	}
+
 	/*
 	 * A release answers the PRESS. It used to hardcode button 1 and to
 	 * re-read Shift at release time, and both are wrong for the same

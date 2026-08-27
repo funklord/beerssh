@@ -173,6 +173,10 @@ void bssh_pane_container::rebuild() {
 			if (session->emulator()) session->emulator()->set_focused(true);
 		});
 
+		connect(view, &bssh_terminal_view::pane_drag_requested, this, [this, session] {
+			emit pane_drag_requested(session);
+		});
+
 		connect(view, &bssh_terminal_view::focus_lost, this, [session] {
 			if (session->emulator()) session->emulator()->set_focused(false);
 		});

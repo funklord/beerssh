@@ -105,6 +105,18 @@ public:
 	bssh_pane_container *panes() const { return m_panes; }
 
 	/*
+	 * The terminals this window HOLDS, in tab order -- panes and tabs
+	 * together. Exposed for the same reason as the three above, and for
+	 * one of its own: since a pane and a tab became different states
+	 * (sec 8.3), counting the tab bar no longer answers "how many
+	 * terminals does this window have", and several tests were asking
+	 * it that way. A proxy that stops being a proxy is worse than no
+	 * accessor, because the tests go on passing while measuring
+	 * something else.
+	 */
+	QList<bssh_session *> shown_sessions() const { return m_shown; }
+
+	/*
 	 * What closing the window should do when sessions are still
 	 * connected. A pure decision, separated from the dialog that asks it,
 	 * so the policy can be tested without a message box on screen -- and
@@ -407,6 +419,21 @@ private:
 	 * one.
 	 */
 	int live_shown_count() const;
+
+	/*
+	 * Rebuilds the tab bar from m_shown minus whatever is on screen as a
+	 * pane. A tab and a pane are different states (sec 8.3), and this is
+	 * the one place that knows which sessions are in which.
+	 */
+	void refresh_tab_bar();
+
+	/*
+	 * The sessions this window holds and is NOT showing, in tab order.
+	 * Derived from m_shown and the pane list rather than maintained
+	 * beside them -- two lists kept in step by hand drift, and the tab
+	 * bar's indices are read back out of this one.
+	 */
+	QList<bssh_session *> m_tab_order;
 	void show_session(bssh_session *session);
 	void detach_session();
 	void update_status();
@@ -482,6 +509,26 @@ public:
 	 * split_with() with something sensible would have passed throughout.
 	 */
 	void split_beside_current();
+
+	/*
+	 * Takes a session off the screen and leaves it in the bar -- the
+	 * un-split, and the other direction of "Show beside current"
+	 * (sec 8.3). Public because it is a plain command with two front
+	 * doors: the terminal menu's verb, and a pane dropped on the tab
+	 * bar.
+	 */
+	void show_as_tab(bssh_session *session);
+
+	/*
+	 * Picks a session up as a drag, wherever the gesture came from -- a
+	 * tab pulled clear of the bar, or Alt+drag on a pane. One function,
+	 * because what a drop MEANS must not depend on which half of the
+	 * window the drag started in.
+	 */
+	void start_session_drag(bssh_session *session);
+
+	/* The session into a window of its own; nullptr if it will not go. */
+	bssh_main_window *tear_out(bssh_session *session);
 
 private:
 	/*

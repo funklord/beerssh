@@ -1600,7 +1600,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 10);
+	QCOMPARE(actions.size(), 11);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -1623,8 +1623,17 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 */
 	QVERIFY(actions.at(4)->isSeparator());
 	QCOMPARE(actions.at(5)->text(), QStringLiteral("Split &Beside Current"));
-	QCOMPARE(actions.at(6)->text(), QStringLiteral("New &Tab"));
-	QCOMPARE(actions.at(7)->text(), QStringLiteral("New &Window"));
+
+	/*
+	 * The un-split, next to the split and for a reason of its own: with
+	 * two panes and nothing else a window has no tab bar to drop a pane
+	 * onto, so the gesture alone would leave a split with no way out.
+	 * The same argument as Split's, which is on this menu because a
+	 * one-session window has no tab bar either.
+	 */
+	QCOMPARE(actions.at(6)->text(), QStringLiteral("Show as &Tab"));
+	QCOMPARE(actions.at(7)->text(), QStringLiteral("New &Tab"));
+	QCOMPARE(actions.at(8)->text(), QStringLiteral("New &Window"));
 
 	/*
 	 * And the way to the configuration, behind its own separator (sec 2):
@@ -1633,8 +1642,8 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * different kind of thing again, and separated for the same reason
 	 * Select All is separated from Copy.
 	 */
-	QVERIFY(actions.at(8)->isSeparator());
-	QCOMPARE(actions.at(9)->text(), QStringLiteral("&Hosts and Settings"));
+	QVERIFY(actions.at(9)->isSeparator());
+	QCOMPARE(actions.at(10)->text(), QStringLiteral("&Hosts and Settings"));
 
 	/*
 	 * Access keys on every verb, which is what makes the menu usable from
@@ -1659,7 +1668,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * unavailable" would be caught here even if the order above still
 	 * lined up.
 	 */
-	QCOMPARE(actions.size(), 10);
+	QCOMPARE(actions.size(), 11);
 
 	delete menu;
 }
@@ -2080,4 +2089,88 @@ void terminal_view_test::only_the_focused_pane_blinks() {
 
 	QVERIFY2(right->cursor_blinks(), "the blink follows focus");
 	QVERIFY2(!left->cursor_blinks(), "and leaves the pane it came from");
+}
+
+void terminal_view_test::alt_drag_asks_for_the_pane_to_be_moved() {
+	/*
+	 * sec 8.4's pane drag. A tab could always be pulled out of the bar,
+	 * and a PANE could not be picked up at all -- so a terminal that had
+	 * been tiled was stuck there, and with two panes and nothing else the
+	 * window had no bar to drag from either. Alt and the left button is
+	 * the gesture, chosen because it costs no screen space and is what
+	 * every Linux window manager already means by "move this".
+	 *
+	 * The view emits and does nothing: it has no idea which session it
+	 * shows or which window holds it (sec 8.4's "a window asks the
+	 * registry and never reaches into another window"). Driven here
+	 * rather than through the window, because the window's handler runs
+	 * QDrag::exec -- a nested loop needing a real pointer grab, which the
+	 * offscreen platform has not got.
+	 */
+	bssh_terminal_view view;
+	view.resize(400, 200);
+
+	bssh_screen screen(view.cols(), view.rows());
+	view.attach_screen(&screen);
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+	QSignalSpy asked(&view, &bssh_terminal_view::pane_drag_requested);
+	QVERIFY(asked.isValid());
+
+	const QPoint from(60, 40);
+	const QPoint to = from + QPoint(4 * QApplication::startDragDistance(), 0);
+
+	/*
+	 * The plain drag FIRST, and it is the assertion that matters most: a
+	 * press and a sweep with no modifier is how text is selected, which
+	 * is the thing a terminal does most. A gesture that tore the pane out
+	 * on that would make the app unusable, and it would pass every
+	 * assertion below.
+	 */
+	QMouseEvent plain_press(QEvent::MouseButtonPress, from, view.mapToGlobal(from),
+	                         Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&view, &plain_press);
+
+	QMouseEvent plain_move(QEvent::MouseMove, to, view.mapToGlobal(to),
+	                        Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&view, &plain_move);
+
+	QMouseEvent plain_release(QEvent::MouseButtonRelease, to, view.mapToGlobal(to),
+	                           Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(&view, &plain_release);
+
+	QCOMPARE(asked.count(), 0);
+
+	/* Now with Alt held. */
+	QMouseEvent press(QEvent::MouseButtonPress, from, view.mapToGlobal(from),
+	                   Qt::LeftButton, Qt::LeftButton, Qt::AltModifier);
+	QCoreApplication::sendEvent(&view, &press);
+
+	/*
+	 * A press on its own is not a gesture. Pressing a modifier and
+	 * clicking is something people do by accident, and a window that
+	 * rearranges itself on one is worse than a window that cannot be
+	 * rearranged.
+	 */
+	QCOMPARE(asked.count(), 0);
+
+	const QPoint barely = from + QPoint(1, 0);
+	QMouseEvent twitch(QEvent::MouseMove, barely, view.mapToGlobal(barely),
+	                    Qt::NoButton, Qt::LeftButton, Qt::AltModifier);
+	QCoreApplication::sendEvent(&view, &twitch);
+	QVERIFY2(asked.count() == 0, "a pixel of movement is a click, not a drag");
+
+	QMouseEvent move(QEvent::MouseMove, to, view.mapToGlobal(to),
+	                  Qt::NoButton, Qt::LeftButton, Qt::AltModifier);
+	QCoreApplication::sendEvent(&view, &move);
+
+	QCOMPARE(asked.count(), 1);
+
+	/* And once per gesture, not once per pixel after it. */
+	QMouseEvent further(QEvent::MouseMove, to + QPoint(30, 0),
+	                     view.mapToGlobal(to + QPoint(30, 0)),
+	                     Qt::NoButton, Qt::LeftButton, Qt::AltModifier);
+	QCoreApplication::sendEvent(&view, &further);
+	QCOMPARE(asked.count(), 1);
 }

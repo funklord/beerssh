@@ -1,0 +1,66 @@
+# Sabotages for tabs, splits and windows being DIFFERENT states.
+#
+# Reported from use: "they become tabs. tabs, splits and windows are
+# supposed to be different things and movable between those states by
+# drag and drop". The tab bar was built from the window's session list
+# outright, so a tiled session was listed in the bar directly above
+# itself -- and a pane could not be picked up at all, so a terminal that
+# had been tiled was stuck there.
+
+# The split. A pane is not a tab.
+[[sabotage]]
+name = "a tiled session is listed in the tab bar as well"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (!panes.contains(session)) m_tab_order.append(session);"
+replace = "\t\tm_tab_order.append(session);"
+expect = "a_tiled_session_leaves_the_tab_bar"
+
+# And the bar has to be rebuilt when the PANES change, not only when the
+# registry does.
+#
+# The expect line names the COLLAPSE test rather than the split one, and
+# the sabotage runner is what worked that out: against the split test
+# this edit was MISSED, because splitting moves focus and the focus
+# handler refreshes the bar too. A window narrowing past its size class
+# (sec 8.2) changes what is on screen without changing the registry, the
+# window's session list, or which pane is focused -- so it is the one
+# path where this call is the only thing that notices.
+[[sabotage]]
+name = "the bar is not rebuilt when a collapse changes what is on screen"
+file = "src/ui/main_window.cpp"
+find = "\t\trefresh_tab_bar();\n\n\t\t/*\n\t\t * A pane built after the setting was changed"
+replace = "\t\t/*\n\t\t * A pane built after the setting was changed"
+expect = "narrowing_a_window_turns_its_extra_panes_into_tabs"
+
+# The un-split, which is what makes a split escapable.
+[[sabotage]]
+name = "a pane dropped on the tab bar is shown instead of tabbed"
+file = "src/ui/main_window.cpp"
+find = "\tif (!beside && m_layout && m_layout->intent().contains(session)) {\n\t\tshow_as_tab(session);\n\t\treturn;\n\t}"
+replace = "\t(void)beside;"
+expect = "a_pane_dropped_on_the_tab_bar_becomes_a_tab"
+
+# A window with no pane shows nothing at all.
+[[sabotage]]
+name = "the last pane can be turned into a tab"
+file = "src/ui/main_window.cpp"
+find = "\tif (intent.size() < 2) return;"
+replace = "\tif (intent.isEmpty()) return;"
+expect = "a_pane_dropped_on_the_tab_bar_becomes_a_tab"
+
+# The gesture. Alt and the left button picks a pane up; a plain drag
+# still selects text, which is the half that would make the app unusable.
+[[sabotage]]
+name = "a plain drag picks the pane up"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (event->button() == Qt::LeftButton && (event->modifiers() & Qt::AltModifier)) {"
+replace = "\tif (event->button() == Qt::LeftButton) {"
+expect = "alt_drag_asks_for_the_pane_to_be_moved"
+
+# And a click is not a drag.
+[[sabotage]]
+name = "an Alt+click with no movement starts a drag"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif ((event->pos() - m_pane_drag_from).manhattanLength()\n\t\t    < QApplication::startDragDistance()) {\n\t\t\tevent->accept();\n\t\t\treturn;\n\t\t}"
+replace = "\t\t(void)0;"
+expect = "alt_drag_asks_for_the_pane_to_be_moved"

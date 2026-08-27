@@ -97,6 +97,18 @@ signals:
 	/* The focused pane changed -- the window retargets its shortcuts. */
 	void focus_changed(bssh_session *session);
 
+	/*
+	 * Alt+drag on a pane (sec 8.4). Named here rather than in the view,
+	 * which has no idea which session it is showing -- the container is
+	 * the one object that holds both halves of that pair.
+	 *
+	 * Wired for EVERY view at rebuild time, not for the focused one:
+	 * dragging the pane you are not typing in is the ordinary case, and
+	 * a signal connected only on focus would make it work the second
+	 * time you tried.
+	 */
+	void pane_drag_requested(bssh_session *session);
+
 	/* A view was built or destroyed; the window rewires what it needs. */
 	void panes_rebuilt();
 
