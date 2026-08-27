@@ -243,7 +243,16 @@ name it demands is plural, singular, capitalised or none of those.
 Present here: **Cargo** looks for `tests/`, `examples/` and `benches/` by
 those exact names, and `cargo-fuzz` for `fuzz_targets/`. **GitHub**
 requires `.github/workflows/`. **git** keeps `hooks/`, which is why
-`tool/hooks/` is spelled that way.
+`tool/hooks/` is spelled that way. And a **foreign package's directory
+names are the same exception one layer out**: the Android SDK ships
+`platform-tools/` and `build-tools/`, and those spellings are the SDK's
+however this tree spells its own. The rename pass learned that by
+breaking them -- a word-boundary rewrite of `tools/` reaches into
+`platform-tools/` because the hyphen is a boundary, so every adb target
+in four projects pointed at a binary that was not there and the
+signature check went quiet by a new route. A sweep must skip compound
+names it does not own, and package-system spellings (Cargo crates,
+Debian packages) under *Filenames* above are this same carve-out.
 
 **Second: a plural an ecosystem has settled**, which is a convention rather
 than a requirement -- nothing breaks, but a reader would be surprised by
@@ -371,8 +380,12 @@ not belong in a `project.md`.
 
 ## Keeping the copies in sync
 
-Each private project keeps a copy of this file at its repo root, opening
-with a header that names the source:
+Each private project keeps a copy of this file at its repo root -- except
+the one this file lives in. `claude-guidelines` holds the source at
+`guidelines/code-style.md`, and a copy beside it would be the same document
+twice in one repository with nothing to keep the two honest; its root
+`code-style.md` says so and points here. Every other private project carries
+a copy, opening with a header that names the source:
 
 ```markdown
 <!-- Copied from ~/.claude/guidelines/code-style.md -- the source. Keep in
@@ -396,6 +409,22 @@ own character-set rule, or renumbering a heading to fit its own structure,
 is that project's rule working correctly, **not drift, and not something to
 reconcile back**. What must match is every rule and every exception, in
 substance.
+
+**`sync.py --check` now reports the copies that have fallen behind**, which
+until 2026-08-24 nothing did. The three files spread verbatim were checked on
+every run and this one -- the document that says what the rules are -- was
+checked by nobody, so drift was indistinguishable from the adaptation the
+section above asks for. It found real losses: four copies had dropped
+*Precedence*, the section saying this source outranks them; three had dropped
+*Formatters*, whose rule was paid for by a formatter rewriting committed
+files; one had dropped *ASCII in source*; and seven had dropped this very
+section, which is the one that would have told a reader to look.
+
+It asks the weaker question that can actually be answered -- does the copy
+still carry a section for every section here -- and it never writes this
+file, because overwriting a copy would delete the part the project owns. A
+heading that *extends* one of these satisfies it, since that is what
+recording a project's own formatter verdict looks like.
 
 **If you notice a copy diverging from the source, reconcile it as soon as
 you notice** -- do not leave it for later and do not work around it. If the
