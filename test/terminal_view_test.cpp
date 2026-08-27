@@ -1,3 +1,4 @@
+#include <QHBoxLayout>
 #include <QScrollBar>
 #include <QUrl>
 #include <QMimeData>
@@ -1932,4 +1933,151 @@ void terminal_view_test::a_drop_asks_the_window_to_paste_rather_than_pasting_its
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 	bssh_ssh_session::set_factory(nullptr);
+}
+
+void terminal_view_test::an_unfocused_cursor_is_hollow() {
+	/*
+	 * konsole's convention, asked for directly (sec 10.2): the terminal
+	 * you are typing into has a filled block and every other one has an
+	 * outline. It is the same safety question sec 8.3 calls
+	 * non-negotiable about the focus border, asked of the one mark that
+	 * is on screen even with a single pane -- where that border is
+	 * deliberately not drawn.
+	 *
+	 * Asserted on the PIXELS rather than on a flag, because the whole
+	 * property is what somebody sees. A boolean saying "hollow" would
+	 * pass with the painter drawing a filled block from it.
+	 */
+	/*
+	 * The view is NOT the top-level here, and that is load-bearing. A
+	 * shown top-level with StrongFocus is handed focus by Qt the moment
+	 * its window activates, so the first version of this test grabbed
+	 * two images of a FOCUSED pane and compared them to each other --
+	 * identical, and it would have stayed identical with the hollow
+	 * cursor deleted. Something else has to be able to hold focus.
+	 */
+	QWidget host;
+	QHBoxLayout *row = new QHBoxLayout(&host);
+
+	bssh_terminal_view view(&host);
+	QLineEdit *elsewhere = new QLineEdit(&host);
+	row->addWidget(&view);
+	row->addWidget(elsewhere);
+
+	host.resize(700, 160);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("font_family"), QStringLiteral("jetbrains-mono"));
+	settings.insert(QStringLiteral("font_size"), 12);
+	settings.insert(QStringLiteral("cursor_blink"), false);
+	bssh_apply_appearance(&view, settings);
+
+	bssh_screen screen(view.cols(), view.rows());
+
+	/*
+	 * The cursor is put five columns in, on a cell left blank. Column
+	 * zero is the wrong place to ask -- it is where the grid inset and
+	 * the scrollbar both land -- and a cell with a glyph in it would
+	 * make the centre pixel ambiguous between the block's punch-out and
+	 * the character itself.
+	 */
+	screen.set_cursor(0, 5);
+	view.attach_screen(&screen);
+
+	host.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&host));
+	host.activateWindow();
+
+	elsewhere->setFocus();
+	QTRY_VERIFY(!view.hasFocus());
+
+	const QImage unfocused = view.grab().toImage();
+
+	view.setFocus();
+	QTRY_VERIFY(view.hasFocus());
+
+	const QImage focused = view.grab().toImage();
+
+	/*
+	 * The two images must DIFFER, and that alone is the discriminating
+	 * assertion: everything else on screen is identical between the two
+	 * grabs, so any difference is the cursor. Asserting only that the
+	 * focused one has a filled cell would pass with both filled.
+	 */
+	QVERIFY(unfocused != focused);
+
+	/*
+	 * And the direction. The focused cell is solid, so it has strictly
+	 * more cursor-coloured pixels than the outline does -- a hollow
+	 * block that was drawn filled fails here even though the images
+	 * above would differ for some other reason.
+	 */
+	const auto ink = [](const QImage &image, const QColor &background) {
+		int count = 0;
+		for (int y = 0; y < image.height(); ++y) {
+			for (int x = 0; x < image.width(); ++x) {
+				if (image.pixelColor(x, y) != background) ++count;
+			}
+		}
+		return count;
+	};
+
+	const QColor background = unfocused.pixelColor(unfocused.width() - 2,
+	                                                unfocused.height() - 2);
+
+	QVERIFY(ink(unfocused, background) > 0);
+	QVERIFY2(ink(focused, background) > ink(unfocused, background),
+	          "a filled block covers more of the cell than its outline");
+}
+
+void terminal_view_test::only_the_focused_pane_blinks() {
+	/*
+	 * Four panes each animating a cursor is four things moving on a
+	 * screen where one of them is the one being typed into: the movement
+	 * is meant to say "here", and it says nothing when everything says
+	 * it. It is also four timers waking twice a second, which sec 5.1
+	 * cares about for its own reasons.
+	 *
+	 * Two views in ONE window, because that is the arrangement the rule
+	 * is about -- two top-level widgets would each be focused in their
+	 * own window and the question could not arise.
+	 */
+	QWidget host;
+	QHBoxLayout *row = new QHBoxLayout(&host);
+
+	bssh_terminal_view *left = new bssh_terminal_view(&host);
+	bssh_terminal_view *right = new bssh_terminal_view(&host);
+	row->addWidget(left);
+	row->addWidget(right);
+
+	host.resize(800, 200);
+	host.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&host));
+	host.activateWindow();
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("cursor_blink"), true);
+	bssh_apply_appearance(left, settings);
+	bssh_apply_appearance(right, settings);
+
+	/*
+	 * Both were ASKED for a blinking cursor, and that is the half a
+	 * timer-count assertion cannot see on its own: the setting must
+	 * still be recorded on the pane that is not blinking, or moving
+	 * focus to it would leave it steady for ever.
+	 */
+	QVERIFY(left->cursor_blink_wanted());
+	QVERIFY(right->cursor_blink_wanted());
+
+	left->setFocus();
+	QTRY_VERIFY(left->hasFocus());
+
+	QVERIFY2(left->cursor_blinks(), "the focused pane blinks");
+	QVERIFY2(!right->cursor_blinks(), "and the one beside it does not");
+
+	right->setFocus();
+	QTRY_VERIFY(right->hasFocus());
+
+	QVERIFY2(right->cursor_blinks(), "the blink follows focus");
+	QVERIFY2(!left->cursor_blinks(), "and leaves the pane it came from");
 }

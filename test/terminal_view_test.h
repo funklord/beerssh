@@ -16,6 +16,8 @@ class terminal_view_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void an_unfocused_cursor_is_hollow();
+	void only_the_focused_pane_blinks();
 	/*
 	 * The scrollbar's default position is process-wide, and a window
 	 * built by a test sets it from the settings. Put it back after

@@ -85,6 +85,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_font_size(BSSH_DEFAULT_POINT_SIZE),
       m_cursor_style(QStringLiteral("block")),
       m_cursor_on(true),
+      m_cursor_blink_wanted(false),
       m_blink_timer(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -276,9 +277,25 @@ void bssh_terminal_view::set_cursor_style(const QString &style) {
 }
 
 void bssh_terminal_view::set_cursor_blink(bool blink) {
-	if (blink == (m_blink_timer != nullptr)) return;
+	if (blink == m_cursor_blink_wanted) return;
 
-	if (!blink) {
+	m_cursor_blink_wanted = blink;
+	sync_blink_timer();
+}
+
+void bssh_terminal_view::sync_blink_timer() {
+	/*
+	 * Only the FOCUSED terminal blinks (sec 10.2). Four panes each
+	 * animating a cursor is four things moving on a screen where one of
+	 * them is the one you are typing into -- the movement is meant to
+	 * say "here", and it says nothing when everything says it. It is
+	 * also four timers waking twice a second on a phone, which sec 5.1
+	 * cares about for its own reasons.
+	 */
+	const bool running = m_cursor_blink_wanted && hasFocus();
+	if (running == (m_blink_timer != nullptr)) return;
+
+	if (!running) {
 		delete m_blink_timer;
 		m_blink_timer = nullptr;
 
@@ -1351,7 +1368,33 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		 */
 		const QColor cursor_colour(bssh_dim(m_scheme.cursor, m_text_brightness));
 
-		if (m_cursor_style == QStringLiteral("underline")) {
+		/*
+		 * An UNFOCUSED terminal gets a hollow block, whatever shape it
+		 * would otherwise draw -- konsole's convention, and xterm's and
+		 * gnome-terminal's before it (sec 10.2).
+		 *
+		 * Whatever shape, because the outline is doing a different job
+		 * from the shape. The shape says what kind of cursor the host
+		 * asked for; the outline says "your keystrokes are not going
+		 * here", and an unfilled bar or underline is a one-pixel line
+		 * with a one-pixel hole in it -- a distinction nobody can see at
+		 * the moment they most need it. This is the same safety question
+		 * sec 8.3 calls non-negotiable about the focus border, asked of
+		 * the one mark that is on screen even with a single pane, where
+		 * that border is deliberately not drawn.
+		 *
+		 * hasFocus() rather than the focus border's flag: the border is
+		 * suppressed when there is only one pane, and a lone terminal in
+		 * a window the user has clicked away from is exactly a terminal
+		 * that should not look live.
+		 */
+		if (!hasFocus()) {
+			const qreal pen = qMax(1, m_cell_height / 12);
+			painter.setPen(QPen(cursor_colour, pen));
+			painter.setBrush(Qt::NoBrush);
+			painter.drawRect(QRectF(x + pen / 2.0, y + pen / 2.0,
+			                         m_cell_width - pen, m_cell_height - pen));
+		} else if (m_cursor_style == QStringLiteral("underline")) {
 			const int thickness = qMax(1, m_cell_height / 10);
 			painter.fillRect(x, y + m_cell_height - thickness,
 			                  m_cell_width, thickness, cursor_colour);
@@ -1614,6 +1657,12 @@ void bssh_terminal_view::focusInEvent(QFocusEvent *event) {
 	 * left Tab moving the keyboard without moving the border.
 	 */
 	emit focus_received();
+
+	/* Blinking belongs to whoever has focus. */
+	sync_blink_timer();
+
+	/* Filled cursor here, hollow in the pane that just lost it. */
+	update();
 }
 
 void bssh_terminal_view::enterEvent(QEnterEvent *event) {
@@ -1632,6 +1681,9 @@ void bssh_terminal_view::enterEvent(QEnterEvent *event) {
 void bssh_terminal_view::focusOutEvent(QFocusEvent *event) {
 	QWidget::focusOutEvent(event);
 	emit focus_lost();
+
+	sync_blink_timer();
+	update();
 }
 
 void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {

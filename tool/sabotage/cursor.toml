@@ -1,0 +1,45 @@
+# Sabotages for the cursor's two focus-dependent properties (sec 10.2).
+#
+# Both are konsole's convention and both were asked for directly: only
+# the focused terminal blinks, and an unfocused one draws a hollow block
+# rather than a filled one.
+
+# The hollow half. A filled block in every pane says "your keystrokes go
+# here" four times over, which is the disagreement sec 8.3 calls
+# non-negotiable about the focus border -- asked of the one mark that is
+# on screen even with a single pane, where that border is not drawn.
+[[sabotage]]
+name = "an unfocused pane draws a filled cursor"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (!hasFocus()) {"
+replace = "\t\tif (false) {"
+expect = "an_unfocused_cursor_is_hollow"
+
+# The blink half: the timer runs on focus, not on the setting alone.
+[[sabotage]]
+name = "every pane blinks, not just the focused one"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst bool running = m_cursor_blink_wanted && hasFocus();"
+replace = "\tconst bool running = m_cursor_blink_wanted;"
+expect = "only_the_focused_pane_blinks"
+
+# And the other direction: a pane that is not blinking must still
+# REMEMBER that it was asked to, or focus arriving would leave it steady
+# for ever. Breaking the wish rather than the timer is what separates
+# "not blinking now" from "never blinking again".
+[[sabotage]]
+name = "a pane forgets it was asked to blink"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_cursor_blink_wanted = blink;\n\tsync_blink_timer();"
+replace = "\tm_cursor_blink_wanted = blink && hasFocus();\n\tsync_blink_timer();"
+expect = "only_the_focused_pane_blinks"
+
+# And the default. A blinking cursor is movement nothing caused, twice a
+# second, for as long as the app is open; anybody who wants it can have
+# it, and nobody should have to turn it off.
+[[sabotage]]
+name = "the shipped default blinks"
+file = "src/model/preset.h"
+find = "\t      cursor_blink(false),"
+replace = "\t      cursor_blink(true),"
+expect = "a_steady_cursor_is_the_default"

@@ -3253,6 +3253,41 @@ encoding, scrollback size, cursor style/blink, bell behaviour, keepalive interva
 compression, algorithm preferences (ciphers/KEX/MACs), and default split/tab
 behaviour for that host type.
 
+#### The cursor — **[DECIDED]**
+Three rules, all asked for directly and all konsole's convention before that.
+
+- **It does not blink by default.** A blinking cursor is movement on screen that
+  nothing caused, twice a second, for as long as the app is open; on a phone it
+  is also a wakeup twice a second per pane, which §5.1 cares about for its own
+  reasons. Anybody who wants it can have it, and nobody should have to turn it
+  off. The default lives on `bssh_preset_t`, and every built-in inherits it —
+  they are default-constructed presets with a few fields changed. Pinned there
+  rather than on the view, because an absent key already reads as false when the
+  view applies a settings object, so a test on the view would pass whatever the
+  default said.
+- **Only the focused terminal blinks.** Four panes each animating a cursor is
+  four things moving on a screen where one of them is the one being typed into:
+  the movement means *here*, and it means nothing when everything says it. The
+  pane still remembers it was asked to blink, or focus arriving would leave it
+  steady for ever — those are two separate facts and the sabotage set breaks
+  each of them separately.
+- **An unfocused terminal draws a hollow block**, whatever cursor shape it would
+  otherwise use. Whatever shape, because the outline is doing a different job
+  from the shape: the shape says what kind of cursor the host asked for, the
+  outline says *your keystrokes are not going here*, and an unfilled bar or
+  underline is a one-pixel line with a one-pixel hole in it. This is §8.3's
+  focus-border question — the one it calls non-negotiable — asked of the one
+  mark that is on screen even with a **single** pane, where that border is
+  deliberately not drawn. It reads `hasFocus()` for that reason rather than the
+  border's own flag.
+  Asserted on the pixels, since the whole property is what somebody sees: a
+  boolean saying "hollow" passes with the painter drawing a block from it. The
+  first draft of that test compared two grabs of the *same* top-level view and
+  found them identical — Qt hands a shown top-level with StrongFocus its focus
+  immediately, so both images were of a focused pane and would have stayed
+  identical with the hollow cursor deleted. It needs something else in the
+  window that can hold focus.
+
 #### Colour schemes — **[DECIDED]**
 §10.2 gave a preset a `colour_scheme` field and never said what one is. It is
 the sixteen ANSI colours plus a default foreground, background and cursor —

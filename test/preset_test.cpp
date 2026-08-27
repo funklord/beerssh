@@ -346,3 +346,27 @@ void preset_test::a_hostile_ini_cannot_claim_to_be_builtin() {
 	/* The rest of it still imports -- it is a preset, just not a shipped one. */
 	QCOMPARE(imported.term, QStringLiteral("vt100"));
 }
+
+void preset_test::a_steady_cursor_is_the_default() {
+	/*
+	 * Asked for directly (sec 10.2). A blinking cursor is movement on
+	 * screen that nothing caused, twice a second, for as long as the app
+	 * is open -- and on a phone it is a wakeup twice a second per pane,
+	 * which sec 5.1 cares about for its own reasons. Anybody who wants
+	 * it can have it; nobody should have to turn it off.
+	 *
+	 * On the PRESET rather than on the view. bssh_apply_appearance reads
+	 * the key out of a settings object, and an absent key is already
+	 * false there -- so a test on the view would pass whatever this
+	 * default said, which is the whole point of asserting it here. The
+	 * builtins inherit it: every one of them is a default-constructed
+	 * preset with a few fields changed (preset.cpp's builtins()).
+	 */
+	QVERIFY2(!bssh_preset_t().cursor_blink, "a steady cursor is the default");
+
+	for (const bssh_preset_t &builtin : bssh_preset_t::builtins()) {
+		QVERIFY2(!builtin.cursor_blink,
+		          qPrintable(QStringLiteral("%1 ships a blinking cursor")
+		                             .arg(builtin.name)));
+	}
+}

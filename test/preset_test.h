@@ -15,6 +15,7 @@ class preset_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void a_steady_cursor_is_the_default();
 	void an_exported_preset_contains_nothing_private();
 	void export_and_import_round_trip();
 	void an_imported_preset_cannot_claim_to_be_builtin();

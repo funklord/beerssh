@@ -248,7 +248,17 @@ public:
 	QString font_family() const { return m_font.family(); }
 	void set_cursor_blink(bool blink);
 	QString cursor_style() const { return m_cursor_style; }
+
+	/*
+	 * Whether this pane's cursor is blinking RIGHT NOW, which is not the
+	 * same question as whether the host asked for a blinking cursor: only
+	 * the focused terminal blinks (sec 10.2). An unfocused pane is asleep
+	 * whatever its settings say, so this reports the timer.
+	 */
 	bool cursor_blinks() const { return m_blink_timer != nullptr; }
+
+	/* What the settings asked for, regardless of where focus is. */
+	bool cursor_blink_wanted() const { return m_cursor_blink_wanted; }
 
 private:
 	/*
@@ -622,7 +632,15 @@ private:
 
 	QString m_cursor_style;
 	bool m_cursor_on;
+	bool m_cursor_blink_wanted;
 	QTimer *m_blink_timer;
+
+	/*
+	 * Starts or stops the blink for what is true now -- the setting AND
+	 * where focus is. Both inputs change independently, so one place
+	 * decides rather than two setters each doing half of it.
+	 */
+	void sync_blink_timer();
 
 	QColor m_background;
 	QColor m_foreground;

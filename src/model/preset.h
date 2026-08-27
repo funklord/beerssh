@@ -74,7 +74,7 @@ struct bssh_preset_t {
 	      scrollback_lines(5000),
 	      bell_enabled(true),
 	      cursor_style(QStringLiteral("block")),
-	      cursor_blink(true),
+	      cursor_blink(false),
 	      font_size(11),
 	      allow_clipboard_write(false),
 	      keepalive_seconds(60),
