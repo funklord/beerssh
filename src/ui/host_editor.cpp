@@ -168,12 +168,33 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	 * adding it again.
 	 */
 	m_font_scope = new QLabel(this);
+
+	/*
+	 * By NAME, so a test can ask this page what its badge says rather
+	 * than guessing which QLabel it is. findChild order is not a
+	 * contract; an object name is.
+	 */
+	m_font_scope->setObjectName(QStringLiteral("host_font_scope"));
 	bssh_wrap_note(m_font_scope);
 	body->addWidget(m_font_scope);
 
 	m_font_revert = new QPushButton(QStringLiteral("Use the preset's font"), this);
 	m_font_revert->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 	body->addWidget(m_font_revert);
+	/*
+	 * The badge follows the picker. It did not: nothing connected these
+	 * on the touch page, so choosing a font left the badge saying
+	 * "Following preset X" while profile() went on to write a font
+	 * override -- the screen and the store disagreeing, which is the one
+	 * thing this badge exists to prevent. The revert button was hidden
+	 * too, so the override just made was unreachable until the page was
+	 * left and reopened. The desktop dialog has always had this.
+	 */
+	connect(m_font_picker, &bssh_font_picker::font_chosen,
+	         this, [this] { update_override_badge(); });
+	connect(m_font_picker, &bssh_font_picker::scheme_chosen,
+	         this, [this] { update_override_badge(); });
+
 	connect(m_font_revert, &QPushButton::clicked,
 	         this, &bssh_host_editor::revert_font_to_preset);
 
@@ -285,8 +306,9 @@ void bssh_host_editor::update_override_badge() {
 		return;
 	}
 
-	const bssh_override_badge_t badge = bssh_font_override_badge(
-	        m_store, m_profile, m_font_picker->font_id(), m_font_picker->point_size());
+	const bssh_override_badge_t badge = bssh_appearance_override_badge(
+	        m_store, m_profile, m_font_picker->font_id(), m_font_picker->point_size(),
+	        m_font_picker->scheme_id());
 
 	m_font_scope->setText(badge.text);
 	m_font_scope->setVisible(true);

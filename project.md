@@ -849,6 +849,34 @@ model on a finger.
   to the remote — with a modifier (conventionally `Shift`) to override and select
   locally. On touch, keep local selection winning. **Done**, encoding delegated
   to libvterm, which already tracks which mouse modes the remote enabled.
+- **The override badge and the write it describes disagreed, in two ways at
+  once.** §10 says a host's Appearance page must say whether it follows its
+  preset or overrides it, and the badge exists so the screen and the store
+  cannot say different things. Both halves of that were false.
+  **The touch page never re-read the badge.** Nothing connected the picker to
+  it, so choosing a font left it reading `Following preset "X"` while
+  `profile()` went on to write a `font_family` override — and the revert
+  button is shown from the same badge, so the override just made was
+  unreachable until the page was left and reopened. The desktop dialog has
+  had that connection since the badge was built; this was the last surviving
+  instance of the desktop/touch asymmetry §10 already records once.
+  **And the badge weighed less than the write did.**
+  `bssh_appearance_overrides()` records the font, the size *and* the colour
+  scheme; the badge weighed the font and the size. So changing nothing but
+  the colours wrote an override under a badge that said "Following" — the
+  same disagreement, one field over, and present on **both** front doors
+  because it was in the shared helper rather than in either page.
+  `bssh_font_override_badge` is `bssh_appearance_override_badge` now, taking
+  the same three fields the writer takes, and the two are commented to
+  diverge only together. `scheme_chosen` had no listener anywhere in the
+  tree; it has one on each front door.
+  **The test asserts the AGREEMENT rather than either value** —
+  `badge.overridden` against whether the writer put `colour_scheme` in the
+  object — so it does not go stale the next time the write path learns a
+  fourth field. And it drives the dialog as well as the helper, because the
+  helper agreeing with the writer says nothing about whether anything asks
+  the helper: the first version tested only the helper, and the sabotage
+  runner reported the desktop connection as MISSED.
 - **A session torn into another window was still wired to the window it came
   from.** The per-session wiring hung off `session_added`, which fires once,
   at creation — so `adopt_session()`, the road a torn-out or dropped tab

@@ -10,6 +10,7 @@
 #include "model/profile_store.h"
 #include "model/settings_resolver.h"
 #include "term/font_catalog.h"
+#include "ui/host_editor.h"
 #include "ui/font_picker.h"
 #include "ui/session_dialog.h"
 #include "model/preset.h"
@@ -151,6 +152,119 @@ void font_picker_test::a_font_matching_the_preset_is_not_recorded_as_an_override
 	         "an untouched dialog must not write a size override");
 }
 
+void font_picker_test::the_badge_covers_what_the_save_writes() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("house");
+	preset.font_family = QStringLiteral("hack");
+	preset.font_size = 17;
+	const int preset_id = store.save_preset(preset);
+	QVERIFY(preset_id > 0);
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("follower");
+	host.host = QStringLiteral("a.example");
+	host.preset_id = preset_id;
+	const int id = store.save(host);
+	QVERIFY(id > 0);
+
+	const bssh_profile_t saved = store.profile(id);
+
+	/*
+	 * Same font, same size, DIFFERENT colours. The badge weighed the font
+	 * and the size only, so it said "Following" while the write recorded
+	 * a colour_scheme override -- the screen and the store disagreeing,
+	 * one field over from the pair this helper was built for.
+	 */
+	QString other;
+	for (const bssh_colour_scheme_t &scheme : bssh_colour_scheme_catalog::instance().all()) {
+		if (scheme.id != bssh_colour_scheme_catalog::instance().effective_id(QString())) {
+			other = scheme.id;
+			break;
+		}
+	}
+	QVERIFY2(!other.isEmpty(), "the catalog must offer a scheme that is not the default");
+
+	const bssh_override_badge_t badge =
+	        bssh_appearance_override_badge(&store, saved, QStringLiteral("hack"), 17, other);
+	const QJsonObject written =
+	        bssh_appearance_overrides(&store, saved, QStringLiteral("hack"), 17, other);
+
+	/*
+	 * The assertion is the AGREEMENT, not either value: whatever the two
+	 * decide, they must decide it together. Asserting the badge alone
+	 * would go stale the next time the write path learns a fourth field.
+	 */
+	QCOMPARE(badge.overridden, written.contains(QStringLiteral("colour_scheme")));
+	QVERIFY2(badge.overridden, "a scheme the preset does not give is an override");
+	QVERIFY2(badge.text.contains(QStringLiteral("colours")), qPrintable(badge.text));
+
+	/*
+	 * And the DIALOG must show that, which is a separate question: the
+	 * helper agreeing with the writer says nothing about whether anything
+	 * asks the helper when the colours change. scheme_chosen had no
+	 * listener anywhere in the tree, so the badge above was right and the
+	 * screen was still wrong.
+	 */
+	bssh_session_dialog dialog(&store);
+	dialog.set_current_profile(saved);
+
+	QLabel *scope = dialog.findChild<QLabel *>(QStringLiteral("host_font_scope"));
+	QVERIFY2(scope, "the desktop page must expose its badge by name");
+	QVERIFY2(scope->text().contains(QStringLiteral("Following")), qPrintable(scope->text()));
+
+	bssh_font_picker *picker =
+	        dialog.findChild<bssh_font_picker *>(QStringLiteral("host_font_picker"));
+	QVERIFY(picker);
+
+	picker->set_scheme(other);
+	QVERIFY2(scope->text().contains(QStringLiteral("Overrides")), qPrintable(scope->text()));
+}
+
+void font_picker_test::the_touch_badge_follows_the_picker() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("house");
+	preset.font_family = QStringLiteral("hack");
+	preset.font_size = 17;
+	const int preset_id = store.save_preset(preset);
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("follower");
+	host.host = QStringLiteral("a.example");
+	host.preset_id = preset_id;
+	const int id = store.save(host);
+
+	bssh_host_editor editor(&store);
+	editor.set_profile(store.profile(id));
+
+	QLabel *scope = editor.findChild<QLabel *>(QStringLiteral("host_font_scope"));
+	QVERIFY2(scope, "the touch page must expose its badge by name");
+	QVERIFY2(scope->text().contains(QStringLiteral("Following")), qPrintable(scope->text()));
+
+	bssh_font_picker *picker = editor.findChild<bssh_font_picker *>();
+	QVERIFY(picker);
+
+	/*
+	 * Picking a different font must move the badge with it. Nothing
+	 * connected the picker to the badge on this page, so it went on
+	 * saying "Following preset" while profile() wrote an override -- and
+	 * the revert button stayed hidden, so the override just made was
+	 * unreachable until the page was left and reopened.
+	 */
+	picker->set_font_choice(QStringLiteral("jetbrains-mono"), 13);
+
+	QVERIFY2(scope->text().contains(QStringLiteral("Overrides")), qPrintable(scope->text()));
+	QVERIFY2(editor.profile().overrides.contains(QStringLiteral("font_family")),
+	          "and the write agrees with what the badge now says");
+}
+
 void font_picker_test::reverting_drops_the_override_rather_than_copying_the_value() {
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.path());
@@ -273,8 +387,9 @@ void font_picker_test::agreeing_with_the_preset_clears_the_override() {
 	/* The user picks what the preset gives, meaning "go back to following it". */
 	picker->set_font_choice(QStringLiteral("hack"), 17);
 
-	const bssh_override_badge_t badge = bssh_font_override_badge(
-	        &store, store.profile(id), picker->font_id(), picker->point_size());
+	const bssh_override_badge_t badge = bssh_appearance_override_badge(
+	        &store, store.profile(id), picker->font_id(), picker->point_size(),
+	        picker->scheme_id());
 	QVERIFY2(!badge.overridden, "the badge must see agreement with the preset");
 
 	/*

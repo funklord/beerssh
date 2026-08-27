@@ -66,15 +66,31 @@ inherited_t inherited_appearance(const bssh_profile_store *store,
 
 } /* namespace */
 
-bssh_override_badge_t bssh_font_override_badge(const bssh_profile_store *store,
-                                                const bssh_profile_t &profile,
-                                                const QString &picked_font_id,
-                                                int picked_size) {
+bssh_override_badge_t bssh_appearance_override_badge(const bssh_profile_store *store,
+                                                      const bssh_profile_t &profile,
+                                                      const QString &picked_font_id,
+                                                      int picked_size,
+                                                      const QString &picked_scheme_id) {
 	const inherited_t inherited = inherited_appearance(store, profile);
+
+	/*
+	 * The SAME three fields bssh_appearance_overrides() writes, and the
+	 * same rule about an empty scheme meaning "the picker has no opinion
+	 * yet". This used to weigh the font and the size only, so changing
+	 * nothing but the colour scheme wrote an override while the badge one
+	 * line below went on saying "Following preset X" -- the screen and
+	 * the store disagreeing, which is the single thing this helper exists
+	 * to prevent (see the header).
+	 *
+	 * If the two ever diverge again they must diverge here, together.
+	 */
+	const bool scheme_differs = !picked_scheme_id.isEmpty() &&
+	                             picked_scheme_id != inherited.scheme_id;
 
 	bssh_override_badge_t badge;
 	badge.overridden = picked_font_id != inherited.font_id ||
-	                    picked_size != inherited.font_size;
+	                    picked_size != inherited.font_size ||
+	                    scheme_differs;
 
 	if (!badge.overridden) {
 		badge.text = QStringLiteral("Following %1.").arg(inherited.source);
@@ -86,10 +102,25 @@ bssh_override_badge_t bssh_font_override_badge(const bssh_profile_store *store,
 	 * on its own does not tell the user what pressing revert gets back.
 	 */
 	const bssh_font_t *font = bssh_font_catalog::instance().by_id(inherited.font_id);
-	badge.text = QStringLiteral("<b>Overrides %1</b>, which uses %2 at %3 pt.")
+	const bssh_colour_scheme_t *scheme =
+	        bssh_colour_scheme_catalog::instance().by_id(inherited.scheme_id);
+
+	badge.text = QStringLiteral("<b>Overrides %1</b>, which uses %2 at %3 pt")
 	                     .arg(inherited.source,
 	                           font ? font->display_name : inherited.font_id,
 	                           QString::number(inherited.font_size));
+
+	/*
+	 * The colours are named only when they are part of what is being
+	 * overridden. A badge that recites every inherited value is one
+	 * nobody finishes reading.
+	 */
+	if (scheme_differs) {
+		badge.text += QStringLiteral(" and the %1 colours")
+		                      .arg(scheme ? scheme->display_name : inherited.scheme_id);
+	}
+
+	badge.text += QLatin1Char('.');
 	return badge;
 }
 

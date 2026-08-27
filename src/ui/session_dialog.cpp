@@ -599,6 +599,10 @@ QWidget *bssh_session_dialog::build_window_page() {
 	QHBoxLayout *scope_row = new QHBoxLayout();
 
 	m_font_scope = new QLabel(page);
+
+	/* By name, as the picker beside it is: findChild order is not a
+	 * contract, and this dialog holds more than one QLabel. */
+	m_font_scope->setObjectName(QStringLiteral("host_font_scope"));
 	bssh_wrap_note(m_font_scope);
 	scope_row->addWidget(m_font_scope, 1);
 
@@ -632,6 +636,14 @@ QWidget *bssh_session_dialog::build_window_page() {
 	connect(m_font_picker, &bssh_font_picker::font_chosen,
 	         this, [this] { update_override_badges(); });
 
+	/*
+	 * And the colours, which had no listener anywhere in the tree. The
+	 * badge weighed only the font and the size, so a scheme-only change
+	 * wrote an override and said "Following preset X" one line below it.
+	 */
+	connect(m_font_picker, &bssh_font_picker::scheme_chosen,
+	         this, [this] { update_override_badges(); });
+
 	layout->addStretch(1);
 	return page;
 }
@@ -639,8 +651,9 @@ QWidget *bssh_session_dialog::build_window_page() {
 void bssh_session_dialog::update_override_badges() {
 	if (!m_font_scope || !m_font_picker) return;
 
-	const bssh_override_badge_t badge = bssh_font_override_badge(
-	        m_store, m_current, m_font_picker->font_id(), m_font_picker->point_size());
+	const bssh_override_badge_t badge = bssh_appearance_override_badge(
+	        m_store, m_current, m_font_picker->font_id(), m_font_picker->point_size(),
+	        m_font_picker->scheme_id());
 
 	m_font_scope->setText(badge.text);
 	if (m_font_revert) m_font_revert->setEnabled(badge.overridden);

@@ -1,0 +1,35 @@
+# Sabotages for sec 10's override badge: the widget that tells a user
+# whether this host follows its preset or overrides it.
+#
+# Both defects here were invisible for the same reason -- the half that
+# was wired worked. The desktop page refreshed its badge on a font pick
+# and the touch page did not; the badge weighed the font and the size and
+# the write also wrote the colours.
+
+# The badge's scope matching the write's. Without the scheme, changing
+# nothing but the colours writes an override while the badge one line
+# below says "Following preset X".
+[[sabotage]]
+name = "the badge ignores the colours the save writes"
+file = "src/ui/override_badge.cpp"
+find = "\t                    scheme_differs;"
+replace = "\t                    false;"
+expect = "the_badge_covers_what_the_save_writes"
+
+# The touch page following its picker at all. This is the last surviving
+# instance of the desktop/touch asymmetry sec 10 records: the desktop
+# dialog has had this connection since the badge was built.
+[[sabotage]]
+name = "the touch badge never hears the font pick"
+file = "src/ui/host_editor.cpp"
+find = "\tconnect(m_font_picker, &bssh_font_picker::font_chosen,\n\t         this, [this] { update_override_badge(); });"
+expect = "the_touch_badge_follows_the_picker"
+
+# And the desktop's colour connection, which had no listener anywhere in
+# the tree before this -- the same gap as above, one field over, on the
+# front door that was supposed to be the complete one.
+[[sabotage]]
+name = "the desktop badge never hears the scheme pick"
+file = "src/ui/session_dialog.cpp"
+find = "\tconnect(m_font_picker, &bssh_font_picker::scheme_chosen,\n\t         this, [this] { update_override_badges(); });"
+expect = "the_badge_covers_what_the_save_writes"

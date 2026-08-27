@@ -36,10 +36,11 @@ struct bssh_override_badge_t {
  * of its own, not against what it resolves to now -- the latter already
  * includes the override and would always compare equal.
  */
-bssh_override_badge_t bssh_font_override_badge(const bssh_profile_store *store,
-                                                const bssh_profile_t &profile,
-                                                const QString &picked_font_id,
-                                                int picked_size);
+bssh_override_badge_t bssh_appearance_override_badge(const bssh_profile_store *store,
+                                                      const bssh_profile_t &profile,
+                                                      const QString &picked_font_id,
+                                                      int picked_size,
+                                                      const QString &picked_scheme_id);
 
 /*
  * The sparse appearance overrides this host should carry, given what the
