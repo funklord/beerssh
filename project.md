@@ -4514,9 +4514,22 @@ background).
     and §9.6's validator runs in CI and fails the build on an unsuitable
     font. **On both platforms:** the base set (JetBrains Mono, DejaVu, Hack,
     Noto — 4.1 MB, 13 faces) ships inside the APK and is verified loading
-    from `assets:/fonts` on a device. Still open: the shared glyph atlas
-    (§9.5 — the renderer caches per-glyph *family* lookups and QFonts, not
-    rasterised glyphs — see below), Play asset-pack delivery and subsetting
+    from `assets:/fonts` on a device.
+    **The shared glyph atlas is settled and declined, not open**, and this
+    line said otherwise for long enough to nearly buy it twice. §9.5 asked
+    the question with a benchmark and answered it: Qt's font-engine cache is
+    already keyed by exactly the tuple §9.5 proposed — family, size, weight,
+    glyph — and is shared process-wide, so the first pane to paint a size
+    pays for the glyphs (1.74–1.88 ms) and the rest get them (1.0–1.6 ms).
+    **An atlas of our own would be a second cache in front of a working
+    one.** The justification printed here was wrong as well as stale: it said
+    the renderer caches family lookups and QFonts "not rasterised glyphs",
+    which is true of *our* caches and false of the one that matters.
+    **This is §16's failure in the milestone list rather than the register**,
+    and it is why a summary must point at where a thing was measured instead
+    of repeating the reasoning: a copied justification cannot be corrected
+    when the measurement that replaces it lands somewhere else.
+    Still open: Play asset-pack delivery and subsetting
     for the rest
     (Iosevka alone is 42 MB, so the condensed face cannot be the compact
     default until it ships), and the fractional-scaling and multi-monitor
@@ -4569,13 +4582,27 @@ background).
     door you opened. Preset import/export through the UI landed as well
     (§10.5) — the buttons are on the preset editor and the format is INI, the
     same one the store uses — and this line went on calling it open.
-    **The settings now act.** `term` reaches the PTY request, `compression`
-    the handshake, `keepalive_seconds` the transport, `scrollback_lines` the
-    emulator, `cursor_style`/`cursor_blink` the renderer, `bell_enabled` the
-    tab marker, and `on_connect_command` runs on every connect — including
-    reconnects, which is the one that matters, since §5.3's answer to "a
-    reconnect is a new shell" is attaching to tmux. Still inert:
-    nothing — every preset field now reaches something that uses it. **`colour_scheme` is built** (§10.2):
+    **The settings now act.** `term` reaches the PTY request **and** the
+    emulator's XTGETTCAP mirror, `compression` the handshake,
+    `keepalive_seconds` the transport, `scrollback_lines` the emulator **and
+    the view's scrollbar**, `cursor_style`/`cursor_blink` the renderer,
+    `bell_enabled` the tab marker, and `on_connect_command` runs on every
+    connect — including reconnects, which is the one that matters, since
+    §5.3's answer to "a reconnect is a new shell" is attaching to tmux.
+    **Every preset field now reaches everything that uses it**, and the two
+    emphasised above are why that word had to change. This line used to end
+    "reaches *something* that uses it", and both of those fields had a second
+    consumer that nothing was wiring: `term` went to the channel while the
+    emulator answered XTGETTCAP with its default, so the terminal named
+    itself one thing in the environment and another when asked; and
+    `scrollback_lines` trimmed the ring without telling the view, so the
+    scrollbar advertised history that had been dropped.
+    The wording encoded the defect. "Reaches something" is satisfied by the
+    first consumer anybody thinks of, and so is the test named for the same
+    claim — `every_resolved_setting_reaches_something_that_uses_it` checked
+    the transport and not the emulator, and passed. A field is wired when
+    every consumer has it, and counting them is the only form of the question
+    that can fail. **`colour_scheme` is built** (§10.2):
     six curated schemes, picked alongside the font so the preview shows what
     the terminal will actually look like, with the sixteen swatches drawn
     because a scheme's name tells a user nothing.
