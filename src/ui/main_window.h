@@ -306,6 +306,16 @@ private:
 	 * forget, and sec 6.4 already records what that costs.
 	 */
 	void refresh_sessions_from_store();
+
+	/*
+	 * Everything this window listens to on one session. Called when a
+	 * session is created and again when one is ADOPTED from another
+	 * window, which is the road that used to wire nothing at all.
+	 */
+	void wire_session(bssh_session *session);
+
+	/* The chords, acting on whichever session this window is showing. */
+	void handle_shortcut(bssh_input_router::shortcut_t shortcut);
 	void on_pane_focus_changed(bssh_session *session);
 
 	/*
@@ -527,6 +537,13 @@ private:
 	QAction *m_detach_action;
 	QWidget *m_terminal_page;
 	bssh_profile_store *m_profile_store;
+
+	/*
+	 * The sessions this window has already wired. Qt::UniqueConnection
+	 * cannot do this job -- it is refused with a lambda, which sec 6.4
+	 * records costing this project a feature twice.
+	 */
+	QSet<bssh_session *> m_wired_sessions;
 	bssh_session_dialog *m_session_dialog;
 	bssh_host_list *m_host_list;
 	bssh_host_editor *m_host_editor;

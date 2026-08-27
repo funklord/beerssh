@@ -2519,6 +2519,55 @@ void layout_test::a_live_tab_is_not_offered_connect() {
 	while (registry->count() > 0) registry->close(registry->at(0));
 }
 
+void layout_test::a_session_adopted_from_another_window_is_wired_to_this_one() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window first;
+	first.resize(900, 600);
+	first.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&first));
+
+	bssh_session *session = first.registry()->create(named(QStringLiteral("moved")));
+	first.adopt_session(session);
+	QCoreApplication::processEvents();
+
+	/*
+	 * A second window takes it, which is what tearing a tab out does
+	 * (sec 8.4). Only the window a session was CREATED in used to wire
+	 * anything to it, because the wiring hung off session_added and that
+	 * fires once -- so every per-session signal in a torn-out tab still
+	 * pointed at the window it came from.
+	 */
+	bssh_main_window second;
+	second.resize(900, 600);
+	second.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&second));
+
+	second.adopt_session(session);
+	QCoreApplication::processEvents();
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("allow_clipboard_write"), true);
+	session->set_settings(settings);
+
+	QGuiApplication::clipboard()->setText(QStringLiteral("before"));
+
+	/*
+	 * OSC 52 is the readable half of the damage. The first window still
+	 * holds its own connection but guards on showing the session, and it
+	 * no longer shows it -- so if the second window was never wired, the
+	 * remote's clipboard request reaches nobody at all and the write
+	 * simply does not happen. Silently: no error, no status line.
+	 */
+	session->emulator()->feed(QByteArrayLiteral("\x1b]52;c;aGVsbG8=\x1b\\"));
+	QCoreApplication::processEvents();
+
+	QCOMPARE(QGuiApplication::clipboard()->text(), QStringLiteral("hello"));
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::a_trusted_host_can_actually_set_the_clipboard() {
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));

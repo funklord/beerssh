@@ -849,6 +849,27 @@ model on a finger.
   to the remote — with a modifier (conventionally `Shift`) to override and select
   locally. On touch, keep local selection winning. **Done**, encoding delegated
   to libvterm, which already tracks which mouse modes the remote enabled.
+- **A session torn into another window was still wired to the window it came
+  from.** The per-session wiring hung off `session_added`, which fires once,
+  at creation — so `adopt_session()`, the road a torn-out or dropped tab
+  arrives by, wired nothing at all. Every signal kept pointing at the old
+  window, and the worst of it was the shortcut router: `handle_shortcut()`
+  acts on `m_terminal_view` and has no idea which window asked, so
+  **Ctrl+Shift+V in the new window pasted into the old window's session**,
+  Ctrl+Shift+C copied the old window's selection, and the new window's own
+  chords did nothing. Quieter with it: OSC 52 reached nobody, a connection
+  failure printed its error in the window the user was not looking at, and
+  "reconnecting in 4s" never appeared anywhere — §5.3's rule that a
+  reconnection is only real if it can be seen, exactly inverted.
+  One `wire_session()` now, called from both roads, guarded by a set of
+  what this window has already wired — **not** `Qt::UniqueConnection`, which
+  is refused with a lambda and has cost this project a feature twice.
+  **Every existing test passed for the reason that hid it.** The OSC 52 test
+  creates the session in the window it then asserts on, so `session_added`
+  fires and the window is wired; the tear-out test asserts tab counts and
+  registry membership and never asks whether the new window can hear the
+  session. The new test adopts from a *different* window, which is the only
+  arrangement in which the question can be asked at all.
 - **A host edited while it was open reached nothing, and one of the ways it
   failed lost data.** `bssh_session` takes a copy of its profile row at
   construction and there was no way to refresh it — `bssh_profile_store`'s

@@ -69,6 +69,7 @@ private slots:
 	 * which Qt refuses outright -- so the feature had never once run.
 	 */
 	void a_trusted_host_can_actually_set_the_clipboard();
+	void a_session_adopted_from_another_window_is_wired_to_this_one();
 	void a_live_tab_is_not_offered_connect();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already

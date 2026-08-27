@@ -319,6 +319,19 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 */
 	connect(m_registry, &bssh_session_registry::session_closing,
 	         this, [this](bssh_session *session) {
+		/*
+		 * Forget it was wired. The set exists to stop a session being
+		 * wired twice, and a stale entry would stop a LATER session
+		 * being wired at all, since the allocator is free to hand back
+		 * the same address.
+		 *
+		 * NOT pinned by a test, and deliberately not given a sabotage
+		 * entry either: whether an address is ever recycled is the
+		 * allocator's business, so a test would pass with or without
+		 * this line. A check that cannot fail is worse than none.
+		 */
+		m_wired_sessions.remove(session);
+
 		if (m_current == session) detach_session();
 
 		/*
@@ -589,145 +602,12 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * session is currently showing. Connected once here, retargeted by
 	 * show_session().
 	 */
-	auto handle_shortcut = [this](bssh_input_router::shortcut_t shortcut) {
-		if (!m_terminal_view) return;
-
-		/*
-		 * Pane navigation (sec 8.3). The chords were emitted by the
-		 * router and the container knew how to move focus; nothing
-		 * joined the two, so with four panes on screen the only way to
-		 * change pane was the mouse.
-		 */
-		if (shortcut == bssh_input_router::SHORTCUT_FOCUS_PANE_LEFT && m_panes) {
-			m_panes->focus_adjacent(-1);
-			return;
-		}
-		if (shortcut == bssh_input_router::SHORTCUT_FOCUS_PANE_RIGHT && m_panes) {
-			m_panes->focus_adjacent(1);
-			return;
-		}
-
-		if (shortcut == bssh_input_router::SHORTCUT_COPY) {
-			const QString selected = m_terminal_view->selection_text();
-			if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
-		}
-		if (shortcut == bssh_input_router::SHORTCUT_PASTE && m_current) {
-			paste_into_current(QGuiApplication::clipboard()->text());
-		}
-		if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_UP) {
-			m_terminal_view->scroll_by(m_terminal_view->rows() / 2);
-		}
-		if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_DOWN) {
-			m_terminal_view->scroll_by(-m_terminal_view->rows() / 2);
-		}
-
-		/*
-		 * Konsole's Ctrl+Shift+T and Ctrl+Shift+N (sec 6.1). What they
-		 * open is what this device opens with -- a local shell on a
-		 * desktop (sec 8.5) -- because that is what every terminal's new
-		 * tab does and what makes the chord predictable. Duplicating the
-		 * host you are on is a different intent and already has its own
-		 * entry on the tab menu.
-		 *
-		 * Where the device does NOT open with a shell, the front door is
-		 * the honest answer: a phone has nothing for a second shell to
-		 * do, and offering the host list is what its Back button does.
-		 */
-		if (shortcut == bssh_input_router::SHORTCUT_NEW_TAB) open_another_session(false);
-		if (shortcut == bssh_input_router::SHORTCUT_NEW_WINDOW) open_another_session(true);
-	};
+	/*
+	 * Wired to the registry here, and called directly by adopt_session()
+	 * for a session that arrives from another window -- see wire_session.
+	 */
 	connect(m_registry, &bssh_session_registry::session_added,
-	         this, [this, handle_shortcut](bssh_session *session) {
-		/*
-		 * The device settings apply to a session opened AFTER they were
-		 * read, too. apply_device_settings() walks the registry, so a
-		 * session created later would otherwise start with the router's
-		 * own defaults and quietly ignore the choice (sec 6.1).
-		 */
-		if (session->input_router()) {
-			session->input_router()->set_caps_as_ctrl(bssh_app_settings().caps_as_ctrl());
-		}
-
-		/*
-		 * Reconnection is only real to the user if they can see it. A
-		 * terminal that has silently stopped receiving output looks
-		 * identical to one whose remote is merely quiet (sec 5.3).
-		 */
-		if (bssh_conn_manager *manager = m_registry->conn_manager_for(session)) {
-			connect(manager, &bssh_conn_manager::reconnect_scheduled,
-			         this, [this, session](int delay_ms, int attempt) {
-				if (session != m_current) return;
-				m_error = QStringLiteral("reconnecting in %1s (attempt %2)")
-				                  .arg((delay_ms + 999) / 1000)
-				                  .arg(attempt);
-				update_status();
-			});
-			connect(manager, &bssh_conn_manager::reconnect_started, this, [this, session](int) {
-				if (session != m_current) return;
-				m_error = QStringLiteral("reconnecting...");
-				update_status();
-			});
-			connect(manager, &bssh_conn_manager::gave_up, this, [this, session] {
-				if (session != m_current) return;
-				m_error = QStringLiteral("gave up reconnecting -- the shell is gone, "
-				                          "not suspended");
-				update_status();
-			});
-		}
-
-		connect(session->input_router(), &bssh_input_router::shortcut_pressed,
-		         this, handle_shortcut);
-
-		/*
-		 * OSC 52 (sec 7.1): the remote asking to set the clipboard.
-		 * Honoured only where the host's preset says so -- off by
-		 * default -- and never silently: the status line says which host
-		 * did it, because a clipboard that changed without the user
-		 * acting is the whole hazard, and the useful case (yanking in
-		 * vim over ssh) is one they just caused deliberately.
-		 *
-		 * Only the window SHOWING that session reacts. A session is on
-		 * screen in exactly one place (sec 8.4), so this is what makes
-		 * one remote request produce one clipboard write and one line of
-		 * status, rather than one per window that has ever shown it.
-		 */
-		connect(session->emulator(), &bssh_emulator::clipboard_write_requested,
-		         this, [this, session](const QString &text) {
-			if (!m_shown.contains(session)) return;
-			if (!session->settings()
-			              .value(QStringLiteral("allow_clipboard_write")).toBool()) {
-				return;
-			}
-
-			QGuiApplication::clipboard()->setText(text);
-
-			m_error = QStringLiteral("%1 set the clipboard (%2 characters)")
-			                  .arg(session->title())
-			                  .arg(text.size());
-			update_status();
-		});
-
-		/* The settings a host resolves to, reaching the pane on screen. */
-		connect(session, &bssh_session::settings_changed, this, [this, session] {
-			if (m_current != session || !m_terminal_view) return;
-
-			bssh_apply_appearance(m_terminal_view, session->settings());
-			if (m_key_row) {
-				m_key_row->set_layout(session->settings()
-				                              .value(QStringLiteral("key_row_layout"))
-				                              .toString());
-			}
-			session->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
-			                                      m_terminal_view->cell_height());
-			session->resize(m_terminal_view->cols(), m_terminal_view->rows());
-			update_status();
-		});
-
-		/* OSC title also drives the window title on desktop (sec 8.3). */
-		connect(session, &bssh_session::title_changed, this, [this, session] {
-			if (session == m_current) update_window_title();
-		});
-	});
+	         this, &bssh_main_window::wire_session);
 
 
 
@@ -1475,8 +1355,173 @@ void bssh_main_window::take_session(bssh_session *session) {
 	on_registry_changed();
 }
 
+void bssh_main_window::handle_shortcut(bssh_input_router::shortcut_t shortcut) {
+	if (!m_terminal_view) return;
+
+	/*
+	 * Pane navigation (sec 8.3). The chords were emitted by the
+	 * router and the container knew how to move focus; nothing
+	 * joined the two, so with four panes on screen the only way to
+	 * change pane was the mouse.
+	 */
+	if (shortcut == bssh_input_router::SHORTCUT_FOCUS_PANE_LEFT && m_panes) {
+		m_panes->focus_adjacent(-1);
+		return;
+	}
+	if (shortcut == bssh_input_router::SHORTCUT_FOCUS_PANE_RIGHT && m_panes) {
+		m_panes->focus_adjacent(1);
+		return;
+	}
+
+	if (shortcut == bssh_input_router::SHORTCUT_COPY) {
+		const QString selected = m_terminal_view->selection_text();
+		if (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);
+	}
+	if (shortcut == bssh_input_router::SHORTCUT_PASTE && m_current) {
+		paste_into_current(QGuiApplication::clipboard()->text());
+	}
+	if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_UP) {
+		m_terminal_view->scroll_by(m_terminal_view->rows() / 2);
+	}
+	if (shortcut == bssh_input_router::SHORTCUT_SCROLL_PAGE_DOWN) {
+		m_terminal_view->scroll_by(-m_terminal_view->rows() / 2);
+	}
+
+	/*
+	 * Konsole's Ctrl+Shift+T and Ctrl+Shift+N (sec 6.1). What they
+	 * open is what this device opens with -- a local shell on a
+	 * desktop (sec 8.5) -- because that is what every terminal's new
+	 * tab does and what makes the chord predictable. Duplicating the
+	 * host you are on is a different intent and already has its own
+	 * entry on the tab menu.
+	 *
+	 * Where the device does NOT open with a shell, the front door is
+	 * the honest answer: a phone has nothing for a second shell to
+	 * do, and offering the host list is what its Back button does.
+	 */
+	if (shortcut == bssh_input_router::SHORTCUT_NEW_TAB) open_another_session(false);
+	if (shortcut == bssh_input_router::SHORTCUT_NEW_WINDOW) open_another_session(true);
+}
+
+void bssh_main_window::wire_session(bssh_session *session) {
+	if (!session) return;
+
+	/*
+	 * Once per session per window. A session reaches a window by two
+	 * roads -- created in it, or torn out of another one and adopted --
+	 * and only the first used to wire anything, so every per-session
+	 * signal in a torn-out tab was still pointing at the window it came
+	 * from. The worst of it was the shortcut router: Ctrl+Shift+V in the
+	 * new window pasted into the OLD window's session, because
+	 * handle_shortcut acts on m_terminal_view and has no idea which
+	 * window asked.
+	 *
+	 * Guarded by a set rather than by Qt::UniqueConnection, which does
+	 * not work with a lambda and has already cost this project a feature
+	 * twice (sec 6.4). Entries are dropped when a session closes, so a
+	 * later session landing on a recycled address is still wired.
+	 */
+	if (m_wired_sessions.contains(session)) return;
+	m_wired_sessions.insert(session);
+
+	/*
+	 * The device settings apply to a session opened AFTER they were
+	 * read, too. apply_device_settings() walks the registry, so a
+	 * session created later would otherwise start with the router's
+	 * own defaults and quietly ignore the choice (sec 6.1).
+	 */
+	if (session->input_router()) {
+		session->input_router()->set_caps_as_ctrl(bssh_app_settings().caps_as_ctrl());
+	}
+
+	/*
+	 * Reconnection is only real to the user if they can see it. A
+	 * terminal that has silently stopped receiving output looks
+	 * identical to one whose remote is merely quiet (sec 5.3).
+	 */
+	if (bssh_conn_manager *manager = m_registry->conn_manager_for(session)) {
+		connect(manager, &bssh_conn_manager::reconnect_scheduled,
+		         this, [this, session](int delay_ms, int attempt) {
+			if (session != m_current) return;
+			m_error = QStringLiteral("reconnecting in %1s (attempt %2)")
+			                  .arg((delay_ms + 999) / 1000)
+			                  .arg(attempt);
+			update_status();
+		});
+		connect(manager, &bssh_conn_manager::reconnect_started, this, [this, session](int) {
+			if (session != m_current) return;
+			m_error = QStringLiteral("reconnecting...");
+			update_status();
+		});
+		connect(manager, &bssh_conn_manager::gave_up, this, [this, session] {
+			if (session != m_current) return;
+			m_error = QStringLiteral("gave up reconnecting -- the shell is gone, "
+			                          "not suspended");
+			update_status();
+		});
+	}
+
+	connect(session->input_router(), &bssh_input_router::shortcut_pressed,
+	         this, &bssh_main_window::handle_shortcut);
+
+	/*
+	 * OSC 52 (sec 7.1): the remote asking to set the clipboard.
+	 * Honoured only where the host's preset says so -- off by
+	 * default -- and never silently: the status line says which host
+	 * did it, because a clipboard that changed without the user
+	 * acting is the whole hazard, and the useful case (yanking in
+	 * vim over ssh) is one they just caused deliberately.
+	 *
+	 * Only the window SHOWING that session reacts. A session is on
+	 * screen in exactly one place (sec 8.4), so this is what makes
+	 * one remote request produce one clipboard write and one line of
+	 * status, rather than one per window that has ever shown it.
+	 */
+	connect(session->emulator(), &bssh_emulator::clipboard_write_requested,
+	         this, [this, session](const QString &text) {
+		if (!m_shown.contains(session)) return;
+		if (!session->settings()
+		              .value(QStringLiteral("allow_clipboard_write")).toBool()) {
+			return;
+		}
+
+		QGuiApplication::clipboard()->setText(text);
+
+		m_error = QStringLiteral("%1 set the clipboard (%2 characters)")
+		                  .arg(session->title())
+		                  .arg(text.size());
+		update_status();
+	});
+
+	/* The settings a host resolves to, reaching the pane on screen. */
+	connect(session, &bssh_session::settings_changed, this, [this, session] {
+		if (m_current != session || !m_terminal_view) return;
+
+		bssh_apply_appearance(m_terminal_view, session->settings());
+		if (m_key_row) {
+			m_key_row->set_layout(session->settings()
+			                              .value(QStringLiteral("key_row_layout"))
+			                              .toString());
+		}
+		session->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
+		                                      m_terminal_view->cell_height());
+		session->resize(m_terminal_view->cols(), m_terminal_view->rows());
+		update_status();
+	});
+
+	/* OSC title also drives the window title on desktop (sec 8.3). */
+	connect(session, &bssh_session::title_changed, this, [this, session] {
+		if (session == m_current) update_window_title();
+	});
+}
 void bssh_main_window::adopt_session(bssh_session *session) {
 	if (!session || m_shown.contains(session)) return;
+
+	/*
+	 * Wired before it is shown: show_session() retargets things that
+	 * assume the session already has its own connections.
+	 */
+	wire_session(session);
 
 	take_session(session);
 	show_session(session);

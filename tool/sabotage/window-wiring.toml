@@ -1,0 +1,25 @@
+# Sabotages for sec 8.4's per-session wiring: a session reaches a window
+# by two roads, and only one of them used to wire anything.
+#
+# The defect this guards was silent in the ordinary way -- the wiring in
+# the window a session was CREATED in kept working, so every test that
+# created a session in the window it then asserted on passed, and the
+# existing OSC 52 test does exactly that.
+
+# The adopt road. Without it a torn-out tab's signals still point at the
+# window it came from: OSC 52 reaches nobody, connection errors print in
+# the old window's status line, and the chords act on the old window's
+# session.
+[[sabotage]]
+name = "an adopted session is wired to nothing"
+file = "src/ui/main_window.cpp"
+find = "\twire_session(session);\n\n\ttake_session(session);"
+replace = "\ttake_session(session);"
+expect = "a_session_adopted_from_another_window_is_wired_to_this_one"
+
+# The pruning that goes with the guard has NO entry here on purpose. It
+# stops a stale entry blocking a later session that lands on a recycled
+# address, and whether an address is recycled is the allocator's business
+# -- so a test for it would pass whether or not the pruning were there.
+# Recorded as unpinned at the call site rather than guarded by a check
+# that cannot fail.
