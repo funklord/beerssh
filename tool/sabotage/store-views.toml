@@ -1,0 +1,32 @@
+# Sabotages for the views onto the profile store following it.
+#
+# sec 8.4's rule is that a list is rebuilt from its source rather than
+# edited alongside it, because two lists kept in step by hand drift. It
+# was applied to the tab bar and the registry and not to the store, so
+# each view rebuilt only from its own edits.
+
+# The touch list. Without it a host added or deleted anywhere else leaves
+# this list showing something that is no longer there.
+[[sabotage]]
+name = "the touch list ignores the store"
+file = "src/ui/host_list.cpp"
+find = "\t\tconnect(m_store, &bssh_profile_store::changed, this, &bssh_host_list::reload);"
+expect = "a_list_follows_a_host_added_in_another_window"
+
+# The desktop list, which is the one that matters most: two windows are a
+# desktop thing, and the stale window's next save wrote from a list the
+# store had already moved past.
+[[sabotage]]
+name = "the desktop list ignores the store"
+file = "src/ui/session_dialog.cpp"
+find = "\t\t\treload_sessions();"
+expect = "a_list_follows_a_host_added_in_another_window"
+
+# And carrying the selection across. This reload can be caused by another
+# window now, so losing the row under the user's cursor would be a new
+# annoyance put in place of an old staleness.
+[[sabotage]]
+name = "a reload from elsewhere drops the selection"
+file = "src/ui/session_dialog.cpp"
+find = "\t\t\t\t\tm_sessions->setCurrentRow(i);"
+expect = "a_list_follows_a_host_added_in_another_window"

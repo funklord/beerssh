@@ -6,6 +6,9 @@
 #include "platform/platform.h"
 #include <QDir>
 #include "profile_store_test.h"
+#include <QListWidget>
+#include "ui/host_list.h"
+#include "ui/session_dialog.h"
 #include "ui/host_editor.h"
 #include "model/preset.h"
 #include "ui/font_picker.h"
@@ -641,6 +644,65 @@ void profile_store_test::the_touch_editor_saves_the_colour_scheme() {
 
 	QCOMPARE(editor.profile().overrides.value(QStringLiteral("colour_scheme")).toString(),
 	          chosen);
+}
+
+void profile_store_test::a_list_follows_a_host_added_in_another_window() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_profile_t first;
+	first.name = QStringLiteral("alpha");
+	first.host = QStringLiteral("a.example");
+	const int first_id = store.save(first);
+	QVERIFY(first_id > 0);
+
+	/*
+	 * Two views onto one store, which on the desktop is two windows.
+	 * Each rebuilt its list only from its OWN edits, so a host added or
+	 * deleted anywhere else left the other showing something that is no
+	 * longer there -- and that window's next save wrote from a list the
+	 * store had moved past. sec 8.4 already states the rule for the tab
+	 * bar and the registry: rebuild from the source rather than edit a
+	 * copy alongside it.
+	 */
+	bssh_host_list touch(&store);
+	bssh_session_dialog desktop(&store);
+
+	QListWidget *desktop_list =
+	        desktop.findChild<QListWidget *>(QStringLiteral("session_list"));
+	QVERIFY(desktop_list);
+	const int before = desktop_list->count();
+
+	/* Select something, so the reload has a selection to lose. */
+	desktop_list->setCurrentRow(0);
+	QCOMPARE(desktop_list->currentItem()->data(Qt::UserRole).toInt(), first_id);
+
+	bssh_profile_t second;
+	second.name = QStringLiteral("beta");
+	second.host = QStringLiteral("b.example");
+	QVERIFY(store.save(second) > 0);
+
+	QCOMPARE(desktop_list->count(), before + 1);
+
+	/*
+	 * And the selection survived. This reload can now be caused by
+	 * somebody else, so a list that jumps under the user's cursor because
+	 * another window saved would be a new annoyance in place of an old
+	 * staleness.
+	 */
+	QVERIFY(desktop_list->currentItem());
+	QCOMPARE(desktop_list->currentItem()->data(Qt::UserRole).toInt(), first_id);
+
+	/* The touch list follows too, by its own connection. */
+	QListWidget *touch_list =
+	        touch.findChild<QListWidget *>(QStringLiteral("host_list"));
+	QVERIFY(touch_list);
+	bool found = false;
+	for (int i = 0; i < touch_list->count(); ++i) {
+		if (touch_list->item(i)->text().contains(QStringLiteral("beta"))) found = true;
+	}
+	QVERIFY2(found, "the touch list must show a host added elsewhere");
 }
 
 void profile_store_test::the_touch_front_door_can_edit_a_host_it_created() {

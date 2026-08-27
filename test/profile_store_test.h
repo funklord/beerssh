@@ -33,6 +33,7 @@ private slots:
 	void a_jump_host_survives_the_round_trip();
 	void the_touch_editor_resolves_through_the_preset();
 	void the_touch_editor_saves_the_colour_scheme();
+	void a_list_follows_a_host_added_in_another_window();
 	void the_touch_front_door_can_edit_a_host_it_created();
 	void repeated_imports_get_distinguishable_names();
 	void an_explicit_directory_is_never_left();

@@ -22,6 +22,18 @@
 bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
     : QWidget(parent),
       m_store(store) {
+	/*
+	 * The list is rebuilt from the store rather than edited alongside it,
+	 * which is the rule sec 8.4 already states for the tab bar and the
+	 * registry: two lists kept in step by hand drift. It was only ever
+	 * rebuilt from this view's OWN edits, so a host added or deleted
+	 * anywhere else left this list showing something that is no longer
+	 * there.
+	 */
+	if (m_store) {
+		connect(m_store, &bssh_profile_store::changed, this, &bssh_host_list::reload);
+	}
+
 	QVBoxLayout *layout = new QVBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
 	layout->setSpacing(0);
@@ -106,6 +118,10 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	layout->addWidget(heading);
 
 	m_list = new QListWidget(this);
+
+	/* By name: findChild order is not a contract, and this widget holds
+	 * more than one list. */
+	m_list->setObjectName(QStringLiteral("host_list"));
 	m_list->setFrameShape(QFrame::NoFrame);
 
 	/*

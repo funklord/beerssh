@@ -43,6 +43,38 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
       m_font_revert(nullptr) {
 	setWindowTitle(QStringLiteral("BeerSSH Configuration"));
 
+	/*
+	 * The session list is rebuilt from the store rather than edited
+	 * alongside it -- sec 8.4's rule for the tab bar and the registry,
+	 * which applies to every view onto a shared thing. It was rebuilt
+	 * only from this dialog's own saves, so with two windows open a host
+	 * added or deleted in one left the other's list stale, and that
+	 * window's next save wrote from a list the store no longer matched.
+	 *
+	 * The SELECTION is carried across, because this reload can now be
+	 * caused by somebody else: a list that jumps under the user's cursor
+	 * because another window saved is a new annoyance in place of an old
+	 * staleness. The form is unaffected either way -- it is driven by
+	 * m_current, which reload_sessions does not touch.
+	 */
+	if (m_store) {
+		connect(m_store, &bssh_profile_store::changed, this, [this] {
+			const int selected = m_sessions && m_sessions->currentItem()
+			        ? m_sessions->currentItem()->data(Qt::UserRole).toInt()
+			        : 0;
+
+			reload_sessions();
+
+			if (selected <= 0 || !m_sessions) return;
+			for (int i = 0; i < m_sessions->count(); ++i) {
+				if (m_sessions->item(i)->data(Qt::UserRole).toInt() == selected) {
+					m_sessions->setCurrentRow(i);
+					return;
+				}
+			}
+		});
+	}
+
 	QHBoxLayout *columns = new QHBoxLayout(this);
 
 	/*
@@ -301,6 +333,10 @@ QWidget *bssh_session_dialog::build_session_page() {
 
 	QHBoxLayout *list_row = new QHBoxLayout();
 	m_sessions = new QListWidget(saved);
+
+	/* By name: findChild order is not a contract, and this widget holds
+	 * more than one list. */
+	m_sessions->setObjectName(QStringLiteral("session_list"));
 	list_row->addWidget(m_sessions, 1);
 
 	QVBoxLayout *buttons = new QVBoxLayout();

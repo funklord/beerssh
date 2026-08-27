@@ -849,6 +849,26 @@ model on a finger.
   to the remote — with a modifier (conventionally `Shift`) to override and select
   locally. On touch, keep local selection winning. **Done**, encoding delegated
   to libvterm, which already tracks which mouse modes the remote enabled.
+- **Every view onto the profile store followed only its own edits.**
+  `bssh_profile_store::changed()` had one listener — the session refresh
+  above — while three objects hold a copy of what the store contains. So
+  with two desktop windows open, adding or deleting a host in one left the
+  other's list showing something that was no longer there, and that window's
+  next save wrote from a list the store had moved past.
+  **Recorded first as a design question and then withdrawn as one**, which is
+  the part worth keeping. It looked like a decision about how much
+  multi-window state should be pushed versus pulled — and the project had
+  already made that decision, in §8.4, for the tab bar: *rebuilt from the
+  registry rather than edited alongside it, because two lists kept in step by
+  hand drift.* The store is the same shape with a different source, both
+  `reload()` functions already existed, and neither touches the edit form. It
+  was a wiring gap wearing a design question's clothes, and treating it as
+  the latter would have left it open indefinitely for a decision that had
+  been taken already.
+  The selection is carried across the reload, because the reload can now be
+  caused by somebody else: a list that jumps under the user's cursor because
+  another window saved would be a new annoyance put in place of an old
+  staleness.
 - **The view did not follow the history when the history changed SIZE.**
   `bssh_emulator::scrollback_changed` had no listener anywhere in the tree.
   It went unnoticed because the two paths that fire it most — a line pushed
