@@ -805,8 +805,8 @@ namespace {
  */
 QString shell_quoted(const QString &path) {
 	static const QString safe = QStringLiteral(
-		"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-		"@%+=:,./-_");
+	  "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	  "@%+=:,./-_");
 
 	bool needs_quoting = path.isEmpty();
 	for (const QChar c : path) {

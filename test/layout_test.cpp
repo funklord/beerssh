@@ -386,7 +386,7 @@ const int BSSH_PHONE_TALL_DP = 640;
 QString too_wide(const QString &name, const QWidget *widget)
 {
 	return QStringLiteral("%1 demands %2px on a %3px screen")
-		      .arg(name).arg(widget->minimumSizeHint().width()).arg(BSSH_PHONE_DP);
+	        .arg(name).arg(widget->minimumSizeHint().width()).arg(BSSH_PHONE_DP);
 }
 
 /*
@@ -423,10 +423,10 @@ QString overflowing_child(const QWidget *root)
 		const QPoint corner = child->mapTo(root, QPoint(child->width() - 1, 0));
 		if (corner.x() > BSSH_PHONE_DP) {
 			return QStringLiteral("%1 \"%2\" ends at %3px")
-				      .arg(QString::fromLatin1(child->metaObject()->className()),
-				            child->accessibleName().isEmpty() ? child->objectName()
-				                                               : child->accessibleName())
-				      .arg(corner.x());
+			        .arg(QString::fromLatin1(child->metaObject()->className()),
+			              child->accessibleName().isEmpty() ? child->objectName()
+			                                                 : child->accessibleName())
+			        .arg(corner.x());
 		}
 	}
 	return QString();
@@ -461,13 +461,13 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 	 * question is also the stronger one.
 	 */
 	QVERIFY2(widget->minimumSizeHint().height() <= BSSH_PHONE_TALL_DP,
-		        qPrintable(QStringLiteral("%1 needs %2px of a %3px screen, so its rows "
-		                                   "will be squeezed until they overlap")
-		                           .arg(name).arg(widget->minimumSizeHint().height())
-		                           .arg(BSSH_PHONE_TALL_DP)));
+	          qPrintable(QStringLiteral("%1 needs %2px of a %3px screen, so its rows "
+	                                     "will be squeezed until they overlap")
+	                             .arg(name).arg(widget->minimumSizeHint().height())
+	                             .arg(BSSH_PHONE_TALL_DP)));
 
 	QVERIFY2(widget->minimumSizeHint().width() <= BSSH_PHONE_DP,
-		        qPrintable(too_wide(name, widget)));
+	          qPrintable(too_wide(name, widget)));
 
 	const QString overflow = overflowing_child(widget);
 	QVERIFY2(overflow.isEmpty(), qPrintable(QStringLiteral("%1: %2").arg(name, overflow)));
@@ -499,8 +499,8 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 		++checked;
 
 		QString complaint = QStringLiteral(
-			"%1: a %2 has %3dp rows, and sec 6.2's floor is %4 -- "
-			"a row is tapped, so it is a target like any other");
+		  "%1: a %2 has %3dp rows, and sec 6.2's floor is %4 -- "
+		  "a row is tapped, so it is a target like any other");
 		complaint = complaint.arg(name);
 		complaint = complaint.arg(QString::fromLatin1(view->metaObject()->className()));
 		complaint = complaint.arg(view->sizeHintForRow(0)).arg(BSSH_TOUCH_TARGET_DP);
@@ -539,9 +539,9 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 		}
 
 		QString complaint = QStringLiteral(
-			"%1: the page inside its scroll area wants %2px of %3 -- "
-			"a form that scrolls sideways on a phone is a form nobody "
-			"reads. The widest thing on it is %4, asking %5px");
+		  "%1: the page inside its scroll area wants %2px of %3 -- "
+		  "a form that scrolls sideways on a phone is a form nobody "
+		  "reads. The widest thing on it is %4, asking %5px");
 		complaint = complaint.arg(name).arg(wanted).arg(room);
 		complaint = complaint.arg(widest).arg(widest_px);
 
@@ -632,8 +632,8 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 
 		const QString what = QString::fromLatin1(control->metaObject()->className());
 		QString complaint = QStringLiteral(
-			"%1: a %2 is %3dp tall, and sec 6.2's floor is %4 -- "
-			"a thumb cannot reliably hit it");
+		  "%1: a %2 is %3dp tall, and sec 6.2's floor is %4 -- "
+		  "a thumb cannot reliably hit it");
 		complaint = complaint.arg(name, what).arg(control->height());
 		complaint = complaint.arg(BSSH_TOUCH_TARGET_DP);
 
@@ -656,8 +656,8 @@ void check_fits(const QString &name, QWidget *widget, bool sideways = false)
 	 * surfaces and teaches whoever meets it to raise the number.
 	 */
 	QVERIFY2(checked > 0, qPrintable(QStringLiteral(
-		        "%1: the touch floor examined nothing at all, so it is not checking "
-		        "this surface").arg(name)));
+	          "%1: the touch floor examined nothing at all, so it is not checking "
+	          "this surface").arg(name)));
 }
 
 } /* namespace */

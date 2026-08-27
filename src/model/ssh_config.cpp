@@ -38,7 +38,7 @@ QString without_comment(const QString &line) {
 
 QString unquote(const QString &value) {
 	if (value.size() >= 2 && value.startsWith(QLatin1Char('"')) &&
-		   value.endsWith(QLatin1Char('"'))) {
+	     value.endsWith(QLatin1Char('"'))) {
 		return value.mid(1, value.size() - 2);
 	}
 	return value;
@@ -82,7 +82,7 @@ bool split_line(const QString &raw, QString &key, QString &value) {
 
 bool is_pattern(const QString &text) {
 	return text.contains(QLatin1Char('*')) || text.contains(QLatin1Char('?')) ||
-		      text.startsWith(QLatin1Char('!'));
+	        text.startsWith(QLatin1Char('!'));
 }
 
 /* OpenSSH globbing: '*' any run, '?' one character. Anchored both ends. */
@@ -92,7 +92,7 @@ bool glob_matches(const QString &pattern, const QString &name) {
 	expression.replace(QStringLiteral("\\?"), QStringLiteral("."));
 
 	const QRegularExpression regex(QStringLiteral("\\A(?:%1)\\z").arg(expression),
-		                              QRegularExpression::CaseInsensitiveOption);
+	                                QRegularExpression::CaseInsensitiveOption);
 	return regex.match(name).hasMatch();
 }
 

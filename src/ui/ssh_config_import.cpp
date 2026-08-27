@@ -35,9 +35,9 @@ QStringList caveats_of(const bssh_ssh_config_host_t &host) {
 	 */
 	if (!host.proxy_jump.isEmpty()) {
 		out.append(host.has_unsupported()
-			                 ? QStringLiteral("NOT imported: connects via %1")
-			                           .arg(host.proxy_jump)
-			                 : QStringLiteral("via %1").arg(host.proxy_jump));
+		                   ? QStringLiteral("NOT imported: connects via %1")
+		                             .arg(host.proxy_jump)
+		                   : QStringLiteral("via %1").arg(host.proxy_jump));
 	}
 	return out;
 }

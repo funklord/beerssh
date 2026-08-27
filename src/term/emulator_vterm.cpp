@@ -279,9 +279,9 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 	 * blank line arrives through on_damage as usual.
 	 */
 	self->screen.move_rect(dest.start_row, dest.start_col,
-		                      src.start_row, src.start_col,
-		                      qMin(dest.end_row - dest.start_row, src.end_row - src.start_row),
-		                      qMin(dest.end_col - dest.start_col, src.end_col - src.start_col));
+	                        src.start_row, src.start_col,
+	                        qMin(dest.end_row - dest.start_row, src.end_row - src.start_row),
+	                        qMin(dest.end_col - dest.start_col, src.end_col - src.start_col));
 
 	/*
 	 * Images move with the text they were drawn beside. An image pinned
@@ -290,8 +290,8 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 	 */
 	if (dest.start_col == src.start_col && dest.start_row != src.start_row) {
 		self->images.scrolled(qMin(dest.start_row, src.start_row),
-			                     qMax(dest.end_row, src.end_row),
-			                     src.start_row - dest.start_row);
+		                       qMax(dest.end_row, src.end_row),
+		                       src.start_row - dest.start_row);
 		emit self->owner->images_changed();
 	}
 
@@ -405,7 +405,7 @@ int decrqm_state(const bssh_emulator_private *self, int mode) {
 }
 
 int on_unrecognised_csi(const char *leader, const long args[], int argcount,
-	                       const char *intermed, char command, void *user) {
+                         const char *intermed, char command, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 
 	const QByteArray lead = QByteArray(leader ? leader : "");
@@ -425,10 +425,10 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 		if (state < 0) return 0;
 
 		self->reply(QByteArrayLiteral("\x1b[?")
-			           + QByteArray::number(mode)
-			           + QByteArrayLiteral(";")
-			           + QByteArray::number(state)
-			           + QByteArrayLiteral("$y"));
+		             + QByteArray::number(mode)
+		             + QByteArrayLiteral(";")
+		             + QByteArray::number(state)
+		             + QByteArrayLiteral("$y"));
 		return 1;
 	}
 
@@ -462,8 +462,8 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 		}
 		if (lead == "?") {
 			self->reply(QByteArrayLiteral("\x1b[?")
-				           + QByteArray::number(self->kitty_flags())
-				           + QByteArrayLiteral("u"));
+			             + QByteArray::number(self->kitty_flags())
+			             + QByteArrayLiteral("u"));
 			return 1;
 		}
 	}
@@ -498,8 +498,8 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 		}
 		if (lead == "?" && argcount > 0 && args[0] == 4) {
 			self->reply(QByteArrayLiteral("\x1b[>4;")
-				           + QByteArray::number(self->modify_other_keys)
-				           + QByteArrayLiteral("m"));
+			             + QByteArray::number(self->modify_other_keys)
+			             + QByteArrayLiteral("m"));
 			return 1;
 		}
 	}
@@ -523,7 +523,7 @@ int on_apc(VTermStringFragment frag, void *user) {
 	if (!self->apc_buffer.startsWith('G')) return 0;
 
 	self->apply_graphics(bssh_parse_kitty(self->apc_buffer, self->graphics,
-		                                     self->cell_width, self->cell_height));
+	                                       self->cell_width, self->cell_height));
 	return 1;
 }
 
@@ -563,7 +563,7 @@ int on_osc(int command, VTermStringFragment frag, void *user) {
 	if (command == 8) return on_osc_link(self->osc_buffer, self);
 
 	self->apply_graphics(bssh_parse_iterm2(self->osc_buffer,
-		                                      self->cell_width, self->cell_height));
+	                                        self->cell_width, self->cell_height));
 	return 1;
 }
 
@@ -634,7 +634,7 @@ int on_selection_set(VTermSelectionMask mask, VTermStringFragment frag, void *us
 	 */
 	if (!self->selection_oversized && !self->selection_buffer.isEmpty()) {
 		emit self->owner->clipboard_write_requested(
-			      QString::fromUtf8(self->selection_buffer));
+		        QString::fromUtf8(self->selection_buffer));
 	}
 
 	self->selection_buffer.clear();
@@ -693,13 +693,13 @@ int on_xtgettcap(const QByteArray &payload, bssh_emulator_private *self) {
 
 		if (value.isEmpty()) {
 			self->reply(QByteArrayLiteral("\x1bP0+r") + to_hex(name)
-				           + QByteArrayLiteral("\x1b\\"));
+			             + QByteArrayLiteral("\x1b\\"));
 			continue;
 		}
 
 		self->reply(QByteArrayLiteral("\x1bP1+r") + to_hex(name)
-			           + QByteArrayLiteral("=") + to_hex(value)
-			           + QByteArrayLiteral("\x1b\\"));
+		             + QByteArrayLiteral("=") + to_hex(value)
+		             + QByteArrayLiteral("\x1b\\"));
 	}
 	return 1;
 }
@@ -738,7 +738,7 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
 	if (!frag.final) return 1;
 
 	self->apply_graphics(bssh_parse_sixel(self->dcs_buffer,
-		                                     self->cell_width, self->cell_height));
+	                                       self->cell_width, self->cell_height));
 	self->dcs_buffer.clear();
 	return 1;
 }

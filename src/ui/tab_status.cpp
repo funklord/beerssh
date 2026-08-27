@@ -43,7 +43,7 @@ state_t state_for(const bssh_session *session) {
  */
 QColor colour_for(state_t state) {
 	const bool light =
-		      QApplication::palette().color(QPalette::Window).lightness() >= 128;
+	        QApplication::palette().color(QPalette::Window).lightness() >= 128;
 
 	switch (state) {
 	case CONNECTED:

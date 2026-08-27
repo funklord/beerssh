@@ -99,10 +99,10 @@ void shoot(const QString &name, QWidget *widget, int width, int height) {
 	widget->grab().save(path);
 
 	QTextStream(stdout) << QStringLiteral("  %1  %2x%3  needs %4x%5%6\n")
-		                             .arg(path, -44)
-		                             .arg(width).arg(height)
-		                             .arg(needed.width()).arg(needed.height())
-		                             .arg(fits ? QString() : QStringLiteral("   <-- DOES NOT FIT"));
+	                               .arg(path, -44)
+	                               .arg(width).arg(height)
+	                               .arg(needed.width()).arg(needed.height())
+	                               .arg(fits ? QString() : QStringLiteral("   <-- DOES NOT FIT"));
 	widget->hide();
 }
 

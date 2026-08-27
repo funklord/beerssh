@@ -61,9 +61,9 @@ QByteArray derive_key(const QString &passphrase, const QByteArray &salt) {
 	const QByteArray passphrase_utf8 = passphrase.toUtf8();
 
 	if (PKCS5_PBKDF2_HMAC(passphrase_utf8.constData(), passphrase_utf8.size(),
-		                     reinterpret_cast<const unsigned char *>(salt.constData()),
-		                     salt.size(), BSSH_PBKDF2_ITERATIONS, EVP_sha256(),
-		                     key.size(), reinterpret_cast<unsigned char *>(key.data())) != 1) {
+	                       reinterpret_cast<const unsigned char *>(salt.constData()),
+	                       salt.size(), BSSH_PBKDF2_ITERATIONS, EVP_sha256(),
+	                       key.size(), reinterpret_cast<unsigned char *>(key.data())) != 1) {
 		return QByteArray();
 	}
 	return key;
@@ -82,24 +82,24 @@ QByteArray encrypt(const QByteArray &plaintext, const QByteArray &key, QByteArra
 	int length = 0;
 	int total = 0;
 	bool ok = EVP_EncryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr,
-		                            reinterpret_cast<const unsigned char *>(key.constData()),
-		                            reinterpret_cast<const unsigned char *>(nonce_out.constData())) == 1;
+	                              reinterpret_cast<const unsigned char *>(key.constData()),
+	                              reinterpret_cast<const unsigned char *>(nonce_out.constData())) == 1;
 
 	if (ok) {
 		ok = EVP_EncryptUpdate(ctx, reinterpret_cast<unsigned char *>(out.data()), &length,
-			                      reinterpret_cast<const unsigned char *>(plaintext.constData()),
-			                      plaintext.size()) == 1;
+		                        reinterpret_cast<const unsigned char *>(plaintext.constData()),
+		                        plaintext.size()) == 1;
 		total = length;
 	}
 	if (ok) {
 		ok = EVP_EncryptFinal_ex(ctx, reinterpret_cast<unsigned char *>(out.data()) + total,
-			                        &length) == 1;
+		                          &length) == 1;
 		total += length;
 	}
 	if (ok) {
 		/* The tag is what makes a wrong passphrase a detectable failure. */
 		ok = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_GET_TAG, BSSH_TAG_BYTES,
-			                        out.data() + total) == 1;
+		                          out.data() + total) == 1;
 		total += BSSH_TAG_BYTES;
 	}
 
@@ -123,17 +123,17 @@ QByteArray decrypt(const QByteArray &ciphertext, const QByteArray &key, const QB
 	int total = 0;
 
 	bool ok = EVP_DecryptInit_ex(ctx, EVP_aes_256_gcm(), nullptr,
-		                            reinterpret_cast<const unsigned char *>(key.constData()),
-		                            reinterpret_cast<const unsigned char *>(nonce.constData())) == 1;
+	                              reinterpret_cast<const unsigned char *>(key.constData()),
+	                              reinterpret_cast<const unsigned char *>(nonce.constData())) == 1;
 	if (ok) {
 		ok = EVP_DecryptUpdate(ctx, reinterpret_cast<unsigned char *>(out.data()), &length,
-			                      reinterpret_cast<const unsigned char *>(ciphertext.constData()),
-			                      body) == 1;
+		                        reinterpret_cast<const unsigned char *>(ciphertext.constData()),
+		                        body) == 1;
 		total = length;
 	}
 	if (ok) {
 		ok = EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, BSSH_TAG_BYTES,
-			                        const_cast<char *>(ciphertext.constData()) + body) == 1;
+		                          const_cast<char *>(ciphertext.constData()) + body) == 1;
 	}
 	if (ok) {
 		/*
@@ -143,7 +143,7 @@ QByteArray decrypt(const QByteArray &ciphertext, const QByteArray &key, const QB
 		 * caller would then treat as a credential.
 		 */
 		ok = EVP_DecryptFinal_ex(ctx, reinterpret_cast<unsigned char *>(out.data()) + total,
-			                        &length) == 1;
+		                          &length) == 1;
 		total += length;
 	}
 

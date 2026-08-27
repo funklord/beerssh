@@ -31,7 +31,7 @@ QByteArray plain_scrolling(int lines) {
 	QByteArray out;
 	for (int i = 0; i < lines; ++i) {
 		out += QByteArrayLiteral("this is a fairly ordinary line of build output number ")
-			      + QByteArray::number(i) + QByteArrayLiteral("\r\n");
+		        + QByteArray::number(i) + QByteArrayLiteral("\r\n");
 	}
 	return out;
 }
@@ -46,8 +46,8 @@ QByteArray coloured_scrolling(int lines) {
 	QByteArray out;
 	for (int i = 0; i < lines; ++i) {
 		out += QByteArrayLiteral("\x1b[32m[ok]\x1b[0m \x1b[1;34mmodule\x1b[0m ")
-			      + QByteArray::number(i)
-			      + QByteArrayLiteral(" \x1b[33mcompiled\x1b[0m in 0.4s\r\n");
+		        + QByteArray::number(i)
+		        + QByteArrayLiteral(" \x1b[33mcompiled\x1b[0m in 0.4s\r\n");
 	}
 	return out;
 }
@@ -64,7 +64,7 @@ QByteArray full_repaint(int frames, int cols, int rows) {
 		out += QByteArrayLiteral("\x1b[H");
 		for (int row = 0; row < rows; ++row) {
 			out += QByteArrayLiteral("\x1b[") + QByteArray::number(row + 1)
-				      + QByteArrayLiteral(";1H");
+			        + QByteArrayLiteral(";1H");
 			out += QByteArray(cols - 1, char('a' + (frame + row) % 26));
 		}
 	}
@@ -76,7 +76,7 @@ QByteArray full_repaint(int frames, int cols, int rows) {
  * back the last emulator so the caller can check the screen it produced.
  */
 qint64 fastest_nsecs(const QByteArray &stream, int cols, int rows,
-	                    QString *final_text) {
+                      QString *final_text) {
 	qint64 best = -1;
 
 	/*
@@ -114,9 +114,9 @@ qint64 fastest_nsecs(const QByteArray &stream, int cols, int rows,
 void report(const char *what, int cols, int rows, qint64 bytes, qint64 nsecs) {
 	const double seconds = double(nsecs) / 1e9;
 	qInfo("%-26s %3dx%-3d  %7.2f MB/s  (%lld KB in %lld ms)",
-		     what, cols, rows,
-		     double(bytes) / seconds / (1024.0 * 1024.0),
-		     bytes / 1024, nsecs / 1000000);
+	       what, cols, rows,
+	       double(bytes) / seconds / (1024.0 * 1024.0),
+	       bytes / 1024, nsecs / 1000000);
 }
 
 /*
@@ -128,9 +128,9 @@ QByteArray painting_sample(int cols, int rows) {
 	QByteArray out(QByteArrayLiteral("\x1b[H"));
 	for (int row = 0; row < rows; ++row) {
 		out += QByteArrayLiteral("\x1b[") + QByteArray::number(row + 1)
-			      + QByteArrayLiteral(";1H");
+		        + QByteArrayLiteral(";1H");
 		out += QByteArrayLiteral("\x1b[3") + QByteArray::number(row % 8)
-			      + QByteArrayLiteral("m[ok]\x1b[0m \x1b[1mmodule\x1b[0m ");
+		        + QByteArrayLiteral("m[ok]\x1b[0m \x1b[1mmodule\x1b[0m ");
 		out += QByteArray::number(row);
 		out += QByteArrayLiteral(" \xe2\x94\x82 ");
 
@@ -174,7 +174,7 @@ double fastest_paint_ms(const QList<bssh_terminal_view *> &views, int frames) {
 
 void report_paint(const char *what, int panes, int cols, int rows, double ms) {
 	qInfo("%-26s %d x %3dx%-3d  %7.2f ms/frame  (%5.1f fps)",
-		     what, panes, cols, rows, ms, ms > 0 ? 1000.0 / ms : 0.0);
+	       what, panes, cols, rows, ms, ms > 0 ? 1000.0 / ms : 0.0);
 }
 
 /* Trailing blanks are stripped by to_text(), so compare on a real row. */

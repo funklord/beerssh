@@ -84,9 +84,9 @@ bool ordinary_phase() {
 bool fresh_connection_expected() {
 	const QString which = phase();
 	return which.isEmpty() ||
-		      which == QStringLiteral("trust") ||
-		      which == QStringLiteral("tunnel_drop") ||
-		      which == QStringLiteral("tunnel_black_hole");
+	        which == QStringLiteral("trust") ||
+	        which == QStringLiteral("tunnel_drop") ||
+	        which == QStringLiteral("tunnel_black_hole");
 }
 
 quint16 test_port() {
@@ -106,8 +106,8 @@ QString test_key() {
  * result worth reporting rather than one to wait forever for.
  */
 outcome_t attempt(const QString &identity, bool trust_host_key = true,
-	                 const QString &jump = QString(),
-	                 const QStringList &command = QStringList())
+                   const QString &jump = QString(),
+                   const QStringList &command = QStringList())
 {
 	outcome_t out;
 
@@ -116,9 +116,9 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true,
 	QByteArray received;
 
 	QObject::connect(session, &bssh_ssh_session::bytes_received,
-		                [&received](const QByteArray &bytes) { received += bytes; });
+	                  [&received](const QByteArray &bytes) { received += bytes; });
 	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
-		                [&out, session, trust_host_key, &loop](const QString &) {
+	                  [&out, session, trust_host_key, &loop](const QString &) {
 		out.key_unknown = true;
 		/*
 		 * Held, not accepted, unless this attempt says otherwise: the whole
@@ -129,33 +129,33 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true,
 		else loop.quit();
 	});
 	QObject::connect(session, &bssh_ssh_session::host_key_revoked,
-		                [&out, &loop](const QString &) {
+	                  [&out, &loop](const QString &) {
 		out.key_revoked = true;
 		loop.quit();
 	});
 	QObject::connect(session, &bssh_ssh_session::host_key_changed,
-		                [&out, &loop](const QString &) {
+	                  [&out, &loop](const QString &) {
 		out.key_changed = true;
 		loop.quit();
 	});
 	QObject::connect(session, &bssh_ssh_session::password_required,
-		                [&out, &loop] { out.password_asked = true; loop.quit(); });
+	                  [&out, &loop] { out.password_asked = true; loop.quit(); });
 	QObject::connect(session, &bssh_ssh_session::key_passphrase_required,
-		                [&out, &loop] { out.passphrase_asked = true; loop.quit(); });
+	                  [&out, &loop] { out.passphrase_asked = true; loop.quit(); });
 	QObject::connect(session, &bssh_ssh_session::failed,
-		                [&out, &loop](const QString &reason) {
+	                  [&out, &loop](const QString &reason) {
 		out.reason = reason;
 		loop.quit();
 	});
 	QObject::connect(session, &bssh_ssh_session::shell_exited,
-		                [&out, &loop](int status) {
+	                  [&out, &loop](int status) {
 		out.exited = true;
 		out.exit_status = status;
 		loop.quit();
 	});
 
 	QObject::connect(session, &bssh_ssh_session::state_changed,
-		                [&](bssh_ssh_session::state_t state) {
+	                  [&](bssh_ssh_session::state_t state) {
 		if (state != bssh_ssh_session::CONNECTED) return;
 
 		out.connected = true;
@@ -181,7 +181,7 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true,
 	if (!jump.isEmpty()) session->set_proxy_jump(jump);
 	if (!command.isEmpty()) session->set_command(command);
 	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
-		                        qEnvironmentVariable("USER"));
+	                          qEnvironmentVariable("USER"));
 
 	QTimer guard;
 	guard.setSingleShot(true);
@@ -203,7 +203,7 @@ outcome_t attempt(const QString &identity, bool trust_host_key = true,
  */
 QString known_hosts_file() {
 	return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) +
-		      QStringLiteral("/known_hosts");
+	        QStringLiteral("/known_hosts");
 }
 
 /*
@@ -242,7 +242,7 @@ bool server_available()
 {
 	if (test_port() == 0 || test_key().isEmpty()) {
 		QTest::qSkip("no live sshd; run via tool/check-ssh.sh (make check-ssh)",
-			            __FILE__, __LINE__);
+		              __FILE__, __LINE__);
 		return false;
 	}
 	return true;
@@ -868,21 +868,21 @@ namespace {
  * the far end believes about the terminal it is drawing into.
  */
 QByteArray shell_output(int cols, int rows, const QByteArray &command,
-	                       int resize_cols = 0, int resize_rows = 0)
+                         int resize_cols = 0, int resize_rows = 0)
 {
 	bssh_ssh_session *session = bssh_ssh_session::create();
 	QEventLoop loop;
 	QByteArray received;
 
 	QObject::connect(session, &bssh_ssh_session::bytes_received,
-		                [&received](const QByteArray &bytes) { received += bytes; });
+	                  [&received](const QByteArray &bytes) { received += bytes; });
 	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
-		                [session](const QString &) { session->accept_host_key(); });
+	                  [session](const QString &) { session->accept_host_key(); });
 	QObject::connect(session, &bssh_ssh_session::failed,
-		                [&loop](const QString &) { loop.quit(); });
+	                  [&loop](const QString &) { loop.quit(); });
 
 	QObject::connect(session, &bssh_ssh_session::state_changed,
-		                [&](bssh_ssh_session::state_t state) {
+	                  [&](bssh_ssh_session::state_t state) {
 		if (state != bssh_ssh_session::CONNECTED) return;
 
 		session->open_shell(cols, rows);
@@ -906,7 +906,7 @@ QByteArray shell_output(int cols, int rows, const QByteArray &command,
 
 	session->set_identity_file(test_key());
 	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
-		                        qEnvironmentVariable("USER"));
+	                          qEnvironmentVariable("USER"));
 
 	QTimer guard;
 	guard.setSingleShot(true);

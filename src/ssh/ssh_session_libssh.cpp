@@ -80,7 +80,7 @@ const int BSSH_TCP_KEEPALIVE_COUNT = 3;
 bool default_identity_exists() {
 	const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
 	const QStringList names = {QStringLiteral("id_ed25519"), QStringLiteral("id_ecdsa"),
-			                        QStringLiteral("id_rsa"), QStringLiteral("id_dsa")};
+		                          QStringLiteral("id_rsa"), QStringLiteral("id_dsa")};
 
 	for (const QString &name : names) {
 		if (QFile::exists(home + QStringLiteral("/.ssh/") + name)) return true;

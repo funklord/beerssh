@@ -14,7 +14,7 @@ namespace {
 
 /* The parsed host with this alias, or a default-constructed one. */
 bssh_ssh_config_host_t find(const QList<bssh_ssh_config_host_t> &hosts,
-	                           const QString &alias) {
+                             const QString &alias) {
 	for (const bssh_ssh_config_host_t &host : hosts) {
 		if (host.alias == alias) return host;
 	}

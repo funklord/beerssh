@@ -464,19 +464,19 @@ namespace {
 /* A press, a move and a release, delivered where the filter is watching. */
 void press_at(QWidget *target, const QPoint &at) {
 	QMouseEvent event(QEvent::MouseButtonPress, at, target->mapToGlobal(at),
-		                 Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
 	QApplication::sendEvent(target, &event);
 }
 
 void move_to(QWidget *target, const QPoint &at) {
 	QMouseEvent event(QEvent::MouseMove, at, target->mapToGlobal(at),
-		                 Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	                   Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
 	QApplication::sendEvent(target, &event);
 }
 
 void release_at(QWidget *target, const QPoint &at) {
 	QMouseEvent event(QEvent::MouseButtonRelease, at, target->mapToGlobal(at),
-		                 Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	                   Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
 	QApplication::sendEvent(target, &event);
 }
 

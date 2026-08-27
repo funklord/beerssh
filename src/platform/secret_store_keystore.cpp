@@ -51,10 +51,10 @@ QByteArray call_bytes(const char *method, const QByteArray &argument) {
 	jbyteArray in = env->NewByteArray(argument.size());
 	if (!in) return QByteArray();
 	env->SetByteArrayRegion(in, 0, argument.size(),
-		                       reinterpret_cast<const jbyte *>(argument.constData()));
+	                         reinterpret_cast<const jbyte *>(argument.constData()));
 
 	const QJniObject result = QJniObject::callStaticObjectMethod(
-		      BSSH_KEYSTORE_CLASS, method, "([B)[B", in);
+	        BSSH_KEYSTORE_CLASS, method, "([B)[B", in);
 	env->DeleteLocalRef(in);
 
 	if (!result.isValid()) return QByteArray();

@@ -56,7 +56,7 @@ QJsonValue typed_value(const QString &key, const QString &raw) {
 
 	if (reference.isBool()) {
 		return raw.compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0 ||
-			     raw == QStringLiteral("1");
+		       raw == QStringLiteral("1");
 	}
 	if (reference.isDouble()) return raw.toInt();
 

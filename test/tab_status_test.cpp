@@ -77,7 +77,7 @@ double channel(int value) {
 
 double luminance(const QColor &colour) {
 	return 0.2126 * channel(colour.red()) + 0.7152 * channel(colour.green()) +
-		      0.0722 * channel(colour.blue());
+	        0.0722 * channel(colour.blue());
 }
 
 double contrast(const QColor &a, const QColor &b) {

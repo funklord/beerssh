@@ -114,8 +114,8 @@ void repaint_everything(bssh_appearance_t appearance) {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
 	if (QGuiApplication::styleHints()) {
 		QGuiApplication::styleHints()->setColorScheme(
-			      appearance == BSSH_APPEARANCE_DARK ? Qt::ColorScheme::Dark
-			                                          : Qt::ColorScheme::Light);
+		        appearance == BSSH_APPEARANCE_DARK ? Qt::ColorScheme::Dark
+		                                            : Qt::ColorScheme::Light);
 	}
 #endif
 }

@@ -45,11 +45,11 @@ bssh_appearance_t android_night_mode() {
 	if (!context.isValid()) return BSSH_APPEARANCE_UNKNOWN;
 
 	const QJniObject resources =
-		      context.callObjectMethod("getResources", "()Landroid/content/res/Resources;");
+	        context.callObjectMethod("getResources", "()Landroid/content/res/Resources;");
 	if (!resources.isValid()) return BSSH_APPEARANCE_UNKNOWN;
 
 	const QJniObject config =
-		      resources.callObjectMethod("getConfiguration", "()Landroid/content/res/Configuration;");
+	        resources.callObjectMethod("getConfiguration", "()Landroid/content/res/Configuration;");
 	if (!config.isValid()) return BSSH_APPEARANCE_UNKNOWN;
 
 	const int ui_mode = config.getField<jint>("uiMode");
@@ -99,11 +99,11 @@ void request_notification_permission() {
 	if (!activity.isValid()) return;
 
 	const QJniObject name =
-		      QJniObject::fromString(QStringLiteral("android.permission.POST_NOTIFICATIONS"));
+	        QJniObject::fromString(QStringLiteral("android.permission.POST_NOTIFICATIONS"));
 
 	/* PackageManager.PERMISSION_GRANTED */
 	const jint granted = activity.callMethod<jint>(
-		      "checkSelfPermission", "(Ljava/lang/String;)I", name.object<jstring>());
+	        "checkSelfPermission", "(Ljava/lang/String;)I", name.object<jstring>());
 	if (granted == 0) return;
 
 	/*
@@ -121,12 +121,12 @@ void request_notification_permission() {
 		if (!string_class) return;
 
 		const QJniObject wanted =
-			      QJniObject::fromString(QStringLiteral("android.permission.POST_NOTIFICATIONS"));
+		        QJniObject::fromString(QStringLiteral("android.permission.POST_NOTIFICATIONS"));
 		jobjectArray names = env->NewObjectArray(1, string_class, wanted.object<jstring>());
 		if (!names) return;
 
 		ui_activity.callMethod<void>("requestPermissions", "([Ljava/lang/String;I)V",
-			                            names, jint(BSSH_NOTIFICATION_PERMISSION_REQUEST));
+		                              names, jint(BSSH_NOTIFICATION_PERMISSION_REQUEST));
 		env->DeleteLocalRef(names);
 	});
 }

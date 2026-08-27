@@ -35,31 +35,31 @@ struct inherited_t {
  * with an empty string and records an override on every save.
  */
 inherited_t inherited_appearance(const bssh_profile_store *store,
-	                                const bssh_profile_t &profile) {
+                                  const bssh_profile_t &profile) {
 	inherited_t out;
 
 	out.preset = store && profile.preset_id != 0 ? store->preset(profile.preset_id)
-		                                           : bssh_preset_t();
+	                                             : bssh_preset_t();
 
 	QJsonObject without = profile.overrides;
 	for (const char *key : BSSH_APPEARANCE_KEYS) without.remove(QLatin1String(key));
 
 	const QJsonObject followed =
-		      profile.preset_id == 0 ? bssh_settings_resolver::app_defaults()
-		                             : bssh_settings_resolver::resolve(out.preset, without);
+	        profile.preset_id == 0 ? bssh_settings_resolver::app_defaults()
+	                               : bssh_settings_resolver::resolve(out.preset, without);
 
 	const bssh_platform *platform = bssh_platform::instance();
 	const bool compact = platform && platform->is_touch_primary();
 
 	out.font_id = bssh_font_catalog::instance().effective_id(
-		      followed.value(QStringLiteral("font_family")).toString(), compact);
+	        followed.value(QStringLiteral("font_family")).toString(), compact);
 	out.font_size = followed.value(QStringLiteral("font_size")).toInt();
 	out.scheme_id = bssh_colour_scheme_catalog::instance().effective_id(
-		      followed.value(QStringLiteral("colour_scheme")).toString());
+	        followed.value(QStringLiteral("colour_scheme")).toString());
 
 	out.source = profile.preset_id == 0
-		      ? QStringLiteral("the app defaults")
-		      : QStringLiteral("preset \"%1\"").arg(out.preset.name);
+	        ? QStringLiteral("the app defaults")
+	        : QStringLiteral("preset \"%1\"").arg(out.preset.name);
 
 	return out;
 }
