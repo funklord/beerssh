@@ -1338,8 +1338,38 @@ time by the top-level Makefile — **not** committed into the submodule
 itself, because a submodule pinned to a commit that exists only on this
 machine is one nobody else can clone. An upstream update that conflicts
 fails loudly at the patch step rather than silently dropping the fix, and
-`make veryclean` hands the submodule back pristine. All three patches are
+`make veryclean` hands the submodule back pristine. All five patches are
 worth sending upstream.
+
+**`vterm-patch/0005` is the fourth kind: a reset that clears state without
+telling anyone.** `vterm_state_reset()` cleared `mode.alt_screen` and
+`mouse_flags` by direct assignment, bypassing `vterm_state_set_termprop()`
+entirely — so the screen layer was never told, and neither was anything
+above it. Reachable from bytes any remote sends, RIS or DECSTR:
+the screen layer kept pointing at the alternate buffer while the state
+said primary, and this terminal kept a mouse mode libvterm no longer had,
+routing every click to a remote that would drop it — clicks dead, wheel
+swallowed, no context menu, no selection, until the session reconnected.
+Both are fixed by announcing rather than assigning, and `set_termprop`
+already does the whole job for these two properties including the buffer
+swap, so the reset came out **more** correct as well as louder.
+The third part of that patch is a new property, and it is the one that
+needed a design rather than a fix. A terminal built on libvterm has modes
+libvterm does not model — the kitty keyboard flags and xterm's
+`modifyOtherKeys` are ours, and **both specifications say RIS clears
+them** — and there was no way to learn that a reset had happened at all.
+So those survived everything: not RIS, not DECSTR, not leaving the
+alternate screen, not a new shell. After a kitty-aware program died
+without popping its flags, **`Ctrl+C` encoded as `CSI 99;5u` for the life
+of the terminal**: no SIGINT delivered, and the escape deposited on the
+shell's command line instead. `VTERM_PROP_RESET` is announced last, so a
+listener sees a terminal that is already reset; it stores nothing, and it
+is listed explicitly in `set_termprop`'s switch so that adding it cannot
+quietly make that switch non-exhaustive.
+It paid for itself immediately in our own code: `reset_modes()` used to
+feed `CSI ? 1049 l` before its reset to work around the altscreen half,
+and to clear the mouse, kitty and `modifyOtherKeys` shadows by hand.
+Both are gone. A reconnect and a remote's own RIS now take the same path.
 
 The third is not an extension hole but an ordering bug, and it is the one
 that shows why vendoring keeps earning its keep after the feature work is
@@ -3939,39 +3969,30 @@ The desktop build is what makes this project testable at all — use it.
   So it was content, not a repaint artifact. Re-deriving the paint path by
   inspection had been listed as one of the three things that might be wrong;
   it was not.
-- **A reset does not reach the state we keep beside libvterm's, and that is
-  the largest thing still open here.** Measured, not fixed — it wants a
-  vendored `vterm-patch/` and is its own piece of work.
-  `vterm_state_reset()` clears `mouse_flags` and `mode.alt_screen` by **direct
-  assignment**, never through `settermprop`, so our copies never hear about it.
-  This is the same wart `reset_modes()` already works around locally by
-  feeding `CSI ? 1049 l` before the reset; nothing does the equivalent for a
-  reset the **remote** issues. After a remote `reset` (RIS `ESC c`, or DECSTR
-  `CSI ! p`): `mouse_reporting()` still answers true while libvterm's flags
-  are zero, so clicks are routed to a remote that drops them, the wheel is
-  swallowed, the context menu never opens and text cannot be selected — the
-  terminal echoes normally and the mouse is inert until reconnect, with
-  `Shift` the only workaround and no way to discover it. And an RIS issued
-  while on the alternate screen leaves libvterm drawing into the alternate
-  buffer with its state claiming primary, which pins `available_history()` at
-  zero and makes the scrollback permanently unreachable.
-  **Worse, the two protocols libvterm does not model are ours alone**, so
-  *nothing* clears them — not RIS, not DECSTR, not leaving the alternate
-  screen, not a new shell on the same transport. Only `reset_modes()` does,
-  and its one caller is a reconnect. A kitty-aware program that dies before it
-  pops its flags leaves **Ctrl+C sending `CSI 99;5u`** instead of `0x03`
-  for ever: no SIGINT, and `[99;5u` deposited on the command line. `Escape`
-  goes the same way as `CSI 27u`, so vi-mode readline never leaves insert.
-  `modifyOtherKeys` behaves identically. Both the kitty specification and
-  xterm clear these on RIS; the user's only escape here is dropping the
-  connection. This is §7.1's own rule — bytes onto a shell's command line for
-  a protocol that shell never enabled — reached by a route §7.1 did not
-  consider.
-  A dead field turned up beside it: `mouse_mode` is documented as kept "so
-  DECRQM can answer for them" and is read nowhere. The answers for 1000/1002/
-  1003 come from libvterm's own `mouse_flags`, so no wrong reply is emitted;
-  the field is a comment describing an intention rather than the code beneath
-  it, which is the shape this document keeps finding.
+- **A reset reaches the state we keep beside libvterm's now — `vterm-patch/
+  0005`, and it is the fourth patch that vendoring paid for.** The mechanism
+  and the design are in §7.1; what belongs here is what it cost to find and
+  how it is held down.
+  It was found by an audit asking, of every path that writes to the remote,
+  what gates it — the same question that had just turned up the reconnect
+  carry-over. The answer for the kitty flags and `modifyOtherKeys` was
+  "nothing clears these, ever", which is a worse answer than the one the
+  audit was looking for.
+  **The proof the patch is right is a rebuild from pristine**, not a reading
+  of the diff: the submodule at its gitlink commit, all five patches applied
+  in order, compared byte-for-byte against the working tree. Run again after
+  the sabotage pass, which edits the vendored source on purpose, and it still
+  reproduced — which is what says the runner's journal really did hand the
+  submodule back.
+  **Two of the four sabotage edits are in the vendored source**, deliberately:
+  a spec that broke only our side would report the consumer covered and leave
+  the thing it consumes unguarded. `tool/sabotage/vterm-reset.toml`.
+  And one test-authoring trap worth keeping, because it produced a plausible
+  green: `"\x1bc"` is **one** character, not `ESC` then `c`, since a hex
+  escape swallows every hex digit that follows it and `c` is one. It compiles
+  with a warning nobody reads and feeds a stray `0xBC`. The octal form
+  `"\033c"` takes three digits at most and is what the test uses.
+
 - **The accessibility interface converted between three spaces and got each
   one wrong — fixed, and the fix is that it no longer converts.**
   `characterRect()` used the bare `BSSH_GRID_INSET_PX` rather than

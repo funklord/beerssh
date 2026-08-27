@@ -48,6 +48,52 @@ void input_router_test::ctrl_c_is_the_interrupt_byte() {
 	          QByteArrayLiteral("\x03"));
 }
 
+void input_router_test::a_reset_gives_ctrl_c_back_after_a_program_dies_holding_it() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::ControlModifier, QStringLiteral("\x03")),
+	          QByteArrayLiteral("\x03"));
+
+	/*
+	 * A kitty-aware program pushes its flags and is killed before it can
+	 * pop them. From here Ctrl+C is CSI 99;5u -- correct while the
+	 * program is running, and catastrophic once it is not: no SIGINT is
+	 * delivered and the escape lands on the shell's command line.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[>5u"));
+	const QByteArray held = press(router, emulator, Qt::Key_C, Qt::ControlModifier,
+	                               QStringLiteral("\x03"));
+	QVERIFY2(held != QByteArrayLiteral("\x03"), held.toHex().constData());
+
+	/*
+	 * `reset` at the shell sends RIS. Every terminal clears the kitty
+	 * flags on it and so does xterm for modifyOtherKeys -- and libvterm
+	 * could not, because it does not model either and had no way to tell
+	 * anyone a reset had happened (vterm-patch/0005).
+	 */
+	/*
+	 * Octal, not hex: `\x1bc` is ONE character, because a hex escape eats
+	 * every hex digit that follows it and `c` is one. An octal escape
+	 * takes three digits at most, so `\033c` really is ESC then 'c'. The
+	 * hex form compiles with a warning and feeds a stray 0xBC.
+	 */
+	emulator.feed(QByteArrayLiteral("\033c"));
+
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::ControlModifier, QStringLiteral("\x03")),
+	          QByteArrayLiteral("\x03"));
+
+	/* And the soft reset, DECSTR, which is the other half of what
+	 * xterm's rs1/rs2 sends. */
+	emulator.feed(QByteArrayLiteral("\x1b[>5u"));
+	QVERIFY(press(router, emulator, Qt::Key_C, Qt::ControlModifier,
+	               QStringLiteral("\x03")) != QByteArrayLiteral("\x03"));
+
+	emulator.feed(QByteArrayLiteral("\x1b[!p"));
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::ControlModifier, QStringLiteral("\x03")),
+	          QByteArrayLiteral("\x03"));
+}
+
 void input_router_test::ctrl_letters_are_case_insensitive() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

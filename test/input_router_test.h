@@ -36,6 +36,7 @@ private slots:
 	void a_matured_hold_swallows_its_own_release();
 	void plain_characters_pass_through();
 	void ctrl_c_is_the_interrupt_byte();
+	void a_reset_gives_ctrl_c_back_after_a_program_dies_holding_it();
 	void ctrl_letters_are_case_insensitive();
 	void arrows_follow_application_cursor_mode();
 	void function_keys_and_navigation_produce_sequences();

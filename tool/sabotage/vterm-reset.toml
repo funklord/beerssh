@@ -1,0 +1,45 @@
+# Sabotages for vterm-patch/0005, the reset announcement.
+#
+# Two of these edit the VENDORED submodule rather than our own source.
+# That is deliberate: the patch is the fix, so a spec that only broke our
+# side would report the consumer covered and leave the thing it consumes
+# unguarded. The runner restores the tree through its journal, and the
+# build's own "already applied" check means a restored file is not
+# re-patched behind it.
+
+# The announcement itself, which is what makes a reset knowable at all.
+# Without it the kitty flags and modifyOtherKeys survive RIS, and Ctrl+C
+# stays encoded as CSI 99;5u for the life of the terminal.
+[[sabotage]]
+name = "a reset is not announced"
+file = "vterm/src/state.c"
+find = "  settermprop_bool(state, VTERM_PROP_RESET, 1);"
+expect = "a_reset_gives_ctrl_c_back_after_a_program_dies_holding_it"
+
+# The alternate screen, announced rather than assigned. Without it the
+# screen layer keeps pointing at the alternate buffer while the state
+# says primary, so text written after the reset goes somewhere nobody
+# can read.
+[[sabotage]]
+name = "the reset clears the alternate screen silently"
+file = "vterm/src/state.c"
+find = "  if(state->mode.alt_screen)\n    settermprop_bool(state, VTERM_PROP_ALTSCREEN, 0);\n  else\n    state->mode.alt_screen = 0;"
+replace = "  state->mode.alt_screen = 0;"
+expect = "a_reset_from_the_remote_clears_the_modes_it_did_not_set"
+
+# The mouse mode, likewise. Without it this terminal keeps a mode
+# libvterm no longer has and routes every click to a remote that drops
+# it -- clicks dead, wheel swallowed, no context menu, until reconnect.
+[[sabotage]]
+name = "the reset clears the mouse mode silently"
+file = "vterm/src/state.c"
+find = "  if(state->mouse_flags)\n    settermprop_int(state, VTERM_PROP_MOUSE, VTERM_PROP_MOUSE_NONE);\n  else\n    state->mouse_flags = 0;"
+replace = "  state->mouse_flags = 0;"
+expect = "a_reset_from_the_remote_clears_the_modes_it_did_not_set"
+
+# And our side of it: the announcement is useless if nothing acts on it.
+[[sabotage]]
+name = "the announcement reaches nothing"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tself->kitty_stack.clear();\n\t\tself->kitty_stack.append(0);"
+expect = "a_reset_gives_ctrl_c_back_after_a_program_dies_holding_it"

@@ -60,6 +60,35 @@ void emulator_test::a_line_longer_than_the_grid_wraps_without_debris() {
  * Every row is checked for characters that were never sent. The feed is
  * only 'A', 'B' and newlines, so anything else on the grid is debris.
  */
+void emulator_test::a_reset_from_the_remote_clears_the_modes_it_did_not_set() {
+	bssh_emulator emulator(40, 6);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h\x1b[?1000h\x1b[?1006h"));
+	QVERIFY(emulator.mouse_reporting());
+	QVERIFY(emulator.alternate_screen());
+
+	/*
+	 * RIS, which is what `reset` at a shell sends. libvterm cleared both
+	 * of these by direct assignment, never through settermprop -- so the
+	 * screen layer went on pointing at the alternate buffer while the
+	 * state said primary, and this terminal kept a mouse mode libvterm no
+	 * longer had, routing every click to a remote that would drop it.
+	 * vterm-patch/0005 makes the reset announce what it clears.
+	 */
+	emulator.feed(QByteArrayLiteral("\033c"));
+
+	QVERIFY(!emulator.mouse_reporting());
+	QVERIFY(!emulator.alternate_screen());
+
+	/*
+	 * And the primary screen is really back, not merely claimed: text
+	 * written now must be readable, which it would not be if the screen
+	 * layer were still drawing into the alternate buffer.
+	 */
+	emulator.feed(QByteArrayLiteral("after the reset"));
+	QCOMPARE(row(emulator, 0), QStringLiteral("after the reset"));
+}
+
 void emulator_test::a_reconnect_keeps_the_history_and_drops_the_modes() {
 	bssh_emulator emulator(40, 6);
 

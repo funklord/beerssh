@@ -22,6 +22,7 @@ private slots:
 	void wrapped_lines_scrolling_off_leave_no_debris();
 	void a_wrapped_line_redrawn_shorter_leaves_no_debris();
 	void a_reconnect_keeps_the_history_and_drops_the_modes();
+	void a_reset_from_the_remote_clears_the_modes_it_did_not_set();
 	void newline_and_carriage_return_move_as_expected();
 	void cursor_addressing_places_text();
 	void erase_display_clears_everything();

@@ -1,0 +1,114 @@
+Announce what a reset clears, instead of assigning it silently
+
+vterm_state_reset() clears mode.alt_screen and mouse_flags by direct
+assignment, bypassing vterm_state_set_termprop() -- so nothing above
+libvterm hears about either, and the screen layer is not told at all.
+
+Two consequences, both reachable from bytes a remote sends (RIS, or
+DECSTR):
+
+  - VTERM_PROP_ALTSCREEN never fires, so screen->buffer keeps pointing at
+    the alternate buffer while state->mode.alt_screen says primary. The
+    terminal goes on drawing into a buffer it believes it has left.
+
+  - VTERM_PROP_MOUSE never fires, so an application mirroring the mouse
+    mode -- which it must, to decide whether a click is a report or a
+    local selection -- keeps a mode libvterm no longer has. Every click
+    is then routed to a remote that will not receive it.
+
+Both are fixed by announcing rather than assigning. set_termprop already
+does the whole job for these two properties, including the buffer swap
+and the lineinfo switch, so the reset gets strictly more correct as well
+as louder. Announced only when the mode was actually set, so a reset of
+an already-primary, already-mouseless terminal stays silent.
+
+The third part is a new property. A terminal built on libvterm has modes
+libvterm does not model -- the kitty keyboard protocol's flags and
+xterm's modifyOtherKeys are the live examples, and both specifications
+say RIS clears them. There is currently no way to learn that a reset
+happened, so those flags survive for the life of the terminal: after a
+program dies without popping its kitty flags, Ctrl+C encodes as
+CSI 99;5u for ever, no SIGINT is delivered, and the escape sequence
+lands on the shell's command line instead.
+
+VTERM_PROP_RESET is announced last, so a listener sees a terminal that is
+already reset. It is announcement-only and stores nothing; it is listed
+explicitly in set_termprop's switch so that adding it cannot silently
+make that switch non-exhaustive.
+
+Applied on top of 0001-0004 at build time (see the top-level Makefile);
+upstream is otherwise untouched. Worth sending upstream -- the first two
+parts are a plain bug fix, and the third is the smallest hook that makes
+the first two useful to a terminal with modes of its own.
+
+--- a/include/vterm.h
++++ b/include/vterm.h
+@@ -260,6 +260,7 @@
+   VTERM_PROP_CURSORSHAPE,       // number
+   VTERM_PROP_MOUSE,             // number
+   VTERM_PROP_FOCUSREPORT,       // bool
++  VTERM_PROP_RESET,             // bool; announced, never stored
+ 
+   VTERM_N_PROPS
+ } VTermProp;
+--- a/src/state.c
++++ b/src/state.c
+@@ -2141,13 +2141,26 @@
+   state->mode.autowrap        = 1;
+   state->mode.insert          = 0;
+   state->mode.newline         = 0;
+-  state->mode.alt_screen      = 0;
+   state->mode.origin          = 0;
+   state->mode.leftrightmargin = 0;
+   state->mode.bracketpaste    = 0;
+   state->mode.report_focus    = 0;
+ 
+-  state->mouse_flags = 0;
++  /* Announced rather than assigned, so that a caller which mirrors these
++   * hears about them. Both were cleared silently: the screen layer was
++   * left pointing at the alternate buffer while the state said primary,
++   * and an application tracking VTERM_PROP_MOUSE kept a mouse mode the
++   * terminal no longer had.
++   */
++  if(state->mode.alt_screen)
++    settermprop_bool(state, VTERM_PROP_ALTSCREEN, 0);
++  else
++    state->mode.alt_screen = 0;
++
++  if(state->mouse_flags)
++    settermprop_int(state, VTERM_PROP_MOUSE, VTERM_PROP_MOUSE_NONE);
++  else
++    state->mouse_flags = 0;
+ 
+   state->vt->mode.ctrl8bit   = 0;
+ 
+@@ -2194,6 +2207,17 @@
+     VTermRect rect = { 0, state->rows, 0, state->cols };
+     erase(state, rect, 0);
+   }
++
++  /* Last, so a listener sees a terminal that is already reset.
++   *
++   * The modes above are the ones libvterm models; a terminal built on top
++   * of it has its own -- the kitty keyboard flags and xterm's
++   * modifyOtherKeys are the live examples -- and both specifications say
++   * RIS clears them. Without this there is no way to know a reset
++   * happened, so those stay set for the life of the terminal and every
++   * keystroke is encoded for a protocol the application never enabled.
++   */
++  settermprop_bool(state, VTERM_PROP_RESET, 1);
+ }
+ 
+ void vterm_state_get_cursorpos(const VTermState *state, VTermPos *cursorpos)
+@@ -2293,6 +2317,11 @@
+   case VTERM_PROP_FOCUSREPORT:
+     state->mode.report_focus = val->boolean;
+     return 1;
++  case VTERM_PROP_RESET:
++    /* Nothing to store: the announcement IS the value. Listed rather
++     * than left to fall through so that adding it cannot silently make
++     * this switch non-exhaustive. */
++    return 1;
+ 
+   case VTERM_N_PROPS:
+     return 0;

@@ -342,6 +342,24 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		self->screen.set_cursor_visible(value->boolean);
 		self->notify_damaged();
 		return 1;
+	case VTERM_PROP_RESET:
+		/*
+		 * The terminal was reset -- RIS, DECSTR, or our own
+		 * reset_modes(). libvterm has already put back everything it
+		 * models and told us about the two we mirror; what is left is
+		 * the modes it does not model at all, which are ours and which
+		 * nothing else can clear (vterm-patch/0005).
+		 *
+		 * Both specifications say a reset clears them, and the cost of
+		 * not doing it is not cosmetic: kitty flags left set encode
+		 * Ctrl+C as CSI 99;5u, so no SIGINT is delivered and the escape
+		 * lands on the shell's command line instead.
+		 */
+		self->modify_other_keys = 0;
+		self->kitty_stack.clear();
+		self->kitty_stack.append(0);
+		self->end_sync();
+		return 1;
 	default:
 		return 0;
 	}
@@ -1346,36 +1364,20 @@ bool bssh_emulator::mouse_reporting() const {
 
 void bssh_emulator::reset_modes() {
 	/*
-	 * The alternate screen comes off through libvterm's OWN path rather
-	 * than through the reset, because vterm_state_reset() sets
-	 * state->mode.alt_screen directly without going through
-	 * VTERM_PROP_ALTSCREEN -- so the state would say "primary" while the
-	 * screen layer still pointed at the alternate buffer, and our mirror
-	 * and alternate_screen_changed() would never hear about it either.
-	 * Feeding the sequence keeps all four in step.
-	 */
-	if (m_private->alt_screen) feed(QByteArrayLiteral("\x1b[?1049l"));
-
-	/*
-	 * Soft, not hard: the hard branch homes the cursor and erases the
-	 * screen, which is exactly the history a reconnect exists to keep.
-	 * Soft resets the modes and nothing else -- keypad, DECCKM, autowrap,
-	 * insert, newline, origin, margins, bracketed paste, focus reporting,
-	 * the mouse flags, the tab stops, the pen and the encodings.
+	 * A soft reset, not a hard one: the hard branch homes the cursor and
+	 * erases the screen, which is exactly the history a reconnect exists
+	 * to keep (sec 5.3).
+	 *
+	 * Everything else is libvterm's now. This used to feed CSI ? 1049 l
+	 * first, because vterm_state_reset() cleared mode.alt_screen by
+	 * assignment and the screen layer was never told -- and it used to
+	 * clear our own mouse, kitty and modifyOtherKeys shadows by hand,
+	 * because nothing announced the reset. vterm-patch/0005 makes the
+	 * reset announce what it clears, so both halves arrive through
+	 * on_set_term_prop and the remote's own RIS or DECSTR is handled by
+	 * the same code as this call. One path, and the workaround is gone.
 	 */
 	vterm_screen_reset(m_private->vts, 0);
-
-	/*
-	 * And the shadows we keep beside libvterm's, which it has never heard
-	 * of: the ones that exist so DECRQM can answer, plus the two
-	 * protocols libvterm does not model at all.
-	 */
-	m_private->mouse_reporting = false;
-	m_private->mouse_mode = 0;
-	m_private->modify_other_keys = 0;
-	m_private->kitty_stack.clear();
-	m_private->kitty_stack.append(0);
-	m_private->end_sync();
 
 	emit damaged();
 }
