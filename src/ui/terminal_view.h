@@ -529,6 +529,12 @@ private:
 	 */
 	QMetaObject::Connection m_alternate_screen_connection;
 
+	/*
+	 * Held for the same reason: the view's own connection, dropped when
+	 * it lets an emulator go, without disturbing anyone else's.
+	 */
+	QMetaObject::Connection m_scrollback_connection;
+
 	/* Range, value and page step from the scrollback and the offset. */
 	void sync_scrollbar();
 	void place_scrollbar();

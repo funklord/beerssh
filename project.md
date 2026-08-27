@@ -849,6 +849,22 @@ model on a finger.
   to the remote — with a modifier (conventionally `Shift`) to override and select
   locally. On touch, keep local selection winning. **Done**, encoding delegated
   to libvterm, which already tracks which mouse modes the remote enabled.
+- **The view did not follow the history when the history changed SIZE.**
+  `bssh_emulator::scrollback_changed` had no listener anywhere in the tree.
+  It went unnoticed because the two paths that fire it most — a line pushed
+  off the top, a line popped back — happen to damage the screen as well, so
+  `on_screen_damaged()` kept the scrollbar honest by accident. The third
+  path does not: `set_scrollback_lines()` trims the ring and damages
+  nothing. So lowering a host's `scrollback_lines` while the view was
+  scrolled back left the bar advertising history that had been dropped and
+  the offset pointing past the end of what was left — blank rows under a
+  scrollbar claiming otherwise, until the next byte of output repaired it.
+  Wired where the view attaches to its emulator, beside the alternate-screen
+  re-clamp, since it is the same rule: what the view may show is the
+  emulator's to announce and the view's to obey.
+  **A signal kept honest by accident is the hardest kind to notice**, and
+  the tell was the listener count rather than any symptom: this was found by
+  asking which signals have no connections, not by anything going wrong.
 - **The override badge and the write it describes disagreed, in two ways at
   once.** §10 says a host's Appearance page must say whether it follows its
   preset or overrides it, and the badge exists so the screen and the store

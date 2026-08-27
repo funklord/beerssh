@@ -363,6 +363,7 @@ void bssh_terminal_view::attach_emulator(bssh_emulator *emulator) {
 	if (m_emulator == emulator) return;
 
 	disconnect(m_alternate_screen_connection);
+	disconnect(m_scrollback_connection);
 	m_emulator = emulator;
 
 	/*
@@ -380,6 +381,24 @@ void bssh_terminal_view::attach_emulator(bssh_emulator *emulator) {
 		m_alternate_screen_connection =
 		        connect(m_emulator, &bssh_emulator::alternate_screen_changed,
 		                 this, [this] { set_scroll_offset(m_scroll_offset); });
+
+		/*
+		 * And when the history itself changes size. This signal had no
+		 * listener anywhere in the tree: pushing and popping happen to
+		 * damage the screen, so on_screen_damaged() kept the bar honest
+		 * by accident -- but set_scrollback_lines() trims the ring with
+		 * no damage at all, so lowering a host's scrollback while the
+		 * view was scrolled back left the bar advertising history that
+		 * had been dropped, and the offset pointing past the end of what
+		 * was left. Blank rows under a scrollbar claiming otherwise,
+		 * until the next byte of output repaired it.
+		 */
+		m_scrollback_connection =
+		        connect(m_emulator, &bssh_emulator::scrollback_changed, this, [this] {
+			set_scroll_offset(m_scroll_offset);
+			sync_scrollbar();
+			update();
+		});
 	}
 
 	sync_scrollbar();

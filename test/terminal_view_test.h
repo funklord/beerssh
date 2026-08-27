@@ -41,6 +41,7 @@ private slots:
 	void drag_selects_text();
 	void selection_spans_the_scrollback();
 	void a_selection_stays_on_its_text_when_the_scrollback_evicts();
+	void shrinking_the_scrollback_brings_the_view_back_with_it();
 	void double_click_selects_a_word();
 	void triple_click_selects_the_line();
 	void mouse_goes_to_the_remote_when_it_asks_for_it();

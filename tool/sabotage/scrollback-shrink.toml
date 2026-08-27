@@ -1,0 +1,12 @@
+# Sabotage for the view following the history when it changes SIZE.
+#
+# scrollback_changed had no listener anywhere in the tree. Push and pop
+# happen to damage the screen, so the bar stayed honest by accident --
+# which is why this went unnoticed: the two paths that fire the signal
+# most often did not need it.
+
+[[sabotage]]
+name = "the view never hears the history shrink"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tm_scrollback_connection =\n\t\t        connect(m_emulator, &bssh_emulator::scrollback_changed, this, [this] {\n\t\t\tset_scroll_offset(m_scroll_offset);\n\t\t\tsync_scrollbar();\n\t\t\tupdate();\n\t\t});"
+expect = "shrinking_the_scrollback_brings_the_view_back_with_it"

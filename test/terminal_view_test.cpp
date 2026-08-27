@@ -262,6 +262,46 @@ void terminal_view_test::selection_spans_the_scrollback() {
 	QCOMPARE(view.selection_text(), before);
 }
 
+void terminal_view_test::shrinking_the_scrollback_brings_the_view_back_with_it() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	emulator.set_scrollback_lines(200);
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < view.rows() + 60; ++i) {
+		emulator.feed(QByteArrayLiteral("a line\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 40);
+
+	view.set_scroll_offset(40);
+	QCOMPARE(view.scroll_offset(), 40);
+
+	/*
+	 * A preset lowering scrollback_lines, which is a live path: editing
+	 * the host's preset reaches set_settings and then the emulator. It
+	 * trims the ring with NO damage at all -- so nothing repainted, and
+	 * the only announcement is scrollback_changed, which had no listener
+	 * anywhere in the tree. The bar went on advertising history that had
+	 * been dropped and the offset pointed past the end of what was left.
+	 */
+	emulator.set_scrollback_lines(5);
+	QCOMPARE(emulator.scrollback().count(), 5);
+
+	/*
+	 * Asserted against the ring rather than against 5: what matters is
+	 * that the view cannot be further back than there is history, which
+	 * stays true whatever the cap becomes.
+	 */
+	QVERIFY2(view.scroll_offset() <= emulator.scrollback().count(),
+	          qPrintable(QStringLiteral("offset %1 into %2 lines")
+	                      .arg(view.scroll_offset())
+	                      .arg(emulator.scrollback().count())));
+}
+
 void terminal_view_test::a_selection_stays_on_its_text_when_the_scrollback_evicts() {
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 320);
