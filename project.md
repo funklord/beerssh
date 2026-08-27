@@ -938,6 +938,44 @@ model on a finger.
   helper agreeing with the writer says nothing about whether anything asks
   the helper: the first version tested only the helper, and the sabotage
   runner reported the desktop connection as MISSED.
+- **Split, drop and reorder were all broken at once, reported from use, and
+  the suite was green throughout.** One cause between them: **the tests drove
+  the model and never the route.**
+  **Split did nothing.** Both menu items called `split_with(m_current)`, and
+  `m_current` is by construction always in the layout intent — `show_session()`
+  puts it there and `m_current` is read back out of the visible panes — so
+  `split_with`'s "already showing" guard was unconditionally taken. The action
+  was enabled, clickable and silent. The guard is right for its other caller,
+  a drop, which must decline a session this window already shows; it was never
+  a sensible question to ask of the current session, because a terminal cannot
+  go beside itself. Split makes a NEW terminal beside now, which is what a
+  split means everywhere else; tiling an existing session stays the tab
+  menu's "Show beside current". The existing tests checked the action
+  **existed** and never triggered it.
+  **Drops never arrived.** `bssh_terminal_view` calls `setAcceptDrops(true)`
+  and refused a session payload, with a comment saying it was refused "so that
+  it reaches the window". Qt does not work that way: `findDnDTarget()` picks
+  the target *before* delivery by walking up to the first widget with
+  `acceptDrops()`, and a child that ignores the event does **not** hand it to
+  an ancestor. The whole drag was ignored, so `exec()` returned `IgnoreAction`
+  and `start_tab_drag` read that as "nobody wanted it" and tore the tab out —
+  dropping a tab on another window produced a new window every time, and
+  §8.4's tile-by-dropping could not be reached at all. Every drop test passed
+  because each sent its events straight at the window, which is the one place
+  Qt would never have delivered them.
+  **Reorder turned into tear-out.** The tear-out margin measured 40dp past
+  `m_tabs->width()`, with a comment saying it used the bar rather than the
+  last tab so that "dragging along a half-empty strip is still reordering".
+  There is no half-empty strip: the row lays the bar out at stretch 0 with the
+  stretch after the "+", so `QTabBar` is exactly as wide as its tabs and that
+  measured distance past the **last tab** — the thing the comment said it
+  avoided. Dragging a tab to the final position starts inside the margin.
+  Measured against `m_tab_row` now, which is the strip the comment meant.
+  **The lesson is the coverage, not the three bugs.** A suite that drives the
+  model tests what the code computes; only a test that drives the route tests
+  what the framework will deliver. All three defects lived in that gap, and
+  two of them were *stated in a comment that was wrong about the framework* —
+  which is the one kind of error reading the code more carefully cannot find.
 - **A session torn into another window was still wired to the window it came
   from.** The per-session wiring hung off `session_added`, which fires once,
   at creation — so `adopt_session()`, the road a torn-out or dropped tab

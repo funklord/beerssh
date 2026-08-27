@@ -2519,6 +2519,147 @@ void layout_test::a_live_tab_is_not_offered_connect() {
 	while (registry->count() > 0) registry->close(registry->at(0));
 }
 
+void layout_test::split_beside_current_makes_a_second_pane() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *only = window.registry()->create(named(QStringLiteral("only")));
+	window.adopt_session(only);
+	QCoreApplication::processEvents();
+	QCOMPARE(window.panes()->views().size(), 1);
+
+	/*
+	 * Both Split menu items called split_with(m_current), and m_current is
+	 * by construction always in the layout intent -- so split_with's
+	 * "already showing" guard was unconditionally taken and the action was
+	 * enabled, clickable and completely silent.
+	 *
+	 * This drives the same entry point the menus do rather than
+	 * split_with() directly: the argument they pass IS the defect, so a
+	 * test calling split_with() with something else would have passed
+	 * throughout.
+	 */
+	window.split_beside_current();
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->views().size(), 2);
+	QCOMPARE(window.registry()->count(), 2);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_tab_dropped_on_a_pane_reaches_the_window() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window onto;
+	onto.resize(900, 600);
+	onto.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&onto));
+
+	bssh_session *resident = onto.registry()->create(named(QStringLiteral("resident")));
+	onto.adopt_session(resident);
+	bssh_session *moving = onto.registry()->create(named(QStringLiteral("moving")));
+	QCoreApplication::processEvents();
+
+	QVERIFY(onto.panes());
+	bssh_terminal_view *pane = onto.panes()->views().value(0);
+	QVERIFY(pane);
+
+	/*
+	 * Delivered to the PANE, which is what Qt does: it picks the target
+	 * before delivery, walking up to the first widget with acceptDrops(),
+	 * and the terminal view has it. The view used to refuse a session
+	 * payload believing the window would get it instead -- Qt does not
+	 * re-target to an ancestor, so nobody got it, the drag showed the
+	 * no-drop cursor, and the tab tore out into a new window every time.
+	 *
+	 * The existing drop tests send their events straight at the WINDOW,
+	 * which is why they passed throughout: they exercise the model and
+	 * never the route.
+	 */
+	QMimeData *mime = new QMimeData;
+	mime->setData(bssh_session_mime_type(),
+	               QByteArray::number(onto.registry()->index_of(moving)));
+
+	const QPoint at(pane->width() / 2, pane->height() / 2);
+	QDragEnterEvent enter(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+
+	/*
+	 * Ignored FIRST, because a QDragMoveEvent arrives accepted by
+	 * default -- so asserting isAccepted() on it straight out of the
+	 * constructor passes whether the handler ran or not. The first
+	 * version of this did exactly that and the sabotage runner reported
+	 * the refusal as MISSED.
+	 */
+	enter.ignore();
+	QCoreApplication::sendEvent(pane, &enter);
+	QVERIFY2(enter.isAccepted(),
+	          "the pane must accept a session drag, or Qt delivers the drop to nobody");
+
+	QDropEvent drop(QPointF(at), Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
+	drop.ignore();
+	QCoreApplication::sendEvent(pane, &drop);
+	QVERIFY(drop.isAccepted());
+	QCoreApplication::processEvents();
+
+	QCOMPARE(onto.panes()->views().size(), 2);
+
+	delete mime;
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_reorder_along_the_strip_is_not_a_tear_out() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	window.adopt_session(window.registry()->create(named(QStringLiteral("one"))));
+	window.adopt_session(window.registry()->create(named(QStringLiteral("two"))));
+	QCoreApplication::processEvents();
+
+	QTabBar *bar = window.findChild<QTabBar *>();
+	QVERIFY(bar);
+	QCOMPARE(bar->count(), 2);
+
+	/*
+	 * Just past the last tab, horizontally, which is where a reorder to
+	 * the final position puts the pointer.
+	 *
+	 * The tear-out test measured distance past `m_tabs->width()`, and the
+	 * row lays the bar out at exactly its sizeHint -- so the bar IS the
+	 * tab strip and that measured distance past the LAST TAB, the very
+	 * thing its comment said it avoided. Forty pixels of slack, then the
+	 * reorder silently became a window operation.
+	 */
+	const QPoint along(bar->width() + 60, bar->height() / 2);
+	QMouseEvent press(QEvent::MouseButtonPress, QPointF(10, bar->height() / 2),
+	                   bar->mapToGlobal(QPoint(10, bar->height() / 2)),
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(bar, &press);
+
+	QMouseEvent move(QEvent::MouseMove, QPointF(along), bar->mapToGlobal(along),
+	                  Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(bar, &move);
+	QCoreApplication::processEvents();
+
+	/* Still one window's worth of tabs: dragging along the strip did not
+	 * detach anything. */
+	QCOMPARE(window.registry()->count(), 2);
+	QCOMPARE(bar->count(), 2);
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::closing_the_visible_tab_leaves_no_view_on_a_dead_session() {
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));

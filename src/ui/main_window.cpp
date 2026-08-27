@@ -963,6 +963,56 @@ void bssh_main_window::show_session(bssh_session *session) {
 	update_status();
 }
 
+void bssh_main_window::split_beside_current() {
+	if (!m_current || !m_layout) return;
+
+	/*
+	 * A NEW terminal beside the current one, which is what a split means
+	 * in every multiplexer and is what the user asking for one wants.
+	 *
+	 * Both menus used to call split_with(m_current), and m_current is by
+	 * construction ALWAYS in the layout intent -- show_session() puts it
+	 * there and m_current is read back out of the visible panes -- so
+	 * split_with's "already showing" guard was unconditionally taken and
+	 * the action did nothing at all. Enabled, clickable, silent. The
+	 * guard is right for its other caller, a drop, which must decline a
+	 * session this window already shows; it was never a sensible thing to
+	 * ask of the current session, because a terminal cannot go beside
+	 * itself.
+	 *
+	 * Tiling an EXISTING session is the tab context menu's "Show beside
+	 * current", which passes the session that was right-clicked and has
+	 * always worked. The two verbs stay distinct: that one rearranges
+	 * what you have, this one makes another.
+	 */
+	/*
+	 * The intent is taken BEFORE the session exists, because creating one
+	 * shows it -- prepare_profile() ends up in show_session(), which sets
+	 * the intent to that session alone. Calling split_with() afterwards
+	 * walks into the same guard the menus did: the session is already in
+	 * the intent, so it declines and the window is left showing the new
+	 * terminal INSTEAD of the old one rather than beside it.
+	 *
+	 * Naming both sides here is what makes "beside" mean beside.
+	 */
+	const QList<bssh_session *> before = m_layout->intent();
+
+	bssh_session *session = prepare_profile(bssh_profile_t::local_shell());
+	if (!session) return;
+
+	QList<bssh_session *> beside = before;
+	if (!beside.contains(session)) beside.append(session);
+	m_layout->set_intent(beside);
+
+	if (m_panes) {
+		m_panes->rebuild();
+		m_panes->focus_session(session);
+	}
+
+	session->connect_to_host();
+	update_status();
+}
+
 void bssh_main_window::split_with(bssh_session *session) {
 	if (!session || !m_layout || !m_panes) return;
 
@@ -1283,6 +1333,19 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		 */
 		connect(m_terminal_view, &bssh_terminal_view::paste_requested,
 		         this, [this](const QString &text) { paste_into_current(text); });
+
+		/*
+		 * And a TAB dropped on this pane, which the view accepts only so
+		 * that Qt delivers it at all -- it picks a target before
+		 * delivery and never re-targets to an ancestor, so a view that
+		 * refused meant the window was never offered the drop and the
+		 * tab tore out into a new window instead of tiling (sec 8.4).
+		 */
+		connect(m_terminal_view, &bssh_terminal_view::session_dropped,
+		         this, [this](const QMimeData *mime) {
+			bssh_session *dropped = session_from_mime(mime);
+			if (dropped) drop_session(dropped, true);
+		});
 
 		/*
 		 * Middle-click pastes the PRIMARY selection, not the clipboard.
@@ -1659,7 +1722,9 @@ void bssh_main_window::drop_session(bssh_session *session, bool beside) {
 }
 
 QString bssh_main_window::session_mime_type() {
-	return QStringLiteral("application/x-bssh-session");
+	/* One spelling, and it lives with the view because that is where a
+	 * drop actually lands (sec 8.4). */
+	return bssh_session_mime_type();
 }
 
 bssh_session *bssh_main_window::session_from_mime(const QMimeData *mime) const {
@@ -1841,11 +1906,33 @@ bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
 			 * half-empty strip is still reordering. Measured from
 			 * the tabs, a tab dragged to the end of a two-tab bar
 			 * would tear itself out mid-reorder.
+			 *
+			 * And that is exactly what it did, because the bar has no
+			 * half-empty strip to drag along: the row lays it out at
+			 * stretch 0 with the stretch AFTER the "+" button, so
+			 * QTabBar is exactly as wide as its tabs. Measuring
+			 * against m_tabs->width() therefore measured distance
+			 * past the LAST TAB -- the thing the comment says it
+			 * avoided -- leaving about 40px of slack before a reorder
+			 * turned into a tear-out. Dragging a tab to the last
+			 * position starts within that margin, which is why moving
+			 * tabs behaved differently depending on where you let go:
+			 * over the panes it split the window, back on the bar it
+			 * dropped the rest of the move, over nothing it detached.
+			 *
+			 * The ROW is the strip the comment meant. It spans the
+			 * window because of that trailing stretch, so sideways
+			 * travel stays a reorder however far along the bar it
+			 * goes, and only leaving the row vertically -- or running
+			 * off the window entirely -- is a tear-out.
 			 */
-			const int above = -at.y();
-			const int below = at.y() - m_tabs->height();
-			const int left = -at.x();
-			const int right = at.x() - m_tabs->width();
+			QWidget *strip = m_tab_row ? m_tab_row : static_cast<QWidget *>(m_tabs);
+			const QPoint in_strip = m_tabs->mapTo(strip, at);
+
+			const int above = -in_strip.y();
+			const int below = in_strip.y() - strip->height();
+			const int left = -in_strip.x();
+			const int right = in_strip.x() - strip->width();
 
 			const int clear = qMax(qMax(above, below), qMax(left, right));
 
@@ -2299,7 +2386,7 @@ void bssh_main_window::build_menu_bar() {
 
 	m_split_action = view->addAction(QStringLiteral("Split &Beside Current"));
 	connect(m_split_action, &QAction::triggered, this, [this] {
-		if (m_current) split_with(m_current);
+		split_beside_current();
 	});
 
 	m_detach_action = view->addAction(QStringLiteral("&Detach Tab to a Window"));
@@ -2510,7 +2597,7 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 
 	const QAction *split = menu->findChild<QAction *>(QStringLiteral("terminal_split"));
 	if (chosen == split) {
-		if (m_current) split_with(m_current);
+		split_beside_current();
 		return;
 	}
 

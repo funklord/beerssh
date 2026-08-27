@@ -71,6 +71,9 @@ private slots:
 	void a_trusted_host_can_actually_set_the_clipboard();
 	void a_session_adopted_from_another_window_is_wired_to_this_one();
 	void closing_the_visible_tab_leaves_no_view_on_a_dead_session();
+	void split_beside_current_makes_a_second_pane();
+	void a_tab_dropped_on_a_pane_reaches_the_window();
+	void a_reorder_along_the_strip_is_not_a_tear_out();
 	void a_live_tab_is_not_offered_connect();
 	/*
 	 * And the desktop front door, at the small window sec 8.2 already

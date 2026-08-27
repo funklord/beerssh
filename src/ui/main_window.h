@@ -464,6 +464,17 @@ public:
 	 */
 	void drop_session(bssh_session *session, bool beside);
 
+	/*
+	 * What the Split menu items mean: a NEW terminal beside the current
+	 * one. They used to pass m_current to split_with(), which always
+	 * declines it, so the action did nothing at all (sec 8.3).
+	 *
+	 * Reachable from a test for the same reason drop_session is: the
+	 * defect was the ARGUMENT the menus passed, so a test that called
+	 * split_with() with something sensible would have passed throughout.
+	 */
+	void split_beside_current();
+
 private:
 	/*
 	 * The ownership half of adopting, without deciding how it is shown.

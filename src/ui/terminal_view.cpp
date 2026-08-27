@@ -886,16 +886,51 @@ QString bssh_terminal_view::text_for_drop(const QMimeData *mime) {
 	return QString();
 }
 
+QString bssh_session_mime_type() {
+	return QStringLiteral("application/x-bssh-session");
+}
+
 void bssh_terminal_view::dragEnterEvent(QDragEnterEvent *event) {
 	/*
-	 * Only what this view can turn into text. A tab dragged from another
-	 * window is a SESSION payload (sec 8.4) and is refused here so that
-	 * it reaches the window, which is what knows how to adopt one.
+	 * Text this view can paste, OR a session for the window to adopt.
+	 *
+	 * The session half used to be REFUSED here, with a comment saying it
+	 * was refused "so that it reaches the window, which is what knows how
+	 * to adopt one". That is not how Qt routes a drag. The target is
+	 * chosen before delivery -- findDnDTarget() walks up from the widget
+	 * under the pointer to the first one with acceptDrops(), and this
+	 * view has it -- and a child that ignores the event does NOT hand it
+	 * to an ancestor. The whole drag was ignored, the no-drop cursor
+	 * shown, and no drop was ever delivered anywhere.
+	 *
+	 * The view covers essentially the whole pane area, so that was every
+	 * drop onto the panes. What the user saw: dragging a tab onto another
+	 * window's terminal produced a NEW WINDOW every time, because
+	 * start_tab_drag() reads IgnoreAction as "nobody wanted it" and tears
+	 * the tab out. sec 8.4's tile-by-dropping could not be reached at all.
+	 *
+	 * So it is accepted here and handed up, which is the only arrangement
+	 * that gets the window the drop.
 	 */
-	if (!text_for_drop(event->mimeData()).isEmpty()) event->acceptProposedAction();
+	if (!text_for_drop(event->mimeData()).isEmpty()
+	     || event->mimeData()->hasFormat(bssh_session_mime_type())) {
+		event->acceptProposedAction();
+	}
 }
 
 void bssh_terminal_view::dropEvent(QDropEvent *event) {
+	/*
+	 * A session goes up to the window untouched: this view knows how to
+	 * paste text and nothing about adopting a session, and sec 8.4 keeps
+	 * it that way. Accepted above only so that Qt delivers it here at
+	 * all -- refusing meant nobody was delivered anything.
+	 */
+	if (event->mimeData()->hasFormat(bssh_session_mime_type())) {
+		event->acceptProposedAction();
+		emit session_dropped(event->mimeData());
+		return;
+	}
+
 	const QString text = text_for_drop(event->mimeData());
 	if (text.isEmpty()) return;
 

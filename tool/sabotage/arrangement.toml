@@ -1,0 +1,46 @@
+# Sabotages for sec 8.3/8.4's arrangement: splitting, dropping a tab onto
+# a pane, and reordering without detaching.
+#
+# All three were reported from use and all three were invisible to the
+# suite for one reason: the tests drove the MODEL and never the ROUTE.
+# The drop tests sent their events straight at the window, bypassing the
+# target Qt actually picks; the split tests checked the menu action
+# existed and never triggered it.
+
+# Split. m_current is by construction always in the layout intent, so
+# split_with declines it and the enabled menu item does nothing at all.
+[[sabotage]]
+name = "split asks to put the current session beside itself"
+file = "src/ui/main_window.cpp"
+find = "\tconst QList<bssh_session *> before = m_layout->intent();"
+replace = "\tconst QList<bssh_session *> before;"
+expect = "split_beside_current_makes_a_second_pane"
+
+# Drop. The pane hands a session payload up to the window instead of
+# dropping it on the floor.
+#
+# The dragEnter ACCEPT has no entry, and the reason is a real limit
+# rather than an oversight: Qt chooses a drop target before delivery,
+# by walking up from the widget under the pointer to the first one with
+# acceptDrops(), and a synthetic sendEvent() cannot exercise that at all
+# -- it delivers wherever it is told. terminal_view_test already records
+# the same limitation. So the accept is verified by the test asserting
+# the event comes back accepted, and the ROUTING it enables is not
+# reachable from any test in this suite; that half was found by reading
+# Qt's findDnDTarget and is why every existing drop test passed while
+# dropping was impossible in the app.
+[[sabotage]]
+name = "a session dropped on a pane goes nowhere"
+file = "src/ui/terminal_view.cpp"
+find = "\t\temit session_dropped(event->mimeData());"
+expect = "a_tab_dropped_on_a_pane_reaches_the_window"
+
+# Reorder. The row lays the bar out at exactly its sizeHint, so measuring
+# against the BAR measures distance past the last tab -- about 40px of
+# slack before a reorder silently became a tear-out.
+[[sabotage]]
+name = "tear-out is measured from the tabs, not the strip"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tQWidget *strip = m_tab_row ? m_tab_row : static_cast<QWidget *>(m_tabs);"
+replace = "\t\t\tQWidget *strip = m_tabs;"
+expect = "a_reorder_along_the_strip_is_not_a_tear_out"

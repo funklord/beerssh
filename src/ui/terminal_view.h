@@ -16,6 +16,15 @@
 class QDragEnterEvent;
 class QDropEvent;
 class QMimeData;
+
+/*
+ * The drag payload a torn-out tab carries (sec 8.4).
+ *
+ * Declared with the VIEW rather than with the window because the pane is
+ * where a drop lands, and a view must not depend on the window it sits
+ * in. The window delegates to this.
+ */
+QString bssh_session_mime_type();
 class QMouseEvent;
 class QPainter;
 class QScrollBar;
@@ -406,6 +415,14 @@ signals:
 	 * session's input router, exactly as the Ctrl+Shift+V shortcut does.
 	 */
 	void context_menu_requested(const QPoint &at);
+
+	/*
+	 * A tab from another window was dropped on this pane (sec 8.4). The
+	 * view accepts the drag only so Qt delivers it -- Qt picks a target
+	 * before delivery and never re-targets to an ancestor, so refusing
+	 * here meant the window was never offered the drop at all.
+	 */
+	void session_dropped(const QMimeData *mime);
 	void primary_paste_requested();
 
 	/*
