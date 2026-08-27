@@ -15,6 +15,8 @@
 #include <QSet>
 #include <QTreeWidget>
 #include <QSignalSpy>
+#include <QWheelEvent>
+#include <QScrollBar>
 #include <QMimeData>
 #include <QWindow>
 #include <QEnterEvent>
@@ -1453,6 +1455,83 @@ void layout_test::the_caps_setting_reaches_a_sessions_router() {
 	/* Shared registry: leave it as it was found (sec 8.4). */
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::the_wheel_scrolls_the_settings_page_and_changes_nothing() {
+	/*
+	 * Reported from use: "suddenly the text became dark when looking
+	 * through config menus". A QComboBox handles a wheel notch by
+	 * changing its value whether or not it has focus, so scrolling the
+	 * device settings with the pointer over the Appearance row moved it
+	 * from "Follow the system" to "Light" -- applied immediately and
+	 * written to app.ini, so it survived a restart. The page did not
+	 * move, which is what makes it keep happening: the natural reaction
+	 * to a page that will not scroll is to wheel again.
+	 *
+	 * Safe to write because the suite sandboxes HOME and XDG_CONFIG_HOME
+	 * (test/main.cpp); restored afterwards regardless.
+	 */
+	const forced_touch_t pointer(0);
+
+	const QString original = bssh_app_settings().theme();
+	bssh_app_settings().set_theme(QStringLiteral("dark"));
+
+	{
+		bssh_app_settings_view view;
+
+		/*
+		 * Small enough that the form overflows. Without this the test
+		 * is vacuous in the nastiest way: a page that cannot scroll
+		 * satisfies "the scroll position is right" trivially, and the
+		 * combo assertion below would be the only real one left.
+		 */
+		view.resize(420, 220);
+		view.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+		QScrollArea *scroll = view.findChild<QScrollArea *>();
+		QVERIFY(scroll);
+		QVERIFY2(scroll->verticalScrollBar()->maximum() > 0,
+		          "the page has to overflow, or this test asks nothing");
+
+		/*
+		 * The Appearance combo found by what it CONTAINS rather than by
+		 * a label or an object name: the item data is the thing the
+		 * defect acted on, and it is what commit() writes.
+		 */
+		QComboBox *theme = nullptr;
+		for (QComboBox *combo : view.findChildren<QComboBox *>()) {
+			if (combo->findData(QStringLiteral("dark")) >= 0
+			    && combo->findData(QStringLiteral("light")) >= 0) {
+				theme = combo;
+			}
+		}
+		QVERIFY(theme);
+
+		const int before = theme->currentIndex();
+		const int scrolled_before = scroll->verticalScrollBar()->value();
+
+		const QPointF at(theme->width() / 2.0, theme->height() / 2.0);
+		QWheelEvent wheel(at, theme->mapToGlobal(at.toPoint()), QPoint(0, -120),
+		                   QPoint(0, -120), Qt::NoButton, Qt::NoModifier,
+		                   Qt::NoScrollPhase, false);
+		QCoreApplication::sendEvent(theme, &wheel);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(theme->currentIndex(), before);
+		QCOMPARE(bssh_app_settings().theme(), QStringLiteral("dark"));
+
+		/*
+		 * The load-bearing third clause. A fix that merely SWALLOWS the
+		 * wheel satisfies both assertions above while leaving the page
+		 * unscrollable -- a different bug wearing this one's clothes,
+		 * and the more annoying of the two to use.
+		 */
+		QVERIFY2(scroll->verticalScrollBar()->value() > scrolled_before,
+		          "the notch has to reach the page it was aimed at");
+	}
+
+	bssh_app_settings().set_theme(original);
 }
 
 void layout_test::the_screenshot_setting_is_absent_where_it_cannot_work() {

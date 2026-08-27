@@ -1,0 +1,36 @@
+# Sabotages for the wheel over a settings page.
+#
+# Reported from use as "suddenly the text became dark when looking
+# through config menus": a QComboBox changes its value on a wheel notch
+# whether or not it has focus, so scrolling the device settings with the
+# pointer over the Appearance row walked it from "Follow the system" to
+# "Light" and on to "Dark" -- applied immediately and written to app.ini,
+# so it survived a restart. The page did not move, which is what makes it
+# keep happening.
+
+# The guard itself.
+[[sabotage]]
+name = "the wheel reaches the control it is over"
+file = "src/ui/app_settings_view.cpp"
+find = "\tbssh_dont_steal_the_wheel(this);"
+replace = "\t(void)0;"
+expect = "the_wheel_scrolls_the_settings_page_and_changes_nothing"
+
+# And the half that a swallowed wheel would satisfy while leaving the
+# page unscrollable -- a different bug wearing this fix's clothes, and
+# the more annoying of the two to use.
+[[sabotage]]
+name = "the notch is eaten instead of scrolling the page"
+file = "src/ui/scroll_guard.cpp"
+find = "\t\t\tbar->setValue(bar->value() - delta * step / 120);"
+replace = "\t\t\t(void)delta;"
+expect = "the_wheel_scrolls_the_settings_page_and_changes_nothing"
+
+# The controls the walk collects. A guard that finds nothing reports
+# success exactly as loudly as one that works.
+[[sabotage]]
+name = "no control is guarded at all"
+file = "src/ui/scroll_guard.cpp"
+find = "\t\tcontrol->installEventFilter(filter);"
+replace = "\t\t(void)filter;"
+expect = "the_wheel_scrolls_the_settings_page_and_changes_nothing"

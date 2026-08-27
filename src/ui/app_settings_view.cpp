@@ -13,6 +13,7 @@
 #include <QFrame>
 #include <QLabel>
 
+#include "ui/scroll_guard.h"
 #include "ui/wrapped_note.h"
 #include "term/colour_scheme.h"
 #include "ui/colour_editor.h"
@@ -592,6 +593,13 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * a setting is a row in a list, not the closed box.
 	 */
 	bssh_apply_touch_heights(this, touch);
+
+	/*
+	 * And the wheel scrolls this page rather than changing whatever
+	 * control the pointer is over. Last, because it walks the form
+	 * and the form has to exist.
+	 */
+	bssh_dont_steal_the_wheel(this);
 }
 
 void bssh_app_settings_view::commit() {

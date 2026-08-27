@@ -8,6 +8,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 
+#include "ui/scroll_guard.h"
 #include "ui/wrapped_note.h"
 #include <QLineEdit>
 #include <QListWidget>
@@ -309,6 +310,13 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 		 * second place, and now it does not.
 		 */
 		bssh_apply_touch_heights(this, true);
+
+	/*
+	 * And the wheel scrolls this page rather than changing whatever
+	 * control the pointer is over. Last, because it walks the form
+	 * and the form has to exist.
+	 */
+	bssh_dont_steal_the_wheel(this);
 		m_font->set_touch_sized(true);
 	}
 

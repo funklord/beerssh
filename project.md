@@ -976,6 +976,35 @@ model on a finger.
   what the framework will deliver. All three defects lived in that gap, and
   two of them were *stated in a comment that was wrong about the framework* —
   which is the one kind of error reading the code more carefully cannot find.
+- **The wheel changed settings instead of scrolling the page.** Reported as
+  "suddenly the text became dark when looking through config menus", and that
+  is exactly what it was: a `QComboBox` handles a wheel notch by changing its
+  value, whether or not it has focus, so scrolling the device settings with the
+  pointer over the **Appearance** row moved it from "Follow the system" to
+  "Light" and on to "Dark" -- one notch each, applied immediately by `commit()`
+  and written to `app.ini`, so it survived a restart. The text-brightness
+  slider one row down is the same accident with a different victim.
+  What makes it keep happening rather than happen once: **the page does not
+  move**, because the control ate the event. The natural reaction to a page
+  that will not scroll is to wheel again, which walks the control further. It
+  is not recoverable by scrolling back either, since scrolling back is what
+  did it.
+  The wheel now always goes to the enclosing scroll area, for every combo,
+  spin box and slider on a scrolling form -- not "unless it has focus", which
+  leaves the same accident available one click later, and a user who has just
+  picked a value from a combo is the user most likely to wheel next. Nothing
+  is taken away: those controls are still set by clicking, by dragging, and
+  from the keyboard once focused.
+  **The page is scrolled by moving its bar, not by forwarding the event.**
+  Forwarding was the obvious first version and it recursed until the stack ran
+  out -- Qt remembers which widget a scroll gesture belongs to, so a wheel
+  handed to the viewport comes straight back to the control it was taken from.
+  Measured on a fixture of a combo, a scroll area and forty rows: SIGSEGV on
+  the first notch.
+  The test's third assertion is the load-bearing one -- that the scroll
+  position **increased**. A fix that merely swallows the wheel satisfies "the
+  combo did not move" and "the setting did not change" while leaving the page
+  unscrollable, which is a different bug wearing this one's clothes.
 - **Closing one window closed both windows' sessions.** Reported as "when I
   close one window it closes both". `closeEvent` ended with
   `for (session : registry->sessions()) session->disconnect_from_host()` --

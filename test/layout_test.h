@@ -108,6 +108,7 @@ private slots:
 	void a_bell_in_a_visible_pane_is_not_a_missed_one();
 	void a_bell_with_the_window_away_is_a_missed_one();
 	void the_caps_setting_reaches_a_sessions_router();
+	void the_wheel_scrolls_the_settings_page_and_changes_nothing();
 	void the_screenshot_setting_is_absent_where_it_cannot_work();
 	void focus_reporting_follows_the_focused_pane();
 	void backing_out_of_a_session_reaches_the_host_list();
