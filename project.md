@@ -4175,29 +4175,48 @@ The desktop build is what makes this project testable at all — use it.
   path never asks `is_touch_primary()`.** The document and the code
   contradict each other; flagged, not resolved.
 ### 12.4 CI
-- **The receipt binds HEAD-at-archive; the hook compares HEAD-at-push. In a
-  tree with two writers that is a thirteen-minute window, and only a quiet
-  tree closes it.** `check-ci` resolves HEAD once, beside the `git archive`
-  that consumes it — which is 5e9b540's fix and is right — and the pre-push
-  hook then refuses anything that is not the commit the receipt names. Both
-  halves are correct and the failure is in neither: a commit landing from
-  another session while the container builds makes the receipt stale, and the
-  push is refused for a tree that would have passed.
-  Measured 2026-08-26, during a spread pass running alongside this session:
-  **five container runs, over an hour, spent on receipts that went stale
+- **The receipt binds HEAD-at-archive; the hook compares HEAD-at-push, and
+  between them sits a thirteen-minute window.** `check-ci` resolves HEAD
+  once, beside the `git archive` that consumes it — 5e9b540's fix, and right
+  — and the pre-push hook refuses anything that is not the commit the receipt
+  names. Both halves are correct and the failure is in neither: a commit
+  landing from another session while the container builds makes the receipt
+  stale, and the push is refused for a tree that would have passed.
+  Measured 2026-08-26/27, alongside a spread pass working in the same trees:
+  **six container runs, well over an hour, spent on receipts that went stale
   between the archive and the push.** Every refusal was the gate working.
-  The protocol that ended it, derived the expensive way: **ask for the hold
-  before the run, not after the refusal.** A message to the other session
-  naming the commit being gated, and an explicit release afterwards, cost one
-  round trip and saved the sixth run. Retrying without asking is what turns a
-  ten-minute cost into an hour.
-  **And ask the TREE, not the session you happen to be talking to.** That
-  sentence above is understated, and the understatement was caught by the
-  other session rather than by this one: the hold covered the peer who had
-  been committing, and a third session nobody had mentioned could have moved
-  HEAD out from under the same run. Knowing who can write to the tree is the
-  hard part, so the workable form is that whoever is about to gate says so
-  somewhere every writer can see, rather than to one peer by name.
+  **A message protocol was tried first and it does not hold.** "Ask the other
+  session for a hold before the run, and release it afterwards" cost one round
+  trip and worked several times — and then the hold was broken **by the
+  session enforcing it**, in good faith, running a four-tree spread from a
+  different project while beerssh was mid-gate. That is the decisive case
+  rather than an unlucky one: **the writer who must remember is by
+  construction the one whose attention is elsewhere.** A hold is remembered by
+  whoever is thinking about beerssh; a spread is run by whoever is thinking
+  about the fragment. Relaying it harder cannot reach that, and neither can
+  enumerating the peers — an earlier near-miss involved a third session nobody
+  had thought to name.
+  **What works is a marker resident in the tree.** `.git/write-hold` carries
+  the reason as its text; `sync.py` skips any project that has one, names it
+  HELD, and drops it from the compared count, so a held tree is out of the
+  arithmetic as well as out of the writing. In `.git`, so it is machine-local
+  and never cloned. **It expires**, and the expiry is by AGE rather than by
+  the commit it names: a gate that passes is followed by a *push*, not a
+  commit, so HEAD does not move and a commit-named marker on a dead session
+  is exactly as immortal as a bare one — the commit name is kept only as an
+  early clear, since a tree that has committed past the gated commit is
+  certainly no longer gating it. An expired hold is reported and then ignored,
+  never dropped quietly; and "cannot say" does not override a hold, so if the
+  directory is not a repository the hold stands.
+  **It closes the spread road, not every road.** Nothing blocks an ordinary
+  commit, so a session working directly in the tree can still move HEAD under
+  a run. Whether that earns a `pre-commit` hook is open and is a question for
+  a deliberate pass, not for whichever session is currently paying the
+  thirteen minutes: it would block every other writer for the length of a
+  gate, and the party proposing it is the one who benefits.
+  **Keep the two apart while deciding.** The receipt that refuses is the
+  safety property; closing the window is only a convenience. Every one of the
+  six refusals cost container minutes and none of them risked a bad push.
   Not a thing to fix in the gate. A receipt that tolerated a moved HEAD would
   be a receipt for a tree nobody built, which is the whole failure 9bc3395 and
   5e9b540 exist to prevent.
