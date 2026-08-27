@@ -332,7 +332,22 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 */
 		m_wired_sessions.remove(session);
 
-		if (m_current == session) detach_session();
+		/*
+		 * Out of the layout whether or not it is the one on screen. A
+		 * session closed while ANOTHER pane is focused never reached
+		 * detach_session() at all, so nothing dropped it from the
+		 * intent and its view stayed in the splitter attached to memory
+		 * about to be freed -- the same fatal read as above, needing a
+		 * split to reach and therefore rarer, which is exactly the
+		 * shape that survives testing.
+		 */
+		if (m_layout) m_layout->forget(session);
+
+		if (m_current == session) {
+			detach_session();
+		} else if (m_panes) {
+			m_panes->rebuild();
+		}
 
 		/*
 		 * The last pane of a window whose session ENDED takes the
@@ -1349,15 +1364,40 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 }
 
 void bssh_main_window::detach_session() {
-	m_current = nullptr;
-
 	/*
+	 * Held BEFORE m_current is cleared, and that one line is the whole
+	 * bug this function used to be.
+	 *
 	 * The panes own the views and attach them; letting go here is a
 	 * matter of dropping the session from the layout and rebuilding, so
 	 * that no view is left pointing into a session about to be freed
-	 * (sec 3, core principle 2).
+	 * (sec 3, core principle 2). That is what the code below intends and
+	 * it is what it did not do: `forget(m_current)` ran AFTER
+	 * `m_current = nullptr`, so it was always `forget(nullptr)`, and
+	 * forget() returns immediately for a session its intent does not
+	 * hold. It is the only caller of forget() in the tree, so forget()
+	 * had never removed anything.
+	 *
+	 * What that cost: the dying session stayed in the layout intent, so
+	 * rebuild() built a BRAND NEW view for it and attached the screen,
+	 * scrollback, images, emulator and router of a session about to be
+	 * deleted. One turn of the event loop later the deleteLater fired and
+	 * the blink timer read a dangling screen. Closing the tab you are
+	 * looking at, which is the ordinary case, because the close button is
+	 * on it.
+	 *
+	 * NOT independently pinned by a test, and deliberately given no
+	 * sabotage entry: the session-closing handler forgets the session
+	 * unconditionally, so either fix alone covers a closing tab and
+	 * breaking this one leaves the suite green. It is kept because it is
+	 * the only thing covering a detach_session() reached for some other
+	 * reason, and because forget(nullptr) is wrong whether or not
+	 * anything currently notices.
 	 */
-	if (m_layout) m_layout->forget(m_current);
+	bssh_session *going = m_current;
+	m_current = nullptr;
+
+	if (m_layout) m_layout->forget(going);
 	if (m_panes) m_panes->rebuild();
 
 	m_terminal_view = m_panes ? m_panes->focused_view() : nullptr;
@@ -1920,6 +1960,26 @@ void bssh_main_window::on_registry_changed() {
 	if (m_shown.isEmpty()) {
 		detach_session();
 		m_pages->setCurrentIndex(0);
+	} else if (!m_current) {
+		/*
+		 * Something took the current session away and this window still
+		 * has others -- closing the tab you were looking at, or another
+		 * window adopting it. Show one of them.
+		 *
+		 * Nothing did, and the window went BLANK: the bar above is
+		 * rebuilt under a QSignalBlocker, so currentChanged never fires
+		 * and show_session() is never reached, and detach_session()
+		 * only ever removes. Measured: close the visible tab of two and
+		 * the pane count goes to zero with a live session still in the
+		 * list. Every tabbed program since the browsers settled it
+		 * promotes a neighbour instead.
+		 *
+		 * The bar's own current index decides which, so the promotion
+		 * agrees with the tab that is drawn as selected rather than
+		 * picking a second answer.
+		 */
+		bssh_session *successor = session_at_tab(m_tabs->currentIndex());
+		show_session(successor ? successor : m_shown.first());
 	}
 
 	update_status();

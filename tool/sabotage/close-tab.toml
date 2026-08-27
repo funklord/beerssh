@@ -1,0 +1,33 @@
+# Sabotages for closing a tab: what the window is left showing, and what
+# it is left pointing at.
+#
+# The defect was a comment describing what the line beneath it did not do.
+# detach_session() cleared m_current and THEN called forget() with it, so
+# it always forgot nullptr -- and it is forget()'s only caller in the
+# tree, so forget() had never removed anything.
+
+# The forget() ORDERING has no entry here, and the reason is worth
+# recording. Two fixes cover this path from opposite ends: the session
+# closing handler forgets the session unconditionally, and
+# detach_session() forgets the one it is letting go. Either alone is
+# enough for a closing tab, so breaking one leaves the suite green and a
+# sabotage entry for it would report MISSED however correct the code is.
+#
+# Both are kept because they are correct separately: the unconditional
+# one is the only thing covering a session closed while ANOTHER pane is
+# focused, and the ordering one is the only thing covering a
+# detach_session() reached for some other reason. The split case pins the
+# first properly, and cannot be written until split_with works -- it is
+# broken for an unrelated reason and a test for it produced one pane
+# instead of two.
+
+# Promoting a successor. The tab bar is rebuilt under a QSignalBlocker,
+# so currentChanged never fires and show_session() is never reached --
+# closing the tab you were looking at left the window BLANK with a live
+# session still in the list.
+[[sabotage]]
+name = "no successor is promoted when the current tab closes"
+file = "src/ui/main_window.cpp"
+find = "\t\tbssh_session *successor = session_at_tab(m_tabs->currentIndex());\n\t\tshow_session(successor ? successor : m_shown.first());"
+replace = "\t\t(void)0;"
+expect = "closing_the_visible_tab_leaves_no_view_on_a_dead_session"

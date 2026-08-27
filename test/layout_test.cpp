@@ -2519,6 +2519,81 @@ void layout_test::a_live_tab_is_not_offered_connect() {
 	while (registry->count() > 0) registry->close(registry->at(0));
 }
 
+void layout_test::closing_the_visible_tab_leaves_no_view_on_a_dead_session() {
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral("one")));
+	window.adopt_session(first);
+	bssh_session *second = window.registry()->create(named(QStringLiteral("two")));
+	window.adopt_session(second);
+	QCoreApplication::processEvents();
+
+	/*
+	 * The tab the user is looking at, which is where the close button
+	 * lives and is therefore the ordinary case.
+	 *
+	 * detach_session() cleared m_current and THEN called
+	 * m_layout->forget(m_current), so it always forgot nullptr and the
+	 * dying session stayed in the layout intent. rebuild() then built a
+	 * fresh view for it and attached the screen, scrollback, emulator and
+	 * router of a session about to be deleted.
+	 */
+	window.registry()->close(second);
+
+	/*
+	 * The delete is deferred, so the crash is one turn of the event loop
+	 * away -- a test that stopped at close() would have passed against
+	 * the bug. This is what actually frees the emulator.
+	 */
+	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+	QCoreApplication::processEvents();
+
+	/*
+	 * And then paint, because the blink timer and paintEvent are what
+	 * read the dangling screen. grab() forces a real paint now rather
+	 * than waiting for a timer this test does not run long enough to see.
+	 */
+	window.grab();
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.registry()->count(), 1);
+	QCOMPARE(window.registry()->at(0), first);
+
+	/*
+	 * The assertion that can actually fail: exactly one view, for the
+	 * session that is left.
+	 *
+	 * "It did not crash" cannot express this and does not discriminate --
+	 * reading freed memory usually returns stale bytes rather than
+	 * faulting, so the first version of this test passed against the bug
+	 * it was written for, and the sabotage runner said so. With the
+	 * defect the layout intent still holds the dead session, so rebuild()
+	 * builds a SECOND view and attaches a freed emulator to it. Counting
+	 * views asks that directly.
+	 */
+	QVERIFY(window.panes());
+	QCOMPARE(window.panes()->views().size(), 1);
+
+	/*
+	 * And closing the LAST one leaves none. This is where the ordering
+	 * bug shows through: with forget() given a nulled m_current, the
+	 * dying session stays in the intent and rebuild() builds a view for
+	 * it, so the window ends up showing a pane for a session that is
+	 * being deleted.
+	 */
+	window.registry()->close(first);
+	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->views().size(), 0);
+}
+
 void layout_test::a_session_adopted_from_another_window_is_wired_to_this_one() {
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));

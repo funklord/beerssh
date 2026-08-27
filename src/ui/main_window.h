@@ -95,6 +95,16 @@ public:
 	bssh_profile_store *profile_store() const { return m_profile_store; }
 
 	/*
+	 * The panes this window is showing. Exposed for the same reason the
+	 * two above are: the invariant worth asserting after a session closes
+	 * is that no VIEW is left attached to it, and "the app did not crash"
+	 * cannot express that -- reading freed memory usually returns stale
+	 * bytes rather than faulting, so a survival test passes against the
+	 * bug it was written for.
+	 */
+	bssh_pane_container *panes() const { return m_panes; }
+
+	/*
 	 * What closing the window should do when sessions are still
 	 * connected. A pure decision, separated from the dialog that asks it,
 	 * so the policy can be tested without a message box on screen -- and
