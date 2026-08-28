@@ -3733,9 +3733,29 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   since this fires on an event the window does not control and one that
   resized every session each time would be sending window-change for no
   reason. The behaviour on real hardware remains unverified.
-- **[OPEN]** Whether to honour the system font-scale accessibility setting. Leaning
-  **no** by default for the terminal grid (it would silently change column count),
-  but do honour it for app chrome. Offer it as an explicit setting.
+- **[OPEN]** Whether to honour the system font-scale accessibility setting.
+  Leaning **no** by default for the terminal grid (it would silently change
+  column count), but do honour it for app chrome. Offer it as an explicit
+  setting.
+  **What is measured, so the decision starts from facts rather than from this
+  paragraph.** *Nothing in this tree reads the system font scale* — no
+  reference to `fontScale` anywhere in `src/`. The grid builds its own `QFont`
+  and sets an explicit point size (`bssh_font_catalog::make_font`); app chrome
+  inherits the application font, which nothing here overrides — the only
+  `setFont` calls are two page titles.
+  **So whether the leaning is already the behaviour depends on a fact about
+  Qt that has not been measured here**, and it is worth naming rather than
+  assuming, because the two possibilities give opposite answers. If Qt applies
+  Android's `fontScale` by adjusting the *default application font*, chrome
+  scales and the grid does not — and the leaning is already true, for free. If
+  Qt folds it into logical DPI instead, both scale together, and the leaning
+  is not merely unimplemented but **unimplementable without new code**, since
+  nothing in the tree distinguishes the two paths.
+  **The experiment that separates them:** run on Android with the system font
+  size changed, and compare the grid's column count against the size of chrome
+  text. One number moving without the other is the first case; both moving is
+  the second. It cannot be run here — the emulator images on this machine are
+  API 33 and no device is attached — and it is cheap on any phone.
 
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every
