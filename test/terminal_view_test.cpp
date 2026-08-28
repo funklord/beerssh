@@ -2178,16 +2178,30 @@ void terminal_view_test::alt_drag_asks_for_the_pane_to_be_moved() {
 namespace {
 
 /*
- * The bounding box of everything that is not the background, within the
- * band of pixels row 0 occupies. Origin-independent on purpose: the grid
- * inset and the scrollbar both move where column 0 starts, and a test
- * that computed the cursor's x would be re-deriving the renderer's
- * arithmetic and agreeing with itself.
+ * The bounding box of everything that is not the background, over the
+ * WHOLE frame. Origin-independent on purpose: the grid inset and the
+ * scrollbar both move where the grid starts, and a test that computed
+ * the cursor's position would be re-deriving the renderer's arithmetic
+ * and agreeing with itself.
+ *
+ * It scanned only the first cell_height rows at first, on the assumption
+ * that row 0 begins at y = 0. It does not -- BSSH_GRID_INSET_PX shifts
+ * the grid down by a pixel -- so the band ended one row short of the
+ * bottom of the cell, which is exactly where an underline is drawn. It
+ * passed here because the cell was tall enough for the underline to be
+ * two pixels thick and overlap by one, and failed in CI where the cell
+ * is smaller and it is one pixel. A probe that measures a place the
+ * fault may not appear in, found by a different Qt rather than by
+ * reading -- the same error as sampling a corner that turned out to be
+ * the scrollbar.
+ *
+ * Scanning everything is safe only because the caller turns the
+ * scrollbar off: grab() renders child widgets, and the bar is ink.
  */
-QRect ink_box(const QImage &frame, int cell_height, const QColor &background) {
+QRect ink_box(const QImage &frame, const QColor &background) {
 	int left = frame.width(), right = -1, top = frame.height(), bottom = -1;
 
-	for (int y = 0; y < qMin(cell_height, frame.height()); ++y) {
+	for (int y = 0; y < frame.height(); ++y) {
 		for (int x = 0; x < frame.width(); ++x) {
 			if (frame.pixelColor(x, y) == background) continue;
 
@@ -2230,6 +2244,15 @@ void terminal_view_test::the_cursor_style_reaches_the_pixels() {
 	 * is where the ink is: a block fills the cell, an underline is a
 	 * thin band at the bottom of it, a bar is a thin column at the left.
 	 */
+	/*
+	 * The bar off for the whole test: grab() renders child widgets, so a
+	 * scrollbar is ink and would be the bounding box. Restored below --
+	 * the default is process-wide and the next test inherits it.
+	 */
+	const bssh_terminal_view::scrollbar_position_t original =
+	        bssh_terminal_view::default_scrollbar_position();
+	bssh_terminal_view::set_default_scrollbar_position(bssh_terminal_view::SCROLLBAR_NONE);
+
 	const auto box_for = [](const QString &style) {
 		bssh_terminal_view view;
 		view.resize(400, 120);
@@ -2252,7 +2275,7 @@ void terminal_view_test::the_cursor_style_reaches_the_pixels() {
 		const QColor background = frame.pixelColor(frame.width() / 2,
 		                                            frame.height() - 3);
 
-		return QPair<QRect, QSize>(ink_box(frame, view.cell_height(), background),
+		return QPair<QRect, QSize>(ink_box(frame, background),
 		                            QSize(view.cell_width(), view.cell_height()));
 	};
 
@@ -2264,11 +2287,29 @@ void terminal_view_test::the_cursor_style_reaches_the_pixels() {
 	const int ch = block.second.height();
 	QVERIFY(cw > 2 && ch > 4);
 
-	/* Each drew something, or every comparison below is between two
-	 * empty rectangles and says nothing. */
-	QVERIFY2(block.first.isValid(), "the block cursor drew nothing");
-	QVERIFY2(underline.first.isValid(), "the underline cursor drew nothing");
-	QVERIFY2(bar.first.isValid(), "the bar cursor drew nothing");
+	/*
+	 * Each drew something, or every comparison below is between two empty
+	 * rectangles and says nothing.
+	 *
+	 * The message carries all three boxes and the cell, because this
+	 * assertion failed once in CI and not here, and "drew nothing" on its
+	 * own does not say whether the cursor was absent, the cell was a
+	 * different size, or the probe was looking in the wrong place.
+	 */
+	const auto describe = [&](const char *name, const QPair<QRect, QSize> &box) {
+		return QStringLiteral("%1 %2,%3 %4x%5")
+		        .arg(QString::fromLatin1(name))
+		        .arg(box.first.left()).arg(box.first.top())
+		        .arg(box.first.width()).arg(box.first.height());
+	};
+	const QString shapes = QStringLiteral("cell %1x%2; %3; %4; %5")
+	        .arg(cw).arg(ch)
+	        .arg(describe("block", block), describe("underline", underline),
+	              describe("bar", bar));
+
+	QVERIFY2(block.first.isValid(), qPrintable(shapes));
+	QVERIFY2(underline.first.isValid(), qPrintable(shapes));
+	QVERIFY2(bar.first.isValid(), qPrintable(shapes));
 
 	/* A block fills its cell in both directions. */
 	QVERIFY2(block.first.height() >= ch - 1 && block.first.width() >= cw - 1,
@@ -2292,6 +2333,8 @@ void terminal_view_test::the_cursor_style_reaches_the_pixels() {
 	QVERIFY2(bar.first.height() >= ch - 1, "a bar spans the cell height");
 	QVERIFY2(bar.first.left() < block.first.left() + cw / 2,
 	          "a bar belongs at the left of the cell");
+
+	bssh_terminal_view::set_default_scrollbar_position(original);
 }
 
 void terminal_view_test::a_reattached_screen_is_not_read_from_the_old_one() {
