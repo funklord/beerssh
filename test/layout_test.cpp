@@ -1988,6 +1988,117 @@ void layout_test::a_mouse_report_reaches_the_wire() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::a_resized_pane_tells_the_remote_its_size() {
+	/*
+	 * A window-change is what stops a remote laying out for a terminal
+	 * that is no longer that shape, and nothing in this suite asserted
+	 * one is ever sent. The fake transport has counted resizes since it
+	 * was written; the only caller that ever read the count is
+	 * live_ssh_test, which needs a real server and does not run under
+	 * `make check`.
+	 *
+	 * Found by finishing a lens rather than stopping where it last paid:
+	 * the emitters that decide WHETHER to write, rather than what. The
+	 * sibling qtty found the mirror of this in its own tree -- its
+	 * backend delivering a resize was checked in one suite and its
+	 * router resizing a window in another, with nothing running SIGWINCH
+	 * through both.
+	 *
+	 * The two assertions are a pair and neither is sufficient. That a
+	 * real change is sent is the feature. That an UNCHANGED size is not
+	 * is the gate -- `if (cols == m_cols && rows == m_rows) return;` --
+	 * and it is the half a test written to the feature's name would
+	 * never ask, while being the half that fails silently: a gate
+	 * comparing the wrong fields swallows real resizes and the remote
+	 * lays out for the old shape for the rest of the session.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	{
+		bssh_main_window window;
+		window.resize(900, 600);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		bssh_session *session = window.registry()->create(named(QStringLiteral("sized")));
+		window.adopt_session(session);
+		session->connect_to_host();
+		QCoreApplication::processEvents();
+		QVERIFY(fake);
+
+		bssh_terminal_view *view = window.panes()->focused_view();
+		QVERIFY(view);
+
+		const int before = fake->resize_count();
+
+		/* A real resize of the WINDOW, which is how this happens: the
+		 * view re-measures its grid and the session carries the new
+		 * shape outward. */
+		window.resize(640, 480);
+		QCoreApplication::processEvents();
+		QTRY_VERIFY(fake->resize_count() > before);
+
+		QVERIFY2(view->cols() > 0 && view->rows() > 0, "the grid must have measured");
+		QCOMPARE(fake->cols(), view->cols());
+		QCOMPARE(fake->rows(), view->rows());
+
+		/*
+		 * And the gate. Asking for the same size again must send
+		 * nothing: a window-change per repaint is a message the remote
+		 * answers by redrawing, so a gate that let them through would
+		 * turn one drag of a window edge into a storm of full-screen
+		 * repaints on the far end.
+		 */
+		const int settled = fake->resize_count();
+
+		session->resize(view->cols(), view->rows());
+		session->resize(view->cols(), view->rows());
+		QCoreApplication::processEvents();
+
+		QCOMPARE(fake->resize_count(), settled);
+
+		/* One more real change, so the assertion above is shown to be
+		 * about the repeat rather than about the counter having
+		 * stopped. */
+		session->resize(view->cols() + 1, view->rows());
+		QCoreApplication::processEvents();
+
+		QCOMPARE(fake->resize_count(), settled + 1);
+		QCOMPARE(fake->cols(), view->cols() + 1);
+
+		/*
+		 * And a change in the ROWS ALONE, which is the case that
+		 * separates a gate comparing both fields from one comparing
+		 * the columns. Written because the sabotage runner reported
+		 * MISSED without it: every change above moved the columns, so
+		 * a columns-only gate satisfied the lot -- the assertions were
+		 * a case where the right answer and the wrong one agree.
+		 *
+		 * A terminal made shorter without being made narrower is not
+		 * exotic. It is what dragging the bottom edge of a window
+		 * does, and what appearing or hiding a tab bar does to every
+		 * pane under it.
+		 */
+		const int rows_only = fake->resize_count();
+
+		session->resize(view->cols() + 1, view->rows() + 1);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(fake->resize_count(), rows_only + 1);
+		QCOMPARE(fake->rows(), view->rows() + 1);
+	}
+
+	bssh_ssh_session::set_factory(nullptr);
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::the_wheel_scrolls_the_settings_page_and_changes_nothing() {
 	/*
 	 * Reported from use: "suddenly the text became dark when looking

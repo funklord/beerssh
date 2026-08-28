@@ -1,0 +1,41 @@
+# Sabotages for the window-change: whether a resize is written at all.
+#
+# The last of a lens rather than the first: the emitters that decide
+# WHETHER to write, not what. Nothing in this suite asserted a
+# window-change is ever sent -- the fake transport has counted resizes
+# since it was written, and the only caller that read the count is
+# live_ssh_test, which needs a real server and does not run under
+# `make check`. The sibling qtty found the mirror in its own tree, its
+# backend's delivery and its router's resize each checked in a different
+# suite with nothing running SIGWINCH through both.
+
+# The feature. A remote that is never told lays out for the old shape.
+[[sabotage]]
+name = "the remote is never told the new size"
+file = "src/model/session.cpp"
+find = "\tif (m_transport) m_transport->resize(cols, rows);"
+replace = "\t(void)0;"
+expect = "a_resized_pane_tells_the_remote_its_size"
+
+# And the gate, which is the half a test written to the feature's name
+# would never ask. A window-change per repaint is a message the remote
+# answers by redrawing, so letting repeats through turns one drag of a
+# window edge into a storm of full-screen repaints at the far end.
+[[sabotage]]
+name = "an unchanged size is sent anyway"
+file = "src/model/session.cpp"
+find = "\tif (cols == m_cols && rows == m_rows) return;"
+replace = "\t(void)0;"
+expect = "a_resized_pane_tells_the_remote_its_size"
+
+# The gate reading the wrong field, which is the shape that fails
+# SILENTLY: real resizes are swallowed and the remote keeps the old
+# layout for the rest of the session. It is also the shape the sibling
+# qtty's frame scheduler had -- a change detector consulting a property
+# that does not change when the content does.
+[[sabotage]]
+name = "the gate compares only the columns"
+file = "src/model/session.cpp"
+find = "\tif (cols == m_cols && rows == m_rows) return;"
+replace = "\tif (cols == m_cols) return;"
+expect = "a_resized_pane_tells_the_remote_its_size"

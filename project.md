@@ -1073,6 +1073,29 @@ model on a finger.
   as a silent absence, which is the same call as the wheel guard's exclusion
   and the XTGETTCAP consume.
 
+- **Nothing asserted that resizing a pane tells the remote its size.** The
+  fake transport has counted window-changes since it was written; the only
+  caller that ever read the count is `live_ssh_test`, which needs a real
+  server and does not run under `make check`.
+  Found by **finishing a lens rather than stopping where it last paid** — the
+  emitters that decide *whether* to write, not what. `qtty` found the mirror
+  in its own tree on the same day: its backend delivering a resize checked in
+  one suite, its router resizing a window in another, and nothing running
+  SIGWINCH through both.
+  The assertions are a pair and neither is sufficient. That a real change is
+  sent is the **feature**; that an unchanged size is *not* sent is the
+  **gate**, and that is the half a test written to the feature's name would
+  never ask — while being the half that fails silently, since a gate
+  comparing the wrong fields swallows real resizes and the remote lays out for
+  the old shape for the rest of the session.
+  **The sabotage runner then rejected the first version**, and the reason is
+  the recurring one: every change the test made moved the *columns*, so a gate
+  comparing only columns satisfied all of them. The assertions were a case
+  where the right answer and the wrong one agree. A rows-only change
+  discriminates — and a terminal made shorter without being made narrower is
+  not exotic, it is dragging the bottom edge of a window, or a tab bar
+  appearing above every pane.
+
 - **A change detector that did not detect the change.** The accessibility
   layer caches the flattened scrollback-plus-screen text and invalidates it on
   the view's `content_revision` — and only `on_screen_damaged()` moved that.
