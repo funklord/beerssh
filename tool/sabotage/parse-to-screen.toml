@@ -1,0 +1,33 @@
+# Sabotages for the JOIN between parsing an image and drawing it.
+#
+# Written to a lens offered by the sibling qtty after it found three
+# input faults of one shape in one function: THE PARSE BEING RIGHT IS
+# WHAT HIDES THE DELIVERY BEING WRONG, because the parse is the half
+# that is easy to assert. A test proving a decoder decodes is what makes
+# an area look covered.
+#
+# It described this file's own gap exactly. Thirteen tests here stopped
+# at the image store -- bytes in, placement out -- and the single paint
+# test built its placement by hand and never went near a parser. Both
+# halves were covered; the chain between them was not. The kitty a=q
+# defect fixed earlier lived in precisely that gap.
+
+# The delivery. The parser still parses and the store still holds it;
+# nothing reaches the screen. Every other test in the file stays green.
+[[sabotage]]
+name = "a parsed image never reaches the screen"
+file = "src/ui/terminal_view.cpp"
+find = "\tdraw_images(painter, offset, false);"
+replace = "\t(void)offset;"
+expect = "an_image_that_arrived_as_bytes_reaches_the_screen"
+
+# The emulator's half of the same join has NO entry, and the runner is
+# what decided that. Breaking `images.place()` was written here first and
+# came back WRONG TEST, failing six cases including the parse tests --
+# because those already assert the store's contents. An entry for it
+# would have claimed for this test coverage that thirteen others already
+# provided, which is a spec taking credit rather than adding a check.
+#
+# That is the lens pointed at itself: the placement is the easy half to
+# assert, it was already asserted, and the only thing this test adds is
+# the half nobody had -- the pixels.

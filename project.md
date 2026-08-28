@@ -1051,6 +1051,30 @@ model on a finger.
   the dead one: that is both the sharpest form of the fault (the window with
   nothing running took down the one that had something) and the only version
   runnable unattended, since a live session raises a modal box.
+- **Thirteen image tests and none that looked at the screen.** Every test in
+  `graphics_test` stopped at the image store -- bytes in, placement out -- and
+  the single test that asserted pixels built its placement by hand and never
+  went near a parser. Both halves covered, the chain between them not.
+  Found by applying a lens the sibling `qtty` offered after hitting three
+  input faults of one shape in one function: **the parse being right is what
+  hides the delivery being wrong**, because the parse is the half that is easy
+  to assert, and a test proving a decoder decodes is what makes an area look
+  covered. It described this file's own gap exactly.
+  Not hypothetical, either: the kitty `a=q` defect fixed earlier lived in
+  precisely that gap. A capability *query* fell through to the transmit path,
+  was decoded as a 1x1 image and placed, and every test here went on passing
+  because each was asking the store what it held rather than asking the screen
+  what it showed.
+  The new test feeds a real escape sequence to a real emulator with a real
+  view attached, and asserts the pixel. It samples **before** as well, so what
+  is asserted is that the image arrived rather than that the terminal is red.
+  **The sabotage runner then refused half of what was written for it**, and
+  that refusal is the lens pointed at itself. An entry breaking `images.place()`
+  came back WRONG TEST, failing six cases including the parse tests -- which
+  already assert the store's contents. It would have claimed for this test
+  coverage that thirteen others already provided. The absence is recorded with
+  that reason, and what the test genuinely adds is the half nobody had: the
+  pixels.
 - **A session torn into another window was still wired to the window it came
   from.** The per-session wiring hung off `session_added`, which fires once,
   at creation — so `adopt_session()`, the road a torn-out or dropped tab

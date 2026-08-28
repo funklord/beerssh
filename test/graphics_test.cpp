@@ -359,3 +359,66 @@ void graphics_test::a_background_image_is_drawn_under_the_text() {
 	QVERIFY2(text_pixels_under > text_pixels_over,
 	         "text must remain visible on top of a background image");
 }
+
+void graphics_test::an_image_that_arrived_as_bytes_reaches_the_screen() {
+	/*
+	 * The JOIN, which nothing tested. Every other test in this file
+	 * stops at the image store -- bytes in, placement out -- and the one
+	 * paint test builds its placement by hand and never goes near a
+	 * parser. Both halves were covered and the chain between them was
+	 * not.
+	 *
+	 * The lens is the sibling qtty's, offered after it found three
+	 * input faults of exactly this shape in one function: **the parse
+	 * being right is what hides the delivery being wrong**, because the
+	 * parse is the half that is easy to assert. A test proving the
+	 * decoder decodes is what makes the area look covered.
+	 *
+	 * It is not hypothetical here. The kitty a=q defect fixed earlier
+	 * lived in this exact gap: a capability QUERY fell through to the
+	 * transmit path, was decoded as a 1x1 image and PLACED, and every
+	 * test in this file went on passing because each was asking the
+	 * store what it held rather than asking the screen what it showed.
+	 */
+	bssh_emulator emulator(40, 10);
+
+	bssh_terminal_view view;
+	view.resize(320, 160);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("default"));
+	bssh_apply_appearance(&view, settings);
+
+	view.attach_screen(&emulator.screen());
+	view.attach_images(&emulator.images());
+	emulator.set_cell_pixels(view.cell_width(), view.cell_height());
+
+	/*
+	 * Sampled BEFORE, so the assertion is that this image arrived rather
+	 * than that the terminal is red -- a scheme whose background happened
+	 * to be red would satisfy an "is red" test with no image at all.
+	 */
+	const QPoint probe(view.cell_width() / 2, view.cell_height() / 2);
+	const QColor before = view.grab().toImage().pixelColor(probe);
+	QVERIFY2(before != QColor(Qt::red), "the fixture needs a background that is not the image");
+
+	/* Four red pixels, raw RGB, two by two -- the same shape the parse
+	 * test next door uses, so a failure here is about delivery. */
+	QByteArray pixels;
+	for (int i = 0; i < 4; ++i) {
+		pixels.append(char(0xff));
+		pixels.append(char(0x00));
+		pixels.append(char(0x00));
+	}
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=24,s=2,v=2"), pixels));
+
+	/* The parse half, so a failure below is unambiguous about which
+	 * half broke. */
+	QCOMPARE(emulator.images().count(), 1);
+
+	const QColor after = view.grab().toImage().pixelColor(probe);
+
+	QVERIFY2(after == QColor(Qt::red),
+	          qPrintable(QStringLiteral("an image that parsed was never drawn: the cell "
+	                                     "under the cursor is %1").arg(after.name())));
+}

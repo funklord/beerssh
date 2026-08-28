@@ -28,6 +28,7 @@ private slots:
 	void an_image_scrolled_off_the_top_survives_in_the_scrollback();
 	void the_memory_budget_drops_the_oldest_but_never_the_visible();
 	void a_background_image_is_drawn_under_the_text();
+	void an_image_that_arrived_as_bytes_reaches_the_screen();
 };
 
 #endif /* BSSH_GRAPHICS_TEST_H */
