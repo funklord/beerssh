@@ -55,6 +55,15 @@ public:
 	/* Everything the client has written, concatenated. */
 	QByteArray written() const { return m_written; }
 
+	/*
+	 * Forget it, so the next assertion is about one exchange rather than
+	 * about everything since the connection opened. A test that asks
+	 * several questions in turn otherwise has to match a growing
+	 * haystack, and "the answer is in there somewhere" is a weaker claim
+	 * than "this is what came back".
+	 */
+	void clear_written() { m_written.clear(); }
+
 	int cols() const { return m_cols; }
 	int rows() const { return m_rows; }
 	int resize_count() const { return m_resize_count; }

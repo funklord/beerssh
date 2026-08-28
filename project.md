@@ -1543,6 +1543,26 @@ serve.
 application on a character-cell terminal, and it is where two of these were
 found.
 
+**What a consumer on the other side CANNOT check, and this bounds the whole
+arrangement.** Named from the other end: a client comparing a reported colour
+against pixels that arrive through the same terminal has no way to see a
+divergence — a palette reported wrongly looks exactly like a theme. The same
+holds for the cell size, where a client scales to whatever it is told and the
+picture is simply slightly wrong. So having a real consumer does not cover
+these and never will; the report-versus-paint invariants are only checkable
+from **inside** this tree, and `tool/sabotage/report-matches-paint.toml` is
+what does it. Every entry there breaks a *connection* rather than a function,
+because each function is individually correct and a test exercising one alone
+stays green.
+Two things came out of writing it. The first probe sampled three pixels in
+from the bottom right and read `f3f3f3` against a reported `000000` — the
+**scrollbar**, a child widget drawn in the application palette. The probe was
+measuring a place the fault could not appear in and would have failed
+identically against correct code. And the cell metrics reach the emulator by
+**three** routes, so breaking any one call site reports MISSED: the invariant
+is "the reported cell tracks the view's", not "this line runs", and the
+sabotage had to break the setter to say so.
+
 **The two projects coordinate directly, by the copyright holder's
 instruction** — session to session, rather than by each writing notes the
 other may not read. The division of labour is `harmonization.md`'s and it is

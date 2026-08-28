@@ -1,0 +1,56 @@
+# Sabotages for the WIRING between what this terminal reports and what it
+# draws.
+#
+# The reason this file exists rather than trusting the consumer: a client
+# cannot detect a divergence here. It compares a reported colour against
+# pixels arriving through the same terminal, so a palette reported
+# wrongly looks exactly like a theme -- named from the other end by qtty,
+# and worth acting on rather than recording. Having a real consumer on
+# the far side of these answers does not cover this and never will.
+#
+# Every entry below breaks a CONNECTION rather than a function. Each
+# function stays correct and the suite would stay green on any test that
+# only exercised one.
+
+# The colours never reach the emulator, so it answers its constructor
+# default -- a plain xterm palette, which is exactly what a client would
+# have assumed anyway. The most invisible of the three.
+[[sabotage]]
+name = "the view's colours never reach the emulator"
+file = "src/ui/pane_container.cpp"
+find = "\t\tsession->emulator()->set_colours(view->terminal_foreground().rgb(),\n\t\t                                  view->terminal_background().rgb());\n\t\tsession->emulator()->set_palette(view->terminal_palette());"
+replace = "\t\tsession->emulator()->set_palette(view->terminal_palette());"
+expect = "what_the_terminal_reports_is_what_it_paints"
+
+# The palette never reaches it, so OSC 4 answers xterm's low sixteen for
+# a terminal painting the host's scheme.
+[[sabotage]]
+name = "the host's palette never reaches the emulator"
+file = "src/ui/pane_container.cpp"
+find = "\t\t                                  view->terminal_background().rgb());\n\t\tsession->emulator()->set_palette(view->terminal_palette());"
+replace = "\t\t                                  view->terminal_background().rgb());"
+expect = "what_the_terminal_reports_is_what_it_paints"
+
+# And the cell metrics, which decide every image's aspect ratio. A stale
+# value here is invisible from outside: a client scales to whatever it is
+# told and the picture is simply slightly wrong.
+#
+# This breaks the SETTER rather than a call site, and the reason is a
+# measurement worth keeping. Removing the rebuild-time call came back
+# MISSED: the metrics reach the emulator by three routes -- that call,
+# the settings-changed lambda, and the grid_resized connection -- and any
+# one of them fires before the query in this test. So no single call site
+# is load-bearing and an entry for one would report MISSED for ever,
+# however correct the code was.
+#
+# That redundancy is fine and probably right; what it means is that the
+# invariant under test is "the reported cell tracks the view's", not "one
+# particular line runs". Breaking the setter tests exactly that, and the
+# emulator then answers its 8x16 constructor default against a view
+# measuring something else.
+[[sabotage]]
+name = "the reported cell size does not track the view's"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->cell_width = qMax(1, width);\n\tm_private->cell_height = qMax(1, height);"
+replace = "\t(void)width;\n\t(void)height;"
+expect = "what_the_terminal_reports_is_what_it_paints"

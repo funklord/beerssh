@@ -1658,6 +1658,151 @@ void layout_test::narrowing_a_window_turns_its_extra_panes_into_tabs() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::what_the_terminal_reports_is_what_it_paints() {
+	/*
+	 * sec 7.1's colour and metric answers, asserted as a RELATIONSHIP
+	 * between what this terminal says and what it actually draws --
+	 * never as either value on its own.
+	 *
+	 * The reason is a limit on the whole cross-checking arrangement,
+	 * named from the other end by qtty and worth having in a test rather
+	 * than only in prose: a client CANNOT detect a divergence here. It
+	 * compares a reported colour against pixels that arrive through the
+	 * same terminal, so a palette reported wrongly looks exactly like a
+	 * theme. Having a real consumer on the other side of these answers
+	 * does not cover this, and it never will -- some invariants are only
+	 * checkable from inside this tree, and this is the test that does it.
+	 *
+	 * Each pair goes through the REAL wiring: the pane container is what
+	 * tells the emulator its colours, palette and cell size, and the
+	 * whole class of defect here is that wiring being absent or stale
+	 * while both halves are individually correct.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	/*
+	 * A transport, because the session DRAINS the emulator into it --
+	 * take_output() is called on every output_ready and the bytes are
+	 * dropped when there is nowhere to send them. Reading the emulator
+	 * here would return empty and the test would pass against any answer
+	 * whatsoever, including none. sec 12.4 records the same trap costing
+	 * an XTGETTCAP test.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	{
+		bssh_main_window window;
+		window.resize(900, 600);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		bssh_session *session = window.registry()->create(named(QStringLiteral("asked")));
+		window.adopt_session(session);
+		session->connect_to_host();
+		QCoreApplication::processEvents();
+		QVERIFY(fake);
+
+		bssh_terminal_view *view = window.panes()->focused_view();
+		QVERIFY(view);
+
+		const auto ask = [&](const QByteArray &query) {
+			fake->clear_written();
+			session->emulator()->feed(query);
+			QCoreApplication::processEvents();
+			return fake->written();
+		};
+
+		/*
+		 * The background, against the pixel actually on screen rather
+		 * than against the member it came from. A grab is the only
+		 * reading a compositing client's own eye would agree with, and
+		 * comparing the reply to terminal_background() would compare
+		 * the wiring against itself.
+		 */
+		const QByteArray reported_bg = ask(QByteArrayLiteral("\x1b]11;?\x1b\\"));
+
+		const QImage painted = view->grab().toImage();
+
+		/*
+		 * The MIDDLE of the view, not a corner. The first version of
+		 * this sampled three pixels in from the bottom right and read
+		 * f3f3f3 against a reported 000000 -- which was the SCROLLBAR,
+		 * a child widget drawn in the application palette. The probe
+		 * was measuring a place the fault could not appear in, and it
+		 * would have failed identically against correct code.
+		 *
+		 * The centre is inside the grid whatever side the bar is on,
+		 * and it is clear of the cursor at row 0 and of anything the
+		 * session has printed.
+		 */
+		const QColor corner = painted.pixelColor(painted.width() / 2, painted.height() / 2);
+
+		const QByteArray expected_bg = QByteArrayLiteral("\x1b]11;rgb:")
+		        + QByteArray::number((corner.red() << 8) | corner.red(), 16)
+		                  .rightJustified(4, '0')
+		        + QByteArrayLiteral("/")
+		        + QByteArray::number((corner.green() << 8) | corner.green(), 16)
+		                  .rightJustified(4, '0')
+		        + QByteArrayLiteral("/")
+		        + QByteArray::number((corner.blue() << 8) | corner.blue(), 16)
+		                  .rightJustified(4, '0')
+		        + QByteArrayLiteral("\x1b\\");
+
+		QCOMPARE(reported_bg, expected_bg);
+
+		/*
+		 * The cell, against the view's own measurement. This is the
+		 * pair an image's aspect ratio depends on, and a stale value
+		 * here is invisible from outside: a client scales to whatever
+		 * it is told and the picture is simply slightly wrong.
+		 */
+		const QByteArray reported_cell = ask(QByteArrayLiteral("\x1b[16t"));
+		QCOMPARE(reported_cell,
+		          QByteArrayLiteral("\x1b[6;")
+		          + QByteArray::number(view->cell_height())
+		          + QByteArrayLiteral(";")
+		          + QByteArray::number(view->cell_width())
+		          + QByteArrayLiteral("t"));
+
+		QVERIFY2(view->cell_width() > 0 && view->cell_height() > 0,
+		          "a zero cell would satisfy the comparison above and mean nothing");
+
+		/*
+		 * And a palette index, against what the RENDERER resolves it
+		 * to. Index 1 rather than 0: the low sixteen are the host's
+		 * scheme and are the half a client cannot derive, and 1 is
+		 * ordinary red in every scheme rather than a background that
+		 * might coincide with something else.
+		 */
+		bssh_color_t red;
+		red.kind = bssh_color_t::INDEXED;
+		red.index = 1;
+
+		const QColor drawn = view->colour_for_test(red);
+
+		const QByteArray reported_red = ask(QByteArrayLiteral("\x1b]4;1;?\x1b\\"));
+		QCOMPARE(reported_red,
+		          QByteArrayLiteral("\x1b]4;1;rgb:")
+		          + QByteArray::number((drawn.red() << 8) | drawn.red(), 16)
+		                    .rightJustified(4, '0')
+		          + QByteArrayLiteral("/")
+		          + QByteArray::number((drawn.green() << 8) | drawn.green(), 16)
+		                    .rightJustified(4, '0')
+		          + QByteArrayLiteral("/")
+		          + QByteArray::number((drawn.blue() << 8) | drawn.blue(), 16)
+		                    .rightJustified(4, '0')
+		          + QByteArrayLiteral("\x1b\\"));
+	}
+
+	bssh_ssh_session::set_factory(nullptr);
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::the_wheel_scrolls_the_settings_page_and_changes_nothing() {
 	/*
 	 * Reported from use: "suddenly the text became dark when looking
