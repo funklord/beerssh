@@ -384,7 +384,24 @@ carrying a `STOP` action, and `onStartCommand` honours the contract first and
 stops itself second — and the C++ side only crosses JNI when the state actually
 changes, since the window recomputes it on every session event.
 
-**Foreground-service TYPE — [OPEN], important for Play review:**
+**Foreground-service TYPE — the choice is MADE; what is [OPEN] is whether it
+survives adjudication.** This entry read as an undecided question between three
+candidates for some time after one of them had been implemented, which sends a
+reader looking for a decision that `46e197c` had already taken with reasons.
+The manifest declares `android:foregroundServiceType="connectedDevice"`, with
+`FOREGROUND_SERVICE_CONNECTED_DEVICE` and the qualifying `CHANGE_NETWORK_STATE`
+this section names as its requirement.
+**What remains open is narrower and is validation rather than design.** The
+type has never been adjudicated by a system that enforces it: `46e197c` verified
+the service on an API 30 emulator, where the Android 14 rules do not apply, and
+the emulator images on this machine are **API 33** — the rules bite at 34. So
+the experiment that would settle it is named and cannot be run here: install on
+API 34 or later and observe whether the service starts at all. Play's review of
+the justification is the second half, and no local test answers it.
+Whether to keep `connectedDevice` or move to `specialUse` stays the copyright
+holder's call. The candidates below are kept because that decision may still be
+made, not because it has not been.
+
 Android 14+ requires a declared `foregroundServiceType`, and Google Play reviews
 the justification. Candidates for a persistent network/SSH connection:
 
