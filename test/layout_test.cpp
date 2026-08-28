@@ -2198,6 +2198,94 @@ void layout_test::the_wheel_scrolls_the_settings_page_and_changes_nothing() {
 	bssh_app_settings().set_theme(original);
 }
 
+void layout_test::the_biometric_setting_is_absent_where_it_cannot_work() {
+	/*
+	 * sec 11's per-host biometric release, offered only where a prompt
+	 * can actually be raised -- and the assertion is that the control is
+	 * ABSENT rather than disabled, which is the same rule the
+	 * hide-from-screenshots checkbox follows next door.
+	 *
+	 * Present-but-ineffective is the failure being avoided: a user who
+	 * ticks a box promising a fingerprint dialog on a device with no
+	 * reader, or with a reader and nothing enrolled, has made their own
+	 * stored password unreachable and will find out at the worst moment.
+	 *
+	 * Both directions are driven through force_biometric, because a test
+	 * that only checked the absent case would pass against a page that
+	 * never offers it at all -- which is what the page did until today,
+	 * and which no assertion about absence can tell from correctness.
+	 */
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.path());
+
+	{
+		bssh_platform::force_biometric(0);
+
+		bssh_host_editor without(&store);
+		bool found = false;
+		for (const QCheckBox *box : without.findChildren<QCheckBox *>()) {
+			if (box->text().contains(QStringLiteral("fingerprint"), Qt::CaseInsensitive)) {
+				found = true;
+			}
+		}
+		QVERIFY2(!found, "a device that cannot raise a prompt must not offer one");
+	}
+
+	{
+		bssh_platform::force_biometric(1);
+
+		bssh_host_editor with(&store);
+		QCheckBox *offered = nullptr;
+		for (QCheckBox *box : with.findChildren<QCheckBox *>()) {
+			if (box->text().contains(QStringLiteral("fingerprint"), Qt::CaseInsensitive)) {
+				offered = box;
+			}
+		}
+		QVERIFY2(offered, "a device that can raise a prompt must offer the setting");
+
+		/*
+		 * And it carries the profile's value in both directions. A
+		 * checkbox that displays the setting and does not write it back
+		 * is sec 10.1's override badge again -- the control was there,
+		 * and the thing it claimed to control was elsewhere.
+		 */
+		bssh_profile_t armed;
+		armed.host = QStringLiteral("locked.example");
+		armed.require_biometric = true;
+		with.set_profile(armed);
+
+		QVERIFY2(offered->isChecked(), "the stored setting must reach the control");
+
+		offered->setChecked(false);
+		QVERIFY2(!with.profile().require_biometric,
+		          "and clearing it must reach the profile");
+
+		offered->setChecked(true);
+		QVERIFY(with.profile().require_biometric);
+	}
+
+	/*
+	 * And a profile edited on a device that CANNOT prompt keeps its
+	 * setting rather than being quietly disarmed -- a host synced from a
+	 * phone with a reader, opened on a desktop without one, must not
+	 * come back with the lock removed.
+	 */
+	{
+		bssh_platform::force_biometric(0);
+
+		bssh_host_editor elsewhere(&store);
+		bssh_profile_t armed;
+		armed.host = QStringLiteral("locked.example");
+		armed.require_biometric = true;
+		elsewhere.set_profile(armed);
+
+		QVERIFY2(elsewhere.profile().require_biometric,
+		          "editing a host where the control is absent must not clear it");
+	}
+
+	bssh_platform::force_biometric(-1);
+}
+
 void layout_test::the_screenshot_setting_is_absent_where_it_cannot_work() {
 	/*
 	 * sec 11's "don't promise one in the UI", asserted on the UI rather

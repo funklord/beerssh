@@ -1,6 +1,8 @@
 #include "ui/touch_metrics.h"
 #include "ui/host_editor.h"
 
+#include <QCheckBox>
+
 #include <QFormLayout>
 #include <QLabel>
 
@@ -139,6 +141,32 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	body->addLayout(form);
 
 	/*
+	 * sec 11's per-host biometric release, and it is on the page only
+	 * where the device can actually raise a prompt.
+	 *
+	 * ABSENT rather than disabled, which is the same rule that keeps the
+	 * hide-from-screenshots checkbox off the desktop settings page: a
+	 * control promising a fingerprint dialog to a device with no reader
+	 * -- or with a reader and nothing enrolled -- is a promise the app
+	 * cannot keep, and the user who ticks it has made their own stored
+	 * password unreachable.
+	 *
+	 * Per host because the question is about trust in one machine, which
+	 * is the same reasoning sec 7.1 gives for OSC 52's write half being
+	 * a per-host setting. Off by default for the reason sec 11 gives:
+	 * the fallback is the typed password, so this adds a lock rather
+	 * than removing one, and nobody should acquire it without asking.
+	 */
+	m_biometric = nullptr;
+	if (bssh_platform::instance() && bssh_platform::instance()->has_biometric()) {
+		m_biometric = new QCheckBox(
+		        QStringLiteral("Ask for a fingerprint before using the saved password"),
+		        this);
+		m_biometric->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+		body->addWidget(m_biometric);
+	}
+
+	/*
 	 * The same picker the desktop dialog embeds, sized for touch (sec
 	 * 9.4: one list on both platforms). It is on the host page rather
 	 * than behind a settings screen because on a phone this IS the
@@ -256,6 +284,7 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_name->setText(profile.name);
 	m_identity->setText(profile.identity_file);
 	m_jump->setText(profile.proxy_jump);
+	if (m_biometric) m_biometric->setChecked(profile.require_biometric);
 
 	const QJsonObject resolved = resolved_settings();
 
@@ -348,6 +377,15 @@ bssh_profile_t bssh_host_editor::profile() const {
 	edited.name = m_name->text().trimmed();
 	edited.identity_file = m_identity->text().trimmed();
 	edited.proxy_jump = m_jump->text().trimmed();
+
+	/*
+	 * Left as it was found where the control is absent, never forced to
+	 * false. A profile synced from a phone that HAS a reader keeps its
+	 * setting when it is edited on a machine that does not -- otherwise
+	 * opening the host on a desktop would quietly disarm it, and the
+	 * user would learn that by finding the lock gone.
+	 */
+	if (m_biometric) edited.require_biometric = m_biometric->isChecked();
 
 	/*
 	 * Sparse appearance overrides, computed by the same function the

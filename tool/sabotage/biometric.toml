@@ -1,33 +1,37 @@
-# Sabotages for sec 11's per-host biometric gate.
+# Sabotages for sec 11's per-host biometric release.
 #
-# Only the portable half exists yet -- the flag, the capability question
-# and the decision path. The Android prompt is the next piece, and until
-# it lands has_biometric() answers false on both platforms so the option
-# is offered nowhere. That is sec 11's "absent, not faked".
+# The feature had a stored field, a reader at connect time, and no way to
+# set it: require_biometric was persisted by the profile store and
+# consulted by the window, and no control anywhere wrote it. The inverse
+# of the class sec 10.1 records twice -- not a setting applied to
+# nothing, but a setting nothing can apply.
 
-# The flag reaching the file. Without it a host asks for the prompt until
-# the app restarts and then quietly stops asking, which is the worst
-# possible failure for a thing whose job is to withhold a password.
+# The control's presence, which is the honesty half. A checkbox
+# promising a fingerprint dialog to a device with no reader -- or with a
+# reader and nothing enrolled -- is a promise the app cannot keep, and
+# the user who ticks it has made their own stored password unreachable.
 [[sabotage]]
-name = "the biometric flag is not persisted"
-file = "src/model/profile_store.cpp"
-find = "\t\t\tfile.setValue(QStringLiteral(\"require_biometric\"), true);"
-expect = "the_biometric_flag_survives_the_round_trip"
+name = "the setting is offered where no prompt can be raised"
+file = "src/ui/host_editor.cpp"
+find = "\tif (bssh_platform::instance() && bssh_platform::instance()->has_biometric()) {"
+replace = "\tif (true) {"
+expect = "the_biometric_setting_is_absent_where_it_cannot_work"
 
-# The testing seam. Without it the whole decision path is unreachable on a
-# desktop, which is the only place it can be exercised today.
+# And the write-back. A control that displays the setting and does not
+# save it is sec 10.1's override badge again: the control was there, and
+# the thing it claimed to control was somewhere else.
 [[sabotage]]
-name = "the capability cannot be forced for a test"
-file = "src/platform/platform.cpp"
-find = "\tif (bssh_forced_biometric >= 0) return bssh_forced_biometric != 0;"
-expect = "the_capability_decides_whether_the_option_exists"
+name = "the control is shown and never written back"
+file = "src/ui/host_editor.cpp"
+find = "\tif (m_biometric) edited.require_biometric = m_biometric->isChecked();"
+replace = "\t(void)0;"
+expect = "the_biometric_setting_is_absent_where_it_cannot_work"
 
-# Failing CLOSED. A platform that cannot ask must answer NO: a caller who
-# forgets the capability check has to withhold a password rather than
-# release one, because that is the direction an error here must fall.
+# The read. Without it the box is always clear, so a host that HAS the
+# lock looks unlocked -- and saving the page then removes it.
 [[sabotage]]
-name = "a platform that cannot ask answers yes"
-file = "src/platform/platform_desktop.cpp"
-find = "\t\tif (done) done(false);"
-replace = "\t\tif (done) done(true);"
-expect = "the_capability_decides_whether_the_option_exists"
+name = "the stored setting never reaches the control"
+file = "src/ui/host_editor.cpp"
+find = "\tif (m_biometric) m_biometric->setChecked(profile.require_biometric);"
+replace = "\t(void)0;"
+expect = "the_biometric_setting_is_absent_where_it_cannot_work"

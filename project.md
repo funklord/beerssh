@@ -4129,10 +4129,39 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
     unless `has_stored_password` is set — so no shape of this can stop a
     key-authenticated session reconnecting. Only a remembered password is
     ever gated.
-    **Built so far: the flag, the capability question and the decision
-    path.** `bssh_platform::has_biometric()` answers false on both platforms
-    today, so the option is offered nowhere — §11's *absent, not faked*, and
-    the Android `BiometricPrompt` is the next piece. Two properties are held
+    **The Android half is built, and the option is now reachable.**
+    `BsshBiometric.java` raises `android.hardware.biometrics.BiometricPrompt`
+    and answers through a registered native method — the first callback *into*
+    native code in this project; every other JNI call here is one-way. The
+    answer crosses the fence as an integer **token** rather than a pointer, so
+    a prompt still on screen when the app tears down resolves to a token
+    nobody is waiting for rather than to freed memory, and it is queued onto
+    the Qt thread because it arrives on Android's UI thread.
+    **API 29 and above, absent below it rather than approximated.**
+    `BiometricPrompt` arrived in 28, but `BiometricManager` — the only way to
+    ask whether anything is *enrolled* — came in 29. On 28 the available
+    answers are "the device has a reader" and "somebody registered a finger",
+    and only the second is the question: a prompt offered where nothing is
+    enrolled can only be cancelled, and the user who turned the setting on has
+    made their own password unreachable.
+    **The control was the missing half, and it was missing in the direction
+    this section keeps recording.** `require_biometric` was persisted by the
+    store and read by the window, and *nothing anywhere wrote it* — the
+    inverse of §10.1's badge: not a setting applied to nothing, but a setting
+    nothing could apply. The host editor offers it now, and only where
+    `has_biometric()`, which is §11's *absent, not faked* and the same rule
+    that keeps the screenshot checkbox off the desktop page. A profile edited
+    where the control is absent keeps its value rather than being quietly
+    disarmed — a host synced from a phone with a reader, opened on a desktop
+    without one, must not come back with the lock removed.
+    **What is proven and what is not.** The APK builds, the class is in the
+    dex and `USE_BIOMETRIC` is in the packaged manifest — all three checked
+    with `aapt2` and by searching *every* dex, after a first probe that read
+    one of five and a manifest probe that could not read UTF-16 AXML at all.
+    Both were caught by running a known-present control rather than by
+    trusting a zero. **That the prompt appears, and that its callback reaches
+    the Qt thread, is not verified**: it needs a device, and nothing off one
+    can exercise it. Two properties are held
     by tests rather than intent: the gate is on the capability **and** the
     flag, so a profile carrying the flag to a machine that cannot ask falls
     through to the typed prompt instead of locking its own password away; and

@@ -7,6 +7,8 @@
 
 #include "model/profile.h"
 
+class QCheckBox;
+
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -82,6 +84,15 @@ private:
 	QLineEdit *m_name;
 	QLineEdit *m_identity;
 	QLineEdit *m_jump;
+
+	/*
+	 * sec 11's per-host biometric release, or nullptr where the device
+	 * cannot raise a prompt. Absent rather than disabled: a control that
+	 * promises a fingerprint dialog a device has no reader for is the
+	 * dishonesty sec 11 forbids, and it is the same rule that keeps the
+	 * screenshot setting off the desktop page.
+	 */
+	QCheckBox *m_biometric;
 	QLineEdit *m_host;
 	QLineEdit *m_user;
 	QSpinBox *m_port;

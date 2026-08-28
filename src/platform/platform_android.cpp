@@ -7,6 +7,9 @@
 #include <QCoreApplication>
 #include <QJniEnvironment>
 #include <QJniObject>
+#include <QHash>
+#include <QMutex>
+#include <QMutexLocker>
 
 namespace {
 
@@ -64,6 +67,64 @@ bssh_appearance_t android_night_mode() {
 
 QJniObject android_context() {
 	return QNativeInterface::QAndroidApplication::context();
+}
+
+/*
+ * The biometric prompt's answer, coming back from Java (project.md
+ * sec 11).
+ *
+ * This is the first callback INTO native code in this project -- every
+ * other JNI call here is one-way -- and the machinery is here rather
+ * than shared because one caller does not make a framework.
+ *
+ * A TOKEN rather than a pointer. The Java side is handed an integer and
+ * hands it back; nothing about a C++ object crosses the fence, so a
+ * prompt still on screen when the app tears down resolves to a token
+ * nobody is waiting for rather than to freed memory. The map is guarded
+ * because the callback arrives on Android's UI thread, which is not the
+ * Qt thread.
+ */
+QMutex g_biometric_lock;
+QHash<qint64, std::function<void(bool)>> g_biometric_waiting;
+qint64 g_biometric_next_token = 1;
+
+void biometric_result(JNIEnv *, jclass, jlong token, jboolean authenticated) {
+	std::function<void(bool)> done;
+
+	{
+		QMutexLocker held(&g_biometric_lock);
+		done = g_biometric_waiting.take(qint64(token));
+	}
+
+	if (!done) return;
+
+	/*
+	 * Queued onto the Qt thread, because this is Android's UI thread and
+	 * the callback ends up touching the credential store and the
+	 * session. Calling straight through would be a data race on
+	 * everything the continuation reaches -- and the symptom of that is
+	 * not a crash here but corruption somewhere else entirely.
+	 */
+	const bool ok = authenticated == JNI_TRUE;
+	QMetaObject::invokeMethod(qApp, [done, ok] { done(ok); }, Qt::QueuedConnection);
+}
+
+/*
+ * Registered once, lazily, so a build that never asks for a prompt never
+ * touches the class -- and so a device whose Java half is missing fails
+ * at the capability check rather than at load time.
+ */
+bool biometric_bridge_ready() {
+	static const bool ready = [] {
+		const JNINativeMethod method = {
+			"nativeResult", "(JZ)V", reinterpret_cast<void *>(biometric_result)
+		};
+
+		QJniEnvironment env;
+		return env.registerNativeMethods("se/vibes/beerssh/BsshBiometric", &method, 1);
+	}();
+
+	return ready;
 }
 
 /*
@@ -424,21 +485,71 @@ public:
 	}
 
 	/*
-	 * Not yet: the JNI half is the next piece of this feature, and until
-	 * it exists this answers honestly so the option is offered nowhere.
-	 * sec 11's rule is absent rather than faked, and a checkbox that
-	 * promised a prompt nothing can show would be the faking.
+	 * Hardware present AND something enrolled, which Java asks in one
+	 * call. Both halves matter: a reader with no finger registered
+	 * raises a prompt that can only be cancelled, so offering the
+	 * setting there would let a user make their own password
+	 * unreachable. sec 11's rule is absent rather than faked.
+	 *
+	 * The bridge is required as well -- a build whose Java half did not
+	 * ship has no prompt, whatever the hardware says.
 	 */
 	bool platform_has_biometric() const override {
-		return false;
+		if (!biometric_bridge_ready()) return false;
+
+		const QJniObject context = android_context();
+		if (!context.isValid()) return false;
+
+		return QJniObject::callStaticMethod<jboolean>(
+		               "se/vibes/beerssh/BsshBiometric", "available",
+		               "(Landroid/content/Context;)Z", context.object())
+		       == JNI_TRUE;
 	}
 
 	void authenticate(const QString &reason, std::function<void(bool)> done) override {
-		Q_UNUSED(reason);
+		if (!done) return;
 
-		/* False, so a caller that forgets the capability check fails
-		 * CLOSED: it withholds a password rather than releasing one. */
-		if (done) done(false);
+		/*
+		 * False, so a caller that forgets the capability check fails
+		 * CLOSED: it withholds a password rather than releasing one.
+		 * That is the direction every failure here takes, including the
+		 * ones below that look like plumbing.
+		 */
+		if (!biometric_bridge_ready()) {
+			done(false);
+			return;
+		}
+
+		const QJniObject activity = android_context();
+		if (!activity.isValid()) {
+			done(false);
+			return;
+		}
+
+		qint64 token = 0;
+		{
+			QMutexLocker held(&g_biometric_lock);
+			token = g_biometric_next_token++;
+			g_biometric_waiting.insert(token, done);
+		}
+
+		const QJniObject title = QJniObject::fromString(QStringLiteral("BeerSSH"));
+		const QJniObject description = QJniObject::fromString(reason);
+
+		/*
+		 * On the ANDROID UI thread, which is not this one.
+		 * BiometricPrompt needs a Looper, and the Qt thread has none --
+		 * called from here it throws before anything is drawn, and the
+		 * caller waits for a callback that will never arrive.
+		 */
+		QNativeInterface::QAndroidApplication::runOnAndroidMainThread(
+		        [activity, title, description, token] {
+			QJniObject::callStaticMethod<void>(
+			        "se/vibes/beerssh/BsshBiometric", "authenticate",
+			        "(Landroid/app/Activity;Ljava/lang/String;Ljava/lang/String;J)V",
+			        activity.object(), title.object(), description.object(),
+			        jlong(token));
+		});
 	}
 
 	bool platform_is_touch_primary() const override {
