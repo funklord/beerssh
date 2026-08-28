@@ -1073,6 +1073,30 @@ model on a finger.
   as a silent absence, which is the same call as the wheel guard's exclusion
   and the XTGETTCAP consume.
 
+- **Nothing asserted that pressing a key sends a byte.** The most fundamental
+  thing a terminal does. The input router has thirty-two tests — keys in,
+  bytes out, every modifier and both keyboard protocols — and the transport
+  has `session_records_what_the_client_wrote`, which calls `send()` on the
+  fake and checks the fake recorded it. That test's own comment calls itself
+  *"the seam M3's input router gets tested through"*, and no router, no view
+  and no key event appear anywhere in it. Both halves exhaustively covered;
+  the chain between them — key event, view, router, emulator, session,
+  transport — covered nowhere.
+  The same search key as the image gap, applied a second time and paying out
+  a second time: **find the exhaustively-tested translator, then ask what
+  carries its output and whether anything asserts the carrying.**
+  The test drives real key events at the focused pane and reads the wire. It
+  asserts three, and the second two are the discriminating ones: `Ctrl+C` must
+  arrive as `0x03`, which no amount of forwarding a key event's `text()`
+  produces, and an arrow must arrive as `ESC [ A`, which no keystroke carries
+  as text at all. A plain letter alone would pass against a view that wrote
+  the event's text straight out with the router cut out of the path.
+  Its sabotage found something the tests here had all been avoiding: breaking
+  the session's hand-off to the transport fails **four** cases now, and none
+  before today, because every mouse-report test in this tree reads the
+  emulator's own output buffer rather than the wire. Those pass whether or
+  not anything carries the bytes.
+
 - **Thirteen image tests and none that looked at the screen.** Every test in
   `graphics_test` stopped at the image store -- bytes in, placement out -- and
   the single test that asserted pixels built its placement by hand and never

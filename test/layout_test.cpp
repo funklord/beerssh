@@ -1803,6 +1803,107 @@ void layout_test::what_the_terminal_reports_is_what_it_paints() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::a_keystroke_in_a_pane_reaches_the_wire() {
+	/*
+	 * The most fundamental thing a terminal does, and nothing asserted
+	 * it end to end.
+	 *
+	 * The input router has thirty-two tests -- keys in, bytes out, every
+	 * modifier and both keyboard protocols -- and the transport has
+	 * `session_records_what_the_client_wrote`, which calls send() on the
+	 * fake and checks the fake recorded it. That test's comment calls
+	 * itself "the seam M3's input router gets tested through", and no
+	 * router, no view and no key event appear anywhere in it. So both
+	 * halves were exhaustively covered and the chain between them --
+	 * key event, view, router, emulator, session, transport -- was not
+	 * covered at all.
+	 *
+	 * Found with a search key the sibling qtty derived from three of its
+	 * own faults: the parse being right is what hides the delivery being
+	 * wrong, because the parse is the half that is easy to assert. Find
+	 * the exhaustively-tested translator, then ask what carries its
+	 * output and whether anything asserts the carrying. Its own
+	 * application of it found an image encoder with sixty-eight
+	 * round-trip checks and no test that it ever reached the wire.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	{
+		bssh_main_window window;
+		window.resize(900, 600);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		window.activateWindow();
+
+		bssh_session *session = window.registry()->create(named(QStringLiteral("typed")));
+		window.adopt_session(session);
+		session->connect_to_host();
+		QCoreApplication::processEvents();
+		QVERIFY(fake);
+
+		bssh_terminal_view *view = window.panes()->focused_view();
+		QVERIFY(view);
+		view->setFocus();
+		QTRY_VERIFY(view->hasFocus());
+
+		fake->clear_written();
+
+		/*
+		 * A real key event at the real widget. QTest::keyClicks would
+		 * do the same thing; this spells the event out so the
+		 * modifiers are visible, since the interesting cases below are
+		 * about them.
+		 */
+		QKeyEvent letter(QEvent::KeyPress, Qt::Key_A, Qt::NoModifier, QStringLiteral("a"));
+		QCoreApplication::sendEvent(view, &letter);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(fake->written(), QByteArrayLiteral("a"));
+
+		/*
+		 * And a control chord, which is the half that would still work
+		 * if the view were writing the text of the event straight out
+		 * and the router were doing nothing. Ctrl+C is 0x03, and no
+		 * amount of forwarding `text()` produces it -- QKeyEvent's text
+		 * for this carries the control character on some platforms and
+		 * not others, so this asserts the router ran rather than that
+		 * the event happened to contain the answer.
+		 */
+		fake->clear_written();
+
+		QKeyEvent interrupt(QEvent::KeyPress, Qt::Key_C, Qt::ControlModifier,
+		                     QStringLiteral("c"));
+		QCoreApplication::sendEvent(view, &interrupt);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(fake->written(), QByteArrayLiteral("\x03"));
+
+		/*
+		 * An arrow, which no keystroke carries as text at all: it only
+		 * exists as an escape sequence the router builds. If the wire
+		 * ever showed a letter and not this, the router had been cut
+		 * out of the path entirely.
+		 */
+		fake->clear_written();
+
+		QKeyEvent up(QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier, QString());
+		QCoreApplication::sendEvent(view, &up);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(fake->written(), QByteArrayLiteral("\x1b[A"));
+	}
+
+	bssh_ssh_session::set_factory(nullptr);
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::the_wheel_scrolls_the_settings_page_and_changes_nothing() {
 	/*
 	 * Reported from use: "suddenly the text became dark when looking

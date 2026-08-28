@@ -1,0 +1,33 @@
+# Sabotages for the chain from a key event to the wire.
+#
+# The most fundamental thing a terminal does, and nothing asserted it end
+# to end. The input router had thirty-two tests -- keys in, bytes out,
+# every modifier and both keyboard protocols -- and the transport had a
+# test calling send() on the fake and checking the fake recorded it,
+# whose comment called itself "the seam the input router gets tested
+# through" while containing no router, no view and no key event.
+#
+# Found with the search key the sibling qtty derived from three of its
+# own faults: the parse being right is what hides the delivery being
+# wrong, because the parse is the half that is easy to assert. Find the
+# exhaustively-tested translator, then ask what carries its output and
+# whether anything asserts the carrying.
+
+# The view's end: no router attached, so nothing translates.
+[[sabotage]]
+name = "the pane is never given a router"
+file = "src/ui/pane_container.cpp"
+find = "\t\tview->attach_input_router(session->input_router());"
+replace = "\t\t(void)0;"
+expect = "a_keystroke_in_a_pane_reaches_the_wire"
+
+# The session's end: the bytes are produced and never handed to the
+# transport. This is the half that a test reading the emulator's own
+# output buffer would miss entirely -- and every mouse-report test in
+# this tree reads exactly that.
+[[sabotage]]
+name = "what the emulator produced never reaches the transport"
+file = "src/model/session.cpp"
+find = "\t\tif (!reply.isEmpty() && m_transport) m_transport->send(reply);"
+replace = "\t\t(void)reply;"
+expect = "a_keystroke_in_a_pane_reaches_the_wire"
