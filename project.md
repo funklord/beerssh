@@ -1663,13 +1663,27 @@ the tier-1 switches.
   compositing against the background wants what is on screen rather than
   what is in the scheme file.
 - **OSC 4**, what colour a palette index is — ranked first on the asker's
-  second pass, with the most interesting cost of the three. qtty quantises
-  its own colours into the 256-colour palette and assumed xterm's default
-  table. Indices 16–255 are a formula every terminal computes identically, so
-  those were right; **0–15 are the user's scheme**, so every quantised colour
-  landing there was computed against the wrong table. The output does not
-  look broken — it looks slightly off, which is the failure nobody reports,
-  and asking is the only way to find out.
+  second pass. Indices 16–255 are a formula every terminal computes
+  identically; **0–15 are the user's scheme**, and that is the half a client
+  cannot derive, so asking is the only way to find out.
+  **The justification this was built on was too broad, and the correction is
+  qtty's own.** It was requested as "every quantised colour I emit is computed
+  against the wrong table". Reading its own code before wiring ours in, it
+  found that its 256-colour matcher builds its candidate list from 16–255
+  *only* — the low sixteen are deliberately excluded, with a comment saying
+  why — so a user's scheme cannot affect that path at all. What it affects is
+  the 16-colour fallback, which picks the nearest of the sixteen for a colour
+  carrying no authored role: a documented last resort rather than the primary
+  route. Narrower than claimed, and still real — picking "nearest" against the
+  wrong sixteen is how a fallback lands somewhere the user can see is wrong.
+  Recorded because the overstated version was written into this document
+  first: a number taken from another tree is a measurement not taken here, and
+  it was repeated rather than checked.
+  Verified end to end from that side afterwards, with the binary's mtime read
+  before *and* after the run: our default scheme puts index 1 at `#aa0000`
+  where qtty's built-in table assumed `#800000`. A default build differs on
+  the very first index, so the difference shows on an ordinary run rather than
+  an exotic one.
   Answered as the palette **is**, before the brightness slider dims anything:
   the slider is a per-cell display adjustment applied to a foreground but not
   to the terminal's own background, so there is no single dimmed value an
