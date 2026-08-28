@@ -1503,18 +1503,30 @@ those have no negative form and silence is what a terminal without them does.
 Answering kitty's query with zero flags would say something different and
 wrong — that the protocol is spoken and sitting at its lowest tier.
 
-**Three of the twelve cannot be switched off yet, and they are named rather
-than omitted.** Bracketed paste, the mouse modes and focus reporting are
-libvterm's: it parses the DEC mode, holds the state and answers DECRQM about
-it. Suppressing only the behaviour would leave the terminal telling a client
-"2004 is on" while ignoring it — exactly the failure above, reproduced. Doing
-it honestly needs a sixth vterm patch on the same hook `0002` and `0004`
-already use. Until then the parser **refuses** those names with that reason,
-because a harness that asked for a terminal without bracketed paste and
-silently got one with it would report a pass for a configuration nobody
-tested.
-An unknown name is refused for the same reason, and the message lists what
-would have been accepted.
+**All twelve switch, including the three libvterm models** — bracketed paste,
+the mouse family and focus reporting. Those were refused at first, because
+libvterm parses the mode, holds the state and answers DECRQM from it, so
+suppressing only the behaviour would leave this terminal reporting a mode as
+present while ignoring it.
+**The fix was not a new patch but a two-line move in the two we had.** `0002`
+and `0004` already existed to hand a DEC-mode set and a DEC-mode query to the
+application; they simply did it in each function's `default` branch, which is
+reached only for a mode libvterm does *not* model. Consulting the fallback at
+the **top** of each function subsumes that case exactly — an application that
+declines gets libvterm's own handling, unchanged — and adds the one this
+needed: an application can now refuse a mode libvterm *does* model. Looking
+for the smallest new patch found a smaller change than a patch.
+**The answer has to be `0`, not `2`.** DECRPM `0` is not-recognised and is the
+only definite no; `2` is recognised-but-currently-reset, which leaves a client
+believing the mode exists and enabling it again. That distinction came from
+the client end — qtty acts on it — and a veto that produced `2` would have
+been no better than none.
+The mouse family is **one** switch (1000, 1002, 1003, 1005, 1006, 1015).
+Gating the SGR encoding alone would let a client enable tracking and then find
+no encoding it could use, which is a stranger terminal than either having a
+mouse or not having one, and not a terminal anybody has tested against.
+An unknown name is still refused, and the message lists what would have been
+accepted.
 
 **The command line outranks the preset here**, which is the only place in this
 project it does. A reduced terminal is an instruction about *this run*, typed
@@ -1646,14 +1658,32 @@ the tier-1 switches.
 
 Both are switchable, as `colour-query` and `window-size`.
 
-**The tier-1 switches are deferred at the asker's request**, which is the
-clearest argument for asking before building. qtty replied that switching
-bracketed paste, the mouse modes or focus reporting off would not change its
-behaviour at all today, because it does not ask the terminal about them — it
-infers them from whether it got raw mode. So the seventh vterm patch would
-have made this terminal honest for a client that was not listening. That gap
-is qtty's and it intends to close it by verifying with DECRQM, which this
-terminal already answers; the patch is worth writing once it does.
+**The tier-1 switches were deferred once, at the asker's request, and that
+round trip is the clearest argument in this exchange for asking before
+building.** qtty first replied that switching bracketed paste, the mouse modes
+or focus reporting off would not change its behaviour at all, because it did
+not ask the terminal about them — it inferred them from whether it got raw
+mode. Building then would have made this terminal honest for a client that was
+not listening. qtty closed that gap, came back with the requirement above,
+*and* ranked them: `sgr-mouse` first, because a client that believes it has
+SGR mouse and does not gets no input at all. The work was then worth doing and
+took a two-line move instead of a patch.
+
+**Two practices came out of the exchange and are worth keeping.**
+- **Any figure either side quotes about the other needs a timestamp and the
+  other binary's mtime.** qtty twice measured this terminal while it was being
+  rebuilt underneath, and the second time nearly filed a parser bug that did
+  not exist — its tool reported our background colour unanswered while a
+  capture minutes later showed it arriving, because we had gained OSC 11 in
+  between. Neither reading was wrong about what it saw; both were about a
+  binary that no longer existed.
+- **A specific wrong cause is worse than a vague one.** qtty attributed a
+  five-per-cent aspect error to its own compositing function, then corrected
+  itself: the function references cell metrics nowhere, and the cause is its
+  internal cell size differing from the one this terminal reports. The
+  measurement was right and the mechanism was not — `evidence.md`'s rule, sent
+  back the other way, and the reason the correction was worth a message rather
+  than a quiet edit.
 
 **`vterm-patch/0006` is what made both reachable**, and it is the third patch
 of the same shape: libvterm answers a question the layer above it knows

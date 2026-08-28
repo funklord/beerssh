@@ -5,7 +5,6 @@ namespace {
 struct entry_t {
 	const char *name;
 	const char *description;
-	bool switchable;
 };
 
 /*
@@ -15,33 +14,33 @@ struct entry_t {
  */
 const entry_t g_features[bssh_term_features_t::FEATURE_COUNT] = {
 	{ "bracketed-paste",
-		"DEC 2004. Wraps pasted text so a shell knows it was pasted.", false },
+		"DEC 2004. Wraps pasted text so a shell knows it was pasted." },
 	{ "sgr-mouse",
-		"DEC 1006 and the mouse modes that feed it.", false },
+		"DEC 1006 and the mouse modes that feed it." },
 	{ "focus-reporting",
-		"DEC 1004. Tells the remote when a pane gains or loses focus.", false },
+		"DEC 1004. Tells the remote when a pane gains or loses focus." },
 	{ "kitty-keyboard",
-		"CSI > flags u. Progressive keyboard disambiguation.", true },
+		"CSI > flags u. Progressive keyboard disambiguation." },
 	{ "modify-other-keys",
-		"CSI > 4 ; n m. xterm's keyboard disambiguation, level 2.", true },
+		"CSI > 4 ; n m. xterm's keyboard disambiguation, level 2." },
 	{ "synchronised-output",
-		"DEC 2026. The remote brackets an update so it paints in one frame.", true },
+		"DEC 2026. The remote brackets an update so it paints in one frame." },
 	{ "hyperlinks",
-		"OSC 8. Marks a run of cells as a clickable URL.", true },
+		"OSC 8. Marks a run of cells as a clickable URL." },
 	{ "clipboard-write",
-		"OSC 52 write. Also needs the host's own permission.", true },
+		"OSC 52 write. Also needs the host's own permission." },
 	{ "xtgettcap",
-		"DCS + q. Lets a remote ask what this terminal supports.", true },
+		"DCS + q. Lets a remote ask what this terminal supports." },
 	{ "colour-query",
-		"OSC 10 and OSC 11. The terminal's own foreground and background.", true },
+		"OSC 10 and OSC 11. The terminal's own foreground and background." },
 	{ "window-size",
-		"CSI 14 t and CSI 16 t. The text area and one cell, in pixels.", true },
+		"CSI 14 t and CSI 16 t. The text area and one cell, in pixels." },
 	{ "sixel",
-		"DCS q. Images as a bitmap the terminal decodes.", true },
+		"DCS q. Images as a bitmap the terminal decodes." },
 	{ "kitty-graphics",
-		"APC G. Images as base64 with key=value controls.", true },
+		"APC G. Images as base64 with key=value controls." },
 	{ "iterm2-images",
-		"OSC 1337. Images as base64 with iTerm2's own arguments.", true },
+		"OSC 1337. Images as base64 with iTerm2's own arguments." },
 };
 
 bool g_override_set = false;
@@ -79,11 +78,6 @@ bool bssh_term_features_t::from_name(const QString &name, feature_t &feature) {
 		return true;
 	}
 	return false;
-}
-
-bool bssh_term_features_t::switchable(feature_t feature) {
-	if (feature < 0 || feature >= FEATURE_COUNT) return false;
-	return g_features[feature].switchable;
 }
 
 bool bssh_term_features_t::operator==(const bssh_term_features_t &other) const {
@@ -140,23 +134,6 @@ bssh_term_features_t bssh_term_features_t::from_spec(const QString &spec, QStrin
 			 */
 			error = QStringLiteral("unknown terminal feature \"%1\"; known ones are %2")
 			                .arg(bare, every_name().join(QStringLiteral(", ")));
-			return bssh_term_features_t();
-		}
-
-		if (!on && !switchable(feature)) {
-			/*
-			 * Refused rather than accepted-and-ignored. A harness
-			 * asking for a terminal without bracketed paste and
-			 * silently getting one WITH it would report a pass for a
-			 * configuration nobody tested -- the same green-result-
-			 * about-the-wrong-thing an unknown name would produce.
-			 */
-			error = QStringLiteral(
-			                "\"%1\" cannot be switched off yet: libvterm owns the "
-			                "mode and answers DECRQM about it, so refusing to act "
-			                "on it would advertise a feature this terminal was not "
-			                "honouring")
-			                .arg(bare);
 			return bssh_term_features_t();
 		}
 

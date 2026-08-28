@@ -21,6 +21,7 @@ private slots:
 	void the_terminal_answers_the_questions_a_compositing_client_asks();
 	void decrqm_answers_for_the_alternate_screen();
 	void a_switched_off_feature_is_not_advertised_either();
+	void a_mode_libvterm_models_can_still_be_declined();
 	void a_feature_spec_reads_left_to_right();
 	void an_unknown_feature_name_is_refused();
 	void focus_is_reported_only_when_the_remote_asked();

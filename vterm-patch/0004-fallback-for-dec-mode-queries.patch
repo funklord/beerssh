@@ -19,26 +19,39 @@ what it would have matched on had the sequence arrived unrecognised in
 the first place. Only when the fallback declines does libvterm send its
 own "0".
 
+The consult is at the TOP of the function rather than in the default
+branch, matching 0002 and for the same second reason: an application must
+be able to answer for a mode libvterm DOES model, or it cannot decline
+one. Reporting "2 -- recognised but reset" for a feature the layer above
+does not implement leaves a client believing the mode exists and can be
+enabled; only "0 -- not recognised" turns the capability off. Those mean
+different things and clients act on the difference.
+
 Applied on top of 0001-0003 at build time (see the top-level Makefile);
 upstream is otherwise untouched. Worth sending upstream alongside 0002.
 
 --- a/src/state.c
 +++ b/src/state.c
-@@ -938,6 +949,17 @@ static void request_dec_mode(VTermState *state, int num)
-       break;
+@@ -869,6 +884,22 @@ static void set_dec_mode(VTermState *state, int num, int val)
  
-     default:
-+      /* Give the application-level fallback a chance before answering
-+       * "not recognised". A mode libvterm does not model may still be
-+       * implemented above it -- 0002 exists so that it can be -- and
-+       * answering 0 here tells every client that it is not, which is
-+       * the one answer that stops them using it. */
-+      if(state->fallbacks && state->fallbacks->csi) {
-+        long fallback_args[1] = { num };
-+        if((*state->fallbacks->csi)("?", fallback_args, 1, "$", 'p', state->fbdata))
-+          return;
-+      }
+ static void request_dec_mode(VTermState *state, int num)
+ {
++  /* Offer the query to the application-level fallback before answering.
++   *
++   * At the top rather than in the default branch, for the reason 0002
++   * gives about the other half of this feature: a mode libvterm models
++   * would otherwise be answered from libvterm's own state, and an
++   * application that has declined that mode cannot say so. "2" --
++   * recognised but reset -- leaves a client believing the mode exists;
++   * only "0" turns the capability off.
++   *
++   * An application that declines gets libvterm's own answer, unchanged. */
++  if(state->fallbacks && state->fallbacks->csi) {
++    long fallback_args[1] = { num };
++    if((*state->fallbacks->csi)("?", fallback_args, 1, "$", 'p', state->fbdata))
++      return;
++  }
 +
-       vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?%d;%d$y", num, 0);
-       return;
-   }
+   int reply;
+ 
+   switch(num) {

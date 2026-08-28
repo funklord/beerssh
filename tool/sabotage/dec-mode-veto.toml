@@ -1,0 +1,59 @@
+# Sabotages for declining a DEC mode libvterm MODELS.
+#
+# Two of the four break the vendored library rather than this tree, which
+# is the half a spec that only edits the consumer would leave unguarded:
+# patches 0002 and 0004 are what make the veto reachable at all, and a
+# patch silently unapplied looks exactly like a feature that works.
+#
+# The distinction under test was asked for by name from the client end:
+# DECRPM "0" is not-recognised and is the only definite no, while "2" is
+# recognised-but-reset and leaves a client believing the mode is there
+# and enabling it again. A veto producing 2 would be no better than none.
+
+# The query half, in the vendored source. Put the consult back in the
+# default branch and a mode libvterm models is answered from libvterm's
+# own state -- so a declined mode reports 2, or 1 once a client has
+# enabled it.
+[[sabotage]]
+name = "the DECRQM consult happens too late to decline a modelled mode"
+file = "vterm/src/state.c"
+find = "  /* Offer the query to the application-level fallback before answering."
+replace = "  if(0)\n  /* Offer the query to the application-level fallback before answering."
+expect = "a_mode_libvterm_models_can_still_be_declined"
+
+# The set half, also in the vendored source.
+[[sabotage]]
+name = "the mode-set consult happens too late to decline a modelled mode"
+file = "vterm/src/state.c"
+find = "  /* Offer every DEC private mode to the application-level fallback"
+replace = "  if(0)\n  /* Offer every DEC private mode to the application-level fallback"
+expect = "a_mode_libvterm_models_can_still_be_declined"
+
+# And the two halves in this tree. Answering the query while still
+# letting the mode engage is the more dangerous direction: the terminal
+# says "not recognised" and then behaves as though it were.
+[[sabotage]]
+name = "a declined mode is still set"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (argcount > 0 && lead == \"?\" && dec_mode_is_off(self, int(args[0]))) {\n\t\t\treturn 1;\n\t\t}"
+replace = "\t\t(void)0;"
+expect = "a_mode_libvterm_models_can_still_be_declined"
+
+# Answering "2" instead of "0" -- the exact confusion the client warned
+# about, and the one that leaves it as wrong as before.
+[[sabotage]]
+name = "a declined mode answers reset rather than unrecognised"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (dec_mode_is_off(self, mode)) return 0;"
+replace = "\tif (dec_mode_is_off(self, mode)) return 2;"
+expect = "a_mode_libvterm_models_can_still_be_declined"
+
+# The mouse family is one switch. Gating only the SGR encoding would let
+# a client enable tracking and find no encoding it could use, which is a
+# stranger terminal than either having a mouse or not.
+[[sabotage]]
+name = "only the SGR encoding is declined, not the mouse family"
+file = "src/term/emulator_vterm.cpp"
+find = "\tcase 1000:  /* X11 button reporting */"
+replace = "\tcase 1000: if (mode != 1006) break; /* X11 button reporting */"
+expect = "a_mode_libvterm_models_can_still_be_declined"

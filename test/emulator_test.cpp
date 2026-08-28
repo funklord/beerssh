@@ -1474,3 +1474,101 @@ void emulator_test::the_terminal_answers_the_questions_a_compositing_client_asks
 	quiet.feed(QByteArrayLiteral("\x1b[16t"));
 	QCOMPARE(quiet.take_output(), QByteArray());
 }
+
+void emulator_test::a_mode_libvterm_models_can_still_be_declined() {
+	/*
+	 * The three tier-1 extensions -- bracketed paste, the mouse family
+	 * and focus reporting -- are modes libvterm models: it parses them,
+	 * holds their state and answers DECRQM from it. Declining one was
+	 * therefore impossible from above, and suppressing only the
+	 * behaviour would have left this terminal reporting the mode as
+	 * present while ignoring it.
+	 *
+	 * Patches 0002 and 0004 now consult the fallback BEFORE libvterm's
+	 * own switch, which is the whole of what makes this reachable.
+	 *
+	 * The distinction asserted here is the one the consumer asked for by
+	 * name: "0" is not-recognised and is the only definite no, while "2"
+	 * is recognised-but-reset and leaves a client believing the mode is
+	 * there and enabling it again. A veto that produced 2 would be no
+	 * better than none.
+	 */
+	QString error;
+
+	{
+		bssh_emulator emulator(20, 4);
+		emulator.set_features(bssh_term_features_t::from_spec(
+		        QStringLiteral("-sgr-mouse"), error));
+		QVERIFY(error.isEmpty());
+
+		/*
+		 * Enabled first, exactly as a client does before asking -- the
+		 * answer must not depend on the terminal never having been
+		 * told to turn the mode on.
+		 */
+		emulator.feed(QByteArrayLiteral("\x1b[?1006h\x1b[?1006$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1006;0$y"));
+
+		/* The whole family, not just the encoding. */
+		emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1000$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1000;0$y"));
+
+		/*
+		 * And the behaviour is gone with it: the mode never reached
+		 * libvterm, so nothing downstream believes the mouse is on.
+		 */
+		emulator.feed(QByteArrayLiteral("\x1b[?1002h"));
+		QVERIFY2(!emulator.mouse_reporting(),
+		          "a declined mode must not take effect either");
+	}
+
+	{
+		bssh_emulator emulator(20, 4);
+		emulator.set_features(bssh_term_features_t::from_spec(
+		        QStringLiteral("-bracketed-paste"), error));
+		QVERIFY(error.isEmpty());
+
+		emulator.feed(QByteArrayLiteral("\x1b[?2004h\x1b[?2004$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2004;0$y"));
+	}
+
+	{
+		bssh_emulator emulator(20, 4);
+		emulator.set_features(bssh_term_features_t::from_spec(
+		        QStringLiteral("-focus-reporting"), error));
+		QVERIFY(error.isEmpty());
+
+		emulator.feed(QByteArrayLiteral("\x1b[?1004h\x1b[?1004$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1004;0$y"));
+
+		/*
+		 * And nothing is volunteered on focus. A terminal that writes
+		 * CSI I to a shell which never enabled 1004 is putting stray
+		 * bytes on that shell's command line -- and here the shell
+		 * DID ask, and was declined, which is the case most likely to
+		 * be got wrong.
+		 */
+		emulator.set_focused(true);
+		emulator.set_focused(false);
+		QCOMPARE(emulator.take_output(), QByteArray());
+	}
+
+	/*
+	 * With everything on, the same three answer "1" -- enabled. Without
+	 * this the whole test would pass against an emulator that had
+	 * stopped answering DECRQM at all, which is the vacuous form of
+	 * every assertion above.
+	 */
+	{
+		bssh_emulator emulator(20, 4);
+
+		emulator.feed(QByteArrayLiteral("\x1b[?1006h\x1b[?1006$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1006;1$y"));
+
+		emulator.feed(QByteArrayLiteral("\x1b[?2004h\x1b[?2004$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2004;1$y"));
+
+		emulator.feed(QByteArrayLiteral("\x1b[?1004h\x1b[?1004$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1004;1$y"));
+	}
+}

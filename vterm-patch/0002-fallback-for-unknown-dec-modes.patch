@@ -10,27 +10,43 @@ DEC 2026 (synchronised output) is the live example -- a terminal cannot
 support it on top of libvterm's parser, because the sequence never
 arrives.
 
+The consult is at the TOP of the function rather than in the default
+branch, and that placement is the whole of it: it is what lets an
+application refuse a mode libvterm DOES model, not merely implement one
+it does not. A terminal built on libvterm cannot otherwise decline
+bracketed paste, the mouse modes or focus reporting -- libvterm records
+the mode as set and then answers DECRQM saying so, which advertises a
+feature the layer above is not honouring.
+
+It was in the default branch first, which handled DEC 2026 and nothing
+else. Moving it up subsumes that case and keeps its behaviour exactly:
+an application that declines gets libvterm's own handling, including
+the debug log for a mode nobody claimed.
+
 Applied on top of 0001 at build time (see the top-level Makefile);
 upstream is otherwise untouched. Worth sending upstream.
 
 --- a/src/state.c
 +++ b/src/state.c
-@@ -863,6 +863,17 @@
-     break;
+@@ -775,6 +775,21 @@ static void set_modes(VTermState *state, int num, int val)
  
-   default:
-+    /* Give the application-level fallback a chance before dropping it.
-+     * Modes libvterm does not model are not thereby unimplementable --
-+     * DEC 2026 (synchronised output) is a live example -- but without
-+     * this they are unreachable, since vterm_screen_set_unrecognised_
-+     * fallbacks never sees a CSI ? h/l that got this far. */
-+    if(state->fallbacks && state->fallbacks->csi) {
-+      long fallback_args[1] = { num };
-+      (*state->fallbacks->csi)("?", fallback_args, 1, NULL, val ? 'h' : 'l', state->fbdata);
+ static void set_dec_mode(VTermState *state, int num, int val)
+ {
++  /* Offer every DEC private mode to the application-level fallback
++   * before acting on it.
++   *
++   * Two things depend on this and neither is reachable otherwise. A mode
++   * libvterm does not model -- DEC 2026, synchronised output -- cannot be
++   * implemented above it at all, because the sequence never arrives. And
++   * a mode libvterm DOES model cannot be declined: it would be recorded
++   * as set here and then reported as set by DECRQM, which tells a client
++   * a feature is on while the layer above ignores it. */
++  if(state->fallbacks && state->fallbacks->csi) {
++    long fallback_args[1] = { num };
++    if((*state->fallbacks->csi)("?", fallback_args, 1, NULL, val ? 'h' : 'l', state->fbdata))
 +      return;
-+    }
++  }
 +
-     DEBUG_LOG("libvterm: Unknown DEC mode %d\n", num);
-     return;
-   }
-
+   switch(num) {
+   case 1:
+     state->mode.cursor = val;

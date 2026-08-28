@@ -414,13 +414,10 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 
 				const QString name =
 				        QString::fromLatin1(bssh_term_features_t::name(feature));
-				const QString note = bssh_term_features_t::switchable(feature)
-				        ? QString()
-				        : QStringLiteral(" (not switchable yet)");
 				const QString what = QString::fromLatin1(
 				        bssh_term_features_t::description(feature));
 
-				lines.append(QStringLiteral("  %1%2\n      %3").arg(name, note, what));
+				lines.append(QStringLiteral("  %1\n      %2").arg(name, what));
 			}
 			line.listing = QStringLiteral("terminal features:\n")
 			        + lines.join(QLatin1Char('\n')) + QLatin1Char('\n');

@@ -393,7 +393,66 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
  * Returns -1 for "not ours", which leaves libvterm to send its own "not
  * recognised".
  */
+/*
+ * The feature a DEC private mode belongs to, or FEATURE_COUNT for a mode
+ * this terminal does not gate.
+ *
+ * One table for both halves of a mode -- setting it and answering for it
+ * -- because the two must agree exactly. A mode refused on the way in and
+ * still reported present on the way out is the failure sec 7.1 keeps
+ * naming, and it is the failure a client notices: qtty reported that "2"
+ * (recognised but reset) leaves it believing the terminal has the mode,
+ * and only "0" (not recognised) turns the capability off.
+ */
+bssh_term_features_t::feature_t feature_for_dec_mode(int mode) {
+	switch (mode) {
+	case 2004:
+		return bssh_term_features_t::BRACKETED_PASTE;
+	case 1000:  /* X11 button reporting */
+	case 1002:  /* button-event tracking */
+	case 1003:  /* any-event tracking */
+	case 1005:  /* UTF-8 encoding */
+	case 1006:  /* SGR encoding */
+	case 1015:  /* urxvt encoding */
+		/*
+		 * The whole mouse family under one switch. Splitting the
+		 * encodings from the tracking modes would let a client enable
+		 * tracking and then find no encoding it could use, which is a
+		 * stranger terminal than either "has a mouse" or "has none" --
+		 * and neither of those is a terminal anybody has tested
+		 * against.
+		 */
+		return bssh_term_features_t::SGR_MOUSE;
+	case 1004:
+		return bssh_term_features_t::FOCUS_REPORTING;
+	default:
+		break;
+	}
+	return bssh_term_features_t::FEATURE_COUNT;
+}
+
+/* True when the mode belongs to a feature that is switched off. */
+bool dec_mode_is_off(const bssh_emulator_private *self, int mode) {
+	const bssh_term_features_t::feature_t feature = feature_for_dec_mode(mode);
+	if (feature == bssh_term_features_t::FEATURE_COUNT) return false;
+
+	return !self->features.enabled(feature);
+}
+
 int decrqm_state(const bssh_emulator_private *self, int mode) {
+	/*
+	 * A mode this terminal has been told not to speak answers "0 -- not
+	 * recognised", which is the only definite no in DECRPM. "2" means
+	 * recognised and currently reset, and a client reading 2 keeps
+	 * believing the mode is there and enables it again.
+	 *
+	 * Reachable at all only because patches 0002 and 0004 consult the
+	 * fallback BEFORE libvterm's own switch: these are modes libvterm
+	 * models, so it would otherwise answer from its own state and there
+	 * would be no way to decline one.
+	 */
+	if (dec_mode_is_off(self, mode)) return 0;
+
 	switch (mode) {
 	case 2026:
 		/*
@@ -605,6 +664,16 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 	}
 
 	if (command == 'h' || command == 'l') {
+		/*
+		 * A switched-off mode is consumed and does nothing: libvterm
+		 * never records it, so nothing downstream acts on it and
+		 * DECRQM has nothing to report. Both halves matter -- see
+		 * decrqm_state, which answers 0 for the same modes.
+		 */
+		if (argcount > 0 && lead == "?" && dec_mode_is_off(self, int(args[0]))) {
+			return 1;
+		}
+
 		/* DEC 2026: synchronised output (sec 7.1). */
 		if (lead == "?" && argcount > 0 && args[0] == 2026) {
 			/*

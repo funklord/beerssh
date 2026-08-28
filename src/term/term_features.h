@@ -69,23 +69,6 @@ struct bssh_term_features_t {
 
 	static bool from_name(const QString &name, feature_t &feature);
 
-	/*
-	 * Whether this one can actually be turned off yet.
-	 *
-	 * The tier-1 three -- bracketed paste, the mouse modes and focus
-	 * reporting -- are libvterm's rather than ours: it parses the DEC
-	 * mode, holds the state and answers DECRQM about it. Refusing to ACT
-	 * on a mode libvterm has recorded as set would leave the terminal
-	 * telling a client "2004 is on" while ignoring it, which is the one
-	 * failure sec 7.1 says is worse than not having the feature. Doing
-	 * it honestly needs a sixth vterm patch on the same hook
-	 * vterm-patch/0002 and 0004 already use.
-	 *
-	 * So they are NAMED here and refused by the parser, rather than
-	 * quietly absent: a harness asking for a terminal without bracketed
-	 * paste has to be told it did not get one.
-	 */
-	static bool switchable(feature_t feature);
 
 	bool enabled(feature_t feature) const { return m_on[feature]; }
 	void set(feature_t feature, bool on) { m_on[feature] = on; }
