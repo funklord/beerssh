@@ -3,6 +3,7 @@
 
 #include <QByteArray>
 #include <QObject>
+#include <QRgb>
 #include <QString>
 
 #include "term/term_features.h"
@@ -185,6 +186,18 @@ public:
 	 * tells it -- and must, or images land with a zero-cell footprint.
 	 */
 	void set_cell_pixels(int width, int height);
+
+	/*
+	 * The colours this terminal is actually painted in, so it can answer
+	 * OSC 10 and OSC 11 truthfully (sec 7.1).
+	 *
+	 * Told rather than looked up, for the same reason set_cell_pixels is:
+	 * the scheme belongs to the view, and an emulator that reached for a
+	 * widget to answer a question would be a model reaching into a view.
+	 * Told on the same events, too -- appearance changes and rebuilds --
+	 * so the answer moves with the theme.
+	 */
+	void set_colours(QRgb foreground, QRgb background);
 
 	/*
 	 * The TERM the app is telling the remote (sec 10.2). Mirrored here

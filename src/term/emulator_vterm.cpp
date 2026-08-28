@@ -96,6 +96,10 @@ struct bssh_emulator_private {
 	int cell_width;
 	int cell_height;
 
+	/* What OSC 10 and OSC 11 answer with, told by the view. */
+	QRgb foreground_rgb;
+	QRgb background_rgb;
+
 	/*
 	 * Rows the cursor owes an image. It cannot be applied inside the APC
 	 * callback: moving our own mirror's cursor there is invisible to
@@ -127,6 +131,8 @@ struct bssh_emulator_private {
 	    term_name(QStringLiteral("xterm-256color")), sync_output(false),
 	      sync_damage_pending(false), sync_timeout(nullptr),
 	      next_link_id(0), open_link_id(0), link_start_row(0), link_start_col(0), cell_width(8), cell_height(16),
+	      foreground_rgb(qRgb(0xdc, 0xdc, 0xdc)),
+	      background_rgb(qRgb(0x1c, 0x1c, 0x1c)),
 	      pending_cursor_advance(0) {
 		kitty_stack.append(0);
 	}
@@ -556,6 +562,48 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 		return 1;
 	}
 
+	/*
+	 * Window ops, and only the two that REPORT (sec 7.1). CSI 14 t is
+	 * the text area in pixels and CSI 16 t is one cell; the reply gives
+	 * height before width, which is xterm's order and the reverse of how
+	 * everything else here is written, so it is worth reading twice.
+	 *
+	 * Everything else under CSI t stays silent, deliberately and
+	 * permanently. The rest of that family MOVES, RESIZES, RAISES and
+	 * ICONIFIES the window, and a remote host is not something this
+	 * terminal lets rearrange the user's desktop. Reporting a size and
+	 * acting on one are different powers that happen to share a final
+	 * byte.
+	 *
+	 * Asked for by the sibling qtty TUI, which needs the cell size to
+	 * keep an image's aspect ratio: a half-block pixel is one cell wide
+	 * and half a cell tall, so assuming 1:2 squashes every picture on a
+	 * terminal whose cells are not that shape. Without an answer it has
+	 * to guess, and a guess about the display is one nobody can check.
+	 */
+	if (command == 't' && lead.isEmpty() && inter.isEmpty() && argcount > 0) {
+		if (!self->features.enabled(bssh_term_features_t::WINDOW_SIZE)) return 0;
+
+		if (args[0] == 14) {
+			self->reply(QByteArrayLiteral("\x1b[4;")
+			             + QByteArray::number(self->screen.rows() * self->cell_height)
+			             + QByteArrayLiteral(";")
+			             + QByteArray::number(self->screen.cols() * self->cell_width)
+			             + QByteArrayLiteral("t"));
+			return 1;
+		}
+		if (args[0] == 16) {
+			self->reply(QByteArrayLiteral("\x1b[6;")
+			             + QByteArray::number(self->cell_height)
+			             + QByteArrayLiteral(";")
+			             + QByteArray::number(self->cell_width)
+			             + QByteArrayLiteral("t"));
+			return 1;
+		}
+
+		return 0;
+	}
+
 	if (command == 'h' || command == 'l') {
 		/* DEC 2026: synchronised output (sec 7.1). */
 		if (lead == "?" && argcount > 0 && args[0] == 2026) {
@@ -662,10 +710,50 @@ int on_osc_link(const QByteArray &payload, bssh_emulator_private *self) {
 	return 1;
 }
 
+/*
+ * OSC 10 and OSC 11 with a "?" payload: what colour is this terminal's
+ * own foreground, and its background.
+ *
+ * Asked for by the sibling qtty TUI and ranked first by it, for a reason
+ * worth keeping: every graphics tier below kitty composites an image's
+ * alpha against the terminal background, and with no answer it has to
+ * assume one. It assumed dark grey, which haloes every translucent edge
+ * on a light theme -- a visible artefact caused entirely by a question
+ * going unanswered.
+ *
+ * The reply is xterm's `rgb:RRRR/GGGG/BBBB`, each channel doubled to
+ * sixteen bits. Doubled rather than shifted: 0xff must come back as
+ * 0xffff and not 0xff00, or white is not quite white.
+ *
+ * Only the "?" form is answered. A payload that SETS the colour is a
+ * different thing and is not honoured -- a remote host repainting the
+ * terminal it was given is not a power this needs to grant, and sec 7.1
+ * has the same line about window ops.
+ */
+int on_osc_colour(int command, const QByteArray &payload, bssh_emulator_private *self) {
+	if (!self->features.enabled(bssh_term_features_t::COLOUR_QUERY)) return 1;
+	if (payload.trimmed() != "?") return 1;
+
+	const QRgb colour = command == 10 ? self->foreground_rgb : self->background_rgb;
+
+	const auto channel = [](int eight) {
+		return QByteArray::number((eight << 8) | eight, 16).rightJustified(4, '0');
+	};
+
+	self->reply(QByteArrayLiteral("\x1b]")
+	             + QByteArray::number(command)
+	             + QByteArrayLiteral(";rgb:")
+	             + channel(qRed(colour)) + QByteArrayLiteral("/")
+	             + channel(qGreen(colour)) + QByteArrayLiteral("/")
+	             + channel(qBlue(colour))
+	             + QByteArrayLiteral("\x1b\\"));
+	return 1;
+}
+
 /* iTerm2 inline images: OSC 1337. */
 int on_osc(int command, VTermStringFragment frag, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
-	if (command != 1337 && command != 8) return 0;
+	if (command != 1337 && command != 8 && command != 10 && command != 11) return 0;
 
 	if (frag.initial) self->osc_buffer.clear();
 	self->osc_buffer.append(frag.str, int(frag.len));
@@ -678,6 +766,9 @@ int on_osc(int command, VTermStringFragment frag, void *user) {
 	 * silence -- a whole feature doing nothing, with no error anywhere.
 	 */
 	if (command == 8) return on_osc_link(self->osc_buffer, self);
+	if (command == 10 || command == 11) {
+		return on_osc_colour(command, self->osc_buffer, self);
+	}
 
 	if (!self->features.enabled(bssh_term_features_t::ITERM2_IMAGES)) return 1;
 
@@ -798,11 +889,52 @@ const VTermSelectionCallbacks BSSH_SELECTION_CALLBACKS = {
  * it, and a terminal that answered by pattern-matching what terminals
  * usually support has broken the program that believed it.
  */
-QByteArray terminfo_capability(const QByteArray &name, const bssh_emulator_private *self) {
-	if (name == "TN") return self->term_name.toUtf8();
-	if (name == "Co" || name == "colors") return QByteArrayLiteral("256");
-	if (name == "RGB") return QByteArrayLiteral("8/8/8");
-	return QByteArray();
+/*
+ * True if this terminal vouches for the capability, with its value in
+ * `value` -- and an EMPTY value meaning a boolean flag, which is a
+ * different answer from declining.
+ *
+ * It used to return the value alone and treat empty as "no", which made
+ * a boolean capability unexpressible: the only two answers available
+ * were a string and a refusal. That cost `Tc`, below.
+ */
+bool terminfo_capability(const QByteArray &name, const bssh_emulator_private *self,
+                          QByteArray &value) {
+	value.clear();
+
+	if (name == "TN") {
+		value = self->term_name.toUtf8();
+		return true;
+	}
+	if (name == "Co" || name == "colors") {
+		value = QByteArrayLiteral("256");
+		return true;
+	}
+	if (name == "RGB") {
+		value = QByteArrayLiteral("8/8/8");
+		return true;
+	}
+
+	/*
+	 * Tc is the same claim as RGB in the other spelling -- terminfo's
+	 * boolean for direct colour, which is what tmux and a good deal else
+	 * actually checks. Answering RGB and declining Tc told a client that
+	 * asked the second way there was no truecolor, from a terminal that
+	 * carries 24-bit colour per cell (sec 7).
+	 *
+	 * Found from the consumer end: qtty asks for RGB and Tc in one
+	 * query and reported back what each answered. Same shape as the
+	 * three probe defects above -- a capability this terminal HAS,
+	 * reported absent -- and it survived because sec 7.1's rule is
+	 * "answer only what is true", which this obeyed while quietly
+	 * declining something equally true.
+	 *
+	 * A boolean, so the value is empty and the reply carries the name
+	 * alone.
+	 */
+	if (name == "Tc") return true;
+
+	return false;
 }
 
 QByteArray to_hex(const QByteArray &raw) {
@@ -843,10 +975,20 @@ int on_xtgettcap(const QByteArray &payload, bssh_emulator_private *self) {
 
 	for (const QByteArray &hex : names) {
 		const QByteArray name = QByteArray::fromHex(hex);
-		const QByteArray value = terminfo_capability(name, self);
 
-		if (value.isEmpty()) {
+		QByteArray value;
+		if (!terminfo_capability(name, self, value)) {
 			self->reply(QByteArrayLiteral("\x1bP0+r") + to_hex(name)
+			             + QByteArrayLiteral("\x1b\\"));
+			continue;
+		}
+
+		/*
+		 * A boolean carries the name and no "=value", which is how
+		 * terminfo spells a flag and what xterm sends for one.
+		 */
+		if (value.isEmpty()) {
+			self->reply(QByteArrayLiteral("\x1bP1+r") + to_hex(name)
 			             + QByteArrayLiteral("\x1b\\"));
 			continue;
 		}
@@ -1530,6 +1672,11 @@ const bssh_term_features_t &bssh_emulator::features() const {
 
 void bssh_emulator::set_term_name(const QString &term) {
 	if (!term.isEmpty()) m_private->term_name = term;
+}
+
+void bssh_emulator::set_colours(QRgb foreground, QRgb background) {
+	m_private->foreground_rgb = foreground;
+	m_private->background_rgb = background;
 }
 
 void bssh_emulator::set_cell_pixels(int width, int height) {

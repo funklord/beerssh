@@ -45,6 +45,8 @@ struct bssh_term_features_t {
 		HYPERLINKS,          /* OSC 8 */
 		CLIPBOARD_WRITE,     /* OSC 52, write half only */
 		XTGETTCAP,           /* DCS + q */
+		COLOUR_QUERY,        /* OSC 10 and OSC 11 with "?" */
+		WINDOW_SIZE,         /* CSI 14 t and CSI 16 t */
 
 		/* Tier 4: images. */
 		SIXEL,               /* DCS q */

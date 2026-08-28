@@ -135,10 +135,21 @@ void bssh_pane_container::rebuild() {
 		connect(session, &bssh_session::settings_changed, view, [view, session] {
 			bssh_apply_appearance(view, session->settings());
 			session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
+			session->emulator()->set_colours(view->terminal_foreground().rgb(),
+			                                  view->terminal_background().rgb());
 			session->resize(view->cols(), view->rows());
 		});
 
 		session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
+
+		/*
+		 * And what it is painted in, for OSC 10 and OSC 11. Set beside
+		 * the cell metrics and on the same events, because it is the
+		 * same kind of fact: something the VIEW knows that the emulator
+		 * has to be able to answer for.
+		 */
+		session->emulator()->set_colours(view->terminal_foreground().rgb(),
+		                                  view->terminal_background().rgb());
 
 		/*
 		 * Per-pane geometry: each pane computes its own cols x rows from

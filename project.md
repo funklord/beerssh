@@ -1529,7 +1529,25 @@ serve.
 
 **The counterpart TUI is `qtty`**, which renders an unmodified Qt Widgets
 application on a character-cell terminal, and it is where two of these were
-found. Reading the consumer rather than this tree is what found them: qtty
+found.
+
+**The two projects coordinate directly, by the copyright holder's
+instruction** — session to session, rather than by each writing notes the
+other may not read. The division of labour is `harmonization.md`'s and it is
+worth stating here because this pair will keep using it: **qtty holds the
+reproduction and BeerSSH holds the reasons.** A probe that gets a wrong answer
+is reported from the end that sent it, citing the sequence and what was
+expected back, and it is treated as a defect *here* — a terminal is the party
+that decides what is true about a terminal. Neither tree edits the other; a
+fix that is separable travels as a patch against the receiving tree, which is
+the same route `vterm-patch/` already uses upstream.
+**Confirm the counterparty before relying on an answer.** `evidence.md`
+records a project that asked another for a wire layout, was answered helpfully
+several times, and had been addressing a tree that owns no layout at all — the
+failure mode is politeness, not noise, so the quality of the replies is
+precisely what suppresses the question. The cheap check is to ask the other
+side to name the thing only it can own: for qtty, the file its probes live in
+and the function that decides a tier. Reading the consumer rather than this tree is what found them: qtty
 probes, and both answers were wrong in the same direction — a feature this
 terminal *has*, reported as absent. §7.1 already calls that worse than
 silence, because a client takes the terminal at its word and falls back.
@@ -1563,6 +1581,15 @@ tiers.)
   **name** and not the version string: the version moves with every release,
   and a test that pinned it would fail for the one reason that is not a
   defect.
+- **`Tc` was declined while `RGB` was answered — fixed.** They are the same
+  claim in two spellings, both true of this terminal (§7), and a client that
+  asked the second way was told there was no truecolor. It surfaced only
+  because qtty asks for both in one query and reported back what each
+  answered — which is what a consumer is for. `terminfo_capability()` could
+  not express a *boolean* capability at all before this: it returned a value
+  and treated empty as "no", so the only two answers available were a string
+  and a refusal. A flag now replies with the name and no `=value`, which is
+  what terminfo means by one.
 - **DECSCUSR and DECSCNM are answered by DECRQSS/DECRQM but have no effect** —
   open, and a design question rather than a defect to fix in passing. Cursor
   shape comes from the preset (§10.2); whether a remote gets to override it is
@@ -1581,6 +1608,52 @@ DA1 is also the one advertisement here that is a **positive claim** rather
 than an answer to a direct question, which makes it the one most able to
 outlive what it claims: it stops offering 4 when `-sixel` switches sixel off,
 and that pair has its own sabotage entry.
+
+**Two more questions are answered because qtty asked for them by name**, and
+both were on the silence list above. Neither is required of a terminal;
+each is cheap, true of this one, and ranked by the party that needs it —
+which is a better argument than novelty and is why they were built ahead of
+the tier-1 switches.
+
+- **OSC 10 and OSC 11**, the terminal's own foreground and background. Every
+  graphics tier below kitty composites an image's alpha against the terminal
+  background, and with no answer qtty assumed dark grey — which haloes every
+  translucent edge on a light theme. A visible artefact caused entirely by an
+  unanswered question. The reply is xterm's `rgb:RRRR/GGGG/BBBB` with each
+  channel **doubled** to sixteen bits rather than shifted, or `0xff` comes
+  back `0xff00` and white is not quite white. Only the `?` form is answered:
+  a payload that *sets* a colour is a remote repainting the terminal it was
+  given, and that is not a power this grants.
+  The colours come from the **view**, told to the emulator beside the cell
+  metrics and on the same events, because they are the same kind of fact —
+  something the view knows that the emulator has to answer for. They are the
+  colours after the contrast floor and the brightness slider, since a client
+  compositing against the background wants what is on screen rather than
+  what is in the scheme file.
+- **`CSI 14 t` and `CSI 16 t`**, the text area and one cell in pixels.
+  Without the cell size an image's aspect ratio cannot be preserved: a
+  half-block pixel is one cell wide and half a cell tall, so assuming 1:2
+  squashes every picture on a terminal whose cells are not that shape. Height
+  comes before width, which is xterm's order and the reverse of everything
+  else here.
+  **Every other window op stays silent, permanently.** The rest of that
+  family moves, resizes, raises and iconifies the window, and a remote host
+  does not get to rearrange the user's desktop — reporting a size and acting
+  on one are different powers that happen to share a final byte. These are
+  the first `CSI t` this terminal has ever answered, and the cheapest way to
+  grow that into something worse is a later `t` handler written beside them,
+  so the silence has its own assertion and its own sabotage entry.
+
+Both are switchable, as `colour-query` and `window-size`.
+
+**The tier-1 switches are deferred at the asker's request**, which is the
+clearest argument for asking before building. qtty replied that switching
+bracketed paste, the mouse modes or focus reporting off would not change its
+behaviour at all today, because it does not ask the terminal about them — it
+infers them from whether it got raw mode. So the seventh vterm patch would
+have made this terminal honest for a client that was not listening. That gap
+is qtty's and it intends to close it by verifying with DECRQM, which this
+terminal already answers; the patch is worth writing once it does.
 
 **`vterm-patch/0006` is what made both reachable**, and it is the third patch
 of the same shape: libvterm answers a question the layer above it knows

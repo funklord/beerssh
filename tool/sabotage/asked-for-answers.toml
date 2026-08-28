@@ -1,0 +1,65 @@
+# Sabotages for three answers a client asked for by name.
+#
+# Reported by the sibling qtty TUI from its own end, each with what the
+# silence costs it. None is required of a terminal; all three are true of
+# this one, which is sec 7.1's whole test for whether to answer.
+
+# OSC 11, ranked first by the asker. Every graphics tier below kitty
+# composites an image's alpha against the terminal background, and with
+# no answer it assumes dark grey -- which haloes every translucent edge
+# on a light theme.
+[[sabotage]]
+name = "the background colour query goes unanswered"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (command == 8) return on_osc_link(self->osc_buffer, self);\n\tif (command == 10 || command == 11) {\n\t\treturn on_osc_colour(command, self->osc_buffer, self);\n\t}"
+replace = "\tif (command == 8) return on_osc_link(self->osc_buffer, self);"
+expect = "the_terminal_answers_the_questions_a_compositing_client_asks"
+
+# Each channel is DOUBLED to sixteen bits, not shifted. 0xff must come
+# back 0xffff and not 0xff00, or white is not quite white -- and the
+# difference is invisible until somebody composites against it.
+[[sabotage]]
+name = "the colour channels are shifted rather than doubled"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\treturn QByteArray::number((eight << 8) | eight, 16).rightJustified(4, '0');"
+replace = "\t\treturn QByteArray::number(eight << 8, 16).rightJustified(4, '0');"
+expect = "the_terminal_answers_the_questions_a_compositing_client_asks"
+
+# A payload that SETS a colour must not be honoured or answered: a remote
+# repainting the terminal it was given is not a power this grants.
+[[sabotage]]
+name = "a colour SET is treated as a query"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (payload.trimmed() != \"?\") return 1;"
+replace = "\t(void)0;"
+expect = "the_terminal_answers_the_questions_a_compositing_client_asks"
+
+# CSI 16 t, the cell in pixels, without which an image's aspect ratio
+# cannot be preserved. Height comes BEFORE width, which is xterm's order
+# and the reverse of how the rest of this file reads.
+[[sabotage]]
+name = "the cell size is reported width-first"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\t\tself->reply(QByteArrayLiteral(\"\\x1b[6;\")\n\t\t\t             + QByteArray::number(self->cell_height)\n\t\t\t             + QByteArrayLiteral(\";\")\n\t\t\t             + QByteArray::number(self->cell_width)"
+replace = "\t\t\tself->reply(QByteArrayLiteral(\"\\x1b[6;\")\n\t\t\t             + QByteArray::number(self->cell_width)\n\t\t\t             + QByteArrayLiteral(\";\")\n\t\t\t             + QByteArray::number(self->cell_height)"
+expect = "the_terminal_answers_the_questions_a_compositing_client_asks"
+
+# And the line that keeps the rest of CSI t silent. The family MOVES,
+# RESIZES, RAISES and ICONIFIES the window; reporting a size and acting
+# on one are different powers that happen to share a final byte.
+[[sabotage]]
+name = "every window op is answered, not just the two that report"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (args[0] == 16) {"
+replace = "\t\tif (args[0] != 14) {"
+expect = "the_terminal_answers_the_questions_a_compositing_client_asks"
+
+# Tc is the same claim as RGB in the other spelling, and both are true.
+# Answering one and declining the other told a client that asked the
+# second way there was no truecolor.
+[[sabotage]]
+name = "Tc is declined while RGB is answered"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (name == \"Tc\") return true;"
+replace = "\tif (name == \"Tc\") return false;"
+expect = "the_terminal_answers_the_questions_a_compositing_client_asks"

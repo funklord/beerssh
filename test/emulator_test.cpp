@@ -1364,3 +1364,113 @@ void emulator_test::the_terminal_answers_for_itself_not_for_libvterm() {
 	QVERIFY2(!version.contains(QByteArrayLiteral("libvterm")),
 	          "the answer must not name the library this is built on");
 }
+
+void emulator_test::the_terminal_answers_the_questions_a_compositing_client_asks() {
+	/*
+	 * Three questions asked by the sibling qtty TUI, reported from its
+	 * end with what each silence costs it. None is required of a
+	 * terminal; all three are cheap and all three are true of this one,
+	 * which is sec 7.1's whole test for whether to answer.
+	 */
+	bssh_emulator emulator(20, 4);
+
+	/*
+	 * OSC 11, ranked first by the asker. Every graphics tier below kitty
+	 * composites an image's alpha against the terminal background, and
+	 * with no answer it has to assume one -- dark grey, which haloes
+	 * every translucent edge on a light theme. A visible artefact caused
+	 * entirely by a question going unanswered.
+	 *
+	 * Each channel is DOUBLED to sixteen bits rather than shifted, which
+	 * is the trap in xterm's format: 0xff must come back 0xffff, not
+	 * 0xff00, or white is not quite white. The value below is chosen so
+	 * the two would differ.
+	 */
+	emulator.set_colours(qRgb(0xff, 0x80, 0x00), qRgb(0x11, 0x22, 0x33));
+
+	emulator.feed(QByteArrayLiteral("\x1b]11;?\x1b\\"));
+	QCOMPARE(emulator.take_output(),
+	          QByteArrayLiteral("\x1b]11;rgb:1111/2222/3333\x1b\\"));
+
+	emulator.feed(QByteArrayLiteral("\x1b]10;?\x1b\\"));
+	QCOMPARE(emulator.take_output(),
+	          QByteArrayLiteral("\x1b]10;rgb:ffff/8080/0000\x1b\\"));
+
+	/*
+	 * A payload that SETS a colour is a different thing and is not
+	 * honoured: a remote repainting the terminal it was given is not a
+	 * power this needs to grant, and the assertion is that it neither
+	 * answers nor takes effect.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b]11;#ff0000\x1b\\"));
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	emulator.feed(QByteArrayLiteral("\x1b]11;?\x1b\\"));
+	QCOMPARE(emulator.take_output(),
+	          QByteArrayLiteral("\x1b]11;rgb:1111/2222/3333\x1b\\"));
+
+	/*
+	 * CSI 16 t, the cell in pixels. Without it an image's aspect ratio
+	 * cannot be preserved: a half-block pixel is one cell wide and half
+	 * a cell tall, so assuming 1:2 squashes every picture on a terminal
+	 * whose cells are not that shape.
+	 *
+	 * HEIGHT BEFORE WIDTH, which is xterm's order and the reverse of how
+	 * everything else in this file reads. The cell here is deliberately
+	 * not square, so a reply with the two the other way round fails.
+	 */
+	emulator.set_cell_pixels(9, 20);
+
+	emulator.feed(QByteArrayLiteral("\x1b[16t"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[6;20;9t"));
+
+	/* CSI 14 t, the text area: the grid multiplied by the cell. */
+	emulator.feed(QByteArrayLiteral("\x1b[14t"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[4;80;180t"));
+
+	/*
+	 * And every OTHER window op stays silent, permanently. The rest of
+	 * that family moves, resizes, raises and iconifies the window, and a
+	 * remote host does not get to rearrange the user's desktop --
+	 * reporting a size and acting on one are different powers that
+	 * happen to share a final byte. Asserted here because the two above
+	 * are the first CSI t this terminal has ever answered, and the
+	 * cheapest way to grow that into something worse is a later `t`
+	 * handler written beside them.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[1t"));      /* de-iconify */
+	emulator.feed(QByteArrayLiteral("\x1b[3;10;10t")); /* move */
+	emulator.feed(QByteArrayLiteral("\x1b[8;24;80t")); /* resize the grid */
+	emulator.feed(QByteArrayLiteral("\x1b[11t"));     /* report state */
+	QCOMPARE(emulator.take_output(), QByteArray());
+	QCOMPARE(emulator.screen().rows(), 4);
+	QCOMPARE(emulator.screen().cols(), 20);
+
+	/*
+	 * Tc, which is the same claim as RGB in the other spelling. Both are
+	 * true of this terminal (sec 7); answering one and declining the
+	 * other told a client that asked the second way there was no
+	 * truecolor. A boolean, so the reply carries the name and no value.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1bP+q5463\x1b\\"));   /* Tc */
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1bP1+r5463\x1b\\"));
+
+	/* And declining still works, or the change above would have made
+	 * every capability true. */
+	emulator.feed(QByteArrayLiteral("\x1bP+q626365\x1b\\"));  /* bce */
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1bP0+r626365\x1b\\"));
+
+	/*
+	 * Both new answers are switchable, and switching them off silences
+	 * them -- the pair sec 7.1 insists on.
+	 */
+	QString error;
+	bssh_emulator quiet(20, 4);
+	quiet.set_features(bssh_term_features_t::from_spec(
+	        QStringLiteral("-colour-query,-window-size"), error));
+	QVERIFY(error.isEmpty());
+
+	quiet.feed(QByteArrayLiteral("\x1b]11;?\x1b\\"));
+	quiet.feed(QByteArrayLiteral("\x1b[16t"));
+	QCOMPARE(quiet.take_output(), QByteArray());
+}

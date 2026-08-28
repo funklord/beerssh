@@ -199,6 +199,17 @@ public:
 	QString colour_scheme() const { return m_scheme_id; }
 
 	/*
+	 * The two colours this pane is actually painted in, after the
+	 * contrast floor and the brightness slider have had their say --
+	 * which is what makes them the honest answer to OSC 10 and OSC 11
+	 * (sec 7.1). A client compositing an image's alpha against the
+	 * background wants the colour on screen, not the one in the scheme
+	 * file.
+	 */
+	QColor terminal_foreground() const { return m_foreground; }
+	QColor terminal_background() const { return m_background; }
+
+	/*
 	 * Re-reads the current scheme from the catalog. set_colour_scheme()
 	 * early-returns when the id has not changed, which is right for
 	 * switching between fixed schemes and wrong for the custom one: its
