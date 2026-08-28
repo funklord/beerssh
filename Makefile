@@ -429,7 +429,8 @@ TEST_BIN       = $(TEST_BUILD_DIR)/beerssh_test
 
 $(TEST_BUILD_DIR)/Makefile: test/tests.pro
 	mkdir -p $(TEST_BUILD_DIR)
-	cd $(TEST_BUILD_DIR) && $(QMAKE) ../test/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX)
+	cd $(TEST_BUILD_DIR) && $(QMAKE) ../test/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
+	        BSSH_VERSION=$(VERSION)
 
 $(TEST_BIN): $(VTERM_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
 	$(MAKE) -C $(TEST_BUILD_DIR)

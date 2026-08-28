@@ -1303,3 +1303,64 @@ void emulator_test::decrqm_answers_for_the_alternate_screen() {
 	emulator.feed(QByteArrayLiteral("\x1b[?1049$p"));
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1049;2$y"));
 }
+
+void emulator_test::the_terminal_answers_for_itself_not_for_libvterm() {
+	/*
+	 * Two questions about WHICH TERMINAL this is, both of which libvterm
+	 * answered for itself -- reasonably, since it has no way to know what
+	 * is built on top of it, and wrongly for every embedder. Patch 0006
+	 * hands both to the fallback first.
+	 *
+	 * DA1 is the conventional place to advertise sixel, as parameter 4.
+	 * libvterm answers "?1;2c" and cannot say more, so a client probing
+	 * for sixel the standard way was told there was none while this
+	 * terminal decodes it. qtty reads DA1 for exactly that parameter, so
+	 * it was compositing in half-blocks against a terminal that can draw
+	 * pixels.
+	 */
+	bssh_emulator emulator(20, 4);
+
+	emulator.feed(QByteArrayLiteral("\x1b[c"));
+
+#ifdef BSSH_NO_SIXEL
+	/*
+	 * Built without a decoder, which is the Android build. Claiming 4
+	 * there would be this same defect pointed the other way, so the
+	 * answer falls back to libvterm's.
+	 */
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1;2c"));
+#else
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1;2;4c"));
+
+	/*
+	 * And it stops claiming sixel when sixel is switched off. This is
+	 * the pair sec 7.1 insists on -- a switch that silences the
+	 * behaviour and leaves the advertisement is the expensive direction,
+	 * and DA1 is the one advertisement that is a positive claim rather
+	 * than an answer to a direct question.
+	 */
+	QString error;
+	bssh_emulator quiet(20, 4);
+	quiet.set_features(bssh_term_features_t::from_spec(QStringLiteral("-sixel"), error));
+	QVERIFY(error.isEmpty());
+
+	quiet.feed(QByteArrayLiteral("\x1b[c"));
+	QCOMPARE(quiet.take_output(), QByteArrayLiteral("\x1b[?1;2c"));
+#endif
+
+	/*
+	 * XTVERSION named the library rather than the program the user ran,
+	 * which is precisely what XTVERSION exists to prevent. Asserted on
+	 * the NAME rather than on the whole string, because the version
+	 * moves with every release and a test that pinned it would fail for
+	 * the one reason that is not a defect.
+	 */
+	bssh_emulator named(20, 4);
+	named.feed(QByteArrayLiteral("\x1b[>q"));
+
+	const QByteArray version = named.take_output();
+	QVERIFY2(version.startsWith(QByteArrayLiteral("\x1bP>|BeerSSH(")), version.constData());
+	QVERIFY2(version.endsWith(QByteArrayLiteral(")\x1b\\")), version.constData());
+	QVERIFY2(!version.contains(QByteArrayLiteral("libvterm")),
+	          "the answer must not name the library this is built on");
+}

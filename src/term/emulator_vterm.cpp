@@ -511,6 +511,51 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 		}
 	}
 
+	/*
+	 * Primary DA. libvterm answers "?1;2c" -- a bare VT100 with advanced
+	 * video -- because it has no way to know what is built on top of it,
+	 * and that is the conventional place to advertise sixel as parameter
+	 * 4. So a client probing for sixel the standard way was told there
+	 * was none, while this terminal decodes it everywhere but Android.
+	 *
+	 * The sibling qtty TUI reads DA1 for exactly that parameter (see its
+	 * `src/backend/ansi/term_caps.cpp`), so it was compositing images in
+	 * half-blocks against a terminal that can draw them properly. Patch
+	 * 0006 is what lets this be answered from here at all.
+	 *
+	 * Everything else in the reply is libvterm's own answer, repeated
+	 * rather than re-derived: this adds a capability, it does not decide
+	 * what kind of terminal this is.
+	 */
+	if (command == 'c' && lead.isEmpty() && inter.isEmpty()) {
+		if (!self->features.enabled(bssh_term_features_t::SIXEL)) return 0;
+
+#ifdef BSSH_NO_SIXEL
+		/*
+		 * Built without a sixel decoder, which is the Android build.
+		 * Claiming 4 there would be the exact failure this fixes,
+		 * pointed the other way.
+		 */
+		return 0;
+#else
+		self->reply(QByteArrayLiteral("\x1b[?1;2;4c"));
+		return 1;
+#endif
+	}
+
+	/*
+	 * XTVERSION. libvterm answers ">|libvterm(0.3)", so anything keying
+	 * off it believes it is talking to the library rather than to the
+	 * program the user ran -- which is precisely what XTVERSION exists
+	 * to prevent. Also patch 0006.
+	 */
+	if (command == 'q' && lead == ">") {
+		self->reply(QByteArrayLiteral("\x1bP>|BeerSSH(")
+		             + QByteArray(BSSH_VERSION_STRING)
+		             + QByteArrayLiteral(")\x1b\\"));
+		return 1;
+	}
+
 	if (command == 'h' || command == 'l') {
 		/* DEC 2026: synchronised output (sec 7.1). */
 		if (lead == "?" && argcount > 0 && args[0] == 2026) {

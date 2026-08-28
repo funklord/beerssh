@@ -1556,10 +1556,13 @@ tiers.)
   alternate screen or falls back to clearing the primary one. Answered from
   the mirror this class already keeps, rather than by asking libvterm a second
   way.
-- **XTVERSION answers `DCS >|libvterm(0.3) ST`** — open. It names the library
-  rather than this terminal, so anything keying off XTVERSION believes it is
-  talking to libvterm. libvterm handles `CSI > q` itself, so this needs the
-  same sixth vterm patch the tier-1 switches do.
+- **XTVERSION answered `DCS >|libvterm(0.3) ST` — fixed** by
+  `vterm-patch/0006`. It named the library rather than the program the user
+  ran, which is precisely what XTVERSION exists to prevent, and anything
+  keying off it believed it was talking to libvterm. The test asserts the
+  **name** and not the version string: the version moves with every release,
+  and a test that pinned it would fail for the one reason that is not a
+  defect.
 - **DECSCUSR and DECSCNM are answered by DECRQSS/DECRQM but have no effect** —
   open, and a design question rather than a defect to fix in passing. Cursor
   shape comes from the preset (§10.2); whether a remote gets to override it is
@@ -1567,11 +1570,25 @@ tiers.)
   interacts with the cursor rules recorded in §10.2. Reverse video is simply
   unconsumed.
 
-**DA1 is the other half of the graphics story and is also open.** It answers
-`?1;2c` — no parameter 4 — so a client that probes for sixel the conventional
-way is told there is none, while sixel works everywhere but Android. qtty
-reads DA1 for exactly that parameter. Same fix location as XTVERSION: the
-reply is libvterm's.
+**DA1 is the other half of the graphics story — fixed by the same patch.** It
+answered `?1;2c`, with no parameter 4, so a client probing for sixel the
+conventional way was told there was none while this terminal decodes it; qtty
+reads DA1 for exactly that parameter and was compositing in half-blocks
+against a terminal that can draw pixels. It answers `?1;2;4c` now, and **not**
+where the build has no decoder — the Android build claims nothing, because
+claiming 4 there would be this same defect pointed the other way.
+DA1 is also the one advertisement here that is a **positive claim** rather
+than an answer to a direct question, which makes it the one most able to
+outlive what it claims: it stops offering 4 when `-sixel` switches sixel off,
+and that pair has its own sabotage entry.
+
+**`vterm-patch/0006` is what made both reachable**, and it is the third patch
+of the same shape: libvterm answers a question the layer above it knows
+better, and answers it with the one reply that stops a client asking again.
+`0002` did it for setting an unmodelled DEC mode, `0004` for querying one, and
+`0006` for the two questions about *which terminal this is*. All three hand the
+sequence to the fallback in its own shape and answer as before only when the
+fallback declines. Worth sending upstream together.
 
 **Tier 4 — images. [DECIDED: support all three]**
 

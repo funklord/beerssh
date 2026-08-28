@@ -15,6 +15,14 @@ TARGET = beerssh_test
 
 QT += widgets network testlib dbus
 
+# Same define as the app's, and passed in the same way by the top-level
+# Makefile. The emulator answers XTVERSION with the program's own name and
+# version (sec 7.1), so this file has to carry it or that source will not
+# compile here -- which is how an app and its tests stop building from the
+# same sources without anybody choosing that.
+isEmpty(BSSH_VERSION): BSSH_VERSION = 0.1.0
+DEFINES += BSSH_VERSION_STRING=\\\"$$BSSH_VERSION\\\"
+
 CONFIG += link_pkgconfig
 PKGCONFIG += libsixel libssh libcrypto libsecret-1
 CONFIG += c++17 console

@@ -1,0 +1,76 @@
+Reach the fallback for DA1 and XTVERSION
+
+Both of these answer a question about WHICH TERMINAL this is, and
+libvterm answers them for itself -- reasonably, since it has no way to
+know what is built on top of it. The result is that an application
+embedding libvterm cannot correct either one, and both are wrong in the
+same way for every such application:
+
+  - Primary DA answers "?1;2c", a bare VT100 with the advanced video
+    option. That is a claim about capabilities, and it is the
+    conventional place to advertise sixel (parameter 4). An application
+    that decodes sixel has no way to say so, so every client that probes
+    for it the standard way is told there is none.
+
+  - XTVERSION answers ">|libvterm(0.3)". Anything keying off it believes
+    it is talking to libvterm rather than to the program the user
+    actually ran, which is precisely what XTVERSION exists to prevent.
+
+This is the same shape as 0002 and 0004: libvterm answers a question the
+layer above it knows better, and answers it with the one reply that
+stops a client asking again. The fix is the same too -- offer the
+sequence to vterm_screen_set_unrecognised_fallbacks first, in its own
+shape, and answer as before only when the fallback declines.
+
+DA1 is handed to the fallback with no leader and command 'c'; XTVERSION
+with leader ">" and command 'q'. An application therefore matches on
+exactly what it would have matched on had the sequence arrived
+unrecognised, which is 0004's rule and the reason these read the same
+way in the consuming code.
+
+Only the val == 0 form of DA1 is offered. "CSI >0c" and the parameterised
+forms are different questions, and libvterm already declines them.
+
+Applied on top of 0001-0005 at build time (see the top-level Makefile);
+upstream is otherwise untouched. Worth sending upstream alongside 0002
+and 0004.
+
+--- a/src/state.c
++++ b/src/state.c
+@@ -1302,8 +1302,20 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
+   case 0x63: // DA - ECMA-48 8.3.24
+     val = CSI_ARG_OR(args[0], 0);
+     if(val == 0)
++    {
++      /* The layer above knows what this terminal can actually do -- most
++       * usefully whether it decodes sixel, which is advertised here as
++       * parameter 4 and cannot be added from outside. Offer the query
++       * before answering for it. */
++      if(state->fallbacks && state->fallbacks->csi) {
++        long fallback_args[1] = { 0 };
++        if((*state->fallbacks->csi)("", fallback_args, 1, "", 'c', state->fbdata))
++          break;
++      }
++
+       // DEC VT100 response
+       vterm_push_output_sprintf_ctrl(state->vt, C1_CSI, "?1;2c");
++    }
+     break;
+ 
+   case LEADER('>', 0x63): // DEC secondary Device Attributes
+@@ -1463,6 +1475,15 @@ static int on_csi(const char *leader, const long args[], int argcount, const cha
+     break;
+ 
+   case LEADER('>', 0x71): // XTVERSION - xterm query version string
++    /* The name of the program the user ran, not the name of this
++     * library. An embedder that answers for itself is what XTVERSION is
++     * for; one that cannot is worse than one that says nothing, because
++     * the answer it gives is confidently wrong. */
++    if(state->fallbacks && state->fallbacks->csi) {
++      if((*state->fallbacks->csi)(">", NULL, 0, "", 'q', state->fbdata))
++        break;
++    }
++
+     request_version_string(state);
+     break;
+ 
