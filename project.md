@@ -4154,6 +4154,33 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
     where the control is absent keeps its value rather than being quietly
     disarmed — a host synced from a phone with a reader, opened on a desktop
     without one, must not come back with the lock removed.
+    **An APK carrying 6.9 MB of nothing, and no idea why — recorded because
+    nothing in the pipeline would have noticed.** Three consecutive builds
+    produced a 46.5 MB APK where a cold build gives 39.6 MB. The files are
+    identical: same 97 entries, same compressed sizes, one 256-byte
+    difference in this app's own library. The whole 7 MB is a **single dead
+    gap** immediately before `libc++_shared.so`, measured by walking the
+    entry offsets; every other gap in the archive is ordinary 4–16 KB
+    alignment.
+    **The cause is not established and three hypotheses are dead.** It is not
+    the fonts (the entry lists are identical). It is not warm-versus-cold as
+    such: after removing the build tree, a rebuild with no change and a
+    rebuild that deliberately grew this app's library by 4 KB both stayed
+    compact. What the bloated builds had in common is only that they ran
+    against a build tree **inherited from an earlier session**, and removing
+    that tree destroyed the state — so it cannot now be reproduced or
+    diagnosed. Recorded as a symptom with its measurement rather than
+    attributed, since the environmental story is the comfortable one and
+    §12.3 already records what a comfortable explanation costs.
+    **The generalisable half needs no diagnosis.** The Android packaging step
+    verifies the ABI and the signature and does not verify that the artifact
+    is *compact*, so megabytes of dead space ship silently: the size is
+    printed and never compared to anything. That check belongs in the shared
+    `tool/android.mk`, which four projects copy, so it is a cross-project
+    signal rather than a change to make here — and it is the same argument
+    the signature check itself was built on, that an artifact is verified
+    rather than trusted because the build reported success.
+
     **What is proven and what is not.** The APK builds, the class is in the
     dex and `USE_BIOMETRIC` is in the packaged manifest — all three checked
     with `aapt2` and by searching *every* dex, after a first probe that read
