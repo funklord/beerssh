@@ -19,7 +19,15 @@ struct bssh_graphics_result_t {
 		NOTHING,        /* unparseable, or a protocol we decline */
 		PLACE,
 		CONTINUE,       /* a chunk arrived; more follows */
-		DELETE_IMAGES
+		DELETE_IMAGES,
+
+		/*
+		 * a=q -- kitty's "can you hear me". The client sends a tiny
+		 * image with the query action and expects an acknowledgement;
+		 * no image is stored and nothing is drawn. It carries an id so
+		 * the answer can be matched to the question.
+		 */
+		ACKNOWLEDGE
 	};
 
 	action_t action;

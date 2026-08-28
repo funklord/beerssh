@@ -1,0 +1,37 @@
+# Sabotages for the two probes a client cannot get any other way.
+#
+# Both were found by reading the CONSUMER rather than this tree: the
+# sibling qtty TUI probes for kitty graphics and reads DECRQM, and both
+# answers were wrong in the same direction -- a feature this terminal
+# has, reported as absent. Sec 7.1 calls that worse than silence,
+# because a client takes the terminal at its word and falls back.
+
+# kitty graphics has no terminfo capability and no DA parameter, so a=q
+# is the ONLY way a client can learn the protocol is there. Unanswered,
+# the query fell through to the transmit path and placed a 1x1 image.
+[[sabotage]]
+name = "the kitty graphics query goes unanswered"
+file = "src/term/graphics.cpp"
+find = "\tif (action == QStringLiteral(\"q\")) {\n\t\tresult.action = bssh_graphics_result_t::ACKNOWLEDGE;\n\t\tresult.id = controls.value(QStringLiteral(\"i\")).toInt();\n\t\treturn result;\n\t}"
+replace = "\t(void)0;"
+expect = "the_kitty_graphics_query_is_answered"
+
+# And the answer itself, which is a separate line and a separate way to
+# be wrong: recognising the query and replying nothing looks identical
+# from inside this tree and identical to "unsupported" from outside it.
+[[sabotage]]
+name = "the query is recognised and not replied to"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\treply(QByteArrayLiteral(\"\\x1b_Gi=\") + QByteArray::number(result.id)\n\t\t\t+ QByteArrayLiteral(\";OK\\x1b\\\\\"));"
+replace = "\t\t(void)0;"
+expect = "the_kitty_graphics_query_is_answered"
+
+# 1049 is what a full-screen program uses to avoid destroying the user's
+# scrollback. libvterm implements it and its DECRQM table stops at 1047,
+# so the query answered "not recognised" while the mode worked.
+[[sabotage]]
+name = "DECRQM disowns the alternate screen"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\treturn self->alt_screen ? 1 : 2;"
+replace = "\t\treturn -1;"
+expect = "decrqm_answers_for_the_alternate_screen"

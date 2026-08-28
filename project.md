@@ -1522,18 +1522,56 @@ by whoever is running the test, so it applies to every session the run opens
 including tabs opened later, and a stored preset must not quietly restore a
 feature the tester asked to be without.
 
-**Four advertise/implement mismatches were found while surveying for this and
-are not fixed.** They are listed because each one misleads a client that
-probes, which is the population this switch exists to serve:
-- **Kitty graphics has no `a=q` reply.** A library probing by query concludes
-  the protocol is unsupported, while transmission works perfectly. This is the
-  one most likely to be hit.
-- **`CSI ? 1049 $p` answers "not recognised"** while 1049 works — libvterm's
-  DECRQM knows 1047 and not 1049.
-- **XTVERSION answers `DCS >|libvterm(0.3) ST`**, naming the library rather
-  than this terminal.
-- **DECSCUSR and DECSCNM are answered by DECRQSS/DECRQM but have no effect**:
-  cursor shape comes from the preset, and reverse video is unconsumed.
+**Four advertise/implement mismatches were found while surveying for this.
+Two are fixed and two are open**, and all four are listed because each
+misleads a client that probes — which is the population this switch exists to
+serve.
+
+**The counterpart TUI is `qtty`**, which renders an unmodified Qt Widgets
+application on a character-cell terminal, and it is where two of these were
+found. Reading the consumer rather than this tree is what found them: qtty
+probes, and both answers were wrong in the same direction — a feature this
+terminal *has*, reported as absent. §7.1 already calls that worse than
+silence, because a client takes the terminal at its word and falls back.
+(§7.1 previously named `fuzzypickles` as the client-side prober. Both are
+real; `fuzzypickles` probes the keyboard tiers, `qtty` the graphics and mode
+tiers.)
+
+- **Kitty graphics had no `a=q` reply — fixed.** The query fell through to the
+  transmit path, which decoded its four bytes into a 1x1 image and placed it,
+  so the probe produced no reply at all and left a stray pixel behind. It is
+  the sharpest case of this whole class, because kitty graphics has **no
+  terminfo capability and no DA parameter**: the query is the only way a
+  client can find out. qtty sends `a=q,t=d,f=24,s=1,v=1` from
+  `src/backend/ansi/term_caps.cpp` and looks for the reply in `find_kitty()`,
+  so every application it rendered was falling back to half-blocks against a
+  terminal that can draw pixels. The test uses qtty's own bytes rather than a
+  probe composed here, since a probe written from this side would be testing
+  what we *think* a client sends — which is the assumption that produced the
+  gap.
+- **`CSI ? 1049 $p` answered "not recognised" — fixed.** libvterm implements
+  1049 and its DECRQM table stops at 1047. It costs more than it looks: 1049
+  is what a full-screen program uses to avoid destroying the user's
+  scrollback, so a client told the terminal lacks it either gives up the
+  alternate screen or falls back to clearing the primary one. Answered from
+  the mirror this class already keeps, rather than by asking libvterm a second
+  way.
+- **XTVERSION answers `DCS >|libvterm(0.3) ST`** — open. It names the library
+  rather than this terminal, so anything keying off XTVERSION believes it is
+  talking to libvterm. libvterm handles `CSI > q` itself, so this needs the
+  same sixth vterm patch the tier-1 switches do.
+- **DECSCUSR and DECSCNM are answered by DECRQSS/DECRQM but have no effect** —
+  open, and a design question rather than a defect to fix in passing. Cursor
+  shape comes from the preset (§10.2); whether a remote gets to override it is
+  the same question §7.1 asks about every other negotiable property, and it
+  interacts with the cursor rules recorded in §10.2. Reverse video is simply
+  unconsumed.
+
+**DA1 is the other half of the graphics story and is also open.** It answers
+`?1;2c` — no parameter 4 — so a client that probes for sixel the conventional
+way is told there is none, while sixel works everywhere but Android. qtty
+reads DA1 for exactly that parameter. Same fix location as XTVERSION: the
+reply is libvterm's.
 
 **Tier 4 — images. [DECIDED: support all three]**
 

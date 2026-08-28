@@ -16,6 +16,8 @@ class emulator_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void the_kitty_graphics_query_is_answered();
+	void decrqm_answers_for_the_alternate_screen();
 	void a_switched_off_feature_is_not_advertised_either();
 	void a_feature_spec_reads_left_to_right();
 	void an_unknown_feature_name_is_refused();

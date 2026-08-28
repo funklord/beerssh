@@ -89,6 +89,33 @@ bssh_graphics_result_t bssh_parse_kitty(const QByteArray &payload,
 
 	const QString action = controls.value(QStringLiteral("a"), QStringLiteral("t"));
 
+	/*
+	 * a=q is kitty's capability probe: a one-pixel image sent with the
+	 * query action, asking only whether anything is listening. It is
+	 * answered and NOT stored.
+	 *
+	 * This was missing, and the shape of the gap is the point. The query
+	 * fell through to the transmit path, which decoded four bytes of
+	 * base64 into a 1x1 image and placed it -- so the probe produced no
+	 * reply at all, and a client that probes before using the protocol
+	 * concluded the terminal had no kitty graphics while transmission
+	 * worked perfectly. An implemented feature that answers "no" when
+	 * asked is sec 7.1's own complaint about DEC 2026, arriving in the
+	 * one protocol where the query is the ONLY way to find out: kitty
+	 * graphics has no terminfo capability and no DA parameter.
+	 *
+	 * Found from the other end. The sibling qtty TUI probes for it in
+	 * `src/backend/ansi/term_caps.cpp`, which sends
+	 * `a=q,t=d,f=24,s=1,v=1` and looks for the reply in find_kitty() --
+	 * so every Qt Widgets application it renders was falling back to
+	 * half-blocks against a terminal that can draw pixels.
+	 */
+	if (action == QStringLiteral("q")) {
+		result.action = bssh_graphics_result_t::ACKNOWLEDGE;
+		result.id = controls.value(QStringLiteral("i")).toInt();
+		return result;
+	}
+
 	if (action == QStringLiteral("d")) {
 		result.action = bssh_graphics_result_t::DELETE_IMAGES;
 		result.id = controls.value(QStringLiteral("i")).toInt();

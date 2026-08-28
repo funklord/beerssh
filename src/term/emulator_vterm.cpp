@@ -409,6 +409,28 @@ int decrqm_state(const bssh_emulator_private *self, int mode) {
 			return -1;
 		}
 		return self->sync_output ? 1 : 2;
+	case 1049:
+		/*
+		 * The alternate screen with cursor save and restore, which
+		 * libvterm implements and does not answer DECRQM for: its
+		 * table knows 1047 and stops there, so `CSI ? 1049 $p` fell
+		 * through to "0 -- not recognised" while `CSI ? 1049 h`
+		 * worked perfectly.
+		 *
+		 * That is the same defect sec 7.1 records for DEC 2026 and it
+		 * is worth more here, because 1049 is the mode a full-screen
+		 * program uses to avoid destroying the user's scrollback. A
+		 * client told the terminal does not have it either gives up
+		 * the alternate screen or -- worse -- falls back to clearing
+		 * the primary one.
+		 *
+		 * Answered from the mirror this class already keeps for its
+		 * own alternate_screen(), rather than by asking libvterm a
+		 * second way: sec 7.1's rule is that libvterm owns the state
+		 * of what it models, and this mirror is fed by the property
+		 * callback it publishes.
+		 */
+		return self->alt_screen ? 1 : 2;
 	default:
 		return -1;
 	}
@@ -1416,6 +1438,23 @@ void bssh_emulator_private::apply_graphics(const bssh_graphics_result_t &result)
 		}
 		emit owner->images_changed();
 		notify_damaged();
+		break;
+	case bssh_graphics_result_t::ACKNOWLEDGE:
+		/*
+		 * kitty's "can you hear me": the answer is the whole point of
+		 * the query, and it is the ONLY way a client can learn this
+		 * protocol is available -- there is no terminfo capability for
+		 * it and no DA parameter.
+		 *
+		 * The id is echoed so a client with more than one question in
+		 * flight can match the answer, exactly as DECRPM echoes its
+		 * mode. "OK" is kitty's own success word; a terminal that
+		 * cannot honour the request answers an error code instead, and
+		 * this one can, because the query is answered from the same
+		 * parser that does the transmitting.
+		 */
+		reply(QByteArrayLiteral("\x1b_Gi=") + QByteArray::number(result.id)
+			+ QByteArrayLiteral(";OK\x1b\\"));
 		break;
 	case bssh_graphics_result_t::CONTINUE:
 	case bssh_graphics_result_t::NOTHING:

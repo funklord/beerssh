@@ -1233,3 +1233,73 @@ void emulator_test::a_switched_off_feature_is_not_advertised_either() {
 		QVERIFY2(!emulator.take_output().isEmpty(), "XTGETTCAP must answer when it is on");
 	}
 }
+
+void emulator_test::the_kitty_graphics_query_is_answered() {
+	/*
+	 * kitty's "can you hear me" -- a=q with a one-pixel image, asking
+	 * only whether anything is listening. It is the ONLY way a client
+	 * can learn this protocol is available: there is no terminfo
+	 * capability for kitty graphics and no DA parameter.
+	 *
+	 * It was unanswered. The query fell through to the transmit path,
+	 * which decoded the four bytes into a 1x1 image and placed it, so a
+	 * client that probes before using the protocol concluded the
+	 * terminal had none while transmission worked perfectly.
+	 *
+	 * The exact bytes are the sibling qtty TUI's own probe, copied from
+	 * its `src/backend/ansi/term_caps.cpp` rather than composed here --
+	 * a probe written from this side would be testing what we think a
+	 * client sends, which is the assumption that produced the gap.
+	 */
+	bssh_emulator emulator(20, 4);
+
+	emulator.feed(QByteArrayLiteral("\x1b_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\x1b\\"));
+
+	const QByteArray answer = emulator.take_output();
+	QVERIFY2(!answer.isEmpty(), "the query must be answered, or the protocol is invisible");
+
+	/*
+	 * The id is echoed so a client with more than one question in flight
+	 * can match the answer, exactly as DECRPM echoes its mode. Asserted
+	 * because an answer that dropped it would still look like a reply
+	 * and would still be useless to a client that sent two.
+	 */
+	QCOMPARE(answer, QByteArrayLiteral("\x1b_Gi=31;OK\x1b\\"));
+
+	/*
+	 * And it stored NOTHING. A query that also places an image is worse
+	 * than one that is ignored: the probe would leave a stray pixel on
+	 * screen at whatever the cursor was.
+	 */
+	QCOMPARE(emulator.images().placements().size(), 0);
+}
+
+void emulator_test::decrqm_answers_for_the_alternate_screen() {
+	/*
+	 * libvterm implements 1049 and does not answer DECRQM for it: its
+	 * table knows 1047 and stops there, so `CSI ? 1049 $p` came back
+	 * "0 -- not recognised" while `CSI ? 1049 h` worked perfectly.
+	 *
+	 * The same defect sec 7.1 records for DEC 2026, and it costs more
+	 * here: 1049 is what a full-screen program uses to avoid destroying
+	 * the user's scrollback, so a client told the terminal lacks it
+	 * either gives up the alternate screen or falls back to clearing the
+	 * primary one.
+	 */
+	bssh_emulator emulator(20, 4);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1049$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1049;2$y"));
+
+	/* And "1" once it is on, which is the half that proves the answer is
+	 * read from the state rather than hardcoded. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h"));
+	QVERIFY(emulator.alternate_screen());
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1049$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1049;1$y"));
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1049l"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1049$p"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1049;2$y"));
+}
