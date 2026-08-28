@@ -2043,9 +2043,31 @@ void layout_test::a_resized_pane_tells_the_remote_its_size() {
 		 * shape outward. */
 		window.resize(640, 480);
 		QCoreApplication::processEvents();
-		QTRY_VERIFY(fake->resize_count() > before);
 
-		QVERIFY2(view->cols() > 0 && view->rows() > 0, "the grid must have measured");
+		/*
+		 * The message carries what each end measured, because the bare
+		 * condition cannot separate the three things that produce it:
+		 * the window resize not changing the grid, the grid change not
+		 * reaching the session, or the session's gate swallowing it.
+		 * A QTRY takes five seconds to fail, so a message that
+		 * guarantees a round of guessing costs more than the assertion
+		 * saves.
+		 *
+		 * The rule is the sibling qtty's, and its tell is the sharp
+		 * part: a temporary print added to diagnose a failure and then
+		 * deleted is evidence the message was insufficient, and
+		 * deleting it restores the insufficiency for the next reader.
+		 */
+		QTRY_VERIFY2(fake->resize_count() > before,
+		              qPrintable(QStringLiteral("no window-change reached the transport; "
+		                                         "the view measured %1x%2 and the transport "
+		                                         "was last told %3x%4")
+		                                 .arg(view->cols()).arg(view->rows())
+		                                 .arg(fake->cols()).arg(fake->rows())));
+
+		QVERIFY2(view->cols() > 0 && view->rows() > 0,
+		          qPrintable(QStringLiteral("the grid measured %1x%2")
+		                             .arg(view->cols()).arg(view->rows())));
 		QCOMPARE(fake->cols(), view->cols());
 		QCOMPARE(fake->rows(), view->rows());
 
