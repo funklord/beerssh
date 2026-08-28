@@ -31,3 +31,21 @@ file = "src/model/session.cpp"
 find = "\t\tif (!reply.isEmpty() && m_transport) m_transport->send(reply);"
 replace = "\t\t(void)reply;"
 expect = "a_keystroke_in_a_pane_reaches_the_wire"
+
+# The mouse takes a different route to the same wire: a key goes view,
+# router, emulator, while a click goes view, emulator directly. Only the
+# tail is shared, so breaking the click's own leg leaves the keystroke
+# case green.
+#
+# Added BESIDE the existing mouse tests rather than by widening them.
+# Those read the emulator's own output buffer, so they pass whether or
+# not anything carries the bytes -- and they are a measurement of where
+# this suite's attention was. Widen them and nobody can tell they never
+# asserted delivery; the record is worth more than the coverage, and the
+# coverage can be added without losing it.
+[[sabotage]]
+name = "a click is encoded and never sent"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tm_emulator->send_mouse_move(screen_row_for_line(line), col, 0);\n\t\t\tm_emulator->send_mouse_button(button, true, 0);"
+replace = "\t\t\tm_emulator->send_mouse_move(screen_row_for_line(line), col, 0);"
+expect = "a_mouse_report_reaches_the_wire"

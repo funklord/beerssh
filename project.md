@@ -1092,10 +1092,35 @@ model on a finger.
   as text at all. A plain letter alone would pass against a view that wrote
   the event's text straight out with the router cut out of the path.
   Its sabotage found something the tests here had all been avoiding: breaking
-  the session's hand-off to the transport fails **four** cases now, and none
-  before today, because every mouse-report test in this tree reads the
-  emulator's own output buffer rather than the wire. Those pass whether or
-  not anything carries the bytes.
+  the session's hand-off to the transport failed **no** case before today,
+  because every mouse-report test in this tree reads the emulator's own output
+  buffer rather than the wire. Those pass whether or not anything carries the
+  bytes.
+  **A click now has its own wire test, added beside those rather than by
+  widening them.** The reason is `qtty`'s and it is worth keeping: those tests
+  are a *measurement of where this suite's attention was*, and once they
+  assert delivery too, nobody can tell that they never did. The record is
+  worth more than the coverage, and the coverage can be added without losing
+  it. A click also takes a different route from a keystroke — view, emulator,
+  where a key goes view, router, emulator — so only the tail is shared and the
+  keystroke test does not cover it. Its assertion is the full SGR report
+  including the **cell**, since a report of the right shape naming the wrong
+  cell satisfies any "something was sent" check, and the column is exactly
+  where a scrollbar's width goes wrong.
+
+- **An early return I wrote an hour earlier left a forked shell behind.** The
+  `O_NONBLOCK` guard above was fixed to fail loudly instead of proceeding
+  silently — and the `return` that fix introduced sat *below* `forkpty()`, so
+  it closed the master and left a child running with `m_child` set, relying on
+  a `disconnect_from_host()` nobody calls on a session that has just announced
+  it never opened.
+  The trap is `qtty`'s, named after it nearly did the same thing while fixing
+  its own inert guard: **the instinct the lesson creates is "return on
+  failure", and returning is how you acquire the next one.** Its tell is the
+  sharp part — the danger is highest where the function has *later* side
+  effects that are not obviously part of the same job, which is exactly a
+  forked child sitting above a line about a descriptor flag. The child is
+  hung up and collected on that path now, `collect()` being bounded.
 
 - **Thirteen image tests and none that looked at the screen.** Every test in
   `graphics_test` stopped at the image store -- bytes in, placement out -- and

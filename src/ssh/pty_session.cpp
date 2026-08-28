@@ -258,10 +258,37 @@ void bssh_pty_session::open_shell(int cols, int rows) {
 	 * There is no sabotage entry: F_GETFL does not fail on a descriptor
 	 * forkpty has just returned, so there is no way to reach this branch
 	 * from a test and an entry would report MISSED for ever.
+	 *
+	 * THE CHILD IS TAKEN DOWN HERE, and that half was missing from the
+	 * first version of this guard -- written an hour earlier, in the
+	 * course of fixing a guard that failed silently.
+	 *
+	 * The fork has already happened by this line, so an early return is
+	 * downstream of a side effect that has nothing to do with a file
+	 * descriptor flag. It closed the master and left a shell running
+	 * with m_child set, relying on disconnect_from_host() being called
+	 * on a session that had just announced it never opened, and on the
+	 * slave's hangup persuading the shell to leave.
+	 *
+	 * The trap is the sibling qtty's, named after it nearly did the same
+	 * thing: fixing an inert failure path by writing another, because
+	 * the instinct the lesson creates is "return on failure" and
+	 * returning is how you acquire the next one. Its tell is the sharp
+	 * part -- the danger is highest where the function has LATER side
+	 * effects that are not obviously part of the same job, which is
+	 * exactly a forked child sitting above a line about O_NONBLOCK.
+	 *
+	 * collect() is bounded: it polls, escalates to SIGKILL, and returns.
 	 */
 	const int flags = fcntl(m_master, F_GETFL, 0);
 	if (flags < 0 || fcntl(m_master, F_SETFL, flags | O_NONBLOCK) < 0) {
 		const QString reason = QString::fromLocal8Bit(std::strerror(errno));
+
+		if (m_child > 0) {
+			::kill(pid_t(m_child), SIGHUP);
+			collect(pid_t(m_child));
+			m_child = -1;
+		}
 
 		::close(m_master);
 		m_master = -1;

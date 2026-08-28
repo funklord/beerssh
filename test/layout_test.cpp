@@ -1904,6 +1904,90 @@ void layout_test::a_keystroke_in_a_pane_reaches_the_wire() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::a_mouse_report_reaches_the_wire() {
+	/*
+	 * The other half of the gap the keystroke test exposed. Every
+	 * mouse-report test in this tree reads the emulator's own output
+	 * buffer, so all of them pass whether or not anything carries the
+	 * bytes to the far end -- correct about the encoding, silent about
+	 * the delivery.
+	 *
+	 * ADDED BESIDE THOSE RATHER THAN WIDENING THEM, and the reason is
+	 * the sibling qtty's: they are a measurement of where this suite's
+	 * attention was, and once they assert delivery too, nobody can tell
+	 * they never did. The record is worth more than the coverage, and
+	 * the coverage can be added without losing it.
+	 *
+	 * A click rather than a keystroke, because the two take different
+	 * routes to the same wire: a key goes view, router, emulator, while
+	 * a click goes view, emulator directly (sec 6.4). Only the tail is
+	 * shared, so the keystroke test does not cover this.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	{
+		bssh_main_window window;
+		window.resize(900, 600);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		window.activateWindow();
+
+		bssh_session *session = window.registry()->create(named(QStringLiteral("clicked")));
+		window.adopt_session(session);
+		session->connect_to_host();
+		QCoreApplication::processEvents();
+		QVERIFY(fake);
+
+		bssh_terminal_view *view = window.panes()->focused_view();
+		QVERIFY(view);
+
+		/* The remote asks for the mouse, or a click is a local selection
+		 * and there is nothing to send (sec 6.4). */
+		session->emulator()->feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+		QCoreApplication::processEvents();
+		QVERIFY(session->emulator()->mouse_reporting());
+
+		fake->clear_written();
+
+		const QPoint at(view->cell_width() * 3 + view->cell_width() / 2,
+		                 view->cell_height() * 2 + view->cell_height() / 2);
+
+		QMouseEvent press(QEvent::MouseButtonPress, at, view->mapToGlobal(at),
+		                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+		QCoreApplication::sendEvent(view, &press);
+		QCoreApplication::processEvents();
+
+		/*
+		 * SGR: CSI < button ; col ; row M, one-based, and the
+		 * coordinates are the discriminating part. A report that
+		 * arrived with the right shape and the wrong cell would satisfy
+		 * any assertion about "something was sent" -- and the columns
+		 * are where a scrollbar's width or a grid inset goes wrong,
+		 * which is a fault this project has had once already.
+		 */
+		QCOMPARE(fake->written(), QByteArrayLiteral("\x1b[<0;4;3M"));
+
+		fake->clear_written();
+
+		QMouseEvent release(QEvent::MouseButtonRelease, at, view->mapToGlobal(at),
+		                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+		QCoreApplication::sendEvent(view, &release);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(fake->written(), QByteArrayLiteral("\x1b[<0;4;3m"));
+	}
+
+	bssh_ssh_session::set_factory(nullptr);
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::the_wheel_scrolls_the_settings_page_and_changes_nothing() {
 	/*
 	 * Reported from use: "suddenly the text became dark when looking
