@@ -997,10 +997,29 @@ model on a finger.
   from the keyboard once focused.
   **The page is scrolled by moving its bar, not by forwarding the event.**
   Forwarding was the obvious first version and it recursed until the stack ran
-  out -- Qt remembers which widget a scroll gesture belongs to, so a wheel
-  handed to the viewport comes straight back to the control it was taken from.
-  Measured on a fixture of a combo, a scroll area and forty rows: SIGSEGV on
-  the first notch.
+  out -- SIGSEGV on the first notch, measured on a fixture of a combo, a
+  scroll area and forty rows.
+  **The explanation of that was wrong for a day, and correcting it is the part
+  worth reading.** It said Qt remembers which widget a scroll gesture belongs
+  to, so a wheel handed to the viewport came back to the control it was taken
+  from. Measured since: it does not. A wheel sent to the viewport reaches the
+  viewport, the page scrolls, and the combo sees nothing.
+  What actually recursed was the filter itself, through the **scroll bars**.
+  Qt parents a `QAbstractScrollArea`'s bars to an internal container widget
+  rather than to the area, so the exclusion written to skip them -- which
+  tested the parent -- never fired, and every bar in the tree was filtered.
+  Forwarding a notch made the scroll area send it to its own vertical bar,
+  which was filtered, which forwarded to the viewport again. Measured with a
+  depth counter: combo, bar, bar, bar, until the stack ended. The exclusion
+  tests the widget now.
+  Two things follow, and the second is why this is here rather than only in
+  the source. The dead exclusion survived because the replacement **cannot
+  recurse whatever it collects** -- a fix that removes a symptom can hide the
+  thing that caused it, and only re-deriving the mechanism found it. And it
+  was re-derived only because the sibling `qtty` reported the same Qt
+  behaviour from its own end: until then a plausible mechanism nobody had
+  reason to doubt sat in a source comment with the authority of a diagnosis,
+  pointing the next reader at the wrong thing.
   The test's third assertion is the load-bearing one -- that the scroll
   position **increased**. A fix that merely swallows the wheel satisfies "the
   combo did not move" and "the setting did not change" while leaving the page
