@@ -28,6 +28,7 @@ QJsonObject bssh_preset_t::to_json() const {
 	object.insert(QStringLiteral("bell_enabled"), bell_enabled);
 	object.insert(QStringLiteral("cursor_style"), cursor_style);
 	object.insert(QStringLiteral("cursor_blink"), cursor_blink);
+	object.insert(QStringLiteral("term_features"), term_features);
 	object.insert(QStringLiteral("font_family"), font_family);
 	object.insert(QStringLiteral("font_size"), font_size);
 	object.insert(QStringLiteral("colour_scheme"), colour_scheme);
@@ -56,6 +57,8 @@ bssh_preset_t bssh_preset_t::from_json(const QJsonObject &object) {
 	preset.bell_enabled = object.value(QStringLiteral("bell_enabled")).toBool(preset.bell_enabled);
 	preset.cursor_style = object.value(QStringLiteral("cursor_style")).toString(preset.cursor_style);
 	preset.cursor_blink = object.value(QStringLiteral("cursor_blink")).toBool(preset.cursor_blink);
+	preset.term_features = object.value(QStringLiteral("term_features"))
+	                               .toString(preset.term_features);
 	preset.font_family = object.value(QStringLiteral("font_family")).toString();
 	preset.font_size = object.value(QStringLiteral("font_size")).toInt(preset.font_size);
 	preset.colour_scheme = object.value(QStringLiteral("colour_scheme")).toString();

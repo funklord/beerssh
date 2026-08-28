@@ -1,5 +1,7 @@
 #include "model/command_line.h"
 
+#include "term/term_features.h"
+
 #include "model/document_path.h"
 
 #include <QCommandLineOption>
@@ -108,6 +110,15 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 		{ "load", "", "session",
 			"Open a saved session by name, as PuTTY's -load does. The "
 			"name is the one the host list shows." },
+		{ "term-features", "", "spec",
+			"Which terminal extensions to speak, for testing a TUI "
+			"against a terminal that lacks one. A comma-separated list "
+			"read left to right, starting from everything on: `none` "
+			"or `all` set every one at once, `-name` turns one off and "
+			"`+name` turns it back on -- so `none,+bracketed-paste` is "
+			"a terminal with nothing but that. Turning one off also "
+			"stops this terminal answering that it has it. Run "
+			"--term-features=? to list the names." },
 		{ "self-test", "", "",
 			"Build the window, run one turn of the event loop and exit. "
 			"What CI runs to check that a headless build comes up at "
@@ -385,6 +396,53 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 	line.version = parser.isSet(QStringLiteral("version"));
 	line.self_test = parser.isSet(QStringLiteral("self-test"));
 	line.hold = parser.isSet(QStringLiteral("hold"));
+
+	if (parser.isSet(QStringLiteral("term-features"))) {
+		const QString spec = parser.value(QStringLiteral("term-features"));
+
+		/*
+		 * `?` lists them, which is the only discoverable spelling for a
+		 * value nobody can guess. The help text cannot carry twelve
+		 * names and their descriptions without becoming the whole help
+		 * text.
+		 */
+		if (spec == QStringLiteral("?") || spec == QStringLiteral("list")) {
+			QStringList lines;
+			for (int i = 0; i < bssh_term_features_t::FEATURE_COUNT; ++i) {
+				const bssh_term_features_t::feature_t feature =
+				        bssh_term_features_t::feature_t(i);
+
+				const QString name =
+				        QString::fromLatin1(bssh_term_features_t::name(feature));
+				const QString note = bssh_term_features_t::switchable(feature)
+				        ? QString()
+				        : QStringLiteral(" (not switchable yet)");
+				const QString what = QString::fromLatin1(
+				        bssh_term_features_t::description(feature));
+
+				lines.append(QStringLiteral("  %1%2\n      %3").arg(name, note, what));
+			}
+			line.listing = QStringLiteral("terminal features:\n")
+			        + lines.join(QLatin1Char('\n')) + QLatin1Char('\n');
+			return line;
+		}
+
+		/*
+		 * Validated HERE rather than where it is applied, so a
+		 * misspelling is a refused command line -- exit 2 with the
+		 * reason -- instead of a session quietly running with the
+		 * feature still on. A harness that got the name wrong would
+		 * otherwise report a pass for a configuration nobody tested.
+		 */
+		QString error;
+		bssh_term_features_t::from_spec(spec, error);
+		if (!error.isEmpty()) {
+			line.error = error;
+			return line;
+		}
+
+		line.term_features = spec;
+	}
 	line.title = parser.value(QStringLiteral("title"));
 	line.working_directory = parser.value(QStringLiteral("workdir"));
 	line.saved_session = parser.value(QStringLiteral("load"));

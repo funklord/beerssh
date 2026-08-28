@@ -16,6 +16,9 @@ class emulator_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void a_switched_off_feature_is_not_advertised_either();
+	void a_feature_spec_reads_left_to_right();
+	void an_unknown_feature_name_is_refused();
 	void focus_is_reported_only_when_the_remote_asked();
 	void plain_text_lands_on_the_first_row();
 	void a_line_longer_than_the_grid_wraps_without_debris();

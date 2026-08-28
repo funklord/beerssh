@@ -59,6 +59,23 @@ struct bssh_preset_t {
 	 */
 	QString on_connect_command;
 
+	/*
+	 * Which of sec 7.1's terminal extensions to speak, as a spec string
+	 * ("-sixel,-kitty-graphics"). Empty means all of them, which is the
+	 * default and what every host should normally have.
+	 *
+	 * It is a preset field because it is a property of the far end, in
+	 * exactly the sense sec 10.2 means: a box whose TUI misbehaves
+	 * against one of these is the same kind of fact as a switch console
+	 * that cannot take box drawing. And it makes the switch reachable
+	 * per host rather than only from a command line, which is what a
+	 * library author testing against a real session needs.
+	 *
+	 * One string rather than twelve booleans, so a feature added later
+	 * costs no schema change and an old file loses nothing.
+	 */
+	QString term_features;
+
 	/* The on-screen key row for this kind of host (sec 6.2). */
 	QString key_row_layout;
 

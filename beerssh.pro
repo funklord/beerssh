@@ -81,6 +81,7 @@ SOURCES += \
     src/ui/licences_view.cpp \
     src/ui/key_row.cpp \
     src/ui/long_press.cpp \
+    src/term/term_features.cpp \
     src/ui/scroll_guard.cpp \
     src/ui/wrapped_note.cpp \
     src/ui/main_window.cpp \
@@ -133,6 +134,7 @@ HEADERS += \
     src/ui/licences_view.h \
     src/ui/key_row.h \
     src/ui/long_press.h \
+    src/term/term_features.h \
     src/ui/scroll_guard.h \
     src/ui/wrapped_note.h \
     src/ui/main_window.h \

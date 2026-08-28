@@ -3,6 +3,7 @@
 
 #include "emulator_test.h"
 #include "term/emulator.h"
+#include "term/term_features.h"
 
 /* First row of the screen, which is what most of these assert on. */
 static QString row(const bssh_emulator &emulator, int index) {
@@ -1036,4 +1037,199 @@ void emulator_test::focus_is_reported_only_when_the_remote_asked() {
 	emulator.set_focused(true);
 	emulator.set_focused(false);
 	QCOMPARE(emulator.take_output(), QByteArray());
+}
+
+void emulator_test::a_feature_spec_reads_left_to_right() {
+	/*
+	 * The spec is applied word by word rather than collected into a set,
+	 * because that is the only order in which "none,+x" and "all,-x"
+	 * both mean what they look like. A set-based reader has to invent a
+	 * precedence rule, and whichever one it picks surprises somebody.
+	 */
+	QString error;
+
+	const bssh_term_features_t all = bssh_term_features_t::from_spec(QString(), error);
+	QVERIFY(error.isEmpty());
+	for (const QString &name : bssh_term_features_t::every_name()) {
+		bssh_term_features_t::feature_t feature = bssh_term_features_t::SIXEL;
+		QVERIFY(bssh_term_features_t::from_name(name, feature));
+		QVERIFY2(all.enabled(feature),
+		          qPrintable(QStringLiteral("%1 must be on by default").arg(name)));
+	}
+
+	const bssh_term_features_t none =
+	        bssh_term_features_t::from_spec(QStringLiteral("none"), error);
+	QVERIFY(error.isEmpty());
+	QVERIFY(!none.enabled(bssh_term_features_t::SIXEL));
+	QVERIFY(!none.enabled(bssh_term_features_t::KITTY_KEYBOARD));
+
+	const bssh_term_features_t only = bssh_term_features_t::from_spec(
+	        QStringLiteral("none,+bracketed-paste"), error);
+	QVERIFY(error.isEmpty());
+	QVERIFY(only.enabled(bssh_term_features_t::BRACKETED_PASTE));
+	QVERIFY(!only.enabled(bssh_term_features_t::SIXEL));
+
+	const bssh_term_features_t most =
+	        bssh_term_features_t::from_spec(QStringLiteral("-sixel,-kitty-graphics"), error);
+	QVERIFY(error.isEmpty());
+	QVERIFY(!most.enabled(bssh_term_features_t::SIXEL));
+	QVERIFY(!most.enabled(bssh_term_features_t::KITTY_GRAPHICS));
+	QVERIFY2(most.enabled(bssh_term_features_t::ITERM2_IMAGES),
+	          "turning two off must not turn a third off");
+
+	/*
+	 * Order matters, and this is the case that proves it is read left to
+	 * right rather than gathered: the same two words in the other order
+	 * mean opposite things.
+	 */
+	const bssh_term_features_t last_wins =
+	        bssh_term_features_t::from_spec(QStringLiteral("-sixel,all"), error);
+	QVERIFY(error.isEmpty());
+	QVERIFY(last_wins.enabled(bssh_term_features_t::SIXEL));
+
+	/* And the round trip, which is what a stored preset writes back. */
+	QCOMPARE(most.to_spec(), QStringLiteral("-sixel,-kitty-graphics"));
+	QCOMPARE(all.to_spec(), QString());
+	QCOMPARE(bssh_term_features_t::from_spec(most.to_spec(), error), most);
+	QVERIFY(error.isEmpty());
+}
+
+void emulator_test::an_unknown_feature_name_is_refused() {
+	/*
+	 * Named rather than ignored, and this is the assertion that earns
+	 * the type its error argument at all.
+	 *
+	 * A harness that misspells a feature -- "sixels", "kitty_keyboard" --
+	 * would otherwise run its entire suite against a terminal that still
+	 * had that feature switched on, and report a pass for a
+	 * configuration nobody ever tested. That is worse than a crash: it
+	 * is a green result about the wrong thing, which is the failure this
+	 * project keeps paying for elsewhere.
+	 */
+	QString error;
+	const bssh_term_features_t refused =
+	        bssh_term_features_t::from_spec(QStringLiteral("-sixels"), error);
+
+	QVERIFY2(!error.isEmpty(), "a name that is not a feature must be refused");
+	QVERIFY2(error.contains(QStringLiteral("sixels")), "the message must name what was wrong");
+	QVERIFY2(error.contains(QStringLiteral("sixel")),
+	          "and list what would have been accepted");
+
+	/*
+	 * And it comes back with everything ON rather than half-applied. A
+	 * refused spec must not leave the terminal in the state the first
+	 * two words of it asked for.
+	 */
+	QCOMPARE(refused, bssh_term_features_t());
+}
+
+void emulator_test::a_switched_off_feature_is_not_advertised_either() {
+	/*
+	 * The rule the whole switch exists for, and the half a behaviour
+	 * test cannot see: turning an extension off has to change what the
+	 * terminal ANSWERS about it, not only what it does.
+	 *
+	 * sec 7.1 has already paid for both polarities of getting this
+	 * wrong. DEC 2026 answered "0 -- not recognised" while the
+	 * implementation existed, so clients fell back from a feature that
+	 * was there; and it records the opposite for XTGETTCAP -- "a
+	 * capability database is a promise: a client told bce will use it".
+	 * A feature switched off but still advertised is that promise
+	 * broken, and it is the more expensive direction, because the client
+	 * goes ahead and nothing happens.
+	 *
+	 * Every case below asserts the PAIR: the extension does nothing, and
+	 * the probe for it says so.
+	 */
+	QString error;
+	const bssh_term_features_t none =
+	        bssh_term_features_t::from_spec(QStringLiteral("none"), error);
+	QVERIFY(error.isEmpty());
+
+	/*
+	 * Synchronised output is the sharpest of the four, because it has a
+	 * real machine-readable "no": DECRPM 0 means "not recognised", which
+	 * is the truth for a terminal that does not have it. With the feature
+	 * on this same query answers 2.
+	 */
+	{
+		bssh_emulator emulator(20, 4);
+		emulator.set_features(none);
+
+		emulator.feed(QByteArrayLiteral("\x1b[?2026$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2026;0$y"));
+
+		emulator.feed(QByteArrayLiteral("\x1b[?2026h"));
+		QVERIFY2(!emulator.synchronised_output(),
+		          "and the mode itself must not engage");
+	}
+
+	/*
+	 * Kitty's keyboard protocol answers nothing at all, which is what a
+	 * terminal without it does -- kitty's own probe is "ask, and if no
+	 * answer arrives before the DA1 you sent after it, there is none".
+	 * Answering the query with zero flags would say something different
+	 * and wrong: that the protocol is spoken and sitting at its lowest
+	 * tier.
+	 */
+	{
+		bssh_emulator emulator(20, 4);
+		emulator.set_features(none);
+
+		emulator.feed(QByteArrayLiteral("\x1b[>1u\x1b[?u"));
+		QCOMPARE(emulator.take_output(), QByteArray());
+	}
+
+	/* Same shape for XTQMODKEYS. */
+	{
+		bssh_emulator emulator(20, 4);
+		emulator.set_features(none);
+
+		emulator.feed(QByteArrayLiteral("\x1b[>4;2m\x1b[?4m"));
+		QCOMPARE(emulator.take_output(), QByteArray());
+	}
+
+	/*
+	 * XTGETTCAP goes silent rather than answering the invalid form for
+	 * every name. The two say different things: DCS 0 + r means "I speak
+	 * XTGETTCAP and do not have that one", which would still advertise
+	 * the protocol.
+	 *
+	 * And the query must still be CONSUMED. Both XTGETTCAP and sixel are
+	 * DCS sequences ending in q, and sec 7.1 records what happens when
+	 * one reaches the other's parser -- so the assertion is that nothing
+	 * comes back AND nothing lands on the screen.
+	 */
+	{
+		bssh_emulator emulator(20, 4);
+		emulator.set_features(none);
+		emulator.set_term_name(QStringLiteral("xterm-256color"));
+
+		emulator.feed(QByteArrayLiteral("\x1bP+q544E\x1b\\"));
+		QCOMPARE(emulator.take_output(), QByteArray());
+		QCOMPARE(emulator.screen().to_text().trimmed(), QString());
+	}
+
+	/*
+	 * And with everything ON, the same four probes answer -- which is
+	 * what stops this test passing against an emulator that had simply
+	 * stopped working. Without it, deleting the feature outright would
+	 * be indistinguishable from switching it off.
+	 */
+	{
+		bssh_emulator emulator(20, 4);
+
+		emulator.feed(QByteArrayLiteral("\x1b[?2026$p"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?2026;2$y"));
+
+		emulator.feed(QByteArrayLiteral("\x1b[>1u\x1b[?u"));
+		QVERIFY2(!emulator.take_output().isEmpty(), "kitty must answer when it is on");
+
+		emulator.feed(QByteArrayLiteral("\x1b[>4;2m\x1b[?4m"));
+		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[>4;2m"));
+
+		emulator.set_term_name(QStringLiteral("xterm-256color"));
+		emulator.feed(QByteArrayLiteral("\x1bP+q544E\x1b\\"));
+		QVERIFY2(!emulator.take_output().isEmpty(), "XTGETTCAP must answer when it is on");
+	}
 }

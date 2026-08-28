@@ -1479,6 +1479,62 @@ Payloads are capped at 64 KB and an oversized one is dropped **whole**: the
 bytes are attacker-controlled, and half a clipboard is not a smaller version of
 what was asked for — it is a different string that someone might paste.
 
+**Switching them off, selectively — [DECIDED]**
+
+Asked for by the author of a TUI library, and the reason is the one this
+section could not have supplied for itself: a library has to work against
+terminals that *lack* each of these, and the only honest way to find out is to
+run it against a terminal that really lacks them rather than against the
+library's own idea of one. `--term-features=-sixel,-kitty-graphics`, or
+`--term-features=none,+bracketed-paste` for a terminal with almost nothing.
+`--term-features=?` lists the names. The same string is a preset field, so a
+host that always wants a reduced terminal says it once.
+
+**The rule that makes it worth building: switching a feature off changes what
+the terminal ANSWERS about it, not only what it does.** This section has
+already paid for both polarities of getting that wrong — DEC 2026 answering
+"not recognised" while the implementation existed, and the warning above that
+"a capability database is a promise". A feature that is off but still
+advertised is the more expensive direction, because the client is told to go
+ahead and then nothing happens. So each switch silences the probe in that
+protocol's own spelling: DECRPM `0` for 2026, which is a real machine-readable
+*no*; silence for kitty's `CSI ? u`, for XTQMODKEYS and for XTGETTCAP, because
+those have no negative form and silence is what a terminal without them does.
+Answering kitty's query with zero flags would say something different and
+wrong — that the protocol is spoken and sitting at its lowest tier.
+
+**Three of the twelve cannot be switched off yet, and they are named rather
+than omitted.** Bracketed paste, the mouse modes and focus reporting are
+libvterm's: it parses the DEC mode, holds the state and answers DECRQM about
+it. Suppressing only the behaviour would leave the terminal telling a client
+"2004 is on" while ignoring it — exactly the failure above, reproduced. Doing
+it honestly needs a sixth vterm patch on the same hook `0002` and `0004`
+already use. Until then the parser **refuses** those names with that reason,
+because a harness that asked for a terminal without bracketed paste and
+silently got one with it would report a pass for a configuration nobody
+tested.
+An unknown name is refused for the same reason, and the message lists what
+would have been accepted.
+
+**The command line outranks the preset here**, which is the only place in this
+project it does. A reduced terminal is an instruction about *this run*, typed
+by whoever is running the test, so it applies to every session the run opens
+including tabs opened later, and a stored preset must not quietly restore a
+feature the tester asked to be without.
+
+**Four advertise/implement mismatches were found while surveying for this and
+are not fixed.** They are listed because each one misleads a client that
+probes, which is the population this switch exists to serve:
+- **Kitty graphics has no `a=q` reply.** A library probing by query concludes
+  the protocol is unsupported, while transmission works perfectly. This is the
+  one most likely to be hit.
+- **`CSI ? 1049 $p` answers "not recognised"** while 1049 works — libvterm's
+  DECRQM knows 1047 and not 1049.
+- **XTVERSION answers `DCS >|libvterm(0.3) ST`**, naming the library rather
+  than this terminal.
+- **DECSCUSR and DECSCNM are answered by DECRQSS/DECRQM but have no effect**:
+  cursor shape comes from the preset, and reverse video is unconsumed.
+
 **Tier 4 — images. [DECIDED: support all three]**
 
 **Sixel**, the **kitty graphics protocol** and **iTerm2's inline images**

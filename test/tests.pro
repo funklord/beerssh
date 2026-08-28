@@ -95,6 +95,7 @@ SOURCES += \
     ../src/ui/layout_manager.cpp \
     ../src/ui/pane_container.cpp \
     ../src/ui/long_press.cpp \
+    ../src/term/term_features.cpp \
     ../src/ui/scroll_guard.cpp \
     ../src/ui/wrapped_note.cpp \
     ../src/ui/main_window.cpp \
@@ -169,6 +170,7 @@ HEADERS += \
     ../src/ui/layout_manager.h \
     ../src/ui/pane_container.h \
     ../src/ui/long_press.h \
+    ../src/term/term_features.h \
     ../src/ui/scroll_guard.h \
     ../src/ui/wrapped_note.h \
     ../src/ui/main_window.h \

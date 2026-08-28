@@ -7,6 +7,7 @@
 
 #include "model/app_settings.h"
 #include "model/command_line.h"
+#include "term/term_features.h"
 #include "model/profile.h"
 #include "model/profile_store.h"
 #include "platform/platform.h"
@@ -107,6 +108,10 @@ int main(int argc, char *argv[]) {
 		err << "beerssh: " << line.error << Qt::endl
 		     << "Try 'beerssh --help'." << Qt::endl;
 		return 2;
+	}
+	if (!line.listing.isEmpty()) {
+		out << line.listing;
+		return 0;
 	}
 	if (line.help) {
 		out << bssh_command_line_usage();
@@ -226,6 +231,22 @@ int main(int argc, char *argv[]) {
 	bssh_theme::apply(bssh_theme::from_text(bssh_app_settings().theme()));
 
 	/* --self-test never opens anything: CI has no server and no shell to run. */
+
+	/*
+	 * --term-features, before any session exists (sec 7.1). Process-wide
+	 * and ahead of every preset: a reduced terminal is an instruction
+	 * about this run, so a stored preset must not restore a feature the
+	 * person running the test asked to be without.
+	 *
+	 * The spec was already validated by the parser, so a bad name has
+	 * exited long before here -- this cannot fail.
+	 */
+	if (!line.term_features.isEmpty()) {
+		QString ignored;
+		bssh_term_features_t::set_process_override(
+		        bssh_term_features_t::from_spec(line.term_features, ignored));
+	}
+
 	bssh_main_window window(line.self_test ? bssh_profile_t() : launch);
 	window.resize(900, 600);
 

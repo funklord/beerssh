@@ -2,6 +2,7 @@
 
 #include "input/input_router.h"
 #include "term/emulator.h"
+#include "term/term_features.h"
 
 bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
     : QObject(parent),
@@ -68,6 +69,25 @@ void bssh_session::set_settings(const QJsonObject &settings) {
 		        m_settings.value(QStringLiteral("compression")).toBool());
 		m_transport->set_identity_file(m_profile.identity_file);
 		m_transport->set_proxy_jump(m_profile.proxy_jump);
+	}
+
+
+	/*
+	 * Which of sec 7.1's extensions this session speaks. Applied in both
+	 * places for the reason set_term_name records right below: settings
+	 * resolve before a transport exists, so a setter applied only in the
+	 * transport block is silently missed for a session that never
+	 * reconnects.
+	 */
+	{
+		bssh_term_features_t features;
+		if (!bssh_term_features_t::process_override(features)) {
+			QString ignored;
+			features = bssh_term_features_t::from_spec(
+			        m_settings.value(QStringLiteral("term_features")).toString(),
+			        ignored);
+		}
+		m_emulator->set_features(features);
 	}
 
 	/*
@@ -145,6 +165,24 @@ void bssh_session::connect_to_host() {
 	 * asked, which sec 7.1 calls worse than declining to answer.
 	 */
 	m_emulator->set_term_name(m_settings.value(QStringLiteral("term")).toString());
+
+	/*
+	 * Which of sec 7.1's extensions this session speaks. Applied in both
+	 * places for the reason set_term_name records right below: settings
+	 * resolve before a transport exists, so a setter applied only in the
+	 * transport block is silently missed for a session that never
+	 * reconnects.
+	 */
+	{
+		bssh_term_features_t features;
+		if (!bssh_term_features_t::process_override(features)) {
+			QString ignored;
+			features = bssh_term_features_t::from_spec(
+			        m_settings.value(QStringLiteral("term_features")).toString(),
+			        ignored);
+		}
+		m_emulator->set_features(features);
+	}
 
 	m_transport->set_compression(
 	        m_settings.value(QStringLiteral("compression")).toBool());

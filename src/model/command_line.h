@@ -80,6 +80,18 @@ struct bssh_command_line_t {
 	 */
 	bool hold;
 
+	/*
+	 * Which of sec 7.1's terminal extensions to speak, as a spec string
+	 * ("-sixel,-kitty-graphics"). Empty means all of them.
+	 *
+	 * On the command line because the thing it is for is a test run: a
+	 * TUI library has to work against terminals that lack each of these,
+	 * and a harness needs to say so per invocation rather than by editing
+	 * a stored preset first. The same string is a preset field, so a host
+	 * that always wants a reduced terminal can say it once.
+	 */
+	QString term_features;
+
 	/* CI's headless smoke test (sec 12.4). */
 	bool self_test;
 
@@ -87,6 +99,19 @@ struct bssh_command_line_t {
 	bool help;
 	bool version;
 	bool man;
+
+	/*
+	 * Something to print on stdout and stop, or empty --
+	 * `--term-features=?` is the only one.
+	 *
+	 * Separate from `error` because it is not one: a listing is a
+	 * question answered, so it belongs on stdout with a zero status,
+	 * exactly like --help. Carried through `error` first, which sent a
+	 * successful answer to stderr and exited 2 -- and a script asking
+	 * what a program supports would have read that as the program
+	 * refusing to run.
+	 */
+	QString listing;
 
 	/*
 	 * Why the command line was refused, or empty. Non-empty means print
@@ -102,7 +127,7 @@ struct bssh_command_line_t {
 
 	/* Nothing to open: the program prints something and stops. */
 	bool exits_immediately() const {
-		return help || version || man || !error.isEmpty();
+		return help || version || man || !listing.isEmpty() || !error.isEmpty();
 	}
 
 	/*

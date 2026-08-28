@@ -61,6 +61,7 @@ struct bssh_emulator_private {
 	bssh_image_store images;
 	bssh_scrollback scrollback;
 	bssh_graphics_transmission_t graphics;   /* chunked kitty transmissions */
+	bssh_term_features_t features;
 	QByteArray apc_buffer;        /* an APC split across reads */
 	QByteArray osc_buffer;
 
@@ -398,6 +399,15 @@ int decrqm_state(const bssh_emulator_private *self, int mode) {
 		 * answer was "0", telling every client the terminal lacked a
 		 * feature it has.
 		 */
+		/*
+		 * And "-1" when the feature is switched off, so libvterm sends
+		 * the real "0 -- not recognised". That is the honest answer
+		 * for a terminal that does not have it, and it is the same
+		 * byte the defect above was sending dishonestly.
+		 */
+		if (!self->features.enabled(bssh_term_features_t::SYNCHRONISED_OUTPUT)) {
+			return -1;
+		}
 		return self->sync_output ? 1 : 2;
 	default:
 		return -1;
@@ -433,7 +443,18 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 	}
 
 	if (command == 'u') {
-		/* Kitty keyboard protocol: push, pop, set, query. */
+		/*
+		 * Kitty keyboard protocol: push, pop, set, query -- and
+		 * nothing at all when it is switched off. Declining every
+		 * shape of it, the query included, is what a terminal without
+		 * the protocol does: kitty's own probe is "ask, and if no
+		 * answer comes back before a DA1 you sent after it, there is
+		 * no support". Answering the query with zero flags would say
+		 * something different and wrong -- that the protocol is
+		 * spoken and currently at its lowest tier.
+		 */
+		if (!self->features.enabled(bssh_term_features_t::KITTY_KEYBOARD)) return 0;
+
 		if (lead == ">") {
 			const int flags = argcount > 0 ? int(args[0]) : 0;
 			self->kitty_stack.append(flags);
@@ -471,6 +492,17 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 	if (command == 'h' || command == 'l') {
 		/* DEC 2026: synchronised output (sec 7.1). */
 		if (lead == "?" && argcount > 0 && args[0] == 2026) {
+			/*
+			 * Off means unrecognised, all the way down: decrqm_state
+			 * declines too, so libvterm answers DECRPM 0 -- "not
+			 * recognised" -- which is the truth rather than the lie
+			 * sec 7.1 records, where 0 was answered while the
+			 * implementation existed and was simply never reached.
+			 */
+			if (!self->features.enabled(
+			            bssh_term_features_t::SYNCHRONISED_OUTPUT)) {
+				return 0;
+			}
 			if (command == 'h') {
 				self->begin_sync();
 			} else {
@@ -483,6 +515,8 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 
 	if (command == 'm') {
 		/* xterm modifyOtherKeys: CSI > 4 ; n m sets, CSI ? 4 m queries. */
+		if (!self->features.enabled(bssh_term_features_t::MODIFY_OTHER_KEYS)) return 0;
+
 		if (lead == ">" && argcount > 0 && args[0] == 4) {
 			int level = argcount > 1 ? int(args[1]) : 0;
 			/*
@@ -522,6 +556,14 @@ int on_apc(VTermStringFragment frag, void *user) {
 
 	if (!self->apc_buffer.startsWith('G')) return 0;
 
+	/*
+	 * Switched off: the payload is dropped and nothing is drawn. Consumed
+	 * rather than declined, so an APC full of base64 is not printed as
+	 * text -- a terminal that does not speak this protocol still knows an
+	 * APC is not for the screen.
+	 */
+	if (!self->features.enabled(bssh_term_features_t::KITTY_GRAPHICS)) return 1;
+
 	self->apply_graphics(bssh_parse_kitty(self->apc_buffer, self->graphics,
 	                                       self->cell_width, self->cell_height));
 	return 1;
@@ -532,6 +574,14 @@ int on_apc(VTermStringFragment frag, void *user) {
  * closes it, and everything printed between belongs to it.
  */
 int on_osc_link(const QByteArray &payload, bssh_emulator_private *self) {
+	/*
+	 * Switched off: the marks are not made, so the cells carry no link
+	 * id and nothing is underlined or clickable. Consumed, for the same
+	 * reason the APC above is -- the URI must not reach the screen as
+	 * text.
+	 */
+	if (!self->features.enabled(bssh_term_features_t::HYPERLINKS)) return 1;
+
 	/* payload is "params;URI", params ignored (id= is the only defined one). */
 	const int semicolon = payload.indexOf(';');
 	if (semicolon < 0) return 0;
@@ -561,6 +611,8 @@ int on_osc(int command, VTermStringFragment frag, void *user) {
 	 * silence -- a whole feature doing nothing, with no error anywhere.
 	 */
 	if (command == 8) return on_osc_link(self->osc_buffer, self);
+
+	if (!self->features.enabled(bssh_term_features_t::ITERM2_IMAGES)) return 1;
 
 	self->apply_graphics(bssh_parse_iterm2(self->osc_buffer,
 	                                        self->cell_width, self->cell_height));
@@ -632,6 +684,21 @@ int on_selection_set(VTermSelectionMask mask, VTermStringFragment frag, void *us
 	 * clipboard to nothing" would be a notification about a malformed
 	 * escape sequence.
 	 */
+	/*
+	 * Two different questions, and both have to say yes. This one is
+	 * "does this terminal speak OSC 52 at all", which is what the
+	 * feature switch answers; the window then asks the other one, "is
+	 * this host trusted to use it" (sec 7.1's per-host, off-by-default
+	 * write half). A test terminal built without the feature must not
+	 * emit at all, or the window's answer becomes the only thing
+	 * standing between the remote and the clipboard.
+	 */
+	if (!self->features.enabled(bssh_term_features_t::CLIPBOARD_WRITE)) {
+		self->selection_buffer.clear();
+		self->selection_oversized = false;
+		return 1;
+	}
+
 	if (!self->selection_oversized && !self->selection_buffer.isEmpty()) {
 		emit self->owner->clipboard_write_requested(
 		        QString::fromUtf8(self->selection_buffer));
@@ -685,6 +752,26 @@ QByteArray to_hex(const QByteArray &raw) {
  * status byte for the lot, and clients disagree about what that means.
  */
 int on_xtgettcap(const QByteArray &payload, bssh_emulator_private *self) {
+	/*
+	 * Switched off means SILENCE, not "0 -- invalid" for every name. The
+	 * two say different things: the invalid form says "I speak XTGETTCAP
+	 * and do not have that capability", which would still advertise the
+	 * protocol. A terminal without it answers nothing at all.
+	 *
+	 * Consumed rather than declined, and the difference is smaller than
+	 * it looks: on_dcs has already chosen this branch over the sixel one
+	 * by reading the introducer, so returning 0 would hand the sequence
+	 * back to libvterm rather than to the sixel parser -- and libvterm
+	 * ignores a DCS nobody claimed. Measured: a sabotage flipping this
+	 * to 0 left the suite green, screen included.
+	 *
+	 * It stays 1 because that is what is true. This code recognised the
+	 * sequence and decided not to answer it, which is a different fact
+	 * from not recognising it, and the next reader of on_dcs should not
+	 * have to re-derive that the two happen to look alike today.
+	 */
+	if (!self->features.enabled(bssh_term_features_t::XTGETTCAP)) return 1;
+
 	const QList<QByteArray> names = payload.split(';');
 
 	for (const QByteArray &hex : names) {
@@ -737,8 +824,16 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
 	self->dcs_buffer.append(frag.str, int(frag.len));
 	if (!frag.final) return 1;
 
-	self->apply_graphics(bssh_parse_sixel(self->dcs_buffer,
-	                                       self->cell_width, self->cell_height));
+	/*
+	 * Switched off: the data is swallowed and no image appears -- the
+	 * same shape the Android build has had all along through
+	 * BSSH_NO_SIXEL, which is the one protocol here that could already
+	 * be turned off and is the precedent this follows.
+	 */
+	if (self->features.enabled(bssh_term_features_t::SIXEL)) {
+		self->apply_graphics(bssh_parse_sixel(self->dcs_buffer,
+		                                       self->cell_width, self->cell_height));
+	}
 	self->dcs_buffer.clear();
 	return 1;
 }
@@ -1339,6 +1434,14 @@ void bssh_emulator::set_scrollback_lines(int lines) {
 
 const bssh_image_store &bssh_emulator::images() const {
 	return m_private->images;
+}
+
+void bssh_emulator::set_features(const bssh_term_features_t &features) {
+	m_private->features = features;
+}
+
+const bssh_term_features_t &bssh_emulator::features() const {
+	return m_private->features;
 }
 
 void bssh_emulator::set_term_name(const QString &term) {

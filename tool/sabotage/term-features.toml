@@ -1,0 +1,78 @@
+# Sabotages for sec 7.1's feature switch.
+#
+# The switch exists so that a TUI library can be run against a terminal
+# that really lacks an extension, rather than against its own idea of
+# one. Its whole value rests on a rule that a behaviour test cannot see:
+# turning a feature off must change what the terminal ANSWERS about it,
+# not only what it does.
+#
+# sec 7.1 has paid for both polarities. DEC 2026 answered "0 -- not
+# recognised" while the implementation existed, so clients fell back from
+# a feature that was there; and "a capability database is a promise: a
+# client told bce will use it" is the same mistake pointed the other way.
+# A switch that silences the behaviour and leaves the advertisement is
+# the more expensive direction, because the client goes ahead and nothing
+# happens.
+
+# The advertisement, for the one extension that has a real machine-
+# readable "no". Leaving decrqm_state answering means a client is told
+# synchronised output is available while the mode does nothing.
+[[sabotage]]
+name = "a switched-off mode is still advertised as available"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (!self->features.enabled(bssh_term_features_t::SYNCHRONISED_OUTPUT)) {\n\t\t\treturn -1;\n\t\t}"
+replace = "\t\t(void)0;"
+expect = "a_switched_off_feature_is_not_advertised_either"
+
+# And the behaviour, which is the other half of the same pair.
+[[sabotage]]
+name = "a switched-off mode still engages"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\t\tif (!self->features.enabled(\n\t\t\t            bssh_term_features_t::SYNCHRONISED_OUTPUT)) {\n\t\t\t\treturn 0;\n\t\t\t}"
+replace = "\t\t\t(void)0;"
+expect = "a_switched_off_feature_is_not_advertised_either"
+
+# Kitty's query. Answering it with zero flags says the protocol is spoken
+# and sitting at its lowest tier, which is a different claim from "not
+# spoken" and the one a client acts on.
+[[sabotage]]
+name = "kitty answers its query when the protocol is off"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (!self->features.enabled(bssh_term_features_t::KITTY_KEYBOARD)) return 0;"
+replace = "\t\t(void)0;"
+expect = "a_switched_off_feature_is_not_advertised_either"
+
+# XTQMODKEYS, same shape.
+[[sabotage]]
+name = "modifyOtherKeys answers its query when it is off"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (!self->features.enabled(bssh_term_features_t::MODIFY_OTHER_KEYS)) return 0;"
+replace = "\t\t(void)0;"
+expect = "a_switched_off_feature_is_not_advertised_either"
+
+# XTGETTCAP's consume-versus-decline has NO entry here, and the reason is
+# worth recording rather than leaving as an absence.
+#
+# The obvious sabotage -- flip `return 1` to `return 0` when the feature
+# is off -- was written, run, and came back MISSED. The comment it was
+# testing claimed that declining would drop the query into the sixel
+# parser, and that is not true: on_dcs has already chosen this branch
+# over the sixel one by reading the introducer, so a 0 hands the sequence
+# back to libvterm, which ignores a DCS nobody claimed. Nothing
+# observable differs, so no test can catch it and an entry would report
+# MISSED for ever however correct the code was.
+#
+# The comment in the source was corrected to say what was measured. That
+# is the finding: the sabotage caught a wrong explanation rather than a
+# wrong line, which is the cheaper of the two to fix and the harder to
+# notice by reading.
+
+# The parser's refusal of an unknown name. Accepting one silently would
+# run a whole suite against a terminal that still had the feature on, and
+# report a pass for a configuration nobody tested.
+[[sabotage]]
+name = "an unknown feature name is accepted and ignored"
+file = "src/term/term_features.cpp"
+find = "\t\t\terror = QStringLiteral(\"unknown terminal feature \\\"%1\\\"; known ones are %2\")\n\t\t\t                .arg(bare, every_name().join(QStringLiteral(\", \")));\n\t\t\treturn bssh_term_features_t();"
+replace = "\t\t\tcontinue;"
+expect = "an_unknown_feature_name_is_refused"

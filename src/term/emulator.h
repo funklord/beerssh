@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QString>
 
+#include "term/term_features.h"
+
 #include "term/image_store.h"
 #include "term/screen.h"
 #include "term/scrollback.h"
@@ -191,6 +193,21 @@ public:
 	 * asked directly is worse than one that will not say.
 	 */
 	void set_term_name(const QString &term);
+
+	/*
+	 * Which of sec 7.1's extensions this terminal speaks. Everything on
+	 * by default; this exists to turn things OFF, so that a TUI can be
+	 * run against a terminal that really lacks a feature rather than
+	 * against its own idea of one.
+	 *
+	 * Switching one off silences what the terminal ANSWERS about it as
+	 * well as what it does -- an extension that is off but still
+	 * advertised is the failure sec 7.1 records for DEC 2026, where a
+	 * client was told the mode existed and the implementation behind it
+	 * was never reached.
+	 */
+	void set_features(const bssh_term_features_t &features);
+	const bssh_term_features_t &features() const;
 
 	/*
 	 * Bytes the terminal owes the remote: answers to device-status and
