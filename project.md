@@ -1073,6 +1073,23 @@ model on a finger.
   as a silent absence, which is the same call as the wheel guard's exclusion
   and the XTGETTCAP consume.
 
+- **`cursor_style` was serialised four ways and drawn one.** Round-tripped
+  through JSON, through the INI, through the preset editor and through the
+  settings resolver — and nothing asserted it ever changed what is *painted*.
+  The renderer has three branches, block, underline and bar; only the block
+  was ever painted in a test, and only by being the default. Two of the three
+  had never been drawn at all, in a function edited twice today.
+  It is §10.2's own class, recorded there twice already — a setting stored,
+  read and applied to nothing — and what made it invisible is that the four
+  serialisation layers *are* the well-tested half. Third application of the
+  same search key, third find.
+  The assertions are on the **shape of the ink** rather than its presence,
+  because "there is a cursor" is what the setting's name suggests and passes
+  for all three values. A block fills the cell, an underline is a thin band at
+  the bottom, a bar is a thin column at the left — measured as a bounding box
+  of non-background pixels, so the test never re-derives the renderer's own
+  arithmetic for where a column starts.
+
 - **Nothing asserted that pressing a key sends a byte.** The most fundamental
   thing a terminal does. The input router has thirty-two tests — keys in,
   bytes out, every modifier and both keyboard protocols — and the transport

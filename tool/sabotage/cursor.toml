@@ -43,3 +43,32 @@ file = "src/model/preset.h"
 find = "\t      cursor_blink(false),"
 replace = "\t      cursor_blink(true),"
 expect = "a_steady_cursor_is_the_default"
+
+# And the SHAPE, which four layers of serialisation made look covered.
+# cursor_style is round-tripped through JSON, through the INI, through
+# the preset editor and through the settings resolver, and nothing
+# asserted it ever changed what is drawn: of the renderer's three
+# branches only the block was painted in a test, and only by being the
+# default.
+[[sabotage]]
+name = "the underline cursor is drawn as a block"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t} else if (m_cursor_style == QStringLiteral(\"underline\")) {"
+replace = "\t\t} else if (false) {"
+expect = "the_cursor_style_reaches_the_pixels"
+
+[[sabotage]]
+name = "the bar cursor is drawn as a block"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t} else if (m_cursor_style == QStringLiteral(\"bar\")) {"
+replace = "\t\t} else if (false) {"
+expect = "the_cursor_style_reaches_the_pixels"
+
+# The delivery itself: the setting never reaches the view, so every
+# style draws whatever the view was constructed with.
+[[sabotage]]
+name = "the style never reaches the view"
+file = "src/ui/terminal_view.cpp"
+find = "\tview->set_cursor_style(settings.value(QStringLiteral(\"cursor_style\")).toString());"
+replace = "\t(void)0;"
+expect = "the_cursor_style_reaches_the_pixels"

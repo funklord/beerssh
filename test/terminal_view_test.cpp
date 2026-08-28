@@ -2174,3 +2174,122 @@ void terminal_view_test::alt_drag_asks_for_the_pane_to_be_moved() {
 	QCoreApplication::sendEvent(&view, &further);
 	QCOMPARE(asked.count(), 1);
 }
+
+namespace {
+
+/*
+ * The bounding box of everything that is not the background, within the
+ * band of pixels row 0 occupies. Origin-independent on purpose: the grid
+ * inset and the scrollbar both move where column 0 starts, and a test
+ * that computed the cursor's x would be re-deriving the renderer's
+ * arithmetic and agreeing with itself.
+ */
+QRect ink_box(const QImage &frame, int cell_height, const QColor &background) {
+	int left = frame.width(), right = -1, top = frame.height(), bottom = -1;
+
+	for (int y = 0; y < qMin(cell_height, frame.height()); ++y) {
+		for (int x = 0; x < frame.width(); ++x) {
+			if (frame.pixelColor(x, y) == background) continue;
+
+			left = qMin(left, x);
+			right = qMax(right, x);
+			top = qMin(top, y);
+			bottom = qMax(bottom, y);
+		}
+	}
+
+	if (right < 0) return QRect();
+	return QRect(QPoint(left, top), QPoint(right, bottom));
+}
+
+} /* namespace */
+
+void terminal_view_test::the_cursor_style_reaches_the_pixels() {
+	/*
+	 * sec 10.2's cursor_style, which is round-tripped through JSON,
+	 * through the INI, through the preset editor and through the
+	 * settings resolver -- and which nothing asserted ever changes what
+	 * is DRAWN. The renderer has three branches, block, underline and
+	 * bar; only the block was ever painted in a test, and only by being
+	 * the default.
+	 *
+	 * That is the class sec 10.2 already records twice: a setting
+	 * stored, read and applied to nothing. The key row had three
+	 * visibility modes with nothing setting one, and the override badge
+	 * was built on one editor while the other resolved elsewhere. Both
+	 * had round-trip tests.
+	 *
+	 * Found with the search key the sibling qtty derived: the parse
+	 * being right is what hides the delivery being wrong. Here the
+	 * "parse" is four layers of serialisation, which is exactly what
+	 * made this look thoroughly covered.
+	 *
+	 * The assertions are on the SHAPE of the ink rather than on its
+	 * presence, because "there is a cursor" is what the setting's name
+	 * suggests and it passes for all three values. What separates them
+	 * is where the ink is: a block fills the cell, an underline is a
+	 * thin band at the bottom of it, a bar is a thin column at the left.
+	 */
+	const auto box_for = [](const QString &style) {
+		bssh_terminal_view view;
+		view.resize(400, 120);
+
+		QJsonObject settings;
+		settings.insert(QStringLiteral("font_family"), QStringLiteral("jetbrains-mono"));
+		settings.insert(QStringLiteral("font_size"), 12);
+		settings.insert(QStringLiteral("cursor_blink"), false);
+		settings.insert(QStringLiteral("cursor_style"), style);
+		bssh_apply_appearance(&view, settings);
+
+		bssh_screen screen(view.cols(), view.rows());
+		screen.set_cursor(0, 5);
+		view.attach_screen(&screen);
+
+		view.show();
+		QTest::qWaitForWindowExposed(&view);
+
+		const QImage frame = view.grab().toImage();
+		const QColor background = frame.pixelColor(frame.width() / 2,
+		                                            frame.height() - 3);
+
+		return QPair<QRect, QSize>(ink_box(frame, view.cell_height(), background),
+		                            QSize(view.cell_width(), view.cell_height()));
+	};
+
+	const QPair<QRect, QSize> block = box_for(QStringLiteral("block"));
+	const QPair<QRect, QSize> underline = box_for(QStringLiteral("underline"));
+	const QPair<QRect, QSize> bar = box_for(QStringLiteral("bar"));
+
+	const int cw = block.second.width();
+	const int ch = block.second.height();
+	QVERIFY(cw > 2 && ch > 4);
+
+	/* Each drew something, or every comparison below is between two
+	 * empty rectangles and says nothing. */
+	QVERIFY2(block.first.isValid(), "the block cursor drew nothing");
+	QVERIFY2(underline.first.isValid(), "the underline cursor drew nothing");
+	QVERIFY2(bar.first.isValid(), "the bar cursor drew nothing");
+
+	/* A block fills its cell in both directions. */
+	QVERIFY2(block.first.height() >= ch - 1 && block.first.width() >= cw - 1,
+	          qPrintable(QStringLiteral("block ink %1x%2 in a %3x%4 cell")
+	                             .arg(block.first.width()).arg(block.first.height())
+	                             .arg(cw).arg(ch)));
+
+	/* An underline is thin and at the BOTTOM -- the second half is what
+	 * tells it from a bar lying on its side. */
+	QVERIFY2(underline.first.height() <= ch / 3,
+	          qPrintable(QStringLiteral("underline is %1 tall in a %2 cell")
+	                             .arg(underline.first.height()).arg(ch)));
+	QVERIFY2(underline.first.top() > ch / 2,
+	          "an underline belongs at the bottom of the cell");
+	QVERIFY2(underline.first.width() >= cw - 1, "an underline spans the cell");
+
+	/* A bar is thin and at the LEFT, and full height. */
+	QVERIFY2(bar.first.width() <= cw / 2,
+	          qPrintable(QStringLiteral("bar is %1 wide in a %2 cell")
+	                             .arg(bar.first.width()).arg(cw)));
+	QVERIFY2(bar.first.height() >= ch - 1, "a bar spans the cell height");
+	QVERIFY2(bar.first.left() < block.first.left() + cw / 2,
+	          "a bar belongs at the left of the cell");
+}
