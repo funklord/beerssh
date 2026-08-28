@@ -1051,6 +1051,28 @@ model on a finger.
   the dead one: that is both the sharpest form of the fault (the window with
   nothing running took down the one that had something) and the only version
   runnable unattended, since a live session raises a modal box.
+- **The local pty, audited against three ways a sibling's harness had lied to
+  it**, offered by `qtty` in the order it met them: a descriptor pointing at
+  the wrong terminal (which reads as a *library* defect, and is the dangerous
+  one because it produces a plausible wrong answer rather than a failure),
+  stdout buffered into the pty (reads as the test never running), and a
+  blocking read on a master (reads as a hang).
+  **Two do not apply and one was already guarded, which is the honest result
+  of the audit** -- `forkpty()` owns the child's descriptors so nothing here
+  names a fixed one, and nothing writes through stdio. What was worth reading
+  was the guard for the third: `if (flags >= 0) fcntl(...)` proceeded to
+  install the notifier on a **blocking** descriptor whenever `F_GETFL` failed,
+  and said nothing. The whole point of the flag is that a read on the UI
+  thread must not block, so carrying on without it keeps exactly the hazard
+  the line exists to remove, and the symptom would be the window freezing a
+  long way from here. `evidence.md`'s rule -- a guard's failure must be the
+  caller's failure -- so the shell now refuses to open, with a reason.
+  It has no test and no sabotage entry: `F_GETFL` does not fail on a
+  descriptor `forkpty` has just returned, so the branch is unreachable from a
+  test and an entry would report MISSED for ever. Recorded rather than left
+  as a silent absence, which is the same call as the wheel guard's exclusion
+  and the XTGETTCAP consume.
+
 - **Thirteen image tests and none that looked at the screen.** Every test in
   `graphics_test` stopped at the image store -- bytes in, placement out -- and
   the single test that asserted pixels built its placement by hand and never

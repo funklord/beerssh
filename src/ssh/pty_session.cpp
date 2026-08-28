@@ -233,9 +233,44 @@ void bssh_pty_session::open_shell(int cols, int rows) {
 	 * this runs on the UI thread. The notifier says when there is
 	 * something; O_NONBLOCK is what stops a spurious wakeup freezing the
 	 * window.
+	 *
+	 * THE FAILURE OF THIS GUARD IS THE CALLER'S FAILURE, which it was
+	 * not: `if (flags >= 0) fcntl(...)` proceeded to install the notifier
+	 * on a blocking descriptor whenever F_GETFL failed, and said nothing.
+	 * The whole point of the flag is that a read on this thread must not
+	 * block, so carrying on without it keeps exactly the hazard the line
+	 * exists to remove -- and the symptom would be the window freezing,
+	 * a long way from here.
+	 *
+	 * evidence.md states the rule ("a guard's failure must be the
+	 * caller's failure", from a cleanup whose helper had gone missing and
+	 * whose suite reported all cases passed). A shell that refuses to
+	 * open, with a reason, is plainly better than an app that stops
+	 * repainting.
+	 *
+	 * Found by auditing this file against three ways a sibling project's
+	 * pty harness had lied to it. Its three were a descriptor pointing at
+	 * the wrong terminal, stdout buffered into the pty, and a blocking
+	 * read on a master -- none of which applies here, since forkpty()
+	 * owns the child's descriptors and nothing writes through stdio. The
+	 * third is guarded, and the guard was the thing worth reading.
+	 *
+	 * There is no sabotage entry: F_GETFL does not fail on a descriptor
+	 * forkpty has just returned, so there is no way to reach this branch
+	 * from a test and an entry would report MISSED for ever.
 	 */
 	const int flags = fcntl(m_master, F_GETFL, 0);
-	if (flags >= 0) fcntl(m_master, F_SETFL, flags | O_NONBLOCK);
+	if (flags < 0 || fcntl(m_master, F_SETFL, flags | O_NONBLOCK) < 0) {
+		const QString reason = QString::fromLocal8Bit(std::strerror(errno));
+
+		::close(m_master);
+		m_master = -1;
+
+		set_state(FAILED);
+		emit failed(QStringLiteral("could not make the pseudo-terminal non-blocking: %1")
+		                    .arg(reason));
+		return;
+	}
 
 	m_notifier = new QSocketNotifier(m_master, QSocketNotifier::Read, this);
 	connect(m_notifier, &QSocketNotifier::activated, this, [this] { on_readable(); });
