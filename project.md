@@ -4172,6 +4172,27 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
     diagnosed. Recorded as a symptom with its measurement rather than
     attributed, since the environmental story is the comfortable one and
     §12.3 already records what a comfortable explanation costs.
+    **The artifact is kept, at the copyright holder's direction**, as
+    `~/fixtures/beerssh-dead-space-46.5M.apk` — 46,499,926 bytes, sha256
+    `08360537107f5c922582f5322047a068680766e94df704ed2776a7cfd31d6e5c`,
+    carrying one 6,942,406-byte gap before `lib/arm64-v8a/libc++_shared.so`.
+    Outside the repository deliberately: it is a 46 MB build artifact and
+    belongs nowhere near git, and outside session scratch because that is
+    documented as disposable.
+    It is kept because **a check of this kind has to be shown to reject
+    something, and this hole cannot be manufactured after the fact** — a
+    hand-made gap is one somebody designed, and the point is to reject one
+    nobody designed. The state that produced it is gone, so if the file goes
+    it cannot be regenerated. It is a structurally valid APK that is merely
+    bloated, not a corrupt one, which is what makes it the right fixture:
+    `zipfile.testzip()` passes on it.
+    **State the denominator when quoting the overhead**, since a threshold
+    will be written against one: dividing by the FILE gives 0.23% healthy
+    against 15.1% bloated, and dividing by the summed ENTRIES gives 0.23%
+    against 17.8%. Two orders apart either way, so the threshold is
+    undemanding — but the two numbers are not the same number and the first
+    report of this quoted one while the record now carries both.
+
     **The generalisable half needs no diagnosis.** The Android packaging step
     verifies the ABI and the signature and does not verify that the artifact
     is *compact*, so megabytes of dead space ship silently: the size is
