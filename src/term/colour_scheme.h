@@ -108,6 +108,22 @@ QRgb bssh_raise_contrast(QRgb colour, QRgb against);
  */
 QRgb bssh_dim(QRgb colour, int percent);
 
+/*
+ * What a 256-colour index resolves to, given a scheme's low sixteen.
+ *
+ * The low sixteen are the host's scheme (sec 10.2); the cube and the
+ * grey ramp are exact formulas every terminal computes identically,
+ * because a program asking for colour 137 has asked for a particular RGB
+ * value rather than for the user's taste.
+ *
+ * Shared because two things need the same answer and must not compute it
+ * twice: the renderer, which paints the cell, and the emulator, which
+ * tells a remote what the index means when it asks with OSC 4. A client
+ * quantising its own colours into this palette is relying on the two
+ * agreeing exactly.
+ */
+QRgb bssh_palette_colour(const QRgb ansi[16], int index);
+
 class bssh_colour_scheme_catalog {
 public:
 	static bssh_colour_scheme_catalog &instance();

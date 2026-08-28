@@ -4,6 +4,7 @@
 #include "emulator_test.h"
 #include "term/emulator.h"
 #include "term/term_features.h"
+#include "term/colour_scheme.h"
 
 /* First row of the screen, which is what most of these assert on. */
 static QString row(const bssh_emulator &emulator, int index) {
@@ -1571,4 +1572,87 @@ void emulator_test::a_mode_libvterm_models_can_still_be_declined() {
 		emulator.feed(QByteArrayLiteral("\x1b[?1004h\x1b[?1004$p"));
 		QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1004;1$y"));
 	}
+}
+
+void emulator_test::the_palette_query_reports_the_hosts_own_sixteen() {
+	/*
+	 * OSC 4, ranked first by the sibling qtty TUI with a cost worth
+	 * recording because it is the kind nobody reports. Its colour model
+	 * quantises into the 256-colour palette and assumed xterm's default
+	 * table. Indices 16 to 255 are a formula every terminal computes
+	 * identically, so those were right; 0 to 15 are the user's scheme,
+	 * so every quantised colour landing there was computed against the
+	 * wrong table. The output does not look broken, it looks slightly
+	 * off.
+	 *
+	 * The low sixteen here are deliberately nothing like xterm's, so a
+	 * reply that fell back to the standard table fails.
+	 */
+	QRgb scheme[16];
+	for (int i = 0; i < 16; ++i) scheme[i] = qRgb(i * 16, 255 - i * 16, 0x40);
+
+	bssh_emulator emulator(20, 4);
+	emulator.set_palette(scheme);
+
+	emulator.feed(QByteArrayLiteral("\x1b]4;1;?\x1b\\"));
+	QCOMPARE(emulator.take_output(),
+	          QByteArrayLiteral("\x1b]4;1;rgb:1010/efef/4040\x1b\\"));
+
+	/*
+	 * Several pairs in one query, answered one reply each -- the same
+	 * reason XTGETTCAP answers one name at a time: a single reply
+	 * covering several indices has to say one thing about all of them.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b]4;0;?;15;?\x1b\\"));
+	QCOMPARE(emulator.take_output(),
+	          QByteArrayLiteral("\x1b]4;0;rgb:0000/ffff/4040\x1b\\")
+	          + QByteArrayLiteral("\x1b]4;15;rgb:f0f0/0f0f/4040\x1b\\"));
+
+	/*
+	 * And above 15 the answer is the standard formula, NOT the scheme --
+	 * a program asking for colour 137 has asked for a particular RGB
+	 * value rather than for the user's taste, and this is the half a
+	 * client could already compute for itself. Checked against the
+	 * shared helper the renderer paints with, so the two cannot drift:
+	 * a client quantising into this palette relies on them agreeing.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b]4;137;?\x1b\\"));
+
+	const QRgb expected = bssh_palette_colour(scheme, 137);
+	QCOMPARE(emulator.take_output(),
+	          QByteArrayLiteral("\x1b]4;137;rgb:")
+	          + QByteArray::number(qRed(expected), 16).rightJustified(2, '0').repeated(2)
+	          + QByteArrayLiteral("/")
+	          + QByteArray::number(qGreen(expected), 16).rightJustified(2, '0').repeated(2)
+	          + QByteArrayLiteral("/")
+	          + QByteArray::number(qBlue(expected), 16).rightJustified(2, '0').repeated(2)
+	          + QByteArrayLiteral("\x1b\\"));
+
+	/*
+	 * A payload that SETS a colour is not honoured and not answered, the
+	 * same line OSC 10 and OSC 11 take: a remote repainting the terminal
+	 * it was given is not a power this grants.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b]4;1;#ff0000\x1b\\"));
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	emulator.feed(QByteArrayLiteral("\x1b]4;1;?\x1b\\"));
+	QCOMPARE(emulator.take_output(),
+	          QByteArrayLiteral("\x1b]4;1;rgb:1010/efef/4040\x1b\\"));
+
+	/* An index outside the palette is declined rather than clamped: a
+	 * client told colour 999 is grey would believe it exists. */
+	emulator.feed(QByteArrayLiteral("\x1b]4;999;?\x1b\\"));
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	/* And it goes quiet with the feature off, like its two siblings. */
+	QString error;
+	bssh_emulator quiet(20, 4);
+	quiet.set_palette(scheme);
+	quiet.set_features(bssh_term_features_t::from_spec(
+	        QStringLiteral("-colour-query"), error));
+	QVERIFY(error.isEmpty());
+
+	quiet.feed(QByteArrayLiteral("\x1b]4;1;?\x1b\\"));
+	QCOMPARE(quiet.take_output(), QByteArray());
 }

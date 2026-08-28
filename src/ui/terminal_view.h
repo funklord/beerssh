@@ -210,6 +210,15 @@ public:
 	QColor terminal_background() const { return m_background; }
 
 	/*
+	 * The host's low sixteen, for the emulator to answer OSC 4 with. The
+	 * scheme's own values rather than anything the renderer has adjusted:
+	 * OSC 4 means the mapping from index to colour, and the brightness
+	 * slider is a per-cell display adjustment that no single index has a
+	 * fixed answer for.
+	 */
+	const QRgb *terminal_palette() const { return m_scheme.ansi; }
+
+	/*
 	 * Re-reads the current scheme from the catalog. set_colour_scheme()
 	 * early-returns when the id has not changed, which is right for
 	 * switching between fixed schemes and wrong for the custom one: its

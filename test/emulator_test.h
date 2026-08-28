@@ -19,6 +19,7 @@ private slots:
 	void the_kitty_graphics_query_is_answered();
 	void the_terminal_answers_for_itself_not_for_libvterm();
 	void the_terminal_answers_the_questions_a_compositing_client_asks();
+	void the_palette_query_reports_the_hosts_own_sixteen();
 	void decrqm_answers_for_the_alternate_screen();
 	void a_switched_off_feature_is_not_advertised_either();
 	void a_mode_libvterm_models_can_still_be_declined();

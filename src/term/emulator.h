@@ -200,6 +200,20 @@ public:
 	void set_colours(QRgb foreground, QRgb background);
 
 	/*
+	 * The host's low sixteen, so OSC 4 can say what an index means
+	 * (sec 7.1). Everything from 16 up is a formula shared with the
+	 * renderer rather than a copy kept here.
+	 *
+	 * This is the half of the palette a client cannot guess. 16 to 255
+	 * are identical on every terminal; 0 to 15 are the user's scheme,
+	 * and a client that quantises its own colours against xterm's
+	 * defaults gets a plausible-looking wrong answer for every one of
+	 * them -- the failure nobody reports because it just looks a bit
+	 * off.
+	 */
+	void set_palette(const QRgb *ansi);
+
+	/*
 	 * The TERM the app is telling the remote (sec 10.2). Mirrored here
 	 * only so XTGETTCAP's TN answers with the same string: a terminal
 	 * that names itself one thing in the environment and another when

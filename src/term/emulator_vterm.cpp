@@ -1,4 +1,5 @@
 #include "term/emulator.h"
+#include "term/colour_scheme.h"
 
 #include <QHash>
 #include <QTimer>
@@ -100,6 +101,9 @@ struct bssh_emulator_private {
 	QRgb foreground_rgb;
 	QRgb background_rgb;
 
+	/* And the host's low sixteen, for OSC 4. */
+	QRgb ansi[16];
+
 	/*
 	 * Rows the cursor owes an image. It cannot be applied inside the APC
 	 * callback: moving our own mirror's cursor there is invisible to
@@ -134,7 +138,25 @@ struct bssh_emulator_private {
 	      foreground_rgb(qRgb(0xdc, 0xdc, 0xdc)),
 	      background_rgb(qRgb(0x1c, 0x1c, 0x1c)),
 	      pending_cursor_advance(0) {
-		kitty_stack.append(0);
+		/*
+	 * A plain xterm palette until a view says otherwise, which is what
+	 * an emulator with no view attached should answer: the standard
+	 * table is the honest default, since it is what every terminal
+	 * agrees on and what a client would have assumed anyway.
+	 */
+	static const QRgb xterm_ansi[16] = {
+		qRgb(0x00, 0x00, 0x00), qRgb(0xcd, 0x00, 0x00),
+		qRgb(0x00, 0xcd, 0x00), qRgb(0xcd, 0xcd, 0x00),
+		qRgb(0x00, 0x00, 0xee), qRgb(0xcd, 0x00, 0xcd),
+		qRgb(0x00, 0xcd, 0xcd), qRgb(0xe5, 0xe5, 0xe5),
+		qRgb(0x7f, 0x7f, 0x7f), qRgb(0xff, 0x00, 0x00),
+		qRgb(0x00, 0xff, 0x00), qRgb(0xff, 0xff, 0x00),
+		qRgb(0x5c, 0x5c, 0xff), qRgb(0xff, 0x00, 0xff),
+		qRgb(0x00, 0xff, 0xff), qRgb(0xff, 0xff, 0xff)
+	};
+	for (int i = 0; i < 16; ++i) ansi[i] = xterm_ansi[i];
+
+	kitty_stack.append(0);
 	}
 
 	int kitty_flags() const { return kitty_stack.last(); }
@@ -799,22 +821,87 @@ int on_osc_link(const QByteArray &payload, bssh_emulator_private *self) {
  * terminal it was given is not a power this needs to grant, and sec 7.1
  * has the same line about window ops.
  */
+/*
+ * xterm's `rgb:RRRR/GGGG/BBBB`, with each channel DOUBLED to sixteen
+ * bits rather than shifted: 0xff must come back 0xffff and not 0xff00,
+ * or white is not quite white -- and the difference is invisible until
+ * somebody composites against it.
+ *
+ * One formatter for OSC 4, 10 and 11, because a client reading all three
+ * is entitled to have them mean the same thing.
+ */
+QByteArray rgb_reply(QRgb colour) {
+	const auto channel = [](int eight) {
+		return QByteArray::number((eight << 8) | eight, 16).rightJustified(4, '0');
+	};
+
+	return QByteArrayLiteral("rgb:") + channel(qRed(colour))
+	        + QByteArrayLiteral("/") + channel(qGreen(colour))
+	        + QByteArrayLiteral("/") + channel(qBlue(colour));
+}
+
+/*
+ * OSC 4: what colour is palette index N.
+ *
+ * `OSC 4 ; <index> ; ? ST`, and the query may carry several pairs in one
+ * sequence -- each is answered separately, for the reason XTGETTCAP
+ * answers one name at a time: a single reply covering several indices
+ * would have to say something about all of them at once.
+ *
+ * Asked for by the sibling qtty TUI and ranked first by it, with a cost
+ * that is worth recording because it is the kind nobody reports. Its
+ * colour model quantises into the 256-colour palette, and it assumed
+ * xterm's default table. Indices 16 to 255 are a formula every terminal
+ * computes identically, so those were right; 0 to 15 are the user's
+ * scheme (sec 10.2), so every quantised colour landing there was
+ * computed against the wrong table. The output does not look broken, it
+ * looks slightly off, and the only way to find out is to ask.
+ *
+ * Answered as the palette IS, before the brightness slider dims
+ * anything. The slider is a display adjustment applied per cell at paint
+ * time -- and applied to a foreground but not to the terminal's own
+ * background -- so there is no single dimmed value an index HAS. What
+ * OSC 4 means everywhere is the mapping from index to colour, and that
+ * is what this answers.
+ *
+ * A payload that SETS a colour is not honoured, exactly as for OSC 10
+ * and OSC 11: a remote repainting the terminal it was given is not a
+ * power this grants.
+ */
+int on_osc_palette(const QByteArray &payload, bssh_emulator_private *self) {
+	if (!self->features.enabled(bssh_term_features_t::COLOUR_QUERY)) return 1;
+
+	const QList<QByteArray> parts = payload.split(';');
+
+	for (int i = 0; i + 1 < parts.size(); i += 2) {
+		if (parts.at(i + 1).trimmed() != "?") continue;
+
+		bool numeric = false;
+		const int index = parts.at(i).trimmed().toInt(&numeric);
+		if (!numeric || index < 0 || index > 255) continue;
+
+		const QRgb colour = bssh_palette_colour(self->ansi, index);
+
+		self->reply(QByteArrayLiteral("\x1b]4;")
+		             + QByteArray::number(index)
+		             + QByteArrayLiteral(";")
+		             + rgb_reply(colour)
+		             + QByteArrayLiteral("\x1b\\"));
+	}
+
+	return 1;
+}
+
 int on_osc_colour(int command, const QByteArray &payload, bssh_emulator_private *self) {
 	if (!self->features.enabled(bssh_term_features_t::COLOUR_QUERY)) return 1;
 	if (payload.trimmed() != "?") return 1;
 
 	const QRgb colour = command == 10 ? self->foreground_rgb : self->background_rgb;
 
-	const auto channel = [](int eight) {
-		return QByteArray::number((eight << 8) | eight, 16).rightJustified(4, '0');
-	};
-
 	self->reply(QByteArrayLiteral("\x1b]")
 	             + QByteArray::number(command)
-	             + QByteArrayLiteral(";rgb:")
-	             + channel(qRed(colour)) + QByteArrayLiteral("/")
-	             + channel(qGreen(colour)) + QByteArrayLiteral("/")
-	             + channel(qBlue(colour))
+	             + QByteArrayLiteral(";")
+	             + rgb_reply(colour)
 	             + QByteArrayLiteral("\x1b\\"));
 	return 1;
 }
@@ -822,7 +909,10 @@ int on_osc_colour(int command, const QByteArray &payload, bssh_emulator_private 
 /* iTerm2 inline images: OSC 1337. */
 int on_osc(int command, VTermStringFragment frag, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
-	if (command != 1337 && command != 8 && command != 10 && command != 11) return 0;
+	if (command != 1337 && command != 8 && command != 4
+	    && command != 10 && command != 11) {
+		return 0;
+	}
 
 	if (frag.initial) self->osc_buffer.clear();
 	self->osc_buffer.append(frag.str, int(frag.len));
@@ -835,6 +925,7 @@ int on_osc(int command, VTermStringFragment frag, void *user) {
 	 * silence -- a whole feature doing nothing, with no error anywhere.
 	 */
 	if (command == 8) return on_osc_link(self->osc_buffer, self);
+	if (command == 4) return on_osc_palette(self->osc_buffer, self);
 	if (command == 10 || command == 11) {
 		return on_osc_colour(command, self->osc_buffer, self);
 	}
@@ -1741,6 +1832,12 @@ const bssh_term_features_t &bssh_emulator::features() const {
 
 void bssh_emulator::set_term_name(const QString &term) {
 	if (!term.isEmpty()) m_private->term_name = term;
+}
+
+void bssh_emulator::set_palette(const QRgb *ansi) {
+	if (!ansi) return;
+
+	for (int i = 0; i < 16; ++i) m_private->ansi[i] = ansi[i];
 }
 
 void bssh_emulator::set_colours(QRgb foreground, QRgb background) {

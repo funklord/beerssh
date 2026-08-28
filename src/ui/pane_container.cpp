@@ -137,6 +137,7 @@ void bssh_pane_container::rebuild() {
 			session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
 			session->emulator()->set_colours(view->terminal_foreground().rgb(),
 			                                  view->terminal_background().rgb());
+			session->emulator()->set_palette(view->terminal_palette());
 			session->resize(view->cols(), view->rows());
 		});
 
@@ -150,6 +151,7 @@ void bssh_pane_container::rebuild() {
 		 */
 		session->emulator()->set_colours(view->terminal_foreground().rgb(),
 		                                  view->terminal_background().rgb());
+		session->emulator()->set_palette(view->terminal_palette());
 
 		/*
 		 * Per-pane geometry: each pane computes its own cols x rows from

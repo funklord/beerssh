@@ -1642,6 +1642,22 @@ the tier-1 switches.
   colours after the contrast floor and the brightness slider, since a client
   compositing against the background wants what is on screen rather than
   what is in the scheme file.
+- **OSC 4**, what colour a palette index is — ranked first on the asker's
+  second pass, with the most interesting cost of the three. qtty quantises
+  its own colours into the 256-colour palette and assumed xterm's default
+  table. Indices 16–255 are a formula every terminal computes identically, so
+  those were right; **0–15 are the user's scheme**, so every quantised colour
+  landing there was computed against the wrong table. The output does not
+  look broken — it looks slightly off, which is the failure nobody reports,
+  and asking is the only way to find out.
+  Answered as the palette **is**, before the brightness slider dims anything:
+  the slider is a per-cell display adjustment applied to a foreground but not
+  to the terminal's own background, so there is no single dimmed value an
+  index *has*. OSC 4 means the mapping from index to colour.
+  The 16–255 formula is now **shared** with the renderer as
+  `bssh_palette_colour()` rather than copied: a client quantising into this
+  palette relies on what we paint and what we report agreeing exactly, and
+  two copies of a formula is how they stop.
 - **`CSI 14 t` and `CSI 16 t`**, the text area and one cell in pixels.
   Without the cell size an image's aspect ratio cannot be preserved: a
   half-block pixel is one cell wide and half a cell tall, so assuming 1:2
@@ -1656,7 +1672,15 @@ the tier-1 switches.
   grow that into something worse is a later `t` handler written beside them,
   so the silence has its own assertion and its own sabotage entry.
 
-Both are switchable, as `colour-query` and `window-size`.
+All three are switchable: OSC 4, 10 and 11 together as `colour-query`, and
+the two window reports as `window-size`.
+
+**What remains unanswered is unanswered because nobody needs it**, which is a
+better reason than a rule. Asked to rank the rest, qtty replied that OSC 12,
+OSC 7, DA3 and the title stack cost it nothing today — it has no title
+emitter at all, and it lets the terminal colour its own cursor. That is the
+shape a request should take here: the sequence, what the silence costs, and
+what answering buys.
 
 **The tier-1 switches were deferred once, at the asker's request, and that
 round trip is the clearest argument in this exchange for asking before
@@ -1671,12 +1695,14 @@ took a two-line move instead of a patch.
 
 **Two practices came out of the exchange and are worth keeping.**
 - **Any figure either side quotes about the other needs a timestamp and the
-  other binary's mtime.** qtty twice measured this terminal while it was being
-  rebuilt underneath, and the second time nearly filed a parser bug that did
-  not exist — its tool reported our background colour unanswered while a
-  capture minutes later showed it arriving, because we had gained OSC 11 in
-  between. Neither reading was wrong about what it saw; both were about a
-  binary that no longer existed.
+  other binary's mtime — checked again *after* the run, not only before.**
+  qtty twice measured this terminal while it was being rebuilt underneath, and
+  the second time nearly filed a parser bug that did not exist — its tool
+  reported our background colour unanswered while a capture minutes later
+  showed it arriving, because we had gained OSC 11 in between. Neither reading
+  was wrong about what it saw; both were about a binary that no longer
+  existed. The after-check is qtty's addition and is the half that catches it:
+  what fooled it was a rebuild landing *during* a run rather than before one.
 - **A specific wrong cause is worse than a vague one.** qtty attributed a
   five-per-cent aspect error to its own compositing function, then corrected
   itself: the function references cell metrics nowhere, and the cause is its

@@ -591,16 +591,13 @@ QColor bssh_terminal_view::resolve(const bssh_color_t &color, const QColor &fall
 	 * recolouring those would make this terminal disagree with every
 	 * other one about what 256-colour output looks like.
 	 */
-	if (index < 16) return QColor(m_scheme.ansi[index]);
-
-	if (index < 232) {
-		const int offset = index - 16;
-		const int steps[6] = {0, 95, 135, 175, 215, 255};
-		return QColor(steps[(offset / 36) % 6], steps[(offset / 6) % 6], steps[offset % 6]);
-	}
-
-	const int grey = 8 + (index - 232) * 10;
-	return QColor(grey, grey, grey);
+	/*
+	 * Shared with the emulator, which has to give the same answer when a
+	 * remote asks with OSC 4 -- a client quantising its own colours into
+	 * this palette relies on the two agreeing exactly, and two copies of
+	 * a formula is the way they stop.
+	 */
+	return QColor(bssh_palette_colour(m_scheme.ansi, index));
 }
 
 void bssh_terminal_view::update_metrics() {

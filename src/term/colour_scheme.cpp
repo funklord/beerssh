@@ -247,3 +247,21 @@ QRgb bssh_raise_contrast(QRgb colour, QRgb against) {
 	 */
 	return lighten ? qRgb(255, 255, 255) : qRgb(0, 0, 0);
 }
+
+QRgb bssh_palette_colour(const QRgb ansi[16], int index) {
+	if (index < 0) return ansi[0];
+	if (index < 16) return ansi[index];
+
+	if (index < 232) {
+		const int offset = index - 16;
+		static const int steps[6] = { 0, 95, 135, 175, 215, 255 };
+		return qRgb(steps[(offset / 36) % 6], steps[(offset / 6) % 6], steps[offset % 6]);
+	}
+
+	if (index < 256) {
+		const int grey = 8 + (index - 232) * 10;
+		return qRgb(grey, grey, grey);
+	}
+
+	return ansi[0];
+}

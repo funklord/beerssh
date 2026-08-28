@@ -11,8 +11,8 @@
 [[sabotage]]
 name = "the background colour query goes unanswered"
 file = "src/term/emulator_vterm.cpp"
-find = "\tif (command == 8) return on_osc_link(self->osc_buffer, self);\n\tif (command == 10 || command == 11) {\n\t\treturn on_osc_colour(command, self->osc_buffer, self);\n\t}"
-replace = "\tif (command == 8) return on_osc_link(self->osc_buffer, self);"
+find = "\tif (command == 10 || command == 11) {\n\t\treturn on_osc_colour(command, self->osc_buffer, self);\n\t}"
+replace = "\t(void)0;"
 expect = "the_terminal_answers_the_questions_a_compositing_client_asks"
 
 # Each channel is DOUBLED to sixteen bits, not shifted. 0xff must come
@@ -63,3 +63,36 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tif (name == \"Tc\") return true;"
 replace = "\tif (name == \"Tc\") return false;"
 expect = "the_terminal_answers_the_questions_a_compositing_client_asks"
+
+# OSC 4, ranked first by the asker on its second pass. Its colour model
+# quantises into the 256-colour palette and assumed xterm's default
+# table: 16-255 are a formula every terminal computes identically, so
+# those were right, but 0-15 are the user's scheme -- so every quantised
+# colour landing there was computed against the wrong table. The output
+# does not look broken, it looks slightly off, which is the failure
+# nobody reports.
+[[sabotage]]
+name = "the palette query goes unanswered"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (command == 4) return on_osc_palette(self->osc_buffer, self);"
+replace = "\t(void)0;"
+expect = "the_palette_query_reports_the_hosts_own_sixteen"
+
+# The half a client cannot compute for itself. Falling back to the
+# standard table for 0-15 answers confidently and wrongly, which is worse
+# than not answering -- it is the same defect the DA1 and kitty fixes
+# addressed, in the one place a client has no way to check.
+[[sabotage]]
+name = "the low sixteen come from xterm rather than the host's scheme"
+file = "src/term/colour_scheme.cpp"
+find = "\tif (index < 16) return ansi[index];"
+replace = "\tif (index < 16) return bssh_palette_colour(ansi, index + 16);"
+expect = "the_palette_query_reports_the_hosts_own_sixteen"
+
+# And a set is not a query, the same line OSC 10 and OSC 11 take.
+[[sabotage]]
+name = "a palette SET is treated as a query"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (parts.at(i + 1).trimmed() != \"?\") continue;"
+replace = "\t\t(void)0;"
+expect = "the_palette_query_reports_the_hosts_own_sixteen"
