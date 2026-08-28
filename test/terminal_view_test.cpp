@@ -2293,3 +2293,59 @@ void terminal_view_test::the_cursor_style_reaches_the_pixels() {
 	QVERIFY2(bar.first.left() < block.first.left() + cw / 2,
 	          "a bar belongs at the left of the cell");
 }
+
+void terminal_view_test::a_reattached_screen_is_not_read_from_the_old_one() {
+	/*
+	 * The accessibility layer caches the flattened text and invalidates
+	 * it on the view's content revision -- and only on_screen_damaged()
+	 * used to move that. So a view pointed at a different screen went on
+	 * reporting the FIRST one's text to a screen reader until something
+	 * happened to damage the new one.
+	 *
+	 * This is not reachable in the app today and the test says so
+	 * deliberately: bssh_pane_container::rebuild() constructs a fresh
+	 * view per pane, so nothing is ever re-attached and the cache is new
+	 * each time. The contract was true by an accident of how panes are
+	 * rebuilt rather than by anything in the view -- which is sec 12.4's
+	 * scrollbar that tracked its history correctly because two of three
+	 * signal sites happened to damage the screen as a side effect. A
+	 * consumer that is right by coincidence looks exactly like a wired
+	 * one, and the way to tell them apart is to drive the path the
+	 * coincidence does not cover.
+	 *
+	 * Found by the sibling qtty asking its own question of a GATE rather
+	 * than a payload: its frame scheduler compared image COUNTS to
+	 * decide whether to send a frame, so a picture repainted in place
+	 * was computed correctly and never transmitted. Same fault, same
+	 * position -- a change detector reading a property that does not
+	 * change when the content does.
+	 */
+	bssh_emulator first(40, 6);
+	first.feed(QByteArrayLiteral("the first terminal"));
+
+	bssh_emulator second(40, 6);
+	second.feed(QByteArrayLiteral("a different terminal"));
+
+	bssh_terminal_view view;
+	view.resize(600, 200);
+	view.attach_screen(&first.screen());
+
+	QAccessibleInterface *a = QAccessible::queryAccessibleInterface(&view);
+	QVERIFY(a);
+
+	/*
+	 * Read FIRST, so the cache is populated. Without this the test would
+	 * pass against the defect: nothing is cached until somebody asks,
+	 * and a fresh cache reads the new screen correctly.
+	 */
+	QVERIFY(a->text(QAccessible::Value).contains(QStringLiteral("the first terminal")));
+
+	view.attach_screen(&second.screen());
+
+	const QString now = a->text(QAccessible::Value);
+	QVERIFY2(now.contains(QStringLiteral("a different terminal")),
+	          qPrintable(QStringLiteral("a reader was still being given the old screen: %1")
+	                             .arg(now.left(120))));
+	QVERIFY2(!now.contains(QStringLiteral("the first terminal")),
+	          "and the old text must be gone, not merely joined by the new");
+}

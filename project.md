@@ -1073,6 +1073,31 @@ model on a finger.
   as a silent absence, which is the same call as the wheel guard's exclusion
   and the XTGETTCAP consume.
 
+- **A change detector that did not detect the change.** The accessibility
+  layer caches the flattened scrollback-plus-screen text and invalidates it on
+  the view's `content_revision` — and only `on_screen_damaged()` moved that.
+  So a view pointed at a *different* screen went on reporting the previous
+  session's text to a screen reader until something happened to damage the new
+  one.
+  **Not reachable in the app**, and recording that is the point rather than a
+  hedge: `bssh_pane_container::rebuild()` constructs a fresh view per pane, so
+  nothing is ever re-attached and the cache is new each time. The contract was
+  true by an accident of how panes are rebuilt rather than by anything in the
+  view — which is this section's own scrollbar, tracking its history correctly
+  because two of three emit sites happened to damage the screen as a side
+  effect. **A consumer that is right by coincidence looks exactly like a wired
+  one**, and the way to tell them apart is to drive the path the coincidence
+  does not cover.
+  The lens is `qtty`'s again, sharpened: **ask the question of the GATE, not
+  the payload.** Its frame scheduler compared image *counts* to decide whether
+  to send a frame, so a picture repainted in place was computed correctly and
+  never transmitted — the same fault in the same position, a change detector
+  reading a property that does not change when the content does. The payload
+  is what tests get written about.
+  The test reads once before re-attaching, because nothing is cached until
+  somebody asks and a fresh cache reads the new screen correctly — without
+  that first read it would pass against the defect.
+
 - **`cursor_style` was serialised four ways and drawn one.** Round-tripped
   through JSON, through the INI, through the preset editor and through the
   settings resolver — and nothing asserted it ever changed what is *painted*.

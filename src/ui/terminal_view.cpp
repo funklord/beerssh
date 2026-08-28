@@ -370,17 +370,50 @@ const QFont &bssh_terminal_view::cell_font(const QString &family, bool bold, boo
 	return *m_font_cache.insert(key, font);
 }
 
+/*
+ * Attaching a different screen, scrollback or image store is a content
+ * change, and each of these bumps the revision to say so.
+ *
+ * It is the revision that invalidates the accessibility layer's cache of
+ * the flattened text (terminal_accessible.cpp), and only
+ * on_screen_damaged() used to move it. So a view pointed at another
+ * session's screen went on reporting the first session's text to a
+ * screen reader until something happened to damage the new one.
+ *
+ * NOT REACHABLE IN THE APP TODAY, and saying so is the point rather than
+ * a hedge: bssh_pane_container::rebuild() constructs a fresh view for
+ * every pane, so no view is ever re-attached and the cache is new each
+ * time. The contract was therefore true by an accident of how panes are
+ * rebuilt rather than by anything here -- which is the shape sec 12.4
+ * already records for the scrollbar that tracked its history correctly
+ * because two of three signal sites happened to damage the screen as a
+ * side effect. A consumer that is right by coincidence looks exactly
+ * like a wired one.
+ *
+ * Found by the sibling qtty asking its own question of a GATE rather
+ * than a payload: its frame scheduler compared image COUNTS to decide
+ * whether to send a frame, so a picture repainted in place was computed
+ * correctly and never transmitted. This is the same fault in the same
+ * position -- a change detector reading a property that does not change
+ * when the content does.
+ */
 void bssh_terminal_view::attach_screen(const bssh_screen *screen) {
+	if (m_screen != screen) ++m_content_revision;
+
 	m_screen = screen;
 	update();
 }
 
 void bssh_terminal_view::attach_images(const bssh_image_store *images) {
+	if (m_images != images) ++m_content_revision;
+
 	m_images = images;
 	update();
 }
 
 void bssh_terminal_view::attach_scrollback(const bssh_scrollback *scrollback) {
+	if (m_scrollback != scrollback) ++m_content_revision;
+
 	m_scrollback = scrollback;
 	update();
 }

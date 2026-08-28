@@ -17,6 +17,7 @@ class terminal_view_test : public QObject {
 
 private slots:
 	void the_cursor_style_reaches_the_pixels();
+	void a_reattached_screen_is_not_read_from_the_old_one();
 	void an_unfocused_cursor_is_hollow();
 	void only_the_focused_pane_blinks();
 	void alt_drag_asks_for_the_pane_to_be_moved();

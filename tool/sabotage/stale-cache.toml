@@ -1,0 +1,36 @@
+# Sabotages for a change detector that reads a property which does not
+# change when the content does.
+#
+# The accessibility layer caches the flattened text and invalidates it on
+# the view's content revision. Only on_screen_damaged() used to move
+# that, so attaching a different screen left a screen reader being given
+# the previous session's text.
+#
+# NOT reachable in the app: bssh_pane_container::rebuild() constructs a
+# fresh view per pane, so nothing is ever re-attached. The contract was
+# true by an accident of how panes are rebuilt rather than by anything in
+# the view -- sec 12.4's scrollbar tracking its history correctly because
+# two of three emit sites happened to damage the screen. A consumer right
+# by coincidence looks exactly like a wired one, and the way to tell them
+# apart is to drive the path the coincidence does not cover.
+#
+# Found by the sibling qtty asking its own question of a GATE rather than
+# a payload: its frame scheduler compared image counts to decide whether
+# to send a frame, so a picture repainted in place was computed correctly
+# and never transmitted.
+
+[[sabotage]]
+name = "attaching a different screen does not count as a change"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_screen != screen) ++m_content_revision;"
+replace = "\t(void)0;"
+expect = "a_reattached_screen_is_not_read_from_the_old_one"
+
+# And the cache itself, so the pair is anchored at both ends: a revision
+# that moves correctly is no use to a cache that ignores it.
+[[sabotage]]
+name = "the flattened text is cached for ever"
+file = "src/ui/terminal_accessible.cpp"
+find = "\tif (m_flat.valid && m_flat.revision == revision) return m_flat;"
+replace = "\tif (m_flat.valid) return m_flat;"
+expect = "a_reattached_screen_is_not_read_from_the_old_one"
