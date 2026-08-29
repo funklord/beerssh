@@ -1090,6 +1090,30 @@ model on a finger.
   as a silent absence, which is the same call as the wheel guard's exclusion
   and the XTGETTCAP consume.
 
+- **A new `#include` does not update qmake's dependencies, so a later header
+  change silently does not rebuild.** qmake scans includes when it *generates*
+  the Makefile; the generated file then carries a static dependency list rather
+  than reading `-MMD` `.d` files back. Add an `#include` to an existing source
+  and that object's dependency list is missing the new header until qmake runs
+  again — and the top-level Makefile only regenerates when the `.pro` changes,
+  which adding an include does not.
+  Measured: after `src/ui/licences_view.cpp` gained `#include
+  "model/command_line.h"`, `grep` for that header in the generated
+  `licences_view.o` rule returned **0**, and touching the header rebuilt
+  nothing. Touching the `.pro` files fixed it and the count went to 1.
+  **The symptom is what makes it expensive**, and it is §12.3's own warning
+  about stale artifacts arriving as a confusing failure far from the cause: a
+  test asserted a string, and the failure printed a *different* string that was
+  in no source file in the tree — the previous build's copy, surviving in an
+  object nothing knew to rebuild. Two runs went into disbelieving the source
+  before the dependency list was suspected.
+  It is a property of qmake rather than a defect here, and no rule in
+  `build-and-commit.md` covers it: that section is about hand-written
+  Makefiles reading `.d` files back, and this is the generated one not having
+  been regenerated. The practical rule is narrow — **after adding an
+  `#include` to a file, touch the `.pro`** — and it is written here because
+  the failure gives no hint of it.
+
 - **Nothing asserted that resizing a pane tells the remote its size.** The
   fake transport has counted window-changes since it was written; the only
   caller that ever read the count is `live_ssh_test`, which needs a real
