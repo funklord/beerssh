@@ -118,7 +118,8 @@ int main(int argc, char *argv[]) {
 		return 0;
 	}
 	if (line.version) {
-		out << "beerssh " << BSSH_VERSION_STRING << Qt::endl;
+		out << "beerssh " << BSSH_VERSION_STRING << Qt::endl
+		     << BSSH_COPYRIGHT_LINE << Qt::endl;
 		return 0;
 	}
 	if (line.man) {

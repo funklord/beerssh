@@ -44,6 +44,7 @@
 #include "model/conn_manager.h"
 #include "model/session_registry.h"
 #include "model/app_settings.h"
+#include "model/command_line.h"
 #include "model/window_title.h"
 #include "model/settings_resolver.h"
 #include "ui/layout_manager.h"
@@ -2539,19 +2540,32 @@ void bssh_main_window::build_menu_bar() {
 	QAction *about = help->addAction(QStringLiteral("&About BeerSSH"));
 	connect(about, &QAction::triggered, this, [this] {
 		/*
-		 * The version is a define the APP's .pro sets, and the test
-		 * build does not. Guarded rather than added to the second
-		 * project file, because the version belongs to what ships.
+		 * The version is a define the project files set. Both of them
+		 * do now -- test/tests.pro gained it when the emulator started
+		 * answering XTVERSION with this program's own name -- so the
+		 * guard no longer distinguishes the app build from the test
+		 * one. It stays because it is still true of a build that sets
+		 * neither, and "development build" is a better thing to show
+		 * than a compile error.
 		 */
 #ifdef BSSH_VERSION_STRING
 		const QString version = QStringLiteral(BSSH_VERSION_STRING);
 #else
 		const QString version = QStringLiteral("development build");
 #endif
+		/*
+		 * The copyright line comes from the same constant --version
+		 * prints, so the two surfaces cannot drift. Escaped, because
+		 * QMessageBox::about renders rich text and the address would
+		 * otherwise be eaten as an unknown tag.
+		 */
 		QMessageBox::about(this, QStringLiteral("About BeerSSH"),
 		                    QStringLiteral("<b>BeerSSH</b><br><br>"
 		                                    "An SSH terminal for desktop and Android."
-		                                    "<br>Version %1").arg(version));
+		                                    "<br>Version %1<br><br>%2")
+		                            .arg(version,
+		                                  QString(QStringLiteral(BSSH_COPYRIGHT_LINE))
+		                                          .toHtmlEscaped()));
 	});
 
 	refresh_menu_bar();

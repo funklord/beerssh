@@ -1,0 +1,31 @@
+# Sabotages for naming the copyright holder (harmonization.md,
+# 2026-08-29): --version, the About window, and the README.
+#
+# Attribution, not licensing. Naming the holder is a statement of fact
+# that grants nothing, creates no obligation to add a LICENSE, and does
+# not touch this project's licensing position, which CLAUDE.md reserves
+# to the copyright holder alone.
+#
+# The point of the constant is that three surfaces read ONE string.
+# Breaking it has to fail, or a later edit can leave the About box and
+# the command line disagreeing about who wrote this -- which is the
+# failure a per-surface literal would have made invisible.
+
+# The touch surface, which had no version and no attribution at all
+# before this: a phone has no menu bar, so the desktop About box does
+# not exist there and the licences page is the only place the app says
+# what it is.
+[[sabotage]]
+name = "the touch surface names nobody"
+file = "src/ui/licences_view.cpp"
+find = "\touter->addWidget(identity);"
+replace = "\t(void)identity;"
+expect = "every_surface_names_the_copyright_holder"
+
+# And the constant itself, which is what stops the surfaces drifting.
+[[sabotage]]
+name = "the shared line stops naming the holder"
+file = "src/model/command_line.h"
+find = "#define BSSH_COPYRIGHT_LINE \"Copyright (C) 2026 Nabeel Sowan <nabeel@vibes.se>\""
+replace = "#define BSSH_COPYRIGHT_LINE \"Copyright (C) 2026\""
+expect = "every_surface_names_the_copyright_holder"

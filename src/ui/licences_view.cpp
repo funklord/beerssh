@@ -1,6 +1,8 @@
 #include "ui/touch_metrics.h"
 #include "ui/licences_view.h"
 
+#include "model/command_line.h"
+
 #include <QDir>
 #include <QFile>
 #include <QHBoxLayout>
@@ -8,6 +10,7 @@
 #include <QScroller>
 #include <QPushButton>
 #include <QTextBrowser>
+#include <QLabel>
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
@@ -55,6 +58,42 @@ bssh_licences_view::bssh_licences_view(QWidget *parent)
 	const bool touch = platform && platform->is_touch_primary();
 
 	QVBoxLayout *outer = new QVBoxLayout(this);
+
+	/*
+	 * What this program is, which version, and who wrote it -- and on
+	 * touch this page is the ONLY place any of that appears.
+	 *
+	 * The desktop has an About box on its menu bar; a phone has no menu
+	 * bar, so before this there was no surface on Android saying what
+	 * version was running or who to attribute it to. sec 8.3 already
+	 * argues that a bug report wants to name what it was running on,
+	 * which is the same argument for naming the build.
+	 *
+	 * Here rather than as a second page, because this page is already
+	 * "what this app is made of" and the app itself is the first entry
+	 * in that answer. A separate About screen on touch would be one more
+	 * thing to find (sec 8.5) for one paragraph.
+	 *
+	 * The copyright line is the constant --version and the About box
+	 * both read, so the three surfaces cannot drift. Attribution, not
+	 * licensing: it grants nothing and creates no obligation to add a
+	 * LICENSE, which stays the copyright holder's alone.
+	 */
+#ifdef BSSH_VERSION_STRING
+	const QString version = QStringLiteral(BSSH_VERSION_STRING);
+#else
+	const QString version = QStringLiteral("development build");
+#endif
+
+	QLabel *identity = new QLabel(
+	        QStringLiteral("<b>BeerSSH</b> %1<br>%2")
+	                .arg(version.toHtmlEscaped(),
+	                      QString(QStringLiteral(BSSH_COPYRIGHT_LINE)).toHtmlEscaped()),
+	        this);
+	identity->setTextFormat(Qt::RichText);
+	identity->setWordWrap(true);
+	identity->setObjectName(QStringLiteral("licences_identity"));
+	outer->addWidget(identity);
 
 	m_list = new QListWidget(this);
 	m_list->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);

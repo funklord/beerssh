@@ -1,5 +1,7 @@
 # BeerSSH
 
+Copyright (C) 2026 Nabeel Sowan <nabeel@vibes.se>
+
 An SSH terminal for **Android and desktop** — background sessions, tabs,
 adaptive splits, and a real keyboard. Qt Widgets, C++, one codebase for
 both platforms.

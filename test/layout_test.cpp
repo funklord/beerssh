@@ -24,6 +24,7 @@
 #include <QDropEvent>
 #include <QtTest>
 
+#include "model/command_line.h"
 #include "model/profile.h"
 #include "platform/platform.h"
 #include <QTemporaryDir>
@@ -38,6 +39,7 @@
 #include "ui/session_dialog.h"
 #include "ui/ssh_config_import.h"
 #include <QCheckBox>
+#include <QLabel>
 #include <QListWidget>
 #include <QMenu>
 #include <QSplitter>
@@ -2284,6 +2286,84 @@ void layout_test::the_biometric_setting_is_absent_where_it_cannot_work() {
 	}
 
 	bssh_platform::force_biometric(-1);
+}
+
+void layout_test::every_surface_names_the_copyright_holder() {
+	/*
+	 * harmonization.md, 2026-08-29: the holder is named in --version, in
+	 * the About window, and in the README. This asserts the two that are
+	 * code; the README is prose and the gate that reads it is a person.
+	 *
+	 * ATTRIBUTION, NOT LICENSING, and the test says so because the next
+	 * reader of this file will wonder: naming the holder is a statement
+	 * of fact that grants nothing, creates no obligation to add a
+	 * LICENSE, and does not touch this project's licensing position --
+	 * which CLAUDE.md reserves to the copyright holder alone.
+	 *
+	 * Asserted against the CONSTANT rather than against a literal. A
+	 * test carrying its own copy of the line would pass while the
+	 * surfaces drifted from each other, which is the whole reason there
+	 * is a constant -- and the address in it is exactly the kind of
+	 * string a second copy gets subtly wrong.
+	 */
+	const QString expected = QStringLiteral(BSSH_COPYRIGHT_LINE);
+	QVERIFY2(expected.contains(QStringLiteral("Nabeel Sowan")),
+	          "the constant itself must name the holder, or every check below is vacuous");
+
+	/*
+	 * The touch surface, which had NO version and no attribution before
+	 * this: a phone has no menu bar, so the desktop About box does not
+	 * exist there and the licences page is the only place the app says
+	 * what it is. That asymmetry is the one sec 10 keeps recording.
+	 */
+	{
+		const forced_touch_t thumb(1);
+
+		bssh_licences_view view;
+		const QLabel *identity =
+		        view.findChild<QLabel *>(QStringLiteral("licences_identity"));
+		QVERIFY2(identity, "the touch front door must have somewhere the app names itself");
+
+		/*
+		 * IN THE LAYOUT, not merely constructed. The first version of
+		 * this asked findChild() for the label and checked its text --
+		 * and findChild finds a widget that was built with the view as
+		 * its parent whether or not anything ever put it on the page.
+		 * The sabotage runner said so: deleting the addWidget left the
+		 * suite green, so the assertion was about construction and the
+		 * user would have seen nothing.
+		 *
+		 * That is the same defect this session spent the day finding
+		 * in other people's code and in this one's -- correctly built,
+		 * delivered nowhere -- written into the test for the fix.
+		 */
+		QVERIFY(view.layout());
+		QVERIFY2(view.layout()->indexOf(const_cast<QLabel *>(identity)) >= 0,
+		          "the label exists but was never added to the page");
+
+		const QString shown = identity->text();
+		QVERIFY2(shown.contains(QStringLiteral("Nabeel Sowan")),
+		          qPrintable(QStringLiteral("no attribution on the touch surface: %1")
+		                             .arg(shown)));
+		QVERIFY2(shown.contains(QStringLiteral("BeerSSH")), qPrintable(shown));
+	}
+
+	/*
+	 * And the same page on a pointer, because it is reachable there too
+	 * and a surface that names the holder only on one platform is the
+	 * asymmetry this test exists to close.
+	 */
+	{
+		const forced_touch_t pointer(0);
+
+		bssh_licences_view view;
+		const QLabel *identity =
+		        view.findChild<QLabel *>(QStringLiteral("licences_identity"));
+		QVERIFY(identity);
+		QVERIFY(view.layout());
+		QVERIFY(view.layout()->indexOf(const_cast<QLabel *>(identity)) >= 0);
+		QVERIFY(identity->text().contains(QStringLiteral("Nabeel Sowan")));
+	}
 }
 
 void layout_test::the_screenshot_setting_is_absent_where_it_cannot_work() {

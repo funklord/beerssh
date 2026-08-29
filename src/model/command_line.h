@@ -28,6 +28,23 @@
  * agreed only by coincidence, and neither could report an error about
  * the other's arguments.
  */
+/*
+ * Who wrote this, in one place because it appears in three (harmonization
+ * .md, 2026-08-29): --version, the About box, and the README.
+ *
+ * ATTRIBUTION, NOT LICENSING. Naming the holder is a statement of fact --
+ * authorship vests automatically and saying who wrote something grants
+ * nothing. It creates no obligation to add a LICENSE and does not touch
+ * this project's licensing position, which CLAUDE.md reserves to the
+ * copyright holder alone.
+ *
+ * Here rather than in main() so the About box and the command line cannot
+ * drift: three surfaces reading one constant is the whole reason it is a
+ * constant. The year is the one the work began, 2026, per the rule --
+ * not a year chosen to fill the field.
+ */
+#define BSSH_COPYRIGHT_LINE "Copyright (C) 2026 Nabeel Sowan <nabeel@vibes.se>"
+
 struct bssh_command_line_t {
 	/* [user@]host[:port]. Empty means no destination was given. */
 	QString target;
