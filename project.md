@@ -47,6 +47,36 @@ users have the package.
 - Keep the JuiceSSH-successor framing in the **store listing and README only**,
   never in the app name — it aids discovery without making the brand a dependent
   of someone else's product.
+- **The placeholder icon now ships on Android too**, which it did not: the APK
+  carried **no launcher icon at all** and the packaged manifest read
+  `icon=''`, so the phone showed a system default while the desktop `.desktop`
+  entry had an icon since 2026-08-03. `android/AndroidManifest.xml` still held
+  androiddeployqt's `%%INSERT_APP_ICON%%` placeholder with nothing to insert,
+  because there was no `android/res/` at all.
+  **This settles nothing about branding.** The SVG's own comment says it is a
+  placeholder and that the direction is the [OPEN] item below; it also gives
+  the argument that applies here, having anticipated exactly this case — *"a
+  .desktop entry without an icon is a defective .desktop entry: software
+  centres show a blank tile and some refuse the launcher altogether."* A
+  launcher with no icon is the same defect on the other platform, so shipping
+  the existing placeholder is consistency rather than a decision.
+  The five `mipmap-*/ic_launcher.png` are **generated from that one SVG** and
+  committed so the build needs no rasteriser. If the SVG changes they must be
+  regenerated, and the command is recorded here so that is a copy-paste rather
+  than a rediscovery:
+
+      for d in "mdpi 48" "hdpi 72" "xhdpi 96" "xxhdpi 144" "xxxhdpi 192"; do
+          set -- $d
+          inkscape --export-type=png \
+                   --export-filename="android/res/mipmap-$1/ic_launcher.png" \
+                   -w $2 -h $2 packaging/se.vibes.beerssh.svg
+      done
+
+  **Verified on the artifact, not on a device**: the APK carries all five
+  densities and `aapt2 dump badging` reports
+  `icon='res/mipmap-mdpi-v4/ic_launcher.png'` where it previously reported
+  `icon=''`. The phone disconnected before the launcher itself could be
+  looked at, so what the launcher draws is unconfirmed.
 - **[OPEN]** Icon/branding direction (a mug, a bottle cap, foam, or something
   abstract) — worth deciding before store assets are produced.
 
