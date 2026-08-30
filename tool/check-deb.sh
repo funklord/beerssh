@@ -72,7 +72,10 @@ fi
 # runtime error and not a syntax one.
 CONTAINER=bssh-check-deb-$$
 STAGE=
-trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; [ -n "$STAGE" ] && rm -rf "$STAGE"; true' EXIT INT TERM
+trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; [ -n "$STAGE" ] && rm -rf "$STAGE"; true' EXIT
+# INT and TERM only exit; `exit` runs the EXIT trap above, so the
+# cleanup lives in exactly one place.
+trap 'exit 130' INT TERM
 
 if [ -n "${DEB_DIR:-}" ]; then
 	echo "check-deb: using the packages already in $DEB_DIR"
@@ -196,6 +199,20 @@ if [ -e /usr/bin/beerssh ]; then
 	exit 1
 fi
 echo "check-deb: it uninstalls cleanly"
-'
+' &
+# `wait` rather than a plain call, because a shell trap CANNOT preempt a
+# foreground command -- it runs only once that command returns. Measured:
+# a script sleeping in the foreground ignores SIGTERM until the sleep ends,
+# while the same script backgrounding it and waiting fires its trap at once.
+# So the kill below was unreachable in the one case it was written for. It
+# ran on the normal exit path, where the container has already gone and
+# killing it is a no-op, and never on the interruption path.
+#
+# It is worth knowing what this still does NOT buy. An outer
+# `timeout N sg docker -c "make check-ci"` signals `sg`, and nothing
+# downstream hears it: measured, a `timeout 75` sat at 2m45s with the
+# script and the container both running underneath. Signal THIS script, or
+# kill the container by the name above -- which is what the name is for.
+wait "$!"
 
 echo "check-deb: the package installs, runs and uninstalls on a clean $IMAGE"

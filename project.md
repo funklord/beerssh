@@ -1792,6 +1792,33 @@ only definite no; `2` is recognised-but-currently-reset, which leaves a client
 believing the mode exists and enabling it again. That distinction came from
 the client end — qtty acts on it — and a veto that produced `2` would have
 been no better than none.
+**Verified from the client end, 2026-08-31, and it supplied the argument
+this section was missing.** The paragraph above pins `0` against `2`; qtty
+pins it against *silence*, which is the third option and the one a uniform
+reading of "a switch silences the probe" would produce. Its `mode_usable()`
+treats silence as "learned nothing, keep the assumption you arrived with"
+and `0` as a definite no — so a terminal going quiet on a disabled DEC mode
+leaves the client believing whatever it believed before, while answering `0`
+actually turns the capability off. **Silence for a claim, a definite no for a
+question that has one.** DECRQM is the only probe here that has one, which is
+why it is the only carve-out — and the two arguments together close all three
+alternatives, which neither does alone.
+The carve-out is defended by name rather than by this paragraph:
+`a_mode_libvterm_models_can_still_be_declined` asserts 1006, 1000, 2004 and
+1004 each answer `;0$y` with their own feature off, and
+`a_switched_off_feature_is_not_advertised_either` does the same for 2026. A
+later pass applying silence uniformly fails those, which is the point of
+writing the exact byte rather than "not empty".
+**The measurement, so it can be re-taken.** `qtty-negotiate --probes` reports
+each probe answered or silent and prints the raw bytes — an instrument built
+because its ordinary output deliberately cannot tell the two apart. Totals:
+568 B with everything on; `-kitty-graphics` drops exactly the 12-byte `a=q`
+OK; `-sixel` turns DA1 `?1;2;4c` into `?1;2c`; `-xtgettcap` drops both DCS
+replies; `-window-size` drops `CSI 14t` and `16t`; `-colour-query` drops OSC
+11 and all sixteen OSC 4 replies, leaving 121 B; `none` leaves 51 B. Nothing
+answered-but-inert anywhere. The byte count is the evidence rather than the
+pass/fail, because a reply that *shrank* rather than vanished would still be
+a reply.
 The mouse family is **one** switch (1000, 1002, 1003, 1005, 1006, 1015).
 Gating the SGR encoding alone would let a client enable tracking and then find
 no encoding it could use, which is a stranger terminal than either having a
@@ -5260,6 +5287,32 @@ The desktop build is what makes this project testable at all — use it.
   generated names are random, so an orphan from a previous run and the
   container the current run is waiting on are indistinguishable in
   `docker ps`, and there is no safe by-hand recipe to write down.
+- **That fix did not work, and proving it is what found the real defect.**
+  The `--name` half was verified immediately — the container went from
+  `reverent_mendeleev` to `bssh-check-ci-17219` — and the kill half was
+  assumed. It could not fire: **a shell trap cannot preempt a foreground
+  command**, it runs only once that command returns, and `docker run` *is*
+  the foreground command. Measured on a two-line fixture with a working
+  control: a script sleeping in the foreground ignores SIGTERM until the
+  sleep ends and its trap never runs, while the same script backgrounding
+  the sleep and calling `wait` fires its trap at once. Then measured on the
+  real thing, which is the control that matters — the committed shape,
+  interrupted, leaves `script: STILL RUNNING` and `container: STILL UP`;
+  backgrounding the run and waiting gives `script: exited` and
+  `container: GONE`. So the kill only ever ran on the normal exit path,
+  where the container has already gone and killing it is a no-op.
+  **A cleanup in a trap is not a cleanup until something proves the trap
+  can run**, and "the trap contains the right command" is not that proof.
+- **What it still does not buy, measured rather than assumed.** An outer
+  `timeout N sg docker -c "make check-ci"` signals `sg`, and nothing
+  downstream hears it: a `timeout 75` was observed alive at 2m45s with the
+  script and the container both running underneath it. So the original
+  incident is only half what it looked like — the wrapper did not merely
+  fail to stop the container, it did not reliably stop the *supervisor*
+  either. Signal the script itself, or kill the container by name. The name
+  is `bssh-check-ci-$$`, so it carries the pid of the shell to signal: the
+  container names its own supervisor, which is the whole answer to "which
+  process do I send this to".
 - **That fix shipped a defect of its own on the first attempt, and `sh -n`
   could not see it.** In `check-deb.sh` the name was assigned beside the
   staging tree — inside the `else` branch — while `docker run --name` sits

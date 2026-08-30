@@ -93,7 +93,10 @@ CONTAINER=bssh-check-ci-$$
 # `docker kill` on an already-exited container returns non-zero, so the
 # status is discarded: under `set -e` a failing trap command should not
 # get to decide this script's exit code.
-trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT INT TERM
+trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT
+# INT and TERM only exit; `exit` runs the EXIT trap above, so the
+# cleanup lives in exactly one place.
+trap 'exit 130' INT TERM
 
 # Only what is committed: this checks what a push would actually give the
 # runner, not what happens to be lying in the working tree.
@@ -193,7 +196,21 @@ tar xf /in/vterm.tar
 make style
 make -j\"\$(nproc)\"
 QT_QPA_PLATFORM=offscreen make test
-"
+" &
+# `wait` rather than a plain call, because a shell trap CANNOT preempt a
+# foreground command -- it runs only once that command returns. Measured:
+# a script sleeping in the foreground ignores SIGTERM until the sleep ends,
+# while the same script backgrounding it and waiting fires its trap at once.
+# So the kill below was unreachable in the one case it was written for. It
+# ran on the normal exit path, where the container has already gone and
+# killing it is a no-op, and never on the interruption path.
+#
+# It is worth knowing what this still does NOT buy. An outer
+# `timeout N sg docker -c "make check-ci"` signals `sg`, and nothing
+# downstream hears it: measured, a `timeout 75` sat at 2m45s with the
+# script and the container both running underneath. Signal THIS script, or
+# kill the container by the name above -- which is what the name is for.
+wait "$!"
 
 echo "check-ci: the linux job passes on $IMAGE"
 

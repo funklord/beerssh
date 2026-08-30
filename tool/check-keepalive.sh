@@ -43,7 +43,10 @@ fi
 # not something to let decide this script's exit code.
 CONTAINER=bssh-check-keepalive-$$
 STAGE=$(mktemp -d)
-trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT INT TERM
+trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT
+# INT and TERM only exit; `exit` runs the EXIT trap above, so the
+# cleanup lives in exactly one place.
+trap 'exit 130' INT TERM
 
 # Only what is committed, for the reason check-ci.sh carries at length:
 # `git ls-files` names tracked PATHS and the tar that follows reads them off
@@ -176,6 +179,20 @@ wait $APP || true
 restore_port
 cat $D/tunnel.log
 grep -q "^Totals: .* 0 failed" $D/tunnel.log
-'
+' &
+# `wait` rather than a plain call, because a shell trap CANNOT preempt a
+# foreground command -- it runs only once that command returns. Measured:
+# a script sleeping in the foreground ignores SIGTERM until the sleep ends,
+# while the same script backgrounding it and waiting fires its trap at once.
+# So the kill below was unreachable in the one case it was written for. It
+# ran on the normal exit path, where the container has already gone and
+# killing it is a no-op, and never on the interruption path.
+#
+# It is worth knowing what this still does NOT buy. An outer
+# `timeout N sg docker -c "make check-ci"` signals `sg`, and nothing
+# downstream hears it: measured, a `timeout 75` sat at 2m45s with the
+# script and the container both running underneath. Signal THIS script, or
+# kill the container by the name above -- which is what the name is for.
+wait "$!"
 
 echo "check-keepalive: a black-holed link is noticed, and the session comes back"
