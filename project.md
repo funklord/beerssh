@@ -1120,6 +1120,27 @@ model on a finger.
   as a silent absence, which is the same call as the wheel guard's exclusion
   and the XTGETTCAP consume.
 
+- **Two menus on the touch front door were half the size a finger needs**, and
+  only a real phone showed it. Measured on a Galaxy Note 9 at 420dpi
+  (2.625 px/dp): the licences list's rows were **48dp**, exactly the floor its
+  item delegate sets — and the host list's overflow menu rows were **23dp**.
+  `bssh_host_list` builds two menus, the overflow and the per-host
+  Edit/Delete, and neither called the shared touch-height treatment. That
+  helper lived on `bssh_main_window`, which the touch front door cannot reach
+  without depending backwards on the desktop window — so it is in
+  `touch_metrics` now, beside `bssh_apply_touch_heights`, which was already
+  the shared home for exactly this.
+  §6.2 records this same defect happening once before, to the tab menu, and
+  says the helper was pulled out *because* "every context menu in this app has
+  to change the same way". Two menus then never called it. **A shared helper
+  does not make a rule; a caller does** — and the sabotage entries this
+  project relies on cannot see a caller that was never written.
+  Confirmed on the device after the fix: the same menu measures **64dp** —
+  48dp of min-height plus the 8dp padding above and below.
+  It is also the clearest case this session for testing on hardware. Every
+  desktop test passed throughout, the suite never dropped below green, and no
+  assertion anywhere was about a menu's row height in device pixels.
+
 - **A new `#include` does not update qmake's dependencies, so a later header
   change silently does not rebuild.** qmake scans includes when it *generates*
   the Makefile; the generated file then carries a static dependency list rather
@@ -3805,11 +3826,19 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   Qt folds it into logical DPI instead, both scale together, and the leaning
   is not merely unimplemented but **unimplementable without new code**, since
   nothing in the tree distinguishes the two paths.
-  **The experiment that separates them:** run on Android with the system font
-  size changed, and compare the grid's column count against the size of chrome
-  text. One number moving without the other is the first case; both moving is
-  the second. It cannot be run here — the emulator images on this machine are
-  API 33 and no device is attached — and it is cheap on any phone.
+  **Run, on a Galaxy Note 9 (Android 10, API 29, 420dpi), and the answer is
+  NEITHER.** The system font size was moved from 0.8 to 1.3 and the app was
+  restarted: of the app's own pixels, **0.14%** differed between the two
+  renders — noise from an animated preview strip, with every label, field and
+  row identical in size and position. Qt does not apply Android's `fontScale`
+  at all, to chrome or to the grid.
+  So the leaning's first half is already satisfied — the grid does not move,
+  which is what §9.5 wants — and its second half is **not implemented and
+  needs new code**. It is implementable, and the mechanism is the one measured
+  above: setting the application font from `fontScale` would move chrome and
+  leave the grid alone, because the grid sets its own point size explicitly in
+  `bssh_font_catalog::make_font`. What remains is the decision, not the
+  question.
 
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every
@@ -4292,6 +4321,25 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
     signal rather than a change to make here — and it is the same argument
     the signature check itself was built on, that an artifact is verified
     rather than trusted because the build reported success.
+
+    **PROVEN ON A DEVICE, 2026-08-30.** A Galaxy Note 9 running Android 10,
+    API 29 — which is exactly the minimum this code targets, so it pins the
+    lower bound rather than a comfortable middle. The host editor offers the
+    checkbox, and that one fact exercises the whole chain: the native method
+    registered against `se/vibes/beerssh/BsshBiometric`, the JNI call into
+    `available()` returned, `BiometricManager.canAuthenticate()` answered
+    `BIOMETRIC_SUCCESS`, and `platform_has_biometric()` therefore returned
+    true. Any break in that chain shows as an absent control, which is the
+    same thing a device with no reader shows — so the *presence* of the
+    checkbox is the assertion.
+    It also settled a question a `dumpsys` probe could not: whether anything
+    is enrolled. Two probes for that returned empty and were recorded as
+    inconclusive rather than negative; the app's own check answered it, which
+    is the right instrument asking the right party.
+    **Still unproven: the prompt itself.** Raising it needs a saved password
+    on a real host, and the callback's trip back to the Qt thread is what
+    would be exercised. The capability half is now evidence rather than
+    intention; the release half is not.
 
     **What is proven and what is not.** The APK builds, the class is in the
     dex and `USE_BIOMETRIC` is in the packaged manifest — all three checked
