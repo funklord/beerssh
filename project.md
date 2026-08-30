@@ -4584,6 +4584,37 @@ core principle 3. Callers get an opaque ID back and never see a key mechanism.
 **`.deb`**; Flatpak and the rest deferred
 All of them want the app ID from §0.1.
 
+**Neither of these checks runs in CI, and CI stopped working on 2026-08-14.**
+Measured over the last 100 runs with `gh`: **19 successes and 81 failures**,
+the most recent green being `2026-08-14T02:52`. Many of the failures are
+runs that never started — annotated *"The job was not started because recent
+account payments have failed or your spending limit needs to be increased"* —
+and it splits on repository visibility rather than on anything in the code,
+so it is an account-level billing state that no tree can fix.
+**The date is the fact that matters, not the colour.** Everything merged here
+since 2026-08-14 has been verified by the local gates and by nothing else.
+**A blocked run is distinguishable from a real one without fetching it, and
+the numbers are not close.** No success in the window completed in under
+**326 s** (median 372); **57 of the 81 failures finished in under 10 s**
+(median 5). So a duration far below the plausible floor is the tell, visible
+in `gh run list` itself — and the remaining ~24 failures, the ones that took
+long enough to have run, are the only ones carrying information about the
+code.
+**This entry said "every run" before it said 19.** That claim came from
+reading three rows and generalising to a hundred — the scope error
+`evidence.md` records twice in two days, committed here by the same hand that
+had just discussed it. Corrected from the other end by a sibling checking its
+own repository rather than accepting a relay, which is the practice that
+caught it.
+**`make check-deb` passes as of `3a6ffce`**, run locally because that is the
+only place it can run: three packages into a clean `debian:trixie`, the app
+starting and loading 22 font faces, the manual page installed, `--help`
+working with no display, the desktop entry validating, the icon it names
+present, and a clean uninstall. Worth knowing because it is exactly the step
+two sibling projects fail at — build and lint pass there and *installing the
+built package* does not — so this is the one to re-run first when CI
+unblocks, and a first green run will not be the same as a first correct one.
+
 **Both artifacts are checked by installing them, not by building them.**
 `make check-deb` puts the packages into a clean `debian:trixie` container, lets
 apt resolve the `Depends` the binary itself generated, runs the app, validates
