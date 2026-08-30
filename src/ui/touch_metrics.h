@@ -1,6 +1,7 @@
 #ifndef BSSH_TOUCH_METRICS_H
 #define BSSH_TOUCH_METRICS_H
 
+class QMenu;
 class QWidget;
 
 /*
@@ -81,5 +82,25 @@ void bssh_apply_touch_height(QWidget *widget, bool touch);
  * taller than the floor on purpose.
  */
 void bssh_apply_touch_heights(QWidget *root, bool touch);
+
+/*
+ * The same floor for a MENU's rows, which no widget walk can reach: a
+ * QMenu's items are actions rather than widgets, so bssh_apply_touch_
+ * heights above cannot see them and a menu has to be handed over by name.
+ *
+ * Here rather than on the main window, which is where this logic first
+ * lived. The touch front door has two menus of its own -- the host
+ * list's overflow and its per-host context menu -- and neither could
+ * reach a helper that belonged to the desktop window without the front
+ * door depending on it backwards. Measured on a Galaxy Note 9 at 420dpi
+ * before this moved: the licences list's rows were 48dp, exactly the
+ * floor its delegate sets, and the overflow menu's were 23dp.
+ *
+ * sec 6.2 already gives the reason this must be shared rather than
+ * repeated: the metrics are the only thing touch changes, and every
+ * context menu has to change the same way. The tab menu had
+ * pointer-height rows until it was pulled out once already.
+ */
+void bssh_apply_touch_menu(QMenu *menu, bool touch);
 
 #endif /* BSSH_TOUCH_METRICS_H */

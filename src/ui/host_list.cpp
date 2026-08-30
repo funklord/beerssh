@@ -82,6 +82,8 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	m_menu->setPopupMode(QToolButton::InstantPopup);
 
 	QMenu *menu = new QMenu(m_menu);
+	bssh_apply_touch_menu(menu, bssh_platform::instance()
+	                              && bssh_platform::instance()->is_touch_primary());
 	/*
 	 * In the overflow menu rather than beside the add button: importing
 	 * is a once-in-a-while gesture and the floating button belongs to the
@@ -367,6 +369,8 @@ void bssh_host_list::on_row_menu(const QPoint &where) {
 
 	QMenu menu(this);
 	menu.setMinimumWidth(240);
+	bssh_apply_touch_menu(&menu, bssh_platform::instance()
+	                               && bssh_platform::instance()->is_touch_primary());
 	QAction *edit = menu.addAction(QStringLiteral("Edit"));
 	QAction *remove = menu.addAction(QStringLiteral("Delete"));
 

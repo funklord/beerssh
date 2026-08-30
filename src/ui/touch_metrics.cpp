@@ -1,5 +1,7 @@
 #include "ui/touch_metrics.h"
 
+#include <QMenu>
+
 #include <QAbstractButton>
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
@@ -59,6 +61,19 @@ void bssh_apply_touch_height(QWidget *widget, bool touch) {
 	if (!widget || !touch) return;
 
 	widget->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+}
+
+void bssh_apply_touch_menu(QMenu *menu, bool touch) {
+	if (!menu || !touch) return;
+
+	/*
+	 * A stylesheet rather than a walk, because a menu's items are
+	 * QActions and not widgets -- there is nothing for findChildren to
+	 * find. The padding is what makes the row taller than its text; the
+	 * min-height is what makes it a target.
+	 */
+	menu->setStyleSheet(QStringLiteral("QMenu::item { min-height: %1px; padding: 8px 24px; }")
+	                            .arg(BSSH_TOUCH_TARGET_DP));
 }
 
 void bssh_apply_touch_heights(QWidget *root, bool touch) {

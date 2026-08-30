@@ -2723,8 +2723,11 @@ void bssh_main_window::apply_menu_layout(QMenu *menu,
 		 */
 		action->setShortcut(QKeySequence());
 	}
-	menu->setStyleSheet(QStringLiteral("QMenu::item { min-height: %1px; padding: 8px 24px; }")
-	                            .arg(BSSH_TOUCH_TARGET_DP));
+	/*
+	 * The row height itself is touch_metrics', shared with the two menus
+	 * on the touch front door which could not reach it here.
+	 */
+	bssh_apply_touch_menu(menu, true);
 }
 
 void bssh_main_window::show_terminal_menu(const QPoint &at) {
