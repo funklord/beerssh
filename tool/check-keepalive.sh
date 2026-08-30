@@ -25,8 +25,25 @@ if ! command -v docker >/dev/null 2>&1; then
 	exit 1
 fi
 
+# A NAME AND A KILL, because the trap below cleans up what this SHELL owns
+# and a container is not that. A container is a child of the docker daemon,
+# so a `timeout` around this script, or a Ctrl-C, signals the shell and the
+# daemon hears nothing: the container carries on, reparented and
+# unsupervised, and `docker ps` shows it "Up" minutes later.
+#
+# Measured 2026-08-31 on check-ci: a ten-minute wrapper killed make and left
+# an ubuntu:24.04 container compiling. Worse than a wasted run, because the
+# receipt that gates a push is written after the container exits under
+# make's supervision -- so the orphan finishes nothing that counts. A bound
+# that stops the supervisor while the work continues is worse than no bound:
+# it turns a slow success into an invisible one.
+#
+# `docker kill` on a container that has already exited returns non-zero, so
+# every status here is discarded -- under `set -e` a failing trap command is
+# not something to let decide this script's exit code.
+CONTAINER=bssh-check-keepalive-$$
 STAGE=$(mktemp -d)
-trap 'rm -rf "$STAGE"' EXIT INT TERM
+trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT INT TERM
 
 # Only what is committed, for the reason check-ci.sh carries at length:
 # `git ls-files` names tracked PATHS and the tar that follows reads them off
@@ -45,7 +62,7 @@ git -C vterm archive --format=tar --prefix=vterm/ HEAD > "$STAGE/vterm.tar"
 
 echo "check-keepalive: building and running inside $IMAGE"
 
-docker run --rm --cap-add=NET_ADMIN -v "$STAGE":/in:ro "$IMAGE" sh -c '
+docker run --rm --name "$CONTAINER" --cap-add=NET_ADMIN -v "$STAGE":/in:ro "$IMAGE" sh -c '
 set -e
 apt-get update -qq >/dev/null 2>&1
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \

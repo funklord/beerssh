@@ -65,10 +65,35 @@ echo "check-ci: image    $IMAGE"
 echo "check-ci: packages $PACKAGES"
 
 STAGE=$(mktemp -d)
+CONTAINER=bssh-check-ci-$$
 # INT and TERM as well as EXIT: an EXIT-only trap leaks the staging tree
 # whenever this is interrupted or hits a timeout, which is exactly when a
 # long docker run gets cut short.
-trap 'rm -rf "$STAGE"' EXIT INT TERM
+#
+# That reasoning was right and its remedy was half the size of the problem.
+# A trap cleans up what this SHELL owns; the container is a child of the
+# docker daemon, which hears nothing when the shell is signalled. So the
+# interruption this trap was written for left the staging tree tidied and
+# an ubuntu:24.04 container still compiling.
+#
+# Measured 2026-08-31: `timeout 600 sg docker -c "make check-ci"` killed
+# make at ten minutes and `docker ps` showed the container Up for another
+# ten. Worse than a wasted run, because the receipt that gates a push is
+# written after the container exits under make's supervision -- so the
+# orphan finishes nothing that counts, and the next run competes with it
+# for the same cores. A bound that stops the supervisor while the work
+# continues is worse than no bound: it turns a slow success into an
+# invisible one.
+#
+# The name is what makes the kill possible at all. Docker's generated
+# names are random, so an orphan from a previous run and the container
+# this run is waiting on are indistinguishable in `docker ps` -- there is
+# no safe way to clean up by hand, and none to write down here.
+#
+# `docker kill` on an already-exited container returns non-zero, so the
+# status is discarded: under `set -e` a failing trap command should not
+# get to decide this script's exit code.
+trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT INT TERM
 
 # Only what is committed: this checks what a push would actually give the
 # runner, not what happens to be lying in the working tree.
@@ -148,7 +173,7 @@ else
 	tar -cf "$STAGE/vterm.tar" --files-from /dev/null
 fi
 
-docker run --rm -v "$STAGE":/in:ro "$IMAGE" sh -c "
+docker run --rm --name "$CONTAINER" -v "$STAGE":/in:ro "$IMAGE" sh -c "
 set -e
 apt-get update -qq >/dev/null 2>&1
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PACKAGES \

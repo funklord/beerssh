@@ -48,11 +48,36 @@ fi
 #   make deb && DEB_DIR=build/deb ./tool/check-deb.sh
 # which is the faster loop when the question is about the container half
 # rather than about the sources.
+# A NAME AND A KILL, because the trap below cleans up what this SHELL owns
+# and a container is not that. A container is a child of the docker daemon,
+# so a `timeout` around this script, or a Ctrl-C, signals the shell and the
+# daemon hears nothing: the container carries on, reparented and
+# unsupervised, and `docker ps` shows it "Up" minutes later.
+#
+# Measured 2026-08-31 on check-ci: a ten-minute wrapper killed make and left
+# an ubuntu:24.04 container compiling. Worse than a wasted run, because the
+# receipt that gates a push is written after the container exits under
+# make's supervision -- so the orphan finishes nothing that counts. A bound
+# that stops the supervisor while the work continues is worse than no bound:
+# it turns a slow success into an invisible one.
+#
+# `docker kill` on a container that has already exited returns non-zero, so
+# every status here is discarded -- under `set -e` a failing trap command is
+# not something to let decide this script's exit code.
+#
+# Set ABOVE the branch below, not inside it. The DEB_DIR path skips the
+# staging tree entirely, and a name assigned only in the other branch
+# would leave `docker run --name "$CONTAINER"` reading an unset
+# variable under `set -u` -- which `sh -n` cannot see, because it is a
+# runtime error and not a syntax one.
+CONTAINER=bssh-check-deb-$$
+STAGE=
+trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; [ -n "$STAGE" ] && rm -rf "$STAGE"; true' EXIT INT TERM
+
 if [ -n "${DEB_DIR:-}" ]; then
 	echo "check-deb: using the packages already in $DEB_DIR"
 else
 	STAGE=$(mktemp -d)
-	trap 'rm -rf "$STAGE"' EXIT INT TERM
 
 	git archive --format=tar --prefix=src/ HEAD | tar -xf - -C "$STAGE"
 	git -C vterm archive --format=tar --prefix=src/vterm/ HEAD \
@@ -80,7 +105,7 @@ fi
 
 echo "check-deb: installing $(ls "$DEB_DIR"/*.deb | wc -l) package(s) into $IMAGE"
 
-docker run --rm -v "$(cd "$DEB_DIR" && pwd)":/in:ro "$IMAGE" sh -c '
+docker run --rm --name "$CONTAINER" -v "$(cd "$DEB_DIR" && pwd)":/in:ro "$IMAGE" sh -c '
 set -e
 apt-get update -qq >/dev/null 2>&1
 apt-get install -y -qq desktop-file-utils >/dev/null 2>&1

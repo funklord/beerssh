@@ -5240,6 +5240,37 @@ The desktop build is what makes this project testable at all — use it.
   deliberately no tool checking this, because the case that bit is a package
   present on the runner and absent from the file, which nothing run locally can
   see.
+- **A `timeout` around a container runner bounds the runner, not the
+  container.** Measured 2026-08-31: `timeout 600 sg docker -c "make check-ci"`
+  killed make at ten minutes and `docker ps` showed the container Up for
+  another ten, still compiling, reparented and unsupervised. The trap in
+  `check-ci.sh` had already reasoned about exactly this moment — its comment
+  says an EXIT-only trap leaks the staging tree "when a long docker run gets
+  cut short" — and its remedy was half the size of the problem, because a
+  trap cleans up what the *shell* owns and a container is a child of the
+  docker daemon, which hears nothing when the shell is signalled.
+  **This is worse than a wasted run.** The receipt that gates a push is
+  written after the container exits under make's supervision, so the orphan
+  finishes nothing that counts and then competes with the next attempt for
+  the same cores — a bound that stops the supervisor while the work carries
+  on turns a slow success into an invisible one, and the ten minutes it
+  "saved" were spent twice. All three container scripts — `check-ci.sh`,
+  `check-deb.sh`, `check-keepalive.sh` — now pass `--name` and kill it from
+  the trap. **The name is what makes cleaning up possible at all**: docker's
+  generated names are random, so an orphan from a previous run and the
+  container the current run is waiting on are indistinguishable in
+  `docker ps`, and there is no safe by-hand recipe to write down.
+- **That fix shipped a defect of its own on the first attempt, and `sh -n`
+  could not see it.** In `check-deb.sh` the name was assigned beside the
+  staging tree — inside the `else` branch — while `docker run --name` sits
+  below the conditional. The documented fast loop,
+  `make deb && DEB_DIR=build/deb ./tool/check-deb.sh`, takes the other
+  branch, so `set -u` would have aborted it at the `docker run`. Both
+  versions parse, because an unset variable is a runtime error and not a
+  syntax one; a control built as the shape nearly committed dies at line 110
+  with rc=2 where the fixed script exits 0. **A cleanup added for one path
+  is not a cleanup until the other paths still run**, and the branch that
+  skips the work is the one that never gets exercised while testing the fix.
 - Keep native dependency build scripts reproducible and pinned to versions.
 - Signing config for Play (upload key + Play App Signing).
 
