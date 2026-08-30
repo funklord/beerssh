@@ -4593,19 +4593,37 @@ and it splits on repository visibility rather than on anything in the code,
 so it is an account-level billing state that no tree can fix.
 **The date is the fact that matters, not the colour.** Everything merged here
 since 2026-08-14 has been verified by the local gates and by nothing else.
-**A blocked run is distinguishable from a real one without fetching it, and
-the numbers are not close.** No success in the window completed in under
+**In THIS repository's window the two populations do not overlap**, which is
+narrower than the rule it is tempting to write. No success completed in under
 **326 s** (median 372); **57 of the 81 failures finished in under 10 s**
-(median 5). So a duration far below the plausible floor is the tell, visible
-in `gh run list` itself — and the remaining ~24 failures, the ones that took
-long enough to have run, are the only ones carrying information about the
-code.
+(median 5) — a 300-second gap with nothing in it. That makes duration a
+usable *triage* here: the remaining ~24 failures, the ones that ran long
+enough to have done something, are the only rows in this history carrying
+information about the code.
+**It is not a general tell, and the sibling that disproved it is the reason
+this paragraph is worded this way.** `netcfgd`'s runs overlap completely —
+blocked at 1m36s, executing at 40s — same tool, same account, same billing
+block, opposite structure. So the useful question was never whether duration
+separates the two; it is that **you cannot learn whether it separates them
+for a given repository without doing the full listing the proxy was meant to
+save you.** The saving is on the second read, never the first.
+This entry claimed the general form before it claimed the narrow one. That is
+the third instance in three days of a measurement's scope widening past what
+was measured, and the second in this paragraph.
 **This entry said "every run" before it said 19.** That claim came from
 reading three rows and generalising to a hundred — the scope error
-`evidence.md` records twice in two days, committed here by the same hand that
-had just discussed it. Corrected from the other end by a sibling checking its
-own repository rather than accepting a relay, which is the practice that
-caught it.
+`evidence.md` records, committed here by the same hand that had just
+discussed it, in a paragraph whose own subject was a list view hiding a
+distinction. Corrected from the other end by a sibling checking its own
+repository rather than accepting a relay.
+**The mechanism is worth more than the instance**, and two sessions hitting
+it on one fact within a day is what shows it is structural: `gh run list`
+defaults to a short page, the rows look uniform, and *"recent"* slides into
+*"all"* with no moment at which anybody decides it should. The fix is
+`-L 100` and counting, not care.
+(The under-10s count differs by one between two independent measurements of
+the same window — 57 here, 58 there. A boundary case at the threshold; it
+moves nothing and is left unresolved rather than tidied into agreement.)
 **`make check-deb` passes as of `3a6ffce`**, run locally because that is the
 only place it can run: three packages into a clean `debian:trixie`, the app
 starting and loading 22 font faces, the manual page installed, `--help`
