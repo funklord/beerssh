@@ -1819,6 +1819,19 @@ replies; `-window-size` drops `CSI 14t` and `16t`; `-colour-query` drops OSC
 answered-but-inert anywhere. The byte count is the evidence rather than the
 pass/fail, because a reply that *shrank* rather than vanished would still be
 a reply.
+**And the scope of it, which the first version of this paragraph left
+out.** qtty re-checked its own provenance and found its beerssh binary
+dated 2026-08-30 17:35, so the run covers the feature switches and the four
+probe fixes — which landed in `3525de0`, earlier — and says **nothing about
+`a8b4187` or anything after it.** Their document had named a commit inferred
+from the binary's mtime, which is a bare commit reading as provenance it does
+not have; the honest form is that the binary postdates `395f354` and predates
+`71eefea` *unless it was built from uncommitted work*, which nothing on
+either side can rule out. Recorded because a verification without its build
+is a fact without its method, and this one would otherwise be quoted as
+covering commits it cannot see. Re-take it when the emulator, the negotiation
+or the vendored patches move — not when the build tooling does, which is all
+that has changed since.
 The mouse family is **one** switch (1000, 1002, 1003, 1005, 1006, 1015).
 Gating the SGR encoding alone would let a client enable tracking and then find
 no encoding it could use, which is a stranger terminal than either having a
@@ -5324,6 +5337,42 @@ The desktop build is what makes this project testable at all — use it.
   with rc=2 where the fixed script exits 0. **A cleanup added for one path
   is not a cleanup until the other paths still run**, and the branch that
   skips the work is the one that never gets exercised while testing the fix.
+- **Run the gate as a background job the harness owns, not under an outer
+  `timeout`.** This is the local remedy for the orphan above and it is the
+  one that actually holds: a backgrounded job is supervised for its whole
+  life and announces its own exit, so nothing needs to guess a duration, and
+  there is no wrapper whose death can strand the work. The two bounds that
+  were tried first both failed in the same direction — an outer `timeout`
+  around `sg docker -c` never reached the script, and a `timeout` that *did*
+  land would kill the supervisor while the container carried on. **A bound
+  chosen by predicting how long the work takes is the wrong instrument
+  anyway**: the gate's honest range here is roughly eight to thirteen
+  minutes depending on what else is compiling, so any number tight enough to
+  catch a hang is loose enough to kill a healthy run, and a run killed at
+  twelve minutes costs the whole twelve.
+- **`wait "$!"` still fails the gate, and this had to be checked rather than
+  assumed, because the change sits on the path that decides pass/fail.**
+  Under `set -e` a failing backgrounded child gives the script the child's
+  status and the line after `wait` is never reached — measured at rc=3, with
+  a positive control confirming a succeeding child does reach it. The
+  receipt write is after that point, so a failing container aborts before
+  anything is recorded. The failure mode being guarded against is the worst
+  one available: a gate that passes unconditionally looks exactly like a
+  gate that passes.
+- **Three probes were wrong in one session and nothing they measured was.**
+  Recorded because the tally is the useful part rather than any one of them.
+  A `pgrep -f 'sh tool/check-ci.sh'` matched **the shell running that very
+  command line** — my own — so the kill landed on the wrong process and the
+  output truncated in a way that read as the test failing. A fixture using
+  `'EOF'` quoting never expanded its path, so its marker file was never
+  created and the column reporting "trap ran" was meaningless in both rows.
+  An `awk` line-width check died with a collation error and the `echo` after
+  it printed "widths checked" regardless. Each was caught the same way: ask
+  what a case *known* to be good should produce, and check the probe says
+  it. The container's name is the durable version of that lesson —
+  `bssh-check-ci-$$` carries the pid of the shell to signal, so the thing
+  being cleaned up names its own supervisor and no process-tree hunt, and no
+  `pgrep` pattern, is needed to find it.
 - Keep native dependency build scripts reproducible and pinned to versions.
 - Signing config for Play (upload key + Play App Signing).
 
