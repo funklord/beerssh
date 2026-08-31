@@ -4,21 +4,14 @@ Source: local
 
 Files: *
 Copyright: 2026 Nabeel Sowan <nabeel@vibes.se>
-License: GPL-3.0-or-later
+License: UNDECIDED
+ No licence is declared for this source tree, and that is deliberate rather
+ than an oversight: the copyright holder is developing this unlicensed until
+ it is complete, and will settle the terms then. Under copyright law the
+ default in that situation is that no rights are granted, so packages built
+ from this tree are for local use and are not distributable as they stand.
+ .
+ The tree carried GPL-3.0-or-later from 2026-08-07 until 2026-08-31 and no
+ longer does. Do not restore it, and do not add any licence here to satisfy
+ a lint warning or to match a sibling project.
 
-License: GPL-3.0-or-later
- This program is free software: you can redistribute it and/or modify it
- under the terms of the GNU General Public License as published by the Free
- Software Foundation, either version 3 of the License, or (at your option)
- any later version.
- .
- This program is distributed in the hope that it will be useful, but WITHOUT
- ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
- more details.
- .
- You should have received a copy of the GNU General Public License along
- with this program.  If not, see <https://www.gnu.org/licenses/>.
- .
- On Debian systems, the complete text of the GNU General Public License
- version 3 can be found in "/usr/share/common-licenses/GPL-3".

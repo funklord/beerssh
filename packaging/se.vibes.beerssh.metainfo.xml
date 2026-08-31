@@ -15,7 +15,10 @@
   <summary>SSH terminal for desktop and Android</summary>
 
   <metadata_license>CC0-1.0</metadata_license>
-  <project_license>GPL-3.0-or-later</project_license>
+  <!-- No <project_license>: this tree carries no licence, deliberately,
+       from 2026-08-31. An SPDX expression here would assert terms that
+       have not been chosen, and LicenseRef-proprietary would assert a
+       different set. The field returns when the holder settles them. -->
 
   <description>
     <p>

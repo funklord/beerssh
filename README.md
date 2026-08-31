@@ -379,3 +379,18 @@ tool/               the style gate, the git hooks, and the check-* scripts
 - **`tool/hooks/commit-msg`** — installed by `make hooks`. Commit subjects
   are `subsystem: summary`, imperative, within 75 columns; `project.md`
   §18.5 has the rest.
+
+## Licence
+
+Copyright (C) 2026 Nabeel Sowan <nabeel@vibes.se>
+
+**None, deliberately.** No licence is declared for this tree and no rights
+are granted; packages built from it are for local use and are not
+distributable as they stand. The copyright holder is developing this
+unlicensed until it is complete and will settle the terms then.
+
+The tree carried GPL-3.0-or-later from 2026-08-07 until 2026-08-31.
+
+This says nothing about the vendored and linked third parties, whose terms
+are their own and unchanged: libvterm is MIT, Qt is LGPL-3.0, libssh is
+LGPL-2.1. The in-app licences view lists them and is untouched.
