@@ -726,225 +726,12 @@ bssh_session *bssh_main_window::prepare_profile(const bssh_profile_t &profile) {
 	if (!m_shown.contains(session)) m_shown.append(session);
 
 	/*
-	 * Only while this is the session the line is about.
-	 *
-	 * update_status() composes ONE sentence -- the current session's
-	 * target and state, then m_error appended after a dash -- so an error
-	 * set by any other session is printed as though it described this
-	 * one. Measured: a background tab dropping put
-	 * "prod.example disconnected -- connection reset" on screen, naming
-	 * the host that was fine and describing the one that was not.
-	 *
-	 * Both siblings below already guard this way -- shell_exited returns
-	 * unless the session is current, state_changed acts only when it is.
-	 * This one could not, being a slot that takes the reason and not the
-	 * session, which is how it became the exception.
-	 *
-	 * And nothing cleaned it up afterwards. The reconnect message that
-	 * would have replaced it is guarded the same way and returns for a
-	 * session that is not current, so the wrong text stayed on the line
-	 * until something else happened to set one.
-	 *
-	 * A background tab is not silenced by this: sec 8.3's per-tab dot is
-	 * where a session nobody is looking at reports itself, and
-	 * bssh_tab_status::state_for() already answers DISCONNECTED for it.
-	 */
-	connect(session, &bssh_session::failed, this,
-	         [this, session](const QString &reason) {
-		if (session != m_current) return;
-		on_failed(reason);
-	});
-
-	/*
 	 * Resolve the host's settings once, here, where the store is (sec
 	 * 10.1). The session carries them from now on, so a pane rebuilt by a
 	 * layout change does not have to find a preset table to know what font
 	 * to draw in.
 	 */
 	session->set_settings(resolved_settings(profile));
-
-	/*
-	 * First contact with a host. The fingerprint is shown because it is
-	 * the only thing the user can actually check -- against what the
-	 * server's owner published, or against `ssh-keyscan` from somewhere
-	 * they already trust.
-	 */
-	connect(session, &bssh_session::host_key_unknown, this, [this, session](const QString &fp) {
-		QMessageBox box(this);
-		box.setIcon(QMessageBox::Question);
-		box.setWindowTitle(QStringLiteral("Unknown host key"));
-		box.setText(QStringLiteral("The host %1 is not in BeerSSH's known-hosts store.")
-		                    .arg(session->profile().target()));
-		box.setInformativeText(QStringLiteral(
-		        "Key fingerprint:\n%1\n\nCheck it against a source you already trust "
-		        "before accepting. Accepting records it for next time.").arg(fp));
-
-		QPushButton *accept = box.addButton(QStringLiteral("Accept and connect"),
-		                                     QMessageBox::AcceptRole);
-		box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
-
-		/*
-		 * Cancel is the default, so leaning on Enter does not trust a
-		 * host nobody looked at.
-		 */
-		box.setDefaultButton(QMessageBox::Cancel);
-		box.exec();
-
-		if (box.clickedButton() == static_cast<QAbstractButton *>(accept)) {
-			session->accept_host_key();
-		} else {
-			session->disconnect_from_host();
-		}
-	});
-
-	/*
-	 * A changed key is a different question wearing the same clothes, and
-	 * the dialog says so: this is what a man-in-the-middle looks like, and
-	 * it is also what a reinstalled server looks like. Only a person can
-	 * tell those apart, which is why it is asked rather than decided.
-	 */
-	connect(session, &bssh_session::host_key_changed, this, [this, session](const QString &fp) {
-		QMessageBox box(this);
-		box.setIcon(QMessageBox::Warning);
-		box.setWindowTitle(QStringLiteral("HOST KEY CHANGED"));
-		box.setText(QStringLiteral("The key for %1 is NOT the one recorded.")
-		                    .arg(session->profile().target()));
-		box.setInformativeText(QStringLiteral(
-		        "New fingerprint:\n%1\n\nThis happens when a server is rebuilt -- and it "
-		        "is also exactly what an interception attack looks like. Do not accept "
-		        "unless you know why the key changed.").arg(fp));
-
-		QPushButton *accept = box.addButton(QStringLiteral("Accept the new key"),
-		                                     QMessageBox::DestructiveRole);
-		box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
-		box.setDefaultButton(QMessageBox::Cancel);
-		box.exec();
-
-		if (box.clickedButton() == static_cast<QAbstractButton *>(accept)) {
-			session->accept_host_key();
-		} else {
-			session->disconnect_from_host();
-		}
-	});
-
-	/*
-	 * Revoked: told, not asked (sec 11). Somebody deliberately marked
-	 * this key as no longer trusted, and "shall I trust it anyway?" is
-	 * not a question this app gets to put to the user -- so there is no
-	 * accept button here, unlike the changed-key dialog above. The
-	 * connection is dropped.
-	 */
-	connect(session, &bssh_session::host_key_revoked, this, [this, session](const QString &fp) {
-		QMessageBox box(this);
-		box.setIcon(QMessageBox::Critical);
-		box.setWindowTitle(QStringLiteral("HOST KEY REVOKED"));
-		box.setText(QStringLiteral("The key for %1 has been revoked.")
-		                    .arg(session->profile().target()));
-		box.setInformativeText(QStringLiteral(
-		        "Fingerprint:\n%1\n\nThis key is marked @revoked in a known_hosts file, "
-		        "which means someone recorded that it must no longer be used. BeerSSH "
-		        "will not connect with it.").arg(fp));
-		box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
-		box.exec();
-
-		session->disconnect_from_host();
-	});
-
-	connect(session, &bssh_session::needs_key_passphrase, this, [this, session] {
-		bool ok = false;
-		const QString passphrase = QInputDialog::getText(
-		        this, QStringLiteral("BeerSSH"),
-		        QStringLiteral("Passphrase for your SSH key:"),
-		        QLineEdit::Password, QString(), &ok);
-
-		/*
-		 * Declining is not a cancel: the server may well take a
-		 * password, so an empty answer falls through to that path rather
-		 * than dropping the connection.
-		 */
-		session->supply_key_passphrase(ok ? passphrase : QString());
-	});
-
-	connect(session, &bssh_session::needs_password, this, [this, session] {
-		/*
-		 * A password already kept for this host is used without asking,
-		 * which is the entire point of storing one -- and is what makes
-		 * auto-reconnect work for password-authenticated hosts without
-		 * holding the credential in memory all session (sec 5.3, 11).
-		 */
-		const QString stored = stored_password_for(session->profile());
-		if (!stored.isEmpty()) {
-			/*
-			 * Unless this host asks the user to prove it is them first
-			 * (sec 11). Per host and off by default, because the
-			 * question it was blocked on -- a reconnect at 3am with
-			 * nobody holding the phone -- has no single answer: right
-			 * for the box running tmux, wrong for the production
-			 * database, and they are not the same host.
-			 *
-			 * Gated on the CAPABILITY as well as the flag, so a
-			 * profile carrying the flag onto a machine that cannot ask
-			 * does not lock its own password away for good. It falls
-			 * through to the typed prompt in that case, which is the
-			 * same road a failed or cancelled prompt takes: biometric
-			 * protects the STORED password, not the account, and
-			 * somebody who knows it can always type it.
-			 */
-			const bssh_platform *platform = bssh_platform::instance();
-			const bool ask_first = session->profile().require_biometric
-			        && platform && platform->has_biometric();
-
-			if (!ask_first) {
-				session->supply_password(stored);
-				return;
-			}
-
-			QPointer<bssh_session> alive(session);
-			const_cast<bssh_platform *>(platform)->authenticate(
-			        QStringLiteral("Unlock the password for %1")
-			                .arg(session->profile().target()),
-			        [this, alive, stored](bool ok) {
-				/* The session can be gone by the time a system
-				 * dialog is answered -- the tab closed, the app
-				 * backgrounded and killed. */
-				if (!alive) return;
-
-				if (ok) {
-					alive->supply_password(stored);
-					return;
-				}
-
-				/* Refused or cancelled: ask for it the ordinary
-				 * way rather than leaving the session waiting on
-				 * nothing. */
-				ask_for_password(alive);
-			});
-			return;
-		}
-
-		ask_for_password(session);
-	});
-
-	/*
-	 * What the status line says about an ending. Only worth anything
-	 * under --hold, which is the one case where the pane is still there
-	 * to read it -- the registry closes the rest (sec 8.6).
-	 */
-	connect(session, &bssh_session::shell_exited, this, [this, session](int status) {
-		if (session != m_current) return;
-
-		m_error = status == 0
-		                  ? QStringLiteral("session ended")
-		                  : QStringLiteral("session ended (exit %1)").arg(status);
-		update_status();
-	});
-	connect(session, &bssh_session::state_changed, this, [this, session] {
-		/* A successful (re)connect clears whatever the last message was. */
-		if (session == m_current && session->is_live()) {
-			m_error.clear();
-			update_status();
-		}
-	});
 
 	show_session(session);
 	return session;
@@ -1687,6 +1474,255 @@ void bssh_main_window::wire_session(bssh_session *session) {
 	 */
 	if (m_wired_sessions.contains(session)) return;
 	m_wired_sessions.insert(session);
+
+	/*
+	 * The prompts and the trust decisions, moved here from
+	 * prepare_profile() so that BOTH roads into a window make them.
+	 *
+	 * They used to be connected only where a session was created, with
+	 * that window as the context object -- so a session torn out into a
+	 * second window went on asking the FIRST one. The password dialog
+	 * opened behind the window the user was looking at, and the session
+	 * sat in AUTHENTICATING until they found it. Worse once that window
+	 * had closed: Qt drops a connection when its context object dies, so
+	 * the session emitted needs_password into nothing and waited for a
+	 * credential nobody would ever be asked for. Same for a changed host
+	 * key, which is a warning that simply never appeared.
+	 *
+	 * Every one of them is guarded on m_shown, and that guard is what
+	 * makes this safe HERE: wire_session runs off the registry's
+	 * session_added, so every window wires every session, and an
+	 * unguarded prompt would raise one dialog per window (sec 8.4). The
+	 * guard is read when the signal arrives rather than when it is
+	 * connected, which is what lets the answer follow the session as it
+	 * moves.
+	 *
+	 * failed, shell_exited and state_changed guard on m_current instead:
+	 * they write the status line, which is about the focused session and
+	 * not merely a shown one.
+	 */
+	/*
+	 * Only while this is the session the line is about.
+	 *
+	 * update_status() composes ONE sentence -- the current session's
+	 * target and state, then m_error appended after a dash -- so an error
+	 * set by any other session is printed as though it described this
+	 * one. Measured: a background tab dropping put
+	 * "prod.example disconnected -- connection reset" on screen, naming
+	 * the host that was fine and describing the one that was not.
+	 *
+	 * Both siblings below already guard this way -- shell_exited returns
+	 * unless the session is current, state_changed acts only when it is.
+	 * This one could not, being a slot that takes the reason and not the
+	 * session, which is how it became the exception.
+	 *
+	 * And nothing cleaned it up afterwards. The reconnect message that
+	 * would have replaced it is guarded the same way and returns for a
+	 * session that is not current, so the wrong text stayed on the line
+	 * until something else happened to set one.
+	 *
+	 * A background tab is not silenced by this: sec 8.3's per-tab dot is
+	 * where a session nobody is looking at reports itself, and
+	 * bssh_tab_status::state_for() already answers DISCONNECTED for it.
+	 */
+	connect(session, &bssh_session::failed, this,
+	         [this, session](const QString &reason) {
+		if (session != m_current) return;
+		on_failed(reason);
+	});
+
+	/*
+	 * First contact with a host. The fingerprint is shown because it is
+	 * the only thing the user can actually check -- against what the
+	 * server's owner published, or against `ssh-keyscan` from somewhere
+	 * they already trust.
+	 */
+	connect(session, &bssh_session::host_key_unknown, this, [this, session](const QString &fp) {
+		/* Only the window showing it may ask; see wire_session. */
+		if (!m_shown.contains(session)) return;
+		QMessageBox box(this);
+		box.setIcon(QMessageBox::Question);
+		box.setWindowTitle(QStringLiteral("Unknown host key"));
+		box.setText(QStringLiteral("The host %1 is not in BeerSSH's known-hosts store.")
+		                    .arg(session->profile().target()));
+		box.setInformativeText(QStringLiteral(
+		        "Key fingerprint:\n%1\n\nCheck it against a source you already trust "
+		        "before accepting. Accepting records it for next time.").arg(fp));
+
+		QPushButton *accept = box.addButton(QStringLiteral("Accept and connect"),
+		                                     QMessageBox::AcceptRole);
+		box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
+
+		/*
+		 * Cancel is the default, so leaning on Enter does not trust a
+		 * host nobody looked at.
+		 */
+		box.setDefaultButton(QMessageBox::Cancel);
+		box.exec();
+
+		if (box.clickedButton() == static_cast<QAbstractButton *>(accept)) {
+			session->accept_host_key();
+		} else {
+			session->disconnect_from_host();
+		}
+	});
+
+	/*
+	 * A changed key is a different question wearing the same clothes, and
+	 * the dialog says so: this is what a man-in-the-middle looks like, and
+	 * it is also what a reinstalled server looks like. Only a person can
+	 * tell those apart, which is why it is asked rather than decided.
+	 */
+	connect(session, &bssh_session::host_key_changed, this, [this, session](const QString &fp) {
+		/* Only the window showing it may ask; see wire_session. */
+		if (!m_shown.contains(session)) return;
+		QMessageBox box(this);
+		box.setIcon(QMessageBox::Warning);
+		box.setWindowTitle(QStringLiteral("HOST KEY CHANGED"));
+		box.setText(QStringLiteral("The key for %1 is NOT the one recorded.")
+		                    .arg(session->profile().target()));
+		box.setInformativeText(QStringLiteral(
+		        "New fingerprint:\n%1\n\nThis happens when a server is rebuilt -- and it "
+		        "is also exactly what an interception attack looks like. Do not accept "
+		        "unless you know why the key changed.").arg(fp));
+
+		QPushButton *accept = box.addButton(QStringLiteral("Accept the new key"),
+		                                     QMessageBox::DestructiveRole);
+		box.addButton(QStringLiteral("Cancel"), QMessageBox::RejectRole);
+		box.setDefaultButton(QMessageBox::Cancel);
+		box.exec();
+
+		if (box.clickedButton() == static_cast<QAbstractButton *>(accept)) {
+			session->accept_host_key();
+		} else {
+			session->disconnect_from_host();
+		}
+	});
+
+	/*
+	 * Revoked: told, not asked (sec 11). Somebody deliberately marked
+	 * this key as no longer trusted, and "shall I trust it anyway?" is
+	 * not a question this app gets to put to the user -- so there is no
+	 * accept button here, unlike the changed-key dialog above. The
+	 * connection is dropped.
+	 */
+	connect(session, &bssh_session::host_key_revoked, this, [this, session](const QString &fp) {
+		/* Only the window showing it may ask; see wire_session. */
+		if (!m_shown.contains(session)) return;
+		QMessageBox box(this);
+		box.setIcon(QMessageBox::Critical);
+		box.setWindowTitle(QStringLiteral("HOST KEY REVOKED"));
+		box.setText(QStringLiteral("The key for %1 has been revoked.")
+		                    .arg(session->profile().target()));
+		box.setInformativeText(QStringLiteral(
+		        "Fingerprint:\n%1\n\nThis key is marked @revoked in a known_hosts file, "
+		        "which means someone recorded that it must no longer be used. BeerSSH "
+		        "will not connect with it.").arg(fp));
+		box.addButton(QStringLiteral("Close"), QMessageBox::RejectRole);
+		box.exec();
+
+		session->disconnect_from_host();
+	});
+
+	connect(session, &bssh_session::needs_key_passphrase, this, [this, session] {
+		/* Only the window showing it may ask; see wire_session. */
+		if (!m_shown.contains(session)) return;
+		bool ok = false;
+		const QString passphrase = QInputDialog::getText(
+		        this, QStringLiteral("BeerSSH"),
+		        QStringLiteral("Passphrase for your SSH key:"),
+		        QLineEdit::Password, QString(), &ok);
+
+		/*
+		 * Declining is not a cancel: the server may well take a
+		 * password, so an empty answer falls through to that path rather
+		 * than dropping the connection.
+		 */
+		session->supply_key_passphrase(ok ? passphrase : QString());
+	});
+
+	connect(session, &bssh_session::needs_password, this, [this, session] {
+		/* Only the window showing it may ask; see wire_session. */
+		if (!m_shown.contains(session)) return;
+		/*
+		 * A password already kept for this host is used without asking,
+		 * which is the entire point of storing one -- and is what makes
+		 * auto-reconnect work for password-authenticated hosts without
+		 * holding the credential in memory all session (sec 5.3, 11).
+		 */
+		const QString stored = stored_password_for(session->profile());
+		if (!stored.isEmpty()) {
+			/*
+			 * Unless this host asks the user to prove it is them first
+			 * (sec 11). Per host and off by default, because the
+			 * question it was blocked on -- a reconnect at 3am with
+			 * nobody holding the phone -- has no single answer: right
+			 * for the box running tmux, wrong for the production
+			 * database, and they are not the same host.
+			 *
+			 * Gated on the CAPABILITY as well as the flag, so a
+			 * profile carrying the flag onto a machine that cannot ask
+			 * does not lock its own password away for good. It falls
+			 * through to the typed prompt in that case, which is the
+			 * same road a failed or cancelled prompt takes: biometric
+			 * protects the STORED password, not the account, and
+			 * somebody who knows it can always type it.
+			 */
+			const bssh_platform *platform = bssh_platform::instance();
+			const bool ask_first = session->profile().require_biometric
+			        && platform && platform->has_biometric();
+
+			if (!ask_first) {
+				session->supply_password(stored);
+				return;
+			}
+
+			QPointer<bssh_session> alive(session);
+			const_cast<bssh_platform *>(platform)->authenticate(
+			        QStringLiteral("Unlock the password for %1")
+			                .arg(session->profile().target()),
+			        [this, alive, stored](bool ok) {
+				/* The session can be gone by the time a system
+				 * dialog is answered -- the tab closed, the app
+				 * backgrounded and killed. */
+				if (!alive) return;
+
+				if (ok) {
+					alive->supply_password(stored);
+					return;
+				}
+
+				/* Refused or cancelled: ask for it the ordinary
+				 * way rather than leaving the session waiting on
+				 * nothing. */
+				ask_for_password(alive);
+			});
+			return;
+		}
+
+		ask_for_password(session);
+	});
+
+	/*
+	 * What the status line says about an ending. Only worth anything
+	 * under --hold, which is the one case where the pane is still there
+	 * to read it -- the registry closes the rest (sec 8.6).
+	 */
+	connect(session, &bssh_session::shell_exited, this, [this, session](int status) {
+		if (session != m_current) return;
+
+		m_error = status == 0
+		                  ? QStringLiteral("session ended")
+		                  : QStringLiteral("session ended (exit %1)").arg(status);
+		update_status();
+	});
+	connect(session, &bssh_session::state_changed, this, [this, session] {
+		/* A successful (re)connect clears whatever the last message was. */
+		if (session == m_current && session->is_live()) {
+			m_error.clear();
+			update_status();
+		}
+	});
 
 	/*
 	 * The device settings apply to a session opened AFTER they were

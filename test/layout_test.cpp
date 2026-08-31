@@ -2738,6 +2738,99 @@ void layout_test::two_windows_write_to_one_host_list() {
 	first.profile_store()->remove(beta);
 }
 
+void layout_test::a_moved_session_asks_the_window_it_is_in() {
+	/*
+	 * A password prompt belongs to the window the session is IN, not the
+	 * one it was opened in.
+	 *
+	 * prepare_profile() connects eight signals -- failed, the three
+	 * host-key prompts, needs_key_passphrase, needs_password,
+	 * shell_exited and state_changed -- with the creating window as their
+	 * context object, and adopt_session() does not remake them. So a
+	 * session torn out into a second window still asks the FIRST one:
+	 * the dialog opens on a window the user is not looking at, behind the
+	 * one they are, and the session sits in AUTHENTICATING until they
+	 * find it.
+	 *
+	 * And if that window has since closed there is no prompt at all. Qt
+	 * drops a connection when its context object dies, so the session
+	 * emits needs_password into nothing and waits for a credential
+	 * nobody will ever be asked for.
+	 *
+	 * Asserted by catching the modal rather than by reading a member,
+	 * because which window OWNS the dialog is the whole question and only
+	 * the widget knows. The timer fires from inside exec()'s own event
+	 * loop; without it this test would hang on the dialog, which is also
+	 * what the bug does to the user.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	{
+		bssh_main_window opened_in(named(QStringLiteral("moved")));
+		opened_in.resize(900, 600);
+		opened_in.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&opened_in));
+		QCoreApplication::processEvents();
+		QVERIFY(fake);
+
+		QCOMPARE(opened_in.shown_sessions().size(), 1);
+		bssh_session *session = opened_in.shown_sessions().first();
+
+		bssh_main_window moved_to;
+		moved_to.resize(900, 600);
+		moved_to.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&moved_to));
+		moved_to.adopt_session(session);
+		QCoreApplication::processEvents();
+
+		QVERIFY2(!opened_in.shown_sessions().contains(session),
+		          "the move has to have happened before the prompt is asked about");
+		QVERIFY(moved_to.shown_sessions().contains(session));
+
+		/*
+		 * Dismisses whatever modal appears and records which window it
+		 * belongs to. Re-arms rather than firing once, since the dialog
+		 * is not up until exec() has started.
+		 */
+		QWidget *asked_on = nullptr;
+		bool saw_prompt = false;
+		QTimer closer;
+		closer.setInterval(0);
+		QObject::connect(&closer, &QTimer::timeout, [&] {
+			QWidget *modal = QApplication::activeModalWidget();
+			if (!modal) return;
+			saw_prompt = true;
+			asked_on = modal->parentWidget() ? modal->parentWidget()->window() : nullptr;
+			if (QDialog *dialog = qobject_cast<QDialog *>(modal)) dialog->reject();
+			else modal->close();
+		});
+		closer.start();
+
+		fake->simulate_password_required();
+
+		closer.stop();
+		QCoreApplication::processEvents();
+
+		/* The control: a prompt has to appear at all, on some window. */
+		QVERIFY2(saw_prompt, "no password prompt was raised anywhere");
+
+		QVERIFY2(asked_on == &moved_to,
+		          asked_on == &opened_in
+		                  ? "the prompt opened on the window the session LEFT"
+		                  : "the prompt opened on no window this test knows about");
+	}
+
+	bssh_ssh_session::set_factory(nullptr);
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::focus_follows_the_pointer_only_when_asked() {
 	/*
 	 * sec 8.3's [OPEN] question, answered: offered, and off by default.

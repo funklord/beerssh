@@ -2983,17 +2983,29 @@ window with no name is a blank row in the task switcher.
   next test in this area: `bssh_main_window window(named("host"))` is the
   arrangement that has these signals, and `adopt_session` is the one that
   does not.
-  It also means those two roads give a session **different** wiring, which
-  is a live question rather than a settled one. Established by reading and
-  **not** by a test: those connections take the creating window as their
-  context object and `adopt_session()` does not remake them, so a session
-  torn out into a second window keeps the first window's prompts — a
-  password dialog raised by the window the tab came from, and none at all
-  if that window has since closed, since Qt drops a connection when its
-  context object dies. Left open deliberately rather than fixed alongside
-  the status line: it is a different failure with a different remedy, and
-  the honest form of it is a test that tears a tab out and asks which
-  window the prompt appears on.
+  It also meant the two roads gave a session **different** wiring, which
+  was left open above and is now closed. Those connections took the
+  creating window as their context object and `adopt_session()` did not
+  remake them, so a session moved into a second window went on asking the
+  first: the password dialog opened behind the window the user was
+  looking at, and the session sat in `AUTHENTICATING` until they found
+  it. Once that window had closed there was no prompt at all — Qt drops a
+  connection when its context object dies, so `needs_password` was
+  emitted into nothing and a **changed host key** raised a warning that
+  never appeared. The test asked the honest form of the question, caught
+  the modal from inside `exec()`'s own event loop and read which window
+  owned it: *the prompt opened on the window the session LEFT*.
+  All eight now live in `wire_session()`, which both roads call. The
+  guard is the part worth understanding: `wire_session()` runs off the
+  process-wide `session_added`, so every window wires every session, and
+  an unguarded prompt would raise **one dialog per window** — the paste
+  fault above, in a worse costume. Each prompt therefore tests
+  `m_shown.contains(session)` when the signal ARRIVES rather than when it
+  is connected, which is precisely what lets the answer follow the
+  session as it moves between windows. `failed`, `shell_exited` and
+  `state_changed` keep the stricter `m_current` guard, because they write
+  the status line and that is about the focused session rather than a
+  merely shown one.
 - **The registry was made process-wide and the profile store was not, so
   two windows silently ate each other's hosts.** This section says "a
   window is just another view onto the registry — the registry stays

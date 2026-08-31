@@ -73,6 +73,7 @@ private slots:
 	void a_shortcut_acts_only_on_the_window_it_was_typed_in();
 	void a_failure_is_reported_against_the_session_it_came_from();
 	void two_windows_write_to_one_host_list();
+	void a_moved_session_asks_the_window_it_is_in();
 	void closing_a_window_leaves_the_other_windows_sessions_alone();
 	void hovering_a_tiled_pane_moves_focus_to_it();
 	void a_tiled_session_leaves_the_tab_bar();
