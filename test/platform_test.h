@@ -66,8 +66,7 @@ private slots:
 	void an_lxqt_palette_is_read_though_it_spells_it_differently();
 	void an_lxqt_light_palette_reads_light();
 	void an_lxqt_palette_file_named_light_holding_dark_reads_dark();
-	void the_lxqt_theme_name_locates_the_file_it_does_not_judge_it();
-	void an_lxqt_theme_name_with_a_separator_is_refused();
+	void the_applied_lxqt_palette_is_read_from_lxqt_conf_itself();
 };
 
 #endif /* BSSH_PLATFORM_TEST_H */

@@ -319,27 +319,11 @@ signals:
  * Two dialects, because a desktop with no dark-mode status is the normal
  * case and each spells the same statement differently: TDE and KDE 3 use
  * [General] with decimal triples, LXQt uses [Palette] with #rrggbb. The
- * LXQt file is named by theme= in lxqt.conf rather than living at a
- * fixed path, and that name LOCATES the file -- it is never read as a
- * predicate.
+ * LXQt writes the APPLIED palette into its own config under [Palette],
+ * so it is a fixed path like the rest.
  */
 QStringList bssh_scheme_sources();
 
-/*
- * The LXQt palette files to consult, resolved from its config.
- *
- * LXQt names its palette by theme= in lxqt.conf rather than keeping
- * it at a fixed path, so unlike kdeglobals this cannot be written
- * down in advance. The name LOCATES the file and is never read as a
- * predicate -- worth stating because it looks like the substring
- * test the rule forbids. Of the twelve palettes LXQt ships, luminance
- * classifies all twelve correctly while eight are named something
- * that says nothing about which they are.
- *
- * Parameters, so this is testable without an LXQt session.
- */
-QStringList bssh_lxqt_palette_files(const QString &config,
-                                     const QStringList &data_dirs);
 
 /*
  * The appearance those files state, or UNKNOWN. See the comment on
