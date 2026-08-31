@@ -2667,6 +2667,77 @@ void layout_test::two_windows_are_two_views_onto_one_registry() {
 	QCOMPARE(shared->count(), 0);
 }
 
+void layout_test::two_windows_write_to_one_host_list() {
+	/*
+	 * The registry rule's other half, never applied. sec 8.4 says a window
+	 * is a view and must not imply a second registry; the profile store is
+	 * the same shape -- one set of files, several views -- and the window
+	 * constructs its own with `new bssh_profile_store(QString(), this)`.
+	 *
+	 * The store loads hosts into a QList once, at construction, and
+	 * write_profiles() calls QSettings::clear() and writes that list back
+	 * whole. Two stores over one hosts.ini are therefore two full-file
+	 * writers with no reader between them: whichever saves second rewrites
+	 * the file from a list that predates the other's save, and the host
+	 * added in the first window is gone from disk.
+	 *
+	 * The id collision is worse than the loss and is why this is not
+	 * merely untidy. A new id is highest+1 over the stale list, so both
+	 * windows mint the SAME one. Credentials are keyed
+	 * "profile:<id>:password" (sec 11), so the surviving host inherits the
+	 * lost one's stored password -- a credential reachable from a host its
+	 * owner never gave it to.
+	 *
+	 * project.md already describes the symptom, and calls it fixed: "with
+	 * two desktop windows open, adding or deleting a host in one left the
+	 * other's list showing something that was no longer there, and that
+	 * window's next save wrote from a list the store had moved past."
+	 * That fix wired each window's VIEWS to their own window's store, and
+	 * could not reach this: there is no shared store for the other
+	 * window's changed() to arrive on.
+	 */
+	bssh_main_window first;
+	bssh_main_window second;
+
+	QVERIFY2(first.profile_store() == second.profile_store(),
+	          "two windows must share one profile store, or each rewrites "
+	          "hosts.ini from a list that predates the other's save");
+
+	/*
+	 * And the behaviour, because pointer equality on its own would pass
+	 * against a store that shared the object and still wrote stale lists.
+	 */
+	const int alpha = first.profile_store()->save(named(QStringLiteral("alpha")));
+	QVERIFY(alpha != 0);
+	const int beta = second.profile_store()->save(named(QStringLiteral("beta")));
+	QVERIFY(beta != 0);
+
+	QVERIFY2(beta != alpha,
+	          "two windows minting the same host id makes one host inherit the "
+	          "other's stored credential");
+
+	/*
+	 * Read back from the FILE, which is where the loss happens -- a store
+	 * constructed now loads it rather than answering out of either
+	 * window's memory.
+	 */
+	{
+		bssh_profile_store on_disk;
+		QStringList names;
+		for (const bssh_profile_t &saved : on_disk.profiles()) names << saved.name;
+
+		QVERIFY2(names.contains(QStringLiteral("alpha")),
+		          qPrintable(QStringLiteral("the first window's host is gone; the "
+		                                     "file holds: ") + names.join(QStringLiteral(", "))));
+		QVERIFY2(names.contains(QStringLiteral("beta")),
+		          qPrintable(QStringLiteral("the second window's host is gone; the "
+		                                     "file holds: ") + names.join(QStringLiteral(", "))));
+	}
+
+	first.profile_store()->remove(alpha);
+	first.profile_store()->remove(beta);
+}
+
 void layout_test::focus_follows_the_pointer_only_when_asked() {
 	/*
 	 * sec 8.3's [OPEN] question, answered: offered, and off by default.

@@ -47,6 +47,32 @@ public:
 	 * writes its config somewhere sensible rather than failing to open.
 	 */
 	explicit bssh_profile_store(const QString &path = QString(), QObject *parent = nullptr);
+
+	/*
+	 * The one store over the app's own config directory (sec 8.4).
+	 *
+	 * Same rule as bssh_session_registry::shared() and for a sharper
+	 * reason: the registry shared so a session opened in one window is
+	 * visible in another, and this shares so a host saved in one window is
+	 * not DELETED by the next save in another. Hosts live in a QList
+	 * loaded at construction, and write_profiles() clears hosts.ini and
+	 * writes that list back whole -- so two stores over one file are two
+	 * full-file writers with no reader between them, and the second write
+	 * erases whatever the first added. Measured, not feared: two windows,
+	 * a host saved through each, and only the second survived on disk.
+	 *
+	 * The id collision is the half that reaches credentials. A new id is
+	 * highest+1 over the store's own list, so two stale lists mint the
+	 * same one, and secrets are keyed "profile:<id>:password" (sec 11).
+	 *
+	 * Constructed on first use and never destroyed, like the registry:
+	 * windows hold it and outlive nothing, and tearing it down at
+	 * static-destruction time would race whatever is still reading rows.
+	 *
+	 * The path-taking constructor above stays public and is what tests
+	 * use; this is only for the app's real one.
+	 */
+	static bssh_profile_store *shared();
 	~bssh_profile_store() override;
 
 	bool is_open() const { return m_open; }

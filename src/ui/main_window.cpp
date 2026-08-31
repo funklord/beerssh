@@ -91,7 +91,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_split_action(nullptr),
       m_detach_action(nullptr),
       m_terminal_page(new QWidget(this)),
-      m_profile_store(new bssh_profile_store(QString(), this)),
+      m_profile_store(bssh_profile_store::shared()),
       m_session_dialog(nullptr),
       m_host_list(nullptr),
       m_host_editor(nullptr),

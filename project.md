@@ -941,6 +941,17 @@ model on a finger.
   caused by somebody else: a list that jumps under the user's cursor because
   another window saved would be a new annoyance put in place of an old
   staleness.
+  **And it did not fix the two-window case it opens with, which stood as a
+  false claim in this document until it was measured.** That wiring joined
+  each window's views to *that window's* store, and the window constructed
+  its own — `new bssh_profile_store(QString(), this)` — so there was no
+  shared object for another window's `changed()` to arrive on. Fixed
+  properly by `bssh_profile_store::shared()`; the measurement and the
+  credential consequence are in §8.4. Worth leaving both halves visible:
+  the entry read as complete because its opening sentence named the
+  two-window symptom and its closing sentence named a two-window
+  consideration, so the middle — which only ever addressed three views
+  inside one window — was never re-read against them.
 - **The view did not follow the history when the history changed SIZE.**
   `bssh_emulator::scrollback_changed` had no listener anywhere in the tree.
   It went unnoticed because the two paths that fire it most — a line pushed
@@ -2983,6 +2994,38 @@ window with no name is a blank row in the task switcher.
   the status line: it is a different failure with a different remedy, and
   the honest form of it is a test that tears a tab out and asks which
   window the prompt appears on.
+- **The registry was made process-wide and the profile store was not, so
+  two windows silently ate each other's hosts.** This section says "a
+  window is just another view onto the registry — the registry stays
+  single and process-wide... Do not let a second window imply a second
+  registry", and that rule was applied to the thing windows *read* and
+  never to the thing they *write*. `bssh_main_window` constructed its own
+  `bssh_profile_store(QString(), this)`.
+  The store loads hosts into a `QList` once, at construction, and
+  `write_profiles()` calls `QSettings::clear()` and writes that list back
+  whole. Two stores over one `hosts.ini` are therefore two full-file
+  writers with no reader between them. Measured with two windows and one
+  host saved through each:
+
+      first.profile_store() != second.profile_store()
+      beta == alpha                    -- both minted the same id
+      "the first window's host is gone; the file holds: beta"
+
+  **The id collision is the half that reaches credentials.** A new id is
+  `highest + 1` over the store's own stale list, and secrets are keyed
+  `profile:<id>:password` (§11) — so the host that survives inherits the
+  stored password of the host that was erased. A credential reachable
+  from a host its owner never gave it to.
+  Fixed with `bssh_profile_store::shared()`, mirroring
+  `bssh_session_registry::shared()`; the path-taking constructor stays for
+  tests. Sharing the object also completes the view wiring described at
+  §7's store entry, which until now could only reach views inside one
+  window.
+  **The generalisation is the part worth carrying.** When one object is
+  made process-wide because two views must agree, ask what else those
+  views *write* through. Half a rule is not half a fix: the read path
+  looked correct, was tested, and was the reason nobody looked at the
+  write path — and the write path is where a loss can happen at all.
 - Rendering N panes means N terminal widgets repainting — keep the glyph cache
   **shared** across panes (§9.5) and throttle repaints to the display refresh
   rather than to data arrival, or a chatty `yes`-style output in one pane will

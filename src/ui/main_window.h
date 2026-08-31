@@ -83,8 +83,14 @@ public:
 	bssh_session_registry *registry() const { return m_registry; }
 
 	/*
-	 * The host and preset rows this window reads and writes. Owned by the
-	 * window, unlike the registry above.
+	 * The host and preset rows this window reads and writes. Process-wide
+	 * and shared with every other window, exactly like the registry above
+	 * -- the window owns neither.
+	 *
+	 * It DID own one, and that was the bug: two stores over one hosts.ini
+	 * are two full-file writers with no reader between them, so a host
+	 * saved in one window was erased by the next save in another, and
+	 * both windows minted the same id for a new host (sec 8.4).
 	 *
 	 * Exposed for the same reason: an edit to a row has to reach the
 	 * sessions already open on it, and that wiring cannot be asserted on

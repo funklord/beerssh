@@ -505,6 +505,11 @@ bssh_profile_t bssh_profile_store::profile(int id) const {
 	return bssh_profile_t();
 }
 
+bssh_profile_store *bssh_profile_store::shared() {
+	static bssh_profile_store *store = new bssh_profile_store;
+	return store;
+}
+
 int bssh_profile_store::save(const bssh_profile_t &profile) {
 	if (!m_open || !profile.is_valid()) return 0;
 
