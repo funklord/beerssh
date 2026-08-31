@@ -1697,8 +1697,35 @@ void bssh_main_window::wire_session(bssh_session *session) {
 		});
 	}
 
+	/*
+	 * Only the window whose pane the chord was typed into.
+	 *
+	 * Every other handler wired here guards on m_shown or m_current, and
+	 * has to: this runs off the registry's session_added and the registry
+	 * is process-wide (sec 8.4), so EVERY window wires every session. A
+	 * second listener that returns immediately costs nothing, which is
+	 * why the arrangement is right.
+	 *
+	 * This one had no guard, and the comment at the top of this function
+	 * names why that is not survivable -- handle_shortcut acts on
+	 * m_terminal_view, m_current and m_panes, all of them THIS window's,
+	 * and has no idea which window asked. With two windows open, a paste
+	 * typed in one was therefore also pasted into whatever the other
+	 * happened to be showing: the text lands on a host the user was not
+	 * aiming at, and a pasted line ending in a newline runs there. The
+	 * earlier fix moved the wiring so a torn-out tab reached its NEW
+	 * window; it did not stop the chord reaching every other one.
+	 *
+	 * m_current rather than m_shown, because handle_shortcut acts on the
+	 * FOCUSED pane -- a background tab in this window is not where the
+	 * keys went either, and m_current follows pane focus
+	 * (on_pane_focus_changed).
+	 */
 	connect(session->input_router(), &bssh_input_router::shortcut_pressed,
-	         this, &bssh_main_window::handle_shortcut);
+	         this, [this, session](bssh_input_router::shortcut_t shortcut) {
+		if (m_current != session) return;
+		handle_shortcut(shortcut);
+	});
 
 	/*
 	 * OSC 52 (sec 7.1): the remote asking to set the clipboard.

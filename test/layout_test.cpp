@@ -3740,6 +3740,104 @@ void layout_test::a_session_adopted_from_another_window_is_wired_to_this_one() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::a_shortcut_acts_only_on_the_window_it_was_typed_in() {
+	/*
+	 * A chord belongs to the pane it was typed into (sec 8.3, sec 8.4).
+	 *
+	 * wire_session() hangs off the registry's session_added, and the
+	 * registry is process-wide -- so EVERY window wires EVERY session.
+	 * That is deliberate and right for the handlers beside it: each one
+	 * guards on showing the session, or on it being the current one, and a
+	 * second listener that returns immediately costs nothing.
+	 *
+	 * shortcut_pressed was the one with no guard, and wire_session's own
+	 * comment names the hazard without closing it -- handle_shortcut acts
+	 * on m_terminal_view, m_current and m_panes, all of them THIS window's,
+	 * and has no idea which window asked. With two windows open a paste
+	 * typed in one was therefore also pasted into whatever the other
+	 * happened to be showing. On a terminal that is not cosmetic: the text
+	 * lands on a host the user was not aiming at, and a pasted line ending
+	 * in a newline runs there.
+	 *
+	 * Two windows and no tear-out, because that is the smaller
+	 * arrangement: the fault needs only a second window to exist, and a
+	 * test that reached it by dragging a tab would have blamed the drag.
+	 *
+	 * Read off the TRANSPORT rather than the emulator, for the reason
+	 * recorded further up this file: take_output() is drained on every
+	 * output_ready, so asking the emulator returns empty and the test
+	 * passes against any answer whatsoever, including none.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	QList<bssh_fake_ssh_session *> made;
+	bssh_ssh_session::set_factory([&made](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		made.append(fake);
+		return fake;
+	});
+
+	{
+		bssh_main_window elsewhere;
+		elsewhere.resize(900, 600);
+		elsewhere.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&elsewhere));
+
+		bssh_session *bystander =
+		    elsewhere.registry()->create(named(QStringLiteral("bystander")));
+		elsewhere.adopt_session(bystander);
+		bystander->connect_to_host();
+		QCoreApplication::processEvents();
+
+		bssh_main_window typed_in;
+		typed_in.resize(900, 600);
+		typed_in.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&typed_in));
+
+		bssh_session *aimed_at =
+		    typed_in.registry()->create(named(QStringLiteral("aimed")));
+		typed_in.adopt_session(aimed_at);
+		aimed_at->connect_to_host();
+		QCoreApplication::processEvents();
+
+		/*
+		 * In creation order, and asserted rather than assumed: a window
+		 * that opened a session of its own would shift the pairing and
+		 * every assertion below would be about the wrong link.
+		 */
+		QCOMPARE(made.size(), 2);
+		bssh_fake_ssh_session *bystander_link = made.at(0);
+		bssh_fake_ssh_session *aimed_link = made.at(1);
+
+		bystander_link->clear_written();
+		aimed_link->clear_written();
+
+		QGuiApplication::clipboard()->setText(QStringLiteral("whoami"));
+
+		/*
+		 * Through the router's own key handling rather than by emitting
+		 * the signal: the chord is half of what is under test, and a test
+		 * that raises the signal by hand says nothing about whether
+		 * Ctrl+Shift+V still produces it. Kept by the app, so it must not
+		 * also reach the remote as bytes.
+		 */
+		QKeyEvent paste(QEvent::KeyPress, Qt::Key_V,
+		                 Qt::ControlModifier | Qt::ShiftModifier, QString());
+		QVERIFY(!aimed_at->input_router()->handle_key(&paste));
+		QCoreApplication::processEvents();
+
+		/* The control. Without it a window that pasted NOWHERE would pass. */
+		QCOMPARE(aimed_link->written(), QByteArrayLiteral("whoami"));
+
+		QVERIFY2(bystander_link->written().isEmpty(),
+		          "a paste typed in one window must not reach another window's session");
+	}
+
+	bssh_ssh_session::set_factory(nullptr);
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::closing_a_window_leaves_the_other_windows_sessions_alone() {
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));

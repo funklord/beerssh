@@ -2908,6 +2908,34 @@ window with no name is a blank row in the task switcher.
   desktop, where a terminal is what the app opens with — no front door showing
   either. Two windows, one of them useless, is a worse answer than a gesture
   that does nothing.
+- **Every window wires every session, so every per-session handler needs a
+  guard — and one did not.** `wire_session()` hangs off the registry's
+  `session_added` and the registry is process-wide, so a session created
+  anywhere is wired by every window there is. That is the right arrangement
+  and is what lets an adopted tab work at all: each handler guards on
+  `m_shown` or on `m_current`, and a second listener that returns
+  immediately costs nothing.
+  `shortcut_pressed` was connected straight to `handle_shortcut`, which
+  guards on nothing and acts on `m_terminal_view`, `m_current` and
+  `m_panes` — all of them *this* window's. So **with two windows open, a
+  paste typed in one was also pasted into whatever the other happened to be
+  showing**: the clipboard onto a host the user was not aiming at, and a
+  pasted line ending in a newline runs there. The new-tab and new-window
+  chords opened one of each per window, and page-up scrolled both.
+  **The comment above that connection named the hazard and did not close
+  it** — "handle_shortcut acts on m_terminal_view and has no idea which
+  window asked" was written while fixing the torn-out case, which was the
+  opposite failure: the new window not wired at all. Wiring the new window
+  did nothing about the chord reaching every *other* one, and a hazard
+  written down next to the code that still has it reads exactly like a
+  hazard that was dealt with. Worth the entry for that alone.
+  Guarded on `m_current` rather than `m_shown`, because a chord belongs to
+  the pane it was typed into: a background tab in this window is not where
+  the keys went either.
+  It needs only a second window to reach — no tear-out, no split, no drag —
+  so the test is two windows and one Ctrl+Shift+V, and it fails on the
+  bystander's transport rather than on the emulator, which `take_output()`
+  would have drained to empty.
 - Rendering N panes means N terminal widgets repainting — keep the glyph cache
   **shared** across panes (§9.5) and throttle repaints to the display refresh
   rather than to data arrival, or a chatty `yes`-style output in one pane will
