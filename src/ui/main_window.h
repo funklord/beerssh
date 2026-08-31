@@ -117,6 +117,19 @@ public:
 	QList<bssh_session *> shown_sessions() const { return m_shown; }
 
 	/*
+	 * The status line's text, before eliding.
+	 *
+	 * Exposed for the same reason as the four above, and it had none at
+	 * all until a defect needed one: this line composes what it says from
+	 * the CURRENT session and an error string set from anywhere, so
+	 * whether a message belongs to the session it is printed beside is a
+	 * question only the composed text can answer. The label is elided to
+	 * the window width, so reading the widget would assert about layout
+	 * rather than about attribution.
+	 */
+	QString status_text() const { return m_status_text; }
+
+	/*
 	 * What closing the window should do when sessions are still
 	 * connected. A pure decision, separated from the dialog that asks it,
 	 * so the policy can be tested without a message box on screen -- and

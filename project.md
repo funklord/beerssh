@@ -2936,6 +2936,53 @@ window with no name is a blank row in the task switcher.
   so the test is two windows and one Ctrl+Shift+V, and it fails on the
   bystander's transport rather than on the emulator, which `take_output()`
   would have drained to empty.
+- **The status line is one sentence built from two sources, so an error
+  belongs to whichever session set it last.** `update_status()` composes
+  the current session's target and state and then appends `m_error` after
+  a dash. `on_failed()` set that from any session the window had opened,
+  guarding on nothing — so a background tab dropping printed
+  `prod.example disconnected -- connection reset` against the host on
+  screen, naming the one that was fine and describing the one that was
+  not. Measured, not reasoned: that string is what the test read back.
+  Its two siblings in the same function already guarded — `shell_exited`
+  returns unless the session is current, `state_changed` acts only when it
+  is — and this one **could not have**, because it is a slot taking the
+  reason and not the session. The connection is the only place that knows
+  which session spoke, which is why the guard has to live there and why
+  the pointer-to-member form is what made the omission invisible.
+  **Nothing cleaned it up.** The reconnect message that would have
+  replaced the text is guarded the same way and returns early for a
+  session that is not current, so the wrong line stayed until something
+  unrelated set another. For the *current* session the same failure is
+  superseded within the same turn of the loop by "reconnecting in 2s",
+  which is why the test asks the control for a clause rather than for the
+  failure's own words.
+  The fix costs a background tab nothing: §8.3's per-tab dot is where a
+  session nobody is looking at reports itself, and
+  `bssh_tab_status::state_for()` already answers `DISCONNECTED`.
+- **None of the eight signals `prepare_profile()` connects had a test, and
+  the reason is reachability.** They are the credential and trust prompts
+  — `failed`, `host_key_unknown`, `host_key_changed`, `host_key_revoked`,
+  `needs_key_passphrase`, `needs_password` — plus `shell_exited` and
+  `state_changed`. `prepare_profile()` is private and `open_profile()`
+  protected, so the only road a test can take to any of them is the
+  **launch profile** the constructor accepts; a session put in with
+  `registry()->create()` and `adopt_session()` gets none of them. That is
+  why the bug above survived, and it is worth knowing before writing the
+  next test in this area: `bssh_main_window window(named("host"))` is the
+  arrangement that has these signals, and `adopt_session` is the one that
+  does not.
+  It also means those two roads give a session **different** wiring, which
+  is a live question rather than a settled one. Established by reading and
+  **not** by a test: those connections take the creating window as their
+  context object and `adopt_session()` does not remake them, so a session
+  torn out into a second window keeps the first window's prompts — a
+  password dialog raised by the window the tab came from, and none at all
+  if that window has since closed, since Qt drops a connection when its
+  context object dies. Left open deliberately rather than fixed alongside
+  the status line: it is a different failure with a different remedy, and
+  the honest form of it is a test that tears a tab out and asks which
+  window the prompt appears on.
 - Rendering N panes means N terminal widgets repainting — keep the glyph cache
   **shared** across panes (§9.5) and throttle repaints to the display refresh
   rather than to data arrival, or a chatty `yes`-style output in one pane will

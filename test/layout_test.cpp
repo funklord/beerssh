@@ -3838,6 +3838,125 @@ void layout_test::a_shortcut_acts_only_on_the_window_it_was_typed_in() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::a_failure_is_reported_against_the_session_it_came_from() {
+	/*
+	 * The status line composes ONE sentence out of two sources: the
+	 * current session's target and state, and m_error -- which any session
+	 * this window opened may set. So a failure belonging to one session is
+	 * printed as though it described another:
+	 *
+	 *     prod.example connected -- connection reset
+	 *
+	 * a true clause and a false sentence, whose named host is the one that
+	 * is fine. Worse than silence, because the reader has no way to tell
+	 * it is being told about somewhere else.
+	 *
+	 * Both siblings in the same function guard: shell_exited returns
+	 * unless the session is current, state_changed acts only when it is.
+	 * on_failed guarded on nothing -- and being a slot that takes only the
+	 * reason, it COULD not have guarded without being handed the session,
+	 * which is how it came to be the one that did not.
+	 *
+	 * This does not silence a background tab. sec 8.3's per-tab dot is
+	 * where a session nobody is looking at reports itself, and
+	 * bssh_tab_status::state_for() already answers DISCONNECTED for a
+	 * dropped one -- so the guard moves the message to the tab it belongs
+	 * to rather than dropping it.
+	 *
+	 * Driven through the LAUNCH profile, because that is the only road a
+	 * test can take to the connections that matter: they are made in
+	 * prepare_profile(), which is private and reached from open_profile()
+	 * -- protected -- and from the constructor. A session put in with
+	 * registry()->create() and adopt_session() never gets them, which is
+	 * why none of these eight signals had a test until now.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	QList<bssh_fake_ssh_session *> made;
+	bssh_ssh_session::set_factory([&made](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		made.append(fake);
+		return fake;
+	});
+
+	/*
+	 * The control, first and in its own window: a failure on the session
+	 * the line is ABOUT must still be printed. Without it, a guard that
+	 * threw every error away would pass the assertion below.
+	 */
+	{
+		made.clear();
+		bssh_main_window solo(named(QStringLiteral("solo")));
+		solo.resize(900, 600);
+		solo.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&solo));
+		QCoreApplication::processEvents();
+
+		QCOMPARE(made.size(), 1);
+		made.at(0)->simulate_connection_lost();
+		QCoreApplication::processEvents();
+
+		/*
+		 * Not asserted against the failure's own words. sec 5.3's
+		 * reconnection machine schedules a retry in the same turn of the
+		 * loop and REPLACES the text with "reconnecting in 2s (attempt
+		 * 1)", which is the more useful thing to say and is correct. What
+		 * the control has to establish is only that a failure on the
+		 * current session reaches this line at all -- so it asks for the
+		 * clause, not for its wording.
+		 */
+		QVERIFY2(solo.status_text().contains(QStringLiteral("solo.example")),
+		          qPrintable(QStringLiteral("the line must be about solo, and says: ")
+		                      + solo.status_text()));
+		QVERIFY2(solo.status_text().contains(QStringLiteral(" -- ")),
+		          qPrintable(QStringLiteral("a failure on the current session must reach "
+		                                     "the line, which says: ")
+		                      + solo.status_text()));
+	}
+
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	{
+		made.clear();
+		bssh_main_window window(named(QStringLiteral("staging")));
+		window.resize(900, 600);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		QCoreApplication::processEvents();
+
+		QCOMPARE(made.size(), 1);
+		bssh_fake_ssh_session *staging_link = made.at(0);
+
+		/*
+		 * A second host, which becomes the one on screen. staging is a
+		 * background tab from here on -- still this window's, still
+		 * connected to on_failed, and no longer what the line is about.
+		 */
+		bssh_session *prod = window.registry()->create(named(QStringLiteral("prod")));
+		window.adopt_session(prod);
+		QCoreApplication::processEvents();
+
+		QVERIFY2(window.status_text().contains(QStringLiteral("prod.example")),
+		          "the line has to be about prod before it can be wrong about it");
+
+		staging_link->simulate_connection_lost();
+		QCoreApplication::processEvents();
+
+		QVERIFY2(!window.status_text().contains(QStringLiteral("connection reset")),
+		          qPrintable(QStringLiteral("a background tab's failure must not be printed "
+		                                     "against the session on screen, but the line "
+		                                     "says: ")
+		                      + window.status_text()));
+
+		/* And the line still says what it is actually showing. */
+		QVERIFY(window.status_text().contains(QStringLiteral("prod.example")));
+	}
+
+	bssh_ssh_session::set_factory(nullptr);
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::closing_a_window_leaves_the_other_windows_sessions_alone() {
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));

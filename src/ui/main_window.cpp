@@ -725,7 +725,35 @@ bssh_session *bssh_main_window::prepare_profile(const bssh_profile_t &profile) {
 	 */
 	if (!m_shown.contains(session)) m_shown.append(session);
 
-	connect(session, &bssh_session::failed, this, &bssh_main_window::on_failed);
+	/*
+	 * Only while this is the session the line is about.
+	 *
+	 * update_status() composes ONE sentence -- the current session's
+	 * target and state, then m_error appended after a dash -- so an error
+	 * set by any other session is printed as though it described this
+	 * one. Measured: a background tab dropping put
+	 * "prod.example disconnected -- connection reset" on screen, naming
+	 * the host that was fine and describing the one that was not.
+	 *
+	 * Both siblings below already guard this way -- shell_exited returns
+	 * unless the session is current, state_changed acts only when it is.
+	 * This one could not, being a slot that takes the reason and not the
+	 * session, which is how it became the exception.
+	 *
+	 * And nothing cleaned it up afterwards. The reconnect message that
+	 * would have replaced it is guarded the same way and returns for a
+	 * session that is not current, so the wrong text stayed on the line
+	 * until something else happened to set one.
+	 *
+	 * A background tab is not silenced by this: sec 8.3's per-tab dot is
+	 * where a session nobody is looking at reports itself, and
+	 * bssh_tab_status::state_for() already answers DISCONNECTED for it.
+	 */
+	connect(session, &bssh_session::failed, this,
+	         [this, session](const QString &reason) {
+		if (session != m_current) return;
+		on_failed(reason);
+	});
 
 	/*
 	 * Resolve the host's settings once, here, where the store is (sec
