@@ -61,6 +61,13 @@ private slots:
 	void the_keys_are_taken_from_general_and_not_another_section();
 	void a_file_that_cannot_be_read_abstains_rather_than_guessing();
 	void a_half_written_scheme_abstains_and_the_next_file_answers();
+
+	/* The second dialect: LXQt states the same thing another way. */
+	void an_lxqt_palette_is_read_though_it_spells_it_differently();
+	void an_lxqt_light_palette_reads_light();
+	void an_lxqt_palette_file_named_light_holding_dark_reads_dark();
+	void the_lxqt_theme_name_locates_the_file_it_does_not_judge_it();
+	void an_lxqt_theme_name_with_a_separator_is_refused();
 };
 
 #endif /* BSSH_PLATFORM_TEST_H */

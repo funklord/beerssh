@@ -249,7 +249,7 @@ public:
 		 *    whatever Qt happened to hand us.
 		 */
 		const bssh_appearance_t written =
-		    bssh_appearance_from_kdeglobals(bssh_kdeglobals_sources());
+		    bssh_appearance_from_scheme_files(bssh_scheme_sources());
 		if (written != BSSH_APPEARANCE_UNKNOWN) return written;
 
 		/*
@@ -347,6 +347,20 @@ bssh_platform *bssh_platform::instance() {
  * "0,42,78" -> a colour, or an invalid one. TDE and KDE 3 write plain
  * decimal triples; anything else is not this format and is not guessed at.
  */
+/*
+ * "#232323" -> a colour, or an invalid one. LXQt writes hex where TDE
+ * writes decimal triples: two spellings of one statement, so both are
+ * read rather than one being preferred.
+ */
+static QColor bssh_colour_from_hex(const QString &value) {
+	const QString s = value.trimmed();
+	if (s.size() != 7 || !s.startsWith(QLatin1Char('#'))) return QColor();
+	bool ok = false;
+	const uint n = s.mid(1).toUInt(&ok, 16);
+	if (!ok) return QColor();
+	return QColor(int((n >> 16) & 0xff), int((n >> 8) & 0xff), int(n & 0xff));
+}
+
 static QColor bssh_colour_from_triple(const QString &value) {
 	const QStringList parts = value.split(QLatin1Char(','));
 	if (parts.size() != 3) return QColor();
@@ -359,19 +373,75 @@ static QColor bssh_colour_from_triple(const QString &value) {
 	return QColor(r, g, b);
 }
 
-QStringList bssh_kdeglobals_sources() {
+QStringList bssh_lxqt_palette_files(const QString &config,
+                                     const QStringList &data_dirs) {
+	QFile file(config);
+	if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return {};
+
+	QTextStream in(&file);
+	QString section;
+	QString name;
+	while (!in.atEnd()) {
+		const QString line = in.readLine().trimmed();
+		if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+			section = line.mid(1, line.size() - 2);
+			continue;
+		}
+		if (section.compare(QStringLiteral("General"), Qt::CaseInsensitive) != 0)
+			continue;
+		const int eq = line.indexOf(QLatin1Char('='));
+		if (eq < 0) continue;
+		if (line.left(eq).trimmed().compare(QStringLiteral("theme"),
+		                                     Qt::CaseInsensitive) == 0)
+			name = line.mid(eq + 1).trimmed();
+	}
+	if (name.isEmpty()) return {};
+	/*
+	 * A palette name is a filename component. One carrying a separator
+	 * would reach outside the palette directories, and no legitimate name
+	 * has one: refuse rather than resolve.
+	 */
+	if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\')) ||
+	    name.startsWith(QLatin1Char('.')))
+		return {};
+
+	QStringList out;
+	for (const QString &dir : data_dirs)
+		out << dir + QStringLiteral("/lxqt/palettes/") + name;
+	return out;
+}
+
+QStringList bssh_scheme_sources() {
 	const QString home = QDir::homePath();
 	const QByteArray xdg = qgetenv("XDG_CONFIG_HOME");
 	const QString cfg = xdg.isEmpty() ? home + QStringLiteral("/.config")
 	                                   : QString::fromLocal8Bit(xdg);
-	return QStringList{
+
+	/* XDG's own defaults, spelled out: a desktop that sets neither is
+	 * exactly the kind this rung exists for. */
+	const QByteArray dh = qgetenv("XDG_DATA_HOME");
+	const QByteArray dd = qgetenv("XDG_DATA_DIRS");
+	const QString data_home = dh.isEmpty()
+	    ? home + QStringLiteral("/.local/share")
+	    : QString::fromLocal8Bit(dh);
+	const QString data_rest = dd.isEmpty()
+	    ? QStringLiteral("/usr/local/share:/usr/share")
+	    : QString::fromLocal8Bit(dd);
+	QStringList data_dirs;
+	data_dirs << data_home;
+	data_dirs << data_rest.split(QLatin1Char(':'), Qt::SkipEmptyParts);
+
+	QStringList sources{
 		cfg + QStringLiteral("/kdeglobals"),
 		home + QStringLiteral("/.trinity/share/config/kdeglobals"),
 		home + QStringLiteral("/.kde/share/config/kdeglobals"),
 	};
+	sources << bssh_lxqt_palette_files(
+	    cfg + QStringLiteral("/lxqt/lxqt.conf"), data_dirs);
+	return sources;
 }
 
-bssh_appearance_t bssh_appearance_from_kdeglobals(const QStringList &sources) {
+bssh_appearance_t bssh_appearance_from_scheme_files(const QStringList &sources) {
 	for (const QString &path : sources) {
 		QFile file(path);
 		if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) continue;
@@ -388,21 +458,37 @@ bssh_appearance_t bssh_appearance_from_kdeglobals(const QStringList &sources) {
 				continue;
 			}
 			/*
-			 * Only under [General]. The same key names appear in
-			 * per-application sections, and taking whichever came last
-			 * would answer about some other program's colours.
+			 * Sections matter in both dialects and for the same reason:
+			 * the same key names appear in per-application sections, and
+			 * taking whichever came last would answer about some other
+			 * program's colours.
 			 */
-			if (section.compare(QStringLiteral("General"), Qt::CaseInsensitive) != 0)
-				continue;
+			const bool general =
+			    section.compare(QStringLiteral("General"), Qt::CaseInsensitive) == 0;
+			const bool palette =
+			    section.compare(QStringLiteral("Palette"), Qt::CaseInsensitive) == 0;
+			if (!general && !palette) continue;
 			const int eq = line.indexOf(QLatin1Char('='));
 			if (eq < 0) continue;
 			const QString key = line.left(eq).trimmed();
 			const QString value = line.mid(eq + 1).trimmed();
-			if (key.compare(QStringLiteral("windowBackground"), Qt::CaseInsensitive) == 0)
-				background = bssh_colour_from_triple(value);
-			else if (key.compare(QStringLiteral("windowForeground"),
+			if (general) {
+				/* TDE and KDE 3. */
+				if (key.compare(QStringLiteral("windowBackground"),
+				                 Qt::CaseInsensitive) == 0)
+					background = bssh_colour_from_triple(value);
+				else if (key.compare(QStringLiteral("windowForeground"),
+				                      Qt::CaseInsensitive) == 0)
+					foreground = bssh_colour_from_triple(value);
+				continue;
+			}
+			/* LXQt. */
+			if (key.compare(QStringLiteral("window_color"),
+			                 Qt::CaseInsensitive) == 0)
+				background = bssh_colour_from_hex(value);
+			else if (key.compare(QStringLiteral("window_text_color"),
 			                      Qt::CaseInsensitive) == 0)
-				foreground = bssh_colour_from_triple(value);
+				foreground = bssh_colour_from_hex(value);
 		}
 
 		/* This file had no answer; the next one may. */

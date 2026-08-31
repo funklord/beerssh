@@ -554,7 +554,7 @@ void platform_test::the_desktops_own_colours_are_read_when_nothing_else_says() {
 	                    "colorScheme=DarkBlue.kcsrc\n"
 	                    "windowBackground=0,42,78\n"
 	                    "windowForeground=220,220,220\n"));
-	QCOMPARE(bssh_appearance_from_kdeglobals({path}), BSSH_APPEARANCE_DARK);
+	QCOMPARE(bssh_appearance_from_scheme_files({path}), BSSH_APPEARANCE_DARK);
 }
 
 /* The control. Without it a parser that always says dark would pass. */
@@ -565,7 +565,7 @@ void platform_test::a_light_scheme_in_the_same_format_reads_light() {
 	    QStringLiteral("[General]\n"
 	                    "windowBackground=255,255,255\n"
 	                    "windowForeground=0,0,0\n"));
-	QCOMPARE(bssh_appearance_from_kdeglobals({path}), BSSH_APPEARANCE_LIGHT);
+	QCOMPARE(bssh_appearance_from_scheme_files({path}), BSSH_APPEARANCE_LIGHT);
 }
 
 /*
@@ -584,7 +584,7 @@ void platform_test::the_colours_decide_and_the_scheme_name_does_not() {
 	                    "colorScheme=DarkBlue.kcsrc\n"
 	                    "windowBackground=255,255,255\n"
 	                    "windowForeground=0,0,0\n"));
-	QCOMPARE(bssh_appearance_from_kdeglobals({path}), BSSH_APPEARANCE_LIGHT);
+	QCOMPARE(bssh_appearance_from_scheme_files({path}), BSSH_APPEARANCE_LIGHT);
 }
 
 /*
@@ -603,7 +603,7 @@ void platform_test::the_keys_are_taken_from_general_and_not_another_section() {
 	                    "[konsole]\n"
 	                    "windowBackground=255,255,255\n"
 	                    "windowForeground=0,0,0\n"));
-	QCOMPARE(bssh_appearance_from_kdeglobals({path}), BSSH_APPEARANCE_DARK);
+	QCOMPARE(bssh_appearance_from_scheme_files({path}), BSSH_APPEARANCE_DARK);
 }
 
 /*
@@ -616,8 +616,8 @@ void platform_test::a_file_that_cannot_be_read_abstains_rather_than_guessing() {
 	QTemporaryDir dir;
 	QVERIFY(dir.isValid());
 	const QString absent = dir.filePath(QStringLiteral("no-such-file"));
-	QCOMPARE(bssh_appearance_from_kdeglobals({absent}), BSSH_APPEARANCE_UNKNOWN);
-	QCOMPARE(bssh_appearance_from_kdeglobals({}), BSSH_APPEARANCE_UNKNOWN);
+	QCOMPARE(bssh_appearance_from_scheme_files({absent}), BSSH_APPEARANCE_UNKNOWN);
+	QCOMPARE(bssh_appearance_from_scheme_files({}), BSSH_APPEARANCE_UNKNOWN);
 }
 
 /*
@@ -632,12 +632,91 @@ void platform_test::a_half_written_scheme_abstains_and_the_next_file_answers() {
 	const QString half = write_kdeglobals(dir, QStringLiteral("half"),
 	    QStringLiteral("[General]\n"
 	                    "windowBackground=0,42,78\n"));
-	QCOMPARE(bssh_appearance_from_kdeglobals({half}), BSSH_APPEARANCE_UNKNOWN);
+	QCOMPARE(bssh_appearance_from_scheme_files({half}), BSSH_APPEARANCE_UNKNOWN);
 
 	const QString whole = write_kdeglobals(dir, QStringLiteral("whole"),
 	    QStringLiteral("[General]\n"
 	                    "windowBackground=0,42,78\n"
 	                    "windowForeground=220,220,220\n"));
-	QCOMPARE(bssh_appearance_from_kdeglobals({half, whole}),
+	QCOMPARE(bssh_appearance_from_scheme_files({half, whole}),
 	          BSSH_APPEARANCE_DARK);
+}
+
+/*
+ * The second dialect. A desktop with no dark-mode status is the normal
+ * case, and each spells the statement differently: LXQt uses [Palette]
+ * and #rrggbb where TDE uses [General] and decimal triples. Both
+ * sessions are installed on the machine this was written on, and before
+ * this the parser found NOTHING in an LXQt config -- not a wrong answer,
+ * which would have been noticed, but silence, which reads as no opinion.
+ */
+void platform_test::an_lxqt_palette_is_read_though_it_spells_it_differently() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = write_kdeglobals(dir, QStringLiteral("pal-dark"),
+	    QStringLiteral("[Palette]\n"
+	                    "base_color=#282828\n"
+	                    "window_color=#232323\n"
+	                    "window_text_color=#e1e6e6\n"));
+	QCOMPARE(bssh_appearance_from_scheme_files({path}), BSSH_APPEARANCE_DARK);
+}
+
+void platform_test::an_lxqt_light_palette_reads_light() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = write_kdeglobals(dir, QStringLiteral("pal-light"),
+	    QStringLiteral("[Palette]\n"
+	                    "window_color=#efefef\n"
+	                    "window_text_color=#000000\n"));
+	QCOMPARE(bssh_appearance_from_scheme_files({path}), BSSH_APPEARANCE_LIGHT);
+}
+
+/*
+ * Of the twelve palettes LXQt ships, luminance classifies all twelve
+ * correctly while EIGHT are named something that says nothing about
+ * which they are. Here the file is called "Light" and holds Silver's
+ * colours, which are dark -- so a substring test gets it backwards.
+ */
+void platform_test::an_lxqt_palette_file_named_light_holding_dark_reads_dark() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = write_kdeglobals(dir, QStringLiteral("Light"),
+	    QStringLiteral("[Palette]\n"
+	                    "window_color=#636464\n"
+	                    "window_text_color=#f9f9f9\n"));
+	QCOMPARE(bssh_appearance_from_scheme_files({path}), BSSH_APPEARANCE_DARK);
+}
+
+/* The indirection LXQt needs and kdeglobals does not. */
+void platform_test::the_lxqt_theme_name_locates_the_file_it_does_not_judge_it() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString conf = write_kdeglobals(dir, QStringLiteral("lxqt.conf"),
+	    QStringLiteral("[General]\n"
+	                    "theme=Clearlooks\n"
+	                    "[Qt]\n"
+	                    "style=Fusion\n"));
+	QStringList want;
+	want << QStringLiteral("/a/lxqt/palettes/Clearlooks");
+	want << QStringLiteral("/b/lxqt/palettes/Clearlooks");
+	QStringList dirs;
+	dirs << QStringLiteral("/a");
+	dirs << QStringLiteral("/b");
+	QCOMPARE(bssh_lxqt_palette_files(conf, dirs), want);
+
+	const QString bare = write_kdeglobals(dir, QStringLiteral("bare.conf"),
+	    QStringLiteral("[General]\n" "icon_theme=breeze\n"));
+	QVERIFY(bssh_lxqt_palette_files(bare, {QStringLiteral("/a")}).isEmpty());
+}
+
+/*
+ * A palette name is a filename component; one carrying a separator would
+ * reach outside the palette directories. Refuse rather than resolve.
+ */
+void platform_test::an_lxqt_theme_name_with_a_separator_is_refused() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString conf = write_kdeglobals(dir, QStringLiteral("escape.conf"),
+	    QStringLiteral("[General]\n" "theme=../../../../etc/shadow\n"));
+	QVERIFY(bssh_lxqt_palette_files(conf, {QStringLiteral("/a")}).isEmpty());
 }
