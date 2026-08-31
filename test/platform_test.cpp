@@ -516,3 +516,128 @@ void platform_test::a_paste_is_questioned_only_when_it_carries_more_than_a_line(
 	/* And the setting really is what turns it off. */
 	QVERIFY(!bssh_main_window::paste_needs_confirming(QStringLiteral("ls\nrm -rf /"), false));
 }
+
+/*
+ * Tier 4, and why it needs a rung of its own.
+ *
+ * Trinity exposes no Qt 6 platform theme and runs no XDG portal, so the
+ * hint answers Unknown and the portal cannot be asked -- and with nothing
+ * integrated Qt hands the program its DEFAULT LIGHT PALETTE. The palette
+ * rung then reports light while working perfectly: there is no dark
+ * palette anywhere for it to find. A false sense of coverage rather than
+ * a visible gap, which is why the file the desktop actually wrote has to
+ * be read, and read BEFORE the palette rather than after it.
+ *
+ * The values below are the real ones, measured on the desktop that
+ * prompted the rule: windowBackground=0,42,78 against
+ * windowForeground=220,220,220.
+ */
+namespace {
+
+QString write_kdeglobals(const QTemporaryDir &dir, const QString &name,
+                          const QString &body) {
+	const QString path = dir.filePath(name);
+	QFile f(path);
+	f.open(QIODevice::WriteOnly | QIODevice::Text);
+	f.write(body.toUtf8());
+	f.close();
+	return path;
+}
+
+}  /* namespace */
+
+void platform_test::the_desktops_own_colours_are_read_when_nothing_else_says() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = write_kdeglobals(dir, QStringLiteral("dark"),
+	    QStringLiteral("[General]\n"
+	                    "colorScheme=DarkBlue.kcsrc\n"
+	                    "windowBackground=0,42,78\n"
+	                    "windowForeground=220,220,220\n"));
+	QCOMPARE(bssh_appearance_from_kdeglobals({path}), BSSH_APPEARANCE_DARK);
+}
+
+/* The control. Without it a parser that always says dark would pass. */
+void platform_test::a_light_scheme_in_the_same_format_reads_light() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = write_kdeglobals(dir, QStringLiteral("light"),
+	    QStringLiteral("[General]\n"
+	                    "windowBackground=255,255,255\n"
+	                    "windowForeground=0,0,0\n"));
+	QCOMPARE(bssh_appearance_from_kdeglobals({path}), BSSH_APPEARANCE_LIGHT);
+}
+
+/*
+ * The name is not a predicate. This desktop's scheme is called
+ * DarkBlue.kcsrc and IS dark, which is luck; plenty of dark schemes are
+ * not named for it and plenty of light ones would match a substring
+ * test. So a file whose name says dark and whose colours say light must
+ * read light, or the implementation is reading the wrong thing and
+ * passing the case above by coincidence.
+ */
+void platform_test::the_colours_decide_and_the_scheme_name_does_not() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = write_kdeglobals(dir, QStringLiteral("misnamed"),
+	    QStringLiteral("[General]\n"
+	                    "colorScheme=DarkBlue.kcsrc\n"
+	                    "windowBackground=255,255,255\n"
+	                    "windowForeground=0,0,0\n"));
+	QCOMPARE(bssh_appearance_from_kdeglobals({path}), BSSH_APPEARANCE_LIGHT);
+}
+
+/*
+ * kdeglobals carries per-application sections using the same key names.
+ * Taking whichever came last would answer about some other program's
+ * colours -- here a dark [General] followed by a light section, which
+ * must still read dark.
+ */
+void platform_test::the_keys_are_taken_from_general_and_not_another_section() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = write_kdeglobals(dir, QStringLiteral("sectioned"),
+	    QStringLiteral("[General]\n"
+	                    "windowBackground=0,42,78\n"
+	                    "windowForeground=220,220,220\n"
+	                    "[konsole]\n"
+	                    "windowBackground=255,255,255\n"
+	                    "windowForeground=0,0,0\n"));
+	QCOMPARE(bssh_appearance_from_kdeglobals({path}), BSSH_APPEARANCE_DARK);
+}
+
+/*
+ * Abstain rather than guess. The errors are not symmetric: a wrong light
+ * answer is merely plain, a wrong dark one is unreadable text on a pale
+ * background. So no readable file means no opinion -- NOT a coin toss,
+ * and not a default of light dressed up as an answer.
+ */
+void platform_test::a_file_that_cannot_be_read_abstains_rather_than_guessing() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString absent = dir.filePath(QStringLiteral("no-such-file"));
+	QCOMPARE(bssh_appearance_from_kdeglobals({absent}), BSSH_APPEARANCE_UNKNOWN);
+	QCOMPARE(bssh_appearance_from_kdeglobals({}), BSSH_APPEARANCE_UNKNOWN);
+}
+
+/*
+ * A file present but missing one of the pair says nothing, and the list
+ * is an order of authority rather than a set: the next file gets to
+ * answer. Both halves in one case because a parser that skipped the
+ * first file for the wrong reason would still pass the second half.
+ */
+void platform_test::a_half_written_scheme_abstains_and_the_next_file_answers() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString half = write_kdeglobals(dir, QStringLiteral("half"),
+	    QStringLiteral("[General]\n"
+	                    "windowBackground=0,42,78\n"));
+	QCOMPARE(bssh_appearance_from_kdeglobals({half}), BSSH_APPEARANCE_UNKNOWN);
+
+	const QString whole = write_kdeglobals(dir, QStringLiteral("whole"),
+	    QStringLiteral("[General]\n"
+	                    "windowBackground=0,42,78\n"
+	                    "windowForeground=220,220,220\n"));
+	QCOMPARE(bssh_appearance_from_kdeglobals({half, whole}),
+	          BSSH_APPEARANCE_DARK);
+}

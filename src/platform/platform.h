@@ -5,6 +5,7 @@
 #include <QPalette>
 #include <Qt>
 #include <QString>
+#include <QStringList>
 #include <functional>
 
 /*
@@ -247,6 +248,27 @@ public:
 	 */
 	virtual bssh_appearance_t system_appearance() const = 0;
 
+	/*
+	 * Tier 4 of the shared dark-desktop rule (claude-guidelines
+	 * harmonization.md): the scheme the desktop wrote down, for a
+	 * desktop that tells Qt nothing.
+	 *
+	 * The three sources above do not fail VISIBLY on a Trinity or KDE 3
+	 * session, which is what makes this worth its own rung. That desktop
+	 * exposes no Qt 6 platform theme and runs no XDG portal, so the hint
+	 * answers Unknown and the portal cannot be asked -- and with nothing
+	 * integrated Qt hands the program its DEFAULT LIGHT PALETTE, so the
+	 * palette rung finds no dark palette and reports light while working
+	 * correctly. A false sense of coverage rather than a gap.
+	 *
+	 * `sources` are files to consult in order, so the parsing is
+	 * testable without a desktop; bssh_kdeglobals_sources() is the real
+	 * list. Returns UNKNOWN when no file can be read or parsed --
+	 * ABSTAIN RATHER THAN GUESS, because the errors are not symmetric: a
+	 * wrong light answer is merely plain, a wrong dark one is unreadable
+	 * text on a pale background.
+	 */
+
 protected:
 	/*
 	 * The palette the PLATFORM handed us, captured at construction --
@@ -288,5 +310,22 @@ signals:
 	 */
 	void network_changed();
 };
+
+
+/*
+ * The kdeglobals files a TDE or KDE 3 desktop writes, most authoritative
+ * first. Separate from the parser so a test can supply its own.
+ */
+QStringList bssh_kdeglobals_sources();
+
+/*
+ * The appearance those files state, or UNKNOWN. See the comment on
+ * system_appearance() above for why this rung exists.
+ *
+ * THE COLOURS DECIDE, NEVER THE SCHEME NAME. `colorScheme=DarkBlue.kcsrc`
+ * contains "Dark" by luck; plenty of dark schemes do not, and a name is
+ * not a predicate about luminance.
+ */
+bssh_appearance_t bssh_appearance_from_kdeglobals(const QStringList &sources);
 
 #endif /* BSSH_PLATFORM_H */

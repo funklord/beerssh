@@ -48,6 +48,19 @@ private slots:
 	void the_palettes_are_actually_light_and_dark();
 	void an_explicit_mode_ignores_the_system();
 	void the_theme_setting_survives_a_restart();
+
+	/*
+	 * Tier 4 of the shared dark-desktop rule: the scheme a TDE or KDE 3
+	 * desktop writes to kdeglobals, which is the only place it says so.
+	 * The parser takes its sources as an argument precisely so this can
+	 * run without one of those desktops.
+	 */
+	void the_desktops_own_colours_are_read_when_nothing_else_says();
+	void a_light_scheme_in_the_same_format_reads_light();
+	void the_colours_decide_and_the_scheme_name_does_not();
+	void the_keys_are_taken_from_general_and_not_another_section();
+	void a_file_that_cannot_be_read_abstains_rather_than_guessing();
+	void a_half_written_scheme_abstains_and_the_next_file_answers();
 };
 
 #endif /* BSSH_PLATFORM_TEST_H */

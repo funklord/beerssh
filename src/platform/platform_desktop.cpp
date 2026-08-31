@@ -14,6 +14,11 @@
 #include <QSystemTrayIcon>
 
 #include "model/command_line.h"
+#include "term/colour_scheme.h"
+
+#include <QFile>
+#include <QTextStream>
+#include <QStringList>
 
 /*
  * Desktop implementation of bssh_platform (Linux primary; macOS and
@@ -234,10 +239,24 @@ public:
 		if (from_portal != BSSH_APPEARANCE_UNKNOWN) return from_portal;
 
 		/*
-		 * 3. The palette we were given. If something themed this app,
+		 * 4. What the desktop wrote down, asked BEFORE the palette
+		 *    below and not after it. The palette rung always answers --
+		 *    a palette is either lighter or darker than its text -- so
+		 *    a rung placed after it can never run. On the desktop this
+		 *    exists for, that ordering would report light and this
+		 *    would be dead code. Authority, not sequence: a statement
+		 *    the desktop wrote down outranks an inference drawn from
+		 *    whatever Qt happened to hand us.
+		 */
+		const bssh_appearance_t written =
+		    bssh_appearance_from_kdeglobals(bssh_kdeglobals_sources());
+		if (written != BSSH_APPEARANCE_UNKNOWN) return written;
+
+		/*
+		 * 5. The palette we were given. If something themed this app,
 		 *    its window colour says which way round it meant it -- a
 		 *    weaker signal than being told, but a true one, and it costs
-		 *    nothing when the first two have already answered.
+		 *    nothing when the others have already answered.
 		 */
 		const QColor window = startup_palette().color(QPalette::Window);
 		return window.lightness() < 128 ? BSSH_APPEARANCE_DARK : BSSH_APPEARANCE_LIGHT;
@@ -323,3 +342,94 @@ bssh_platform *bssh_platform::instance() {
 }
 
 #include "platform_desktop.moc"
+
+/*
+ * "0,42,78" -> a colour, or an invalid one. TDE and KDE 3 write plain
+ * decimal triples; anything else is not this format and is not guessed at.
+ */
+static QColor bssh_colour_from_triple(const QString &value) {
+	const QStringList parts = value.split(QLatin1Char(','));
+	if (parts.size() != 3) return QColor();
+	bool ok_r = false, ok_g = false, ok_b = false;
+	const int r = parts.at(0).trimmed().toInt(&ok_r);
+	const int g = parts.at(1).trimmed().toInt(&ok_g);
+	const int b = parts.at(2).trimmed().toInt(&ok_b);
+	if (!ok_r || !ok_g || !ok_b) return QColor();
+	if (r < 0 || r > 255 || g < 0 || g > 255 || b < 0 || b > 255) return QColor();
+	return QColor(r, g, b);
+}
+
+QStringList bssh_kdeglobals_sources() {
+	const QString home = QDir::homePath();
+	const QByteArray xdg = qgetenv("XDG_CONFIG_HOME");
+	const QString cfg = xdg.isEmpty() ? home + QStringLiteral("/.config")
+	                                   : QString::fromLocal8Bit(xdg);
+	return QStringList{
+		cfg + QStringLiteral("/kdeglobals"),
+		home + QStringLiteral("/.trinity/share/config/kdeglobals"),
+		home + QStringLiteral("/.kde/share/config/kdeglobals"),
+	};
+}
+
+bssh_appearance_t bssh_appearance_from_kdeglobals(const QStringList &sources) {
+	for (const QString &path : sources) {
+		QFile file(path);
+		if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) continue;
+
+		QTextStream in(&file);
+		QString section;
+		QColor background;
+		QColor foreground;
+
+		while (!in.atEnd()) {
+			const QString line = in.readLine().trimmed();
+			if (line.startsWith(QLatin1Char('[')) && line.endsWith(QLatin1Char(']'))) {
+				section = line.mid(1, line.size() - 2);
+				continue;
+			}
+			/*
+			 * Only under [General]. The same key names appear in
+			 * per-application sections, and taking whichever came last
+			 * would answer about some other program's colours.
+			 */
+			if (section.compare(QStringLiteral("General"), Qt::CaseInsensitive) != 0)
+				continue;
+			const int eq = line.indexOf(QLatin1Char('='));
+			if (eq < 0) continue;
+			const QString key = line.left(eq).trimmed();
+			const QString value = line.mid(eq + 1).trimmed();
+			if (key.compare(QStringLiteral("windowBackground"), Qt::CaseInsensitive) == 0)
+				background = bssh_colour_from_triple(value);
+			else if (key.compare(QStringLiteral("windowForeground"),
+			                      Qt::CaseInsensitive) == 0)
+				foreground = bssh_colour_from_triple(value);
+		}
+
+		/* This file had no answer; the next one may. */
+		if (!background.isValid() || !foreground.isValid()) continue;
+
+		/*
+		 * bssh_relative_luminance rather than a second luminance of our
+		 * own: colour_scheme.h already exposes it "because three callers
+		 * need them and a fourth copy is how they stop agreeing", and
+		 * this is the fourth caller. It is the gamma-correct WCAG form,
+		 * where harmonization.md names the raw weighted sum; both answer
+		 * the same question -- is the background darker than the text --
+		 * and the tree's existing one is the better of the two.
+		 */
+		const double back = bssh_relative_luminance(background.rgb());
+		const double fore = bssh_relative_luminance(foreground.rgb());
+		if (back < fore) return BSSH_APPEARANCE_DARK;
+		if (back > fore) return BSSH_APPEARANCE_LIGHT;
+		/* Identical luminance states nothing. */
+		return BSSH_APPEARANCE_UNKNOWN;
+	}
+
+	/*
+	 * ABSTAIN RATHER THAN GUESS. The two errors are not symmetric: a
+	 * wrong light answer is merely plain, while a wrong dark one is
+	 * unreadable text on a pale background. No readable file means no
+	 * opinion, and the caller keeps its own default.
+	 */
+	return BSSH_APPEARANCE_UNKNOWN;
+}
