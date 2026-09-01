@@ -6373,7 +6373,29 @@ background).
    suspend/resume), backoff, status UI. **Built:** `bssh_conn_manager`
    per session, exponential backoff capped and jittered, network-change
    retry, user-disconnect suppression, and an attempt limit so a dead host
-   stops waking the radio. **Keepalive is built** (§4): a per-host
+   stops waking the radio.
+   **The storm control above was the one requirement of §5.3 that was not
+   built, and a test was named for it.** `note_network_changed` called
+   `attempt_reconnect()` directly — no delay, no jitter, no attempt counted
+   — and every manager in the registry hangs off the one platform
+   `network_changed` signal. So a flap had all N sessions dialling in the
+   same millisecond, by the single route §5.3 names: *"a network flap must
+   not fire N simultaneous reconnects"*. The machinery to prevent it was
+   already there and three lines away; the flap path went round it.
+   **`jitter_separates_sessions_dropped_together` did not catch this, and
+   its comment opens "the storm sec 5.3 warns about: one network flap drops
+   eight sessions".** It measures `backoff_delay_ms`, a pure function, and
+   proves the jitter separates eight draws — on the backoff path, which a
+   flap does not take. A test can name the hazard exactly and still cover
+   only the path that was already safe, because the name describes the
+   scenario while the body describes the arithmetic. The new one asserts on
+   the MANAGER: nothing dialled synchronously, a delay to be staggered by,
+   and eight flapping sessions not returning in one instant.
+   Routing the flap through `schedule_reconnect()` also counts the attempt
+   and honours the cap, and the reset that was already there keeps it
+   prompt — the delay becomes the base second rather than whatever the last
+   outage had climbed to, so "try now" still means about a second instead
+   of up to a minute. **Keepalive is built** (§4): a per-host
    SSH_MSG_IGNORE interval for NAT plus TCP keepalive and `TCP_USER_TIMEOUT`
    for dead-peer detection, applied both when settings resolve and when the
    transport is built — they arrive in that order, and doing only the first

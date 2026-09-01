@@ -70,6 +70,71 @@ void conn_manager_test::jitter_separates_sessions_dropped_together() {
 	QVERIFY2(delays.size() > 1, "jitter collapsed: every session would retry at once");
 }
 
+void conn_manager_test::a_network_flap_staggers_the_sessions_rather_than_dialling_them() {
+	/*
+	 * The storm the test above is NAMED for, by the route that actually
+	 * causes one. That test measures backoff_delay_ms and proves the
+	 * jitter separates eight sessions -- on the backoff path. A network
+	 * flap does not take the backoff path: note_network_changed called
+	 * attempt_reconnect() directly, with no delay and no jitter, and
+	 * every manager in the registry hangs off the one platform signal.
+	 * So the eight reconnected in the same millisecond by the single
+	 * route sec 5.3 singles out by name.
+	 *
+	 * A test can name the hazard and still cover only the path that was
+	 * already safe. This asserts on the manager rather than on the pure
+	 * function, which is the difference.
+	 */
+	bssh_session session(host(QStringLiteral("flapping")));
+	bssh_conn_manager manager(&session);
+
+	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
+	QSignalSpy started(&manager, &bssh_conn_manager::reconnect_started);
+
+	session.note_connection_lost();
+	QCOMPARE(scheduled.count(), 1);
+
+	manager.note_network_changed();
+
+	/* Nothing was dialled synchronously. */
+	QCOMPARE(started.count(), 0);
+
+	/* It was scheduled instead, with a delay to be staggered by. */
+	QCOMPARE(scheduled.count(), 2);
+	QVERIFY2(scheduled.at(1).at(0).toInt() > 0,
+	          "a network flap scheduled a reconnect with no delay to stagger");
+
+	/*
+	 * And promptly: the point of noticing the network at all is not to
+	 * sit out a delay computed for a network that has gone, so the reset
+	 * must put this back near the base second rather than leaving it at
+	 * whatever the last outage had climbed to.
+	 */
+	QVERIFY2(scheduled.at(1).at(0).toInt() < 4 * bssh_conn_manager::base_delay_ms(),
+	          qPrintable(QStringLiteral("a flap waits %1ms")
+	                             .arg(scheduled.at(1).at(0).toInt())));
+
+	/*
+	 * Eight sessions flapping together do not all come back at the same
+	 * instant -- which is the requirement itself, measured through the
+	 * manager.
+	 */
+	QSet<int> delays;
+	for (int i = 0; i < 8; ++i) {
+		bssh_session dropped(host(QStringLiteral("host%1").arg(i)));
+		bssh_conn_manager one(&dropped);
+		QSignalSpy spy(&one, &bssh_conn_manager::reconnect_scheduled);
+
+		dropped.note_connection_lost();
+		one.note_network_changed();
+
+		QVERIFY(spy.count() >= 1);
+		delays.insert(spy.last().at(0).toInt());
+	}
+
+	QVERIFY2(delays.size() > 1, "every session would come back in the same millisecond");
+}
+
 void conn_manager_test::an_exited_shell_is_not_reopened() {
 	bssh_session session(host(QStringLiteral("exiting")));
 	bssh_conn_manager manager(&session);

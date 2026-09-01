@@ -77,14 +77,28 @@ void bssh_conn_manager::note_network_changed() {
 
 	/*
 	 * The network moved, so whatever the backoff was waiting for has
-	 * probably just changed. Reset and try immediately rather than
-	 * sitting out the remainder of a delay that was computed for a
-	 * network that no longer exists -- this is the whole reason the
-	 * platform reports the event at all (sec 5.3).
+	 * probably just changed. Reset rather than sitting out the remainder
+	 * of a delay computed for a network that no longer exists -- this is
+	 * the whole reason the platform reports the event at all (sec 5.3).
+	 *
+	 * SCHEDULED, not dialled. This used to call attempt_reconnect()
+	 * directly, which is the one case sec 5.3 singles out by name:
+	 * "with many sessions open, a network flap must not fire N
+	 * simultaneous reconnects. Stagger with per-session jitter." Every
+	 * manager in the registry hangs off the same platform signal, so a
+	 * direct call had all of them dialling in the same millisecond, on
+	 * the network that had just come back -- the storm, arriving by the
+	 * one route that skipped the machinery built to prevent it.
+	 *
+	 * Going through the scheduler applies the same jitter the backoff
+	 * uses, counts the attempt, and honours the cap. The reset is what
+	 * keeps it prompt: the delay becomes the base second rather than
+	 * whatever the last outage had climbed to, so "try again now" still
+	 * means about a second instead of up to a minute.
 	 */
 	m_attempt = 0;
 	m_timer->stop();
-	attempt_reconnect();
+	schedule_reconnect();
 }
 
 void bssh_conn_manager::on_session_state_changed() {
