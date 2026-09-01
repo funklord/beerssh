@@ -2631,6 +2631,7 @@ void bssh_main_window::build_menu_bar() {
 	QMenu *edit = m_menu_bar->addMenu(QStringLiteral("&Edit"));
 
 	m_copy_action = edit->addAction(QStringLiteral("&Copy"));
+	m_copy_action->setObjectName(QStringLiteral("menu_copy"));
 	m_copy_action->setShortcut(chord("copy"));
 	connect(m_copy_action, &QAction::triggered, this, [this] {
 		if (!m_terminal_view) return;
@@ -2639,6 +2640,7 @@ void bssh_main_window::build_menu_bar() {
 	});
 
 	m_paste_action = edit->addAction(QStringLiteral("&Paste"));
+	m_paste_action->setObjectName(QStringLiteral("menu_paste"));
 	m_paste_action->setShortcut(chord("paste"));
 	connect(m_paste_action, &QAction::triggered, this, [this] {
 		paste_into_current(QGuiApplication::clipboard()->text());
@@ -2703,14 +2705,49 @@ void bssh_main_window::build_menu_bar() {
 		                                          .toHtmlEscaped()));
 	});
 
+	/*
+	 * The clipboard is the third thing the menu bar depends on, and it
+	 * was the one nothing watched. Copy is re-derived on
+	 * selection_changed and both verbs on session and binding changes;
+	 * Paste's own input had no subscription, so the bar could not have
+	 * asked whether there was anything to paste and settled for whether
+	 * there was a session.
+	 *
+	 * Cheap to answer often: refresh_menu_bar sets a handful of enabled
+	 * flags, and this fires when a clipboard changes rather than while
+	 * one is being read.
+	 */
+	connect(QGuiApplication::clipboard(), &QClipboard::dataChanged,
+	         this, &bssh_main_window::refresh_menu_bar);
+
 	refresh_menu_bar();
 }
 
 /*
  * Enabled state and shortcut labels, re-derived rather than remembered.
- * Called whenever the session or the bindings change, because both can:
- * a chord is rebindable and a window can have no session at all.
+ * Called whenever the session, the bindings or the CLIPBOARD change --
+ * all three can, and Paste depends on the last of them.
  */
+bool bssh_main_window::can_copy() const {
+	return m_terminal_view && m_terminal_view->has_selection();
+}
+
+bool bssh_main_window::can_paste() const {
+	/*
+	 * An empty clipboard means Paste does nothing, so it is offered only
+	 * when there is something to paste -- which is what every editor
+	 * does, and what the right-click menu already did while the menu bar
+	 * settled for "is there a session".
+	 *
+	 * The bar could not have asked this before: it re-derives on session
+	 * and binding changes, and the clipboard is neither, so the answer
+	 * would have been whatever was true when the last session appeared.
+	 * The constructor subscribes to QClipboard::dataChanged for exactly
+	 * this, the way selection_changed already drives the Copy half.
+	 */
+	return m_current && !QGuiApplication::clipboard()->text().isEmpty();
+}
+
 void bssh_main_window::refresh_menu_bar() {
 	if (!m_menu_bar) return;
 
@@ -2719,13 +2756,13 @@ void bssh_main_window::refresh_menu_bar() {
 	for (QAction *action : m_session_actions) action->setEnabled(has_session);
 
 	if (m_copy_action) {
-		m_copy_action->setEnabled(m_terminal_view && m_terminal_view->has_selection());
+		m_copy_action->setEnabled(can_copy());
 		m_copy_action->setShortcut(
 		        QKeySequence(bssh_input_router::binding_for(QStringLiteral("copy"))));
 	}
 
 	if (m_paste_action) {
-		m_paste_action->setEnabled(has_session);
+		m_paste_action->setEnabled(can_paste());
 		m_paste_action->setShortcut(
 		        QKeySequence(bssh_input_router::binding_for(QStringLiteral("paste"))));
 	}
@@ -2770,13 +2807,13 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	copy->setObjectName(QStringLiteral("terminal_copy"));
 	copy->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("copy"))));
-	copy->setEnabled(m_terminal_view && m_terminal_view->has_selection());
+	copy->setEnabled(can_copy());
 
 	QAction *paste = menu->addAction(QStringLiteral("&Paste"));
 	paste->setObjectName(QStringLiteral("terminal_paste"));
 	paste->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("paste"))));
-	paste->setEnabled(m_current && !QGuiApplication::clipboard()->text().isEmpty());
+	paste->setEnabled(can_paste());
 
 	menu->addSeparator();
 

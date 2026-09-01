@@ -23,6 +23,7 @@
 #include "terminal_view_test.h"
 
 #include "fake_ssh_session.h"
+#include <QClipboard>
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "term/font_catalog.h"
@@ -1804,6 +1805,74 @@ void terminal_view_test::the_menu_shows_the_chord_the_router_would_actually_stea
 	QAction *paste = menu->findChild<QAction *>(QStringLiteral("terminal_paste"));
 	QVERIFY2(paste, "the context menu has no Paste action to check");
 	QCOMPARE(paste->shortcut(), QKeySequence(QStringLiteral("Ctrl+Shift+V")));
+}
+
+void terminal_view_test::both_menus_agree_on_when_paste_is_offered() {
+	/*
+	 * This window offers Paste from two menus, and they disagreed: the
+	 * menu bar enabled it whenever a session existed, while the
+	 * right-click menu also required something on the clipboard. The same
+	 * verb, at the same instant, greyed in one place and offered in the
+	 * other.
+	 *
+	 * The bar could not have asked the better question. It re-derives on
+	 * session and binding changes, and Copy additionally on
+	 * selection_changed -- but nothing watched the CLIPBOARD, so an
+	 * answer depending on it would have been whatever was true when the
+	 * last session appeared. The missing subscription is the bug; the
+	 * weaker rule is what it left behind.
+	 *
+	 * Asserted as AGREEMENT between the two menus, which is the property
+	 * that was broken, and then that the agreed answer actually tracks
+	 * the clipboard -- so a window that simply disabled Paste everywhere
+	 * would not pass.
+	 */
+	bssh_main_window window;
+
+	/*
+	 * WITH a session, which is the only state where the two rules can
+	 * differ: with none, "is there a session" and "is there a session and
+	 * something to paste" are both false, and the menus agree for the
+	 * wrong reason. The first version of this test had no session and
+	 * passed against the bug -- sabotage is what caught it.
+	 */
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("pastes");
+	profile.host = QStringLiteral("pastes.example");
+	window.adopt_session(registry->create(profile));
+
+	const auto context_paste_enabled = [&window]() {
+		QMenu *menu = window.build_terminal_menu(&window);
+		if (!menu) return false;
+		const QAction *paste =
+		        menu->findChild<QAction *>(QStringLiteral("terminal_paste"));
+		const bool enabled = paste && paste->isEnabled();
+		delete menu;
+		return enabled;
+	};
+
+	QAction *bar_paste = window.findChild<QAction *>(QStringLiteral("menu_paste"));
+	QVERIFY2(bar_paste, "the menu bar has no Paste action to compare against");
+
+	QGuiApplication::clipboard()->clear();
+	QCOMPARE(context_paste_enabled(), bar_paste->isEnabled());
+
+	QGuiApplication::clipboard()->setText(QStringLiteral("something to paste"));
+	QCOMPARE(context_paste_enabled(), bar_paste->isEnabled());
+
+	/*
+	 * And the agreed answer actually TRACKS the clipboard, so a window
+	 * that disabled Paste everywhere would not pass either.
+	 */
+	QGuiApplication::clipboard()->setText(QStringLiteral("more"));
+	QVERIFY2(bar_paste->isEnabled(), "paste stayed off with a session and a full clipboard");
+
+	QGuiApplication::clipboard()->clear();
+	QVERIFY2(!bar_paste->isEnabled(), "paste was offered with an empty clipboard");
+	QCOMPARE(context_paste_enabled(), bar_paste->isEnabled());
 }
 
 void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {

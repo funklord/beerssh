@@ -478,6 +478,17 @@ private:
 	void build_menu_bar();
 	void refresh_menu_bar();
 
+	/*
+	 * When each edit verb is available. ONE answer each, because this
+	 * window offers both of them from two menus -- the menu bar and the
+	 * right-click menu -- and the two disagreed: the bar enabled Paste
+	 * whenever a session existed, while the context menu also required
+	 * something on the clipboard. Same verb, same instant, greyed in one
+	 * place and offered in the other.
+	 */
+	bool can_copy() const;
+	bool can_paste() const;
+
 	/* The session behind a tab of THIS window, or null (sec 8.4). */
 	bssh_session *session_at_tab(int index) const;
 

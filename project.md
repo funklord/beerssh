@@ -697,6 +697,30 @@ quirks on Android.
   and calls `set_bindings` itself, discarding anything set before it. The fix
   was right and the test was wrong, which is the reverse of the usual
   suspicion and the reason to read a failure before believing it.
+  **The same two menus also answered "can you paste?" two ways.** The bar
+  enabled Paste whenever a session existed; the right-click menu also
+  required something on the clipboard. Same verb, same instant, greyed in
+  one place and offered in the other. The bar could not have asked the
+  better question: it re-derives on session and binding changes, and Copy
+  additionally on `selection_changed`, but **nothing watched the
+  clipboard** — so an answer depending on it would have been whatever was
+  true when the last session appeared. The missing subscription is the
+  bug and the weaker rule is what it left behind. Both verbs now have one
+  answer each, `can_copy()` and `can_paste()`, and the constructor
+  subscribes to `QClipboard::dataChanged` the way it already listens for a
+  selection.
+  **The first version of that test passed against the bug**, and only
+  sabotage found it out. It built a window with no session — and with
+  none, "is there a session" and "is there a session and something to
+  paste" are both false, so the two menus agreed for the wrong reason. It
+  is the failure this document keeps recording, committed while writing
+  the test for it: **the case that distinguishes two rules is the one
+  where they disagree, and a fixture that cannot reach it will report
+  agreement whatever the code says.** It adopts a session now, and each
+  half is sabotaged separately — the old rule gives context-disabled
+  against bar-enabled, and removing the subscription gives the reverse,
+  which is what shows the subscription is load-bearing rather than
+  decorative.
 
 ### 6.2 On-screen keyboard strategy (touch platforms)
 Android soft keyboards don't expose Ctrl/Esc/etc. Plan a **custom on-screen key
