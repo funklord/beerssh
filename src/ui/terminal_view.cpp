@@ -454,9 +454,14 @@ void bssh_terminal_view::attach_emulator(bssh_emulator *emulator) {
 		 */
 		m_scrollback_connection =
 		        connect(m_emulator, &bssh_emulator::scrollback_changed, this, [this] {
-			set_scroll_offset(m_scroll_offset);
-			sync_scrollbar();
-			update();
+			/*
+			 * The same three things this used to do, plus the two
+			 * it did not: the content revision and the reader's
+			 * event. A trim changes what the terminal HAS, which
+			 * is a content change whether or not a cell was
+			 * damaged.
+			 */
+			note_content_changed();
 		});
 	}
 
@@ -1995,7 +2000,21 @@ void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings
 	view->set_font_id(family, size);
 }
 
-void bssh_terminal_view::on_screen_damaged() {
+void bssh_terminal_view::note_content_changed() {
+	/*
+	 * The revision the accessibility layer caches its flattened text
+	 * against. It was bumped here and nowhere else, so the one content
+	 * change that damages nothing -- set_scrollback_lines() trimming the
+	 * ring -- left a reader describing lines that had been dropped, with
+	 * every offset past the trim wrong. characterRect made it worse
+	 * rather than better: it asks the view for geometry using
+	 * history_base(), which the trim DOES move, so the rectangles
+	 * pointed at the wrong rows too.
+	 *
+	 * That is sec 9.5's scrollbar defect exactly, arriving at the second
+	 * consumer of one signal: scrollback_changed was wired for the bar
+	 * and not for this.
+	 */
 	++m_content_revision;
 
 	/*
@@ -2021,6 +2040,10 @@ void bssh_terminal_view::on_screen_damaged() {
 
 	QAccessibleTextUpdateEvent event(this, 0, QString(), QString());
 	QAccessible::updateAccessibility(&event);
+}
+
+void bssh_terminal_view::on_screen_damaged() {
+	note_content_changed();
 }
 
 void bssh_terminal_view::set_raise_contrast(bool raise) {

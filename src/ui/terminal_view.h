@@ -407,6 +407,14 @@ public slots:
 	 * told is a screen reader still reading the login banner while a
 	 * build scrolls past.
 	 */
+	/*
+	 * Everything that follows from the content changing, in one place.
+	 *
+	 * Damage is one cause and a scrollback trim is another, and only the
+	 * first used to do all of it -- see the definition.
+	 */
+	void note_content_changed();
+
 	void on_screen_damaged();
 
 signals:

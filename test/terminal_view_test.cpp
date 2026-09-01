@@ -1312,6 +1312,74 @@ void terminal_view_test::the_floor_lifts_glyphs_and_leaves_backgrounds_faithful(
 	          "an inverse cell's background must keep the palette's own colour");
 }
 
+void terminal_view_test::trimming_the_history_reaches_the_reader_too() {
+	/*
+	 * sec 10.2's scrollback_lines is a per-host setting, so the history a
+	 * reader is holding can be cut from under it while it reads.
+	 *
+	 * The flattened text is cached against the view's content revision,
+	 * and that revision is bumped by on_screen_damaged() -- which a trim
+	 * does not cause. set_scrollback_lines() removes lines and damages
+	 * NOTHING, which is the same property that once left the scrollbar
+	 * advertising history that had been dropped (sec 9.5). That was fixed
+	 * for the scrollbar by wiring scrollback_changed; the accessibility
+	 * cache is the same signal's second consumer and was never wired.
+	 *
+	 * So a reader kept describing lines that no longer existed, with every
+	 * offset past the trim wrong -- and characterRect asks the view for
+	 * geometry using history_base(), which the trim DID move, so the
+	 * rectangles pointed at the wrong rows as well.
+	 *
+	 * Who is in that condition matters more than how narrow it looks: it
+	 * is people who need the screen described to them, reading a terminal
+	 * whose history a host setting just shortened.
+	 */
+	bssh_emulator emulator(30, 3);
+	for (int i = 1; i <= 40; ++i) {
+		emulator.feed(QByteArrayLiteral("line ") + QByteArray::number(i) +
+		               QByteArrayLiteral("\r\n"));
+	}
+	QVERIFY2(emulator.scrollback().count() > 10, "the test needs history to trim");
+
+	bssh_terminal_view view;
+	show_and_resize(view, 600, 120);
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	QAccessibleInterface *a = QAccessible::queryAccessibleInterface(&view);
+	QVERIFY(a);
+	QAccessibleTextInterface *text = a->textInterface();
+	QVERIFY(text);
+
+	/* Read once, so the flattened text is cached at the old size. */
+	const QString before = a->text(QAccessible::Value);
+	QVERIFY2(before.contains(QStringLiteral("line 2")),
+	          "the early history has to be there before it can be dropped");
+	const int count_before = text->characterCount();
+	QCOMPARE(count_before, before.size());
+
+	emulator.set_scrollback_lines(3);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(emulator.scrollback().count() <= 3, "the trim itself has to have happened");
+
+	const QString after = a->text(QAccessible::Value);
+
+	/*
+	 * The control, so this cannot pass against a reader that went blank:
+	 * what is still held must still be readable.
+	 */
+	QVERIFY2(after.contains(QStringLiteral("line 40")),
+	          "the live screen must survive a trim");
+
+	QVERIFY2(!after.contains(QStringLiteral("line 2")),
+	          "a reader must not go on describing history that was dropped");
+	QCOMPARE(text->characterCount(), after.size());
+	QVERIFY2(text->characterCount() < count_before,
+	          "the reader's text has to shrink when the history does");
+}
+
 void terminal_view_test::a_reader_can_reach_the_scrollback_and_the_selection() {
 	/*
 	 * History is most of what a terminal has to say. Exposing only the

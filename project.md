@@ -952,6 +952,32 @@ model on a finger.
   two-window symptom and its closing sentence named a two-window
   consideration, so the middle — which only ever addressed three views
   inside one window — was never re-read against them.
+- **And the same signal's SECOND consumer was never wired either, so a
+  screen reader went on describing dropped history.** The entry below
+  fixed `scrollback_changed` for the scrollbar. The accessibility layer
+  caches its flattened text against the view's content revision, and that
+  revision was bumped by `on_screen_damaged()` and nowhere else — so the
+  one content change that damages nothing left a reader holding text for
+  lines that no longer existed, with every offset past the trim wrong.
+  `characterRect` made it worse rather than better: it asks the view for
+  geometry using `history_base()`, which a trim DOES move, so the
+  rectangles pointed at the wrong rows as well. Stale text and stale
+  geometry, disagreeing with each other.
+  **A fix that reaches one consumer of a signal is the shape to distrust**,
+  and this is the second time this exact signal has taught it: it had no
+  listener at all, then gained one, and stopping there looked like
+  completion. Counting the consumers is the only form of the question that
+  can fail — the same lesson §14 records for `term` and
+  `scrollback_lines` reaching *something* that used them.
+  `note_content_changed()` is now the one function both causes call.
+  Damage is one cause, a trim is another, and the divergence was two
+  copies of "what follows from the content changing" where only one was
+  kept up to date.
+  **On who is in this condition**, which `working-practice.md` warns gets
+  read backwards: it is not a narrow case. It is people who need the
+  screen described to them, reading a terminal whose history a per-host
+  setting (§10.2) just shortened.
+
 - **The view did not follow the history when the history changed SIZE.**
   `bssh_emulator::scrollback_changed` had no listener anywhere in the tree.
   It went unnoticed because the two paths that fire it most — a line pushed

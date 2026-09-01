@@ -69,6 +69,7 @@ private slots:
 	void the_floor_lifts_glyphs_and_leaves_backgrounds_faithful();
 	void dimming_takes_the_text_and_the_blocks_but_never_the_background();
 	void a_reader_can_reach_the_scrollback_and_the_selection();
+	void trimming_the_history_reaches_the_reader_too();
 	void a_readers_rectangles_follow_the_grid_and_the_scroll();
 	void a_reader_counts_characters_where_the_grid_counts_cells();
 
