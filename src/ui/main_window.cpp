@@ -3517,6 +3517,25 @@ void bssh_main_window::offer_to_remember(bssh_session *session, const QString &p
 
 	if (!unlock_secret_store()) return;
 
+	/*
+	 * Read the row back out of the STORE rather than using the session's
+	 * copy of it. The two agree now that a save refreshes live sessions,
+	 * but this writes a whole row back, so taking it from anywhere other
+	 * than the row itself means an edit made in between is silently
+	 * reverted -- a hostname corrected while connected, undone by storing
+	 * a password. Only the one flag this function owns is changed.
+	 *
+	 * ASKED BEFORE THE SECRET IS WRITTEN, not after. A session outlives
+	 * the deletion of its host (sec 8.4), and it keeps the old id, so the
+	 * prompt still offers to remember. Storing first and checking second
+	 * wrote a credential under an id with no row behind it and then
+	 * declined to record the flag -- an orphaned secret that nothing will
+	 * ever erase, which is exactly what 0482afe made deletion prevent,
+	 * arriving by another road.
+	 */
+	const bssh_profile_t updated_row = m_profile_store->profile(session->profile().id);
+	if (updated_row.id != session->profile().id) return;
+
 	bssh_secret_store *store = bssh_secret_store::instance();
 	if (!store->store(bssh_profile_password_key(session->profile().id), password)) {
 		return;
@@ -3526,19 +3545,9 @@ void bssh_main_window::offer_to_remember(bssh_session *session, const QString &p
 	 * The flag goes in the profile row so the next run knows to ask for
 	 * the store passphrase. Written only after the secret itself landed,
 	 * or a failed write would leave the app hunting for a password that
-	 * was never saved.
+	 * was never saved -- an ordering this keeps.
 	 */
-	/*
-	 * Read the row back out of the STORE rather than using the session's
-	 * copy of it. The two agree now that a save refreshes live sessions,
-	 * but this writes a whole row back, so taking it from anywhere other
-	 * than the row itself means an edit made in between is silently
-	 * reverted -- a hostname corrected while connected, undone by storing
-	 * a password. Only the one flag this function owns is changed.
-	 */
-	bssh_profile_t updated = m_profile_store->profile(session->profile().id);
-	if (updated.id != session->profile().id) return;
-
+	bssh_profile_t updated = updated_row;
 	updated.has_stored_password = true;
 	m_profile_store->save(updated);
 }

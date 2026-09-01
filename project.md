@@ -4576,6 +4576,35 @@ cannot make it silently mean *trusted*.
 Checked by sabotage: restoring the old mapping fails exactly the two
 tests naming those two verdicts, and nothing else in the suite.
 
+**And the credential erase had a second road into the same bad state,
+which the first fix did not close.** `offer_to_remember` wrote the secret
+and *then* read the row back to set its flag, bailing if the row had
+gone. A session outlives the deletion of its host (§8.4) and keeps the old
+id, so the prompt still offers to remember — and storing first meant a
+credential written under an id with no row behind it, followed by a
+polite refusal to record the flag. An orphan nothing will ever erase:
+exactly what deleting a host was made to prevent, by another road.
+
+Two things about the shape, because both are easy to repeat:
+
+- **Closing one route to a bad state is not closing the state.** The
+  earlier work asked "what happens when a host is deleted?" and answered
+  it. The question that covers this is "how can a credential come to
+  exist with no row behind it?", which has more than one answer. A fix
+  believed complete because it addressed the case that prompted it is the
+  same fault this document records for the store's own multi-window
+  entry.
+- **The guard existed and was in the wrong place.** The row check was
+  already written, three lines too late. Not a missing check — a correct
+  one positioned so it could not prevent the thing it describes, which is
+  harder to see than an absent one because a reader asking "is this
+  validated?" finds that it is.
+
+The ordering the original comment protected — the flag written only after
+the secret lands — is kept. That comment was right about what it covered
+and silent about the row's existence, and it read as covering more than
+it said.
+
 **Appending to `known_hosts` could corrupt the entry already there.**
 `bssh_append_hashed_known_host` opened the file in `Append` and wrote its
 line. Two faults, and they compound:
