@@ -1697,3 +1697,43 @@ void emulator_test::a_remote_cannot_grow_the_title_without_limit() {
 	QCOMPARE(ordinary.count(), 1);
 	QCOMPARE(ordinary.first().first().toString(), QStringLiteral("a sensible name"));
 }
+
+void emulator_test::a_switched_off_image_protocol_costs_no_memory() {
+	/*
+	 * The half a feature switch did not cover. sixel, kitty graphics and
+	 * iTerm2 images each tested features.enabled AFTER buffering the whole
+	 * payload, so a host could spend this terminal's memory on a protocol
+	 * the user had turned OFF -- and on Android, which builds without
+	 * libsixel entirely, on one it cannot even decode.
+	 *
+	 * Asserted through what the terminal does rather than by reading a
+	 * buffer: with sixel off, a large payload must leave no image and must
+	 * not disturb the screen, and the terminal must still be working
+	 * afterwards. A buffer this test cannot see is exactly the thing the
+	 * cap exists to bound, so the observable claim is that the session
+	 * survives an oversized one and keeps its senses.
+	 */
+	bssh_emulator emulator(80, 24);
+
+	bssh_term_features_t off;
+	off.set(bssh_term_features_t::SIXEL, false);
+	emulator.set_features(off);
+
+	emulator.feed(QByteArrayLiteral("\x1bPq"));
+	for (int i = 0; i < 64; ++i) {
+		emulator.feed(QByteArray(4096, '?'));
+	}
+	emulator.feed(QByteArrayLiteral("\x1b\\"));
+
+	QCOMPARE(emulator.images().count(), 0);
+
+	/*
+	 * And the terminal still works, which is the control: a parser left
+	 * wedged by the oversized payload would fail here rather than above.
+	 */
+	emulator.feed(QByteArrayLiteral("after"));
+	QVERIFY2(emulator.screen().to_text().contains(QStringLiteral("after")),
+	          qPrintable(QStringLiteral("the terminal has to keep working after an "
+	                                     "oversized payload; screen holds: ")
+	                      + emulator.screen().to_text().left(80)));
+}

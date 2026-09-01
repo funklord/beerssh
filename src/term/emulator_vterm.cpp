@@ -66,6 +66,11 @@ struct bssh_emulator_private {
 	QByteArray apc_buffer;        /* an APC split across reads */
 	QByteArray osc_buffer;
 
+	/* Set when a payload passed the cap; see bssh_accumulate. */
+	bool apc_oversized = false;
+	bool osc_oversized = false;
+	bool dcs_oversized = false;
+
 	/* Accumulates a selection payload across fragments (OSC 52). */
 	QByteArray selection_buffer;
 	bool selection_oversized = false;
@@ -780,12 +785,56 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
  * untouched, which is all this needs -- unlike the private CSIs in sec
  * 7.1, no patch was required here.
  */
+/*
+ * Every remote-controlled string this terminal accumulates, bounded.
+ *
+ * on_selection_set has capped OSC 52 since it was written, and its
+ * reasoning is general: libvterm hands a long string over in pieces as
+ * its own buffer fills, so a consumer that appends them without a bound
+ * of its own lets the REMOTE decide how much memory it costs. That
+ * applied to four more buffers than it was used on -- the DCS payload for
+ * sixel and for XTGETTCAP, the APC payload for kitty graphics, and the
+ * OSC payload shared by hyperlinks, the palette, the colour queries and
+ * iTerm2 images. None needs a terminator to keep arriving.
+ *
+ * Generous, because an inline image legitimately is large: the image
+ * store's own budget is 32 MB of DECODED pixels per session, so an
+ * encoded payload well under that is not a limit anybody meets by
+ * accident.
+ *
+ * DROPPED WHOLE rather than truncated, which is the selection's rule and
+ * right for the same reason: half a base64 image, half a hyperlink or
+ * half a capability query is not a smaller version of the thing, it is a
+ * different and invalid one. sec 8.3's title is the deliberate exception
+ * -- a truncated label is still a label.
+ */
+const int BSSH_MAX_STRING_PAYLOAD = 8 * 1024 * 1024;
+
+bool bssh_accumulate(QByteArray &buffer, bool &oversized, VTermStringFragment frag) {
+	if (frag.initial) {
+		buffer.clear();
+		oversized = false;
+	}
+
+	if (buffer.size() + int(frag.len) > BSSH_MAX_STRING_PAYLOAD) {
+		oversized = true;
+		buffer.clear();
+	}
+
+	if (!oversized) buffer.append(frag.str, int(frag.len));
+
+	/* True when the caller may act on a complete, in-budget payload. */
+	return frag.final && !oversized;
+}
+
 int on_apc(VTermStringFragment frag, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 
-	if (frag.initial) self->apc_buffer.clear();
-	self->apc_buffer.append(frag.str, int(frag.len));
-	if (!frag.final) return 1;
+	if (!bssh_accumulate(self->apc_buffer, self->apc_oversized, frag)) {
+		/* Consumed either way: a half-arrived or oversized APC must not
+		 * fall through and be printed as text. */
+		return frag.final ? 1 : 1;
+	}
 
 	if (!self->apc_buffer.startsWith('G')) return 0;
 
@@ -941,9 +990,7 @@ int on_osc(int command, VTermStringFragment frag, void *user) {
 		return 0;
 	}
 
-	if (frag.initial) self->osc_buffer.clear();
-	self->osc_buffer.append(frag.str, int(frag.len));
-	if (!frag.final) return 1;
+	if (!bssh_accumulate(self->osc_buffer, self->osc_oversized, frag)) return 1;
 
 	/*
 	 * OSC 8 and OSC 1337 arrive through the same callback and are
@@ -1200,9 +1247,7 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
 	 * answered with silence.
 	 */
 	if (commandlen >= 2 && command[commandlen - 2] == '+') {
-		if (frag.initial) self->dcs_buffer.clear();
-		self->dcs_buffer.append(frag.str, int(frag.len));
-		if (!frag.final) return 1;
+		if (!bssh_accumulate(self->dcs_buffer, self->dcs_oversized, frag)) return 1;
 
 		const int handled = on_xtgettcap(self->dcs_buffer, self);
 		self->dcs_buffer.clear();
@@ -1214,11 +1259,33 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
 	 * only the body it reports success and returns a 1x1 image, which is
 	 * the kind of failure that reaches a screenshot rather than a log.
 	 */
+	/*
+	 * Nothing is accumulated when the feature is off, which is the half
+	 * the switch did not cover: this checked features.enabled AFTER
+	 * buffering the whole payload, so a host could still spend this
+	 * terminal's memory on a protocol the user had turned off -- or on an
+	 * Android build compiled without libsixel at all.
+	 */
+	if (!self->features.enabled(bssh_term_features_t::SIXEL)) {
+		self->dcs_buffer.clear();
+		self->dcs_oversized = false;
+		return 1;
+	}
+
 	if (frag.initial) {
 		self->dcs_buffer = QByteArrayLiteral("\x1bP") + QByteArray(command, int(commandlen));
+		self->dcs_oversized = false;
 	}
-	self->dcs_buffer.append(frag.str, int(frag.len));
+	if (self->dcs_buffer.size() + int(frag.len) > BSSH_MAX_STRING_PAYLOAD) {
+		self->dcs_oversized = true;
+		self->dcs_buffer.clear();
+	}
+	if (!self->dcs_oversized) self->dcs_buffer.append(frag.str, int(frag.len));
 	if (!frag.final) return 1;
+	if (self->dcs_oversized) {
+		self->dcs_buffer.clear();
+		return 1;
+	}
 
 	/*
 	 * Switched off: the data is swallowed and no image appears -- the
@@ -1226,10 +1293,8 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
 	 * BSSH_NO_SIXEL, which is the one protocol here that could already
 	 * be turned off and is the precedent this follows.
 	 */
-	if (self->features.enabled(bssh_term_features_t::SIXEL)) {
-		self->apply_graphics(bssh_parse_sixel(self->dcs_buffer,
-		                                       self->cell_width, self->cell_height));
-	}
+	self->apply_graphics(bssh_parse_sixel(self->dcs_buffer,
+	                                       self->cell_width, self->cell_height));
 	self->dcs_buffer.clear();
 	return 1;
 }

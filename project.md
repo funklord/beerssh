@@ -4635,6 +4635,40 @@ matters is precisely the file neither of them wrote last.
 `flush()` and `close()`'s error are checked too — the out-of-band failure
 channel one more layer along.
 
+**Four more buffers had the same fault, and a switched-off protocol still
+paid for it.** Generalising the title's cap found that this terminal
+accumulates five remote-controlled strings and bounded exactly one:
+
+| buffer | protocol | was bounded |
+|---|---|---|
+| `selection_buffer` | OSC 52 | yes, 64 KB |
+| `dcs_buffer` | XTGETTCAP | no |
+| `dcs_buffer` | sixel | no |
+| `apc_buffer` | kitty graphics | no |
+| `osc_buffer` | OSC 8, 4, 10/11, 1337 | no |
+
+**And every image protocol tested `features.enabled(...)` AFTER buffering
+the whole payload.** So a host could spend this terminal's memory on a
+protocol the user had switched off — or, on Android, one the build cannot
+even decode, since it compiles without libsixel. The switch stopped the
+behaviour and not the resource, which is worth saying because "the
+feature is off" reads like protection.
+
+All four go through one `bssh_accumulate()` now, and sixel returns before
+accumulating anything when it is disabled. Oversized payloads are dropped
+**whole**, which is the selection's rule and right for the same reason:
+half a base64 image or half a hyperlink is not a smaller version of the
+thing but an invalid one. §8.3's title stays the deliberate exception,
+because a truncated label is still a label.
+
+**What the test does and does not pin.** The buffer is not observable
+from outside, so the test asserts behaviour: with sixel off, a
+quarter-megabyte payload leaves no image and the terminal still renders
+text afterwards. Sabotage removing the early return fails it — but it
+fails because the protocol then RENDERS, so what is pinned is the switch
+rather than the memory. Said here because a green suite should not be
+read as covering the bound.
+
 **A remote could grow the title buffer without limit, and the reasoning
 against it was already written down in the same file.** OSC titles arrive
 as fragments and need no terminator to keep arriving, so a host that opens

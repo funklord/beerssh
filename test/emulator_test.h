@@ -17,6 +17,7 @@ class emulator_test : public QObject {
 
 private slots:
 	void a_remote_cannot_grow_the_title_without_limit();
+	void a_switched_off_image_protocol_costs_no_memory();
 	void the_kitty_graphics_query_is_answered();
 	void the_terminal_answers_for_itself_not_for_libvterm();
 	void the_terminal_answers_the_questions_a_compositing_client_asks();
