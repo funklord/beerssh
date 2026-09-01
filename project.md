@@ -4234,6 +4234,26 @@ preset, since there is nothing to add. **The residue is a hand-edited
 silently; that is the same trust the tree extends to the rest of its own
 config, and a typo there is the typist's.
 
+**A host OVERRIDE reached the emulator without meeting any of these
+bounds.** `from_json()` clamps scrollback, font size and keepalive, and the
+comment saying why names sec 10.5: a preset is a file people send each other,
+so the spinbox that used to enforce the ranges is not on the path. A per-field
+override in `hosts.ini` is the same number in the same kind of file — and
+`resolve()` inserted it verbatim, having checked only that the key still
+exists. Its comment shows the STALE-key case was thought about and the
+out-of-range one was not. `load_profiles()`' own comment uses
+`scrollback_lines=99999` as its example of a hand-typed override, which is
+below the bound but was never being measured against it; `999999999` reached
+the emulator as written, which is the memory bound sec 10.2 added the clamp for
+in the first place.
+
+`resolve()` now returns `from_json(resolved).to_json()` — the round trip
+through the struct, rather than a second list of `qBound` calls beside the
+first. Two spellings of one schema drift, and this drift would show up as a
+bound that holds for a preset and not for a host, which is the bug over again.
+The round trip is lossless for every key the defaults carry, which the test
+asserts directly rather than trusting.
+
 ### 10.4 Built-in starter presets
 Ship a handful of **read-only** presets that users clone rather than edit:
 *Default Linux*, *Raspberry Pi / SBC*, *OpenWrt / BusyBox router* (limited `TERM`,
@@ -4679,6 +4699,15 @@ address carrying a port and the form `known_hosts` already stores. An
 unbracketed address with several colons is a host with no port, which is
 OpenSSH's rule. Both paths call one `bssh_port_from_string`, and
 `to_port` is a forwarder.
+
+**And a FOURTH copy was still reading the same field with a cast.**
+`load_profiles()` had `static_cast<quint16>(file.value("port", 22).toUInt())`
+— so `port=65538` hand-typed into `hosts.ini` arrives as **2**, and `port=ssh`
+as **0**, on a row whose editor still shows what was typed. That is the worst
+version of this bug rather than the mildest: the connect bar at least fails
+visibly, while here the file and the connection disagree and only the file is
+readable. `is_valid()` cannot catch it either — it asks only whether a host is
+named. It calls `bssh_port_from_string` now, like the other three.
 
 **Third time tonight for one shape**: a rule with two implementations
 where only one is careful — preset ranges in a spinbox but not the

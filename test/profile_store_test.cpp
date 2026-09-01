@@ -14,6 +14,9 @@
 #include "ui/session_dialog.h"
 #include "ui/host_editor.h"
 #include "model/preset.h"
+#include "model/settings_resolver.h"
+#include <QSettings>
+#include <QJsonObject>
 #include "ui/font_picker.h"
 #include "ui/main_window.h"
 
@@ -1230,4 +1233,117 @@ void profile_store_test::a_device_setting_that_cannot_be_written_says_so() {
 	}
 
 	QVERIFY2(!wrote, "a write that did not reach app.ini must not report success");
+}
+
+void profile_store_test::a_hand_typed_port_out_of_range_falls_back_rather_than_wrapping() {
+	/*
+	 * hosts.ini is a text file people edit, and the reader cast whatever
+	 * was in it to quint16. 65538 is 2 after that cast -- so the row read
+	 * 65538, the connection went to port 2, and nothing anywhere said the
+	 * two disagreed. A wrong port that LOOKS right is worse than a
+	 * refusal: it is the one failure the user cannot see by reading their
+	 * own file.
+	 *
+	 * The rule already existed for the same string typed into the connect
+	 * bar (bssh_port_from_string, used by to_port and from_target). This
+	 * door simply was not using it.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+
+	{
+		QSettings file(dir.path() + QStringLiteral("/hosts.ini"), QSettings::IniFormat);
+		file.beginGroup(QStringLiteral("host-1"));
+		file.setValue(QStringLiteral("name"), QStringLiteral("Wrapped"));
+		file.setValue(QStringLiteral("host"), QStringLiteral("example.invalid"));
+		file.setValue(QStringLiteral("port"), QStringLiteral("65538"));
+		file.endGroup();
+
+		file.beginGroup(QStringLiteral("host-2"));
+		file.setValue(QStringLiteral("name"), QStringLiteral("Wordy"));
+		file.setValue(QStringLiteral("host"), QStringLiteral("example.invalid"));
+		file.setValue(QStringLiteral("port"), QStringLiteral("ssh"));
+		file.endGroup();
+
+		file.beginGroup(QStringLiteral("host-3"));
+		file.setValue(QStringLiteral("name"), QStringLiteral("Fine"));
+		file.setValue(QStringLiteral("host"), QStringLiteral("example.invalid"));
+		file.setValue(QStringLiteral("port"), QStringLiteral("2222"));
+		file.endGroup();
+		file.sync();
+	}
+
+	bssh_profile_store store(dir.path());
+	QVERIFY(store.is_open());
+
+	quint16 wrapped = 0, wordy = 0, fine = 0;
+	for (const bssh_profile_t &profile : store.profiles()) {
+		if (profile.name == QStringLiteral("Wrapped")) wrapped = profile.port;
+		if (profile.name == QStringLiteral("Wordy")) wordy = profile.port;
+		if (profile.name == QStringLiteral("Fine")) fine = profile.port;
+	}
+
+	/* Not 2. */
+	QCOMPARE(wrapped, quint16(22));
+	QCOMPARE(wordy, quint16(22));
+
+	/* And a port that is simply a port still is one, so this is a check
+	 * on the range rather than on the field being read at all. */
+	QCOMPARE(fine, quint16(2222));
+}
+
+void profile_store_test::a_hand_typed_override_meets_the_same_bounds_as_a_preset() {
+	/*
+	 * A preset's numbers are clamped by from_json, because sec 10.5 makes
+	 * a preset a file people send each other and the only thing enforcing
+	 * the ranges was a spinbox. A host OVERRIDE is the same number in the
+	 * same kind of file, typed into hosts.ini -- and it reached the
+	 * emulator as written, because the resolver checked only that the key
+	 * still exists.
+	 *
+	 * load_profiles' own comment uses "scrollback_lines=99999" as its
+	 * example of a hand-typed override, which is above the bound.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+
+	{
+		QSettings file(dir.path() + QStringLiteral("/hosts.ini"), QSettings::IniFormat);
+		file.beginGroup(QStringLiteral("host-1"));
+		file.setValue(QStringLiteral("name"), QStringLiteral("Greedy"));
+		file.setValue(QStringLiteral("host"), QStringLiteral("example.invalid"));
+		file.setValue(QStringLiteral("scrollback_lines"), QStringLiteral("999999999"));
+		file.setValue(QStringLiteral("font_size"), QStringLiteral("100000"));
+		file.endGroup();
+		file.sync();
+	}
+
+	bssh_profile_store store(dir.path());
+	QVERIFY(store.is_open());
+	QCOMPARE(store.profiles().size(), 1);
+
+	const bssh_profile_t profile = store.profiles().first();
+	const QJsonObject resolved = bssh_settings_resolver::resolve(
+	        bssh_preset_t(), profile.overrides);
+
+	QCOMPARE(resolved.value(QStringLiteral("scrollback_lines")).toInt(),
+	          BSSH_PRESET_MAX_SCROLLBACK);
+	QCOMPARE(resolved.value(QStringLiteral("font_size")).toInt(),
+	          BSSH_PRESET_MAX_POINT_SIZE);
+
+	/*
+	 * And the round-trip that does the clamping loses nothing: every key
+	 * the defaults carry is still there afterwards. A resolver that
+	 * quietly dropped a field would take the setting with it.
+	 */
+	const QJsonObject defaults = bssh_settings_resolver::app_defaults();
+	for (auto it = defaults.constBegin(); it != defaults.constEnd(); ++it) {
+		QVERIFY2(resolved.contains(it.key()), qPrintable(it.key()));
+	}
+
+	/* An override INSIDE the range is still an override, so the clamp has
+	 * not simply overwritten the host's answer with the preset's. */
+	QCOMPARE(resolved.value(QStringLiteral("scrollback_lines")).toInt() >
+	                  bssh_preset_t().scrollback_lines,
+	          true);
 }

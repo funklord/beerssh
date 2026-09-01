@@ -302,7 +302,16 @@ void bssh_profile_store::load_profiles() {
 		profile.name = file.value(QStringLiteral("name")).toString();
 		profile.host = file.value(QStringLiteral("host")).toString();
 		profile.user = file.value(QStringLiteral("user")).toString();
-		profile.port = static_cast<quint16>(file.value(QStringLiteral("port"), 22).toUInt());
+		/*
+		 * Through the shared rule, not a cast. hosts.ini is a text file
+		 * people edit, and a plain static_cast<quint16> of 65538 is 2 --
+		 * a silent connection to a port nobody named, on a host whose
+		 * row still reads 65538. Out of range, zero and not-a-number all
+		 * fall back to 22 instead, which is the answer to_port() and
+		 * from_target() already give for the same string.
+		 */
+		profile.port = bssh_port_from_string(
+		        file.value(QStringLiteral("port")).toString(), 22);
 		profile.identity_file = file.value(QStringLiteral("identity_file")).toString();
 		profile.proxy_jump = file.value(QStringLiteral("proxy_jump")).toString();
 		profile.has_stored_password =

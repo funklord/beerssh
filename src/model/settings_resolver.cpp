@@ -32,7 +32,23 @@ QJsonObject bssh_settings_resolver::resolve(const bssh_preset_t &preset,
 		resolved.insert(it.key(), it.value());
 	}
 
-	return resolved;
+	/*
+	 * Back through the preset reader, which is where the numeric bounds
+	 * live -- because a host OVERRIDE reaches here without having met
+	 * them. from_json() clamps scrollback, font size and keepalive for
+	 * exactly the reason sec 10.5 gives: the only thing enforcing those
+	 * ranges was a spinbox, and a file does not go through one. That
+	 * argument covers hosts.ini precisely as well as presets.ini -- the
+	 * load comment above uses "scrollback_lines=99999" as its own example
+	 * of a hand-typed override, and until this round-trip that number
+	 * arrived at the emulator as written.
+	 *
+	 * Done by round-tripping through the struct rather than by a second
+	 * list of qBound calls here, for the reason typed_value() gives: two
+	 * spellings of one schema drift, and the drift would appear as a
+	 * bound that holds for a preset and not for a host.
+	 */
+	return bssh_preset_t::from_json(resolved).to_json();
 }
 
 QSet<QString> bssh_settings_resolver::overridden_fields(const bssh_preset_t &preset,

@@ -18,6 +18,8 @@ private slots:
 	void a_password_a_locked_store_kept_is_swept_at_the_next_unlock();
 	void a_save_that_cannot_reach_the_disk_is_not_reported_as_saved();
 	void a_device_setting_that_cannot_be_written_says_so();
+	void a_hand_typed_port_out_of_range_falls_back_rather_than_wrapping();
+	void a_hand_typed_override_meets_the_same_bounds_as_a_preset();
 	void saves_and_lists_profiles();
 	void updates_rather_than_duplicating();
 	void removes_profiles();
