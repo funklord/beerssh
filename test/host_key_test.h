@@ -27,6 +27,13 @@ private slots:
 	void a_key_that_does_not_match_is_a_mismatch_whichever_way();
 	void a_check_that_could_not_run_is_never_a_first_contact();
 	void an_unrecognised_verdict_refuses_rather_than_trusts();
+
+	/* sec 11's other collapsed enum: what libssh's auth result said. */
+	void an_accepted_credential_is_accepted();
+	void only_denied_means_the_credential_was_wrong();
+	void a_partial_acceptance_is_not_a_failure();
+	void an_auth_error_is_not_a_rejected_credential();
+	void an_unrecognised_auth_result_is_not_an_acceptance();
 };
 
 #endif /* BSSH_HOST_KEY_TEST_H */

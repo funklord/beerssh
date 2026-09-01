@@ -33,6 +33,24 @@ enum bssh_host_key_verdict_t {
 bssh_host_key_verdict_t bssh_host_key_verdict(int known_hosts_result);
 
 /*
+ * What libssh's authentication result actually said (project.md sec 11).
+ *
+ * Same reasoning as bssh_host_key_verdict above, and the same int rather
+ * than enum ssh_auth_e for the same header promise. libssh answers six
+ * ways and only one of them means "the credential was wrong"; collapsing
+ * the rest into that is how a correct password came to be reported as a
+ * failure.
+ */
+enum bssh_auth_outcome_t {
+	BSSH_AUTH_ACCEPTED,    /* through; nothing further is wanted */
+	BSSH_AUTH_REJECTED,    /* the credential was wrong */
+	BSSH_AUTH_NEEDS_MORE,  /* accepted, and the server wants another factor */
+	BSSH_AUTH_ERRORED      /* no verdict on the credential at all */
+};
+
+bssh_auth_outcome_t bssh_auth_outcome(int auth_result);
+
+/*
  * The libssh implementation of bssh_ssh_session (project.md sec 4).
  *
  * This header and its .cpp are the ONLY places in the tree allowed to know

@@ -63,3 +63,60 @@ void host_key_test::an_unrecognised_verdict_refuses_rather_than_trusts() {
 	QCOMPARE(bssh_host_key_verdict(4242), BSSH_HOST_KEY_UNVERIFIED);
 	QCOMPARE(bssh_host_key_verdict(-99), BSSH_HOST_KEY_UNVERIFIED);
 }
+
+void host_key_test::an_accepted_credential_is_accepted() {
+	QCOMPARE(bssh_auth_outcome(SSH_AUTH_SUCCESS), BSSH_AUTH_ACCEPTED);
+}
+
+void host_key_test::only_denied_means_the_credential_was_wrong() {
+	QCOMPARE(bssh_auth_outcome(SSH_AUTH_DENIED), BSSH_AUTH_REJECTED);
+
+	/*
+	 * The whole point, stated as the property rather than value by
+	 * value: exactly one of libssh's six results means "what you typed
+	 * was wrong", and every other one used to say so too.
+	 */
+	const int others[] = { SSH_AUTH_SUCCESS, SSH_AUTH_PARTIAL, SSH_AUTH_INFO,
+		                SSH_AUTH_AGAIN, SSH_AUTH_ERROR };
+	for (int rc : others) {
+		QVERIFY2(bssh_auth_outcome(rc) != BSSH_AUTH_REJECTED,
+		          "only SSH_AUTH_DENIED may be reported as a wrong credential");
+	}
+}
+
+/*
+ * `AuthenticationMethods password,keyboard-interactive` returns PARTIAL
+ * for a password that was RIGHT: the server took it and wants another
+ * factor. It was reported as "Authentication failed", so the user retyped
+ * a correct password indefinitely.
+ *
+ * The key paths already fell through to the next prompt on this, which is
+ * the correct move and was an accident of testing only for SUCCESS -- so
+ * the same value was handled sensibly in one place and as a failure in
+ * another, which is the asymmetry that gave the bug away.
+ */
+void host_key_test::a_partial_acceptance_is_not_a_failure() {
+	QCOMPARE(bssh_auth_outcome(SSH_AUTH_PARTIAL), BSSH_AUTH_NEEDS_MORE);
+}
+
+/*
+ * A transport or protocol fault is not a verdict on the credential, and
+ * telling the user their password failed sends them to fix the one thing
+ * that was not broken. The same collapse as the known-hosts ERROR above,
+ * one layer along.
+ */
+void host_key_test::an_auth_error_is_not_a_rejected_credential() {
+	QCOMPARE(bssh_auth_outcome(SSH_AUTH_ERROR), BSSH_AUTH_ERRORED);
+}
+
+/*
+ * INFO and AGAIN cannot occur on these calls -- INFO belongs to
+ * keyboard-interactive and AGAIN to a non-blocking session -- so what
+ * matters is only that neither can be mistaken for a way through.
+ */
+void host_key_test::an_unrecognised_auth_result_is_not_an_acceptance() {
+	QCOMPARE(bssh_auth_outcome(SSH_AUTH_INFO), BSSH_AUTH_ERRORED);
+	QCOMPARE(bssh_auth_outcome(SSH_AUTH_AGAIN), BSSH_AUTH_ERRORED);
+	QCOMPARE(bssh_auth_outcome(4242), BSSH_AUTH_ERRORED);
+	QVERIFY(bssh_auth_outcome(4242) != BSSH_AUTH_ACCEPTED);
+}

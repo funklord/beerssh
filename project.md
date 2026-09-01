@@ -4381,6 +4381,49 @@ All of it goes behind one interface — `bssh_secret_store` (`store`, `load`,
 `erase`, `is_hardware_backed`) — with one implementation per platform, per §3's
 core principle 3. Callers get an opaque ID back and never see a key mechanism.
 
+**And libssh has six authentication results, of which exactly one means
+the credential was wrong.** `do_authenticate_password` tested for
+`SSH_AUTH_SUCCESS` and called everything else `"Authentication failed"`.
+The same collapse as the known-hosts one above, one layer down the stack,
+and found by looking for it there.
+
+The tell was an asymmetry rather than a reading of the enum: `PARTIAL`
+falls through to the next prompt in **both** key paths — which is correct
+— while the password path called it a failure. The same value handled
+sensibly in one place and as a failure in another is a question worth
+asking, and the key paths were right only by accident of testing for
+`SUCCESS`.
+
+What it cost: a server with `AuthenticationMethods
+password,keyboard-interactive` returns `SSH_AUTH_PARTIAL` for a password
+that was **right** — it was taken, and another factor is wanted. The user
+was told authentication failed, so they retyped a correct password
+indefinitely. That is the worst instruction the program can give, because
+it sends someone to change the one thing that was working.
+
+`SSH_AUTH_ERROR` was the same misdiagnosis: a transport or protocol fault
+reported as a rejected credential, sending the user to fix what was not
+broken.
+
+Three things are now deliberate rather than incidental. A partial
+acceptance says plainly that the server took the credential and wants a
+method this client cannot answer yet — no blame on what was typed. An
+error reports libssh's own message. And an error in the **key** paths now
+fails rather than prompting: asking for a credential after a fault asks
+somebody to answer for something that never reached a verdict, and their
+answer cannot help.
+
+Multi-factor itself is neither built nor promised — this document has
+never mentioned it — and this does not build it. Reporting accurately is
+not the same as supporting it, and saying "cannot answer yet" is the
+honest form of that.
+
+The test worth copying is the property one: of the six results, only
+`SSH_AUTH_DENIED` may map to "wrong credential". That is the claim the
+bug violated, and it is what a seventh value added carelessly would trip
+over. Sabotage: restoring the old mapping fails exactly four tests, all
+of them naming this rule, and nothing else in the suite.
+
 **libssh has six known-hosts verdicts and this handled two, so "I could
 not check" was shown to the user as "this host is new".** `verify_host_key`
 tested for `SSH_KNOWN_HOSTS_OK`, then for `CHANGED`, and sent everything

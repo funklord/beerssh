@@ -534,6 +534,46 @@ bssh_host_key_verdict_t bssh_host_key_verdict(int known_hosts_result) {
 	return BSSH_HOST_KEY_UNVERIFIED;
 }
 
+bssh_auth_outcome_t bssh_auth_outcome(int auth_result) {
+	/* An int rather than the enum, for the reason bssh_host_key_verdict
+	 * gives: a value libssh never defined must not be cast into it. */
+	switch (auth_result) {
+	case SSH_AUTH_SUCCESS:
+		return BSSH_AUTH_ACCEPTED;
+
+	case SSH_AUTH_DENIED:
+		return BSSH_AUTH_REJECTED;
+
+	/*
+	 * The credential WAS accepted and the server wants another method --
+	 * `AuthenticationMethods password,keyboard-interactive` and friends.
+	 * Reported as "Authentication failed", which is false in the way that
+	 * costs the most: the user retypes a password that was right.
+	 *
+	 * The key paths already fell through to the next prompt on this,
+	 * which is the correct move and was an accident of testing only for
+	 * SUCCESS. Naming it makes both deliberate.
+	 */
+	case SSH_AUTH_PARTIAL:
+		return BSSH_AUTH_NEEDS_MORE;
+
+	/*
+	 * No verdict on the credential. ERROR is a transport or protocol
+	 * fault; INFO and AGAIN cannot occur here at all -- INFO belongs to
+	 * keyboard-interactive and AGAIN to a non-blocking session, and every
+	 * libssh call in this file is blocking (see the header). If one
+	 * arrives anyway, the safe reading is that nothing was decided rather
+	 * than that the password was wrong.
+	 */
+	case SSH_AUTH_ERROR:
+	case SSH_AUTH_INFO:
+	case SSH_AUTH_AGAIN:
+		return BSSH_AUTH_ERRORED;
+	}
+
+	return BSSH_AUTH_ERRORED;
+}
+
 bool bssh_libssh_worker::verify_host_key() {
 	/*
 	 * Revocation first, and it outranks every other verdict including
@@ -583,10 +623,17 @@ void bssh_libssh_worker::do_key_passphrase(const QString &passphrase) {
 	if (!m_session) return;
 
 	const QByteArray passphrase_utf8 = passphrase.toUtf8();
-	const int rc = ssh_userauth_publickey_auto(m_session, nullptr, passphrase_utf8.constData());
+	const bssh_auth_outcome_t outcome = bssh_auth_outcome(
+	        ssh_userauth_publickey_auto(m_session, nullptr, passphrase_utf8.constData()));
 
-	if (rc == SSH_AUTH_SUCCESS) {
+	if (outcome == BSSH_AUTH_ACCEPTED) {
 		emit state_changed(bssh_ssh_session::CONNECTED);
+		return;
+	}
+
+	/* Not a wrong passphrase; nothing was decided. See authenticate(). */
+	if (outcome == BSSH_AUTH_ERRORED) {
+		fail(session_error());
 		return;
 	}
 
@@ -813,9 +860,31 @@ void bssh_libssh_worker::authenticate() {
 	 * a passphrase prompt is its own piece of UI. Such a key simply falls
 	 * through to the password path rather than silently failing.
 	 */
-	const int key_rc = ssh_userauth_publickey_auto(m_session, nullptr, nullptr);
-	if (key_rc == SSH_AUTH_SUCCESS) {
+	const bssh_auth_outcome_t key_outcome =
+	        bssh_auth_outcome(ssh_userauth_publickey_auto(m_session, nullptr, nullptr));
+	if (key_outcome == BSSH_AUTH_ACCEPTED) {
 		emit state_changed(bssh_ssh_session::CONNECTED);
+		return;
+	}
+
+	/*
+	 * A transport fault is not a rejected key. Prompting for a credential
+	 * after one asks the user to answer for something that never reached
+	 * a verdict, and their answer cannot help.
+	 */
+	if (key_outcome == BSSH_AUTH_ERRORED) {
+		fail(session_error());
+		return;
+	}
+
+	/*
+	 * The key WORKED and the server wants a second factor
+	 * (`AuthenticationMethods publickey,password`). Straight to the
+	 * password prompt: offering to unlock the key would be answering a
+	 * question nobody asked, since the key is already accepted.
+	 */
+	if (key_outcome == BSSH_AUTH_NEEDS_MORE) {
+		emit password_required();
 		return;
 	}
 
@@ -841,12 +910,31 @@ void bssh_libssh_worker::do_authenticate_password(const QString &password) {
 
 	const QByteArray password_utf8 = password.toUtf8();
 	const int rc = ssh_userauth_password(m_session, nullptr, password_utf8.constData());
-	if (rc != SSH_AUTH_SUCCESS) {
+
+	switch (bssh_auth_outcome(rc)) {
+	case BSSH_AUTH_ACCEPTED:
+		emit state_changed(bssh_ssh_session::CONNECTED);
+		return;
+
+	case BSSH_AUTH_REJECTED:
 		fail(QStringLiteral("Authentication failed"));
 		return;
-	}
 
-	emit state_changed(bssh_ssh_session::CONNECTED);
+	/*
+	 * Said plainly, and without blaming the credential: the server took
+	 * it. A user told "Authentication failed" here retypes a password
+	 * that was right, which is the worst possible instruction.
+	 */
+	case BSSH_AUTH_NEEDS_MORE:
+		fail(QStringLiteral("The server accepted that, and requires another "
+			             "authentication method as well -- which BeerSSH "
+			             "cannot answer yet."));
+		return;
+
+	case BSSH_AUTH_ERRORED:
+		fail(session_error());
+		return;
+	}
 }
 
 void bssh_libssh_worker::do_open_shell(int cols, int rows) {
