@@ -521,6 +521,49 @@ void emulator_test::osc8_marks_cells_with_a_link() {
 	QCOMPARE(int(emulator.screen().cell(0, 20).link), 0);
 }
 
+void emulator_test::erase_saved_lines_actually_empties_the_scrollback() {
+	/*
+	 * CSI 3 J is what `clear` sends as its E3 capability, after homing
+	 * the cursor and erasing the screen. The callback for it was declared
+	 * in the table and left null, so the sequence arrived and nothing
+	 * happened: measured at 16 scrollback lines before and 16 after, for
+	 * the bare sequence and for the whole of what `clear` sends.
+	 *
+	 * A terminal that keeps the history through `clear` is not a cosmetic
+	 * problem: running it before pasting something private is exactly
+	 * what people do.
+	 */
+	bssh_emulator emulator(40, 5);
+
+	for (int i = 0; i < 20; ++i) {
+		emulator.feed(QByteArrayLiteral("line") + QByteArray::number(i)
+		               + QByteArrayLiteral("\r\n"));
+	}
+	const int filled = emulator.scrollback().count();
+	QVERIFY2(filled > 0, "the fixture built no history, so this proves nothing");
+
+	const qint64 base_before = emulator.scrollback().base();
+
+	/*
+	 * Erasing the SCREEN is not erasing the history, and a fix that
+	 * cleared on any ED would take the scrollback away from every
+	 * full-screen program that repaints with CSI 2 J.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[2J"));
+	QCOMPARE(emulator.scrollback().count(), filled);
+
+	emulator.feed(QByteArrayLiteral("\x1b[3J"));
+	QCOMPARE(emulator.scrollback().count(), 0);
+
+	/*
+	 * And the names go with them. bssh_scrollback::clear advances the
+	 * base by what it dropped, so a selection anchored in the erased
+	 * history fails to find its line rather than finding a different one
+	 * under the same name.
+	 */
+	QCOMPARE(emulator.scrollback().base(), base_before + filled);
+}
+
 void emulator_test::an_enormous_link_is_dropped_whole_and_shown_short() {
 	/*
 	 * The link ids wrap at 65535 and the comment beside them said the

@@ -1428,6 +1428,36 @@ int on_sb_pushline4(int cols, const VTermScreenCell *cells, bool continuation, v
 }
 
 /*
+ * CSI 3 J -- erase saved lines. This is what `clear` sends as its E3
+ * capability, after homing the cursor and erasing the screen, and what
+ * every terminal that has a scrollback empties it for.
+ *
+ * The callback was declared in the table and left null, so the sequence
+ * arrived and nothing happened: `clear` wiped the screen and left the
+ * whole history behind it, which is the one thing somebody running it
+ * before pasting a password is relying on.
+ *
+ * bssh_scrollback::clear() advances the base by what it drops rather
+ * than renumbering, so a selection anchored in the history that has just
+ * been erased fails to find its line instead of finding a different one
+ * under the same name.
+ */
+int on_sb_clear(void *user) {
+	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+
+	self->scrollback.clear();
+
+	/*
+	 * Announced, because the view holds a scroll offset measured against
+	 * a history that has just gone: the same signal a trim sends, and the
+	 * handler already re-clamps rather than leaving the bar advertising
+	 * lines that are not there.
+	 */
+	emit self->owner->scrollback_changed();
+	return 1;
+}
+
+/*
  * libvterm wants a line back, because the screen is scrolling down again
  * -- leaving the alternate screen, or a resize pulling content back onto
  * the grid. Returning 0 tells it there is nothing, which it handles.
@@ -1488,7 +1518,7 @@ const VTermScreenCallbacks screen_callbacks = {
 	.resize      = nullptr, /* our own resize() drives the mirror */
 	.sb_pushline = on_sb_pushline,
 	.sb_popline  = on_sb_popline,
-	.sb_clear    = nullptr,
+	.sb_clear    = on_sb_clear,
 	/* Opt-in ABI extension; enabled by the has_pushline4 call at setup. */
 	.sb_pushline4 = on_sb_pushline4
 	/*

@@ -6141,6 +6141,27 @@ The desktop build is what makes this project testable at all — use it.
   **Trailing blanks are not trimmed on a row that continues.** There the last
   column is where the text carries on, so a space at the end of it is content
   and trimming it would silently join two words.
+- **`clear` did not clear the history, and the callback for it was the null
+  beside the one above.** `CSI 3 J` — erase saved lines — is what `clear`
+  sends as its terminfo `E3`, after homing the cursor and erasing the screen.
+  `sb_clear` was declared in the same table as `sb_pushline4` and left
+  `nullptr`, so the sequence arrived and nothing happened. Measured: sixteen
+  scrollback lines before and sixteen after, for the bare sequence and for
+  the whole of what `clear` sends. **Two nulls in one table, found by the
+  same question**, which is the argument for reading a table of function
+  pointers as a list of decisions rather than as configuration: every empty
+  slot is a capability declined, and nothing distinguishes the ones declined
+  on purpose from the ones nobody reached.
+  Not cosmetic, either: running `clear` before pasting something private is
+  exactly what people do with it.
+  **`CSI 2 J` must NOT clear the history**, and the test says so — a fix that
+  emptied the scrollback on any ED would take it away from every full-screen
+  program that repaints. `bssh_scrollback::clear()` was already right for
+  this: it advances the base by what it drops, so a selection anchored in the
+  erased history fails to find its line rather than finding a different one
+  under the same name. The change announces `scrollback_changed`, which the
+  view already handles by re-clamping an offset measured against history that
+  has gone.
   Everything that crosses between a buffer index and a line's name goes
   through it now, including the accessibility interface, whose flat rows had
   coincided with absolute lines only because the base had always been zero.
