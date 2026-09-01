@@ -3229,6 +3229,34 @@ window with no name is a blank row in the task switcher.
   views *write* through. Half a rule is not half a fix: the read path
   looked correct, was tested, and was the reason nobody looked at the
   write path — and the write path is where a loss can happen at all.
+- **The id collision has a second direction, and it DELETES a password.**
+  Ids are still minted `highest + 1` over the profiles that currently
+  exist, so removing the highest-numbered host frees its id for the next
+  one — and secrets are keyed from the id. A deletion the **locked**
+  passphrase store cannot carry out writes the key down to be swept later
+  (§11's deletion rule), and `bssh_sweep_orphaned_secrets()` erased every
+  key on that list unconditionally. So: delete a host that had a password
+  while the store is locked, create a new host — which takes the freed id —
+  save a password for it, then unlock. The sweep erases the key, and the
+  key is now the new host's. Demonstrated before fixing: the new password
+  reads back as `""`.
+  The entry above is the same collision pointed the other way — a credential
+  **reachable** from a host nobody gave it to. This one is the right host's
+  credential **destroyed**, and it is the more visible of the two, because
+  the user watches a password they just saved disappear.
+  The sweep now skips any key a live profile owns, and **drops** it from the
+  list rather than keeping it: the id has been re-issued, so whatever the
+  deleted host left there is already overwritten by its new owner — keeping
+  it would mean deleting that owner's password on every sweep, for ever.
+  Both sweep tests run together, which is the pairing that matters: a live
+  credential survives AND a genuine locked-store orphan is still swept. One
+  alone is satisfiable by a sweep that does nothing.
+  **The root cause is id REUSE and it is still there.** The inheriting
+  direction is blocked only incidentally, by a new profile starting with
+  `has_stored_password` false so nothing reads the stale key. Minting from a
+  persisted high-water mark would close it properly, and is a change to id
+  semantics rather than a guard — left as a decision rather than made in
+  passing.
 - Rendering N panes means N terminal widgets repainting — keep the glyph cache
   **shared** across panes (§9.5) and throttle repaints to the display refresh
   rather than to data arrival, or a chatty `yes`-style output in one pane will

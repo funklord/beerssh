@@ -1102,6 +1102,92 @@ void profile_store_test::a_password_a_locked_store_kept_is_swept_at_the_next_unl
 	          "and drop it from the list, or it is swept forever");
 }
 
+void profile_store_test::a_sweep_does_not_erase_a_password_a_reused_id_now_owns() {
+	/*
+	 * Two mechanisms that are each correct alone and destroy a credential
+	 * together.
+	 *
+	 * Ids are minted as `highest + 1` over the profiles that CURRENTLY
+	 * exist, so deleting the highest-numbered host frees its id for the
+	 * next one. And a deletion the locked store could not carry out
+	 * writes the key down to be swept later. The sweep then erases every
+	 * key on its list unconditionally -- including one a NEW host has
+	 * since taken over and stored its own password under.
+	 *
+	 * The user's view of it: "I saved my password and it disappeared."
+	 *
+	 * sec 11 already records the mirror of this, where a reused id let a
+	 * host inherit a credential nobody gave it. This is the same
+	 * collision pointed the other way: not a secret reachable from the
+	 * wrong host, but the right host's secret deleted out from under it.
+	 */
+	bssh_secret_store *secrets = bssh_secret_store::instance();
+	QVERIFY(secrets);
+	if (!secrets->needs_passphrase()) {
+		QSKIP("this store cannot be locked, so it has no orphans to sweep");
+	}
+
+	const QString pass = QStringLiteral("passphrase for the suite");
+	secrets->lock();
+	if (!secrets->unlock(pass)) {
+		QFile::remove(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+		              + QStringLiteral("/secrets.enc"));
+		QVERIFY2(secrets->unlock(pass), "could not establish a store this test can open");
+	}
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_app_settings().set_orphaned_secrets(QStringList());
+
+	/* The host that goes away, with a password of its own. */
+	bssh_profile_t doomed;
+	doomed.name = QStringLiteral("doomed");
+	doomed.host = QStringLiteral("doomed.example");
+	doomed.has_stored_password = true;
+	const int doomed_id = store.save(doomed);
+	QVERIFY(doomed_id != 0);
+
+	const QString key = bssh_profile_password_key(doomed_id);
+	QVERIFY(secrets->store(key, QStringLiteral("old-secret")));
+
+	/* Deleted while locked, so the key is written down rather than erased. */
+	secrets->lock();
+	QVERIFY(store.remove(doomed_id));
+	QVERIFY2(bssh_app_settings().orphaned_secrets().contains(key),
+	          "the fixture needs the orphan to have been recorded");
+
+	/*
+	 * The next host takes the freed id -- asserted, because if ids were
+	 * never reused there would be no collision and nothing below would
+	 * mean anything.
+	 */
+	bssh_profile_t fresh;
+	fresh.name = QStringLiteral("fresh");
+	fresh.host = QStringLiteral("fresh.example");
+	fresh.has_stored_password = true;
+	const int fresh_id = store.save(fresh);
+	QCOMPARE(fresh_id, doomed_id);
+
+	/* And stores a password of its own, under the very same key. */
+	QVERIFY(secrets->unlock(pass));
+	QVERIFY(secrets->store(bssh_profile_password_key(fresh_id),
+	                        QStringLiteral("new-secret")));
+
+	/* The store that owns the profiles, so the sweep can tell which keys
+	 * are live; the app passes nothing and gets the shared one. */
+	bssh_sweep_orphaned_secrets(&store);
+
+	QCOMPARE(secrets->load(bssh_profile_password_key(fresh_id)),
+	          QStringLiteral("new-secret"));
+
+	/* And the stale entry is gone from the list rather than swept for
+	 * ever against a key it no longer describes. */
+	QVERIFY2(!bssh_app_settings().orphaned_secrets().contains(key),
+	          "a key a live host now owns must not stay on the sweep list");
+}
+
 void profile_store_test::a_save_that_cannot_reach_the_disk_is_not_reported_as_saved() {
 	/*
 	 * QSettings swallows a failed write: sync() returns void and status()

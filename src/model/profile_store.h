@@ -214,6 +214,15 @@ private:
  * first.
  */
 bool bssh_note_orphaned_secret(const QString &key);
-void bssh_sweep_orphaned_secrets();
+/*
+ * Erases what a locked store could not, and NEVER a key some live profile
+ * has since taken over.
+ *
+ * `store` is the one that owns the profiles; null means the process-wide
+ * one, which is what the app always wants. The parameter exists for the
+ * same reason the path-taking constructor does -- a test needs to say
+ * which profiles are real.
+ */
+void bssh_sweep_orphaned_secrets(const bssh_profile_store *store = nullptr);
 
 #endif /* BSSH_PROFILE_STORE_H */

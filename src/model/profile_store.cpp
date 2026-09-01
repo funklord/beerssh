@@ -1,5 +1,7 @@
 #include "model/profile_store.h"
 
+#include <QSet>
+
 #include "platform/platform.h"
 #include "platform/secret_store.h"
 #include "model/app_settings.h"
@@ -841,7 +843,7 @@ bool bssh_note_orphaned_secret(const QString &key) {
 	return settings.set_orphaned_secrets(pending);
 }
 
-void bssh_sweep_orphaned_secrets() {
+void bssh_sweep_orphaned_secrets(const bssh_profile_store *store) {
 	bssh_app_settings settings;
 	const QStringList pending = settings.orphaned_secrets();
 	if (pending.isEmpty()) return;
@@ -850,12 +852,45 @@ void bssh_sweep_orphaned_secrets() {
 	if (!secrets) return;
 
 	/*
+	 * The keys some host currently owns, which must survive whatever this
+	 * list says.
+	 *
+	 * An id is minted as `highest + 1` over the profiles that EXIST, so
+	 * deleting the highest-numbered host frees its id for the next one --
+	 * and the key is derived from the id. A deletion the locked store
+	 * could not carry out therefore writes down a key that a later host
+	 * can come to own, and erasing it then destroys a password its owner
+	 * had just saved. Reported as "I saved my password and it
+	 * disappeared".
+	 *
+	 * sec 11 records the mirror of this collision, where a reused id let
+	 * a host INHERIT a credential nobody gave it. Same cause, other
+	 * direction.
+	 */
+	const bssh_profile_store *owner = store ? store : bssh_profile_store::shared();
+	if (!owner) return;
+
+	QSet<QString> live;
+	for (const bssh_profile_t &profile : owner->profiles()) {
+		live.insert(bssh_profile_password_key(profile.id));
+	}
+
+	/*
 	 * Kept when the erase fails, dropped when it succeeds. A store that
 	 * is still locked leaves the list exactly as it was, so the sweep is
 	 * safe to call from anywhere and costs nothing when it cannot act.
 	 */
 	QStringList still_pending;
 	for (const QString &key : pending) {
+		/*
+		 * Dropped rather than kept: the id has been re-issued, so
+		 * whatever the deleted host left under this key is gone
+		 * already -- overwritten by its new owner. Keeping it would
+		 * mean sweeping it for ever, and sweeping it would mean
+		 * deleting the new owner's password every time.
+		 */
+		if (live.contains(key)) continue;
+
 		if (!secrets->erase(key)) still_pending << key;
 	}
 
