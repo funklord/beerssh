@@ -189,6 +189,26 @@ private:
 	QString m_last_error;
 	bool m_open;
 
+	/*
+	 * The next host id to hand out, and it only ever GOES UP.
+	 *
+	 * It used to be `highest + 1` over the hosts that currently exist,
+	 * which reissues the id of the highest-numbered host as soon as that
+	 * host is deleted. Secrets are keyed `profile:<id>:password`
+	 * (sec 11), so a reissued id is a reissued key -- and sec 11 records
+	 * both directions of what that costs: a host inheriting a credential
+	 * nobody gave it, and the orphan sweep deleting a password its new
+	 * owner had just saved.
+	 *
+	 * Persisted in hosts.ini as a ROOT-LEVEL key, which load_profiles'
+	 * loop over childGroups() does not see: it walks groups, and this is
+	 * not one. A file written before this existed has no such key, so it
+	 * starts one past the highest id present -- which cannot collide with
+	 * anything still in the file, though it cannot know about hosts
+	 * deleted before the upgrade. The sweep guard covers those.
+	 */
+	int m_next_id;
+
 	QList<bssh_profile_t> m_profiles;
 	QList<bssh_preset_t> m_presets;
 	QHash<int, QString> m_slugs;

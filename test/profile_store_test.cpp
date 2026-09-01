@@ -1102,24 +1102,111 @@ void profile_store_test::a_password_a_locked_store_kept_is_swept_at_the_next_unl
 	          "and drop it from the list, or it is swept forever");
 }
 
-void profile_store_test::a_sweep_does_not_erase_a_password_a_reused_id_now_owns() {
+void profile_store_test::an_id_is_never_reissued_to_another_host() {
 	/*
-	 * Two mechanisms that are each correct alone and destroy a credential
-	 * together.
+	 * Ids used to be minted as `highest + 1` over the hosts that
+	 * CURRENTLY exist, so deleting the highest-numbered one handed its id
+	 * to the next host created. Secrets are keyed `profile:<id>:password`
+	 * (sec 11), so a reissued id is a reissued KEY -- and sec 11 records
+	 * both directions of what that costs: a host inheriting a credential
+	 * nobody gave it, and the orphan sweep deleting a password its new
+	 * owner had just saved.
 	 *
-	 * Ids are minted as `highest + 1` over the profiles that CURRENTLY
-	 * exist, so deleting the highest-numbered host frees its id for the
-	 * next one. And a deletion the locked store could not carry out
-	 * writes the key down to be swept later. The sweep then erases every
-	 * key on its list unconditionally -- including one a NEW host has
-	 * since taken over and stored its own password under.
+	 * The counter only goes up, and it is persisted, so it survives the
+	 * store being closed and reopened -- which is where "highest + 1"
+	 * would recompute itself back into the collision.
+	 */
+	/*
+	 * IN MEMORY first: the highest-numbered host goes and the next one
+	 * created must not be handed its id.
+	 */
+	{
+		QTemporaryDir dir;
+		QVERIFY(dir.isValid());
+		bssh_profile_store store(dir.path());
+
+		bssh_profile_t first;
+		first.name = QStringLiteral("first");
+		first.host = QStringLiteral("first.example");
+		const int first_id = store.save(first);
+		QVERIFY(first_id != 0);
+
+		bssh_profile_t second;
+		second.name = QStringLiteral("second");
+		second.host = QStringLiteral("second.example");
+		const int second_id = store.save(second);
+		QVERIFY(second_id > first_id);
+
+		QVERIFY(store.remove(second_id));
+
+		bssh_profile_t third;
+		third.name = QStringLiteral("third");
+		third.host = QStringLiteral("third.example");
+		const int third_id = store.save(third);
+
+		QVERIFY2(third_id != second_id,
+		          "the id of a deleted host was handed to a new one");
+	}
+
+	/*
+	 * ACROSS A REOPEN, in a directory of its own, and the shape matters:
+	 * the deleted host must be the HIGHEST-numbered one still missing
+	 * when the store reopens. Create another host first and its id sits
+	 * in the file, so a counter recomputed from what exists lands past
+	 * the gap by luck and the assertion proves nothing -- which is what
+	 * the first version of this test did, and the sabotage runner
+	 * reported it MISSED.
+	 */
+	{
+		QTemporaryDir dir;
+		QVERIFY(dir.isValid());
+
+		int deleted_id = 0;
+		{
+			bssh_profile_store store(dir.path());
+
+			bssh_profile_t keeper;
+			keeper.name = QStringLiteral("keeper");
+			keeper.host = QStringLiteral("keeper.example");
+			QVERIFY(store.save(keeper) != 0);
+
+			bssh_profile_t doomed;
+			doomed.name = QStringLiteral("doomed");
+			doomed.host = QStringLiteral("doomed.example");
+			deleted_id = store.save(doomed);
+			QVERIFY(deleted_id != 0);
+
+			QVERIFY(store.remove(deleted_id));
+		}
+
+		bssh_profile_store reopened(dir.path());
+
+		bssh_profile_t after;
+		after.name = QStringLiteral("after");
+		after.host = QStringLiteral("after.example");
+		const int after_id = reopened.save(after);
+
+		QVERIFY2(after_id != deleted_id,
+		          qPrintable(QStringLiteral("a reopened store reissued %1, the id of a "
+		                                     "host that had been deleted").arg(after_id)));
+	}
+}
+
+void profile_store_test::a_sweep_does_not_erase_a_password_a_live_host_now_owns() {
+	/*
+	 * The sweep erases what a locked store could not, and must never
+	 * erase a key some live host owns.
 	 *
-	 * The user's view of it: "I saved my password and it disappeared."
+	 * This used to be reachable through id REUSE, which is fixed above --
+	 * so the collision is built the way that remains: the orphan list
+	 * lives in the app settings and is process-wide, while ids are minted
+	 * per store DIRECTORY. Two stores therefore both hand out id 1, and
+	 * both derive the same secret key from it. A key one of them wrote
+	 * down as an orphan is a key the other's host is still using.
 	 *
-	 * sec 11 already records the mirror of this, where a reused id let a
-	 * host inherit a credential nobody gave it. This is the same
-	 * collision pointed the other way: not a secret reachable from the
-	 * wrong host, but the right host's secret deleted out from under it.
+	 * Kept as defence in depth rather than deleted with the cause: a
+	 * hosts.ini written before the counter existed can also carry ids
+	 * that a pending orphan names.
 	 */
 	bssh_secret_store *secrets = bssh_secret_store::instance();
 	QVERIFY(secrets);
@@ -1135,18 +1222,18 @@ void profile_store_test::a_sweep_does_not_erase_a_password_a_reused_id_now_owns(
 		QVERIFY2(secrets->unlock(pass), "could not establish a store this test can open");
 	}
 
-	QTemporaryDir dir;
-	QVERIFY(dir.isValid());
-	bssh_profile_store store(dir.path());
+	QTemporaryDir gone_dir;
+	QTemporaryDir live_dir;
+	QVERIFY(gone_dir.isValid() && live_dir.isValid());
 
 	bssh_app_settings().set_orphaned_secrets(QStringList());
 
-	/* The host that goes away, with a password of its own. */
+	bssh_profile_store gone(gone_dir.path());
 	bssh_profile_t doomed;
 	doomed.name = QStringLiteral("doomed");
 	doomed.host = QStringLiteral("doomed.example");
 	doomed.has_stored_password = true;
-	const int doomed_id = store.save(doomed);
+	const int doomed_id = gone.save(doomed);
 	QVERIFY(doomed_id != 0);
 
 	const QString key = bssh_profile_password_key(doomed_id);
@@ -1154,33 +1241,29 @@ void profile_store_test::a_sweep_does_not_erase_a_password_a_reused_id_now_owns(
 
 	/* Deleted while locked, so the key is written down rather than erased. */
 	secrets->lock();
-	QVERIFY(store.remove(doomed_id));
+	QVERIFY(gone.remove(doomed_id));
 	QVERIFY2(bssh_app_settings().orphaned_secrets().contains(key),
 	          "the fixture needs the orphan to have been recorded");
 
 	/*
-	 * The next host takes the freed id -- asserted, because if ids were
-	 * never reused there would be no collision and nothing below would
-	 * mean anything.
+	 * A different store, and its first host takes the same id -- so the
+	 * same key. Asserted, because if it did not there would be no
+	 * collision and nothing below would mean anything.
 	 */
+	bssh_profile_store live(live_dir.path());
 	bssh_profile_t fresh;
 	fresh.name = QStringLiteral("fresh");
 	fresh.host = QStringLiteral("fresh.example");
 	fresh.has_stored_password = true;
-	const int fresh_id = store.save(fresh);
-	QCOMPARE(fresh_id, doomed_id);
+	const int fresh_id = live.save(fresh);
+	QCOMPARE(bssh_profile_password_key(fresh_id), key);
 
-	/* And stores a password of its own, under the very same key. */
 	QVERIFY(secrets->unlock(pass));
-	QVERIFY(secrets->store(bssh_profile_password_key(fresh_id),
-	                        QStringLiteral("new-secret")));
+	QVERIFY(secrets->store(key, QStringLiteral("new-secret")));
 
-	/* The store that owns the profiles, so the sweep can tell which keys
-	 * are live; the app passes nothing and gets the shared one. */
-	bssh_sweep_orphaned_secrets(&store);
+	bssh_sweep_orphaned_secrets(&live);
 
-	QCOMPARE(secrets->load(bssh_profile_password_key(fresh_id)),
-	          QStringLiteral("new-secret"));
+	QCOMPARE(secrets->load(key), QStringLiteral("new-secret"));
 
 	/* And the stale entry is gone from the list rather than swept for
 	 * ever against a key it no longer describes. */

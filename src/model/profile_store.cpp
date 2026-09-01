@@ -77,7 +77,8 @@ QString raw_value(const QJsonValue &value) {
 
 bssh_profile_store::bssh_profile_store(const QString &path, QObject *parent)
     : QObject(parent),
-      m_open(false) {
+      m_open(false),
+      m_next_id(1) {
 	QString dir = path;
 
 	/*
@@ -296,6 +297,12 @@ void bssh_profile_store::load_presets() {
 void bssh_profile_store::load_profiles() {
 	QSettings file(hosts_path(), QSettings::IniFormat);
 
+	/*
+	 * A root-level key, so the loop below -- which walks GROUPS -- never
+	 * sees it as a host. See m_next_id for why an id is never reissued.
+	 */
+	m_next_id = qMax(1, file.value(QStringLiteral("next_id"), 1).toInt());
+
 	for (const QString &section : file.childGroups()) {
 		file.beginGroup(section);
 
@@ -343,6 +350,16 @@ void bssh_profile_store::load_profiles() {
 		file.endGroup();
 
 		if (profile.is_valid()) m_profiles.append(profile);
+	}
+
+	/*
+	 * Never below what the file already uses. A hosts.ini written before
+	 * the counter existed has no key at all, and one hand-edited to add a
+	 * host could name an id past it -- both arrive here as a counter that
+	 * would collide on the next save.
+	 */
+	for (const bssh_profile_t &existing : m_profiles) {
+		m_next_id = qMax(m_next_id, existing.id + 1);
 	}
 
 	sort_profiles();
@@ -479,6 +496,14 @@ bool bssh_profile_store::write_profiles() {
 	QSettings file(hosts_path(), QSettings::IniFormat);
 	file.clear();
 
+	/*
+	 * Before the groups and outside all of them: clear() has just removed
+	 * it along with everything else, and losing it would put the counter
+	 * back to "one past what exists" at the next load -- which is the
+	 * behaviour this replaced.
+	 */
+	file.setValue(QStringLiteral("next_id"), m_next_id);
+
 	for (const bssh_profile_t &profile : m_profiles) {
 		file.beginGroup(QStringLiteral("host-%1").arg(profile.id));
 
@@ -560,11 +585,12 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 	if (stored.name.isEmpty()) stored.name = stored.host;
 
 	if (stored.id == 0) {
-		int highest = 0;
-		for (const bssh_profile_t &existing : m_profiles) {
-			highest = qMax(highest, existing.id);
-		}
-		stored.id = highest + 1;
+		/*
+		 * From the counter, not from the hosts that happen to exist:
+		 * see m_next_id. Deleting the highest-numbered host used to
+		 * hand its id -- and so its secret's key -- to the next one.
+		 */
+		stored.id = m_next_id++;
 		m_profiles.append(stored);
 	} else {
 		bool replaced = false;

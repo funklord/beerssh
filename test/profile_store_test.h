@@ -16,7 +16,8 @@ class profile_store_test : public QObject {
 private slots:
 	void deleting_a_host_takes_its_password_with_it();
 	void a_password_a_locked_store_kept_is_swept_at_the_next_unlock();
-	void a_sweep_does_not_erase_a_password_a_reused_id_now_owns();
+	void an_id_is_never_reissued_to_another_host();
+	void a_sweep_does_not_erase_a_password_a_live_host_now_owns();
 	void a_save_that_cannot_reach_the_disk_is_not_reported_as_saved();
 	void a_device_setting_that_cannot_be_written_says_so();
 	void a_hand_typed_port_out_of_range_falls_back_rather_than_wrapping();

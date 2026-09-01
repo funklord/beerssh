@@ -3263,12 +3263,36 @@ window with no name is a blank row in the task switcher.
   Both sweep tests run together, which is the pairing that matters: a live
   credential survives AND a genuine locked-store orphan is still swept. One
   alone is satisfiable by a sweep that does nothing.
-  **The root cause is id REUSE and it is still there.** The inheriting
-  direction is blocked only incidentally, by a new profile starting with
-  `has_stored_password` false so nothing reads the stale key. Minting from a
-  persisted high-water mark would close it properly, and is a change to id
-  semantics rather than a guard — left as a decision rather than made in
-  passing.
+  **The root cause was id REUSE, and it is closed now.** `save()` mints from
+  a counter that only rises, kept in `hosts.ini` as a ROOT-LEVEL key —
+  invisible to `load_profiles()`' loop, which walks groups — and raised past
+  every id already present, so a file written before the counter existed, or
+  one hand-edited to add a host, cannot collide with it. Preset ids keep the
+  old rule deliberately: hosts reference presets by SLUG and no secret is
+  keyed from a preset id, so reuse there costs nothing.
+  **The sweep guard stays, and its test had to be rebuilt to keep meaning
+  anything.** It used to construct the collision through reuse, which no
+  longer happens — the honest options were to delete the test with the cause
+  or to reach the same key another way. The orphan list is process-wide app
+  settings while ids are minted per store DIRECTORY, so two stores both hand
+  out id 1 and derive the same key; that is the route the test takes now, and
+  it asserts the keys really do collide before asserting anything else.
+  **The sabotage runner then caught a test of mine that could not fail**, on
+  its first real use, which is the argument for the registry in one line. The
+  persistence assertion created a third host BEFORE reopening, so the highest
+  id was in the file and the migration line recomputed the same answer with
+  or without the stored key — MISSED, the suite stayed green. The persisted
+  counter only matters when the highest id is ABSENT, which is the deletion
+  case the fixture had accidentally filled in. Split into two directories
+  now: one for the in-memory counter, one that deletes the highest-numbered
+  host, reopens, and asks whether the dead id comes back. All three edits
+  caught afterwards.
+  **And a restore is not a rebuild.** Running the suite straight after a
+  sabotage run reported a failure in the fix that had just been verified
+  three ways: the harness restores the source but does not rebuild, so the
+  binary was still the sabotaged one and the message was the sabotage
+  announcing itself. `restore()`'s `utime` stamp exists so `make` will
+  rebuild — it cannot help a caller who skips `make`.
 - Rendering N panes means N terminal widgets repainting — keep the glyph cache
   **shared** across panes (§9.5) and throttle repaints to the display refresh
   rather than to data arrival, or a chatty `yes`-style output in one pane will
