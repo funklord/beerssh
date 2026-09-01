@@ -16,6 +16,7 @@ class secret_store_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void the_store_is_replaced_atomically_and_stays_owner_only();
 	/*
 	 * sec 11 asks the UI to name the backend and say whether it is
 	 * hardware-backed, in as many words and without softening. Everything

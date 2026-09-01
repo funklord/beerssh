@@ -4576,6 +4576,37 @@ cannot make it silently mean *trusted*.
 Checked by sabotage: restoring the old mapping fails exactly the two
 tests naming those two verdicts, and nothing else in the suite.
 
+**The credential store destroyed itself before writing its
+replacement.** `flush()` opened the real file with
+`QIODevice::Truncate`, so the existing store was gone before the new
+bytes were written. An interrupted or failed write left a truncated
+blob — and `unlock()` rejects a short blob, so what is lost is not the
+secret being saved but **every credential in the file**.
+
+The reporting made it worse. A truncated store fails to unlock, and the
+UI says *"either it is wrong, or the store has been modified"* — sending
+somebody to look for an attacker, or to doubt their own passphrase, when
+this file truncated itself. **A wrong diagnosis is worse than a bare
+failure**, and this is the third instance tonight of the same shape:
+"could not check" shown as "new host" (§11), five auth results shown as
+"wrong password" (§11), and now self-inflicted loss shown as tampering.
+
+`QSaveFile` now writes a temporary beside it and renames over the target
+on `commit()`, so a failure at any point leaves the old store exactly as
+it was. `setDirectWriteFallback(true)` keeps the one case the old code
+handled — a writable file in a directory that is not — because refusing
+it would trade one failure for another.
+
+**The sabotage found a regression the fix would otherwise have
+shipped.** Removing `setPermissions` leaves `ReadGroup` and `ReadOther`
+set: a naive temp-and-rename makes the credential file world-readable,
+and *nothing else in the tree fails*, because the secrets stay encrypted
+so no test of their content notices. The test therefore asserts the mode
+rather than trusting that `setPermissions` survives a rename. The
+general form is worth carrying: **when replacing a write with a
+different mechanism, the properties to assert are the ones the old
+mechanism gave you for free.**
+
 **A save that never reached the disk was reported as a save.** `QSettings`
 swallows a failed write: `sync()` returns `void` and `status()` reports the
 failure to whoever asks. Nothing asked, in any of the three writers. So an

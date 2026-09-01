@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
@@ -268,15 +269,49 @@ private:
 		blob.append(nonce);
 		blob.append(ciphertext);
 
-		QFile file(store_path());
-		if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate)) return false;
+		/*
+		 * Replaced atomically, not rewritten in place. This opened the
+		 * real file with Truncate, so the existing store was destroyed
+		 * BEFORE the replacement was written -- and an interrupted or
+		 * failed write then left a truncated blob.
+		 *
+		 * What that costs is not the one secret being saved. unlock()
+		 * rejects a short blob, so EVERY credential is gone, and the UI
+		 * says "either it is wrong, or the store has been modified" --
+		 * sending somebody to look for an attacker, or to doubt their
+		 * own passphrase, when this file truncated itself.
+		 *
+		 * QSaveFile writes a temporary beside it and renames over the
+		 * target on commit(), so a failure at any point leaves the old
+		 * store exactly as it was.
+		 */
+		QSaveFile file(store_path());
 
-		/* Owner-only, before anything is written into it. */
+		/*
+		 * And where a temporary cannot be created -- a writable file in
+		 * a directory that is not -- fall back to writing in place
+		 * rather than refusing. That is the behaviour this replaces, so
+		 * declining it would trade one failure for another; atomicity is
+		 * gained wherever the directory allows it and nothing is lost
+		 * where it does not.
+		 */
+		file.setDirectWriteFallback(true);
+
+		if (!file.open(QIODevice::WriteOnly)) return false;
+
+		/*
+		 * Owner-only, set on the temporary before it is renamed, so the
+		 * secrets are never briefly readable by anybody else. A rename
+		 * carries the permissions with it -- asserted by a test, because
+		 * a temporary created with the default mode would make this
+		 * file world-readable and nothing else would notice.
+		 */
 		file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
 
-		const bool written = file.write(blob) == blob.size();
-		file.close();
-		return written;
+		if (file.write(blob) != blob.size()) return false;
+
+		/* commit() flushes, renames and reports -- close() would not. */
+		return file.commit();
 	}
 
 	bool m_unlocked;

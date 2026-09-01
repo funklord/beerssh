@@ -284,3 +284,61 @@ void secret_store_test::the_password_prompt_fits_a_phone()
 		                             .arg(phone)));
 	}
 }
+
+void secret_store_test::the_store_is_replaced_atomically_and_stays_owner_only() {
+	/*
+	 * flush() used to open the real file with Truncate, so the existing
+	 * store was destroyed BEFORE the replacement was written. An
+	 * interrupted or failed write then left a truncated blob -- and
+	 * unlock() rejects a short blob, so what is lost is not the secret
+	 * being saved but EVERY credential in the file. The UI reports that as
+	 * "either it is wrong, or the store has been modified", which sends
+	 * somebody looking for an attacker.
+	 *
+	 * It is a QSaveFile now: a temporary beside it, renamed over the
+	 * target on commit.
+	 *
+	 * THE MODE IS THE HALF A TEMP-AND-RENAME BREAKS. A temporary created
+	 * with the default mode and renamed into place would leave the
+	 * credential file world-readable, and nothing else in the tree would
+	 * notice -- the secrets stay encrypted, so no test of their content
+	 * would fail. This asserts the permissions rather than trusting that
+	 * setPermissions survives the rename.
+	 */
+	QTemporaryDir dir;
+	redirect_app_data(dir);
+
+	bssh_secret_store *store = bssh_make_file_secret_store();
+	store->lock();
+	QVERIFY(store->unlock(QStringLiteral("correct horse")));
+	QVERIFY(store->store(QStringLiteral("profile:1:password"), QStringLiteral("hunter2")));
+
+	const QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+	                      + QStringLiteral("/secrets.enc");
+	QVERIFY2(QFile::exists(path), qPrintable(QStringLiteral("no store at ") + path));
+
+	const QFileDevice::Permissions mode = QFile::permissions(path);
+	QVERIFY2(mode.testFlag(QFileDevice::ReadOwner), "the owner has to be able to read it");
+	QVERIFY2(!mode.testFlag(QFileDevice::ReadGroup) && !mode.testFlag(QFileDevice::ReadOther),
+	          qPrintable(QStringLiteral("a credential file must not be readable by anybody "
+	                                     "else; ReadGroup=%1 ReadOther=%2")
+	                      .arg(mode.testFlag(QFileDevice::ReadGroup))
+	                      .arg(mode.testFlag(QFileDevice::ReadOther))));
+
+	/*
+	 * And a second write, which is the one that goes through the rename
+	 * path with the target already present -- the case the old code
+	 * truncated.
+	 */
+	QVERIFY(store->store(QStringLiteral("profile:2:password"), QStringLiteral("second")));
+
+	const QFileDevice::Permissions after = QFile::permissions(path);
+	QVERIFY2(!after.testFlag(QFileDevice::ReadGroup) && !after.testFlag(QFileDevice::ReadOther),
+	          "replacing the store must not widen its permissions");
+
+	/* And it is still the store it was: both secrets readable after a reopen. */
+	store->lock();
+	QVERIFY(store->unlock(QStringLiteral("correct horse")));
+	QCOMPARE(store->load(QStringLiteral("profile:1:password")), QStringLiteral("hunter2"));
+	QCOMPARE(store->load(QStringLiteral("profile:2:password")), QStringLiteral("second"));
+}
