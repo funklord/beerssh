@@ -15,6 +15,7 @@ class command_line_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void a_target_with_colons_is_a_host_not_a_port();
 	void a_bare_destination_is_the_target();
 	void a_destination_becomes_a_profile();
 	void execute_takes_the_rest_of_the_line();

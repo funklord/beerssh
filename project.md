@@ -4635,6 +4635,35 @@ matters is precisely the file neither of them wrote last.
 `flush()` and `close()`'s error are checked too — the out-of-band failure
 channel one more layer along.
 
+**The command line mangled every IPv6 address, and the config importer
+had validated the same syntax correctly all along.** `from_target` split
+`[user@]host[:port]` on the LAST colon, so `2001:db8::1` became host
+`2001:db8:` on port 1 and `::1` became host `:` on port 1 — not a failure,
+a connection to somewhere nobody asked for. It also read the port with
+`toUShort()` and no `ok` flag, so anything unparseable or out of range
+became **0**: worse than the 22 it overwrote, and a failure whose message
+says nothing about the port.
+
+`ssh_config.cpp` had `to_port` rejecting non-numeric, zero and
+out-of-range with a fallback, for the same `host:port` syntax. **The
+careless path was the one reading what somebody had just typed; the
+careful one was reading a file** — the wrong way round if either had to be
+careless.
+
+Bracketed literals are handled first now, which is how OpenSSH writes an
+address carrying a port and the form `known_hosts` already stores. An
+unbracketed address with several colons is a host with no port, which is
+OpenSSH's rule. Both paths call one `bssh_port_from_string`, and
+`to_port` is a forwarder.
+
+**Third time tonight for one shape**: a rule with two implementations
+where only one is careful — preset ranges in a spinbox but not the
+importer, port validation in the importer but not the command line, image
+bounds in the placement but not the decode. Each time the fix was to move
+the rule to the data and have every caller use it, which is this
+document's own "two places computing one thing" arriving from three
+directions.
+
 **The preset editor validated its numbers and the importer did not.**
 §10.5 makes a preset a file people send each other, so `from_json` reads
 numbers from wherever that file came from — and the ranges the app

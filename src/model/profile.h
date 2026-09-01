@@ -19,6 +19,23 @@
  * arrive at M10. The field order is already the one sec 10.5 wants for an
  * OpenSSH config import, so that mapping stays cheap.
  */
+/*
+ * A port from text, or the fallback (sec 10.5).
+ *
+ * One definition, because two paths accept the same [user@]host[:port]
+ * syntax -- the command line and the OpenSSH config import -- and only
+ * the importer validated it. from_target used toUShort() with no ok flag,
+ * so a non-numeric or out-of-range port silently became 0: worse than the
+ * 22 it started with, and a connection failure whose message says nothing
+ * about the port being the problem.
+ */
+inline quint16 bssh_port_from_string(const QString &text, quint16 fallback) {
+	bool ok = false;
+	const uint number = text.toUInt(&ok);
+	if (!ok || number == 0 || number > 65535) return fallback;
+	return static_cast<quint16>(number);
+}
+
 struct bssh_profile_t {
 	/* Row id in the store; 0 means "not saved yet". */
 	int id;
@@ -184,10 +201,36 @@ struct bssh_profile_t {
 			profile.user = rest.left(at);
 			rest = rest.mid(at + 1);
 		}
-		const int colon = rest.lastIndexOf(QLatin1Char(':'));
-		if (colon >= 0) {
-			profile.port = static_cast<quint16>(rest.mid(colon + 1).toUShort());
-			rest = rest.left(colon);
+		/*
+		 * A bracketed literal first, which is how OpenSSH writes an
+		 * address that contains colons of its own -- and the form
+		 * known_hosts already stores as [host]:port.
+		 *
+		 * Splitting on the LAST colon, as this did, mangles every IPv6
+		 * address silently: `2001:db8::1` became host "2001:db8:" on
+		 * port 1, and `::1` became host ":" on port 1. No error, and a
+		 * connection to somewhere nobody asked for.
+		 */
+		if (rest.startsWith(QLatin1Char('['))) {
+			const int close = rest.indexOf(QLatin1Char(']'));
+			if (close > 0) {
+				const QString after = rest.mid(close + 1);
+				if (after.startsWith(QLatin1Char(':'))) {
+					profile.port = bssh_port_from_string(after.mid(1), profile.port);
+				}
+				rest = rest.mid(1, close - 1);
+			}
+		} else {
+			/*
+			 * Only a port when there is exactly one colon. A bare IPv6
+			 * literal has several and carries no port, which is the
+			 * same rule OpenSSH applies to an unbracketed address.
+			 */
+			const int colon = rest.lastIndexOf(QLatin1Char(':'));
+			if (colon >= 0 && rest.indexOf(QLatin1Char(':')) == colon) {
+				profile.port = bssh_port_from_string(rest.mid(colon + 1), profile.port);
+				rest = rest.left(colon);
+			}
 		}
 		profile.host = rest;
 		if (profile.user.isEmpty()) profile.user = qEnvironmentVariable("USER");

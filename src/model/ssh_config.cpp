@@ -116,10 +116,8 @@ bool block_applies(const block_t &block, const QString &alias) {
 }
 
 quint16 to_port(const QString &value, quint16 fallback) {
-	bool ok = false;
-	const uint number = value.toUInt(&ok);
-	if (!ok || number == 0 || number > 65535) return fallback;
-	return static_cast<quint16>(number);
+	/* One definition, shared with the command line; see profile.h. */
+	return bssh_port_from_string(value, fallback);
 }
 
 } /* namespace */

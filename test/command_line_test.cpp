@@ -324,3 +324,48 @@ void command_line_test::the_manual_page_describes_the_options_the_parser_takes()
 	QVERIFY2(seen >= bssh_command_line_options().size(),
 	          "the page must name every option, not a subset that happens to match");
 }
+
+void command_line_test::a_target_with_colons_is_a_host_not_a_port() {
+	/*
+	 * from_target split on the LAST colon, so every IPv6 literal was
+	 * mangled in silence: `2001:db8::1` became host "2001:db8:" on port 1,
+	 * and `::1` became host ":" on port 1. Not a failure -- a connection
+	 * to somewhere nobody asked for.
+	 *
+	 * And the port was read with toUShort() and no ok flag, so anything
+	 * unparseable or out of range became 0: worse than the 22 it
+	 * overwrote, and a failure whose message says nothing about the port.
+	 * ssh_config.cpp validated the SAME syntax properly all along, which
+	 * is the wrong way round if either path had to be careless -- one
+	 * reads a file, the other reads what somebody just typed.
+	 */
+	const bssh_profile_t plain = bssh_profile_t::from_target(QStringLiteral("2001:db8::1"));
+	QCOMPARE(plain.host, QStringLiteral("2001:db8::1"));
+	QCOMPARE(plain.port, quint16(22));
+
+	const bssh_profile_t loopback = bssh_profile_t::from_target(QStringLiteral("::1"));
+	QCOMPARE(loopback.host, QStringLiteral("::1"));
+	QCOMPARE(loopback.port, quint16(22));
+
+	/* Bracketed, which is how OpenSSH writes an address with a port. */
+	const bssh_profile_t bracketed =
+	        bssh_profile_t::from_target(QStringLiteral("[2001:db8::1]:2222"));
+	QCOMPARE(bracketed.host, QStringLiteral("2001:db8::1"));
+	QCOMPARE(bracketed.port, quint16(2222));
+
+	/* The ordinary cases still work, which is the control. */
+	const bssh_profile_t named = bssh_profile_t::from_target(QStringLiteral("box.example:2200"));
+	QCOMPARE(named.host, QStringLiteral("box.example"));
+	QCOMPARE(named.port, quint16(2200));
+
+	const bssh_profile_t with_user =
+	        bssh_profile_t::from_target(QStringLiteral("ada@box.example"));
+	QCOMPARE(with_user.user, QStringLiteral("ada"));
+	QCOMPARE(with_user.host, QStringLiteral("box.example"));
+	QCOMPARE(with_user.port, quint16(22));
+
+	/* A port that is not one keeps the default rather than becoming 0. */
+	QCOMPARE(bssh_profile_t::from_target(QStringLiteral("box.example:abc")).port, quint16(22));
+	QCOMPARE(bssh_profile_t::from_target(QStringLiteral("box.example:99999")).port, quint16(22));
+	QCOMPARE(bssh_profile_t::from_target(QStringLiteral("box.example:0")).port, quint16(22));
+}
