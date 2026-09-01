@@ -45,6 +45,17 @@ namespace {
  */
 const int BSSH_MAX_IMAGE_CELLS = 10000;
 
+/*
+ * The most pixels this will decode into an image, for any protocol.
+ *
+ * Tied to bssh_image_store's 32 MB per-session budget: at three bytes a
+ * pixel this is 25 MB, so an image that passes fits the budget rather
+ * than being evicted the moment it arrives. It is also larger than a 4K
+ * screen (8,294,400), which is the biggest thing anybody sensibly sends
+ * to a terminal.
+ */
+const qint64 BSSH_MAX_IMAGE_PIXELS = 8 * 1024 * 1024;
+
 /* "a=T,f=100,c=2,r=1" -> {a: T, f: 100, ...} */
 QMap<QString, QString> parse_kitty_controls(const QString &text) {
 	QMap<QString, QString> controls;
@@ -151,13 +162,32 @@ bssh_graphics_result_t bssh_parse_kitty(const QByteArray &payload,
 	} else if ((format == 24 || format == 32) && pixel_width > 0 && pixel_height > 0) {
 		const QImage::Format qt_format = format == 24 ? QImage::Format_RGB888
 		                                              : QImage::Format_RGBA8888;
-		const int bytes_per_line = pixel_width * (format == 24 ? 3 : 4);
+		/*
+		 * SIXTY-FOUR BIT, and that is the whole of this guard.
+		 *
+		 * Both of these were int, and both operands come from the
+		 * remote's own s= and v= controls. `s=46341 v=46341 f=32` makes
+		 * bytes_per_line 185364 and the product 8,589,953,124 -- which
+		 * wraps to 18,532 in an int. The check then demanded 18 KB of
+		 * payload and handed QImage a 46341x46341 image over it, and
+		 * copy() reads rows until it has 8.59 GB: an out-of-bounds read
+		 * of gigabytes, driven entirely by a remote, whose best outcome
+		 * is a crash and whose worst is heap contents drawn on screen.
+		 *
+		 * In 64-bit arithmetic the product cannot wrap for any int pair,
+		 * so the comparison means what it says -- and the payload cap in
+		 * the emulator then bounds the image for free, since an image
+		 * this can accept must fit in a payload that already has a
+		 * ceiling.
+		 */
+		const qint64 bytes_per_line = qint64(pixel_width) * (format == 24 ? 3 : 4);
+		const qint64 needed = bytes_per_line * qint64(pixel_height);
 
 		/*
 		 * Copied, not wrapped: QImage's borrowing constructor keeps a
 		 * pointer into this buffer, which is a local about to die.
 		 */
-		if (decoded.size() >= bytes_per_line * pixel_height) {
+		if (needed > 0 && qint64(decoded.size()) >= needed) {
 			image = QImage(reinterpret_cast<const uchar *>(decoded.constData()),
 			                pixel_width, pixel_height, bytes_per_line, qt_format).copy();
 		}
@@ -284,7 +314,40 @@ bssh_graphics_result_t bssh_parse_sixel(const QByteArray &payload,
 		return result;
 	}
 
+	/*
+	 * Bounded BEFORE anything is allocated, which nothing did: the
+	 * dimensions come back from libsixel and were used as they arrived.
+	 * BSSH_MAX_IMAGE_CELLS caps the PLACEMENT, not the decode, so it
+	 * never reached this.
+	 *
+	 * Three faults fall out of the one guard. The allocation below could
+	 * fail and return a null image, and the loop then called setPixel on
+	 * it. `y * width + x` is int arithmetic, so a decode wider than
+	 * INT_MAX / height wrapped the index and read outside the buffer --
+	 * the same overflow as the kitty guard above, a hundred lines apart.
+	 * And a large image is minutes of per-pixel work on the thread that
+	 * runs the terminal.
+	 *
+	 * The ceiling is argued rather than picked: bssh_image_store's budget
+	 * is 32 MB per session, and at three bytes a pixel this is 25 MB --
+	 * an image that fits the budget, and still larger than a 4K screen's
+	 * 8,294,400 pixels. Anything bigger would be evicted on arrival, so
+	 * decoding it was work with no possible outcome.
+	 */
+	const qint64 total_pixels = qint64(width) * qint64(height);
+	if (total_pixels > BSSH_MAX_IMAGE_PIXELS) {
+		free(pixels);
+		free(palette);
+		return result;
+	}
+
 	QImage image(width, height, QImage::Format_RGB888);
+	if (image.isNull()) {
+		free(pixels);
+		free(palette);
+		return result;
+	}
+
 	for (int y = 0; y < height; ++y) {
 		for (int x = 0; x < width; ++x) {
 			/*
@@ -292,7 +355,13 @@ bssh_graphics_result_t bssh_parse_sixel(const QByteArray &payload,
 			 * naming a colour outside the palette it declared must not
 			 * read past the end of it.
 			 */
-			const int index = qBound(0, int(pixels[y * width + x]), ncolors - 1);
+			/*
+			 * Widened as well as bounded above. The cap makes this
+			 * unable to overflow today; saying so in the type means a
+			 * larger cap later cannot quietly reintroduce it.
+			 */
+			const qint64 at = qint64(y) * qint64(width) + qint64(x);
+			const int index = qBound(0, int(pixels[at]), ncolors - 1);
 			const unsigned char *entry = palette + index * 3;
 			image.setPixel(x, y, qRgb(entry[0], entry[1], entry[2]));
 		}

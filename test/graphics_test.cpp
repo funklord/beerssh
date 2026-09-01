@@ -422,3 +422,56 @@ void graphics_test::an_image_that_arrived_as_bytes_reaches_the_screen() {
 	          qPrintable(QStringLiteral("an image that parsed was never drawn: the cell "
 	                                     "under the cursor is %1").arg(after.name())));
 }
+
+void graphics_test::a_declared_size_that_overflows_is_refused() {
+	/*
+	 * The guard on kitty's raw formats multiplied two remote-supplied
+	 * ints. `s=46341 v=46341 f=32` gives bytes_per_line 185364 and a
+	 * product of 8,589,953,124 -- which wraps to 18,532 in an int. The
+	 * check then asked for 18 KB of payload and handed QImage a
+	 * 46341x46341 image over it, and copy() reads until it has 8.59 GB.
+	 *
+	 * An out-of-bounds read of gigabytes, chosen by whatever is on the
+	 * other end of the connection. Best case a crash; worst case heap
+	 * contents decoded into an image and drawn on the screen.
+	 *
+	 * 46341 is not arbitrary: it is the smallest square whose 32-bit
+	 * product wraps to a value small enough for an ordinary payload to
+	 * satisfy, which is what makes this reachable rather than theoretical.
+	 */
+	const int side = 46341;
+	const QByteArray payload(20000, '\x01');
+
+	const QByteArray apc = QByteArrayLiteral("\x1b_Ga=T,f=32,s=")
+	        + QByteArray::number(side)
+	        + QByteArrayLiteral(",v=")
+	        + QByteArray::number(side)
+	        + QByteArrayLiteral(";")
+	        + payload.toBase64()
+	        + QByteArrayLiteral("\x1b\\");
+
+	bssh_emulator emulator(80, 24);
+	emulator.feed(apc);
+
+	QVERIFY2(emulator.images().count() == 0,
+	          "a declared size the payload cannot cover must not become an image");
+
+	/*
+	 * The control, and it is the one that matters: an image whose declared
+	 * size the payload really does cover is still accepted, so this cannot
+	 * pass against a parser that refuses everything.
+	 */
+	const int small = 4;
+	const QByteArray real(small * small * 4, '\x7f');
+	const QByteArray good = QByteArrayLiteral("\x1b_Ga=T,f=32,s=")
+	        + QByteArray::number(small)
+	        + QByteArrayLiteral(",v=")
+	        + QByteArray::number(small)
+	        + QByteArrayLiteral(";")
+	        + real.toBase64()
+	        + QByteArrayLiteral("\x1b\\");
+
+	emulator.feed(good);
+	QVERIFY2(emulator.images().count() == 1,
+	          "an image whose payload covers its declared size must still arrive");
+}

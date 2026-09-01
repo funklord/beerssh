@@ -15,6 +15,7 @@ class graphics_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void a_declared_size_that_overflows_is_refused();
 	void kitty_png_is_placed_at_the_cursor();
 	void kitty_raw_rgb_is_decoded();
 	void kitty_chunked_transmission_reassembles();

@@ -4635,6 +4635,47 @@ matters is precisely the file neither of them wrote last.
 `flush()` and `close()`'s error are checked too — the out-of-band failure
 channel one more layer along.
 
+**Both image decoders trusted remote dimensions, and one of them read
+8.59 GB out of bounds.** The kitty raw-format guard multiplied two `int`s
+taken from the remote's own `s=` and `v=` controls:
+
+    s=46341 v=46341 f=32
+      bytes_per_line          =       185,364
+      bytes_per_line * height = 8,589,953,124
+      as a 32-bit int         =        18,532   <- what the guard demanded
+      what QImage then read   = 8,589,953,124   <- 8.59 GB
+
+So the check asked for 18 KB of payload and handed `QImage` a
+46341×46341 image over it. `46341` is not arbitrary: it is the smallest
+square whose 32-bit product wraps small enough for an ordinary payload to
+satisfy, which is what makes it reachable rather than theoretical. Best
+case a crash; worst case heap contents decoded into an image and drawn on
+screen.
+
+**The sixel path had the same overflow a hundred lines below**, in
+`pixels[y * width + x]`, plus two more: no `isNull()` check after an
+allocation that can fail, and no bound on the decoded dimensions at all —
+`BSSH_MAX_IMAGE_CELLS` caps the *placement*, not the decode, so it never
+reached this. One ceiling closes all three.
+
+**Both ceilings are argued rather than picked.** 64-bit arithmetic cannot
+wrap for any `int` pair, so the kitty comparison now means what it says —
+and §7.1's payload cap then bounds the image for free, since an image the
+guard accepts must fit a payload that already has one. The sixel ceiling
+is 8 Mi pixels: 25 MB at three bytes each, inside `bssh_image_store`'s
+32 MB session budget, and still larger than a 4K screen's 8,294,400.
+Above it an image would be evicted on arrival, so decoding it was work
+with no possible outcome.
+
+**The sabotage is the evidence, and it does not fail — it crashes.**
+Restoring the 32-bit arithmetic makes that test segfault rather than
+report, which is the honest shape of the defect. It also attached
+`gdb --batch` through the suite's crash handler, and a stopped-traced
+process ignores `timeout`'s SIGTERM, so a debugger sat resident for an
+hour with two zombies beside it — exactly the incident
+`running-code.md` records. Cleaned up and verified empty. Worth knowing
+before anyone re-runs that sabotage.
+
 **Four more buffers had the same fault, and a switched-off protocol still
 paid for it.** Generalising the title's cap found that this terminal
 accumulates five remote-controlled strings and bounded exactly one:
