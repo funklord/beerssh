@@ -4908,6 +4908,31 @@ store with a memory budget (§7.2), both bounded for this reason.
 bounded?"* but *"this file bounds its other remote-controlled buffer and
 says why — does that reasoning apply here?"* It applied verbatim.
 
+**The cap bounded the memory and not the LAYOUT, which is the other half
+of the same string.** 1024 characters is a modest buffer and, in a
+`QTabBar` with `setExpanding(false)` and no elide mode, a tab **11,472
+pixels wide** — measured. Every tab after it sits past the right-hand
+edge: present, but reachable only through the scroll buttons, which is
+not where anybody looks for the session they were just in. No hostility
+is needed either, unlike the unbounded case — a shell putting the full
+command line or a deep path in its title gets there on an ordinary
+afternoon.
+
+Three widgets in this tree set an elide mode deliberately, and
+`elide_status()` does the arithmetic by hand for the status label. The
+tab bar, the one label a REMOTE writes, was the one that set none.
+`Qt::ElideMiddle`, for the reason `bssh_host_list` already gives about
+the same kind of string: the two ends identify a session and the middle
+of a long path is the part nobody needs — and several tabs on one host
+differ in their leaf directory, so eliding at the end throws away the
+character that tells them apart. The test asserts structurally, that one
+tab cannot be wider than the bar it lives in, rather than pinning a pixel
+count to a style and a font.
+
+**A bound is not a bound on everything**: capping a string's length says
+what it costs in memory and nothing about what it does to a layout that
+sizes to its content.
+
 Truncated where the selection is dropped whole, deliberately: half a
 clipboard is a different string and pasting it is worse than pasting
 nothing, while half a title is still a label and nothing executes it. The

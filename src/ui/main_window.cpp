@@ -153,6 +153,24 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_tabs->setExpanding(false);
 	m_tabs->setTabsClosable(true);
 	m_tabs->setDrawBase(false);
+
+	/*
+	 * ELIDED, because the label is a string the REMOTE writes. A title
+	 * arrives by OSC (sec 8.3) and is capped at 1024 characters, which
+	 * with setExpanding(false) is a tab about eleven thousand pixels
+	 * wide: measured, and it puts every tab after it past the right-hand
+	 * edge, reachable only through the scroll buttons. No hostility is
+	 * needed for this -- a shell that puts the full command line or a
+	 * deep path in its title gets there on an ordinary afternoon.
+	 *
+	 * In the MIDDLE, for the reason bssh_host_list gives about the same
+	 * kind of string: the two ends are what identify a session and the
+	 * middle of a long path is the part nobody needs. Several tabs on one
+	 * host differ in their LEAF directory, so eliding at the end throws
+	 * away the character that tells them apart.
+	 */
+	m_tabs->setElideMode(Qt::ElideMiddle);
+
 	m_tabs->hide();
 
 	/*

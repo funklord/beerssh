@@ -4318,3 +4318,41 @@ void layout_test::a_trusted_host_can_actually_set_the_clipboard() {
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
+
+void layout_test::a_long_title_cannot_push_the_other_tabs_off_the_bar() {
+	/*
+	 * A tab label is a string the REMOTE writes: it arrives by OSC
+	 * (sec 8.3), and the emulator caps it at 1024 characters. With
+	 * setExpanding(false) and no elide mode that is a tab about eleven
+	 * thousand pixels wide, and every tab after it sits past the
+	 * right-hand edge -- present, but reachable only through the scroll
+	 * buttons, which is not where a user looks for the session they were
+	 * just in.
+	 *
+	 * No hostility is required. A shell that puts the full command line
+	 * or a deep path into its title gets there on an ordinary afternoon.
+	 *
+	 * Asserted structurally rather than in pixels: whatever the style and
+	 * font, ONE tab must not be wider than the whole bar it lives in.
+	 */
+	bssh_main_window window;
+
+	QTabBar *tabs = window.findChild<QTabBar *>();
+	QVERIFY2(tabs, "the window must have a tab bar");
+
+	tabs->addTab(QStringLiteral("web"));
+	tabs->addTab(QString(1024, QLatin1Char('W')));
+	tabs->addTab(QStringLiteral("db"));
+	tabs->resize(600, tabs->sizeHint().height());
+
+	QVERIFY2(tabs->tabRect(1).width() < tabs->width(),
+	          qPrintable(QStringLiteral("one tab is %1px in a %2px bar")
+	                             .arg(tabs->tabRect(1).width())
+	                             .arg(tabs->width())));
+
+	/* And a short label is still shown whole, so this is a check on the
+	 * eliding rather than on tabs having been made uniformly small. */
+	const int plain = tabs->tabRect(0).width();
+	tabs->setTabText(0, QStringLiteral("web"));
+	QCOMPARE(tabs->tabRect(0).width(), plain);
+}
