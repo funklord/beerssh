@@ -4933,6 +4933,43 @@ count to a style and a font.
 what it costs in memory and nothing about what it does to a layout that
 sizes to its content.
 
+**The same lens found OSC 8, where the comment stated the wrong
+conclusion out loud.** `begin_link` wraps its ids at 65535 and says so —
+*"Ids wrap rather than grow without bound: a session left running on
+output full of links would otherwise allocate for ever."* That bounds the
+COUNT. Each entry is a URI straight from the remote, `links` is never
+cleared, and the only thing limiting the size of one was the OSC payload
+cap — so the real bound was 65535 × that, which is not a bound. Two
+different quantities, one of them measured and the other assumed to
+follow.
+
+**Dropped whole rather than shortened**, at 4096 characters. That is the
+call `on_selection_set` makes for the clipboard and the opposite of the
+title's, and this file already wrote down the rule that decides which:
+half a title is still a label and nothing executes it, while half a URI
+is a DIFFERENT address — and this one is handed to a browser. The refusal
+also CLOSES any link already open. Returning with `open_link_id` standing
+would have attributed everything printed afterwards to the previous URI,
+which turns a refusal into a wrong destination — the single outcome the
+whole rule exists to prevent, reintroduced by the guard against it.
+
+**And the confirmation dialog had the tab bar's bug, in the one place it
+matters most.** The prompt asking whether to open a remote's address put
+the URI in verbatim. At 2083 characters — which the OSC 8 convention asks
+emulators to *support* — that is a dialog **14,211 pixels wide** on an
+800-pixel screen: a box whose entire purpose is letting somebody read
+where they are about to go, too wide to show it. No hostility needed; a
+signed download link runs to hundreds of characters on an ordinary day.
+Shown elided, opened whole — a shortened address is a different one, so
+only the display changes. `bssh_uri_for_prompt` is pure and lives in the
+header so it can be tested without a modal dialog, which is the shape the
+libssh rules were extracted into for the same reason. Elided in the
+MIDDLE: the scheme and host say who is being talked to and the tail says
+what is being fetched, so eliding at the end hides the tail and eliding
+at the start hides the HOST. The limit is measured rather than picked —
+485px at 64 characters, 700 at 96, 807 at 112, 1130 at 160 — and 96 is
+the widest that still fits with margin.
+
 Truncated where the selection is dropped whole, deliberately: half a
 clipboard is a different string and pasting it is worse than pasting
 nothing, while half a title is still a label and nothing executes it. The

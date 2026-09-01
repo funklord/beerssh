@@ -1295,9 +1295,17 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 	 */
 		connect(m_terminal_view, &bssh_terminal_view::link_activated,
 		       this, [this](const QString &uri) {
+			/*
+			 * SHOWN elided, OPENED whole. The question is what the
+			 * user is being asked to read, and a URI put in
+			 * verbatim makes a dialog wider than the screen -- see
+			 * bssh_uri_for_prompt. What openUrl gets is the address
+			 * itself, because a shortened one is a different one.
+			 */
 			const QMessageBox::StandardButton answer = QMessageBox::question(
 			      this, QStringLiteral("Open link"),
-			      QStringLiteral("Open this address, sent by the remote host?\n\n%1").arg(uri),
+			      QStringLiteral("Open this address, sent by the remote host?\n\n%1")
+			              .arg(bssh_uri_for_prompt(uri, BSSH_URI_PROMPT_CHARS)),
 			      QMessageBox::Open | QMessageBox::Cancel, QMessageBox::Cancel);
 
 			if (answer == QMessageBox::Open) QDesktopServices::openUrl(QUrl(uri));

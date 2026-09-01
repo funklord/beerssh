@@ -338,6 +338,20 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
  */
 const int BSSH_MAX_TITLE_CHARS = 1024;
 
+/*
+ * The longest OSC 8 URI this terminal will hold. The convention's own
+ * document asks emulators to support at least 2083 bytes -- the old IE
+ * limit -- so this clears that with room and is still far past any
+ * address anybody sends on purpose.
+ *
+ * A URI over it is DROPPED WHOLE rather than truncated, which is the
+ * distinction on_selection_set and the title cap already draw between
+ * them: half a title is still a label and nothing executes it, while
+ * half a URI is a DIFFERENT address, and this one is offered to a
+ * browser. Truncating would turn a refusal into a wrong destination.
+ */
+const int BSSH_MAX_LINK_CHARS = 4096;
+
 int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 
@@ -1789,6 +1803,30 @@ VTermPos bssh_emulator_private::cursor_position() const {
 }
 
 void bssh_emulator_private::begin_link(const QString &uri) {
+	/*
+	 * BOUNDED BY LENGTH as well as by count, and the two are different
+	 * bounds. The wrap below caps how MANY links are held; it says
+	 * nothing about how big one is, and `links` is never cleared -- so a
+	 * host sending 65535 distinct URIs of a megabyte each had this map
+	 * holding gigabytes while the comment beneath said the allocation was
+	 * bounded. The OSC payload cap is the only thing that was limiting
+	 * one of them, and 65535 times that is not a limit.
+	 *
+	 * Dropped rather than shortened, and dropped BEFORE an id is spent,
+	 * so the cells carry no link and a Ctrl+click finds nothing. See
+	 * BSSH_MAX_LINK_CHARS.
+	 *
+	 * Any link already open is CLOSED on the way out rather than left
+	 * standing. Returning with open_link_id untouched would attribute
+	 * everything printed afterwards to the PREVIOUS URI -- a refusal
+	 * turned into a wrong destination, which is the one outcome dropping
+	 * the URI whole exists to avoid.
+	 */
+	if (uri.size() > BSSH_MAX_LINK_CHARS) {
+		end_link();
+		return;
+	}
+
 	/*
 	 * Ids wrap rather than grow without bound: a session left running on
 	 * output full of links would otherwise allocate for ever. Wrapping

@@ -12,6 +12,49 @@
 #include "term/screen.h"
 #include "term/scrollback.h"
 
+/*
+ * A remote's URI as it should be SHOWN to somebody being asked whether to
+ * open it -- which is not the same string as the one that gets opened.
+ *
+ * A URI is held up to 4096 characters (BSSH_MAX_LINK_CHARS), and the
+ * convention's own document asks emulators to support at least 2083. Put
+ * verbatim into a QMessageBox, 2083 characters is a dialog 14,211 pixels
+ * wide -- measured, against an 800-pixel screen. The dialog exists so the
+ * user can read where they are about to go, and one that cannot fit on
+ * the screen has stopped doing that. Nothing hostile is needed: a signed
+ * download link runs to hundreds of characters on an ordinary day.
+ *
+ * Elided in the MIDDLE, for the reason bssh_host_list gives and which is
+ * sharper here than anywhere else: the two ends are what identify an
+ * address. The scheme and host say who is being talked to and the tail
+ * says what is being fetched, while the middle of a long query string is
+ * the part nobody can read anyway. Eliding at the END would hide the tail
+ * and eliding at the START would hide the HOST, which is the single most
+ * important thing on the screen at that moment.
+ *
+ * Pure and here rather than inline in the dialog, so it can be tested
+ * without showing a modal one.
+ */
+/*
+ * How much of one to show. MEASURED rather than picked: with the same
+ * 2083-character address, this dialog asks for 485px at 64 characters,
+ * 700 at 96, 807 at 112 and 1130 at 160. 96 is the widest tried that
+ * still sits inside an 800-pixel screen with margin, and an ordinary
+ * address is shorter than it and so is shown untouched.
+ */
+const int BSSH_URI_PROMPT_CHARS = 96;
+
+inline QString bssh_uri_for_prompt(const QString &uri, int max_chars) {
+	if (max_chars <= 0 || uri.size() <= max_chars) return uri;
+
+	/* The ellipsis is one of the characters, so the two halves share what
+	 * is left rather than overrunning the budget by one. */
+	const int keep = max_chars - 1;
+	const int head = keep - keep / 2;
+
+	return uri.left(head) + QString::fromUtf8("\xe2\x80\xa6") + uri.right(keep / 2);
+}
+
 struct bssh_emulator_private;
 
 /*

@@ -521,6 +521,81 @@ void emulator_test::osc8_marks_cells_with_a_link() {
 	QCOMPARE(int(emulator.screen().cell(0, 20).link), 0);
 }
 
+void emulator_test::an_enormous_link_is_dropped_whole_and_shown_short() {
+	/*
+	 * The link ids wrap at 65535 and the comment beside them said the
+	 * allocation was therefore bounded. It bounded the COUNT. Each entry
+	 * is a URI straight from the remote, `links` is never cleared, and
+	 * the only thing limiting one of them was the OSC payload cap -- so
+	 * 65535 times that was the real bound, which is not one.
+	 */
+	bssh_emulator emulator(40, 5);
+
+	const QByteArray huge(200 * 1024, 'a');
+	emulator.feed(QByteArrayLiteral("\x1b]8;;https://example.com/") + huge +
+	               QByteArrayLiteral("\x07") + QByteArrayLiteral("text") +
+	               QByteArrayLiteral("\x1b]8;;\x07"));
+
+	/*
+	 * No link at all, rather than a shortened one. Half a URI is a
+	 * DIFFERENT address and this one is offered to a browser, so the
+	 * refusal has to be total -- the same call the clipboard cap makes,
+	 * and the opposite of the title's, which truncates because nothing
+	 * executes a label.
+	 */
+	QCOMPARE(int(emulator.screen().cell(0, 0).link), 0);
+
+	/*
+	 * And a link that was already open is CLOSED by the refusal, not left
+	 * standing. Returning with it open would attribute the text after it
+	 * to the PREVIOUS address -- a refusal turned into a wrong
+	 * destination, which is the outcome all of this exists to avoid.
+	 */
+	bssh_emulator second(40, 5);
+	second.feed(QByteArrayLiteral("\x1b]8;;https://first.example/\x07"));
+	second.feed(QByteArrayLiteral("\x1b]8;;https://second.example/") + huge +
+	             QByteArrayLiteral("\x07"));
+	second.feed(QByteArrayLiteral("after"));
+
+	QCOMPARE(int(second.screen().cell(0, 0).link), 0);
+
+	/* An ordinary address is untouched by any of it. */
+	bssh_emulator ordinary(40, 5);
+	ordinary.feed(QByteArrayLiteral("\x1b]8;;https://example.com/x\x07"
+	                                 "ok\x1b]8;;\x07"));
+	const quint16 id = ordinary.screen().cell(0, 0).link;
+	QVERIFY(id != 0);
+	QCOMPARE(ordinary.link_uri(id), QStringLiteral("https://example.com/x"));
+
+	/*
+	 * The other half: what is SHOWN when the user is asked whether to
+	 * open one. Put in verbatim, a 2083-character address -- which the
+	 * convention asks emulators to support -- makes a dialog 14,211
+	 * pixels wide on an 800-pixel screen, so the box that exists for
+	 * reading an address stops being able to show one.
+	 */
+	const QString host = QStringLiteral("https://good.example/");
+	const QString tail = QStringLiteral("/final-name.tar.gz");
+	const QString long_uri = host + QString(2000, QLatin1Char('a')) + tail;
+
+	const QString shown = bssh_uri_for_prompt(long_uri, BSSH_URI_PROMPT_CHARS);
+
+	QCOMPARE(shown.size(), BSSH_URI_PROMPT_CHARS);
+
+	/*
+	 * Elided in the MIDDLE: the scheme and host say who is being talked
+	 * to and the tail says what is being fetched. Eliding at the end
+	 * would hide the tail; eliding at the start would hide the HOST,
+	 * which is the most important thing on the screen at that moment.
+	 */
+	QVERIFY2(shown.startsWith(host), qPrintable(shown));
+	QVERIFY2(shown.endsWith(tail), qPrintable(shown));
+
+	/* An address short enough to read is passed through untouched. */
+	const QString plain = QStringLiteral("https://example.com/a/b");
+	QCOMPARE(bssh_uri_for_prompt(plain, BSSH_URI_PROMPT_CHARS), plain);
+}
+
 void emulator_test::osc8_survives_a_wrap_and_ends_where_told() {
 	/* Narrow enough that the link text wraps to the next row. */
 	bssh_emulator emulator(10, 5);

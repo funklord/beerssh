@@ -46,6 +46,7 @@ private slots:
 	void resize_keeps_existing_text();
 	void osc8_marks_cells_with_a_link();
 	void osc8_survives_a_wrap_and_ends_where_told();
+	void an_enormous_link_is_dropped_whole_and_shown_short();
 	void synchronised_output_holds_the_repaint();
 	void synchronised_output_releases_itself_if_abandoned();
 	void scrolled_lines_enter_the_scrollback();
