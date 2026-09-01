@@ -3454,7 +3454,7 @@ QString bssh_main_window::stored_password_for(const bssh_profile_t &profile) {
 	bssh_secret_store *store = bssh_secret_store::instance();
 	if (!store->is_unlocked() && !unlock_secret_store()) return QString();
 
-	return store->load(QStringLiteral("profile:%1:password").arg(profile.id));
+	return store->load(bssh_profile_password_key(profile.id));
 }
 
 bool bssh_main_window::unlock_secret_store() {
@@ -3489,7 +3489,7 @@ void bssh_main_window::offer_to_remember(bssh_session *session, const QString &p
 	if (!unlock_secret_store()) return;
 
 	bssh_secret_store *store = bssh_secret_store::instance();
-	if (!store->store(QStringLiteral("profile:%1:password").arg(session->profile().id), password)) {
+	if (!store->store(bssh_profile_password_key(session->profile().id), password)) {
 		return;
 	}
 

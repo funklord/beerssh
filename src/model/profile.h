@@ -196,4 +196,20 @@ struct bssh_profile_t {
 	}
 };
 
+/*
+ * Where this host's remembered password lives in bssh_secret_store
+ * (sec 11). Derived from the id and nothing else -- the store holds no
+ * host, user or port, which is what keeps sec 10.3's separation intact.
+ *
+ * One function rather than the format string written out at each caller.
+ * Two of them now build this key -- releasing a password and erasing one
+ * when its host is deleted -- and a key computed in two places is a key
+ * that can stop matching, which would leave a credential unreachable and
+ * unerasable at once.
+ */
+inline QString bssh_profile_password_key(int id) {
+	return QStringLiteral("profile:%1:password").arg(id);
+}
+
+
 #endif /* BSSH_PROFILE_H */

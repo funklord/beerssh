@@ -4381,6 +4381,42 @@ All of it goes behind one interface — `bssh_secret_store` (`store`, `load`,
 `erase`, `is_hardware_backed`) — with one implementation per platform, per §3's
 core principle 3. Callers get an opaque ID back and never see a key mechanism.
 
+**`erase` had no caller in the tree, and deleting a host left its password
+behind.** The separation this section is built on — the row holds a *flag*
+saying a credential exists, the credential lives in the store under a key
+derived from the row's id — was only ever wired in one direction. `save`
+and `load` had callers; nothing joined deletion to `erase`, so a password
+for a host the user deliberately removed stayed in their keyring, or in
+the passphrase-derived file this section calls safe to copy between
+machines, indefinitely. Half an interface unused is how it hid: nobody
+looks for the caller of a function that exists.
+
+Two things measured before the fix, because both look worse than they are
+and a later reader should not have to re-derive either:
+
+- **Ids are reused and it is not an inheritance.** `save()` mints
+  `highest + 1` over the rows that remain, so a deleted host's key is one
+  a future host will be given. It cannot read it:
+  `stored_password_for()` returns before touching the store unless that
+  row's own `has_stored_password` is set, and a new row's is not. The
+  fault is an orphaned secret, not a credential handed to the wrong host.
+- **A session cannot die inside a modal prompt**, so the host-key
+  handlers' raw `session` pointer is sound where the password path's
+  `QPointer` is necessary. Qt processes `DeferredDelete` only when
+  control returns to the loop `deleteLater()` was called from, and
+  entering a dialog's nested loop is not that. The password path differs
+  because it is an *asynchronous* platform callback (Android's
+  BiometricPrompt), which does resume on the outer loop.
+
+**The locked-store half is deliberately not answered.** libsecret erases
+whether or not this app has unlocked anything; the passphrase-derived file
+cannot, because it re-encrypts the whole blob, so `erase` returns false
+while locked. Prompting for a passphrase in order to *delete* something is
+the wrong trade, and the alternatives — sweep orphans at the next unlock,
+or record them for one — are a decision this document has not taken. A
+locked store is therefore left exactly as it was: no worse than before the
+fix, and not quietly declared fixed either.
+
 - **Private keys / passwords** stored encrypted; never plaintext in app files,
   `SharedPreferences`, or the INI config files (§10.6).
   - **Android [DECIDED, built]:** secrets are wrapped with a key generated

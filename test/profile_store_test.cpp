@@ -4,6 +4,7 @@
 
 #include "model/profile_store.h"
 #include "platform/platform.h"
+#include "platform/secret_store.h"
 #include <QDir>
 #include "profile_store_test.h"
 #include <QListWidget>
@@ -950,4 +951,64 @@ void profile_store_test::an_existing_host_list_is_migrated_once() {
 	filled.close();
 	QVERIFY2(QFileInfo(target).size() > 0,
 	          "a target with hosts in it must block a second migration");
+}
+
+void profile_store_test::deleting_a_host_takes_its_password_with_it() {
+	/*
+	 * sec 11: the credential lives in the secret store and the row holds
+	 * only a flag saying one exists. Nothing joined the two ends, so
+	 * removing a host deleted the row and left the password behind -- and
+	 * bssh_secret_store::erase() had NO CALLER anywhere in the tree, which
+	 * is how a whole half of an interface goes unused without anyone
+	 * noticing.
+	 *
+	 * What that costs: a password for a host the user deliberately deleted
+	 * stays in their keyring, or in the encrypted file they copy between
+	 * machines, for good. They have every reason to believe it went with
+	 * the host.
+	 *
+	 * And ids are reused -- save() mints highest+1 over the rows that
+	 * remain -- so the key a deleted host leaves behind is a key a future
+	 * host will be given. It cannot READ it, because stored_password_for()
+	 * returns early unless the row's own has_stored_password is set and a
+	 * new row's is not; the orphan is the fault here, not an inheritance.
+	 * Worth stating, because the id reuse makes it look like the worse bug
+	 * and a reader should not have to re-derive that it is not.
+	 *
+	 * Through bssh_secret_store::instance() rather than a backend by name:
+	 * the erase has to happen in whichever store the app actually uses,
+	 * and a test that built its own would asserts about an object the code
+	 * under test never touches.
+	 */
+	bssh_secret_store *secrets = bssh_secret_store::instance();
+	QVERIFY(secrets);
+	if (secrets->needs_passphrase() && !secrets->is_unlocked()) {
+		QVERIFY(secrets->unlock(QStringLiteral("passphrase for the suite")));
+	}
+	QVERIFY2(secrets->is_unlocked(), "the store has to be readable for this to mean anything");
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("doomed");
+	host.host = QStringLiteral("doomed.example");
+	host.has_stored_password = true;
+	const int id = store.save(host);
+	QVERIFY(id != 0);
+
+	/*
+	 * The precondition, asserted rather than assumed: if the store never
+	 * took the secret, every assertion below would pass against a bug
+	 * still present.
+	 */
+	const QString key = bssh_profile_password_key(id);
+	QVERIFY(secrets->store(key, QStringLiteral("hunter2")));
+	QCOMPARE(secrets->load(key), QStringLiteral("hunter2"));
+
+	QVERIFY(store.remove(id));
+
+	QVERIFY2(secrets->load(key).isEmpty(),
+	          "deleting a host must take its stored password with it");
 }

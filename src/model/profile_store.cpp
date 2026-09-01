@@ -1,6 +1,7 @@
 #include "model/profile_store.h"
 
 #include "platform/platform.h"
+#include "platform/secret_store.h"
 
 #include <QDir>
 #include <QFile>
@@ -543,12 +544,46 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 bool bssh_profile_store::remove(int id) {
 	if (!m_open || id == 0) return false;
 
+	/* Read while the row still exists; see the erase below. */
+	const bool had_password = profile(id).has_stored_password;
+
 	const qsizetype before = m_profiles.size();
 	m_profiles.erase(std::remove_if(m_profiles.begin(), m_profiles.end(),
 	                                 [id](const bssh_profile_t &p) { return p.id == id; }),
 	                  m_profiles.end());
 
 	if (m_profiles.size() == before) return false;
+
+
+	/*
+	 * And the credential with it (sec 11). The row held only a FLAG
+	 * saying one existed; the secret lives in bssh_secret_store under a
+	 * key derived from this id, and nothing joined the two ends -- so a
+	 * password for a host the user deliberately deleted stayed in their
+	 * keyring, or in the encrypted file sec 11 calls safe to copy between
+	 * machines, for good. bssh_secret_store::erase() had NO CALLER
+	 * anywhere in the tree, which is how half an interface goes unused
+	 * without anybody noticing.
+	 *
+	 * The flag is read before the row goes, because it is the cheap way
+	 * to know a secret exists at all: asking the store would mean
+	 * unlocking it on every deletion, including the many with nothing to
+	 * erase.
+	 *
+	 * The erase is not required to succeed and the deletion does not
+	 * depend on it. A libsecret store erases whether or not this app has
+	 * unlocked anything; the passphrase-derived file cannot, since it
+	 * re-encrypts the whole blob and returns false while locked. What to
+	 * do about that -- prompt on delete, or record the orphan and sweep
+	 * it at the next unlock -- is a question sec 11 does not answer, and
+	 * this does not invent one: a locked store is left exactly as it was
+	 * before this change, no worse and no better.
+	 */
+	if (had_password) {
+		if (bssh_secret_store *secrets = bssh_secret_store::instance()) {
+			secrets->erase(bssh_profile_password_key(id));
+		}
+	}
 
 	write_profiles();
 	emit changed();
