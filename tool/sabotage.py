@@ -154,16 +154,43 @@ class Edit:
 			return True
 
 		try:
-			shutil.copy2(self.parked, self.path)
+			# The CONTENT, and only the content. copy2() also copies the
+			# metadata, and copying metadata onto a file somebody else
+			# owns raises EPERM -- after the bytes have already landed.
+			# That aborted this function between the write and the
+			# read-back below, so a restore that had in fact succeeded
+			# was announced as "THE TREE IS NOT RESTORED".
+			#
+			# Measured here: the tree is checked out by one user and the
+			# runner was invoked by another, which is ordinary in a
+			# shared checkout and says nothing about whether the file
+			# came back. git diff was empty and the parked copy was
+			# byte-identical while the runner said the opposite.
+			#
+			# A safety message that cries wolf is worse than none: it
+			# teaches whoever sees it next to skip the check, and the
+			# real one looks exactly the same. So restoration is defined
+			# as the bytes being back, which is what the read-back
+			# decides -- ownership and timestamps are a courtesy and
+			# cannot fail it.
+			#
+			# The destination already exists, so it keeps its own mode
+			# and there is nothing to copy anyway.
+			shutil.copyfile(self.parked, self.path)
 
-			# copy2 restores the mtime along with the mode, which puts the
-			# file BEHIND the object built from the sabotaged text -- so
-			# make judges that object current and the next `make test`
-			# silently runs the sabotage against a tree that reads as
-			# clean. Found the hard way: two tiling tests failed after a
-			# run whose git status was empty, and the binary still held
-			# the last edit. Stamp it now, so the restore is a change as
-			# far as the build system is concerned.
+			# The mtime still has to move, and for its own reason:
+			# copyfile leaves it as it was, which puts the file BEHIND
+			# the object built from the sabotaged text -- so make judges
+			# that object current and the next `make test` silently runs
+			# the sabotage against a tree that reads as clean. Found the
+			# hard way: two tiling tests failed after a run whose git
+			# status was empty, and the binary still held the last edit.
+			#
+			# Stamping to NOW rather than to the parked file's time,
+			# which is both what the build system needs and the form
+			# that works without owning the file: utime(path, None)
+			# asks only for write permission, where an explicit time
+			# demands ownership.
 			os.utime(self.path, None)
 
 			# Read it back. A copy that silently did not land -- a full
