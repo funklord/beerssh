@@ -52,20 +52,37 @@ bssh_preset_t bssh_preset_t::from_json(const QJsonObject &object) {
 
 	preset.name = object.value(QStringLiteral("name")).toString();
 	preset.term = object.value(QStringLiteral("term")).toString(preset.term);
-	preset.scrollback_lines =
-	        object.value(QStringLiteral("scrollback_lines")).toInt(preset.scrollback_lines);
+	/*
+	 * CLAMPED, not taken as written. sec 10.5 makes a preset a file
+	 * people send each other, so these numbers arrive from wherever that
+	 * file came from -- and the only thing enforcing their ranges was a
+	 * spinbox in the editor, which an import does not go through.
+	 *
+	 * Clamped rather than refused, which is what the spinbox does to a
+	 * number typed past its range: rejecting a whole preset over one
+	 * field would lose the fifteen that were fine.
+	 */
+	preset.scrollback_lines = qBound(
+	        BSSH_PRESET_MIN_SCROLLBACK,
+	        object.value(QStringLiteral("scrollback_lines")).toInt(preset.scrollback_lines),
+	        BSSH_PRESET_MAX_SCROLLBACK);
 	preset.bell_enabled = object.value(QStringLiteral("bell_enabled")).toBool(preset.bell_enabled);
 	preset.cursor_style = object.value(QStringLiteral("cursor_style")).toString(preset.cursor_style);
 	preset.cursor_blink = object.value(QStringLiteral("cursor_blink")).toBool(preset.cursor_blink);
 	preset.term_features = object.value(QStringLiteral("term_features"))
 	                               .toString(preset.term_features);
 	preset.font_family = object.value(QStringLiteral("font_family")).toString();
-	preset.font_size = object.value(QStringLiteral("font_size")).toInt(preset.font_size);
+	preset.font_size = qBound(
+	        BSSH_PRESET_MIN_POINT_SIZE,
+	        object.value(QStringLiteral("font_size")).toInt(preset.font_size),
+	        BSSH_PRESET_MAX_POINT_SIZE);
 	preset.colour_scheme = object.value(QStringLiteral("colour_scheme")).toString();
 	preset.allow_clipboard_write =
 	        object.value(QStringLiteral("allow_clipboard_write")).toBool(false);
-	preset.keepalive_seconds =
-	        object.value(QStringLiteral("keepalive_seconds")).toInt(preset.keepalive_seconds);
+	preset.keepalive_seconds = qBound(
+	        BSSH_PRESET_MIN_KEEPALIVE,
+	        object.value(QStringLiteral("keepalive_seconds")).toInt(preset.keepalive_seconds),
+	        BSSH_PRESET_MAX_KEEPALIVE);
 	preset.compression = object.value(QStringLiteral("compression")).toBool(preset.compression);
 	preset.on_connect_command = object.value(QStringLiteral("on_connect_command")).toString();
 	preset.key_row_layout = object.value(QStringLiteral("key_row_layout")).toString();

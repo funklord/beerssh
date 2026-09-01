@@ -15,6 +15,7 @@ class preset_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void an_imported_preset_cannot_exceed_the_editor_s_ranges();
 	void a_steady_cursor_is_the_default();
 	void an_exported_preset_contains_nothing_private();
 	void export_and_import_round_trip();

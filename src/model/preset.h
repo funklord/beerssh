@@ -23,6 +23,28 @@
  * this file to a stranger tell them something about the sender's network
  * or credentials? If yes, it belongs on the host profile instead.
  */
+/*
+ * The ranges a preset's numeric fields may take (sec 10.2).
+ *
+ * Here rather than in the editors, because they are properties of the
+ * FIELD and not of a spinbox. They lived as file-static constants inside
+ * preset_editor.cpp and font_picker.cpp, so the only path that enforced
+ * them was somebody typing into a widget -- and sec 10.5 makes a preset a
+ * file people send each other, which arrives through from_json() and was
+ * bounded by nothing at all.
+ *
+ * A scrollback of two billion is the case that matters: sec 7 caps the
+ * ring precisely because "a terminal left open on a chatty log is the
+ * normal case", and an imported preset could raise that cap past any
+ * memory the device has.
+ */
+const int BSSH_PRESET_MIN_SCROLLBACK = 0;
+const int BSSH_PRESET_MAX_SCROLLBACK = 200000;
+const int BSSH_PRESET_MIN_POINT_SIZE = 6;
+const int BSSH_PRESET_MAX_POINT_SIZE = 32;
+const int BSSH_PRESET_MIN_KEEPALIVE = 0;
+const int BSSH_PRESET_MAX_KEEPALIVE = 3600;
+
 struct bssh_preset_t {
 	int id;
 	QString name;

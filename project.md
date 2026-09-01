@@ -4635,6 +4635,40 @@ matters is precisely the file neither of them wrote last.
 `flush()` and `close()`'s error are checked too — the out-of-band failure
 channel one more layer along.
 
+**The preset editor validated its numbers and the importer did not.**
+§10.5 makes a preset a file people send each other, so `from_json` reads
+numbers from wherever that file came from — and the ranges the app
+believes in lived as file-static constants inside `preset_editor.cpp` and
+`font_picker.cpp`. They were properties of a **spinbox**, not of the
+field, so the only thing enforcing them was somebody typing.
+
+`scrollback_lines` is the one that matters: §7 caps the ring because *"a
+terminal left open on a chatty log is the normal case"*, and an imported
+preset could raise that cap past any memory the device has. `font_size`
+took 0 and `keepalive_seconds` took negatives by the same route.
+
+**What makes this worth recording is why it was invisible.** `from_json`
+already hardened against a hostile preset — it forces `id = 0` and
+`is_builtin = false` so a shared file cannot impersonate a shipped one —
+**and there was already a test for that**
+(`an_imported_preset_cannot_claim_to_be_builtin`). So the code visibly
+considered the adversary and had the test to prove it. A partial threat
+model with a passing test reads as a complete one, which is the same
+property that let bracketed paste survive above: every individual claim
+audits clean.
+
+The bounds live in `preset.h` beside the fields now and the editors read
+them from there, so there is one definition rather than two copies of a
+rule drifting from the data it describes. Clamped rather than refused,
+matching what a spinbox does to an out-of-range number: rejecting a whole
+preset over one field would discard the fifteen that were fine.
+
+The test asserts against the named constants rather than literals —
+hard-coding 200000 would add a third copy and pass while the editor and
+the importer disagreed — and it re-asserts the identity hardening, since
+extending a defence is exactly when the half already there deserves an
+assertion rather than an assumption.
+
 **A paste could close its own bracket, and the command after it was
 typed rather than pasted.** §6.4 leans on bracketed paste to stop a pasted
 newline executing, and §7.1 lists it as Done. It is implemented, and it

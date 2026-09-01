@@ -1,4 +1,5 @@
 #include "ui/touch_metrics.h"
+#include "model/preset.h"
 #include "ui/font_picker.h"
 
 #include <QComboBox>
@@ -30,8 +31,6 @@
 static const char *const BSSH_PREVIEW_TEXT =
         "ABCDEfgh 0O1lI5S2Z {}[]()  \342\224\214\342\224\200\342\224\254\342\224\200\342\224\220  \342\226\221\342\226\222\342\226\223\342\226\210";
 
-static const int BSSH_MIN_POINT_SIZE = 6;
-static const int BSSH_MAX_POINT_SIZE = 32;
 
 /* Tall enough to read as colour rather than as a line. */
 static const int BSSH_SWATCH_HEIGHT = 18;
@@ -162,7 +161,7 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	m_family->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
 	m_size = new QSpinBox(this);
-	m_size->setRange(BSSH_MIN_POINT_SIZE, BSSH_MAX_POINT_SIZE);
+	m_size->setRange(BSSH_PRESET_MIN_POINT_SIZE, BSSH_PRESET_MAX_POINT_SIZE);
 	m_size->setSuffix(QStringLiteral(" pt"));
 
 	const bssh_font_catalog &catalog = bssh_font_catalog::instance();

@@ -32,8 +32,6 @@
  * build. The cost of the upper end is memory per session (sec 7), which
  * is why it is a preset field rather than a constant.
  */
-static const int BSSH_MIN_SCROLLBACK = 0;
-static const int BSSH_MAX_SCROLLBACK = 200000;
 
 bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layout,
                                         section_t section, QWidget *parent)
@@ -118,7 +116,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	m_term->setPlaceholderText(QStringLiteral("xterm-256color"));
 
 	m_scrollback = new QSpinBox(this);
-	m_scrollback->setRange(BSSH_MIN_SCROLLBACK, BSSH_MAX_SCROLLBACK);
+	m_scrollback->setRange(BSSH_PRESET_MIN_SCROLLBACK, BSSH_PRESET_MAX_SCROLLBACK);
 	m_scrollback->setSuffix(QStringLiteral(" lines"));
 
 	m_bell = new QCheckBox(QStringLiteral("Bell enabled"), this);
@@ -133,7 +131,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	m_font = new bssh_font_picker(this);
 
 	m_keepalive = new QSpinBox(this);
-	m_keepalive->setRange(0, 3600);
+	m_keepalive->setRange(BSSH_PRESET_MIN_KEEPALIVE, BSSH_PRESET_MAX_KEEPALIVE);
 	m_keepalive->setSuffix(QStringLiteral(" s"));
 	/*
 	 * Says what 0 costs rather than only what it means. A phone behind a

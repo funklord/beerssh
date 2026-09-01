@@ -370,3 +370,53 @@ void preset_test::a_steady_cursor_is_the_default() {
 		                             .arg(builtin.name)));
 	}
 }
+
+void preset_test::an_imported_preset_cannot_exceed_the_editor_s_ranges() {
+	/*
+	 * sec 10.5 makes a preset a file people send each other, so these
+	 * numbers arrive from wherever that file came from. The ranges were
+	 * real but lived as file-static constants inside preset_editor.cpp and
+	 * font_picker.cpp -- properties of a spinbox rather than of the field
+	 * -- so the only thing enforcing them was somebody typing.
+	 *
+	 * scrollback_lines is the one that matters. sec 7 caps the ring
+	 * because "a terminal left open on a chatty log is the normal case",
+	 * and an imported preset could raise that cap past any memory the
+	 * device has.
+	 *
+	 * from_json already hardened against a hostile preset -- it forces
+	 * id = 0 and is_builtin = false so a shared file cannot impersonate a
+	 * shipped one -- which is what made this easy to miss: the code
+	 * visibly HAD considered the adversary, just not this input.
+	 */
+	QJsonObject hostile;
+	hostile.insert(QStringLiteral("name"), QStringLiteral("gift"));
+	hostile.insert(QStringLiteral("scrollback_lines"), 2000000000);
+	hostile.insert(QStringLiteral("font_size"), 0);
+	hostile.insert(QStringLiteral("keepalive_seconds"), -1);
+
+	const bssh_preset_t got = bssh_preset_t::from_json(hostile);
+
+	QCOMPARE(got.scrollback_lines, BSSH_PRESET_MAX_SCROLLBACK);
+	QCOMPARE(got.font_size, BSSH_PRESET_MIN_POINT_SIZE);
+	QCOMPARE(got.keepalive_seconds, BSSH_PRESET_MIN_KEEPALIVE);
+
+	/*
+	 * The control: an ordinary preset passes through untouched, so this
+	 * cannot pass against an import that clamped everything to a default.
+	 */
+	QJsonObject ordinary;
+	ordinary.insert(QStringLiteral("name"), QStringLiteral("sensible"));
+	ordinary.insert(QStringLiteral("scrollback_lines"), 5000);
+	ordinary.insert(QStringLiteral("font_size"), 12);
+	ordinary.insert(QStringLiteral("keepalive_seconds"), 60);
+
+	const bssh_preset_t fine = bssh_preset_t::from_json(ordinary);
+	QCOMPARE(fine.scrollback_lines, 5000);
+	QCOMPARE(fine.font_size, 12);
+	QCOMPARE(fine.keepalive_seconds, 60);
+
+	/* And the identity hardening that was already there still holds. */
+	QCOMPARE(fine.id, 0);
+	QVERIFY(!fine.is_builtin);
+}
