@@ -1,3 +1,5 @@
+#include <QFile>
+#include <QTemporaryDir>
 #include <QtTest>
 
 #include <libssh/libssh.h>
@@ -119,4 +121,75 @@ void host_key_test::an_unrecognised_auth_result_is_not_an_acceptance() {
 	QCOMPARE(bssh_auth_outcome(SSH_AUTH_AGAIN), BSSH_AUTH_ERRORED);
 	QCOMPARE(bssh_auth_outcome(4242), BSSH_AUTH_ERRORED);
 	QVERIFY(bssh_auth_outcome(4242) != BSSH_AUTH_ACCEPTED);
+}
+
+/*
+ * known_hosts is shared with OpenSSH, and appending blindly joins the new
+ * entry onto the last existing one whenever that file does not end in a
+ * newline. That corrupts the PREVIOUS host's entry as well as failing to
+ * record this one -- one bad append costs two trust decisions.
+ *
+ * A file edited by hand is the ordinary way to get there. A short write
+ * is the other, and the two compound: a truncated append leaves no
+ * trailing newline, arranging the corruption of the next one.
+ */
+void host_key_test::an_appended_entry_starts_on_a_line_of_its_own() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("known_hosts"));
+
+	{
+		QFile seed(path);
+		QVERIFY(seed.open(QIODevice::WriteOnly));
+		/* No trailing newline -- what a hand-edited file looks like. */
+		QVERIFY(seed.write(QByteArrayLiteral("|1|first ssh-ed25519 AAAA")) > 0);
+		seed.close();
+	}
+
+	QVERIFY(bssh_append_line(path, QByteArrayLiteral("|1|second ssh-ed25519 BBBB")));
+
+	QFile check(path);
+	QVERIFY(check.open(QIODevice::ReadOnly));
+	const QList<QByteArray> lines = check.readAll().split('\n');
+
+	QVERIFY2(lines.contains(QByteArrayLiteral("|1|first ssh-ed25519 AAAA")),
+	          "the entry that was already there must survive intact");
+	QVERIFY2(lines.contains(QByteArrayLiteral("|1|second ssh-ed25519 BBBB")),
+	          "and the new one must be a line rather than a suffix");
+}
+
+/* The control: a file that is already terminated gains no blank line. */
+void host_key_test::appending_to_a_terminated_file_adds_no_blank_line() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("known_hosts"));
+
+	{
+		QFile seed(path);
+		QVERIFY(seed.open(QIODevice::WriteOnly));
+		QVERIFY(seed.write(QByteArrayLiteral("|1|first ssh-ed25519 AAAA\n")) > 0);
+		seed.close();
+	}
+
+	QVERIFY(bssh_append_line(path, QByteArrayLiteral("|1|second ssh-ed25519 BBBB")));
+
+	QFile check(path);
+	QVERIFY(check.open(QIODevice::ReadOnly));
+	QCOMPARE(check.readAll(),
+	          QByteArrayLiteral("|1|first ssh-ed25519 AAAA\n"
+	                             "|1|second ssh-ed25519 BBBB\n"));
+}
+
+/* First contact with a machine that has no known_hosts yet. */
+void host_key_test::appending_creates_a_file_that_was_not_there() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString path = dir.filePath(QStringLiteral("known_hosts"));
+	QVERIFY(!QFile::exists(path));
+
+	QVERIFY(bssh_append_line(path, QByteArrayLiteral("|1|only ssh-ed25519 CCCC")));
+
+	QFile check(path);
+	QVERIFY(check.open(QIODevice::ReadOnly));
+	QCOMPARE(check.readAll(), QByteArrayLiteral("|1|only ssh-ed25519 CCCC\n"));
 }

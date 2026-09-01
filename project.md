@@ -4576,6 +4576,36 @@ cannot make it silently mean *trusted*.
 Checked by sabotage: restoring the old mapping fails exactly the two
 tests naming those two verdicts, and nothing else in the suite.
 
+**Appending to `known_hosts` could corrupt the entry already there.**
+`bssh_append_hashed_known_host` opened the file in `Append` and wrote its
+line. Two faults, and they compound:
+
+- **Nothing checked that the file ended in a newline.** If it did not — a
+  hand-edited file is the ordinary way there — the new entry was joined
+  onto the last existing one, corrupting the *previous* host's entry as
+  well as failing to record this one. **One bad append costs two trust
+  decisions**, in a file this app deliberately shares with OpenSSH (§11).
+- **`write(...) > 0` accepted a partial write**, so a short write
+  recorded a truncated entry as a trust decision made — and left the file
+  without a trailing newline, arranging the corruption of the next
+  append.
+
+The sabotage names the damage better than the description does: with the
+blind append restored, the failing assertion is *"the entry that was
+already there must survive intact"*. Not the new entry — the one that was
+already correct.
+
+The rule is `bssh_append_line(path, line)` now, taking a path rather than
+a session so it can be tested without a server. That is the third time
+this section has had to pull a decision out of code only `make check-ssh`
+can reach, and it is the same move as `bssh_host_key_verdict`. It asks
+the last byte rather than reasoning about who wrote the file: this app
+always terminates what it appends and so does OpenSSH, and the case that
+matters is precisely the file neither of them wrote last.
+
+`flush()` and `close()`'s error are checked too — the out-of-band failure
+channel one more layer along.
+
 **The credential store destroyed itself before writing its
 replacement.** `flush()` opened the real file with
 `QIODevice::Truncate`, so the existing store was gone before the new

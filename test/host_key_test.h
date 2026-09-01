@@ -34,6 +34,11 @@ private slots:
 	void a_partial_acceptance_is_not_a_failure();
 	void an_auth_error_is_not_a_rejected_credential();
 	void an_unrecognised_auth_result_is_not_an_acceptance();
+
+	/* sec 11's known_hosts, which this app shares with OpenSSH. */
+	void an_appended_entry_starts_on_a_line_of_its_own();
+	void appending_to_a_terminated_file_adds_no_blank_line();
+	void appending_creates_a_file_that_was_not_there();
 };
 
 #endif /* BSSH_HOST_KEY_TEST_H */

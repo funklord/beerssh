@@ -51,6 +51,23 @@ enum bssh_auth_outcome_t {
 bssh_auth_outcome_t bssh_auth_outcome(int auth_result);
 
 /*
+ * Append one line to a line-oriented file, starting it on a line of its
+ * own (project.md sec 11).
+ *
+ * Written for known_hosts, which this app shares with OpenSSH. Appending
+ * blindly joins the new entry onto the last existing one whenever that
+ * file does not end in a newline -- corrupting the previous host's entry
+ * as well as failing to record this one. A file edited by hand is the
+ * ordinary way to get there, and a short write is the other: it leaves no
+ * trailing newline, so one partial append arranges the corruption of the
+ * next.
+ *
+ * No libssh type, so it stays inside this header's promise, and takes a
+ * path rather than a session so the rule can be tested without a server.
+ */
+bool bssh_append_line(const QString &path, const QByteArray &line);
+
+/*
  * The libssh implementation of bssh_ssh_session (project.md sec 4).
  *
  * This header and its .cpp are the ONLY places in the tree allowed to know

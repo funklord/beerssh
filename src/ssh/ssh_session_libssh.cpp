@@ -723,6 +723,43 @@ static QByteArray bssh_hash_host_field(const QByteArray &host) {
  * ~/.ssh is somewhere this process cannot reach. Android has no ~/.ssh at
  * all, and a sandboxed desktop build may not be allowed near it.
  */
+bool bssh_append_line(const QString &path, const QByteArray &line) {
+	QFile file(path);
+	if (!file.open(QIODevice::ReadWrite)) return false;
+
+	/*
+	 * Start on a line of our own. Append mode writes at the end, so a
+	 * file whose last byte is not a newline swallows the new entry onto
+	 * its last line -- which corrupts the entry already there as well as
+	 * this one, in a file OpenSSH also reads.
+	 *
+	 * Asked of the last byte rather than assumed from who wrote it: this
+	 * app always terminates what it appends, and OpenSSH does too, but a
+	 * hand-edited file need not -- and a short write here would leave
+	 * exactly this condition for the next append to fall into.
+	 */
+	QByteArray prefix;
+	if (file.size() > 0) {
+		if (!file.seek(file.size() - 1)) return false;
+		const QByteArray last = file.read(1);
+		if (last != QByteArrayLiteral("\n")) prefix = QByteArrayLiteral("\n");
+	}
+
+	if (!file.seek(file.size())) return false;
+
+	const QByteArray payload = prefix + line + '\n';
+
+	/*
+	 * The whole line or nothing reported as success. This checked for
+	 * "> 0", so a short write -- a full disk, most obviously -- was a
+	 * truncated entry recorded as a trust decision made.
+	 */
+	if (file.write(payload) != payload.size()) return false;
+
+	/* close() reports what write() cannot: a flush that failed. */
+	return file.flush() && (file.close(), file.error() == QFileDevice::NoError);
+}
+
 static bool bssh_append_hashed_known_host(ssh_session session) {
 	const QString path = primary_known_hosts_path();
 	if (path.isEmpty()) return false;
@@ -747,16 +784,10 @@ static bool bssh_append_hashed_known_host(ssh_session session) {
 	QFile::setPermissions(info.absolutePath(),
 	                       QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
 
-	QFile file(path);
-	if (!file.open(QIODevice::Append | QIODevice::WriteOnly | QIODevice::Text)) return false;
+	if (!bssh_append_line(path, hashed + entry.mid(split))) return false;
 
-	const bool ok = file.write(hashed + entry.mid(split) + '\n') > 0;
-	file.close();
-
-	if (ok) {
-		QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner);
-	}
-	return ok;
+	QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner);
+	return true;
 }
 
 void bssh_libssh_worker::do_accept_host_key() {
