@@ -1638,7 +1638,7 @@ void bssh_terminal_view::select_all() {
 	m_selection_focus_col = qMax(0, m_cols - 1);
 
 	update();
-	emit selection_changed();
+	note_selection_changed();
 }
 
 void bssh_terminal_view::clear_selection() {
@@ -1647,7 +1647,7 @@ void bssh_terminal_view::clear_selection() {
 	m_selection_anchor_line = -1;
 	m_selection_focus_line = -1;
 	update();
-	emit selection_changed();
+	note_selection_changed();
 }
 
 QString bssh_terminal_view::selection_text() const {
@@ -1836,7 +1836,7 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 		m_click_count = 0;
 
 		update();
-		emit selection_changed();
+		note_selection_changed();
 		event->accept();
 		return;
 	}
@@ -1928,7 +1928,7 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 	}
 
 	m_selecting = false;
-	emit selection_changed();
+	note_selection_changed();
 	event->accept();
 }
 
@@ -1977,7 +1977,7 @@ void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
 	m_last_click_line = line;
 
 	update();
-	emit selection_changed();
+	note_selection_changed();
 	event->accept();
 }
 
@@ -2044,6 +2044,45 @@ void bssh_terminal_view::note_content_changed() {
 
 void bssh_terminal_view::on_screen_damaged() {
 	note_content_changed();
+}
+
+void bssh_terminal_view::note_selection_changed() {
+	emit selection_changed();
+
+	/*
+	 * And the reader, which was never told. sec 14's M11 exposes the
+	 * selection through the text interface -- selectionCount() and
+	 * selection() answer correctly whenever they are asked -- but
+	 * nothing ever announced a change, so an assistive client learned of
+	 * one only if it happened to re-query. For a terminal that is the
+	 * wrong half to leave out: the selection is what the user is about
+	 * to copy, and being told what it now covers is the whole feedback.
+	 *
+	 * The one accessibility event this program emitted was the text
+	 * update in note_content_changed(). This is the second.
+	 *
+	 * Offsets come from the accessible interface rather than being
+	 * recomputed here, because the mapping from a selection in cells to
+	 * an offset in the flattened history-and-screen text is that class's
+	 * and a second copy is how the two stop agreeing (sec 8.4's rule
+	 * about one place computing one thing).
+	 *
+	 * Guarded like the text event: QAccessible::isActive() is false with
+	 * no client attached, which is the common case, and flattening for
+	 * an event nobody receives would put that cost on every drag.
+	 */
+	if (!QAccessible::isActive()) return;
+
+	QAccessibleInterface *self = QAccessible::queryAccessibleInterface(this);
+	QAccessibleTextInterface *as_text = self ? self->textInterface() : nullptr;
+	if (!as_text) return;
+
+	int start = 0;
+	int end = 0;
+	if (as_text->selectionCount() > 0) as_text->selection(0, &start, &end);
+
+	QAccessibleTextSelectionEvent event(this, start, end);
+	QAccessible::updateAccessibility(&event);
 }
 
 void bssh_terminal_view::set_raise_contrast(bool raise) {

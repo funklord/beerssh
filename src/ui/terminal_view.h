@@ -415,6 +415,14 @@ public slots:
 	 */
 	void note_content_changed();
 
+	/*
+	 * The same, for the selection. Emits selection_changed() AND tells
+	 * an assistive client, which nothing did: the text interface
+	 * declares selectionCount()/selection() and never announced that
+	 * either had moved.
+	 */
+	void note_selection_changed();
+
 	void on_screen_damaged();
 
 signals:

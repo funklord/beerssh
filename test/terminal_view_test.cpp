@@ -1312,6 +1312,85 @@ void terminal_view_test::the_floor_lifts_glyphs_and_leaves_backgrounds_faithful(
 	          "an inverse cell's background must keep the palette's own colour");
 }
 
+namespace {
+
+/*
+ * installUpdateHandler takes a plain function pointer, so what it records
+ * has to live at file scope. Types only -- the assertion is about which
+ * events were announced, not their payloads.
+ */
+QList<QAccessible::Event> g_announced;
+
+void record_accessible_event(QAccessibleEvent *event) {
+	if (event) g_announced.append(event->type());
+}
+
+} /* namespace */
+
+void terminal_view_test::a_selection_change_is_announced_not_only_answerable() {
+	/*
+	 * sec 14's M11 exposes the selection through the text interface, and
+	 * selectionCount()/selection() answer correctly whenever they are
+	 * asked. Nothing ever ANNOUNCED a change, so an assistive client
+	 * learned of one only by re-querying -- and the whole program emitted
+	 * exactly one accessibility event, the text update for damage.
+	 *
+	 * For a terminal that is the wrong half to leave out: the selection is
+	 * what the user is about to copy, and being told what it now covers is
+	 * the feedback.
+	 *
+	 * THIS TEST SKIPS ON THE PLATFORM THE SUITE ACTUALLY RUNS ON, and the
+	 * skip is the finding rather than an inconvenience. Both emitters are
+	 * guarded on QAccessible::isActive(), which is false with no client
+	 * attached -- deliberately, since flattening the screen for an event
+	 * nobody receives would put that cost on every drag. Under the
+	 * offscreen platform QAccessible::setActive(true) does not take at
+	 * all, measured here rather than assumed, so no announcement this
+	 * program makes can be observed. The interface is testable because it
+	 * is queried directly and bypasses the guard; the NOTIFICATIONS are
+	 * not, and never have been.
+	 *
+	 * Kept rather than deleted so the gap is visible and so this starts
+	 * asserting the moment it runs somewhere accessibility can be turned
+	 * on.
+	 */
+	bssh_emulator emulator(30, 3);
+	emulator.feed(QByteArrayLiteral("hello\r\nworld\r\n"));
+
+	bssh_terminal_view view;
+	show_and_resize(view, 600, 120);
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+
+	const bool was_active = QAccessible::isActive();
+	QAccessible::setActive(true);
+	if (!QAccessible::isActive()) {
+		QAccessible::setActive(was_active);
+		QSKIP("accessibility cannot be activated here, so no announcement is observable");
+	}
+
+	QAccessible::UpdateHandler previous =
+	        QAccessible::installUpdateHandler(record_accessible_event);
+
+	g_announced.clear();
+	view.select_all();
+	QVERIFY2(g_announced.contains(QAccessible::TextSelectionChanged),
+	          "selecting has to be announced, not merely answerable");
+
+	/*
+	 * And clearing it, which is the half a reader needs most: a selection
+	 * that silently went away leaves somebody believing they still have
+	 * something to copy.
+	 */
+	g_announced.clear();
+	view.clear_selection();
+	QVERIFY2(g_announced.contains(QAccessible::TextSelectionChanged),
+	          "clearing the selection has to be announced too");
+
+	QAccessible::installUpdateHandler(previous);
+	QAccessible::setActive(was_active);
+}
+
 void terminal_view_test::trimming_the_history_reaches_the_reader_too() {
 	/*
 	 * sec 10.2's scrollback_lines is a per-host setting, so the history a

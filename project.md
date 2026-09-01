@@ -952,6 +952,34 @@ model on a finger.
   two-window symptom and its closing sentence named a two-window
   consideration, so the middle — which only ever addressed three views
   inside one window — was never re-read against them.
+- **The selection was answerable and never announced — and finding that
+  out established that NO announcement this program makes is testable.**
+  §14's M11 exposes the selection through the text interface, and
+  `selectionCount()`/`selection()` answer correctly whenever asked.
+  Nothing emitted an event when it changed, so an assistive client
+  learned of one only by re-querying. The whole program emitted exactly
+  **one** accessibility event, the text update for damage; this is the
+  second. `note_selection_changed()` carries it at all five emit sites,
+  so they cannot diverge — the same structural remedy as
+  `note_content_changed()` above, adopted deliberately rather than
+  discovered again.
+  **The measurement matters more than the fix.** Both emitters are
+  guarded on `QAccessible::isActive()`, which is false with no client
+  attached — deliberately, since flattening the screen for an event
+  nobody receives would put that cost on every drag. Under the offscreen
+  platform the suite runs on, `QAccessible::setActive(true)` **does not
+  take at all**: measured, not assumed, after a test that failed *with
+  the fix applied* and a signal spy that proved the path ran. So the
+  interface is testable because tests query it directly and bypass the
+  guard, while the NOTIFICATIONS are not, and never have been — the
+  pre-existing one included. That is how a whole missing event class
+  survived M11, and it is worth knowing before anyone concludes from a
+  green suite that this area is covered.
+  The test is kept and skips with that reason. A skip naming its
+  measurement is a marker; one saying "not supported" would be false
+  comfort, and this one starts asserting the moment it runs somewhere
+  accessibility can be switched on.
+
 - **And the same signal's SECOND consumer was never wired either, so a
   screen reader went on describing dropped history.** The entry below
   fixed `scrollback_changed` for the scrollbar. The accessibility layer
