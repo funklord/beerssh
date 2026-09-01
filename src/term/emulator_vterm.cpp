@@ -2093,6 +2093,46 @@ void bssh_emulator::send_paste(const QString &text) {
 			vterm_keyboard_key(m_private->vt, VTERM_KEY_ENTER, VTERM_MOD_NONE);
 			continue;
 		}
+
+		/*
+		 * CONTROL CHARACTERS ARE DROPPED, and this is what stops a paste
+		 * closing its own bracket.
+		 *
+		 * Bracketed paste is the protection sec 6.4 leans on and sec 7.1
+		 * calls Done, but the marker that ends it travels in the same
+		 * byte stream as the data it wraps. Pasted text containing
+		 * ESC [ 2 0 1 ~ therefore ended the paste early, and everything
+		 * after it arrived as TYPED input:
+		 *
+		 *     ESC[200~ safe ESC[201~ rm -rf ~ ESC[201~
+		 *
+		 * Somebody copies a line from a web page, and the shell reads
+		 * the tail as something they typed. sec 6.4's newline prompt is
+		 * no help either: it says "2 lines" while the reader believes
+		 * bracketed paste has them covered.
+		 *
+		 * Dropped rather than escaped, because there is nothing to
+		 * escape TO -- the remote's parser defines these bytes and a
+		 * paste is text, not a command channel. Tab survives because it
+		 * is text people genuinely paste; ESC and the rest of C0 are
+		 * not, and neither is DEL. This is xterm's default
+		 * (disallowedPasteControls) and what kitty does by stripping the
+		 * terminator.
+		 */
+		if (codepoint == u'\t') {
+			vterm_keyboard_unichar(m_private->vt, codepoint, VTERM_MOD_NONE);
+			continue;
+		}
+		if (codepoint < 0x20 || codepoint == 0x7f) continue;
+
+		/*
+		 * C1 as well (U+0080..U+009F). libvterm sends them as UTF-8, so
+		 * a parser in UTF-8 mode does not read them as controls -- but
+		 * they are control codepoints, never legitimate text, and one
+		 * fewer thing depending on which mode the far end is in.
+		 */
+		if (codepoint >= 0x80 && codepoint <= 0x9f) continue;
+
 		vterm_keyboard_unichar(m_private->vt, codepoint, VTERM_MOD_NONE);
 	}
 

@@ -24,6 +24,18 @@ set -eu
 cd "$(git rev-parse --show-toplevel)"
 
 head_sha=$(git rev-parse HEAD)
+
+# One slot, and every session in this tree writes it.
+#
+# Two sessions gating different commits overwrite each other's receipt, so
+# a stamp naming an ANCESTOR of HEAD is not evidence that your run failed
+# -- it may be evidence that somebody else's succeeded. Nothing is unsafe
+# either way, because the comparison below refuses anything the receipt
+# does not name; what is wrong is the diagnostic reading, and it is wrong
+# at the moment somebody is trying to work out why a push was refused.
+#
+# Seen 2026-09-01: a receipt naming 367abb1 while HEAD was 4bdfe64 and the
+# container for 4bdfe64 was still building. Nothing had gone wrong.
 stamp="$(git rev-parse --git-dir)/check-ci-passed"
 
 # git feeds a pre-push hook one line per ref:

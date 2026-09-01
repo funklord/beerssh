@@ -853,3 +853,52 @@ void input_router_test::a_chord_given_back_reaches_the_remote() {
 
 	bssh_input_router::set_bindings(QHash<QString, QString>());
 }
+
+void input_router_test::a_paste_cannot_close_its_own_bracket() {
+	/*
+	 * sec 6.4 leans on bracketed paste to stop a pasted newline being
+	 * executed, and sec 7.1 lists it as Done. But the protection lives in
+	 * a marker inside the same byte stream as the data it protects: if the
+	 * pasted text contains ESC [ 2 0 1 ~ itself, the far end sees the
+	 * paste end early and reads everything after it as TYPED input.
+	 *
+	 * That is the whole attack. Somebody copies a line from a web page, it
+	 * carries the terminator and a command after it, and the shell runs
+	 * the command without the paste ever looking multi-line -- so sec
+	 * 6.4's newline confirmation never fires either.
+	 */
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?2004h"));   /* remote enables it */
+	emulator.take_output();
+
+	router.paste(QStringLiteral("safe\x1b[201~rm -rf ~"));
+
+	const QByteArray sent = emulator.take_output();
+
+	QVERIFY2(sent.startsWith(QByteArrayLiteral("\x1b[200~")),
+	          "the control: bracketed paste has to be in use for this to matter");
+
+	const int first_end = sent.indexOf(QByteArrayLiteral("\x1b[201~"));
+	QVERIFY(first_end > 0);
+	QVERIFY2(sent.indexOf(QByteArrayLiteral("\x1b[201~"), first_end + 1) < 0,
+	          qPrintable(QStringLiteral("the pasted text closed its own bracket; "
+	                                     "bytes: ") + QString::fromLatin1(sent.toPercentEncoding())));
+
+	/*
+	 * And the text itself still arrives, so this cannot pass against a
+	 * paste that dropped everything. The command is delivered as ordinary
+	 * characters INSIDE the bracket, which is exactly where a shell will
+	 * not run it.
+	 */
+	QVERIFY2(sent.contains(QByteArrayLiteral("safe")), "the pasted text has to survive");
+	QVERIFY2(sent.contains(QByteArrayLiteral("rm -rf ~")),
+	          "the text after the stripped marker is still text, and still pasted");
+
+	/* Tab is text people paste; it is not dropped with the controls. */
+	emulator.take_output();
+	router.paste(QStringLiteral("a\tb"));
+	QVERIFY2(emulator.take_output().contains(QByteArrayLiteral("a\tb")),
+	          "a tab in a paste has to survive");
+}

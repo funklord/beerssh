@@ -4635,6 +4635,40 @@ matters is precisely the file neither of them wrote last.
 `flush()` and `close()`'s error are checked too — the out-of-band failure
 channel one more layer along.
 
+**A paste could close its own bracket, and the command after it was
+typed rather than pasted.** §6.4 leans on bracketed paste to stop a pasted
+newline executing, and §7.1 lists it as Done. It is implemented, and it
+was escapable by its own payload: the marker that ends a paste travels in
+the same byte stream as the data it wraps, so pasted text containing
+`ESC [ 2 0 1 ~` ended the paste early. Demonstrated rather than argued —
+the bytes that went to the remote were
+
+    ESC[200~ safe ESC[201~ rm -rf ~ ESC[201~
+
+so the far end saw the paste finish after `safe` and read the rest as
+**typed input**. Somebody copies a line from a web page and the shell
+takes the tail as something they entered.
+
+**Two protections existed and the gap was between them.** Bracketed paste
+is escapable by its content; the multiline confirmation reports "2 lines"
+while the reader believes the bracketing covers them. Neither is wrong on
+its own terms, which is why it survived — §7.1 could say Done and be
+telling the truth about what it implemented.
+
+Control characters are dropped from pasted text now: C0 except tab, DEL,
+and C1 as well. **Dropped rather than escaped, because there is nothing
+to escape to** — the remote's parser defines those bytes and a paste is
+text, not a command channel. Tab survives because it is text people
+paste. This is xterm's default (`disallowedPasteControls`) and what kitty
+does by stripping the terminator, so it is the established answer rather
+than an invented one.
+
+The test asserts three directions, so it cannot pass against a paste that
+dropped everything: no second end marker, the text still arrives —
+including the command, delivered as ordinary characters *inside* the
+bracket, which is exactly where a shell will not run it — and a tab
+survives.
+
 **Both image decoders trusted remote dimensions, and one of them read
 8.59 GB out of bounds.** The kitty raw-format guard multiplied two `int`s
 taken from the remote's own `s=` and `v=` controls:

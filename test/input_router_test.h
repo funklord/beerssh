@@ -20,6 +20,7 @@ class input_router_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void a_paste_cannot_close_its_own_bracket();
 	/* sec 6.1: the stolen set is the user's to change, and to refuse. */
 	void a_rebound_chord_is_the_one_that_is_stolen();
 	void a_chord_given_back_reaches_the_remote();
