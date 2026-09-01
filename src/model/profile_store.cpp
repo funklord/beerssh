@@ -567,7 +567,7 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 
 	sort_profiles();
 	if (!write_profiles()) {
-	/*
+		/*
 	 * Restored rather than reloaded, and the difference is not
 	 * stylistic: QSettings shares one cached QConfFile per path, so a
 	 * write that failed still leaves its values in that cache and a
@@ -580,7 +580,7 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 	 * otherwise be shown as saved in all of them and be gone at the next
 	 * start.
 	 */
-	/*
+		/*
 	 * Memory must not outlive the disk. The row is dropped again by
 	 * reloading, because one store is shared by every window (sec 8.4)
 	 * and a change that never reached the file would otherwise be shown

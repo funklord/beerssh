@@ -971,8 +971,8 @@ void bssh_libssh_worker::do_authenticate_password(const QString &password) {
 	 */
 	case BSSH_AUTH_NEEDS_MORE:
 		fail(QStringLiteral("The server accepted that, and requires another "
-			             "authentication method as well -- which BeerSSH "
-			             "cannot answer yet."));
+		               "authentication method as well -- which BeerSSH "
+		               "cannot answer yet."));
 		return;
 
 	case BSSH_AUTH_ERRORED:

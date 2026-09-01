@@ -68,7 +68,7 @@ bool bssh_long_press::eventFilter(QObject *watched, QEvent *event) {
 		 */
 		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
 		if ((m_timer->isActive() || m_matured)
-				 && (mouse->pos() - m_pressed_at).manhattanLength() > BSSH_HOLD_SLOP_PX) {
+		     && (mouse->pos() - m_pressed_at).manhattanLength() > BSSH_HOLD_SLOP_PX) {
 			m_timer->stop();
 			m_matured = false;
 		}
