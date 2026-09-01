@@ -239,6 +239,7 @@ signals:
 private:
 	void teardown();
 	void fail(const QString &reason);
+	bool set_option(int option, const void *value, const char *what);
 	QString session_error() const;
 	bool verify_host_key();
 	bool server_key_is_revoked() const;
@@ -534,6 +535,36 @@ bssh_host_key_verdict_t bssh_host_key_verdict(int known_hosts_result) {
 	return BSSH_HOST_KEY_UNVERIFIED;
 }
 
+bool bssh_libssh_worker::set_option(int option, const void *value, const char *what) {
+	if (ssh_options_set(m_session, ssh_options_e(option), value) == SSH_OK) return true;
+
+	/*
+	 * Loud, because these options decide WHAT the connection is rather
+	 * than how it behaves. The one that made this necessary is
+	 * SSH_OPTIONS_FD: it hands libssh the bastion tunnel's descriptor,
+	 * and SSH_OPTIONS_HOST is deliberately the TARGET's name so the host
+	 * key is checked against the right machine. So a discarded failure
+	 * there does not fail to connect -- ssh_connect opens its own socket
+	 * to the target and succeeds, the host key verifies, and the user
+	 * gets an ordinary-looking session that never went through the jump
+	 * host they asked for, with the tunnel still open beside it pumping
+	 * nothing.
+	 *
+	 * The known-hosts paths are the same shape: unset, libssh falls back
+	 * to its own defaults, so the app would verify against a different
+	 * store than the one it believes it is using.
+	 *
+	 * Compression and the identity file are deliberately NOT routed
+	 * through this. Losing either degrades the session without changing
+	 * which machine it reaches or what its key is checked against, and a
+	 * connection refused over a compression flag would be the worse
+	 * outcome.
+	 */
+	fail(QStringLiteral("could not set %1: %2")
+	             .arg(QString::fromLatin1(what), session_error()));
+	return false;
+}
+
 bssh_auth_outcome_t bssh_auth_outcome(int auth_result) {
 	/* An int rather than the enum, for the reason bssh_host_key_verdict
 	 * gives: a value libssh never defined must not be cast into it. */
@@ -772,14 +803,19 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	const QByteArray known_utf8 = primary_known_hosts_path().toUtf8();
 	int port_value = port;
 
-	ssh_options_set(m_session, SSH_OPTIONS_HOST, host_utf8.constData());
-	ssh_options_set(m_session, SSH_OPTIONS_PORT, &port_value);
-	ssh_options_set(m_session, SSH_OPTIONS_USER, user_utf8.constData());
+	if (!set_option(SSH_OPTIONS_HOST, host_utf8.constData(), "the host") ||
+	     !set_option(SSH_OPTIONS_PORT, &port_value, "the port") ||
+	     !set_option(SSH_OPTIONS_USER, user_utf8.constData(), "the user")) {
+		return;
+	}
 	/*
 	 * The user's own file where it is reachable, so one decision serves
 	 * both clients (sec 11); this app's store otherwise.
 	 */
-	ssh_options_set(m_session, SSH_OPTIONS_KNOWNHOSTS, known_utf8.constData());
+	if (!set_option(SSH_OPTIONS_KNOWNHOSTS, known_utf8.constData(),
+	                 "the known-hosts file")) {
+		return;
+	}
 
 	/*
 	 * The GLOBAL slot stays what libssh means by it:
@@ -788,7 +824,10 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	 * here -- as the first version of this did -- quietly displaced that,
 	 * so a host the admin had vouched for came back as unknown.
 	 */
-	ssh_options_set(m_session, SSH_OPTIONS_GLOBAL_KNOWNHOSTS, "/etc/ssh/ssh_known_hosts");
+	if (!set_option(SSH_OPTIONS_GLOBAL_KNOWNHOSTS, "/etc/ssh/ssh_known_hosts",
+	                 "the system known-hosts file")) {
+		return;
+	}
 
 	/*
 	 * Before ssh_connect, because compression is negotiated during the
@@ -826,7 +865,12 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 			return;
 		}
 
-		ssh_options_set(m_session, SSH_OPTIONS_FD, &fd);
+		/*
+		 * The one that must never be discarded. Unset, ssh_connect
+		 * below opens its own socket to the target and the jump host is
+		 * silently skipped -- see set_option.
+		 */
+		if (!set_option(SSH_OPTIONS_FD, &fd, "the jump host's connection")) return;
 	}
 
 	if (ssh_connect(m_session) != SSH_OK) {

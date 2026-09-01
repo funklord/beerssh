@@ -4381,6 +4381,51 @@ All of it goes behind one interface — `bssh_secret_store` (`store`, `load`,
 `erase`, `is_hardware_backed`) — with one implementation per platform, per §3's
 core principle 3. Callers get an opaque ID back and never see a key mechanism.
 
+**A discarded `ssh_options_set` could have skipped the jump host without
+saying so.** Found by asking the rigorous form of the question rather than
+stopping at the first instance: *every* libssh call in
+`ssh_session_libssh.cpp` whose result is thrown away. There were eleven,
+and one of them decides what the connection IS.
+
+`SSH_OPTIONS_FD` hands libssh the bastion tunnel's descriptor. Its failure
+mode is not a failed connection, which is what makes it worth this entry:
+
+- `SSH_OPTIONS_HOST` is deliberately the **target's** name, so the host
+  key is checked against the right machine (see the comment there);
+- with no descriptor set, `ssh_connect` opens its own socket **straight to
+  the target**;
+- the host key verifies, authentication proceeds, the session is
+  indistinguishable from a correct one;
+- the tunnel stays open beside it, pumping nothing.
+
+So a user who configured ProxyJump — often a policy and audit boundary
+rather than merely a route — gets a session that never went through it,
+and nothing anywhere says so. The known-hosts paths are the same shape:
+unset, libssh falls back to its own defaults, so the app verifies against
+a different store than the one it believes it is using.
+
+The options that decide *what the connection is* — the descriptor, host,
+port, user, and both known-hosts paths — now go through a checked helper
+that fails loudly. **Compression and the identity file deliberately do
+not.** Losing either degrades the session without changing which machine
+it reaches or what its key is checked against, and a connection refused
+over a compression flag is the worse outcome. That line is drawn in the
+code rather than left to whoever edits next.
+
+The tell was an asymmetry again, and a stark one:
+`bssh_jump_tunnel::write_to_channel` handles `SSH_ERROR`, `SSH_AGAIN`,
+zero and `EINTR` meticulously, ten files from a `do_send` that discards
+everything `ssh_channel_write` returns. **A tree that already contains the
+careful version of a thing is the cheapest place to notice the careless
+one** — the same search `working-practice.md` names for decisions, applied
+to error handling.
+
+Still open and deliberately not bundled here: `do_send` and `do_resize`
+discard their results too. Losing keystrokes silently and letting the
+remote keep a stale window size are real, and they are a different fault
+from a bypassed bastion; putting them in one commit would file both under
+whichever subject the message chose.
+
 **And libssh has six authentication results, of which exactly one means
 the credential was wrong.** `do_authenticate_password` tested for
 `SSH_AUTH_SUCCESS` and called everything else `"Authentication failed"`.
