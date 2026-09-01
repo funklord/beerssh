@@ -4576,6 +4576,45 @@ cannot make it silently mean *trusted*.
 Checked by sabotage: restoring the old mapping fails exactly the two
 tests naming those two verdicts, and nothing else in the suite.
 
+**A save that never reached the disk was reported as a save.** `QSettings`
+swallows a failed write: `sync()` returns `void` and `status()` reports the
+failure to whoever asks. Nothing asked, in any of the three writers. So an
+unwritable config directory — a read-only home, permissions somebody
+changed, a full disk — left `save()` returning an id and emitting
+`changed()` exactly as success does, and the host was gone at the next
+start with nothing said. This tree's own Makefile documents that failure
+mode costing an afternoon, in the suite rather than the app.
+
+Three halves, and detection alone would not have been a fix:
+
+- **The store detects it.** All three writers check `status()` and set
+  `last_error()`.
+- **Memory cannot outlive the disk.** A failed write restores the
+  pre-write snapshot. **Restored, not reloaded** — `load()` was the first
+  attempt and it did not work, because QSettings shares one cached
+  `QConfFile` per path, so a failed write leaves its values in that cache
+  and a fresh `QSettings` on the same file reads them back rather than the
+  disk. Measured, after a test that expected reloading to undo the change
+  and got the row back. This matters more since the store became
+  process-wide (§8.4): a phantom row used to die with its window and would
+  now be shown as saved in every one.
+- **The user is told.** Both front doors report it, because a host lost
+  silently on one surface and not the other is §8.5's asymmetry again.
+
+**`last_error()` was in the earlier "never called" sweep and was dismissed
+as a harmless unused getter.** It was the reporting half of this: set in
+exactly one place, read only by a test's failure message, and never
+reachable for the failure it existed to describe. The generalisation worth
+keeping is that **an accessor nobody calls is sometimes a missing caller
+rather than dead code, and the way to tell is to ask what it would have
+reported** — the question that found `erase()` and was not asked of this.
+
+The test refuses rather than skips where the condition can be made, and
+skips with its reason where it cannot: running as root, which the CI
+container does, a read-only directory is still writable. It asserts both
+directions, so a store that dropped everything on any write error would
+not pass.
+
 **`erase` had no caller in the tree, and deleting a host left its password
 behind.** The separation this section is built on — the row holds a *flag*
 saying a credential exists, the credential lives in the store under a key

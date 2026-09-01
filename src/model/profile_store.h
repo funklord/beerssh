@@ -156,8 +156,15 @@ private:
 	void load();
 	void load_presets();
 	void load_profiles();
-	void write_presets();
-	void write_profiles();
+	/*
+	 * False when the file could not be written -- a read-only home, a
+	 * full disk, or a config directory somebody's permissions do not
+	 * allow. QSettings reports that through status() and nothing asked,
+	 * so a save that never reached the disk returned an id and emitted
+	 * changed() exactly like one that had.
+	 */
+	bool write_presets();
+	bool write_profiles();
 	void sort_profiles();
 	void sort_presets();
 

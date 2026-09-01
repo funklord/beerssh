@@ -568,7 +568,22 @@ void bssh_session_dialog::on_save() {
 		}
 	}
 
-	m_current.id = m_store->save(profile);
+	const int saved = m_store->save(profile);
+	if (saved == 0) {
+		/*
+		 * The same silence the touch editor had: the store can now say
+		 * a write did not reach the disk (sec 10.6), and returning as
+		 * though it had is how a session is lost between here and the
+		 * next start.
+		 */
+		QMessageBox::warning(
+		        this, QStringLiteral("Not saved"),
+		        QStringLiteral("This session could not be written to your "
+		                        "configuration.\n\n%1").arg(m_store->last_error()));
+		return;
+	}
+
+	m_current.id = saved;
 	reload_sessions();
 }
 

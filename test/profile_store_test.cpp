@@ -1098,3 +1098,77 @@ void profile_store_test::a_password_a_locked_store_kept_is_swept_at_the_next_unl
 	QVERIFY2(!bssh_app_settings().orphaned_secrets().contains(key),
 	          "and drop it from the list, or it is swept forever");
 }
+
+void profile_store_test::a_save_that_cannot_reach_the_disk_is_not_reported_as_saved() {
+	/*
+	 * QSettings swallows a failed write: sync() returns void and status()
+	 * reports the failure to whoever asks. Nothing asked. So an unwritable
+	 * config directory -- a read-only home, permissions somebody changed,
+	 * a full disk -- left save() returning an id and emitting changed()
+	 * exactly as a successful one does, and the host was gone at the next
+	 * start with nothing said.
+	 *
+	 * The tree's own Makefile documents this failure mode costing an
+	 * afternoon, in the test suite rather than the app: "on a full
+	 * filesystem those writes fail... which reads exactly like a
+	 * regression in the code under test".
+	 *
+	 * Memory must not outlive the disk either, and that got worse rather
+	 * than better when the store became process-wide (sec 8.4): a row that
+	 * never reached the file used to die with its window and now would be
+	 * shown as saved in every one of them.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+	QVERIFY(store.is_open());
+
+	bssh_profile_t first;
+	first.name = QStringLiteral("writable");
+	first.host = QStringLiteral("writable.example");
+	QVERIFY(store.save(first) != 0);
+
+	/*
+	 * Take the directory away. Refused rather than skipped where the
+	 * permission does not bite -- running as root, which the CI container
+	 * does -- because a test that cannot create the condition it names
+	 * must say so rather than pass.
+	 */
+	QVERIFY(QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+	                                           | QFileDevice::ExeOwner));
+
+	bssh_profile_t doomed;
+	doomed.name = QStringLiteral("doomed");
+	doomed.host = QStringLiteral("doomed.example");
+	const int id = store.save(doomed);
+
+	if (id != 0) {
+		QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+		                                   | QFileDevice::WriteOwner
+		                                   | QFileDevice::ExeOwner);
+		QSKIP("this account can write a read-only directory, so the failure "
+		       "cannot be produced here");
+	}
+
+	QVERIFY2(!store.last_error().isEmpty(),
+	          "a failed write has to say what could not be written");
+
+	/*
+	 * And the row is gone from memory too, because one store is shared by
+	 * every window: a change that never reached the file must not be
+	 * displayed as saved in any of them.
+	 */
+	QStringList names;
+	for (const bssh_profile_t &p : store.profiles()) names << p.name;
+	QVERIFY2(!names.contains(QStringLiteral("doomed")),
+	          qPrintable(QStringLiteral("memory outlived the disk; it holds: ")
+	                      + names.join(QStringLiteral(", "))));
+
+	/* The control: what WAS written is still there. */
+	QVERIFY2(names.contains(QStringLiteral("writable")),
+	          "the rows that did reach the disk must survive");
+
+	QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+	                                   | QFileDevice::WriteOwner
+	                                   | QFileDevice::ExeOwner);
+}

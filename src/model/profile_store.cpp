@@ -416,7 +416,7 @@ int bssh_profile_store::id_for_slug(const QString &slug) const {
 	return 0;
 }
 
-void bssh_profile_store::write_presets() {
+bool bssh_profile_store::write_presets() {
 	QSettings file(presets_path(), QSettings::IniFormat);
 	file.clear();
 
@@ -448,9 +448,23 @@ void bssh_profile_store::write_presets() {
 	}
 
 	file.sync();
+
+	/*
+	 * The half nobody asked for. QSettings swallows a failed write and
+	 * says nothing, so an unwritable config directory -- a read-only
+	 * home, a full disk, permissions somebody changed -- left the row in
+	 * memory, the id returned and changed() emitted, and the host gone at
+	 * the next start. With one store shared by every window (sec 8.4), an
+	 * unwritten change is shown as saved in all of them.
+	 */
+	if (file.status() != QSettings::NoError) {
+		m_last_error = QStringLiteral("could not write %1").arg(file.fileName());
+		return false;
+	}
+	return true;
 }
 
-void bssh_profile_store::write_profiles() {
+bool bssh_profile_store::write_profiles() {
 	QSettings file(hosts_path(), QSettings::IniFormat);
 	file.clear();
 
@@ -494,6 +508,20 @@ void bssh_profile_store::write_profiles() {
 	}
 
 	file.sync();
+
+	/*
+	 * The half nobody asked for. QSettings swallows a failed write and
+	 * says nothing, so an unwritable config directory -- a read-only
+	 * home, a full disk, permissions somebody changed -- left the row in
+	 * memory, the id returned and changed() emitted, and the host gone at
+	 * the next start. With one store shared by every window (sec 8.4), an
+	 * unwritten change is shown as saved in all of them.
+	 */
+	if (file.status() != QSettings::NoError) {
+		m_last_error = QStringLiteral("could not write %1").arg(file.fileName());
+		return false;
+	}
+	return true;
 }
 
 QList<bssh_profile_t> bssh_profile_store::profiles() const {
@@ -514,6 +542,8 @@ bssh_profile_store *bssh_profile_store::shared() {
 
 int bssh_profile_store::save(const bssh_profile_t &profile) {
 	if (!m_open || !profile.is_valid()) return 0;
+
+	const QList<bssh_profile_t> before_write = m_profiles;
 
 	bssh_profile_t stored = profile;
 	if (stored.name.isEmpty()) stored.name = stored.host;
@@ -536,7 +566,30 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 	}
 
 	sort_profiles();
-	write_profiles();
+	if (!write_profiles()) {
+	/*
+	 * Restored rather than reloaded, and the difference is not
+	 * stylistic: QSettings shares one cached QConfFile per path, so a
+	 * write that failed still leaves its values in that cache and a
+	 * fresh QSettings on the same file reads them back. load() therefore
+	 * returns the row that never reached the disk. Measured, after a
+	 * test that expected reloading to undo it and got "doomed" back.
+	 *
+	 * Memory must not outlive the disk, because one store is shared by
+	 * every window (sec 8.4): a change that never reached the file would
+	 * otherwise be shown as saved in all of them and be gone at the next
+	 * start.
+	 */
+	/*
+	 * Memory must not outlive the disk. The row is dropped again by
+	 * reloading, because one store is shared by every window (sec 8.4)
+	 * and a change that never reached the file would otherwise be shown
+	 * as saved in all of them -- and be gone at the next start.
+	 */
+		m_profiles = before_write;
+		emit changed();
+		return 0;
+	}
 
 	emit changed();
 	return stored.id;
@@ -544,6 +597,8 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 
 bool bssh_profile_store::remove(int id) {
 	if (!m_open || id == 0) return false;
+
+	const QList<bssh_profile_t> before_write = m_profiles;
 
 	/* Read while the row still exists; see the erase below. */
 	const bool had_password = profile(id).has_stored_password;
@@ -586,7 +641,13 @@ bool bssh_profile_store::remove(int id) {
 		if (!secrets || !secrets->erase(key)) bssh_note_orphaned_secret(key);
 	}
 
-	write_profiles();
+	if (!write_profiles()) {
+		/* See save(): restored, not reloaded. */
+		m_profiles = before_write;
+		emit changed();
+		return false;
+	}
+
 	emit changed();
 	return true;
 }
@@ -603,6 +664,8 @@ bssh_preset_t bssh_profile_store::preset(int id) const {
 }
 
 int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
+	const QList<bssh_preset_t> presets_before = m_presets;
+	const QHash<int, QString> slugs_before = m_slugs;
 	if (!m_open || preset.name.isEmpty()) return 0;
 
 	/* Shipped presets are cloned, not edited (sec 10.4). */
@@ -640,13 +703,21 @@ int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
 	}
 
 	sort_presets();
-	write_presets();
+	if (!write_presets()) {
+		/* See save(): restored, not reloaded. */
+		m_presets = presets_before;
+		m_slugs = slugs_before;
+		emit changed();
+		return 0;
+	}
 
 	emit changed();
 	return stored.id;
 }
 
 bool bssh_profile_store::remove_preset(int id) {
+	const QList<bssh_preset_t> presets_before = m_presets;
+	const QHash<int, QString> slugs_before = m_slugs;
 	if (!m_open || id == 0) return false;
 	if (preset(id).is_builtin) return false;
 
@@ -665,7 +736,13 @@ bool bssh_profile_store::remove_preset(int id) {
 	if (m_presets.size() == before) return false;
 
 	m_slugs.remove(id);
-	write_presets();
+	if (!write_presets()) {
+		/* See save(): restored, not reloaded. */
+		m_presets = presets_before;
+		m_slugs = slugs_before;
+		emit changed();
+		return false;
+	}
 
 	emit changed();
 	return true;
@@ -696,6 +773,12 @@ bool bssh_profile_store::save_layout(const layout_state_t &layout) {
 	file.setValue(QStringLiteral("active"), layout.active_index);
 	file.endGroup();
 	file.sync();
+
+	/* Same silence as the two writers above; see write_profiles. */
+	if (file.status() != QSettings::NoError) {
+		m_last_error = QStringLiteral("could not write %1").arg(file.fileName());
+		return false;
+	}
 
 	return true;
 }

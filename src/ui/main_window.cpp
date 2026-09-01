@@ -471,7 +471,22 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 		connect(m_host_editor, &bssh_host_editor::save_requested,
 		         this, [this](const bssh_profile_t &profile) {
-			m_profile_store->save(profile);
+			/*
+			 * Said rather than swallowed. The store now reports a
+			 * write it could not make -- a read-only home, a full
+			 * disk, permissions somebody changed (sec 10.6) -- and
+			 * returning to the list as though it had worked is how
+			 * a host is lost between here and the next start.
+			 */
+			if (m_profile_store->save(profile) == 0) {
+				QMessageBox::warning(
+				        this, QStringLiteral("Not saved"),
+				        QStringLiteral("This host could not be written to "
+				                        "your configuration.\n\n%1")
+				                .arg(m_profile_store->last_error()));
+				return;
+			}
+
 			m_host_list->reload();
 			m_pages->setCurrentWidget(m_host_list);
 		});
