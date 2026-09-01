@@ -279,8 +279,14 @@ Or with [fmake](../fmake), which needs no build file and nothing beyond the
 Python standard library:
 
 ```sh
-fmake         # ./beerssh, same sources
+python3 ~/src/fmake/fmake   # ./beerssh, same sources
 ```
+
+**Not `/usr/bin/fmake`.** The packaged one predates `$file()` and leaves the
+reference in the value as text, so the build succeeds and the binary
+carries the literal string. Measured: `--version` printing
+`$file(VERSION)`. Run the one in fmake's own tree until a newer package is
+installed.
 
 **Run `make` first, or at least its vterm step.** fmake compiles the
 submodule from source and the patches in `vterm-patch/` are not committed
