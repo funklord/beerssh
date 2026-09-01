@@ -2,6 +2,7 @@
 
 #include "platform/platform.h"
 #include "platform/secret_store.h"
+#include "model/app_settings.h"
 
 #include <QDir>
 #include <QFile>
@@ -580,9 +581,9 @@ bool bssh_profile_store::remove(int id) {
 	 * before this change, no worse and no better.
 	 */
 	if (had_password) {
-		if (bssh_secret_store *secrets = bssh_secret_store::instance()) {
-			secrets->erase(bssh_profile_password_key(id));
-		}
+		const QString key = bssh_profile_password_key(id);
+		bssh_secret_store *secrets = bssh_secret_store::instance();
+		if (!secrets || !secrets->erase(key)) bssh_note_orphaned_secret(key);
 	}
 
 	write_profiles();
@@ -726,4 +727,36 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 	state.active_index = qBound(0, active, qMax(0, int(state.profile_ids.size()) - 1));
 
 	return state;
+}
+
+void bssh_note_orphaned_secret(const QString &key) {
+	if (key.isEmpty()) return;
+
+	bssh_app_settings settings;
+	QStringList pending = settings.orphaned_secrets();
+	if (pending.contains(key)) return;
+
+	pending << key;
+	settings.set_orphaned_secrets(pending);
+}
+
+void bssh_sweep_orphaned_secrets() {
+	bssh_app_settings settings;
+	const QStringList pending = settings.orphaned_secrets();
+	if (pending.isEmpty()) return;
+
+	bssh_secret_store *secrets = bssh_secret_store::instance();
+	if (!secrets) return;
+
+	/*
+	 * Kept when the erase fails, dropped when it succeeds. A store that
+	 * is still locked leaves the list exactly as it was, so the sweep is
+	 * safe to call from anywhere and costs nothing when it cannot act.
+	 */
+	QStringList still_pending;
+	for (const QString &key : pending) {
+		if (!secrets->erase(key)) still_pending << key;
+	}
+
+	if (still_pending != pending) settings.set_orphaned_secrets(still_pending);
 }

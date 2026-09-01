@@ -15,6 +15,7 @@ class profile_store_test : public QObject {
 
 private slots:
 	void deleting_a_host_takes_its_password_with_it();
+	void a_password_a_locked_store_kept_is_swept_at_the_next_unlock();
 	void saves_and_lists_profiles();
 	void updates_rather_than_duplicating();
 	void removes_profiles();

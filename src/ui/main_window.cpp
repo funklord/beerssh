@@ -3459,7 +3459,10 @@ QString bssh_main_window::stored_password_for(const bssh_profile_t &profile) {
 
 bool bssh_main_window::unlock_secret_store() {
 	bssh_secret_store *store = bssh_secret_store::instance();
-	if (store->is_unlocked()) return true;
+	if (store->is_unlocked()) {
+		bssh_sweep_orphaned_secrets();
+		return true;
+	}
 	if (!store->needs_passphrase()) return false;
 
 	bool ok = false;
@@ -3470,7 +3473,18 @@ bool bssh_main_window::unlock_secret_store() {
 	        QLineEdit::Password, QString(), &ok);
 	if (!ok) return false;
 
-	if (store->unlock(passphrase)) return true;
+	if (store->unlock(passphrase)) {
+		/*
+		 * sec 11: the moment a password left behind by a deleted host
+		 * can finally be erased. It is swept HERE rather than asked for
+		 * on its own, because this is the only place the store is
+		 * unlocked and the user came to do something else -- they are
+		 * releasing a password, not answering for a host they removed
+		 * weeks ago.
+		 */
+		bssh_sweep_orphaned_secrets();
+		return true;
+	}
 
 	/*
 	 * Said plainly rather than folded into a generic failure: a wrong

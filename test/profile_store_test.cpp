@@ -1,8 +1,10 @@
 #include <QTemporaryDir>
 #include <QtTest>
 #include <QFile>
+#include <QStandardPaths>
 
 #include "model/profile_store.h"
+#include "model/app_settings.h"
 #include "platform/platform.h"
 #include "platform/secret_store.h"
 #include <QDir>
@@ -1011,4 +1013,88 @@ void profile_store_test::deleting_a_host_takes_its_password_with_it() {
 
 	QVERIFY2(secrets->load(key).isEmpty(),
 	          "deleting a host must take its stored password with it");
+}
+
+void profile_store_test::a_password_a_locked_store_kept_is_swept_at_the_next_unlock() {
+	/*
+	 * The other half of sec 11's deletion rule, and the case the erase
+	 * alone cannot cover: the passphrase-derived store re-encrypts its
+	 * whole blob to remove one key, so erase() returns false while locked.
+	 *
+	 * Prompting for a passphrase in order to DELETE something is the wrong
+	 * trade -- the user asked to remove a host, not to prove who they are
+	 * -- so the key is written down and swept the next time the store is
+	 * unlocked for any reason. That moment arrives on its own: unlocking
+	 * happens to release a remembered password, which is routine, and
+	 * never for this.
+	 *
+	 * Only meaningful on a store that CAN be locked. A libsecret session
+	 * store is unlocked by the login session and erases whether or not
+	 * this app has asked it for anything, so there is nothing here to
+	 * test and the skip says so rather than passing quietly.
+	 */
+	bssh_secret_store *secrets = bssh_secret_store::instance();
+	QVERIFY(secrets);
+	if (!secrets->needs_passphrase()) {
+		QSKIP("this store cannot be locked, so it has no orphans to sweep");
+	}
+	/*
+	 * Take ownership of the store's state for the duration, rather than
+	 * assuming a passphrase. The suite shares one bssh_secret_store, and
+	 * whichever test reached it first chose what opens it -- so unlocking
+	 * with a passphrase of our own is a guess, and it was wrong: the
+	 * re-unlock below failed against a file another test had created.
+	 * Delete and recreate where it is not ours, which is honest about
+	 * what this test needs and cannot disturb anything real, since
+	 * test/main.cpp has pointed every standard location at a throwaway
+	 * tree.
+	 */
+	const QString pass = QStringLiteral("passphrase for the suite");
+	secrets->lock();
+	if (!secrets->unlock(pass)) {
+		QFile::remove(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+		              + QStringLiteral("/secrets.enc"));
+		QVERIFY2(secrets->unlock(pass), "could not establish a store this test can open");
+	}
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("locked-out");
+	host.host = QStringLiteral("locked-out.example");
+	host.has_stored_password = true;
+	const int id = store.save(host);
+	QVERIFY(id != 0);
+
+	const QString key = bssh_profile_password_key(id);
+	QVERIFY(secrets->store(key, QStringLiteral("hunter2")));
+	QCOMPARE(secrets->load(key), QStringLiteral("hunter2"));
+
+	bssh_app_settings().set_orphaned_secrets(QStringList());
+
+	/* Locked at the moment of deletion, which is the whole point. */
+	secrets->lock();
+	QVERIFY(!secrets->is_unlocked());
+
+	QVERIFY(store.remove(id));
+
+	/*
+	 * The secret is still there -- asserted, because a test that only
+	 * checked the list would pass against an erase that had silently
+	 * worked and made the list pointless.
+	 */
+	QVERIFY2(bssh_app_settings().orphaned_secrets().contains(key),
+	          "a key a locked store could not erase has to be written down");
+
+	QVERIFY(secrets->unlock(pass));
+	QCOMPARE(secrets->load(key), QStringLiteral("hunter2"));
+
+	bssh_sweep_orphaned_secrets();
+
+	QVERIFY2(secrets->load(key).isEmpty(),
+	          "the sweep has to erase what the locked store could not");
+	QVERIFY2(!bssh_app_settings().orphaned_secrets().contains(key),
+	          "and drop it from the list, or it is swept forever");
 }

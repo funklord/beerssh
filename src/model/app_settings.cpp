@@ -325,3 +325,11 @@ bool bssh_app_settings::warn_multiline_paste() const {
 void bssh_app_settings::set_warn_multiline_paste(bool warn) {
 	store(QStringLiteral("input/warn_multiline_paste"), warn);
 }
+
+QStringList bssh_app_settings::orphaned_secrets() const {
+	return value(QStringLiteral("secrets/orphaned"), QStringList()).toStringList();
+}
+
+void bssh_app_settings::set_orphaned_secrets(const QStringList &keys) {
+	store(QStringLiteral("secrets/orphaned"), keys);
+}

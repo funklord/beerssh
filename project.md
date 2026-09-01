@@ -4408,14 +4408,34 @@ and a later reader should not have to re-derive either:
   because it is an *asynchronous* platform callback (Android's
   BiometricPrompt), which does resume on the outer loop.
 
-**The locked-store half is deliberately not answered.** libsecret erases
-whether or not this app has unlocked anything; the passphrase-derived file
-cannot, because it re-encrypts the whole blob, so `erase` returns false
-while locked. Prompting for a passphrase in order to *delete* something is
-the wrong trade, and the alternatives — sweep orphans at the next unlock,
-or record them for one — are a decision this document has not taken. A
-locked store is therefore left exactly as it was: no worse than before the
-fix, and not quietly declared fixed either.
+**The locked-store half is answered too: write the key down, sweep it at
+the next unlock.** libsecret erases whether or not this app has unlocked
+anything; the passphrase-derived file cannot, because it re-encrypts the
+whole blob, so `erase` returns false while locked.
+
+The three candidates, and why this one:
+
+- *Prompt for the passphrase on delete.* Rejected. The user asked to
+  remove a host, not to prove who they are — it turns a deletion into an
+  authentication, and a cancel still leaves the orphan.
+- *Erase without unlocking.* Impossible for that backend by construction:
+  one encrypted blob, so removing a key means re-encrypting all of it.
+- *Record the key and sweep it later.* Taken. `bssh_note_orphaned_secret`
+  writes it to `app.ini` and `bssh_sweep_orphaned_secrets` clears what it
+  can whenever the store is unlocked.
+
+**The sweep point arrives on its own, which is what makes it cost
+nothing.** The store is unlocked to release a remembered password — a
+thing users do routinely and never for this — so nothing is ever asked of
+them and an orphan does not outlive their next connection to a host they
+saved a password for.
+
+Two properties worth stating because they are what keep it safe: the list
+holds key NAMES and no secrets, and lives in `app.ini` rather than in the
+secret store precisely because the secret store is the thing that cannot
+be read while locked; and the sweep keeps every entry whose erase fails
+and drops only those that succeed, so running it against a still-locked
+store is a no-op rather than a silent loss.
 
 - **Private keys / passwords** stored encrypted; never plaintext in app files,
   `SharedPreferences`, or the INI config files (§10.6).

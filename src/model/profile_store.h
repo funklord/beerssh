@@ -187,4 +187,26 @@ private:
 	QHash<int, QString> m_slugs;
 };
 
+/*
+ * sec 11's locked-store half.
+ *
+ * Deleting a host erases its password, and on a libsecret store that
+ * always works. The passphrase-derived file cannot erase while locked --
+ * it re-encrypts the whole blob -- and prompting for a passphrase in
+ * order to DELETE something is the wrong trade: the user asked to remove
+ * a host, not to prove who they are.
+ *
+ * So the key is written down instead, and swept the next time the store
+ * is unlocked for any reason. That moment arrives on its own: the store
+ * is unlocked to release a remembered password, which is something the
+ * user does routinely and never for this. Nothing has to be asked of
+ * them, and the orphan does not outlive their next connection to a host
+ * they saved a password for.
+ *
+ * Both are no-ops where there is nothing to do, so callers need not ask
+ * first.
+ */
+void bssh_note_orphaned_secret(const QString &key);
+void bssh_sweep_orphaned_secrets();
+
 #endif /* BSSH_PROFILE_STORE_H */

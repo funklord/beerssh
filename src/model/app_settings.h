@@ -2,6 +2,7 @@
 #define BSSH_APP_SETTINGS_H
 
 #include <QString>
+#include <QStringList>
 
 #include "term/colour_scheme.h"
 #include <QVariant>
@@ -205,6 +206,19 @@ public:
 	 */
 	bool warn_multiline_paste() const;
 	void set_warn_multiline_paste(bool warn);
+
+	/*
+	 * sec 11: secret-store keys whose host row is gone but whose secret
+	 * could not be erased, because the passphrase-derived store was
+	 * locked at the time and erasing means re-encrypting the whole blob.
+	 *
+	 * Not a secret and deliberately not in the secret store: it is a list
+	 * of key NAMES, which is exactly the thing that store cannot be asked
+	 * for while locked. It says a host with that id once had a password,
+	 * which the hosts file said in plainer terms while the host existed.
+	 */
+	QStringList orphaned_secrets() const;
+	void set_orphaned_secrets(const QStringList &keys);
 
 	/* Where app.ini lives; empty when no directory could be found. */
 	QString path() const { return m_path; }
