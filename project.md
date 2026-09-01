@@ -4666,6 +4666,41 @@ general form is worth carrying: **when replacing a write with a
 different mechanism, the properties to assert are the ones the old
 mechanism gave you for free.**
 
+**The same unchecked write was left in the sibling file, and it defeated
+the orphan sweep.** `bssh_app_settings::store()` discarded `QSettings`
+failures exactly as the profile store's three writers did — both files
+were grepped when that was fixed, and only one of them was.
+
+A cosmetic device setting failing to persist merely reverts at the next
+start. The orphaned-secret list is where the silence is **durable**: it
+records a credential the locked store could not erase, so a write that
+vanishes means the sweep never comes back for it and the password
+outlives its host for good. The cleanup was defeated by the exact silence
+it was built to close.
+
+`store()` reports now, `set_orphaned_secrets` and
+`bssh_note_orphaned_secret` propagate, and `remove()` records it when a
+credential can be neither erased nor scheduled — the row goes as asked,
+and the store says the password outlived it.
+
+**The test was worse than the bug, and sabotage is what showed it.** Its
+first version skipped where it should have failed: the skip read *"if the
+write succeeded, this account can write read-only directories"* — and
+`store()` **returning** success is precisely what the fault looks like.
+With the status check removed the test skipped and the suite reported
+zero failures.
+
+The rule that fixes it is one this document already holds in two other
+forms — the receipt over the exit code, the remote ref over the push
+output: **condition on the artifact, not on the claim.** It reads
+`app.ini`'s bytes now, and directly rather than through `QSettings`,
+which serves back values it failed to write.
+
+And the general form, which is the part worth carrying: **a skip is a
+branch where a test declines to check, so its condition deserves the same
+scepticism as an assertion — more, because a wrong skip is invisible in a
+green run.**
+
 **A save that never reached the disk was reported as a save.** `QSettings`
 swallows a failed write: `sync()` returns `void` and `status()` reports the
 failure to whoever asks. Nothing asked, in any of the three writers. So an

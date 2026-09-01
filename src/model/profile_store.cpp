@@ -638,7 +638,16 @@ bool bssh_profile_store::remove(int id) {
 	if (had_password) {
 		const QString key = bssh_profile_password_key(id);
 		bssh_secret_store *secrets = bssh_secret_store::instance();
-		if (!secrets || !secrets->erase(key)) bssh_note_orphaned_secret(key);
+		if ((!secrets || !secrets->erase(key)) && !bssh_note_orphaned_secret(key)) {
+			/*
+			 * Neither erased nor written down, so nothing will come
+			 * back for it. Recorded rather than swallowed: the row is
+			 * gone as asked, and this says the credential outlived it.
+			 */
+			m_last_error = QStringLiteral(
+			        "removed the host, but could not remove or schedule its "
+			        "saved password");
+		}
 	}
 
 	if (!write_profiles()) {
@@ -812,15 +821,15 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 	return state;
 }
 
-void bssh_note_orphaned_secret(const QString &key) {
-	if (key.isEmpty()) return;
+bool bssh_note_orphaned_secret(const QString &key) {
+	if (key.isEmpty()) return false;
 
 	bssh_app_settings settings;
 	QStringList pending = settings.orphaned_secrets();
-	if (pending.contains(key)) return;
+	if (pending.contains(key)) return true;
 
 	pending << key;
-	settings.set_orphaned_secrets(pending);
+	return settings.set_orphaned_secrets(pending);
 }
 
 void bssh_sweep_orphaned_secrets() {

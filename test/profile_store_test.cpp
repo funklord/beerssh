@@ -1172,3 +1172,62 @@ void profile_store_test::a_save_that_cannot_reach_the_disk_is_not_reported_as_sa
 	                                   | QFileDevice::WriteOwner
 	                                   | QFileDevice::ExeOwner);
 }
+
+void profile_store_test::a_device_setting_that_cannot_be_written_says_so() {
+	/*
+	 * The same fault as the profile store's three writers, in the sibling
+	 * file, and it was left there when they were fixed: QSettings reports
+	 * a failed write through status() and bssh_app_settings::store() asked
+	 * nothing, returning void so no caller could have known either.
+	 *
+	 * A cosmetic device setting failing to persist merely reverts at the
+	 * next start. The orphaned-secret list is where the silence is
+	 * DURABLE: it records a credential the locked store could not erase,
+	 * so a write that vanishes means the sweep never comes back for it and
+	 * the password outlives its host for good -- defeating the cleanup by
+	 * the exact silence it was built to close.
+	 *
+	 * Its own directory, so making it unwritable cannot strand the rest of
+	 * the suite.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+
+	bssh_app_settings settings(dir.path());
+	QVERIFY2(settings.set_orphaned_secrets({QStringLiteral("profile:7:password")}),
+	          "the control: a writable directory has to succeed");
+	QCOMPARE(settings.orphaned_secrets(), QStringList{QStringLiteral("profile:7:password")});
+
+	QVERIFY(QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+	                                           | QFileDevice::ExeOwner));
+
+	const bool wrote = settings.set_orphaned_secrets(
+	        {QStringLiteral("profile:7:password"), QStringLiteral("profile:8:password")});
+
+	QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+	                                   | QFileDevice::WriteOwner
+	                                   | QFileDevice::ExeOwner);
+
+	/*
+	 * Whether the account really could write, asked of the FILE rather
+	 * than of the return value. Conditioning the skip on what store()
+	 * SAID is not a skip at all: with the status check removed it says
+	 * true, the skip fires, and the sabotage passes -- which is exactly
+	 * how this test first behaved, and exactly the vacuous pass the rest
+	 * of this section exists to refuse.
+	 *
+	 * Read as bytes, because QSettings shares one cached QConfFile per
+	 * path and would hand back the value it failed to write.
+	 */
+	QFile ini(dir.path() + QStringLiteral("/app.ini"));
+	QVERIFY(ini.open(QIODevice::ReadOnly));
+	const bool really_landed = ini.readAll().contains("profile:8:password");
+	ini.close();
+
+	if (really_landed) {
+		QSKIP("this account can write a read-only directory, so the failure "
+		       "cannot be produced here");
+	}
+
+	QVERIFY2(!wrote, "a write that did not reach app.ini must not report success");
+}

@@ -67,8 +67,8 @@ bool bssh_app_settings::contains(const QString &key) const {
 	return file.contains(key);
 }
 
-void bssh_app_settings::store(const QString &key, const QVariant &value) {
-	if (m_path.isEmpty()) return;
+bool bssh_app_settings::store(const QString &key, const QVariant &value) {
+	if (m_path.isEmpty()) return false;
 
 	QSettings file(m_path, QSettings::IniFormat);
 	file.setValue(key, value);
@@ -80,6 +80,14 @@ void bssh_app_settings::store(const QString &key, const QVariant &value) {
 	 * memory is a setting the other one cannot see (sec 10.6).
 	 */
 	file.sync();
+
+	/*
+	 * And whether it landed. A device setting that silently fails to
+	 * persist merely reverts at the next start; the orphaned-secret list
+	 * is the one where silence is durable, because a credential that is
+	 * never recorded is never swept.
+	 */
+	return file.status() == QSettings::NoError;
 }
 
 bssh_app_settings::key_row_visibility_t bssh_app_settings::key_row_visibility() const {
@@ -330,6 +338,6 @@ QStringList bssh_app_settings::orphaned_secrets() const {
 	return value(QStringLiteral("secrets/orphaned"), QStringList()).toStringList();
 }
 
-void bssh_app_settings::set_orphaned_secrets(const QStringList &keys) {
-	store(QStringLiteral("secrets/orphaned"), keys);
+bool bssh_app_settings::set_orphaned_secrets(const QStringList &keys) {
+	return store(QStringLiteral("secrets/orphaned"), keys);
 }

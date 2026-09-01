@@ -218,7 +218,7 @@ public:
 	 * which the hosts file said in plainer terms while the host existed.
 	 */
 	QStringList orphaned_secrets() const;
-	void set_orphaned_secrets(const QStringList &keys);
+	bool set_orphaned_secrets(const QStringList &keys);
 
 	/* Where app.ini lives; empty when no directory could be found. */
 	QString path() const { return m_path; }
@@ -231,7 +231,14 @@ private:
 	 * default still lives with the setting.
 	 */
 	QVariant value(const QString &key, const QVariant &fallback) const;
-	void store(const QString &key, const QVariant &value);
+
+	/*
+	 * False when the write did not reach app.ini. QSettings reports that
+	 * through status() and this asked nothing, exactly as profile_store's
+	 * three writers did -- the same fault in the sibling file, fixed in
+	 * only one of them at the time.
+	 */
+	bool store(const QString &key, const QVariant &value);
 	bool contains(const QString &key) const;
 
 	QString m_path;

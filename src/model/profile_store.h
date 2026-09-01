@@ -213,7 +213,7 @@ private:
  * Both are no-ops where there is nothing to do, so callers need not ask
  * first.
  */
-void bssh_note_orphaned_secret(const QString &key);
+bool bssh_note_orphaned_secret(const QString &key);
 void bssh_sweep_orphaned_secrets();
 
 #endif /* BSSH_PROFILE_STORE_H */
