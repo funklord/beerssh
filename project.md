@@ -2208,6 +2208,34 @@ misunderstood its job. `z < 0` now renders in its own pass before the cells,
 which is what the comment beside the single over-the-text loop had claimed all
 along.
 
+**And that "never drop what is on screen" rule is what let sixel animation
+run the budget over.** Sixel carries no image id, so `place()` gives every
+frame a fresh one and appends it — and a program that redraws in place, which
+is what an animation is, never scrolls. So the entire run landed in the one
+case `enforce_budget()` declines to touch: it drops only what has gone above
+the fold, and every frame is on the live screen by construction. The store
+grew one decoded frame at a time for as long as the animation played, past a
+budget whose own comment says it exists so "a session left running all day
+cannot quietly become the reason the app is killed" — which is precisely how
+that happened.
+
+**A covered frame is not an image anybody is reading**, which is the
+distinction the refusal actually rests on. The renderer walks the list in
+order and paints the later placement over it, so not one of its pixels can
+reach the screen again. `place()` now drops every earlier placement the new
+one paints entirely over — same z SIDE, since a below-text image is painted
+in its own pass and so is not covered by one above the text however exactly
+the cells line up. Sixty frames become one. A frame that covers only part of
+an earlier image leaves it, because the rest is still visible, and that is
+what the test checks alongside the count — otherwise it would pass just as
+well against a store that simply kept the newest.
+
+**Same shape as the night's others, in a subsystem with no config file in
+it**: a bound that held on one path and not on the neighbouring one. Here the
+two paths were not two readers of a value but two ways for an image to become
+unreachable — scrolled away, which was handled, and drawn over, which was
+not.
+
 **Where this lives in the code:** libvterm handles the sequences it knows
 and hands everything else to `vterm_screen_set_unrecognised_fallbacks`, its
 documented extension hook. Modes libvterm does not model (kitty flags,

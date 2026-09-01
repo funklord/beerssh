@@ -93,6 +93,9 @@ public:
 private:
 	void enforce_budget();
 
+	/* Removes every earlier placement the one at `index` paints over. */
+	void drop_covered_by(int index);
+
 	QList<bssh_image_placement_t> m_placements;
 	int m_next_id;
 	qint64 m_budget;

@@ -26,12 +26,58 @@ int bssh_image_store::place(const bssh_image_placement_t &placement) {
 	for (int i = 0; i < m_placements.size(); ++i) {
 		if (m_placements.at(i).id == stored.id) {
 			m_placements[i] = stored;
+			drop_covered_by(i);
 			return stored.id;
 		}
 	}
 
 	m_placements.append(stored);
+	drop_covered_by(m_placements.size() - 1);
 	return stored.id;
+}
+
+/*
+ * A placement drawn entirely over by a later one is dead: the renderer
+ * walks this list in order and paints the later one on top, so not one
+ * of its pixels can reach the screen again.
+ *
+ * Without this, sixel ANIMATION grows without limit. Sixel carries no
+ * image id, so `place` gives every frame a fresh one and appends it --
+ * and a program that redraws in place, which is what an animation is,
+ * never scrolls. enforce_budget() cannot help: it drops only what is
+ * above the fold, and each frame is on screen by construction, so the
+ * whole stack of them is exactly the case it declines to touch. The
+ * budget's own comment says it exists so "a session left running all day
+ * cannot quietly become the reason the app is killed", and this is the
+ * way that happened anyway.
+ *
+ * Dropping these is not the thing enforce_budget() refuses to do. That
+ * refusal is about not deleting an image the user is reading; this one is
+ * invisible by definition, and if it were not, the covering test would be
+ * wrong rather than the policy.
+ *
+ * z is compared by SIDE, not by value: below-text images are painted in a
+ * separate pass, so one of those is not covered by an image above the
+ * text however exactly it overlaps.
+ */
+void bssh_image_store::drop_covered_by(int index) {
+	const bssh_image_placement_t cover = m_placements.at(index);
+
+	/* Nothing covers anything without area of its own. */
+	if (cover.rows <= 0 || cover.cols <= 0) return;
+
+	for (int i = index - 1; i >= 0; --i) {
+		const bssh_image_placement_t &under = m_placements.at(i);
+
+		if ((under.z < 0) != (cover.z < 0)) continue;
+
+		if (under.row < cover.row) continue;
+		if (under.col < cover.col) continue;
+		if (under.row + under.rows > cover.row + cover.rows) continue;
+		if (under.col + under.cols > cover.col + cover.cols) continue;
+
+		m_placements.removeAt(i);
+	}
 }
 
 void bssh_image_store::remove(int id) {

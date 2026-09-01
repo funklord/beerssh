@@ -475,3 +475,85 @@ void graphics_test::a_declared_size_that_overflows_is_refused() {
 	QVERIFY2(emulator.images().count() == 1,
 	          "an image whose payload covers its declared size must still arrive");
 }
+
+void graphics_test::a_frame_drawn_over_an_earlier_one_does_not_keep_it_alive() {
+	/*
+	 * Sixel animation. Sixel carries no image id, so place() hands every
+	 * frame a fresh one and appends it -- and a program that redraws in
+	 * place, which is what an animation IS, never scrolls.
+	 *
+	 * That put the whole run in exactly the case the budget declines to
+	 * touch: enforce_budget drops only what has gone above the fold, and
+	 * every frame is on screen by construction. So the store grew one
+	 * decoded frame at a time for as long as the animation ran, past a
+	 * budget that exists, in its own words, so "a session left running all
+	 * day cannot quietly become the reason the app is killed".
+	 *
+	 * A covered frame is not an image anybody is reading: the renderer
+	 * walks the list in order and paints the later one over it, so not one
+	 * of its pixels can reach the screen again.
+	 */
+	bssh_image_store store;
+
+	const qint64 frame = QImage(200, 200, QImage::Format_RGB32).sizeInBytes();
+
+	for (int i = 0; i < 60; ++i) {
+		bssh_image_placement_t frame_i;
+		frame_i.image = QImage(200, 200, QImage::Format_RGB32);
+		frame_i.row = 3;
+		frame_i.col = 0;
+		frame_i.cols = 20;
+		frame_i.rows = 10;
+		store.place(frame_i);
+	}
+
+	/* One frame, not sixty. */
+	QCOMPARE(store.count(), 1);
+	QCOMPARE(store.memory_used(), frame);
+
+	/*
+	 * A frame that does NOT cover the last one is a second image rather
+	 * than a replacement -- so this is a check on the covering test and
+	 * not simply on "the newest wins".
+	 */
+	bssh_image_placement_t elsewhere;
+	elsewhere.image = QImage(200, 200, QImage::Format_RGB32);
+	elsewhere.row = 30;
+	elsewhere.col = 0;
+	elsewhere.cols = 20;
+	elsewhere.rows = 10;
+	store.place(elsewhere);
+	QCOMPARE(store.count(), 2);
+
+	/* And one that covers only PART of an image leaves it, because the
+	 * rest of it is still on the screen. */
+	bssh_image_placement_t partial;
+	partial.image = QImage(200, 200, QImage::Format_RGB32);
+	partial.row = 30;
+	partial.col = 0;
+	partial.cols = 10;
+	partial.rows = 10;
+	store.place(partial);
+	QCOMPARE(store.count(), 3);
+
+	/*
+	 * A below-text image is painted in its own pass, so an image above the
+	 * text does not cover it however exactly the cells line up.
+	 */
+	bssh_image_store layered;
+
+	bssh_image_placement_t background;
+	background.image = QImage(200, 200, QImage::Format_RGB32);
+	background.row = 0;
+	background.col = 0;
+	background.cols = 20;
+	background.rows = 10;
+	background.z = -1;
+	layered.place(background);
+
+	bssh_image_placement_t foreground = background;
+	foreground.z = 0;
+	layered.place(foreground);
+
+	QCOMPARE(layered.count(), 2);
+}
