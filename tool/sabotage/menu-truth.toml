@@ -1,0 +1,39 @@
+# Sabotages for a menu telling the truth about what the app will do.
+#
+# This window offers Copy and Paste from two menus, and the chords from a
+# rebindable table. Both went wrong the same way: a second copy of
+# something with one owner. The router's own comment states the rule --
+# "the list a user is shown and the list the router acts on cannot be two
+# lists" -- and a literal is a second list that agrees until somebody
+# changes the first.
+#
+# Worth knowing when reading these: the menu already had a test, and it
+# could not see either defect. It asserts the item TEXT and the order, and
+# the text was never wrong.
+
+[[sabotage]]
+name = "the context menu writes its Copy chord out as a literal"
+file = "src/ui/main_window.cpp"
+find = "\tcopy->setShortcut(\n\t        QKeySequence(bssh_input_router::binding_for(QStringLiteral(\"copy\"))));"
+replace = "\tcopy->setShortcut(QKeySequence(QStringLiteral(\"Ctrl+Shift+C\")));"
+expect = "the_menu_shows_the_chord_the_router_would_actually_steal"
+
+# The bar enabled Paste whenever a session existed; the context menu also
+# required something on the clipboard. Same verb, same instant, greyed in
+# one place and offered in the other.
+[[sabotage]]
+name = "the menu bar answers `can you paste?` differently from the context menu"
+file = "src/ui/main_window.cpp"
+find = "\t\tm_paste_action->setEnabled(can_paste());"
+replace = "\t\tm_paste_action->setEnabled(has_session);"
+expect = "both_menus_agree_on_when_paste_is_offered"
+
+# The missing subscription is the bug and the weaker rule was what it left
+# behind: refresh_menu_bar re-derives on session, binding and selection
+# changes, and nothing watched the clipboard.
+[[sabotage]]
+name = "nothing watches the clipboard, so the menu bar's answer goes stale"
+file = "src/ui/main_window.cpp"
+find = "\tconnect(QGuiApplication::clipboard(), &QClipboard::dataChanged,\n\t         this, &bssh_main_window::refresh_menu_bar);"
+replace = "\t/* sabotage: no clipboard subscription */"
+expect = "both_menus_agree_on_when_paste_is_offered"

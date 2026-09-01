@@ -1,0 +1,28 @@
+# Sabotages for an image staying beside the output it was drawn with.
+#
+# sec 7.2's rule is that a placement scrolled off the top keeps going into
+# negative rows, so scrolling back brings the picture back with its text
+# instead of finding a hole. These guard the two ways that was broken --
+# an image the budget could never reclaim, and an image the text walked
+# away from.
+
+# Sixel carries no image id, so place() gives every frame a fresh one and
+# appends it; a program redrawing in place never scrolls, so
+# enforce_budget -- which drops only what is above the fold -- can never
+# touch any of them. Sixty frames instead of one.
+[[sabotage]]
+name = "a frame drawn entirely over an earlier one keeps it alive"
+file = "src/term/image_store.cpp"
+find = "\tdrop_covered_by(m_placements.size() - 1);"
+replace = "\t/* sabotage: covered frames retained */"
+expect = "a_frame_drawn_over_an_earlier_one_does_not_keep_it_alive"
+
+# A resize pushes lines into the scrollback exactly as a scroll does, but
+# libvterm reports it through sb_pushline -- and only moverect reaches
+# images.scrolled(). So the text moved and the images did not.
+[[sabotage]]
+name = "a reflow moves the text and leaves the images where they were"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->images.shift_rows(m_private->scrollback.count() - lines_before);"
+replace = "\t(void)lines_before;"
+expect = "a_resize_keeps_an_image_with_the_text_it_was_drawn_beside"

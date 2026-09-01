@@ -1,0 +1,20 @@
+# Sabotage for sec 5.3's storm control, which was the one requirement of
+# that section not built.
+#
+# "With many sessions open, a network flap must not fire N simultaneous
+# reconnects. Stagger with per-session jitter." note_network_changed
+# called attempt_reconnect() directly -- no delay, no jitter, no attempt
+# counted -- and every manager in the registry hangs off the one platform
+# signal, so a flap had all of them dialling in the same millisecond.
+#
+# jitter_separates_sessions_dropped_together did NOT catch it, and its
+# comment opens "the storm sec 5.3 warns about: one network flap drops
+# eight sessions". It measures backoff_delay_ms, a pure function, on the
+# backoff path -- which a flap does not take. A test can name the hazard
+# exactly and still cover only the path that was already safe.
+[[sabotage]]
+name = "a network flap dials every session at once instead of scheduling"
+file = "src/model/conn_manager.cpp"
+find = "\tm_attempt = 0;\n\tm_timer->stop();\n\tschedule_reconnect();"
+replace = "\tm_attempt = 0;\n\tm_timer->stop();\n\tattempt_reconnect();"
+expect = "a_network_flap_staggers_the_sessions_rather_than_dialling_them"

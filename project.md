@@ -1257,6 +1257,18 @@ model on a finger.
   unless something is pending — an always-on one fires continuously while the
   pty has room. Nothing is dropped, which was the old comment's stated
   concern and the reason it was spinning in the first place.
+  **It has a test and deliberately NO sabotage entry**, which is the same
+  call as the `F_GETFL` guard above and for a sharper reason: the sabotage
+  for this one HANGS. Restoring the spin loop makes the suite wait on a
+  child that is not reading, and `tool/sabotage.py` runs `make test` per
+  edit — so the entry would burn the runner's whole `RUN_DEADLINE_S` (1800s)
+  and then be killed, which `run_suite()` reports as *did not run at all*
+  rather than as caught by the test that names it. Half an hour to produce a
+  verdict that says nothing. The negative evidence was taken once instead, by
+  hand and outside the suite, under `timeout -s KILL 40`: killed at 40s where
+  the fix passes in under one. Written down rather than left as a silent
+  absence, so the next reader of `tool/sabotage/` does not take the gap for
+  an oversight.
 
 - **Two menus on the touch front door were half the size a finger needs**, and
   only a real phone showed it. Measured on a Galaxy Note 9 at 420dpi

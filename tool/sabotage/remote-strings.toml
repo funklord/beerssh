@@ -1,0 +1,35 @@
+# Sabotages for strings the REMOTE writes and this app then shows.
+#
+# Each was bounded in memory and unbounded in layout, which is the
+# distinction these guard: capping a string's length says what it costs to
+# hold and nothing about what it does to a widget that sizes to its
+# content. Measured, not argued -- an 1024-character title is a tab
+# 11,472 pixels wide, and a 2083-character URI is a dialog 14,211 pixels
+# wide on an 800-pixel screen.
+
+[[sabotage]]
+name = "a tab label is not elided, so one title pushes the other tabs off"
+file = "src/ui/main_window.cpp"
+find = "\tm_tabs->setElideMode(Qt::ElideMiddle);"
+replace = "\t/* sabotage: no elide */"
+expect = "a_long_title_cannot_push_the_other_tabs_off_the_bar"
+
+# The link ids wrap at 65535 and the comment said the allocation was
+# therefore bounded. It bounds the COUNT; each entry is a URI from the
+# remote and `links` is never cleared.
+[[sabotage]]
+name = "an enormous hyperlink URI is stored rather than dropped"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (uri.size() > BSSH_MAX_LINK_CHARS) {"
+replace = "\tif (false) {"
+expect = "an_enormous_link_is_dropped_whole_and_shown_short"
+
+# Shown elided, opened whole. The dialog exists so somebody can read where
+# they are about to go, and one wider than the screen has stopped doing
+# that.
+[[sabotage]]
+name = "the open-link prompt shows the URI at full length"
+file = "src/term/emulator.h"
+find = "\tif (max_chars <= 0 || uri.size() <= max_chars) return uri;"
+replace = "\tif (true) return uri;"
+expect = "an_enormous_link_is_dropped_whole_and_shown_short"

@@ -1,0 +1,39 @@
+# Sabotages for the bounds on values that arrive in a FILE.
+#
+# sec 10.5 makes a preset something people send each other, and hosts.ini
+# is a text file people edit -- so the spinbox that used to enforce these
+# ranges is not on the path any of them take. Each of these three had its
+# rule enforced somewhere else in the tree and not here, which is the
+# shape this document keeps unpicking: one rule, two implementations, one
+# of them careful.
+
+# A feature name is REFUSED where a number is clamped, and the asymmetry
+# is the point: a scrollback of two billion has an obvious nearest legal
+# value and "sixl" has none. Let the error through and an imported preset
+# silently runs the defaults.
+[[sabotage]]
+name = "an unknown terminal feature in an imported preset is accepted"
+file = "src/model/preset.cpp"
+find = "\tif (!feature_error.isEmpty()) {"
+replace = "\tif (false && !feature_error.isEmpty()) {"
+expect = "an_imported_preset_naming_an_unknown_feature_is_refused"
+
+# The cast this replaced turns port=65538 into port 2 -- a connection to
+# somewhere nobody named, on a row whose editor still shows what was
+# typed. The fourth copy of a rule the other three share.
+[[sabotage]]
+name = "a hand-typed port is cast instead of checked"
+file = "src/model/profile_store.cpp"
+find = "\t\tprofile.port = bssh_port_from_string(\n\t\t        file.value(QStringLiteral(\"port\")).toString(), 22);"
+replace = "\t\tprofile.port = static_cast<quint16>(file.value(QStringLiteral(\"port\"), 22).toUInt());"
+expect = "a_hand_typed_port_out_of_range_falls_back_rather_than_wrapping"
+
+# from_json clamps a preset's numbers; a per-host override reached the
+# emulator without meeting them, because resolve() checked only that the
+# key still existed.
+[[sabotage]]
+name = "a host override skips the bounds a preset must meet"
+file = "src/model/settings_resolver.cpp"
+find = "\treturn bssh_preset_t::from_json(resolved).to_json();"
+replace = "\treturn resolved;"
+expect = "a_hand_typed_override_meets_the_same_bounds_as_a_preset"

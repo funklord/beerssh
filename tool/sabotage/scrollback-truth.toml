@@ -1,0 +1,38 @@
+# Sabotages for what the scrollback holds, and what copying it gives back.
+#
+# Two capabilities libvterm offers that this tree had declared and left
+# switched off: sb_pushline4's continuation flag and the sb_clear
+# callback, both nullptr in the same table. An empty slot in a table of
+# function pointers is a capability declined, and nothing on the page
+# distinguishes the ones declined on purpose from the ones nobody reached.
+
+# A row still on the live screen is answered by libvterm's own line info.
+# Break this and a wrapped command is copied with a newline through the
+# middle of it -- pasting it into a shell runs both halves.
+[[sabotage]]
+name = "a wrapped row on screen is not known to continue the row above"
+file = "src/term/emulator_vterm.cpp"
+find = "\treturn info && info->continuation;"
+replace = "\treturn false && info;"
+expect = "copying_a_wrapped_line_gives_back_one_line"
+
+# The other half, and the one the screen test cannot reach: once a row has
+# scrolled off, libvterm no longer holds it and the flag must have been
+# STORED on the way past. Without the opt-in the older three-argument
+# callback is used and the bit is never offered.
+[[sabotage]]
+name = "the pushline4 opt-in is never made, so the scrollback loses the wrap"
+file = "src/term/emulator_vterm.cpp"
+find = "\tvterm_screen_callbacks_has_pushline4(m_private->vts);"
+replace = "\t/* sabotage: opt-in withheld */"
+expect = "a_wrapped_line_stays_one_line_after_it_scrolls_away"
+
+# CSI 3 J is what `clear` sends as its terminfo E3. Left null, the
+# sequence arrives and nothing happens -- `clear` wipes the screen and
+# leaves the whole history behind it.
+[[sabotage]]
+name = "erase-saved-lines is declined, so `clear` keeps the history"
+file = "src/term/emulator_vterm.cpp"
+find = "\t.sb_clear    = on_sb_clear,"
+replace = "\t.sb_clear    = nullptr,"
+expect = "erase_saved_lines_actually_empties_the_scrollback"
