@@ -328,6 +328,11 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 	return 1;
 }
 
+/*
+ * A tab label, not a document. See the cap's use in on_set_term_prop.
+ */
+const int BSSH_MAX_TITLE_CHARS = 1024;
+
 int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 
@@ -338,9 +343,31 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		 * split across two reads arrives as two callbacks, and treating
 		 * either one as complete is how a tab ends up labelled with half
 		 * a path.
+		 *
+		 * BOUNDED, for the reason on_selection_set already gives about
+		 * OSC 52 six hundred lines below: libvterm hands a long string
+		 * over in pieces as its own buffer fills, so accumulating them
+		 * without a cap of our own puts the cap back where it started
+		 * and the REMOTE decides how much memory this costs. A title
+		 * needs no terminator to keep arriving, so a host that opens one
+		 * and never closes it grew this buffer without limit -- and this
+		 * string reaches the tab label, the window title and, on
+		 * Android, the notification.
+		 *
+		 * TRUNCATED where the selection is dropped whole, and the
+		 * difference is deliberate. Half a clipboard is a different
+		 * string and pasting it is worse than pasting nothing; half a
+		 * title is still a label, and nothing executes it. sec 8.3 wants
+		 * a name for a tab, and 1024 characters is far past any name
+		 * somebody meant.
 		 */
 		if (value->string.initial) self->title.clear();
-		self->title.append(QString::fromUtf8(value->string.str, value->string.len));
+		if (self->title.size() < BSSH_MAX_TITLE_CHARS) {
+			self->title.append(QString::fromUtf8(value->string.str, value->string.len));
+			if (self->title.size() > BSSH_MAX_TITLE_CHARS) {
+				self->title.truncate(BSSH_MAX_TITLE_CHARS);
+			}
+		}
 		if (value->string.final) emit self->owner->title_changed(self->title);
 		return 1;
 	case VTERM_PROP_MOUSE:

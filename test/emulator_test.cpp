@@ -1656,3 +1656,44 @@ void emulator_test::the_palette_query_reports_the_hosts_own_sixteen() {
 	quiet.feed(QByteArrayLiteral("\x1b]4;1;?\x1b\\"));
 	QCOMPARE(quiet.take_output(), QByteArray());
 }
+
+void emulator_test::a_remote_cannot_grow_the_title_without_limit() {
+	/*
+	 * The title arrives as fragments and needs no terminator to keep
+	 * arriving, so a host that opens an OSC title and never closes it grew
+	 * this buffer for as long as it kept typing -- and the string reaches
+	 * the tab label, the window title and, on Android, the notification.
+	 *
+	 * on_selection_set already caps OSC 52 for exactly this reason, six
+	 * hundred lines away in the same file: libvterm hands a long string
+	 * over in pieces as its own buffer fills, so accumulating them without
+	 * a bound of our own lets the REMOTE decide how much memory this
+	 * costs. The title was the one remote-controlled buffer with no cap,
+	 * next to a scrollback with a line limit and an image store with a
+	 * memory budget.
+	 */
+	bssh_emulator emulator(80, 24);
+	QSignalSpy spy(&emulator, &bssh_emulator::title_changed);
+
+	emulator.feed(QByteArrayLiteral("\x1b]0;"));
+	for (int i = 0; i < 64; ++i) {
+		emulator.feed(QByteArray(4096, 'A'));
+	}
+	emulator.feed(QByteArrayLiteral("\x1b\\"));
+
+	QCOMPARE(spy.count(), 1);
+	const QString title = spy.first().first().toString();
+
+	QVERIFY2(title.size() <= 1024,
+	          qPrintable(QStringLiteral("a quarter-megabyte title survived at %1 characters")
+	                      .arg(title.size())));
+
+	/*
+	 * The control, so this cannot pass against a terminal that dropped
+	 * titles altogether: an ordinary one arrives whole.
+	 */
+	QSignalSpy ordinary(&emulator, &bssh_emulator::title_changed);
+	emulator.feed(QByteArrayLiteral("\x1b]0;a sensible name\x1b\\"));
+	QCOMPARE(ordinary.count(), 1);
+	QCOMPARE(ordinary.first().first().toString(), QStringLiteral("a sensible name"));
+}

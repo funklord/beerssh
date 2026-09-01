@@ -4635,6 +4635,32 @@ matters is precisely the file neither of them wrote last.
 `flush()` and `close()`'s error are checked too — the out-of-band failure
 channel one more layer along.
 
+**A remote could grow the title buffer without limit, and the reasoning
+against it was already written down in the same file.** OSC titles arrive
+as fragments and need no terminator to keep arriving, so a host that opens
+`ESC ] 0 ;` and never closes it appended forever. Measured by sabotage:
+262,144 characters from one sequence in a unit test, and that is only what
+the test chose to send. The string reaches the tab label, the window title
+and, on Android, the notification.
+
+`on_selection_set` caps OSC 52 at 64 KB six hundred lines below, and its
+comment states this case exactly — *"libvterm hands a long string over in
+pieces as its own buffer fills, so accumulating them without a bound of
+our own would put the cap back where it started: the remote decides how
+much memory this costs."* The title was the one remote-controlled buffer
+with no cap, beside a scrollback with a hard line limit (§7) and an image
+store with a memory budget (§7.2), both bounded for this reason.
+
+**The lens worth keeping is the sharp form of it**: not *"is this buffer
+bounded?"* but *"this file bounds its other remote-controlled buffer and
+says why — does that reasoning apply here?"* It applied verbatim.
+
+Truncated where the selection is dropped whole, deliberately: half a
+clipboard is a different string and pasting it is worse than pasting
+nothing, while half a title is still a label and nothing executes it. The
+divergence is in the comment so it does not read as an inconsistency
+somebody should tidy.
+
 **The credential store destroyed itself before writing its
 replacement.** `flush()` opened the real file with
 `QIODevice::Truncate`, so the existing store was gone before the new
