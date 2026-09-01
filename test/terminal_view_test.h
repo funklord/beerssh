@@ -86,6 +86,7 @@ private slots:
 	void a_click_while_scrolled_back_reports_the_screen_row();
 	void the_menu_layout_follows_the_device_until_told_otherwise();
 	void the_terminal_menu_offers_the_three_verbs_in_order();
+	void the_menu_shows_the_chord_the_router_would_actually_steal();
 	void the_touch_layout_grows_the_rows_and_drops_the_chords();
 };
 

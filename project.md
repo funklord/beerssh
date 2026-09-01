@@ -677,6 +677,26 @@ quirks on Android.
   is built from the **defaults** rather than from the effective list, or an
   action whose chord had been given back would vanish from the page and could
   never be bound again.
+  **The right-click menu was the second copy, and it was there all along.**
+  Its Copy and Paste entries wrote their chords out as the literals
+  `"Ctrl+Shift+C"` and `"Ctrl+Shift+V"`, while every other menu in the window
+  asks `binding_for()`. So rebinding copy left the context menu advertising
+  the chord that had just been replaced — the app telling the user, in
+  writing, to press a key that no longer does anything. Exactly the drift
+  this section says a list written anywhere else would be free to do, sitting
+  in the one place nobody had looked.
+  **The menu already had a test, and the test could not see it.** It asserts
+  the item TEXT and the order — and the text was never wrong. What was wrong
+  was an attribute nothing asked about, which is the general shape: a menu
+  test that reads labels passes over anything the label does not carry. The
+  new one rebinds copy and asks the menu what chord it now shows, and leaves
+  paste unbound so a failure cannot be "both were blanked".
+  **Worth recording about the test rather than the bug:** the first version
+  set the binding and then built the window, and failed against a correct
+  fix. `bssh_main_window`'s constructor loads the chords from app settings
+  and calls `set_bindings` itself, discarding anything set before it. The fix
+  was right and the test was wrong, which is the reverse of the usual
+  suspicion and the reason to read a failure before believing it.
 
 ### 6.2 On-screen keyboard strategy (touch platforms)
 Android soft keyboards don't expose Ctrl/Esc/etc. Plan a **custom on-screen key

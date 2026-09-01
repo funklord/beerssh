@@ -1740,6 +1740,72 @@ void terminal_view_test::the_menu_layout_follows_the_device_until_told_otherwise
 	          bssh_app_settings::CONTEXT_MENU_DESKTOP);
 }
 
+namespace {
+
+/*
+ * The bindings are process-wide, so they must go back however this test
+ * leaves -- an assertion failing partway would otherwise hand every later
+ * test a rebound Copy.
+ */
+struct bindings_guard {
+	~bindings_guard() { bssh_input_router::set_bindings(QHash<QString, QString>()); }
+};
+
+} /* namespace */
+
+void terminal_view_test::the_menu_shows_the_chord_the_router_would_actually_steal() {
+	/*
+	 * The context menu wrote its Copy and Paste chords out as literals --
+	 * "Ctrl+Shift+C" and "Ctrl+Shift+V" -- while every other menu in this
+	 * window asks bssh_input_router::binding_for(). So a user who rebound
+	 * copy got a menu still advertising the chord they had just replaced,
+	 * and the app told them, in writing, to press a key that no longer
+	 * did anything.
+	 *
+	 * It is the failure the router's own table exists to prevent, in its
+	 * words: "the list a user is shown and the list the router acts on
+	 * cannot be two lists". A literal is a second list that agrees right
+	 * up until somebody changes the first, which is why the menu test
+	 * next door passed throughout -- it reads the item TEXT, and the text
+	 * was never wrong.
+	 */
+	bindings_guard guard;
+
+	/*
+	 * The window is built FIRST: its constructor loads the bindings out
+	 * of the app settings and calls set_bindings itself, so anything set
+	 * before it is discarded. The menu is what this is about, and it is
+	 * built fresh on every right-click -- which is exactly when
+	 * binding_for is consulted.
+	 */
+	bssh_main_window window;
+
+	QHash<QString, QString> bindings;
+	bindings.insert(QStringLiteral("copy"), QStringLiteral("Ctrl+Alt+K"));
+	bssh_input_router::set_bindings(bindings);
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	QAction *copy = menu->findChild<QAction *>(QStringLiteral("terminal_copy"));
+	QVERIFY2(copy, "the context menu has no Copy action to check");
+
+	QCOMPARE(copy->shortcut(), QKeySequence(QStringLiteral("Ctrl+Alt+K")));
+
+	/* And specifically not the chord it used to hardcode. */
+	QVERIFY2(copy->shortcut() != QKeySequence(QStringLiteral("Ctrl+Shift+C")),
+	          "the menu is still advertising the replaced chord");
+
+	/*
+	 * Paste was NOT rebound, so it must still show its default -- which
+	 * is what keeps this a check on the lookup rather than on the two
+	 * actions having been blanked.
+	 */
+	QAction *paste = menu->findChild<QAction *>(QStringLiteral("terminal_paste"));
+	QVERIFY2(paste, "the context menu has no Paste action to check");
+	QCOMPARE(paste->shortcut(), QKeySequence(QStringLiteral("Ctrl+Shift+V")));
+}
+
 void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	bssh_main_window window;
 

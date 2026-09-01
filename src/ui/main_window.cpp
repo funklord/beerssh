@@ -2755,14 +2755,27 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	QMenu *menu = new QMenu(parent);
 	menu->setObjectName(QStringLiteral("terminal_context_menu"));
 
+	/*
+	 * The chords come from the ROUTER, not from a literal. These two were
+	 * written out as "Ctrl+Shift+C" and "Ctrl+Shift+V" while every other
+	 * menu here asks binding_for() -- so a user who rebound copy got a
+	 * context menu still advertising the chord they had just replaced.
+	 *
+	 * That is the failure the router's own table exists to prevent, in
+	 * its words: "the list a user is shown and the list the router acts
+	 * on cannot be two lists". A hardcoded label is a second list that
+	 * happens to agree until somebody changes the first.
+	 */
 	QAction *copy = menu->addAction(QStringLiteral("&Copy"));
 	copy->setObjectName(QStringLiteral("terminal_copy"));
-	copy->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+C")));
+	copy->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("copy"))));
 	copy->setEnabled(m_terminal_view && m_terminal_view->has_selection());
 
 	QAction *paste = menu->addAction(QStringLiteral("&Paste"));
 	paste->setObjectName(QStringLiteral("terminal_paste"));
-	paste->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+V")));
+	paste->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("paste"))));
 	paste->setEnabled(m_current && !QGuiApplication::clipboard()->text().isEmpty());
 
 	menu->addSeparator();
