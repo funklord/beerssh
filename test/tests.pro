@@ -56,6 +56,7 @@ SOURCES += \
     profile_store_test.cpp \
     session_registry_test.cpp \
     tab_status_test.cpp \
+    host_key_test.cpp \
     input_router_test.cpp \
     pty_session_test.cpp \
     layout_test.cpp \
@@ -136,6 +137,7 @@ HEADERS += \
     profile_store_test.h \
     session_registry_test.h \
     tab_status_test.h \
+    host_key_test.h \
     input_router_test.h \
     pty_session_test.h \
     layout_test.h \

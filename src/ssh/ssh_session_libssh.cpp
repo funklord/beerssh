@@ -479,6 +479,61 @@ bool bssh_libssh_worker::server_key_is_revoked() const {
 	return false;
 }
 
+bssh_host_key_verdict_t bssh_host_key_verdict(int known_hosts_result) {
+	/*
+	 * Switched as an int rather than as the enum, deliberately. Casting a
+	 * value libssh never defined into the enum in order to switch on it
+	 * is undefined behaviour, and coping with exactly that value is what
+	 * this function is for. The cost is that -Wswitch can no longer warn
+	 * about an enumerator nobody handled; the default below is what
+	 * covers that, and it refuses rather than trusts.
+	 */
+	switch (known_hosts_result) {
+	case SSH_KNOWN_HOSTS_OK:
+		return BSSH_HOST_KEY_TRUSTED;
+
+	/*
+	 * Not recorded, which is an ordinary first connection. NOT_FOUND is
+	 * the same answer arrived at differently -- there is no known-hosts
+	 * file yet -- and libssh says so itself: "the host is thus unknown".
+	 */
+	case SSH_KNOWN_HOSTS_UNKNOWN:
+	case SSH_KNOWN_HOSTS_NOT_FOUND:
+		return BSSH_HOST_KEY_FIRST_CONTACT;
+
+	/*
+	 * Both of these are libssh's "possible attack", and they were not
+	 * treated alike. CHANGED is the famous one. OTHER -- "the server
+	 * gave us a key of a type while we had an other type recorded" --
+	 * fell through to the first-contact prompt, which offers "Accept and
+	 * connect" for something libssh documents as an attack. The warning
+	 * dialog's own words fit it exactly: the key is NOT the one recorded.
+	 */
+	case SSH_KNOWN_HOSTS_CHANGED:
+	case SSH_KNOWN_HOSTS_OTHER:
+		return BSSH_HOST_KEY_MISMATCH;
+
+	/*
+	 * The check did not run -- an unreadable or malformed known-hosts
+	 * file, say. This also fell through to the first-contact prompt,
+	 * which told the user the host was not recorded and invited them to
+	 * trust it. "I could not tell" and "it is not there" are different
+	 * answers, and rendering them identically is the vacuous pass at its
+	 * most expensive: a trust decision taken on a verification that
+	 * never happened.
+	 */
+	case SSH_KNOWN_HOSTS_ERROR:
+		return BSSH_HOST_KEY_UNVERIFIED;
+	}
+
+	/*
+	 * A value this libssh has and this code does not know. Refused
+	 * rather than trusted, because the safe default for an unrecognised
+	 * verdict about a host key is not to proceed.
+	 */
+	return BSSH_HOST_KEY_UNVERIFIED;
+}
+
 bool bssh_libssh_worker::verify_host_key() {
 	/*
 	 * Revocation first, and it outranks every other verdict including
@@ -492,8 +547,20 @@ bool bssh_libssh_worker::verify_host_key() {
 		return false;
 	}
 
-	const enum ssh_known_hosts_e known = ssh_session_is_known_server(m_session);
-	if (known == SSH_KNOWN_HOSTS_OK) return true;
+	const bssh_host_key_verdict_t verdict =
+	        bssh_host_key_verdict(ssh_session_is_known_server(m_session));
+	if (verdict == BSSH_HOST_KEY_TRUSTED) return true;
+
+	/*
+	 * A check that could not run is a failure, not a question. Everything
+	 * below holds the connection open while a person decides; there is
+	 * nothing to decide here, because nothing was verified.
+	 */
+	if (verdict == BSSH_HOST_KEY_UNVERIFIED) {
+		fail(QStringLiteral("could not check the host key against known hosts: %1")
+		             .arg(session_error()));
+		return false;
+	}
 
 	/*
 	 * Never accepted silently (sec 11), and never decided here: the
@@ -504,7 +571,7 @@ bool bssh_libssh_worker::verify_host_key() {
 	 */
 	const QString fingerprint = server_fingerprint();
 
-	if (known == SSH_KNOWN_HOSTS_CHANGED) {
+	if (verdict == BSSH_HOST_KEY_MISMATCH) {
 		emit host_key_changed(fingerprint);
 	} else {
 		emit host_key_unknown(fingerprint);

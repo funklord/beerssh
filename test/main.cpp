@@ -25,6 +25,7 @@
 #include "profile_store_test.h"
 #include "session_registry_test.h"
 #include "tab_status_test.h"
+#include "host_key_test.h"
 #include "input_router_test.h"
 #include "pty_session_test.h"
 #include "layout_test.h"
@@ -340,6 +341,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<profile_store_test>(argc, argv);
 	failures += run_test<session_registry_test>(argc, argv);
 	failures += run_test<tab_status_test>(argc, argv);
+	failures += run_test<host_key_test>(argc, argv);
 	failures += run_test<pty_session_test>(argc, argv);
 	failures += run_test<input_router_test>(argc, argv);
 	failures += run_test<layout_test>(argc, argv);

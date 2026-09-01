@@ -8,6 +8,31 @@
 class bssh_libssh_worker;
 
 /*
+ * What the known-hosts check said, as a decision this app can act on
+ * (project.md sec 11).
+ *
+ * A pure mapping, kept apart from the connecting so the RULE can be
+ * tested -- the same reason bssh_tab_status::state_for exists apart from
+ * the tab bar. Nothing else in this file is reachable from a test without
+ * a real server, which is precisely why the most consequential rule in it
+ * had none.
+ *
+ * Takes an int rather than enum ssh_known_hosts_e, because of the promise
+ * at the top of this header: no libssh type appears in it, so a libssh2
+ * backend could replace the .cpp without touching anything that includes
+ * this. The caller passes libssh's verdict; the meaning of the values is
+ * the .cpp's business.
+ */
+enum bssh_host_key_verdict_t {
+	BSSH_HOST_KEY_TRUSTED,        /* recorded, and unchanged */
+	BSSH_HOST_KEY_FIRST_CONTACT,  /* not recorded at all; ask */
+	BSSH_HOST_KEY_MISMATCH,       /* recorded differently; warn */
+	BSSH_HOST_KEY_UNVERIFIED      /* the check did not run; refuse */
+};
+
+bssh_host_key_verdict_t bssh_host_key_verdict(int known_hosts_result);
+
+/*
  * The libssh implementation of bssh_ssh_session (project.md sec 4).
  *
  * This header and its .cpp are the ONLY places in the tree allowed to know

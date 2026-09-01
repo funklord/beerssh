@@ -4381,6 +4381,59 @@ All of it goes behind one interface — `bssh_secret_store` (`store`, `load`,
 `erase`, `is_hardware_backed`) — with one implementation per platform, per §3's
 core principle 3. Callers get an opaque ID back and never see a key mechanism.
 
+**libssh has six known-hosts verdicts and this handled two, so "I could
+not check" was shown to the user as "this host is new".** `verify_host_key`
+tested for `SSH_KNOWN_HOSTS_OK`, then for `CHANGED`, and sent everything
+else to the first-contact prompt — the one whose button reads *Accept and
+connect*. Two of the remaining four do not belong there, and libssh's own
+header says why:
+
+| verdict | libssh's description | was |
+|---|---|---|
+| `UNKNOWN`, `NOT_FOUND` | not recorded | first contact ✓ |
+| `CHANGED` | *"you HAVE to warn the user about a possible attack"* | warning ✓ |
+| `OTHER` | *"a key of a type while we had an other type recorded. It is a possible attack"* | **first contact** |
+| `ERROR` | *"there had been an error checking the host"* | **first contact** |
+
+`ERROR` is the one that matters. An unreadable or malformed known-hosts
+file means the check **did not run**, and the user was told the host was
+not recorded and invited to trust it. *"I could not tell"* and *"it is not
+there"* are different answers, and rendering them identically is
+`evidence.md`'s vacuous pass at its most expensive: a trust decision taken
+on the strength of a verification that never happened. It now fails the
+connection with its own message — there is nothing to decide when nothing
+was verified, and every other branch holds the connection open precisely
+because there is.
+
+`OTHER` routes to the existing warning, which needed no new dialog: its
+words already fit — *the key for this host is NOT the one recorded*.
+
+**Why it survived: the file it lives in cannot be unit-tested.** Every
+line of `ssh_session_libssh.cpp` needs a real server, so `make check-ssh`
+is the only thing that has ever reached it — a gate somebody must
+remember to run, against a host they must have. So the most consequential
+rule in the program had no test. The decision is now
+`bssh_host_key_verdict()`, a pure mapping that can be asked without a
+socket, which is the same move `bssh_tab_status::state_for` makes for the
+tab bar and with rather more at stake. **A rule worth this much should not
+live where only a gated check can see it**, and that is the general form
+worth carrying: when a decision cannot be tested where it sits, the fault
+is usually where it sits.
+
+Two details of the mapping earn their place. It takes an `int` rather
+than `enum ssh_known_hosts_e`, because that header promises no libssh type
+appears in it so a libssh2 backend could replace the `.cpp` without
+touching its includers. And it switches on that `int` rather than casting
+to the enum, because casting a value libssh never defined in order to
+switch on it is undefined behaviour and coping with exactly that value is
+the function's purpose — the cost being that `-Wswitch` can no longer warn
+about an unhandled enumerator, which the default clause covers by
+refusing rather than trusting. A libssh that grows a seventh verdict
+cannot make it silently mean *trusted*.
+
+Checked by sabotage: restoring the old mapping fails exactly the two
+tests naming those two verdicts, and nothing else in the suite.
+
 **`erase` had no caller in the tree, and deleting a host left its password
 behind.** The separation this section is built on — the row holds a *flag*
 saying a credential exists, the credential lives in the store under a key
