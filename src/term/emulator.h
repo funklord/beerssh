@@ -220,6 +220,18 @@ public:
 	 * to render a scrolled-back position; nothing else writes it.
 	 */
 	const bssh_scrollback &scrollback() const;
+
+	/*
+	 * Whether a LIVE SCREEN row is the tail of the row above it -- one
+	 * logical line that ran past the right edge, not two lines.
+	 *
+	 * Asked of libvterm rather than mirrored: it already tracks this per
+	 * row and answers from its own state, so a copy of it here would be
+	 * a second thing to keep in step for no gain. The scrollback's half
+	 * of the same question is bssh_scrollback::is_continuation, which
+	 * must be stored because those rows have left libvterm's screen.
+	 */
+	bool row_is_continuation(int row) const;
 	void set_scrollback_lines(int lines);
 
 	/*

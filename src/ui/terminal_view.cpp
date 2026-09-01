@@ -1650,6 +1650,20 @@ void bssh_terminal_view::clear_selection() {
 	note_selection_changed();
 }
 
+bool bssh_terminal_view::line_is_continuation(qint64 line) const {
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	const qint64 index = line - history_base();
+
+	/* Evicted: gone rather than renumbered, so nothing is known of it. */
+	if (index < 0) return false;
+
+	if (index < history) {
+		return m_scrollback && m_scrollback->is_continuation(int(index));
+	}
+
+	return m_emulator && m_emulator->row_is_continuation(int(index - history));
+}
+
 QString bssh_terminal_view::selection_text() const {
 	if (!has_selection()) return QString();
 
@@ -1659,7 +1673,9 @@ QString bssh_terminal_view::selection_text() const {
 	int last_col = 0;
 	normalised_selection(first_line, first_col, last_line, last_col);
 
-	QStringList lines;
+	QString out;
+	bool continued_into_this = false;
+
 	for (qint64 line = first_line; line <= last_line; ++line) {
 		const int from = line == first_line ? first_col : 0;
 		const int to = line == last_line ? last_col : m_cols - 1;
@@ -1672,15 +1688,36 @@ QString bssh_terminal_view::selection_text() const {
 		}
 
 		/*
+		 * WRAPPED lines are rejoined, because they were never two
+		 * lines. libvterm knows which rows are the tail of the row
+		 * above; a newline inserted between them turns one command into
+		 * two, and pasting that into a shell runs both halves -- the
+		 * larger version of the padding problem below, which this
+		 * function was already careful about.
+		 */
+		const bool continued = line < last_line && line_is_continuation(line + 1);
+
+		/*
 		 * Trailing blanks are padding, not content: a terminal line is
 		 * always m_cols wide, and pasting the padding back into a shell
 		 * is how a copied command arrives with a tail of spaces.
+		 *
+		 * Not on a row that CONTINUES, though: there the last column is
+		 * where the text carries on, so a space at the end of it is
+		 * content and trimming it would silently join two words.
 		 */
-		while (text.endsWith(QLatin1Char(' '))) text.chop(1);
-		lines.append(text);
+		if (!continued) {
+			while (text.endsWith(QLatin1Char(' '))) text.chop(1);
+		}
+
+		if (!out.isEmpty() || line != first_line) {
+			if (!continued_into_this) out.append(QLatin1Char('\n'));
+		}
+		out.append(text);
+		continued_into_this = continued;
 	}
 
-	return lines.join(QLatin1Char('\n'));
+	return out;
 }
 
 void bssh_terminal_view::focusInEvent(QFocusEvent *event) {

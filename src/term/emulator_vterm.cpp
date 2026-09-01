@@ -1354,9 +1354,7 @@ bool is_invisible_cell(const bssh_cell_t &cell) {
  * renderer, the selection, and the popline handler below all bound the
  * column against size()), so a trimmed line reads back identically.
  */
-int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
-	Q_UNUSED(cells);
-	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
+void push_top_line(bssh_emulator_private *self, int cols, bool continuation) {
 
 	/*
 	 * Taken from the MIRROR's top row, not converted from libvterm's
@@ -1402,8 +1400,30 @@ int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
 		line.append(self->screen.cell(0, col));
 	}
 
-	self->scrollback.push(line);
+	self->scrollback.push(line, continuation);
 	emit self->owner->scrollback_changed();
+}
+
+/*
+ * The pre-4 callback, kept because the table still names it: libvterm
+ * uses this one unless the has_pushline4 opt-in below is made, and a
+ * build that somehow skipped the opt-in should scroll correctly rather
+ * than not at all. It simply cannot know about wrapping.
+ */
+int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
+	Q_UNUSED(cells);
+	push_top_line(static_cast<bssh_emulator_private *>(user), cols, false);
+	return 1;
+}
+
+/*
+ * The same thing, plus the one bit that makes a copied line paste back as
+ * what was typed: whether this line is the TAIL of the one above it
+ * rather than a line of its own.
+ */
+int on_sb_pushline4(int cols, const VTermScreenCell *cells, bool continuation, void *user) {
+	Q_UNUSED(cells);
+	push_top_line(static_cast<bssh_emulator_private *>(user), cols, continuation);
 	return 1;
 }
 
@@ -1469,8 +1489,8 @@ const VTermScreenCallbacks screen_callbacks = {
 	.sb_pushline = on_sb_pushline,
 	.sb_popline  = on_sb_popline,
 	.sb_clear    = nullptr,
-	/* Opt-in ABI extension; only used if the has_pushline4 call is made. */
-	.sb_pushline4 = nullptr
+	/* Opt-in ABI extension; enabled by the has_pushline4 call at setup. */
+	.sb_pushline4 = on_sb_pushline4
 	/*
 	 * Designated initialisers on purpose: libvterm has added callbacks
 	 * before (sb_pushline4 is newer than this list), and a positional
@@ -1564,6 +1584,16 @@ bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
 
 	m_private->vts = vterm_obtain_screen(m_private->vt);
 	vterm_screen_set_callbacks(m_private->vts, &screen_callbacks, m_private);
+
+	/*
+	 * Opt in to sb_pushline4, which is the same callback plus whether the
+	 * line being pushed CONTINUES the one above it. Without this libvterm
+	 * uses the older three-argument form and that bit is simply not
+	 * offered -- so a wrapped line reached the scrollback as two lines
+	 * with nothing to say they were one, and copying it put a newline in
+	 * the middle of a command.
+	 */
+	vterm_screen_callbacks_has_pushline4(m_private->vts);
 
 	/*
 	 * Damage merged per row rather than per cell (sec 9.5).
@@ -1964,6 +1994,20 @@ const bssh_scrollback &bssh_emulator::scrollback() const {
 void bssh_emulator::set_scrollback_lines(int lines) {
 	m_private->scrollback.set_max_lines(lines);
 	emit scrollback_changed();
+}
+
+bool bssh_emulator::row_is_continuation(int row) const {
+	if (!m_private->vt || row <= 0 || row >= m_private->screen.rows()) return false;
+
+	/*
+	 * Row 0 is never a continuation of anything on this screen: whatever
+	 * it continued has already gone to the scrollback, and that half is
+	 * answered by bssh_scrollback::is_continuation.
+	 */
+	const VTermLineInfo *info =
+	        vterm_state_get_lineinfo(vterm_obtain_state(m_private->vt), row);
+
+	return info && info->continuation;
 }
 
 const bssh_image_store &bssh_emulator::images() const {

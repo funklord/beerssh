@@ -32,7 +32,20 @@ public:
 	void set_max_lines(int max_lines);
 	int max_lines() const { return m_max_lines; }
 
-	void push(const QList<bssh_cell_t> &line);
+	/*
+	 * `continuation` says this line is the tail of the one before it --
+	 * a single logical line that ran past the right edge, not two lines.
+	 * libvterm knows, and says so through sb_pushline4.
+	 *
+	 * Kept because COPY needs it: joining every row with a newline turns
+	 * one wrapped command into two, and pasting that into a shell runs
+	 * both halves. The trailing-blank trimming in selection_text() exists
+	 * for the same reason and covers the smaller half of it.
+	 */
+	void push(const QList<bssh_cell_t> &line, bool continuation = false);
+
+	/* Whether the line at `index` continues the one before it. */
+	bool is_continuation(int index) const;
 
 	/*
 	 * Takes the most recent line back off, for when the screen scrolls
@@ -64,6 +77,9 @@ public:
 
 private:
 	QList<QList<bssh_cell_t> > m_lines;
+
+	/* Parallel to m_lines; see push(). */
+	QList<bool> m_continuations;
 	int m_max_lines;
 
 	/* Only ever grows; see base(). */

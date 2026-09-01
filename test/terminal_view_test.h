@@ -80,6 +80,9 @@ private slots:
 	 * the tab bar and the host list and not for the thing the app is for.
 	 */
 	void select_all_reaches_the_scrollback_and_the_screen();
+	void copying_a_wrapped_line_gives_back_one_line();
+	void a_real_newline_still_separates_two_lines();
+	void a_wrapped_line_stays_one_line_after_it_scrolls_away();
 	void middle_click_pastes_the_primary_selection();
 	void the_remote_keeps_the_right_button_when_it_asked_for_the_mouse();
 	void a_release_names_the_button_the_press_reported();

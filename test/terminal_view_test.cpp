@@ -1640,6 +1640,106 @@ void terminal_view_test::a_reader_counts_characters_where_the_grid_counts_cells(
 	QCOMPARE(text->offsetAtPoint(rect.center()), marker);
 }
 
+void terminal_view_test::copying_a_wrapped_line_gives_back_one_line() {
+	/*
+	 * A command too long for the window is ONE line that ran past the
+	 * right edge, not two. Copying it joined every row with a newline, so
+	 * pasting it into a shell ran the first half as a command and then
+	 * the rest as another -- which is the same hazard as the trailing
+	 * padding this function already trims, several orders of magnitude
+	 * worse.
+	 *
+	 * Measured before the fix on this fixture: one newline in the middle
+	 * of a single echo.
+	 *
+	 * libvterm tracks it per row and offers it two ways: sb_pushline4
+	 * carries the bit for a line leaving the screen, and
+	 * vterm_state_get_lineinfo answers for the rows still on it. The
+	 * pushline4 callback was declared in the table and set to nullptr, so
+	 * the bit was never asked for.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	const QByteArray tail(view.cols() + 12, 'a');
+	const QByteArray typed = QByteArrayLiteral("echo ") + tail;
+	emulator.feed(typed);
+
+	view.select_all();
+	const QString text = view.selection_text().trimmed();
+
+	QCOMPARE(text.count(QLatin1Char('\n')), 0);
+	QCOMPARE(text, QString::fromLatin1(typed));
+}
+
+void terminal_view_test::a_real_newline_still_separates_two_lines() {
+	/*
+	 * The other direction, and the reason the fix cannot simply drop
+	 * newlines: two lines the user actually entered must stay two. A
+	 * short line followed by another is not a wrap, and libvterm says so.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("first\r\nsecond"));
+
+	view.select_all();
+	const QString text = view.selection_text().trimmed();
+
+	QCOMPARE(text, QStringLiteral("first\nsecond"));
+}
+
+void terminal_view_test::a_wrapped_line_stays_one_line_after_it_scrolls_away() {
+	/*
+	 * The OTHER half, and the one the screen test cannot reach. A row
+	 * still on the live screen is answered by libvterm's own line info;
+	 * once it has scrolled off, libvterm no longer holds it and the flag
+	 * has to have been STORED on the way past -- which is what
+	 * sb_pushline4 carries and what the older sb_pushline cannot.
+	 *
+	 * Written because the first test covered only the screen: the parse
+	 * being right is what hides the delivery being wrong, and here the
+	 * two halves are answered by two different mechanisms.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	const QByteArray tail(view.cols() + 12, 'a');
+	const QByteArray typed = QByteArrayLiteral("echo ") + tail;
+	emulator.feed(typed + QByteArrayLiteral("\r\n"));
+
+	/* Push it well past the top of the screen. */
+	for (int i = 0; i < view.rows() + 5; ++i) {
+		emulator.feed(QByteArrayLiteral("filler\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 0);
+
+	view.select_all();
+	const QString text = view.selection_text();
+
+	/*
+	 * The command comes back whole, from the scrollback, with nothing
+	 * inserted where the window happened to end.
+	 */
+	QVERIFY2(text.contains(QString::fromLatin1(typed)),
+	          qPrintable(text.left(200)));
+}
+
 void terminal_view_test::select_all_reaches_the_scrollback_and_the_screen() {
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 96);

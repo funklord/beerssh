@@ -6110,6 +6110,37 @@ The desktop build is what makes this project testable at all — use it.
   rather than renumbered and anything still holding its name must fail to
   find it rather than find a different line under it. `pop()` takes from the
   back and leaves the base alone.
+- **Copy put a newline in the middle of a wrapped command.** A line too long
+  for the window is ONE logical line that ran past the right edge;
+  `selection_text()` joined every ROW with `\n`, so copying it and pasting it
+  into a shell ran the first half as a command and the remainder as another.
+  Measured on a 70-column fixture: one `echo`, one newline in the middle of
+  it. The same function already trims trailing padding, and says why —
+  *"pasting the padding back into a shell is how a copied command arrives
+  with a tail of spaces"* — so paste fidelity was the stated intent all
+  along; this was the same hazard several orders of magnitude worse, sitting
+  two lines above the comment describing the smaller one.
+  **libvterm knew, and was being asked the older question.** It tracks
+  continuation per row and offers it twice over:
+  `vterm_state_get_lineinfo()` for rows still on the screen, and
+  `sb_pushline4`'s extra argument for a row on its way into the scrollback.
+  The callback table **named `sb_pushline4` and set it to `nullptr`**, with
+  the opt-in call never made — so the bit existed, was reachable, and was
+  declined. That is the shape worth remembering: not a missing capability but
+  a declared one left switched off, which reads as a considered choice
+  because the field is right there.
+  **Two halves, two mechanisms, and the first test only reached one.** A row
+  on the live screen is answered by libvterm's own state; once scrolled off,
+  libvterm no longer holds it and the flag has to have been *stored* on the
+  way past — so `bssh_scrollback` keeps a list parallel to its lines,
+  maintained in every place the front or back is dropped. The screen test
+  passes with the scrollback half entirely broken, which is why there is a
+  second test that scrolls the line away first. Each half was sabotaged on
+  its own: killing the screen half puts the newline back, and removing the
+  `has_pushline4` opt-in leaves the command no longer contiguous.
+  **Trailing blanks are not trimmed on a row that continues.** There the last
+  column is where the text carries on, so a space at the end of it is content
+  and trimming it would silently join two words.
   Everything that crosses between a buffer index and a line's name goes
   through it now, including the accessibility interface, whose flat rows had
   coincided with absolute lines only because the base had always been zero.

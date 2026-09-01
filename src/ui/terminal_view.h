@@ -539,6 +539,16 @@ private:
 	 */
 	qint64 history_base() const;
 
+	/*
+	 * Whether an absolute line is the TAIL of the one before it -- one
+	 * logical line that ran past the right edge rather than two lines.
+	 *
+	 * Answered from whichever half holds it: the scrollback stores the
+	 * flag for lines that have left the screen, and libvterm answers for
+	 * the rows still on it.
+	 */
+	bool line_is_continuation(qint64 line) const;
+
 	qint64 line_for_row(int row) const;
 
 	/*
