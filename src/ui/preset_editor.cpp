@@ -646,14 +646,19 @@ void bssh_preset_editor::on_import() {
 	if (path.isEmpty() || !m_store) return;
 
 	bool ok = false;
-	bssh_preset_t imported = bssh_preset_t::read_ini(path, &ok);
+	QString why;
+	bssh_preset_t imported = bssh_preset_t::read_ini(path, &ok, &why);
 
 	if (!ok) {
 		QMessageBox::warning(this, QStringLiteral("Import failed"),
-		                      QStringLiteral("%1 does not look like a preset file.")
-		                              .arg(path));
+		                      why.isEmpty()
+		                              ? QStringLiteral("%1 does not look like a preset file.")
+		                                        .arg(path)
+		                              : QStringLiteral("%1 could not be imported.\n\n%2")
+		                                        .arg(path, why));
 		return;
 	}
+
 
 	/*
 	 * Added, never merged over an existing one of the same name. An

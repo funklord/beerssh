@@ -4210,6 +4210,30 @@ cannot fire still reads as protection, which is worse than no guard, because it
 invites the next reader to weaken the one doing the work. Removing each
 remaining layer in turn shows both are real.
 
+**`term_features` is refused rather than coerced, and that is the opposite of
+every other field.** `from_json()` *clamps* the numeric ones, because a
+scrollback of two billion has an obvious nearest legal value. A misspelled
+feature name has none — `sixl` is not nearer to `sixel` than to anything else —
+so falling back to the defaults hands somebody a preset whose file says one
+thing and whose terminal does another, with nothing said. That is the hazard
+`from_spec()`'s own comment describes ("report a pass for a configuration
+nobody tested") and the one the command line already refuses for the identical
+string, `exit 2` at parse time, "so a misspelling is a refused command line".
+The preset path did not: `bssh_session_t` reads it at `session.cpp:86` and
+`:180` with the error argument named `ignored`, and cannot do better — a
+session being built has nobody to report to. **So it is checked where the file
+enters.** In `read_ini()`, which is the single reader for both import doors —
+the editor's file dialog and `import_launch_document()`, the Android
+"open with" path — and not in either door, where it would have been written
+twice and covered whichever was found first. `read_ini()` gained an optional
+`error` out-parameter for it: the existing refusal says "does not look like a
+preset file", which for this case points whoever was handed the file at the
+wrong end of a working one. It stays empty when the file genuinely is not a
+preset, since there is nothing to add. **The residue is a hand-edited
+`presets.ini`**, which no longer goes through `read_ini()` and still falls back
+silently; that is the same trust the tree extends to the rest of its own
+config, and a typo there is the typist's.
+
 ### 10.4 Built-in starter presets
 Ship a handful of **read-only** presets that users clone rather than edit:
 *Default Linux*, *Raspberry Pi / SBC*, *OpenWrt / BusyBox router* (limited `TERM`,

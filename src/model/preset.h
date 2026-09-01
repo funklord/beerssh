@@ -139,7 +139,14 @@ struct bssh_preset_t {
 	 * would claim a slot and a status that are not theirs to give.
 	 */
 	bool write_ini(const QString &raw_path) const;
-	static bssh_preset_t read_ini(const QString &raw_path, bool *ok = nullptr);
+	/*
+	 * `error`, where given, carries the reason a readable file was still
+	 * refused -- text for whoever handed the file over. It stays empty
+	 * when the file was not a preset at all, because there is nothing to
+	 * say about it beyond that.
+	 */
+	static bssh_preset_t read_ini(const QString &raw_path, bool *ok = nullptr,
+	                               QString *error = nullptr);
 
 	/* The starter set (sec 10.4). Read-only; users clone them. */
 	static QList<bssh_preset_t> builtins();

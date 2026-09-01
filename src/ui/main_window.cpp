@@ -2409,7 +2409,8 @@ void bssh_main_window::import_launch_document() {
 	if (document.isEmpty()) return;
 
 	bool ok = false;
-	bssh_preset_t imported = bssh_preset_t::read_ini(document, &ok);
+	QString why;
+	bssh_preset_t imported = bssh_preset_t::read_ini(document, &ok, &why);
 
 	if (!ok) {
 		/*
@@ -2418,8 +2419,10 @@ void bssh_main_window::import_launch_document() {
 		 * app being broken, and the user picked this app on purpose.
 		 */
 		QMessageBox::warning(this, QStringLiteral("Not a preset"),
-		                      QStringLiteral("BeerSSH could not read a preset from "
-		                                      "that file."));
+		                      why.isEmpty()
+		                              ? QStringLiteral("BeerSSH could not read a preset "
+		                                                "from that file.")
+		                              : why);
 		return;
 	}
 

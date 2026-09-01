@@ -300,6 +300,60 @@ void preset_editor_test::an_import_never_claims_an_id_or_shipped_status() {
 	QVERIFY(!junk_ok);
 }
 
+void preset_editor_test::an_imported_preset_naming_an_unknown_feature_is_refused() {
+	QTemporaryDir dir;
+
+	/*
+	 * A preset that is otherwise perfectly well formed, with one letter
+	 * missing from a feature name.
+	 *
+	 * Silently falling back to the default features would be the worst
+	 * available answer: the preset would load, the host would connect,
+	 * and the terminal would be running a configuration nobody chose --
+	 * with a file on disk that says otherwise. Presets are files people
+	 * send each other, so the reader is not the one who made the typo.
+	 */
+	const QString bad = dir.filePath(QStringLiteral("typo.ini"));
+	{
+		QFile file(bad);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("[preset]\n"
+		           "name=Typo\n"
+		           "scrollback_lines=500\n"
+		           "term_features=sixl\n");
+	}
+
+	bool ok = true;
+	QString why;
+	bssh_preset_t::read_ini(bad, &ok, &why);
+
+	QVERIFY(!ok);
+
+	/* And with a reason, because "could not read that file" sends
+	 * somebody looking at the wrong end of a working file. */
+	QVERIFY(!why.isEmpty());
+	QVERIFY(why.contains(QStringLiteral("sixl")));
+
+	/* The spelling that IS a feature still imports, so this is a check
+	 * on the name rather than on the field being present at all. */
+	const QString good = dir.filePath(QStringLiteral("fine.ini"));
+	{
+		QFile file(good);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("[preset]\n"
+		           "name=Fine\n"
+		           "term_features=-sixel\n");
+	}
+
+	bool good_ok = false;
+	QString good_why = QStringLiteral("not cleared");
+	const bssh_preset_t fine = bssh_preset_t::read_ini(good, &good_ok, &good_why);
+
+	QVERIFY(good_ok);
+	QVERIFY(good_why.isEmpty());
+	QCOMPARE(fine.term_features, QStringLiteral("-sixel"));
+}
+
 void preset_editor_test::an_untouched_font_stays_unset_rather_than_being_pinned() {
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.path());

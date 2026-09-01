@@ -24,6 +24,7 @@ private slots:
 	void a_preset_round_trips_through_an_exported_file();
 	void an_exported_preset_names_nobodys_infrastructure();
 	void an_import_never_claims_an_id_or_shipped_status();
+	void an_imported_preset_naming_an_unknown_feature_is_refused();
 	void an_untouched_font_stays_unset_rather_than_being_pinned();
 	void a_file_url_is_read_as_a_file_rather_than_as_a_name();
 };

@@ -1,5 +1,7 @@
 #include "model/preset.h"
 
+#include "term/term_features.h"
+
 #include "model/document_path.h"
 #include <QTemporaryDir>
 #include <QSettings>
@@ -213,8 +215,10 @@ bool bssh_preset_t::write_ini(const QString &raw_path) const {
 	return destination.write(source.readAll()) >= 0;
 }
 
-bssh_preset_t bssh_preset_t::read_ini(const QString &raw_path, bool *ok) {
+bssh_preset_t bssh_preset_t::read_ini(const QString &raw_path, bool *ok,
+                                       QString *error) {
 	if (ok) *ok = false;
+	if (error) error->clear();
 
 	const QString path = bssh_normalise_document_path(raw_path);
 
@@ -288,6 +292,30 @@ bssh_preset_t bssh_preset_t::read_ini(const QString &raw_path, bool *ok) {
 	 */
 	preset.id = 0;
 	preset.is_builtin = false;
+
+	/*
+	 * The feature spec is checked HERE, at the one place a preset enters
+	 * from outside, and a bad name refuses the import rather than
+	 * silently dropping to the defaults.
+	 *
+	 * It is the odd field out: from_json() CLAMPS the numeric ones,
+	 * because a scrollback of two billion has an obvious nearest legal
+	 * value. A misspelled feature name has none -- "sixl" is not nearer
+	 * to sixel than to anything else -- so guessing would hand somebody a
+	 * preset describing a terminal they did not ask for.
+	 *
+	 * Which is exactly the hazard the command line refuses for the same
+	 * string, and for the same reason: caught at the edge, because past
+	 * it there is nobody to tell. bssh_session_t reads the field with an
+	 * error argument named `ignored`, and cannot do better -- a session
+	 * being built has no one to report to.
+	 */
+	QString feature_error;
+	bssh_term_features_t::from_spec(preset.term_features, feature_error);
+	if (!feature_error.isEmpty()) {
+		if (error) *error = feature_error;
+		return bssh_preset_t();
+	}
 
 	if (ok) *ok = true;
 	return preset;
