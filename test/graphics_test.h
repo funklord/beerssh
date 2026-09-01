@@ -16,6 +16,7 @@ class graphics_test : public QObject {
 
 private slots:
 	void a_declared_size_that_overflows_is_refused();
+	void a_resize_keeps_an_image_with_the_text_it_was_drawn_beside();
 	void a_frame_drawn_over_an_earlier_one_does_not_keep_it_alive();
 	void kitty_png_is_placed_at_the_cursor();
 	void kitty_raw_rgb_is_decoded();
@@ -25,7 +26,7 @@ private slots:
 	void sixel_is_decoded_by_libsixel();
 	void malformed_sixel_is_declined_not_guessed();
 	void images_follow_the_text_when_the_screen_scrolls();
-	void images_are_dropped_when_the_grid_shrinks();
+	void a_shrink_moves_an_image_with_its_row_rather_than_dropping_it();
 	void an_absurd_cell_footprint_is_refused_by_both_protocols();
 	void an_image_scrolled_off_the_top_survives_in_the_scrollback();
 	void the_memory_budget_drops_the_oldest_but_never_the_visible();

@@ -2236,6 +2236,42 @@ two paths were not two readers of a value but two ways for an image to become
 unreachable — scrolled away, which was handled, and drawn over, which was
 not.
 
+**There was a third way, and a test was pinning it shut.** A RESIZE pushes
+lines into the scrollback exactly as a scroll does — but libvterm reports
+that through `sb_pushline`, and only `moverect` reaches `on_moverect` and so
+`images.scrolled()`. So on a reflow the text moved and the images did not.
+Measured: shrinking a 10-row screen to 5 pushed five lines, `DDD` went from
+row 5 to row 0, and the image stayed at row 0 — five rows from the output it
+was drawn beside, sitting on top of whatever had taken its place.
+
+`bssh_emulator::resize` now measures how far the buffer moved — the
+scrollback count before and after — and shifts every placement by it.
+Measured rather than derived, because it is libvterm that decides how much a
+reflow pushes. `shift_rows` has no region where `scrolled()` has one, and
+that difference is the point: a scrolling REGION must not move what lies
+outside it, while a resize moves the whole buffer past the screen, so an
+image already at row −3 belongs at −8 after five more lines go by. A grow
+runs the same arithmetic backwards, since libvterm pops lines back off the
+scrollback.
+
+**`images_are_dropped_when_the_grid_shrinks` asserted the opposite, and its
+stated reason was false.** *"The row it sits on no longer exists. Holding it
+would leak."* The row does still exist — it MOVES. On that same fixture the
+text at row 7 arrives at row 2, still on the live screen, so the old
+behaviour dropped an image whose text was three rows further up. That is
+word for word the failure the test beside it documents for the scrolling
+path: *"a plot vanished as soon as one more line of output arrived, while
+the text it was drawn beside was still there to scroll back to."*
+
+It passed because the image genuinely was left behind, so dropping it was
+the only way to avoid a placement stranded on the wrong row. **The test
+pinned the workaround rather than the behaviour anybody wanted**, and the
+name said so out loud — which is the tell worth keeping: a test named for a
+mechanism rather than for a promise is describing what the code does, and
+the reason in its comment is then a rationalisation rather than a
+requirement. It now asserts against the TEXT, which is the thing an image is
+supposed to stay beside.
+
 **Where this lives in the code:** libvterm handles the sequences it knows
 and hands everything else to `vterm_screen_set_unrecognised_fallbacks`, its
 documented extension hook. Modes libvterm does not model (kitty flags,

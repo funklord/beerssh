@@ -85,6 +85,21 @@ public:
 	qint64 memory_used() const;
 
 	/* Dropped when the grid shrinks past them. */
+	/*
+	 * Every placement moves up by `lines`, including the ones already
+	 * above the fold. For a RESIZE, which pushes lines into the
+	 * scrollback the way a scroll does but reports it through
+	 * sb_pushline rather than moverect -- so scrolled() never hears
+	 * about it.
+	 *
+	 * Unlike scrolled() this has no region: a resize moves the whole
+	 * buffer past the screen, so an image already at row -3 is at -8
+	 * after five more lines go by. scrolled() deliberately leaves those
+	 * alone, because a scrolling REGION does not move what is outside
+	 * it.
+	 */
+	void shift_rows(int lines);
+
 	void trim_to(int rows);
 
 	const QList<bssh_image_placement_t> &placements() const { return m_placements; }

@@ -225,18 +225,53 @@ void graphics_test::an_absurd_cell_footprint_is_refused_by_both_protocols() {
 	QVERIFY2(iterm.rows <= 10000, qPrintable(QString::number(iterm.rows)));
 }
 
-void graphics_test::images_are_dropped_when_the_grid_shrinks() {
+void graphics_test::a_shrink_moves_an_image_with_its_row_rather_than_dropping_it() {
+	/*
+	 * This test used to assert the opposite, as
+	 * images_are_dropped_when_the_grid_shrinks, and its reason was "the
+	 * row it sits on no longer exists. Holding it would leak."
+	 *
+	 * The row does still exist; it MOVES. Measured on this fixture:
+	 * shrinking 10 rows to 4 pushes lines into the scrollback and the
+	 * text at row 7 arrives at row 2, still on the live screen. So the
+	 * old behaviour dropped an image whose text was sitting three rows
+	 * further up -- which is the failure the test below this one
+	 * documents for the scrolling path, in its own words: "a plot
+	 * vanished as soon as one more line of output arrived, while the text
+	 * it was drawn beside was still there to scroll back to".
+	 *
+	 * It passed because the image genuinely was left behind: nothing
+	 * moved placements on a resize, since libvterm reports a reflow
+	 * through sb_pushline and only moverect reaches images.scrolled().
+	 * Dropping the image was the only way to avoid a placement stranded
+	 * on the wrong row, so the test pinned the workaround rather than the
+	 * behaviour anybody wanted.
+	 *
+	 * Asserted against the TEXT, which is the thing the image is supposed
+	 * to stay beside.
+	 */
 	bssh_emulator emulator(40, 10);
 	emulator.set_cell_pixels(8, 16);
 
-	emulator.feed(QByteArrayLiteral("\x1b[8;1H"));
+	emulator.feed(QByteArrayLiteral("\x1b[8;1HMARKER"));
+	emulator.feed(QByteArrayLiteral("\x1b[8;10H"));
 	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100,c=2,r=1"),
 	                            png_of(16, 16, qRgb(0, 255, 255))));
-	QCOMPARE(emulator.images().count(), 1);
 
-	/* The row it sits on no longer exists. Holding it would leak. */
+	QCOMPARE(emulator.images().count(), 1);
+	QCOMPARE(emulator.images().placements().first().row, 7);
+
 	emulator.resize(40, 4);
-	QCOMPARE(emulator.images().count(), 0);
+
+	/* Find where the text went. */
+	int marker_row = -1;
+	for (int r = 0; r < 4 && marker_row < 0; ++r) {
+		if (emulator.screen().cell(r, 0).ch == U'M') marker_row = r;
+	}
+	QVERIFY2(marker_row >= 0, "the fixture lost its own marker, so it proves nothing");
+
+	QCOMPARE(emulator.images().count(), 1);
+	QCOMPARE(emulator.images().placements().first().row, marker_row);
 }
 
 void graphics_test::an_image_scrolled_off_the_top_survives_in_the_scrollback() {
@@ -421,6 +456,80 @@ void graphics_test::an_image_that_arrived_as_bytes_reaches_the_screen() {
 	QVERIFY2(after == QColor(Qt::red),
 	          qPrintable(QStringLiteral("an image that parsed was never drawn: the cell "
 	                                     "under the cursor is %1").arg(after.name())));
+}
+
+void graphics_test::a_resize_keeps_an_image_with_the_text_it_was_drawn_beside() {
+	/*
+	 * A shrink pushes lines into the scrollback exactly as a scroll
+	 * does -- but libvterm reports it through sb_pushline, and only
+	 * moverect reaches on_moverect and so images.scrolled(). So the text
+	 * moved and the images did not.
+	 *
+	 * Measured before the fix, on this fixture: shrinking 10 rows to 5
+	 * pushed five lines, the text moved up five, and the image stayed at
+	 * row 0 -- sitting on top of output from five rows later, five rows
+	 * from what it belonged to. That is the "terminal has come apart"
+	 * the scroll handling exists to prevent, arriving by the one route
+	 * that skipped it.
+	 *
+	 * Asserted in ABSOLUTE lines, which is the numbering the view scrolls
+	 * and selects in: a resize reflows the screen and must not move an
+	 * image relative to the CONTENT. Comparing rows instead would just
+	 * restate the arithmetic the fix performs.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+
+	QByteArray pixels;
+	for (int i = 0; i < 4; ++i) {
+		pixels.append(char(0xff));
+		pixels.append(char(0x00));
+		pixels.append(char(0x00));
+	}
+
+	emulator.feed(QByteArrayLiteral("TOP\r\n"));
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=24,s=2,v=2"), pixels));
+	emulator.feed(QByteArrayLiteral("\r\nAAA\r\nBBB\r\nCCC\r\nDDD\r\nEEE\r\nFFF\r\nGGG\r\n"));
+
+	QCOMPARE(emulator.images().count(), 1);
+
+	/*
+	 * base + count + row: how far down the whole session's output this
+	 * image sits. bssh_terminal_view names lines exactly this way.
+	 */
+	const auto absolute_line = [&emulator]() {
+		return emulator.scrollback().base() + emulator.scrollback().count()
+		        + emulator.images().placements().first().row;
+	};
+
+	const qint64 before = absolute_line();
+
+	const int lines_before = emulator.scrollback().count();
+
+	emulator.resize(40, 5);
+
+	/*
+	 * Checked on the SCROLLBACK rather than on the image: a guard that
+	 * asks whether the placement moved cannot tell "the fixture did not
+	 * reflow" from "the bug is present", and would report the wrong one.
+	 */
+	QVERIFY2(emulator.scrollback().count() > lines_before,
+	          "the fixture did not actually reflow, so this proves nothing");
+
+	QVERIFY2(emulator.images().count() == 1, "the resize dropped the image entirely");
+
+	QCOMPARE(absolute_line(), before);
+
+	/*
+	 * And back the other way: growing pops lines off the scrollback, so
+	 * the images come down with the text. The same invariant, run
+	 * backwards, which is what stops the fix being a one-directional
+	 * subtraction that happens to suit a shrink.
+	 */
+	emulator.resize(40, 12);
+
+	QCOMPARE(emulator.images().count(), 1);
+	QCOMPARE(absolute_line(), before);
 }
 
 void graphics_test::a_declared_size_that_overflows_is_refused() {

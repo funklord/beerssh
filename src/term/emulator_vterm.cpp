@@ -1667,8 +1667,26 @@ void bssh_emulator::resize(int cols, int rows) {
 	 */
 	vterm_screen_flush_damage(m_private->vts);
 
+	/*
+	 * How far the buffer moves past the screen, measured rather than
+	 * derived: a shrink pushes lines into the scrollback exactly as a
+	 * scroll does, but libvterm reports that through sb_pushline and
+	 * never emits the moverect that on_moverect turns into
+	 * images.scrolled(). So the text moved and the images did not --
+	 * an image drawn beside output five rows back sat on top of whatever
+	 * had taken its place, which is the "terminal has come apart" this
+	 * store's scroll handling exists to prevent.
+	 *
+	 * A grow runs the same arithmetic backwards: libvterm pops lines
+	 * back off the scrollback, the count falls, and the images come down
+	 * with the text.
+	 */
+	const int lines_before = m_private->scrollback.count();
+
 	vterm_set_size(m_private->vt, rows, cols);
 	m_private->screen.resize(cols, rows);
+
+	m_private->images.shift_rows(m_private->scrollback.count() - lines_before);
 
 	/*
 	 * Re-mirror everything: libvterm reflows on resize and does not

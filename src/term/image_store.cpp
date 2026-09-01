@@ -158,6 +158,17 @@ void bssh_image_store::enforce_budget() {
 	}
 }
 
+void bssh_image_store::shift_rows(int lines) {
+	if (lines == 0) return;
+
+	for (int i = 0; i < m_placements.size(); ++i) {
+		m_placements[i].row -= lines;
+	}
+
+	/* Some of them are above the fold now that were not. */
+	enforce_budget();
+}
+
 void bssh_image_store::trim_to(int rows) {
 	for (int i = m_placements.size() - 1; i >= 0; --i) {
 		if (m_placements.at(i).row >= rows) m_placements.removeAt(i);
