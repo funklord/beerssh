@@ -1223,12 +1223,61 @@ void bssh_libssh_worker::drain() {
 
 void bssh_libssh_worker::do_resize(int cols, int rows) {
 	if (!m_channel) return;
-	ssh_channel_change_pty_size(m_channel, cols, rows);
+
+	/*
+	 * A window-change the remote never hears leaves it drawing to the
+	 * old geometry, which is not a cosmetic fault: a full-screen program
+	 * wraps and clears against a size the terminal no longer has, and
+	 * the screen is garbage until something redraws it.
+	 *
+	 * SSH_ERROR here is the transport failing rather than the server
+	 * declining -- a window-change carries want_reply false and is not
+	 * answered -- so this is the same condition the read pump treats as
+	 * fatal, and it is treated the same way.
+	 */
+	if (ssh_channel_change_pty_size(m_channel, cols, rows) != SSH_OK) {
+		fail(session_error());
+	}
 }
 
 void bssh_libssh_worker::do_send(const QByteArray &bytes) {
 	if (!m_channel || bytes.isEmpty()) return;
-	ssh_channel_write(m_channel, bytes.constData(), bytes.size());
+
+	/*
+	 * These are the user's keystrokes and pastes, and the result was
+	 * thrown away -- so a write that failed took the input with it and
+	 * said nothing, leaving a terminal that looks alive and swallows
+	 * everything typed into it.
+	 *
+	 * Looped over the count rather than called once, which is what
+	 * bssh_jump_tunnel::write_to_channel already does ten files away.
+	 * This channel is blocking, so libssh writes everything or returns
+	 * SSH_ERROR and the loop turns once -- but a partial write silently
+	 * losing the tail is the failure being prevented, and a loop that
+	 * cannot be wrong is cheaper than a comment asserting it cannot
+	 * happen.
+	 *
+	 * No SSH_AGAIN case, unlike the tunnel: that value belongs to a
+	 * non-blocking session and this one is never set non-blocking. A
+	 * zero return is still refused rather than retried, because nothing
+	 * would make the next attempt differ and spinning is the worse way
+	 * to fail.
+	 */
+	qsizetype written = 0;
+	while (written < bytes.size()) {
+		const int n = ssh_channel_write(m_channel, bytes.constData() + written,
+		                                 uint32_t(bytes.size() - written));
+		if (n == SSH_ERROR) {
+			fail(session_error());
+			return;
+		}
+		if (n <= 0) {
+			fail(QStringLiteral("the connection accepted none of %1 byte(s) sent")
+			             .arg(bytes.size() - written));
+			return;
+		}
+		written += n;
+	}
 }
 
 void bssh_libssh_worker::do_disconnect() {
