@@ -5796,12 +5796,34 @@ The desktop build is what makes this project testable at all — use it.
   certainly no longer gating it. An expired hold is reported and then ignored,
   never dropped quietly; and "cannot say" does not override a hold, so if the
   directory is not a repository the hold stands.
-  **It closes the spread road, not every road.** Nothing blocks an ordinary
-  commit, so a session working directly in the tree can still move HEAD under
-  a run. Whether that earns a `pre-commit` hook is open and is a question for
-  a deliberate pass, not for whichever session is currently paying the
-  thirteen minutes: it would block every other writer for the length of a
-  gate, and the party proposing it is the one who benefits.
+  **It closed the spread road, not every road, and the rest is closed now.**
+  The hold blocks a spread; nothing blocked an ordinary commit, so a session
+  working directly in the tree could still move HEAD under a run. That was
+  left to a deliberate pass rather than to whichever session was paying the
+  thirteen minutes, since it blocks every other writer for the length of a
+  gate and the party proposing it is the one who benefits.
+
+  **Decided by the copyright holder 2026-09-01 and built.** `check-ci.sh`
+  writes `.git/check-ci-running` -- gated commit, pid, start time -- and
+  removes it in the trap it already had; `tool/hooks/pre-commit` refuses
+  while that file names a live pid, printing what is gated and for how long.
+  `--no-verify` is the escape, a dead pid makes it inert and clears it, and
+  a garbled marker never blocks. All six behaviours are covered by a
+  sabotage each, because a hook that has not been seen to refuse is not
+  known to work.
+
+  **What decided it was one more measurement rather than the argument.**
+  2026-09-01, three runs in an evening with another session working here:
+  the middle one earned a receipt for `204a3ac` that was stale before it
+  could be used, because `663eeb9` landed while the container was still
+  compiling. The run was not wrong, it was wasted -- and that is the fourth
+  such hour.
+
+  **It is machine-local, and that is a stated limit rather than a
+  footnote.** `.git` is not shared, so this says nothing to a session on
+  another computer, and this project is worked from more than one. Those
+  writers are kept in step by fetching and pushing often, which is the only
+  channel that crosses machines.
   **Keep the two apart while deciding.** The receipt that refuses is the
   safety property; closing the window is only a convenience. Every one of the
   six refusals cost container minutes and none of them risked a bad push.

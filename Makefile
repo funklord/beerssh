@@ -1106,4 +1106,5 @@ hooks:
 	@test -d .git || { echo "hooks: not a git repository" >&2; exit 1; }
 	@install -m 0755 tool/hooks/commit-msg .git/hooks/commit-msg
 	@install -m 0755 tool/hooks/pre-push .git/hooks/pre-push
-	@echo "hooks: commit-msg and pre-push installed from tool/hooks/"
+	@install -m 0755 tool/hooks/pre-commit .git/hooks/pre-commit
+	@echo "hooks: commit-msg, pre-commit and pre-push installed from tool/hooks/"

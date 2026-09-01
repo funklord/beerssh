@@ -93,7 +93,8 @@ CONTAINER=bssh-check-ci-$$
 # `docker kill` on an already-exited container returns non-zero, so the
 # status is discarded: under `set -e` a failing trap command should not
 # get to decide this script's exit code.
-trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT
+MARKER="$(git rev-parse --git-dir)/check-ci-running"
+trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"; rm -f "$MARKER"' EXIT
 # INT and TERM only exit; `exit` runs the EXIT trap above, so the
 # cleanup lives in exactly one place.
 trap 'exit 130' INT TERM
@@ -126,6 +127,19 @@ trap 'exit 130' INT TERM
 # had never been inside it. The pre-push hook would then have passed it as
 # verified. One resolution, used twice.
 STAGED=$(git rev-parse HEAD)
+
+# Tell any other session in this clone that a build is in flight, so its
+# pre-commit hook can refuse rather than silently invalidating the receipt
+# this run is about to write. commit, pid, epoch seconds; removed by the
+# EXIT trap above, and ignored by the hook once the pid is gone, so a
+# killed run cannot wedge the tree.
+#
+# In .git for the same reason the receipt is: it describes THIS clone on
+# THIS machine and must never be committed or survive one. It follows that
+# it says nothing to a session on another computer -- those are kept in
+# step by fetching and pushing often, which is the only channel that
+# crosses machines.
+printf '%s %s %s\n' "$STAGED" "$$" "$(date +%s)" > "$MARKER"
 
 git archive --format=tar HEAD > "$STAGE/src.tar"
 

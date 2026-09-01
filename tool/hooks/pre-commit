@@ -1,0 +1,68 @@
+#!/bin/sh
+# Refuse to commit while check-ci is gating a build (project.md sec 12.4).
+#
+# beerssh's own, for the same reasons as pre-push beside it: what it guards
+# is this project's script, and a hook that exists only in .git/hooks
+# enforces a rule nobody can see, does not survive a clone and cannot be
+# diffed. `make hooks` installs it.
+#
+# WHAT IT IS FOR. check-ci builds from `git archive HEAD` and writes a
+# receipt naming that commit; pre-push refuses anything the receipt does
+# not cover. The receipt is therefore only as good as HEAD staying still
+# for the ten to fifteen minutes the container runs, and a second session
+# committing in this tree meanwhile invalidates a build that has already
+# been paid for. Measured here 2026-09-01: three runs in one evening, and
+# the middle one earned a receipt for 204a3ac that was stale before it
+# could be used, because another session committed 663eeb9 while the
+# container was still compiling. The run was not wrong, it was wasted.
+#
+# WHY A FILE AND NOT A MESSAGE. A hold relayed between sessions binds
+# whoever is thinking about this tree, and the writer who breaks it is by
+# construction the one whose attention is elsewhere -- it happened here on
+# 2026-08-27, when the session enforcing a commit hold spread a one-hunk
+# fragment to four trees and put ddc24ed into this one, in good faith,
+# while working on something else. Enumerating peers does not help when the
+# writer is not an unknown peer but the holder. Only something resident in
+# the tree, that nobody has to remember at the moment of writing, is in the
+# right place to refuse.
+#
+# WHAT IT IS NOT. This is a convenience and should be argued as one. The
+# receipt that pre-push checks is the safety property, and it was never in
+# doubt: every refusal it has made was the gate working. What this saves is
+# container minutes and a second run, not a bad push.
+#
+# It is also MACHINE-LOCAL, and that is a real limit rather than a detail:
+# .git is not shared, so this says nothing to a session on another
+# computer. Those are coordinated by fetching and pushing often, which is
+# the only channel that crosses machines. See build-and-commit.md.
+#
+# Self-limiting: a marker whose pid is gone is ignored and removed, so a
+# killed run cannot wedge the tree. Bypass with `git commit --no-verify`,
+# which is at least a decision rather than an accident.
+
+set -eu
+
+marker="$(git rev-parse --git-dir)/check-ci-running"
+[ -f "$marker" ] || exit 0
+
+# commit, pid, epoch seconds -- written by tool/check-ci.sh
+read -r gated pid started < "$marker" || exit 0
+
+if ! kill -0 "$pid" 2>/dev/null; then
+	# The run is gone: its trap did not fire, which a kill -9 or a
+	# power cut will do. Stale by definition, so clear it and continue
+	# rather than blocking on a process that cannot finish.
+	rm -f "$marker"
+	exit 0
+fi
+
+now=$(date +%s)
+elapsed=$(( now - started ))
+
+short=$(printf '%.7s' "$gated")
+echo "pre-commit: refusing -- check-ci is building $short" >&2
+echo "pre-commit:   pid $pid, running ${elapsed}s. It builds from git archive" >&2
+echo "pre-commit:   HEAD, so a commit now invalidates the receipt it is about" >&2
+echo "pre-commit:   to write and the run has to be paid for again." >&2
+echo "pre-commit:   Wait for it, or commit with --no-verify if you mean to." >&2
+exit 1
