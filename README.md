@@ -275,6 +275,27 @@ make shots    # render every screen to PNG, because looking at it is the test
 make deb      # Debian packages, built with debhelper from VERSION
 make bench    # emulator throughput in MB/s; not a gate, run it on an idle box
 ```
+Or with [fmake](../fmake), which needs no build file and nothing beyond the
+Python standard library:
+
+```sh
+fmake         # ./beerssh, same sources
+```
+
+**Run `make` first, or at least its vterm step.** fmake compiles the
+submodule from source and the patches in `vterm-patch/` are not committed
+into it, so a tree where they have not been applied fails on
+`VTERM_PROP_RESET` — which is §7.1 working as designed rather than a
+problem with either build.
+
+`fmake.toml` says the three things fmake cannot read off the tree: the
+version, from `VERSION` rather than written a third time; `vterm/include`,
+which qmake carries as `INCLUDEPATH` and without which every
+`bssh_emulator` method is missing at the link; and that the Android
+translation units, the Android dependency trees and `build-*` are not part
+of a desktop build. `make` remains the interface — fmake builds the
+program and none of the gates, the APK or the packaging.
+
 
 `make` wraps qmake, which does the actual Qt build in `build/`; everything
 else in the tree is a plain Makefile. `make help` lists the targets.

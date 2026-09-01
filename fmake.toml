@@ -1,0 +1,28 @@
+[project]
+# The version qmake passes as BSSH_VERSION_STRING, read from the file it
+# and debian/changelog already agree about rather than written a third time.
+defines = ['BSSH_VERSION_STRING="$file(VERSION)"']
+
+# The vendored libvterm's public header. qmake carries the same path as
+# INCLUDEPATH; without it src/term/emulator_vterm.cpp does not compile and
+# every bssh_emulator method is missing at the link.
+include-dirs = ["vterm/include"]
+
+# Android-only translation units. qmake scopes them out with `android { }`;
+# on a desktop build they reach for QJniEnvironment, which is not there.
+exclude = [
+  "src/platform/secret_store_keystore.cpp",
+  "src/platform/platform_android.cpp",
+  # The Android dependency trees: two prebuilt libcrypto.a for the same
+  # ABI, plus OpenSSL's own source and test programs beside them. Nothing
+  # tracked lives under either, and on a desktop build they are two
+  # definitions of every OpenSSL symbol and a few hundred targets nobody
+  # asked for.
+  "deps",
+  "build-deps-android",
+  # qmake's own output, which holds a moc_*.cpp for every class fmake also
+  # mocs. `build-*` rather than naming each: qmake writes one directory per
+  # configuration and a list of them goes stale the next time somebody
+  # builds for a new target. Nothing tracked lives under any of them.
+  "build-*",
+]
