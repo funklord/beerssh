@@ -105,6 +105,8 @@ public:
 
 private:
 	void on_readable();
+	void on_writable();
+	void flush_pending();
 	void reap();
 
 	QString m_shell;
@@ -115,6 +117,26 @@ private:
 	int m_master;
 	qint64 m_child;
 	QSocketNotifier *m_notifier;
+
+	/*
+	 * What send() could not hand to the kernel yet, and the notifier that
+	 * says when there is room for more.
+	 *
+	 * The master is O_NONBLOCK, so a full pty answers EAGAIN. send() used
+	 * to sit in a usleep loop until it drained -- ON THE UI THREAD, which
+	 * this file forbids a few hundred lines up for exactly this reason:
+	 * "Never an unbounded waitpid. This runs on the UI thread ... would
+	 * otherwise hang the window."
+	 *
+	 * Measured: with the slave in RAW mode and nothing reading it -- what
+	 * any full-screen program does to its pty -- 15,360 bytes of a 1 MB
+	 * paste reach the buffer and the loop is still spinning 3,500ms
+	 * later. In canonical mode it completes, because the line discipline
+	 * discards on overflow; so the case that hangs is the one a TUI is
+	 * always in.
+	 */
+	QByteArray m_pending;
+	QSocketNotifier *m_write_notifier;
 };
 
 #endif /* BSSH_PTY_SESSION_H */

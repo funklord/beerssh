@@ -21,6 +21,7 @@ private slots:
 	void a_command_runs_instead_of_the_shell();
 	void a_command_starts_where_it_was_told_to();
 	void a_command_that_cannot_be_run_says_so();
+	void a_big_send_does_not_block_the_ui_thread();
 	void a_local_profile_is_valid_without_a_host();
 };
 

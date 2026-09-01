@@ -1228,6 +1228,35 @@ model on a finger.
   test and an entry would report MISSED for ever. Recorded rather than left
   as a silent absence, which is the same call as the wheel guard's exclusion
   and the XTGETTCAP consume.
+  **The audit found the READ side and the write side had the same hazard.**
+  That third lie — "a blocking read on a master reads as a hang" — was
+  guarded by making the master `O_NONBLOCK`. But only a READ notifier was
+  ever installed, so nothing said when there was room to WRITE, and `send()`
+  answered `EAGAIN` with `usleep(1000)` in a loop with no bound, on the UI
+  thread. The file forbids exactly this a few hundred lines up, in the
+  comment on `collect()`: *"Never an unbounded waitpid. This runs on the UI
+  thread ... would otherwise hang the window, or the entire test suite."*
+  The rule was stated, obeyed where it was written, and broken in the
+  neighbouring function.
+  **The first probe said there was no bug**, and stopping there would have
+  been wrong. Writing 1 MB to a pty whose slave is unread in CANONICAL mode
+  completes in 114 spins, because the line discipline discards on overflow.
+  In RAW mode — what every full-screen program sets — 15,360 bytes land and
+  the loop is still spinning 3,500ms later. **The configuration that hides it
+  is a bare shell and the configuration that hangs is a TUI**, which is the
+  wrong way round for anything found by trying it once.
+  It is a deadlock rather than a slow write: spinning on the UI thread means
+  output is not drained either, so a child echoing back fills the master's
+  read buffer, stops reading its own stdin, and the pty never empties.
+  Confirmed by sabotage under an external `timeout -s KILL 40` — the old loop
+  is killed at 40s where the fix passes in under one. **Run once, outside the
+  suite**: putting a known-unbounded loop into `make check` is the thing
+  `running-code.md` exists to prevent, so the suite gets the positive test and
+  the negative evidence is taken separately.
+  The fix queues what will not fit and installs a write notifier, disabled
+  unless something is pending — an always-on one fires continuously while the
+  pty has room. Nothing is dropped, which was the old comment's stated
+  concern and the reason it was spinning in the first place.
 
 - **Two menus on the touch front door were half the size a finger needs**, and
   only a real phone showed it. Measured on a Galaxy Note 9 at 420dpi

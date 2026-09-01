@@ -109,7 +109,8 @@ bssh_pty_session::bssh_pty_session(QObject *parent)
     : bssh_ssh_session(parent),
       m_master(-1),
       m_child(-1),
-      m_notifier(nullptr) {
+      m_notifier(nullptr),
+      m_write_notifier(nullptr) {
 }
 
 bssh_pty_session::~bssh_pty_session() {
@@ -301,6 +302,15 @@ void bssh_pty_session::open_shell(int cols, int rows) {
 
 	m_notifier = new QSocketNotifier(m_master, QSocketNotifier::Read, this);
 	connect(m_notifier, &QSocketNotifier::activated, this, [this] { on_readable(); });
+
+	/*
+	 * Disabled until there is something waiting: an always-on write
+	 * notifier fires continuously while the pty has room, which is
+	 * almost always.
+	 */
+	m_write_notifier = new QSocketNotifier(m_master, QSocketNotifier::Write, this);
+	m_write_notifier->setEnabled(false);
+	connect(m_write_notifier, &QSocketNotifier::activated, this, [this] { on_writable(); });
 }
 
 void bssh_pty_session::on_readable() {
@@ -334,6 +344,14 @@ void bssh_pty_session::reap() {
 		m_notifier = nullptr;
 	}
 
+	/* Goes with the descriptor it watches, and so does what it was for. */
+	if (m_write_notifier) {
+		m_write_notifier->setEnabled(false);
+		m_write_notifier->deleteLater();
+		m_write_notifier = nullptr;
+	}
+	m_pending.clear();
+
 	if (m_master >= 0) {
 		::close(m_master);
 		m_master = -1;
@@ -365,31 +383,64 @@ void bssh_pty_session::resize(int cols, int rows) {
 	::ioctl(m_master, TIOCSWINSZ, &size);
 }
 
-void bssh_pty_session::send(const QByteArray &bytes) {
-	if (m_master < 0 || bytes.isEmpty()) return;
-
-	qint64 written = 0;
-	while (written < bytes.size()) {
-		const ssize_t put = ::write(m_master, bytes.constData() + written,
-		                             size_t(bytes.size() - written));
+/*
+ * Hands the kernel as much as it will take right now, and says whether
+ * anything is left over.
+ *
+ * Never waits. A full pty answers EAGAIN on this non-blocking master, and
+ * what cannot go now goes when the notifier says there is room.
+ */
+void bssh_pty_session::flush_pending() {
+	while (!m_pending.isEmpty() && m_master >= 0) {
+		const ssize_t put = ::write(m_master, m_pending.constData(),
+		                             size_t(m_pending.size()));
 		if (put > 0) {
-			written += put;
+			m_pending.remove(0, int(put));
 			continue;
 		}
 		if (put < 0 && errno == EINTR) continue;
 
 		/*
-		 * A full pty buffer is the one case worth not dropping on the
-		 * floor: a paste larger than the kernel's buffer would
-		 * otherwise arrive truncated, which is silent and looks like
-		 * the remote losing input.
+		 * Full. Not an error and not a reason to drop anything: leave
+		 * the remainder queued and let on_writable() carry on when the
+		 * child reads.
 		 */
-		if (put < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-			::usleep(1000);
-			continue;
-		}
+		if (put < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) break;
+
+		/* A real write error: the pty is going or gone. */
+		m_pending.clear();
 		break;
 	}
+
+	if (m_write_notifier) m_write_notifier->setEnabled(!m_pending.isEmpty());
+}
+
+void bssh_pty_session::on_writable() {
+	flush_pending();
+}
+
+void bssh_pty_session::send(const QByteArray &bytes) {
+	if (m_master < 0 || bytes.isEmpty()) return;
+
+	/*
+	 * QUEUED, then flushed as far as it goes. This used to loop on
+	 * EAGAIN with a usleep, which is an unbounded wait on the UI thread
+	 * -- the thing collect() is carefully written not to do, for the
+	 * reason stated there: it hangs the window.
+	 *
+	 * A paste bigger than the pty buffer is enough to reach it, and only
+	 * needs the child not to be reading: measured, 15,360 bytes of a 1 MB
+	 * paste land and the loop is still going 3,500ms later with the slave
+	 * in raw mode. Canonical mode hides it, because the line discipline
+	 * discards instead of filling -- so the configuration that hangs is
+	 * the one every full-screen program sets.
+	 *
+	 * Nothing is dropped, which was the old comment's concern and is
+	 * still right: the remainder waits for room rather than being
+	 * truncated.
+	 */
+	m_pending.append(bytes);
+	flush_pending();
 }
 
 void bssh_pty_session::disconnect_from_host() {

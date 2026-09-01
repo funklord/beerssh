@@ -192,6 +192,69 @@ void pty_session_test::a_command_that_cannot_be_run_says_so() {
 	QCOMPARE(exited.first().at(0).toInt(), 127);
 }
 
+void pty_session_test::a_big_send_does_not_block_the_ui_thread() {
+	/*
+	 * send() used to loop on EAGAIN with a usleep and no bound, on the UI
+	 * thread -- the thing collect() a few hundred lines up is carefully
+	 * written NOT to do, and for the reason stated there: "This runs on
+	 * the UI thread ... would otherwise hang the window."
+	 *
+	 * The master is O_NONBLOCK and only a READ notifier existed, so
+	 * nothing ever said when there was room to write and spinning was the
+	 * only recourse. Measured with a standalone probe: with the slave in
+	 * RAW mode and nothing draining it, 15,360 bytes of a 1 MB write land
+	 * and the loop is still going 3,500ms later. In CANONICAL mode it
+	 * completes, because the line discipline discards on overflow -- so
+	 * the configuration that hangs is the one every full-screen program
+	 * puts its pty into, and the one that hides it is a bare shell.
+	 *
+	 * Two things are asserted, because either alone is satisfiable by a
+	 * broken implementation: send() RETURNS, and everything it was given
+	 * still arrives. Dropping the overflow would pass the first; the old
+	 * spin would eventually pass the second.
+	 */
+	bssh_pty_session session;
+	session.set_command(QStringList(QStringLiteral("/bin/cat")));
+
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(80, 24);
+
+	/*
+	 * Comfortably past any pty buffer, in lines short enough that the
+	 * canonical line discipline is not the thing under test.
+	 */
+	QByteArray payload;
+	for (int i = 0; i < 4000; ++i) {
+		payload.append(QByteArrayLiteral("filler-line-of-some-length\n"));
+	}
+	payload.append(QByteArrayLiteral("bssh-tail-marker\n"));
+
+	QElapsedTimer timer;
+	timer.start();
+	session.send(payload);
+	const qint64 elapsed = timer.elapsed();
+
+	/*
+	 * Returns rather than waiting for the child. Generous, because this
+	 * is asserting "does not sit in a retry loop" and not a latency
+	 * budget -- the old code was still spinning after seconds.
+	 */
+	QVERIFY2(elapsed < 1000,
+	          qPrintable(QStringLiteral("send() took %1ms, which is a wait, not a hand-off")
+	                             .arg(elapsed)));
+
+	/*
+	 * And the TAIL comes back, which it can only do if the remainder that
+	 * did not fit was flushed later from the write notifier.
+	 */
+	QByteArray seen;
+	QVERIFY2(wait_for_output(&session, QByteArrayLiteral("bssh-tail-marker"), &seen),
+	          qPrintable(QStringLiteral("the queued remainder never reached the child; "
+	                                     "saw %1 bytes").arg(seen.size())));
+
+	session.disconnect_from_host();
+}
+
 void pty_session_test::a_local_profile_is_valid_without_a_host() {
 	/*
 	 * is_valid() gates whether anything will open a profile at all, and
