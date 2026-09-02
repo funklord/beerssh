@@ -1629,10 +1629,29 @@ void bssh_terminal_view::set_long_press_menu(bool enabled) {
 }
 
 void bssh_terminal_view::select_all() {
+	/*
+	 * From the BASE, not from zero.
+	 *
+	 * Line names carry history_base() everywhere else in this file --
+	 * line_for_row builds them with it, cell_for_line and
+	 * line_is_continuation subtract it -- because once the ring evicts, a
+	 * name below the base does not describe anything. This function named
+	 * 0 .. count+rows-1 and so selected a window that begins below the
+	 * base and ends before the live screen: the front resolves to blanks
+	 * and what the user is actually looking at falls outside the
+	 * selection.
+	 *
+	 * Measured on an eight-line ring with sixty lines fed through it:
+	 * Select All then Copy produced twelve characters and none of the
+	 * screen. The painting agrees with the anchors, so it looks right and
+	 * only the clipboard disagrees -- which is word for word how the
+	 * defect that introduced base() behaved.
+	 */
+	const qint64 base = history_base();
 	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
-	const qint64 last_line = history + qMax(0, m_rows - 1);
+	const qint64 last_line = base + history + qMax(0, m_rows - 1);
 
-	m_selection_anchor_line = 0;
+	m_selection_anchor_line = base;
 	m_selection_anchor_col = 0;
 	m_selection_focus_line = last_line;
 	m_selection_focus_col = qMax(0, m_cols - 1);

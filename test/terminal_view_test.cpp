@@ -1740,6 +1740,53 @@ void terminal_view_test::a_wrapped_line_stays_one_line_after_it_scrolls_away() {
 	          qPrintable(text.left(200)));
 }
 
+void terminal_view_test::select_all_still_reaches_the_screen_once_the_ring_evicts() {
+	/*
+	 * select_all() named its lines 0 .. count+rows-1, with no
+	 * history_base(). Every other producer and consumer of a line name in
+	 * this file carries the base -- line_for_row, cell_for_line,
+	 * line_is_continuation -- because a name without it stops meaning
+	 * anything the moment the ring evicts.
+	 *
+	 * So once more lines have scrolled off than the ring holds, Select
+	 * All selects a window of names that begins below the base: the
+	 * evicted end resolves to blanks and the live screen falls outside
+	 * the selection entirely. The painting agrees with the anchors, so it
+	 * looks right and only the clipboard disagrees -- which is word for
+	 * word how the original base() defect behaved.
+	 *
+	 * The test beside this one feeds twenty lines into a five-thousand
+	 * line ring, so its base is zero and it cannot see any of this.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	emulator.set_scrollback_lines(8);
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < 60; ++i) {
+		emulator.feed(QByteArrayLiteral("line") + QByteArray::number(i)
+		               + QByteArrayLiteral("\r\n"));
+	}
+	emulator.feed(QByteArrayLiteral("ON-SCREEN-MARKER"));
+
+	QVERIFY2(emulator.scrollback().base() > 0,
+	          "the ring must have evicted for this to mean anything");
+
+	view.select_all();
+	QVERIFY(view.has_selection());
+
+	const QString text = view.selection_text();
+
+	/* What the user is looking at has to be in what they just selected. */
+	QVERIFY2(text.contains(QStringLiteral("ON-SCREEN-MARKER")),
+	          qPrintable(QStringLiteral("select all missed the live screen; got %1 chars: %2")
+	                             .arg(text.size()).arg(text.left(120))));
+}
+
 void terminal_view_test::select_all_reaches_the_scrollback_and_the_screen() {
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 96);
