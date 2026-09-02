@@ -1771,12 +1771,30 @@ void bssh_emulator::resize(int cols, int rows) {
 	 * back off the scrollback, the count falls, and the images come down
 	 * with the text.
 	 */
-	const int lines_before = m_private->scrollback.count();
+	/*
+	 * base() + count(), not count() alone.
+	 *
+	 * count() SATURATES: push() appends and then evicts from the front
+	 * once the ring is at its cap, so a full scrollback answers a
+	 * five-line push with the count unchanged and the base up by five.
+	 * Measured on a ring of eight: the delta was zero, the images stayed
+	 * put, and the text moved out from under them -- the very fault this
+	 * shift was added to fix, surviving in the state a long session is
+	 * always in.
+	 *
+	 * The sum is what advances, and it is the same quantity the absolute
+	 * line numbering is built from, which is why the invariant the test
+	 * asserts is stated in those terms.
+	 */
+	const qint64 passed_before =
+	        m_private->scrollback.base() + m_private->scrollback.count();
 
 	vterm_set_size(m_private->vt, rows, cols);
 	m_private->screen.resize(cols, rows);
 
-	m_private->images.shift_rows(m_private->scrollback.count() - lines_before);
+	const qint64 passed_after =
+	        m_private->scrollback.base() + m_private->scrollback.count();
+	m_private->images.shift_rows(int(passed_after - passed_before));
 
 	/*
 	 * Re-mirror everything: libvterm reflows on resize and does not

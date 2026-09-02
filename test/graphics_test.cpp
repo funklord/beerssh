@@ -458,6 +458,60 @@ void graphics_test::an_image_that_arrived_as_bytes_reaches_the_screen() {
 	                                     "under the cursor is %1").arg(after.name())));
 }
 
+void graphics_test::a_resize_moves_images_even_when_the_ring_is_full() {
+	/*
+	 * The same invariant as the test below, with the scrollback FULL --
+	 * which is the normal state of a long session and the case the first
+	 * version of the fix could not see.
+	 *
+	 * That fix measured how far the buffer moved as the change in
+	 * scrollback COUNT. push() appends and then evicts from the front
+	 * once the ring is at its cap, so a full ring answers a five-line
+	 * push with count unchanged and base up by five: the delta is zero
+	 * and the images do not move, while the text does.
+	 *
+	 * base() + count() is what actually advances, and it is what the
+	 * absolute line numbering is built from.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+	emulator.set_scrollback_lines(8);
+
+	QByteArray pixels;
+	for (int i = 0; i < 4; ++i) {
+		pixels.append(char(0xff));
+		pixels.append(char(0x00));
+		pixels.append(char(0x00));
+	}
+
+	/* Fill the ring well past its cap, so evictions are happening. */
+	for (int i = 0; i < 40; ++i) {
+		emulator.feed(QByteArrayLiteral("filler\r\n"));
+	}
+	QCOMPARE(emulator.scrollback().count(), 8);
+	QVERIFY2(emulator.scrollback().base() > 0, "the ring must be evicting for this to mean anything");
+
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=24,s=2,v=2"), pixels));
+	emulator.feed(QByteArrayLiteral("\r\nAAA\r\nBBB\r\n"));
+
+	QCOMPARE(emulator.images().count(), 1);
+
+	const auto absolute_line = [&emulator]() {
+		return emulator.scrollback().base() + emulator.scrollback().count()
+		        + emulator.images().placements().first().row;
+	};
+
+	const qint64 before = absolute_line();
+	const qint64 pushed_before = emulator.scrollback().base() + emulator.scrollback().count();
+
+	emulator.resize(40, 5);
+
+	QVERIFY2(emulator.scrollback().base() + emulator.scrollback().count() > pushed_before,
+	          "the fixture did not actually push any lines, so this proves nothing");
+
+	QCOMPARE(absolute_line(), before);
+}
+
 void graphics_test::a_resize_keeps_an_image_with_the_text_it_was_drawn_beside() {
 	/*
 	 * A shrink pushes lines into the scrollback exactly as a scroll
