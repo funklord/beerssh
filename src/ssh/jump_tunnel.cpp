@@ -118,6 +118,18 @@ int bssh_jump_tunnel::open(const hop_t &hop, const QString &target_host, quint16
 	const QByteArray known_utf8 = known_hosts.toUtf8();
 	int port_value = hop.port;
 
+	/*
+	 * The same ceiling the target session gets. This connect is blocking
+	 * too -- ssh_set_blocking(0) comes later, after the channel is up --
+	 * and it runs before the pump does, so an unreachable bastion held
+	 * the thread here with nothing bounding it. bssh_jump_tunnel::close()
+	 * waits five seconds for this thread and then deliberately abandons
+	 * the session rather than kill it, so an unbounded connect turns that
+	 * documented five-second cost into a leaked thread every time.
+	 */
+	long timeout_s = 10;
+	ssh_options_set(m_session, SSH_OPTIONS_TIMEOUT, &timeout_s);
+
 	ssh_options_set(m_session, SSH_OPTIONS_HOST, host_utf8.constData());
 	ssh_options_set(m_session, SSH_OPTIONS_PORT, &port_value);
 	if (!user_utf8.isEmpty()) ssh_options_set(m_session, SSH_OPTIONS_USER, user_utf8.constData());

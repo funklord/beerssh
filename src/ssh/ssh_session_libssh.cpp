@@ -547,6 +547,32 @@ bssh_host_key_verdict_t bssh_host_key_verdict(int known_hosts_result) {
 	return BSSH_HOST_KEY_UNVERIFIED;
 }
 
+/*
+ * How long any BLOCKING libssh call may take before it gives up.
+ *
+ * Nothing set this, so the ceiling was libssh's own: about ten seconds
+ * for ssh_connect, and for a blocking session established afterwards,
+ * SSH_TIMEOUT_DEFAULT resolves to no limit at all. That reaches the GUI
+ * thread. The facade's destructor asks the worker to disconnect over a
+ * BlockingQueuedConnection, which waits on the worker's EVENT LOOP -- and
+ * that loop is not running while the worker sits inside libssh. So
+ * closing a tab that is still connecting, or still authenticating,
+ * freezes the window for as long as the call takes.
+ *
+ * That is the symptom the worker thread exists to prevent, in this
+ * class's own words: "a UI that freezes for the length of a TCP handshake
+ * to an unreachable host is a UI that looks crashed -- which on Android
+ * is also a UI the system may kill for not responding."
+ *
+ * Ten seconds, which is what libssh already applies to a connect. The
+ * point is not to shorten that -- it is that every OTHER blocking call
+ * now has the same ceiling instead of none, and that the number is this
+ * program's to choose rather than the library's to assume. Lower would
+ * start refusing slow key exchanges on a loaded server, which is a
+ * working connection turned into a failed one.
+ */
+const long BSSH_SSH_TIMEOUT_S = 10;
+
 bool bssh_libssh_worker::set_option(int option, const void *value, const char *what) {
 	if (ssh_options_set(m_session, ssh_options_e(option), value) == SSH_OK) return true;
 
@@ -845,6 +871,16 @@ void bssh_libssh_worker::do_connect(const QString &host, quint16 port, const QSt
 	const QByteArray user_utf8 = user.toUtf8();
 	const QByteArray known_utf8 = primary_known_hosts_path().toUtf8();
 	int port_value = port;
+
+	/*
+	 * Not routed through set_option(), following the split that function
+	 * documents: it is loud for options deciding WHAT the connection is,
+	 * and quiet for ones deciding how it behaves. A timeout is the
+	 * second kind -- losing it does not reach a different machine or
+	 * check a different key store.
+	 */
+	long timeout_s = BSSH_SSH_TIMEOUT_S;
+	ssh_options_set(m_session, SSH_OPTIONS_TIMEOUT, &timeout_s);
 
 	if (!set_option(SSH_OPTIONS_HOST, host_utf8.constData(), "the host") ||
 	     !set_option(SSH_OPTIONS_PORT, &port_value, "the port") ||
