@@ -1,0 +1,24 @@
+# Sabotage for how a pane drag REACHES the window, which is a lifetime
+# question rather than a behavioural one.
+#
+# The view emits pane_drag_requested from its own mouseMoveEvent, and what
+# that reaches runs QDrag::exec() -- a nested event loop that does not
+# return until the pointer is released. Whatever happens to the panes
+# meanwhile comes back through rebuild(), which qDeleteAll()s the views.
+# Delivered directly, that destroys the view whose handler is still on the
+# stack, inside its own signal emission.
+#
+# It did not misbehave, and the reason is not a design: nothing after the
+# emit in mouseMoveEvent touches `this` -- the remaining lines are
+# event->accept() and return. The next edit to that function has no way of
+# knowing those two lines are load-bearing.
+#
+# The test asserts the DELIVERY rather than the crash. A test for the
+# crash would have to drive a real drag and then rely on undefined
+# behaviour showing itself, which is not evidence of anything.
+[[sabotage]]
+name = "the pane drag is delivered directly, from inside the view's own emission"
+file = "src/ui/pane_container.cpp"
+find = "\t\t}, Qt::QueuedConnection);"
+replace = "\t\t});"
+expect = "a_pane_drag_is_not_raised_from_inside_the_views_own_handler"

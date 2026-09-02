@@ -4356,3 +4356,57 @@ void layout_test::a_long_title_cannot_push_the_other_tabs_off_the_bar() {
 	tabs->setTabText(0, QStringLiteral("web"));
 	QCOMPARE(tabs->tabRect(0).width(), plain);
 }
+
+void layout_test::a_pane_drag_is_not_raised_from_inside_the_views_own_handler() {
+	/*
+	 * The view emits pane_drag_requested from its own mouseMoveEvent,
+	 * and what that reaches runs QDrag::exec() -- a nested event loop
+	 * that does not return until the pointer is released. Whatever
+	 * happens to the panes meanwhile comes back through rebuild(), which
+	 * qDeleteAll()s the views. Delivered directly, that destroys the view
+	 * whose handler is still on the stack, inside its own emission.
+	 *
+	 * It does not misbehave today, and the reason is worth stating
+	 * because it is not a design: nothing after the emit in
+	 * mouseMoveEvent touches `this` -- the remaining lines are
+	 * event->accept() and return. The next edit to that function has no
+	 * way of knowing those two lines are load-bearing.
+	 *
+	 * So the delivery is QUEUED, and this asserts that rather than
+	 * asserting the crash it prevents. A test for the crash would have to
+	 * drive a real drag and then rely on undefined behaviour showing
+	 * itself, which is not evidence of anything.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(800, 400);
+
+	layout.set_intent({a});
+	QCOMPARE(container.pane_count(), 1);
+
+	QWidget *view = container.view_at(0);
+	QVERIFY(view);
+
+	QSignalSpy raised(&container, &bssh_pane_container::pane_drag_requested);
+
+	/*
+	 * The signal a mouse drag would emit, without needing one. Signals
+	 * are invokable, which is what lets this ask the delivery question
+	 * directly.
+	 */
+	QVERIFY(QMetaObject::invokeMethod(view, "pane_drag_requested"));
+
+	QVERIFY2(raised.count() == 0,
+	          "the drag was raised synchronously, from inside the view's own "
+	          "signal emission");
+
+	QCoreApplication::processEvents();
+
+	QVERIFY2(raised.count() == 1,
+	          "the drag never arrived at all, so queueing lost it");
+}

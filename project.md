@@ -3241,6 +3241,35 @@ window with no name is a blank row in the task switcher.
   views *write* through. Half a rule is not half a fix: the read path
   looked correct, was tested, and was the reason nobody looked at the
   write path — and the write path is where a loss can happen at all.
+- **A pane drag was raised from inside the view's own signal emission, and
+  the thing it reaches destroys that view.** `mouseMoveEvent` emits
+  `pane_drag_requested`; `start_session_drag` answers it with
+  `QDrag::exec()`, a nested event loop that does not return until the
+  pointer is released. Every outcome of the drop — another window taking
+  the session, this one rearranging, or `tear_out()` when nobody wanted it
+  — comes back through `rebuild()`, which `qDeleteAll()`s the views. So the
+  view is deleted while its own handler is on the stack, inside its own
+  emission, which Qt does not promise to survive.
+  **It did not misbehave, and that is the interesting part.** Nothing after
+  the emit touches `this`: the two remaining lines are `event->accept()`
+  and `return`. The object survives by a property of two lines rather than
+  by design, and the next edit to that function has no way of knowing they
+  are load-bearing. Reported as a latent hazard rather than a bug, because
+  no failure could be demonstrated — the same call as reverting the Split
+  fix that fixed nothing.
+  `Qt::QueuedConnection` closes it for one word: the emit returns at once
+  and the drag begins from the event loop with the handler long finished.
+  A `QPointer` guards the session, because deferring by a turn is exactly
+  what lets one disappear first — the same guard, for the same reason, as
+  the biometric prompt's.
+  **The test asserts the DELIVERY, not the crash.** Invoke the view's
+  signal, check the container's has not fired, run the event loop, check it
+  has. A test for the crash would have to drive a real drag and then depend
+  on undefined behaviour showing itself, which is evidence of nothing.
+  `deleteLater()` was the other candidate and was not taken: it removes the
+  whole hazard class, but a visible child widget then lingers a turn unless
+  hidden and reparented first, trading a theoretical crash for a visible
+  flicker.
 - **The id collision has a second direction, and it DELETES a password.**
   Ids are still minted `highest + 1` over the profiles that currently
   exist, so removing the highest-numbered host frees its id for the next

@@ -5,6 +5,7 @@
 #include <QEvent>
 #include <QSplitter>
 #include <QSplitterHandle>
+#include <QPointer>
 #include <QVBoxLayout>
 
 #include "model/session.h"
@@ -186,9 +187,36 @@ void bssh_pane_container::rebuild() {
 			if (session->emulator()) session->emulator()->set_focused(true);
 		});
 
-		connect(view, &bssh_terminal_view::pane_drag_requested, this, [this, session] {
-			emit pane_drag_requested(session);
-		});
+		/*
+		 * QUEUED, and that is the whole point of it.
+		 *
+		 * This signal is emitted from the view's own mouseMoveEvent,
+		 * and what it reaches runs QDrag::exec() -- a nested event loop
+		 * that does not return until the pointer is released. Whatever
+		 * happens to the panes in the meantime comes back through
+		 * rebuild(), which qDeleteAll()s these views. So a direct
+		 * connection destroys the view whose event handler is still on
+		 * the stack, inside its own signal emission, which is a thing
+		 * Qt does not promise to survive.
+		 *
+		 * It does survive today, by an accident worth naming: nothing
+		 * after the emit in mouseMoveEvent touches `this` -- the two
+		 * remaining lines are event->accept() and return. That is a
+		 * property of two lines rather than a design, and the next edit
+		 * to that function has no way of knowing it is load-bearing.
+		 *
+		 * Queued, the emit returns at once and the drag begins from the
+		 * event loop, with the view's handler long finished.
+		 *
+		 * A QPointer because deferring by a turn is exactly what makes
+		 * a session able to disappear first -- the same guard, and for
+		 * the same reason, as the biometric prompt's.
+		 */
+		connect(view, &bssh_terminal_view::pane_drag_requested, this,
+		         [this, alive = QPointer<bssh_session>(session)] {
+			if (!alive) return;
+			emit pane_drag_requested(alive.data());
+		}, Qt::QueuedConnection);
 
 		connect(view, &bssh_terminal_view::focus_lost, this, [session] {
 			if (session->emulator()) session->emulator()->set_focused(false);

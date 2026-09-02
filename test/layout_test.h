@@ -70,6 +70,7 @@ private slots:
 	 */
 	void a_trusted_host_can_actually_set_the_clipboard();
 	void a_long_title_cannot_push_the_other_tabs_off_the_bar();
+	void a_pane_drag_is_not_raised_from_inside_the_views_own_handler();
 	void a_session_adopted_from_another_window_is_wired_to_this_one();
 	void a_shortcut_acts_only_on_the_window_it_was_typed_in();
 	void a_failure_is_reported_against_the_session_it_came_from();
