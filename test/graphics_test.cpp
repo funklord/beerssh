@@ -586,6 +586,114 @@ void graphics_test::a_resize_keeps_an_image_with_the_text_it_was_drawn_beside() 
 	QCOMPARE(absolute_line(), before);
 }
 
+void graphics_test::a_small_payload_that_decodes_huge_is_refused() {
+	/*
+	 * BSSH_MAX_IMAGE_PIXELS says it is "for any protocol" and guarded
+	 * ONE of the four decoders. For kitty f=100 and for iTerm2 the
+	 * payload cap bounds the COMPRESSED bytes and says nothing about
+	 * what they expand to: a solid-colour PNG of a couple of kilobytes
+	 * is 5792x5792 decoded -- 128 MB, Qt's own allocation limit, and
+	 * four times the image store's entire budget.
+	 *
+	 * The store cannot reclaim it either. Each lands on its own row, so
+	 * drop_covered_by has nothing to drop, and enforce_budget refuses to
+	 * touch anything still on screen -- which is the case it is
+	 * deliberately written not to handle.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+
+	/* Comfortably past 8,388,608 pixels, and a tiny payload. */
+	const QByteArray huge = png_of(4096, 4096, qRgb(0, 0, 255));
+	QVERIFY2(huge.size() < 200000,
+	          "the fixture needs a SMALL payload, or it proves nothing about decode size");
+
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100,c=1,r=1"), huge));
+	QCOMPARE(emulator.images().count(), 0);
+
+	/* iTerm2 reaches the same guard by its own road. */
+	const QByteArray osc = QByteArrayLiteral("\x1b]1337;File=inline=1:")
+	        + huge.toBase64() + QByteArrayLiteral("\x07");
+	emulator.feed(osc);
+	QCOMPARE(emulator.images().count(), 0);
+
+	/*
+	 * And an ordinary image still arrives, so this is a bound on size
+	 * rather than a decoder that refuses everything.
+	 */
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100,c=2,r=1"),
+	                            png_of(32, 32, qRgb(255, 0, 0))));
+	QCOMPARE(emulator.images().count(), 1);
+}
+
+void graphics_test::a_chunked_transmission_cannot_grow_without_end() {
+	/*
+	 * bssh_accumulate bounds one APC payload at 8 MB and clears on the
+	 * initial fragment. It does not bound a TRANSMISSION: m=1 stitches
+	 * together any number of complete, in-budget payloads, and the only
+	 * things that emptied it were m=0 -- which a remote need never send
+	 * -- and a reset. The product of two bounds is not a bound.
+	 *
+	 * What this asserts is RECOVERY, and that is deliberate. Counting
+	 * images after the oversized run proves nothing: unbounded, the
+	 * transmission simply never completes and places nothing; bounded, it
+	 * is thrown away and places nothing. Both look identical from
+	 * outside. What differs is the state left behind -- and a later,
+	 * perfectly ordinary image is what finds it.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+
+	const QByteArray chunk(2 * 1024 * 1024, 'A');   /* valid base64 alphabet */
+
+	/* Well past BSSH_MAX_TRANSMISSION_BYTES, and never terminated. */
+	for (int i = 0; i < 24; ++i) {
+		emulator.feed(QByteArrayLiteral("\x1b_Ga=T,f=100,m=1;") + chunk
+		               + QByteArrayLiteral("\x1b\\"));
+	}
+
+	QCOMPARE(emulator.images().count(), 0);
+
+	/*
+	 * The bound itself, asked of what is HELD.
+	 *
+	 * Counting images cannot see this: unbounded, the transmission never
+	 * completes and places nothing; bounded, it is discarded and places
+	 * nothing. Nor can a later image see it -- the terminating chunk
+	 * clears the buffer either way. What differs is only the megabytes
+	 * held in the meantime, so that is what this asks about.
+	 */
+	QVERIFY2(emulator.pending_transmission_bytes() <= BSSH_MAX_TRANSMISSION_BYTES,
+	          qPrintable(QStringLiteral("the transmission buffer holds %1 bytes")
+	                             .arg(emulator.pending_transmission_bytes())));
+
+	/*
+	 * The abandoned transmission is closed by its own last chunk, and
+	 * then an ordinary chunked PNG has to arrive intact. Unbounded, the
+	 * tens of megabytes still sitting in the buffer are prepended to it
+	 * and it decodes to nothing.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b_Gm=0;") + chunk
+	               + QByteArrayLiteral("\x1b\\"));
+
+	const QByteArray b64 = png_of(16, 16, qRgb(0, 255, 0)).toBase64();
+	const int half = int(b64.size() / 2);
+
+	/*
+	 * Built by hand rather than through kitty_escape(), which base64s
+	 * what it is given -- handing it data that is already base64 encodes
+	 * it twice. The chunked test at the top of this file does the same.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b_Ga=T,f=100,c=1,r=1,m=1;") + b64.left(half)
+	               + QByteArrayLiteral("\x1b\\"));
+	emulator.feed(QByteArrayLiteral("\x1b_Gm=0;") + b64.mid(half)
+	               + QByteArrayLiteral("\x1b\\"));
+
+	QVERIFY2(emulator.images().count() == 1,
+	          "an ordinary image after an oversized transmission has to arrive: "
+	          "the buffer was still holding the abandoned one");
+}
+
 void graphics_test::a_declared_size_that_overflows_is_refused() {
 	/*
 	 * The guard on kitty's raw formats multiplied two remote-supplied

@@ -44,9 +44,37 @@ struct bssh_graphics_result_t {
  * Keeping just the bytes and re-reading the controls from the final chunk
  * gets a default-format decode of a PNG, which fails silently.
  */
+/*
+ * The most base64 a single kitty transmission may accumulate.
+ *
+ * bssh_accumulate bounds ONE APC payload at 8 MB and clears on the
+ * initial fragment. It does not bound a TRANSMISSION, which m=1 stitches
+ * together from any number of complete, in-budget payloads -- and the
+ * only things that ever emptied it were m=0, which a remote need never
+ * send, and a reset. So the wire could hand this 8 MB at a time for as
+ * long as it liked: the product of two bounds, which is not a bound.
+ *
+ * 32 MB of base64 is about 24 MB decoded, which is already past the image
+ * store's whole 32 MB budget once decoded to pixels -- so nothing a real
+ * client sends comes near it. A 4K screenshot is a few megabytes.
+ */
+const qint64 BSSH_MAX_TRANSMISSION_BYTES = 32 * 1024 * 1024;
+
 struct bssh_graphics_transmission_t {
 	QByteArray data;
 	QMap<QString, QString> controls;
+
+	/*
+	 * This transmission went past BSSH_MAX_TRANSMISSION_BYTES and is
+	 * being thrown away.
+	 *
+	 * Held until m=0 rather than only clearing the buffer, because the
+	 * chunks that follow belong to the same doomed image: accumulating
+	 * them again would leave a tail in the buffer for the NEXT
+	 * transmission to be prepended to, which decodes to nothing and
+	 * reads as the terminal having stopped accepting images.
+	 */
+	bool abandoned = false;
 };
 
 bssh_graphics_result_t bssh_parse_kitty(const QByteArray &payload,

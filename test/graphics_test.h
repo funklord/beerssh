@@ -16,6 +16,8 @@ class graphics_test : public QObject {
 
 private slots:
 	void a_declared_size_that_overflows_is_refused();
+	void a_small_payload_that_decodes_huge_is_refused();
+	void a_chunked_transmission_cannot_grow_without_end();
 	void a_resize_keeps_an_image_with_the_text_it_was_drawn_beside();
 	void a_resize_moves_images_even_when_the_ring_is_full();
 	void a_frame_drawn_over_an_earlier_one_does_not_keep_it_alive();

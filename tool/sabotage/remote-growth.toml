@@ -38,3 +38,26 @@ file = "src/term/emulator_vterm.cpp"
 find = "\t\tself->links.clear();\n\t\tself->link_bytes = 0;\n\t\tself->open_link_id = 0;\n"
 replace = ""
 expect = "the_hyperlink_table_is_bounded_and_a_reset_empties_it"
+
+# The kitty TRANSMISSION, which m=1 stitches from any number of complete,
+# in-budget APC payloads. bssh_accumulate bounds one payload at 8 MB; the
+# product of two bounds is not a bound. Measured without this: 50,331,648
+# bytes held from about 30 KB of escape sequences.
+[[sabotage]]
+name = "a chunked kitty transmission accumulates without limit"
+file = "src/term/graphics.cpp"
+find = "\tif (qint64(transmission.data.size()) + data.size() > BSSH_MAX_TRANSMISSION_BYTES) {"
+replace = "\tif (false) {"
+expect = "a_chunked_transmission_cannot_grow_without_end"
+
+# BSSH_MAX_IMAGE_PIXELS calls itself a bound "for any protocol" and
+# guarded sixel alone. For kitty f=100 and iTerm2 the payload cap bounds
+# the COMPRESSED bytes: a 2 KB solid PNG is 128 MB decoded, which the
+# image store cannot reclaim because enforce_budget will not drop
+# anything still on screen.
+[[sabotage]]
+name = "a small payload that decodes huge is placed anyway"
+file = "src/term/graphics.cpp"
+find = "\t\tif (qint64(image.width()) * qint64(image.height()) > BSSH_MAX_IMAGE_PIXELS) {\n\t\t\treturn result;\n\t\t}"
+replace = "\t\tif (false) { return result; }"
+expect = "a_small_payload_that_decodes_huge_is_refused"

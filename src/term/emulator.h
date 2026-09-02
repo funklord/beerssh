@@ -181,6 +181,17 @@ public:
 
 	/* How many hyperlink uris are held; see BSSH_MAX_LINK_BYTES. */
 	int link_count() const;
+
+	/*
+	 * Base64 held for a kitty transmission still in flight; see
+	 * BSSH_MAX_TRANSMISSION_BYTES.
+	 *
+	 * The third bound in this class to need an accessor before it could
+	 * be tested at all. The difference between a bounded buffer and an
+	 * unbounded one is not visible in what the terminal DRAWS -- both
+	 * place no image -- it is only visible in what is being held.
+	 */
+	qint64 pending_transmission_bytes() const;
 	int modify_other_keys_level() const;
 
 	void send_key(int key, quint8 modifiers);

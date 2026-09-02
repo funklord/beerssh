@@ -56,6 +56,7 @@ const int BSSH_MAX_IMAGE_CELLS = 10000;
  */
 const qint64 BSSH_MAX_IMAGE_PIXELS = 8 * 1024 * 1024;
 
+
 /* "a=T,f=100,c=2,r=1" -> {a: T, f: 100, ...} */
 QMap<QString, QString> parse_kitty_controls(const QString &text) {
 	QMap<QString, QString> controls;
@@ -138,6 +139,34 @@ bssh_graphics_result_t bssh_parse_kitty(const QByteArray &payload,
 	 * across reads anyway, so accumulating until m=0 is not an
 	 * optimisation -- a large image simply does not arrive any other way.
 	 */
+	/*
+	 * Bounded before it is appended to. A transmission over the cap is
+	 * abandoned whole rather than truncated: half a base64 stream decodes
+	 * to a different image, or to nothing, and neither is worth the
+	 * memory it took to hold.
+	 */
+	if (qint64(transmission.data.size()) + data.size() > BSSH_MAX_TRANSMISSION_BYTES) {
+		transmission.abandoned = true;
+		transmission.data.clear();
+		transmission.controls.clear();
+	}
+
+	/*
+	 * An abandoned transmission stays abandoned until its last chunk.
+	 * Clearing the buffer alone would let the REST of the same image
+	 * accumulate again and sit there waiting for the next transmission to
+	 * be appended to it -- which decodes to nothing, and reads as the
+	 * terminal having stopped accepting images altogether.
+	 */
+	if (transmission.abandoned) {
+		if (chunk_controls.value(QStringLiteral("m")) != QStringLiteral("1")) {
+			transmission.abandoned = false;
+			transmission.data.clear();
+			transmission.controls.clear();
+		}
+		return result;
+	}
+
 	transmission.data.append(data);
 	if (chunk_controls.value(QStringLiteral("m")) == QStringLiteral("1")) {
 		transmission.controls = controls;
@@ -159,6 +188,22 @@ bssh_graphics_result_t bssh_parse_kitty(const QByteArray &payload,
 	if (format == 100) {
 		/* PNG, which Qt decodes; kitty's "f=100" is exactly that. */
 		image = QImage::fromData(decoded);
+
+		/*
+		 * The payload cap bounds the COMPRESSED size and says nothing
+		 * about what it decodes to. A two-kilobyte solid-colour PNG is
+		 * 5792x5792 once expanded -- 128 MB, which is Qt's own
+		 * allocation limit and four times the image store's entire
+		 * budget. The store cannot reclaim it either: enforce_budget
+		 * refuses to drop anything still on screen.
+		 *
+		 * BSSH_MAX_IMAGE_PIXELS says it is "for any protocol" and was
+		 * applied to sixel alone. This is the same guard on the branch
+		 * next to it.
+		 */
+		if (qint64(image.width()) * qint64(image.height()) > BSSH_MAX_IMAGE_PIXELS) {
+			return result;
+		}
 	} else if ((format == 24 || format == 32) && pixel_width > 0 && pixel_height > 0) {
 		const QImage::Format qt_format = format == 24 ? QImage::Format_RGB888
 		                                              : QImage::Format_RGBA8888;
@@ -231,6 +276,11 @@ bssh_graphics_result_t bssh_parse_iterm2(const QByteArray &payload,
 	const QByteArray decoded = QByteArray::fromBase64(payload.mid(colon + 1));
 	const QImage image = QImage::fromData(decoded);
 	if (image.isNull()) return result;
+
+	/* Decoded size, not payload size -- see the kitty f=100 branch. */
+	if (qint64(image.width()) * qint64(image.height()) > BSSH_MAX_IMAGE_PIXELS) {
+		return result;
+	}
 
 	result.action = bssh_graphics_result_t::PLACE;
 	result.placement.image = image;

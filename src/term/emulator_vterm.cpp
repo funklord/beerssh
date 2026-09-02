@@ -2193,6 +2193,10 @@ void bssh_emulator::set_focused(bool focused) {
 	}
 }
 
+qint64 bssh_emulator::pending_transmission_bytes() const {
+	return m_private->graphics.data.size();
+}
+
 int bssh_emulator::link_count() const {
 	return m_private->links.size();
 }
