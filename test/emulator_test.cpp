@@ -521,6 +521,61 @@ void emulator_test::osc8_marks_cells_with_a_link() {
 	QCOMPARE(int(emulator.screen().cell(0, 20).link), 0);
 }
 
+void emulator_test::the_hyperlink_table_is_bounded_and_a_reset_empties_it() {
+	/*
+	 * BSSH_MAX_LINK_CHARS bounds ONE uri and the id wrap bounds the count
+	 * at 65535. The product is not a bound anybody would choose: about
+	 * 536 MB, kept for the life of the session, because `links` was never
+	 * cleared -- not by the reset that clears every other piece of state
+	 * this file owns.
+	 *
+	 * The per-uri cap landed earlier tonight and its own message said
+	 * "65535 times that is not a limit" about the cap it replaced, then
+	 * left the aggregate exactly where it was. This is that half.
+	 */
+	bssh_emulator emulator(40, 5);
+
+	const QByteArray uri(2048, 'a');
+
+	/* Comfortably past the budget: 8000 x 2048 chars is ~32 MB of
+	 * QChar, four times BSSH_MAX_LINK_BYTES. */
+	for (int i = 0; i < 8000; ++i) {
+		emulator.feed(QByteArrayLiteral("\x1b]8;;https://example.com/") + uri
+		               + QByteArrayLiteral("\x07x\x1b]8;;\x07"));
+	}
+
+	const qint64 held = qint64(emulator.link_count()) * 2048 * 2;
+	QVERIFY2(held <= BSSH_MAX_LINK_BYTES * 2,
+	          qPrintable(QStringLiteral("the table holds about %1 bytes of uri")
+	                             .arg(held)));
+
+	/*
+	 * And it still WORKS: the most recent link resolves, so the bound is
+	 * dropping old entries rather than refusing to store anything.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[H"));   /* 8000 lines of output have scrolled */
+	emulator.feed(QByteArrayLiteral("\x1b]8;;https://recent.example/\x07"
+	                                 "here\x1b]8;;\x07"));
+	const quint16 id = emulator.screen().cell(0, 0).link;
+	QVERIFY(id != 0);
+	QCOMPARE(emulator.link_uri(id), QStringLiteral("https://recent.example/"));
+
+	/*
+	 * A reset drops them, like every other piece of state this file owns.
+	 * The screen the links were anchored to is gone, so keeping the uris
+	 * keeps the one thing nothing can reach.
+	 */
+	/*
+	 * \033c, not \x1bc: a hex escape eats as many digits as it can, so
+	 * \x1bc is the single value 0x1bc rather than ESC followed by c.
+	 * The RIS test at the top of this file uses octal for the same
+	 * reason -- and this one fed garbage and reported the reset as not
+	 * clearing anything.
+	 */
+	emulator.feed(QByteArrayLiteral("\033c"));
+	QCOMPARE(emulator.link_count(), 0);
+}
+
 void emulator_test::the_kitty_flags_stack_is_bounded() {
 	/*
 	 * CSI > flags u pushes a kitty keyboard mode. The pop beside it is

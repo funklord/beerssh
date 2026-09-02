@@ -58,6 +58,24 @@ const int BSSH_URI_PROMPT_CHARS = 96;
  */
 const int BSSH_MAX_KITTY_STACK = 64;
 
+/*
+ * How much hyperlink text this terminal will hold at once, across all of
+ * them.
+ *
+ * BSSH_MAX_LINK_CHARS bounds ONE uri and the id wrap bounds the COUNT at
+ * 65535 -- and the product of two bounds is not a bound anybody would
+ * choose: 65535 uris of 4096 QChars is about 536 MB, held for the life of
+ * the session because `links` was never cleared. The commit that added
+ * the per-uri cap said as much about the cap it replaced ("65535 times
+ * that is not a limit") and then left the aggregate where it was.
+ *
+ * 8 MB, which sits beside the image store's 32 MB budget rather than
+ * dwarfing it, and is far past what an ordinary session reaches: `ls
+ * --hyperlink` over a large tree is file:// uris of a hundred characters
+ * or so, tens of thousands of which still fit.
+ */
+const qint64 BSSH_MAX_LINK_BYTES = 8 * 1024 * 1024;
+
 inline QString bssh_uri_for_prompt(const QString &uri, int max_chars) {
 	if (max_chars <= 0 || uri.size() <= max_chars) return uri;
 
@@ -160,6 +178,9 @@ public:
 	 * observe is a bound nothing can test.
 	 */
 	int kitty_stack_depth() const;
+
+	/* How many hyperlink uris are held; see BSSH_MAX_LINK_BYTES. */
+	int link_count() const;
 	int modify_other_keys_level() const;
 
 	void send_key(int key, quint8 modifiers);

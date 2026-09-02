@@ -94,6 +94,9 @@ struct bssh_emulator_private {
 	};
 
 	QHash<quint16, QString> links;
+
+	/* What `links` is holding, in bytes; see begin_link. */
+	qint64 link_bytes = 0;
 	QList<link_range_t> pending_links;
 	quint16 next_link_id;
 	quint16 open_link_id;
@@ -434,6 +437,18 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		self->modify_other_keys = 0;
 		self->kitty_stack.clear();
 		self->kitty_stack.append(0);
+
+		/*
+		 * The hyperlinks too, which are ours in exactly the sense this
+		 * comment means: libvterm does not model OSC 8, so nothing else
+		 * can drop them, and they were never dropped at all. A reset
+		 * clears the screen the links were anchored to, so keeping the
+		 * uris is keeping the one thing that cannot be reached.
+		 */
+		self->links.clear();
+		self->link_bytes = 0;
+		self->open_link_id = 0;
+
 		self->end_sync();
 		return 1;
 	default:
@@ -1928,6 +1943,24 @@ void bssh_emulator_private::begin_link(const QString &uri) {
 	 */
 	if (++next_link_id == 0) next_link_id = 1;
 
+	/*
+	 * And the total, which the wrap does NOT bound: 65535 ids times one
+	 * capped uri is about half a gigabyte, kept for the life of the
+	 * session because nothing here ever dropped a link.
+	 *
+	 * Emptied wholesale rather than evicted one at a time. A QHash has no
+	 * order to evict by, and the comment above already accepts what
+	 * clearing costs -- an id that has wrapped "can only ever mislabel a
+	 * link that has already scrolled out of the bounded scrollback", so a
+	 * link this far back is unreliable either way. What it buys is that
+	 * the ceiling is a number this program chose.
+	 */
+	link_bytes += qint64(uri.size()) * 2;
+	if (link_bytes > BSSH_MAX_LINK_BYTES) {
+		links.clear();
+		link_bytes = qint64(uri.size()) * 2;
+	}
+
 	open_link_id = next_link_id;
 	links.insert(open_link_id, uri);
 
@@ -2140,6 +2173,10 @@ void bssh_emulator::set_focused(bool focused) {
 	} else {
 		vterm_state_focus_out(state);
 	}
+}
+
+int bssh_emulator::link_count() const {
+	return m_private->links.size();
 }
 
 int bssh_emulator::kitty_stack_depth() const {

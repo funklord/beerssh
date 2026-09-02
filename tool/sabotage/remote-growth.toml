@@ -17,3 +17,24 @@ file = "src/term/emulator_vterm.cpp"
 find = "\t\t\tif (self->kitty_stack.size() >= BSSH_MAX_KITTY_STACK) {\n\t\t\t\tself->kitty_stack.removeAt(1);\n\t\t\t}\n\n"
 replace = ""
 expect = "the_kitty_flags_stack_is_bounded"
+
+# The aggregate the id wrap does NOT bound. BSSH_MAX_LINK_CHARS caps one
+# uri and the wrap caps the count at 65535; the product is about 536 MB,
+# held for the life of the session because `links` was never cleared.
+# Without the budget this fixture holds ~32 MB, four times the cap.
+[[sabotage]]
+name = "the hyperlink table has no aggregate budget"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (link_bytes > BSSH_MAX_LINK_BYTES) {"
+replace = "\tif (false && link_bytes > BSSH_MAX_LINK_BYTES) {"
+expect = "the_hyperlink_table_is_bounded_and_a_reset_empties_it"
+
+# A reset clears every other piece of state this file owns -- the kitty
+# stack, modifyOtherKeys, the sync -- and left the hyperlinks, which
+# libvterm does not model either and so nothing else can drop.
+[[sabotage]]
+name = "a reset leaves the hyperlink table behind"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tself->links.clear();\n\t\tself->link_bytes = 0;\n\t\tself->open_link_id = 0;\n"
+replace = ""
+expect = "the_hyperlink_table_is_bounded_and_a_reset_empties_it"

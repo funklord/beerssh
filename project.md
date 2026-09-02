@@ -5100,6 +5100,33 @@ same reason `scrollback().count()` and `images().count()` do. A bound
 nothing can observe is a bound nothing can test, and the sabotage reports
 the depth it reached (5001) rather than merely that it was too big.
 
+**And the hyperlink cap was only half a cap, which its own commit message
+had already said.** `e7c7fc3` bounded ONE uri at 4096 characters and
+argued, about the bound it replaced, that "65535 times that is not a
+limit". The same arithmetic applies to what it left: 65535 ids × 4096
+QChars is about **536 MB**, held for the life of the session, because
+`links` was never cleared — not by the reset that clears every other
+piece of state this file owns. Reducing a worst case from half a terabyte
+to half a gigabyte is worth doing and is not the same as bounding it.
+`BSSH_MAX_LINK_BYTES` is 8 MB, placed beside the image store's 32 MB
+rather than dwarfing it; an ordinary session is nowhere near, since
+`ls --hyperlink` produces file:// uris of a hundred characters or so.
+**Emptied wholesale rather than evicted one at a time**, because a QHash
+has no order to evict by and the existing comment already accepts the
+cost: a wrapped id "can only ever mislabel a link that has already
+scrolled out of the bounded scrollback". What the clear buys is a ceiling
+this program chose. The test asserts the most recent link still resolves,
+so a terminal that simply stored nothing would not pass.
+**Two of my own test's failures were the FIXTURE, not the code**, and the
+second is worth writing down. `"\x1bc"` is not ESC followed by c: a hex
+escape consumes every hex digit it can reach, and `c` is one, so that
+literal is the single value 0x1bc. The test fed garbage and reported the
+reset as clearing nothing — a specific, plausible wrong number rather
+than a crash. The RIS test at the top of the same file uses `"\033c"`,
+octal, capped at three digits, for exactly this reason: **when a
+neighbouring test spells the same thing differently, the difference is
+usually load-bearing.**
+
 **The cap bounded the memory and not the LAYOUT, which is the other half
 of the same string.** 1024 characters is a modest buffer and, in a
 `QTabBar` with `setExpanding(false)` and no elide mode, a tab **11,472
