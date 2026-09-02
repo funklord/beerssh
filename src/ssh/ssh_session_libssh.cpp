@@ -220,6 +220,9 @@ public slots:
 	void apply_identity_file();
 	void drain();
 
+	/* See do_send: what the channel window could not take yet. */
+	void flush_pending();
+
 signals:
 	/*
 	 * int, not state_t, so the queued connection across the thread
@@ -259,6 +262,12 @@ private:
 	 */
 	QTimer *m_keepalive;
 	int m_keepalive_seconds;
+
+	/*
+	 * Output the remote's channel window had no room for. Held here
+	 * rather than waited on -- see do_send.
+	 */
+	QByteArray m_pending;
 
 	/* Applied at connect time; see set_term's comment on the interface. */
 	QString m_term;
@@ -307,6 +316,9 @@ void bssh_libssh_worker::teardown() {
 	m_poll = nullptr;
 	delete m_keepalive;
 	m_keepalive = nullptr;
+
+	/* Nothing to flush into a channel that is going. */
+	m_pending.clear();
 
 	if (m_channel) {
 		if (ssh_channel_is_open(m_channel)) ssh_channel_close(m_channel);
@@ -1196,6 +1208,17 @@ void bssh_libssh_worker::do_set_keepalive(int seconds) {
 void bssh_libssh_worker::drain() {
 	if (!m_channel) return;
 
+	/*
+	 * Anything the window had no room for last time. This runs from the
+	 * poll and from the read notifier, and a window opens because a
+	 * packet arrived -- which is exactly what brings us here.
+	 *
+	 * Re-checked afterwards because flush_pending() can fail() and take
+	 * the channel down underneath this.
+	 */
+	flush_pending();
+	if (!m_channel) return;
+
 	char buffer[4096];
 
 	/*
@@ -1280,34 +1303,70 @@ void bssh_libssh_worker::do_send(const QByteArray &bytes) {
 	 * said nothing, leaving a terminal that looks alive and swallows
 	 * everything typed into it.
 	 *
-	 * Looped over the count rather than called once, which is what
-	 * bssh_jump_tunnel::write_to_channel already does ten files away.
-	 * This channel is blocking, so libssh writes everything or returns
-	 * SSH_ERROR and the loop turns once -- but a partial write silently
-	 * losing the tail is the failure being prevented, and a loop that
-	 * cannot be wrong is cheaper than a comment asserting it cannot
-	 * happen.
+	 * QUEUED, and never asked for more than the remote will take right
+	 * now. This session is BLOCKING and is never set otherwise, and the
+	 * comment that used to stand here read that as a guarantee of
+	 * progress: "libssh writes everything or returns SSH_ERROR and the
+	 * loop turns once". That is true of a PARTIAL write and says nothing
+	 * about the wait. When the remote program stops reading its stdin the
+	 * channel window closes, and a blocking ssh_channel_write does not
+	 * return at all.
 	 *
-	 * No SSH_AGAIN case, unlike the tunnel: that value belongs to a
-	 * non-blocking session and this one is never set non-blocking. A
-	 * zero return is still refused rather than retried, because nothing
-	 * would make the next attempt differ and spinning is the worse way
-	 * to fail.
+	 * What that costs is the whole worker: this thread stops returning to
+	 * its event loop, so drain() never runs again and output stops, and
+	 * do_disconnect never runs either -- so Disconnect does nothing and
+	 * the facade's destructor, which waits on this loop, waits for ever.
+	 * TCP_USER_TIMEOUT does not rescue it, because the peer is alive and
+	 * acknowledging; it simply is not reading.
+	 *
+	 * ssh_channel_window_size() is what the remote will accept without a
+	 * wait, so writing at most that much cannot block. What does not fit
+	 * waits for the window to open, which arrives as a packet and so
+	 * arrives through drain() -- the poll this worker already runs.
+	 *
+	 * This is the third implementation of one rule and was the only
+	 * careless one. bssh_jump_tunnel::write_to_channel polls with a
+	 * 200ms cap and rechecks its stop flag; bssh_pty_session::send queues
+	 * and returns, and its comment describes this very scenario: "a paste
+	 * bigger than the pty buffer is enough to reach it, and only needs
+	 * the child not to be reading".
 	 */
-	qsizetype written = 0;
-	while (written < bytes.size()) {
-		const int n = ssh_channel_write(m_channel, bytes.constData() + written,
-		                                 uint32_t(bytes.size() - written));
+	m_pending.append(bytes);
+	flush_pending();
+}
+
+/*
+ * Hands the channel as much as its window allows, and leaves the rest
+ * queued. Never waits: see do_send.
+ */
+void bssh_libssh_worker::flush_pending() {
+	while (!m_pending.isEmpty() && m_channel) {
+		const uint32_t window = ssh_channel_window_size(m_channel);
+
+		/*
+		 * Nothing to be done this turn. Not an error and not a reason to
+		 * drop anything -- the remote is simply not reading yet, and
+		 * drain() comes back when a packet says it is.
+		 */
+		if (window == 0) return;
+
+		const int take = int(qMin<qsizetype>(m_pending.size(), qsizetype(window)));
+		const int n = ssh_channel_write(m_channel, m_pending.constData(), uint32_t(take));
+
 		if (n == SSH_ERROR) {
+			m_pending.clear();
 			fail(session_error());
 			return;
 		}
 		if (n <= 0) {
+			const qsizetype left = m_pending.size();
+			m_pending.clear();
 			fail(QStringLiteral("the connection accepted none of %1 byte(s) sent")
-			             .arg(bytes.size() - written));
+			             .arg(left));
 			return;
 		}
-		written += n;
+
+		m_pending.remove(0, n);
 	}
 }
 

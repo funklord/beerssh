@@ -92,6 +92,7 @@ private slots:
 
 	void the_remote_is_told_the_size_it_was_given();
 	void a_resize_reaches_the_remote();
+	void a_send_to_a_remote_that_is_not_reading_still_lets_go();
 
 	void a_host_is_reachable_through_a_jump_host();
 	void an_unknown_jump_host_is_refused_rather_than_prompted_about();

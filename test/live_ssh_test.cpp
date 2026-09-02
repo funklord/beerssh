@@ -966,6 +966,111 @@ void live_ssh_test::the_remote_is_told_the_size_it_was_given()
 	                             .arg(QString::fromUtf8(out.simplified()))));
 }
 
+void live_ssh_test::a_send_to_a_remote_that_is_not_reading_still_lets_go()
+{
+	if (!server_available()) return;
+	if (!ordinary_phase()) {
+		QSKIP("this phase is waiting on a session of its own; see ordinary_phase()");
+	}
+
+	/*
+	 * The channel window closing is the one thing a fake session cannot
+	 * model, which is why this lives here rather than in the suite.
+	 *
+	 * do_send used to call a BLOCKING ssh_channel_write. That is fine
+	 * until the remote program stops reading its stdin: the window
+	 * closes, the write does not return, and the worker thread stops
+	 * going round its event loop. Everything the worker does is then
+	 * stuck behind it -- drain(), so output ceases; and do_disconnect,
+	 * which is what makes this testable at all.
+	 *
+	 * So the assertion is on DISCONNECT, not on send(). The facade's
+	 * send() is a queued invoke and returns at once whatever the worker
+	 * is doing, so timing it would prove nothing. Asking the session to
+	 * go away and watching whether it can is the question.
+	 *
+	 * `sleep` is the remote that does not read: it holds the pty while
+	 * reading nothing, so everything sent after it banks up in the
+	 * window.
+	 */
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+
+	bool disconnected = false;
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed,
+	                  [&loop](const QString &) { loop.quit(); });
+
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [&](bssh_ssh_session::state_t state) {
+		if (state == bssh_ssh_session::DISCONNECTED) {
+			disconnected = true;
+			loop.quit();
+			return;
+		}
+		if (state != bssh_ssh_session::CONNECTED) return;
+
+		session->open_shell(80, 24);
+
+		/*
+		 * RAW, and that is the whole of it.
+		 *
+		 * A canonical tty DISCARDS input once its buffer fills rather
+		 * than pushing back, so sshd goes on consuming the channel and
+		 * re-advertising the window, and a blocking write never waits.
+		 * Measured locally on a pty earlier: canonical writes a whole
+		 * megabyte and finishes, raw stops after 15,360 bytes. The
+		 * configuration that HIDES this is a bare shell and the one that
+		 * shows it is what every full-screen program sets.
+		 *
+		 * `stty raw` then a sleep is therefore the remote that does not
+		 * read: raw keeps the bytes, the buffer fills, sshd stops
+		 * consuming, and the window shuts.
+		 */
+		QTimer::singleShot(1200, session, [session] {
+			session->send(QByteArrayLiteral("stty raw -echo; sleep 20\n"));
+		});
+
+		/*
+		 * Comfortably past any channel window, so the write cannot be
+		 * satisfied in one go and the old code would sit in it.
+		 */
+		QTimer::singleShot(2400, session, [session] {
+			session->send(QByteArray(4 * 1024 * 1024, 'x'));
+		});
+
+		/*
+		 * And then ask it to go. With the worker stuck in a write this
+		 * never runs at all.
+		 */
+		QTimer::singleShot(3600, session, [session] {
+			session->disconnect_from_host();
+		});
+	});
+
+	session->set_identity_file(test_key());
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
+	                          qEnvironmentVariable("USER"));
+
+	/*
+	 * Bounded, so a worker that cannot let go fails this rather than
+	 * hanging the run -- which is the whole reason the assertion is
+	 * reachable from a test at all.
+	 */
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(20000);
+	loop.exec();
+
+	QVERIFY2(disconnected,
+	          "the session never reported DISCONNECTED: the worker was still "
+	          "inside a blocking write and never reached do_disconnect");
+
+	delete session;
+}
+
 void live_ssh_test::a_resize_reaches_the_remote()
 {
 	if (!server_available()) return;

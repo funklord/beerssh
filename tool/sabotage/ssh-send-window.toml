@@ -1,0 +1,28 @@
+# Sabotage for the one write loop of three that did not bound its wait.
+#
+# NOTE: expect names a LIVE test. tool/sabotage.py runs `make test`, where
+# live_ssh_test skips without a server -- so this entry reports MISSED
+# under the ordinary runner and is meaningful only under:
+#
+#   BSSH_TEST_BIN=./build-tests/beerssh_test ./tool/check-ssh.sh
+#
+# Recorded here rather than left out, because the alternative is a guard
+# with no written trace of how it was verified. It WAS verified: with this
+# edit applied, against a real sshd, the phase fails on the session never
+# reaching DISCONNECTED.
+#
+# The session is blocking and is never set otherwise, and no
+# SSH_OPTIONS_TIMEOUT is set anywhere in the tree, so ssh_channel_write
+# waits on the channel window for ever. The comment that used to stand in
+# do_send read "blocking" as a guarantee of progress -- true of a partial
+# write, silent about the wait.
+#
+# What it costs is the whole worker: drain() stops, so output ceases, and
+# do_disconnect never runs, so Disconnect does nothing and the facade's
+# destructor waits on that loop.
+[[sabotage]]
+name = "do_send asks for more than the channel window and blocks the worker"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\tif (window == 0) return;\n\n\t\tconst int take = int(qMin<qsizetype>(m_pending.size(), qsizetype(window)));"
+replace = "\t\tif (false && window == 0) return;\n\n\t\tconst int take = int(m_pending.size());"
+expect = "a_send_to_a_remote_that_is_not_reading_still_lets_go"
