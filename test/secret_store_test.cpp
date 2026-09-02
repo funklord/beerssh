@@ -6,6 +6,8 @@
 #include <QtTest>
 
 #include "platform/secret_store.h"
+#include <QCheckBox>
+#include <QComboBox>
 #include "ui/app_settings_view.h"
 #include "ui/password_prompt.h"
 #include "secret_store_test.h"
@@ -191,6 +193,57 @@ void secret_store_test::the_selector_always_returns_a_working_store() {
 	} else {
 		QVERIFY(selected->is_unlocked());
 	}
+}
+
+void secret_store_test::a_second_settings_page_does_not_write_back_a_stale_snapshot()
+{
+	/*
+	 * There is one of these pages per WINDOW, and each snapshots app.ini
+	 * into its widgets when it is built. commit() then wrote EVERY widget
+	 * back, so the older snapshot won: set the theme in one window, touch
+	 * any single control in the other, and that other window's idea of
+	 * the theme -- as it stood when it opened -- was written over the
+	 * choice just made. Nothing subscribes to app.ini, so neither page
+	 * ever learns.
+	 *
+	 * Two views here stand for two windows. The second is built FIRST so
+	 * its snapshot is the stale one, which is the case that bites.
+	 */
+	bssh_app_settings().set_theme(QStringLiteral("light"));
+
+	bssh_app_settings_view stale;      /* opened while the theme was light */
+	bssh_app_settings_view current;
+
+	QComboBox *stale_theme = stale.findChild<QComboBox *>(QStringLiteral("theme"));
+	QCheckBox *stale_caps = stale.findChild<QCheckBox *>(QStringLiteral("caps_as_ctrl"));
+	QComboBox *live_theme = current.findChild<QComboBox *>(QStringLiteral("theme"));
+
+	if (!stale_theme || !stale_caps || !live_theme) {
+		QSKIP("this build's settings page does not name its controls");
+	}
+
+	/* The other window chooses a theme. */
+	const int dark = live_theme->findData(QStringLiteral("dark"));
+	QVERIFY(dark >= 0);
+	live_theme->setCurrentIndex(dark);
+	QCOMPARE(bssh_app_settings().theme(), QStringLiteral("dark"));
+
+	/*
+	 * And now the stale page touches something else entirely. Its theme
+	 * combo still says "light", because nothing told it otherwise.
+	 */
+	const bool before = stale_caps->isChecked();
+	stale_caps->setChecked(!before);
+
+	/* The choice the user actually made has to survive... */
+	QCOMPARE(bssh_app_settings().theme(), QStringLiteral("dark"));
+
+	/*
+	 * ...and the control they actually touched has to have been written,
+	 * or a commit() that wrote nothing at all would satisfy the line
+	 * above.
+	 */
+	QCOMPARE(bssh_app_settings().caps_as_ctrl(), !before);
 }
 
 void secret_store_test::the_settings_page_names_the_secret_backend()

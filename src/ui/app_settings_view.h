@@ -3,6 +3,10 @@
 
 #include <QWidget>
 
+#include <functional>
+
+#include "model/app_settings.h"
+
 class QCheckBox;
 class QLabel;
 class QPushButton;
@@ -34,7 +38,23 @@ signals:
 	void back_requested();
 
 private:
-	void commit();
+	/*
+	 * Writes ONE setting and tells the window.
+	 *
+	 * One field rather than the whole page, because there is a view per
+	 * WINDOW and each snapshots app.ini into its widgets when it is
+	 * built. A commit() that wrote every widget back made the older
+	 * snapshot win: open two windows, set the theme in the second, then
+	 * tick any box in the first, and the first window's key row,
+	 * scrollbar, status line and window title -- as they stood when it
+	 * opened -- were written over the ones just chosen. Nothing
+	 * subscribes to app.ini, so neither page ever learns it happened.
+	 *
+	 * A write of the control the user actually touched cannot carry a
+	 * stale field with it. Re-reading the widgets when the page is shown
+	 * would not do: both windows' settings pages can be open at once.
+	 */
+	void commit(const std::function<void(bssh_app_settings &)> &write);
 
 	QComboBox *m_key_row;
 	QComboBox *m_theme;

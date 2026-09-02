@@ -26,6 +26,7 @@ private slots:
 	 * know were the ones who could not find out.
 	 */
 	void the_settings_page_names_the_secret_backend();
+	void a_second_settings_page_does_not_write_back_a_stale_snapshot();
 
 	/*
 	 * And shows all of it. A wrapped label in a form's field column is

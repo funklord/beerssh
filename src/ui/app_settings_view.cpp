@@ -114,6 +114,14 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * one most people want, but it is not the only one.
 	 */
 	m_theme = new QComboBox(this);
+
+	/*
+	 * Named, so a test can reach it. There is one of these pages per
+	 * window and what they write to app.ini has to be asserted across
+	 * two of them; the chord editors below are named for the same
+	 * reason.
+	 */
+	m_theme->setObjectName(QStringLiteral("theme"));
 	m_theme->addItem(QStringLiteral("Follow the system"), QStringLiteral("system"));
 	m_theme->addItem(QStringLiteral("Light"), QStringLiteral("light"));
 	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
@@ -262,6 +270,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	form->addRow(paste_note);
 
 	m_caps_as_ctrl = new QCheckBox(QStringLiteral("Caps Lock sends Ctrl"), this);
+	m_caps_as_ctrl->setObjectName(QStringLiteral("caps_as_ctrl"));
 	m_caps_as_ctrl->setToolTip(
 	        QStringLiteral("Caps Lock arms Ctrl for the next key, in this terminal only. "
 	                        "Your system still toggles its own caps lock -- no application "
@@ -563,30 +572,72 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * changing IT saved nothing until the key row was also touched --
 	 * which looks exactly like a setting that does not work.
 	 */
-	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] { commit(); });
-	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] { commit(); });
-	connect(m_context_menu, &QComboBox::currentIndexChanged, this, [this] { commit(); });
-	connect(m_scrollbar, &QComboBox::currentIndexChanged, this, [this] { commit(); });
-	connect(m_status_line, &QComboBox::currentIndexChanged, this, [this] { commit(); });
+	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_key_row_visibility(bssh_app_settings::key_row_visibility_t(
+			        m_key_row->currentData().toInt()));
+		});
+	});
+	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_theme(m_theme->currentData().toString());
+		});
+	});
+	connect(m_context_menu, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_context_menu(bssh_app_settings::context_menu_t(
+			        m_context_menu->currentData().toInt()));
+		});
+	});
+	connect(m_scrollbar, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_scrollbar(bssh_app_settings::scrollbar_t(
+			        m_scrollbar->currentData().toInt()));
+		});
+	});
+	connect(m_status_line, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_status_line(bssh_app_settings::status_line_t(
+			        m_status_line->currentData().toInt()));
+		});
+	});
 
 	/*
 	 * On editingFinished rather than on every keystroke: a format is
 	 * typed a character at a time and "%" alone is not a title anybody
 	 * meant to see in their task switcher.
 	 */
-	connect(m_window_title, &QLineEdit::editingFinished, this, [this] { commit(); });
+	connect(m_window_title, &QLineEdit::editingFinished, this, [this] {
+		commit([this](bssh_app_settings &s) { s.set_window_title(m_window_title->text()); });
+	});
 	if (m_hide_from_screenshots) {
-		connect(m_hide_from_screenshots, &QCheckBox::toggled, this, [this] { commit(); });
+		connect(m_hide_from_screenshots, &QCheckBox::toggled, this, [this] {
+			commit([this](bssh_app_settings &s) {
+				s.set_hide_from_screenshots(m_hide_from_screenshots->isChecked());
+			});
+		});
 	}
 	if (m_focus_follows_mouse) {
-		connect(m_focus_follows_mouse, &QCheckBox::toggled, this, [this] { commit(); });
+		connect(m_focus_follows_mouse, &QCheckBox::toggled, this, [this] {
+			commit([this](bssh_app_settings &s) {
+				s.set_focus_follows_mouse(m_focus_follows_mouse->isChecked());
+			});
+		});
 	}
-	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] { commit(); });
-	connect(m_warn_multiline_paste, &QCheckBox::toggled, this, [this] { commit(); });
-	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] { commit(); });
+	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) { s.set_caps_as_ctrl(m_caps_as_ctrl->isChecked()); });
+	});
+	connect(m_warn_multiline_paste, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_warn_multiline_paste(m_warn_multiline_paste->isChecked());
+		});
+	});
+	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) { s.set_raise_contrast(m_raise_contrast->isChecked()); });
+	});
 	connect(m_text_brightness, &QSlider::valueChanged, this, [this](int value) {
 		m_text_brightness_value->setText(QStringLiteral("%1%").arg(value));
-		commit();
+		commit([value](bssh_app_settings &s) { s.set_text_brightness(value); });
 	});
 
 	/*
@@ -609,31 +660,16 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	bssh_dont_steal_the_wheel(this);
 }
 
-void bssh_app_settings_view::commit() {
+void bssh_app_settings_view::commit(const std::function<void(bssh_app_settings &)> &write) {
 	bssh_app_settings stored;
-	stored.set_key_row_visibility(
-	        bssh_app_settings::key_row_visibility_t(m_key_row->currentData().toInt()));
-	stored.set_theme(m_theme->currentData().toString());
-	stored.set_context_menu(
-	        bssh_app_settings::context_menu_t(m_context_menu->currentData().toInt()));
-	stored.set_scrollbar(
-	        bssh_app_settings::scrollbar_t(m_scrollbar->currentData().toInt()));
-	stored.set_status_line(
-	        bssh_app_settings::status_line_t(m_status_line->currentData().toInt()));
-	stored.set_window_title(m_window_title->text());
-	stored.set_raise_contrast(m_raise_contrast->isChecked());
-	stored.set_text_brightness(m_text_brightness->value());
-	stored.set_caps_as_ctrl(m_caps_as_ctrl->isChecked());
-	stored.set_warn_multiline_paste(m_warn_multiline_paste->isChecked());
-	if (m_focus_follows_mouse) {
-		stored.set_focus_follows_mouse(m_focus_follows_mouse->isChecked());
-	}
-	if (m_hide_from_screenshots) {
-		stored.set_hide_from_screenshots(m_hide_from_screenshots->isChecked());
-	}
+	if (write) write(stored);
 
-	/* Applied immediately: a setting that waits for a restart reads as a
-	 * setting that did not work. */
-	bssh_theme::apply(bssh_theme::from_text(m_theme->currentData().toString()));
+	/*
+	 * The theme is applied from what is now STORED rather than from this
+	 * page's combo. Another window may have set it since this page was
+	 * built, and applying the widget would undo that on screen even now
+	 * that the write no longer does.
+	 */
+	bssh_theme::apply(bssh_theme::from_text(stored.theme()));
 	emit changed();
 }

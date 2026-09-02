@@ -1320,10 +1320,21 @@ void profile_store_test::a_delete_that_cannot_be_written_keeps_the_password_too(
 	 * what remove() SAID would skip for the very defect it is here to
 	 * catch.
 	 */
-	QSettings written(dir.path() + QStringLiteral("/hosts.ini"), QSettings::IniFormat);
-	if (!written.childGroups().isEmpty() && removed) {
-		QSKIP("this account can write the directory anyway, so the failure "
-		       "path was never taken");
+	/*
+	 * Read as BYTES, for the reason the app.ini test below gives: QSettings
+	 * shares one cached QConfFile per path and hands back the state it
+	 * failed to write, so asking it whether the host is still on disk gets
+	 * the answer from memory. Asking the return value would be worse
+	 * still -- that is the value under test.
+	 */
+	QFile ini(dir.path() + QStringLiteral("/hosts.ini"));
+	QVERIFY(ini.open(QIODevice::ReadOnly));
+	const bool still_on_disk = ini.readAll().contains("kept.example");
+	ini.close();
+
+	if (!still_on_disk) {
+		QSKIP("this account can write a read-only directory, so the failure "
+		       "cannot be produced here");
 	}
 
 	QVERIFY2(!removed, "a delete whose write failed must not report success");

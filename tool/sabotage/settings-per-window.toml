@@ -1,0 +1,17 @@
+# Sabotage for two windows' settings pages overwriting each other.
+#
+# There is one bssh_app_settings_view per WINDOW, and each snapshots
+# app.ini into its widgets when it is built. commit() wrote EVERY widget
+# back, so the older snapshot won: set the theme in one window, then tick
+# any box in the other, and that other window's idea of the theme -- as it
+# stood when it opened -- was written over the choice just made. Nothing
+# subscribes to app.ini, so neither page ever learns.
+#
+# The same shape sec 8.4 records for the profile store, in the file next
+# door: two full-file writers with no reader between them.
+[[sabotage]]
+name = "a settings page writes every field, not the one that changed"
+file = "src/ui/app_settings_view.cpp"
+find = "\tbssh_app_settings stored;\n\tif (write) write(stored);"
+replace = "\tbssh_app_settings stored;\n\tif (write) write(stored);\n\tstored.set_theme(m_theme->currentData().toString());\n\tstored.set_caps_as_ctrl(m_caps_as_ctrl->isChecked());"
+expect = "a_second_settings_page_does_not_write_back_a_stale_snapshot"
