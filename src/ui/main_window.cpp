@@ -474,7 +474,23 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		connect(m_host_list, &bssh_host_list::delete_requested,
 		         this, [this](const bssh_profile_t &profile) {
 			if (!m_profile_store || profile.id == 0) return;
-			m_profile_store->remove(profile.id);
+
+			/*
+			 * The same report the save above makes. Silence here left a
+			 * host that had apparently been deleted sitting in the list
+			 * again at the next start, with no reason given.
+			 */
+			if (!m_profile_store->remove(profile.id)) {
+				QMessageBox::warning(
+				        this, QStringLiteral("Not deleted"),
+				        QStringLiteral("This host could not be removed from your "
+				                        "configuration.\n\n%1")
+				                .arg(m_profile_store->last_error()));
+			} else if (!m_profile_store->last_error().isEmpty()) {
+				/* Removed, but its password outlived it. */
+				QMessageBox::warning(this, QStringLiteral("Password not removed"),
+				                      m_profile_store->last_error());
+			}
 			m_host_list->reload();
 		});
 		m_pages->addWidget(m_host_list);

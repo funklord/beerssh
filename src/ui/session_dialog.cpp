@@ -603,7 +603,31 @@ void bssh_session_dialog::on_delete() {
 	const int id = selected_profile_id();
 	if (id == 0 || !m_store) return;
 
-	m_store->remove(id);
+	/*
+	 * Said, for the reason Save says it (sec 10.6) and with more at stake.
+	 * A discarded false left the host on screen as though nothing had
+	 * happened, when what actually happened is that the write did not
+	 * reach the disk.
+	 */
+	if (!m_store->remove(id)) {
+		QMessageBox::warning(
+		        this, QStringLiteral("Not deleted"),
+		        QStringLiteral("This session could not be removed from your "
+		                        "configuration.\n\n%1").arg(m_store->last_error()));
+		reload_sessions();
+		return;
+	}
+
+	/*
+	 * And the half-success: the row went, its password did not. remove()
+	 * records that and nothing read it, which is the "accessor nobody
+	 * calls" this document keeps finding.
+	 */
+	if (!m_store->last_error().isEmpty()) {
+		QMessageBox::warning(this, QStringLiteral("Password not removed"),
+		                      m_store->last_error());
+	}
+
 	if (m_current.id == id) m_current = bssh_profile_t();
 	reload_sessions();
 }

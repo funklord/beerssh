@@ -1,0 +1,17 @@
+# Sabotage for a deletion that half-succeeds.
+#
+# remove() erases the stored credential and then writes hosts.ini, and on
+# a failed write it restores the row from a snapshot taken BEFORE the
+# erase. So the host came back to the list with its "password saved" flag
+# intact while the secret it names had already gone from the keyring, and
+# the next connection asked for a password the user believed they had
+# stored.
+#
+# The two halves have to fail together or not at all. Measured with the
+# erase back in front of the write: the row returns and load() gives "".
+[[sabotage]]
+name = "the credential is erased before the write that can fail"
+file = "src/model/profile_store.cpp"
+find = "\tif (!write_profiles()) {\n\t\t/* See save(): restored, not reloaded. */\n\t\tm_profiles = before_write;\n\t\temit changed();\n\t\treturn false;\n\t}"
+replace = "\tif (had_password) {\n\t\tbssh_secret_store *early = bssh_secret_store::instance();\n\t\tif (early) early->erase(bssh_profile_password_key(id));\n\t}\n\n\tif (!write_profiles()) {\n\t\tm_profiles = before_write;\n\t\temit changed();\n\t\treturn false;\n\t}"
+expect = "a_delete_that_cannot_be_written_keeps_the_password_too"

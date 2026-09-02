@@ -635,6 +635,12 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 bool bssh_profile_store::remove(int id) {
 	if (!m_open || id == 0) return false;
 
+	/*
+	 * Cleared on entry, or a caller that checks it after a SUCCESSFUL
+	 * removal reads whatever the last failure left there.
+	 */
+	m_last_error.clear();
+
 	const QList<bssh_profile_t> before_write = m_profiles;
 
 	/* Read while the row still exists; see the erase below. */
@@ -672,6 +678,23 @@ bool bssh_profile_store::remove(int id) {
 	 * this does not invent one: a locked store is left exactly as it was
 	 * before this change, no worse and no better.
 	 */
+	if (!write_profiles()) {
+		/* See save(): restored, not reloaded. */
+		m_profiles = before_write;
+		emit changed();
+		return false;
+	}
+
+	/*
+	 * AFTER the write, and that ordering is the point.
+	 *
+	 * This ran before it, so a write that failed put the row back --
+	 * `before_write` is captured above, with the flag still set -- while
+	 * the secret it names had already gone from the keyring. The host
+	 * returned to the list saying it had a saved password, and the next
+	 * connection asked for one the user believed they had stored. A
+	 * failed write now leaves BOTH halves as they were.
+	 */
 	if (had_password) {
 		const QString key = bssh_profile_password_key(id);
 		bssh_secret_store *secrets = bssh_secret_store::instance();
@@ -685,13 +708,6 @@ bool bssh_profile_store::remove(int id) {
 			        "removed the host, but could not remove or schedule its "
 			        "saved password");
 		}
-	}
-
-	if (!write_profiles()) {
-		/* See save(): restored, not reloaded. */
-		m_profiles = before_write;
-		emit changed();
-		return false;
 	}
 
 	emit changed();

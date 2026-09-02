@@ -1271,6 +1271,71 @@ void profile_store_test::a_sweep_does_not_erase_a_password_a_live_host_now_owns(
 	          "a key a live host now owns must not stay on the sweep list");
 }
 
+void profile_store_test::a_delete_that_cannot_be_written_keeps_the_password_too() {
+	/*
+	 * remove() erased the credential BEFORE writing hosts.ini, and the
+	 * rollback snapshot is taken before that -- so a write that failed
+	 * put the row back with its "password saved" flag intact while the
+	 * secret it names had already gone. The host returned to the list
+	 * claiming a password it no longer had, and the next connection asked
+	 * for one the user believed they had stored.
+	 *
+	 * The two halves have to fail together or not at all, which is what
+	 * this asserts: the row is still there AND so is the secret.
+	 */
+	bssh_secret_store *secrets = bssh_secret_store::instance();
+	QVERIFY(secrets);
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("kept");
+	host.host = QStringLiteral("kept.example");
+	host.has_stored_password = true;
+	const int id = store.save(host);
+	QVERIFY(id != 0);
+
+	const QString key = bssh_profile_password_key(id);
+	if (!secrets->is_unlocked() && secrets->needs_passphrase()) {
+		QVERIFY(secrets->unlock(QStringLiteral("passphrase for the suite")));
+	}
+	QVERIFY(secrets->store(key, QStringLiteral("keep-me")));
+
+	/* The write cannot land from here. */
+	QVERIFY(QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+	                                           | QFileDevice::ExeOwner));
+
+	const bool removed = store.remove(id);
+
+	QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+	                                   | QFileDevice::WriteOwner
+	                                   | QFileDevice::ExeOwner);
+
+	/*
+	 * Asked of the FILE rather than of the return value: running as a
+	 * user who can write regardless -- root in a container is the usual
+	 * one -- makes this a test of nothing, and conditioning the skip on
+	 * what remove() SAID would skip for the very defect it is here to
+	 * catch.
+	 */
+	QSettings written(dir.path() + QStringLiteral("/hosts.ini"), QSettings::IniFormat);
+	if (!written.childGroups().isEmpty() && removed) {
+		QSKIP("this account can write the directory anyway, so the failure "
+		       "path was never taken");
+	}
+
+	QVERIFY2(!removed, "a delete whose write failed must not report success");
+
+	/* The row came back... */
+	QCOMPARE(store.profiles().size(), 1);
+	QCOMPARE(store.profiles().first().id, id);
+
+	/* ...and so must the password it still claims to have. */
+	QCOMPARE(secrets->load(key), QStringLiteral("keep-me"));
+}
+
 void profile_store_test::a_save_that_cannot_reach_the_disk_is_not_reported_as_saved() {
 	/*
 	 * QSettings swallows a failed write: sync() returns void and status()
