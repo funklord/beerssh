@@ -320,11 +320,41 @@ public:
 	}
 
 private:
+	/*
+	 * Built once, SHOWN every time -- two questions that were one early
+	 * return.
+	 *
+	 * set_keep_alive(false) hides the icon when the last session goes,
+	 * and bssh_main_window calls set_keep_alive(live > 0) on every
+	 * connect and disconnect. So the second session of a run got no icon
+	 * at all: this saw m_tray already existed and returned, and the icon
+	 * stayed hidden for the rest of the process. That is sec 5.5's route
+	 * back to a hidden window, gone after the first time the session
+	 * count touches zero.
+	 *
+	 * notify() inherited it, handing showMessage() an invisible icon,
+	 * which Qt drops without a word -- so every reconnect and bell notice
+	 * went missing too.
+	 */
 	void ensure_tray() {
-		if (m_tray || !QSystemTrayIcon::isSystemTrayAvailable()) return;
+		if (!QSystemTrayIcon::isSystemTrayAvailable()) return;
+
+		if (m_tray) {
+			m_tray->show();
+			return;
+		}
 
 		m_tray = new QSystemTrayIcon(this);
 		m_tray->setToolTip(QStringLiteral("BeerSSH"));
+
+		/*
+		 * The application icon, said out loud. QSystemTrayIcon does not
+		 * inherit the one main.cpp sets on QGuiApplication, and Qt warns
+		 * "No Icon set" and shows nothing -- a way back nobody can see is
+		 * the same as no way back. main.cpp sets the window icon for the
+		 * same reason and this did not follow it.
+		 */
+		m_tray->setIcon(QGuiApplication::windowIcon());
 
 		QMenu *menu = new QMenu();
 		menu->addAction(QStringLiteral("Quit BeerSSH"), qApp, &QCoreApplication::quit);

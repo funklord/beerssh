@@ -123,14 +123,38 @@ public:
 		GError *error = nullptr;
 		const QByteArray id_utf8 = id.toUtf8();
 
-		const gboolean ok = secret_password_clear_sync(
-		        bssh_schema(), nullptr, &error, "id", id_utf8.constData(), nullptr);
+		secret_password_clear_sync(bssh_schema(), nullptr, &error,
+		                            "id", id_utf8.constData(), nullptr);
 
 		if (error) {
 			g_error_free(error);
 			return false;
 		}
-		return ok;
+
+		/*
+		 * The return value is dropped on purpose: it answers a different
+		 * question from the one this method asks.
+		 * secret_password_clear_sync() reports whether anything MATCHED,
+		 * so it hands back FALSE with no GError when the keyring held no
+		 * such entry -- which is "already gone", the state the caller
+		 * wanted, not a failure to reach it. Only an error is a failure,
+		 * and an error sets `error`.
+		 *
+		 * Returning that FALSE cost more than a wrong word.
+		 * bssh_profile_store::remove() files a key on the orphan list
+		 * when erase() fails, and bssh_sweep_orphaned_secrets() drops
+		 * only the keys whose erase SUCCEEDS. So deleting a host whose
+		 * entry was already gone added a key that every later sweep
+		 * re-erased, failed on, and wrote back: the list in app.ini grew
+		 * for the life of the install and never shrank, costing a D-Bus
+		 * round trip per stale entry for ever.
+		 *
+		 * Both sibling backends already answer this way, which is the
+		 * asymmetry that gave it away: the keystore returns true outright
+		 * for a key it does not hold, and the file store's
+		 * remove-then-flush cannot tell the two cases apart.
+		 */
+		return true;
 	}
 };
 
