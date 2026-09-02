@@ -43,6 +43,20 @@
  * address is shorter than it and so is shown untouched.
  */
 const int BSSH_URI_PROMPT_CHARS = 96;
+/*
+ * How deep the kitty keyboard flags stack may go.
+ *
+ * The push had no bound: five bytes on the wire per entry, cleared only
+ * by a reset, and the remote deciding how many. Same rule as the title
+ * cap and the string payloads above it -- a buffer a remote can grow
+ * needs a bound of this program's own, or the cap is back where it
+ * started.
+ *
+ * Generous on purpose. A program nests these to save and restore its
+ * keyboard mode around a subprocess; anything past a handful is not a
+ * program keeping track of itself.
+ */
+const int BSSH_MAX_KITTY_STACK = 64;
 
 inline QString bssh_uri_for_prompt(const QString &uri, int max_chars) {
 	if (max_chars <= 0 || uri.size() <= max_chars) return uri;
@@ -139,6 +153,13 @@ public:
 	QString link_uri(quint16 id) const;
 
 	int kitty_keyboard_flags() const;
+
+	/*
+	 * How deep the kitty flags stack is. Exposed for the same reason
+	 * scrollback().count() and images().count() are: a bound nothing can
+	 * observe is a bound nothing can test.
+	 */
+	int kitty_stack_depth() const;
 	int modify_other_keys_level() const;
 
 	void send_key(int key, quint8 modifiers);

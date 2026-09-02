@@ -352,6 +352,7 @@ const int BSSH_MAX_TITLE_CHARS = 1024;
  */
 const int BSSH_MAX_LINK_CHARS = 4096;
 
+
 int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 
@@ -612,6 +613,20 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 
 		if (lead == ">") {
 			const int flags = argcount > 0 ? int(args[0]) : 0;
+
+			/*
+			 * At the cap the entry ABOVE the base goes, not the base
+			 * itself: the pop below refuses to remove the last one,
+			 * so a program that pops its way back down must land on
+			 * the zero it started from rather than on whatever
+			 * eviction happened to leave. Dropping the oldest also
+			 * keeps the entries a program is actually using, which
+			 * are the ones nearest the top.
+			 */
+			if (self->kitty_stack.size() >= BSSH_MAX_KITTY_STACK) {
+				self->kitty_stack.removeAt(1);
+			}
+
 			self->kitty_stack.append(flags);
 			return 1;
 		}
@@ -2125,6 +2140,10 @@ void bssh_emulator::set_focused(bool focused) {
 	} else {
 		vterm_state_focus_out(state);
 	}
+}
+
+int bssh_emulator::kitty_stack_depth() const {
+	return m_private->kitty_stack.size();
 }
 
 int bssh_emulator::kitty_keyboard_flags() const {

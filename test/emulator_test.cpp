@@ -521,6 +521,54 @@ void emulator_test::osc8_marks_cells_with_a_link() {
 	QCOMPARE(int(emulator.screen().cell(0, 20).link), 0);
 }
 
+void emulator_test::the_kitty_flags_stack_is_bounded() {
+	/*
+	 * CSI > flags u pushes a kitty keyboard mode. The pop beside it is
+	 * guarded so the stack never empties, and the set writes in place --
+	 * the PUSH had no bound at all, and the stack is cleared only by a
+	 * reset. Five bytes on the wire per entry, held for the life of the
+	 * session, with the remote deciding how many.
+	 *
+	 * That is the shape this file bounds everywhere else: the title
+	 * buffer, OSC 52, the DCS and APC payloads, the hyperlink URIs. Its
+	 * own words for it -- "accumulating them without a bound of our own
+	 * would put the cap back where it started: the remote decides how
+	 * much memory this costs".
+	 */
+	bssh_emulator emulator(40, 5);
+
+	/* One entry to begin with, which is the base the pop refuses to
+	 * remove. */
+	QCOMPARE(emulator.kitty_stack_depth(), 1);
+
+	for (int i = 0; i < 5000; ++i) {
+		emulator.feed(QByteArrayLiteral("\x1b[>1u"));
+	}
+
+	QVERIFY2(emulator.kitty_stack_depth() <= BSSH_MAX_KITTY_STACK,
+	          qPrintable(QStringLiteral("the stack grew to %1 entries")
+	                             .arg(emulator.kitty_stack_depth())));
+
+	/*
+	 * And popping past the bottom still lands on the base rather than on
+	 * whatever eviction left behind -- which is why the cap drops the
+	 * entry ABOVE the base rather than the base itself.
+	 */
+	for (int i = 0; i < 5000; ++i) {
+		emulator.feed(QByteArrayLiteral("\x1b[<1u"));
+	}
+
+	QCOMPARE(emulator.kitty_stack_depth(), 1);
+	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
+
+	/* An ordinary push and pop still round-trips, so this is a check on
+	 * the bound and not on the protocol having been switched off. */
+	emulator.feed(QByteArrayLiteral("\x1b[>5u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 5);
+	emulator.feed(QByteArrayLiteral("\x1b[<1u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
+}
+
 void emulator_test::erase_saved_lines_actually_empties_the_scrollback() {
 	/*
 	 * CSI 3 J is what `clear` sends as its E3 capability, after homing

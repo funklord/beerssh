@@ -1,0 +1,19 @@
+# Sabotage for a buffer the REMOTE decides the size of.
+#
+# Distinct from remote-strings.toml, which is about things bounded in
+# memory and unbounded in LAYOUT. This one is the plainer failure: a
+# structure with no cap at all, grown five bytes at a time from the wire
+# and cleared only by a reset.
+#
+# The kitty keyboard stack was the last of them. Its pop is guarded so the
+# stack never empties and its set writes in place -- only the push grew
+# freely, which is the half nobody looks at when the other two are
+# careful. Every neighbouring buffer in that file carries a cap and says
+# why: "accumulating them without a bound of our own would put the cap
+# back where it started: the remote decides how much memory this costs".
+[[sabotage]]
+name = "the kitty flags stack grows without limit"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\t\tif (self->kitty_stack.size() >= BSSH_MAX_KITTY_STACK) {\n\t\t\t\tself->kitty_stack.removeAt(1);\n\t\t\t}\n\n"
+replace = ""
+expect = "the_kitty_flags_stack_is_bounded"

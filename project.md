@@ -5081,6 +5081,25 @@ store with a memory budget (§7.2), both bounded for this reason.
 bounded?"* but *"this file bounds its other remote-controlled buffer and
 says why — does that reasoning apply here?"* It applied verbatim.
 
+**It applied once more, to the last unbounded thing in the file, and that
+one is not a buffer of bytes.** `CSI > flags u` pushes a kitty keyboard
+mode, and the push had no cap — five bytes on the wire per entry, cleared
+only by a reset, with the remote choosing how many. What makes it the
+interesting case is its neighbours: the POP is carefully guarded so the
+stack never empties, and the SET writes in place. Two of the three
+operations were thought about. The one that grows was not, which is the
+half nobody checks when the others are careful.
+`BSSH_MAX_KITTY_STACK` caps it at 64 — generous, because a program nests
+these to save and restore its mode around a subprocess and anything past
+a handful is not a program keeping track of itself. **The eviction takes
+the entry ABOVE the base, never the base**, because the pop refuses to
+remove the last one: a program popping its way back down has to land on
+the zero it started from rather than on whatever eviction left behind.
+`kitty_stack_depth()` exists so the bound can be asserted at all — the
+same reason `scrollback().count()` and `images().count()` do. A bound
+nothing can observe is a bound nothing can test, and the sabotage reports
+the depth it reached (5001) rather than merely that it was too big.
+
 **The cap bounded the memory and not the LAYOUT, which is the other half
 of the same string.** 1024 characters is a modest buffer and, in a
 `QTabBar` with `setExpanding(false)` and no elide mode, a tab **11,472
