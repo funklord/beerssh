@@ -445,11 +445,18 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * down anywhere a user could reach: the only way to discover that
 	 * Ctrl+Shift+C never reaches your shell was to press it and notice.
 	 *
-	 * Built from bssh_input_router::stolen_chords(), which is the same
-	 * list handle_key() matches against, so this cannot drift into
-	 * describing a set the router no longer takes. Read-only for now --
-	 * sec 6.1 also asks for these to be remappable, and that is not
-	 * built.
+	 * This used to end "Read-only for now -- sec 6.1 also asks for these
+	 * to be remappable, and that is not built", and named
+	 * stolen_chords() as what the rows came from. Both stopped being
+	 * true when the rows below became QKeySequenceEdits built from
+	 * default_chords(), and the comment describing that change was added
+	 * ten lines down rather than here -- so the file said the feature was
+	 * missing directly above the code implementing it.
+	 *
+	 * Worth the words because of which way the error points: a stale
+	 * comment claiming something is UNBUILT invites the next reader to
+	 * build it again, and the honest reasons in it are what make the
+	 * claim credible.
 	 */
 	QLabel *chords_heading = new QLabel(
 	        QStringLiteral("<b>Keys this app keeps</b>"), this);
