@@ -1146,9 +1146,36 @@ check: style test
 # clone, and can be kept in sync. .git/hooks is untracked, so a hook that
 # exists only there enforces a rule nobody can see and vanishes silently on
 # a fresh clone.
+#
+# **Where the hooks live is git's question, not the filesystem's.** This
+# asked `test -d .git`, which is false in a linked worktree and in a
+# submodule checkout: there `.git` is a regular FILE naming the real gitdir.
+# So `make hooks` refused with "not a git repository" inside one that is.
+# This tree's own vterm/ submodule is exactly that shape -- a 30-byte gitdir
+# file -- so the case is reachable from a checkout of this repository, not
+# only from somebody's worktree.
+#
+# Testing -e instead would only move the failure one line down: the installs
+# write into .git/hooks/, which is not a directory there either. Asking git
+# answers both halves at once, and from a worktree it returns the MAIN
+# repository's hooks directory -- which is the one git actually runs.
+#
+# git's absence is reported as its own thing rather than as "not a git
+# repository", which would be a message naming a cause nothing tested. The
+# submodule fetch at the top of this file already draws the same
+# distinction.
 hooks:
-	@test -d .git || { echo "hooks: not a git repository" >&2; exit 1; }
-	@install -m 0755 tool/hooks/commit-msg .git/hooks/commit-msg
-	@install -m 0755 tool/hooks/pre-push .git/hooks/pre-push
-	@install -m 0755 tool/hooks/pre-commit .git/hooks/pre-commit
-	@echo "hooks: commit-msg, pre-commit and pre-push installed from tool/hooks/"
+	@if ! command -v git >/dev/null 2>&1; then \
+		echo "hooks: git is not installed, so there is nowhere to install to." >&2; \
+		exit 1; \
+	fi; \
+	dir=$$(git rev-parse --git-common-dir 2>/dev/null); \
+	if [ -z "$$dir" ]; then \
+		echo "hooks: not a git repository, so there is nowhere to install to." >&2; \
+		exit 1; \
+	fi; \
+	mkdir -p "$$dir/hooks"; \
+	install -m 0755 tool/hooks/commit-msg "$$dir/hooks/commit-msg"; \
+	install -m 0755 tool/hooks/pre-push "$$dir/hooks/pre-push"; \
+	install -m 0755 tool/hooks/pre-commit "$$dir/hooks/pre-commit"; \
+	echo "hooks: commit-msg, pre-commit and pre-push installed from tool/hooks/ into $$dir/hooks/"
