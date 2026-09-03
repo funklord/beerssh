@@ -821,10 +821,22 @@ ifneq ($(ANDROID_KEYSTORE),)
 	@# under a message announcing a release build. Signed with the debug
 	@# key is the one packaging mistake nobody catches by looking.
 	$(MAKE) -C $(ANDROID_BUILD_DIR) apk_install_target
-	@set -e; \
 	@# `apk` here is QT'S generated target, not one of ours -- ours is
 	@# `android` now, and this line reads Qt's Makefile to lift the
 	@# androiddeployqt command out of it.
+	@#
+	@# Above the recipe rather than inside it, and that is not a matter of
+	@# taste. A recipe line ending in a backslash CONTINUES, and make hands
+	@# the joined text to the shell without looking at it -- so a `@#` on
+	@# the next line is not a comment, it is an argument. This sat between
+	@# `@set -e; \` and the sed below, where the apostrophe in QT'S opened a
+	@# quote that nothing closed, and every release build died on
+	@# "Unterminated quoted string" before androiddeployqt ever ran.
+	@#
+	@# It survived because the cheap check clears it: `make -n` prints this
+	@# recipe expanded and `sh -n` on what it prints exits 0. The error
+	@# exists only in the string make actually passes to the shell.
+	@set -e; \
 	deploy=$$(sed -n '/^apk: apk_install_target/,+1p' $(ANDROID_BUILD_DIR)/Makefile | tail -1); \
 	if [ -z "$$deploy" ]; then echo "android: cannot find Qt's deploy command" >&2; exit 1; fi; \
 	$$deploy --release --sign $(ANDROID_KEYSTORE) $(ANDROID_KEY_ALIAS)
