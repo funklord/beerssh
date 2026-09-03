@@ -869,6 +869,37 @@ up, a strip of modifiers has nothing to modify.
   Qt started with, so the same setting gives the same result on a Fusion session,
   a GTK-themed one and Android. Qt is still *told*, so anything asking it rather
   than us agrees.
+  **The portal answered when that was written and does not answer now, so
+  the three-tier chain currently fails on the holder's own desktop.**
+  Re-measured 2026-09-03: `XDG_CURRENT_DESKTOP=TDE`, `QT_QPA_PLATFORMTHEME`
+  unset, and `org.freedesktop.portal.Desktop` **is not provided by any
+  `.service` file** — `gdbus` returns `ServiceUnknown`. The only portal names
+  present are `org.freedesktop.impl.portal.desktop.lxqt` (activatable) and
+  `impl.portal.Secret`, and an *impl* is not the frontend: something looking
+  only for "a portal" on this box finds one and still gets no answer. So tier
+  1 returns Unknown, tier 2 cannot answer, Qt hands back its default light
+  palette, and tier 3 reads that palette and says **light** — correctly, from
+  a palette nothing themed. **Three tiers, none broken, all wrong**, and
+  nothing in the chain reports a difficulty; it looks exactly like a
+  correctly-detected light desktop.
+  **Tier 4 is the fix and is settled workspace-wide** (`harmonization.md`
+  `038d7e9`, signalled by hydra): read `~/.trinity/share/config/kdeglobals`,
+  then `~/.kde/share/config/kdeglobals`, and compare Rec.709 luminance of
+  `windowBackground` against `windowForeground` — deliberately the same
+  comparison tier 3 makes, pointed at the source that has the answer.
+  Measured here: `windowBackground=0,42,78` is luminance 35.7 and
+  `windowForeground=220,220,220` is 220, so background-darker gives *dark*,
+  which is the truth. **Do not read the scheme name**: this machine's
+  `colorScheme=DarkBlue.kcsrc` contains "Dark" by luck, and a name is not a
+  predicate. **Abstain when the file will not parse**, rather than guessing.
+  Not implemented here yet — the measurement is recorded so the next session
+  does not re-take it, and hydra has tiers 1-3 plus this one, so its function
+  is the thing to copy rather than a fourth implementation to write.
+  **beerssh's existing final tier already obeys the safety half of that rule**
+  without saying so: it does not abstain, it answers *light*, which is the
+  direction that survives being wrong. In a terminal a wrong dark guess is
+  pale text on pale — unreadable rather than merely plain — which is why this
+  tree is the one where the whole question bites hardest.
   Both change sources are watched — Qt's signal and the portal's
   `SettingChanged` — because either may be the one that notices, and a theme that
   is only right at startup is one a user calls broken.
