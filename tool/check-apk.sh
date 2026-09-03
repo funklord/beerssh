@@ -106,9 +106,40 @@ fi
 
 # And the bundled fonts, which is the packaging question the APK is
 # actually answering: the app prints what it found (sec 9.4).
-faces=$(adb logcat -d 2>&1 | grep -o "beerssh: [0-9]* font faces" | tail -1 | grep -o "[0-9]*" || true)
-if [ -z "$faces" ] || [ "$faces" -lt 1 ]; then
-	echo "check-apk: it started but found no bundled fonts -- assets are missing" >&2
+#
+# It prints one of TWO lines, and they are not the same news. src/main.cpp
+# says so at the branch that writes them: "'the fonts are missing' and 'no
+# fonts were found' are the same bug report, and only this can tell them
+# apart." That distinction was built deliberately and then thrown away
+# here, by looking for the success line only.
+#
+# The old test also asked whether the number was < 1, which it can never
+# be: main.cpp prints that line only when the count is above zero, and a
+# different line otherwise. So the branch was dead, and every real failure
+# arrived through "the line is absent" -- which a logcat ring that had
+# wrapped, a filtered qInfo, or a reworded message produce just as readily
+# as an empty assets/ directory. All four said "assets are missing".
+#
+# Read once and ask for both. An absent pair is now its own answer, and it
+# is a failure rather than a pass: this check has verified nothing at that
+# point, and saying so is the whole difference between a gate and a
+# formality.
+log=$(adb logcat -d 2>&1 || true)
+faces=$(printf '%s\n' "$log" | grep -o "beerssh: [0-9]* font faces" | tail -1 \
+        | grep -o "[0-9]*" || true)
+
+if [ -z "$faces" ]; then
+	if printf '%s\n' "$log" | grep -q "beerssh: no bundled fonts"; then
+		echo "check-apk: it started and found NO bundled fonts -- assets are missing" >&2
+		echo "check-apk:   the app said so itself:" >&2
+		printf '%s\n' "$log" | grep "beerssh: no bundled fonts" | tail -1 >&2
+	else
+		echo "check-apk: neither font message is in the log, so nothing was checked." >&2
+		echo "check-apk:   the app prints one of them at startup (src/main.cpp), so" >&2
+		echo "check-apk:   their absence is about the LOG, not about the assets: a" >&2
+		echo "check-apk:   logcat ring that wrapped or a filtered qInfo looks exactly" >&2
+		echo "check-apk:   like this. Re-run closer to the launch." >&2
+	fi
 	exit 1
 fi
 
