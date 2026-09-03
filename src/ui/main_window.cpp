@@ -3692,36 +3692,56 @@ void bssh_main_window::offer_to_remember(bssh_session *session, const QString &p
 	if (!unlock_secret_store()) return;
 
 	/*
-	 * Read the row back out of the STORE rather than using the session's
-	 * copy of it. The two agree now that a save refreshes live sessions,
-	 * but this writes a whole row back, so taking it from anywhere other
-	 * than the row itself means an edit made in between is silently
-	 * reverted -- a hostname corrected while connected, undone by storing
-	 * a password. Only the one flag this function owns is changed.
-	 *
-	 * ASKED BEFORE THE SECRET IS WRITTEN, not after. A session outlives
-	 * the deletion of its host (sec 8.4), and it keeps the old id, so the
-	 * prompt still offers to remember. Storing first and checking second
-	 * wrote a credential under an id with no row behind it and then
-	 * declined to record the flag -- an orphaned secret that nothing will
-	 * ever erase, which is exactly what 0482afe made deletion prevent,
-	 * arriving by another road.
+	 * The two writes and their ordering live in
+	 * bssh_remember_profile_password(), because getting them right is not
+	 * a widget's job and the rollback it does cannot be tested through a
+	 * window. What is left here is the part that IS this window's: saying
+	 * so when it did not work.
 	 */
-	const bssh_profile_t updated_row = m_profile_store->profile(session->profile().id);
-	if (updated_row.id != session->profile().id) return;
-
-	bssh_secret_store *store = bssh_secret_store::instance();
-	if (!store->store(bssh_profile_password_key(session->profile().id), password)) {
-		return;
-	}
+	const bssh_remember_result_t result = bssh_remember_profile_password(
+	        session->profile().id, password, m_profile_store);
 
 	/*
-	 * The flag goes in the profile row so the next run knows to ask for
-	 * the store passphrase. Written only after the secret itself landed,
-	 * or a failed write would leave the app hunting for a password that
-	 * was never saved -- an ordering this keeps.
+	 * Said rather than swallowed. The tick box is a promise, and the next
+	 * connection asking for a password the user believes they saved is
+	 * the moment they find out it was not kept -- by which time nothing
+	 * on screen connects the two. The reason is named because what to do
+	 * next differs: a full disk is fixable, a store that will not open is
+	 * a different problem.
+	 *
+	 * Every case named and no default, so a result added later is a
+	 * warning here rather than a warning box with a blank reason in it.
 	 */
-	bssh_profile_t updated = updated_row;
-	updated.has_stored_password = true;
-	m_profile_store->save(updated);
+	QString reason;
+	switch (result) {
+	case BSSH_REMEMBER_SAVED:
+		return;
+	case BSSH_REMEMBER_NO_HOST:
+		/*
+		 * A host deleted while its session was still up (sec 8.4), or
+		 * a session with no host behind it at all. Nothing was written
+		 * and nothing needs saying: there is no longer anywhere to
+		 * remember a password FOR, and the user deleted it themselves.
+		 */
+		return;
+	case BSSH_REMEMBER_NO_STORE:
+		reason = QStringLiteral("There is no credential store on this system.");
+		break;
+	case BSSH_REMEMBER_NOT_STORED:
+		reason = QStringLiteral("The credential store could not be written.");
+		break;
+	case BSSH_REMEMBER_NOT_FLAGGED:
+		reason = QStringLiteral("The host could not be updated, so the password "
+		                         "was taken back out of the store.");
+		break;
+	case BSSH_REMEMBER_STRAY:
+		reason = QStringLiteral("The host could not be updated, and the password "
+		                         "could not be taken back out of the store -- it "
+		                         "may still be there, unused.");
+		break;
+	}
+
+	QMessageBox::warning(this, QStringLiteral("BeerSSH"),
+	                      QStringLiteral("The password for %1 was not saved.\n\n%2")
+	                              .arg(session->profile().target(), reason));
 }

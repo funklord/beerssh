@@ -5225,6 +5225,57 @@ the secret lands — is kept. That comment was right about what it covered
 and silent about the row's existence, and it read as covering more than
 it said.
 
+**And both writes reported failure to a caller that read neither.** The
+third act of the same story, and the one the two above could not reach,
+because they were about the *order* of the writes rather than about
+their *answers*. `offer_to_remember` asked the secret store to store the
+password and returned quietly when it said no; then set the row's flag
+and never looked at what `save()` returned at all. A user who ticked
+"Remember" was told nothing either way, and found out at the next
+connection — asked for a password they believed they had saved, with
+nothing on screen connecting the two moments.
+
+**The flag half is the expensive one, and it is a leak rather than an
+inconvenience.** A secret whose flag never landed is read by nothing:
+`stored_password_for()` returns early without the flag, `remove()`
+erases a credential only for a row that claims to have one, and
+`bssh_sweep_orphaned_secrets()` skips any key a live profile owns. So it
+sits in the keyring, unused, unerasable, and it survives the deletion of
+the host it belongs to — the very state §11 twice made deletion prevent,
+arriving a third time by a third road. It is erased again now when the
+flag cannot be written, and the one case where even the erase fails is
+told to the user rather than swallowed.
+
+**Where the fix went matters more than what it does.** The ordering, the
+row check and the rollback are `bssh_remember_profile_password()` in
+`profile_store.cpp`, beside the sweep and the orphan note that already
+reason about both stores. What is left in the window is the half that IS
+a window's job: turning a result into a sentence. The reason is the one
+this document keeps arriving at from the other direction — the previous
+version was untestable *because of where it sat*, a private method of a
+widget behind a modal prompt, and three of these assertions cannot be
+written against a window at all. §11's host-key entry above says the same
+thing in the same words: when a decision cannot be tested where it sits,
+the fault is usually where it sits.
+
+**The lens was the previous day's fixes, asked from the other end.** Four
+commits made `unlock()`, `store()` and `erase()` return false honestly
+where they had been reporting success. The question that follows is not
+where else that shape occurs — that sweep was finished — but **who reads
+the false they now return**. One caller did not, and it was the only
+caller any of them had, so the four fixes were invisible from where a
+user stands: a store that correctly refused to write reached a widget
+that discarded the refusal. A correct function is not a working feature.
+
+Held by three tests and two sabotage edits. The failure is forced the way
+§12.3's delete test forces it — a read-only directory for the hosts file,
+with the credential store in the app's own config directory and still
+writable, which is exactly the split that makes the secret land and the
+flag not. The skip is conditioned on whether the flag reached the FILE
+rather than on what the call returned, because an account that can write
+a read-only directory (root in a container, which is what `check-ci` is)
+would otherwise skip for the very defect the test exists to catch.
+
 **Appending to `known_hosts` could corrupt the entry already there.**
 `bssh_append_hashed_known_host` opened the file in `Append` and wrote its
 line. Two faults, and they compound:

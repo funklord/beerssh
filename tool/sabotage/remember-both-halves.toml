@@ -1,0 +1,41 @@
+# Sabotages for "remember this password", which is two writes that have to
+# agree: the secret in bssh_secret_store, and the row's has_password flag
+# that says anything will ever come back for it.
+#
+# Both edits below are what the code did before bssh_remember_profile_password
+# existed -- the window took the secret store's status, dropped the profile
+# store's, and had no rollback at all.
+#
+# Each names the test that must notice. A sabotage caught by some OTHER test
+# is reported as "WRONG TEST" rather than as a pass.
+
+# A flag that never landed leaves a secret nothing reads: stored_password_for()
+# returns early without the flag, remove() erases a credential only for a row
+# that claims one, and the orphan sweep skips any key a live profile owns. So
+# it outlives the host, unused and unerasable.
+[[sabotage]]
+name = "a flag that could not be written leaves the secret behind"
+file = "src/model/profile_store.cpp"
+find = "\treturn secrets->erase(key) ? BSSH_REMEMBER_NOT_FLAGGED : BSSH_REMEMBER_STRAY;"
+replace = "\treturn BSSH_REMEMBER_NOT_FLAGGED;"
+expect = "a_password_whose_flag_cannot_be_written_is_taken_back"
+
+# And the ordering. A session outlives the deletion of its host and keeps the
+# old id, so the prompt still offers to remember; writing the secret before
+# looking for the row puts a credential under an id with no row behind it.
+[[sabotage]]
+name = "the secret is written before the row is looked for"
+file = "src/model/profile_store.cpp"
+find = '''
+	const bssh_profile_t row = owner->profile(profile_id);
+	if (row.id != profile_id) return BSSH_REMEMBER_NO_HOST;
+
+	const QString key = bssh_profile_password_key(profile_id);
+	if (!secrets->store(key, password)) return BSSH_REMEMBER_NOT_STORED;'''
+replace = '''
+	const QString key = bssh_profile_password_key(profile_id);
+	if (!secrets->store(key, password)) return BSSH_REMEMBER_NOT_STORED;
+
+	const bssh_profile_t row = owner->profile(profile_id);
+	if (row.id != profile_id) return BSSH_REMEMBER_NO_HOST;'''
+expect = "a_host_deleted_while_its_session_lived_gets_no_credential"

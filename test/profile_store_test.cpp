@@ -1271,6 +1271,138 @@ void profile_store_test::a_sweep_does_not_erase_a_password_a_live_host_now_owns(
 	          "a key a live host now owns must not stay on the sweep list");
 }
 
+/*
+ * "Remember this password" is two writes -- the secret, and the flag that
+ * says a secret exists -- and the three tests below hold the three ways
+ * they can come apart. All of them go through
+ * bssh_remember_profile_password(), which is where the ordering lives,
+ * because the window that used to hold it dropped both statuses on the
+ * floor: a store that could not be written and a flag that never landed
+ * were both reported to the user as a password saved.
+ */
+static bssh_secret_store *unlocked_store_for_remembering() {
+	bssh_secret_store *secrets = bssh_secret_store::instance();
+	if (!secrets) return nullptr;
+	if (secrets->needs_passphrase() && !secrets->is_unlocked()) {
+		if (!secrets->unlock(QStringLiteral("passphrase for the suite"))) return nullptr;
+	}
+	return secrets->is_unlocked() ? secrets : nullptr;
+}
+
+void profile_store_test::remembering_a_password_writes_the_secret_and_the_flag() {
+	bssh_secret_store *secrets = unlocked_store_for_remembering();
+	QVERIFY2(secrets, "the store has to be open for this to mean anything");
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	const int id = store.save(make_profile(QStringLiteral("bastion"),
+	                                        QStringLiteral("bastion.example")));
+	QVERIFY(id != 0);
+
+	const QString key = bssh_profile_password_key(id);
+	QVERIFY2(secrets->load(key).isEmpty(), "the key must start empty");
+
+	QCOMPARE(bssh_remember_profile_password(id, QStringLiteral("hunter2"), &store),
+	          BSSH_REMEMBER_SAVED);
+
+	/*
+	 * BOTH halves, because either alone is the defect: a secret with no
+	 * flag is read by nothing, and a flag with no secret sends the next
+	 * connection looking for a password that is not there.
+	 */
+	QCOMPARE(secrets->load(key), QStringLiteral("hunter2"));
+	QVERIFY2(store.profile(id).has_stored_password,
+	          "the row has to say a credential exists, or nothing comes back for it");
+
+	secrets->erase(key);
+}
+
+void profile_store_test::a_password_whose_flag_cannot_be_written_is_taken_back() {
+	bssh_secret_store *secrets = unlocked_store_for_remembering();
+	QVERIFY2(secrets, "the store has to be open for this to mean anything");
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	const int id = store.save(make_profile(QStringLiteral("flagless"),
+	                                        QStringLiteral("flagless.example")));
+	QVERIFY(id != 0);
+	const QString key = bssh_profile_password_key(id);
+
+	/*
+	 * The hosts file cannot be written from here; the credential store
+	 * lives in the app's own config directory and still can. That is
+	 * exactly the split this test needs -- the secret lands and the flag
+	 * does not.
+	 */
+	QVERIFY(QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+	                                           | QFileDevice::ExeOwner));
+
+	const bssh_remember_result_t result =
+	        bssh_remember_profile_password(id, QStringLiteral("hunter2"), &store);
+
+	QFile::setPermissions(dir.path(), QFileDevice::ReadOwner
+	                                   | QFileDevice::WriteOwner
+	                                   | QFileDevice::ExeOwner);
+
+	/*
+	 * Asked of the FILE, for the reason the delete test above gives:
+	 * running as a user who can write a read-only directory -- root in a
+	 * container -- makes this a test of nothing, and conditioning the skip
+	 * on what the call RETURNED would skip for the very defect it is here
+	 * to catch.
+	 */
+	QFile ini(dir.path() + QStringLiteral("/hosts.ini"));
+	QVERIFY(ini.open(QIODevice::ReadOnly));
+	const bool flag_landed = ini.readAll().contains("has_password=true");
+	ini.close();
+
+	if (flag_landed) {
+		secrets->erase(key);
+		QSKIP("this account can write a read-only directory, so the failure "
+		       "cannot be produced here");
+	}
+
+	QCOMPARE(result, BSSH_REMEMBER_NOT_FLAGGED);
+
+	/*
+	 * The point of the whole exercise. remove() erases a credential only
+	 * for a row that claims to have one, and the orphan sweep skips any
+	 * key a live profile owns -- so a secret left here is read by nothing,
+	 * swept by nothing, and outlives the host it belongs to.
+	 */
+	QVERIFY2(secrets->load(key).isEmpty(),
+	          "a secret whose flag never landed must not be left behind");
+}
+
+void profile_store_test::a_host_deleted_while_its_session_lived_gets_no_credential() {
+	bssh_secret_store *secrets = unlocked_store_for_remembering();
+	QVERIFY2(secrets, "the store has to be open for this to mean anything");
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	const int id = store.save(make_profile(QStringLiteral("doomed"),
+	                                        QStringLiteral("doomed.example")));
+	QVERIFY(id != 0);
+	QVERIFY(store.remove(id));
+
+	/*
+	 * A session outlives the deletion of its host (sec 8.4) and keeps the
+	 * old id, so the prompt still offers to remember. Writing the secret
+	 * first and looking for the row second would leave a credential under
+	 * an id with no row behind it.
+	 */
+	QCOMPARE(bssh_remember_profile_password(id, QStringLiteral("hunter2"), &store),
+	          BSSH_REMEMBER_NO_HOST);
+	QVERIFY2(secrets->load(bssh_profile_password_key(id)).isEmpty(),
+	          "a host that is gone must not acquire a credential");
+}
+
 void profile_store_test::a_delete_that_cannot_be_written_keeps_the_password_too() {
 	/*
 	 * remove() erased the credential BEFORE writing hosts.ini, and the

@@ -18,6 +18,9 @@ private slots:
 	void a_password_a_locked_store_kept_is_swept_at_the_next_unlock();
 	void an_id_is_never_reissued_to_another_host();
 	void a_sweep_does_not_erase_a_password_a_live_host_now_owns();
+	void remembering_a_password_writes_the_secret_and_the_flag();
+	void a_password_whose_flag_cannot_be_written_is_taken_back();
+	void a_host_deleted_while_its_session_lived_gets_no_credential();
 	void a_delete_that_cannot_be_written_keeps_the_password_too();
 	void a_save_that_cannot_reach_the_disk_is_not_reported_as_saved();
 	void a_device_setting_that_cannot_be_written_says_so();

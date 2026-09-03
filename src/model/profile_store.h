@@ -245,4 +245,49 @@ bool bssh_note_orphaned_secret(const QString &key);
  */
 void bssh_sweep_orphaned_secrets(const bssh_profile_store *store = nullptr);
 
+/*
+ * "Remember this password" -- the credential and the flag that says it is
+ * there, written as one act (sec 11).
+ *
+ * Two stores have to agree: the secret goes into bssh_secret_store, and
+ * the row's has_stored_password says whether anything will ever come back
+ * for it. Either write can fail, and a caller that takes one status and
+ * drops the other is how they come apart -- which is what this exists to
+ * stop being possible from a widget.
+ *
+ * The ordering and the rollback are the whole of it:
+ *
+ *   - the row is read back out of the store rather than taken from a
+ *     caller's copy, so an edit made while the session was up is not
+ *     reverted by remembering a password;
+ *   - the row is checked BEFORE the secret is written, because a session
+ *     outlives the deletion of its host (sec 8.4) and keeps the old id,
+ *     so storing first would leave a credential under an id with no row
+ *     behind it;
+ *   - the flag is written after the secret lands, so a failed secret
+ *     write does not leave the app hunting for a password that is not
+ *     there;
+ *   - and a failed FLAG write erases the secret again, because
+ *     bssh_profile_store::remove() only erases a credential for a row
+ *     that claims to have one. A secret whose flag never landed is
+ *     therefore read by nothing, erased by nothing -- the orphan sweep
+ *     skips any key a live profile owns -- and outlives the host it
+ *     belongs to.
+ *
+ * The store is not unlocked here: unlocking prompts, and prompting is the
+ * caller's business. An unlocked store is the caller's precondition.
+ */
+enum bssh_remember_result_t {
+	BSSH_REMEMBER_SAVED,       /* both halves landed */
+	BSSH_REMEMBER_NO_HOST,     /* the row went away; nothing was written */
+	BSSH_REMEMBER_NO_STORE,    /* there is no credential store at all */
+	BSSH_REMEMBER_NOT_STORED,  /* the secret could not be written */
+	BSSH_REMEMBER_NOT_FLAGGED, /* the secret was written and taken back */
+	BSSH_REMEMBER_STRAY        /* ...and the taking back failed too */
+};
+
+bssh_remember_result_t bssh_remember_profile_password(int profile_id,
+                                                       const QString &password,
+                                                       bssh_profile_store *store = nullptr);
+
 #endif /* BSSH_PROFILE_STORE_H */

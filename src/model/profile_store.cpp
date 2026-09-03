@@ -938,3 +938,48 @@ void bssh_sweep_orphaned_secrets(const bssh_profile_store *store) {
 
 	if (still_pending != pending) settings.set_orphaned_secrets(still_pending);
 }
+
+bssh_remember_result_t bssh_remember_profile_password(int profile_id,
+                                                       const QString &password,
+                                                       bssh_profile_store *store) {
+	/*
+	 * A session with no host behind it, and an empty password, share an
+	 * answer with the row that went away: nothing was written, and there
+	 * is nothing to tell the user about. Callers act on the difference
+	 * between "nothing happened" and "something half happened", which is
+	 * the line this enum draws.
+	 */
+	if (profile_id == 0 || password.isEmpty()) return BSSH_REMEMBER_NO_HOST;
+
+	bssh_profile_store *owner = store ? store : bssh_profile_store::shared();
+	if (!owner) return BSSH_REMEMBER_NO_HOST;
+
+	bssh_secret_store *secrets = bssh_secret_store::instance();
+	if (!secrets) return BSSH_REMEMBER_NO_STORE;
+
+	/*
+	 * Read the row back out of the STORE rather than trusting a caller's
+	 * copy of it. This writes a whole row back, so taking it from
+	 * anywhere else means an edit made in between is silently reverted --
+	 * a hostname corrected while connected, undone by storing a password.
+	 * Only the one flag this function owns is changed.
+	 */
+	const bssh_profile_t row = owner->profile(profile_id);
+	if (row.id != profile_id) return BSSH_REMEMBER_NO_HOST;
+
+	const QString key = bssh_profile_password_key(profile_id);
+	if (!secrets->store(key, password)) return BSSH_REMEMBER_NOT_STORED;
+
+	bssh_profile_t updated = row;
+	updated.has_stored_password = true;
+	if (owner->save(updated) == profile_id) return BSSH_REMEMBER_SAVED;
+
+	/*
+	 * The flag did not land, so nothing will ever read what was just
+	 * written -- and remove() will not erase it either, since it erases
+	 * only for a row that claims to have a password. Taken back here
+	 * rather than left for the orphan sweep, which skips any key a live
+	 * profile owns and would keep this one for ever.
+	 */
+	return secrets->erase(key) ? BSSH_REMEMBER_NOT_FLAGGED : BSSH_REMEMBER_STRAY;
+}
