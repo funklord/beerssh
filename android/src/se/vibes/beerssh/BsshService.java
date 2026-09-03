@@ -101,14 +101,31 @@ public class BsshService extends Service {
 		createChannel();
 
 		/*
-		 * Unconditionally, and before anything else: this is the call the
-		 * contract above is about, and it has to happen even when the
-		 * command that arrived is "stop". Making it conditional is what
-		 * turns a refused connection into a killed process.
+		 * A null intent means ANDROID started this, not the app: it is
+		 * the redelivery a system-restarted service gets. Nothing good
+		 * can come of continuing.
+		 *
+		 * The process this service exists to keep alive is gone, and the
+		 * SSH sessions went with it -- plain SSH cannot resume one
+		 * (sec 5.3), so there is nothing left to hold open. What is left
+		 * is a process with a service and no Qt: it shows a notification
+		 * saying "Connected" when nothing is, and the launcher can no
+		 * longer bring the app up, because Android hands the launch to
+		 * this process and the activity comes up over a runtime that
+		 * never initialised. Measured on a device 2026-09-04: the app
+		 * became unstartable and stayed that way until a force-stop.
+		 *
+		 * startForeground() is still called first, because the contract
+		 * described above applies to this start as much as any other.
 		 */
 		startForeground(NOTIFICATION_ID, buildNotification(this, s_status));
+		if (intent == null) {
+			stopForeground(true);
+			stopSelf();
+			return START_NOT_STICKY;
+		}
 
-		if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+		if (ACTION_STOP.equals(intent.getAction())) {
 			stopForeground(true);
 			stopSelf();
 			/*
@@ -119,13 +136,21 @@ public class BsshService extends Service {
 		}
 
 		/*
-		 * START_STICKY: if Android kills the process under memory
-		 * pressure it will recreate the service. The SSH sessions do NOT
-		 * come back with it -- they were in the process that died -- so
-		 * this is about the service's own lifecycle, not about session
-		 * recovery, which plain SSH cannot do anyway (sec 5.3).
+		 * NOT sticky, and the comment this replaces argued itself out of
+		 * its own conclusion: it said the sessions do not come back with
+		 * the service, "so this is about the service's own lifecycle".
+		 * A service whose only job is to keep a process alive for
+		 * sessions that no longer exist has no lifecycle worth
+		 * preserving.
+		 *
+		 * What sticky actually bought was a resurrection: the Qt main
+		 * loop aborted, Android recreated the service in a fresh process
+		 * with no Qt in it, and the app could not be started from the
+		 * launcher again -- no crash dialog, because the process was
+		 * technically alive. sec 5.1 wants the service to outlive the
+		 * UI going to the BACKGROUND; it must not outlive the UI dying.
 		 */
-		return START_STICKY;
+		return START_NOT_STICKY;
 	}
 
 	@Override

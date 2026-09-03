@@ -401,6 +401,64 @@ A backgrounded app cannot reliably hold a socket open; Android will kill it.
 Solution: a **foreground service** with an ongoing notification, started when the
 first session connects and stopped when the last disconnects.
 
+**The service must not outlive the UI DYING, only the UI going to the
+background — [FIXED 2026-09-04].** It returned `START_STICKY`, and the
+comment defending that argued itself out of its own conclusion: it conceded
+that the SSH sessions do not come back with the service, "so this is about
+the service's own lifecycle". A service whose only job is to keep a process
+alive for sessions that no longer exist has no lifecycle worth preserving.
+
+What sticky actually bought, measured on the device: the Qt main loop thread
+aborted (`SIGABRT`, abort message *"Failed to acquire deadlock protector for
+`QAndroidPlatformOpenGLWindow::eglSurface()`"*), Android recreated the
+service in a **fresh process with no Qt in it**, and that process then held
+the app's identity. The launcher could no longer bring BeerSSH up — a splash
+screen, then `Not drawing due to not visible` — and there was no crash
+dialog, because from Android's point of view the app was running. It stayed
+that way for twenty-six minutes until an `am force-stop`. The notification
+said *Connected* throughout, because `s_status` is a static that a new
+process initialises to that word.
+
+**From the user's side this is indistinguishable from "the app will not
+start"**, which is how it was reported, and it is the worse failure of the
+two on this page: a session that dies is an inconvenience, an app that
+cannot be started again is uninstall-and-reinstall territory for anyone who
+does not know about force-stop.
+
+Two changes. `START_NOT_STICKY`, so a process that dies stays dead and the
+next launch gets a clean one. And a guard on a **null intent**, which is how
+a system-restarted service is told it was Android's idea rather than the
+app's: it honours the `startForeground` contract above — that applies to
+this start like any other — and then stops itself. The guard is the belt to
+the other's braces, since an OEM or a redelivery could restart a service
+that is no longer sticky.
+
+**Verified by compiling it, which is more than this file used to get.**
+`android/src/se/vibes/beerssh/BsshService.java` is built only by the Android
+build, so no routine gate here sees it — the same hole §11 records for
+`secret_store_keystore.cpp`. It compiles off-device against the real
+`android.jar` and Qt's own `QtActivity`:
+
+    javac -cp $ANDROID_SDK_ROOT/platforms/android-36/android.jar:\
+              $QT_ANDROID_ROOT/jar/Qt6Android.jar:\
+              build-android-arm64-v8a/android-build/build/intermediates/\
+              javac/debug/compileDebugJavaWithJavac/classes \
+          android/src/se/vibes/beerssh/BsshService.java
+
+and the check was shown capable of failing before it was believed: the same
+command on a copy with `START_NOT_STICKY` misspelled exits 1 naming the
+symbol. **That makes a `make check-java` gate cheap and obvious, and it does
+not exist yet** — worth having, because this file is one of two in the tree
+that nothing compiles.
+
+**What is NOT verified is the behaviour.** Reproducing it needs the Qt main
+loop to abort again, and the abort itself is not understood — it happened
+during rapid foreground switching with the IME animating, and no attempt was
+made to provoke it a second time. So the fix rests on the mechanism being
+read correctly from the log, not on having watched the app recover. The
+EGL deadlock abort is its own open question and is not addressed here.
+
+
 **Stopping it is a START.** `startForegroundService()` opens a contract: the
 service has about five seconds to call `startForeground()` or Android throws
 `RemoteServiceException` and kills the process. A plain `stopService()` arriving
