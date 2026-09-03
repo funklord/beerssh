@@ -1388,6 +1388,34 @@ void terminal_view_test::a_selection_change_is_announced_not_only_answerable() {
 	QVERIFY2(g_announced.contains(QAccessible::TextSelectionChanged),
 	          "clearing the selection has to be announced too");
 
+	/*
+	 * And the CARET, which had the same defect one function above the one
+	 * that fixed it here. cursorPosition() answered correctly whenever it
+	 * was asked and nothing ever said it had moved.
+	 *
+	 * For a terminal the caret is the worse half to leave out: it is
+	 * where your own typing appears, and following it is how a reader
+	 * follows you typing. libvterm's movecursor callback routes through
+	 * notify_damaged() like everything else, so a move reached a client
+	 * as "the text changed" and never as "the caret moved".
+	 */
+	g_announced.clear();
+	emulator.feed(QByteArrayLiteral("abc"));
+	view.on_screen_damaged();
+	QVERIFY2(g_announced.contains(QAccessible::TextCaretMoved),
+	          "typing moves the caret, and that has to be announced");
+
+	/*
+	 * And NOT announced when it did not move. Output that leaves the
+	 * cursor where it was is the common case -- a scrolling log ends on
+	 * the same line -- and a caret event per damage would be a reader
+	 * saying it moved when it did not.
+	 */
+	g_announced.clear();
+	view.on_screen_damaged();
+	QVERIFY2(!g_announced.contains(QAccessible::TextCaretMoved),
+	          "damage that does not move the caret must not announce one");
+
 	QAccessible::installUpdateHandler(previous);
 	QAccessible::setActive(was_active);
 }

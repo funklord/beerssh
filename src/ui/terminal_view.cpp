@@ -2132,6 +2132,44 @@ void bssh_terminal_view::note_content_changed() {
 
 	QAccessibleTextUpdateEvent event(this, 0, QString(), QString());
 	QAccessible::updateAccessibility(&event);
+
+	/*
+	 * And the CARET, which was never announced either.
+	 *
+	 * This is the same defect note_selection_changed() records and fixes
+	 * one function below, left standing one function above it:
+	 * cursorPosition() answers correctly whenever it is asked, and
+	 * nothing ever said it had moved, so a client learned of a move only
+	 * by re-querying. For a terminal that is the worse half to leave out
+	 * -- the caret is where your own typing appears, and following it is
+	 * how a reader follows you typing.
+	 *
+	 * libvterm's movecursor callback routes through notify_damaged() like
+	 * everything else, so a caret move reached a client as "the text
+	 * changed" and never as "the caret moved".
+	 *
+	 * Offsets come from the accessible interface rather than being
+	 * recomputed here, for the reason given below: the mapping from a
+	 * cell to an offset in the flattened text is that class's, and a
+	 * second copy is how the two stop agreeing. flatten() is cached on
+	 * the content revision, so asking costs one flatten per damage and
+	 * only while a client is attached.
+	 *
+	 * Sent only when it CHANGED. Output that does not move the cursor is
+	 * common -- a scrolling log leaves it on the last line -- and a
+	 * caret event per damage would be a reader announcing a move that
+	 * did not happen.
+	 */
+	QAccessibleInterface *self = QAccessible::queryAccessibleInterface(this);
+	QAccessibleTextInterface *as_text = self ? self->textInterface() : nullptr;
+	if (!as_text) return;
+
+	const int offset = as_text->cursorPosition();
+	if (offset == m_last_cursor_offset) return;
+	m_last_cursor_offset = offset;
+
+	QAccessibleTextCursorEvent moved(this, offset);
+	QAccessible::updateAccessibility(&moved);
 }
 
 void bssh_terminal_view::on_screen_damaged() {

@@ -672,6 +672,13 @@ private:
 	qint64 m_selection_focus_line;
 	int m_selection_focus_col;
 	bssh_emulator *m_emulator;
+	/*
+	 * The caret offset last ANNOUNCED to an assistive client, so a cursor
+	 * event goes out when it moves rather than on every damage. -1 until
+	 * the first one, which no real offset can be.
+	 */
+	int m_last_cursor_offset = -1;
+
 	bssh_input_router *m_input_router;
 	QFont m_font;
 

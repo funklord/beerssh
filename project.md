@@ -1033,6 +1033,44 @@ up, a strip of modifiers has nothing to modify.
   cover; this one had gone green in two full suite runs before sabotage was
   pointed at it.
 
+- **The caret was answerable and never announced. [FIXED]** The accessible
+  text interface implements `cursorPosition()`, so a screen reader asking
+  where the caret is gets the right answer — and `QAccessibleTextCursorEvent`
+  appeared nowhere in the tree, so nothing ever said it had moved. libvterm's
+  `movecursor` callback routes through `notify_damaged()` like everything
+  else, so a caret move reached a client as "the text changed" and never as
+  "the caret moved". For a terminal that is the worse half to leave out: the
+  caret is where your own typing appears, and following it is how a reader
+  follows you typing.
+  **Where it was hiding is the finding.** `note_selection_changed()`, the
+  function immediately below the one that needed this, already carried a
+  comment describing the defect exactly — "selectionCount() and selection()
+  answer correctly whenever they are asked… nothing ever announced a change,
+  so an assistive client learned of one only if it happened to re-query".
+  Whoever fixed that half found the class, wrote down why it mattered, and
+  left the identical gap one function above. The lens generalises: **for any
+  accessible interface, list what it can ANSWER against what the program
+  ANNOUNCES and look at the difference.**
+  Announced on change only. Output that leaves the cursor where it was is the
+  common case — a scrolling log ends on the same line — and an event per
+  damage would be a reader announcing a move that did not happen.
+  **The suite cannot observe any of this, and says so rather than implying
+  otherwise.** Both emitters are guarded on `QAccessible::isActive()`,
+  deliberately, since flattening the screen for an event nobody receives
+  would put that cost on every damage; and under the offscreen platform
+  `setActive(true)` does not take — measured again in the run that landed
+  this, where the test called it and `isActive()` was still false. So
+  `a_selection_change_is_announced_not_only_answerable` SKIPS, and the caret
+  assertions were added to it rather than to a new test that would also skip.
+  **No sabotage entry, and that is a decision rather than an omission**: the
+  runner decides by whether a named test fails, and a test that skips cannot
+  — an entry here would report MISSED and read as the fix being wrong instead
+  of the platform being unable to see it. Same call as the `F_GETFL` guard
+  and the keepalive loop.
+  **A whole category of accessibility defect is invisible to every gate in
+  this workspace for that reason**, and reading the two lists against each
+  other is the only thing that finds it.
+
 - **A modifier button must not outlive the session it describes. [FIXED]**
   Three instances of one mistake, all found by reading the new keyboard code
   rather than by using it. `refresh_modifier_buttons()` opened with
