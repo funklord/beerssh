@@ -53,12 +53,60 @@ public:
 	void paste(const QString &text);
 
 	/*
-	 * Sticky modifiers, for the on-screen key row (sec 6.2): tapping Ctrl
-	 * then C must produce Ctrl-C, because a touch screen cannot hold two
-	 * keys at once. Cleared as soon as they are applied.
+	 * Sticky modifiers, for the on-screen keyboards (sec 6.2): tapping
+	 * Ctrl then C must produce Ctrl-C, because a touch screen cannot hold
+	 * two keys at once.
+	 *
+	 * THREE states per modifier, not two, and the third is what a Treo
+	 * had: OFF, armed for the next key only, and LOCKED until pressed
+	 * again. One press arms, a second locks, a third releases.
+	 *
+	 * A one-shot on its own cannot express what a terminal constantly
+	 * asks for. Ctrl-C is one key and is served by arming; but reading a
+	 * long file with Ctrl-B, or walking a buffer with Ctrl-N, is the same
+	 * modifier over and over, and re-arming it before every keystroke is
+	 * the interaction a physical keyboard never demands of you. The Treo
+	 * and the BlackBerry both answered it this way, Android's own sticky
+	 * keys do, and so does macOS: the press count IS the state, so there
+	 * is nothing extra to discover and nothing new to learn.
+	 *
+	 * `sticky_modifiers` is the ARMED set only, which is what it has
+	 * always meant; `locked_modifiers` is the other half. What a key
+	 * actually carries is effective_modifiers(), and a keystroke spends
+	 * the armed half while leaving the locked half exactly where it is --
+	 * that difference is the whole feature.
 	 */
-	void set_sticky_modifiers(quint8 modifiers) { m_sticky = modifiers; }
+	enum modifier_state_t {
+		MODIFIER_OFF,
+		MODIFIER_ONCE,
+		MODIFIER_LOCKED
+	};
+
+	void set_sticky_modifiers(quint8 modifiers);
 	quint8 sticky_modifiers() const { return m_sticky; }
+
+	void set_locked_modifiers(quint8 modifiers);
+	quint8 locked_modifiers() const { return m_locked; }
+
+	/* What the next keystroke will carry: armed and locked together. */
+	quint8 effective_modifiers() const { return quint8(m_sticky | m_locked); }
+
+	modifier_state_t modifier_state(quint8 modifier) const;
+
+	/*
+	 * One press of a modifier key, wherever it came from. OFF to ONCE to
+	 * LOCKED and back to OFF.
+	 *
+	 * Here rather than in the widget because both on-screen keyboards
+	 * need it: a cycle written per caller is a cycle that goes round
+	 * differently in two places.
+	 *
+	 * Caps-as-Ctrl (sec 6.1) deliberately does NOT use this. It toggles,
+	 * for the reason recorded at that key: the second press is a
+	 * correction, and answering a correction with a lock is the worst
+	 * available reading of it.
+	 */
+	void cycle_modifier(quint8 modifier);
 
 	/* Feeds a key from the on-screen row through the same translation. */
 	void send_key(int key, quint8 modifiers);
@@ -191,14 +239,29 @@ public:
 
 signals:
 	void shortcut_pressed(bssh_input_router::shortcut_t shortcut);
+
+	/*
+	 * The ARMED set changed. Keeps its name and its meaning: a keystroke
+	 * spends it, so a button drawn from it must be redrawn straight after
+	 * one, or it is a Ctrl key claiming to be held when it is not.
+	 */
 	void sticky_modifiers_changed(quint8 modifiers);
+
+	/* The LOCKED set changed. A separate signal because it survives a
+	 * keystroke and the armed set does not, so a listener that cares
+	 * about only one of them can say so. */
+	void locked_modifiers_changed(quint8 modifiers);
 
 private:
 	quint8 modifiers_for(QKeyEvent *event) const;
 
+	/* Applied to the next key and then gone; see modifier_state_t. */
+	void spend_sticky_modifiers();
+
 	bssh_emulator *m_emulator;
 	bool m_caps_as_ctrl;
 	quint8 m_sticky;
+	quint8 m_locked;
 };
 
 #endif /* BSSH_INPUT_ROUTER_H */

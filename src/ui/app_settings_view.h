@@ -57,6 +57,7 @@ private:
 	void commit(const std::function<void(bssh_app_settings &)> &write);
 
 	QComboBox *m_key_row;
+	QComboBox *m_keyboard;
 	QComboBox *m_theme;
 	QComboBox *m_scrollbar;
 	QComboBox *m_status_line;

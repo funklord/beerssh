@@ -70,7 +70,18 @@ struct bssh_key_t {
 	int value;
 	quint8 modifier;
 
-	bssh_key_t() : kind(KEY), value(0), modifier(0) {}
+	/*
+	 * How many key widths this one occupies, for the built-in keyboard's
+	 * grid. A row ignores it: its keys are laid out end to end and scroll
+	 * (sec 6.2), so there are no columns for a key to span.
+	 *
+	 * Here rather than in a keyboard-only struct because a space bar is
+	 * still a key and not a different kind of thing. Splitting the type
+	 * to carry one integer is how two vocabularies for one concept start.
+	 */
+	int span;
+
+	bssh_key_t() : kind(KEY), value(0), modifier(0), span(1) {}
 };
 
 struct bssh_key_row_layout_t {

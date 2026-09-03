@@ -1,6 +1,7 @@
 #include "ui/touch_metrics.h"
 #include "ui/key_row.h"
 
+#include <QFont>
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QScroller>
@@ -75,6 +76,14 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
 
 	if (m_router) {
 		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
+		         this, [this](quint8) { refresh_modifier_buttons(); });
+		/*
+		 * Both halves, because a lock survives the keystroke that spends
+		 * the armed one -- so a listener watching only the armed set
+		 * would stop redrawing exactly when the state stopped being
+		 * obvious.
+		 */
+		connect(m_router, &bssh_input_router::locked_modifiers_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
 	}
 
@@ -255,8 +264,12 @@ void bssh_key_row::add_modifier(const QString &label, quint8 modifier) {
 
 	connect(button, &QAbstractButton::clicked, this, [this, modifier] {
 		if (!m_router) return;
-		/* Toggle: pressing Ctrl twice should clear it, not stack it. */
-		m_router->set_sticky_modifiers(m_router->sticky_modifiers() ^ modifier);
+		/*
+		 * One press arms, a second locks, a third releases -- the Treo's
+		 * cycle, and the router owns it because the built-in keyboard
+		 * (sec 6.2) asks the same question with different buttons.
+		 */
+		m_router->cycle_modifier(modifier);
 		refresh_modifier_buttons();
 	});
 }
@@ -264,15 +277,40 @@ void bssh_key_row::add_modifier(const QString &label, quint8 modifier) {
 void bssh_key_row::refresh_modifier_buttons() {
 	if (!m_router) return;
 
-	const quint8 sticky = m_router->sticky_modifiers();
 	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
 		/*
-		 * The button's checked state has to follow the router, not its
-		 * own clicks: the modifier is consumed by the next keystroke, and
+		 * The button's state has to follow the router, not its own
+		 * clicks: the armed half is consumed by the next keystroke, and
 		 * a Ctrl button still looking pressed afterwards is a button
 		 * lying about the state of the terminal.
+		 *
+		 * ARMED and LOCKED must not look the same. They differ by
+		 * exactly the thing a user needs to know before typing the next
+		 * letter -- whether it is about to be a control character -- and
+		 * a lock that reads as an arm is how somebody sends Ctrl-L,
+		 * Ctrl-S, Ctrl-Q while believing they typed "lsq". Bold rather
+		 * than a second colour, because the row is drawn against
+		 * whatever palette the theme is in (sec 6.2) and weight survives
+		 * both.
 		 */
-		m_modifier_buttons.at(i)->setChecked(sticky & m_modifier_values.at(i));
+		QAbstractButton *button = m_modifier_buttons.at(i);
+		const bssh_input_router::modifier_state_t state =
+		        m_router->modifier_state(m_modifier_values.at(i));
+
+		button->setChecked(state != bssh_input_router::MODIFIER_OFF);
+
+		/*
+		 * Named on the button as well, so a test can ask which of the
+		 * three it is. setChecked cannot answer that -- two of the
+		 * states share it, which is the whole difficulty.
+		 */
+		button->setProperty("bssh_modifier_state", int(state));
+
+		QFont font = button->font();
+		if (font.bold() != (state == bssh_input_router::MODIFIER_LOCKED)) {
+			font.setBold(state == bssh_input_router::MODIFIER_LOCKED);
+			button->setFont(font);
+		}
 	}
 }
 
@@ -290,6 +328,14 @@ void bssh_key_row::set_router(bssh_input_router *router) {
 
 	if (m_router) {
 		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
+		         this, [this](quint8) { refresh_modifier_buttons(); });
+		/*
+		 * Both halves, because a lock survives the keystroke that spends
+		 * the armed one -- so a listener watching only the armed set
+		 * would stop redrawing exactly when the state stopped being
+		 * obvious.
+		 */
+		connect(m_router, &bssh_input_router::locked_modifiers_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
 	}
 

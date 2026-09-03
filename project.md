@@ -723,10 +723,21 @@ quirks on Android.
   decorative.
 
 ### 6.2 On-screen keyboard strategy (touch platforms)
-Android soft keyboards don't expose Ctrl/Esc/etc. Plan a **custom on-screen key
-row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
-↑↓←→ Fn - / | ~` and a Ctrl/Alt "sticky modifier" toggle. This is what ConnectBot
-/ Termux do and is expected by users.
+Android soft keyboards don't expose Ctrl/Esc/etc. **Two answers ship, and a
+device-level setting chooses between them** (`input/keyboard`, §10.6); the
+second was an open question in this section for a long time and is settled
+below.
+
+**The key row** — a strip of buttons above the system keyboard providing
+`Esc Tab Ctrl Alt ↑↓←→ Fn - / | ~` and sticky modifiers. This is what
+ConnectBot and Termux do and is what users coming from either expect. It is
+the default, and it is right wherever a system keyboard appears: that keyboard
+keeps its prediction, its languages and its layout, none of which a terminal
+should be reimplementing.
+
+**The built-in keyboard** — one this app draws itself, replacing both. It
+exists because the row has a floor under it: where no system keyboard comes
+up, a strip of modifiers has nothing to modify.
 
 - Render it as a Qt Widget docked above the input area; feed synthetic key events
   into `bssh_input_router`.
@@ -901,9 +912,78 @@ row** (a strip of buttons above the soft keyboard) providing: `Esc Tab Ctrl Alt
 - Keeping it buildable on desktop is also what makes it *testable* — a synthetic
   key row press is the cheapest way to exercise the router's sticky-modifier
   logic in a unit test.
-- Decide **[OPEN]** whether to also ship an optional bundled soft-keyboard (like
-  Termux's Hacker's Keyboard approach) — probably **no** for v1; rely on the key
-  row + external keyboards.
+- **A bundled soft keyboard was the open question here, and it is answered:
+  yes. [BUILT]** This entry used to read "probably **no** for v1; rely on the key
+  row + external keyboards", and that reasoning had a floor underneath it nobody
+  had stood on. The key row is a strip of Ctrl, Esc, Tab and arrows placed *above
+  the system keyboard*. Where no system keyboard appears, it is a strip of
+  modifiers with nothing to modify, and the terminal cannot be typed into at all
+  — reported from a device, which is the only place it can be seen. "Rely on the
+  key row + external keyboards" is a complete answer only for people who have an
+  external keyboard.
+  **Both halves ship, and which one shows is a device-level setting** (§10.6,
+  `input/keyboard`): *this device's keyboard* keeps its prediction, its languages
+  and its layout with the key row above it, and is still the default and what
+  every existing install has; *BeerSSH's own* replaces both. **Two states, not
+  the three every other setting on that page carries** — and that is a real
+  difference rather than an oversight. `AUTO` means "ask the device", and this is
+  the one question the device will not answer: Android reports no capability for
+  whether an IME will actually appear. An `AUTO` here would be a guess wearing a
+  detection's clothes, and the case it would have to guess is exactly the one
+  that strands the user — guess *system* where none arrives and there is no way
+  to type the setting back.
+  **Three groups, one side button.** Letters, numbers-and-symbols, and the
+  terminal keys with F1–F12. The button sits in a full-height column on the right
+  and names the group it goes *to*, because a button labelled with where you
+  already are is one nobody presses. Cycling rather than a chooser: with three
+  groups the furthest is two taps, and a menu over a keyboard that exists because
+  the screen is already small is the wrong shape.
+  **Every group has the same number of rows, and it is checked.** Not tidiness —
+  the keyboard docks under the terminal, so a group one row taller would shrink
+  the terminal when the side button is pressed: a resize on the wire (§6.3) and a
+  reflow of whatever the remote is drawing, on every tap of the button whose only
+  job is to change which keys are shown. Every row is also exactly 20 half-columns
+  wide, so keys line up between rows; a thumb aims at where the key was on the row
+  before. **That check caught a real fault on its first run** — the symbols row
+  added to 22 — and the fix was not the obvious one: dropping a character would
+  have left the comma with nowhere on the keyboard to be, while the semicolon was
+  already duplicated on the letters home row.
+  **The 48dp floor is a floor on height, and that is what makes a keyboard
+  possible at all.** Ten keys at 48dp *wide* is 480 of a 360dp phone; nobody ships
+  that, and Android's own keys are around 34. `check_fits` measures
+  `control->height()`, so the rule and the reality already agreed. What the
+  keyboard sets explicitly is a small minimum *width*, because a button left to
+  its own size hint asks for its label's width — twenty of those is the defect
+  this section already records the key row shipping with, where `Ctrl` drew as
+  `Ctr` and the row read as cramped rather than as twice too wide. The terminal
+  group's labels are `Hom`, `PgU`, `Bksp` for the same reason: a keyboard cannot
+  scroll sideways out of an elided label the way the row can.
+  **Shift is a layout change, not a wire modifier.** The letter keys relabel
+  themselves to capitals while it is on, because the character itself differs —
+  a key still reading `q` while about to send `Q` is the one thing on screen that
+  could have said so, saying the wrong thing. This found a latent defect in
+  `send_text`: it passed `MOD_SHIFT` through to libvterm, asking for a shifted
+  version of an already-shifted character, which is the rule `handle_key` states
+  thirty lines above itself. Before a keyboard of our own had a Shift key, the
+  only route there was a sticky Shift armed for the mouse override, so the defect
+  existed with almost no way to meet it.
+- **Modifiers are three-state, the way a Treo's were. [BUILT]** `OFF → armed for
+  the next key → LOCKED → OFF`, one press each; the press count *is* the state,
+  so there is nothing extra to discover. A one-shot alone cannot express what a
+  terminal asks for constantly: Ctrl-C is one key and arming serves it, but
+  walking a buffer with Ctrl-N or paging with Ctrl-B is the same modifier over and
+  over, and re-arming before every keystroke is an interaction no physical
+  keyboard demands. Locking from *armed* rather than from *off* is deliberate —
+  one tap for the common case, a second only when you already know you are
+  sending more; the other order makes the rare case free and the common one
+  dangerous, since a lock nobody noticed turns every following letter into a
+  control byte. Armed and locked must not *look* alike either, since they differ
+  by exactly what a user needs to know before the next letter.
+  **Caps-as-Ctrl (§6.1) deliberately does not use this cycle.** It toggles, and
+  the reason is recorded at that key: the second press is a correction, and
+  answering a correction with a lock is the worst available reading of it. That
+  came out of a test failure, and the test was right — the decision was already
+  written down.
 
 ### 6.3 Input routing
 Central **`bssh_input_router`** converts (key, modifiers, terminal mode) → bytes,

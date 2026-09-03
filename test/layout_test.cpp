@@ -29,6 +29,10 @@
 #include "platform/platform.h"
 #include <QTemporaryDir>
 #include "model/profile_store.h"
+#include "ui/soft_keyboard.h"
+#include "ui/soft_keyboard_layout.h"
+#include "input/input_router.h"
+#include "term/emulator.h"
 #include "ui/host_list.h"
 #include "ui/host_editor.h"
 #include "ui/preset_editor.h"
@@ -729,6 +733,153 @@ void layout_test::every_touch_surface_fits_a_phone()
 		check_fits(QStringLiteral("password prompt"), &prompt);
 	}
 
+}
+
+void layout_test::every_keyboard_group_is_the_same_shape() {
+	const QList<bssh_soft_key_group_t> &groups =
+	        bssh_soft_keyboard_catalog::instance().all();
+
+	QVERIFY2(groups.size() >= 2,
+	          "a side button that walks one group is a button with nothing to do");
+
+	const int rows = groups.first().rows.size();
+	QVERIFY2(rows > 0, "a group with no rows is a keyboard with no keys");
+
+	for (const bssh_soft_key_group_t &group : groups) {
+		/*
+		 * Same number of ROWS in every group.
+		 *
+		 * Not tidiness. The keyboard is docked under the terminal, so a
+		 * group one row taller than another shrinks the terminal when
+		 * the side button is pressed -- a resize on the wire (sec 6.3)
+		 * and a reflow of whatever the remote is drawing, on every tap
+		 * of the button whose whole purpose is to change which keys are
+		 * shown.
+		 */
+		QString complaint = QStringLiteral(
+		  "the %1 group has %2 rows and %3 has %4 -- switching between them "
+		  "would resize the terminal and reflow the remote's output");
+		complaint = complaint.arg(group.display_name).arg(group.rows.size());
+		complaint = complaint.arg(groups.first().display_name).arg(rows);
+		QVERIFY2(group.rows.size() == rows, qPrintable(complaint));
+
+		for (int r = 0; r < group.rows.size(); ++r) {
+			int columns = 0;
+			for (const bssh_key_t &key : group.rows.at(r)) {
+				QVERIFY2(key.span > 0, "a key of no width cannot be pressed");
+				columns += key.span;
+			}
+
+			/*
+			 * And every row is exactly the grid's width. A short row
+			 * leaves its last key stretched across the gap, so the keys
+			 * above and below it stop lining up -- which on a keyboard
+			 * is not a cosmetic fault: a thumb aims at where the key was
+			 * on the previous row.
+			 */
+			QString wrong = QStringLiteral(
+			  "%1 row %2 adds to %3 half-columns, not %4 -- its keys will not "
+			  "line up with the rows above and below");
+			wrong = wrong.arg(group.display_name).arg(r);
+			wrong = wrong.arg(columns).arg(BSSH_KEYBOARD_COLUMNS);
+			QVERIFY2(columns == BSSH_KEYBOARD_COLUMNS, qPrintable(wrong));
+		}
+	}
+}
+
+void layout_test::the_built_in_keyboard_fits_a_phone() {
+	const forced_touch_t arrangement(1);
+
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	bssh_soft_keyboard keyboard(&router);
+	check_fits(QStringLiteral("built-in keyboard"), &keyboard);
+
+	/*
+	 * And it fits in EVERY group, not just the one it opens on. The
+	 * terminal group carries the longest labels -- F11, PgU, Bksp -- so a
+	 * keyboard checked only on its letters is a keyboard checked where it
+	 * is least likely to fail.
+	 */
+	const int groups = bssh_soft_keyboard_catalog::instance().all().size();
+	for (int i = 1; i < groups; ++i) {
+		keyboard.set_group(i);
+		check_fits(QStringLiteral("built-in keyboard (%1)").arg(keyboard.group_id()),
+		            &keyboard);
+	}
+}
+
+void layout_test::only_one_on_screen_keyboard_is_ever_shown() {
+	/*
+	 * The key row and the built-in keyboard carry the same modifiers over
+	 * the same router (sec 6.2). Two Ctrl buttons is two answers to what
+	 * is armed, and on a phone it is also two keyboards stacked where
+	 * there was barely room for one.
+	 *
+	 * Asserted with the row's own setting on ALWAYS, which is the state
+	 * where the two rules actually disagree. On AUTO with touch off the
+	 * row is hidden anyway, and the check would pass without the code
+	 * doing anything -- the shape this project keeps recording, where a
+	 * fixture that cannot reach the distinguishing case reports agreement
+	 * whatever the code says.
+	 *
+	 * A window per setting, because the window reads app.ini when it is
+	 * built and the function that re-reads it is private. Two windows is
+	 * also the honest test: this is a device-level choice, and what has
+	 * to be right is what a user sees after making it.
+	 */
+	const forced_touch_t arrangement(1);
+
+	{
+		bssh_app_settings settings;
+		settings.set_key_row_visibility(bssh_app_settings::KEY_ROW_ALWAYS);
+		settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+	}
+	{
+		bssh_main_window window;
+		window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		bssh_key_row *row = window.findChild<bssh_key_row *>();
+		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		QVERIFY2(row && keyboard, "the window builds both and shows one");
+
+		QVERIFY2(!keyboard->isHidden(),
+		          "the built-in keyboard was chosen and must be the one on screen");
+		QVERIFY2(row->isHidden(),
+		          "the key row is set to ALWAYS and the built-in keyboard must "
+		          "still replace it -- two Ctrl buttons over one router is two "
+		          "answers to what is armed");
+	}
+
+	/* And the other way round, which is what every existing install has. */
+	{
+		bssh_app_settings settings;
+		settings.set_keyboard(bssh_app_settings::KEYBOARD_SYSTEM);
+	}
+	{
+		bssh_main_window window;
+		window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		bssh_key_row *row = window.findChild<bssh_key_row *>();
+		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		QVERIFY(row && keyboard);
+
+		QVERIFY2(keyboard->isHidden(),
+		          "choosing this device's keyboard must put ours away");
+		QVERIFY2(!row->isHidden(),
+		          "and bring the key row back, which is what ALWAYS asked for");
+	}
+
+	/* Left as found, so the next test does not inherit this one's choice. */
+	{
+		bssh_app_settings settings;
+		settings.set_key_row_visibility(bssh_app_settings::KEY_ROW_AUTO);
+	}
 }
 
 namespace {

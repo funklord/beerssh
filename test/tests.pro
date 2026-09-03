@@ -114,6 +114,8 @@ SOURCES += \
     ../src/ui/touch_metrics.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/key_row_layout.cpp \
+    ../src/ui/soft_keyboard.cpp \
+    ../src/ui/soft_keyboard_layout.cpp \
     ../src/ui/app_settings_view.cpp \
     ../src/ui/colour_editor.cpp \
     ../src/ui/licences_view.cpp \
@@ -192,6 +194,7 @@ HEADERS += \
     ../src/ui/colour_editor.h \
     ../src/ui/licences_view.h \
     ../src/ui/key_row.h \
+    ../src/ui/soft_keyboard.h \
     ../src/ui/terminal_accessible.h \
     ../src/ui/theme.h \
     ../src/ui/terminal_view.h

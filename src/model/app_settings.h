@@ -56,6 +56,37 @@ public:
 		KEY_ROW_NEVER
 	};
 
+	/*
+	 * Which on-screen keyboard a touch device gets (sec 6.2).
+	 *
+	 * SYSTEM is what this app did until now: whatever keyboard Android
+	 * supplies, with the key row above it carrying the Ctrl, Esc, Tab and
+	 * arrows that no system keyboard has. It is the right answer wherever
+	 * a system keyboard actually appears, and it keeps that keyboard's
+	 * prediction, its languages and its layout -- none of which a
+	 * terminal should be in the business of reimplementing.
+	 *
+	 * BUILT_IN is the keyboard this app draws. It exists because the
+	 * other answer has a floor: where no system keyboard comes up, a row
+	 * of modifiers has nothing to modify and the terminal cannot be typed
+	 * into at all.
+	 *
+	 * TWO states and not the three the settings above carry, and that is
+	 * a real difference rather than an oversight. AUTO means "follow the
+	 * device", and the device cannot be asked this one: Android reports
+	 * no capability for whether an IME will appear, so an AUTO here would
+	 * be a guess wearing a detection's clothes. What it would have to
+	 * guess is also the case that strands the user -- guess SYSTEM where
+	 * none arrives and there is no way to type the setting back.
+	 */
+	enum keyboard_t {
+		KEYBOARD_SYSTEM,
+		KEYBOARD_BUILT_IN
+	};
+
+	keyboard_t keyboard() const;
+	void set_keyboard(keyboard_t keyboard);
+
 	explicit bssh_app_settings(const QString &directory = QString());
 
 	/*

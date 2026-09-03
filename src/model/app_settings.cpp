@@ -101,6 +101,33 @@ void bssh_app_settings::set_key_row_visibility(key_row_visibility_t visibility) 
 
 namespace {
 
+const char *const BSSH_KEYBOARD_KEYS[] = { "system", "built_in" };
+
+} /* namespace */
+
+bssh_app_settings::keyboard_t bssh_app_settings::keyboard() const {
+	const QString text = value(QStringLiteral("input/keyboard"),
+	                            QStringLiteral("system")).toString();
+
+	for (int i = 0; i < 2; ++i) {
+		if (text == QLatin1String(BSSH_KEYBOARD_KEYS[i])) return keyboard_t(i);
+	}
+
+	/*
+	 * An unreadable value reads as SYSTEM, which is what every existing
+	 * installation already has and what a device with a working keyboard
+	 * wants. Defaulting the other way would hand a phone a keyboard it
+	 * did not ask for because somebody mistyped a word in app.ini.
+	 */
+	return KEYBOARD_SYSTEM;
+}
+
+void bssh_app_settings::set_keyboard(keyboard_t keyboard) {
+	store(QStringLiteral("input/keyboard"), QLatin1String(BSSH_KEYBOARD_KEYS[int(keyboard)]));
+}
+
+namespace {
+
 const char *const BSSH_CONTEXT_MENU_KEYS[] = { "auto", "desktop", "touch" };
 
 } /* namespace */

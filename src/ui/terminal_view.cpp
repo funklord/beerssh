@@ -1517,12 +1517,18 @@ bool bssh_terminal_view::take_shift_override(Qt::KeyboardModifiers modifiers) {
 	if (modifiers.testFlag(Qt::ShiftModifier)) return true;
 
 	if (!m_input_router) return false;
-	if (!(m_input_router->sticky_modifiers() & bssh_emulator::MOD_SHIFT)) return false;
+	if (!(m_input_router->effective_modifiers() & bssh_emulator::MOD_SHIFT)) return false;
 
 	/*
-	 * Consumed, like a key consumes it. Leaving it set would make the
-	 * next tap select too, which is not what "one shot" means anywhere
-	 * else in the key row.
+	 * The ARMED half is consumed, like a key consumes it: leaving it set
+	 * would make the next tap select too, which is not what "one shot"
+	 * means anywhere else.
+	 *
+	 * The LOCKED half is deliberately NOT consumed. A user who locked
+	 * Shift to work inside a program that has grabbed the mouse (sec 6.2)
+	 * wants the next tap to select as well; a lock that the first tap
+	 * quietly released would be a lock for exactly as long as it went
+	 * unused.
 	 */
 	m_input_router->set_sticky_modifiers(
 	        m_input_router->sticky_modifiers() & ~quint8(bssh_emulator::MOD_SHIFT));

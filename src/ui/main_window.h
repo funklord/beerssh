@@ -29,6 +29,7 @@ class bssh_host_list;
 class bssh_layout_manager;
 class bssh_pane_container;
 class bssh_key_row;
+class bssh_soft_keyboard;
 class bssh_profile_store;
 class bssh_session_dialog;
 class bssh_session;
@@ -388,6 +389,13 @@ private:
 
 	/* Reads sec 6.2's three-state setting and applies it to the key row. */
 	void apply_key_row_visibility();
+
+	/*
+	 * Which on-screen keyboard is showing (sec 6.2). Exactly one of them,
+	 * or the modifiers appear twice and the two copies disagree about
+	 * what is armed.
+	 */
+	void apply_keyboard_choice();
 	void apply_device_settings();
 
 	/*
@@ -715,6 +723,7 @@ private:
 	QTabBar *m_tabs;
 	bssh_long_press *m_tab_long_press;
 	bssh_key_row *m_key_row;
+	bssh_soft_keyboard *m_keyboard;
 	QString m_error;
 
 	/*

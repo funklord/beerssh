@@ -76,6 +76,8 @@ SOURCES += \
     src/ui/layout_manager.cpp \
     src/ui/pane_container.cpp \
     src/ui/key_row_layout.cpp \
+    src/ui/soft_keyboard.cpp \
+    src/ui/soft_keyboard_layout.cpp \
     src/ui/app_settings_view.cpp \
     src/ui/colour_editor.cpp \
     src/ui/licences_view.cpp \
@@ -129,6 +131,8 @@ HEADERS += \
     src/ui/layout_manager.h \
     src/ui/pane_container.h \
     src/ui/key_row_layout.h \
+    src/ui/soft_keyboard.h \
+    src/ui/soft_keyboard_layout.h \
     src/ui/app_settings_view.h \
     src/ui/colour_editor.h \
     src/ui/licences_view.h \

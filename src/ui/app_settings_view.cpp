@@ -78,6 +78,27 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	form->addRow(QStringLiteral("On-screen keys"), m_key_row);
 
 	/*
+	 * Which keyboard, above the row's own setting in importance and
+	 * directly under it on the page, because the row is what the first
+	 * choice turns off.
+	 */
+	m_keyboard = new QComboBox(this);
+	m_keyboard->setObjectName(QStringLiteral("keyboard"));
+	m_keyboard->addItem(QStringLiteral("This device's keyboard"),
+	                     int(bssh_app_settings::KEYBOARD_SYSTEM));
+	m_keyboard->addItem(QStringLiteral("BeerSSH's own keyboard"),
+	                     int(bssh_app_settings::KEYBOARD_BUILT_IN));
+	form->addRow(QStringLiteral("Keyboard"), m_keyboard);
+
+	QLabel *keyboard_note = bssh_wrapped_note(
+	        QStringLiteral("This device's keyboard keeps its prediction, languages and "
+	                        "layout, with the key row above it for Ctrl, Esc, Tab and the "
+	                        "arrows it has none of. Choose BeerSSH's own where no keyboard "
+	                        "comes up at all, or where you would rather have the terminal "
+	                        "keys on the keyboard itself."), this);
+	form->addRow(keyboard_note);
+
+	/*
 	 * Directly under the control it explains, not at the foot of the
 	 * page. It says what "Automatic" decides, and it sat below the whole
 	 * form back when there was one setting to explain -- with three, and
@@ -566,6 +587,9 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	const int index = m_key_row->findData(int(settings.key_row_visibility()));
 	m_key_row->setCurrentIndex(index < 0 ? 0 : index);
 
+	const int keyboard_index = m_keyboard->findData(int(settings.keyboard()));
+	m_keyboard->setCurrentIndex(keyboard_index < 0 ? 0 : keyboard_index);
+
 	/*
 	 * Every control commits, not just the first one. The lambda used to
 	 * hang off the key row alone, so once a second setting appeared here
@@ -576,6 +600,12 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		commit([this](bssh_app_settings &s) {
 			s.set_key_row_visibility(bssh_app_settings::key_row_visibility_t(
 			        m_key_row->currentData().toInt()));
+		});
+	});
+	connect(m_keyboard, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_keyboard(bssh_app_settings::keyboard_t(
+			        m_keyboard->currentData().toInt()));
 		});
 	});
 	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] {

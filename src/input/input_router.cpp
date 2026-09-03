@@ -11,11 +11,71 @@ bssh_input_router::bssh_input_router(bssh_emulator *emulator, QObject *parent)
     : QObject(parent),
       m_emulator(emulator),
       m_caps_as_ctrl(false),
-      m_sticky(bssh_emulator::MOD_NONE) {
+      m_sticky(bssh_emulator::MOD_NONE),
+      m_locked(bssh_emulator::MOD_NONE) {
+}
+
+void bssh_input_router::set_sticky_modifiers(quint8 modifiers) {
+	if (m_sticky == modifiers) return;
+	m_sticky = modifiers;
+	emit sticky_modifiers_changed(m_sticky);
+}
+
+void bssh_input_router::set_locked_modifiers(quint8 modifiers) {
+	if (m_locked == modifiers) return;
+	m_locked = modifiers;
+	emit locked_modifiers_changed(m_locked);
+}
+
+/*
+ * A keystroke has just gone out carrying effective_modifiers(). The armed
+ * half is spent; the locked half is not.
+ *
+ * One function rather than the clear-and-emit that was written out at
+ * eight call sites. Every one of them was the same two lines, and the
+ * eighth is the one that would eventually be a clear without an emit --
+ * which is a Ctrl button left drawn as pressed over a terminal that has
+ * already forgotten it.
+ */
+void bssh_input_router::spend_sticky_modifiers() {
+	set_sticky_modifiers(bssh_emulator::MOD_NONE);
+}
+
+bssh_input_router::modifier_state_t
+bssh_input_router::modifier_state(quint8 modifier) const {
+	if (m_locked & modifier) return MODIFIER_LOCKED;
+	if (m_sticky & modifier) return MODIFIER_ONCE;
+	return MODIFIER_OFF;
+}
+
+/*
+ * OFF -> ONCE -> LOCKED -> OFF, which is the order a Treo goes round and
+ * the reason the header calls the press count the state.
+ *
+ * Locking from ARMED rather than from OFF is what makes the common case
+ * cheap: one tap for the Ctrl-C everybody sends, and a second only when
+ * you already know you are sending more. Going OFF -> LOCKED first would
+ * make the rare case free and the common one dangerous, since a lock
+ * nobody noticed turns every following letter into a control byte.
+ */
+void bssh_input_router::cycle_modifier(quint8 modifier) {
+	switch (modifier_state(modifier)) {
+	case MODIFIER_OFF:
+		set_sticky_modifiers(quint8(m_sticky | modifier));
+		break;
+	case MODIFIER_ONCE:
+		set_sticky_modifiers(quint8(m_sticky & ~modifier));
+		set_locked_modifiers(quint8(m_locked | modifier));
+		break;
+	case MODIFIER_LOCKED:
+		set_locked_modifiers(quint8(m_locked & ~modifier));
+		break;
+	}
 }
 
 quint8 bssh_input_router::modifiers_for(QKeyEvent *event) const {
-	quint8 modifiers = m_sticky;
+	/* Armed AND locked: what a key carries is both (see the header). */
+	quint8 modifiers = effective_modifiers();
 
 	if (event->modifiers() & Qt::ShiftModifier) modifiers |= bssh_emulator::MOD_SHIFT;
 	if (event->modifiers() & Qt::ControlModifier) modifiers |= bssh_emulator::MOD_CTRL;
@@ -166,8 +226,26 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 	if (event->key() == Qt::Key_CapsLock) {
 		if (!m_caps_as_ctrl) return false;
 
-		set_sticky_modifiers(m_sticky ^ bssh_emulator::MOD_CTRL);
-		emit sticky_modifiers_changed(m_sticky);
+		/*
+		 * A TOGGLE, and deliberately NOT the Treo cycle the on-screen
+		 * keyboards use. Sec 6.1 settled this for the physical key and
+		 * the reason still holds: the operating system's own caps state
+		 * is beyond reach here, so pressing Caps again to undo a mistake
+		 * is what a user will try -- and a second press that LOCKED Ctrl
+		 * instead would answer that correction by turning every
+		 * following letter into a control byte.
+		 *
+		 * The cycle also wants something the physical key does not have.
+		 * It takes three presses to return to off, which is workable for
+		 * an on-screen button whose state you can see and wrong for a
+		 * key whose own light is busy telling you something else.
+		 */
+		if (modifier_state(bssh_emulator::MOD_CTRL) == MODIFIER_OFF) {
+			set_sticky_modifiers(quint8(m_sticky | bssh_emulator::MOD_CTRL));
+		} else {
+			set_sticky_modifiers(quint8(m_sticky & ~bssh_emulator::MOD_CTRL));
+			set_locked_modifiers(quint8(m_locked & ~bssh_emulator::MOD_CTRL));
+		}
 		return true;
 	}
 
@@ -260,8 +338,7 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 
 	if (key != bssh_emulator::KEY_NONE) {
 		m_emulator->send_key(key, modifiers);
-		set_sticky_modifiers(bssh_emulator::MOD_NONE);
-		emit sticky_modifiers_changed(m_sticky);
+		spend_sticky_modifiers();
 		return true;
 	}
 
@@ -280,8 +357,7 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 		if (code >= 0x20 && code < 0x7f) {
 			m_emulator->send_char(static_cast<char32_t>(QChar(code).toLower().unicode()),
 			                       modifiers);
-			set_sticky_modifiers(bssh_emulator::MOD_NONE);
-			emit sticky_modifiers_changed(m_sticky);
+			spend_sticky_modifiers();
 			return true;
 		}
 	}
@@ -300,29 +376,40 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 		m_emulator->send_char(codepoint, modifiers & bssh_emulator::MOD_ALT);
 	}
 
-	set_sticky_modifiers(bssh_emulator::MOD_NONE);
-	emit sticky_modifiers_changed(m_sticky);
+	spend_sticky_modifiers();
 	return true;
 }
 
 void bssh_input_router::send_key(int key, quint8 modifiers) {
 	if (!m_emulator) return;
 
-	m_emulator->send_key(key, modifiers | m_sticky);
-	set_sticky_modifiers(bssh_emulator::MOD_NONE);
-	emit sticky_modifiers_changed(m_sticky);
+	m_emulator->send_key(key, modifiers | effective_modifiers());
+	spend_sticky_modifiers();
 }
 
 void bssh_input_router::send_text(const QString &text) {
 	if (!m_emulator || text.isEmpty()) return;
 
+	/*
+	 * SHIFT is masked off, for the reason handle_key states thirty lines
+	 * up: the TEXT is already what the shift produced, and passing the
+	 * modifier as well asks libvterm for a shifted version of an
+	 * already-shifted character.
+	 *
+	 * It mattered the moment a keyboard of our own had a Shift key on it
+	 * (sec 6.2). Before that the only way to reach here with SHIFT set
+	 * was a sticky Shift armed for the mouse override, so the defect
+	 * existed and had almost no way to be met. ALT is passed, because
+	 * libvterm turns it into the ESC prefix a shell expects for Meta.
+	 */
+	const quint8 modifiers = quint8(effective_modifiers() & ~quint8(bssh_emulator::MOD_SHIFT));
+
 	const QList<uint> codepoints = text.toUcs4();
 	for (uint codepoint : codepoints) {
-		m_emulator->send_char(codepoint, m_sticky);
+		m_emulator->send_char(codepoint, modifiers);
 	}
 
-	set_sticky_modifiers(bssh_emulator::MOD_NONE);
-	emit sticky_modifiers_changed(m_sticky);
+	spend_sticky_modifiers();
 }
 
 void bssh_input_router::paste(const QString &text) {

@@ -166,6 +166,72 @@ void input_router_test::sticky_modifier_applies_once_then_clears() {
 	QVERIFY(spy.count() > 0);
 }
 
+void input_router_test::a_modifier_locks_on_the_second_press_and_releases_on_the_third() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/*
+	 * The Treo's cycle (sec 6.2). One press arms for the next key, a
+	 * second locks until pressed again, a third releases.
+	 *
+	 * A one-shot alone cannot express what a terminal asks for
+	 * constantly. Ctrl-C is one key and arming serves it; walking a
+	 * buffer with Ctrl-N or paging with Ctrl-B is the same modifier over
+	 * and over, and re-arming before every keystroke is an interaction no
+	 * physical keyboard demands.
+	 */
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_ONCE);
+
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::NoModifier, QStringLiteral("c")),
+	          QByteArrayLiteral("\x03"));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_OFF);
+
+	/* Second press: locked. */
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_LOCKED);
+
+	/*
+	 * Surviving the keystroke is the whole difference between the two
+	 * states, so it is asserted over TWO keys rather than one: a lock
+	 * that lasted exactly one more keystroke than an arm would satisfy a
+	 * single check and be no more useful than the arm.
+	 */
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::NoModifier, QStringLiteral("c")),
+	          QByteArrayLiteral("\x03"));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_LOCKED);
+	QCOMPARE(press(router, emulator, Qt::Key_D, Qt::NoModifier, QStringLiteral("d")),
+	          QByteArrayLiteral("\x04"));
+
+	/* And the key row's own path carries it too, not just handle_key. */
+	QCOMPARE(router.effective_modifiers(), quint8(bssh_emulator::MOD_CTRL));
+
+	/* Third press: released, and the next letter is a letter again. */
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_OFF);
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::NoModifier, QStringLiteral("c")),
+	          QByteArrayLiteral("c"));
+
+	/*
+	 * Arming and locking are per modifier, not one shared state: a locked
+	 * Ctrl must not be released by tapping Alt, or the two keys would be
+	 * one key with two labels.
+	 */
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	router.cycle_modifier(bssh_emulator::MOD_ALT);
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_LOCKED);
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_ALT),
+	          bssh_input_router::MODIFIER_ONCE);
+}
+
 void input_router_test::ctrl_shift_c_is_kept_by_the_app() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

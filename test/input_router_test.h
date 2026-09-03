@@ -43,6 +43,7 @@ private slots:
 	void function_keys_and_navigation_produce_sequences();
 	void alt_prefixes_with_escape();
 	void sticky_modifier_applies_once_then_clears();
+	void a_modifier_locks_on_the_second_press_and_releases_on_the_third();
 	void ctrl_shift_c_is_kept_by_the_app();
 	void paste_is_bracketed_only_when_the_remote_asked();
 	void kitty_protocol_disambiguates_ctrl_and_escape();

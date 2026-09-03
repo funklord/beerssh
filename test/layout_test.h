@@ -38,6 +38,9 @@ private slots:
 	 * before it ships rather than after.
 	 */
 	void every_touch_surface_fits_a_phone();
+	void every_keyboard_group_is_the_same_shape();
+	void the_built_in_keyboard_fits_a_phone();
+	void only_one_on_screen_keyboard_is_ever_shown();
 	void the_key_row_fits_a_phone();
 	void the_desktop_opens_a_shell_and_the_phone_opens_its_config();
 	void the_config_is_reachable_from_a_terminal();

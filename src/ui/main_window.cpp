@@ -60,6 +60,7 @@
 #include "ui/host_editor.h"
 #include "ui/host_list.h"
 #include "ui/key_row.h"
+#include "ui/soft_keyboard.h"
 #include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
 #include "model/preset.h"
@@ -106,6 +107,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_tabs(new QTabBar(m_terminal_page)),
       m_tab_long_press(nullptr),
       m_key_row(nullptr),
+      m_keyboard(nullptr),
       m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
       m_window_title_format(QStringLiteral("%t - BeerSSH")),
       m_asked_about_closing(false),
@@ -693,6 +695,21 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	layout->insertWidget(2, m_key_row);
 
 	/*
+	 * And the built-in keyboard, in the same slot, for the same session.
+	 * Exactly one of the two is ever visible (sec 6.2): they carry the
+	 * same modifiers, and two Ctrl buttons over one router is two answers
+	 * to what is armed.
+	 *
+	 * Built on every platform rather than behind an ifdef, for the reason
+	 * the key row is: a widget compiled only on Android is a widget
+	 * tested only on Android, and this one is laid out to a phone's width
+	 * by a test that runs on the desktop.
+	 */
+	m_keyboard = new bssh_soft_keyboard(nullptr, this);
+	layout->insertWidget(3, m_keyboard);
+	m_keyboard->hide();
+
+	/*
 	 * sec 6.2's three-state setting, which the key row has supported since
 	 * M3 and nothing ever set: AUTO was the only reachable mode, so a
 	 * convertible laptop could not ask for the row and a tablet with a
@@ -1225,6 +1242,39 @@ void bssh_main_window::apply_key_row_visibility() {
 		m_key_row->set_visibility_mode(bssh_key_row::AUTO);
 		break;
 	}
+
+	apply_keyboard_choice();
+}
+
+void bssh_main_window::apply_keyboard_choice() {
+	if (!m_keyboard || !m_key_row) return;
+
+	const bssh_app_settings settings;
+	const bool built_in = settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN;
+
+	/*
+	 * The row's own visibility rule still decides whether IT shows -- the
+	 * three-state setting, the platform, all of it. What this adds is
+	 * that the built-in keyboard replaces it rather than joining it.
+	 */
+	m_keyboard->setVisible(built_in);
+	if (built_in) m_key_row->hide();
+	else m_key_row->setVisible(m_key_row->should_be_visible());
+
+	/*
+	 * And the system keyboard is asked not to come up, because the point
+	 * of choosing ours is that theirs is not wanted -- two keyboards
+	 * stacked on a phone leave no terminal.
+	 *
+	 * Qt shows an IME when a widget with WA_InputMethodEnabled takes
+	 * focus, so clearing the attribute is what declines it. The terminal
+	 * still receives inputMethodEvent from anything that delivers text
+	 * without an IME, which on Android is where some physical keys arrive
+	 * (sec 6.1) -- so this turns the panel off and not the path.
+	 */
+	if (m_terminal_view) {
+		m_terminal_view->setAttribute(Qt::WA_InputMethodEnabled, !built_in);
+	}
 }
 
 void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
@@ -1353,6 +1403,7 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		 */
 		m_current = session;
 
+		if (m_keyboard) m_keyboard->set_router(session->input_router());
 		if (m_key_row) {
 			m_key_row->set_router(session->input_router());
 			m_key_row->set_layout(
@@ -1414,6 +1465,7 @@ void bssh_main_window::detach_session() {
 
 	m_terminal_view = m_panes ? m_panes->focused_view() : nullptr;
 	if (m_key_row) m_key_row->set_router(nullptr);
+	if (m_keyboard) m_keyboard->set_router(nullptr);
 }
 
 void bssh_main_window::take_session(bssh_session *session) {
@@ -3495,6 +3547,9 @@ QSize bssh_main_window::size_for_grid(int cols, int rows) {
 	}
 	if (m_status_label) wanted.rheight() += m_status_label->sizeHint().height();
 	if (m_key_row && !m_key_row->isHidden()) wanted.rheight() += m_key_row->sizeHint().height();
+	if (m_keyboard && !m_keyboard->isHidden()) {
+		wanted.rheight() += m_keyboard->sizeHint().height();
+	}
 
 	return wanted;
 }
