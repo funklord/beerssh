@@ -3094,9 +3094,24 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   the eye learns the rhythm — except the status line's, whose `addRow` was
   called one line too early. The result reads as a stray sentence hanging off
   the scrollbar's note: *"Everything adds the terminal's size in cells"*
-  above a row that has not yet offered *Everything*. No test can see this,
-  because every widget is present, sized correctly and inside the page; only
-  the order is wrong, and order is what a picture shows.
+  above a row that has not yet offered *Everything*. **None of the checks in
+  place could see it**: they ask whether every widget is present, sized
+  correctly and inside the page, and all three were true. Only the order was
+  wrong, and order is what a picture shows.
+  **This entry used to say "no test can see this", and that was too strong.**
+  `QFormLayout` exposes `rowCount()` and `itemAt(row, role)`, so asserting
+  that each explanatory note follows the control it explains is ordinary.
+  Nobody had written it, which is a different fact from nobody being able to.
+  The distinction is worth the correction because the two decay in opposite
+  ways: **a stale "untested" is harmless the moment somebody closes it, while
+  a stale "untestable" goes on deterring the test that would have worked.**
+  Found by a sweep of this document's own gap claims — nine of them, of which
+  four were already closed in the same entry that stated the gap, two were
+  device-dependent facts that will stay true, two were principles rather than
+  confessions, and this one was the only live item. It was live because it
+  was WRONG, not because it was stale, which suggests the sharper filter for
+  a document like this one: **search for claims of impossibility, not claims
+  of absence.**
 - **Two form layouts start two label columns.** `QFormLayout` sizes its label
   column from its own widest label, and nothing tells a second one about the
   first — so the font picker, embedded below the preset editor's form,
