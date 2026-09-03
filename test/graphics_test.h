@@ -25,6 +25,7 @@ private slots:
 	void kitty_raw_rgb_is_decoded();
 	void kitty_chunked_transmission_reassembles();
 	void kitty_delete_removes_images();
+	void an_image_without_an_id_does_not_answer_to_a_remote_one();
 	void iterm2_inline_image_is_placed();
 	void sixel_is_decoded_by_libsixel();
 	void malformed_sixel_is_declined_not_guessed();

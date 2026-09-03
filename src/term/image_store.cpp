@@ -10,30 +10,49 @@
  */
 static const qint64 BSSH_DEFAULT_IMAGE_BUDGET = 32 * 1024 * 1024;
 
-bssh_image_store::bssh_image_store() : m_next_id(1), m_budget(BSSH_DEFAULT_IMAGE_BUDGET) {
+bssh_image_store::bssh_image_store() : m_budget(BSSH_DEFAULT_IMAGE_BUDGET) {
 }
 
 int bssh_image_store::place(const bssh_image_placement_t &placement) {
 	if (placement.image.isNull()) return 0;
 
-	bssh_image_placement_t stored = placement;
-	if (stored.id == 0) stored.id = m_next_id++;
-
 	/*
-	 * A protocol may re-transmit an existing id to replace the image
-	 * rather than to add a second copy of it.
+	 * An id is the REMOTE's id, and an anonymous placement stays
+	 * anonymous -- which is what the field's own comment in the header
+	 * has always said: "0 means the protocol did not give one, which is
+	 * the normal case for sixel and iTerm2".
+	 *
+	 * This handed those an id anyway, out of a counter of its own, into
+	 * the one namespace kitty's ids live in. The counter started at 1 and
+	 * kitty's numbering starts at 1, so the two collided from the first
+	 * image each side drew: in a session where both protocols are used --
+	 * a plot from one tool, a picture from another -- `a=T,i=1` replaced
+	 * a sixel frame the terminal had numbered 1, and `a=d,i=1` deleted
+	 * it. Neither program had ever heard of the other, and neither has
+	 * any way to find out: nothing in either protocol reports the number
+	 * a terminal invented for somebody else's image.
+	 *
+	 * Nothing needed the invented number. The covering test, the budget,
+	 * the scroll and the trim all work on geometry, and place()'s return
+	 * value has no caller at all.
 	 */
-	for (int i = 0; i < m_placements.size(); ++i) {
-		if (m_placements.at(i).id == stored.id) {
-			m_placements[i] = stored;
-			drop_covered_by(i);
-			return stored.id;
+	if (placement.id != 0) {
+		/*
+		 * A protocol may re-transmit an existing id to replace the image
+		 * rather than to add a second copy of it.
+		 */
+		for (int i = 0; i < m_placements.size(); ++i) {
+			if (m_placements.at(i).id == placement.id) {
+				m_placements[i] = placement;
+				drop_covered_by(i);
+				return placement.id;
+			}
 		}
 	}
 
-	m_placements.append(stored);
+	m_placements.append(placement);
 	drop_covered_by(m_placements.size() - 1);
-	return stored.id;
+	return placement.id;
 }
 
 /*
@@ -42,9 +61,9 @@ int bssh_image_store::place(const bssh_image_placement_t &placement) {
  * of its pixels can reach the screen again.
  *
  * Without this, sixel ANIMATION grows without limit. Sixel carries no
- * image id, so `place` gives every frame a fresh one and appends it --
- * and a program that redraws in place, which is what an animation is,
- * never scrolls. enforce_budget() cannot help: it drops only what is
+ * image id, so no frame can replace an earlier one and `place` simply
+ * appends each -- and a program that redraws in place, which is what an
+ * animation is, never scrolls. enforce_budget() cannot help: it drops only what is
  * above the fold, and each frame is on screen by construction, so the
  * whole stack of them is exactly the case it declines to touch. The
  * budget's own comment says it exists so "a session left running all day
@@ -81,6 +100,13 @@ void bssh_image_store::drop_covered_by(int index) {
 }
 
 void bssh_image_store::remove(int id) {
+	/*
+	 * Anonymous placements answer to no id; see place(). Without this,
+	 * "delete image 0" is a request every sixel frame in the buffer
+	 * matches at once.
+	 */
+	if (id == 0) return;
+
 	for (int i = m_placements.size() - 1; i >= 0; --i) {
 		if (m_placements.at(i).id == id) m_placements.removeAt(i);
 	}

@@ -107,6 +107,45 @@ void graphics_test::kitty_delete_removes_images() {
 	QCOMPARE(emulator.images().count(), 0);
 }
 
+void graphics_test::an_image_without_an_id_does_not_answer_to_a_remote_one() {
+	/*
+	 * sixel and iTerm2 carry no image id -- image_store.h says so, in the
+	 * field's own comment: "0 means the protocol did not give one, which
+	 * is the normal case for sixel and iTerm2".
+	 *
+	 * place() handed those an id anyway, out of a counter starting at 1,
+	 * into the same namespace kitty's ids live in. kitty's numbering
+	 * starts at 1 too, so in a session where both protocols are used --
+	 * a plot from one tool, a picture from another -- the first
+	 * `a=T,i=1` REPLACED the sixel frame, and `a=d,i=1` deleted it.
+	 * Neither program had ever heard of the other.
+	 *
+	 * Driven through the emulator rather than the store, because what
+	 * makes this reachable is the wire: nothing in either protocol lets
+	 * a program discover the number the terminal invented for somebody
+	 * else's image.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+
+	/* Two red columns, six pixels tall; one cell, at row 0. */
+	emulator.feed(QByteArrayLiteral("\x1bPq#0;2;100;0;0#0~~\x1b\\"));
+	QCOMPARE(emulator.images().count(), 1);
+
+	/*
+	 * A kitty image at the row below, so the covering test cannot be
+	 * what decides this either way.
+	 */
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100,i=1"),
+	                            png_of(8, 8, qRgb(0, 0, 255))));
+	QCOMPARE(emulator.images().count(), 2);
+
+	/* And deleting kitty's image 1 must not take the sixel with it. */
+	emulator.feed(QByteArrayLiteral("\x1b_Ga=d,i=1\x1b\\"));
+	QCOMPARE(emulator.images().count(), 1);
+	QCOMPARE(emulator.images().placements().first().image.size(), QSize(2, 6));
+}
+
 void graphics_test::iterm2_inline_image_is_placed() {
 	bssh_emulator emulator(40, 10);
 	emulator.set_cell_pixels(8, 16);
@@ -749,9 +788,9 @@ void graphics_test::a_declared_size_that_overflows_is_refused() {
 
 void graphics_test::a_frame_drawn_over_an_earlier_one_does_not_keep_it_alive() {
 	/*
-	 * Sixel animation. Sixel carries no image id, so place() hands every
-	 * frame a fresh one and appends it -- and a program that redraws in
-	 * place, which is what an animation IS, never scrolls.
+	 * Sixel animation. Sixel carries no image id, so no frame can replace
+	 * an earlier one and place() simply appends each -- and a program that
+	 * redraws in place, which is what an animation IS, never scrolls.
 	 *
 	 * That put the whole run in exactly the case the budget declines to
 	 * touch: enforce_budget drops only what has gone above the fold, and

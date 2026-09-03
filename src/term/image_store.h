@@ -112,7 +112,6 @@ private:
 	void drop_covered_by(int index);
 
 	QList<bssh_image_placement_t> m_placements;
-	int m_next_id;
 	qint64 m_budget;
 };
 

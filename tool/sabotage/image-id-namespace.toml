@@ -1,0 +1,83 @@
+# Sabotage for sec 7.1's image ids: whose namespace a placement's id is in.
+#
+# kitty is the only one of the three protocols that names its images, and
+# the name is the REMOTE's. sixel and iTerm2 send none, and a terminal that
+# invents one for them puts it in kitty's namespace -- where the remote can
+# hit it without ever having heard of the other program's picture.
+#
+# Each names the test that must notice. A sabotage caught by some OTHER
+# test is reported as "WRONG TEST" rather than as a pass.
+
+# Restore the counter place() used to hand anonymous placements. Where that
+# counter LIVES is this edit's own business -- the member it used to be
+# cannot be reached without touching the header, and a sabotage is one edit
+# to one file. What has to survive the move is the behaviour the defect
+# rested on, and two earlier attempts got that wrong in opposite
+# directions:
+#
+#   - deriving the id from the buffer's size reuses ids among anonymous
+#     images, which the real code never did, and took the sixel-animation
+#     test down alongside the intended one. A sabotage that breaks two
+#     things proves neither.
+#   - a table keyed on the store's address is not per-store either: a
+#     freed store leaves its count behind for whatever is allocated at the
+#     same address next, so the counter did not start at 1, no id collided,
+#     and the suite stayed green.
+#
+# So: monotonic, and restarted when the store is empty -- at which point no
+# placement is holding a number below the mark and nothing older can be
+# collided with. A fresh store hands out 1 first, which is the defect.
+[[sabotage]]
+name = "an anonymous image is given a number kitty can name"
+file = "src/term/image_store.cpp"
+find = '''
+	if (placement.id != 0) {
+		/*
+		 * A protocol may re-transmit an existing id to replace the image
+		 * rather than to add a second copy of it.
+		 */
+		for (int i = 0; i < m_placements.size(); ++i) {
+			if (m_placements.at(i).id == placement.id) {
+				m_placements[i] = placement;
+				drop_covered_by(i);
+				return placement.id;
+			}
+		}
+	}
+
+	m_placements.append(placement);
+	drop_covered_by(m_placements.size() - 1);
+	return placement.id;
+'''
+replace = '''
+	/*
+	 * The counter place() used to keep, kept beside the store rather than
+	 * in it so this edit stays inside one file. Restarting it whenever
+	 * the store is empty is what makes it per-store: no placement can
+	 * still be holding a number below the mark, so nothing older can be
+	 * collided with, and a fresh store hands out 1 first -- which is the
+	 * whole defect, because 1 is where kitty's own numbering starts.
+	 */
+	static int counter = 0;
+	if (m_placements.isEmpty()) counter = 0;
+
+	bssh_image_placement_t stored = placement;
+	if (stored.id == 0) stored.id = ++counter;
+
+	/*
+	 * A protocol may re-transmit an existing id to replace the image
+	 * rather than to add a second copy of it.
+	 */
+	for (int i = 0; i < m_placements.size(); ++i) {
+		if (m_placements.at(i).id == stored.id) {
+			m_placements[i] = stored;
+			drop_covered_by(i);
+			return stored.id;
+		}
+	}
+
+	m_placements.append(stored);
+	drop_covered_by(m_placements.size() - 1);
+	return stored.id;
+'''
+expect = "an_image_without_an_id_does_not_answer_to_a_remote_one"
