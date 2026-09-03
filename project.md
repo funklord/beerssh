@@ -4745,6 +4745,41 @@ below the bound but was never being measured against it; `999999999` reached
 the emulator as written, which is the memory bound sec 10.2 added the clamp for
 in the first place.
 
+**The other end of that range was worse, and the clamp had nothing to do with
+it. [FIXED]** `BSSH_PRESET_MIN_SCROLLBACK` is 0 and the preset editor's spin
+box starts there, so "0 lines" is a value the UI invites. `bssh_session`
+applied it behind `if (lines > 0)`, so the emulator kept its 5000-line default
+while the page read 0 — and the app went on holding history the user had just
+asked it not to keep. For a terminal that is a **privacy** setting rather than
+a preference: somebody who turns scrollback off is asking for output not to be
+retained, and a key or a password echoed into a session is the reason.
+**ABSENT and ZERO are different, and `QJsonValue::toInt()` reports both as 0.**
+The guard was defending the default against an absent key, which is the only
+thing it could distinguish that way — and the case it protected against cannot
+occur, because every caller passes a RESOLVED object and `to_json()` always
+inserts this key. So it discarded the reachable case to guard an unreachable
+one. Asking whether the key is *there* separates them properly. The same
+mistake, in three different costumes, was fixed in `version-check` and in
+`check-apk` on the same day.
+
+**And a second defect was hiding behind the first, unreachable until it was
+fixed.** `bssh_scrollback::push()` returned early at capacity nought without
+touching `m_base`. But `base()` is documented as "how many lines this ring has
+dropped off the front", and at capacity nought every pushed line is dropped the
+instant it arrives — so the absolute numbering froze, and `base() + count()`
+stopped being the number of lines that have gone past. That difference is
+exactly what the emulator measures a resize against to keep images with their
+text (§7.1), so with scrollback off, images would have stopped following the
+text they were drawn beside. Nothing could reach it while the session was
+discarding a scrollback size of 0.
+**The fixture was wrong before the code was right**, which is worth recording
+because it is the shape this document keeps returning to: the first version fed
+three lines to a 24-row screen, nothing scrolled, nothing was ever pushed, and
+`base()` correctly did not move. A test that cannot reach the distinguishing
+case reports agreement whatever the code says. It feeds sixty lines now, and
+the non-zero size is asserted BEFORE the zero one so it cannot pass by the
+setting never being applied at all.
+
 `resolve()` now returns `from_json(resolved).to_json()` — the round trip
 through the struct, rather than a second list of `qBound` calls beside the
 first. Two spellings of one schema drift, and this drift would show up as a

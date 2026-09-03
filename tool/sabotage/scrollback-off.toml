@@ -1,0 +1,39 @@
+# Sabotages for sec 10.2's scrollback size at the value the UI offers and
+# the code discarded: nought.
+#
+# Each names the test that must notice. A sabotage caught by some OTHER
+# test is reported as "WRONG TEST" rather than as a pass.
+
+# The setting discarded. BSSH_PRESET_MIN_SCROLLBACK is 0 and the spin box
+# starts there, so this is a value a user can ask for -- and applying it
+# only when positive means the emulator keeps its 5000 default while the
+# page says 0. ABSENT and ZERO are different; toInt() reports both as 0.
+[[sabotage]]
+name = "a scrollback size of nought is thrown away"
+file = "src/model/session.cpp"
+find = '''
+	if (m_emulator && m_settings.contains(QStringLiteral("scrollback_lines"))) {
+		m_emulator->set_scrollback_lines(
+		        m_settings.value(QStringLiteral("scrollback_lines")).toInt());
+	}'''
+replace = '''
+	if (m_emulator) {
+		const int lines = m_settings.value(QStringLiteral("scrollback_lines")).toInt();
+		if (lines > 0) m_emulator->set_scrollback_lines(lines);
+	}'''
+expect = "turning_scrollback_off_actually_turns_it_off"
+
+# And the line that is dropped without being counted. base() is "how many
+# lines this ring has dropped off the front", and at capacity nought every
+# pushed line is dropped the instant it arrives -- so not counting it
+# freezes the absolute numbering, which is what the emulator measures a
+# resize against to keep images with their text.
+[[sabotage]]
+name = "a line dropped by a zero-length ring is not counted"
+file = "src/term/scrollback.cpp"
+find = '''
+		++m_base;
+		return;'''
+replace = '''
+		return;'''
+expect = "turning_scrollback_off_actually_turns_it_off"

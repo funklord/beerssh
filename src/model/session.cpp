@@ -96,9 +96,24 @@ void bssh_session::set_settings(const QJsonObject &settings) {
 	 * a pane that was just rebuilt by a layout change must still find the
 	 * history (sec 3, core principle 2).
 	 */
-	if (m_emulator) {
-		const int lines = m_settings.value(QStringLiteral("scrollback_lines")).toInt();
-		if (lines > 0) m_emulator->set_scrollback_lines(lines);
+	/*
+	 * ABSENT and ZERO are different, and toInt() reports both as 0.
+	 *
+	 * This read the value and applied it only when positive, so "0 lines"
+	 * -- which BSSH_PRESET_MIN_SCROLLBACK offers and the preset editor's
+	 * spin box invites -- was discarded and the emulator kept its 5000
+	 * default. The app went on holding history the user had just asked it
+	 * not to keep, which for a terminal is a privacy setting rather than
+	 * a preference.
+	 *
+	 * The case the guard protected against cannot occur: every caller
+	 * passes a RESOLVED object and preset_t::to_json() always inserts
+	 * this key, so an absent one means no settings were applied at all.
+	 * Asking whether the key is THERE separates the two properly.
+	 */
+	if (m_emulator && m_settings.contains(QStringLiteral("scrollback_lines"))) {
+		m_emulator->set_scrollback_lines(
+		        m_settings.value(QStringLiteral("scrollback_lines")).toInt());
 	}
 
 	emit settings_changed();

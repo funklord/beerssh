@@ -558,6 +558,78 @@ void session_registry_test::a_reconnect_hands_the_new_shell_a_clean_terminal() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void session_registry_test::turning_scrollback_off_actually_turns_it_off() {
+	/*
+	 * Sec 10.2's scrollback size, at the one value the spin box offers
+	 * that the session discarded.
+	 *
+	 * BSSH_PRESET_MIN_SCROLLBACK is 0 and the preset editor's range
+	 * starts there, so "0 lines" is a value the UI invites. The session
+	 * applied it behind `if (lines > 0)`, so the emulator kept its 5000
+	 * default and the app went on retaining history the user had just
+	 * asked it not to keep. For a terminal that is a privacy setting --
+	 * somebody who turns scrollback off is asking for output not to be
+	 * held -- and it silently did nothing.
+	 *
+	 * The guard was reading an ABSENT key, which QJsonValue::toInt()
+	 * also reports as 0. Absent and zero are different, and every caller
+	 * passes a RESOLVED object, where preset_t::to_json() always inserts
+	 * the key -- so the case it protected against cannot occur and the
+	 * case it discarded is the one a user can reach.
+	 */
+	bssh_profile_t profile = profile_for(QStringLiteral("quiet"),
+	                                      QStringLiteral("quiet.example"));
+	bssh_session session(profile);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("scrollback_lines"), 120);
+	session.set_settings(settings);
+	QCOMPARE(session.emulator()->scrollback().max_lines(), 120);
+
+	/*
+	 * Asserted after a non-zero value, so this cannot pass by the setting
+	 * never being applied at all: the ring has to be seen changing before
+	 * it is seen going to zero.
+	 */
+	settings.insert(QStringLiteral("scrollback_lines"), 0);
+	session.set_settings(settings);
+	QCOMPARE(session.emulator()->scrollback().max_lines(), 0);
+
+	/* And nothing is retained once it is off. */
+	const qint64 before = session.emulator()->scrollback().base();
+
+	/*
+	 * Enough to SCROLL, which three lines are not: libvterm pushes to the
+	 * scrollback only when a line leaves the top of the screen, so a
+	 * short feed reaches none of this and would let the assertions below
+	 * pass without the ring ever being asked to drop anything.
+	 */
+	QByteArray output;
+	for (int i = 0; i < 60; ++i) {
+		output += QByteArrayLiteral("line ") + QByteArray::number(i)
+		        + QByteArrayLiteral("\r\n");
+	}
+	session.emulator()->feed(output);
+
+	QCOMPARE(session.emulator()->scrollback().count(), 0);
+
+	/*
+	 * And the lines that went past are still COUNTED, which is what
+	 * base() promises: "how many lines this ring has dropped off the
+	 * front". At capacity nought every pushed line is dropped the instant
+	 * it arrives, so the count has to move or `base() + count()` stops
+	 * being the number of lines that have gone by -- and the emulator
+	 * measures a resize with exactly that difference to keep images with
+	 * their text (sec 7.1).
+	 *
+	 * Reachable only now: the session used to discard a scrollback size
+	 * of 0 before it could ever get here.
+	 */
+	QVERIFY2(session.emulator()->scrollback().base() > before,
+	          "a line dropped by a zero-length ring is still a line that "
+	          "has gone past, and base() is what counts those");
+}
+
 void session_registry_test::a_silenced_bell_does_not_mark_the_tab() {
 	bssh_profile_t profile;
 	profile.host = QStringLiteral("noisy.example.com");

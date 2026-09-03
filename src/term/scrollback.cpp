@@ -25,7 +25,24 @@ void bssh_scrollback::set_max_lines(int max_lines) {
 }
 
 void bssh_scrollback::push(const QList<bssh_cell_t> &line, bool continuation) {
-	if (m_max_lines == 0) return;
+	if (m_max_lines == 0) {
+		/*
+		 * Dropped the instant it arrives -- and dropping off the front is
+		 * exactly what base() counts, so it counts this one too.
+		 *
+		 * Returning without counting froze the absolute numbering at
+		 * zero for as long as scrollback was off, so `base() + count()`
+		 * stopped being the number of lines that have gone past. The
+		 * emulator measures a resize with that difference to keep images
+		 * with their text (sec 7.1), and a frozen one is a difference of
+		 * nought however far the screen scrolled.
+		 *
+		 * Unreachable until now, which is why it survived: the session
+		 * discarded a scrollback size of 0 before it could arrive here.
+		 */
+		++m_base;
+		return;
+	}
 
 	m_lines.append(line);
 	m_continuations.append(continuation);

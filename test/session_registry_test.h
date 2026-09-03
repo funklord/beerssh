@@ -32,6 +32,7 @@ private slots:
 	void a_reconnect_hands_the_new_shell_a_clean_terminal();
 	void editing_a_host_reaches_the_session_already_open_on_it();
 	void a_silenced_bell_does_not_mark_the_tab();
+	void turning_scrollback_off_actually_turns_it_off();
 
 	/* sec 8.3's window title, which is a format rather than a choice. */
 	void the_window_title_expands_what_the_session_knows();
