@@ -1280,6 +1280,30 @@ void bssh_main_window::apply_keyboard_choice() {
 void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 	m_terminal_view = m_panes ? m_panes->focused_view() : nullptr;
 
+	/*
+	 * Whether a view may raise the system keyboard is a property of the
+	 * VIEW, and views are destroyed and rebuilt whenever the panes change
+	 * -- so the choice is applied where the view changes and not only
+	 * where the setting does.
+	 *
+	 * Belt and braces, and said plainly because it was nearly recorded as
+	 * something stronger. The reasoning was that choosing the built-in
+	 * keyboard at the front door, where m_terminal_view is null, would
+	 * leave the next session's view carrying the attribute its
+	 * constructor set. A test was written for exactly that order and
+	 * PASSED with this line removed -- in both directions, once it was
+	 * made to assert both -- so whatever else applies the choice on the
+	 * way to a view, this is not the only thing doing it, and the fault
+	 * could not be produced. The test was removed rather than kept: one
+	 * that cannot fail is worse than none, because it reads as cover.
+	 *
+	 * The line stays because it makes the invariant hold at the moment
+	 * the view changes rather than by whatever currently arranges it,
+	 * which is cheap. It is NOT a fix for an observed defect and must not
+	 * be cited as one.
+	 */
+	apply_keyboard_choice();
+
 	if (!m_terminal_view) {
 		m_current = nullptr;
 		update_status();

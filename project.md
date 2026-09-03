@@ -967,6 +967,41 @@ up, a strip of modifiers has nothing to modify.
   thirty lines above itself. Before a keyboard of our own had a Shift key, the
   only route there was a sticky Shift armed for the mouse override, so the defect
   existed with almost no way to meet it.
+- **Nothing ever asked for the system keyboard, which is why there was none.
+  [FIXED]** The setting above defaults to the system keyboard, and that mode
+  did not work — the finding that prompted this whole section's rewrite was
+  "there is no keyboard on Android", and this is the mechanism. Qt raises the
+  on-screen panel from `QLineEdit`, `QTextEdit` and the spin boxes, which call
+  the private `QWidgetPrivate::handleSoftwareInputPanel()` themselves. **A
+  custom `QWidget` gets nothing.** `bssh_terminal_view` set
+  `WA_InputMethodEnabled` and implemented `inputMethodEvent`, so it would have
+  understood a panel perfectly — the attribute says a panel *would be
+  understood*, not that one should be shown, and no call to
+  `QGuiApplication::inputMethod()->show()` existed anywhere in the tree.
+  Asked for on focus **and** on a tap that selected nothing. Both are needed
+  and neither is redundant: focusIn covers arriving by Tab, by the pane
+  container's own `setFocus` and by the first touch, while a tap covers coming
+  back after the user has dismissed the panel — which does not move focus, so
+  focusIn alone would never fire again. `QLineEdit` asks on release for that
+  same reason.
+  **The suite cannot assert this and says so rather than implying otherwise.**
+  It runs offscreen, where there is no input panel to raise and
+  `inputMethod()->show()` is a no-op, so nothing here demonstrates a keyboard
+  appearing; that needs a device. What the suite does hold is the gate around
+  it — a view declines the panel when the built-in keyboard is chosen.
+  **A claimed second defect did not survive its own test, and is recorded
+  because the near miss is the lesson.** The reasoning was that applying the
+  choice only when the *setting* changes would leave a view opened afterwards
+  carrying its constructor's attribute — choose the built-in keyboard at the
+  front door, where there is no view, then open a session. A test was written
+  for exactly that order and **passed with the fix removed**, and still passed
+  once strengthened to assert both directions. So the fault could not be
+  produced. The test was deleted rather than kept, and the one-line call kept
+  as belt-and-braces with a comment saying it is not a fix for anything
+  observed. A test that cannot fail is worse than no test, because it reads as
+  cover; this one had gone green in two full suite runs before sabotage was
+  pointed at it.
+
 - **Modifiers are three-state, the way a Treo's were. [BUILT]** `OFF → armed for
   the next key → LOCKED → OFF`, one press each; the press count *is* the state,
   so there is nothing extra to discover. A one-shot alone cannot express what a

@@ -514,6 +514,19 @@ protected:
 	void mouseDoubleClickEvent(QMouseEvent *event) override;
 	void inputMethodEvent(QInputMethodEvent *event) override;
 
+	/*
+	 * Asks for the on-screen keyboard (sec 6.2).
+	 *
+	 * Nothing raises it for a plain QWidget. Qt does it from QLineEdit,
+	 * QTextEdit and the spin boxes, which call the private
+	 * QWidgetPrivate::handleSoftwareInputPanel() themselves -- a custom
+	 * widget gets nothing. So the terminal took focus, declared that it
+	 * accepted input methods, and no keyboard ever appeared: the
+	 * attribute says a panel WOULD be understood, not that one should be
+	 * shown.
+	 */
+	void request_input_panel();
+
 	/* sec 6.4's drops: a file's path, or the text itself. */
 	void dragEnterEvent(QDragEnterEvent *event) override;
 	void dropEvent(QDropEvent *event) override;

@@ -18,6 +18,8 @@
 #include <QContextMenuEvent>
 #include <QPainter>
 #include <QTimer>
+#include <QGuiApplication>
+#include <QInputMethod>
 #include <QInputMethodEvent>
 #include <QKeyEvent>
 #include <QApplication>
@@ -1756,6 +1758,15 @@ void bssh_terminal_view::focusInEvent(QFocusEvent *event) {
 	 */
 	emit focus_received();
 
+	/*
+	 * And ask for the keyboard, because nothing else will (sec 6.2).
+	 * Here as well as on a tap: focusIn covers arriving by Tab, by the
+	 * container's own setFocus and by the first touch, and a tap covers
+	 * coming back after the user has dismissed the panel -- which does
+	 * not move focus, so this alone would never fire again.
+	 */
+	request_input_panel();
+
 	/* Blinking belongs to whoever has focus. */
 	sync_blink_timer();
 
@@ -1985,6 +1996,13 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 	}
 
 	if (!m_selecting) {
+		/*
+		 * A tap that selected nothing is somebody asking to type. This
+		 * is where QLineEdit asks too, and for the same reason: the
+		 * panel can be dismissed without focus moving, so a release is
+		 * the only event left that means "I want the keyboard back".
+		 */
+		request_input_panel();
 		QWidget::mouseReleaseEvent(event);
 		return;
 	}
@@ -1992,6 +2010,18 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 	m_selecting = false;
 	note_selection_changed();
 	event->accept();
+}
+
+void bssh_terminal_view::request_input_panel() {
+	/*
+	 * Only when this widget would actually receive what the panel sends.
+	 * The built-in keyboard (sec 6.2) clears WA_InputMethodEnabled
+	 * precisely to decline the system one, and asking for it anyway would
+	 * stack two keyboards on a screen that had room for neither.
+	 */
+	if (!testAttribute(Qt::WA_InputMethodEnabled)) return;
+
+	QGuiApplication::inputMethod()->show();
 }
 
 void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
