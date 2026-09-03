@@ -240,8 +240,21 @@ public:
 	bool store(const QString &id, const QString &secret) override {
 		if (!m_unlocked) return false;
 
+		/*
+		 * Written first, kept only if the write succeeded.
+		 *
+		 * This changed m_secrets and then flushed, returning what the
+		 * flush said -- so a failed write left memory and disk
+		 * disagreeing, with the caller told it had failed. The store
+		 * either holds the secret or it does not, and the answer has to
+		 * be the one it gave.
+		 */
+		const QJsonObject before = m_secrets;
 		m_secrets.insert(id, secret);
-		return flush();
+		if (flush()) return true;
+
+		m_secrets = before;
+		return false;
 	}
 
 	QString load(const QString &id) const override {
@@ -252,8 +265,19 @@ public:
 	bool erase(const QString &id) override {
 		if (!m_unlocked) return false;
 
+		/*
+		 * The same, and this is the direction that costs. A user asks to
+		 * forget a password, is told it could not be done, and it is
+		 * gone from memory anyway: the app cannot use it, and the next
+		 * successful write for any OTHER id persists the erasure that
+		 * was reported as failed.
+		 */
+		const QJsonObject before = m_secrets;
 		m_secrets.remove(id);
-		return flush();
+		if (flush()) return true;
+
+		m_secrets = before;
+		return false;
 	}
 
 private:

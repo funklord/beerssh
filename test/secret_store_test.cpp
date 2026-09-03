@@ -139,6 +139,59 @@ void secret_store_test::a_locked_store_yields_nothing() {
 	QVERIFY(!store->erase(QStringLiteral("id")));
 }
 
+void secret_store_test::an_erase_that_cannot_be_written_keeps_the_secret_readable() {
+	/*
+	 * store() and erase() both change m_secrets and THEN flush, and
+	 * return what the flush said. So a failed write leaves memory and
+	 * disk disagreeing, and the caller is told it failed while the
+	 * process behaves for the rest of its life as though it had not.
+	 *
+	 * For an erase that is the dangerous direction. The user asks to
+	 * forget a password, is told it could not be done, and the secret is
+	 * gone from memory anyway -- so the app cannot use it, and the next
+	 * successful write for any OTHER id persists the erasure that was
+	 * reported as failed. The store either forgot it or did not, and the
+	 * answer must be the same one it gave.
+	 *
+	 * Same shape as the profile store's delete, one store over: there the
+	 * credential was erased before the write that could fail.
+	 *
+	 * The write is made to fail by putting a DIRECTORY where the file
+	 * goes. Removing the directory would not do it -- store_path() calls
+	 * mkpath every time -- and making it read-only would not either,
+	 * because the container this suite gates in runs as root and root
+	 * ignores the mode. That cost a test earlier in this project's life.
+	 */
+	QTemporaryDir dir;
+	const QString path = redirect_app_data(dir);
+
+	bssh_secret_store *store = bssh_make_file_secret_store();
+	store->lock();
+	QVERIFY(store->unlock(QStringLiteral("correct horse")));
+
+	QVERIFY(store->store(QStringLiteral("profile:9"), QStringLiteral("keep-me")));
+	QCOMPARE(store->load(QStringLiteral("profile:9")), QStringLiteral("keep-me"));
+
+	QVERIFY(QFile::remove(path));
+	QVERIFY2(QDir().mkpath(path), "a directory where the file goes makes the write fail");
+
+	QVERIFY2(!store->erase(QStringLiteral("profile:9")),
+	          "an erase that could not be written must report that it failed");
+
+	QVERIFY2(store->load(QStringLiteral("profile:9")) == QStringLiteral("keep-me"),
+	          "the erase was reported as failed, so the secret has to still be "
+	          "there -- otherwise the store forgot it and said it had not");
+
+	/* And the same in the other direction: a save that failed saved nothing. */
+	QVERIFY2(!store->store(QStringLiteral("profile:10"), QStringLiteral("never-written")),
+	          "a store that could not be written must report that it failed");
+	QVERIFY2(store->load(QStringLiteral("profile:10")).isEmpty(),
+	          "the save was reported as failed, so nothing may be readable back "
+	          "-- a later successful write would otherwise persist it");
+
+	QDir().rmdir(path);
+}
+
 void secret_store_test::erasing_removes_it_from_the_file() {
 	QTemporaryDir dir;
 	redirect_app_data(dir);

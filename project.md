@@ -5647,6 +5647,29 @@ mode costing an afternoon, in the suite rather than the app.
 
 Three halves, and detection alone would not have been a fix:
 
+- **A failed write left the store disagreeing with what it had just told the
+  caller. [FIXED]** `store()` and `erase()` changed `m_secrets` and *then*
+  flushed, returning what the flush said. So when the write failed the caller
+  was told it failed and the process behaved for the rest of its life as
+  though it had not.
+  **The erase is the direction that costs.** A user asks to forget a
+  password, is told it could not be done, and it is gone from memory anyway
+  — the app cannot use it, and the next successful write for any *other* id
+  persists the erasure that was reported as failed. The store either holds a
+  secret or it does not, and the answer has to be the one it gave. Both
+  directions roll back now.
+  **Same fault as the profile store's delete, one store over**, found by
+  asking the question that fix suggests: who else changes state before a
+  write that can fail? There it was the credential erased ahead of
+  `write_profiles()`; here it was memory mutated ahead of `flush()`. Fixing
+  one did not fix the other, and nothing connected them.
+  **Forcing the failure is the part worth copying.** The test puts a
+  DIRECTORY where the file goes. Deleting the file does not work — the path
+  helper calls `mkpath` on every call — and making the directory read-only
+  does not either, because the container `check-ci` gates in runs as **root**
+  and root ignores the mode. That cost a test earlier in this project's life,
+  so the reasoning is in the test rather than left to be rediscovered.
+
 - **The store detects it.** All three writers check `status()` and set
   `last_error()`.
 - **Memory cannot outlive the disk.** A failed write restores the
