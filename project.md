@@ -5663,6 +5663,21 @@ Three halves, and detection alone would not have been a fix:
   write that can fail? There it was the credential erased ahead of
   `write_profiles()`; here it was memory mutated ahead of `flush()`. Fixing
   one did not fix the other, and nothing connected them.
+  **The Android backend had it too, and no gate here can even compile that
+  file.** `secret_store_keystore.cpp` carries the identical
+  mutate-then-flush in both `store()` and `erase()`, fixed the same way. It
+  is listed only inside `beerssh.pro`'s `android {}` block, so the desktop
+  build, the test build and `check-ci` all skip it — and it includes
+  `QJniObject`, which exists only on Android, so it cannot be compiled here
+  at all. A stub of the JNI surface was tried and abandoned: a stub that
+  drifts from the real API would pass code that does not build on Android,
+  and false assurance is worse than none.
+  **So that fix is verified by symmetry and inspection only** — the added
+  lines are token-identical to the file backend's, which compiles and is
+  tested, and use only types already in that translation unit. Worth knowing
+  as its own fact rather than as a footnote: **a source file in this tree is
+  compiled by no routine gate**, so any change to it — this one included —
+  is unchecked until somebody builds for Android.
   **Forcing the failure is the part worth copying.** The test puts a
   DIRECTORY where the file goes. Deleting the file does not work — the path
   helper calls `mkpath` on every call — and making the directory read-only

@@ -118,8 +118,20 @@ public:
 
 	bool store(const QString &id, const QString &secret) override {
 		ensure_loaded();
+
+		/*
+		 * Written first, kept only if the write succeeded -- the same
+		 * rule as the file backend, and it was wrong here for the same
+		 * reason. Changing m_secrets and then returning what flush()
+		 * said leaves memory and disk disagreeing, with the caller told
+		 * it failed.
+		 */
+		const QJsonObject before = m_secrets;
 		m_secrets.insert(id, secret);
-		return flush();
+		if (flush()) return true;
+
+		m_secrets = before;
+		return false;
 	}
 
 	QString load(const QString &id) const override {
@@ -131,8 +143,17 @@ public:
 		ensure_loaded();
 		if (!m_secrets.contains(id)) return true;
 
+		/*
+		 * And this is the direction that costs: a user asks to forget a
+		 * password, is told it could not be done, and it is gone from
+		 * memory anyway.
+		 */
+		const QJsonObject before = m_secrets;
 		m_secrets.remove(id);
-		return flush();
+		if (flush()) return true;
+
+		m_secrets = before;
+		return false;
 	}
 
 private:
