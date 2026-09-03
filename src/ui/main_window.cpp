@@ -1035,8 +1035,12 @@ void bssh_main_window::on_screen_changed() {
 	 * in dp without a resizeEvent -- which is what decides how many panes
 	 * fit (sec 8.2).
 	 */
+	/*
+	 * Through set_width's own signal, for the reason resizeEvent gives:
+	 * a rebuild that is not conditioned on the class changing destroys
+	 * live views for nothing.
+	 */
 	if (m_layout) m_layout->set_width(width());
-	if (m_panes) m_panes->rebuild();
 
 	update_status();
 }
@@ -1066,9 +1070,26 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	 * first thing ever to measure it was a drop onto a 360-pixel window
 	 * that tiled instead of declining.
 	 */
+	/*
+	 * set_width() rebuilds through layout_changed, and ONLY when the size
+	 * class actually changed -- which is why there is no rebuild here.
+	 *
+	 * There was one, unconditional, and on Android it made the app
+	 * untypable. Opening the on-screen keyboard resizes the window, so
+	 * every frame of the keyboard's own appearance tore down every pane
+	 * view; the view that had just asked for the panel was destroyed
+	 * mid-animation, and Qt answers a focus object that no longer accepts
+	 * input by calling QtInputDelegate.hideSoftwareKeyboard(). The
+	 * keyboard flashed up and vanished on every tap, on a platform where
+	 * that is the only way to type.
+	 *
+	 * The width does not even change when a keyboard opens -- only the
+	 * height does -- so the rebuild could never have been the right
+	 * answer to this event. set_width() has said as much in a comment
+	 * since it was written: a rebuild per pixel is what it exists to
+	 * prevent, and this walked straight past it.
+	 */
 	m_layout->set_width(width());
-
-	if (m_panes) m_panes->rebuild();
 }
 
 /*

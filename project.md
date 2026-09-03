@@ -3194,6 +3194,60 @@ the panes, which calls it again. **That loop ran for five minutes and died on a
 stack overflow.** Rebuilding only on a real change terminates, because the second
 pass finds the default already right.
 
+**And the same lesson was available one function away, unlearned, where it
+cost the phone its keyboard.** `resizeEvent` called `m_panes->rebuild()`
+**unconditionally**. On Android the on-screen keyboard's appearance IS a
+window resize, delivered repeatedly as it animates — so every frame of the
+keyboard opening destroyed every pane view, including the one that had just
+asked for the panel, and Qt answers a focus object that no longer accepts
+input by calling `QtInputDelegate.hideSoftwareKeyboard()`. The keyboard
+flashed up and vanished on every tap. On a phone that is the whole of
+typing, and the copyright holder's report was "completely broken on mobile
+— no way to use it".
+
+Three things make it a defect rather than a trade-off, and the third is the
+one worth carrying:
+
+- **The width does not change when a keyboard opens** — only the height —
+  so the rebuild could never have been the right answer to this event.
+- **It was rebuilding every pane view per pixel of a desktop window drag**
+  too, which nobody had noticed because on a desktop it only costs time.
+- **The guard already existed and the caller walked past it.**
+  `bssh_layout_manager::set_width()` emits `layout_changed` only when the
+  size CLASS changes, `bssh_pane_container` already connects that to
+  `rebuild`, and `set_width`'s own comment says a rebuild per pixel is
+  precisely what it exists to prevent. `resizeEvent` called `set_width()`
+  and then rebuilt anyway. §11 records the same shape in
+  `offer_to_remember` — "not a missing check, a correct one positioned so
+  it could not prevent the thing it describes" — and this is that a second
+  time, in a second subsystem, three weeks later.
+
+**Found on a device and diagnosed from the platform's own log, not from
+the code.** `ImeTracker` and `InsetsController` name who asked and why:
+a show request, then `onRequestHide at ORIGIN_CLIENT reason
+HIDE_SOFT_INPUT_ON_ANIMATION_STATE_CHANGED`, with
+`QtInputDelegate.lambda$hideSoftwareKeyboard$6` in the stack that set
+`setRequestedVisibleTypes: visible=false`. That is the app hiding it, five
+milliseconds after asking for it, and no amount of reading `request_input_panel()`
+would have said so.
+
+**Held by `a_resize_that_keeps_the_size_class_keeps_the_views`, which is a
+desktop test for an Android defect** — the property is not Android's. It
+holds a `QPointer` to a pane view, resizes the height only, then the width
+within one class, and requires the view to survive both; then crosses into
+a class that fits more panes and requires the view to be **destroyed**.
+That last assertion is the control, and it earned its place twice in one
+sitting. The first version of the test did not show the window: a hidden
+widget is not laid out and delivers no `resizeEvent`, so all three
+"survives" assertions held because nothing had happened at all, and only
+the control caught it. The sabotage then reported **two** failures for one
+cause, because a failing `QVERIFY2` returns from the test function and the
+registry cleanup written at the bottom never ran — the leaked session
+failed a middle-click test that counts the registry. The cleanup is a
+destructor now. **A cleanup written at the end of a test is the cleanup
+that does not run on the day it is needed.**
+
+
 **A view nobody is showing must not tell its session how big it is.** A
 window-change message is a claim about what the user can see, and Qt lays out a
 widget in an unshown window with whatever the splitter had before it had a real

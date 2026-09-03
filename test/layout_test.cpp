@@ -19,6 +19,7 @@
 #include <QScrollBar>
 #include <QMimeData>
 #include <QWindow>
+#include <QPointer>
 #include <QEnterEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -1107,6 +1108,104 @@ void layout_test::backing_out_of_a_session_reaches_the_host_list() {
 	 * from quitting for everything downstream of the event.
 	 */
 	QVERIFY2(!back.isAccepted(), "going up must not also close the window");
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+/*
+ * Shared registry: leave it as it was found (sec 8.4), and by a DESTRUCTOR
+ * rather than by a line at the end.
+ *
+ * A QVERIFY2 that fails returns from the test function, so a cleanup
+ * written at the bottom is exactly the cleanup that does not run on the
+ * day it is needed -- the session leaks and the next test to count the
+ * registry fails too. Measured: the sabotage run for this test reported
+ * two failures for one cause, and the second was a middle-click test
+ * counting a window this one left behind.
+ */
+namespace {
+
+struct registry_left_as_found_t {
+	bssh_session_registry *registry;
+
+	explicit registry_left_as_found_t(bssh_session_registry *r) : registry(r) {}
+	~registry_left_as_found_t() {
+		while (registry && registry->count() > 0) registry->close(registry->at(0));
+	}
+};
+
+} /* namespace */
+
+/*
+ * The Android keyboard defect, held as a desktop test because the property
+ * is not Android's: a resize that does not change the size class must not
+ * destroy the pane views.
+ *
+ * resizeEvent called m_panes->rebuild() unconditionally, and rebuild() is
+ * qDeleteAll(m_views). On a phone the on-screen keyboard's appearance IS a
+ * window resize, delivered repeatedly as it animates -- so every frame of
+ * the keyboard opening destroyed the view that had just asked for it, and
+ * Qt answers a focus object that no longer accepts input by calling
+ * QtInputDelegate.hideSoftwareKeyboard(). The keyboard flashed up and
+ * vanished on every tap, which on a phone is the whole of typing.
+ *
+ * A keyboard changes the HEIGHT, so the first assertion is the one that
+ * matters; the width case is here because a desktop window drag was
+ * rebuilding every view per pixel by the same route.
+ */
+void layout_test::a_resize_that_keeps_the_size_class_keeps_the_views() {
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fake->set_fail_on_connect(QStringLiteral("no network in a test"));
+		return fake;
+	});
+
+	bssh_main_window window(bssh_profile_t::from_target(QStringLiteral("nowhere.example")));
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+
+	/*
+	 * Shown, because a hidden widget is not laid out and delivers no
+	 * resizeEvent -- so every assertion below would hold for the reason
+	 * that nothing happened at all. The control at the end is what caught
+	 * that when this test was first written without it.
+	 */
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	const registry_left_as_found_t tidy(window.registry());
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY2(panes, "the window must have a pane container");
+
+	/*
+	 * Held by QPointer rather than by the raw pointer: rebuild() deletes
+	 * the view, and asking a deleted object anything is how a test that
+	 * means to catch this crashes instead of failing.
+	 */
+	QPointer<bssh_terminal_view> view = panes->view_at(0);
+	QVERIFY2(!view.isNull(), "there must be a view for the resize to lose");
+
+	/* Exactly what a keyboard opening does: height only. */
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP / 2);
+	QVERIFY2(!view.isNull(),
+	          "a height-only resize must not destroy the pane views -- this is "
+	          "the on-screen keyboard dismissing itself");
+
+	/* And a width change that stays inside the same class. */
+	window.resize(BSSH_PHONE_DP - 20, BSSH_PHONE_TALL_DP / 2);
+	QVERIFY2(!view.isNull(),
+	          "a width change within one size class must not rebuild either");
+
+	/*
+	 * The positive control, and without it the three assertions above are
+	 * satisfied by a window that never rebuilds at all. Crossing into a
+	 * class that fits more panes MUST still rebuild, which is what the
+	 * layout_changed signal is for.
+	 */
+	window.resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
+	QVERIFY2(view.isNull(),
+	          "crossing the size class must still rebuild, or this test would "
+	          "pass against a window that had stopped laying out entirely");
 
 	bssh_ssh_session::set_factory(nullptr);
 }

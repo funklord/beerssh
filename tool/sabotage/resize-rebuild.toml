@@ -1,0 +1,17 @@
+# Sabotage for the on-screen keyboard defect.
+#
+# resizeEvent called m_panes->rebuild() unconditionally. rebuild() is
+# qDeleteAll(m_views), and on Android the keyboard's appearance IS a window
+# resize -- so the view that had just asked for the panel was destroyed
+# mid-animation and Qt called QtInputDelegate.hideSoftwareKeyboard(). The
+# keyboard flashed up and vanished on every tap.
+#
+# Putting the line back must fail the test that names the property, and
+# nothing else: the layout tests that DO expect a rebuild expect it on a
+# size-class change, which still happens through layout_changed.
+[[sabotage]]
+name = "a resize rebuilds the panes whether or not the class changed"
+file = "src/ui/main_window.cpp"
+find = "\t * prevent, and this walked straight past it.\n\t */\n\tm_layout->set_width(width());\n}"
+replace = "\t */\n\tm_layout->set_width(width());\n\n\tif (m_panes) m_panes->rebuild();\n}"
+expect = "a_resize_that_keeps_the_size_class_keeps_the_views"
