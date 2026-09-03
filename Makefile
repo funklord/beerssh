@@ -1018,19 +1018,51 @@ deb: version-check fonts
 	@ls -1 $(DEB_DIR)/*.deb
 
 # The VERSION file is the source; everything else is checked against it.
+#
+# **An input this cannot read is a failure, not a skip.** The condition here
+# tested whether dpkg-parsechangelog printed anything and then announced
+# "skipped (dpkg-parsechangelog unavailable)" -- a cause it never tested.
+# Measured, with the tool installed: exit 25 and empty output when there is
+# no debian/changelog, exit 255 when there is one nothing can parse. Both
+# are indistinguishable from an absent tool at that condition, so a
+# changelog a bad merge left unparseable produced a green skip naming the
+# wrong reason, and `deb` went on to build a package whose version had been
+# compared against nothing. That is the shape raidcfgd records at its own
+# version-check, reached from the other end: there, two empty files
+# compared equal.
+#
+# So there is no skip left. An absent dpkg-parsechangelog is handled by
+# reading the file directly instead -- which is the only case the old
+# message actually described -- and everything else stops the build.
+#
+# The fallback is NOT raidcfgd's line. That one strips a Debian revision
+# with `\(.*\)-[^-]*` and so requires a hyphen; this package is native
+# (`beerssh (1.0)`, no revision), and copying it across would have turned a
+# false skip into a false failure on every machine without dpkg-dev.
 version-check:
-	@file=$$(cat VERSION); \
-	changelog=$$(dpkg-parsechangelog -SVersion 2>/dev/null); \
+	@file=$$(cat VERSION 2>/dev/null); \
+	if [ -z "$$file" ]; then \
+		echo "version-check: VERSION is empty or unreadable;" >&2; \
+		echo "version-check:   there is nothing to compare against." >&2; \
+		exit 1; \
+	fi; \
+	changelog=$$(dpkg-parsechangelog -SVersion 2>/dev/null \
+	              || sed -n '1s/^[^(]*(\([^)]*\)).*/\1/p' debian/changelog 2>/dev/null); \
 	if [ -z "$$changelog" ]; then \
-		echo "version-check: skipped (dpkg-parsechangelog unavailable)"; \
-	elif [ "$$file" != "$$changelog" ]; then \
+		echo "version-check: no version could be read from debian/changelog." >&2; \
+		echo "version-check:   dpkg-parsechangelog and the direct read both" >&2; \
+		echo "version-check:   came back empty, so nothing was compared." >&2; \
+		echo "version-check:   what the parser makes of it:" >&2; \
+		dpkg-parsechangelog -SVersion >/dev/null || true; \
+		exit 1; \
+	fi; \
+	if [ "$$file" != "$$changelog" ]; then \
 		echo "version-check: VERSION says $$file but"; \
 		echo "               debian/changelog says $$changelog"; \
 		echo "version-check:   add a changelog entry for $$file"; \
 		exit 1; \
-	else \
-		echo "version-check: $$file, in step"; \
-	fi
+	fi; \
+	echo "version-check: $$file, in step"
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(TARGET)
