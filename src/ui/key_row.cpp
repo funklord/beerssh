@@ -263,20 +263,34 @@ void bssh_key_row::add_modifier(const QString &label, quint8 modifier) {
 	m_modifier_values.append(modifier);
 
 	connect(button, &QAbstractButton::clicked, this, [this, modifier] {
-		if (!m_router) return;
 		/*
 		 * One press arms, a second locks, a third releases -- the Treo's
 		 * cycle, and the router owns it because the built-in keyboard
 		 * (sec 6.2) asks the same question with different buttons.
 		 */
-		m_router->cycle_modifier(modifier);
+		if (m_router) m_router->cycle_modifier(modifier);
+
+		/*
+		 * Refreshed even with no router, and that is the whole point of
+		 * doing it outside the guard. The button is CHECKABLE, so Qt has
+		 * already toggled it by the time this runs; returning early
+		 * here left it drawn as pressed with no terminal behind it and
+		 * nothing able to put it back.
+		 */
 		refresh_modifier_buttons();
 	});
 }
 
 void bssh_key_row::refresh_modifier_buttons() {
-	if (!m_router) return;
-
+	/*
+	 * No router means no session, which means nothing is armed -- so the
+	 * buttons are drawn OFF rather than left as they were.
+	 *
+	 * Returning early here was the bug this function's own comment warns
+	 * about, one step further out: a row whose visibility does not depend
+	 * on a session at all (see should_be_visible) kept a locked Ctrl on
+	 * screen after the session behind it closed.
+	 */
 	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
 		/*
 		 * The button's state has to follow the router, not its own
@@ -295,7 +309,8 @@ void bssh_key_row::refresh_modifier_buttons() {
 		 */
 		QAbstractButton *button = m_modifier_buttons.at(i);
 		const bssh_input_router::modifier_state_t state =
-		        m_router->modifier_state(m_modifier_values.at(i));
+		        m_router ? m_router->modifier_state(m_modifier_values.at(i))
+		                 : bssh_input_router::MODIFIER_OFF;
 
 		button->setChecked(state != bssh_input_router::MODIFIER_OFF);
 

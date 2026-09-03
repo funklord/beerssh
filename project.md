@@ -1033,6 +1033,38 @@ up, a strip of modifiers has nothing to modify.
   cover; this one had gone green in two full suite runs before sabotage was
   pointed at it.
 
+- **A modifier button must not outlive the session it describes. [FIXED]**
+  Three instances of one mistake, all found by reading the new keyboard code
+  rather than by using it. `refresh_modifier_buttons()` opened with
+  `if (!m_router) return;`, so `set_router(nullptr)` — which is what a
+  closing session does — left the buttons showing whatever they had. Lock
+  Ctrl, close the session, and it still reads locked over a window with no
+  terminal. The row is reachable in that state because **its visibility
+  depends on the mode and the platform and never on whether a session
+  exists** (`should_be_visible`), so it stays on screen with nothing behind
+  it.
+  **The sharper half is the press.** The button is CHECKABLE, so Qt toggles
+  it before the handler runs — and a handler that returned early on a null
+  router left it drawn as pressed with nothing able to put it back. At the
+  front door that is permanent until a session arrives.
+  The built-in keyboard had both, plus a third of the same shape:
+  `refresh_letter_labels()` also returned early, so it could stay drawn in
+  capitals after the session that shifted it had gone.
+  The rule in all three: **no router means no session, which means nothing
+  is armed**, so the buttons are drawn OFF rather than left as they were —
+  and the refresh happens OUTSIDE the guard, because by then Qt has already
+  toggled the button.
+  What makes this worth recording is where it was hiding.
+  `refresh_modifier_buttons()` already carried a comment warning about
+  exactly this — "a Ctrl button still looking pressed afterwards is a button
+  lying about the state of the terminal" — and the guard one line above it
+  created the same lie one step further out. **The comment was right about
+  the hazard and blind to the case beside it**, which is the same shape as
+  §6.2's own note that a rule written under one configuration never
+  announces the dependency it was written under.
+  Both halves are sabotaged separately and fail at different assertions, so
+  the test cannot be passing for one reason and covering both by accident.
+
 - **Modifiers are three-state, the way a Treo's were. [BUILT]** `OFF → armed for
   the next key → LOCKED → OFF`, one press each; the press count *is* the state,
   so there is nothing extra to discover. A one-shot alone cannot express what a

@@ -377,6 +377,52 @@ void input_router_test::pane_chords_are_kept_by_the_app() {
 	QCOMPARE(spy.count(), 1);
 }
 
+static QAbstractButton *button_labelled(const QWidget &parent, const QString &label) {
+	for (QAbstractButton *button : parent.findChildren<QAbstractButton *>()) {
+		if (button->text() == label) return button;
+	}
+	return nullptr;
+}
+
+void input_router_test::a_modifier_button_stops_claiming_a_session_that_has_gone() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_key_row row(&router);
+
+	QAbstractButton *ctrl = button_labelled(row, QStringLiteral("Ctrl"));
+	QVERIFY(ctrl != nullptr);
+
+	/* Locked, which is the state that lasts and so the one that can rot. */
+	ctrl->click();
+	ctrl->click();
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_LOCKED);
+	QVERIFY2(ctrl->isChecked(), "a locked modifier must read as pressed");
+
+	/*
+	 * The session goes. The row does NOT: its visibility depends on the
+	 * mode and the platform (should_be_visible) and never on whether a
+	 * session exists, so it stays on screen with nothing behind it.
+	 */
+	row.set_router(nullptr);
+
+	QVERIFY2(!ctrl->isChecked(),
+	          "with no session there is nothing armed, and a Ctrl still drawn "
+	          "as pressed is the button lying about the state of the terminal");
+
+	/*
+	 * And pressing it with nothing behind it must not leave it stuck.
+	 *
+	 * This is the sharper half. The button is CHECKABLE, so Qt toggles it
+	 * before the handler runs -- a handler that returns early on a null
+	 * router leaves it drawn as pressed with nothing able to put it back,
+	 * and the row is reachable in exactly that state at the front door.
+	 */
+	ctrl->click();
+	QVERIFY2(!ctrl->isChecked(),
+	          "a modifier pressed with no session must not stay pressed");
+}
+
 void input_router_test::key_row_goes_through_the_router() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

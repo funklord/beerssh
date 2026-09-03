@@ -52,6 +52,7 @@ private slots:
 	void modify_other_keys_encodes_and_reports_its_level();
 	void pane_chords_are_kept_by_the_app();
 	void key_row_goes_through_the_router();
+	void a_modifier_button_stops_claiming_a_session_that_has_gone();
 	void key_row_visibility_follows_the_input_device();
 	void a_key_row_layout_changes_which_keys_exist();
 	void the_fn_key_reaches_the_function_keys();

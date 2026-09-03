@@ -136,9 +136,14 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 		m_modifier_buttons.append(button);
 		m_modifier_values.append(modifier);
 		connect(button, &QAbstractButton::clicked, this, [this, modifier] {
-			if (!m_router) return;
 			/* One press arms, a second locks, a third releases (sec 6.2). */
-			m_router->cycle_modifier(modifier);
+			if (m_router) m_router->cycle_modifier(modifier);
+
+			/*
+			 * Refreshed outside the guard: the button is checkable, so
+			 * Qt has already toggled it, and returning early would leave
+			 * it drawn as pressed with no terminal behind it.
+			 */
 			refresh_modifiers();
 		});
 		break;
@@ -244,12 +249,12 @@ void bssh_soft_keyboard::rebuild() {
 }
 
 void bssh_soft_keyboard::refresh_modifiers() {
-	if (!m_router) return;
-
+	/* No router means no session, so nothing is armed; see the key row. */
 	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
 		QAbstractButton *button = m_modifier_buttons.at(i);
 		const bssh_input_router::modifier_state_t state =
-		        m_router->modifier_state(m_modifier_values.at(i));
+		        m_router ? m_router->modifier_state(m_modifier_values.at(i))
+		                 : bssh_input_router::MODIFIER_OFF;
 
 		button->setChecked(state != bssh_input_router::MODIFIER_OFF);
 		button->setProperty("bssh_modifier_state", int(state));
@@ -265,10 +270,14 @@ void bssh_soft_keyboard::refresh_modifiers() {
 }
 
 void bssh_soft_keyboard::refresh_letter_labels() {
-	if (!m_router) return;
-
-	const bool shifted = m_router->modifier_state(bssh_emulator::MOD_SHIFT)
-	                        != bssh_input_router::MODIFIER_OFF;
+	/*
+	 * Same rule as the modifiers: with no session there is no Shift, so
+	 * the letters read lowercase. Returning early left a keyboard drawn
+	 * in capitals after the session that shifted it had gone.
+	 */
+	const bool shifted = m_router
+	        && m_router->modifier_state(bssh_emulator::MOD_SHIFT)
+	                != bssh_input_router::MODIFIER_OFF;
 
 	for (int i = 0; i < m_letter_buttons.size(); ++i) {
 		const QChar ch(uint(m_letter_values.at(i)));

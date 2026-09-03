@@ -1,0 +1,40 @@
+# Sabotages for sec 6.2's modifier buttons after the session behind them
+# has gone.
+#
+# The row's visibility depends on the mode and the platform and never on
+# whether a session exists (should_be_visible), so it stays on screen with
+# nothing behind it -- which is what makes both of these reachable rather
+# than theoretical.
+#
+# Each names the test that must notice. A sabotage caught by some OTHER
+# test is reported as "WRONG TEST" rather than as a pass.
+
+# Refresh declining to run without a router, which leaves whatever state
+# the buttons had. Lock Ctrl, close the session, and it still reads locked.
+[[sabotage]]
+name = "a modifier button keeps its state after the session goes"
+file = "src/ui/key_row.cpp"
+find = '''
+	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
+		/*
+		 * The button's state has to follow the router'''
+replace = '''
+	if (!m_router) return;
+
+	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
+		/*
+		 * The button's state has to follow the router'''
+expect = "a_modifier_button_stops_claiming_a_session_that_has_gone"
+
+# The sharper half. The button is CHECKABLE, so Qt has toggled it by the
+# time the handler runs; returning early there leaves it drawn as pressed
+# with nothing able to put it back.
+[[sabotage]]
+name = "a modifier pressed with no session stays pressed"
+file = "src/ui/key_row.cpp"
+find = '''
+		if (m_router) m_router->cycle_modifier(modifier);'''
+replace = '''
+		if (!m_router) return;
+		m_router->cycle_modifier(modifier);'''
+expect = "a_modifier_button_stops_claiming_a_session_that_has_gone"
