@@ -3,6 +3,7 @@
 #include <QTemporaryDir>
 #include <QAbstractButton>
 #include <QLabel>
+#include <QFileInfo>
 #include <QtTest>
 
 #include "platform/secret_store.h"
@@ -137,6 +138,50 @@ void secret_store_test::a_locked_store_yields_nothing() {
 	QCOMPARE(store->load(QStringLiteral("id")), QString());
 	QVERIFY(!store->store(QStringLiteral("id2"), QStringLiteral("v")));
 	QVERIFY(!store->erase(QStringLiteral("id")));
+}
+
+void secret_store_test::an_unlock_that_could_not_be_written_is_not_unlocked() {
+	/*
+	 * The same self-contradiction as the erase below, one function up and
+	 * gating everything else. On first use unlock() sets m_unlocked and
+	 * THEN returns flush(), so a failed write returns false while
+	 * is_unlocked() answers true: the store denies being open and claims
+	 * to be open at once.
+	 *
+	 * That is the worse place for it. Anything that asks is_unlocked()
+	 * before prompting skips the passphrase, believing the store is
+	 * already open -- and load() then answers empty, which reads as "no
+	 * secret saved" rather than "the store never opened".
+	 *
+	 * The write is made to fail by putting a regular FILE where the data
+	 * DIRECTORY goes: mkpath then cannot create it, QSaveFile cannot
+	 * create the target underneath it, and QFile::exists() on the target
+	 * is still false -- which is what keeps this on the first-use branch.
+	 * A directory at the target path would not do: exists() answers true
+	 * for one, and unlock() would take the read branch instead.
+	 */
+	QTemporaryDir dir;
+	const QString path = redirect_app_data(dir);
+	const QString data_dir = QFileInfo(path).absolutePath();
+
+	QDir(data_dir).removeRecursively();
+	QFile blocker(data_dir);
+	QVERIFY2(blocker.open(QIODevice::WriteOnly), "a file where the directory goes");
+	blocker.close();
+
+	bssh_secret_store *store = bssh_make_file_secret_store();
+	store->lock();
+	QVERIFY(!store->is_unlocked());
+
+	QVERIFY2(!store->unlock(QStringLiteral("correct horse")),
+	          "the store could not be written, so unlocking it failed");
+	QVERIFY2(!store->is_unlocked(),
+	          "unlock() said it failed, so is_unlocked() must not say otherwise "
+	          "-- a store that answers both ways sends the caller past the "
+	          "passphrase prompt into a store that was never opened");
+
+	QFile::remove(data_dir);
+	store->lock();
 }
 
 void secret_store_test::an_erase_that_cannot_be_written_keeps_the_secret_readable() {

@@ -53,6 +53,7 @@ private slots:
 	void a_locked_store_yields_nothing();
 	void erasing_removes_it_from_the_file();
 	void an_erase_that_cannot_be_written_keeps_the_secret_readable();
+	void an_unlock_that_could_not_be_written_is_not_unlocked();
 	void the_backend_describes_itself_honestly();
 	void the_selector_always_returns_a_working_store();
 };

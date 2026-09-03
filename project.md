@@ -5663,6 +5663,19 @@ Three halves, and detection alone would not have been a fix:
   write that can fail? There it was the credential erased ahead of
   `write_profiles()`; here it was memory mutated ahead of `flush()`. Fixing
   one did not fix the other, and nothing connected them.
+  **And `unlock()` itself, which gates the other two.** On first use it set
+  `m_unlocked` and *then* returned `flush()`, so a failed write answered
+  false while `is_unlocked()` answered true — the store denying it was open
+  and claiming to be open at once. That is the worst place in the file for
+  it: anything asking `is_unlocked()` before prompting skips the passphrase,
+  believing the store is already open, and `load()` then returns empty,
+  which reads as "no secret saved" rather than "the store never opened".
+  **Four instances of one shape in a day**, each found by asking the last
+  fix's question — who else changes state before a write that can fail? The
+  profile store's credential ahead of `write_profiles()`, this file's
+  `store()` and `erase()` ahead of `flush()`, the Android keystore's pair,
+  and `unlock()` a few lines above them. Nothing connected any of them, and
+  fixing one never fixed the next.
   **The Android backend had it too, and no gate here can even compile that
   file.** `secret_store_keystore.cpp` carries the identical
   mutate-then-flush in both `store()` and `erase()`, fixed the same way. It

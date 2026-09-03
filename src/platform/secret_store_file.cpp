@@ -188,9 +188,27 @@ public:
 			m_key = derive_key(passphrase, m_salt);
 			if (m_key.isEmpty()) return false;
 
+			/*
+			 * Written BEFORE the store calls itself unlocked, and that
+			 * order is the whole of it. Setting m_unlocked first and
+			 * returning flush() made unlock() answer false while
+			 * is_unlocked() answered true -- the store denying it was
+			 * open and claiming to be open at once.
+			 *
+			 * This is the worst place in the file for that. Anything
+			 * that asks is_unlocked() before prompting skips the
+			 * passphrase, believing the store is already open, and
+			 * load() then returns empty -- which reads as "no secret
+			 * saved" rather than "the store never opened".
+			 *
+			 * flush() does not consult m_unlocked, so it can be asked
+			 * first.
+			 */
 			m_secrets = QJsonObject();
+			if (!flush()) return false;
+
 			m_unlocked = true;
-			return flush();
+			return true;
 		}
 
 		if (!file.open(QIODevice::ReadOnly)) return false;
