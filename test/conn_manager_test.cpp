@@ -3,6 +3,7 @@
 #include <QtTest>
 
 #include "conn_manager_test.h"
+#include "fake_ssh_session.h"
 #include "model/conn_manager.h"
 #include "model/session.h"
 
@@ -68,6 +69,70 @@ void conn_manager_test::jitter_separates_sessions_dropped_together() {
 	}
 
 	QVERIFY2(delays.size() > 1, "jitter collapsed: every session would retry at once");
+}
+
+void conn_manager_test::a_failing_reconnect_does_not_reset_its_own_backoff() {
+	/*
+	 * Sec 5.3's backoff, on the path a real outage takes.
+	 *
+	 * backoff_grows_and_then_stops_growing() measures the pure function
+	 * and proves the CURVE is right. It cannot see whether the manager
+	 * ever walks up it, and the manager did not: on_session_state_changed
+	 * resets the attempt count whenever the session is_live(), and
+	 * is_live() is "not DISCONNECTED and not FAILED" -- true of RESOLVING,
+	 * CONNECTING and AUTHENTICATING, which is exactly what a reconnect
+	 * attempt passes through on its way to failing.
+	 *
+	 * So every attempt reset the counter that was measuring it. The delay
+	 * never left its first step and BSSH_MAX_ATTEMPTS was unreachable, so
+	 * gave_up() could not fire. Against a host that is simply not there
+	 * the app dials once a second for as long as it is left running,
+	 * which on a phone is the radio kept awake all night -- the storm
+	 * sec 5.3 exists to prevent rather than a variation on it.
+	 *
+	 * A REAL TRANSPORT is what makes this visible, and its absence is why
+	 * the first version of this test could not fail: with none, the
+	 * session reports DISCONNECTED throughout, is_live() is never true,
+	 * and the reset under test is never reached at all.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("unreachable")));
+	bssh_conn_manager manager(&session);
+	session.connect_to_host();
+	QVERIFY(fake != nullptr);
+
+	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
+	QSignalSpy started(&manager, &bssh_conn_manager::reconnect_started);
+
+	/* Up, then dropped. */
+	fake->simulate_key_auth_success();
+	fake->simulate_connection_lost();
+	QCOMPARE(scheduled.count(), 1);
+	QCOMPARE(scheduled.at(0).at(1).toInt(), 1);
+
+	/*
+	 * Let the manager's own timer fire rather than invoking the slot: the
+	 * timer is single-shot and stops itself when it fires, which is the
+	 * state schedule_reconnect() needs in order to schedule again.
+	 * Driving the slot by hand leaves the timer armed and the next
+	 * schedule silently declines.
+	 */
+	QVERIFY2(started.wait(5000), "the scheduled reconnect never ran");
+
+	/* The attempt walks RESOLVING/CONNECTING/AUTHENTICATING, then fails. */
+	fake->simulate_connection_lost();
+
+	QCOMPARE(scheduled.count(), 2);
+	QVERIFY2(scheduled.at(1).at(1).toInt() == 2,
+	          "the second failure has to be attempt two -- a reconnect that "
+	          "resets the counter measuring it never backs off at all");
+
+	bssh_ssh_session::set_factory(nullptr);
 }
 
 void conn_manager_test::a_network_flap_staggers_the_sessions_rather_than_dialling_them() {

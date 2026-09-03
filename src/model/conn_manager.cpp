@@ -104,17 +104,38 @@ void bssh_conn_manager::note_network_changed() {
 void bssh_conn_manager::on_session_state_changed() {
 	if (!m_session) return;
 
-	if (m_session->is_live()) {
-		/*
-		 * Back up: forget the backoff so the next unrelated drop starts
-		 * from one second again rather than from wherever the last
-		 * outage left off.
-		 */
+	/*
+	 * ESTABLISHED, not merely alive.
+	 *
+	 * Back up: forget the backoff so the next unrelated drop starts from
+	 * one second again rather than from wherever the last outage left
+	 * off. That is right for a connection that actually came back, and it
+	 * used to be asked as is_live() -- which is "not DISCONNECTED and not
+	 * FAILED", so it is true of RESOLVING, CONNECTING and AUTHENTICATING
+	 * as well.
+	 *
+	 * Those are the states a reconnect ATTEMPT passes through. So every
+	 * attempt reset the counter that was measuring it: the delay never
+	 * left its first step, BSSH_MAX_ATTEMPTS was unreachable and
+	 * gave_up() could not fire. Against a host that is simply not there
+	 * this dialled once a second for as long as the app was left running,
+	 * which on a phone is the radio kept awake all night -- the storm
+	 * sec 5.3 exists to prevent rather than a variation on it.
+	 */
+	if (m_session->state() == bssh_ssh_session::CONNECTED) {
 		m_attempt = 0;
 		m_reconnecting = false;
 		m_timer->stop();
 		return;
 	}
+
+	/*
+	 * An attempt in flight is neither a success to reset on nor a failure
+	 * to schedule against, and treating it as either is wrong in a
+	 * different direction: as success it wipes the backoff, and as
+	 * failure it would dial again while a connection is still being made.
+	 */
+	if (m_session->is_live()) return;
 
 	/*
 	 * A shell that ended by itself is not a connection that dropped.

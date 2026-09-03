@@ -512,6 +512,34 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   Both feed the same `bssh_platform` event. On a network switch, trigger a
   reconnect rather than waiting for a TCP timeout.
 - **Backoff**: exponential backoff with jitter, capped; user-visible status.
+  **It never actually backed off. [FIXED]** `on_session_state_changed()`
+  reset the attempt count whenever the session was `is_live()`, and
+  `is_live()` is "not DISCONNECTED and not FAILED" — so it is true of
+  `RESOLVING`, `CONNECTING` and `AUTHENTICATING`, which are exactly the
+  states a reconnect ATTEMPT passes through on its way to failing. Every
+  attempt reset the counter that was measuring it. The delay never left its
+  first step, `BSSH_MAX_ATTEMPTS` was unreachable so `gave_up()` could never
+  fire, and against a host that is simply not there the app dialled once a
+  second for as long as it was left running — on a phone, the radio kept
+  awake all night. That is the storm §5.3 exists to prevent rather than a
+  variation on it.
+  **The existing tests could not see it, and both are good tests.**
+  `backoff_grows_and_then_stops_growing()` measures `backoff_delay_ms`, a
+  pure function, and proves the CURVE is right; it has no way to observe
+  whether the manager ever walks up it. The storm test is about EIGHT
+  sessions flapping together and staggering apart. One session against a
+  dead host is a third thing neither asks about.
+  **The obvious fix would have been wrong in the opposite direction.**
+  Narrowing the reset to `CONNECTED` alone drops the in-flight states
+  through to `schedule_reconnect()` — dialling again while a connection
+  attempt is still being made. So an attempt in flight is now explicitly
+  neither: not a success to reset on, not a failure to schedule against.
+  **Three fixtures were needed to reach it**, and the first two failed the
+  way the defect itself does. With no transport the session reports
+  DISCONNECTED throughout, `is_live()` is never true and the reset is never
+  reached; driving `attempt_reconnect()` by hand leaves the single-shot
+  timer armed, so the next `schedule_reconnect()` silently early-returns and
+  nothing is scheduled. It waits for the manager's own timer now.
 - **Reconnect storm control:** with many sessions open, a network flap must not
   fire N simultaneous reconnects. Stagger with per-session jitter.
 - **Session continuity gap:** plain SSH cannot resume a dropped shell — a reconnect

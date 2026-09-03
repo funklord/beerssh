@@ -1,0 +1,21 @@
+# Sabotage for sec 5.3's backoff, on the path a real outage takes.
+#
+# backoff_delay_ms is a pure function and its own test proves the CURVE is
+# right. What no test could see is whether the manager ever walks up it.
+#
+# Each names the test that must notice. A sabotage caught by some OTHER
+# test is reported as "WRONG TEST" rather than as a pass.
+
+# Reset on is_live() rather than on CONNECTED. is_live() is "not
+# DISCONNECTED and not FAILED", so it is true of RESOLVING, CONNECTING and
+# AUTHENTICATING -- the states a reconnect ATTEMPT passes through. Every
+# attempt then resets the counter measuring it, the delay never leaves its
+# first step, and gave_up() becomes unreachable.
+[[sabotage]]
+name = "a reconnect attempt resets the backoff it is being measured by"
+file = "src/model/conn_manager.cpp"
+find = '''
+	if (m_session->state() == bssh_ssh_session::CONNECTED) {'''
+replace = '''
+	if (m_session->is_live()) {'''
+expect = "a_failing_reconnect_does_not_reset_its_own_backoff"
