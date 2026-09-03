@@ -36,6 +36,7 @@
 #   make check-ci     -- run the Linux CI job in the runner's own image
 #                        (needs docker; sec 12.4)
 #   make check-ssh    -- the SSH transport against a throwaway sshd
+#   make check-handoff -- can a live session move between processes
 #                        (needs sshd; sec 12.3)
 #   make check-keepalive -- dead-peer detection against a black-holed
 #                        link (needs docker + NET_ADMIN; sec 5.3)
@@ -620,6 +621,19 @@ check-ci:
 check-ssh: $(TEST_BIN)
 	./tool/check-ssh.sh
 
+# Sec 8.4's process migration, and the one part of it with no prior art to
+# copy: moving a LIVE connection between processes without the peer
+# noticing. CRIU does the adjacent thing in the kernel with TCP_REPAIR;
+# nothing does it at library level, so there is no existing design to read.
+#
+# Not part of `check`, and deliberately: it answers a design question that
+# is still open rather than guarding behaviour the app has. It is kept
+# runnable because what it measures depends on libssh internals that will
+# move under it -- a finding about 0.11.5 is not a finding about whatever
+# Debian ships next, and the only honest way to know is to run it again.
+check-handoff:
+	./tool/handoff/run.sh
+
 # sec 5.3's dead-peer detection against a link whose packets vanish.
 # Needs docker and NET_ADMIN -- a closed socket is not a dropped link, and
 # only iptables can make packets disappear rather than be refused. Slow by
@@ -1133,7 +1147,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style check-ci check-ssh check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
+.PHONY: all run test bench style check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-source style-docs hooks version-check

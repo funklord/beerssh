@@ -3171,11 +3171,63 @@ window with no name is a blank row in the task switcher.
   pointer dereference; the discipline is what lets it become a message without
   the callers changing.
   This is also why a torn-out tab becomes a new **window** and not a new
-  **process**. A live SSH session cannot move between processes — libssh's
-  state, the channel and the crypto context are all in this one — so a new
-  process would mean dropping the connection and reconnecting, losing the
-  scrollback and whatever was running. Once the server is real, the same drag
-  becomes a client attaching to a session that never moved.
+  **process**: nothing in this app moves a live session, so a new process
+  would mean dropping the connection and reconnecting, losing the scrollback
+  and whatever was running. Once the server is real, the same drag becomes a
+  client attaching to a session that never moved.
+  **This used to say a live SSH session *cannot* move between processes, and
+  that was never tested.** It can — see the migration entry below, where an
+  authenticated one does, and sshd notices nothing. What holds is the weaker
+  claim: libssh's state, the channel and the crypto context are all in one
+  process, and nothing here moves them.
+- **Moving a live session between processes: the transport half is
+  measured, the serialising half is not. [PROBED]** The bullet above says a
+  live SSH session cannot cross a process boundary, and gives that as the
+  reason a torn-out tab becomes a window rather than a process. That claim
+  was never tested, and half of it is wrong.
+  `make check-handoff` runs two probes against a real sshd. The first is
+  plaintext: it connects, deliberately reads only **ten bytes** of the
+  version banner so the rest is still in the kernel, passes the socket to
+  another process by `SCM_RIGHTS` together with the ten bytes already
+  drained, and the receiving process reassembles the banner, sends its own,
+  and **gets KEXINIT back**. sshd sends that only after a valid banner
+  exchange and drops anything malformed, so it is the *peer* certifying the
+  connection stayed continuous — not the probe certifying itself.
+  The second is the case that matters: an **authenticated libssh session**
+  with cipher contexts, MAC keys, sequence numbers and an open channel. The
+  parent authenticates and runs a command; the child runs another on the
+  same session and it works. `fork()` carries the state by inheriting the
+  heap, which is the point — it holds the serialising question still while
+  the *discipline* question is settled. **fork is not the proposed
+  mechanism**: it cannot move a session into an already-running process,
+  which is the actual feature.
+  So what is left for a real implementation is **laborious rather than
+  unknown**: walking `ssh_session_struct` and `ssh_crypto_struct`. Cipher
+  contexts do not need serialising at all — for every AEAD/CTR construction
+  SSH uses they are reconstructible from key, IV and sequence number, which
+  are plain bytes.
+  **Two faults are demonstrated rather than argued, and both must keep
+  failing** — a probe that can only pass proves nothing.
+  `shutdown()` after handing the fd over kills the connection, where
+  `close()` is refcounted and invisible to the peer; the encrypted form of
+  the same mistake is the departing process calling `ssh_disconnect()`,
+  which is why the parent deliberately **leaks** the session and says so —
+  leaking is what looks like the bug there, and it is the correct move.
+  Reading past the commit point fails in plaintext by stealing bytes, and
+  fails **worse** encrypted: both sides advance the same receive sequence
+  number, the MAC stops verifying, and it presents as `Socket error:
+  disconnected` with nothing naming the cause.
+  Two constraints follow and are now measured, not predicted.
+  **Compression must be off** — zlib has `deflateCopy` and no serialisation
+  at all, so a migratable session cannot carry a zlib stream;
+  `bssh_ssh_session::set_compression()` already exists to say so. And the
+  handoff **must not straddle a rekey**.
+  Kept runnable rather than written up once, because the finding depends on
+  libssh internals that move: this is 0.11.5, and a result about 0.11.5 is
+  not a result about whatever Debian ships next. **[OPEN]** whether to build
+  any of it, and where the emulator would live if so — in the UI, and only
+  emulator state needs exporting; in a per-session process, and nothing does
+  but the terminal never moves.
 - **A window shows its OWN tabs, not the registry's.** The tab bar was built
   from every session in the process, which was indistinguishable from correct
   while there could be only one window and wrong the moment there could be two:
@@ -3187,7 +3239,7 @@ window with no name is a blank row in the task switcher.
 - **Tearing a tab out makes a window, and the session does not move.** It stays
   in the registry, connected, with its scrollback and whatever is running; only
   the view showing it changes. That is the whole reason a torn-out tab is not a
-  new *process* — a live SSH session cannot cross one — and it is why the same
+  new *process* — nothing here moves a live session — and it is why the same
   operation becomes a message rather than a migration once the client/server
   split arrives.
   The gesture is a drag taken **40dp clear of the bar**, not "left the widget":
