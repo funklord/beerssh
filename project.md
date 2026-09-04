@@ -447,9 +447,30 @@ build, so no routine gate here sees it — the same hole §11 records for
 
 and the check was shown capable of failing before it was believed: the same
 command on a copy with `START_NOT_STICKY` misspelled exits 1 naming the
-symbol. **That makes a `make check-java` gate cheap and obvious, and it does
-not exist yet** — worth having, because this file is one of two in the tree
-that nothing compiles.
+symbol.
+
+**~~That makes a `make check-java` gate cheap and obvious, and it does not
+exist yet.~~ It exists** (2026-09-04). It compiles all three files under
+`android/src` with no NDK and no device: `android.jar` from the newest
+installed SDK platform for the platform classes, `Qt6Android.jar` for the
+bindings, and Qt's own `src/android/java/src` on the sourcepath for
+`QtActivity`, which the service names — so it works from a clean checkout
+rather than only from a tree that has already built. `-implicit:none` keeps
+Qt's sources out of the output.
+
+**It refuses rather than skipping** when the SDK or the kit is absent, and
+that is the one design decision in it. A gate that needs the thing it
+checks for is weakest on the machines that lack it, and one that skips
+quietly there is a green light nobody earned; whoever has no SDK does not
+run the target. Three controls, all run: a deliberate compile error exits 2
+naming the symbol, a `QT_ANDROID_ROOT` that is not a kit refuses, and an
+`ANDROID_SDK_ROOT` with no platforms refuses. An UNSET kit is auto-detected
+by `tool/android.mk` and correctly still passes — worth recording, because
+it was written up as a failed control before the reason was read.
+
+`secret_store_keystore.cpp` is still the other file nothing compiles, and
+this does not reach it: it is C++ needing QJniObject, which Qt ships only
+for Android.
 
 **What is NOT verified is the behaviour.** Reproducing it needs the Qt main
 loop to abort again, and the abort itself is not understood — it happened

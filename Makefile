@@ -44,6 +44,9 @@
 #                        not needed to build, see FONTS below
 #   make fonts-list   -- show the set and its pinned versions
 #   make check-fonts  -- validate the fetched fonts against sec 9.1
+#   make check-java   -- compile the app's Java (sec 5.2) against the SDK
+#                        and the Qt kit; nothing else in the tree does.
+#                        Refuses rather than skipping without them
 #   make android      -- the installable APK, named for its version and ABI
 #                        and checked for both; debug-signed unless
 #                        ANDROID_KEYSTORE is set (sec 12.2). Needs a Qt kit,
@@ -656,6 +659,60 @@ fonts-list:
 # and fontTools installed, neither of which a plain checkout has.
 check-fonts:
 	@python3 tool/check-fonts.py $(FONT_DIR)
+
+# Compile the app's Java. Nothing else in the tree does (sec 5.2).
+#
+# android/src holds three files -- the foreground service, the biometric
+# prompt and the keystore bridge -- and they are built ONLY by `make
+# android`, which needs an NDK, a JDK, a Qt kit and ten minutes. So a
+# change to any of them was unchecked until somebody built for Android,
+# and the commit that fixed the service's START_STICKY said so in as many
+# words: "no routine gate here sees it".
+#
+# This is the cheap half of that. It needs no NDK and no device: javac
+# against the SDK's android.jar for the platform classes, Qt's Qt6Android
+# jar for what its bindings expose, and Qt's own java sources on the
+# sourcepath for QtActivity, which the service names. -implicit:none so
+# Qt's sources are read for types and not compiled into our output.
+#
+# It REFUSES rather than skipping when the SDK or the kit is absent. A
+# gate that needs the thing it checks for is weakest on the machines that
+# lack it, and one that skips quietly there is a green light nobody
+# earned -- so an absent SDK is an error with the reason named, and
+# whoever has no SDK simply does not run this target.
+ANDROID_JAVA_SRC = $(wildcard android/src/se/vibes/beerssh/*.java)
+
+check-java:
+	@test -n "$(ANDROID_JAVA_SRC)" || { \
+		echo "check-java: no java under android/src -- nothing to compile," >&2; \
+		echo "check-java:   which is not a pass. Has the tree moved?" >&2; \
+		exit 1; \
+	}
+	@sdk="$(ANDROID_SDK_ROOT)"; \
+	test -n "$$sdk" || sdk="$$HOME/Android/Sdk"; \
+	plat=$$(ls -d "$$sdk"/platforms/android-* 2>/dev/null | sort -V | tail -1); \
+	test -n "$$plat" || { \
+		echo "check-java: no SDK platform under $$sdk/platforms." >&2; \
+		echo "check-java:   Set ANDROID_SDK_ROOT. Refusing rather than skipping:" >&2; \
+		echo "check-java:   a check that passes for want of its own tools is worse" >&2; \
+		echo "check-java:   than one nobody ran." >&2; \
+		exit 1; \
+	}; \
+	qt="$(QT_ANDROID_ROOT)"; \
+	test -n "$$qt" -a -d "$$qt/jar" || { \
+		echo "check-java: QT_ANDROID_ROOT does not name a Qt Android kit." >&2; \
+		echo "check-java:   Needed for Qt6Android.jar and QtActivity's source." >&2; \
+		exit 1; \
+	}; \
+	out=$$(mktemp -d) || exit 1; \
+	trap 'rm -rf "$$out"' EXIT INT TERM; \
+	javac -nowarn -implicit:none \
+	      -cp "$$plat/android.jar:$$qt/jar/Qt6Android.jar" \
+	      -sourcepath "$$qt/src/android/java/src" \
+	      -d "$$out" $(ANDROID_JAVA_SRC) || exit 1; \
+	echo "check-java: $(words $(ANDROID_JAVA_SRC)) file(s) compile against $$(basename $$plat)"
+
+.PHONY: check-java
 
 $(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_ANDROID_STAMP)
 	@mkdir -p $(VTERM_ANDROID_DIR)
