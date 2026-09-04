@@ -22,6 +22,15 @@
  * format and for the same reason: it is configuration, and configuration a
  * person can open in an editor is worth more than a database.
  */
+/*
+ * The dimmest the terminal's text may be set, as a percentage.
+ *
+ * Not a taste: at 40 per cent white on black is 3.66:1 and at 30 it is
+ * 2.45:1, against sec 9.3's floor of 3:1. Below this the slider would
+ * offer settings the rest of the program refuses to draw.
+ */
+const int BSSH_TEXT_BRIGHTNESS_MIN = 40;
+
 class bssh_app_settings {
 public:
 	/*

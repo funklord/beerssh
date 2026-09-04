@@ -374,7 +374,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	brightness_layout->setContentsMargins(0, 0, 0, 0);
 
 	m_text_brightness = new QSlider(Qt::Horizontal, brightness_row);
-	m_text_brightness->setRange(10, 100);
+	m_text_brightness->setRange(BSSH_TEXT_BRIGHTNESS_MIN, 100);
 	m_text_brightness->setSingleStep(5);
 	m_text_brightness->setPageStep(10);
 	m_text_brightness->setToolTip(

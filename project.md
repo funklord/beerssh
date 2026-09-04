@@ -5629,6 +5629,46 @@ Three rules, all asked for directly and all konsole's convention before that.
   identical with the hollow cursor deleted. It needs something else in the
   window that can hold focus.
 
+
+#### The brightness slider could be set to unreadable — **[FIXED 2026-09-04]**
+
+Reported as "the text colours are dark, impossible to read", and it was
+a setting rather than a rendering fault: this machine's config held
+`text_brightness=10`, which is the lowest the slider offered.
+
+§9.3 puts a **3:1 floor** under anything this program draws, and the dim
+is applied *after* that floor deliberately -- a slider the floor could
+veto is a slider that stops working where somebody reached for it. What
+nobody decided was **how far down it goes**. Measured against pure
+black, which is what a dark scheme's background is and what the dim is
+always applied against, since it is never applied to a background:
+
+| brightness | colour | contrast |
+|---|---|---|
+| 100% | `#ffffff` | 21.00:1 |
+| 70% | `#b2b2b2` | 9.90:1 |
+| 50% | `#7f7f7f` | 5.24:1 |
+| **40%** | `#666666` | **3.66:1** |
+| 30% | `#4c4c4c` | 2.45:1 |
+| 10% | `#191919` | **1.19:1** |
+
+So the slider reached a quarter of this program's own minimum, and 10
+was the value a real config held. `BSSH_TEXT_BRIGHTNESS_MIN` is 40 --
+the lowest step that still clears 3:1 -- and it bounds the slider's
+range, the setter, and the getter.
+
+**Clamping on READ is the half that matters.** A config already holding
+10 comes back as 40, so the terminal is readable on the next launch
+without anybody having to find the setting that made it unreadable --
+which is the same argument the surrounding comment already made for
+refusing a hand-edited 0, finishing its own sentence.
+
+`the_brightness_slider_cannot_reach_unreadable` walks every value the
+slider can produce and asserts each clears the floor, **and asserts the
+step below the minimum does not** -- or the floor would be higher than
+it needs to be and the slider would have lost range for nothing. A bound
+wants both halves checked.
+
 #### Colour schemes — **[DECIDED]**
 §10.2 gave a preset a `colour_scheme` field and never said what one is. It is
 the sixteen ANSI colours plus a default foreground, background and cursor —
@@ -7162,6 +7202,41 @@ store is a no-op rather than a silent loss.
 ---
 
 ## 12. Build, packaging, CI
+
+
+#### Tearing out the FOCUSED session hangs — **[OPEN, found 2026-09-04]**
+
+Reported as "no way to drag a pane out". The gesture exists -- Alt and a
+drag on a pane, `bssh_terminal_view::pane_drag_requested` --  and a drag
+nobody accepts falls back to `tear_out(session)`, which is what makes
+dropping on the desktop mean "a window of its own".
+
+**`tear_out()` does not return when the session is `m_current`.**
+Measured: changing the Detach menu item to `tear_out(m_current)` instead
+of the current tab took `the_detach_action_makes_a_window` from passing
+in 200ms to QtTest's 300-second function timeout; reverting the one line
+put it back to green, so it is that call and not the test around it. The
+change was not shipped.
+
+The shape, as far as it is understood: `take_session()` emits
+`session_taken` *before* the new window appends, so that "the
+announcement finds only windows that should let go" -- and the losing
+window's handler runs `detach_session()` when the taken session is the
+one it is showing, which rebuilds its layout while the new window is
+still mid-take. Whether that is a ping-pong between the two windows or a
+rebuild that re-shows what it has just dropped is **not established**,
+and this entry deliberately stops at what was measured.
+
+**Why it matters more than a menu item.** The tab route is fine and is
+what ships: `tear_out_tab()` takes a session out of the BAR, which is
+never `m_current`. So the fault sits on exactly one path -- the pane
+drag -- and that path is the only way a pane leaves a window, which is
+why it was reported as the feature not existing rather than as a hang.
+
+Not fixed here because a guess at the ordering would be a change to how
+windows hand sessions over, which is sec 8.4's core invariant, made
+without understanding the loop. The reproduction is one line and is
+written down above, which is what the next attempt needs.
 
 ### 12.1 Builds
 - **[BUILT] A missing submodule is fetched, not complained about**, and the

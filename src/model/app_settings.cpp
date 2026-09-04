@@ -231,12 +231,37 @@ int bssh_app_settings::text_brightness() const {
 	 * Bounded on the way OUT as well as in. A hand-edited config saying 0
 	 * would otherwise render an invisible terminal, and the first thing
 	 * somebody does about an invisible terminal is not open the settings.
+	 *
+	 * THE FLOOR IS 40 AND WAS 10, which is the same argument finishing
+	 * its own sentence. sec 9.3 sets a 3:1 contrast floor for anything
+	 * this program draws, and the dim is deliberately applied AFTER that
+	 * floor so a user who wants it dimmer than the default can have it.
+	 * What nobody decided was how much dimmer. Measured against pure
+	 * black, which is what a dark scheme's background is:
+	 *
+	 *     100%  #ffffff  21.00:1      40%  #666666   3.66:1
+	 *      70%  #b2b2b2   9.90:1      30%  #4c4c4c   2.45:1
+	 *      50%  #7f7f7f   5.24:1      10%  #191919   1.19:1
+	 *
+	 * So the slider could be set to a QUARTER of this program's own
+	 * minimum, and 10 was the value one of these configs actually held
+	 * -- reported as "the text colours are dark, impossible to read",
+	 * which at 1.19:1 is a literal description. 40 is the lowest step
+	 * that still clears 3:1, so every position the slider can reach is
+	 * one the rest of the program would accept.
+	 *
+	 * Clamping on READ is what matters: a config already holding 10
+	 * comes back as 40 and the terminal is readable again on the next
+	 * launch, without anybody having to find the setting that made it
+	 * unreadable.
 	 */
-	return qBound(10, value(QStringLiteral("appearance/text_brightness"), 100).toInt(), 100);
+	return qBound(BSSH_TEXT_BRIGHTNESS_MIN,
+	               value(QStringLiteral("appearance/text_brightness"), 100).toInt(), 100);
 }
 
 void bssh_app_settings::set_text_brightness(int percent) {
-	store(QStringLiteral("appearance/text_brightness"), qBound(10, percent, 100));
+	store(QStringLiteral("appearance/text_brightness"),
+	       qBound(BSSH_TEXT_BRIGHTNESS_MIN, percent, 100));
 }
 
 namespace {

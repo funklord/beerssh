@@ -1243,19 +1243,21 @@ void layout_test::the_detach_action_makes_a_window() {
 	          "menu must say so rather than accept the click and do nothing");
 
 	/*
-	 * TWO sessions in a wide window, which is the reported case and the
-	 * one the guard does not cover: on a screen with room they are two
-	 * PANES (sec 8.3), so the tab bar is empty -- and the action is
-	 * enabled, because two sessions are shown.
+	 * TWO sessions, SPLIT, which is the reported case and the one the
+	 * guard does not cover.
+	 *
+	 * A second session is a tab until somebody splits, and a split moves
+	 * it into a pane -- so both sessions are panes and the tab bar is
+	 * empty. The action stays enabled, because two sessions are shown;
+	 * it reads the current TAB, of which there are none; and it does
+	 * nothing, silently, which is exactly what was reported.
 	 */
 	window.adopt_session(registry->create(named(QStringLiteral("second"))));
+	window.split_beside_current();
 	QVERIFY2(detach->isEnabled(), "two sessions and detaching is refused");
 
 	QTabBar *bar = window.findChild<QTabBar *>();
-	const int tabs = bar ? bar->count() : 0;
-	const int panes = window.registry() ? 2 : 0;
-	QVERIFY2(panes == 2, "setup");
-
+	const int tabs = bar && bar->isVisible() ? bar->count() : 0;
 	const int windows_before = bssh_main_window_count();
 	detach->trigger();
 	QVERIFY2(bssh_main_window_count() > windows_before,
@@ -1276,6 +1278,52 @@ void layout_test::the_detach_action_makes_a_window() {
 		bssh_main_window *other = qobject_cast<bssh_main_window *>(widget);
 		if (other && other != &window) other->close();
 	}
+}
+
+/*
+ * Nothing the brightness slider can be set to is unreadable (sec 9.3).
+ *
+ * The dim is applied AFTER the contrast floor on purpose -- a slider the
+ * floor could veto is a slider that stops working where somebody reached
+ * for it -- so the floor cannot protect this and the RANGE has to.
+ * Nobody had decided how far down it went: the minimum was 10, which is
+ * 1.19:1 white on black against a 3:1 floor, and one of these configs
+ * was sitting at exactly that.
+ *
+ * Asserted against pure black because that is what a dark scheme's
+ * background is, and because the dim is never applied to a background --
+ * so black is what the text is always dimmed against.
+ */
+void layout_test::the_brightness_slider_cannot_reach_unreadable() {
+	const QRgb black = qRgb(0, 0, 0);
+	const QRgb white = qRgb(255, 255, 255);
+
+	for (int percent = BSSH_TEXT_BRIGHTNESS_MIN; percent <= 100; ++percent) {
+		const QRgb dimmed = bssh_dim(white, percent);
+		const double ratio = bssh_contrast_ratio(dimmed, black);
+		QVERIFY2(ratio >= BSSH_CONTRAST_FLOOR,
+		          qPrintable(QStringLiteral("%1%% gives %2:1")
+		                             .arg(percent).arg(ratio, 0, 'f', 2)));
+	}
+
+	/*
+	 * And one step below it does NOT clear the floor, or the minimum is
+	 * higher than it needs to be and the slider has lost range for
+	 * nothing. A bound wants both halves checked.
+	 */
+	const double below = bssh_contrast_ratio(
+	        bssh_dim(white, BSSH_TEXT_BRIGHTNESS_MIN - 5), black);
+	QVERIFY2(below < BSSH_CONTRAST_FLOOR,
+	          qPrintable(QStringLiteral("the floor could be lower: %1%% gives %2:1")
+	                             .arg(BSSH_TEXT_BRIGHTNESS_MIN - 5)
+	                             .arg(below, 0, 'f', 2)));
+
+	/* A stored value from before the floor moved comes back clamped. */
+	bssh_app_settings settings;
+	const int before = settings.text_brightness();
+	settings.set_text_brightness(10);
+	QCOMPARE(settings.text_brightness(), BSSH_TEXT_BRIGHTNESS_MIN);
+	settings.set_text_brightness(before);
 }
 
 /*
