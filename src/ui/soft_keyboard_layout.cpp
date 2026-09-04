@@ -380,7 +380,7 @@ bssh_key_t modifier_key(const QString &label, quint8 modifier, int span = 2) {
 QList<bssh_key_t> common_bottom_row() {
 	QList<bssh_key_t> row;
 	row.append(modifier_key(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL, 3));
-	row.append(modifier_key(QStringLiteral("Alt"), bssh_emulator::MOD_ALT, 2));
+	row.append(modifier_key(QStringLiteral("Alt"), bssh_emulator::MOD_ALT, 3));
 	row.append(named_key(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE, 3));
 	row.append(text_key(QStringLiteral("space"), U' ', 4));
 
@@ -405,7 +405,7 @@ QList<bssh_key_t> common_bottom_row() {
 	 * Enter keep theirs, being what a terminal reaches for most.
 	 */
 	row.append(modifier_key(QStringLiteral("AltGr"), bssh_input_router::MOD_ALTGR, 3));
-	row.append(named_key(QStringLiteral("Tab"), bssh_emulator::KEY_TAB, 2));
+	row.append(named_key(QStringLiteral("Tab"), bssh_emulator::KEY_TAB, 3));
 	row.append(named_key(QStringLiteral("Enter"), bssh_emulator::KEY_ENTER, 3));
 	return row;
 }
@@ -692,7 +692,7 @@ bssh_soft_key_group_t letters_group() {
 	group.button_label = QStringLiteral("abc");
 	group.display_name = QStringLiteral("Letters");
 
-	group.rows.append(slot_run("AD", 1, 10, 2));
+	group.rows.append(slot_run("AD", 1, 11, 2));
 
 	/*
 	 * Ten, not the nine a physical keyboard has: the semicolon takes the
@@ -701,12 +701,12 @@ bssh_soft_key_group_t letters_group() {
 	 * wants a semicolon far more than it wants the indent -- it separates
 	 * two commands on one line.
 	 */
-	group.rows.append(slot_run("AC", 1, 10, 2));
+	group.rows.append(slot_run("AC", 1, 11, 2));
 
 	QList<bssh_key_t> row;
-	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 3));
+	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 4));
 	row.append(slot_run("AB", 1, 7, 2));
-	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 3));
+	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 4));
 	group.rows.append(row);
 
 	group.rows.append(common_bottom_row());
@@ -745,7 +745,7 @@ bssh_soft_key_group_t numbers_group() {
 	 * Swedish user still gets a Swedish LETTER block, and still gets a
 	 * shell they can type in.
 	 */
-	group.rows.append(literal_row("1234567890"));
+	group.rows.append(literal_row("1234567890-"));
 	/*
 	 * A comma rather than a second semicolon: `;` is already on the
 	 * letters group's home row, and this row has exactly ten places. The
@@ -763,7 +763,7 @@ bssh_soft_key_group_t numbers_group() {
 	 * pair from the US table gives both back from one key and makes the
 	 * palette carry them whatever the letters do.
 	 */
-	group.rows.append(literal_row("-/;,()$&@\""));
+	group.rows.append(literal_row("/;,()$&@\"'?"));
 
 	/*
 	 * The pipe, the tilde, the backtick and the star. Sec 6.2 names
@@ -773,7 +773,7 @@ bssh_soft_key_group_t numbers_group() {
 	 * point of being written.
 	 */
 	QList<bssh_key_t> row;
-	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 3));
+	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 4));
 	/*
 	 * The second symbol row, chosen for what a SHELL cannot do without
 	 * rather than for what looks like a symbol page.
@@ -795,8 +795,8 @@ bssh_soft_key_group_t numbers_group() {
 	 * AE12, and the backslash that replaces the bare pipe is BKSL. The
 	 * layout table already gives each of them { } + and | on Shift.
 	 */
-	row.append(literal_row(".'\\~[]="));
-	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 3));
+	row.append(literal_row(".\\~[]=*"));
+	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 4));
 	group.rows.append(row);
 
 	group.rows.append(common_bottom_row());
@@ -818,7 +818,7 @@ bssh_soft_key_group_t terminal_group() {
 	group.display_name = QStringLiteral("Terminal and function keys");
 
 	QList<bssh_key_t> row;
-	for (int n = 1; n <= 10; ++n) {
+	for (int n = 1; n <= 11; ++n) {
 		row.append(named_key(QStringLiteral("F%1").arg(n),
 		                      bssh_emulator::KEY_FUNCTION_BASE + n));
 	}
@@ -832,7 +832,6 @@ bssh_soft_key_group_t terminal_group() {
 	 * chosen to fit instead.
 	 */
 	row.clear();
-	row.append(named_key(QStringLiteral("F11"), bssh_emulator::KEY_FUNCTION_BASE + 11));
 	row.append(named_key(QStringLiteral("F12"), bssh_emulator::KEY_FUNCTION_BASE + 12));
 	row.append(named_key(QStringLiteral("Ins"), bssh_emulator::KEY_INSERT));
 	row.append(named_key(QStringLiteral("Del"), bssh_emulator::KEY_DELETE));
@@ -840,20 +839,28 @@ bssh_soft_key_group_t terminal_group() {
 	row.append(named_key(QStringLiteral("End"), bssh_emulator::KEY_END));
 	row.append(named_key(QStringLiteral("PgU"), bssh_emulator::KEY_PAGE_UP));
 	row.append(named_key(QStringLiteral("PgD"), bssh_emulator::KEY_PAGE_DOWN));
-	row.append(named_key(QStringLiteral("↑"), bssh_emulator::KEY_UP));
+	/*
+	 * Every arrow on one row, which the extra columns paid for. They
+	 * were split across two rows because ten keys was the width; a
+	 * cursor cluster with two of its arrows on the row above is not one
+	 * a thumb can use without looking.
+	 */
+	row.append(named_key(QStringLiteral("←"), bssh_emulator::KEY_LEFT));
 	row.append(named_key(QStringLiteral("↓"), bssh_emulator::KEY_DOWN));
+	row.append(named_key(QStringLiteral("↑"), bssh_emulator::KEY_UP));
+	row.append(named_key(QStringLiteral("→"), bssh_emulator::KEY_RIGHT));
 	group.rows.append(row);
 
 	row.clear();
-	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 3));
-	row.append(named_key(QStringLiteral("←"), bssh_emulator::KEY_LEFT));
-	row.append(named_key(QStringLiteral("→"), bssh_emulator::KEY_RIGHT));
+	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 4));
 	row.append(literal('-'));
 	row.append(literal('/'));
 	row.append(literal('|'));
 	row.append(literal('~'));
 	row.append(literal('`'));
-	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 3));
+	row.append(literal('$'));
+	row.append(literal('*'));
+	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 4));
 	group.rows.append(row);
 
 	group.rows.append(common_bottom_row());

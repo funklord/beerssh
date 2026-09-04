@@ -982,6 +982,36 @@ struct layout_left_as_found_t {
 	~layout_left_as_found_t() { bssh_set_keyboard_layout(id); }
 };
 
+/*
+ * Every character a style can send, over every modifier combination.
+ *
+ * Through bssh_keyboard_char rather than by reading the stored levels,
+ * which is the difference between what a key SENDS and what it holds: a
+ * capital comes from toUpper at send time, so a probe reading levels
+ * reports every capital as unreachable. One did, during this work, and
+ * the false gap looked exactly like a real one.
+ */
+QSet<uint> every_character(bssh_soft_keyboard_catalog::style_t style) {
+	QSet<uint> sent;
+	for (const bssh_soft_key_group_t &group :
+	     bssh_soft_keyboard_catalog::instance().all(style)) {
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind != bssh_key_t::TEXT) continue;
+
+				for (int modifiers = 0; modifiers < 4; ++modifiers) {
+					const QChar character = bssh_keyboard_char(
+					        key, modifiers & 1, modifiers & 2);
+					if (!character.isNull() && character.unicode()) {
+						sent.insert(character.unicode());
+					}
+				}
+			}
+		}
+	}
+	return sent;
+}
+
 /* The character a TEXT key sends, for a key that sends this one. */
 QChar slot_character(char32_t wanted) {
 	for (const bssh_soft_key_group_t &group :
@@ -1106,6 +1136,61 @@ void layout_test::the_layout_setting_reaches_the_keyboard() {
 
 	settings.set_keyboard_layout(before);
 	settings.set_keyboard(style_before);
+}
+
+/*
+ * A small screen loses no LETTER (sec 6.2).
+ *
+ * Selecting Swedish used to make Swedish worse. The compact board showed
+ * ten keys a row, so it stopped at AD10 and AC10 -- and Swedish puts
+ * a-ring at AD11 and a-diaeresis at AC11, which fell off the board. Only
+ * o-diaeresis survived, because AC10 is on the row. Under US
+ * International all three are reachable through AltGr, so **the US
+ * layout was a better Swedish keyboard than the Swedish one**, on the
+ * device it was asked for.
+ *
+ * The ASCII contract passed throughout and was right to: those letters
+ * are not ASCII, and a keyboard that can type a shell is what it
+ * promises. This is the promise it does not make -- that choosing a
+ * layout gets you the letters you chose it for.
+ *
+ * Stated against the FULL keyboard rather than against a list of
+ * letters, so it holds for a layout nobody has added yet: the full board
+ * carries every slot, so what it can send is what the layout has, and a
+ * smaller screen may drop symbols but must not drop letters. Measured,
+ * Swedish loses only AltGr curiosities from TLDE, AE12 and BKSL -- a
+ * square root, a section sign, an acute, a middle dot, a plus-minus, an
+ * ellipsis and a per-mille -- and no shell wants any of them.
+ */
+void layout_test::a_small_screen_loses_no_letter() {
+	const layout_left_as_found_t restore;
+
+	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+		QVERIFY(bssh_set_keyboard_layout(layout.id));
+
+		const QSet<uint> full =
+		        every_character(bssh_soft_keyboard_catalog::STYLE_FULL);
+		const QSet<uint> compact =
+		        every_character(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+
+		QString lost;
+		for (uint code : full) {
+			if (!compact.contains(code) && QChar(code).isLetter()) {
+				lost.append(QChar(code));
+			}
+		}
+		QVERIFY2(lost.isEmpty(),
+		          qPrintable(QStringLiteral("layout %1: the compact keyboard "
+		                                     "cannot type %2").arg(layout.id, lost)));
+
+		/*
+		 * And it compared something. Two empty sets satisfy the loop
+		 * above exactly as loudly as two full ones.
+		 */
+		QVERIFY2(full.size() > 40,
+		          qPrintable(QStringLiteral("layout %1 sends %2 characters")
+		                             .arg(layout.id).arg(full.size())));
+	}
 }
 
 /*

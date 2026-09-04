@@ -48,7 +48,7 @@
  * is for: a key in the same place from one row to the next. Ten letters
  * at span 2 fill it, and so do six wider keys at 3, 3, 3, 5, 3, 3.
  */
-const int BSSH_KEYBOARD_COLUMNS = 20;
+const int BSSH_KEYBOARD_COLUMNS = 22;
 
 /*
  * The widest any group is, and the only thing that needs to know both

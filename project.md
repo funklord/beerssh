@@ -1860,6 +1860,46 @@ carries the ASCII; the *full* keyboard's is not, and asks the layout
 whether it is ISO.
 
 
+
+**The compact keyboard is 22 half-columns, not 20 — [DECIDED 2026-09-04]**
+by the copyright holder, choosing all three pages over the letters page
+alone. It was eleven keys or nothing: **selecting Swedish made Swedish
+worse.** `å` is `AD11` and `ä` is `AC11`, the rows stopped at `AD10` and
+`AC10`, and only `ö` survived because it sits on the row. Under US
+International all three are reachable through AltGr — so the US layout
+was a better Swedish keyboard than the Swedish one, on the device it was
+asked for.
+
+**The ASCII contract passed throughout, and was right to.** Those letters
+are not ASCII, and what that test promises is a keyboard that can type a
+shell. `a_small_screen_loses_no_letter` is the promise it does not make:
+every LETTER the full board can send, the compact one must send too.
+Stated against the full keyboard rather than a list, so it holds for a
+layout nobody has added yet — the full board carries every slot, so what
+it sends is what the layout has. Swedish loses only AltGr curiosities
+from `TLDE`, `AE12` and `BKSL` — `√ § ´ · ± … ‰` — and no shell wants any
+of them.
+
+All three pages went to 22 so that keys do not move under a thumb when
+the page button is pressed, which is what §6.2 designed the shared
+bottom row for. **Alt and Tab got back the column AltGr had cost them**,
+and the extra width paid for real things rather than padding: the digit
+row runs `1234567890-` in `AE01`–`AE11` order, the US letters page gains
+`[` and `'` as direct keys, and the terminal page finally has **all four
+arrows on one row** — they had been split across two because ten was the
+width, and a cursor cluster with two arrows on the row above is not one
+a thumb can use without looking.
+
+**One cosmetic regression, recorded rather than papered over.** At §8.1's
+narrowest phone the keys are about 33dp instead of 36, and `Hom` now
+elides to an ellipsis — `Ins`, `Del`, `End`, `PgU` and `PgD` all still
+fit, so it is one label and marginal. It is visible in
+`touch-keyboard-compact-terminal.png` and nowhere else. The honest fix is
+for `bssh_key_cap` to shrink a label that does not fit rather than let
+the style elide it, which would also help the full board's `Home`,
+`PgUp` and `F10`–`F12` on a phone; that is a change to how every cap is
+drawn and is not what was asked for here.
+
 **Two of the four sabotages were missed on the first run, and both
 misses were findings.** Dropping the ISO key was expected to fail the
 shape test and did not -- because that test walked only the *current*
