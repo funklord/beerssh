@@ -124,11 +124,29 @@ public:
 		STYLE_FULL
 	};
 
+	/*
+	 * Every lookup takes the style, and NONE of them defaults it.
+	 *
+	 * They defaulted to STYLE_COMPACT for about an hour, and in that hour
+	 * two callers in bssh_soft_keyboard silently asked the wrong
+	 * catalogue: group_id() named a compact group while the full keyboard
+	 * was on screen, and set_group() clamped an index against the compact
+	 * list's three groups when the full one has two -- so set_group(2)
+	 * was accepted, rebuild() found it out of range, and the keyboard
+	 * came up EMPTY.
+	 *
+	 * A default argument is a way of not asking the question. Requiring
+	 * it makes the compiler find every consumer, which is the only form
+	 * of "every consumer has it" that cannot rot -- sec 10 records the
+	 * same lesson for preset fields, where counting them by hand was what
+	 * failed.
+	 */
+
 	static bssh_soft_keyboard_catalog &instance();
 
 	bssh_soft_keyboard_catalog();
 
-	const QList<bssh_soft_key_group_t> &all(style_t style = STYLE_COMPACT) const {
+	const QList<bssh_soft_key_group_t> &all(style_t style) const {
 		return style == STYLE_FULL ? m_full : m_groups;
 	}
 
@@ -138,9 +156,9 @@ public:
 	 * away, and a chooser would be a menu over a keyboard that exists
 	 * because the screen is already too small.
 	 */
-	int next_index(int index, style_t style = STYLE_COMPACT) const;
+	int next_index(int index, style_t style) const;
 
-	int index_of(const QString &id, style_t style = STYLE_COMPACT) const;
+	int index_of(const QString &id, style_t style) const;
 
 private:
 	QList<bssh_soft_key_group_t> m_groups;

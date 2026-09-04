@@ -806,6 +806,57 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
 
 } /* namespace */
 
+/*
+ * The full keyboard answers about ITSELF, which for an hour it did not.
+ *
+ * bssh_soft_keyboard's catalogue lookups took a style that defaulted to
+ * COMPACT, so with the full board on screen group_id() named a compact
+ * group and set_group() clamped indices against the compact list's three
+ * when the full one has two. set_group(2) was therefore accepted, rebuild()
+ * found it past the end, and the keyboard came up EMPTY -- which is why the
+ * button count below is the assertion that matters and the ids are the
+ * cheaper half.
+ *
+ * The defaults are gone, so this cannot recur without a compile error. The
+ * test stays because the next person to add a style will not know that.
+ */
+void layout_test::the_full_keyboard_answers_about_itself() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	bssh_soft_keyboard keyboard(&router);
+	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_FULL);
+
+	const QList<bssh_soft_key_group_t> &full =
+	        bssh_soft_keyboard_catalog::instance().all(
+	                bssh_soft_keyboard_catalog::STYLE_FULL);
+	QVERIFY2(full.size() >= 2, "the full keyboard needs a second page to walk to");
+
+	QCOMPARE(keyboard.group_id(), full.first().id);
+
+	/*
+	 * Every group, and a wrap past the end. The wrap is the case that was
+	 * broken: an index the compact list accepts and the full one does not.
+	 */
+	for (int i = 0; i <= full.size(); ++i) {
+		keyboard.set_group(i);
+
+		const bssh_soft_key_group_t &expected = full.at(i % full.size());
+		QCOMPARE(keyboard.group_id(), expected.id);
+
+		/*
+		 * And it drew something. An out-of-range group leaves rebuild()
+		 * returning before it adds a single key, so the widget is a
+		 * keyboard with no keys -- present, sized, and useless, which is
+		 * exactly what no id comparison can see.
+		 */
+		const int drawn = keyboard.findChildren<QAbstractButton *>().size();
+		QVERIFY2(drawn > 10,
+		          qPrintable(QStringLiteral("group %1 drew %2 buttons")
+		                             .arg(expected.id).arg(drawn)));
+	}
+}
+
 void layout_test::every_keyboard_group_is_the_same_shape() {
 	/*
 	 * BOTH keyboards, because there are two now (sec 6.2) and the rule is
@@ -833,7 +884,14 @@ void layout_test::the_built_in_keyboard_fits_a_phone() {
 	 * keyboard checked only on its letters is a keyboard checked where it
 	 * is least likely to fail.
 	 */
-	const int groups = bssh_soft_keyboard_catalog::instance().all().size();
+	/*
+	 * The COMPACT catalogue by name: this test is the_built_in_keyboard
+	 * _fits_a_phone, and the full-size one deliberately does not (sec 6.2
+	 * -- it wants about 770dp). Naming the style is what keeps this test
+	 * about the keyboard it is about.
+	 */
+	const int groups = bssh_soft_keyboard_catalog::instance()
+	        .all(bssh_soft_keyboard_catalog::STYLE_COMPACT).size();
 	for (int i = 1; i < groups; ++i) {
 		keyboard.set_group(i);
 		check_fits(QStringLiteral("built-in keyboard (%1)").arg(keyboard.group_id()),

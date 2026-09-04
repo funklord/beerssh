@@ -84,7 +84,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 
 QString bssh_soft_keyboard::group_id() const {
 	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all();
+	        bssh_soft_keyboard_catalog::instance().all(m_style);
 	if (m_group < 0 || m_group >= groups.size()) return QString();
 	return groups.at(m_group).id;
 }
@@ -99,7 +99,7 @@ void bssh_soft_keyboard::set_style(bssh_soft_keyboard_catalog::style_t style) {
 
 void bssh_soft_keyboard::set_group(int index) {
 	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all();
+	        bssh_soft_keyboard_catalog::instance().all(m_style);
 	if (groups.isEmpty()) return;
 
 	const int wanted = (index % groups.size() + groups.size()) % groups.size();
