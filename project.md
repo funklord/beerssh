@@ -527,6 +527,56 @@ else. It was not captured for the one instance seen here, because only the
 crash buffer was saved and the warning goes to the main one. Capture
 `adb logcat -v threadtime` to a file BEFORE provoking it.
 
+**The holder is named in a sibling's confirmed instance, and it is
+accessibility.** hydra reports one from 2026-08-26 — a Galaxy Note 9 with
+`com.jamworks.bxactions` running and `accessibility_enabled=1`, any menu tap
+killing the app within a second, reproducibly — carrying the line this
+entry says to go and capture:
+
+    Abort message: 'Failed to acquire deadlock protector for
+    QAndroidPlatformOpenGLWindow::eglSurface().
+    ... while already locked by 'QtAndroidAccessibility::runInObjectContext()'.
+
+That is their measurement, on their device, in their app. **It does not
+establish what held the flag in OUR abort**, which was a different app on a
+different phone during IME animation, and the four candidates are still
+four. What it does establish is that this holder reaches the fatal branch
+in practice rather than in principle, which is more than the source alone
+said.
+
+**The consequence for this tree is specific, because we asked for it.**
+`bssh_terminal_accessible` calls `QAccessible::installFactory`
+(`terminal_accessible.cpp:65`), so `runInObjectContext()` is live in this
+process whenever any accessibility service is running — which is the
+condition hydra's instance needed. §14's M11 exposed the terminal, its
+scrollback and its selection to screen readers on purpose, because a widget
+that paints characters was otherwise invisible to them.
+
+So the population is not "users with an unusual gesture app". **It is users
+who need the screen described to them**, and for them the failure is not a
+degraded terminal but an app that dies on a menu tap. That is the shape
+hydra's own record already names for a related crash — narrowing a
+condition can make a finding worse, because TalkBack is an accessibility
+service — and it arrives here through the accessibility work rather than
+in spite of it.
+
+**Not established, and recorded as such:** whether our instance had this
+holder; whether the accessibility bridge failing to get a surface explains
+the stale `uiautomator` reads hydra spent an hour on (they record that as
+open too — same bridge, same surface, one path returning quietly and one
+fatal); and whether anything in this app's own accessibility code changes
+the odds. Nothing here is a defect in `bssh_terminal_accessible`: the flag,
+the wait and the `qFatal` are all Qt's, and an app that installs an
+accessibility factory is doing the thing Qt asks of it.
+
+**What it changes about what to do next.** Capturing the holder line stops
+being a nice-to-have: if ours is also `runInObjectContext()`, then this
+tree's exposure is proportional to how many of its users run a screen
+reader, and that is a different argument for chasing an upstream bug than
+"it crashed once". `adb logcat -v threadtime` to a file, before provoking
+it, and with TalkBack deliberately on as one arm.
+
+
 
 **Stopping it is a START.** `startForegroundService()` opens a contract: the
 service has about five seconds to call `startForeground()` or Android throws
