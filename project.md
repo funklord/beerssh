@@ -1643,6 +1643,24 @@ exactly where it was cheapest to keep, on the idle keyboard nobody is
 reading under pressure.
 
 
+
+**The first paint made the letters wander, and said in a comment that it
+did not — [FIXED 2026-09-04].** It raised the primary legend by half the
+hint's height, with a comment claiming that was what kept a hinted cap
+and an unhinted one in line. It was the exact opposite: only the hinted
+caps moved, so `g`, `h`, `v` and `b` — the four letters us(intl) leaves
+without a third level — stood visibly lower than the rest of their rows.
+The primary is centred in the whole cap now, which is where the style
+puts it on a cap with no hint.
+
+Worth keeping for how it was found rather than for the fix. **No
+assertion could see it**: every key is present, correctly sized, in the
+right cell, sending the right character, and the catalogue is identical
+either way. It was the render on the phone that showed it — and once it
+was known, it is plainly visible in the desktop shot too, which had been
+looked at and passed. A picture answers a question a number cannot, and
+a picture only answers the question you bring to it.
+
 **Only the AltGr legend is hinted, and not the Shift one.** A cap reads
 `1` with `¡` in the corner and no `!`, which looks like an omission and
 is the rule doing its job: the hint is for a level the user cannot

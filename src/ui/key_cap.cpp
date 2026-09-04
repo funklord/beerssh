@@ -1,6 +1,5 @@
 #include "ui/key_cap.h"
 
-#include <QFontMetrics>
 #include <QStyleOptionToolButton>
 #include <QStylePainter>
 
@@ -85,21 +84,31 @@ void bssh_key_cap::paintEvent(QPaintEvent *event) {
 	faded.setAlphaF(0.55);
 
 	const QRect box = rect().adjusted(2, 1, -2, -1);
-	const QFontMetrics hint_metrics(hint_font);
 
 	painter.setFont(hint_font);
 	painter.setPen(faded);
 	painter.drawText(box, Qt::AlignRight | Qt::AlignBottom, m_hint);
 
 	/*
-	 * The primary is raised by half the hint's height rather than
-	 * centred in what is left, so that a cap with a hint and a cap
-	 * without one put their main legend in visibly the same place. A row
-	 * of letters whose baseline wanders depending on whether the key has
-	 * a third level is worse than either arrangement.
+	 * The primary is centred in the WHOLE cap, exactly as the style
+	 * centres it on a cap with no hint. Anything else makes the letters
+	 * wander: a hinted cap and an unhinted one sit side by side in every
+	 * row, and a baseline that moves depending on whether a key happens
+	 * to have a third level is worse than either position.
+	 *
+	 * The first version raised it by half the hint's height, with a
+	 * comment claiming that was what kept the two in line. It was the
+	 * opposite -- only the hinted caps moved -- and g, h, v and b, the
+	 * four letters us(intl) leaves without a third level, stood visibly
+	 * lower than the rest of their rows. No assertion could see it and
+	 * the render did, on the phone and, once looked at properly, in the
+	 * desktop shot as well.
+	 *
+	 * There is no collision to avoid. The hint is bottom-RIGHT and one
+	 * character wide; a centred single glyph does not reach it even on
+	 * the compact board's narrowest key.
 	 */
 	painter.setFont(font());
 	painter.setPen(ink);
-	painter.drawText(box.adjusted(0, 0, 0, -hint_metrics.height() / 2),
-	                  Qt::AlignCenter, primary);
+	painter.drawText(box, Qt::AlignCenter, primary);
 }
