@@ -396,6 +396,7 @@ private:
 	 * what is armed.
 	 */
 	void apply_keyboard_choice();
+	void apply_keyboard_style();
 	void apply_device_settings();
 
 	/*

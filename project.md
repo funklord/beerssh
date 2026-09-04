@@ -473,11 +473,59 @@ this does not reach it: it is C++ needing QJniObject, which Qt ships only
 for Android.
 
 **What is NOT verified is the behaviour.** Reproducing it needs the Qt main
-loop to abort again, and the abort itself is not understood — it happened
-during rapid foreground switching with the IME animating, and no attempt was
-made to provoke it a second time. So the fix rests on the mechanism being
-read correctly from the log, not on having watched the app recover. The
-EGL deadlock abort is its own open question and is not addressed here.
+loop to abort again, and no attempt was made to provoke it a second time. So
+the fix rests on the mechanism being read correctly from the log, not on
+having watched the app recover.
+
+**~~The EGL deadlock abort is its own open question and is not addressed
+here.~~ Its mechanism is established (2026-09-04), and it is upstream
+Qt's rather than ours.** `QAndroidPlatformOpenGLWindow::eglSurface()`
+guards surface creation with `AndroidDeadlockProtector` — a single
+process-wide `QBasicAtomicInt`, acquired by one non-blocking
+`testAndSetAcquire`, with no timeout and no per-window scope
+(`qjnihelpers.cpp:446`). Inside the guard Qt calls `createSurface()` and
+then waits on a condition until the **Android UI thread** delivers the
+Surface back. Every other holder of that same flag — the IME's
+`runOnQtThread()` at 23 call sites, accessibility's `runInObjectContext()`,
+native drag, permissions — takes it ON the Android UI thread and holds it
+across a blocking call INTO the Qt thread. So it is a genuine A-waits-B
+cycle, and Qt turns a hang into a crash deliberately.
+
+Three facts decide what we can do about it, and none of them is ours to
+fix:
+
+- **The `qFatal` is itself an upstream regression.** Until qtbase
+  `d885a69` (2025-08-21) the same failed acquisition returned silently.
+  Every other user of the flag still returns gracefully; this call site
+  alone aborts.
+- **We are already past the "fixed" versions.** The caller-side fixes for
+  QTBUG-140674 and QTBUG-141579 are present in the 6.12.0 tree we build
+  against — verified by reading `qandroidinputcontext.cpp:81` and
+  `androidjniaccessibility.cpp:82`, not by trusting a changelog — and it
+  crashed anyway. That is QTBUG-144207 exactly: filed against 6.10.2, P1,
+  still open, reported across several vendors, not reproducible on demand.
+- **Our own widget churn cannot cause it directly.** `src/` contains no
+  `winId()`, no `WA_NativeWindow`, no `QOpenGLWidget` and no
+  `createWindowContainer`, so the terminal views share the top-level's
+  backing store and a pane rebuild creates no Surface at all.
+
+**But there is a traceable aggravating route, and it is ours.**
+`rebuild()` → `focus_session()` → `setFocus()` → `focusInEvent` →
+`request_input_panel()` → `inputMethod()->show()`. Each IME show is a burst
+of Android-UI-thread traffic holding the flag. Under the code before
+§8.4's resize fix, a keyboard opening rebuilt the panes on every animation
+frame, so that burst fired per frame while repaints needed the same flag —
+the maximal version of the race. The fix makes it strictly less likely and
+cannot close it.
+
+**The next step is one line of logcat, and it is cheap.**
+`AndroidDeadlockProtector::acquire()` emits, immediately before the fatal,
+a warning reading *"...while already locked by '&lt;HOLDER&gt;'"* — which names
+which of the four had it. That string has exactly one producer in the whole
+installed Qt tree, so any occurrence of it is this failure and nothing
+else. It was not captured for the one instance seen here, because only the
+crash buffer was saved and the warning goes to the main one. Capture
+`adb logcat -v threadtime` to a file BEFORE provoking it.
 
 
 **Stopping it is a START.** `startForegroundService()` opens a contract: the
@@ -6116,16 +6164,81 @@ store is a no-op rather than a silent loss.
     gap** immediately before `libc++_shared.so`, measured by walking the
     entry offsets; every other gap in the archive is ordinary 4–16 KB
     alignment.
-    **The cause is not established and three hypotheses are dead.** It is not
-    the fonts (the entry lists are identical). It is not warm-versus-cold as
-    such: after removing the build tree, a rebuild with no change and a
-    rebuild that deliberately grew this app's library by 4 KB both stayed
-    compact. What the bloated builds had in common is only that they ran
-    against a build tree **inherited from an earlier session**, and removing
-    that tree destroyed the state — so it cannot now be reproduced or
-    diagnosed. Recorded as a symptom with its measurement rather than
-    attributed, since the environmental story is the comfortable one and
-    §12.3 already records what a comfortable explanation costs.
+    **~~The cause is not established and three hypotheses are dead.~~
+    Established 2026-09-04: it is `com.android.zipflinger`, filling the hole
+    left by the PREVIOUS `libbeerssh_arm64-v8a.so` during an incremental
+    repackage.** Three hypotheses were indeed dead — not the fonts, not
+    warm-versus-cold as such — and the entry that survived them, that the
+    state "cannot now be reproduced or diagnosed", was wrong twice over: it
+    reproduced on the next build, and it is diagnosable in an hour.
+
+    `ZipArchive.fillFreeLocation()` in `zipflinger-9.2.1.jar` writes free
+    space as a chain of nameless local file headers in 65,475-byte chunks,
+    with a literal DOS timestamp of 1981-01-01 01:01:02 — which is the
+    `21 08 21 02` in every stub. AGP's packaging task opens whatever APK is
+    already on disk, so a rebuild deletes the old library entry and re-adds
+    the new one at the tail, leaving its corpse behind as stubs. The hole is
+    slightly SMALLER than the current library, so first-fit cannot reuse it
+    and the cycle repeats every build where the library grows.
+
+    **The control is what makes this a diagnosis rather than a story**, and
+    it is the part to copy: writing a fresh archive through the same jar
+    produces **zero** stubs, while reopening one, deleting entries and
+    re-adding produces stubs whose first thirty bytes are byte-identical to
+    ours. Neither `zipalign` nor `apksigner` is involved — this project runs
+    neither, and three build stages of the APK are byte-identical, so it
+    leaves Gradle already containing them.
+
+    **And the earlier measurement here was low.** It is **111 stubs,
+    6,954,823 bytes, 14.91%** of the file in SIX regions, not one; the
+    single 6.9 MB gap is the largest. The 4,096 bytes before the central
+    directory that a naive gap walk also reports are not dead space at all
+    but the APK Signing Block. Reported as one region because the first
+    script stopped at the first gap it found — a check over part of a
+    population reading exactly like a check over all of it, which is the
+    same fault this document records for the keyboard's row arithmetic
+    (§6.2), on the same day.
+
+    **Recoverable, measured end to end:** `zipalign -f -P 16 4` followed by
+    a re-sign gives 39,707,611 bytes, `apksigner verify` passes, and all ten
+    `.so` stay 16 KB aligned. The order matters — `zipalign` alone destroys
+    the signature, since it drops the signing block — and `-p 16` is not
+    `-P 16`: the lower-case form takes no argument and silently gives 4 KB
+    alignment, which would break 16 KB-page devices. **Not yet done here**,
+    because it belongs in the shared `tool/android.mk` that four projects
+    copy, which makes it a signal rather than a local edit
+    (`harmonization.md`).
+
+    **~~Open: whether deleting the output APK before packaging is enough.~~
+    Measured 2026-09-04, and it is: 46,639,876 → 39,692,128 bytes, ZERO
+    stub regions, 6,947,748 saved, and all ten `.so` still on 16384
+    boundaries.** One `rm` of
+    `android-build/build/outputs/apk/debug/android-build-debug.apk` before
+    the build, which AGP then re-runs because its output is missing. So
+    prevention works and the `zipalign` post-process is the fallback rather
+    than the remedy.
+
+    **The alignment check that says so was wrong the first time**, and it
+    is worth the sentence because the error would have raised a false
+    alarm about 16 KB-page devices. Python's `ZipInfo.extra` is the
+    CENTRAL DIRECTORY's extra field; zipalign's padding lives in the LOCAL
+    header's, and the two differ. Computing the data offset from the
+    central copy reported all ten libraries misaligned in both the new
+    APK and the old fixture — which, since the fixture was independently
+    measured as aligned, is what said the instrument was at fault rather
+    than the artifact. Read `nlen`/`elen` from the local header at
+    `header_offset` instead.
+
+    **Scope beyond this tree is NOT established, and the first report of
+    it said otherwise.** The signal to `claude-guidelines` originally read
+    "four projects copy the fragment so all four are almost certainly
+    paying it" — a scope claim reasoned from a proxy rather than from any
+    APK. fuzzypickles measured theirs within the hour: zero stubs, 129
+    named local headers, a walk reaching 99.9% of the file. Their own
+    caveat is the reason it stays open rather than closing the other way:
+    they cannot say whether that build was incremental, and a zero from a
+    build that never reopened an existing output is exactly what the
+    fresh-write control predicts.
     **The artifact is kept, at the copyright holder's direction**, as
     `~/fixtures/beerssh-dead-space-46.5M.apk` — 46,499,926 bytes, sha256
     `08360537107f5c922582f5322047a068680766e94df704ed2776a7cfd31d6e5c`,

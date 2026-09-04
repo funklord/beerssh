@@ -468,3 +468,12 @@ int bssh_soft_keyboard_catalog::index_of(const QString &id, style_t style) const
 	}
 	return 0;
 }
+
+bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
+        bssh_soft_keyboard_catalog::style_t wanted, int width_dp) {
+	if (wanted != bssh_soft_keyboard_catalog::STYLE_FULL) return wanted;
+	if (width_dp < BSSH_FULL_KEYBOARD_MIN_DP) {
+		return bssh_soft_keyboard_catalog::STYLE_COMPACT;
+	}
+	return wanted;
+}

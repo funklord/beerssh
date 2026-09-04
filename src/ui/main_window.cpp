@@ -1090,6 +1090,14 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	 * prevent, and this walked straight past it.
 	 */
 	m_layout->set_width(width());
+
+	/*
+	 * The keyboard's own width question, which is not the layout
+	 * manager's: it asks how many panes fit, this asks whether the
+	 * full-size keyboard does (sec 6.2). Cheap on every resize, because
+	 * set_style returns at once when the answer has not changed.
+	 */
+	apply_keyboard_style();
 }
 
 /*
@@ -1286,9 +1294,7 @@ void bssh_main_window::apply_keyboard_choice() {
 	 * three-state setting, the platform, all of it. What this adds is
 	 * that the built-in keyboard replaces it rather than joining it.
 	 */
-	m_keyboard->set_style(settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_FULL
-	                       ? bssh_soft_keyboard_catalog::STYLE_FULL
-	                       : bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	apply_keyboard_style();
 	m_keyboard->setVisible(built_in);
 	if (built_in) m_key_row->hide();
 	else m_key_row->setVisible(m_key_row->should_be_visible());
@@ -1307,6 +1313,32 @@ void bssh_main_window::apply_keyboard_choice() {
 	if (m_terminal_view) {
 		m_terminal_view->setAttribute(Qt::WA_InputMethodEnabled, !built_in);
 	}
+}
+
+/*
+ * Which keyboard is DRAWN: what the user chose, narrowed by what fits
+ * (sec 6.2).
+ *
+ * Called from apply_device_settings, where the setting changes, and from
+ * resizeEvent, where the room does -- because both halves of the answer
+ * can move and a fallback applied only when the setting changes is one
+ * that never fires on the device it was written for. A folding phone
+ * changes width without anybody touching a setting.
+ *
+ * The stored setting is not rewritten. Unfolding gives the full keyboard
+ * back, which is sec 8.2's rule for splits collapsing to tabs: the intent
+ * is remembered rather than overwritten by the screen it last met.
+ */
+void bssh_main_window::apply_keyboard_style() {
+	if (!m_keyboard) return;
+
+	const bssh_app_settings settings;
+	const bssh_soft_keyboard_catalog::style_t wanted =
+	        settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_FULL
+	                ? bssh_soft_keyboard_catalog::STYLE_FULL
+	                : bssh_soft_keyboard_catalog::STYLE_COMPACT;
+
+	m_keyboard->set_style(bssh_keyboard_style_for(wanted, width()));
 }
 
 void bssh_main_window::on_pane_focus_changed(bssh_session *session) {

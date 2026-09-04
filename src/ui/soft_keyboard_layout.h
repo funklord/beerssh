@@ -165,4 +165,42 @@ private:
 	QList<bssh_soft_key_group_t> m_full;
 };
 
+/*
+ * The narrowest window the full-size keyboard is drawn in, in dp.
+ *
+ * sec 8.2's MEDIUM boundary, reused rather than a second number invented
+ * beside it: a tree with two width thresholds has two things to keep in
+ * step, and this one is asking the same question sec 8.2 asks -- is there
+ * room to do the roomy thing.
+ *
+ * It is a compromise and the measurement says so. 15u of keyboard plus the
+ * page button shares the width, so a 1u key gets width/16.5:
+ *
+ *     317dp  Fold cover screen      19dp   no
+ *     360dp  ordinary phone         22dp   no
+ *     600dp  this threshold         36dp   usable, under sec 6.2's 48dp
+ *     680dp  Fold inner screen      41dp   usable
+ *     840dp  sec 8.2's EXPANDED     51dp   meets 48dp
+ *
+ * Nothing below 600 is defensible. Above it, the honest 48dp answer is
+ * about 770dp -- which would exclude a folding phone's inner screen, the
+ * device this keyboard was asked for. So the threshold buys the Fold at
+ * the price of keys a little under target, and the alternative was to
+ * refuse the full keyboard on the hardware it exists for.
+ */
+const int BSSH_FULL_KEYBOARD_MIN_DP = 600;
+
+/*
+ * Which keyboard to DRAW, given which one was chosen and how much room
+ * there is.
+ *
+ * A pure function of the two, so it can be asked without a widget: the
+ * fallback is a display decision, and the stored setting is never
+ * rewritten by it. A phone that is folded shows the compact keyboard and
+ * unfolds to the full one, the way sec 8.2 collapses splits to tabs and
+ * restores them, with the intent remembered rather than overwritten.
+ */
+bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
+        bssh_soft_keyboard_catalog::style_t wanted, int width_dp);
+
 #endif /* BSSH_SOFT_KEYBOARD_LAYOUT_H */

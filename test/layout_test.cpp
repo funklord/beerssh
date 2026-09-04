@@ -820,6 +820,71 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
  * The defaults are gone, so this cannot recur without a compile error. The
  * test stays because the next person to add a style will not know that.
  */
+/*
+ * The full keyboard gives way on a narrow screen, and comes back.
+ *
+ * Asked of the rule AND of the window, because they fail differently: the
+ * rule can be right while nothing calls it -- which is this tree's most
+ * repeated defect -- and the window can call it on the setting only, which
+ * would never fire on a folding phone, where the width changes and no
+ * setting does.
+ */
+void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
+	typedef bssh_soft_keyboard_catalog catalog;
+
+	/* The rule, at the boundary and either side of it. */
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL, BSSH_PHONE_DP),
+	          catalog::STYLE_COMPACT);
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL,
+	                                  BSSH_FULL_KEYBOARD_MIN_DP - 1),
+	          catalog::STYLE_COMPACT);
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL,
+	                                  BSSH_FULL_KEYBOARD_MIN_DP),
+	          catalog::STYLE_FULL);
+
+	/*
+	 * And the compact choice is never widened INTO the full one. The
+	 * fallback narrows what was asked for; it does not overrule someone
+	 * who asked for the thumb keyboard on a tablet.
+	 */
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 2000),
+	          catalog::STYLE_COMPACT);
+
+	/* Now the wiring. */
+	const forced_touch_t arrangement(1);
+
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN_FULL);
+
+	bssh_main_window window;
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_soft_keyboard *keys = window.findChild<bssh_soft_keyboard *>();
+	QVERIFY2(keys, "the window must build the keyboard it was asked for");
+
+	const QString narrow = keys->group_id();
+	QVERIFY2(narrow.startsWith(QStringLiteral("full-")) == false,
+	          qPrintable(QStringLiteral("a %1dp window drew the full keyboard's "
+	                                     "group '%2'").arg(BSSH_PHONE_DP).arg(narrow)));
+
+	/*
+	 * Widen past the threshold and the full keyboard returns -- WITHOUT
+	 * the setting being touched, which is the half that says the choice
+	 * was remembered rather than rewritten.
+	 */
+	window.resize(BSSH_FULL_KEYBOARD_MIN_DP + 100, BSSH_PHONE_TALL_DP);
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	QVERIFY2(keys->group_id().startsWith(QStringLiteral("full-")),
+	          qPrintable(QStringLiteral("a wide window drew '%1'").arg(keys->group_id())));
+	QCOMPARE(bssh_app_settings().keyboard(), bssh_app_settings::KEYBOARD_BUILT_IN_FULL);
+
+	settings.set_keyboard(before);
+}
+
 void layout_test::the_full_keyboard_answers_about_itself() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
