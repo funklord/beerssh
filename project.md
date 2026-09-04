@@ -560,6 +560,25 @@ condition can make a finding worse, because TalkBack is an accessibility
 service — and it arrives here through the accessibility work rather than
 in spite of it.
 
+**One negative run, recorded with its limits because a bare "no crash"
+would be worth nothing.** hydra turned TalkBack on against their own app —
+three services registered, a page loaded, a `-v threadtime` capture with
+zero `deadlock protector`, `Abort message` or `FATAL` lines. They decline
+to call it a refutation and so does this entry: different device (Fold 3,
+not the Note 9 of the confirmed instance), different Qt, and **no menu was
+ever opened** before the handset disconnected — while the instance that
+aborted was a menu tap. So the run does not touch the case. It is here so
+nobody repeats it believing it settled something.
+
+**And the sibling comparison cuts the other way, which is worth knowing
+before quoting "same population".** hydra has no accessibility code at all
+— not one `setAccessibleName` anywhere in its `src/`. A screen reader gets
+whatever Qt Widgets supplies by default, so its icon-only toolbar buttons
+are unlabelled and much of that browser is unnavigable before a menu is
+ever reached. The population is the same; the failures are not. This tree
+made its terminal navigable deliberately, which is precisely why the abort
+reaches the users M11 was written for.
+
 **Not established, and recorded as such:** whether our instance had this
 holder; whether the accessibility bridge failing to get a surface explains
 the stale `uiautomator` reads hydra spent an hour on (they record that as
