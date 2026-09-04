@@ -1,5 +1,6 @@
 #include "ui/key_cap.h"
 
+#include <QFontMetrics>
 #include <QStyleOptionToolButton>
 #include <QStylePainter>
 
@@ -27,8 +28,44 @@ void bssh_key_cap::set_hint(const QString &hint) {
 	update();
 }
 
+QFont bssh_key_cap::fitted_font(const QFont &base, const QString &text, int width) {
+	QFont chosen = base;
+	if (text.isEmpty() || width <= 0) return chosen;
+
+	/*
+	 * The floor is 70 per cent of the widget's font. Below that a
+	 * three-letter label on a 33dp key is smaller than the AltGr hint
+	 * beside it, which reads as a mistake rather than as a smaller
+	 * label -- so the last resort stays the style's, and the caller
+	 * elides.
+	 */
+	const qreal floor = 0.7;
+	for (int step = 0; step < 8; ++step) {
+		if (QFontMetrics(chosen).horizontalAdvance(text) <= width) break;
+
+		const qreal next = (chosen.pointSizeF() > 0 ? chosen.pointSizeF()
+		                                             : chosen.pixelSize()) * 0.94;
+		const qreal limit = (base.pointSizeF() > 0 ? base.pointSizeF()
+		                                            : base.pixelSize()) * floor;
+		if (next < limit) break;
+
+		if (chosen.pointSizeF() > 0) chosen.setPointSizeF(next);
+		else chosen.setPixelSize(qMax(1, int(next)));
+	}
+	return chosen;
+}
+
 void bssh_key_cap::paintEvent(QPaintEvent *event) {
-	if (!needs_own_paint(text(), m_hint)) {
+	/*
+	 * The style draws it when nothing here has to: no second legend, no
+	 * ampersand for Qt to eat, and a label that fits. The last of those
+	 * is why this is measured rather than asked of the text alone -- it
+	 * is a property of the key's WIDTH, which changes with the screen.
+	 */
+	const int room = rect().width() - 6;
+	const bool too_wide = QFontMetrics(font()).horizontalAdvance(text()) > room;
+
+	if (!needs_own_paint(text(), m_hint) && !too_wide) {
 		/*
 		 * Nothing to add, so nothing is reimplemented: the overwhelming
 		 * majority of keys take the style's own drawing, and a cap with
@@ -112,7 +149,17 @@ void bssh_key_cap::paintEvent(QPaintEvent *event) {
 	 * character wide; a centred single glyph does not reach it even on
 	 * the compact board's narrowest key.
 	 */
-	painter.setFont(font());
+	/*
+	 * Shrunk to fit rather than elided, and elided only if shrinking to
+	 * the floor still is not enough.
+	 */
+	const QFont sized = fitted_font(font(), primary, box.width());
+	const QFontMetrics metrics(sized);
+	const QString drawn = metrics.horizontalAdvance(primary) > box.width()
+	        ? metrics.elidedText(primary, Qt::ElideRight, box.width())
+	        : primary;
+
+	painter.setFont(sized);
 	painter.setPen(ink);
-	painter.drawText(box, Qt::AlignCenter, primary);
+	painter.drawText(box, Qt::AlignCenter, drawn);
 }

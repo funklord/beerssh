@@ -1890,15 +1890,27 @@ arrows on one row** — they had been split across two because ten was the
 width, and a cursor cluster with two arrows on the row above is not one
 a thumb can use without looking.
 
-**One cosmetic regression, recorded rather than papered over.** At §8.1's
-narrowest phone the keys are about 33dp instead of 36, and `Hom` now
-elides to an ellipsis — `Ins`, `Del`, `End`, `PgU` and `PgD` all still
-fit, so it is one label and marginal. It is visible in
-`touch-keyboard-compact-terminal.png` and nowhere else. The honest fix is
-for `bssh_key_cap` to shrink a label that does not fit rather than let
-the style elide it, which would also help the full board's `Home`,
-`PgUp` and `F10`–`F12` on a phone; that is a change to how every cap is
-drawn and is not what was asked for here.
+**A keycap shrinks its label rather than eliding it — [FIXED
+2026-09-04].** The narrower keys cost one label: `Hom` drew as an
+ellipsis at §8.1's narrowest phone, where `Ins`, `Del`, `End`, `PgU` and
+`PgD` all still fit. The style's answer to a label too wide for its key
+is an ellipsis, which on a keyboard is the worst of both — the key still
+takes the room and no longer says what it does.
+
+`bssh_key_cap::fitted_font` walks the font down in 6 per cent steps to a
+floor of 70 per cent and the cap draws at whatever fits. **Below the
+floor it elides after all**, deliberately: a three-letter label smaller
+than the AltGr hint beside it reads as a mistake rather than as a
+smaller label, and an ellipsis is bad where four-point type is worse.
+That is why the full keyboard still elides at 360dp — 1u is 24dp there,
+no font in the range fits `PgUp`, and §6.2 already says that board wants
+600dp and falls back to the compact one below it. At 800dp every label
+is whole.
+
+It also decides the paint path by MEASUREMENT rather than by asking the
+text: whether a label fits is a property of the key's width, which
+changes with the screen, so `paintEvent` measures and `needs_own_paint`
+answers only the two questions that are properties of the string.
 
 **Two of the four sabotages were missed on the first run, and both
 misses were findings.** Dropping the ISO key was expected to fail the

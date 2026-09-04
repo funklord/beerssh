@@ -47,6 +47,7 @@ private slots:
 	void both_keyboards_reach_every_printable_character();
 	void an_unknown_layout_is_refused_and_changes_nothing();
 	void a_small_screen_loses_no_letter();
+	void the_detach_action_makes_a_window();
 	void the_layout_setting_reaches_the_keyboard();
 	void choosing_a_layout_changes_what_the_keys_send();
 	void an_ampersand_cap_is_not_left_to_the_style();

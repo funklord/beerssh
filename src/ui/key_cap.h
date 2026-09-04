@@ -1,6 +1,7 @@
 #ifndef BSSH_KEY_CAP_H
 #define BSSH_KEY_CAP_H
 
+#include <QFont>
 #include <QString>
 #include <QToolButton>
 
@@ -72,6 +73,24 @@ public:
 	 * already need it.
 	 */
 	static bool needs_own_paint(const QString &text, const QString &hint);
+
+	/*
+	 * The largest font at or below `base` that fits `text` into `width`,
+	 * down to a floor.
+	 *
+	 * A keycap SHRINKS rather than elides. The style's answer to a label
+	 * too wide for its key is an ellipsis, which on a keyboard is the
+	 * worst of both: the key still takes the room and no longer says
+	 * what it does. `Hom` drew as three dots when the compact grid went
+	 * to eleven keys a row, and `Home`, `PgUp` and `F10` to `F12` have
+	 * done the same on the full board at phone width since it was
+	 * written.
+	 *
+	 * Static and public so the floor can be tested rather than eyeballed
+	 * in a render: below it the label would be unreadable, so it elides
+	 * after all -- an ellipsis is bad and four-point type is worse.
+	 */
+	static QFont fitted_font(const QFont &base, const QString &text, int width);
 
 protected:
 	void paintEvent(QPaintEvent *event) override;

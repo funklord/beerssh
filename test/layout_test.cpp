@@ -6,6 +6,7 @@
 #include <QLineEdit>
 #include <QKeySequenceEdit>
 #include <QSlider>
+#include <QAction>
 #include <QComboBox>
 #include <QClipboard>
 #include <QJsonObject>
@@ -1190,6 +1191,90 @@ void layout_test::a_small_screen_loses_no_letter() {
 		QVERIFY2(full.size() > 40,
 		          qPrintable(QStringLiteral("layout %1 sends %2 characters")
 		                             .arg(layout.id).arg(full.size())));
+	}
+}
+
+namespace {
+
+/* Windows of ours that are currently alive, for a test that makes one. */
+int bssh_main_window_count() {
+	int found = 0;
+	for (QWidget *widget : QApplication::topLevelWidgets()) {
+		if (qobject_cast<bssh_main_window *>(widget)) ++found;
+	}
+	return found;
+}
+
+} /* namespace */
+
+/*
+ * "Detach Tab to a Window" produces a window (sec 8.4).
+ *
+ * Reported as doing nothing. It is guarded -- a window will not empty
+ * itself, so the action is disabled while this window shows one session
+ * -- and this asks the question that guard makes easy to skip: with
+ * enough sessions to be allowed, does it actually tear one out.
+ *
+ * Driven through the QAction the menu holds rather than by calling
+ * tear_out_tab(), because the menu item is what was reported and an
+ * action that is disabled, or wired to nothing, is exactly the failure
+ * being chased.
+ */
+void layout_test::the_detach_action_makes_a_window() {
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	QAction *detach = nullptr;
+	for (QAction *action : window.findChildren<QAction *>()) {
+		if (action->text().contains(QStringLiteral("Detach"))) detach = action;
+	}
+	QVERIFY2(detach, "the View menu has no Detach item");
+
+	/* One session: refused, and the menu says so rather than no-opping. */
+	window.adopt_session(registry->create(named(QStringLiteral("only"))));
+	QVERIFY2(!detach->isEnabled(),
+	          "detaching the only session would leave an empty window, and the "
+	          "menu must say so rather than accept the click and do nothing");
+
+	/*
+	 * TWO sessions in a wide window, which is the reported case and the
+	 * one the guard does not cover: on a screen with room they are two
+	 * PANES (sec 8.3), so the tab bar is empty -- and the action is
+	 * enabled, because two sessions are shown.
+	 */
+	window.adopt_session(registry->create(named(QStringLiteral("second"))));
+	QVERIFY2(detach->isEnabled(), "two sessions and detaching is refused");
+
+	QTabBar *bar = window.findChild<QTabBar *>();
+	const int tabs = bar ? bar->count() : 0;
+	const int panes = window.registry() ? 2 : 0;
+	QVERIFY2(panes == 2, "setup");
+
+	const int windows_before = bssh_main_window_count();
+	detach->trigger();
+	QVERIFY2(bssh_main_window_count() > windows_before,
+	          qPrintable(QStringLiteral("with %1 tab(s) showing, Detach did "
+	                                     "nothing").arg(tabs)));
+
+	window.adopt_session(registry->create(named(QStringLiteral("third"))));
+	QVERIFY2(detach->isEnabled(), "three sessions and detaching is still refused");
+
+	const int before = bssh_main_window_count();
+	detach->trigger();
+	QVERIFY2(bssh_main_window_count() > before,
+	          qPrintable(QStringLiteral("triggering Detach left %1 window(s)")
+	                             .arg(bssh_main_window_count())));
+
+	/* And the torn-out window is closed with this one. */
+	for (QWidget *widget : QApplication::topLevelWidgets()) {
+		bssh_main_window *other = qobject_cast<bssh_main_window *>(widget);
+		if (other && other != &window) other->close();
 	}
 }
 
