@@ -213,6 +213,18 @@ const int BSSH_FULL_KEYBOARD_MIN_DP = 600;
  */
 QChar bssh_shifted_char(char32_t plain, char32_t twin, bool shifted);
 
+/*
+ * The same question over four levels: what does this key send, given
+ * Shift and AltGr.
+ *
+ * Falls back down the levels rather than sending nothing: a key with no
+ * level 4 but a level 3 gives its level 3 under Shift+AltGr, and a key
+ * with no AltGr legend at all behaves exactly as it did before. That is
+ * what keeps AltGr harmless on the 21 keys of a US board that have no
+ * third legend.
+ */
+QChar bssh_keyboard_char(const bssh_key_t &key, bool shifted, bool altgr);
+
 bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
         bssh_soft_keyboard_catalog::style_t wanted, int width_dp);
 

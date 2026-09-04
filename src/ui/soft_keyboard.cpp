@@ -1,5 +1,7 @@
 #include "ui/soft_keyboard.h"
 
+#include "ui/key_cap.h"
+
 #include <QAbstractButton>
 #include <QFont>
 #include <QGridLayout>
@@ -149,8 +151,8 @@ void bssh_soft_keyboard::set_group(int index) {
 	rebuild();
 }
 
-QAbstractButton *bssh_soft_keyboard::make_button(const QString &label) {
-	QToolButton *button = new QToolButton(m_keys);
+bssh_key_cap *bssh_soft_keyboard::make_button(const QString &label) {
+	bssh_key_cap *button = new bssh_key_cap(m_keys);
 	button->setText(label);
 
 	/*
@@ -176,7 +178,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 	 */
 	if (key.kind == bssh_key_t::SPACER) return;
 
-	QAbstractButton *button = make_button(key.label);
+	bssh_key_cap *button = make_button(key.label);
 	m_grid->addWidget(button, row, column, 1, key.span);
 
 	switch (key.kind) {
@@ -222,14 +224,13 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 		 * false of a keyboard, and on the full-size board's real number
 		 * row it left 21 characters unreachable.
 		 */
-		if (QChar::isLetter(uint(ch)) || key.shifted_value != 0) {
+		if (QChar::isLetter(uint(ch)) || key.shifted_value != 0
+		     || key.altgr_value != 0) {
 			m_letter_buttons.append(button);
-			m_letter_values.append(ch);
-			m_letter_shifted.append(char32_t(key.shifted_value));
+			m_letter_keys.append(key);
 		}
 
-		const char32_t twin = char32_t(key.shifted_value);
-		connect(button, &QAbstractButton::clicked, this, [this, ch, twin] {
+		connect(button, &QAbstractButton::clicked, this, [this, key] {
 			if (!m_router) return;
 
 			/*
@@ -243,7 +244,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 			        m_router->modifier_state(bssh_emulator::MOD_SHIFT)
 			                != bssh_input_router::MODIFIER_OFF;
 
-			m_router->send_text(QString(bssh_shifted_char(ch, twin, shifted)));
+			m_router->send_text(QString(bssh_keyboard_char(key, shifted, altgr_armed())));
 			refresh_letter_labels();
 		});
 		break;
@@ -273,8 +274,7 @@ void bssh_soft_keyboard::rebuild() {
 	m_modifier_buttons.clear();
 	m_modifier_values.clear();
 	m_letter_buttons.clear();
-	m_letter_values.clear();
-	m_letter_shifted.clear();
+	m_letter_keys.clear();
 
 	while (QLayoutItem *item = m_grid->takeAt(0)) {
 		delete item->widget();
@@ -344,6 +344,12 @@ void bssh_soft_keyboard::refresh_modifiers() {
 	refresh_letter_labels();
 }
 
+bool bssh_soft_keyboard::altgr_armed() const {
+	return m_router
+	        && m_router->modifier_state(bssh_input_router::MOD_ALTGR)
+	                != bssh_input_router::MODIFIER_OFF;
+}
+
 void bssh_soft_keyboard::refresh_letter_labels() {
 	/*
 	 * Same rule as the modifiers: with no session there is no Shift, so
@@ -354,11 +360,32 @@ void bssh_soft_keyboard::refresh_letter_labels() {
 	        && m_router->modifier_state(bssh_emulator::MOD_SHIFT)
 	                != bssh_input_router::MODIFIER_OFF;
 
+	const bool altgr = altgr_armed();
+
 	for (int i = 0; i < m_letter_buttons.size(); ++i) {
-		const char32_t plain = m_letter_values.at(i);
-		const char32_t twin = m_letter_shifted.at(i);
-		m_letter_buttons.at(i)->setText(
-		        QString(bssh_shifted_char(plain, twin, shifted)));
+		const bssh_key_t &key = m_letter_keys.at(i);
+		const QChar active = bssh_keyboard_char(key, shifted, altgr);
+
+		/*
+		 * ANNOTATED while AltGr is idle, because US International is
+		 * unfamiliar to most people and a third legend nobody can see is
+		 * a feature nobody finds.
+		 *
+		 * The cap always reads, prominently, the character it will
+		 * actually send: the plain letter now, the accented one once
+		 * AltGr is armed. The third level rides along as a HINT in the
+		 * corner -- smaller and dimmer, the way it is printed on a real
+		 * keycap -- and goes away when AltGr arms it, because a hint
+		 * repeating what the user has just done is forty caps' worth of
+		 * reading at the moment they are hunting for a character.
+		 * bssh_key_cap draws it; see there for why it is a paint rather
+		 * than a longer string.
+		 */
+		m_letter_buttons.at(i)->setText(QString(active));
+		m_letter_buttons.at(i)->set_hint(
+		        !altgr && key.altgr_value != 0
+		                ? QString(QChar(uint(key.altgr_value)))
+		                : QString());
 	}
 }
 

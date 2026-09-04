@@ -1,0 +1,100 @@
+#include "ui/key_cap.h"
+
+#include <QFontMetrics>
+#include <QStyleOptionToolButton>
+#include <QStylePainter>
+
+bssh_key_cap::bssh_key_cap(QWidget *parent) : QToolButton(parent) {}
+
+void bssh_key_cap::set_hint(const QString &hint) {
+	if (m_hint == hint) return;
+
+	m_hint = hint;
+
+	/*
+	 * Said aloud rather than only drawn. A sighted user learns the third
+	 * level by reading the corner of the cap; without this a screen
+	 * reader user has no way to discover it at all, which would make the
+	 * annotation an accessibility regression dressed as a feature.
+	 */
+	setAccessibleDescription(m_hint.isEmpty()
+	                                 ? QString()
+	                                 : QStringLiteral("AltGr: %1").arg(m_hint));
+
+	update();
+}
+
+void bssh_key_cap::paintEvent(QPaintEvent *event) {
+	if (m_hint.isEmpty()) {
+		/*
+		 * Nothing to add, so nothing is reimplemented: the overwhelming
+		 * majority of keys take the style's own drawing, and a cap with
+		 * no second legend must be indistinguishable from the buttons
+		 * around it.
+		 */
+		QToolButton::paintEvent(event);
+		return;
+	}
+
+	QStylePainter painter(this);
+	QStyleOptionToolButton option;
+	initStyleOption(&option);
+
+	/*
+	 * The frame from the style, the text from here. Clearing the label
+	 * before drawing the control is what stops the style centring the
+	 * primary legend on its own and this one drawing a second copy over
+	 * it.
+	 */
+	const QString primary = option.text;
+	option.text.clear();
+	option.icon = QIcon();
+	painter.drawComplexControl(QStyle::CC_ToolButton, option);
+
+	QFont hint_font = font();
+	const qreal hint_points = hint_font.pointSizeF() > 0
+	                                  ? hint_font.pointSizeF() * 0.68
+	                                  : hint_font.pixelSize() * 0.68;
+	if (hint_font.pointSizeF() > 0) {
+		hint_font.setPointSizeF(qMax(qreal(6), hint_points));
+	} else {
+		hint_font.setPixelSize(qMax(6, int(hint_points)));
+	}
+
+	/*
+	 * Dimmed with ALPHA, and not with bssh_dim() from the colour scheme,
+	 * which scales a colour toward black.
+	 *
+	 * That helper is right for what it was written for -- a terminal
+	 * glyph on a background the program owns and knows is dark. A keycap
+	 * is drawn on the desktop's button colour, which may be either, and
+	 * scaling toward black would dim the legend on a dark theme and
+	 * SHARPEN it on a light one, where the text is already dark. Alpha
+	 * blends toward whatever is actually behind, so it means the same
+	 * thing in both directions. harmonization.md records the general
+	 * form: a colour meeting a ground the program did not choose.
+	 */
+	QColor ink = option.palette.color(isEnabled() ? QPalette::Active : QPalette::Disabled,
+	                                   QPalette::ButtonText);
+	QColor faded = ink;
+	faded.setAlphaF(0.55);
+
+	const QRect box = rect().adjusted(2, 1, -2, -1);
+	const QFontMetrics hint_metrics(hint_font);
+
+	painter.setFont(hint_font);
+	painter.setPen(faded);
+	painter.drawText(box, Qt::AlignRight | Qt::AlignBottom, m_hint);
+
+	/*
+	 * The primary is raised by half the hint's height rather than
+	 * centred in what is left, so that a cap with a hint and a cap
+	 * without one put their main legend in visibly the same place. A row
+	 * of letters whose baseline wanders depending on whether the key has
+	 * a third level is worse than either arrangement.
+	 */
+	painter.setFont(font());
+	painter.setPen(ink);
+	painter.drawText(box.adjusted(0, 0, 0, -hint_metrics.height() / 2),
+	                  Qt::AlignCenter, primary);
+}

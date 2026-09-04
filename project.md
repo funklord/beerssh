@@ -1528,6 +1528,112 @@ and page two is exactly the part that was not re-derived. **A check over
 part of the population reads exactly like a check over all of it.**
 
 
+**åäö, and the layout question underneath it — [BUILT 2026-09-04].** The
+holder asked for the Swedish vowels and named the better answer in the
+same breath: US International with AltGr, annotated on the keyboard,
+because it is unfamiliar to many. So `bssh_key_t` carries four levels
+rather than two, the right Alt is AltGr — which is what it is on every
+board that has one, no new key and no change to the row's arithmetic —
+and `MOD_ALTGR` is tracked by the router and masked out of everything it
+sends, because AltGr is a *layout* selector and no terminal has ever
+received one.
+
+**One deliberate divergence from us(intl): the quote keys stay live.**
+That variant makes `'` and `"` DEAD at levels 1 and 2, so `'` then `a`
+gives `á`. In a shell that is hostile — they are quoting characters typed
+constantly, and each would need a trailing space. Levels 1 and 2 come
+from `us(basic)` and only levels 3 and 4 from `intl`. That is what makes
+it usable in a terminal and is why AltGr rather than dead keys was the
+right answer to the holder's question.
+
+**Slots and legends, split — [BUILT 2026-09-04].** A keyboard is a
+GEOMETRY and a LAYOUT, and this file had them fused: `full_literal_run
+("qwertyuiop")` declared in one call both *ten keys of this width here*
+and *these ten characters*. A second layout could not have been added
+without forking the geometry it was welded to, and the first thing anyone
+wants after AltGr is their own letters.
+
+Positions are named the way XKB names them — `AE01` leftmost on the digit
+row, `AD01` on QWERTY, `AC01` on home, `AB01` on the bottom, plus `TLDE`
+and `BKSL` — because that is the vocabulary every layout in the world is
+already written in. Geometry says `slot_run("AD", 1, 12, BSSH_FULL_UNIT)`;
+one table of 47 rows says what those positions carry. A Swedish layout is
+a second such table and *no change to any geometry at all*.
+
+**The table was generated from `/usr/share/X11/xkb/symbols/us`** — levels
+1 and 2 from variant `basic`, 3 and 4 from `intl` — rather than
+transcribed, because a table of accented characters is exactly the kind
+of thing that is plausible and wrong when recalled and cannot be caught
+by re-reading it. Deriving it also **checked the two hand-written tables
+it replaced**: it reproduces all 38 rows of the old AltGr table and all
+21 of the old shifted-twin switch, exactly. Two transcriptions agreeing
+is worth something only when the second did not come from the first.
+
+**The refactor carries a proof, and the proof caught two invented
+values.** The whole composed catalogue — every group, row, key, span and
+level, 238 lines — was dumped before and after and diffed. It came out
+identical, but not on the first attempt: the generator had dropped level
+4 wherever it equalled level 2, which silently took `^` off Shift+AltGr+6;
+and it had kept level 4 on `g h v b`, where intl merely repeats the
+capital that `toUpper` already gives. Reading the diff of the *source*
+would have shown neither. Both are the same underlying phenomenon — intl
+repeating basic on the keys it deadened — and the rule that expresses it
+(`if l3 == l1 and l4 == l2`) reproduces the old tables exactly, where two
+plausible rules did not.
+
+**What the split buys, asserted:**
+`both_keyboards_read_one_layout` compares every character the compact and
+full boards share, at all four levels. They used to be two copies of the
+alphabet with nothing holding them together — a letter corrected on one
+would have stayed wrong on the other, and no test could have seen it,
+because each was right about itself. It counts what it compared, since a
+loop that agrees about nothing passes just as loudly.
+`every_slot_the_geometry_names_exists` catches a mistyped position:
+`slot_key()` is handed a string and cannot fail at build time, so an
+unknown slot draws a key that sends nothing and wears the id it could not
+find, and this is what reads it.
+
+**The compact symbol pages are deliberately NOT slots.** They are a
+palette — `-/:,()$&@"` arranged for a thumb, not a keyboard's positions —
+so they name characters, and one lookup by level-1 character gets them
+the same second and third legends from the same one table. A character
+that sits at no slot's level 1, such as the `?` on that page, has none,
+which is what it had before.
+
+**The annotation shows one prominent legend, always the one that will be
+sent — [DECIDED 2026-09-04].** The holder asked whether to show only the
+active character while a modifier is held, or to show every legend and
+move the emphasis. The answer is a middle one and it is a *paint*, not a
+string: `QToolButton` renders one font in one colour and neither it nor
+`QAbstractButton` renders markup, so two legends of different weight in
+one cap needs `bssh_key_cap::paintEvent`. The cap reads `q` at full
+weight with `ä` small and dimmed in the corner a printed keycap puts it;
+arm AltGr and it reads `ä` at full weight with no hint at all.
+
+Showing both always, with the emphasis moving, reads better on paper and
+worse on a phone: hunting for a character means scanning forty caps, and
+forty caps showing two glyphs each is twice the reading at the one moment
+the user is already looking for something. Collapsing to the active
+character alone — the holder's first option — loses the annotation
+exactly where it was cheapest to keep, on the idle keyboard nobody is
+reading under pressure.
+
+**The dim is alpha and not `bssh_dim()`**, which §9.3 defines as scaling
+toward black. That is right for a terminal glyph on a background this
+program owns and knows is dark; a keycap is drawn on the *desktop's*
+button colour, which may be either, so scaling toward black would dim the
+hint on a dark theme and SHARPEN it on a light one. Alpha blends toward
+whatever is actually behind. It is the workspace's rule about a colour
+meeting a ground the program did not choose, arriving one widget down.
+
+**And the hint is said as well as drawn.** `setAccessibleDescription`
+carries it, because the cap's `text()` stays the single character it
+sends — a braille display reading `q ä` would be wrong twice over, since
+it is one key sending one thing — and without the description a screen
+reader user would have no way to discover the third level at all. An
+annotation that is invisible to the people who most need things named is
+an accessibility regression dressed as a feature.
+
 ### 6.3 Input routing
 Central **`bssh_input_router`** converts (key, modifiers, terminal mode) → bytes,
 using the emulator's current modes (application cursor keys, keypad mode,

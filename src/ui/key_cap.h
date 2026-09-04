@@ -1,0 +1,64 @@
+#ifndef BSSH_KEY_CAP_H
+#define BSSH_KEY_CAP_H
+
+#include <QString>
+#include <QToolButton>
+
+/*
+ * A keycap that can carry a second legend (project.md sec 6.2).
+ *
+ * A printed keycap shows what the key sends and, smaller and off to one
+ * side, what it sends with AltGr. The soft keyboard needs the same thing
+ * for the same reason: US International is unfamiliar to most people, and
+ * a third level nobody can see is a feature nobody finds.
+ *
+ * Qt has no way to do this with a plain button. QToolButton renders its
+ * text in one font and one colour, and neither it nor QAbstractButton
+ * renders markup -- so two legends of different weight in one cap is a
+ * paint, not a string. That is the whole reason this class exists.
+ *
+ * The rule it draws to: EXACTLY ONE legend is prominent at any moment,
+ * and it is always the character the key will actually send. The hint is
+ * subordinate -- smaller, dimmer, in the corner a keycap puts it -- and
+ * the keyboard drops it once AltGr is armed, because at that point the
+ * prominent character has become the accented one and a hint repeating
+ * what the user has already done is noise on a 36dp key.
+ *
+ * The alternative considered was showing both legends always and moving
+ * the emphasis between them. It reads better on paper and worse on a
+ * phone: hunting for a character means scanning forty caps, and forty
+ * caps showing two glyphs each is twice the reading at the one moment
+ * the user is already looking for something.
+ */
+class bssh_key_cap : public QToolButton {
+	/*
+	 * Q_OBJECT for the metaobject rather than for signals: this class
+	 * declares none. findChildren<bssh_key_cap *> is what needs it --
+	 * a test asking for the keycaps, and not for every QToolButton on a
+	 * keyboard that also has three side buttons.
+	 */
+	Q_OBJECT
+
+public:
+	explicit bssh_key_cap(QWidget *parent = nullptr);
+
+	/*
+	 * The subordinate legend, or empty for none.
+	 *
+	 * Separate from setText() rather than folded into it, so that what
+	 * the button reports to a screen reader stays the character it
+	 * sends. A cap reading "q a" to a braille display would be wrong
+	 * twice over -- it is one key, and it sends one thing.
+	 */
+	void set_hint(const QString &hint);
+
+	const QString &hint() const { return m_hint; }
+
+protected:
+	void paintEvent(QPaintEvent *event) override;
+
+private:
+	QString m_hint;
+};
+
+#endif /* BSSH_KEY_CAP_H */

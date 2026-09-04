@@ -101,6 +101,24 @@ struct bssh_key_t {
 	 * with nothing different to send is left alone.
 	 */
 	int shifted_value;
+
+	/*
+	 * Levels 3 and 4: what this key sends with AltGr, and with
+	 * Shift+AltGr. Zero for neither.
+	 *
+	 * The names are XKB's, because the table they come from is: US
+	 * International puts a, a and o on q, w and p at level 3, and a
+	 * layout is exactly a choice of what sits at each level. Four levels
+	 * is the number every European layout needs, so it is the number to
+	 * settle on before layouts exist rather than after -- adding a level
+	 * later is a migration of every table written in the meantime.
+	 *
+	 * AltGr is NOT sent. It picks a character, the way Shift does; by the
+	 * time anything reaches the wire its whole effect is in the text.
+	 * See bssh_input_router::MOD_ALTGR.
+	 */
+	int altgr_value;
+	int shift_altgr_value;
 	quint8 modifier;
 
 	/*
@@ -114,7 +132,9 @@ struct bssh_key_t {
 	 */
 	int span;
 
-	bssh_key_t() : kind(KEY), value(0), shifted_value(0), modifier(0), span(1) {}
+	bssh_key_t()
+	    : kind(KEY), value(0), shifted_value(0), altgr_value(0),
+	      shift_altgr_value(0), modifier(0), span(1) {}
 };
 
 struct bssh_key_row_layout_t {

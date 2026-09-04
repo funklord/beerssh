@@ -30,6 +30,7 @@
 #include "platform/platform.h"
 #include <QTemporaryDir>
 #include "model/profile_store.h"
+#include "ui/key_cap.h"
 #include "ui/soft_keyboard.h"
 #include "ui/soft_keyboard_layout.h"
 #include "input/input_router.h"
@@ -854,6 +855,164 @@ struct registry_left_as_found_t {
 } /* namespace */
 
 /*
+ * One layout, two geometries: the slot split (sec 6.2).
+ *
+ * Geometry and legends used to be declared in one call --
+ * full_literal_run("qwertyuiop") said both "ten keys here" and "these
+ * characters" -- so the compact keyboard and the full one carried two
+ * copies of the alphabet with nothing holding them together. A letter
+ * corrected on one would have stayed wrong on the other, and no test
+ * could have seen it, because each was right about itself.
+ *
+ * Now both name XKB slots and the characters come from one table. This
+ * asserts the property that makes that worth having: the same slot sends
+ * the same thing on both keyboards, at every level.
+ */
+void layout_test::both_keyboards_read_one_layout() {
+	bssh_soft_keyboard_catalog &catalog = bssh_soft_keyboard_catalog::instance();
+
+	QHash<int, bssh_key_t> compact;
+	for (const bssh_soft_key_group_t &group :
+	     catalog.all(bssh_soft_keyboard_catalog::STYLE_COMPACT)) {
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind == bssh_key_t::TEXT && !compact.contains(key.value)) {
+					compact.insert(key.value, key);
+				}
+			}
+		}
+	}
+
+	/*
+	 * The MAIN block only. The numeric keypad is not a layout position:
+	 * KP7 is KP7 in every language, and a national layout moves the
+	 * letters above it and not the digits on it. Comparing it here would
+	 * be asking the wrong population -- and it says so loudly, because
+	 * the keypad's 0 and the digit row's 0 are the same character and
+	 * only one of them has ) on its top half.
+	 */
+	int compared = 0;
+	for (const bssh_soft_key_group_t &group :
+	     catalog.all(bssh_soft_keyboard_catalog::STYLE_FULL)) {
+		if (!group.id.contains(QStringLiteral("main"))) continue;
+
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind != bssh_key_t::TEXT) continue;
+				if (!compact.contains(key.value)) continue;
+
+				const bssh_key_t &twin = compact.value(key.value);
+				QCOMPARE(twin.shifted_value, key.shifted_value);
+				QCOMPARE(twin.altgr_value, key.altgr_value);
+				QCOMPARE(twin.shift_altgr_value, key.shift_altgr_value);
+				++compared;
+			}
+		}
+	}
+
+	/*
+	 * And the comparison was over something. A loop that agrees about
+	 * nothing passes exactly as loudly as one that agrees about the
+	 * alphabet, which is this suite's own standing lesson.
+	 */
+	QVERIFY2(compared >= 26, qPrintable(QStringLiteral("compared %1 keys").arg(compared)));
+}
+
+/*
+ * Every slot the geometry names is one the layout has.
+ *
+ * slot_key() cannot fail loudly at build time -- it is handed a string --
+ * so a mistyped position produces a key that sends nothing and wears the
+ * id it could not find. That is deliberate and it needs a reader: this
+ * is it. A keyboard drawn with a hole in it is exactly the fault a test
+ * over a green catalogue would otherwise miss.
+ */
+void layout_test::every_slot_the_geometry_names_exists() {
+	bssh_soft_keyboard_catalog &catalog = bssh_soft_keyboard_catalog::instance();
+
+	for (bssh_soft_keyboard_catalog::style_t style :
+	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
+	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
+		for (const bssh_soft_key_group_t &group : catalog.all(style)) {
+			for (const QList<bssh_key_t> &row : group.rows) {
+				for (const bssh_key_t &key : row) {
+					if (key.kind != bssh_key_t::TEXT) continue;
+					QVERIFY2(key.value != 0,
+					          qPrintable(QStringLiteral("%1 has a key sending nothing, labelled %2")
+					                             .arg(group.id, key.label)));
+				}
+			}
+		}
+	}
+}
+
+/*
+ * AltGr reaches US International's third level, and the Swedish three in
+ * particular.
+ *
+ * The holder's phone types Svenska and neither built-in keyboard could
+ * produce a single accented character -- 53 characters, all ASCII. That
+ * is the same family as the Shift defect below: a keyboard that cannot
+ * reach what its user types.
+ *
+ * The table is generated from the system's own xkb us(intl) rather than
+ * recalled, so what this test guards is that it is WIRED -- that the
+ * levels reach the key, and that asking for level 3 gets level 3.
+ */
+void layout_test::altgr_reaches_the_us_international_level() {
+	QSet<char32_t> plain_only;
+	QSet<char32_t> with_altgr;
+	QSet<char32_t> with_shift_altgr;
+
+	for (bssh_soft_keyboard_catalog::style_t style :
+	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
+	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
+		for (const bssh_soft_key_group_t &group :
+		     bssh_soft_keyboard_catalog::instance().all(style)) {
+			for (const QList<bssh_key_t> &row : group.rows) {
+				for (const bssh_key_t &key : row) {
+					if (key.kind != bssh_key_t::TEXT) continue;
+					plain_only.insert(bssh_keyboard_char(key, false, false).unicode());
+					with_altgr.insert(bssh_keyboard_char(key, false, true).unicode());
+					with_shift_altgr.insert(bssh_keyboard_char(key, true, true).unicode());
+				}
+			}
+		}
+	}
+
+	/* The three this was asked for, and their capitals. */
+	const QList<QPair<QChar, QChar> > nordic = {
+		{ QChar(0x00e5), QChar(0x00c5) },   /* a-ring   */
+		{ QChar(0x00e4), QChar(0x00c4) },   /* a-umlaut */
+		{ QChar(0x00f6), QChar(0x00d6) }    /* o-umlaut */
+	};
+	for (const QPair<QChar, QChar> &pair : nordic) {
+		QVERIFY2(with_altgr.contains(pair.first.unicode()),
+		          qPrintable(QStringLiteral("AltGr cannot reach %1").arg(pair.first)));
+		QVERIFY2(with_shift_altgr.contains(pair.second.unicode()),
+		          qPrintable(QStringLiteral("Shift+AltGr cannot reach %1").arg(pair.second)));
+	}
+
+	/*
+	 * And AltGr is HARMLESS where a key has no third legend, which is
+	 * most of them: it must fall through to what the key already sent
+	 * rather than swallowing the press. Space is the case that would hurt
+	 * most if it did not.
+	 */
+	QVERIFY2(with_altgr.contains(U' '), "AltGr must leave space alone");
+	QVERIFY2(with_altgr.contains(U'/'), "AltGr must leave a key with no third legend alone");
+
+	/*
+	 * The plain keyboard is unchanged by any of this -- a regression here
+	 * would mean AltGr had leaked into the unmodified level.
+	 */
+	QVERIFY2(plain_only.contains(U'q') && plain_only.contains(U'1'),
+	          "the unmodified level must still be plain US");
+	QVERIFY2(!plain_only.contains(0x00e4),
+	          "an accented character must not appear without AltGr");
+}
+
+/*
  * Shift picks the OTHER LEGEND, not the capital.
  *
  * This is the defect a device found and no test could: Shift was
@@ -1133,6 +1292,56 @@ void layout_test::the_full_keyboard_answers_about_itself() {
 		          qPrintable(QStringLiteral("group %1 drew %2 buttons")
 		                             .arg(expected.id).arg(drawn)));
 	}
+}
+
+/*
+ * The third legend is drawn, and it goes away when it has been acted on.
+ *
+ * The catalogue test above proves AltGr REACHES the accented characters;
+ * this proves the user can find out that it does. Those are different
+ * claims and the tree has been caught out by the difference before -- a
+ * correct function is not a working feature, and a legend nobody can see
+ * is exactly the shape of that fault.
+ *
+ * Asserted through the cap's own hint rather than through its text,
+ * because the two now say different things on purpose: the text is what
+ * the key sends, which is what a screen reader reads, and the hint is
+ * the annotation. A test reading a concatenated label would have passed
+ * against the string version this replaced and could not tell the two
+ * apart.
+ */
+void layout_test::the_altgr_legend_is_shown_and_then_stands_aside() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	bssh_soft_keyboard keyboard(&router);
+	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_FULL);
+
+	bssh_key_cap *q = nullptr;
+	for (bssh_key_cap *cap : keyboard.findChildren<bssh_key_cap *>()) {
+		if (cap->text() == QStringLiteral("q")) q = cap;
+	}
+	QVERIFY2(q, "the full keyboard drew no q");
+
+	/* Idle: the cap sends q and advertises what AltGr would give. */
+	QCOMPARE(q->text(), QStringLiteral("q"));
+	QCOMPARE(q->hint(), QString(QChar(0x00e4)));
+	QVERIFY2(!q->accessibleDescription().isEmpty(),
+	          "the hint is drawn but not said, so a screen reader cannot find it");
+
+	/*
+	 * Armed: the cap sends a and stops advertising, because the user has
+	 * already done the thing the advertisement was for.
+	 */
+	router.cycle_modifier(bssh_input_router::MOD_ALTGR);
+	QCOMPARE(q->text(), QString(QChar(0x00e4)));
+	QCOMPARE(q->hint(), QString());
+
+	/* And released, it goes back to saying what it says at rest. */
+	router.cycle_modifier(bssh_input_router::MOD_ALTGR);
+	router.cycle_modifier(bssh_input_router::MOD_ALTGR);
+	QCOMPARE(q->text(), QStringLiteral("q"));
+	QCOMPARE(q->hint(), QString(QChar(0x00e4)));
 }
 
 void layout_test::every_keyboard_group_is_the_same_shape() {

@@ -40,9 +40,13 @@ private slots:
 	void every_touch_surface_fits_a_phone();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
+	void both_keyboards_read_one_layout();
+	void every_slot_the_geometry_names_exists();
+	void altgr_reaches_the_us_international_level();
 	void shift_reaches_every_character_a_real_keyboard_has();
 	void the_hide_key_is_remembered_and_a_tap_undoes_it();
 	void the_keyboard_config_key_opens_the_settings_page();
+	void the_altgr_legend_is_shown_and_then_stands_aside();
 	void every_keyboard_group_is_the_same_shape();
 	void the_built_in_keyboard_fits_a_phone();
 	void only_one_on_screen_keyboard_is_ever_shown();

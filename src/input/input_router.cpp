@@ -383,7 +383,14 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 void bssh_input_router::send_key(int key, quint8 modifiers) {
 	if (!m_emulator) return;
 
-	m_emulator->send_key(key, modifiers | effective_modifiers());
+	/*
+	 * ALTGR masked off: it selects a character rather than modifying a
+	 * key, and libvterm has no encoding for it (see MOD_ALTGR). Passing
+	 * it would ask for a modified version of a key that was never
+	 * modified.
+	 */
+	const quint8 sending = quint8((modifiers | effective_modifiers()) & ~MOD_ALTGR);
+	m_emulator->send_key(key, sending);
 	spend_sticky_modifiers();
 }
 
@@ -402,7 +409,9 @@ void bssh_input_router::send_text(const QString &text) {
 	 * existed and had almost no way to be met. ALT is passed, because
 	 * libvterm turns it into the ESC prefix a shell expects for Meta.
 	 */
-	const quint8 modifiers = quint8(effective_modifiers() & ~quint8(bssh_emulator::MOD_SHIFT));
+	const quint8 modifiers = quint8(effective_modifiers()
+	                                 & ~quint8(bssh_emulator::MOD_SHIFT)
+	                                 & ~MOD_ALTGR);
 
 	const QList<uint> codepoints = text.toUcs4();
 	for (uint codepoint : codepoints) {

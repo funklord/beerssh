@@ -76,6 +76,29 @@ public:
 	 * the armed half while leaving the locked half exactly where it is --
 	 * that difference is the whole feature.
 	 */
+	/*
+	 * A modifier this app tracks and NEVER sends.
+	 *
+	 * AltGr is not a terminal modifier: libvterm has no encoding for it,
+	 * and a remote program never hears about it. What it does is pick a
+	 * different CHARACTER from the key -- level 3 of a layout, the same
+	 * way Shift picks level 2 -- so by the time anything is sent, its
+	 * whole effect is already in the text.
+	 *
+	 * It lives here rather than in bssh_emulator's modifier_t because
+	 * that enum is the WIRE vocabulary, and a bit that never reaches the
+	 * wire does not belong in it. It lives here rather than in the
+	 * keyboard because the sticky/locked machinery -- tap once to arm,
+	 * twice to lock, spent on the next key -- is this class's, and a
+	 * second copy of it in a widget is the drift sec 6.3 exists to
+	 * prevent.
+	 *
+	 * Masked out of everything sent, exactly as MOD_SHIFT is masked out
+	 * of send_text and for the same reason: the character already IS the
+	 * answer.
+	 */
+	static const quint8 MOD_ALTGR = 0x08;
+
 	enum modifier_state_t {
 		MODIFIER_OFF,
 		MODIFIER_ONCE,

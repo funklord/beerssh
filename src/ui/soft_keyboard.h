@@ -6,6 +6,8 @@
 #include <QWidget>
 
 #include "ui/key_row_layout.h"
+
+class bssh_key_cap;
 #include "ui/soft_keyboard_layout.h"
 
 class QAbstractButton;
@@ -79,7 +81,8 @@ signals:
 
 private:
 	void rebuild();
-	QAbstractButton *make_button(const QString &label);
+	bssh_key_cap *make_button(const QString &label);
+	bool altgr_armed() const;
 	void add_key(const bssh_key_t &key, int row, int column);
 	void refresh_modifiers();
 
@@ -132,9 +135,8 @@ private:
 	 * place each; the second legend is zero for a letter, which takes its
 	 * capital instead (bssh_shifted_char).
 	 */
-	QList<QAbstractButton *> m_letter_buttons;
-	QList<char32_t> m_letter_values;
-	QList<char32_t> m_letter_shifted;
+	QList<bssh_key_cap *> m_letter_buttons;
+	QList<bssh_key_t> m_letter_keys;
 };
 
 #endif /* BSSH_SOFT_KEYBOARD_H */

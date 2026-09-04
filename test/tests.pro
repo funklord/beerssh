@@ -113,6 +113,7 @@ SOURCES += \
     ../src/ui/tab_status.cpp \
     ../src/ui/touch_metrics.cpp \
     ../src/platform/platform_desktop.cpp \
+    ../src/ui/key_cap.cpp \
     ../src/ui/key_row_layout.cpp \
     ../src/ui/soft_keyboard.cpp \
     ../src/ui/soft_keyboard_layout.cpp \
@@ -125,6 +126,7 @@ SOURCES += \
     ../src/ui/terminal_view.cpp
 
 HEADERS += \
+    ../src/ui/key_cap.h \
     fake_ssh_session.h \
     command_line_test.h \
     conn_manager_test.h \
