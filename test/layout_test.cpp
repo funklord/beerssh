@@ -919,6 +919,51 @@ void layout_test::both_keyboards_read_one_layout() {
 }
 
 /*
+ * The ampersand key draws an ampersand (sec 6.2).
+ *
+ * Qt reads & in a button's text as a mnemonic marker and eats it, so
+ * the & on the compact symbol page drew a BLANK cap. It sent the right
+ * character, it was the right size, it was in the right cell, and every
+ * test about the catalogue passed -- because the catalogue was right.
+ * What was wrong was the drawing, and only a picture of the phone
+ * showed it.
+ *
+ * Asserted through the predicate rather than through pixels, because
+ * pixels are what the shots are for and a unit test that rasterises a
+ * button is a test of Qt. What this pins is the decision: a cap whose
+ * label contains an ampersand must not be left to the style.
+ */
+void layout_test::an_ampersand_cap_is_not_left_to_the_style() {
+	QVERIFY(bssh_key_cap::needs_own_paint(QStringLiteral("&"), QString()));
+	QVERIFY(bssh_key_cap::needs_own_paint(QStringLiteral("q"),
+	                                       QString(QChar(0x00e4))));
+
+	/*
+	 * And the ordinary caps are still the style's, which is the half
+	 * that keeps a keyboard looking like its own buttons -- and keeps
+	 * the eliding the full board's narrow keys rely on.
+	 */
+	QVERIFY(!bssh_key_cap::needs_own_paint(QStringLiteral("Enter"), QString()));
+	QVERIFY(!bssh_key_cap::needs_own_paint(QStringLiteral("g"), QString()));
+
+	/*
+	 * And the keyboard really does carry one, or the two lines above are
+	 * a rule about nothing.
+	 */
+	bool found = false;
+	for (const bssh_soft_key_group_t &group :
+	     bssh_soft_keyboard_catalog::instance().all(
+	             bssh_soft_keyboard_catalog::STYLE_COMPACT)) {
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.label == QStringLiteral("&")) found = true;
+			}
+		}
+	}
+	QVERIFY2(found, "no cap on the compact keyboard is labelled &");
+}
+
+/*
  * Every printable ASCII character is reachable on both keyboards
  * (sec 6.2).
  *

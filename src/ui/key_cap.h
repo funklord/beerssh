@@ -54,6 +54,25 @@ public:
 
 	const QString &hint() const { return m_hint; }
 
+	/*
+	 * Whether this cap has to draw its own text rather than let the
+	 * style do it.
+	 *
+	 * A second legend is the obvious reason. The other one is an
+	 * AMPERSAND: Qt reads & in a button's text as a mnemonic marker and
+	 * eats it, so the & key on the compact symbol page drew a blank cap
+	 * -- it sent the right character, it was the right size, in the
+	 * right cell, and it showed nothing at all. QPainter::drawText does
+	 * no such interpretation, so taking the custom path fixes it.
+	 *
+	 * Static and public so it can be tested. The alternative fixes were
+	 * worse: escaping to "&&" makes text() lie, which is what a screen
+	 * reader reads, and drawing EVERY cap here would lose the style's
+	 * eliding on the full board's narrow keys, where Home and PgUp
+	 * already need it.
+	 */
+	static bool needs_own_paint(const QString &text, const QString &hint);
+
 protected:
 	void paintEvent(QPaintEvent *event) override;
 

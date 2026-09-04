@@ -5,6 +5,10 @@
 
 bssh_key_cap::bssh_key_cap(QWidget *parent) : QToolButton(parent) {}
 
+bool bssh_key_cap::needs_own_paint(const QString &text, const QString &hint) {
+	return !hint.isEmpty() || text.contains(QLatin1Char('&'));
+}
+
 void bssh_key_cap::set_hint(const QString &hint) {
 	if (m_hint == hint) return;
 
@@ -24,7 +28,7 @@ void bssh_key_cap::set_hint(const QString &hint) {
 }
 
 void bssh_key_cap::paintEvent(QPaintEvent *event) {
-	if (m_hint.isEmpty()) {
+	if (!needs_own_paint(text(), m_hint)) {
 		/*
 		 * Nothing to add, so nothing is reimplemented: the overwhelming
 		 * majority of keys take the style's own drawing, and a cap with

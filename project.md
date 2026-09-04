@@ -1548,6 +1548,27 @@ right answer to the holder's question.
 
 
 
+
+**The `&` key drew a blank cap — [FIXED 2026-09-04].** Qt reads `&` in a
+button's text as a mnemonic marker and eats it, so the ampersand on the
+compact symbol page was an empty key. It sent the right character, it
+was the right size, it was in the right cell, and every test about the
+catalogue passed — because the catalogue was right. What was wrong was
+the *drawing*, and only a photograph of the phone showed it.
+
+`bssh_key_cap` already draws its own text when there is a hint, and
+`QPainter::drawText` does no mnemonic interpretation, so the fix is to
+take that path for an ampersand too. The two alternatives are worse:
+escaping to `&&` makes `text()` lie, and `text()` is what a screen
+reader reads; and drawing *every* cap here would lose the style's
+eliding, which the full board's narrow keys already depend on.
+
+Pinned through the predicate rather than through pixels —
+`bssh_key_cap::needs_own_paint` — because pixels are what `make shots`
+is for, and a unit test that rasterises a button is a test of Qt. What
+the test holds is the decision, plus the fact that the keyboard really
+does carry such a cap, or it would be a rule about nothing.
+
 **The compact keyboard could not type `+ = [ \\ ] { }` — [FIXED
 2026-09-04].** Seven printable ASCII characters unreachable at any level
 of any group, on the board a phone gets, in a program that is a shell.

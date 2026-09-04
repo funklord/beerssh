@@ -100,3 +100,15 @@ file = "src/ui/soft_keyboard_layout.cpp"
 find = "\trow.append(modifier_key(QStringLiteral(\"AltGr\"), bssh_input_router::MOD_ALTGR, 3));"
 replace = "\trow.append(modifier_key(QStringLiteral(\"Alt\"), bssh_emulator::MOD_ALT, 3));"
 expect = "a_keyboard_can_reach_every_level_it_shows"
+
+# 7. The ampersand cap goes back to the style, and draws nothing.
+#    Qt eats & in a button's text as a mnemonic marker. The key still
+#    sends the right character and sits in the right cell, so nothing
+#    about the catalogue changes -- only what a user sees, which is an
+#    empty key on the symbol page.
+[[sabotage]]
+name = "the ampersand cap is left to the style"
+file = "src/ui/key_cap.cpp"
+find = "\treturn !hint.isEmpty() || text.contains(QLatin1Char('&'));"
+replace = "\treturn !hint.isEmpty();"
+expect = "an_ampersand_cap_is_not_left_to_the_style"
