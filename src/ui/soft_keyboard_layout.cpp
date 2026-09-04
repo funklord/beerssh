@@ -282,14 +282,6 @@ bssh_key_t spacer(int span) {
 	return key;
 }
 
-bssh_key_t full_text(const QString &label, char32_t ch, int span = 4) {
-	return text_key(label, ch, span);
-}
-
-bssh_key_t full_literal(char ch, int span = 4) {
-	return literal(ch, span);
-}
-
 void append_all(QList<bssh_key_t> &row, const QList<bssh_key_t> &more) {
 	for (const bssh_key_t &key : more) row.append(key);
 }
@@ -411,7 +403,7 @@ bssh_soft_key_group_t full_main_group() {
 /*
  * A key on the numeric keypad: the character it shows, and nothing else.
  *
- * NOT full_literal(), which is what these were, and which consults the
+ * NOT literal(), which is what these were, and which consults the
  * layout. That gave every keypad key the legends belonging to the digit
  * ROW -- Shift on the keypad's 4 sent $, AltGr on its 5 sent a euro
  * sign, Shift on its . sent > -- because the layout is keyed by

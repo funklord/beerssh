@@ -1642,6 +1642,16 @@ character alone — the holder's first option — loses the annotation
 exactly where it was cheapest to keep, on the idle keyboard nobody is
 reading under pressure.
 
+
+**Only the AltGr legend is hinted, and not the Shift one.** A cap reads
+`1` with `¡` in the corner and no `!`, which looks like an omission and
+is the rule doing its job: the hint is for a level the user cannot
+discover by a gesture they already know. Everyone who has used a phone
+knows Shift relabels the keyboard, and pressing it does — `1` becomes
+`!` on every cap. Nobody arrives knowing that AltGr exists, let alone
+that it is the right Alt. Hinting both would put three glyphs on a 36dp
+key to teach one thing that needs teaching and one that does not.
+
 **The dim is alpha and not `bssh_dim()`**, which §9.3 defines as scaling
 toward black. That is right for a terminal glyph on a background this
 program owns and knows is dark; a keycap is drawn on the *desktop's*

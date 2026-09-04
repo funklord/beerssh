@@ -281,6 +281,33 @@ void bssh_ui_shots::render_touch_surfaces() {
 				shoot(name + QStringLiteral("-wide"), &keys,
 				       800, keys.sizeHint().height());
 			}
+
+			/*
+			 * And once with AltGr armed, which is the state the third
+			 * level exists for and the one no other picture shows.
+			 *
+			 * Idle, a cap reads its letter with the accented character
+			 * small and dimmed in the corner; armed, it reads the
+			 * accented character alone at full weight. That swap is a
+			 * paint rather than a string (bssh_key_cap), so a render is
+			 * the only thing that can say whether it came out legible
+			 * on a key this size -- which is sec 17's whole argument,
+			 * and the reason the elided labels were found here and not
+			 * in an assertion.
+			 */
+			if (groups.at(g).id.contains(QStringLiteral("letters"))
+			    || groups.at(g).id.contains(QStringLiteral("main"))) {
+				key_router.cycle_modifier(bssh_input_router::MOD_ALTGR);
+				shoot(name + QStringLiteral("-altgr"), &keys,
+				       which.style == bssh_soft_keyboard_catalog::STYLE_FULL
+				               ? 800
+				               : BSSH_PHONE_W,
+				       keys.sizeHint().height());
+
+				/* Armed, locked, off: leave the router as it was found. */
+				key_router.cycle_modifier(bssh_input_router::MOD_ALTGR);
+				key_router.cycle_modifier(bssh_input_router::MOD_ALTGR);
+			}
 		}
 	}
 

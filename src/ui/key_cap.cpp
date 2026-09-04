@@ -73,9 +73,14 @@ void bssh_key_cap::paintEvent(QPaintEvent *event) {
 	 * blends toward whatever is actually behind, so it means the same
 	 * thing in both directions. harmonization.md records the general
 	 * form: a colour meeting a ground the program did not choose.
+	 *
+	 * The group is not named either. initStyleOption() has already set
+	 * the palette's current group from the widget's state, so asking for
+	 * ButtonText plainly gives the disabled colour when disabled and the
+	 * inactive one when the window is not focused -- where naming Active
+	 * or Disabled by hand would have got two of those three right.
 	 */
-	QColor ink = option.palette.color(isEnabled() ? QPalette::Active : QPalette::Disabled,
-	                                   QPalette::ButtonText);
+	QColor ink = option.palette.color(QPalette::ButtonText);
 	QColor faded = ink;
 	faded.setAlphaF(0.55);
 
