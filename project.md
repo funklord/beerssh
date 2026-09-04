@@ -1600,6 +1600,30 @@ the same second and third legends from the same one table. A character
 that sits at no slot's level 1, such as the `?` on that page, has none,
 which is what it had before.
 
+
+**A keypad key sends its digit and nothing else — [FIXED 2026-09-04].**
+It did not. Every key on the numeric keypad was built with the helper
+that consults the layout, and the layout is keyed by character, so the
+keypad inherited the *digit row's* legends: Shift on its `4` sent `$`,
+AltGr on its `5` sent `€`, Shift on its `.` sent `>`. A real keypad with
+NumLock on sends its digit, and KP7 is KP7 in every language — which is
+also why the keypad gets no slot.
+
+**The one correct key in the group was an accident.** The double-width
+`0` had been built with a different helper because of its width, so it
+alone behaved, and the group disagreed with itself for as long as nobody
+compared its members. `keypad_key()` is that helper for all fifteen now.
+
+**It was found by a test written for something else**, which is worth
+recording as a method rather than as luck. `both_keyboards_read_one_layout`
+hashes keys by the character they send, so the keypad's `0` and the digit
+row's `0` collided and it failed on `) != nothing`. The first reading was
+that the test was wrong — it was, and scoping it to the main block was
+right — but the collision it tripped over was a real fault underneath.
+Reading a failure before deciding the test is at fault is what separated
+the two, and the composed-catalogue dump showed the fix touching exactly
+13 keys and nothing else.
+
 **The annotation shows one prominent legend, always the one that will be
 sent — [DECIDED 2026-09-04].** The holder asked whether to show only the
 active character while a modifier is held, or to show every legend and

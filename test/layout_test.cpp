@@ -919,6 +919,47 @@ void layout_test::both_keyboards_read_one_layout() {
 }
 
 /*
+ * A keypad key sends its digit and nothing else (sec 6.2).
+ *
+ * It did not. Every key on the numeric keypad was built with the helper
+ * that consults the layout, and the layout is keyed by character -- so
+ * the keypad inherited the DIGIT ROW's legends: Shift on its 4 sent $,
+ * AltGr on its 5 sent a euro sign, Shift on its . sent >. A real keypad
+ * with NumLock on sends its digit, and that is all.
+ *
+ * The double-width 0 was the one key in the group that behaved, purely
+ * because its width made somebody reach for a different helper. So the
+ * group disagreed with itself and the correct member was the accident.
+ */
+void layout_test::a_keypad_key_sends_only_its_digit() {
+	int checked = 0;
+
+	for (const bssh_soft_key_group_t &group :
+	     bssh_soft_keyboard_catalog::instance().all(
+	             bssh_soft_keyboard_catalog::STYLE_FULL)) {
+		if (!group.id.contains(QStringLiteral("keypad"))) continue;
+
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind != bssh_key_t::TEXT) continue;
+
+				const QString where = QStringLiteral("keypad %1").arg(key.label);
+				QVERIFY2(key.shifted_value == 0, qPrintable(where));
+				QVERIFY2(key.altgr_value == 0, qPrintable(where));
+				QVERIFY2(key.shift_altgr_value == 0, qPrintable(where));
+				++checked;
+			}
+		}
+	}
+
+	/*
+	 * And it looked at the keypad rather than at an empty list -- the
+	 * assertion above is satisfied by a group with no keys in it.
+	 */
+	QVERIFY2(checked >= 15, qPrintable(QStringLiteral("checked %1 keys").arg(checked)));
+}
+
+/*
  * Every slot the geometry names is one the layout has.
  *
  * slot_key() cannot fail loudly at build time -- it is handed a string --

@@ -408,6 +408,32 @@ bssh_soft_key_group_t full_main_group() {
  * its keys bigger than the letters', which is the one thing a keyboard
  * shaped like a keyboard must not do.
  */
+/*
+ * A key on the numeric keypad: the character it shows, and nothing else.
+ *
+ * NOT full_literal(), which is what these were, and which consults the
+ * layout. That gave every keypad key the legends belonging to the digit
+ * ROW -- Shift on the keypad's 4 sent $, AltGr on its 5 sent a euro
+ * sign, Shift on its . sent > -- because the layout is keyed by
+ * character and a 4 is a 4 wherever it happens to be drawn.
+ *
+ * A real keypad does none of that: with NumLock on it sends its digit
+ * and nothing else. That is also why the keypad gets no slot -- KP7 is
+ * KP7 in every language, and a national layout moves the letters above
+ * it rather than the digits on it.
+ *
+ * The fault was visible from inside the group and nobody was looking:
+ * the double-width 0 was built with a different helper and was therefore
+ * the ONE key here that behaved correctly. What found it was a test
+ * comparing the two keyboards, which collapsed that 0 with the digit
+ * row's and failed on the disagreement -- a fault surfacing through a
+ * test written for something else, which is the argument for reading a
+ * failure before assuming the test is at fault.
+ */
+bssh_key_t keypad_key(const QString &label, char32_t ch, int span = BSSH_FULL_UNIT) {
+	return text_key(label, ch, span);
+}
+
 bssh_soft_key_group_t full_keypad_group() {
 	bssh_soft_key_group_t group;
 	group.id = QStringLiteral("full-keypad");
@@ -436,9 +462,9 @@ bssh_soft_key_group_t full_keypad_group() {
 	top.append(spacer(nav));
 	top.append(spacer(gap));
 	top.append(spacer(BSSH_FULL_UNIT));
-	top.append(full_literal('/'));
-	top.append(full_literal('*'));
-	top.append(full_literal('-'));
+	top.append(keypad_key(QStringLiteral("/"), U'/'));
+	top.append(keypad_key(QStringLiteral("*"), U'*'));
+	top.append(keypad_key(QStringLiteral("-"), U'-'));
 	top.append(spacer(trailing));
 	group.rows.append(top);
 
@@ -447,10 +473,10 @@ bssh_soft_key_group_t full_keypad_group() {
 	r1.append(named_key(QStringLiteral("Home"), bssh_emulator::KEY_HOME, BSSH_FULL_UNIT));
 	r1.append(named_key(QStringLiteral("PgUp"), bssh_emulator::KEY_PAGE_UP, BSSH_FULL_UNIT));
 	r1.append(spacer(gap));
-	r1.append(full_literal('7'));
-	r1.append(full_literal('8'));
-	r1.append(full_literal('9'));
-	r1.append(full_literal('+'));
+	r1.append(keypad_key(QStringLiteral("7"), U'7'));
+	r1.append(keypad_key(QStringLiteral("8"), U'8'));
+	r1.append(keypad_key(QStringLiteral("9"), U'9'));
+	r1.append(keypad_key(QStringLiteral("+"), U'+'));
 	r1.append(spacer(trailing));
 	group.rows.append(r1);
 
@@ -459,9 +485,9 @@ bssh_soft_key_group_t full_keypad_group() {
 	r2.append(named_key(QStringLiteral("End"), bssh_emulator::KEY_END, BSSH_FULL_UNIT));
 	r2.append(named_key(QStringLiteral("PgDn"), bssh_emulator::KEY_PAGE_DOWN, BSSH_FULL_UNIT));
 	r2.append(spacer(gap));
-	r2.append(full_literal('4'));
-	r2.append(full_literal('5'));
-	r2.append(full_literal('6'));
+	r2.append(keypad_key(QStringLiteral("4"), U'4'));
+	r2.append(keypad_key(QStringLiteral("5"), U'5'));
+	r2.append(keypad_key(QStringLiteral("6"), U'6'));
 	r2.append(spacer(BSSH_FULL_UNIT));
 	r2.append(spacer(trailing));
 	group.rows.append(r2);
@@ -471,9 +497,9 @@ bssh_soft_key_group_t full_keypad_group() {
 	r3.append(named_key(QStringLiteral("Up"), bssh_emulator::KEY_UP, BSSH_FULL_UNIT));
 	r3.append(spacer(BSSH_FULL_UNIT));
 	r3.append(spacer(gap));
-	r3.append(full_literal('1'));
-	r3.append(full_literal('2'));
-	r3.append(full_literal('3'));
+	r3.append(keypad_key(QStringLiteral("1"), U'1'));
+	r3.append(keypad_key(QStringLiteral("2"), U'2'));
+	r3.append(keypad_key(QStringLiteral("3"), U'3'));
 	r3.append(named_key(QStringLiteral("Ent"), bssh_emulator::KEY_ENTER, BSSH_FULL_UNIT));
 	r3.append(spacer(trailing));
 	group.rows.append(r3);
@@ -483,8 +509,8 @@ bssh_soft_key_group_t full_keypad_group() {
 	r4.append(named_key(QStringLiteral("Down"), bssh_emulator::KEY_DOWN, BSSH_FULL_UNIT));
 	r4.append(named_key(QStringLiteral("Right"), bssh_emulator::KEY_RIGHT, BSSH_FULL_UNIT));
 	r4.append(spacer(gap));
-	r4.append(full_text(QStringLiteral("0"), U'0', 2 * BSSH_FULL_UNIT));
-	r4.append(full_literal('.'));
+	r4.append(keypad_key(QStringLiteral("0"), U'0', 2 * BSSH_FULL_UNIT));
+	r4.append(keypad_key(QStringLiteral("."), U'.'));
 	r4.append(spacer(BSSH_FULL_UNIT));
 	r4.append(spacer(trailing));
 	group.rows.append(r4);

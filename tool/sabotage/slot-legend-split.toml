@@ -56,3 +56,15 @@ find = '''	setAccessibleDescription(m_hint.isEmpty()
 	                                 : QStringLiteral("AltGr: %1").arg(m_hint));'''
 replace = "\t/* nothing */"
 expect = "the_altgr_legend_is_shown_and_then_stands_aside"
+
+# 5. The keypad goes back to consulting the layout.
+#    This is the state it shipped in: a keypad key built with the helper
+#    that reads the layout table, so Shift on the keypad's 4 sends $ and
+#    AltGr on its 5 sends a euro sign. Nothing looks wrong -- the keys
+#    are in the right places and send the right digits unmodified.
+[[sabotage]]
+name = "the keypad inherits the digit row's legends"
+file = "src/ui/soft_keyboard_layout.cpp"
+find = "\tr2.append(keypad_key(QStringLiteral(\"4\"), U'4'));"
+replace = "\tr2.append(full_literal('4'));"
+expect = "a_keypad_key_sends_only_its_digit"
