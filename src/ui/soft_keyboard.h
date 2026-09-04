@@ -126,8 +126,15 @@ private:
 	QList<quint8> m_modifier_values;
 
 	/* Buttons whose label follows Shift; see refresh_letter_labels. */
+	/*
+	 * The keys that CHANGE under Shift, and what each becomes. Parallel
+	 * lists rather than a struct because they are filled and read in one
+	 * place each; the second legend is zero for a letter, which takes its
+	 * capital instead (bssh_shifted_char).
+	 */
 	QList<QAbstractButton *> m_letter_buttons;
 	QList<char32_t> m_letter_values;
+	QList<char32_t> m_letter_shifted;
 };
 
 #endif /* BSSH_SOFT_KEYBOARD_H */

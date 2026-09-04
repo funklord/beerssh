@@ -1346,6 +1346,56 @@ up, a strip of modifiers has nothing to modify.
   written down.
 
 
+**Shift was `toUpper()`, and that left 21 characters unreachable —
+[FIXED 2026-09-04].** Reported from a device as *"the full keyb isn't
+full"*, which was exact:
+
+    ~ ! @ # $ % ^ & * ( ) _ + { } | : " < > ?
+
+No pipe, no `~`, no `$`, no `:`. In a terminal that is not a gap in the
+keyboard, it is most of a shell.
+
+**The cause is a model, not a typo, and the code said so in its own
+comment**: *"A digit or a bracket has no capital to become, and
+`QChar::toUpper` would leave it alone anyway."* True of `toUpper` and
+false of a keyboard. Shift does not uppercase anything — it picks **the
+other legend printed on the keycap**, and which character that is was
+settled by a layout standard rather than by arithmetic. So `bssh_key_t`
+carries a second value and the full keyboard's number row and punctuation
+are given their ANSI twins from a table. Letters keep `toUpper`, because
+for letters that genuinely IS the rule.
+
+**The compact keyboard hid it.** Its symbols live on the `123` page as
+separate keys, so Shift doing nothing there was invisible; the full board
+has a real number row, which is what exposed it. A defect present in both
+was only reachable through the surface built second.
+
+**The label and the character come from one function**
+(`bssh_shifted_char`), because a keycap that disagrees with its output is
+worse than one that never relabels: the user learns the wrong thing and
+keeps using it. And every key that CHANGES under Shift now relabels, where
+before only letters did — which is precisely why nobody noticed the digits
+were inert.
+
+**Held by a test that walks the catalogue rather than pressing keys**, and
+its first version was wrong in this document's favourite way: it keyed a
+map by the plain character, so the numpad's `0` overwrote the number row's
+`0` and it reported `)` unreachable. The numpad `0` is correctly twinless
+— a real one is Insert. Two distinct keys carry the same character and
+only one is shifted, so the question is *does SOME key produce this*,
+which is also what a user means by "can I type it".
+
+**And the fallback was silent — [FIXED 2026-09-04].** Choosing the
+full-size keyboard on a folded phone did nothing visible, and was reported
+as *"the choice doesn't work on a small screen"*, which from where the
+user stood is what it was. The setting page now says so when the two
+differ, asking `bssh_keyboard_style_for()` rather than repeating the
+threshold, and re-asking on resize so that unfolding does not leave a
+stale *"too narrow"* beside a keyboard that is no longer falling back.
+**A setting that is quietly overruled is worse than one that is refused,
+because there is nothing to argue with.**
+
+
 **A configuration key and a hide key, and one tap to undo the hide —
 [BUILT 2026-09-04]**, asked for by the copyright holder after using the
 full keyboard on a device.

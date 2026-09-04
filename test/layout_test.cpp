@@ -854,6 +854,80 @@ struct registry_left_as_found_t {
 } /* namespace */
 
 /*
+ * Shift picks the OTHER LEGEND, not the capital.
+ *
+ * This is the defect a device found and no test could: Shift was
+ * QChar::toUpper(), which is right for letters and does nothing at all to
+ * a digit or a bracket -- so on the full-size board's real number row,
+ * 21 characters were unreachable. In a terminal that is the pipe, the
+ * home directory and most of a shell's punctuation, which is why the
+ * report was "the full keyb isn't full".
+ *
+ * Asserted over the catalogue rather than by clicking, because the claim
+ * is about EVERY key on the keyboard and a test that pressed a few would
+ * be back to sampling. The list below is US ANSI's, written out rather
+ * than computed, since there is no rule to compute -- which is the whole
+ * reason toUpper was the wrong model.
+ */
+void layout_test::shift_reaches_every_character_a_real_keyboard_has() {
+	struct pair_t { char plain; char shifted; };
+	const pair_t ansi[] = {
+		{'`','~'}, {'1','!'}, {'2','@'}, {'3','#'}, {'4','$'}, {'5','%'},
+		{'6','^'}, {'7','&'}, {'8','*'}, {'9','('}, {'0',')'}, {'-','_'},
+		{'=','+'}, {'[','{'}, {']','}'}, {'\\','|'}, {';',':'}, {'\'','"'},
+		{',','<'}, {'.','>'}, {'/','?'}
+	};
+
+	/*
+	 * What the keyboard can PRODUCE, over every key -- not a map keyed by
+	 * the plain character.
+	 *
+	 * Keyed that way the numpad's 0 overwrote the number row's 0 and the
+	 * test reported ")" unreachable, which was the test's error and not
+	 * the keyboard's: a real numpad 0 is Insert and correctly has no
+	 * second legend. Two distinct keys carry the same plain character and
+	 * only one of them is shifted, so the question is "does SOME key
+	 * produce this", which is also what a user means by "can I type it".
+	 */
+	QSet<char32_t> producible;
+	const QList<bssh_soft_key_group_t> &full =
+	        bssh_soft_keyboard_catalog::instance().all(
+	                bssh_soft_keyboard_catalog::STYLE_FULL);
+	for (const bssh_soft_key_group_t &group : full) {
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind != bssh_key_t::TEXT) continue;
+				producible.insert(bssh_shifted_char(char32_t(key.value),
+				                                     char32_t(key.shifted_value),
+				                                     true).unicode());
+			}
+		}
+	}
+
+	QStringList unreachable;
+	for (const pair_t &p : ansi) {
+		if (!producible.contains(char32_t(p.shifted))) {
+			unreachable << QStringLiteral("%1 (shift+%2)")
+			        .arg(QChar(p.shifted)).arg(QChar(p.plain));
+		}
+	}
+	QVERIFY2(unreachable.isEmpty(),
+	          qPrintable(QStringLiteral("unreachable: %1").arg(unreachable.join(QStringLiteral(", ")))));
+
+	/* And a letter still takes its capital, which IS the rule for letters. */
+	QCOMPARE(bssh_shifted_char(U'a', 0, true), QChar('A'));
+	QCOMPARE(bssh_shifted_char(U'a', 0, false), QChar('a'));
+
+	/*
+	 * The keycap and the character come from one function, so a key
+	 * cannot show one thing and send another. Asserted by asking the same
+	 * question the widget asks for its label.
+	 */
+	QCOMPARE(bssh_shifted_char(U'1', U'!', true), QChar('!'));
+	QCOMPARE(bssh_shifted_char(U'1', U'!', false), QChar('1'));
+}
+
+/*
  * The keyboard's own two keys, and the way back (sec 6.2).
  *
  * Driven through the window rather than the widget, because every part of

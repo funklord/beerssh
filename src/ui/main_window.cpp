@@ -745,7 +745,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 	/*
 	 * Cfg goes to the same page the front door's menu opens, rather than
-	 * a second settings surface -- sec 10 records what two front doors to
+	 * a second settings surface -- sec 14's M10 records what two front doors to
 	 * one setting cost when only one of them was kept in step.
 	 *
 	 * On a desktop there is no touch front door and no page stack, so
@@ -1331,7 +1331,7 @@ void bssh_main_window::apply_keyboard_choice() {
 	 * are two built-in keyboards now (compact and full-size), and a test
 	 * for one of them would leave the other drawn as nothing while the
 	 * system panel stayed declined -- a phone with no keyboard at all.
-	 * sec 10 records the same shape for preset fields, where a setting
+	 * sec 14's M10 records the same shape for preset fields, where a setting
 	 * reached the first consumer anybody thought of and not the second.
 	 */
 	const bool built_in = settings.keyboard() != bssh_app_settings::KEYBOARD_SYSTEM;

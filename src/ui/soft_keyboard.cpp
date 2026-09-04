@@ -213,18 +213,23 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 		const char32_t ch = char32_t(key.value);
 
 		/*
-		 * Only letters follow Shift. A digit or a bracket has no capital
-		 * to become, and QChar::toUpper would leave it alone anyway --
-		 * but listing them here would put them in the relabelling loop,
-		 * where a key whose label never changes is a key that looks like
-		 * it might.
+		 * Every key that CHANGES under Shift goes in the relabelling
+		 * list: letters, which become capitals, and anything carrying a
+		 * second legend -- 1 becoming !, / becoming ?.
+		 *
+		 * This used to hold letters only, on the reasoning that "a digit
+		 * or a bracket has no capital to become". True of toUpper and
+		 * false of a keyboard, and on the full-size board's real number
+		 * row it left 21 characters unreachable.
 		 */
-		if (QChar::isLetter(uint(ch))) {
+		if (QChar::isLetter(uint(ch)) || key.shifted_value != 0) {
 			m_letter_buttons.append(button);
 			m_letter_values.append(ch);
+			m_letter_shifted.append(char32_t(key.shifted_value));
 		}
 
-		connect(button, &QAbstractButton::clicked, this, [this, ch] {
+		const char32_t twin = char32_t(key.shifted_value);
+		connect(button, &QAbstractButton::clicked, this, [this, ch, twin] {
 			if (!m_router) return;
 
 			/*
@@ -238,8 +243,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 			        m_router->modifier_state(bssh_emulator::MOD_SHIFT)
 			                != bssh_input_router::MODIFIER_OFF;
 
-			const QChar out = shifted ? QChar(uint(ch)).toUpper() : QChar(uint(ch));
-			m_router->send_text(QString(out));
+			m_router->send_text(QString(bssh_shifted_char(ch, twin, shifted)));
 			refresh_letter_labels();
 		});
 		break;
@@ -270,6 +274,7 @@ void bssh_soft_keyboard::rebuild() {
 	m_modifier_values.clear();
 	m_letter_buttons.clear();
 	m_letter_values.clear();
+	m_letter_shifted.clear();
 
 	while (QLayoutItem *item = m_grid->takeAt(0)) {
 		delete item->widget();
@@ -350,9 +355,10 @@ void bssh_soft_keyboard::refresh_letter_labels() {
 	                != bssh_input_router::MODIFIER_OFF;
 
 	for (int i = 0; i < m_letter_buttons.size(); ++i) {
-		const QChar ch(uint(m_letter_values.at(i)));
-		m_letter_buttons.at(i)->setText(shifted ? QString(ch.toUpper())
-		                                         : QString(ch));
+		const char32_t plain = m_letter_values.at(i);
+		const char32_t twin = m_letter_shifted.at(i);
+		m_letter_buttons.at(i)->setText(
+		        QString(bssh_shifted_char(plain, twin, shifted)));
 	}
 }
 

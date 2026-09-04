@@ -4,6 +4,39 @@
 
 namespace {
 
+/*
+ * The other legend on each key, US ANSI. A table rather than a rule,
+ * because there is no rule: Shift picks the character printed on the top
+ * half of the keycap, and which character that is was decided by a layout
+ * standard, not by arithmetic.
+ */
+char32_t shifted_twin(char32_t plain) {
+	switch (plain) {
+	case U'`': return U'~';
+	case U'1': return U'!';
+	case U'2': return U'@';
+	case U'3': return U'#';
+	case U'4': return U'$';
+	case U'5': return U'%';
+	case U'6': return U'^';
+	case U'7': return U'&';
+	case U'8': return U'*';
+	case U'9': return U'(';
+	case U'0': return U')';
+	case U'-': return U'_';
+	case U'=': return U'+';
+	case U'[': return U'{';
+	case U']': return U'}';
+	case U'\\': return U'|';
+	case U';': return U':';
+	case U'\'': return U'"';
+	case U',': return U'<';
+	case U'.': return U'>';
+	case U'/': return U'?';
+	default:  return 0;
+	}
+}
+
 bssh_key_t text_key(const QString &label, char32_t ch, int span = 2) {
 	bssh_key_t key;
 	key.kind = bssh_key_t::TEXT;
@@ -13,9 +46,11 @@ bssh_key_t text_key(const QString &label, char32_t ch, int span = 2) {
 	return key;
 }
 
-/* A character whose label IS what it sends. */
+/* A character whose label IS what it sends, and its second legend. */
 bssh_key_t literal(char ch) {
-	return text_key(QString(QLatin1Char(ch)), char32_t(ch));
+	bssh_key_t key = text_key(QString(QLatin1Char(ch)), char32_t(ch));
+	key.shifted_value = int(shifted_twin(char32_t(ch)));
+	return key;
 }
 
 bssh_key_t named_key(const QString &label, int code, int span = 2) {
@@ -76,6 +111,7 @@ QList<bssh_key_t> literal_row(const char *characters) {
  * real keyboard is that hands already know where its keys are.
  */
 
+
 const int BSSH_FULL_UNIT = 4;                /* one key, in quarter columns */
 const int BSSH_FULL_COLUMNS = 15 * BSSH_FULL_UNIT;
 
@@ -91,7 +127,9 @@ bssh_key_t full_text(const QString &label, char32_t ch, int span = 4) {
 }
 
 bssh_key_t full_literal(char ch, int span = 4) {
-	return text_key(QString(QLatin1Char(ch)), char32_t(ch), span);
+	bssh_key_t key = text_key(QString(QLatin1Char(ch)), char32_t(ch), span);
+	key.shifted_value = int(shifted_twin(char32_t(ch)));
+	return key;
 }
 
 QList<bssh_key_t> full_literal_run(const char *characters) {
@@ -476,4 +514,10 @@ bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
 		return bssh_soft_keyboard_catalog::STYLE_COMPACT;
 	}
 	return wanted;
+}
+
+QChar bssh_shifted_char(char32_t plain, char32_t twin, bool shifted) {
+	if (!shifted) return QChar(uint(plain));
+	if (twin != 0) return QChar(uint(twin));
+	return QChar(uint(plain)).toUpper();
 }

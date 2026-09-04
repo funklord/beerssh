@@ -83,6 +83,24 @@ struct bssh_key_t {
 	/* A bssh_emulator key code, a modifier mask, or a codepoint,
 	 * depending on kind. CHORD uses both value and modifier. */
 	int value;
+
+	/*
+	 * What this key sends WITH SHIFT, when that is not simply the capital
+	 * of what it sends without.
+	 *
+	 * A keycap carries two legends and Shift picks the other one. Modelling
+	 * it as QChar::toUpper() instead is right for letters and silently
+	 * wrong for everything else -- toUpper('1') is '1', so on a keyboard
+	 * with a real number row that left 21 characters unreachable:
+	 * ~ ! @ # $ % ^ & * ( ) _ + { } | : " < > ? -- which in a terminal is
+	 * the pipe, the home directory and most of a shell's punctuation.
+	 * Reported from a device with "the full keyb isn't full", which was
+	 * exact.
+	 *
+	 * Zero means "no second legend": a letter takes toUpper, and a key
+	 * with nothing different to send is left alone.
+	 */
+	int shifted_value;
 	quint8 modifier;
 
 	/*
@@ -96,7 +114,7 @@ struct bssh_key_t {
 	 */
 	int span;
 
-	bssh_key_t() : kind(KEY), value(0), modifier(0), span(1) {}
+	bssh_key_t() : kind(KEY), value(0), shifted_value(0), modifier(0), span(1) {}
 };
 
 struct bssh_key_row_layout_t {

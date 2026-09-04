@@ -40,6 +40,7 @@ private slots:
 	void every_touch_surface_fits_a_phone();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
+	void shift_reaches_every_character_a_real_keyboard_has();
 	void the_hide_key_is_remembered_and_a_tap_undoes_it();
 	void the_keyboard_config_key_opens_the_settings_page();
 	void every_keyboard_group_is_the_same_shape();

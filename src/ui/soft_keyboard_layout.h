@@ -137,7 +137,7 @@ public:
 	 *
 	 * A default argument is a way of not asking the question. Requiring
 	 * it makes the compiler find every consumer, which is the only form
-	 * of "every consumer has it" that cannot rot -- sec 10 records the
+	 * of "every consumer has it" that cannot rot -- sec 14's M10 records the
 	 * same lesson for preset fields, where counting them by hand was what
 	 * failed.
 	 */
@@ -168,9 +168,9 @@ private:
 /*
  * The narrowest window the full-size keyboard is drawn in, in dp.
  *
- * sec 8.2's MEDIUM boundary, reused rather than a second number invented
+ * sec 8.1's MEDIUM boundary, reused rather than a second number invented
  * beside it: a tree with two width thresholds has two things to keep in
- * step, and this one is asking the same question sec 8.2 asks -- is there
+ * step, and this one is asking the same question sec 8.1 asks -- is there
  * room to do the roomy thing.
  *
  * It is a compromise and the measurement says so. 15u of keyboard plus the
@@ -180,7 +180,7 @@ private:
  *     360dp  ordinary phone         22dp   no
  *     600dp  this threshold         36dp   usable, under sec 6.2's 48dp
  *     680dp  Fold inner screen      41dp   usable
- *     840dp  sec 8.2's EXPANDED     51dp   meets 48dp
+ *     840dp  sec 8.1's EXPANDED     51dp   meets 48dp
  *
  * Nothing below 600 is defensible. Above it, the honest 48dp answer is
  * about 770dp -- which would exclude a folding phone's inner screen, the
@@ -200,6 +200,19 @@ const int BSSH_FULL_KEYBOARD_MIN_DP = 600;
  * unfolds to the full one, the way sec 8.2 collapses splits to tabs and
  * restores them, with the intent remembered rather than overwritten.
  */
+/*
+ * What a key sends, or shows, given Shift.
+ *
+ * One function for both, because the button's LABEL and the character it
+ * SENDS are the same question asked twice, and a keyboard whose keycap
+ * disagrees with its output is worse than one that does not relabel at
+ * all -- the user learns the wrong thing and keeps using it.
+ *
+ * `twin` is the key's second legend, zero where it has none. Unshifted, or
+ * with no twin and no capital, a key sends what it shows.
+ */
+QChar bssh_shifted_char(char32_t plain, char32_t twin, bool shifted);
+
 bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
         bssh_soft_keyboard_catalog::style_t wanted, int width_dp);
 

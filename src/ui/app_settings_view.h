@@ -3,6 +3,8 @@
 
 #include <QWidget>
 
+class QResizeEvent;
+
 #include <functional>
 
 #include "model/app_settings.h"
@@ -37,6 +39,12 @@ signals:
 	/* Touch layout only: the page is done and the caller should go back. */
 	void back_requested();
 
+protected:
+	void resizeEvent(QResizeEvent *event) override;
+
+private slots:
+	void refresh_keyboard_fallback();
+
 private:
 	/*
 	 * Writes ONE setting and tells the window.
@@ -58,6 +66,7 @@ private:
 
 	QComboBox *m_key_row;
 	QComboBox *m_keyboard;
+	QLabel *m_keyboard_fallback;
 	QComboBox *m_theme;
 	QComboBox *m_scrollbar;
 	QComboBox *m_status_line;

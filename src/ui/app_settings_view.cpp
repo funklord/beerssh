@@ -1,6 +1,8 @@
 #include "ui/touch_metrics.h"
 #include "ui/app_settings_view.h"
 
+#include "ui/soft_keyboard_layout.h"
+
 #include <QCheckBox>
 #include <QHBoxLayout>
 #include <QSlider>
@@ -106,6 +108,27 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "comes up at all, or where you would rather have the terminal "
 	                        "keys on the keyboard itself."), this);
 	form->addRow(keyboard_note);
+
+	/*
+	 * What the choice will ACTUALLY give on this screen.
+	 *
+	 * The full-size keyboard needs about 600dp and falls back to the
+	 * compact one below that (sec 6.2). Silently: the holder chose it on
+	 * a folded phone, nothing changed, and reported it as "the choice
+	 * doesn't work on a small screen" -- which from where they were
+	 * standing is exactly what it was. A setting that is quietly
+	 * overruled is worse than one that is refused, because there is
+	 * nothing to argue with.
+	 *
+	 * Shown only when the two differ, so the row is silent in the case
+	 * where it would be saying nothing.
+	 */
+	m_keyboard_fallback = bssh_wrapped_note(QString(), this);
+	form->addRow(m_keyboard_fallback);
+	m_keyboard_fallback->hide();
+
+	connect(m_keyboard, QOverload<int>::of(&QComboBox::currentIndexChanged),
+	         this, &bssh_app_settings_view::refresh_keyboard_fallback);
 
 	/*
 	 * Directly under the control it explains, not at the foot of the
@@ -711,4 +734,47 @@ void bssh_app_settings_view::commit(const std::function<void(bssh_app_settings &
 	 */
 	bssh_theme::apply(bssh_theme::from_text(stored.theme()));
 	emit changed();
+}
+
+/*
+ * The fallback note, kept in step with the choice and with the width.
+ *
+ * Asks bssh_keyboard_style_for() rather than repeating its threshold: a
+ * second copy of that number would be a second thing to be wrong, and the
+ * one that decides what is DRAWN is the one that must be reported.
+ */
+void bssh_app_settings_view::refresh_keyboard_fallback() {
+	if (!m_keyboard || !m_keyboard_fallback) return;
+
+	const bssh_app_settings::keyboard_t chosen =
+	        bssh_app_settings::keyboard_t(m_keyboard->currentData().toInt());
+	if (chosen != bssh_app_settings::KEYBOARD_BUILT_IN_FULL) {
+		m_keyboard_fallback->hide();
+		return;
+	}
+
+	const bssh_soft_keyboard_catalog::style_t drawn =
+	        bssh_keyboard_style_for(bssh_soft_keyboard_catalog::STYLE_FULL, width());
+	if (drawn == bssh_soft_keyboard_catalog::STYLE_FULL) {
+		m_keyboard_fallback->hide();
+		return;
+	}
+
+	m_keyboard_fallback->setText(QStringLiteral(
+	        "This screen is too narrow for the full-size keyboard, so the compact "
+	        "one is shown here. Unfold or rotate to a wider screen and the "
+	        "full-size keyboard appears; the choice is kept either way."));
+	m_keyboard_fallback->show();
+}
+
+/*
+ * The note is a function of the choice AND the width, so a resize has to
+ * re-ask it. Without this, unfolding a phone leaves "this screen is too
+ * narrow" on screen next to a keyboard that is no longer falling back --
+ * a stale explanation being worse than none, since it describes a state
+ * the user can see is not true.
+ */
+void bssh_app_settings_view::resizeEvent(QResizeEvent *event) {
+	QWidget::resizeEvent(event);
+	refresh_keyboard_fallback();
 }
