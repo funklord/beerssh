@@ -1301,8 +1301,27 @@ void profile_store_test::remembering_a_password_writes_the_secret_and_the_flag()
 	                                        QStringLiteral("bastion.example")));
 	QVERIFY(id != 0);
 
+	/*
+	 * ERASED rather than asserted empty, and the difference is a CI
+	 * failure this cost.
+	 *
+	 * The store is process-wide and ids restart at 1 in every temporary
+	 * directory, so every test here reaches for the same key. Asserting
+	 * it starts empty makes this test's precondition a claim about every
+	 * test that ran before it -- and which those are is not fixed: the
+	 * two sweep tests that leave a secret behind SKIP on a desktop, where
+	 * a libsecret store cannot be locked, and RUN in the CI container,
+	 * where the file store can. Green here, red there, for a reason that
+	 * has nothing to do with what either test is about.
+	 *
+	 * Erasing first says the thing actually meant: whatever the store
+	 * held, what is under this key afterwards was put there by the call
+	 * below.
+	 */
 	const QString key = bssh_profile_password_key(id);
-	QVERIFY2(secrets->load(key).isEmpty(), "the key must start empty");
+	secrets->erase(key);
+	QVERIFY2(secrets->load(key).isEmpty(),
+	          "the key must start empty, or what follows proves nothing");
 
 	QCOMPARE(bssh_remember_profile_password(id, QStringLiteral("hunter2"), &store),
 	          BSSH_REMEMBER_SAVED);
@@ -1330,7 +1349,10 @@ void profile_store_test::a_password_whose_flag_cannot_be_written_is_taken_back()
 	const int id = store.save(make_profile(QStringLiteral("flagless"),
 	                                        QStringLiteral("flagless.example")));
 	QVERIFY(id != 0);
+
+	/* Cleared first, for the reason the success test above gives. */
 	const QString key = bssh_profile_password_key(id);
+	secrets->erase(key);
 
 	/*
 	 * The hosts file cannot be written from here; the credential store
@@ -1397,9 +1419,13 @@ void profile_store_test::a_host_deleted_while_its_session_lived_gets_no_credenti
 	 * first and looking for the row second would leave a credential under
 	 * an id with no row behind it.
 	 */
+	/* Cleared first, for the reason the success test above gives. */
+	const QString key = bssh_profile_password_key(id);
+	secrets->erase(key);
+
 	QCOMPARE(bssh_remember_profile_password(id, QStringLiteral("hunter2"), &store),
 	          BSSH_REMEMBER_NO_HOST);
-	QVERIFY2(secrets->load(bssh_profile_password_key(id)).isEmpty(),
+	QVERIFY2(secrets->load(key).isEmpty(),
 	          "a host that is gone must not acquire a credential");
 }
 
