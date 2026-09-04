@@ -285,7 +285,17 @@ ifdef SANITIZE
                     QMAKE_LFLAGS+=-fsanitize=address,undefined
 endif
 
-all: $(TARGET) $(MAN_PAGE)
+# What a plain `make` puts in the tree, named ONCE.
+#
+# `all` builds this list and `clean` removes it, from the same variable,
+# so the two cannot drift apart. That is the whole fix rather than the
+# missing line it replaces: a clean must always cause a rebuild -- that
+# is what it is for -- and it can only promise that if it removes
+# everything the default build produces. Adding a product to `all` now
+# makes clean remove it, without anybody remembering to.
+ARTIFACTS = $(TARGET) $(MAN_PAGE)
+
+all: $(ARTIFACTS)
 
 # The shared Android vocabulary: android, android-aab, android-install,
 # android-run, android-log, android-uninstall, android-check, and every
@@ -1145,8 +1155,22 @@ uninstall:
 
 # clean removes intermediates only; $(TARGET) survives, matching the split
 # every Makefile in the sibling tree uses.
+# A clean always causes a rebuild. That is what it is for.
+#
+# It did not. $(TARGET) was missing from the list, so `make clean && make`
+# built a man page and nothing else: the binary at the root is a COPY of
+# $(BUILD_DIR)/$(TARGET) whose prerequisites are the SOURCES rather than
+# the thing it was copied from, so removing the objects left the copy in
+# place, newer than every source, and make correctly decided there was
+# nothing to do. The man page rebuilt only because clean had removed it
+# -- from the stale binary.
+#
+# The tell was inside this file. veryclean carried `rm -f $(TARGET)` and
+# clean did not, so the two disagreed about whether the binary is a build
+# artifact; veryclean now gets it by depending on clean, like everything
+# else here.
 clean:
-	rm -f $(MAN_PAGE)
+	rm -f $(ARTIFACTS)
 	@if [ -f $(BUILD_DIR)/Makefile ]; then $(MAKE) -C $(BUILD_DIR) clean; fi
 	@if [ -f $(TEST_BUILD_DIR)/Makefile ]; then $(MAKE) -C $(TEST_BUILD_DIR) clean; fi
 	@if [ -f $(ANDROID_BUILD_DIR)/Makefile ]; then $(MAKE) -C $(ANDROID_BUILD_DIR) clean; fi
@@ -1186,7 +1210,6 @@ veryclean: clean
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
 	fi
-	rm -f $(TARGET)
 
 # `distclean` removes what the build generated and `veryclean` does not.
 # `.qmake.stash` is qmake's, is named, and is disposable by construction.

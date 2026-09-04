@@ -9,5 +9,27 @@
 %:
 	dh $@
 
+# The suite is NOT run while packaging, and this line is what stops it.
+#
+# dh_auto_test runs `make test` whenever a test target exists, so a plain
+# `%: dh $@` rules file quietly made `make deb` build and run all 516
+# cases -- most of them Qt widget tests that want a display. That fails in
+# a build chroot for a reason that has nothing to do with packaging, and
+# it fails on a developer machine too when anything else is building,
+# since two `make test` runs share build-tests.
+#
+# Nothing is lost by skipping it. `make test` and `make check-ci` are what
+# gate this project, they run before every push, and check-ci builds in
+# the runner's own image -- a stricter environment than dpkg-buildpackage
+# provides. Running the suite again here would be a second copy of a check
+# that already passed, taking the package build down with it when it
+# collided.
+#
+# To have it back, delete this override and give the suite a display:
+# `export QT_QPA_PLATFORM=offscreen` in a dh_auto_test override. That is a
+# deliberate trade of package build time for a check already made, not a
+# default worth having.
+override_dh_auto_test:
+
 override_dh_auto_install:
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp PREFIX=/usr

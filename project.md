@@ -7057,6 +7057,57 @@ store is a no-op rather than a silent loss.
   conditionals sprinkled through the file. A second scope appearing elsewhere in
   `beerssh.pro` is the same smell as an `#ifdef` in the sources.
 
+
+**`make clean` must always cause a rebuild — [FIXED 2026-09-04].** It did
+not: `make clean && make` built a man page and nothing else. Reported by
+the copyright holder, who also named the principle — *that is what clean
+is for* — which is why the fix is not the one missing line.
+
+The mechanism is worth keeping because it is invisible from either half.
+The binary at the repo root is a **copy** of `$(BUILD_DIR)/$(TARGET)`,
+and its prerequisites are the *sources* rather than the thing it was
+copied from. So removing the objects left the copy in place, newer than
+every source, and make correctly concluded there was nothing to do. The
+man page rebuilt only because `clean` *had* removed it — from the stale
+binary.
+
+**The tell was inside the file.** `veryclean` carried `rm -f $(TARGET)`
+and `clean` did not, so the two disagreed about whether the binary is a
+build artifact. Neither is wrong on its own page; only reading them
+together shows it.
+
+So the fix is structural rather than a remembered line: `ARTIFACTS =
+$(TARGET) $(MAN_PAGE)` is named once, `all` builds it and `clean` removes
+it, and `veryclean` gets it by depending on `clean`. Adding a product to
+the default build now makes clean remove it without anybody remembering
+to. Verified by reproducing the fault first — a `beerssh` newer than the
+sources with no man page beside it produces exactly the reported
+one-line build — and then watching a real `g++ -c` come back after the
+change.
+
+**`make deb` no longer runs the test suite — [FIXED 2026-09-04].** It
+did, and it broke there. `debian/rules` is the minimal `%: dh $@`, and
+**`dh_auto_test` runs `make test` whenever a test target exists** — so
+packaging built and ran all 516 cases, most of them Qt widget tests that
+want a display. That fails in a build chroot for a reason unrelated to
+packaging, and it fails on a developer machine too the moment anything
+else is building, because two `make test` runs share `build-tests`.
+
+`override_dh_auto_test:` is the whole fix, and nothing is lost by it:
+`make test` and `make check-ci` gate this project, they run before every
+push, and check-ci builds in the runner's own image — a stricter
+environment than `dpkg-buildpackage` provides. Running the suite again
+during packaging is a second copy of a check that already passed, which
+takes the package down with it when it collides. The override records
+how to get it back — an offscreen platform in a `dh_auto_test` override
+— so the decision is reversible rather than merely absent.
+
+**Proven with a positive control**, since a step that is absent and a
+step that never appears look identical: with the override commented out
+`dh binary --no-act` lists `dh_auto_test`, and with it in place the step
+is gone. Checking only the after state would have shown nothing either
+way.
+
 ### 12.2 Desktop packaging — **[DECIDED]** tarball, `make install`, and a
 **`.deb`**; Flatpak and the rest deferred
 All of them want the app ID from §0.1.
