@@ -919,6 +919,58 @@ void layout_test::both_keyboards_read_one_layout() {
 }
 
 /*
+ * A keyboard has a key for every level it advertises (sec 6.2).
+ *
+ * The compact board did not. Every letter on it carries a third legend
+ * and draws it in the corner of the cap, and it had Shift, Ctrl and Alt
+ * and no AltGr -- so on a phone, which is the device that gets this
+ * keyboard and the device the accented characters were asked for, not
+ * one of the 78 hints could be reached.
+ *
+ * Every existing test passed. The catalogue reaches the characters, the
+ * router sends them, the cap draws them, the two boards agree about
+ * them. Each was true and none of them asked whether the board the user
+ * is looking at has the key that gets there -- which is this tree's most
+ * repeated defect, a correct function with nothing wired to it, arriving
+ * one level up: a correct KEYBOARD with no way in.
+ *
+ * Written as a relationship rather than as "the compact board has an
+ * AltGr key", so it holds for a style added later and for a layout that
+ * puts its third level somewhere else.
+ */
+void layout_test::a_keyboard_can_reach_every_level_it_shows() {
+	for (bssh_soft_keyboard_catalog::style_t style :
+	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
+	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
+		const QList<bssh_soft_key_group_t> &groups =
+		        bssh_soft_keyboard_catalog::instance().all(style);
+
+		quint8 offered = 0;
+		quint8 advertised = 0;
+		for (const bssh_soft_key_group_t &group : groups) {
+			for (const QList<bssh_key_t> &row : group.rows) {
+				for (const bssh_key_t &key : row) {
+					if (key.kind == bssh_key_t::MODIFIER) offered |= key.modifier;
+					if (key.kind != bssh_key_t::TEXT) continue;
+
+					if (key.shifted_value != 0 || QChar::isLetter(uint(key.value))) {
+						advertised |= quint8(bssh_emulator::MOD_SHIFT);
+					}
+					if (key.altgr_value != 0 || key.shift_altgr_value != 0) {
+						advertised |= bssh_input_router::MOD_ALTGR;
+					}
+				}
+			}
+		}
+
+		QVERIFY2(advertised != 0, "no group offered a second level to check");
+		QVERIFY2((advertised & ~offered) == 0,
+		          qPrintable(QStringLiteral("style %1 shows levels %2 and offers %3")
+		                             .arg(int(style)).arg(advertised).arg(offered)));
+	}
+}
+
+/*
  * A keypad key sends its digit and nothing else (sec 6.2).
  *
  * It did not. Every key on the numeric keypad was built with the helper

@@ -68,3 +68,16 @@ file = "src/ui/soft_keyboard_layout.cpp"
 find = "\tr2.append(keypad_key(QStringLiteral(\"4\"), U'4'));"
 replace = "\tr2.append(literal('4', BSSH_FULL_UNIT));"
 expect = "a_keypad_key_sends_only_its_digit"
+
+# 6. The compact keyboard loses its AltGr key.
+#    This is the state it shipped in, and it is the worst of the six:
+#    every letter goes on drawing its third legend, the catalogue goes on
+#    reaching the accented characters, the router goes on sending them --
+#    and on a phone not one of the 78 hints can be reached, because the
+#    board has no key that gets there.
+[[sabotage]]
+name = "the board advertises a level it has no key for"
+file = "src/ui/soft_keyboard_layout.cpp"
+find = "\trow.append(modifier_key(QStringLiteral(\"AltGr\"), bssh_input_router::MOD_ALTGR, 3));"
+replace = "\trow.append(spacer(3));"
+expect = "a_keyboard_can_reach_every_level_it_shows"

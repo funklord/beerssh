@@ -1546,6 +1546,42 @@ from `us(basic)` and only levels 3 and 4 from `intl`. That is what makes
 it usable in a terminal and is why AltGr rather than dead keys was the
 right answer to the holder's question.
 
+
+**The compact keyboard had no AltGr key — [FIXED 2026-09-04], and it is
+the worst thing in this section.** Every letter on that board carries a
+third legend and now draws it in the corner of the cap. The board had
+Shift, Ctrl and Alt and nothing else — so on a **phone**, which is the
+device that gets the compact keyboard and the device the accented
+characters were asked for, not one of the 78 hints could be reached. The
+full-size board had AltGr from the start, on its right Alt, and the
+full-size board needs 600dp. The level therefore worked everywhere
+except where it was wanted.
+
+**Every test passed while it was broken**, and each was true: the
+catalogue reaches the characters (`altgr_reaches_the_us_international_level`),
+the router sends them, the cap draws them
+(`the_altgr_legend_is_shown_and_then_stands_aside`), both boards agree
+about them (`both_keyboards_read_one_layout`). Not one asked whether the
+board a user is actually looking at has a key that gets there. It is
+§14's most repeated defect — a correct function with nothing wired to it
+— arriving a level up: a correct *keyboard* with no way in.
+
+**It was found by a photograph of the phone.** Not by a sweep, not by an
+assertion, and not by the desktop renders, which show the same missing
+key and had been looked at twice. What made it visible was the device
+screenshot taken to confirm an unrelated alignment fix, with a shell
+open and the keyboard up, where the question "can I type ä on this"
+answers itself.
+
+`a_keyboard_can_reach_every_level_it_shows` is the guard, written as a
+relationship rather than as "the compact board has an AltGr key": every
+level any key on a style *advertises* must be one some key on that same
+style *offers*. It holds for a style added later and for a layout that
+puts its third level somewhere else. The row pays for it with a column
+off Alt and one off Tab, which puts them at the width of a letter key
+rather than below it; Ctrl, Esc and Enter keep theirs, being what a
+terminal reaches for most.
+
 **Slots and legends, split — [BUILT 2026-09-04].** A keyboard is a
 GEOMETRY and a LAYOUT, and this file had them fused: `full_literal_run
 ("qwertyuiop")` declared in one call both *ten keys of this width here*

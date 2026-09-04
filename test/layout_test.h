@@ -43,6 +43,7 @@ private slots:
 	void both_keyboards_read_one_layout();
 	void every_slot_the_geometry_names_exists();
 	void a_keypad_key_sends_only_its_digit();
+	void a_keyboard_can_reach_every_level_it_shows();
 	void altgr_reaches_the_us_international_level();
 	void shift_reaches_every_character_a_real_keyboard_has();
 	void the_hide_key_is_remembered_and_a_tap_undoes_it();

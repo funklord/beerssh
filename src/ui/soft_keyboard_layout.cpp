@@ -243,10 +243,32 @@ bssh_key_t modifier_key(const QString &label, quint8 modifier, int span = 2) {
 QList<bssh_key_t> common_bottom_row() {
 	QList<bssh_key_t> row;
 	row.append(modifier_key(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL, 3));
-	row.append(modifier_key(QStringLiteral("Alt"), bssh_emulator::MOD_ALT, 3));
+	row.append(modifier_key(QStringLiteral("Alt"), bssh_emulator::MOD_ALT, 2));
 	row.append(named_key(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE, 3));
-	row.append(text_key(QStringLiteral("space"), U' ', 5));
-	row.append(named_key(QStringLiteral("Tab"), bssh_emulator::KEY_TAB, 3));
+	row.append(text_key(QStringLiteral("space"), U' ', 4));
+
+	/*
+	 * AltGr, right of space, where a European keyboard puts it.
+	 *
+	 * It was missing, and the omission was the worst kind: every letter
+	 * on this keyboard carries a third legend and shows it in the corner
+	 * of the cap, and on a phone -- which is the device that gets this
+	 * keyboard, and the device the accented characters were asked for --
+	 * not one of them could be reached. Seventy-eight keys advertising
+	 * something the board had no key for.
+	 *
+	 * The full-size keyboard had it from the start, on its right Alt,
+	 * and the full-size keyboard needs 600dp. So the level worked
+	 * everywhere except where it was wanted, and every test passed:
+	 * the catalogue reaches the characters, the router sends them, the
+	 * cap draws them. Nothing asked whether this BOARD had the key.
+	 *
+	 * It costs a column from Alt and one from Tab, which drops them to
+	 * the width of a letter key rather than below it. Ctrl, Esc and
+	 * Enter keep theirs, being what a terminal reaches for most.
+	 */
+	row.append(modifier_key(QStringLiteral("AltGr"), bssh_input_router::MOD_ALTGR, 3));
+	row.append(named_key(QStringLiteral("Tab"), bssh_emulator::KEY_TAB, 2));
 	row.append(named_key(QStringLiteral("Enter"), bssh_emulator::KEY_ENTER, 3));
 	return row;
 }
