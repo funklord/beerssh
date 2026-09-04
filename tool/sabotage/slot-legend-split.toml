@@ -3,18 +3,32 @@
 # Every edit is the version this would have been if written carelessly,
 # and every one leaves code that reads as correct on the page.
 
-# 1. The two keyboards stop sharing a layout.
+# 1. The two keyboards stop sharing a layout, and drift.
 #    This is the state the split was made to end: the compact board
 #    carrying its own copy of the alphabet, right about itself, and free
-#    to disagree with the full one. Nothing about the compact keyboard
-#    looks wrong afterwards -- it draws ten letters in the right order --
-#    and only a comparison ACROSS the two can see it.
+#    to disagree with the full one. The letters here are a QWERTZ row,
+#    which is what that drift looks like in practice -- somebody serving
+#    one board's users and not noticing there are two boards.
+#
+#    The first version of this edit spelled the row "qwertyuiop" and was
+#    MISSED, correctly: literal_row reads the same layout table, so the
+#    two boards still agreed and there was nothing for the test to find.
+#    It broke the structure without breaking the property, which is the
+#    difference between a sabotage and a control that can fail the way
+#    the real thing fails.
+#
+#    QWERTZ was MISSED too, and for a better reason: it makes y absent
+#    rather than wrong, and both_keyboards_read_one_layout compares only
+#    characters both boards carry. So this is expected against the
+#    reachability test instead -- and running the sabotage is what
+#    exposed that blind spot, which is the whole argument for running
+#    them rather than trusting that a test covers what it says.
 [[sabotage]]
 name = "the compact keyboard keeps its own copy of the letters"
 file = "src/ui/soft_keyboard_layout.cpp"
 find = "\tgroup.rows.append(slot_run(\"AD\", 1, 10, 2));"
-replace = "\tgroup.rows.append(literal_row(\"qwertyuiop\"));"
-expect = "both_keyboards_read_one_layout"
+replace = "\tgroup.rows.append(literal_row(\"qwertzuiop\"));"
+expect = "both_keyboards_reach_every_printable_character"
 
 # 2. A slot the layout does not have.
 #    slot_key() takes a string, so this cannot fail at build time. AC12
@@ -75,9 +89,14 @@ expect = "a_keypad_key_sends_only_its_digit"
 #    reaching the accented characters, the router goes on sending them --
 #    and on a phone not one of the 78 hints can be reached, because the
 #    board has no key that gets there.
+#
+#    A second Alt rather than a spacer: spacer() is declared further down
+#    with the full-size keyboard, so the first version of this edit did
+#    not compile, and a sabotage that does not build says nothing about
+#    the test it was meant to exercise.
 [[sabotage]]
 name = "the board advertises a level it has no key for"
 file = "src/ui/soft_keyboard_layout.cpp"
 find = "\trow.append(modifier_key(QStringLiteral(\"AltGr\"), bssh_input_router::MOD_ALTGR, 3));"
-replace = "\trow.append(spacer(3));"
+replace = "\trow.append(modifier_key(QStringLiteral(\"Alt\"), bssh_emulator::MOD_ALT, 3));"
 expect = "a_keyboard_can_reach_every_level_it_shows"

@@ -919,6 +919,60 @@ void layout_test::both_keyboards_read_one_layout() {
 }
 
 /*
+ * Every printable ASCII character is reachable on both keyboards
+ * (sec 6.2).
+ *
+ * The compact one could not type + = [ \\ ] { } -- so no ${VAR}, no
+ * [ -f x ], no escaping and no line continuation, on the board a phone
+ * gets and in a program that is a shell. Nothing said so: every group
+ * was the right shape, every row added up, and every key sent what its
+ * cap showed. A keyboard is not a set of correct keys, it is a claim
+ * that you can type, and only asking what it CANNOT reach can check it.
+ *
+ * Capitals are excluded because they are not a level: bssh_shifted_char
+ * falls back to toUpper, so a letter key covers its capital without
+ * storing one, and a layout in a caseless script gets the right answer
+ * by not having one to store.
+ *
+ * This is also what makes the qwertz sabotage catchable.
+ * both_keyboards_read_one_layout compares only characters both boards
+ * carry, so a letter going MISSING from one of them is invisible to it
+ * -- an absence, not a disagreement. Found by running the sabotage and
+ * reading why it was missed, which is the argument for running them.
+ */
+void layout_test::both_keyboards_reach_every_printable_character() {
+	for (bssh_soft_keyboard_catalog::style_t style :
+	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
+	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
+		QSet<uint> reachable;
+		for (const bssh_soft_key_group_t &group :
+		     bssh_soft_keyboard_catalog::instance().all(style)) {
+			for (const QList<bssh_key_t> &row : group.rows) {
+				for (const bssh_key_t &key : row) {
+					if (key.kind != bssh_key_t::TEXT) continue;
+
+					const int levels[4] = { key.value, key.shifted_value,
+					                         key.altgr_value, key.shift_altgr_value };
+					for (int level : levels) {
+						if (level > 0) reachable.insert(uint(level));
+					}
+				}
+			}
+		}
+
+		QString missing;
+		for (uint ch = '!'; ch <= '~'; ++ch) {
+			if (ch >= 'A' && ch <= 'Z') continue;
+			if (!reachable.contains(ch)) missing.append(QChar(ch));
+		}
+
+		QVERIFY2(missing.isEmpty(),
+		          qPrintable(QStringLiteral("style %1 cannot type: %2")
+		                             .arg(int(style)).arg(missing)));
+	}
+}
+
+/*
  * A keyboard has a key for every level it advertises (sec 6.2).
  *
  * The compact board did not. Every letter on it carries a third legend

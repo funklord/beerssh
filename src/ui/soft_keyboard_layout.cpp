@@ -602,7 +602,28 @@ bssh_soft_key_group_t numbers_group() {
 	 */
 	QList<bssh_key_t> row;
 	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 3));
-	row.append(literal_row(".?!'|~*"));
+	/*
+	 * The second symbol row, chosen for what a SHELL cannot do without
+	 * rather than for what looks like a symbol page.
+	 *
+	 * It used to read . ? ! ' | ~ * and the compact keyboard could not
+	 * type + = [ \\ ] { } at all -- so no ${VAR}, no [ -f x ], no
+	 * escaping and no line continuation, on the board a phone gets.
+	 * Measured over every level of every group: seven printable ASCII
+	 * characters unreachable, and they are not obscure ones.
+	 *
+	 * What paid for them is that ? ! and * were each already one Shift
+	 * away on THIS page -- Shift+/ Shift+1 Shift+8 -- so the page was
+	 * spending three of its seventeen keys on characters it already had.
+	 * Nine of them were, in fact; these three are the ones whose Shift
+	 * lives on the same page rather than another one.
+	 *
+	 * The replacements come in the pairs a real keyboard uses, which is
+	 * why they need no new machinery: [ and ] are AD11 and AD12, = is
+	 * AE12, and the backslash that replaces the bare pipe is BKSL. The
+	 * layout table already gives each of them { } + and | on Shift.
+	 */
+	row.append(literal_row(".'\\~[]="));
 	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 3));
 	group.rows.append(row);
 

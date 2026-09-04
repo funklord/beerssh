@@ -1547,6 +1547,47 @@ it usable in a terminal and is why AltGr rather than dead keys was the
 right answer to the holder's question.
 
 
+
+**The compact keyboard could not type `+ = [ \\ ] { }` — [FIXED
+2026-09-04].** Seven printable ASCII characters unreachable at any level
+of any group, on the board a phone gets, in a program that is a shell.
+No `${VAR}`, no `[ -f x ]`, no escaping, no line continuation. Nothing
+said so: every group was the right shape, every row added up, every key
+sent what its cap showed. **A keyboard is not a set of correct keys, it
+is a claim that you can type** — and only asking what it *cannot* reach
+can check that.
+
+**What paid for them was duplication the page already had.** `?`, `!`
+and `*` were each one Shift away on that same page — Shift+`/`,
+Shift+`1`, Shift+`8` — so it was spending three of its seventeen keys on
+characters it already carried. Nine of the seventeen were, in fact;
+these three are the ones whose Shift lives on the same page rather than
+another one, which is what makes them the cheapest to give up.
+
+**The replacements needed no new machinery**, which is the split paying
+off a second time. They come in the pairs a real keyboard uses: `[` and
+`]` are AD11 and AD12, `=` is AE12, and the backslash replacing the bare
+pipe is BKSL. The layout table already gives each of them `{`, `}`, `+`
+and `|` on Shift — so four keys bought seven characters and the palette
+did not have to learn anything about them.
+
+`both_keyboards_reach_every_printable_character` is the guard. Capitals
+are excluded because they are not a level: `bssh_shifted_char` falls
+back to `toUpper`, so a letter key covers its capital without storing
+one, and a layout in a caseless script gets the right answer by not
+having one to store.
+
+**It was found by running the sabotages, and by the one that failed.**
+The QWERTZ edit — the compact board keeping its own copy of the letters
+and drifting — was MISSED, because `both_keyboards_read_one_layout`
+compares only characters both boards carry, so a letter going *missing*
+is an absence rather than a disagreement and it cannot see one. Chasing
+that blind spot is what prompted asking which characters each board can
+reach at all, which is how the seven turned up. **A sabotage that is not
+caught is worth more than one that is**: the four that were caught
+confirmed what was already believed, and the one that was not led
+somewhere nobody was looking.
+
 **The compact keyboard had no AltGr key — [FIXED 2026-09-04], and it is
 the worst thing in this section.** Every letter on that board carries a
 third legend and now draws it in the corner of the cap. The board had
