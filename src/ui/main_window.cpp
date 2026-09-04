@@ -108,6 +108,8 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_tab_long_press(nullptr),
       m_key_row(nullptr),
       m_keyboard(nullptr),
+      m_keyboard_hidden_by_user(false),
+      m_device_settings(nullptr),
       m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
       m_window_title_format(QStringLiteral("%t - BeerSSH")),
       m_asked_about_closing(false),
@@ -237,6 +239,25 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * the same code, because a terminal should not care which state it
 	 * was in when it was picked up.
 	 */
+	/*
+	 * A tap in the terminal brings the built-in keyboard back after its
+	 * Hide key has put it away (sec 6.2). One tap, because a keyboard you
+	 * have to find a menu to restore is one the Hide key made a trap.
+	 *
+	 * Only when a built-in keyboard is the one chosen -- with the system
+	 * panel, the tap has already asked Qt for it and this would be a
+	 * second answer to the same gesture.
+	 */
+	connect(m_panes, &bssh_pane_container::input_panel_requested, this, [this] {
+		if (!m_keyboard_hidden_by_user) return;
+
+		const bssh_app_settings settings;
+		if (settings.keyboard() == bssh_app_settings::KEYBOARD_SYSTEM) return;
+
+		m_keyboard_hidden_by_user = false;
+		apply_key_row_visibility();
+	});
+
 	connect(m_panes, &bssh_pane_container::pane_drag_requested,
 	         this, &bssh_main_window::start_session_drag);
 	connect(m_panes, &bssh_pane_container::panes_rebuilt, this, [this] {
@@ -567,6 +588,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 		bssh_app_settings_view *device = new bssh_app_settings_view(this);
 		m_pages->addWidget(device);
+		m_device_settings = device;
 
 		connect(m_host_list, &bssh_host_list::settings_requested, this, [this, device] {
 			m_pages->setCurrentWidget(device);
@@ -708,6 +730,31 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_keyboard = new bssh_soft_keyboard(nullptr, this);
 	layout->insertWidget(3, m_keyboard);
 	m_keyboard->hide();
+
+	/*
+	 * The keyboard's own two keys (sec 6.2). Hide is remembered rather
+	 * than merely applied: apply_device_settings recomputes visibility on
+	 * every session event and every settings change, so a keyboard that
+	 * only called hide() would come back on the next one, which from the
+	 * user's side is a key that does not work.
+	 */
+	connect(m_keyboard, &bssh_soft_keyboard::hide_requested, this, [this] {
+		m_keyboard_hidden_by_user = true;
+		m_keyboard->hide();
+	});
+
+	/*
+	 * Cfg goes to the same page the front door's menu opens, rather than
+	 * a second settings surface -- sec 10 records what two front doors to
+	 * one setting cost when only one of them was kept in step.
+	 *
+	 * On a desktop there is no touch front door and no page stack, so
+	 * there is nothing to show; the button is only ever pressed on a
+	 * device that has one.
+	 */
+	connect(m_keyboard, &bssh_soft_keyboard::settings_requested, this, [this] {
+		if (m_pages && m_device_settings) m_pages->setCurrentWidget(m_device_settings);
+	});
 
 	/*
 	 * sec 6.2's three-state setting, which the key row has supported since
@@ -1295,7 +1342,13 @@ void bssh_main_window::apply_keyboard_choice() {
 	 * that the built-in keyboard replaces it rather than joining it.
 	 */
 	apply_keyboard_style();
-	m_keyboard->setVisible(built_in);
+
+	/*
+	 * Shown when the setting says so AND the user has not put it away.
+	 * The hide key is theirs; this function runs on every session event
+	 * and would otherwise overrule it moments later.
+	 */
+	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user);
 	if (built_in) m_key_row->hide();
 	else m_key_row->setVisible(m_key_row->should_be_visible());
 

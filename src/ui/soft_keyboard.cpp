@@ -4,6 +4,7 @@
 #include <QFont>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QSizePolicy>
 #include <QToolButton>
 
@@ -39,6 +40,8 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
       m_keys(nullptr),
       m_grid(nullptr),
       m_group_button(nullptr),
+      m_settings_button(nullptr),
+      m_hide_button(nullptr),
       m_group(0),
       m_style(bssh_soft_keyboard_catalog::STYLE_COMPACT) {
 	QHBoxLayout *outer = new QHBoxLayout(this);
@@ -62,15 +65,52 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	 * configurable is a real question and not one to answer by guessing
 	 * here.
 	 */
+	/*
+	 * The side column: settings, the page button, hide. Three things that
+	 * are about the KEYBOARD rather than about a page, so they stay put
+	 * when the page button is pressed -- which is what makes hide usable
+	 * from the numpad and not only from the letters.
+	 *
+	 * The page button keeps the stretch, so it stays the big one: it is
+	 * pressed constantly and the other two are not.
+	 */
+	QVBoxLayout *side = new QVBoxLayout;
+	side->setContentsMargins(0, 0, 0, 0);
+	side->setSpacing(1);   /* the key grid's own spacing */
+
+	m_settings_button = new QToolButton(this);
+	m_settings_button->setText(QStringLiteral("Cfg"));
+	m_settings_button->setObjectName(QStringLiteral("keyboard-settings"));
+	m_settings_button->setFocusPolicy(Qt::NoFocus);
+	m_settings_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
+	m_settings_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	m_settings_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+	side->addWidget(m_settings_button, 0);
+
 	m_group_button = new QToolButton(this);
 	m_group_button->setFocusPolicy(Qt::NoFocus);
 	m_group_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
 	m_group_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-	outer->addWidget(m_group_button, 0);
+	side->addWidget(m_group_button, 1);
+
+	m_hide_button = new QToolButton(this);
+	m_hide_button->setText(QStringLiteral("Hide"));
+	m_hide_button->setObjectName(QStringLiteral("keyboard-hide"));
+	m_hide_button->setFocusPolicy(Qt::NoFocus);
+	m_hide_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
+	m_hide_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	m_hide_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+	side->addWidget(m_hide_button, 0);
+
+	outer->addLayout(side, 0);
 
 	connect(m_group_button, &QAbstractButton::clicked, this, [this] {
 		set_group(bssh_soft_keyboard_catalog::instance().next_index(m_group, m_style));
 	});
+	connect(m_settings_button, &QAbstractButton::clicked,
+	         this, &bssh_soft_keyboard::settings_requested);
+	connect(m_hide_button, &QAbstractButton::clicked,
+	         this, &bssh_soft_keyboard::hide_requested);
 
 	if (m_router) {
 		connect(m_router, &bssh_input_router::sticky_modifiers_changed,

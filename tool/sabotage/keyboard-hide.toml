@@ -1,0 +1,37 @@
+# Sabotages for the keyboard's Hide key and the tap that undoes it.
+#
+# Both edits are the shape the feature would have had if written
+# carelessly, and both leave code that reads as correct.
+
+# 1. The keyboard hides itself and nobody remembers the user asked.
+#    apply_device_settings() recomputes visibility on every pane rebuild
+#    and every session event, so the keyboard comes back moments later --
+#    a key that visibly does not work.
+[[sabotage]]
+name = "the hide key is applied but not remembered"
+file = "src/ui/main_window.cpp"
+find = "\tm_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user);"
+replace = "\tm_keyboard->setVisible(built_in);"
+expect = "the_hide_key_is_remembered_and_a_tap_undoes_it"
+
+# 2. The view reports the tap only where the SYSTEM panel would be raised.
+#    WA_InputMethodEnabled is cleared precisely when the built-in keyboard
+#    is chosen, so the report is silent in the one mode that needs it and
+#    the keyboard can never be brought back.
+[[sabotage]]
+name = "the tap is reported only when the system panel would answer"
+file = "src/ui/terminal_view.cpp"
+find = '''	emit input_panel_requested();
+
+	/*
+	 * And only then the SYSTEM panel, when this widget would actually
+	 * receive what it sends. The built-in keyboard clears
+	 * WA_InputMethodEnabled precisely to decline the system one, and
+	 * asking for it anyway would stack two keyboards on a screen that had
+	 * room for neither.
+	 */
+	if (!testAttribute(Qt::WA_InputMethodEnabled)) return;'''
+replace = '''	if (!testAttribute(Qt::WA_InputMethodEnabled)) return;
+
+	emit input_panel_requested();'''
+expect = "the_hide_key_is_remembered_and_a_tap_undoes_it"

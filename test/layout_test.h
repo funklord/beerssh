@@ -40,6 +40,8 @@ private slots:
 	void every_touch_surface_fits_a_phone();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
+	void the_hide_key_is_remembered_and_a_tap_undoes_it();
+	void the_keyboard_config_key_opens_the_settings_page();
 	void every_keyboard_group_is_the_same_shape();
 	void the_built_in_keyboard_fits_a_phone();
 	void only_one_on_screen_keyboard_is_ever_shown();

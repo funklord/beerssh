@@ -2014,10 +2014,20 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 
 void bssh_terminal_view::request_input_panel() {
 	/*
-	 * Only when this widget would actually receive what the panel sends.
-	 * The built-in keyboard (sec 6.2) clears WA_InputMethodEnabled
-	 * precisely to decline the system one, and asking for it anyway would
-	 * stack two keyboards on a screen that had room for neither.
+	 * Said first and unconditionally: the gesture happened, whatever is
+	 * going to answer it. The built-in keyboard is hidden by its own key
+	 * (sec 6.2) and a tap is what brings it back, so a report gated on
+	 * the system panel's attribute would be silent in the one mode that
+	 * needs it.
+	 */
+	emit input_panel_requested();
+
+	/*
+	 * And only then the SYSTEM panel, when this widget would actually
+	 * receive what it sends. The built-in keyboard clears
+	 * WA_InputMethodEnabled precisely to decline the system one, and
+	 * asking for it anyway would stack two keyboards on a screen that had
+	 * room for neither.
 	 */
 	if (!testAttribute(Qt::WA_InputMethodEnabled)) return;
 

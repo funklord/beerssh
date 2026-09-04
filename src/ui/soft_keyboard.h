@@ -60,6 +60,23 @@ public:
 	/* The side button, so a test can press what a thumb presses. */
 	QAbstractButton *group_button() const { return m_group_button; }
 
+signals:
+	/*
+	 * The configuration key: show the settings the user would otherwise
+	 * reach through the front door and a menu, which from a live session
+	 * on a phone is several screens away.
+	 */
+	void settings_requested();
+
+	/*
+	 * The hide key. The keyboard does not hide ITSELF: the window owns
+	 * whether it is shown, has to remember that the user asked rather
+	 * than the layout deciding, and is the only thing that can bring it
+	 * back when the terminal is tapped. A widget that hid itself would
+	 * leave nobody holding that state.
+	 */
+	void hide_requested();
+
 private:
 	void rebuild();
 	QAbstractButton *make_button(const QString &label);
@@ -82,6 +99,25 @@ private:
 	QWidget *m_keys;
 	QGridLayout *m_grid;
 	QAbstractButton *m_group_button;
+
+	/*
+	 * In the SIDE COLUMN rather than on a page, and that is the whole
+	 * decision (sec 6.2).
+	 *
+	 * Hide has to be reachable from wherever you are: a key that lives on
+	 * the letters page cannot be reached from the numpad, so a user who
+	 * cycled over to type a digit would have to cycle back to put the
+	 * keyboard away. The side column is the only part of this widget that
+	 * does not change when the page button is pressed.
+	 *
+	 * It also leaves the row arithmetic alone. Both keyboards have rows
+	 * that must sum exactly to their own width, and the full-size one is
+	 * written in quarter keys where a wrong span puts every key after it
+	 * in the wrong place -- so adding two keys to a row is the expensive
+	 * way to do this and buys nothing.
+	 */
+	QAbstractButton *m_settings_button;
+	QAbstractButton *m_hide_button;
 
 	int m_group;
 	bssh_soft_keyboard_catalog::style_t m_style;

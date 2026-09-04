@@ -107,6 +107,12 @@ signals:
 	 * a signal connected only on focus would make it work the second
 	 * time you tried.
 	 */
+	/*
+	 * A tap in some pane asked for a keyboard (sec 6.2). Which pane does
+	 * not matter: there is one on-screen keyboard for the window.
+	 */
+	void input_panel_requested();
+
 	void pane_drag_requested(bssh_session *session);
 
 	/* A view was built or destroyed; the window rewires what it needs. */

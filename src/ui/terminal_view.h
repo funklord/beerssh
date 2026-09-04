@@ -435,6 +435,19 @@ signals:
 	void pane_drag_requested();
 
 	/*
+	 * A tap that selected nothing: somebody asking to type (sec 6.2).
+	 *
+	 * Emitted whichever keyboard is in use, and BEFORE the system-panel
+	 * request below decides whether it is the one to raise -- because the
+	 * built-in keyboard clears WA_InputMethodEnabled to decline the
+	 * system panel, so a signal emitted only on that path would never
+	 * fire in exactly the mode that needs it. The window decides what to
+	 * show; the view only reports the gesture, which is the same division
+	 * pane_drag_requested draws.
+	 */
+	void input_panel_requested();
+
+	/*
 	 * Emitted only when the grid size actually changes, not on every
 	 * resize event -- at M5 this is what triggers window-change for one
 	 * session, and a desktop window drag would otherwise fire a storm of

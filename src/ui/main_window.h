@@ -397,6 +397,15 @@ private:
 	 */
 	void apply_keyboard_choice();
 	void apply_keyboard_style();
+
+	/*
+	 * Set by the keyboard's own Hide key and cleared by a tap in the
+	 * terminal. Not persisted: it is about this session's screen, not a
+	 * preference, and a keyboard that stayed hidden across a restart
+	 * would look like the setting had changed itself.
+	 */
+	bool m_keyboard_hidden_by_user;
+	QWidget *m_device_settings;
 	void apply_device_settings();
 
 	/*

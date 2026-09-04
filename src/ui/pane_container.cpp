@@ -212,6 +212,15 @@ void bssh_pane_container::rebuild() {
 		 * a session able to disappear first -- the same guard, and for
 		 * the same reason, as the biometric prompt's.
 		 */
+		/*
+		 * Forwarded rather than connected straight to the window: views
+		 * are destroyed and rebuilt whenever the panes change, so a
+		 * window holding connections to them would be wiring itself to
+		 * objects that stop existing. The container outlives them.
+		 */
+		connect(view, &bssh_terminal_view::input_panel_requested,
+		         this, &bssh_pane_container::input_panel_requested);
+
 		connect(view, &bssh_terminal_view::pane_drag_requested, this,
 		         [this, alive = QPointer<bssh_session>(session)] {
 			if (!alive) return;

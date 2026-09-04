@@ -1346,6 +1346,60 @@ up, a strip of modifiers has nothing to modify.
   written down.
 
 
+**A configuration key and a hide key, and one tap to undo the hide —
+[BUILT 2026-09-04]**, asked for by the copyright holder after using the
+full keyboard on a device.
+
+**They live in the SIDE COLUMN, not on a page**, and that is the only real
+decision in it. Hide has to be reachable from wherever you are: a key on
+the letters page cannot be reached from the numpad, so somebody who
+cycled over to type a digit would have to cycle back to put the keyboard
+away. The side column is the only part of the widget that does not change
+when the page button is pressed. It also leaves the row arithmetic alone —
+both keyboards have rows that must sum exactly to their own width, and the
+full-size one is written in quarter keys where one wrong span puts every
+key after it in the wrong place, so adding two keys to a row is the
+expensive way to do this and buys nothing.
+
+**The keyboard does not hide itself.** The window owns visibility, and
+`apply_device_settings()` recomputes it on every pane rebuild and every
+session event — so a widget that called `hide()` on itself would be
+overruled moments later, which from the user's side is a key that does not
+work. The window holds `m_keyboard_hidden_by_user` instead, and the
+setting's own visibility rule is `built_in && !hidden_by_user`. Not
+persisted: it is about this session's screen rather than a preference, and
+a keyboard that stayed hidden across a restart would look like the setting
+had changed itself.
+
+**The way back is a tap in the terminal, and it travels through three
+objects.** `bssh_terminal_view` reports the gesture FIRST and
+unconditionally — before the `WA_InputMethodEnabled` check that decides
+whether the SYSTEM panel should answer — because that attribute is cleared
+precisely when the built-in keyboard is chosen, so a report gated on it
+would be silent in the one mode that needs it. `bssh_pane_container`
+forwards it rather than the window connecting to views directly, because
+views are destroyed and rebuilt whenever the panes change and the window
+would be wiring itself to objects that stop existing.
+
+**Every part of that is a connection, which is why both tests drive the
+WINDOW and not the widget.** A test of `bssh_soft_keyboard` alone passes
+with none of it wired — the same shape as the `set_group` defect earlier
+the same day, where correct-looking code had never been exercised.
+`the_hide_key_is_remembered_and_a_tap_undoes_it` clicks the real key,
+forces a pane rebuild and requires the keyboard to still be away, then
+brings it back with a real `QTest::mouseClick` on the view rather than by
+emitting anything — the path under test IS the plumbing.
+`the_keyboard_config_key_opens_the_settings_page` requires the page stack
+to land on the SAME `bssh_app_settings_view` the front door's menu opens,
+and checks it was not already showing, or the assertion would pass with
+the button doing nothing.
+
+**Sabotage, two edits, both the version this would have been if written
+carelessly:** dropping the remembered flag (`setVisible(built_in)`), and
+moving the tap report below the `WA_InputMethodEnabled` check. Neither
+looks wrong on the page and both make the feature useless.
+
+
 **A second built-in keyboard, in a real keyboard's shape — [BUILT
 2026-09-04].** The compact one above is a phone keyboard: three groups of
 four rows, thumb-sized, letters where a phone user expects them. The

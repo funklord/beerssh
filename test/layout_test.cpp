@@ -829,6 +829,145 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
  * would never fire on a folding phone, where the width changes and no
  * setting does.
  */
+/*
+ * Shared registry: leave it as it was found (sec 8.4), and by a DESTRUCTOR
+ * rather than by a line at the end.
+ *
+ * A QVERIFY2 that fails returns from the test function, so a cleanup
+ * written at the bottom is exactly the cleanup that does not run on the
+ * day it is needed -- the session leaks and the next test to count the
+ * registry fails too. Measured: the sabotage run for this test reported
+ * two failures for one cause, and the second was a middle-click test
+ * counting a window this one left behind.
+ */
+namespace {
+
+struct registry_left_as_found_t {
+	bssh_session_registry *registry;
+
+	explicit registry_left_as_found_t(bssh_session_registry *r) : registry(r) {}
+	~registry_left_as_found_t() {
+		while (registry && registry->count() > 0) registry->close(registry->at(0));
+	}
+};
+
+} /* namespace */
+
+/*
+ * The keyboard's own two keys, and the way back (sec 6.2).
+ *
+ * Driven through the window rather than the widget, because every part of
+ * this that can be wrong is a connection: the keyboard does not hide
+ * itself, the window remembers that the user asked, and the way back is a
+ * gesture in a DIFFERENT widget that has to reach the window through the
+ * pane container. A test of bssh_soft_keyboard alone would pass with none
+ * of that wired.
+ */
+void layout_test::the_hide_key_is_remembered_and_a_tap_undoes_it() {
+	const forced_touch_t arrangement(1);
+
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fake->set_fail_on_connect(QStringLiteral("no network in a test"));
+		return fake;
+	});
+
+	bssh_main_window window(bssh_profile_t::from_target(QStringLiteral("nowhere.example")));
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	const registry_left_as_found_t tidy(window.registry());
+
+	bssh_soft_keyboard *keys = window.findChild<bssh_soft_keyboard *>();
+	QVERIFY2(keys, "a touch window with the built-in keyboard chosen must build one");
+	QVERIFY2(keys->isVisible(), "and must show it");
+
+	QAbstractButton *hide = window.findChild<QAbstractButton *>(
+	        QStringLiteral("keyboard-hide"));
+	QVERIFY2(hide, "the keyboard must carry a hide key");
+	hide->click();
+	QVERIFY2(!keys->isVisible(), "the hide key must put it away");
+
+	/*
+	 * And it must STAY away across a pane rebuild, which is what makes
+	 * this a remembered choice rather than a momentary one.
+	 * apply_device_settings() recomputes visibility on every rebuild, so
+	 * without the flag the keyboard returns a moment after the user asked
+	 * for it to go -- a key that visibly does not work.
+	 */
+	window.resize(BSSH_FULL_KEYBOARD_MIN_DP + 100, BSSH_PHONE_TALL_DP);
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	QVERIFY2(!keys->isVisible(),
+	          "a pane rebuild must not overrule the hide key");
+
+	/*
+	 * The way back: a tap in the terminal. Driven as a real click on the
+	 * view rather than by emitting anything, because the path under test
+	 * IS the plumbing -- mouseReleaseEvent to request_input_panel to the
+	 * container to the window -- and emitting the signal by hand would
+	 * test none of it.
+	 */
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	bssh_terminal_view *view = panes->view_at(0);
+	QVERIFY2(view, "there must be a pane to tap");
+
+	QTest::mouseClick(view, Qt::LeftButton, Qt::KeyboardModifiers(),
+	                   view->rect().center());
+	QVERIFY2(keys->isVisible(),
+	          "one tap in the terminal must bring the keyboard back");
+
+	settings.set_keyboard(before);
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+/*
+ * The configuration key reaches the SAME settings page the front door's
+ * menu opens, and not a second one. sec 10 records what two front doors to
+ * one setting cost when only one of them was kept in step.
+ */
+void layout_test::the_keyboard_config_key_opens_the_settings_page() {
+	const forced_touch_t arrangement(1);
+
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fake->set_fail_on_connect(QStringLiteral("no network in a test"));
+		return fake;
+	});
+
+	bssh_main_window window(bssh_profile_t::from_target(QStringLiteral("nowhere.example")));
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	const registry_left_as_found_t tidy(window.registry());
+
+	QStackedWidget *pages = window.findChild<QStackedWidget *>();
+	bssh_app_settings_view *device = window.findChild<bssh_app_settings_view *>();
+	QVERIFY2(pages && device, "the touch window must have a page stack and a settings page");
+	QVERIFY2(pages->currentWidget() != device,
+	          "the settings page must not be what a session opens on");
+
+	QAbstractButton *config = window.findChild<QAbstractButton *>(
+	        QStringLiteral("keyboard-settings"));
+	QVERIFY2(config, "the keyboard must carry a configuration key");
+	config->click();
+
+	QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(device));
+
+	settings.set_keyboard(before);
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
 	typedef bssh_soft_keyboard_catalog catalog;
 
@@ -1265,29 +1404,6 @@ void layout_test::backing_out_of_a_session_reaches_the_host_list() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
-/*
- * Shared registry: leave it as it was found (sec 8.4), and by a DESTRUCTOR
- * rather than by a line at the end.
- *
- * A QVERIFY2 that fails returns from the test function, so a cleanup
- * written at the bottom is exactly the cleanup that does not run on the
- * day it is needed -- the session leaks and the next test to count the
- * registry fails too. Measured: the sabotage run for this test reported
- * two failures for one cause, and the second was a middle-click test
- * counting a window this one left behind.
- */
-namespace {
-
-struct registry_left_as_found_t {
-	bssh_session_registry *registry;
-
-	explicit registry_left_as_found_t(bssh_session_registry *r) : registry(r) {}
-	~registry_left_as_found_t() {
-		while (registry && registry->count() > 0) registry->close(registry->at(0));
-	}
-};
-
-} /* namespace */
 
 /*
  * The Android keyboard defect, held as a desktop test because the property
