@@ -1785,7 +1785,100 @@ annotation that is invisible to the people who most need things named is
 an accessibility regression dressed as a feature.
 
 
-#### A layout engine — **[PLANNED 2026-09-04, decisions open]**
+#### A layout engine — **[BUILT 2026-09-04]**
+
+**The three open decisions were answered by the copyright holder the same
+day: the setting is GLOBAL, Swedish ships first, and the layouts come
+from somewhere the legwork is already done.** That last one settles the
+curation question in a better way than naming a set would have: the
+corpus is **xkeyboard-config**, which every Linux desktop uses and which
+carries about 100 layouts, so what ships is a matter of running the tool
+again rather than of transcription.
+
+`tool/gen-layout.py` is that tool. It resolves a layout through
+`setxkbmap | xkbcomp`, takes characters from `keysymdef.h`'s own `U+`
+comments, and dead-key bases from the system Compose file. **Three
+sourced files and nothing transcribed** -- which matters because the
+hand-written table it replaced was wrong.
+
+**Regenerating the shipped US table was the proof, and it failed twice
+before it passed.** First the tool lost `«` and `»`: xkb spells that
+keysym `guillemotleft`, and `keysymdef.h` carries the old spelling as a
+bare alias whose comment says *deprecated alias for* and gives no
+codepoint, so resolving name-to-comment silently dropped it. Resolving
+name-to-value-to-codepoint fixes aliases generally. Then it wanted to
+emit **combining** marks from flattened dead keys -- `dead_horn` gives
+U+031B -- which stack onto the glyph to the left instead of typing
+anything, so it refuses anything with a non-zero combining class.
+
+**Then it found eleven slots the shipped table had silently dropped**,
+including `ç`, `Ç` and `¿`. The cause was a hand-written keysym table
+with holes in it, where an unknown name became an empty string. **And
+the corroboration recorded above was worthless**: this document said the
+generated table "reproduces all 38 rows of the old AltGr table exactly",
+and it did -- because the same author wrote both, with the same blind
+spot. Two witnesses, one hand.
+
+**Dead keys are flattened, not composed, and the Compose file decides to
+what.** Swedish has no live tilde and no live backtick at all: `AE12` is
+`dead_acute`/`dead_grave`, `AD12` is `dead_diaeresis`/`dead_circumflex`,
+and AltGr+`AD12` is `dead_tilde`. Each becomes what the system pairs it
+with space -- `'`, `` ` ``, `"`, `^`, `~` -- which is **one keystroke
+where a physical Swedish keyboard needs two**, and is somebody else's
+decision about what a dead key stands for rather than ours. Composing
+properly remains worth having as fidelity; it is not needed for access.
+
+**The contract earned its keep immediately, twice, and the second time
+corrected this document.** `both_keyboards_reach_every_printable_character`
+runs over *every* layout in the catalogue, and on the first non-US layout
+it failed twice:
+
+- **The compact board could not type `*`, `;` or `^`.** Those came from
+  the US layout's Shift levels -- `;` is `AC10`, which Swedish makes `ö`,
+  and `^`/`*` were Shift+6 and Shift+8, which Swedish makes `&` and `(`.
+  The number row was `slot_run("AE", 1, 10)` and should never have been:
+  **a phone's number page is a palette, not a layout**, so it is a
+  `literal_row` now and keeps the US pairs in every language. The colon
+  key became a semicolon key carrying the colon on Shift, the way a real
+  `AC10` does.
+- **The full board could not type `|`.** This corrects the sentence
+  written a few hours earlier saying the ISO key was fidelity rather
+  than capability, because the symbol page covers what a layout cannot
+  reach. **That is true of the compact keyboard and false of the full
+  one, which has no symbol page** -- its two pages are the main block and
+  the keypad, so it is purely the layout and inherits every gap the
+  layout has. `LSGT` ships in the Swedish table now, and
+  `full_main_group()` spends a column of the left Shift on it: 1.25u and
+  1u, which is what an ISO keyboard does with that space, and the row
+  still comes to 60.
+
+**The claim that a layout needs no geometry change is therefore dead in
+both directions** -- it needed correcting once for ANSI-vs-ISO and again
+for which keyboard is asking. What survives is narrower and true: the
+*compact* keyboard's geometry is layout-independent because its palette
+carries the ASCII; the *full* keyboard's is not, and asks the layout
+whether it is ISO.
+
+
+**Two of the four sabotages were missed on the first run, and both
+misses were findings.** Dropping the ISO key was expected to fail the
+shape test and did not -- because that test walked only the *current*
+layout, so a Swedish shift row four columns short went straight past it
+while the US row it was looking at was unchanged. It walks the catalogue
+now. And replacing the settings page's `addRow` with a `hide` left the
+suite green, because the test found the control by object name and
+`findChild` finds a widget that was built and never put on the page. It
+asserts the control is not hidden and has a parent now. **A sabotage
+that is not caught is worth more than one that is** -- the two that were
+caught confirmed what was already believed.
+
+**The setting is global**, at `[input] keyboard_layout`, defaulting to
+`us-intl`, with a control on the settings page listed from the catalogue
+so adding a layout needs no edit to that page. An unknown id is
+**refused** rather than silently replaced, because a settings file
+written by a newer version should not quietly become a keyboard whose
+letters are somewhere else.
+
 
 The slot split above was the prerequisite: geometry names XKB positions and
 one table says what they carry, so a second layout is a second table. This
@@ -1872,10 +1965,12 @@ and with the ASCII palette it is not.
 4. **ISO geometry.** `LSGT` and the ISO Enter, as a geometry variant a
    layout can ask for. Fidelity, and last.
 
-**Open, and each is the copyright holder's rather than a worker's:**
+**Answered 2026-09-04 by the copyright holder, and recorded here because
+the reasoning outlives the answer:**
 
-- **Which layouts ship.** The curation question the fonts and colour
-  schemes both answered by naming a set and saying why each is in it.
+- **Which layouts ship** -- answered by sourcing them: xkeyboard-config
+  has done the legwork, so the set grows by running the tool rather than
+  by curation. Swedish first, a fuller set to follow.
 - **Global or preset-owned.** Colour scheme and key row are preset-owned
   (§10.2) because they suit a *host*; a keyboard layout suits a *person*,
   and a different alphabet per server would be strange. The recommendation

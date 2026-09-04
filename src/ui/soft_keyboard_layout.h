@@ -108,6 +108,50 @@ struct bssh_soft_key_group_t {
  * stable id, identical on both platforms, so what a user learns on one
  * device is what they find on another.
  */
+/*
+ * A keyboard layout: what the alphanumeric slots carry (project.md sec 6.2).
+ *
+ * The geometry names XKB positions -- AD01, AE12, TLDE -- and a layout
+ * says what those positions send. So a second layout is a second table
+ * and not a second keyboard, which is the whole reason the two were
+ * split apart.
+ *
+ * It governs the LETTER BLOCK only. The compact keyboard's symbol pages
+ * are a palette rather than a layout: they name ASCII characters
+ * directly and go on sending them whatever the letters become, which is
+ * what keeps a terminal typeable under a layout that has no live tilde.
+ *
+ * The soft keyboard only, as well. sec 6.1 settled that without naming
+ * it: a physical key arrives as a QKeyEvent with the OS layout already
+ * applied, so translating again would translate twice.
+ */
+struct bssh_keyboard_layout_t {
+	QString id;
+	QString display_name;
+};
+
+/*
+ * Every layout, in the order a chooser should list them. The first is
+ * the default, and is US International.
+ */
+QList<bssh_keyboard_layout_t> bssh_keyboard_layouts();
+
+/*
+ * Read the catalog through this layout from now on.
+ *
+ * Returns true if the id was known. An unknown one leaves the current
+ * layout alone and says so, rather than falling back silently to a
+ * keyboard whose letters are not the ones the user asked for -- a
+ * setting written by a newer version, or by hand, should not quietly
+ * become something else.
+ *
+ * The catalog is rebuilt, so any bssh_soft_keyboard on screen has to be
+ * rebuilt too; bssh_main_window does that where it applies the setting.
+ */
+bool bssh_set_keyboard_layout(const QString &id);
+
+QString bssh_keyboard_layout();
+
 class bssh_soft_keyboard_catalog {
 public:
 	/*
@@ -159,6 +203,15 @@ public:
 	int next_index(int index, style_t style) const;
 
 	int index_of(const QString &id, style_t style) const;
+
+	/*
+	 * Build the groups again, because the layout changed.
+	 *
+	 * The groups hold characters rather than a reference to a layout, so
+	 * a new layout means new groups. In place, so pointers into the
+	 * catalog survive.
+	 */
+	void rebuild();
 
 private:
 	QList<bssh_soft_key_group_t> m_groups;

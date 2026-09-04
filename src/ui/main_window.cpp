@@ -1386,6 +1386,21 @@ void bssh_main_window::apply_keyboard_style() {
 	if (!m_keyboard) return;
 
 	const bssh_app_settings settings;
+
+	/*
+	 * The LAYOUT first, because it rebuilds the catalog the style is
+	 * then read out of. The other order draws a keyboard from the old
+	 * letters and corrects it on the next resize, which on a desktop is
+	 * never.
+	 *
+	 * An unknown id leaves the layout alone -- a setting written by a
+	 * newer version, or by hand, should not quietly become a keyboard
+	 * whose letters are somewhere else.
+	 */
+	if (bssh_set_keyboard_layout(settings.keyboard_layout())) {
+		m_keyboard->rebuild_keys();
+	}
+
 	const bssh_soft_keyboard_catalog::style_t wanted =
 	        settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_FULL
 	                ? bssh_soft_keyboard_catalog::STYLE_FULL

@@ -1,0 +1,57 @@
+# Sabotages for the layout engine (project.md sec 6.2).
+#
+# Each is the version this would have been if written carelessly, and
+# each leaves code that reads as correct.
+
+# 1. The compact number row follows the layout again.
+#    This is the state it shipped in and the contract caught on the first
+#    layout that was not US: Swedish puts ( and & where US has * and ^,
+#    so a Swedish compact keyboard cannot type either. The digits are
+#    1-0 in both layouts, so the row looks perfectly right.
+[[sabotage]]
+name = "the number row follows the layout instead of the palette"
+file = "src/ui/soft_keyboard_layout.cpp"
+find = "\tgroup.rows.append(literal_row(\"1234567890\"));"
+replace = "\tgroup.rows.append(slot_run(\"AE\", 1, 10, 2));"
+expect = "both_keyboards_reach_every_printable_character"
+
+# 2. The full keyboard loses the ISO key.
+#    The full board has no symbol page -- its two pages are the main
+#    block and the keypad -- so it is purely the layout and inherits
+#    every gap the layout has. Without LSGT a Swedish full keyboard
+#    cannot type a bar at all.
+#
+#    Expected against the reachability test rather than the shape one,
+#    and finding that out is what fixed the shape test: it walked only
+#    the CURRENT layout, so a Swedish shift row four columns short went
+#    straight past it while the US row it was looking at was unchanged.
+#    It walks the catalogue now, and would catch this too.
+[[sabotage]]
+name = "the full keyboard drops the ISO key an ISO layout needs"
+file = "src/ui/soft_keyboard_layout.cpp"
+find = "\tif (iso) shift.append(slot_key(\"LSGT\", BSSH_FULL_UNIT));"
+replace = "\tif (false) shift.append(slot_key(\"LSGT\", BSSH_FULL_UNIT));"
+expect = "both_keyboards_reach_every_printable_character"
+
+# 3. An unknown layout is accepted rather than refused.
+#    A settings file written by a newer version, or edited by hand, would
+#    silently leave the keyboard on whatever was current while the window
+#    rebuilt it as though the change had taken -- and the caller has no
+#    way to tell that nothing happened.
+[[sabotage]]
+name = "an unknown layout reports success"
+file = "src/ui/soft_keyboard_layout.cpp"
+find = "\t\treturn true;\n\t}\n\treturn false;\n}"
+replace = "\t\treturn true;\n\t}\n\treturn true;\n}"
+expect = "an_unknown_layout_is_refused_and_changes_nothing"
+
+# 4. The settings page loses the layout control.
+#    The catalog stays right about every layout and the user has no way
+#    to choose one -- a correct function with nothing wired to it, which
+#    is this tree's most repeated defect.
+[[sabotage]]
+name = "the layout cannot be chosen"
+file = "src/ui/app_settings_view.cpp"
+find = "\tform->addRow(QStringLiteral(\"Layout\"), m_keyboard_layout);"
+replace = "\tm_keyboard_layout->hide();"
+expect = "the_layout_setting_reaches_the_keyboard"

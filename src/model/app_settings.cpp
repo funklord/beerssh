@@ -205,6 +205,15 @@ QString bssh_app_settings::theme() const {
 	return value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString();
 }
 
+QString bssh_app_settings::keyboard_layout() const {
+	return value(QStringLiteral("input/keyboard_layout"),
+	              QStringLiteral("us-intl")).toString();
+}
+
+void bssh_app_settings::set_keyboard_layout(const QString &id) {
+	store(QStringLiteral("input/keyboard_layout"), id);
+}
+
 void bssh_app_settings::set_theme(const QString &theme) {
 	store(QStringLiteral("appearance/theme"), theme);
 }

@@ -144,6 +144,20 @@ public:
 	QString theme() const;
 	void set_theme(const QString &theme);
 
+	/*
+	 * Which keyboard layout the built-in keyboard draws (sec 6.2).
+	 *
+	 * GLOBAL rather than preset-owned, unlike the colour scheme and the
+	 * key row beside it, and the difference is what the setting is about.
+	 * Those suit a HOST -- a network switch wants different keys from a
+	 * Linux box. A keyboard layout suits a PERSON: it is where their
+	 * hands expect the letters to be, and a different alphabet per server
+	 * would be a strange thing to want. Set by the copyright holder
+	 * 2026-09-04.
+	 */
+	QString keyboard_layout() const;
+	void set_keyboard_layout(const QString &id);
+
 	key_row_visibility_t key_row_visibility() const;
 	void set_key_row_visibility(key_row_visibility_t visibility);
 

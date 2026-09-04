@@ -62,6 +62,16 @@ public:
 	/* The side button, so a test can press what a thumb presses. */
 	QAbstractButton *group_button() const { return m_group_button; }
 
+	/*
+	 * Draw the keys again, because the CATALOG changed underneath.
+	 *
+	 * set_style() and set_group() cover a change of mind about which
+	 * keys to show; this covers the keys themselves being different --
+	 * a new keyboard layout. The widget holds nothing but what it read
+	 * from the catalog, so rebuilding is the whole of the update.
+	 */
+	void rebuild_keys() { rebuild(); }
+
 signals:
 	/*
 	 * The configuration key: show the settings the user would otherwise

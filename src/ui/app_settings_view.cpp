@@ -101,6 +101,25 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                     int(bssh_app_settings::KEYBOARD_BUILT_IN_FULL));
 	form->addRow(QStringLiteral("Keyboard"), m_keyboard);
 
+	/*
+	 * Which layout the built-in keyboard draws (sec 6.2).
+	 *
+	 * Beside the keyboard setting rather than on a preset, because a
+	 * layout is where a PERSON's hands expect the letters to be. The
+	 * colour scheme and the key row above are preset-owned since they
+	 * suit a host; a different alphabet per server would be a strange
+	 * thing to want.
+	 *
+	 * Listed from the catalog rather than spelled out here, so adding a
+	 * layout is one table and no edit to this page.
+	 */
+	m_keyboard_layout = new QComboBox(this);
+	m_keyboard_layout->setObjectName(QStringLiteral("keyboard-layout"));
+	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+		m_keyboard_layout->addItem(layout.display_name, layout.id);
+	}
+	form->addRow(QStringLiteral("Layout"), m_keyboard_layout);
+
 	QLabel *keyboard_note = bssh_wrapped_note(
 	        QStringLiteral("This device's keyboard keeps its prediction, languages and "
 	                        "layout, with the key row above it for Ctrl, Esc, Tab and the "
@@ -622,6 +641,9 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	const int keyboard_index = m_keyboard->findData(int(settings.keyboard()));
 	m_keyboard->setCurrentIndex(keyboard_index < 0 ? 0 : keyboard_index);
 
+	const int layout_index = m_keyboard_layout->findData(settings.keyboard_layout());
+	m_keyboard_layout->setCurrentIndex(layout_index < 0 ? 0 : layout_index);
+
 	/*
 	 * Every control commits, not just the first one. The lambda used to
 	 * hang off the key row alone, so once a second setting appeared here
@@ -638,6 +660,11 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		commit([this](bssh_app_settings &s) {
 			s.set_keyboard(bssh_app_settings::keyboard_t(
 			        m_keyboard->currentData().toInt()));
+		});
+	});
+	connect(m_keyboard_layout, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_keyboard_layout(m_keyboard_layout->currentData().toString());
 		});
 	});
 	connect(m_theme, &QComboBox::currentIndexChanged, this, [this] {

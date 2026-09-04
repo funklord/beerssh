@@ -67,6 +67,7 @@ private:
 	QComboBox *m_key_row;
 	QComboBox *m_keyboard;
 	QLabel *m_keyboard_fallback;
+	QComboBox *m_keyboard_layout;
 	QComboBox *m_theme;
 	QComboBox *m_scrollbar;
 	QComboBox *m_status_line;

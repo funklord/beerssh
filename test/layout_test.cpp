@@ -963,6 +963,46 @@ void layout_test::an_ampersand_cap_is_not_left_to_the_style() {
 	QVERIFY2(found, "no cap on the compact keyboard is labelled &");
 }
 
+namespace {
+
+/*
+ * Leave the layout as it was found, by a destructor.
+ *
+ * The layout is process-wide and the catalog is a singleton, so a test
+ * that selects one and returns early on a failed QVERIFY would leave
+ * every later test reading a Swedish keyboard. Same reason
+ * registry_left_as_found_t exists, and the same failure it was written
+ * for: a cleanup at the bottom of a function is the cleanup that does
+ * not run on the day it is needed.
+ */
+struct layout_left_as_found_t {
+	QString id;
+
+	layout_left_as_found_t() : id(bssh_keyboard_layout()) {}
+	~layout_left_as_found_t() { bssh_set_keyboard_layout(id); }
+};
+
+/* The character a TEXT key sends, for a key that sends this one. */
+QChar slot_character(char32_t wanted) {
+	for (const bssh_soft_key_group_t &group :
+	     bssh_soft_keyboard_catalog::instance().all(
+	             bssh_soft_keyboard_catalog::STYLE_FULL)) {
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind == bssh_key_t::TEXT
+				     && char32_t(key.value) == wanted) {
+					return QChar(uint(key.value));
+				}
+			}
+		}
+	}
+	return QChar();
+}
+
+void check_every_printable_character(const QString &layout_id);
+
+} /* namespace */
+
 /*
  * Every printable ASCII character is reachable on both keyboards
  * (sec 6.2).
@@ -986,6 +1026,143 @@ void layout_test::an_ampersand_cap_is_not_left_to_the_style() {
  * reading why it was missed, which is the argument for running them.
  */
 void layout_test::both_keyboards_reach_every_printable_character() {
+	/*
+	 * EVERY layout, not just the one that happens to be current. This is
+	 * the contract a layout has to satisfy to be in the catalog at all:
+	 * a Swedish letter block has no bar on it, because a Swedish board
+	 * puts one on the ISO key ANSI does not have, and what covers it is
+	 * the symbol page being ours and ASCII. That is a claim about the
+	 * whole keyboard, so only asking it of the whole keyboard, under
+	 * each layout in turn, can check it.
+	 */
+	const layout_left_as_found_t restore;
+
+	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+		QVERIFY2(bssh_set_keyboard_layout(layout.id),
+		          qPrintable(QStringLiteral("the catalog lists %1 and will not "
+		                                     "select it").arg(layout.id)));
+		check_every_printable_character(layout.id);
+	}
+}
+
+/*
+ * The layout setting reaches the keyboard (sec 6.2).
+ *
+ * The catalog can be right about every layout and the user still have no
+ * way to choose one, which is this tree's most repeated defect and the
+ * reason this test exists rather than a second catalog test. It goes
+ * through the settings PAGE -- the control a thumb touches -- and then
+ * asks the window's keyboard what its keys send.
+ */
+void layout_test::the_layout_setting_reaches_the_keyboard() {
+	const layout_left_as_found_t restore_layout;
+
+	bssh_app_settings settings;
+	const QString before = settings.keyboard_layout();
+	const bssh_app_settings::keyboard_t style_before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+	settings.set_keyboard_layout(QStringLiteral("us-intl"));
+
+	bssh_main_window window;
+	window.resize(400, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	const registry_left_as_found_t tidy(window.registry());
+
+	bssh_app_settings_view *page = window.findChild<bssh_app_settings_view *>();
+	QVERIFY2(page, "the window has no settings page");
+	QComboBox *chooser = page->findChild<QComboBox *>(QStringLiteral("keyboard-layout"));
+	QVERIFY2(chooser, "the settings page offers no layout control");
+
+	/*
+	 * And it is on the page rather than merely constructed. findChild
+	 * finds a widget that was built and never added to a layout, or one
+	 * that was explicitly hidden -- both of which are a control the user
+	 * cannot reach, and both of which this test passed until a sabotage
+	 * replaced the addRow() with a hide().
+	 *
+	 * isHidden() rather than isVisible(), because the settings page is
+	 * one card of a stack and need not be the visible one for the
+	 * control to be properly on it.
+	 */
+	QVERIFY2(!chooser->isHidden(), "the layout control is on the page but hidden");
+	QVERIFY2(chooser->parentWidget() != nullptr,
+	          "the layout control was never given a parent");
+
+	const int swedish = chooser->findData(QStringLiteral("se"));
+	QVERIFY2(swedish >= 0, "the control does not list the Swedish layout");
+	chooser->setCurrentIndex(swedish);
+
+	QCOMPARE(bssh_app_settings().keyboard_layout(), QStringLiteral("se"));
+
+	/*
+	 * And the keys followed. Asked of the CATALOG the widget draws from,
+	 * because that is what the setting is supposed to move; the widget
+	 * rebuilding from it is covered by rebuild_keys() having a caller.
+	 */
+	QVERIFY(bssh_set_keyboard_layout(bssh_app_settings().keyboard_layout()));
+	QCOMPARE(slot_character(0x00e5), QChar(0x00e5));
+
+	settings.set_keyboard_layout(before);
+	settings.set_keyboard(style_before);
+}
+
+/*
+ * A layout that is not in the catalog changes nothing.
+ *
+ * A settings file written by a newer version, or edited by hand, must
+ * not quietly produce a keyboard whose letters are somewhere else. The
+ * refusal is reported rather than swallowed, so the window knows not to
+ * rebuild.
+ */
+void layout_test::an_unknown_layout_is_refused_and_changes_nothing() {
+	const layout_left_as_found_t restore;
+
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("us-intl")));
+	QVERIFY(!bssh_set_keyboard_layout(QStringLiteral("klingon")));
+	QCOMPARE(bssh_keyboard_layout(), QStringLiteral("us-intl"));
+
+	/* And the keyboard it left behind is still the one that was asked for. */
+	QCOMPARE(slot_character(U'q'), QChar(U'q'));
+}
+
+/*
+ * Selecting a layout changes the letters (sec 6.2).
+ *
+ * The point of the split, asserted at the only place it is visible: the
+ * geometry says AD11 and the layout says what AD11 sends, so a Swedish
+ * keyboard puts an a-ring where the US one puts a bracket -- with no
+ * change to a single span, row or group.
+ */
+void layout_test::choosing_a_layout_changes_what_the_keys_send() {
+	const layout_left_as_found_t restore;
+
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("us-intl")));
+	QCOMPARE(slot_character(U'['), QChar(U'['));
+
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("se")));
+	QCOMPARE(slot_character(0x00e5), QChar(0x00e5));   /* a-ring, AD11 */
+	QCOMPARE(slot_character(0x00f6), QChar(0x00f6));   /* o-diaeresis, AC10 */
+	QCOMPARE(slot_character(0x00e4), QChar(0x00e4));   /* a-diaeresis, AC11 */
+
+	/*
+	 * And the geometry did not move. Same groups, same rows, same
+	 * columns -- which is the whole claim the slot split makes.
+	 */
+	const QList<bssh_soft_key_group_t> &swedish =
+	        bssh_soft_keyboard_catalog::instance().all(
+	                bssh_soft_keyboard_catalog::STYLE_FULL);
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("us-intl")));
+	const QList<bssh_soft_key_group_t> &american =
+	        bssh_soft_keyboard_catalog::instance().all(
+	                bssh_soft_keyboard_catalog::STYLE_FULL);
+	QCOMPARE(swedish.size(), american.size());
+}
+
+namespace {
+
+void check_every_printable_character(const QString &layout_id) {
 	for (bssh_soft_keyboard_catalog::style_t style :
 	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
 	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
@@ -1012,10 +1189,12 @@ void layout_test::both_keyboards_reach_every_printable_character() {
 		}
 
 		QVERIFY2(missing.isEmpty(),
-		          qPrintable(QStringLiteral("style %1 cannot type: %2")
-		                             .arg(int(style)).arg(missing)));
+		          qPrintable(QStringLiteral("layout %1, style %2 cannot type: %3")
+		                             .arg(layout_id).arg(int(style)).arg(missing)));
 	}
 }
+
+} /* namespace */
 
 /*
  * A keyboard has a key for every level it advertises (sec 6.2).
@@ -1544,8 +1723,24 @@ void layout_test::every_keyboard_group_is_the_same_shape() {
 	 * units, so one wrong span puts every key after it in the wrong
 	 * place, and the arithmetic is nobody's idea of readable.
 	 */
-	check_keyboard_shape(bssh_soft_keyboard_catalog::STYLE_COMPACT);
-	check_keyboard_shape(bssh_soft_keyboard_catalog::STYLE_FULL);
+	/*
+	 * EVERY layout, because a row's width can depend on one. An ISO
+	 * layout carries LSGT and the full board spends a column of the left
+	 * Shift on it; get that arithmetic wrong and the row is 56 or 64
+	 * rather than 60.
+	 *
+	 * It checked only the current layout until a sabotage showed why
+	 * that is not enough: dropping the ISO key left the Swedish shift
+	 * row four columns short and this test saw nothing, because under
+	 * US the row it was looking at had not changed.
+	 */
+	const layout_left_as_found_t restore;
+
+	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+		QVERIFY(bssh_set_keyboard_layout(layout.id));
+		check_keyboard_shape(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+		check_keyboard_shape(bssh_soft_keyboard_catalog::STYLE_FULL);
+	}
 }
 
 void layout_test::the_built_in_keyboard_fits_a_phone() {

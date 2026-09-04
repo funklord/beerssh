@@ -45,6 +45,9 @@ private slots:
 	void a_keypad_key_sends_only_its_digit();
 	void a_keyboard_can_reach_every_level_it_shows();
 	void both_keyboards_reach_every_printable_character();
+	void an_unknown_layout_is_refused_and_changes_nothing();
+	void the_layout_setting_reaches_the_keyboard();
+	void choosing_a_layout_changes_what_the_keys_send();
 	void an_ampersand_cap_is_not_left_to_the_style();
 	void altgr_reaches_the_us_international_level();
 	void shift_reaches_every_character_a_real_keyboard_has();
