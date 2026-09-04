@@ -86,8 +86,17 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_keyboard->setObjectName(QStringLiteral("keyboard"));
 	m_keyboard->addItem(QStringLiteral("This device's keyboard"),
 	                     int(bssh_app_settings::KEYBOARD_SYSTEM));
-	m_keyboard->addItem(QStringLiteral("BeerSSH's own keyboard"),
+	/*
+	 * Short deliberately. A combo asks for room for its LONGEST item, and
+	 * the page it sits on has to fit 360dp -- "BeerSSH's own keyboard
+	 * (full size)" wanted 373px of the 346 available and pushed the whole
+	 * settings form into sideways scrolling. Caught by the touch-fits
+	 * test rather than by looking, which is the point of that test.
+	 */
+	m_keyboard->addItem(QStringLiteral("BeerSSH's own, compact"),
 	                     int(bssh_app_settings::KEYBOARD_BUILT_IN));
+	m_keyboard->addItem(QStringLiteral("BeerSSH's own, full size"),
+	                     int(bssh_app_settings::KEYBOARD_BUILT_IN_FULL));
 	form->addRow(QStringLiteral("Keyboard"), m_keyboard);
 
 	QLabel *keyboard_note = bssh_wrapped_note(

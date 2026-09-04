@@ -47,6 +47,21 @@ struct bssh_key_t {
 		CHORD,
 
 		/*
+		 * Occupies its columns and draws nothing.
+		 *
+		 * The full-size keyboard (sec 6.2) is laid out in a real
+		 * keyboard's proportions, and a real keyboard has gaps: between
+		 * the function banks, between the main block and the navigation
+		 * cluster. It also has keys a terminal cannot send -- Super,
+		 * Menu, PrtSc, ScrLk, Pause, NumLock have no encoding in
+		 * libvterm and no meaning down the wire. Both are the same
+		 * problem: the geometry has to hold the space or every key after
+		 * it shifts, and drawing a button that does nothing is the
+		 * "absent, not faked" rule sec 11 applies to capabilities.
+		 */
+		SPACER,
+
+		/*
 		 * Fn: swaps the row for F1..F12 and back (sec 6.2, which lists
 		 * it among the keys the row must carry).
 		 *

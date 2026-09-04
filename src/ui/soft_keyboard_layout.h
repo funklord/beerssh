@@ -50,8 +50,30 @@
  */
 const int BSSH_KEYBOARD_COLUMNS = 20;
 
+/*
+ * The widest any group is, and the only thing that needs to know both
+ * numbers: clearing the stretch on columns a narrower group does not use
+ * has to walk past its own width. Asserted against the catalog, so a
+ * group wider than this fails a test rather than being drawn clipped.
+ */
+const int BSSH_KEYBOARD_MAX_COLUMNS = 60;
+
 struct bssh_soft_key_group_t {
 	QString id;
+
+	/*
+	 * How wide every row of THIS group is, in grid columns.
+	 *
+	 * Per group rather than one constant for the tree, because the two
+	 * keyboards do not share a unit. The compact one counts half-keys and
+	 * is 20 wide; the full-size one counts QUARTER-keys and is 60, which
+	 * is 15u -- the width of a real keyboard's main block -- because that
+	 * is the granularity 1.25u, 1.75u, 2.25u and 6.25u need to come out
+	 * exact. A single grid could not express both without one of them
+	 * rounding, and a keyboard whose Shift is a quarter-key wrong is one
+	 * a touch-typist's hand notices immediately.
+	 */
+	int columns;
 
 	/*
 	 * What the side button reads while THIS group is the next one. Short,
@@ -74,6 +96,8 @@ struct bssh_soft_key_group_t {
 	 * whose whole job is to show different keys.
 	 */
 	QList<QList<bssh_key_t> > rows;
+
+	bssh_soft_key_group_t() : columns(BSSH_KEYBOARD_COLUMNS) {}
 };
 
 /*
@@ -86,11 +110,27 @@ struct bssh_soft_key_group_t {
  */
 class bssh_soft_keyboard_catalog {
 public:
+	/*
+	 * Two keyboards, not two settings.
+	 *
+	 * COMPACT is the thumb keyboard: three groups of four rows, letters
+	 * where a phone user expects them. FULL is a real keyboard's shape
+	 * and key count, for a tablet, a foldable's inner screen, or anyone
+	 * who would rather have Tab, Ctrl and the function row where their
+	 * hands already know they are.
+	 */
+	enum style_t {
+		STYLE_COMPACT,
+		STYLE_FULL
+	};
+
 	static bssh_soft_keyboard_catalog &instance();
 
 	bssh_soft_keyboard_catalog();
 
-	const QList<bssh_soft_key_group_t> &all() const { return m_groups; }
+	const QList<bssh_soft_key_group_t> &all(style_t style = STYLE_COMPACT) const {
+		return style == STYLE_FULL ? m_full : m_groups;
+	}
 
 	/*
 	 * The group after this one, wrapping. The side button cycles rather
@@ -98,12 +138,13 @@ public:
 	 * away, and a chooser would be a menu over a keyboard that exists
 	 * because the screen is already too small.
 	 */
-	int next_index(int index) const;
+	int next_index(int index, style_t style = STYLE_COMPACT) const;
 
-	int index_of(const QString &id) const;
+	int index_of(const QString &id, style_t style = STYLE_COMPACT) const;
 
 private:
 	QList<bssh_soft_key_group_t> m_groups;
+	QList<bssh_soft_key_group_t> m_full;
 };
 
 #endif /* BSSH_SOFT_KEYBOARD_LAYOUT_H */

@@ -39,7 +39,8 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
       m_keys(nullptr),
       m_grid(nullptr),
       m_group_button(nullptr),
-      m_group(0) {
+      m_group(0),
+      m_style(bssh_soft_keyboard_catalog::STYLE_COMPACT) {
 	QHBoxLayout *outer = new QHBoxLayout(this);
 	outer->setContentsMargins(0, 0, 0, 0);
 	outer->setSpacing(0);
@@ -68,7 +69,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	outer->addWidget(m_group_button, 0);
 
 	connect(m_group_button, &QAbstractButton::clicked, this, [this] {
-		set_group(bssh_soft_keyboard_catalog::instance().next_index(m_group));
+		set_group(bssh_soft_keyboard_catalog::instance().next_index(m_group, m_style));
 	});
 
 	if (m_router) {
@@ -86,6 +87,14 @@ QString bssh_soft_keyboard::group_id() const {
 	        bssh_soft_keyboard_catalog::instance().all();
 	if (m_group < 0 || m_group >= groups.size()) return QString();
 	return groups.at(m_group).id;
+}
+
+void bssh_soft_keyboard::set_style(bssh_soft_keyboard_catalog::style_t style) {
+	if (style == m_style) return;
+
+	m_style = style;
+	m_group = 0;
+	rebuild();
 }
 
 void bssh_soft_keyboard::set_group(int index) {
@@ -119,10 +128,22 @@ QAbstractButton *bssh_soft_keyboard::make_button(const QString &label) {
 }
 
 void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
+	/*
+	 * A spacer holds its columns and draws nothing: the gap between the
+	 * function banks, and the keys a terminal cannot send. No button is
+	 * made, because a button that does nothing is worse than a gap -- it
+	 * invites a press and answers with silence.
+	 */
+	if (key.kind == bssh_key_t::SPACER) return;
+
 	QAbstractButton *button = make_button(key.label);
 	m_grid->addWidget(button, row, column, 1, key.span);
 
 	switch (key.kind) {
+	case bssh_key_t::SPACER:
+		/* Returned above; named so the switch stays exhaustive. */
+		break;
+
 	case bssh_key_t::KEY: {
 		const int code = key.value;
 		connect(button, &QAbstractButton::clicked, this, [this, code] {
@@ -216,7 +237,7 @@ void bssh_soft_keyboard::rebuild() {
 	}
 
 	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all();
+	        bssh_soft_keyboard_catalog::instance().all(m_style);
 	if (m_group < 0 || m_group >= groups.size()) return;
 
 	const bssh_soft_key_group_t &group = groups.at(m_group);
@@ -234,13 +255,22 @@ void bssh_soft_keyboard::rebuild() {
 	 * nothing else. Without this the columns are sized from whatever
 	 * happens to sit in them and a row of ten letters comes out ragged.
 	 */
-	for (int c = 0; c < BSSH_KEYBOARD_COLUMNS; ++c) m_grid->setColumnStretch(c, 1);
+	for (int c = 0; c < group.columns; ++c) m_grid->setColumnStretch(c, 1);
+
+	/*
+	 * And the columns the PREVIOUS group used and this one does not, or a
+	 * narrower group keeps stretch on columns nothing occupies and comes
+	 * out squeezed into the left of the widget.
+	 */
+	for (int c = group.columns; c < BSSH_KEYBOARD_MAX_COLUMNS; ++c) {
+		m_grid->setColumnStretch(c, 0);
+	}
 
 	/*
 	 * The side button names the group it goes TO, not the one on screen.
 	 * A button labelled with where you already are is one nobody presses.
 	 */
-	const int next = bssh_soft_keyboard_catalog::instance().next_index(m_group);
+	const int next = bssh_soft_keyboard_catalog::instance().next_index(m_group, m_style);
 	if (next >= 0 && next < groups.size()) {
 		m_group_button->setText(groups.at(next).button_label);
 	}

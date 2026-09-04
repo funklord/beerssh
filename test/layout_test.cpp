@@ -736,9 +736,17 @@ void layout_test::every_touch_surface_fits_a_phone()
 
 }
 
-void layout_test::every_keyboard_group_is_the_same_shape() {
+namespace {
+
+/*
+ * One keyboard's shape: same rows in every group, every row exactly the
+ * group's own width, and no group wider than the widget clears stretch
+ * for. Called once per style rather than wrapped in a loop, so the body
+ * keeps its indentation and the failure message names which keyboard.
+ */
+void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
 	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all();
+	        bssh_soft_keyboard_catalog::instance().all(style);
 
 	QVERIFY2(groups.size() >= 2,
 	          "a side button that walks one group is a button with nothing to do");
@@ -779,13 +787,35 @@ void layout_test::every_keyboard_group_is_the_same_shape() {
 			 * on the previous row.
 			 */
 			QString wrong = QStringLiteral(
-			  "%1 row %2 adds to %3 half-columns, not %4 -- its keys will not "
+			  "%1 row %2 adds to %3 columns, not %4 -- its keys will not "
 			  "line up with the rows above and below");
 			wrong = wrong.arg(group.display_name).arg(r);
-			wrong = wrong.arg(columns).arg(BSSH_KEYBOARD_COLUMNS);
-			QVERIFY2(columns == BSSH_KEYBOARD_COLUMNS, qPrintable(wrong));
+			wrong = wrong.arg(columns).arg(group.columns);
+			QVERIFY2(columns == group.columns, qPrintable(wrong));
 		}
+
+		/*
+		 * And no group is wider than the widget is prepared to clear
+		 * stretch for, or switching to a narrower one leaves stretch on
+		 * columns nothing occupies.
+		 */
+		QVERIFY2(group.columns <= BSSH_KEYBOARD_MAX_COLUMNS,
+		          "a group wider than BSSH_KEYBOARD_MAX_COLUMNS is drawn clipped");
 	}
+}
+
+} /* namespace */
+
+void layout_test::every_keyboard_group_is_the_same_shape() {
+	/*
+	 * BOTH keyboards, because there are two now (sec 6.2) and the rule is
+	 * about neither one in particular. The full-size board is where this
+	 * earns its keep: its rows are built from real key widths in quarter
+	 * units, so one wrong span puts every key after it in the wrong
+	 * place, and the arithmetic is nobody's idea of readable.
+	 */
+	check_keyboard_shape(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	check_keyboard_shape(bssh_soft_keyboard_catalog::STYLE_FULL);
 }
 
 void layout_test::the_built_in_keyboard_fits_a_phone() {

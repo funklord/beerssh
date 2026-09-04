@@ -1,5 +1,7 @@
 #include "model/app_settings.h"
 
+#include "platform/platform.h"
+
 #include <QColor>
 
 #include <QDir>
@@ -101,25 +103,53 @@ void bssh_app_settings::set_key_row_visibility(key_row_visibility_t visibility) 
 
 namespace {
 
-const char *const BSSH_KEYBOARD_KEYS[] = { "system", "built_in" };
+const char *const BSSH_KEYBOARD_KEYS[] = { "system", "built_in", "built_in_full" };
+const int BSSH_KEYBOARD_COUNT = 3;
 
 } /* namespace */
 
-bssh_app_settings::keyboard_t bssh_app_settings::keyboard() const {
-	const QString text = value(QStringLiteral("input/keyboard"),
-	                            QStringLiteral("system")).toString();
+/*
+ * The default follows the PLATFORM, which is the correction this setting
+ * needed: it was SYSTEM everywhere.
+ *
+ * On a phone that was the wrong way round. The system keyboard has no Esc,
+ * no Ctrl, no arrows and no function keys -- the four things a terminal is
+ * mostly made of -- so a user who installs BeerSSH and taps the terminal
+ * gets a keyboard that cannot type the characters the app exists for, and
+ * has to find a setting to fix it. The keyboard sec 6.2 asks for is the
+ * one a touch device should start with.
+ *
+ * It stays SYSTEM on a desktop for the same reason it is wrong on a phone:
+ * there is a real keyboard already, and drawing one on screen would take a
+ * third of the terminal to duplicate it.
+ *
+ * A stored value always wins, so nobody's choice is changed by this -- it
+ * decides only what an installation that has never been asked does.
+ */
+bssh_app_settings::keyboard_t bssh_app_settings::default_keyboard() {
+	const bssh_platform *platform = bssh_platform::instance();
+	return (platform && platform->is_touch_primary()) ? KEYBOARD_BUILT_IN
+	                                                   : KEYBOARD_SYSTEM;
+}
 
-	for (int i = 0; i < 2; ++i) {
+bssh_app_settings::keyboard_t bssh_app_settings::keyboard() const {
+	const QVariant stored = value(QStringLiteral("input/keyboard"), QVariant());
+	if (!stored.isValid()) return default_keyboard();
+
+	const QString text = stored.toString();
+	for (int i = 0; i < BSSH_KEYBOARD_COUNT; ++i) {
 		if (text == QLatin1String(BSSH_KEYBOARD_KEYS[i])) return keyboard_t(i);
 	}
 
 	/*
-	 * An unreadable value reads as SYSTEM, which is what every existing
-	 * installation already has and what a device with a working keyboard
-	 * wants. Defaulting the other way would hand a phone a keyboard it
-	 * did not ask for because somebody mistyped a word in app.ini.
+	 * An unreadable value reads as the platform's default rather than as
+	 * SYSTEM. It used to read as SYSTEM with the argument that a mistyped
+	 * word in app.ini must not hand a phone a keyboard it did not ask
+	 * for -- but with the default the other way round on touch, that
+	 * argument now says the opposite: a typo must not take the keyboard
+	 * AWAY from a device whose only way to type is the one we draw.
 	 */
-	return KEYBOARD_SYSTEM;
+	return default_keyboard();
 }
 
 void bssh_app_settings::set_keyboard(keyboard_t keyboard) {

@@ -81,8 +81,24 @@ public:
 	 */
 	enum keyboard_t {
 		KEYBOARD_SYSTEM,
-		KEYBOARD_BUILT_IN
+
+		/* The compact one: three groups of four rows, thumb-sized. */
+		KEYBOARD_BUILT_IN,
+
+		/*
+		 * A full-size keyboard in a real keyboard's proportions -- every
+		 * key a 104-key board has, at the width it has there, with the
+		 * clusters that do not fit on a second page (sec 6.2).
+		 */
+		KEYBOARD_BUILT_IN_FULL
 	};
+
+	/*
+	 * What an installation that has never been asked gets. Public because
+	 * the settings page shows which one that is, and a second copy of the
+	 * rule would be a second thing to be wrong.
+	 */
+	static keyboard_t default_keyboard();
 
 	keyboard_t keyboard() const;
 	void set_keyboard(keyboard_t keyboard);

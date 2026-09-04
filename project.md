@@ -1207,6 +1207,85 @@ up, a strip of modifiers has nothing to modify.
   came out of a test failure, and the test was right — the decision was already
   written down.
 
+
+**A second built-in keyboard, in a real keyboard's shape — [BUILT
+2026-09-04].** The compact one above is a phone keyboard: three groups of
+four rows, thumb-sized, letters where a phone user expects them. The
+holder asked for the other thing as well — every key a real board has, at
+the width it has there — and the two are different enough that neither can
+be the other with a setting.
+
+**Quarter-key columns, because halves cannot express a keyboard.** The
+compact one counts half-keys on a 20-wide grid. ANSI needs 1.25u, 1.5u,
+1.75u, 2.25u, 2.75u and 6.25u, so the full board counts QUARTERS and is 60
+wide — 15u, the width of a real main block. `columns` is therefore a
+property of the GROUP rather than a constant for the tree. A single grid
+could not hold both without one of them rounding, and a Shift a quarter-key
+wrong is one a touch-typist's hand notices at once.
+
+**Two pages, split where a real board's clusters are.** Page one is the
+main block: function row, digits, the three letter rows, bottom row — 78
+keys. Page two is what sits to the right of it on a real keyboard: the
+navigation cluster, the arrows and the numeric keypad. Both pages are the
+same 60 columns, so a keypad key is exactly as wide as a letter; giving
+page two a narrower grid would have made its keys BIGGER than the letters',
+which is the one thing a keyboard shaped like a keyboard must not do.
+
+**Keys a terminal cannot send hold their space and draw nothing —
+[DECIDED 2026-09-04]**, by the copyright holder, asked because the other
+answer was defensible: a real keyboard has those keys, and "as many keys as
+a real keyboard" could reasonably have meant drawing them inert. Super,
+Menu, PrtSc, ScrLk, Pause, NumLock and Caps Lock have no encoding in
+libvterm and no meaning on the wire. The geometry has to keep their places
+or every key after them shifts; drawing a button that does nothing is the
+*absent, not faked* rule §11 applies to capabilities, arriving in a
+keyboard. `bssh_key_t::SPACER` is that, and the widget's switch over kinds
+is exhaustive so a new kind fails to compile rather than drawing a dead
+button.
+
+**It does not fit a phone, and that is arithmetic rather than a defect.**
+15u plus the page button needs about **770dp** to give every key §6.2's
+48dp touch target. Measured: a 360dp phone gives each 1u key about **21dp**
+and Qt elides `Home`, `PgUp`, `Left` and `F10`–`F12` to an ellipsis; a Fold's
+cover screen at 317dp gives about 18dp; its inner screen at roughly 680dp
+gives about 42dp, which is usable. Rendered at 800dp it reads as a
+keyboard, every label intact. **So this is a large-screen keyboard**, and
+whether a narrow device should fall back to the compact one automatically —
+the way §8.2 collapses splits to tabs — is the holder's call and is open.
+
+**The default was wrong and is now the platform's.** `keyboard()` returned
+SYSTEM everywhere. On a phone that hands a new user a keyboard with no Esc,
+no Ctrl, no arrows and no function keys — the four things a terminal is
+mostly made of — and leaves them to find a setting to fix it. It is
+BUILT_IN on a touch device and SYSTEM on a desktop, where there is a real
+keyboard already. A stored value always wins, so nobody's choice changes.
+
+**And the consumer had to be asked the right question.** The window decided
+whether to show a built-in keyboard with `keyboard() == KEYBOARD_BUILT_IN`.
+With a second built-in value that test is false for the full board, so the
+system panel would have been declined and nothing drawn in its place — a
+phone with no keyboard at all. It asks `!= KEYBOARD_SYSTEM` now. §10
+records the same shape for preset fields: a setting that reached the first
+consumer anybody thought of and not the second.
+
+**Two things the pictures caught that no assertion did**, which is §17's
+argument for `make shots` and the reason the keyboard now has shots at all
+— it had none, a surface the user's thumbs live on with nothing rendering
+it. The settings combo's third item wanted 373px of a phone's 346 and
+pushed the whole form into sideways scrolling. And the elision above is
+only visible in a render; the catalog's shape test says every row adds up,
+and every row did.
+
+**The row arithmetic is generated, not typed.** Page two was written with
+its widths spelled out and one row came to 52 instead of 60 — caught by the
+catalog's shape test, which now walks both styles and each group's own
+width. It is built from named geometry (`nav`, `gap`, `pad`, `trailing`,
+summing to the row by construction) since. Worth recording how the hand
+check missed it: page one was re-derived from ANSI dimensions and passed,
+and page two is exactly the part that was not re-derived. **A check over
+part of the population reads exactly like a check over all of it.**
+
+
 ### 6.3 Input routing
 Central **`bssh_input_router`** converts (key, modifiers, terminal mode) → bytes,
 using the emulator's current modes (application cursor keys, keypad mode,

@@ -16,6 +16,8 @@
 #include "input/input_router.h"
 #include "ui/key_row_layout.h"
 #include "ui/key_row.h"
+#include "ui/soft_keyboard.h"
+#include "ui/soft_keyboard_layout.h"
 #include "ui/host_editor.h"
 #include "ui/host_list.h"
 #include "ui/licences_view.h"
@@ -227,6 +229,60 @@ void bssh_ui_shots::render_touch_surfaces() {
 	 */
 	bssh_emulator key_emulator(80, 24);
 	bssh_input_router key_router(&key_emulator);
+
+	/*
+	 * The built-in keyboards, which had no picture at all.
+	 *
+	 * A surface the user's thumbs live on, and until now nothing rendered
+	 * it -- so its geometry was held by an assertion that every row adds
+	 * to the grid's width and by nothing that could see whether the
+	 * result looks like a keyboard. The full-size one especially: its
+	 * widths are ANSI's in quarter keys, and "Shift is the right size" is
+	 * exactly the claim sec 17 says a render answers and a number does
+	 * not.
+	 *
+	 * Every group of both styles, because the page button is the whole
+	 * design and a picture of page one says nothing about page two.
+	 */
+	struct keyboard_shot_t {
+		bssh_soft_keyboard_catalog::style_t style;
+		const char *name;
+	};
+	const keyboard_shot_t keyboards[] = {
+		{ bssh_soft_keyboard_catalog::STYLE_COMPACT, "compact" },
+		{ bssh_soft_keyboard_catalog::STYLE_FULL,    "full" }
+	};
+
+	for (const keyboard_shot_t &which : keyboards) {
+		const QList<bssh_soft_key_group_t> &groups =
+		        bssh_soft_keyboard_catalog::instance().all(which.style);
+
+		for (int g = 0; g < groups.size(); ++g) {
+			bssh_soft_keyboard keys(&key_router);
+			keys.set_style(which.style);
+			keys.set_group(g);
+
+			const QString name = QStringLiteral("touch-keyboard-%1-%2")
+			        .arg(QLatin1String(which.name), groups.at(g).id);
+			shoot(name, &keys, BSSH_PHONE_W, keys.sizeHint().height());
+
+			/*
+			 * And the full one again at a tablet's width, because a
+			 * phone is not where it is meant to be used and a picture
+			 * of it there answers the wrong question.
+			 *
+			 * 15u of keyboard plus the page button needs about 770dp
+			 * to give every key sec 6.2's 48dp target; a 360dp phone
+			 * gives each one about 21dp, which is why the labels
+			 * elide there. This is the picture that says whether the
+			 * proportions are right.
+			 */
+			if (which.style == bssh_soft_keyboard_catalog::STYLE_FULL) {
+				shoot(name + QStringLiteral("-wide"), &keys,
+				       800, keys.sizeHint().height());
+			}
+		}
+	}
 
 	for (const bssh_key_row_layout_t &layout : bssh_key_row_catalog::instance().all()) {
 		bssh_key_row row(&key_router);

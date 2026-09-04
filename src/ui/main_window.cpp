@@ -1271,13 +1271,24 @@ void bssh_main_window::apply_keyboard_choice() {
 	if (!m_keyboard || !m_key_row) return;
 
 	const bssh_app_settings settings;
-	const bool built_in = settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN;
+	/*
+	 * Asked as "not the system one" rather than by naming a value: there
+	 * are two built-in keyboards now (compact and full-size), and a test
+	 * for one of them would leave the other drawn as nothing while the
+	 * system panel stayed declined -- a phone with no keyboard at all.
+	 * sec 10 records the same shape for preset fields, where a setting
+	 * reached the first consumer anybody thought of and not the second.
+	 */
+	const bool built_in = settings.keyboard() != bssh_app_settings::KEYBOARD_SYSTEM;
 
 	/*
 	 * The row's own visibility rule still decides whether IT shows -- the
 	 * three-state setting, the platform, all of it. What this adds is
 	 * that the built-in keyboard replaces it rather than joining it.
 	 */
+	m_keyboard->set_style(settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_FULL
+	                       ? bssh_soft_keyboard_catalog::STYLE_FULL
+	                       : bssh_soft_keyboard_catalog::STYLE_COMPACT);
 	m_keyboard->setVisible(built_in);
 	if (built_in) m_key_row->hide();
 	else m_key_row->setVisible(m_key_row->should_be_visible());

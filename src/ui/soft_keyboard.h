@@ -6,6 +6,7 @@
 #include <QWidget>
 
 #include "ui/key_row_layout.h"
+#include "ui/soft_keyboard_layout.h"
 
 class QAbstractButton;
 class QGridLayout;
@@ -45,6 +46,14 @@ public:
 	 * setter exists for restoring one and for tests.
 	 */
 	void set_group(int index);
+
+	/*
+	 * Which keyboard this is: the compact thumb one or the full-size
+	 * board (sec 6.2). Rebuilds, because the two do not share a column
+	 * grid -- and resets to the first group, since group indices are per
+	 * style and a "terminal" index in a two-group catalog is off the end.
+	 */
+	void set_style(bssh_soft_keyboard_catalog::style_t style);
 	int group() const { return m_group; }
 	QString group_id() const;
 
@@ -75,6 +84,7 @@ private:
 	QAbstractButton *m_group_button;
 
 	int m_group;
+	bssh_soft_keyboard_catalog::style_t m_style;
 
 	QList<QAbstractButton *> m_modifier_buttons;
 	QList<quint8> m_modifier_values;
