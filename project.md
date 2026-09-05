@@ -9025,3 +9025,50 @@ restated here; `code-style.md` carries what the hook itself does.
 - `tool/hooks/commit-msg`, installed by `make hooks`, enforces the two
   mechanical halves: no generator attribution, and a subject within 75
   columns. Everything else above is a review item.
+
+### 18.6 The gate's own suite runs before the gate's verdict
+
+`tool/style_gate.py` is copied verbatim into every private project from
+`~/.claude/tool/`, and `tool/test_style_gate.py` is its suite, copied the
+same way. **Measured 2026-09-04 across eight trees — beerssh, hydra, situ,
+fmake, netcfgd, apt-emerge, fuzzypickles and raidcfgd — every one carried
+the suite and not one ran it.** The tests had travelled everywhere and were
+executed only in the tree they came from, so a defect in the shared gate
+would have been caught in one place out of nine.
+
+`make style` is `style-tool style-source style-docs`, in that order. The
+suite goes first because a gate's pass is worth reading only once the gate
+is known to work: a checker that has stopped inspecting anything reports
+success exactly as loudly as one that discriminates. It costs seconds
+rather than minutes — 9 and 16 on two runs of this machine.
+
+Under `style` rather than `test` on purpose, and it reaches further that
+way: `tool/check-ci.sh` runs `make style` inside the container against a
+tree exported from `git archive HEAD`, so the suite is proved on a clean
+checkout as well as on a developer machine. `make test` never leaves this
+machine.
+
+**The wiring was verified by breaking the gate and watching the suite,
+which took two attempts and the first one is the more useful.** Changing
+`split_leading_ws`'s tab expansion from `col += width - (col % width)` to
+`col += width` left all 106 tests green — which looked like a coverage
+gap and was not, at first reading. The two expressions differ only when a
+tab is preceded by something that leaves the column off a tab stop, and
+every such line in leading whitespace is a space-before-tab, which is
+rejected by an earlier rule. Probed directly, the broken function returns
+column 11 where the correct one returns 8, and `check_text` produces
+*identical verdicts* on all four crafted inputs. **A control has to be
+able to fail the way the thing it controls for fails; that one could
+not.** The second attempt — disabling the `space-indented line; use tabs`
+branch — turned the suite red with exit 1, which is the control that
+counts.
+
+**What the first attempt did turn up is a real gap, and it belongs to the
+shared tool rather than to this tree.** `split_leading_ws` is called only
+from the conversion and column paths (`style_gate.py` lines 1143, 1599 and
+1630), never from `check_text`, and the suite never names it. So the retab
+converter's column arithmetic — precisely what `harmonization.md` says must
+be proved independently of the tool that performed the retab — survives
+being broken with the suite green. Signalled rather than fixed here: the
+suite is spread from `~/.claude/tool/`, and a fix made in one copy is how
+sixteen copies stop agreeing.

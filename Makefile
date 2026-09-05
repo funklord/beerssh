@@ -609,7 +609,33 @@ shots: $(TEST_BIN)
 check-deb:
 	./tool/check-deb.sh
 
-style: style-source style-docs
+# The gate's own suite runs first, then the gate's verdict.
+#
+# tool/style_gate.py is copied verbatim into every private project from
+# ~/.claude/tool/, and tool/test_style_gate.py is its suite, copied the
+# same way. Measured 2026-09-04 across eight trees -- beerssh, hydra,
+# situ, fmake, netcfgd, apt-emerge, fuzzypickles and raidcfgd -- every
+# one carried the suite and not one ran it. The tests had travelled
+# everywhere and were executed only in the tree they came from, so a
+# defect in the shared gate would have been caught in one place out of
+# nine.
+#
+# It runs ahead of style-source and style-docs because a gate's pass is
+# worth reading only once the gate is known to work: a checker that has
+# stopped inspecting anything reports success exactly as loudly as one
+# that discriminates. Seconds rather than minutes -- 9 and 16 on two
+# runs of this machine -- and the cheapest positive control here.
+#
+# Wiring it here rather than under `test` is deliberate and reaches
+# further: check-ci.sh runs `make style` inside the container against a
+# tree exported from `git archive HEAD`, so the suite is proved on a
+# clean checkout as well as on a developer machine. `make test` never
+# leaves this machine.
+style: style-tool style-source style-docs
+
+style-tool:
+	python3 tool/test_style_gate.py
+
 
 style-source:
 	python3 tool/style_gate.py check
@@ -1230,7 +1256,7 @@ help:
 .PHONY: all run test bench style check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
-        distclean help check style-source style-docs hooks version-check
+        distclean help check style-tool style-source style-docs hooks version-check
 
 # `check` is everything that must pass before committing; `test` is the suite
 # alone. GNU's meaning of check, and what most of these projects already did.
