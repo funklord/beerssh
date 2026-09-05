@@ -1950,6 +1950,51 @@ asserts the control is not hidden and has a parent now. **A sabotage
 that is not caught is worth more than one that is** -- the two that were
 caught confirmed what was already believed.
 
+
+**Thirteen layouts ship, and the twenty-seven candidates sorted
+themselves — [BUILT 2026-09-05].** The holder asked for a fuller set
+once Swedish worked. Because the corpus supplies the layouts and the
+contract admits them, this was a measurement rather than a curation:
+generate all twenty-seven, register them in a throwaway binary, and read
+which pass `both_keyboards_reach_every_printable_character` and
+`a_small_screen_loses_no_letter` unchanged.
+
+**Eleven passed and ship**, with the corpus's own names from
+`rules/base.lst` so nobody here decides what a layout is called:
+Norwegian, Danish, Finnish, English (UK), Dutch, Spanish, Portuguese,
+German (Switzerland), Polish, Latvian, Romanian — beside US
+International and Swedish.
+
+**Thirteen Latin layouts were refused for one reason, and it is a fact
+about this keyboard rather than about those languages.** German loses
+`ß`, French loses `è à é`, and Czech, Slovak, Hungarian and Lithuanian
+lose most of their accented set. Confirmed by reading the tables rather
+than inferred: `ß` is **AE11** and `é è à` are **AE02, AE07, AE10** —
+all on the DIGIT row. The compact keyboard's digit row is the ASCII
+palette, not a slot run, so a letter placed there has nowhere to appear.
+
+**That palette is not an accident and cannot simply be reverted.** The
+digit row *was* a slot run, and that is what left the Swedish compact
+board unable to type `*`, `;` or `^`. So the two failures are the same
+knob at its two ends:
+
+| digit row | guarantees | loses |
+|---|---|---|
+| ASCII palette | every printable ASCII, in every layout | letters a layout puts on the digit row |
+| slot run | the layout's own digit-row letters | ASCII, wherever the layout's Shift level differs |
+
+Neither is right for AZERTY, which needs both. **The honest answer is
+probably a fourth compact page carrying the layout's own AE row**, which
+costs a tap and no ASCII — but a new page is a design change to §6.2's
+three-group cycle and is the holder's, not a worker's.
+
+**Three non-Latin candidates failed differently and worse.** Russian,
+Greek and Ukrainian lose `a`–`z` *entirely*, on both keyboards: the
+letter block is Cyrillic or Greek and the palette carries punctuation
+only. A terminal without the Latin alphabet is not a terminal, so a
+non-Latin layout needs a Latin route the design does not currently have
+— a toggle, or a palette that carries letters. Recorded, not attempted.
+
 **The setting is global**, at `[input] keyboard_layout`, defaulting to
 `us-intl`, with a control on the settings page listed from the catalogue
 so adding a layout needs no edit to that page. An unknown id is
