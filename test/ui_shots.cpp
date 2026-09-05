@@ -1,3 +1,4 @@
+#include <QLabel>
 #include <QAbstractButton>
 #include <QDir>
 #include <QScrollArea>
@@ -494,6 +495,17 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
 
 	panes->views().first()->set_being_dragged(false);
+
+	/*
+	 * And what the pointer carries while that net is up. QDrag::exec()
+	 * cannot be driven headlessly, so the pixmap is rendered on its own
+	 * -- which is the only way anybody sees it before shipping it.
+	 */
+	QLabel carried;
+	carried.setPixmap(window.session_drag_pixmap(window.registry()->at(0)));
+	carried.setContentsMargins(6, 6, 6, 6);
+	shoot(QStringLiteral("desktop-session-drag-cursor"), &carried,
+	       carried.sizeHint().width() + 12, carried.sizeHint().height() + 12);
 
 	/*
 	 * And at the size the window SAYS it can be.

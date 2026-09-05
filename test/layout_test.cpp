@@ -1388,6 +1388,51 @@ void layout_test::the_keyboard_side_icons_are_still_named() {
 }
 
 /*
+ * Pressing the grip and moving asks for the drag (sec 8.4).
+ *
+ * This is as far as a test can drive the gesture: the next thing that
+ * happens is QDrag::exec(), a nested loop waiting on a real pointer,
+ * which nothing headless can answer. So the assertion is on the
+ * REQUEST -- the view deciding the press was a drag rather than a
+ * selection -- which is the part the handle actually added.
+ *
+ * Driven against a bare view rather than through a window, deliberately.
+ * Through a window the signal reaches start_session_drag() and the test
+ * would hang in exec(), which is the same trap that made an earlier
+ * cleanup look like a fault in the code under test.
+ *
+ * And it asserts the press is NOT a drag until the pointer moves, since
+ * a press that rearranged the window on its own is what the Alt gesture
+ * was careful to avoid and the handle must not reintroduce.
+ */
+void layout_test::the_grip_asks_for_a_drag_once_the_pointer_moves() {
+	bssh_terminal_view view;
+	view.set_pane_handle(true);
+	view.resize(600, 400);
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+	const QRect grip = view.pane_grip_rect();
+	QVERIFY2(!grip.isNull(), "a 600x400 pane should have room for a handle");
+
+	QSignalSpy asked(&view, &bssh_terminal_view::pane_drag_requested);
+
+	QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, grip.center());
+	QCOMPARE(asked.count(), 0);
+
+	/* Short of the threshold: still not a drag. */
+	QTest::mouseMove(&view, grip.center() + QPoint(2, 0));
+	QCOMPARE(asked.count(), 0);
+
+	QTest::mouseMove(&view, grip.center()
+	                         + QPoint(QApplication::startDragDistance() * 3, 40));
+	QCOMPARE(asked.count(), 1);
+
+	QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier,
+	                     grip.center() + QPoint(60, 40));
+}
+
+/*
  * A pane dropped back where it came from does nothing (sec 8.4).
  *
  * Asked for as "the ability to drop it back with no effect", and it was

@@ -548,6 +548,16 @@ public:
 	void drop_session(bssh_session *session, bool beside);
 
 	/*
+	 * What the pointer carries during a session drag.
+	 *
+	 * Public so it can be RENDERED. The drag itself runs QDrag::exec(),
+	 * a nested loop waiting on a real pointer, so nothing headless can
+	 * drive it -- and a pixmap nobody has looked at is the same kind of
+	 * claim as a keycap nobody has looked at.
+	 */
+	QPixmap session_drag_pixmap(bssh_session *session) const;
+
+	/*
 	 * What the Split menu items mean: a NEW terminal beside the current
 	 * one. They used to pass m_current to split_with(), which always
 	 * declines it, so the action did nothing at all (sec 8.3).
@@ -574,7 +584,7 @@ public:
 	 * window the drag started in.
 	 */
 	void start_session_drag(bssh_session *session);
-	QPixmap session_drag_pixmap(bssh_session *session) const;
+
 
 	/* The session into a window of its own; nullptr if it will not go. */
 	bssh_main_window *tear_out(bssh_session *session);

@@ -4704,7 +4704,22 @@ worse than one that cannot be undone.**
 
 Pictured in `desktop-pane-being-dragged.png`, because a net over the
 right pane and a net over the wrong one are the same assertion and
-different screens.
+different screens — and in `desktop-session-drag-cursor.png`, since
+`QDrag::exec()` is a nested loop waiting on a real pointer and nothing
+headless can drive it. **A pixmap nobody has looked at is the same kind
+of claim as a keycap nobody has looked at**, so it is rendered on its
+own rather than trusted.
+
+**How far a test can follow the gesture, and where it stops.**
+`the_grip_asks_for_a_drag_once_the_pointer_moves` presses the grip and
+moves, and asserts the view asked for a drag — and asserts it did NOT
+ask on the press alone, since a press that rearranged the window by
+itself is exactly what the Alt gesture was careful to avoid and a handle
+must not reintroduce. It runs against a **bare view**, not through a
+window: through a window the request reaches `start_session_drag()` and
+the test would hang in `exec()`, which is the same trap that made an
+earlier cleanup look like a fault in the code under test. Everything
+past the request needs a real pointer and is covered by the pictures.
 
 **A torn-out window has no tab bar, and that is the other half of the
 report — [OPEN, found 2026-09-05].** Rendered rather than reasoned:
