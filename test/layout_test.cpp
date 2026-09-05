@@ -1433,6 +1433,63 @@ void layout_test::the_grip_asks_for_a_drag_once_the_pointer_moves() {
 }
 
 /*
+ * A window that gives up its last session closes (sec 8.4).
+ *
+ * Found by driving the real gesture with a real pointer: tearing a pane
+ * out and dragging it back left the torn-out window on screen, empty,
+ * titled "BeerSSH" with "no session" in its status line.
+ *
+ * The rule is not new -- tear_out() already refuses to empty a window,
+ * because the result is useless -- and a drop into ANOTHER window
+ * empties one just as thoroughly with nothing enforcing it there.
+ *
+ * The last window is exempt: closing it would quit the program on a
+ * gesture that was about rearranging it.
+ */
+void layout_test::a_window_that_loses_its_last_session_closes() {
+	bssh_main_window keeper;
+	keeper.resize(900, 600);
+	keeper.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&keeper));
+
+	bssh_session_registry *registry = keeper.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	keeper.adopt_session(registry->create(named(QStringLiteral("stays"))));
+
+	QPointer<bssh_main_window> giver = new bssh_main_window;
+	giver->setAttribute(Qt::WA_DeleteOnClose);
+	giver->resize(900, 600);
+	giver->show();
+	QVERIFY(QTest::qWaitForWindowExposed(giver));
+
+	bssh_session *moving = registry->create(named(QStringLiteral("moves")));
+	giver->adopt_session(moving);
+	QVERIFY2(giver->isVisible(), "the second window did not come up");
+
+	/* The keeper takes it, which is what a drop onto it does. */
+	keeper.adopt_session(moving);
+
+	/*
+	 * deleteLater, so the window goes on the next turn of the loop
+	 * rather than underneath the take_session() that emptied it.
+	 */
+	QTest::qWait(50);
+	QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+	QVERIFY2(giver.isNull() || !giver->isVisible(),
+	          "the window that gave up its last session is still on screen");
+
+	/*
+	 * And the keeper is untouched: the exemption is about the LAST
+	 * window, so a window that still has something must never take
+	 * itself down.
+	 */
+	QVERIFY2(keeper.isVisible(), "the window that took the session closed itself");
+}
+
+/*
  * A pane dropped back where it came from does nothing (sec 8.4).
  *
  * Asked for as "the ability to drop it back with no effect", and it was

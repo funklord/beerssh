@@ -4710,6 +4710,34 @@ headless can drive it. **A pixmap nobody has looked at is the same kind
 of claim as a keycap nobody has looked at**, so it is rendered on its
 own rather than trusted.
 
+**Driven end to end with a real pointer, once xdotool was installed.**
+Under Xvfb with a window manager, against two real local shells: press
+the grip, watch the net and the carried terminal, and release. It found
+one bug that no test had, and confirmed the three that had only been
+asserted.
+
+- **Dropped back inside the pane it came from: nothing changed.** Same
+  two panes, same scrollback, focus intact.
+- **Dropped on the empty desktop: torn out into its own window**, the
+  second shell going with it.
+- **Dragged from that window back into the first: it merged** — and left
+  the emptied window on screen, titled "BeerSSH", status line reading
+  *no session*, a grey rectangle doing nothing.
+
+**A window that gives up its last session closes now.** The rule is not
+new: `tear_out()` already refuses to empty a window because the result
+is useless, and a drop into *another* window empties one just as
+thoroughly with nothing enforcing it there. Never the last window, which
+would quit the program on a gesture about rearranging it.
+
+**`close()` rather than `deleteLater()`, and a test aborted to say so.**
+A window need not be heap-owned — most of this suite builds them on the
+stack — and `deleteLater()` on one of those had Qt trying to free stack
+memory, SIGABRT, in a test about password prompts that had nothing to do
+with dragging. `close()` lets each window keep its own policy: one made
+by `tear_out()` carries `WA_DeleteOnClose` and goes, one that does not
+simply hides.
+
 **How far a test can follow the gesture, and where it stops.**
 `the_grip_asks_for_a_drag_once_the_pointer_moves` presses the grip and
 moves, and asserts the view asked for a drag — and asserts it did NOT

@@ -1,3 +1,4 @@
+#include <QApplication>
 #include "ui/touch_metrics.h"
 #include "ui/main_window.h"
 
@@ -470,6 +471,33 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		m_shown.removeAll(session);
 		if (m_current == session) detach_session();
 		on_registry_changed();
+
+		/*
+		 * And if that was the last one, this window has no reason to
+		 * exist. It stayed open, empty, titled "BeerSSH" with "no
+		 * session" in the status line -- found by dragging the only
+		 * pane of a torn-out window back into the one it came from,
+		 * which is the whole point of being able to tear one out.
+		 *
+		 * The rule is not new. tear_out() already refuses to empty a
+		 * window, on the grounds that the result is useless; a drop
+		 * into ANOTHER window empties one just as thoroughly and
+		 * nothing enforced it there.
+		 *
+		 * Never the last window, which would quit the program on a
+		 * gesture that was about rearranging it.
+		 *
+		 * close() rather than deleteLater(), and a test aborted to say
+		 * so: a window need not be heap-owned. One built on the stack
+		 * -- which is how most of this suite builds them -- met
+		 * deleteLater() and Qt tried to free stack memory, SIGABRT.
+		 * close() lets each window keep its own policy: one made by
+		 * tear_out() carries WA_DeleteOnClose and goes, and one that
+		 * does not simply hides. Nothing here prompts, because the
+		 * confirmation in closeEvent() is about live sessions and this
+		 * window has just lost its last.
+		 */
+		if (m_shown.isEmpty() && other_windows_exist()) close();
 	});
 
 	/*
@@ -1624,6 +1652,14 @@ void bssh_main_window::detach_session() {
 	m_terminal_view = m_panes ? m_panes->focused_view() : nullptr;
 	if (m_key_row) m_key_row->set_router(nullptr);
 	if (m_keyboard) m_keyboard->set_router(nullptr);
+}
+
+bool bssh_main_window::other_windows_exist() const {
+	for (QWidget *widget : QApplication::topLevelWidgets()) {
+		const bssh_main_window *other = qobject_cast<bssh_main_window *>(widget);
+		if (other && other != this && !other->isHidden()) return true;
+	}
+	return false;
 }
 
 void bssh_main_window::take_session(bssh_session *session) {

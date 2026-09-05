@@ -547,6 +547,9 @@ public:
 	 */
 	void drop_session(bssh_session *session, bool beside);
 
+	/* Whether any other window of ours is still up. */
+	bool other_windows_exist() const;
+
 	/*
 	 * What the pointer carries during a session drag.
 	 *
