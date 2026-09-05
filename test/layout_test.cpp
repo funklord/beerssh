@@ -1353,6 +1353,41 @@ void layout_test::the_brightness_slider_cannot_reach_unreadable() {
 }
 
 /*
+ * The side-column icons are still NAMED (sec 6.2).
+ *
+ * Cfg and Hide became pictures, and a button whose label becomes a
+ * picture loses the text a screen reader was reading. The word moves to
+ * the accessible name rather than being dropped -- the same trap the
+ * AltGr hint had, where what is drawn and what is announced are two
+ * different things and only one of them is checked by looking.
+ *
+ * Also asserts the icon is THERE, since an accessible name on a blank
+ * button would satisfy the first half while leaving nothing to press.
+ */
+void layout_test::the_keyboard_side_icons_are_still_named() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	bssh_soft_keyboard keyboard(&router);
+	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+
+	const char *names[] = { "keyboard-settings", "keyboard-hide" };
+	for (const char *name : names) {
+		QToolButton *button =
+		        keyboard.findChild<QToolButton *>(QLatin1String(name));
+		QVERIFY2(button, name);
+		QVERIFY2(!button->accessibleName().isEmpty(),
+		          qPrintable(QStringLiteral("%1 draws a picture and says nothing")
+		                             .arg(QLatin1String(name))));
+		QVERIFY2(!button->icon().isNull(),
+		          qPrintable(QStringLiteral("%1 has no icon").arg(QLatin1String(name))));
+		QVERIFY2(button->text().isEmpty(),
+		          qPrintable(QStringLiteral("%1 still carries a label beside its icon")
+		                             .arg(QLatin1String(name))));
+	}
+}
+
+/*
  * A layout that is not in the catalog changes nothing.
  *
  * A settings file written by a newer version, or edited by hand, must

@@ -89,8 +89,12 @@ signals:
 	 */
 	void hide_requested();
 
+protected:
+	void changeEvent(QEvent *event) override;
+
 private:
 	void rebuild();
+	void refresh_side_icons();
 	bssh_key_cap *make_button(const QString &label);
 	bool altgr_armed() const;
 	void add_key(const bssh_key_t &key, int row, int column);

@@ -1528,6 +1528,32 @@ and page two is exactly the part that was not re-derived. **A check over
 part of the population reads exactly like a check over all of it.**
 
 
+
+**Cfg and Hide are icons, drawn rather than typed — [DONE 2026-09-05].**
+Asked for by the copyright holder. The two are painted from primitives
+in `bssh_soft_keyboard`: three sliders for settings, a chevron coming
+down to a bar for hide, which is what every platform's dismiss control
+draws.
+
+**A character would have been three lines and a gamble.** A gear is
+U+2699 and a chevron U+25BE, the label font is the system's, and a
+device whose fallback lacks the glyph draws a tofu box — which under
+§11's absent-not-faked rule is worse than the word it replaced. Qt's
+standard pixmaps have no settings icon either. Painted primitives cannot
+be missing, scale with the button, and take `QPalette::ButtonText`, so
+they follow the light and dark schemes without a second asset.
+
+**They carry their colour rather than taking it when drawn**, an icon
+being pixels, so `changeEvent` repaints them on a palette change — the
+failure `bssh_key_cap` avoids with alpha and this one cannot.
+
+**And the word did not disappear with the label.** A button whose text
+becomes a picture loses what a screen reader was reading, so "Settings"
+and "Hide the keyboard" moved to the accessible name and the tooltip.
+`the_keyboard_side_icons_are_still_named` asserts the name, the icon and
+the *absence* of the old text — a name on a blank button would satisfy
+the first check while leaving nothing to press.
+
 **åäö, and the layout question underneath it — [BUILT 2026-09-04].** The
 holder asked for the Swedish vowels and named the better answer in the
 same breath: US International with AltGr, annotated on the keyboard,

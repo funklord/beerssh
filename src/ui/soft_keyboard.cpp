@@ -1,3 +1,8 @@
+#include <QEvent>
+#include <QIcon>
+#include <QPainter>
+#include <QPainterPath>
+#include <QPixmap>
 #include "ui/soft_keyboard.h"
 
 #include "ui/key_cap.h"
@@ -16,6 +21,71 @@
 #include "ui/touch_metrics.h"
 
 namespace {
+
+/*
+ * The two side-column icons, DRAWN rather than set from a character.
+ *
+ * A gear at U+2699 and a chevron at U+25BE would be three lines of code
+ * and a gamble: the label font is the system's, Android falls back
+ * through it for symbols, and a device without the glyph draws a tofu
+ * box. sec 11's rule is absent-not-faked, and a box where a control
+ * should be is worse than the word it replaced. Qt's standard pixmaps
+ * have no settings icon either.
+ *
+ * So they are painted from primitives, which cannot be missing, scale
+ * with the button, and take their colour from the palette -- so they
+ * follow the light and dark schemes without a second asset.
+ */
+QIcon bssh_painted_icon(const QColor &ink, int size, bool settings) {
+	QPixmap canvas(size, size);
+	canvas.fill(Qt::transparent);
+
+	QPainter painter(&canvas);
+	painter.setRenderHint(QPainter::Antialiasing, true);
+
+	QPen pen(ink);
+	pen.setWidthF(qMax(1.5, size / 11.0));
+	pen.setCapStyle(Qt::RoundCap);
+	pen.setJoinStyle(Qt::RoundJoin);
+	painter.setPen(pen);
+
+	const qreal unit = size;
+	if (settings) {
+		/*
+		 * Three sliders. A gear is the more common symbol and much
+		 * harder to draw legibly at 36dp; sliders read as settings at
+		 * any size and stay clear in one colour.
+		 */
+		const qreal rows[3] = { 0.30, 0.50, 0.70 };
+		const qreal knobs[3] = { 0.66, 0.36, 0.60 };
+		for (int i = 0; i < 3; ++i) {
+			painter.drawLine(QPointF(unit * 0.16, unit * rows[i]),
+			                  QPointF(unit * 0.84, unit * rows[i]));
+		}
+		painter.setBrush(ink);
+		for (int i = 0; i < 3; ++i) {
+			painter.drawEllipse(QPointF(unit * knobs[i], unit * rows[i]),
+			                     unit * 0.075, unit * 0.075);
+		}
+	} else {
+		/*
+		 * A chevron coming down to a bar: the keyboard going away, which
+		 * is what every platform's dismiss control draws.
+		 */
+		QPainterPath path;
+		path.moveTo(unit * 0.26, unit * 0.34);
+		path.lineTo(unit * 0.50, unit * 0.56);
+		path.lineTo(unit * 0.74, unit * 0.34);
+		painter.drawPath(path);
+		painter.drawLine(QPointF(unit * 0.26, unit * 0.74),
+		                  QPointF(unit * 0.74, unit * 0.74));
+	}
+
+	painter.end();
+	return QIcon(canvas);
+}
+
+
 
 /*
  * How wide a key may be asked to be, in device-independent pixels.
@@ -81,8 +151,17 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	side->setSpacing(1);   /* the key grid's own spacing */
 
 	m_settings_button = new QToolButton(this);
-	m_settings_button->setText(QStringLiteral("Cfg"));
 	m_settings_button->setObjectName(QStringLiteral("keyboard-settings"));
+
+	/*
+	 * An icon, and the NAME is still said. A button whose label becomes
+	 * a picture loses the text a screen reader was reading, so the word
+	 * moves to the accessible name and the tooltip rather than being
+	 * dropped -- the same trap the AltGr hint had, where what is drawn
+	 * and what is announced are two different things.
+	 */
+	m_settings_button->setAccessibleName(QStringLiteral("Settings"));
+	m_settings_button->setToolTip(QStringLiteral("Settings"));
 	m_settings_button->setFocusPolicy(Qt::NoFocus);
 	m_settings_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
 	m_settings_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
@@ -96,13 +175,16 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	side->addWidget(m_group_button, 1);
 
 	m_hide_button = new QToolButton(this);
-	m_hide_button->setText(QStringLiteral("Hide"));
 	m_hide_button->setObjectName(QStringLiteral("keyboard-hide"));
+	m_hide_button->setAccessibleName(QStringLiteral("Hide the keyboard"));
+	m_hide_button->setToolTip(QStringLiteral("Hide the keyboard"));
 	m_hide_button->setFocusPolicy(Qt::NoFocus);
 	m_hide_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
 	m_hide_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 	m_hide_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	side->addWidget(m_hide_button, 0);
+
+	refresh_side_icons();
 
 	outer->addLayout(side, 0);
 
@@ -348,6 +430,33 @@ bool bssh_soft_keyboard::altgr_armed() const {
 	return m_router
 	        && m_router->modifier_state(bssh_input_router::MOD_ALTGR)
 	                != bssh_input_router::MODIFIER_OFF;
+}
+
+/*
+ * Paint the side icons for the CURRENT palette.
+ *
+ * Called again on a palette change, because the icons carry their colour
+ * rather than taking it from the widget when drawn: a theme switch would
+ * otherwise leave a dark glyph on a dark button, which is the failure
+ * bssh_key_cap avoids by using alpha and this cannot, an icon being
+ * pixels.
+ */
+void bssh_soft_keyboard::refresh_side_icons() {
+	if (!m_settings_button || !m_hide_button) return;
+
+	const QColor ink = palette().color(QPalette::ButtonText);
+	const int size = qMax(16, int(BSSH_TOUCH_TARGET_DP * 0.55));
+
+	m_settings_button->setIcon(bssh_painted_icon(ink, size * 2, true));
+	m_settings_button->setIconSize(QSize(size, size));
+
+	m_hide_button->setIcon(bssh_painted_icon(ink, size * 2, false));
+	m_hide_button->setIconSize(QSize(size, size));
+}
+
+void bssh_soft_keyboard::changeEvent(QEvent *event) {
+	QWidget::changeEvent(event);
+	if (event->type() == QEvent::PaletteChange) refresh_side_icons();
 }
 
 void bssh_soft_keyboard::refresh_letter_labels() {
