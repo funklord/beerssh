@@ -47,6 +47,7 @@ private slots:
 	void both_keyboards_reach_every_printable_character();
 	void an_unknown_layout_is_refused_and_changes_nothing();
 	void a_small_screen_loses_no_letter();
+	void a_fourth_page_appears_only_where_a_letter_needs_it();
 	void the_detach_action_makes_a_window();
 	void the_keyboard_side_icons_are_still_named();
 	void a_pane_dropped_back_changes_nothing();

@@ -3,6 +3,10 @@
 #include "term/emulator.h"
 #include "input/input_router.h"
 
+#include <QSet>
+
+#include <algorithm>
+
 namespace {
 
 /*
@@ -789,6 +793,720 @@ const bssh_layout_slot_t BSSH_LAYOUT_RO[] = {
  * xkbcomp, and neither exists on Android -- so what ships is the table
  * and not the machinery that made it.
  */
+const bssh_layout_slot_t BSSH_LAYOUT_DE[] = {
+	{ "TLDE", { "^", "\u00b0", "\u2032", "\u2033" } },
+	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
+	{ "AE02", { "2", "\"", "\u00b2", "\u215b" } },
+	{ "AE03", { "3", "\u00a7", "\u00b3", "\u00a3" } },
+	{ "AE04", { "4", "$", "\u00bc", "\u00a4" } },
+	{ "AE05", { "5", "%", "\u00bd", "\u215c" } },
+	{ "AE06", { "6", "&", "\u00ac", "\u215d" } },
+	{ "AE07", { "7", "/", "{", "\u215e" } },
+	{ "AE08", { "8", "(", "[", "\u2122" } },
+	{ "AE09", { "9", ")", "]", "\u00b1" } },
+	{ "AE10", { "0", "=", "}", "\u00b0" } },
+	{ "AE11", { "\u00df", "?", "\\", "\u00bf" } },
+	{ "AE12", { "'", "`", "\u00b8", "\u02db" } },
+	{ "AD01", { "q", "", "@", "\u03a9" } },
+	{ "AD02", { "w", "", "\u017f", "\u00a7" } },
+	{ "AD03", { "e", "", "\u20ac", "\u20ac" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "z", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "\u00fc", "", "\"", "\u00b0" } },
+	{ "AD12", { "+", "*", "~", "\u00af" } },
+	{ "BKSL", { "#", "'", "\u2019", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e6", "\u00c6" } },
+	{ "AC02", { "s", "", "\u017f", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u00f0", "\u00d0" } },
+	{ "AC04", { "f", "", "\u0111", "\u00aa" } },
+	{ "AC05", { "g", "", "\u014b", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "\u02d9" } },
+	{ "AC08", { "k", "", "\u0138", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { "\u00f6", "", "\u02dd", "" } },
+	{ "AC11", { "\u00e4", "", "^", "\u02c7" } },
+	{ "AB01", { "y", "", "\u00bb", "\u203a" } },
+	{ "AB02", { "x", "", "\u00ab", "\u2039" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201e", "\u201a" } },
+	{ "AB05", { "b", "", "\u201c", "\u2018" } },
+	{ "AB06", { "n", "", "\u201d", "\u2019" } },
+	{ "AB07", { "m", "", "\u00b5", "\u00ba" } },
+	{ "AB08", { ",", ";", "\u00b7", "\u00d7" } },
+	{ "AB09", { ".", ":", "\u2026", "\u00f7" } },
+	{ "AB10", { "-", "_", "\u2013", "\u2014" } },
+	{ "LSGT", { "<", ">", "|", "" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_FR[] = {
+	{ "TLDE", { "\u00b2", "~", "\u00ac", "\u00ac" } },
+	{ "AE01", { "&", "1", "\u00b9", "\u00a1" } },
+	{ "AE02", { "\u00e9", "2", "~", "\u215b" } },
+	{ "AE03", { "\"", "3", "#", "\u00a3" } },
+	{ "AE04", { "'", "4", "{", "$" } },
+	{ "AE05", { "(", "5", "[", "\u215c" } },
+	{ "AE06", { "-", "6", "|", "\u215d" } },
+	{ "AE07", { "\u00e8", "7", "`", "\u215e" } },
+	{ "AE08", { "_", "8", "\\", "\u2122" } },
+	{ "AE09", { "\u00e7", "9", "^", "\u00b1" } },
+	{ "AE10", { "\u00e0", "0", "@", "\u00b0" } },
+	{ "AE11", { ")", "\u00b0", "]", "\u00bf" } },
+	{ "AE12", { "=", "+", "}", "\u02db" } },
+	{ "AD01", { "a", "", "\u00e6", "\u00c6" } },
+	{ "AD02", { "z", "", "\u00ab", "<" } },
+	{ "AD03", { "e", "", "\u20ac", "\u00a2" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "y", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "^", "\"", "\"", "\u00b0" } },
+	{ "AD12", { "$", "\u00a3", "\u00a4", "\u00af" } },
+	{ "BKSL", { "*", "\u00b5", "`", "\u02d8" } },
+	{ "AC01", { "q", "", "@", "\u03a9" } },
+	{ "AC02", { "s", "", "\u00df", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u00f0", "\u00d0" } },
+	{ "AC04", { "f", "", "\u0111", "\u00aa" } },
+	{ "AC05", { "g", "", "\u014b", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0138", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { "m", "", "\u00b5", "\u00ba" } },
+	{ "AC11", { "\u00f9", "%", "^", "\u02c7" } },
+	{ "AB01", { "w", "", "\u0142", "\u0141" } },
+	{ "AB02", { "x", "", "\u00bb", ">" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201e", "\u201a" } },
+	{ "AB05", { "b", "", "\u201c", "\u2018" } },
+	{ "AB06", { "n", "", "\u201d", "\u2019" } },
+	{ "AB07", { ",", "?", "'", "\u02dd" } },
+	{ "AB08", { ";", ".", "\u2022", "\u00d7" } },
+	{ "AB09", { ":", "/", "\u00b7", "\u00f7" } },
+	{ "AB10", { "!", "\u00a7", "", "\u02d9" } },
+	{ "LSGT", { "<", ">", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_CZ[] = {
+	{ "TLDE", { ";", "\u00b0", "`", "~" } },
+	{ "AE01", { "+", "1", "!", "~" } },
+	{ "AE02", { "\u011b", "2", "@", "\u02c7" } },
+	{ "AE03", { "\u0161", "3", "#", "^" } },
+	{ "AE04", { "\u010d", "4", "$", "\u02d8" } },
+	{ "AE05", { "\u0159", "5", "%", "\u00b0" } },
+	{ "AE06", { "\u017e", "6", "^", "\u02db" } },
+	{ "AE07", { "\u00fd", "7", "&", "`" } },
+	{ "AE08", { "\u00e1", "8", "*", "\u02d9" } },
+	{ "AE09", { "\u00ed", "9", "{", "'" } },
+	{ "AE10", { "\u00e9", "0", "}", "\u02dd" } },
+	{ "AE11", { "=", "%", "\\", "\"" } },
+	{ "AE12", { "'", "\u02c7", "\u00af", "\u00b8" } },
+	{ "AD01", { "q", "", "\\", "\u03a9" } },
+	{ "AD02", { "w", "", "|", "\u00a7" } },
+	{ "AD03", { "e", "", "\u20ac", "" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "z", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "\u00fa", "/", "[", "\u00f7" } },
+	{ "AD12", { ")", "(", "]", "\u00d7" } },
+	{ "BKSL", { "\"", "'", "\\", "|" } },
+	{ "AC01", { "a", "", "~", "\u00c6" } },
+	{ "AC02", { "s", "", "\u0111", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u0110", "\u00d0" } },
+	{ "AC04", { "f", "", "[", "\u00aa" } },
+	{ "AC05", { "g", "", "]", "\u014a" } },
+	{ "AC06", { "h", "", "`", "\u0126" } },
+	{ "AC07", { "j", "", "'", "" } },
+	{ "AC08", { "k", "", "\u0142", "&" } },
+	{ "AC09", { "l", "", "\u0141", "\u0141" } },
+	{ "AC10", { "\u016f", "\"", "$", "\u02dd" } },
+	{ "AC11", { "\u00a7", "!", "'", "\u00df" } },
+	{ "AB01", { "y", "", "\u00b0", "<" } },
+	{ "AB02", { "x", "", "#", ">" } },
+	{ "AB03", { "c", "", "&", "\u00a9" } },
+	{ "AB04", { "v", "", "@", "\u201a" } },
+	{ "AB05", { "b", "", "{", "\u2018" } },
+	{ "AB06", { "n", "", "}", "\u2019" } },
+	{ "AB07", { "m", "", "^", "\u00ba" } },
+	{ "AB08", { ",", "?", "<", "\u00d7" } },
+	{ "AB09", { ".", ":", ">", "\u00f7" } },
+	{ "AB10", { "-", "_", "*", "\u02d9" } },
+	{ "LSGT", { "\\", "|", "/", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_SK[] = {
+	{ "TLDE", { ";", "\u00b0", "`", "~" } },
+	{ "AE01", { "+", "1", "!", "~" } },
+	{ "AE02", { "\u013e", "2", "@", "\u02c7" } },
+	{ "AE03", { "\u0161", "3", "#", "^" } },
+	{ "AE04", { "\u010d", "4", "$", "\u02d8" } },
+	{ "AE05", { "\u0165", "5", "%", "\u00b0" } },
+	{ "AE06", { "\u017e", "6", "^", "\u02db" } },
+	{ "AE07", { "\u00fd", "7", "&", "`" } },
+	{ "AE08", { "\u00e1", "8", "*", "\u02d9" } },
+	{ "AE09", { "\u00ed", "9", "{", "'" } },
+	{ "AE10", { "\u00e9", "0", "}", "\u02dd" } },
+	{ "AE11", { "=", "%", "\\", "\"" } },
+	{ "AE12", { "'", "\u02c7", "\u00af", "\u00b8" } },
+	{ "AD01", { "q", "", "\\", "\u03a9" } },
+	{ "AD02", { "w", "", "|", "\u00a7" } },
+	{ "AD03", { "e", "", "\u20ac", "" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "z", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "\u00fa", "/", "[", "\u00f7" } },
+	{ "AD12", { "\u00e4", "(", "]", "\u00d7" } },
+	{ "BKSL", { "\u0148", ")", "\\", "|" } },
+	{ "AC01", { "a", "", "~", "\u00c6" } },
+	{ "AC02", { "s", "", "\u0111", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u0110", "\u00d0" } },
+	{ "AC04", { "f", "", "[", "\u00aa" } },
+	{ "AC05", { "g", "", "]", "\u014a" } },
+	{ "AC06", { "h", "", "`", "\u0126" } },
+	{ "AC07", { "j", "", "'", "" } },
+	{ "AC08", { "k", "", "\u0142", "&" } },
+	{ "AC09", { "l", "", "\u0141", "\u0141" } },
+	{ "AC10", { "\u00f4", "\"", "$", "\u02dd" } },
+	{ "AC11", { "\u00a7", "!", "'", "\u00df" } },
+	{ "AB01", { "y", "", "\u00b0", "<" } },
+	{ "AB02", { "x", "", "#", ">" } },
+	{ "AB03", { "c", "", "&", "\u00a9" } },
+	{ "AB04", { "v", "", "@", "\u201a" } },
+	{ "AB05", { "b", "", "{", "\u2018" } },
+	{ "AB06", { "n", "", "}", "\u2019" } },
+	{ "AB07", { "m", "", "^", "\u00ba" } },
+	{ "AB08", { ",", "?", "<", "\u00d7" } },
+	{ "AB09", { ".", ":", ">", "\u00f7" } },
+	{ "AB10", { "-", "_", "*", "\u02d9" } },
+	{ "LSGT", { "\\", "|", "/", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_HU[] = {
+	{ "TLDE", { "0", "\u00a7", "\u00ac", "\u00ac" } },
+	{ "AE01", { "1", "'", "~", "~" } },
+	{ "AE02", { "2", "\"", "\u02c7", "\u02c7" } },
+	{ "AE03", { "3", "+", "^", "^" } },
+	{ "AE04", { "4", "!", "\u02d8", "\u02d8" } },
+	{ "AE05", { "5", "%", "\u00b0", "\u00b0" } },
+	{ "AE06", { "6", "/", "\u02db", "\u02db" } },
+	{ "AE07", { "7", "=", "`", "`" } },
+	{ "AE08", { "8", "(", "\u02d9", "\u02d9" } },
+	{ "AE09", { "9", ")", "'", "\u00b4" } },
+	{ "AE10", { "\u00f6", "", "\u02dd", "\u02dd" } },
+	{ "AE11", { "\u00fc", "", "\"", "\u00a8" } },
+	{ "AE12", { "\u00f3", "", "\u00b8", "\u00b8" } },
+	{ "AD01", { "q", "", "\\", "\u03a9" } },
+	{ "AD02", { "w", "", "|", "\u00a7" } },
+	{ "AD03", { "e", "", "\u00c4", "" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "z", "", "\u2013", "\u00a5" } },
+	{ "AD07", { "u", "", "\u20ac", "\u2191" } },
+	{ "AD08", { "i", "", "\u00cd", "\u00ed" } },
+	{ "AD09", { "o", "", "\u201e", "\u00d8" } },
+	{ "AD10", { "p", "", "\u201d", "\u00de" } },
+	{ "AD11", { "\u0151", "", "\u00f7", "\u00b0" } },
+	{ "AD12", { "\u00fa", "", "\u00d7", "\u00af" } },
+	{ "BKSL", { "\u0171", "", "\u00a4", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e4", "\u00c4" } },
+	{ "AC02", { "s", "", "\u0111", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u0110", "\u00d0" } },
+	{ "AC04", { "f", "", "[", "\u00aa" } },
+	{ "AC05", { "g", "", "]", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "\u00ed", "\u00cd" } },
+	{ "AC08", { "k", "", "\u0142", "&" } },
+	{ "AC09", { "l", "", "\u0141", "\u0141" } },
+	{ "AC10", { "\u00e9", "", "$", "\u00a2" } },
+	{ "AC11", { "\u00e1", "", "\u00df", "\u1e9e" } },
+	{ "AB01", { "y", "", ">", "<" } },
+	{ "AB02", { "x", "", "#", ">" } },
+	{ "AB03", { "c", "", "&", "\u00a9" } },
+	{ "AB04", { "v", "", "@", "\u201a" } },
+	{ "AB05", { "b", "", "{", "\u2018" } },
+	{ "AB06", { "n", "", "}", "\u2019" } },
+	{ "AB07", { "m", "", "<", "\u00ba" } },
+	{ "AB08", { ",", "?", ";", "\u00d7" } },
+	{ "AB09", { ".", ":", ">", "\u00f7" } },
+	{ "AB10", { "-", "_", "*", "\u02d9" } },
+	{ "LSGT", { "\u00ed", "", "<", ">" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_LT[] = {
+	{ "TLDE", { "`", "~", "\u00b4", "\u00ac" } },
+	{ "AE01", { "\u0105", "", "1", "!" } },
+	{ "AE02", { "\u010d", "", "2", "@" } },
+	{ "AE03", { "\u0119", "", "3", "#" } },
+	{ "AE04", { "\u0117", "", "4", "$" } },
+	{ "AE05", { "\u012f", "", "5", "%" } },
+	{ "AE06", { "\u0161", "", "6", "^" } },
+	{ "AE07", { "\u0173", "", "7", "&" } },
+	{ "AE08", { "\u016b", "", "8", "*" } },
+	{ "AE09", { "\u201e", "(", "9", "(" } },
+	{ "AE10", { "\u201c", ")", "0", ")" } },
+	{ "AE11", { "-", "_", "\u2013", "\u00bf" } },
+	{ "AE12", { "\u017e", "", "=", "+" } },
+	{ "AD01", { "q", "", "@", "\u03a9" } },
+	{ "AD02", { "w", "", "\u017f", "\u00a7" } },
+	{ "AD03", { "e", "", "\u20ac", "\u00a3" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "y", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "[", "{", "\"", "\u00b0" } },
+	{ "AD12", { "]", "}", "~", "\u00af" } },
+	{ "BKSL", { "\\", "|", "`", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e6", "\u00c6" } },
+	{ "AC02", { "s", "", "\u00df", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u00f0", "\u00d0" } },
+	{ "AC04", { "f", "", "\u0111", "\u00aa" } },
+	{ "AC05", { "g", "", "\u014b", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0138", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { ";", ":", "'", "\u02dd" } },
+	{ "AC11", { "'", "\"", "^", "\u02c7" } },
+	{ "AB01", { "z", "", "\u00ab", "<" } },
+	{ "AB02", { "x", "", "\u00bb", ">" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201e", "\u201a" } },
+	{ "AB05", { "b", "", "\u201c", "\u2018" } },
+	{ "AB06", { "n", "", "\u201d", "\u2019" } },
+	{ "AB07", { "m", "", "\u00b5", "\u00ba" } },
+	{ "AB08", { ",", "<", "\u2022", "\u00d7" } },
+	{ "AB09", { ".", ">", "\u00b7", "\u00f7" } },
+	{ "AB10", { "/", "?", "", "\u02d9" } },
+	{ "LSGT", { "\u2013", "\u20ac", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_IT[] = {
+	{ "TLDE", { "\\", "|", "\u00ac", "\u00a6" } },
+	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
+	{ "AE02", { "2", "\"", "\u00b2", "\u02dd" } },
+	{ "AE03", { "3", "\u00a3", "\u00b3", "~" } },
+	{ "AE04", { "4", "$", "\u00bc", "\u215b" } },
+	{ "AE05", { "5", "%", "\u00bd", "\u215c" } },
+	{ "AE06", { "6", "&", "\u00ac", "\u215d" } },
+	{ "AE07", { "7", "/", "{", "\u215e" } },
+	{ "AE08", { "8", "(", "[", "\u2122" } },
+	{ "AE09", { "9", ")", "]", "\u00b1" } },
+	{ "AE10", { "0", "=", "}", "\u02db" } },
+	{ "AE11", { "'", "?", "`", "\u00bf" } },
+	{ "AE12", { "\u00ec", "^", "~", "^" } },
+	{ "AD01", { "q", "", "@", "\u03a9" } },
+	{ "AD02", { "w", "", "\u017f", "\u00a7" } },
+	{ "AD03", { "e", "", "\u20ac", "\u00a2" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "y", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "\u00e8", "\u00e9", "[", "{" } },
+	{ "AD12", { "+", "*", "]", "}" } },
+	{ "BKSL", { "\u00f9", "\u00a7", "`", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e6", "\u00c6" } },
+	{ "AC02", { "s", "", "\u00df", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u00f0", "\u00d0" } },
+	{ "AC04", { "f", "", "\u0111", "\u00aa" } },
+	{ "AC05", { "g", "", "\u014b", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0138", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { "\u00f2", "\u00e7", "@", "\u00b8" } },
+	{ "AC11", { "\u00e0", "\u00b0", "#", "\u00b0" } },
+	{ "AB01", { "z", "", "\u00ab", "<" } },
+	{ "AB02", { "x", "", "\u00bb", ">" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201c", "\u2018" } },
+	{ "AB05", { "b", "", "\u201d", "\u2019" } },
+	{ "AB06", { "n", "", "\u00f1", "\u00d1" } },
+	{ "AB07", { "m", "", "\u00b5", "\u00ba" } },
+	{ "AB08", { ",", ";", "'", "\u00d7" } },
+	{ "AB09", { ".", ":", "\u00b7", "\"" } },
+	{ "AB10", { "-", "_", "\u00af", "\u00f7" } },
+	{ "LSGT", { "<", ">", "\u00ab", "\u00bb" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_BE[] = {
+	{ "TLDE", { "\u00b2", "\u00b3", "\u00ac", "\u00ac" } },
+	{ "AE01", { "&", "1", "|", "\u00a1" } },
+	{ "AE02", { "\u00e9", "2", "@", "\u215b" } },
+	{ "AE03", { "\"", "3", "#", "\u00a3" } },
+	{ "AE04", { "'", "4", "\u00bc", "$" } },
+	{ "AE05", { "(", "5", "\u00bd", "\u215c" } },
+	{ "AE06", { "\u00a7", "6", "^", "\u215d" } },
+	{ "AE07", { "\u00e8", "7", "{", "\u215e" } },
+	{ "AE08", { "!", "8", "[", "\u2122" } },
+	{ "AE09", { "\u00e7", "9", "{", "\u00b1" } },
+	{ "AE10", { "\u00e0", "0", "}", "\u00b0" } },
+	{ "AE11", { ")", "\u00b0", "\\", "\u00bf" } },
+	{ "AE12", { "-", "_", "\u00b8", "\u02db" } },
+	{ "AD01", { "a", "", "@", "\u03a9" } },
+	{ "AD02", { "z", "", "\u017f", "\u00a7" } },
+	{ "AD03", { "e", "", "\u20ac", "\u00a2" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "y", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u0153", "\u0152" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "^", "\"", "[", "\u00b0" } },
+	{ "AD12", { "$", "*", "]", "\u00af" } },
+	{ "BKSL", { "\u00b5", "\u00a3", "`", "\u02d8" } },
+	{ "AC01", { "q", "", "\u00e6", "\u00c6" } },
+	{ "AC02", { "s", "", "\u00df", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u00f0", "\u00d0" } },
+	{ "AC04", { "f", "", "\u0111", "\u00aa" } },
+	{ "AC05", { "g", "", "\u014b", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0138", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { "m", "", "'", "\u02dd" } },
+	{ "AC11", { "\u00f9", "%", "'", "\u02c7" } },
+	{ "AB01", { "w", "", "\u00ab", "<" } },
+	{ "AB02", { "x", "", "\u00bb", ">" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201e", "\u201a" } },
+	{ "AB05", { "b", "", "\u201c", "\u2018" } },
+	{ "AB06", { "n", "", "\u201d", "\u2019" } },
+	{ "AB07", { ",", "?", "\u00b8", "\u00ba" } },
+	{ "AB08", { ";", ".", "\u2022", "\u00d7" } },
+	{ "AB09", { ":", "/", "\u00b7", "\u00f7" } },
+	{ "AB10", { "=", "+", "~", "\u02d9" } },
+	{ "LSGT", { "<", ">", "\\", "\\" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_SI[] = {
+	{ "TLDE", { "\u00b8", "\u00a8", "", "" } },
+	{ "AE01", { "1", "!", "~", "~" } },
+	{ "AE02", { "2", "\"", "\u02c7", "\u02c7" } },
+	{ "AE03", { "3", "#", "^", "^" } },
+	{ "AE04", { "4", "$", "\u02d8", "\u02d8" } },
+	{ "AE05", { "5", "%", "\u00b0", "\u00b0" } },
+	{ "AE06", { "6", "&", "\u02db", "\u02db" } },
+	{ "AE07", { "7", "/", "`", "`" } },
+	{ "AE08", { "8", "(", "\u02d9", "\u02d9" } },
+	{ "AE09", { "9", ")", "'", "'" } },
+	{ "AE10", { "0", "=", "\u02dd", "\u02dd" } },
+	{ "AE11", { "'", "?", "\"", "\u00a8" } },
+	{ "AE12", { "+", "*", "\u00b8", "\u00b8" } },
+	{ "AD01", { "q", "", "\\", "\u03a9" } },
+	{ "AD02", { "w", "", "|", "\u0141" } },
+	{ "AD03", { "e", "", "\u20ac", "\u20ac" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "z", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "\u0161", "", "\u00f7", "\u00b0" } },
+	{ "AD12", { "\u0111", "", "\u00d7", "\u00af" } },
+	{ "BKSL", { "\u017e", "", "\u00a4", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e6", "\u00c6" } },
+	{ "AC02", { "s", "", "\u201e", "\u00bb" } },
+	{ "AC03", { "d", "", "\u201c", "\u00ab" } },
+	{ "AC04", { "f", "", "[", "\u00aa" } },
+	{ "AC05", { "g", "", "]", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0142", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { "\u010d", "", "'", "\u02dd" } },
+	{ "AC11", { "\u0107", "", "\u00df", "\u02c7" } },
+	{ "AB01", { "y", "", "\u2018", "\u00bb" } },
+	{ "AB02", { "x", "", "\u2019", "\u00ab" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "@", "`" } },
+	{ "AB05", { "b", "", "{", "'" } },
+	{ "AB06", { "n", "", "}", "\u00b4" } },
+	{ "AB07", { "m", "", "\u00a7", "\u00ba" } },
+	{ "AB08", { ",", ";", "<", "\u00d7" } },
+	{ "AB09", { ".", ":", ">", "\u00f7" } },
+	{ "AB10", { "-", "_", "\u2014", "\u2013" } },
+	{ "LSGT", { "<", ">", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_HR[] = {
+	{ "TLDE", { "`", "~", "\u00ac", "\u00ac" } },
+	{ "AE01", { "1", "!", "~", "~" } },
+	{ "AE02", { "2", "\"", "\u02c7", "\u02c7" } },
+	{ "AE03", { "3", "#", "^", "^" } },
+	{ "AE04", { "4", "$", "\u02d8", "\u02d8" } },
+	{ "AE05", { "5", "%", "\u00b0", "\u00b0" } },
+	{ "AE06", { "6", "&", "\u02db", "\u02db" } },
+	{ "AE07", { "7", "/", "`", "`" } },
+	{ "AE08", { "8", "(", "\u02d9", "\u02d9" } },
+	{ "AE09", { "9", ")", "'", "'" } },
+	{ "AE10", { "0", "=", "\u02dd", "\u02dd" } },
+	{ "AE11", { "'", "?", "\"", "\u00a8" } },
+	{ "AE12", { "+", "*", "\u00b8", "\u00b8" } },
+	{ "AD01", { "q", "", "\\", "\u03a9" } },
+	{ "AD02", { "w", "", "|", "\u0141" } },
+	{ "AD03", { "e", "", "\u20ac", "\u20ac" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "z", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "\u0161", "", "\u00f7", "\u00b0" } },
+	{ "AD12", { "\u0111", "", "\u00d7", "\u00af" } },
+	{ "BKSL", { "\u017e", "", "\u00a4", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e6", "\u00c6" } },
+	{ "AC02", { "s", "", "\u201e", "\u00bb" } },
+	{ "AC03", { "d", "", "\u201d", "\u00ab" } },
+	{ "AC04", { "f", "", "[", "\u00aa" } },
+	{ "AC05", { "g", "", "]", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0142", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { "\u010d", "", "'", "\u02dd" } },
+	{ "AC11", { "\u0107", "", "\u00df", "\u02c7" } },
+	{ "AB01", { "y", "", "\u2018", "\u00bb" } },
+	{ "AB02", { "x", "", "\u2019", "\u00ab" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "@", "`" } },
+	{ "AB05", { "b", "", "{", "'" } },
+	{ "AB06", { "n", "", "}", "\u00b4" } },
+	{ "AB07", { "m", "", "\u00a7", "\u00ba" } },
+	{ "AB08", { ",", ";", "<", "\u00d7" } },
+	{ "AB09", { ".", ":", ">", "\u00f7" } },
+	{ "AB10", { "-", "_", "", "\u02d9" } },
+	{ "LSGT", { "<", ">", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_EE[] = {
+	{ "TLDE", { "\u02c7", "~", "\u2022", "\u00b7" } },
+	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
+	{ "AE02", { "2", "\"", "@", "\u215b" } },
+	{ "AE03", { "3", "#", "\u00a3", "\u00a3" } },
+	{ "AE04", { "4", "\u00a4", "$", "$" } },
+	{ "AE05", { "5", "%", "\u20ac", "\u215c" } },
+	{ "AE06", { "6", "&", "\u00ac", "\u215d" } },
+	{ "AE07", { "7", "/", "{", "\u215e" } },
+	{ "AE08", { "8", "(", "[", "\u2122" } },
+	{ "AE09", { "9", ")", "]", "\u00b1" } },
+	{ "AE10", { "0", "=", "}", "\u00b0" } },
+	{ "AE11", { "+", "?", "\\", "\u00bf" } },
+	{ "AE12", { "'", "`", "`", "\u00b8" } },
+	{ "AD01", { "q", "", "@", "\u03a9" } },
+	{ "AD02", { "w", "", "\u00df", "\u03a3" } },
+	{ "AD03", { "e", "", "\u20ac", "\u00a2" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "y", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "\u00fc", "", "\"", "\u00b0" } },
+	{ "AD12", { "\u00f5", "", "\u00a7", "\u00af" } },
+	{ "BKSL", { "'", "*", "\u00bd", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e6", "\u00c6" } },
+	{ "AC02", { "s", "", "\u0161", "\u0160" } },
+	{ "AC03", { "d", "", "\u00f0", "\u00d0" } },
+	{ "AC04", { "f", "", "\u0111", "\u00aa" } },
+	{ "AC05", { "g", "", "\u014b", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0138", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { "\u00f6", "", "'", "\u02dd" } },
+	{ "AC11", { "\u00e4", "", "^", "^" } },
+	{ "AB01", { "z", "", "\u017e", "\u017d" } },
+	{ "AB02", { "x", "", "\u00bb", "\u00ab" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201e", "\u201a" } },
+	{ "AB05", { "b", "", "\u201c", "\u2018" } },
+	{ "AB06", { "n", "", "\u201d", "\u2019" } },
+	{ "AB07", { "m", "", "\u00b5", "\u00ba" } },
+	{ "AB08", { ",", ";", "<", "\u00d7" } },
+	{ "AB09", { ".", ":", ">", "\u00f7" } },
+	{ "AB10", { "-", "_", "|", "\u02d9" } },
+	{ "LSGT", { "<", ">", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_IS[] = {
+	{ "TLDE", { "\u00b0", "\"", "\u00ac", "\u00ad" } },
+	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
+	{ "AE02", { "2", "\"", "\u00b2", "\u215b" } },
+	{ "AE03", { "3", "#", "\u00b3", "\u00a3" } },
+	{ "AE04", { "4", "$", "\u00bc", "\u00a4" } },
+	{ "AE05", { "5", "%", "\u00bd", "\u215c" } },
+	{ "AE06", { "6", "&", "\u00ac", "\u215d" } },
+	{ "AE07", { "7", "/", "{", "\u215e" } },
+	{ "AE08", { "8", "(", "[", "\u2122" } },
+	{ "AE09", { "9", ")", "]", "\u00b1" } },
+	{ "AE10", { "0", "=", "}", "\u00b0" } },
+	{ "AE11", { "\u00f6", "", "\\", "\u00bf" } },
+	{ "AE12", { "-", "_", "\u00b8", "\u02db" } },
+	{ "AD01", { "q", "", "@", "\u03a9" } },
+	{ "AD02", { "w", "", "\u017f", "\u00a7" } },
+	{ "AD03", { "e", "", "\u20ac", "\u00a2" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "y", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u2193", "\u2191" } },
+	{ "AD08", { "i", "", "\u2192", "\u0131" } },
+	{ "AD09", { "o", "", "\u00f8", "\u00d8" } },
+	{ "AD10", { "p", "", "|", "\u03c0" } },
+	{ "AD11", { "\u00f0", "", "\"", "\u00b0" } },
+	{ "AD12", { "'", "?", "~", "\u00af" } },
+	{ "BKSL", { "+", "*", "`", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e6", "\u00c6" } },
+	{ "AC02", { "s", "", "\u00df", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u201e", "\u201c" } },
+	{ "AC04", { "f", "", "\u0111", "\u00aa" } },
+	{ "AC05", { "g", "", "\u014b", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0138", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { "\u00e6", "", "^", "\u02dd" } },
+	{ "AC11", { "'", "'", "^", "\u02c7" } },
+	{ "AB01", { "z", "", "\u00ab", "<" } },
+	{ "AB02", { "x", "", "\u00bb", ">" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201e", "\u201a" } },
+	{ "AB05", { "b", "", "\u201c", "\u2018" } },
+	{ "AB06", { "n", "", "\u201d", "\u2019" } },
+	{ "AB07", { "m", "", "\u00b5", "\u00ba" } },
+	{ "AB08", { ",", ";", "\u2022", "\u00d7" } },
+	{ "AB09", { ".", ":", "\u00b7", "\u00f7" } },
+	{ "AB10", { "\u00fe", "", "", "\u02d9" } },
+	{ "LSGT", { "<", ">", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_TR[] = {
+	{ "TLDE", { "\"", "\u00e9", "<", "\u00b0" } },
+	{ "AE01", { "1", "!", ">", "\u00a1" } },
+	{ "AE02", { "2", "'", "\u00a3", "\u00b2" } },
+	{ "AE03", { "3", "^", "#", "\u00b3" } },
+	{ "AE04", { "4", "+", "$", "\u00bc" } },
+	{ "AE05", { "5", "%", "\u00bd", "\u215c" } },
+	{ "AE06", { "6", "&", "\u00be", "" } },
+	{ "AE07", { "7", "/", "{", "" } },
+	{ "AE08", { "8", "(", "[", "" } },
+	{ "AE09", { "9", ")", "]", "\u00b1" } },
+	{ "AE10", { "0", "=", "}", "\u00b0" } },
+	{ "AE11", { "*", "?", "\\", "\u00bf" } },
+	{ "AE12", { "-", "_", "|", "" } },
+	{ "AD01", { "q", "", "@", "\u03a9" } },
+	{ "AD02", { "w", "", "", "" } },
+	{ "AD03", { "e", "", "\u20ac", "" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u20ba", "" } },
+	{ "AD06", { "y", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u00fb", "\u00db" } },
+	{ "AD08", { "\u0131", "", "\u00ee", "\u00ce" } },
+	{ "AD09", { "o", "", "\u00f4", "\u00d4" } },
+	{ "AD10", { "p", "", "", "" } },
+	{ "AD11", { "\u011f", "", "\"", "\u00b0" } },
+	{ "AD12", { "\u00fc", "", "~", "\u00af" } },
+	{ "BKSL", { ",", ";", "`", "`" } },
+	{ "AC01", { "a", "", "\u00e2", "\u00c2" } },
+	{ "AC02", { "s", "", "\u00df", "" } },
+	{ "AC03", { "d", "", "", "" } },
+	{ "AC04", { "f", "", "\u00aa", "" } },
+	{ "AC05", { "g", "", "", "" } },
+	{ "AC06", { "h", "", "", "" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "", "" } },
+	{ "AC09", { "l", "", "", "" } },
+	{ "AC10", { "\u015f", "", "\u00b4", "'" } },
+	{ "AC11", { "i", "\u0130", "'", "\u02c7" } },
+	{ "AB01", { "z", "", "\u00ab", "<" } },
+	{ "AB02", { "x", "", "\u00bb", ">" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201e", "\u201a" } },
+	{ "AB05", { "b", "", "\u201c", "\u2018" } },
+	{ "AB06", { "n", "", "\u201d", "\u2019" } },
+	{ "AB07", { "m", "", "\u00b5", "\u00ba" } },
+	{ "AB08", { "\u00f6", "", "\u00d7", "" } },
+	{ "AB09", { "\u00e7", "", "\u00b7", "\u00f7" } },
+	{ "AB10", { ".", ":", "\u02d9", "\u02d9" } },
+	{ "LSGT", { "<", ">", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_MT[] = {
+	{ "TLDE", { "\u010b", "", "`", "\u00ac" } },
+	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
+	{ "AE02", { "2", "\"", "\u00b2", "\u215b" } },
+	{ "AE03", { "3", "\u20ac", "\u00a3", "\u00a3" } },
+	{ "AE04", { "4", "$", "\u20ac", "\u00bc" } },
+	{ "AE05", { "5", "%", "\u00bd", "\u215c" } },
+	{ "AE06", { "6", "^", "^", "^" } },
+	{ "AE07", { "7", "&", "{", "\u215e" } },
+	{ "AE08", { "8", "*", "[", "\u2122" } },
+	{ "AE09", { "9", "(", "]", "\u00b1" } },
+	{ "AE10", { "0", ")", "}", "\u00b0" } },
+	{ "AE11", { "-", "_", "\\", "\u00bf" } },
+	{ "AE12", { "=", "+", "\u00b8", "\u02db" } },
+	{ "AD01", { "q", "", "@", "\u03a9" } },
+	{ "AD02", { "w", "", "\u017f", "\u00a7" } },
+	{ "AD03", { "e", "", "\u00e8", "\u00c8" } },
+	{ "AD04", { "r", "", "\u00b6", "\u00ae" } },
+	{ "AD05", { "t", "", "\u0167", "\u0166" } },
+	{ "AD06", { "y", "", "\u2190", "\u00a5" } },
+	{ "AD07", { "u", "", "\u00f9", "\u00d9" } },
+	{ "AD08", { "i", "", "\u00ec", "\u00cc" } },
+	{ "AD09", { "o", "", "\u00f2", "\u00d2" } },
+	{ "AD10", { "p", "", "\u00fe", "\u00de" } },
+	{ "AD11", { "\u0121", "", "[", "{" } },
+	{ "AD12", { "\u0127", "", "]", "}" } },
+	{ "BKSL", { "#", "~", "`", "\u02d8" } },
+	{ "AC01", { "a", "", "\u00e0", "\u00c0" } },
+	{ "AC02", { "s", "", "\u00df", "\u1e9e" } },
+	{ "AC03", { "d", "", "\u00f0", "\u00d0" } },
+	{ "AC04", { "f", "", "\u0111", "\u00aa" } },
+	{ "AC05", { "g", "", "\u014b", "\u014a" } },
+	{ "AC06", { "h", "", "\u0127", "\u0126" } },
+	{ "AC07", { "j", "", "", "" } },
+	{ "AC08", { "k", "", "\u0138", "&" } },
+	{ "AC09", { "l", "", "\u0142", "\u0141" } },
+	{ "AC10", { ";", ":", "'", "\u02dd" } },
+	{ "AC11", { "'", "@", "^", "\u02c7" } },
+	{ "AB01", { "z", "", "\u00ab", "<" } },
+	{ "AB02", { "x", "", "\u00bb", ">" } },
+	{ "AB03", { "c", "", "\u00a2", "\u00a9" } },
+	{ "AB04", { "v", "", "\u201e", "\u201a" } },
+	{ "AB05", { "b", "", "\u201c", "\u2018" } },
+	{ "AB06", { "n", "", "\u201d", "\u2019" } },
+	{ "AB07", { "m", "", "\u00b5", "\u00ba" } },
+	{ "AB08", { ",", "<", "\u2022", "\u00d7" } },
+	{ "AB09", { ".", ">", "\u00b7", "\u00f7" } },
+	{ "AB10", { "/", "?", "", "\u02d9" } },
+	{ "LSGT", { "\u017c", "", "\\", "|" } },
+};
+
 struct bssh_layout_t {
 	const char *id;
 	const char *display_name;
@@ -832,6 +1550,34 @@ const bssh_layout_t BSSH_LAYOUTS[] = {
 	   BSSH_LAYOUT_LV, int(sizeof BSSH_LAYOUT_LV / sizeof *BSSH_LAYOUT_LV) },
 	{ "ro", "Romanian",
 	   BSSH_LAYOUT_RO, int(sizeof BSSH_LAYOUT_RO / sizeof *BSSH_LAYOUT_RO) },
+	{ "de", "German",
+	   BSSH_LAYOUT_DE, int(sizeof BSSH_LAYOUT_DE / sizeof *BSSH_LAYOUT_DE) },
+	{ "fr", "French",
+	   BSSH_LAYOUT_FR, int(sizeof BSSH_LAYOUT_FR / sizeof *BSSH_LAYOUT_FR) },
+	{ "cz", "Czech",
+	   BSSH_LAYOUT_CZ, int(sizeof BSSH_LAYOUT_CZ / sizeof *BSSH_LAYOUT_CZ) },
+	{ "sk", "Slovak",
+	   BSSH_LAYOUT_SK, int(sizeof BSSH_LAYOUT_SK / sizeof *BSSH_LAYOUT_SK) },
+	{ "hu", "Hungarian",
+	   BSSH_LAYOUT_HU, int(sizeof BSSH_LAYOUT_HU / sizeof *BSSH_LAYOUT_HU) },
+	{ "lt", "Lithuanian",
+	   BSSH_LAYOUT_LT, int(sizeof BSSH_LAYOUT_LT / sizeof *BSSH_LAYOUT_LT) },
+	{ "it", "Italian",
+	   BSSH_LAYOUT_IT, int(sizeof BSSH_LAYOUT_IT / sizeof *BSSH_LAYOUT_IT) },
+	{ "be", "Belgian",
+	   BSSH_LAYOUT_BE, int(sizeof BSSH_LAYOUT_BE / sizeof *BSSH_LAYOUT_BE) },
+	{ "si", "Slovenian",
+	   BSSH_LAYOUT_SI, int(sizeof BSSH_LAYOUT_SI / sizeof *BSSH_LAYOUT_SI) },
+	{ "hr", "Croatian",
+	   BSSH_LAYOUT_HR, int(sizeof BSSH_LAYOUT_HR / sizeof *BSSH_LAYOUT_HR) },
+	{ "ee", "Estonian",
+	   BSSH_LAYOUT_EE, int(sizeof BSSH_LAYOUT_EE / sizeof *BSSH_LAYOUT_EE) },
+	{ "is", "Icelandic",
+	   BSSH_LAYOUT_IS, int(sizeof BSSH_LAYOUT_IS / sizeof *BSSH_LAYOUT_IS) },
+	{ "tr", "Turkish",
+	   BSSH_LAYOUT_TR, int(sizeof BSSH_LAYOUT_TR / sizeof *BSSH_LAYOUT_TR) },
+	{ "mt", "Maltese",
+	   BSSH_LAYOUT_MT, int(sizeof BSSH_LAYOUT_MT / sizeof *BSSH_LAYOUT_MT) },
 };
 
 /*
@@ -1463,6 +2209,184 @@ bssh_soft_key_group_t terminal_group() {
 	return group;
 }
 
+/*
+ * A fourth compact page: the slots the other three do not carry.
+ *
+ * The compact keyboard's three pages leave gaps by construction, and for
+ * most layouts the gaps hold nothing anybody misses. The letters page is
+ * AD01-AD11, AC01-AC11 and AB01-AB07, so it stops short of AB08-AB10; the
+ * digit row is an ASCII PALETTE rather than a slot run, deliberately,
+ * because making it a slot run is what once left the Swedish board unable
+ * to type `*`, `;` or `^`; and TLDE, BKSL and LSGT are on no compact page
+ * at all.
+ *
+ * Under US International every one of those gaps is punctuation the
+ * palette already carries, so nothing is lost. Under German the gap holds
+ * a LETTER: eszett is AE11. Under French it holds four -- e-acute,
+ * e-grave, c-cedilla and a-grave at AE02, AE07, AE09 and AE10. Those six
+ * layouts were generated, measured against
+ * `a_small_screen_loses_no_letter`, and refused on exactly this, because
+ * a keyboard that cannot type the language it is named after is not the
+ * keyboard the user asked for.
+ *
+ * So this page is defined by the GAP rather than by a row: it carries
+ * every slot the other three omit. Defining it that way is what makes it
+ * hold for a layout nobody has added yet -- naming "the AE row" would
+ * have covered German and French and missed a layout that puts a letter
+ * on AB08.
+ *
+ * It costs a tap and no ASCII, which is the trade the alternative could
+ * not make: a slot-run digit row buys the layout's letters by losing the
+ * palette's punctuation, and a terminal needs both.
+ */
+const char *const BSSH_OUTER_TOP[] = {
+	"AE01", "AE02", "AE03", "AE04", "AE05", "AE06",
+	"AE07", "AE08", "AE09", "AE10", "AE11"
+};
+
+/*
+ * AD12 is in this list because the letters page stops at AD11, and that
+ * is not a detail: Slovak puts a-diaeresis there. The first version of
+ * this page enumerated the digit row, TLDE, BKSL, LSGT and AB08-AB10,
+ * read as complete, and `a_small_screen_loses_no_letter` refused Slovak
+ * on the one slot it had missed. The list is written out rather than
+ * derived because a key does not carry its slot id once built -- so the
+ * contract test is the guard that the enumeration is complete, and it
+ * has already done that job once.
+ */
+const char *const BSSH_OUTER_MIDDLE[] = {
+	"AE12", "TLDE", "AD12", "BKSL", "LSGT"
+};
+
+const char *const BSSH_OUTER_BOTTOM[] = {
+	"AB08", "AB09", "AB10"
+};
+
+/*
+ * Lay the slots that EXIST across a fixed width.
+ *
+ * Absent slots are skipped rather than drawn. slot_key() falls back to a
+ * key labelled with the slot id when a layout does not define one, which
+ * is right where the geometry knows the slot exists and wrong here: LSGT
+ * is the ISO key between Shift and AB01, an ANSI layout simply has none,
+ * and drawing it would put a key reading "LSGT" on the board.
+ *
+ * The width is then divided among whatever is left, remainder to the
+ * leftmost keys, so the row fills its columns exactly whether a layout
+ * brought five slots or three. A row that does not sum to
+ * BSSH_KEYBOARD_COLUMNS is a row the grid stretches, and the keyboard is
+ * checked for that.
+ */
+QList<bssh_key_t> spread_slots(const char *const *ids, int count, int width) {
+	QList<const char *> present;
+	for (int i = 0; i < count; ++i) {
+		if (layout_slot(ids[i])) present.append(ids[i]);
+	}
+
+	QList<bssh_key_t> keys;
+	if (present.isEmpty()) {
+		keys.append(spacer(width));
+		return keys;
+	}
+
+	const int each = width / present.size();
+	int extra = width % present.size();
+	for (const char *id : present) {
+		int span = each;
+		if (extra > 0) {
+			++span;
+			--extra;
+		}
+		keys.append(slot_key(id, span));
+	}
+	return keys;
+}
+
+/*
+ * Three rows and the shared bottom, because every group must be the same
+ * height.
+ *
+ * The first version had two rows and the suite said why that is not a
+ * cosmetic matter: switching to a shorter page resizes the terminal, and
+ * a resize reflows the remote's output. So the page is built to the
+ * shape the others have rather than to the amount of content it happens
+ * to carry, and the middle row's keys are simply wider.
+ */
+bssh_soft_key_group_t outer_slots_group() {
+	bssh_soft_key_group_t group;
+	group.id = QStringLiteral("outer");
+	group.display_name = QStringLiteral("Layout row");
+
+	group.rows.append(spread_slots(BSSH_OUTER_TOP,
+	                                int(sizeof BSSH_OUTER_TOP / sizeof *BSSH_OUTER_TOP),
+	                                BSSH_KEYBOARD_COLUMNS));
+
+	group.rows.append(spread_slots(BSSH_OUTER_MIDDLE,
+	                                int(sizeof BSSH_OUTER_MIDDLE / sizeof *BSSH_OUTER_MIDDLE),
+	                                BSSH_KEYBOARD_COLUMNS));
+
+	QList<bssh_key_t> row;
+	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 4));
+	row.append(spread_slots(BSSH_OUTER_BOTTOM,
+	                         int(sizeof BSSH_OUTER_BOTTOM / sizeof *BSSH_OUTER_BOTTOM), 12));
+	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 6));
+	group.rows.append(row);
+
+	group.rows.append(common_bottom_row());
+	return group;
+}
+
+/* Every character a set of groups can send, at all four levels. */
+QSet<uint> characters_of(const QList<bssh_soft_key_group_t> &groups) {
+	QSet<uint> sent;
+	for (const bssh_soft_key_group_t &group : groups) {
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind != bssh_key_t::TEXT) continue;
+				for (int modifiers = 0; modifiers < 4; ++modifiers) {
+					const QChar character = bssh_keyboard_char(
+					        key, modifiers & 1, modifiers & 2);
+					if (!character.isNull() && character.unicode()) {
+						sent.insert(character.unicode());
+					}
+				}
+			}
+		}
+	}
+	return sent;
+}
+
+/*
+ * The letters this page adds, and the reason the page is conditional.
+ *
+ * Asked as a set difference against the pages already built rather than
+ * as a property of the layout, because that is the question the contract
+ * asks: not "does this layout put a letter on the digit row" but "is
+ * there a letter the compact keyboard could not otherwise send". A
+ * fourth page for a layout that needs none is a tap every user pays and
+ * nobody spends.
+ *
+ * Letters only. The page carries plenty of punctuation the palette
+ * already has, and admitting it on that basis would give every layout a
+ * fourth page for a section sign.
+ */
+QString letters_this_page_adds(const QList<bssh_soft_key_group_t> &already,
+                                const bssh_soft_key_group_t &page) {
+	const QSet<uint> reachable = characters_of(already);
+	QList<bssh_soft_key_group_t> alone;
+	alone.append(page);
+
+	QString added;
+	QList<uint> codes(characters_of(alone).cbegin(), characters_of(alone).cend());
+	std::sort(codes.begin(), codes.end());
+	for (uint code : codes) {
+		if (reachable.contains(code)) continue;
+		if (!QChar(code).isLetter()) continue;
+		added.append(QChar(code));
+	}
+	return added;
+}
+
 } /* namespace */
 
 bssh_soft_keyboard_catalog::bssh_soft_keyboard_catalog() {
@@ -1476,6 +2400,25 @@ void bssh_soft_keyboard_catalog::rebuild() {
 	m_groups.append(letters_group());
 	m_groups.append(numbers_group());
 	m_groups.append(terminal_group());
+
+	/*
+	 * The fourth page, for the layouts that need it and no others.
+	 *
+	 * Appended last so the three-group cycle a user already knows is
+	 * unchanged in both order and content, and the extra page is a tap
+	 * further round rather than something inserted in the middle of it.
+	 *
+	 * The button carries the letters it adds rather than a fixed label:
+	 * the page exists for different characters in every layout that has
+	 * one, so "abc" and "123" have no sibling that is true everywhere.
+	 * German shows eszett, French shows two of its four.
+	 */
+	bssh_soft_key_group_t outer = outer_slots_group();
+	const QString adds = letters_this_page_adds(m_groups, outer);
+	if (!adds.isEmpty()) {
+		outer.button_label = adds.left(2);
+		m_groups.append(outer);
+	}
 
 	m_full.append(full_main_group());
 	m_full.append(full_keypad_group());

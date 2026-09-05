@@ -1951,42 +1951,85 @@ that is not caught is worth more than one that is** -- the two that were
 caught confirmed what was already believed.
 
 
-**Thirteen layouts ship, and the twenty-seven candidates sorted
-themselves — [BUILT 2026-09-05].** The holder asked for a fuller set
-once Swedish worked. Because the corpus supplies the layouts and the
+**Twenty-seven layouts ship, and the corpus sorted them rather than
+anybody curating — [BUILT 2026-09-05].** The holder asked for a fuller
+set once Swedish worked. Because the corpus supplies the layouts and the
 contract admits them, this was a measurement rather than a curation:
-generate all twenty-seven, register them in a throwaway binary, and read
-which pass `both_keyboards_reach_every_printable_character` and
+generate, register, and read which pass
+`both_keyboards_reach_every_printable_character` and
 `a_small_screen_loses_no_letter` unchanged.
 
-**Eleven passed and ship**, with the corpus's own names from
-`rules/base.lst` so nobody here decides what a layout is called:
-Norwegian, Danish, Finnish, English (UK), Dutch, Spanish, Portuguese,
-German (Switzerland), Polish, Latvian, Romanian — beside US
-International and Swedish.
+**Thirteen passed immediately** and shipped with the corpus's own names
+from `rules/base.lst`, so nobody here decides what a layout is called:
+US International, Swedish, Norwegian, Danish, Finnish, English (UK),
+Dutch, Spanish, Portuguese, German (Switzerland), Polish, Latvian and
+Romanian.
 
-**Thirteen Latin layouts were refused for one reason, and it is a fact
-about this keyboard rather than about those languages.** German loses
-`ß`, French loses `è à é`, and Czech, Slovak, Hungarian and Lithuanian
-lose most of their accented set. Confirmed by reading the tables rather
-than inferred: `ß` is **AE11** and `é è à` are **AE02, AE07, AE10** —
-all on the DIGIT row. The compact keyboard's digit row is the ASCII
-palette, not a slot run, so a letter placed there has nowhere to appear.
+**Thirteen more were refused for one reason, and it was a fact about
+this keyboard rather than about those languages.** German lost `ss`,
+French lost `e-acute e-grave a-grave`, and Czech, Slovak, Hungarian and
+Lithuanian lost most of their accented set. Confirmed by reading the
+tables rather than inferred: eszett is **AE11** and the French three are
+**AE02, AE07, AE10** — all on the DIGIT row. The compact keyboard's
+digit row is the ASCII palette, not a slot run, so a letter placed there
+had nowhere to appear.
 
-**That palette is not an accident and cannot simply be reverted.** The
-digit row *was* a slot run, and that is what left the Swedish compact
-board unable to type `*`, `;` or `^`. So the two failures are the same
-knob at its two ends:
+**That palette is not an accident and could not simply be reverted.**
+The digit row *was* a slot run, and that is what left the Swedish
+compact board unable to type `*`, `;` or `^`. So the two failures are
+the same knob at its two ends:
 
 | digit row | guarantees | loses |
 |---|---|---|
 | ASCII palette | every printable ASCII, in every layout | letters a layout puts on the digit row |
 | slot run | the layout's own digit-row letters | ASCII, wherever the layout's Shift level differs |
 
-Neither is right for AZERTY, which needs both. **The honest answer is
-probably a fourth compact page carrying the layout's own AE row**, which
-costs a tap and no ASCII — but a new page is a design change to §6.2's
-three-group cycle and is the holder's, not a worker's.
+Neither is right for AZERTY, which needs both.
+
+**The fourth compact page closed it, and all fourteen remaining Latin
+candidates now ship — [BUILT 2026-09-06].** A fourth page carrying the
+slots the other three omit, which costs a tap and no ASCII. Fourteen
+were generated and registered and **not one was refused**: German,
+French, Czech, Slovak, Hungarian, Lithuanian, Italian, Belgian,
+Slovenian, Croatian, Estonian, Icelandic, Turkish and Maltese.
+
+**The page is defined by the GAP rather than by a row**, which is what
+makes it hold for a layout nobody has added yet. Naming "the AE row"
+would have covered German and French and missed Slovak, which puts
+a-diaeresis on **AD12** — the letters page runs AD01-AD11. That is not
+hypothetical: the first version enumerated the digit row, TLDE, BKSL,
+LSGT and AB08-AB10, read as complete, and `a_small_screen_loses_no_letter`
+refused Slovak on the one slot it had missed. The enumeration is written
+out rather than derived, because a key does not carry its slot id once
+built, so **the contract test is the guard that the list is complete —
+and it has already done that job once.**
+
+**It is conditional, and that is the half a reachability test cannot
+see.** Under most layouts every omitted slot holds punctuation the
+palette already carries, so a fourth page would be a tap every user pays
+and nobody spends. The page is admitted by a set difference against the
+pages already built — is there a LETTER the compact keyboard could not
+otherwise send — rather than by naming the layouts that get one.
+`a_small_screen_loses_no_letter` would go on passing if every layout
+grew a page it did not need, so
+`a_fourth_page_appears_only_where_a_letter_needs_it` counts the pages
+instead: three for US International and for Swedish, four for German.
+Swedish is the sharper control, having letters the palette lacks that
+the letters page already reaches at AD11 and AC11.
+
+**The button carries the letters the page adds rather than a fixed
+label**, because the page exists for different characters in every
+layout that has one, so `abc` and `123` have no sibling that is true
+everywhere. German shows eszett.
+
+**Two existing contracts caught this change and both were right.**
+Building the page with two rows failed
+`every_keyboard_group_is_the_same_shape`, which is not cosmetic:
+switching to a shorter page resizes the terminal and reflows the
+remote's output. The page is built to the shape the others have rather
+than to the content it happens to carry, and its middle row's keys are
+simply wider. **Made to fail on purpose afterwards** — admitting the
+page unconditionally turns the counting test red with exit 2.
 
 **Three non-Latin candidates failed differently and worse.** Russian,
 Greek and Ukrainian lose `a`–`z` *entirely*, on both keyboards: the

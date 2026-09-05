@@ -1194,6 +1194,65 @@ void layout_test::a_small_screen_loses_no_letter() {
 	}
 }
 
+/*
+ * The fourth compact page exists only where a letter needs it (sec 6.2).
+ *
+ * The page carries the slots the other three omit -- the digit row, TLDE,
+ * AD12, BKSL, LSGT and AB08-AB10 -- and under most layouts every one of
+ * those holds punctuation the ASCII palette already has. Giving those
+ * layouts a fourth page would be a tap every user pays and nobody spends,
+ * so the page is admitted by a set difference against the pages already
+ * built rather than by naming the layouts that get one.
+ *
+ * Asserted in both directions, because only one of them is the change:
+ * `a_small_screen_loses_no_letter` already proves German can type eszett
+ * somewhere, and would go on passing if every layout grew a page it did
+ * not need. What that test cannot see is the tap, so this one counts the
+ * pages.
+ */
+void layout_test::a_fourth_page_appears_only_where_a_letter_needs_it() {
+	const layout_left_as_found_t restore;
+
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("us-intl")));
+	QCOMPARE(int(bssh_soft_keyboard_catalog::instance()
+	                     .all(bssh_soft_keyboard_catalog::STYLE_COMPACT).size()), 3);
+
+	/*
+	 * Swedish is the sharper half of the control: it has letters the
+	 * ASCII palette does not carry, and they are on AD11 and AC11 where
+	 * the letters page already reaches them.
+	 */
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("se")));
+	QCOMPARE(int(bssh_soft_keyboard_catalog::instance()
+	                     .all(bssh_soft_keyboard_catalog::STYLE_COMPACT).size()), 3);
+
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("de")));
+	const QList<bssh_soft_key_group_t> german =
+	        bssh_soft_keyboard_catalog::instance().all(
+	                bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	QCOMPARE(int(german.size()), 4);
+
+	/*
+	 * And it is the page that carries the letter rather than merely a
+	 * fourth page: the button says what it is for, and the keys send it.
+	 */
+	QCOMPARE(german.last().button_label, QString(QChar(0x00df)));
+
+	bool eszett = false;
+	for (const QList<bssh_key_t> &row : german.last().rows) {
+		for (const bssh_key_t &key : row) {
+			if (key.kind != bssh_key_t::TEXT) continue;
+			for (int modifiers = 0; modifiers < 4; ++modifiers) {
+				if (bssh_keyboard_char(key, modifiers & 1, modifiers & 2)
+				     == QChar(0x00df)) {
+					eszett = true;
+				}
+			}
+		}
+	}
+	QVERIFY2(eszett, "the German fourth page does not carry eszett");
+}
+
 namespace {
 
 /* Windows of ours that are currently alive, for a test that makes one. */
