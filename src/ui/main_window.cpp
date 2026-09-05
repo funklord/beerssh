@@ -2885,10 +2885,25 @@ void bssh_main_window::build_menu_bar() {
 		split_beside_current();
 	});
 
-	m_detach_action = view->addAction(QStringLiteral("&Detach Tab to a Window"));
+	/*
+	 * "Detach to a Window", and it takes the session you are LOOKING at
+	 * rather than whichever tab happens to be current.
+	 *
+	 * It read m_tabs->currentIndex() and was called "Detach Tab to a
+	 * Window", which is wrong twice over on a wide screen. A split shows
+	 * sessions as PANES, and a pane is not in the tab bar (sec 8.3) --
+	 * so the item either acted on a different session than the one with
+	 * focus, or, with no tab at all, on nothing. Both read as "it does
+	 * nothing" from the other side of the screen.
+	 *
+	 * It is also the only route a PANE has out of a window. Dragging one
+	 * out is Alt and a drag, which works and which nobody discovers, so
+	 * a menu item that does it is the discoverable half of the same
+	 * gesture.
+	 */
+	m_detach_action = view->addAction(QStringLiteral("&Detach to a Window"));
 	connect(m_detach_action, &QAction::triggered, this, [this] {
-		const int index = m_tabs->currentIndex();
-		if (index >= 0) tear_out_tab(index);
+		if (m_current) tear_out(m_current);
 	});
 
 	QMenu *settings = m_menu_bar->addMenu(QStringLiteral("&Settings"));

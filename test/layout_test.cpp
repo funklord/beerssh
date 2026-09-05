@@ -1273,10 +1273,36 @@ void layout_test::the_detach_action_makes_a_window() {
 	          qPrintable(QStringLiteral("triggering Detach left %1 window(s)")
 	                             .arg(bssh_main_window_count())));
 
-	/* And the torn-out window is closed with this one. */
+	/*
+	 * DELETED rather than closed, and that distinction cost an hour.
+	 *
+	 * closeEvent() asks before closing a window with a live session in
+	 * it, and a modal QDialog::exec() offscreen waits for an answer that
+	 * never comes. The test hung there -- in its own cleanup, after the
+	 * assertions had passed -- and the hang was read as a fault in the
+	 * code under test, because reverting the one line being tested made
+	 * it go away. It made it go away by changing which session was torn
+	 * out, and so whether the closing window still had one.
+	 *
+	 * A backtrace settled it in one look: QDialog::exec under
+	 * closeEvent, under this loop. Deleting skips the confirmation,
+	 * which is what a test wants -- the prompt has its own coverage.
+	 *
+	 * COLLECTED FIRST, then deleted, which is the second thing this
+	 * loop got wrong. topLevelWidgets() is a snapshot of raw pointers
+	 * and a window owns top-level children of its own -- menus -- so
+	 * deleting one while walking the snapshot leaves entries in it
+	 * pointing at freed memory, and the next qobject_cast reads them.
+	 * That crashed in QMetaObject::cast, which again looked like a
+	 * fault in the code under test and again was not.
+	 */
+	QList<QPointer<bssh_main_window> > extras;
 	for (QWidget *widget : QApplication::topLevelWidgets()) {
 		bssh_main_window *other = qobject_cast<bssh_main_window *>(widget);
-		if (other && other != &window) other->close();
+		if (other && other != &window) extras.append(other);
+	}
+	for (const QPointer<bssh_main_window> &extra : extras) {
+		if (extra) delete extra.data();
 	}
 }
 

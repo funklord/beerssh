@@ -4625,6 +4625,28 @@ place their spacing can be judged. `desktop-window` shoots it with **two**
 sessions, since one hides the tab strip and a picture of a deliberately-absent
 tab bar says nothing about it.
 
+
+**Detach takes the session you are LOOKING at — [FIXED 2026-09-05].**
+Reported as "detach tab to window does nothing", together with "there is
+no way to drag a pane out". They are the same fault seen twice.
+
+The item read `m_tabs->currentIndex()` and was called "Detach Tab to a
+Window", which is wrong twice over on a wide screen. A split shows
+sessions as PANES, and a pane is not in the tab bar (§8.3) — so the item
+either acted on a different session than the one with focus, or, with no
+tab, on nothing at all. Both read as *it does nothing* from the other
+side of the screen.
+
+It is also **the only route a pane has out of a window that anybody
+finds**. Dragging one out is Alt and a drag, which works and which
+nobody discovers; a drag nobody accepts falls back to `tear_out()`, so
+the gesture is complete and invisible. A menu item that does the same
+thing is the discoverable half.
+
+`the_detach_action_makes_a_window` covers both halves of the guard — one
+session refuses, because a window will not empty itself, and more than
+one does not — across a tabbed window and a split one.
+
 ### 8.5 The front door — **[DECIDED]**
 
 **Desktop borrows PuTTY's interface. Touch gets a mobile one. Same model
@@ -7204,39 +7226,53 @@ store is a no-op rather than a silent loss.
 ## 12. Build, packaging, CI
 
 
-#### Tearing out the FOCUSED session hangs — **[OPEN, found 2026-09-04]**
+#### ~~Tearing out the FOCUSED session hangs~~ — **[WITHDRAWN 2026-09-05, the diagnosis was wrong]**
 
-Reported as "no way to drag a pane out". The gesture exists -- Alt and a
-drag on a pane, `bssh_terminal_view::pane_drag_requested` --  and a drag
-nobody accepts falls back to `tear_out(session)`, which is what makes
-dropping on the desktop mean "a window of its own".
+**It does not hang, and this entry was published saying it did.** The
+correction is kept in full rather than deleted, because the way the
+false diagnosis was reached is worth more than the fact it was false.
 
-**`tear_out()` does not return when the session is `m_current`.**
-Measured: changing the Detach menu item to `tear_out(m_current)` instead
-of the current tab took `the_detach_action_makes_a_window` from passing
-in 200ms to QtTest's 300-second function timeout; reverting the one line
-put it back to green, so it is that call and not the test around it. The
-change was not shipped.
+What was written: that `tear_out()` does not return when the session is
+`m_current`, on the evidence that changing the Detach item to
+`tear_out(m_current)` took its test from 200ms to QtTest's 300-second
+timeout, and that reverting the one line put it back to green. **Both
+observations were true and the conclusion did not follow.**
 
-The shape, as far as it is understood: `take_session()` emits
-`session_taken` *before* the new window appends, so that "the
-announcement finds only windows that should let go" -- and the losing
-window's handler runs `detach_session()` when the taken session is the
-one it is showing, which rebuilds its layout while the new window is
-still mid-take. Whether that is a ping-pong between the two windows or a
-rebuild that re-shows what it has just dropped is **not established**,
-and this entry deliberately stops at what was measured.
+**A backtrace settled it in one look**, and should have been the first
+move rather than the last:
 
-**Why it matters more than a menu item.** The tab route is fine and is
-what ships: `tear_out_tab()` takes a session out of the BAR, which is
-never `m_current`. So the fault sits on exactly one path -- the pane
-drag -- and that path is the only way a pane leaves a window, which is
-why it was reported as the feature not existing rather than as a hang.
+    #8  QDialog::exec()
+    #9  bssh_main_window::closeEvent(QCloseEvent*)
+    #21 layout_test::the_detach_action_makes_a_window()
 
-Not fixed here because a guess at the ordering would be a change to how
-windows hand sessions over, which is sec 8.4's core invariant, made
-without understanding the loop. The reproduction is one line and is
-written down above, which is what the next attempt needs.
+The hang was in the TEST'S OWN CLEANUP. `closeEvent()` asks before
+closing a window with a live session in it, and a modal dialog offscreen
+waits for an answer that never comes. Reverting the line did fix it --
+by changing which session was torn out, and so whether the window being
+closed still had one. **A revert that cures a symptom is not a diagnosis
+of it**, and this is the whole of what went wrong: a one-line change and
+a clean revert felt like a controlled experiment, and the variable it
+actually moved was three steps away from the one being named.
+
+**Then the fixed cleanup crashed, and that was the test too.** With the
+dialog avoided it segfaulted in `QMetaObject::cast` -- deleting windows
+while walking a snapshot of `topLevelWidgets()`, which holds raw
+pointers and includes top-level children a window owns, so the next cast
+read freed memory. Collected first, then deleted, and 522 tests pass
+with `tear_out(m_current)` in place.
+
+**So two "faults in the code under test" in a row were faults in the
+test**, and the published one carried a mechanism -- an ordering hazard
+in `take_session()` -- that was invented to explain a measurement whose
+cause had not been established. That is the failure `evidence.md` names:
+a specific wrong cause is more actionable than a vague one, and sends
+the next person somewhere with the authority of a diagnosis. The entry
+said in as many words that the mechanism was "not established"; it
+should not have named one at all.
+
+**What is true, and shipped:** the Detach item now takes the session you
+are looking at rather than whichever tab happens to be current. See
+§8.4.
 
 ### 12.1 Builds
 - **[BUILT] A missing submodule is fetched, not complained about**, and the
