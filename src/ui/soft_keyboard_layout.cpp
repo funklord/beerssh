@@ -2377,7 +2377,18 @@ QString letters_this_page_adds(const QList<bssh_soft_key_group_t> &already,
 	alone.append(page);
 
 	QString added;
-	QList<uint> codes(characters_of(alone).cbegin(), characters_of(alone).cend());
+	/*
+	 * One set, held, because building the list straight from
+	 * characters_of(alone).cbegin() and .cend() calls the function
+	 * twice and takes the two iterators from different temporaries.
+	 * That is undefined behaviour whatever it appears to do.
+	 *
+	 * Found while chasing something else, and it explained none of
+	 * it: the label that prompted the look was correct. Kept
+	 * because the defect is real, not because it caused a symptom.
+	 */
+	const QSet<uint> mine = characters_of(alone);
+	QList<uint> codes(mine.cbegin(), mine.cend());
 	std::sort(codes.begin(), codes.end());
 	for (uint code : codes) {
 		if (reachable.contains(code)) continue;

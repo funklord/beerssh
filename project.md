@@ -2022,6 +2022,30 @@ label**, because the page exists for different characters in every
 layout that has one, so `abc` and `123` have no sibling that is true
 everywhere. German shows eszett.
 
+**The French button reads `a-grave e-grave` and not `a-grave
+c-cedilla`, and that is the rule working rather than a defect.** AZERTY
+keeps four letters on the digit row -- a-grave, c-cedilla, e-grave and
+e-acute -- and only three of them are new. US International puts
+c-cedilla at AltGr+comma; the palette rows carry US International's
+levels by construction, so that they stay ASCII whatever layout is
+chosen; and the comma is on the numbers page. **C-cedilla is therefore
+already typeable in every layout**, and a page offering it again would
+be adding nothing.
+
+That was read off a phone as a suspected defect and understood only
+after the tables were checked. The check that settled it is one grep:
+c-cedilla appears in the French table at AE09 alone, so its
+reachability had to come from somewhere that is not the French table.
+
+**And the bug found while chasing it explained none of it.** The list
+of added characters was built from `characters_of(alone).cbegin()` and
+`characters_of(alone).cend()` -- two calls, two temporaries, iterators
+from different containers, undefined behaviour. It is fixed because it
+is real, not because it caused the symptom: the label that prompted the
+look was correct both before and after. **A wrong theory that finds a
+genuine defect is still a wrong theory**, and the comment that first
+recorded this claimed the fix explained the label, which it never did.
+
 **Two existing contracts caught this change and both were right.**
 Building the page with two rows failed
 `every_keyboard_group_is_the_same_shape`, which is not cosmetic:

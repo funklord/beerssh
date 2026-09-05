@@ -1251,6 +1251,31 @@ void layout_test::a_fourth_page_appears_only_where_a_letter_needs_it() {
 		}
 	}
 	QVERIFY2(eszett, "the German fourth page does not carry eszett");
+
+	/*
+	 * French, which adds three letters where German adds one -- and
+	 * the interesting part is the fourth letter it does NOT add.
+	 *
+	 * AZERTY keeps a-grave, c-cedilla, e-grave and e-acute on the
+	 * digit row, so all four appear on this page. Only three of them
+	 * are new: US International puts c-cedilla at AltGr+comma, the
+	 * palette rows carry US International's levels by construction so
+	 * that they stay ASCII whatever layout is chosen, and the comma
+	 * is on the numbers page. C-cedilla is therefore already typeable
+	 * in EVERY layout, and a page that offered it again would be
+	 * adding nothing.
+	 *
+	 * Sorted, the three are a-grave, e-grave, e-acute, so the button
+	 * takes the first two. This was read off a phone as a suspected
+	 * defect before it was understood as the rule working.
+	 */
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("fr")));
+	const QList<bssh_soft_key_group_t> french =
+	        bssh_soft_keyboard_catalog::instance().all(
+	                bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	QCOMPARE(int(french.size()), 4);
+	QCOMPARE(french.last().button_label,
+	          QString(QChar(0x00e0)) + QChar(0x00e8));
 }
 
 namespace {
