@@ -1388,6 +1388,89 @@ void layout_test::the_keyboard_side_icons_are_still_named() {
 }
 
 /*
+ * A pane dropped back where it came from does nothing (sec 8.4).
+ *
+ * Asked for as "the ability to drop it back with no effect", and it was
+ * not a no-op before: the drop went through take-and-show, and on a
+ * window with no room for another pane that means show_session(), which
+ * replaces the intent with the dropped session ALONE. So putting a pane
+ * back exactly where it was collapsed the split it belonged to -- a
+ * gesture whose undo is destructive, which is worse than one that
+ * cannot be undone.
+ */
+void layout_test::a_pane_dropped_back_changes_nothing() {
+	bssh_main_window window;
+	window.resize(1000, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	bssh_session *first = registry->create(named(QStringLiteral("first")));
+	bssh_session *second = registry->create(named(QStringLiteral("second")));
+	window.adopt_session(first);
+	window.adopt_session(second);
+	window.split_beside_current();
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	const QList<bssh_terminal_view *> before = panes->views();
+	QVERIFY2(before.size() >= 2, "the split produced fewer than two panes");
+
+	/* Dropped onto the panes it is already one of. */
+	window.drop_session(panes->views().size() >= 2 ? second : first, true);
+
+	QCOMPARE(panes->views().size(), before.size());
+}
+
+/*
+ * The pane's drag handle arms the drag without a modifier (sec 8.4).
+ *
+ * Alt and a drag has always worked and nobody discovers it, which is why
+ * the handle exists. Pressing where it is drawn must do what Alt did:
+ * arm, and wait for the pointer to move, so that a press on its own is
+ * not a gesture.
+ */
+void layout_test::the_pane_grip_arms_a_drag() {
+	bssh_main_window window;
+	window.resize(1000, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+	window.adopt_session(registry->create(named(QStringLiteral("only"))));
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QVERIFY2(!panes->views().isEmpty(), "no pane was built");
+
+	bssh_terminal_view *view = panes->views().first();
+
+	/*
+	 * After the splitter has given it a width. Asked too early the pane
+	 * is 0 wide, which is not a fact about the handle.
+	 */
+	QTest::qWait(50);
+	QVERIFY2(view->width() > 100, "the pane was never laid out");
+
+	/*
+	 * A pane, so it has a handle -- and the handle is inside the view,
+	 * which is the half a rect can get wrong.
+	 */
+	const QRect grip = view->pane_grip_rect();
+	QVERIFY2(view->rect().contains(grip),
+	          qPrintable(QStringLiteral("grip %1,%2 %3x%4 is outside a %5x%6 view")
+	                             .arg(grip.x()).arg(grip.y())
+	                             .arg(grip.width()).arg(grip.height())
+	                             .arg(view->width()).arg(view->height())));
+	QVERIFY2(grip.width() >= 14, "the grip is too small to hit");
+}
+
+/*
  * A layout that is not in the catalog changes nothing.
  *
  * A settings file written by a newer version, or edited by hand, must

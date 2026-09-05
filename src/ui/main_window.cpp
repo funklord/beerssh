@@ -18,6 +18,8 @@
 #include <QMenu>
 #include <QMetaEnum>
 #include <QMouseEvent>
+#include <QPointer>
+#include <QFontMetrics>
 #include <QDrag>
 #include <QDragEnterEvent>
 #include <QDropEvent>
@@ -2123,6 +2125,19 @@ void bssh_main_window::drop_session(bssh_session *session, bool beside) {
 	if (!session) return;
 
 	/*
+	 * Dropped back where it came from: nothing happens, which is what
+	 * cancelling a drag should look like.
+	 *
+	 * Without this the drop still went through take-and-show below, and
+	 * on a window with no room for another pane that means show_session()
+	 * -- which replaces the intent with this session ALONE, so putting a
+	 * pane back exactly where it was collapsed the split it was part of.
+	 * A gesture whose undo is destructive is worse than one that cannot
+	 * be undone.
+	 */
+	if (beside && m_layout && m_layout->intent().contains(session)) return;
+
+	/*
 	 * A pane of THIS window, dropped on THIS window's tab bar, is the
 	 * un-split (sec 8.3). It has to be caught before the take-and-show
 	 * below, which would put the session back on screen as the only pane
@@ -2192,6 +2207,55 @@ void bssh_main_window::start_tab_drag(int index) {
 	start_session_drag(session_at_tab(index));
 }
 
+/*
+ * What the pointer carries during a session drag.
+ *
+ * Painted rather than loaded: this program ships no icon theme, and a
+ * missing asset would leave the gesture looking like nothing again.
+ */
+QPixmap bssh_main_window::session_drag_pixmap(bssh_session *session) const {
+	const QString name = session && !session->title().isEmpty()
+	        ? session->title()
+	        : QStringLiteral("session");
+
+	QFontMetrics metrics(font());
+	const int text_width = metrics.horizontalAdvance(name);
+	const int box = 34;
+	const int width = qMin(320, box + 8 + text_width + 10);
+	const int height = qMax(box, metrics.height()) + 8;
+
+	QPixmap canvas(width, height);
+	canvas.fill(Qt::transparent);
+
+	QPainter painter(&canvas);
+	painter.setRenderHint(QPainter::Antialiasing, true);
+
+	/* A little terminal: a dark screen, a lit border, a prompt. */
+	const QRect screen(2, (height - box) / 2, box - 4, box - 8);
+	painter.fillRect(screen, QColor(20, 20, 20));
+
+	QPen edge(palette().color(QPalette::Highlight));
+	edge.setWidth(2);
+	painter.setPen(edge);
+	painter.drawRect(screen);
+
+	QFont prompt = font();
+	prompt.setPointSizeF(qMax(6.0, prompt.pointSizeF() * 0.8));
+	painter.setFont(prompt);
+	painter.setPen(QColor(220, 220, 220));
+	painter.drawText(screen.adjusted(4, 2, -2, -2), Qt::AlignLeft | Qt::AlignVCenter,
+	                  QStringLiteral("$_"));
+
+	painter.setFont(font());
+	painter.setPen(palette().color(QPalette::WindowText));
+	painter.drawText(QRect(box + 4, 0, width - box - 6, height),
+	                  Qt::AlignLeft | Qt::AlignVCenter,
+	                  metrics.elidedText(name, Qt::ElideMiddle, width - box - 8));
+	painter.end();
+
+	return canvas;
+}
+
 void bssh_main_window::start_session_drag(bssh_session *session) {
 	if (!session || !m_registry) return;
 
@@ -2205,6 +2269,28 @@ void bssh_main_window::start_session_drag(bssh_session *session) {
 	drag->setMimeData(mime);
 
 	/*
+	 * Something under the pointer that says what is being carried.
+	 *
+	 * Qt's default is no pixmap at all, so a session drag looked exactly
+	 * like a text drag, a file drag, or nothing -- and the one question
+	 * a user has mid-gesture is what they picked up. A small terminal
+	 * with the session's name under it answers it without a theme asset.
+	 */
+	drag->setPixmap(session_drag_pixmap(session));
+	drag->setHotSpot(QPoint(12, 12));
+
+	/*
+	 * And the pane it came FROM is hatched for as long as the drag is
+	 * up. exec() runs a nested loop, so this is set before it and
+	 * cleared after -- through a QPointer, because the view is destroyed
+	 * when the session lands somewhere else and the pointer would
+	 * otherwise be dangling by the time exec() returns.
+	 */
+	QPointer<bssh_terminal_view> source =
+	        m_panes ? m_panes->view_for(session) : nullptr;
+	if (source) source->set_being_dragged(true);
+
+	/*
 	 * A move, not a copy: a session is shown in exactly one place
 	 * (sec 8.4), and there is no meaning to be had from two views of one
 	 * connection.
@@ -2214,7 +2300,11 @@ void bssh_main_window::start_session_drag(bssh_session *session) {
 	 * through their own dropEvent, never through anything this window
 	 * called on them.
 	 */
-	if (drag->exec(Qt::MoveAction) != Qt::IgnoreAction) return;
+	const Qt::DropAction landed = drag->exec(Qt::MoveAction);
+
+	if (source) source->set_being_dragged(false);
+
+	if (landed != Qt::IgnoreAction) return;
 
 	/*
 	 * Nobody wanted it, so the gesture means what it meant before there

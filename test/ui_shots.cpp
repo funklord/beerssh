@@ -16,6 +16,7 @@
 #include "input/input_router.h"
 #include "ui/key_row_layout.h"
 #include "ui/key_row.h"
+#include "ui/pane_container.h"
 #include "ui/soft_keyboard.h"
 #include "ui/soft_keyboard_layout.h"
 #include "ui/host_editor.h"
@@ -473,6 +474,26 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
 
 	delete torn;
+
+	/*
+	 * And a pane mid-drag, which is the state a user is in when they
+	 * most need to be told something: the pointer has left, and nothing
+	 * else on screen says which terminal is about to move. A net over it
+	 * and a border around it, drawn over everything including the focus
+	 * ring.
+	 */
+	window.adopt_session(window.registry()->create(sample_profile()));
+	window.split_beside_current();
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY2(panes, "the window has no pane container");
+	QVERIFY2(panes->views().size() >= 2, "the split produced fewer than two panes");
+	panes->views().first()->set_being_dragged(true);
+
+	shoot(QStringLiteral("desktop-pane-being-dragged"), &window,
+	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+
+	panes->views().first()->set_being_dragged(false);
 
 	/*
 	 * And at the size the window SAYS it can be.

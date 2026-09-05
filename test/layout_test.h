@@ -49,6 +49,8 @@ private slots:
 	void a_small_screen_loses_no_letter();
 	void the_detach_action_makes_a_window();
 	void the_keyboard_side_icons_are_still_named();
+	void a_pane_dropped_back_changes_nothing();
+	void the_pane_grip_arms_a_drag();
 	void the_brightness_slider_cannot_reach_unreadable();
 	void the_layout_setting_reaches_the_keyboard();
 	void choosing_a_layout_changes_what_the_keys_send();

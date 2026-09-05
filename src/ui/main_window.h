@@ -574,6 +574,7 @@ public:
 	 * window the drag started in.
 	 */
 	void start_session_drag(bssh_session *session);
+	QPixmap session_drag_pixmap(bssh_session *session) const;
 
 	/* The session into a window of its own; nullptr if it will not go. */
 	bssh_main_window *tear_out(bssh_session *session);

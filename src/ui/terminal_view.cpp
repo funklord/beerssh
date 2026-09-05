@@ -1,6 +1,7 @@
 #include "ui/terminal_view.h"
 
 #include <QDragEnterEvent>
+#include <QEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
 #include <QScrollBar>
@@ -73,6 +74,9 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_scroll_offset(0),
       m_scrollbar(nullptr),
       m_scrollbar_position(default_scrollbar_position()),
+      m_being_dragged(false),
+      m_pointer_inside(false),
+      m_pane_handle(false),
       m_focus_border(false),
       m_click_count(0),
       m_last_click_line(-1),
@@ -1138,6 +1142,46 @@ void bssh_terminal_view::resizeEvent(QResizeEvent *event) {
 	recompute_grid();
 }
 
+void bssh_terminal_view::leaveEvent(QEvent *event) {
+	m_pointer_inside = false;
+	update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+	QWidget::leaveEvent(event);
+}
+
+void bssh_terminal_view::set_pane_handle(bool handle) {
+	if (m_pane_handle == handle) return;
+
+	m_pane_handle = handle;
+	update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+}
+
+void bssh_terminal_view::set_being_dragged(bool dragged) {
+	if (m_being_dragged == dragged) return;
+
+	m_being_dragged = dragged;
+	update();
+}
+
+QRect bssh_terminal_view::pane_grip_rect() const {
+	/*
+	 * Sized from the CELL rather than from a constant, so it stays in
+	 * proportion to the text at any font size, and clamped so it is
+	 * neither a speck on a tiny font nor a slab on a huge one.
+	 */
+	const int side = qBound(14, int(m_cell_height * 1.1), 26);
+
+	/*
+	 * A pane too narrow to spare the corner has no handle, rather than
+	 * one hanging off its left edge. Measured in a test that asked for
+	 * the rect before the splitter had given the pane any width: the
+	 * arithmetic happily returned x = -25 in a view 0 wide, which draws
+	 * nothing and would still have answered contains() for a press.
+	 */
+	if (width() < side * 3 || height() < side * 2) return QRect();
+
+	return QRect(width() - side - 3, 3, side, side);
+}
+
 void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	Q_UNUSED(event);
 
@@ -1492,6 +1536,68 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		painter.drawRect(rect().adjusted(1, 1, -1, -1));
 	}
 
+	/*
+	 * The pane's drag handle, under the pointer only.
+	 *
+	 * Filled with the terminal's own background rather than blended,
+	 * because a grip half-showing the character underneath reads as a
+	 * rendering fault rather than as a control -- so while it is up it
+	 * occludes those cells, and that is why it is up only while the
+	 * pointer is in this pane. Two pixel tests made that decision: drawn
+	 * always, it put ink in a run-of-text check and swallowed a cursor.
+	 */
+	if (grip_visible()) {
+		const QRect grip = pane_grip_rect();
+		painter.fillRect(grip, m_background);
+
+		QColor ink(bssh_raise_contrast(m_foreground.rgb(), m_background.rgb()));
+		ink.setAlphaF(0.45);
+		QPen grip_pen(ink);
+		grip_pen.setWidthF(qMax(1.0, grip.height() / 12.0));
+		grip_pen.setCapStyle(Qt::RoundCap);
+		painter.setPen(grip_pen);
+
+		for (int i = 0; i < 3; ++i) {
+			const qreal y = grip.top() + grip.height() * (0.32 + i * 0.18);
+			painter.drawLine(QPointF(grip.left() + grip.width() * 0.24, y),
+			                  QPointF(grip.left() + grip.width() * 0.76, y));
+		}
+	}
+
+	/*
+	 * And, while a drag is carrying this pane, a net over the whole of
+	 * it and a border around it.
+	 *
+	 * Drawn LAST, over the focus border and the grip, because it is the
+	 * one thing on the pane that has to be unmistakable: the question a
+	 * user is asking mid-drag is "which terminal am I about to move",
+	 * and an answer that a cursor or a title bar could obscure is not an
+	 * answer. The diagonal net rather than a tint, because a tint over a
+	 * dark scheme is a slightly different dark and reads as nothing.
+	 */
+	if (m_being_dragged) {
+		const QColor accent = palette().color(QPalette::Highlight);
+
+		QColor mesh(accent);
+		mesh.setAlphaF(0.35);
+		QPen net(mesh);
+		net.setWidthF(qMax(1.0, m_cell_height / 8.0));
+		painter.setPen(net);
+
+		const int step = qMax(10, m_cell_height);
+		for (int x = -height(); x < width(); x += step) {
+			painter.drawLine(x, height(), x + height(), 0);
+		}
+
+		QColor edge(accent);
+		edge.setAlphaF(0.9);
+		QPen outline(edge);
+		outline.setWidth(qMax(3, m_cell_height / 4));
+		painter.setPen(outline);
+		painter.setBrush(Qt::NoBrush);
+		const int inset = outline.width() / 2;
+		painter.drawRect(rect().adjusted(inset, inset, -inset - 1, -inset - 1));
+	}
 }
 
 /*
@@ -1777,6 +1883,14 @@ void bssh_terminal_view::focusInEvent(QFocusEvent *event) {
 void bssh_terminal_view::enterEvent(QEnterEvent *event) {
 	QWidget::enterEvent(event);
 
+	/*
+	 * The drag grip shows itself under the pointer, whatever the focus
+	 * policy is: it is a handle on this pane rather than a consequence
+	 * of focusing it, and the early return below is about focus.
+	 */
+	m_pointer_inside = true;
+	update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+
 	if (!m_focus_follows_mouse) return;
 
 	/*
@@ -1814,7 +1928,19 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	 * accident, and a window that rearranges itself on one is worse than
 	 * one that cannot be rearranged.
 	 */
-	if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::AltModifier)) {
+	/*
+	 * The handle does the same thing without the modifier, which is the
+	 * whole reason it exists: Alt+drag works and nobody discovers it.
+	 * Checked first, and with a touch-sized reach around the drawn grip
+	 * so a thumb does not have to be accurate to the pixel.
+	 */
+	const QRect grip = pane_grip_rect();
+	const bool on_grip = event->button() == Qt::LeftButton && grip_visible()
+	        && !grip.isNull()
+	        && grip.adjusted(-8, -8, 4, 8).contains(event->pos());
+
+	if (on_grip || (event->button() == Qt::LeftButton
+	                 && (event->modifiers() & Qt::AltModifier))) {
 		m_pane_drag_from = event->pos();
 		m_maybe_pane_drag = true;
 		event->accept();

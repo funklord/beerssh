@@ -68,6 +68,11 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
 	}
 }
 
+bssh_terminal_view *bssh_pane_container::view_for(bssh_session *session) const {
+	const int index = m_sessions.indexOf(session);
+	return index >= 0 ? view_at(index) : nullptr;
+}
+
 bssh_terminal_view *bssh_pane_container::view_at(int index) const {
 	if (index < 0 || index >= m_views.size()) return nullptr;
 	return m_views.at(index);
@@ -117,6 +122,13 @@ void bssh_pane_container::rebuild() {
 
 	for (bssh_session *session : panes) {
 		bssh_terminal_view *view = new bssh_terminal_view(m_splitter);
+
+		/*
+		 * It is a pane, so it gets the drag handle (sec 8.4). A view
+		 * built anywhere else is not something a window can be asked
+		 * to hand over.
+		 */
+		view->set_pane_handle(true);
 
 		view->attach_screen(&session->emulator()->screen());
 		view->attach_scrollback(&session->emulator()->scrollback());

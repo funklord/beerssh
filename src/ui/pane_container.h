@@ -43,6 +43,15 @@ public:
 	int pane_count() const { return m_views.size(); }
 	bssh_terminal_view *view_at(int index) const;
 
+	/*
+	 * The view showing this session, or nullptr.
+	 *
+	 * m_sessions and m_views are built together and stay in step, so the
+	 * index of one is the index of the other. Needed so the window can
+	 * mark the pane a drag picked up.
+	 */
+	bssh_terminal_view *view_for(bssh_session *session) const;
+
 	void focus_session(bssh_session *session);
 
 	/*

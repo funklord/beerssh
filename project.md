@@ -4653,6 +4653,59 @@ tab bar says nothing about it.
 
 
 
+
+**A pane has a drag handle, and a drag says what it is carrying —
+[BUILT 2026-09-05].** Four things, asked for together, all about the one
+gesture that had no visible existence.
+
+**The handle.** A pane has no chrome — panes are bare views in a
+splitter — so the only place a grip can go is on the terminal, where it
+occludes cells. Three constraints shaped it:
+
+- It is drawn **only under the pointer**, because two pixel tests
+  refused it otherwise: drawn always it put ink at x=590 y=9 in a
+  run-of-text check and made a 13-pixel underline in a 21-pixel cell.
+  The terminal's pixels are the terminal's, and those tests were right.
+- It belongs to a **pane** rather than to a view. `set_pane_handle()` is
+  off by default and `bssh_pane_container` turns it on, so a view built
+  anywhere else — a preview, a test — has no grip. That is also what
+  keeps it out of the pixel tests *honestly*, by those views not being
+  panes, rather than by teaching the assertions to ignore a corner.
+- A pane too narrow to spare the corner has **no** handle, rather than
+  one hanging off its left edge. Found by a test that asked before the
+  splitter had given the pane a width: the arithmetic returned x = -25
+  in a view 0 wide, which draws nothing and would still have answered
+  `contains()` for a press.
+
+**Touch gets no grip**, since touch never hovers. It loses nothing:
+cross-window drag needs more than one window, which a phone has not got.
+
+**What the pointer carries.** Qt's default is no pixmap at all, so a
+session drag looked like a text drag, a file drag, or nothing. It now
+carries a small painted terminal with the session's name beside it —
+painted rather than loaded, since this program ships no icon theme and a
+missing asset would leave the gesture looking like nothing again.
+
+**What is left behind.** The pane a drag picked up is hatched with a
+diagonal net and outlined in the accent, drawn last so nothing — not the
+focus ring, not the grip — paints over it. A net rather than a tint,
+because a tint over a dark scheme is a slightly different dark and reads
+as nothing. Held through a `QPointer` around `exec()`, which runs a
+nested loop: the view is destroyed when the session lands elsewhere, so
+the pointer would be dangling by the time the drag returns.
+
+**Dropping it back does nothing**, which is what cancelling should look
+like — and it was not true before. The drop went through take-and-show,
+and on a window with no room for another pane that means
+`show_session()`, which replaces the intent with the dropped session
+*alone*. So putting a pane back exactly where it came from collapsed the
+split it belonged to: **a gesture whose undo is destructive, which is
+worse than one that cannot be undone.**
+
+Pictured in `desktop-pane-being-dragged.png`, because a net over the
+right pane and a net over the wrong one are the same assertion and
+different screens.
+
 **A torn-out window has no tab bar, and that is the other half of the
 report — [OPEN, found 2026-09-05].** Rendered rather than reasoned:
 `desktop-detach-source.png` and `desktop-detach-torn-out.png` are the

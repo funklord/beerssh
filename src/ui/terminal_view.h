@@ -511,7 +511,73 @@ signals:
 	 */
 	void link_activated(const QString &uri);
 
+public:
+	/*
+	 * Where the pane's drag handle sits, in widget coordinates.
+	 *
+	 * A pane has no chrome of its own -- panes are bare views in a
+	 * splitter -- so the only place a handle can go is ON the terminal,
+	 * and it costs the couple of cells it covers. That is the trade, and
+	 * it buys the one gesture a pane had no discoverable route to: a
+	 * window showing a single session shows it as a pane, which sec 8.3
+	 * keeps out of the tab bar, so there was nothing to take hold of and
+	 * the only way out was an Alt+drag nobody finds.
+	 *
+	 * Top RIGHT rather than top left, where a prompt and its command
+	 * live. Public so a test can press it where a thumb would.
+	 */
+	QRect pane_grip_rect() const;
+
+	/*
+	 * Mark this pane as the one a drag is carrying.
+	 *
+	 * A drag with no visible source is a gesture you have to remember
+	 * having started: the pointer leaves, nothing on screen says which
+	 * terminal is about to move, and dropping somewhere wrong is
+	 * indistinguishable from dropping somewhere right until it lands.
+	 * So the pane it came from is hatched and outlined for as long as
+	 * the drag is up.
+	 */
+	void set_being_dragged(bool dragged);
+	bool being_dragged() const { return m_being_dragged; }
+
+	/*
+	 * Whether the grip is drawn right now.
+	 *
+	 * Only under the pointer. It has to be, and two pixel tests proved
+	 * it rather than an opinion: drawn always, the grip put ink at
+	 * x=590 y=9 in a run-of-text check and made a 13-pixel underline in
+	 * a 21-pixel cell. The terminal's pixels are the terminal's, and a
+	 * control that occludes cells is not a cosmetic cost -- so it
+	 * appears where the pointer is and nowhere else.
+	 *
+	 * The price is that TOUCH never hovers, so a phone gets no grip. It
+	 * loses nothing it had: cross-window drag needs more than one window,
+	 * which a phone does not have, and a pane there is reached through
+	 * the tab bar or the Detach item.
+	 */
+	bool grip_visible() const {
+		return m_pane_handle && (m_pointer_inside || m_being_dragged);
+	}
+
+	/*
+	 * Whether this view is a PANE, and so has a handle at all.
+	 *
+	 * Off by default and turned on by bssh_pane_container, because the
+	 * handle belongs to a pane rather than to a terminal: a view built
+	 * on its own -- a preview, a test -- is not something anybody can
+	 * drag out of a window, and drawing a grip on it would be a control
+	 * that does nothing.
+	 *
+	 * It is also what keeps the grip out of the renderer's pixel tests
+	 * honestly. Those measure the ink in a frame and a grip is ink; the
+	 * fix is that they build bare views, which are not panes, rather
+	 * than teaching the assertions to ignore a corner.
+	 */
+	void set_pane_handle(bool handle);
+
 protected:
+	void leaveEvent(QEvent *event) override;
 	void paintEvent(QPaintEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
 	void contextMenuEvent(QContextMenuEvent *event) override;
@@ -662,6 +728,9 @@ private:
 	void sync_scrollbar();
 	void place_scrollbar();
 	bool m_focus_border;
+	bool m_being_dragged;
+	bool m_pointer_inside;
+	bool m_pane_handle;
 
 	/*
 	 * Selection endpoints in ABSOLUTE line coordinates -- history line
