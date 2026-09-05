@@ -50,6 +50,7 @@ private slots:
 	void the_detach_action_makes_a_window();
 	void the_keyboard_side_icons_are_still_named();
 	void a_pane_dropped_back_changes_nothing();
+	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();
 	void a_window_that_loses_its_last_session_closes();
 	void the_pane_grip_arms_a_drag();
 	void the_grip_asks_for_a_drag_once_the_pointer_moves();

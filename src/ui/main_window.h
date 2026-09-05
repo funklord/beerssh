@@ -547,6 +547,22 @@ public:
 	 */
 	void drop_session(bssh_session *session, bool beside);
 
+	/*
+	 * Whether a point in this window's coordinates is on the tab ROW.
+	 *
+	 * The row, not the widget, and that distinction was a bug: a QTabBar
+	 * is only as wide as its tabs, so with one tab open it covers about
+	 * 123 pixels of a 1000-pixel window. Asking the widget meant a drop
+	 * at x=60 un-split correctly while the identical drop at x=340 --
+	 * the same row, visually the same strip -- did nothing at all.
+	 * Nobody aiming at "the tab bar" is aiming at a widget.
+	 *
+	 * Public because it is the decision, and a synthesised QDropEvent
+	 * does not reach dropEvent() -- Qt's drop delivery wants a real
+	 * drag -- so the geometry is what a test can hold.
+	 */
+	bool point_is_on_tab_row(const QPoint &at) const;
+
 	/* Whether any other window of ours is still up. */
 	bool other_windows_exist() const;
 

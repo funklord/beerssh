@@ -1490,6 +1490,59 @@ void layout_test::a_window_that_loses_its_last_session_closes() {
 }
 
 /*
+ * The whole tab-bar ROW is the drop target, not just the tabs (sec 8.3).
+ *
+ * A QTabBar is only as wide as its tabs -- with one tab open, about 123
+ * pixels of a 1000-pixel window -- and the hit test asked the widget.
+ * Measured with a real pointer under Xvfb: a drop at x=60 un-split
+ * correctly and the identical drop at x=340, the same row and visually
+ * the same strip, did nothing at all.
+ *
+ * Asserted on the DECISION rather than by dropping, because a
+ * synthesised QDropEvent never reaches dropEvent() -- Qt's drop
+ * delivery wants a real drag, which a headless test has not got. That
+ * was established by instrumenting the handler and watching other
+ * tests' drops appear while this one's did not, so the geometry is what
+ * a test can hold and the gesture itself is held by the live run.
+ */
+void layout_test::the_tab_bar_row_takes_a_drop_beyond_the_tabs() {
+	bssh_main_window window;
+	window.resize(1000, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	window.adopt_session(registry->create(named(QStringLiteral("first"))));
+	window.adopt_session(registry->create(named(QStringLiteral("second"))));
+	QTest::qWait(50);
+
+	QTabBar *bar = window.findChild<QTabBar *>();
+	QVERIFY2(bar && bar->isVisible(), "no tab bar to aim at");
+
+	const QPoint on_a_tab = bar->mapTo(&window, QPoint(4, bar->height() / 2));
+	const QPoint same_row = bar->mapTo(&window,
+	                                    QPoint(bar->width() + 250, bar->height() / 2));
+	const QPoint below = bar->mapTo(&window, QPoint(4, bar->height() + 80));
+
+	/*
+	 * The gap is the whole point: if the bar spanned the window these
+	 * two points would be the same test.
+	 */
+	QVERIFY2(same_row.x() > bar->width(), "the bar already spans the window");
+	QVERIFY2(same_row.x() < window.width(), "aimed off the end of the window");
+
+	QVERIFY2(window.point_is_on_tab_row(on_a_tab), "a tab is not on the tab row");
+	QVERIFY2(window.point_is_on_tab_row(same_row),
+	          "the row beyond the last tab is not treated as the tab bar");
+	QVERIFY2(!window.point_is_on_tab_row(below),
+	          "a point below the row counts as the tab bar, so the panes would "
+	          "never receive a drop");
+}
+
+/*
  * A pane dropped back where it came from does nothing (sec 8.4).
  *
  * Asked for as "the ability to drop it back with no effect", and it was

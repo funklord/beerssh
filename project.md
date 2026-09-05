@@ -4710,6 +4710,35 @@ headless can drive it. **A pixmap nobody has looked at is the same kind
 of claim as a keycap nobody has looked at**, so it is rendered on its
 own rather than trusted.
 
+
+**Dropping a pane on the tab bar missed most of the tab bar — [FIXED
+2026-09-05].** §8.3 says where a drop lands is what it means: the bar
+makes a tab, the panes make a tile. Driven with a real pointer, the
+un-split worked when the drop landed **on a tab** and did nothing at all
+a few hundred pixels to the right, on the same row.
+
+The hit test asked the tab bar WIDGET, and a `QTabBar` is only as wide
+as its tabs — 123 pixels of a 1000-pixel window with one tab open.
+Measured: a drop at window x=60 gave `on_the_bar=1` and un-split; the
+identical drop at x=340 gave `on_the_bar=0`, so it counted as a drop on
+the panes, where the drop-back guard correctly swallowed it. **Nobody
+aiming at "the tab bar" is aiming at a widget**, so the test is on Y
+alone and the whole row answers.
+
+**Instrumenting was what settled it**, after two rounds of reasoning
+from the screen produced two different wrong stories. One `qWarning` in
+`dropEvent` gave the coordinates and the verdict, and the fix followed
+in a line.
+
+**And the test holds the DECISION rather than the drop.** A synthesised
+`QDropEvent` never reaches `dropEvent()` — established the same way, by
+watching other tests' drops appear in the instrumented log while this
+one's did not, so Qt's drop delivery wants a real drag. The geometry is
+therefore named — `point_is_on_tab_row()` — and asserted at three
+points: on a tab, the same row well beyond the last tab, and below the
+row. The middle one is the bug and the third is what stops the fix
+swallowing every drop meant for the panes.
+
 **Driven end to end with a real pointer, once xdotool was installed.**
 Under Xvfb with a window manager, against two real local shells: press
 the grip, watch the net and the carried terminal, and release. It found

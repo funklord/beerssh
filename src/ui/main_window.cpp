@@ -2355,6 +2355,13 @@ void bssh_main_window::dragEnterEvent(QDragEnterEvent *event) {
 	if (session_from_mime(event->mimeData())) event->acceptProposedAction();
 }
 
+bool bssh_main_window::point_is_on_tab_row(const QPoint &at) const {
+	if (!m_tabs || !m_tabs->isVisible()) return false;
+
+	const QPoint in_bar = m_tabs->mapFrom(this, at);
+	return in_bar.y() >= 0 && in_bar.y() < m_tabs->height();
+}
+
 void bssh_main_window::dropEvent(QDropEvent *event) {
 	bssh_session *session = session_from_mime(event->mimeData());
 	if (!session) return;
@@ -2367,12 +2374,19 @@ void bssh_main_window::dropEvent(QDropEvent *event) {
 	 * Mapped into the bar's own coordinates rather than compared against
 	 * its geometry(), which is expressed in its parent's and would be
 	 * offset by however the window is laid out.
+	 *
+	 * The ROW, not the widget, and that distinction is a bug this found.
+	 * A QTabBar is only as wide as its tabs, so with one tab open it
+	 * occupies about 180 pixels of a 1200-pixel window -- and dropping
+	 * anywhere else along that row missed it. Measured: a drop at x=60
+	 * un-split correctly and the identical drop at x=340, the same row
+	 * and visually the same strip, did nothing at all.
+	 *
+	 * Nobody aiming at "the tab bar" is aiming at a widget. They mean
+	 * the band across the top where tabs live, so the test is on Y
+	 * alone and the whole row answers.
 	 */
-	const QPoint at = event->position().toPoint();
-	const bool on_the_bar = m_tabs && m_tabs->isVisible()
-	                        && m_tabs->rect().contains(m_tabs->mapFrom(this, at));
-
-	drop_session(session, !on_the_bar);
+	drop_session(session, !point_is_on_tab_row(event->position().toPoint()));
 	event->acceptProposedAction();
 }
 
