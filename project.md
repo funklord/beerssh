@@ -4626,6 +4626,28 @@ sessions, since one hides the tab strip and a picture of a deliberately-absent
 tab bar says nothing about it.
 
 
+
+**A torn-out window has no tab bar, and that is the other half of the
+report — [OPEN, found 2026-09-05].** Rendered rather than reasoned:
+`desktop-detach-source.png` and `desktop-detach-torn-out.png` are the
+same window before and after, and the pair says what no assertion did.
+The source keeps a tab and a terminal; **the new window has a menu bar
+and a terminal and nothing else.**
+
+That is §8.3 working as written -- a pane is not in the bar, and a
+window showing its only session shows it as a pane -- so the bar has
+nothing to list. It is also why detaching feels one-way. The session
+leaves through a menu item, and the route back is the Alt+drag nobody
+discovers, because there is no tab to take hold of.
+
+**Not fixed here, because the fix is a design choice rather than a
+defect.** Listing a lone pane in the bar would contradict §8.3's rule
+that the bar holds what is *not* on screen; adding a "Move to Other
+Window" item is a new piece of UI; and drawing a drag handle on a pane
+is a third answer. Which one is the copyright holder's call. What is
+established is the shape: **the inverse of Detach has no discoverable
+route**, and the pictures are in `build-shots/` for whoever takes it.
+
 **Detach takes the session you are LOOKING at — [FIXED 2026-09-05].**
 Reported as "detach tab to window does nothing", together with "there is
 no way to drag a pane out". They are the same fault seen twice.

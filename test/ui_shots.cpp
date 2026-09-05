@@ -436,6 +436,45 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	shoot(QStringLiteral("desktop-window"), &window, BSSH_DESKTOP_W, BSSH_DESKTOP_H);
 
 	/*
+	 * And the same window after "Detach to a Window", which is the one
+	 * thing about this surface a number cannot answer: whether the
+	 * session you were LOOKING at is the one that left.
+	 *
+	 * The item used to read the current TAB, and on a wide screen a
+	 * split shows sessions as panes that are not in the bar -- so it
+	 * acted on something else, or on nothing. Both look identical from
+	 * the outside, which is why this is a picture: the source window
+	 * should be left holding one session and the new one should hold
+	 * the other, and only two images side by side say so.
+	 *
+	 * Triggered through the QAction the menu holds, which is exactly
+	 * what clicking the menu does.
+	 */
+	window.split_beside_current();
+
+	QAction *detach = nullptr;
+	for (QAction *action : window.findChildren<QAction *>()) {
+		if (action->text().contains(QStringLiteral("Detach"))) detach = action;
+	}
+	QVERIFY2(detach && detach->isEnabled(), "the Detach item is missing or refused");
+
+	detach->trigger();
+
+	bssh_main_window *torn = nullptr;
+	for (QWidget *widget : QApplication::topLevelWidgets()) {
+		bssh_main_window *other = qobject_cast<bssh_main_window *>(widget);
+		if (other && other != &window) torn = other;
+	}
+	QVERIFY2(torn, "Detach produced no window");
+
+	shoot(QStringLiteral("desktop-detach-source"), &window,
+	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	shoot(QStringLiteral("desktop-detach-torn-out"), torn,
+	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+
+	delete torn;
+
+	/*
 	 * And at the size the window SAYS it can be.
 	 *
 	 * It reports a minimum of about 214x77, which cannot be true of a
