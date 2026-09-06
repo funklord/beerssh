@@ -1468,7 +1468,44 @@ void layout_test::the_keyboard_side_icons_are_still_named() {
 		QVERIFY2(button->text().isEmpty(),
 		          qPrintable(QStringLiteral("%1 still carries a label beside its icon")
 		                             .arg(QLatin1String(name))));
+
+		/*
+		 * And it has INK in it. A QIcon built from a fully transparent
+		 * pixmap is not null, so the check above passes over a button
+		 * that draws nothing -- which is a live risk for a filled path
+		 * with an odd-even hole, where getting the fill rule backwards
+		 * paints either everything or nothing.
+		 */
+		const QImage drawn = button->icon().pixmap(64, 64).toImage()
+		                             .convertToFormat(QImage::Format_ARGB32);
+		QVERIFY2(!drawn.isNull(), name);
+
+		int painted = 0;
+		for (int y = 0; y < drawn.height(); ++y) {
+			for (int x = 0; x < drawn.width(); ++x) {
+				if (qAlpha(drawn.pixel(x, y)) > 0) ++painted;
+			}
+		}
+		const int area = drawn.width() * drawn.height();
+		QVERIFY2(painted > area / 50,
+		          qPrintable(QStringLiteral("%1 draws almost nothing: %2 of %3 px")
+		                             .arg(QLatin1String(name)).arg(painted).arg(area)));
+		QVERIFY2(painted < area * 9 / 10,
+		          qPrintable(QStringLiteral("%1 is a solid block: %2 of %3 px")
+		                             .arg(QLatin1String(name)).arg(painted).arg(area)));
 	}
+
+	/*
+	 * The cog has a HOLE, which is what separates it from a blob at the
+	 * size this is drawn. Asserted only for the settings icon: the hide
+	 * chevron passes through its own centre.
+	 */
+	QToolButton *cog =
+	        keyboard.findChild<QToolButton *>(QStringLiteral("keyboard-settings"));
+	QVERIFY(cog);
+	const QImage face = cog->icon().pixmap(64, 64).toImage()
+	                            .convertToFormat(QImage::Format_ARGB32);
+	QCOMPARE(qAlpha(face.pixel(face.width() / 2, face.height() / 2)), 0);
 }
 
 /*

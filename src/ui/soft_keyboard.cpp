@@ -3,6 +3,9 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
+#include <QtMath>
+
+#include <cmath>
 #include "ui/soft_keyboard.h"
 
 #include "ui/key_cap.h"
@@ -52,21 +55,77 @@ QIcon bssh_painted_icon(const QColor &ink, int size, bool settings) {
 	const qreal unit = size;
 	if (settings) {
 		/*
-		 * Three sliders. A gear is the more common symbol and much
-		 * harder to draw legibly at 36dp; sliders read as settings at
-		 * any size and stay clear in one colour.
+		 * A cog: the settings symbol everywhere a person has used a
+		 * phone, so it needs no learning.
+		 *
+		 * This was three sliders, and the reasoning for them was
+		 * backwards. Sliders were chosen because a gear's teeth are the
+		 * first thing to turn to mush at 36dp -- an argument about
+		 * RENDERING, offered against an argument about MEANING, and
+		 * meaning wins: sliders read as a filter or an equaliser to most
+		 * people, and an icon that has to be explained is the wrong
+		 * icon. Reported by the copyright holder, who expected a cog.
+		 *
+		 * The rendering problem is real and is answered by drawing
+		 * FEWER, FATTER teeth than a gear really has. Six radial strokes
+		 * with round caps stay separate at any size this is drawn at; a
+		 * finely-toothed gear becomes a blurred disc, which is what the
+		 * old comment was afraid of and was right about.
 		 */
-		const qreal rows[3] = { 0.30, 0.50, 0.70 };
-		const qreal knobs[3] = { 0.66, 0.36, 0.60 };
-		for (int i = 0; i < 3; ++i) {
-			painter.drawLine(QPointF(unit * 0.16, unit * rows[i]),
-			                  QPointF(unit * 0.84, unit * rows[i]));
+		const QPointF centre(unit * 0.5, unit * 0.5);
+
+		/*
+		 * FILLED, not stroked, and that is the whole difference between
+		 * a cog and a ship's wheel.
+		 *
+		 * The first attempt drew a stroked ring with six radial lines
+		 * out of it. On a device it read as a helm or a sun: thin spokes
+		 * STICKING OUT of a circle, where a gear's teeth are part of the
+		 * rim. So the outline is one path -- out to the tooth, along it,
+		 * back to the rim, around to the next -- filled solid, with the
+		 * centre punched out by an odd-even subpath.
+		 */
+		const int teeth = 6;
+		const qreal step = 360.0 / teeth;
+		const qreal outer = unit * 0.40;
+		const qreal inner = unit * 0.29;
+
+		const auto polar = [&](qreal degrees, qreal radius) {
+			const qreal angle = qDegreesToRadians(degrees);
+			return QPointF(centre.x() + std::cos(angle) * radius,
+			                centre.y() + std::sin(angle) * radius);
+		};
+
+		/*
+		 * Between the teeth the outline follows the root CIRCLE, not a
+		 * straight chord. With six teeth a chord is long enough to see,
+		 * and it flattens the body into something closer to a starfish
+		 * than a gear.
+		 *
+		 * arcTo's angles run the other way from polar() above: Qt
+		 * measures counter-clockwise from three o'clock, and screen y
+		 * grows downward, so a clockwise walk is negated.
+		 */
+		const QRectF root(centre.x() - inner, centre.y() - inner,
+		                   inner * 2, inner * 2);
+
+		QPainterPath gear;
+		gear.moveTo(polar(0, inner));
+		for (int i = 0; i < teeth; ++i) {
+			const qreal base = step * i;
+			gear.lineTo(polar(base + step * 0.15, outer));
+			gear.lineTo(polar(base + step * 0.35, outer));
+			gear.lineTo(polar(base + step * 0.50, inner));
+			gear.arcTo(root, -(base + step * 0.50), -(step * 0.50));
 		}
-		painter.setBrush(ink);
-		for (int i = 0; i < 3; ++i) {
-			painter.drawEllipse(QPointF(unit * knobs[i], unit * rows[i]),
-			                     unit * 0.075, unit * 0.075);
-		}
+		gear.closeSubpath();
+
+		/* The hole. Without it a filled gear is just a lumpy disc. */
+		gear.addEllipse(centre, unit * 0.115, unit * 0.115);
+		gear.setFillRule(Qt::OddEvenFill);
+
+		painter.setPen(Qt::NoPen);
+		painter.fillPath(gear, ink);
 	} else {
 		/*
 		 * A chevron coming down to a bar: the keyboard going away, which

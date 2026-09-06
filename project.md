@@ -1531,9 +1531,38 @@ part of the population reads exactly like a check over all of it.**
 
 **Cfg and Hide are icons, drawn rather than typed — [DONE 2026-09-05].**
 Asked for by the copyright holder. The two are painted from primitives
-in `bssh_soft_keyboard`: three sliders for settings, a chevron coming
-down to a bar for hide, which is what every platform's dismiss control
-draws.
+in `bssh_soft_keyboard`: a cog for settings, a chevron coming down to a
+bar for hide, which is what every platform's dismiss control draws.
+
+**The settings icon was three sliders first, and the reasoning for them
+was backwards — [FIXED 2026-09-06].** The holder said they would have
+preferred a wrench or a cog. Sliders had been chosen because a gear's
+teeth are the first thing to turn to mush at 36dp: an argument about
+RENDERING, offered against an argument about MEANING. Meaning wins. A
+cog is what Android's own Settings, GNOME, iOS and essentially every
+toolbar use, so it needs no learning, while sliders read as a filter or
+an equaliser to most people — and an icon that has to be explained is
+the wrong icon. The wrench was declined in the same breath: it reads as
+tools, repair or developer options, and Chrome moved off it years ago.
+
+**The rendering problem is real and is answered by drawing fewer, fatter
+teeth than a gear has** — six, not the twelve a real one carries.
+
+**Two attempts, and the first was wrong on a device rather than in a
+test.** A stroked ring with six radial lines out of it read as a ship's
+helm: thin spokes STICKING OUT of a circle, where a gear's teeth are
+part of the rim. Filled instead — one path out to each tooth, along it,
+back to the rim — with the centre punched out by an odd-even subpath.
+The roots between teeth follow the root CIRCLE rather than a straight
+chord, which at six teeth is long enough to see and flattens the body
+into something closer to a starfish.
+
+**The test asserted the icon was not null, and a QIcon built from a
+fully transparent pixmap is not null.** It counts ink now, rejects a
+solid block as well as a blank one, and asserts the cog has a HOLE —
+which is what separates it from a blob at this size, and the one thing
+an inverted fill rule destroys. Made to fail: `Qt::WindingFill` fills
+the hole and the assertion reads alpha 255 against 0, exit 2.
 
 **A character would have been three lines and a gamble.** A gear is
 U+2699 and a chevron U+25BE, the label font is the system's, and a
