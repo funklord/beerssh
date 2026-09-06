@@ -8034,6 +8034,36 @@ assertion**, which is the check refusing to measure the wrong thing.
 Both specs re-aimed and re-run: all 14 edits in `scroll` and `windows`
 caught, the two former misses among them.
 
+**And then the other 42 specs, which had never been run: 112 edits,
+110 caught, 2 missed — [MEASURED 2026-09-06].** Every spec in the tree
+has now been executed at least once. The two misses are a THIRD kind,
+distinct from the mis-aimed anchor and the mis-aimed `expect` above, and
+neither is a gap in the tests.
+
+**The covering test exists, is correct, and does not RUN here.**
+`a_sweep_does_not_erase_a_password_a_live_host_now_owns` skips with
+"this store cannot be locked, so it has no orphans to sweep" — this
+machine's secret store needs no passphrase, so there are no orphans and
+the scenario is unreachable.
+`a_send_to_a_remote_that_is_not_reading_still_lets_go` is in
+`live_ssh_test` and needs a real server. A MISSED verdict for either
+means the test did not run, not that nothing covers the code.
+
+**The sweep one is the uncomfortable half**, and it is `evidence.md`'s
+*a gate that needs the thing it checks for is weakest where it matters*:
+the test can only run on a machine whose store LOCKS, which is exactly
+the machine where an orphan sweep can erase a live host's key. A green
+run on a keyring-backed desktop says nothing about it. Recorded in the
+spec rather than papered over, because the fix is a lockable store in
+the fixture and that is its own piece of work.
+
+**So the runner has three failure modes and only one is mechanical.** An
+anchor that no longer matches is detectable by a script. An `expect`
+naming a test that does not cover the defect, and an `expect` naming a
+test that does not run, are both invisible until the spec is executed —
+and both report as MISSED, which reads like a hole in the code's tests
+and is not.
+
 **Proved by running a spec end to end rather than by matching strings.**
 `soft-keyboard.toml`, from a 532-passing baseline: all four caught by
 the tests they name, including both entries repaired here — the keyboard

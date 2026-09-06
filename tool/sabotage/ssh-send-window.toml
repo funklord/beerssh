@@ -21,6 +21,11 @@
 # do_disconnect never runs, so Disconnect does nothing and the facade's
 # destructor waits on that loop.
 [[sabotage]]
+# MISSED under `make test`, because the test that covers it is a LIVE
+# one. a_send_to_a_remote_that_is_not_reading_still_lets_go lives in
+# live_ssh_test and needs a real server, so this edit can only be proved
+# under the live suite. A MISSED verdict here is the runner reporting
+# that the covering test did not run, not that none exists.
 name = "do_send asks for more than the channel window and blocks the worker"
 file = "src/ssh/ssh_session_libssh.cpp"
 find = "\t\tif (window == 0) return;\n\n\t\tconst int take = int(qMin<qsizetype>(m_pending.size(), qsizetype(window)));"
