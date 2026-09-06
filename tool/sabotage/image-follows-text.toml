@@ -23,6 +23,6 @@ expect = "a_frame_drawn_over_an_earlier_one_does_not_keep_it_alive"
 [[sabotage]]
 name = "a reflow moves the text and leaves the images where they were"
 file = "src/term/emulator_vterm.cpp"
-find = "\tm_private->images.shift_rows(m_private->scrollback.count() - lines_before);"
-replace = "\t(void)lines_before;"
+find = "\tm_private->images.shift_rows(int(passed_after - passed_before));"
+replace = "\t(void)(passed_after - passed_before);"
 expect = "a_resize_keeps_an_image_with_the_text_it_was_drawn_beside"

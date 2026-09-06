@@ -14,25 +14,20 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tvterm_screen_reset(m_private->vts, 0);"
 expect = "a_reconnect_keeps_the_history_and_drops_the_modes"
 
-# Leaving the alternate screen through libvterm's own path.
-# vterm_state_reset() sets state->mode.alt_screen directly and never goes
-# through VTERM_PROP_ALTSCREEN, so without this the state says primary
-# while the screen layer still points at the alternate buffer -- and the
-# history the reconnect exists to keep stays hidden behind it.
-[[sabotage]]
-name = "the alternate buffer stays up across a reconnect"
-file = "src/term/emulator_vterm.cpp"
-find = "\tif (m_private->alt_screen) feed(QByteArrayLiteral(\"\\x1b[?1049l\"));"
-expect = "a_reconnect_keeps_the_history_and_drops_the_modes"
-
-# The shadow libvterm has never heard of. It is what the view asks before
-# deciding whether a click is a report or a selection, so a stale one
-# survives the reset that cleared libvterm's own flags.
-[[sabotage]]
-name = "the mouse shadow outlives the reset"
-file = "src/term/emulator_vterm.cpp"
-find = "\tm_private->mouse_reporting = false;"
-expect = "a_reconnect_keeps_the_history_and_drops_the_modes"
+# Two sabotages lived here and are gone, because the code they broke was
+# deliberately deleted rather than moved.
+#
+# One fed CSI ? 1049 l before the reset, because vterm_state_reset() set
+# state->mode.alt_screen by assignment and never told the screen layer.
+# The other cleared m_private->mouse_reporting by hand, because nothing
+# announced the reset. vterm-patch/0005 makes the reset announce what it
+# clears, so both arrive through on_set_term_prop and one call now does
+# what three did.
+#
+# What replaced them is already here: "the new shell inherits the old
+# one's modes" breaks that one call, and vterm-reset.toml breaks the
+# patch itself in vterm/src/state.c -- which is the half a sabotage
+# spec that only touches the consumer would miss.
 
 # And the call site, which the emulator-level test could not see: it was
 # reported MISSED on the first run, with the three edits above all caught,

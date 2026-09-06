@@ -26,8 +26,8 @@
 [[sabotage]]
 name = "the compact keyboard keeps its own copy of the letters"
 file = "keyboard/soft_keyboard_layout.cpp"
-find = "\tgroup.rows.append(slot_run(\"AD\", 1, 10, 2));"
-replace = "\tgroup.rows.append(literal_row(\"qwertzuiop\"));"
+find = "\tgroup.rows.append(slot_run(\"AD\", 1, 11, 2));"
+replace = "\tgroup.rows.append(literal_row(\"qwertzuiop[\"));"
 expect = "both_keyboards_reach_every_printable_character"
 
 # 2. A slot the layout does not have.

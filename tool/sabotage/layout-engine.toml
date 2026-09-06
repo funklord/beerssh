@@ -11,8 +11,8 @@
 [[sabotage]]
 name = "the number row follows the layout instead of the palette"
 file = "keyboard/soft_keyboard_layout.cpp"
-find = "\tgroup.rows.append(literal_row(\"1234567890\"));"
-replace = "\tgroup.rows.append(slot_run(\"AE\", 1, 10, 2));"
+find = "\tgroup.rows.append(literal_row(\"1234567890-\"));"
+replace = "\tgroup.rows.append(slot_run(\"AE\", 1, 11, 2));"
 expect = "both_keyboards_reach_every_printable_character"
 
 # 2. The full keyboard loses the ISO key.

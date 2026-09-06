@@ -22,7 +22,7 @@ expect = "the_kitty_graphics_query_is_answered"
 [[sabotage]]
 name = "the query is recognised and not replied to"
 file = "src/term/emulator_vterm.cpp"
-find = "\t\treply(QByteArrayLiteral(\"\\x1b_Gi=\") + QByteArray::number(result.id)\n\t\t\t+ QByteArrayLiteral(\";OK\\x1b\\\\\"));"
+find = "\t\treply(QByteArrayLiteral(\"\\x1b_Gi=\") + QByteArray::number(result.id)\n\t\t  + QByteArrayLiteral(\";OK\\x1b\\\\\"));"
 replace = "\t\t(void)0;"
 expect = "the_kitty_graphics_query_is_answered"
 

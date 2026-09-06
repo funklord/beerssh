@@ -7950,24 +7950,44 @@ nothing in a build or a test run would have said so. Sixteen path
 references were updated across the specs and `tool/gen-layout.py`.
 
 **Which raised the question of how many were ALREADY stale, and the
-answer is fifteen of 167.** Measured by parsing every spec and counting
-its `find` anchor in the file it names: `arrangement-states`,
-`host-edits`, `image-follows-text`, `layout-engine`, `probe-answers`,
-`reconnect` (twice), `resize-rebuild`, `scroll`, `scrollback-shrink`,
-`slot-legend-split`, `soft-keyboard` (twice), `touch-override` and
-`windows`. **The same fifteen fail at `6faac65`, before this work**, so
-the move caused none of them. Each needs its anchor re-derived against
-what the code says now, which is a piece of work per spec rather than a
-sweep.
+answer was fifteen of 167 — [FIXED 2026-09-06].** Measured by parsing
+every spec and counting its `find` anchor in the file it names. The same
+fifteen failed at `6faac65`, before the move, so the move caused none of
+them. All 165 edits now match exactly once.
 
-**And the instrument was wrong the first time, in the direction that
-flattered the change.** The baseline check reported twenty rather than
-fifteen, making the move look like it had FIXED five. Those five name
-`vterm/src/state.c`, which is in the submodule: `git show
-<rev>:vterm/src/state.c` cannot resolve a gitlink, so it returned
-nothing and the anchors were counted as missing. The disagreement was
-only visible because the same five passed against the working tree
-minutes earlier — two readings of one file that had not changed.
+**They had rotted in four distinct ways, and only one was a simple
+drift.** Seven anchors still described live code that had moved — a slot
+run reaching AD11 rather than AD10, a palette row that grew a hyphen
+when the grid went to 22 columns, `sticky_modifiers` becoming
+`effective_modifiers`, a row calculation gaining `history_base()`. Four
+had been reorganised and needed re-deriving: tabs build into
+`m_tab_order` now rather than being read out of `m_shown` by index, and
+`set_width()` is no longer the last line of its function. Two named a
+construct that no longer exists — "a row one key short" pointed at a
+hardcoded `literal_row("asdfghjkl;")` that the slot/legend split
+replaced, and it shortens the AC slot run instead.
+
+**And two were retired rather than repaired, which is the case worth
+knowing.** Both `reconnect` entries broke hand-rolled workarounds that
+`vterm-patch/0005` DELETED on purpose: one fed `CSI ? 1049 l` because
+`vterm_state_reset()` set `mode.alt_screen` by assignment and never told
+the screen layer, the other cleared the mouse shadow by hand because
+nothing announced the reset. One call does all of it now, and an entry
+breaking that call was already in the same spec. Writing replacements
+would have duplicated it, so they are gone with the reason recorded in
+the spec.
+
+**Two `replace` halves were wrong as well, which an anchor check cannot
+see.** The number-row sabotage substituted a ten-key slot run into a
+22-column grid, so it would have been caught by the shape test rather
+than the reachability test it names — a sabotage passing for the wrong
+reason, which is worth no more than one that misses.
+
+**Proved by running a spec end to end rather than by matching strings.**
+`soft-keyboard.toml`, from a 532-passing baseline: all four caught by
+the tests they name, including both entries repaired here — the keyboard
+visibility anchor at 3 failures and the re-aimed AC row at 32. The tree
+came back clean and the journal empty.
 
 ### 12.3 Testing
 The desktop build is what makes this project testable at all — use it.

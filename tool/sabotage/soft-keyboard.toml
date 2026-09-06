@@ -10,12 +10,12 @@
 name = "the built-in keyboard joins the key row instead of replacing it"
 file = "src/ui/main_window.cpp"
 find = '''
-	m_keyboard->setVisible(built_in);
+	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user);
 	if (built_in) m_key_row->hide();
 	else m_key_row->setVisible(m_key_row->should_be_visible());
 '''
 replace = '''
-	m_keyboard->setVisible(built_in);
+	m_keyboard->setVisible(built_in && !m_keyboard_hidden_by_user);
 	m_key_row->setVisible(m_key_row->should_be_visible());
 '''
 expect = "only_one_on_screen_keyboard_is_ever_shown"
@@ -70,7 +70,7 @@ expect = "every_keyboard_group_is_the_same_shape"
 name = "a row is one key short of the grid width"
 file = "keyboard/soft_keyboard_layout.cpp"
 find = '''
-	group.rows.append(literal_row("asdfghjkl;"));'''
+	group.rows.append(slot_run("AC", 1, 11, 2));'''
 replace = '''
-	group.rows.append(literal_row("asdfghjkl"));'''
+	group.rows.append(slot_run("AC", 1, 10, 2));'''
 expect = "every_keyboard_group_is_the_same_shape"

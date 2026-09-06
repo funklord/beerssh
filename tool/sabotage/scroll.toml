@@ -75,6 +75,6 @@ expect = "a_release_names_the_button_the_press_reported"
 [[sabotage]]
 name = "a click reports the view row, not the screen row"
 file = "src/ui/terminal_view.cpp"
-find = "\treturn int(line - history);"
-replace = "\treturn int(line - history + m_scroll_offset);"
+find = "\treturn int(line - history_base() - history);"
+replace = "\treturn int(line - history_base() - history + m_scroll_offset);"
 expect = "a_click_while_scrolled_back_reports_the_screen_row"

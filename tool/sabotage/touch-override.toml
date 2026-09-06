@@ -12,7 +12,7 @@
 [[sabotage]]
 name = "the key row's Shift does not reach a tap"
 file = "src/ui/terminal_view.cpp"
-find = "\tif (!(m_input_router->sticky_modifiers() & bssh_emulator::MOD_SHIFT)) return false;"
+find = "\tif (!(m_input_router->effective_modifiers() & bssh_emulator::MOD_SHIFT)) return false;"
 replace = "\treturn false;"
 expect = "a_sticky_shift_overrides_mouse_reporting_on_touch"
 

@@ -53,8 +53,8 @@ expect = "a_pane_dropped_on_the_tab_bar_becomes_a_tab"
 [[sabotage]]
 name = "a plain drag picks the pane up"
 file = "src/ui/terminal_view.cpp"
-find = "\tif (event->button() == Qt::LeftButton && (event->modifiers() & Qt::AltModifier)) {"
-replace = "\tif (event->button() == Qt::LeftButton) {"
+find = "\tif (on_grip || (event->button() == Qt::LeftButton\n\t                 && (event->modifiers() & Qt::AltModifier))) {"
+replace = "\tif (on_grip || event->button() == Qt::LeftButton) {"
 expect = "alt_drag_asks_for_the_pane_to_be_moved"
 
 # And a click is not a drag.

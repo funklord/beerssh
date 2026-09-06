@@ -14,8 +14,8 @@
 [[sabotage]]
 name = "the emulator never hears the resolved TERM"
 file = "src/model/session.cpp"
-find = "\tm_emulator->set_term_name(m_settings.value(QStringLiteral(\"term\")).toString());\n\n\tm_transport->set_compression("
-replace = "\tm_transport->set_compression("
+find = "\t\tm_emulator->set_term_name(m_settings.value(QStringLiteral(\"term\")).toString());\n\t\tm_transport->set_compression("
+replace = "\t\tm_transport->set_compression("
 expect = "every_resolved_setting_reaches_something_that_uses_it"
 
 # The store's changed() signal reaching live sessions. It had no listener
