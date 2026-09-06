@@ -44,7 +44,7 @@ expect = "a_modifier_locks_on_the_second_press_and_releases_on_the_third"
 # remote is drawing.
 [[sabotage]]
 name = "one key group is a row shorter than the others"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = '''
 	group.rows.append(common_bottom_row());
 	return group;
@@ -68,7 +68,7 @@ expect = "every_keyboard_group_is_the_same_shape"
 # between rows while every group still has the same height.
 [[sabotage]]
 name = "a row is one key short of the grid width"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = '''
 	group.rows.append(literal_row("asdfghjkl;"));'''
 replace = '''

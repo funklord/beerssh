@@ -25,7 +25,7 @@
 #    them rather than trusting that a test covers what it says.
 [[sabotage]]
 name = "the compact keyboard keeps its own copy of the letters"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = "\tgroup.rows.append(slot_run(\"AD\", 1, 10, 2));"
 replace = "\tgroup.rows.append(literal_row(\"qwertzuiop\"));"
 expect = "both_keyboards_reach_every_printable_character"
@@ -37,7 +37,7 @@ expect = "both_keyboards_reach_every_printable_character"
 #    still adds up, so the shape test passes.
 [[sabotage]]
 name = "the geometry names a slot the layout does not have"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = "\tappend_all(home, slot_run(\"AC\", 1, 11, BSSH_FULL_UNIT));"
 replace = "\tappend_all(home, slot_run(\"AC\", 2, 11, BSSH_FULL_UNIT));"
 expect = "every_slot_the_geometry_names_exists"
@@ -49,7 +49,7 @@ expect = "every_slot_the_geometry_names_exists"
 #    that it does, which on an unfamiliar layout is the whole feature.
 [[sabotage]]
 name = "AltGr works and nothing says so"
-file = "src/ui/soft_keyboard.cpp"
+file = "keyboard/soft_keyboard.cpp"
 find = '''		m_letter_buttons.at(i)->set_hint(
 		        !altgr && key.altgr_value != 0
 		                ? QString(QChar(uint(key.altgr_value)))
@@ -64,7 +64,7 @@ expect = "the_altgr_legend_is_shown_and_then_stands_aside"
 #    and it is invisible on screen.
 [[sabotage]]
 name = "the annotation is drawn but not announced"
-file = "src/ui/key_cap.cpp"
+file = "keyboard/key_cap.cpp"
 find = '''	setAccessibleDescription(m_hint.isEmpty()
 	                                 ? QString()
 	                                 : QStringLiteral("AltGr: %1").arg(m_hint));'''
@@ -78,7 +78,7 @@ expect = "the_altgr_legend_is_shown_and_then_stands_aside"
 #    are in the right places and send the right digits unmodified.
 [[sabotage]]
 name = "the keypad inherits the digit row's legends"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = "\tr2.append(keypad_key(QStringLiteral(\"4\"), U'4'));"
 replace = "\tr2.append(literal('4', BSSH_FULL_UNIT));"
 expect = "a_keypad_key_sends_only_its_digit"
@@ -96,7 +96,7 @@ expect = "a_keypad_key_sends_only_its_digit"
 #    the test it was meant to exercise.
 [[sabotage]]
 name = "the board advertises a level it has no key for"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = "\trow.append(modifier_key(QStringLiteral(\"AltGr\"), bssh_input_router::MOD_ALTGR, 3));"
 replace = "\trow.append(modifier_key(QStringLiteral(\"Alt\"), bssh_emulator::MOD_ALT, 3));"
 expect = "a_keyboard_can_reach_every_level_it_shows"
@@ -108,7 +108,7 @@ expect = "a_keyboard_can_reach_every_level_it_shows"
 #    empty key on the symbol page.
 [[sabotage]]
 name = "the ampersand cap is left to the style"
-file = "src/ui/key_cap.cpp"
+file = "keyboard/key_cap.cpp"
 find = "\treturn !hint.isEmpty() || text.contains(QLatin1Char('&'));"
 replace = "\treturn !hint.isEmpty();"
 expect = "an_ampersand_cap_is_not_left_to_the_style"

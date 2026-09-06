@@ -24,7 +24,7 @@
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
-#include "ui/key_row_layout.h"
+#include "keyboard/key_row_layout.h"
 
 /*
  * Scrollback is in lines and the range is deliberately wide: 200 is a

@@ -28,7 +28,7 @@ PKGCONFIG += libsixel libssh libcrypto libsecret-1
 CONFIG += c++17 console
 CONFIG -= app_bundle
 
-INCLUDEPATH += $$PWD/../src $$PWD $$PWD/../vterm/include
+INCLUDEPATH += $$PWD/../src $$PWD/.. $$PWD $$PWD/../vterm/include
 
 # Where tool/fetch-fonts.sh puts the curated set (project.md sec 9.2).
 # The font tests skip themselves when it is not there, so a checkout that
@@ -113,20 +113,20 @@ SOURCES += \
     ../src/ui/tab_status.cpp \
     ../src/ui/touch_metrics.cpp \
     ../src/platform/platform_desktop.cpp \
-    ../src/ui/key_cap.cpp \
-    ../src/ui/key_row_layout.cpp \
-    ../src/ui/soft_keyboard.cpp \
-    ../src/ui/soft_keyboard_layout.cpp \
+    ../keyboard/key_cap.cpp \
+    ../keyboard/key_row_layout.cpp \
+    ../keyboard/soft_keyboard.cpp \
+    ../keyboard/soft_keyboard_layout.cpp \
     ../src/ui/app_settings_view.cpp \
     ../src/ui/colour_editor.cpp \
     ../src/ui/licences_view.cpp \
-    ../src/ui/key_row.cpp \
+    ../keyboard/key_row.cpp \
     ../src/ui/terminal_accessible.cpp \
     ../src/ui/theme.cpp \
     ../src/ui/terminal_view.cpp
 
 HEADERS += \
-    ../src/ui/key_cap.h \
+    ../keyboard/key_cap.h \
     fake_ssh_session.h \
     command_line_test.h \
     conn_manager_test.h \
@@ -195,8 +195,8 @@ HEADERS += \
     ../src/ui/app_settings_view.h \
     ../src/ui/colour_editor.h \
     ../src/ui/licences_view.h \
-    ../src/ui/key_row.h \
-    ../src/ui/soft_keyboard.h \
+    ../keyboard/key_row.h \
+    ../keyboard/soft_keyboard.h \
     ../src/ui/terminal_accessible.h \
     ../src/ui/theme.h \
     ../src/ui/terminal_view.h

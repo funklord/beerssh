@@ -1,4 +1,4 @@
-#include "ui/key_cap.h"
+#include "keyboard/key_cap.h"
 
 #include <QFontMetrics>
 #include <QStyleOptionToolButton>

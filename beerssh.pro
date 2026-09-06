@@ -38,7 +38,7 @@ QMAKE_CXXFLAGS_RELEASE += -Os
 QMAKE_CFLAGS_RELEASE   -= -O2
 QMAKE_CFLAGS_RELEASE   += -Os
 
-INCLUDEPATH += $$PWD/src
+INCLUDEPATH += $$PWD/src $$PWD
 
 SOURCES += \
     src/main.cpp \
@@ -75,14 +75,14 @@ SOURCES += \
     src/ui/host_list.cpp \
     src/ui/layout_manager.cpp \
     src/ui/pane_container.cpp \
-    src/ui/key_cap.cpp \
-    src/ui/key_row_layout.cpp \
-    src/ui/soft_keyboard.cpp \
-    src/ui/soft_keyboard_layout.cpp \
+    keyboard/key_cap.cpp \
+    keyboard/key_row_layout.cpp \
+    keyboard/soft_keyboard.cpp \
+    keyboard/soft_keyboard_layout.cpp \
     src/ui/app_settings_view.cpp \
     src/ui/colour_editor.cpp \
     src/ui/licences_view.cpp \
-    src/ui/key_row.cpp \
+    keyboard/key_row.cpp \
     src/ui/long_press.cpp \
     src/term/term_features.cpp \
     src/ui/scroll_guard.cpp \
@@ -131,14 +131,14 @@ HEADERS += \
     src/ui/host_list.h \
     src/ui/layout_manager.h \
     src/ui/pane_container.h \
-    src/ui/key_cap.h \
-    src/ui/key_row_layout.h \
-    src/ui/soft_keyboard.h \
-    src/ui/soft_keyboard_layout.h \
+    keyboard/key_cap.h \
+    keyboard/key_row_layout.h \
+    keyboard/soft_keyboard.h \
+    keyboard/soft_keyboard_layout.h \
     src/ui/app_settings_view.h \
     src/ui/colour_editor.h \
     src/ui/licences_view.h \
-    src/ui/key_row.h \
+    keyboard/key_row.h \
     src/ui/long_press.h \
     src/term/term_features.h \
     src/ui/scroll_guard.h \

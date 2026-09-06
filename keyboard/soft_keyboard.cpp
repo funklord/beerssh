@@ -6,9 +6,9 @@
 #include <QtMath>
 
 #include <cmath>
-#include "ui/soft_keyboard.h"
+#include "keyboard/soft_keyboard.h"
 
-#include "ui/key_cap.h"
+#include "keyboard/key_cap.h"
 
 #include <QAbstractButton>
 #include <QFont>
@@ -20,7 +20,7 @@
 
 #include "input/input_router.h"
 #include "term/emulator.h"
-#include "ui/soft_keyboard_layout.h"
+#include "keyboard/soft_keyboard_layout.h"
 #include "ui/touch_metrics.h"
 
 namespace {

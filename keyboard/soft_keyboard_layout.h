@@ -4,7 +4,7 @@
 #include <QList>
 #include <QString>
 
-#include "ui/key_row_layout.h"
+#include "keyboard/key_row_layout.h"
 
 /*
  * bssh_soft_keyboard_layout -- what the built-in keyboard holds

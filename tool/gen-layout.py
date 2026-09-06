@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a keyboard layout table for src/ui/soft_keyboard_layout.cpp.
+"""Generate a keyboard layout table for keyboard/soft_keyboard_layout.cpp.
 
     tool/gen-layout.py us            > table.txt
     tool/gen-layout.py se --name Swedish

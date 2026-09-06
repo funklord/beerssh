@@ -11,7 +11,7 @@
 # keyboard's groups and counts the buttons it drew.
 [[sabotage]]
 name = "set_group clamps against the other keyboard's group count"
-file = "src/ui/soft_keyboard.cpp"
+file = "keyboard/soft_keyboard.cpp"
 find = '''void bssh_soft_keyboard::set_group(int index) {
 	const QList<bssh_soft_key_group_t> &groups =
 	        bssh_soft_keyboard_catalog::instance().all(m_style);'''

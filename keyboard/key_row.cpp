@@ -1,5 +1,5 @@
 #include "ui/touch_metrics.h"
-#include "ui/key_row.h"
+#include "keyboard/key_row.h"
 
 #include <QFont>
 #include <QHBoxLayout>
@@ -12,7 +12,7 @@
 #include "input/input_router.h"
 #include "platform/platform.h"
 #include "term/emulator.h"
-#include "ui/key_row_layout.h"
+#include "keyboard/key_row_layout.h"
 
 bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
     : QWidget(parent),

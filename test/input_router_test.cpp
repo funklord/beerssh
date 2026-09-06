@@ -4,11 +4,11 @@
 #include <QtTest>
 
 #include "input/input_router.h"
-#include "ui/key_row_layout.h"
+#include "keyboard/key_row_layout.h"
 #include "ui/long_press.h"
 #include "input_router_test.h"
 #include "term/emulator.h"
-#include "ui/key_row.h"
+#include "keyboard/key_row.h"
 
 /*
  * Drives a key through the router and returns the bytes it produced.

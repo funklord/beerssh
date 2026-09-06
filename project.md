@@ -7876,6 +7876,68 @@ without an icon is defective, so there is a plain one meant to be replaced.
 - **macOS/Windows:** `.dmg` / installer, best-effort per §1, unsigned until
   someone actually wants them (code signing on both is a cost, not a checkbox).
 
+### 12.2b The keyboard lives in `keyboard/` — **[DONE 2026-09-06]**
+
+Asked for by the copyright holder, who expects to want these routines in
+other software. The move is the preparation; taking them out is a later
+and separate piece of work.
+
+**At the repo root beside `vterm/`, not under `src/`**, which is the
+holder's own correction after the first attempt put it in
+`src/keyboard/`. The root is where this tree already keeps a separable
+library: `vterm/` is a submodule there, built by its own rules and
+included through its own path. A keyboard that is expected to leave
+should sit in the shape it will leave in, so that becoming a submodule
+is a change to `.gitmodules` rather than a second move.
+
+It costs two lines elsewhere. `INCLUDEPATH` gains the repo root in both
+`.pro` files so `keyboard/...` still resolves, and the `Makefile`'s
+`SOURCES` and `HEADERS` wildcards name `keyboard/` explicitly — those
+are the qmake build's PREREQUISITES, so missing a directory does not
+fail, it quietly stops triggering rebuilds.
+
+`key_cap`, `key_row`, `key_row_layout`, `soft_keyboard` and
+`soft_keyboard_layout` — ten files — moved with `git mv` so history
+follows them. Nothing else changed: the bulk edit was proved by
+comparing each file against `git show HEAD:` and asserting that every
+differing line is an `#include`. Sixteen files, twenty-six changed
+lines, no violations.
+
+**What still binds it to beerssh, which is the whole remaining job:**
+
+| dependency | why it is in the way |
+|---|---|
+| `term/emulator.h` | the key codes and modifier masks. A shared keyboard needs its own key vocabulary, or that enum moves with it |
+| `input/input_router.h` | where keys are sent. The natural seam: an abstract sink rather than this program's router |
+| `platform/platform.h` | `key_row` only |
+| `ui/touch_metrics.h` | a genuine shared UI concern — 11 non-keyboard files use it, so it stays where it is |
+
+**The move's real hazard was not the build.** Five sabotage specs name
+source files by path, and they still said `src/ui/`. A sabotage that no
+longer applies is indistinguishable from a check that cannot fail, and
+nothing in a build or a test run would have said so. Sixteen path
+references were updated across the specs and `tool/gen-layout.py`.
+
+**Which raised the question of how many were ALREADY stale, and the
+answer is fifteen of 167.** Measured by parsing every spec and counting
+its `find` anchor in the file it names: `arrangement-states`,
+`host-edits`, `image-follows-text`, `layout-engine`, `probe-answers`,
+`reconnect` (twice), `resize-rebuild`, `scroll`, `scrollback-shrink`,
+`slot-legend-split`, `soft-keyboard` (twice), `touch-override` and
+`windows`. **The same fifteen fail at `6faac65`, before this work**, so
+the move caused none of them. Each needs its anchor re-derived against
+what the code says now, which is a piece of work per spec rather than a
+sweep.
+
+**And the instrument was wrong the first time, in the direction that
+flattered the change.** The baseline check reported twenty rather than
+fifteen, making the move look like it had FIXED five. Those five name
+`vterm/src/state.c`, which is in the submodule: `git show
+<rev>:vterm/src/state.c` cannot resolve a gitlink, so it returned
+nothing and the anchors were counted as missing. The disagreement was
+only visible because the same five passed against the working tree
+minutes earlier — two readings of one file that had not changed.
+
 ### 12.3 Testing
 The desktop build is what makes this project testable at all — use it.
 - **Unit tests run on the host**, no device and no server: the emulator fed

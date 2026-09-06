@@ -13,7 +13,7 @@
 # the buttons had. Lock Ctrl, close the session, and it still reads locked.
 [[sabotage]]
 name = "a modifier button keeps its state after the session goes"
-file = "src/ui/key_row.cpp"
+file = "keyboard/key_row.cpp"
 find = '''
 	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
 		/*
@@ -31,7 +31,7 @@ expect = "a_modifier_button_stops_claiming_a_session_that_has_gone"
 # with nothing able to put it back.
 [[sabotage]]
 name = "a modifier pressed with no session stays pressed"
-file = "src/ui/key_row.cpp"
+file = "keyboard/key_row.cpp"
 find = '''
 		if (m_router) m_router->cycle_modifier(modifier);'''
 replace = '''

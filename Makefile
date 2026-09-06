@@ -154,8 +154,12 @@ DESTDIR ?=
 # under `all`, and project.md sec 8.6.
 MAN_PAGE = $(TARGET).1
 
-SOURCES = $(wildcard src/*.cpp src/*/*.cpp)
-HEADERS = $(wildcard src/*.h src/*/*.h)
+# keyboard/ is ours and sits beside src/ rather than inside it, so it is
+# named here too. These are the qmake build's PREREQUISITES rather than
+# its inputs -- miss a directory and editing a file in it quietly fails
+# to trigger a rebuild, which is a stale binary and not an error.
+SOURCES = $(wildcard src/*.cpp src/*/*.cpp keyboard/*.cpp)
+HEADERS = $(wildcard src/*.h src/*/*.h keyboard/*.h)
 
 # --- vendored libvterm ------------------------------------------------------
 # Built here, by hand, rather than through its own autotools: this repo's

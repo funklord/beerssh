@@ -5,10 +5,10 @@
 #include <QString>
 #include <QWidget>
 
-#include "ui/key_row_layout.h"
+#include "keyboard/key_row_layout.h"
 
 class bssh_key_cap;
-#include "ui/soft_keyboard_layout.h"
+#include "keyboard/soft_keyboard_layout.h"
 
 class QAbstractButton;
 class QGridLayout;

@@ -1,4 +1,4 @@
-#include "ui/soft_keyboard_layout.h"
+#include "keyboard/soft_keyboard_layout.h"
 
 #include "term/emulator.h"
 #include "input/input_router.h"

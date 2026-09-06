@@ -10,7 +10,7 @@
 #    1-0 in both layouts, so the row looks perfectly right.
 [[sabotage]]
 name = "the number row follows the layout instead of the palette"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = "\tgroup.rows.append(literal_row(\"1234567890\"));"
 replace = "\tgroup.rows.append(slot_run(\"AE\", 1, 10, 2));"
 expect = "both_keyboards_reach_every_printable_character"
@@ -28,7 +28,7 @@ expect = "both_keyboards_reach_every_printable_character"
 #    It walks the catalogue now, and would catch this too.
 [[sabotage]]
 name = "the full keyboard drops the ISO key an ISO layout needs"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = "\tif (iso) shift.append(slot_key(\"LSGT\", BSSH_FULL_UNIT));"
 replace = "\tif (false) shift.append(slot_key(\"LSGT\", BSSH_FULL_UNIT));"
 expect = "both_keyboards_reach_every_printable_character"
@@ -40,7 +40,7 @@ expect = "both_keyboards_reach_every_printable_character"
 #    way to tell that nothing happened.
 [[sabotage]]
 name = "an unknown layout reports success"
-file = "src/ui/soft_keyboard_layout.cpp"
+file = "keyboard/soft_keyboard_layout.cpp"
 find = "\t\treturn true;\n\t}\n\treturn false;\n}"
 replace = "\t\treturn true;\n\t}\n\treturn true;\n}"
 expect = "an_unknown_layout_is_refused_and_changes_nothing"
