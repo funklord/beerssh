@@ -1400,6 +1400,43 @@ int bssh_main_window_count() {
  * action that is disabled, or wired to nothing, is exactly the failure
  * being chased.
  */
+/*
+ * The LAST tab does not tear out (sec 8.4).
+ *
+ * A window will not empty itself: tearing out the only session would
+ * leave a window with nothing in it and, on desktop, no front door
+ * showing either. The menu item is disabled for that case, and
+ * the_detach_action_makes_a_window asserts as much -- but the menu is
+ * not the only caller, and the guard that matters lives in tear_out()
+ * itself, where a drag to the tab bar and any future caller arrive.
+ *
+ * Asked of tear_out() directly for that reason. Deleting its guard left
+ * the suite green: every existing test either drives the disabled menu
+ * item, which never reaches the guard, or tears out with two sessions,
+ * where the guard does not fire. So the one line stopping a window from
+ * emptying itself was covered by nothing.
+ *
+ * Both halves are asserted, because a refusal that still built a window
+ * and returned nullptr would satisfy the first alone.
+ */
+void layout_test::the_last_tab_does_not_tear_out() {
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	bssh_session *only = registry->create(named(QStringLiteral("only")));
+	window.adopt_session(only);
+
+	const int before = bssh_main_window_count();
+	QCOMPARE(window.tear_out(only), static_cast<bssh_main_window *>(nullptr));
+	QCOMPARE(bssh_main_window_count(), before);
+}
+
 void layout_test::the_detach_action_makes_a_window() {
 	bssh_main_window window;
 	window.resize(900, 600);

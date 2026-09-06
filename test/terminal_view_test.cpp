@@ -873,6 +873,62 @@ static bool ink_span(const QImage &frame, int y, int width, const QColor &backgr
 	return first >= 0;
 }
 
+/*
+ * A block cursor does not COVER the character it sits on (sec 8.3).
+ *
+ * The block is filled with the cursor colour and the glyph is then
+ * punched back out of it in the background colour, so the character
+ * stays readable under the mark. Drop the punch-out and the cursor is a
+ * solid rectangle: the letter under it is simply gone, which on a shell
+ * prompt means the character you are about to overtype is invisible.
+ *
+ * Asserted as a RELATIONSHIP between two renders rather than against a
+ * colour or a rectangle. A block over a glyph and a block over an empty
+ * cell must not look the same -- and if the punch-out is removed they
+ * are identical, because both are then the same filled rectangle. That
+ * needs no knowledge of the grid inset, the palette, or which pixels the
+ * letter happens to occupy, all of which a pixel-counting version would
+ * have to hard-code and none of which this is about.
+ *
+ * Found by sabotage: replacing the punched-out glyph with an empty
+ * QString left the suite green, so the cursor could have covered every
+ * character it marked with nothing to say so.
+ */
+void terminal_view_test::the_block_cursor_does_not_cover_its_character() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/*
+	 * Both conditions the block path needs, stated rather than assumed:
+	 * an unfocused view draws an outline instead, and a bar or underline
+	 * cursor cannot cover anything, so either would make this pass while
+	 * measuring nothing.
+	 */
+	view.set_cursor_style(QStringLiteral("block"));
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	view.activateWindow();
+	view.setFocus();
+	QTRY_VERIFY2(view.hasFocus(), "an unfocused view draws an outline, not a block");
+
+	/* A letter with plenty of ink, with the cursor put back on top. */
+	emulator.feed(QByteArrayLiteral("\x1b[2J\x1b[H""W\x1b[H"));
+	const QImage over_glyph = view.grab().toImage();
+
+	/* The same block, over an empty cell. */
+	emulator.feed(QByteArrayLiteral("\x1b[2J\x1b[H"));
+	const QImage over_blank = view.grab().toImage();
+
+	QCOMPARE(over_glyph.size(), over_blank.size());
+	QVERIFY2(over_glyph != over_blank,
+	          "the block over a letter looks exactly like the block over an "
+	          "empty cell, so the cursor is covering the character it marks");
+}
+
 void terminal_view_test::the_cursor_lands_on_the_cell_it_marks() {
 	bssh_terminal_view view;
 	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_RIGHT);

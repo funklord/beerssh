@@ -54,7 +54,7 @@ name = "the block cursor covers its character"
 file = "src/ui/terminal_view.cpp"
 find = "\t\t\t\t                  QString::fromUcs4(&cell.ch, 1));"
 replace = "\t\t\t\t                  QString());"
-expect = "the_cursor_lands_on_the_cell_it_marks"
+expect = "the_block_cursor_does_not_cover_its_character"
 
 # The release naming the button the PRESS reported. libvterm keeps a
 # button MASK, so a release naming a different button clears the wrong

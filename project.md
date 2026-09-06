@@ -8001,14 +8001,38 @@ substrings rather than lines.** The one-tab call is contained in the
 two-tab one, so the first re-aim matched both sites and the uniqueness
 check reported a bland "2" rather than naming the wrong site.
 
-**The other two misses are gaps in the TESTS and are left open.**
-`scroll`'s "the block cursor covers its character" and `windows`' "the
-last tab may tear out" both apply cleanly and the suite stays green. The
-second is the guard that stops a window emptying itself -- live code,
-met in use when the detach action appeared to do nothing, and covered by
-nothing: `a_torn_out_tab_becomes_a_window` proves tearing WORKS and
-never that the last one is refused. Writing those two tests is its own
-piece of work.
+**The other two misses were gaps in the TESTS, and both are closed —
+[FIXED 2026-09-06].** `scroll`'s "the block cursor covers its character"
+and `windows`' "the last tab may tear out" applied cleanly and the suite
+stayed green.
+
+**Neither spec was wrong about the code; both were wrong about the test
+that covered it.** `expect` is a claim about coverage and nothing checks
+it, so a spec can name a test that exists, runs and passes while the
+sabotage it describes goes unnoticed — and the verdict then reads MISSED,
+which looks like a hole in the tests rather than a mis-aimed spec.
+
+`the_last_tab_does_not_tear_out` asks `tear_out()` DIRECTLY, which is the
+whole point. The old `expect` named
+`the_detach_action_makes_a_window`, which drives the menu ITEM — and the
+menu is disabled for a single session, so it never reaches the guard.
+Every other caller tears out with two sessions, where the guard does not
+fire. One line stopping a window from emptying itself, covered by
+nothing.
+
+`the_block_cursor_does_not_cover_its_character` asserts a RELATIONSHIP
+between two renders rather than pixels: a block over a letter must not
+look identical to a block over an empty cell, and with the punch-out
+removed both are the same filled rectangle. That needs no knowledge of
+the grid inset, the palette, or which pixels the glyph occupies. It also
+states the two preconditions the block path needs — the view focused, the
+style block — because an unfocused view draws an outline and a bar cannot
+cover anything, and either would make it pass while measuring nothing.
+**The first run failed on that precondition rather than on the
+assertion**, which is the check refusing to measure the wrong thing.
+
+Both specs re-aimed and re-run: all 14 edits in `scroll` and `windows`
+caught, the two former misses among them.
 
 **Proved by running a spec end to end rather than by matching strings.**
 `soft-keyboard.toml`, from a 532-passing baseline: all four caught by

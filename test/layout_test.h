@@ -51,6 +51,7 @@ private slots:
 	void a_non_latin_layout_opens_in_latin_and_reaches_its_script();
 	void the_script_toggle_is_offered_only_where_it_does_something();
 	void the_detach_action_makes_a_window();
+	void the_last_tab_does_not_tear_out();
 	void the_keyboard_side_icons_are_still_named();
 	void a_pane_dropped_back_changes_nothing();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();

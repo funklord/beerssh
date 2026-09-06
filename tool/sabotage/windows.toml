@@ -28,7 +28,7 @@ expect = "a_window_shows_only_its_own_tabs"
 name = "the last tab may tear out"
 file = "src/ui/main_window.cpp"
 find = "\tif (m_shown.size() < 2) return nullptr;"
-expect = "a_torn_out_tab_becomes_a_window"
+expect = "the_last_tab_does_not_tear_out"
 
 [[sabotage]]
 name = "a torn-out tab is not adopted"
