@@ -36,6 +36,26 @@ public:
 	 */
 	static bssh_secret_store *instance();
 
+	/*
+	 * Replaces what instance() answers, for tests.
+	 *
+	 * The same seam bssh_ssh_session::set_factory() is, and here for the
+	 * same reason: instance() prefers the keyring, so on a machine with
+	 * one running, every test of orphan sweeping SKIPPED -- "this store
+	 * cannot be locked, so it has no orphans to sweep". A skipped test
+	 * cannot fail, and sabotage measured 2026-09-06 confirmed it: erasing
+	 * the guard that protects a live host's key left the suite green.
+	 *
+	 * That is the worst shape a gap can have. The test runs only where
+	 * the store LOCKS, which is exactly the machine where a sweep can
+	 * erase a key some host is still using, so a green run on a
+	 * keyring-backed desktop said nothing about the case that matters.
+	 *
+	 * Null restores the runtime selection. Tests must do that in cleanup,
+	 * or the next test reads a store this one has thrown away.
+	 */
+	static void set_instance(bssh_secret_store *store);
+
 	/* Shown to the user, verbatim. Never softened. */
 	virtual QString backend_name() const = 0;
 	virtual bool is_hardware_backed() const = 0;

@@ -8049,7 +8049,20 @@ the scenario is unreachable.
 `live_ssh_test` and needs a real server. A MISSED verdict for either
 means the test did not run, not that nothing covers the code.
 
-**The sweep one is the uncomfortable half**, and it is `evidence.md`'s
+**The sweep one is FIXED — the test injects a lockable store now.**
+`bssh_secret_store::set_instance()` is the same seam
+`bssh_ssh_session::set_factory()` already is, wired into both platform
+selectors so there is one definition rather than a copy each. The double
+is in-memory rather than the real passphrase store: that store's whole
+point is a slow key derivation, so injecting it cost about ten seconds
+per test and tripped the suite's per-class timeout and its output cap.
+The code under test is the SWEEP, not anybody's cryptography, so the
+double has the one property the sweep needs -- a store that locks, and
+refuses to write or erase while locked. Both tests run and pass now,
+and re-running the spec catches all three edits including the one that
+was missed.
+
+**It was the uncomfortable half**, and it is `evidence.md`'s
 *a gate that needs the thing it checks for is weakest where it matters*:
 the test can only run on a machine whose store LOCKS, which is exactly
 the machine where an orphan sweep can erase a live host's key. A green

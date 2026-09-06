@@ -1,5 +1,8 @@
 #include "platform/secret_store.h"
 
+/* Defined in secret_store.cpp, beside the setter. */
+bssh_secret_store *bssh_secret_store_override();
+
 /*
  * Which secret store Android uses (project.md sec 11).
  *
@@ -22,6 +25,8 @@
  * assume the stronger one.
  */
 bssh_secret_store *bssh_secret_store::instance() {
+	if (bssh_secret_store_override()) return bssh_secret_store_override();
+
 	static bssh_secret_store *store = []() -> bssh_secret_store * {
 		if (bssh_secret_store *keystore = bssh_make_keystore_secret_store()) return keystore;
 		return bssh_make_file_secret_store();

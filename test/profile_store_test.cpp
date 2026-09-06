@@ -7,6 +7,7 @@
 #include "model/app_settings.h"
 #include "platform/platform.h"
 #include "platform/secret_store.h"
+#include <QHash>
 #include <QDir>
 #include "profile_store_test.h"
 #include <QListWidget>
@@ -19,6 +20,70 @@
 #include <QJsonObject>
 #include "ui/font_picker.h"
 #include "ui/main_window.h"
+
+/*
+ * A secret store that LOCKS, in memory.
+ *
+ * The real passphrase-derived store would do, and is what the first
+ * version injected -- but its whole point is a deliberately slow key
+ * derivation, so an unlock costs seconds and these tests lock and unlock
+ * several times each. Measured: about ten seconds per test, which
+ * tripped the suite's per-class timeout and its output cap.
+ *
+ * The code under test is the profile store's SWEEP, not anybody's
+ * cryptography, so the double gives the sweep the one property it needs
+ * -- a store that can be locked, and that refuses to write or erase
+ * while it is -- and nothing else. Reads answer empty when locked, which
+ * is what the interface documents for absent, locked and unreadable
+ * alike.
+ */
+class lockable_test_store : public bssh_secret_store {
+public:
+	QString backend_name() const override { return QStringLiteral("test double"); }
+	bool is_hardware_backed() const override { return false; }
+	bool is_unlocked() const override { return m_unlocked; }
+	bool needs_passphrase() const override { return true; }
+
+	bool unlock(const QString &passphrase) override {
+		if (m_passphrase.isEmpty()) m_passphrase = passphrase;
+		m_unlocked = passphrase == m_passphrase;
+		return m_unlocked;
+	}
+
+	void lock() override { m_unlocked = false; }
+
+	bool store(const QString &id, const QString &secret) override {
+		if (!m_unlocked) return false;
+		m_secrets.insert(id, secret);
+		return true;
+	}
+
+	QString load(const QString &id) const override {
+		return m_unlocked ? m_secrets.value(id) : QString();
+	}
+
+	bool erase(const QString &id) override {
+		if (!m_unlocked) return false;
+		m_secrets.remove(id);
+		return true;
+	}
+
+private:
+	bool m_unlocked = false;
+	QString m_passphrase;
+	QHash<QString, QString> m_secrets;
+};
+
+/*
+ * Puts bssh_secret_store::instance() back, whatever the test did to it.
+ *
+ * The seam is process-wide, so a test that injected a store and returned
+ * early would hand the next one a store this test owns and has since
+ * destroyed.
+ */
+struct secret_store_left_as_found_t {
+	~secret_store_left_as_found_t() { bssh_secret_store::set_instance(nullptr); }
+};
 
 static bssh_profile_t make_profile(const QString &name, const QString &host) {
 	bssh_profile_t profile;
@@ -1036,11 +1101,29 @@ void profile_store_test::a_password_a_locked_store_kept_is_swept_at_the_next_unl
 	 * this app has asked it for anything, so there is nothing here to
 	 * test and the skip says so rather than passing quietly.
 	 */
+	/*
+	 * A store that LOCKS, injected rather than whatever this machine
+	 * happens to run.
+	 *
+	 * This used to skip: instance() prefers the keyring, a keyring needs
+	 * no passphrase, and a store that cannot lock has no orphans to
+	 * sweep. So on every desktop with a session keyring the whole
+	 * scenario was unreachable -- and sabotage proved what that cost,
+	 * erasing the guard that protects a live host's key and leaving the
+	 * suite green.
+	 *
+	 * It is the worst shape a gap can have: the test ran only where the
+	 * store locks, which is exactly the machine where a sweep can erase
+	 * a key some host is still using.
+	 */
+	const secret_store_left_as_found_t store_restore;
+	lockable_test_store lockable;
+	bssh_secret_store::set_instance(&lockable);
+
 	bssh_secret_store *secrets = bssh_secret_store::instance();
 	QVERIFY(secrets);
-	if (!secrets->needs_passphrase()) {
-		QSKIP("this store cannot be locked, so it has no orphans to sweep");
-	}
+	QVERIFY2(secrets->needs_passphrase(),
+	          "the injected store must be one that locks, or this tests nothing");
 	/*
 	 * Take ownership of the store's state for the duration, rather than
 	 * assuming a passphrase. The suite shares one bssh_secret_store, and
@@ -1208,11 +1291,29 @@ void profile_store_test::a_sweep_does_not_erase_a_password_a_live_host_now_owns(
 	 * hosts.ini written before the counter existed can also carry ids
 	 * that a pending orphan names.
 	 */
+	/*
+	 * A store that LOCKS, injected rather than whatever this machine
+	 * happens to run.
+	 *
+	 * This used to skip: instance() prefers the keyring, a keyring needs
+	 * no passphrase, and a store that cannot lock has no orphans to
+	 * sweep. So on every desktop with a session keyring the whole
+	 * scenario was unreachable -- and sabotage proved what that cost,
+	 * erasing the guard that protects a live host's key and leaving the
+	 * suite green.
+	 *
+	 * It is the worst shape a gap can have: the test ran only where the
+	 * store locks, which is exactly the machine where a sweep can erase
+	 * a key some host is still using.
+	 */
+	const secret_store_left_as_found_t store_restore;
+	lockable_test_store lockable;
+	bssh_secret_store::set_instance(&lockable);
+
 	bssh_secret_store *secrets = bssh_secret_store::instance();
 	QVERIFY(secrets);
-	if (!secrets->needs_passphrase()) {
-		QSKIP("this store cannot be locked, so it has no orphans to sweep");
-	}
+	QVERIFY2(secrets->needs_passphrase(),
+	          "the injected store must be one that locks, or this tests nothing");
 
 	const QString pass = QStringLiteral("passphrase for the suite");
 	secrets->lock();

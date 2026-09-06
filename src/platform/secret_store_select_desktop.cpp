@@ -1,5 +1,8 @@
 #include "platform/secret_store.h"
 
+/* Defined in secret_store.cpp, beside the setter. */
+bssh_secret_store *bssh_secret_store_override();
+
 /*
  * Which secret store the desktop uses (project.md sec 11).
  *
@@ -20,6 +23,8 @@ bssh_secret_store *bssh_secret_store::instance() {
 	 * appeared and from the file afterwards, and secrets written to one
 	 * would be invisible in the other.
 	 */
+	if (bssh_secret_store_override()) return bssh_secret_store_override();
+
 	static bssh_secret_store *selected = nullptr;
 	static bool resolved = false;
 
