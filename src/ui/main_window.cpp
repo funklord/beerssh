@@ -35,6 +35,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
+#include <QKeyEvent>
 #include <QStackedWidget>
 
 #include <QIcon>
@@ -87,6 +88,7 @@ static const int BSSH_TEAR_OUT_DP = 40;
 bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent)
     : QWidget(parent),
       m_pages(new QStackedWidget(this)),
+      m_back_target(nullptr),
       m_front_door_up(false),
       m_menu_bar(nullptr),
       m_tab_row(nullptr),
@@ -521,7 +523,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 			if (!m_host_editor) return;
 			m_host_editor->set_profile(profile);
 			m_host_editor->set_editing(true);
-			m_pages->setCurrentWidget(m_host_editor);
+			show_page(m_host_editor);
 		});
 
 		connect(m_host_list, &bssh_host_list::delete_requested,
@@ -575,10 +577,10 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 			}
 
 			m_host_list->reload();
-			m_pages->setCurrentWidget(m_host_list);
+			go_back();
 		});
 		connect(m_host_editor, &bssh_host_editor::cancelled, this, [this] {
-			m_pages->setCurrentWidget(m_host_list);
+			go_back();
 		});
 
 		/*
@@ -596,24 +598,24 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 		connect(m_host_list, &bssh_host_list::presets_requested, this, [this] {
 			m_preset_editor->reload();
-			m_pages->setCurrentWidget(m_preset_editor);
+			show_page(m_preset_editor);
 		});
 		connect(m_preset_editor, &bssh_preset_editor::preset_saved,
 		         this, &bssh_main_window::reresolve_sessions);
 		connect(m_preset_editor, &bssh_preset_editor::preset_removed,
 		         this, &bssh_main_window::reresolve_sessions);
 		connect(m_preset_editor, &bssh_preset_editor::back_requested, this, [this] {
-			m_pages->setCurrentWidget(m_host_list);
+			go_back();
 		});
 
 		bssh_licences_view *licences = new bssh_licences_view(this);
 		m_pages->addWidget(licences);
 
 		connect(m_host_list, &bssh_host_list::licences_requested, this, [this, licences] {
-			m_pages->setCurrentWidget(licences);
+			show_page(licences);
 		});
 		connect(licences, &bssh_licences_view::back_requested, this, [this] {
-			m_pages->setCurrentWidget(m_host_list);
+			go_back();
 		});
 
 		bssh_app_settings_view *device = new bssh_app_settings_view(this);
@@ -621,12 +623,12 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		m_device_settings = device;
 
 		connect(m_host_list, &bssh_host_list::settings_requested, this, [this, device] {
-			m_pages->setCurrentWidget(device);
+			show_page(device);
 		});
 		connect(device, &bssh_app_settings_view::changed,
 		         this, &bssh_main_window::apply_device_settings);
 		connect(device, &bssh_app_settings_view::back_requested, this, [this] {
-			m_pages->setCurrentWidget(m_host_list);
+			go_back();
 		});
 	} else {
 		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
@@ -783,7 +785,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * device that has one.
 	 */
 	connect(m_keyboard, &bssh_soft_keyboard::settings_requested, this, [this] {
-		if (m_pages && m_device_settings) m_pages->setCurrentWidget(m_device_settings);
+		if (m_pages && m_device_settings) show_page(m_device_settings);
 	});
 
 	/*
@@ -896,7 +898,7 @@ void bssh_main_window::on_add_host() {
 
 	m_host_editor->set_profile(bssh_profile_t());
 	m_host_editor->set_editing(false);
-	m_pages->setCurrentWidget(m_host_editor);
+	show_page(m_host_editor);
 }
 
 void bssh_main_window::show_session(bssh_session *session) {
@@ -2564,6 +2566,68 @@ bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
  * tabs are rebuilt -- otherwise switching to light leaves four dots that
  * were chosen to be legible on a dark bar and are not on this one.
  */
+/*
+ * Show a sub-page, remembering the page to return to.
+ *
+ * The four sub-pages used to return to the host list whatever they were
+ * opened from, which is right from the front door and wrong from a
+ * session: reaching the settings from a live shell's keyboard and
+ * pressing Back put the shell out of sight. The page it was opened from
+ * is the only answer that is right from both doors.
+ */
+void bssh_main_window::show_page(QWidget *page) {
+	if (!m_pages || !page) return;
+
+	m_back_target = m_pages->currentWidget();
+	m_pages->setCurrentWidget(page);
+}
+
+/*
+ * Leave the page now showing. False when there is nothing to leave.
+ *
+ * The caller needs the answer: Android's Back must background the app
+ * when it is already at the bottom of the stack, and swallowing it
+ * there would leave a user pressing Back at a terminal with nothing
+ * happening at all.
+ */
+bool bssh_main_window::go_back() {
+	if (!m_pages) return false;
+
+	QWidget *here = m_pages->currentWidget();
+	if (here == m_terminal_page || here == m_host_list) return false;
+
+	QWidget *to = m_back_target;
+	if (!to || to == here) to = m_host_list;
+	m_back_target = nullptr;
+
+	if (!to) return false;
+	m_pages->setCurrentWidget(to);
+	return true;
+}
+
+/*
+ * Android's Back key leaves the PAGE, not the app (sec 8.5).
+ *
+ * Reported from a phone: opening the settings and pressing Back closed
+ * nothing and put the whole app in the background, with the settings
+ * page still showing underneath when it came forward again. Qt delivers
+ * the system Back as Qt::Key_Back, and a window that does not handle it
+ * lets Qt close the window -- so the app went away while the page it
+ * should have left stayed exactly where it was.
+ *
+ * Only accepted when there was something to leave. Back at the terminal
+ * or at the host list is a request to leave the APP, and swallowing it
+ * there would strand a user pressing a key that does nothing.
+ */
+void bssh_main_window::keyPressEvent(QKeyEvent *event) {
+	if (event->key() == Qt::Key_Back && go_back()) {
+		event->accept();
+		return;
+	}
+
+	QWidget::keyPressEvent(event);
+}
+
 void bssh_main_window::changeEvent(QEvent *event) {
 	QWidget::changeEvent(event);
 	if (event && event->type() == QEvent::PaletteChange) on_registry_changed();

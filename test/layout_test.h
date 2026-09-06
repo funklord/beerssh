@@ -65,6 +65,7 @@ private slots:
 	void shift_reaches_every_character_a_real_keyboard_has();
 	void the_hide_key_is_remembered_and_a_tap_undoes_it();
 	void the_keyboard_config_key_opens_the_settings_page();
+	void the_back_key_leaves_the_page_not_the_app();
 	void the_altgr_legend_is_shown_and_then_stands_aside();
 	void every_keyboard_group_is_the_same_shape();
 	void the_built_in_keyboard_fits_a_phone();

@@ -18,6 +18,7 @@ class QLabel;
 class QMenuBar;
 class QTabBar;
 class QStackedWidget;
+class QKeyEvent;
 class QDragEnterEvent;
 class QShowEvent;
 class QScreen;
@@ -278,6 +279,7 @@ public:
 
 protected:
 	void changeEvent(QEvent *event) override;
+	void keyPressEvent(QKeyEvent *event) override;
 
 	/*
 	 * Watches the tab bar for sec 8.3's middle-click close, which QTabBar
@@ -687,6 +689,24 @@ private:
 	void elide_status();
 
 	QStackedWidget *m_pages;
+
+	/*
+	 * Where Back goes from the page now showing, and nullptr on the
+	 * pages Back does not leave.
+	 *
+	 * Every sub-page used to return to the host list whatever it was
+	 * opened from, so reaching the settings from a live session's
+	 * keyboard and pressing Back put the session out of sight -- the
+	 * page it came from is the only answer that is right from both
+	 * doors.
+	 */
+	QWidget *m_back_target;
+
+	/* Show a sub-page, remembering what to return to. */
+	void show_page(QWidget *page);
+
+	/* Leave the page now showing. False when there is nothing to leave. */
+	bool go_back();
 	bool m_front_door_up;
 	QMenuBar *m_menu_bar;
 	QWidget *m_tab_row;

@@ -12,6 +12,7 @@
 #include <QJsonObject>
 #include <QAbstractScrollArea>
 #include <QScrollArea>
+#include <QKeyEvent>
 #include <QStackedWidget>
 #include <QSet>
 #include <QTreeWidget>
@@ -2300,6 +2301,76 @@ void layout_test::the_keyboard_config_key_opens_the_settings_page() {
 	config->click();
 
 	QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(device));
+
+	settings.set_keyboard(before);
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+/*
+ * Android's Back leaves the PAGE, not the app (sec 8.5).
+ *
+ * Reported from a phone: open the settings from a session's keyboard,
+ * press the system Back, and the whole app went to the background with
+ * the settings page still showing underneath when it came forward
+ * again. Qt delivers the system Back as Qt::Key_Back and a window that
+ * does not handle it lets Qt close the window, so the app left while
+ * the page it should have left stayed put.
+ *
+ * Asserted on the EVENT rather than only on the page, because at the
+ * bottom of the stack "the page did not change" is true whether Back
+ * was handled or ignored, and those are opposite behaviours: ignoring
+ * it is what lets Android background the app, and swallowing it would
+ * strand a user pressing a key that does nothing.
+ */
+void layout_test::the_back_key_leaves_the_page_not_the_app() {
+	const forced_touch_t arrangement(1);
+
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fake->set_fail_on_connect(QStringLiteral("no network in a test"));
+		return fake;
+	});
+
+	bssh_main_window window(bssh_profile_t::from_target(QStringLiteral("nowhere.example")));
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	const registry_left_as_found_t tidy(window.registry());
+
+	QStackedWidget *pages = window.findChild<QStackedWidget *>();
+	bssh_app_settings_view *device = window.findChild<bssh_app_settings_view *>();
+	QVERIFY2(pages && device, "the touch window must have a page stack and a settings page");
+
+	QWidget *came_from = pages->currentWidget();
+	QVERIFY2(came_from != device, "the settings page must not be what a session opens on");
+
+	QAbstractButton *config = window.findChild<QAbstractButton *>(
+	        QStringLiteral("keyboard-settings"));
+	QVERIFY2(config, "the keyboard must carry a configuration key");
+	config->click();
+	QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(device));
+
+	/*
+	 * Back returns to the page it was opened FROM, not to the host
+	 * list. Opened from a live session's keyboard, returning to the
+	 * host list puts the session out of sight.
+	 */
+	QKeyEvent leaving(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
+	QApplication::sendEvent(&window, &leaving);
+	QVERIFY2(leaving.isAccepted(), "Back on the settings page was not handled");
+	QCOMPARE(pages->currentWidget(), came_from);
+
+	/* At the bottom of the stack it must be left alone. */
+	QKeyEvent at_root(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
+	QApplication::sendEvent(&window, &at_root);
+	QVERIFY2(!at_root.isAccepted(),
+	          "Back was swallowed with no page to leave, so nothing can background the app");
+	QCOMPARE(pages->currentWidget(), came_from);
 
 	settings.set_keyboard(before);
 	bssh_ssh_session::set_factory(nullptr);

@@ -5024,6 +5024,37 @@ one does not — across a tabbed window and a split one.
 
 ### 8.5 The front door — **[DECIDED]**
 
+**Android's Back leaves the PAGE, not the app — [FIXED 2026-09-06].**
+Reported from a phone: open the settings from a session's keyboard,
+press the system Back, and the whole app went to the background with
+the settings page still showing underneath when it came forward again.
+Qt delivers the system Back as `Qt::Key_Back`, and a window that does
+not handle it lets Qt close the window — so the app left while the page
+it should have left stayed exactly where it was. The only way out was
+the page's own on-screen Back button.
+
+**It must not be swallowed at the bottom of the stack.** Back at the
+terminal or the host list is a request to leave the APP, and Android
+backgrounds on an unhandled Back, so `go_back()` returns false there and
+the event is left ignored. Eating it would strand a user pressing a key
+that does nothing, which is the opposite failure and just as bad.
+
+**And Back returns to the page it came FROM, which was a second fault in
+the same place.** Every sub-page returned to the host list whatever
+opened it — right from the front door and wrong from a session, since
+reaching the settings from a live shell's keyboard and pressing Back put
+the shell out of sight. Entry goes through `show_page()`, which records
+the current page; `go_back()` returns to it and falls back to the host
+list.
+
+**The test asserts the EVENT, not only the page.** At the bottom of the
+stack "the page did not change" is true whether Back was handled or
+ignored, and those are opposite behaviours — so a page-only assertion
+would have passed with the handler deleted. Made to fail: disabling the
+handler reports *Back on the settings page was not handled* with the
+accepted flag false, exit 2.
+
+
 **Desktop borrows PuTTY's interface. Touch gets a mobile one. Same model
 underneath.**
 
