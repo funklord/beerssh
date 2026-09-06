@@ -9,13 +9,26 @@
 # the environment carried -- the terminal contradicting itself, which
 # sec 7.1 calls worse than declining to answer.
 #
-# The find carries the blank line after it, because the same call appears
-# in set_settings() where it is correct and unguarded by this.
+# It targets the call in the APPLY path, not the one in set_settings(),
+# and the difference is the whole sabotage. Settings resolve before
+# anyone presses connect, so at set_settings() time there is usually no
+# transport and that whole block is skipped -- which is why the apply
+# path grew a copy, and why deleting the set_settings() one changes
+# nothing a test can see.
+#
+# Measured 2026-09-06: aimed at set_settings() this was MISSED with the
+# suite green. The anchor had never broken -- the fix moved, and a
+# sabotage can rot without its find string ever failing to match, which
+# is the failure an anchor check cannot detect.
+#
+# The find opens with a NEWLINE because the runner matches substrings
+# rather than lines: the one-tab call is contained in the two-tab one,
+# so without it the anchor matches both sites and the uniqueness check
+# reports two.
 [[sabotage]]
 name = "the emulator never hears the resolved TERM"
 file = "src/model/session.cpp"
-find = "\t\tm_emulator->set_term_name(m_settings.value(QStringLiteral(\"term\")).toString());\n\t\tm_transport->set_compression("
-replace = "\t\tm_transport->set_compression("
+find = "\n\tm_emulator->set_term_name(m_settings.value(QStringLiteral(\"term\")).toString());"
 expect = "every_resolved_setting_reaches_something_that_uses_it"
 
 # The store's changed() signal reaching live sessions. It had no listener

@@ -7983,6 +7983,33 @@ see.** The number-row sabotage substituted a ten-key slot run into a
 than the reachability test it names — a sabotage passing for the wrong
 reason, which is worth no more than one that misses.
 
+**Proved by RUNNING them, 49 edits across the twelve repaired specs
+from a 532-passing baseline: 46 caught, 3 missed.** Matching an anchor
+turned out to prove very little, which is the finding.
+
+**One miss was an anchor that had never broken.** "The emulator never
+hears the resolved TERM" pointed at the `set_term_name()` call in
+`set_settings()`, and deleting it changes nothing a test can see:
+settings resolve before anyone presses connect, so there is usually no
+transport and that whole block is skipped -- which is why the apply path
+grew a second copy, and that copy is the fix. **A sabotage can rot
+without its find string ever failing to match**, and no anchor check can
+see it. Re-aimed at the apply path and re-run: caught.
+
+**Its anchor needed a leading NEWLINE, because the runner matches
+substrings rather than lines.** The one-tab call is contained in the
+two-tab one, so the first re-aim matched both sites and the uniqueness
+check reported a bland "2" rather than naming the wrong site.
+
+**The other two misses are gaps in the TESTS and are left open.**
+`scroll`'s "the block cursor covers its character" and `windows`' "the
+last tab may tear out" both apply cleanly and the suite stays green. The
+second is the guard that stops a window emptying itself -- live code,
+met in use when the detach action appeared to do nothing, and covered by
+nothing: `a_torn_out_tab_becomes_a_window` proves tearing WORKS and
+never that the last one is refused. Writing those two tests is its own
+piece of work.
+
 **Proved by running a spec end to end rather than by matching strings.**
 `soft-keyboard.toml`, from a 532-passing baseline: all four caught by
 the tests they name, including both entries repaired here — the keyboard
