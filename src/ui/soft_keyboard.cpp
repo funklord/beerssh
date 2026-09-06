@@ -85,10 +85,26 @@ QIcon bssh_painted_icon(const QColor &ink, int size, bool settings) {
 		 * back to the rim, around to the next -- filled solid, with the
 		 * centre punched out by an odd-even subpath.
 		 */
-		const int teeth = 6;
+		/*
+		 * Eight teeth with RADIAL sides, and the sides are what matter.
+		 *
+		 * The version before this walked from the rim at one angle out
+		 * to the tip at another, so every tooth was a wedge that came to
+		 * a point, and the whole read as a starfish -- reported as "not
+		 * quite clear", which it was. A gear tooth has parallel flanks:
+		 * both corners of its base sit at the SAME angles as the two
+		 * corners of its tip, so the side runs straight out along a
+		 * radius and the top is flat.
+		 *
+		 * Short teeth, too. The rim is 0.33 and the tip 0.42, about a
+		 * quarter again rather than half, because a tall tooth on a
+		 * small body is the other half of the starfish.
+		 */
+		const int teeth = 8;
 		const qreal step = 360.0 / teeth;
-		const qreal outer = unit * 0.40;
-		const qreal inner = unit * 0.29;
+		const qreal half = step * 0.20;
+		const qreal outer = unit * 0.42;
+		const qreal inner = unit * 0.33;
 
 		const auto polar = [&](qreal degrees, qreal radius) {
 			const qreal angle = qDegreesToRadians(degrees);
@@ -97,31 +113,30 @@ QIcon bssh_painted_icon(const QColor &ink, int size, bool settings) {
 		};
 
 		/*
-		 * Between the teeth the outline follows the root CIRCLE, not a
-		 * straight chord. With six teeth a chord is long enough to see,
-		 * and it flattens the body into something closer to a starfish
-		 * than a gear.
+		 * Between the teeth the outline follows the root CIRCLE rather
+		 * than a straight chord, which would flatten the body.
 		 *
-		 * arcTo's angles run the other way from polar() above: Qt
-		 * measures counter-clockwise from three o'clock, and screen y
-		 * grows downward, so a clockwise walk is negated.
+		 * arcTo's angles run the other way from polar(): Qt measures
+		 * counter-clockwise from three o'clock and screen y grows
+		 * downward, so a clockwise walk is negated.
 		 */
 		const QRectF root(centre.x() - inner, centre.y() - inner,
 		                   inner * 2, inner * 2);
 
 		QPainterPath gear;
-		gear.moveTo(polar(0, inner));
+		gear.moveTo(polar(-half, inner));
 		for (int i = 0; i < teeth; ++i) {
 			const qreal base = step * i;
-			gear.lineTo(polar(base + step * 0.15, outer));
-			gear.lineTo(polar(base + step * 0.35, outer));
-			gear.lineTo(polar(base + step * 0.50, inner));
-			gear.arcTo(root, -(base + step * 0.50), -(step * 0.50));
+			gear.lineTo(polar(base - half, inner));
+			gear.lineTo(polar(base - half, outer));
+			gear.lineTo(polar(base + half, outer));
+			gear.lineTo(polar(base + half, inner));
+			gear.arcTo(root, -(base + half), -(step - half * 2));
 		}
 		gear.closeSubpath();
 
 		/* The hole. Without it a filled gear is just a lumpy disc. */
-		gear.addEllipse(centre, unit * 0.115, unit * 0.115);
+		gear.addEllipse(centre, unit * 0.15, unit * 0.15);
 		gear.setFillRule(Qt::OddEvenFill);
 
 		painter.setPen(Qt::NoPen);

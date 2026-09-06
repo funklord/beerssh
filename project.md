@@ -1545,17 +1545,36 @@ an equaliser to most people — and an icon that has to be explained is
 the wrong icon. The wrench was declined in the same breath: it reads as
 tools, repair or developer options, and Chrome moved off it years ago.
 
-**The rendering problem is real and is answered by drawing fewer, fatter
-teeth than a gear has** — six, not the twelve a real one carries.
+**The rendering problem is real and is answered by drawing FEWER teeth
+than a gear has, and by drawing them square.** Eight, not the twenty a
+real gear carries.
 
-**Two attempts, and the first was wrong on a device rather than in a
-test.** A stroked ring with six radial lines out of it read as a ship's
-helm: thin spokes STICKING OUT of a circle, where a gear's teeth are
-part of the rim. Filled instead — one path out to each tooth, along it,
-back to the rim — with the centre punched out by an odd-even subpath.
-The roots between teeth follow the root CIRCLE rather than a straight
-chord, which at six teeth is long enough to see and flattens the body
-into something closer to a starfish.
+**Three attempts, and each was wrong on a device rather than in a
+test.** The first drew a stroked ring with six radial lines out of it
+and read as a ship's helm: thin spokes STICKING OUT of a circle, where
+a gear's teeth are part of the rim. The second filled the outline --
+one path out to each tooth, along it, back to the rim -- with the
+centre punched out by an odd-even subpath, and the roots following the
+root CIRCLE rather than a straight chord, which at six teeth is long
+enough to see and flattens the body.
+
+**The third fixed the thing the first two had wrong and nobody had
+named.** Reported as not quite clear, with the reporter unable to say
+why. Blown up, the teeth were WEDGES: each walked from the rim at one
+angle out to the tip at another, so its sides slanted and it came to a
+point, and eight of those would have been a spikier starfish rather
+than a clearer cog. **A gear tooth has parallel flanks** -- both
+corners of the base at the same angles as the two corners of the tip,
+so the side runs straight out along a radius and the top is flat.
+
+Shorter teeth with it: rim at 0.33 and tip at 0.42, about a quarter
+again rather than half, since a tall tooth on a small body is the other
+half of the starfish. The hole went from 0.115 to 0.15.
+
+**Worth keeping for the next icon: "add more detail" was the reported
+remedy and would have made it worse.** What was missing was not
+ornament but a shape rule, and the way to find it was to blow the
+rendered pixels up rather than to reason about the drawing code.
 
 **The test asserted the icon was not null, and a QIcon built from a
 fully transparent pixmap is not null.** It counts ink now, rejects a
