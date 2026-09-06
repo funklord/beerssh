@@ -8083,6 +8083,36 @@ the tests they name, including both entries repaired here — the keyboard
 visibility anchor at 3 failures and the re-aimed AC row at 32. The tree
 came back clean and the journal empty.
 
+### 12.2c Three sweeps that found nothing, and what they were — **[2026-09-06]**
+
+Recorded because an empty result is a measurement only when its method
+is, and because these say where NOT to look next. All three lenses came
+out of the day's real defects rather than off a list.
+
+**Tests that do not RUN, from the sweep sabotage that stayed green.**
+35 `QSKIP` sites; only one fires on this machine now —
+`a_selection_change_is_announced_not_only_answerable`. Its guard was
+re-measured rather than believed: a probe under Qt 6.12 shows
+`QAccessible::setActive(true)` leaves `isActive()` false under BOTH the
+offscreen platform and xcb under Xvfb, so the comment's claim still
+holds and the skip is unavoidable without an AT-SPI bridge. The
+accessibility sabotages are caught by other tests, so nothing hides
+behind it. The read-only-directory, bundled-font and settings-page
+guards do not fire here at all.
+
+**Settings that reach nothing, from the TERM anchor that had rotted.**
+All 16 `bssh_app_settings` getters have a caller outside the class.
+`every_resolved_setting_reaches_something_that_uses_it` already covers
+the per-host half; this is the app half, measured once by hand.
+
+**A rule enforced at one door and not the other**, which is the shape of
+both the Back key and the TERM call. Three actions in `main_window` are
+guarded by their menu item's enabled state: `split_with` deliberately
+does NOT repeat it -- asking for a pane that does not fit is REMEMBERED
+rather than refused (sec 8.2) -- `show_as_tab` repeats it and cites
+`tear_out`'s rule, and its sabotage is caught. `tear_out` was the one
+that was guarded and untested, and that is fixed above.
+
 ### 12.3 Testing
 The desktop build is what makes this project testable at all — use it.
 - **Unit tests run on the host**, no device and no server: the emulator fed
