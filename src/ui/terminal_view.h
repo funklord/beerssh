@@ -551,14 +551,34 @@ public:
 	 * control that occludes cells is not a cosmetic cost -- so it
 	 * appears where the pointer is and nowhere else.
 	 *
-	 * The price is that TOUCH never hovers, so a phone gets no grip. It
-	 * loses nothing it had: cross-window drag needs more than one window,
-	 * which a phone does not have, and a pane there is reached through
-	 * the tab bar or the Detach item.
+	 * TOUCH never hovers, so it needs the third term. The claim that
+	 * used to stand here -- that touch "loses nothing it had", because a
+	 * pane is reachable through the tab bar or the Detach item -- was
+	 * true about reaching a pane and wrong about ARRANGING one: those
+	 * routes take a pane out, and neither reorders two panes against
+	 * each other. On a screen wide enough to split, that is the gesture
+	 * with no touch equivalent at all.
+	 *
+	 * So the grip persists where a drag can DO something and nowhere
+	 * else, which keeps the occlusion argument above intact rather than
+	 * overruling it. bssh_pane_container turns it on for touch when
+	 * there is more than one pane; a single pane has nothing to be
+	 * rearranged against, and a phone narrow enough to show one pane
+	 * therefore sees no grip and loses no cells.
 	 */
 	bool grip_visible() const {
-		return m_pane_handle && (m_pointer_inside || m_being_dragged);
+		return m_pane_handle
+		        && (m_pointer_inside || m_being_dragged || m_grip_persistent);
 	}
+
+	/*
+	 * Keep the grip up without a pointer. See grip_visible().
+	 *
+	 * Set by bssh_pane_container rather than read from the platform
+	 * here: whether a drag can achieve anything is a question about the
+	 * LAYOUT, which a single view cannot answer.
+	 */
+	void set_grip_persistent(bool persistent);
 
 	/*
 	 * Whether this view is a PANE, and so has a handle at all.
@@ -731,6 +751,7 @@ private:
 	bool m_being_dragged;
 	bool m_pointer_inside;
 	bool m_pane_handle;
+	bool m_grip_persistent;
 
 	/*
 	 * Selection endpoints in ABSOLUTE line coordinates -- history line

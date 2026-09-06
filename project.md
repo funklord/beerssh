@@ -4879,8 +4879,30 @@ occludes cells. Three constraints shaped it:
   in a view 0 wide, which draws nothing and would still have answered
   `contains()` for a press.
 
-**Touch gets no grip**, since touch never hovers. It loses nothing:
+**Touch gets the grip where a drag can achieve something —
+[BUILT 2026-09-06].** Touch never hovers, so the hover rule gave a phone
+no grip at all, and the sentence that stood here said it lost nothing:
 cross-window drag needs more than one window, which a phone has not got.
+
+**That was right about reaching a pane and wrong about arranging one.**
+The tab bar and the Detach item both take a pane OUT of the
+arrangement; neither reorders two panes against each other, and on a
+screen wide enough to split that is a gesture touch had no equivalent
+for at all. A folding phone shows two panes unfolded, so this is not a
+desktop-only case.
+
+**It persists only where a drag can DO something**, which keeps the
+occlusion argument above intact rather than overruling it:
+`bssh_pane_container` sets it for touch when there is more than one
+pane. A single pane has nothing to be rearranged against, so a phone
+narrow enough to show one terminal still loses no cells — and the
+container decides it rather than the view, because whether a drag can
+achieve anything is a question about the LAYOUT that one view cannot
+answer.
+
+`a_touch_pane_keeps_its_grip_when_there_is_one_to_drag` asserts both
+directions. "The grip is up" alone would be satisfied by drawing it
+always, which is exactly what the two pixel tests above refused.
 
 **What the pointer carries.** Qt's default is no pixmap at all, so a
 session drag looked like a text drag, a file drag, or nothing. It now

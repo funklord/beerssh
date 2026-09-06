@@ -48,6 +48,21 @@ find = "\tif (intent.size() < 2) return;"
 replace = "\tif (intent.isEmpty()) return;"
 expect = "a_pane_dropped_on_the_tab_bar_becomes_a_tab"
 
+# The grip that touch can reach. It persists only where a drag can
+# achieve something -- more than one pane -- because it covers a couple
+# of the terminal's own cells, and drawing it always is what the pixel
+# tests refused. Turning the condition into a constant is the edit a
+# hurried change makes: it looks like a simplification and it costs a
+# phone showing one terminal two cells for a control that can do nothing.
+[[sabotage]]
+name = "the touch grip is up whether or not there is a pane to drag"
+file = "src/ui/pane_container.cpp"
+find = """		view->set_grip_persistent(panes.size() > 1
+		                           && bssh_platform::instance()->is_touch_primary());"""
+replace = """		view->set_grip_persistent(
+		        bssh_platform::instance()->is_touch_primary());"""
+expect = "a_touch_pane_keeps_its_grip_when_there_is_one_to_drag"
+
 # The gesture. Alt and the left button picks a pane up; a plain drag
 # still selects text, which is the half that would make the app unusable.
 [[sabotage]]

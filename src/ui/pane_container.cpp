@@ -130,6 +130,15 @@ void bssh_pane_container::rebuild() {
 		 */
 		view->set_pane_handle(true);
 
+		/*
+		 * And on touch it stays up, because touch never hovers (sec
+		 * 8.4). Only with a pane to rearrange it against: a single
+		 * pane has nothing to drag onto, and the grip costs the cells
+		 * it covers, so a phone showing one terminal sees nothing.
+		 */
+		view->set_grip_persistent(panes.size() > 1
+		                           && bssh_platform::instance()->is_touch_primary());
+
 		view->attach_screen(&session->emulator()->screen());
 		view->attach_scrollback(&session->emulator()->scrollback());
 		view->attach_images(&session->emulator()->images());

@@ -77,6 +77,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_being_dragged(false),
       m_pointer_inside(false),
       m_pane_handle(false),
+      m_grip_persistent(false),
       m_focus_border(false),
       m_click_count(0),
       m_last_click_line(-1),
@@ -1152,6 +1153,20 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 	if (m_pane_handle == handle) return;
 
 	m_pane_handle = handle;
+	update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+}
+
+/*
+ * Keep the grip up with no pointer, for touch. See grip_visible().
+ *
+ * The repaint is the same rect the hover path uses, and it has to
+ * happen: the flag changes when the pane COUNT changes, which is a
+ * moment nothing else is repainting this corner.
+ */
+void bssh_terminal_view::set_grip_persistent(bool persistent) {
+	if (m_grip_persistent == persistent) return;
+
+	m_grip_persistent = persistent;
 	update(pane_grip_rect().adjusted(-2, -2, 2, 2));
 }
 
