@@ -1278,6 +1278,101 @@ void layout_test::a_fourth_page_appears_only_where_a_letter_needs_it() {
 	          QString(QChar(0x00e0)) + QChar(0x00e8));
 }
 
+/*
+ * A non-Latin layout opens in Latin and can still reach its own script
+ * (sec 6.2).
+ *
+ * Russian, Greek and Ukrainian put Cyrillic or Greek on the whole letter
+ * block, and the ASCII palette carries punctuation only, so choosing one
+ * of them cost the alphabet a shell is written in. They were refused on
+ * that until there was something to switch with.
+ *
+ * Both halves are asserted because each alone would pass over a broken
+ * toggle: a keyboard stuck in Latin satisfies the ASCII contract and is
+ * not a Russian keyboard, and one stuck in Cyrillic reaches the script
+ * and is not a terminal.
+ */
+void layout_test::a_non_latin_layout_opens_in_latin_and_reaches_its_script() {
+	const layout_left_as_found_t restore;
+
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("ru")));
+	QVERIFY2(!bssh_layout_has_latin(), "Russian is being read as a Latin layout");
+	QVERIFY2(bssh_latin_mode(), "a non-Latin layout did not open in Latin");
+
+	const QSet<uint> opened =
+	        every_character(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	for (char letter = 'a'; letter <= 'z'; ++letter) {
+		QVERIFY2(opened.contains(uint(letter)),
+		          qPrintable(QStringLiteral("Russian opens without %1")
+		                             .arg(QChar(letter))));
+	}
+
+	/* And the script it was chosen for is one tap away. */
+	bssh_set_latin_mode(false);
+	const QSet<uint> script =
+	        every_character(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	QVERIFY2(script.contains(0x0439),
+	          "Russian cannot type short-i with Latin mode off");
+	QVERIFY2(!script.contains(uint('q')),
+	          "Latin mode off still draws a Latin letter block");
+
+	bssh_set_latin_mode(true);
+	QVERIFY(every_character(bssh_soft_keyboard_catalog::STYLE_COMPACT)
+	                .contains(uint('q')));
+
+	/*
+	 * A layout change resets it. Carrying the mode across would mean
+	 * choosing Greek and getting whichever script the last layout was
+	 * left showing.
+	 */
+	bssh_set_latin_mode(false);
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("gr")));
+	QVERIFY2(bssh_latin_mode(), "the toggle survived a layout change");
+}
+
+/*
+ * The script toggle is offered only where there is a second script
+ * (sec 6.2, sec 11).
+ *
+ * A Latin layout has nothing to switch to, and a control that does
+ * nothing on 27 of 30 layouts is worse than an absent one -- which is
+ * absent-not-faked applied to a button rather than to a capability.
+ */
+void layout_test::the_script_toggle_is_offered_only_where_it_does_something() {
+	const layout_left_as_found_t restore;
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("se")));
+	{
+		bssh_soft_keyboard keyboard(&router);
+		keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+		QToolButton *toggle =
+		        keyboard.findChild<QToolButton *>(QStringLiteral("keyboard-script"));
+		QVERIFY2(toggle, "the toggle was never built");
+		QVERIFY2(toggle->isHidden(), "Swedish is offered a script toggle");
+	}
+
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("ru")));
+	{
+		bssh_soft_keyboard keyboard(&router);
+		keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+		QToolButton *toggle =
+		        keyboard.findChild<QToolButton *>(QStringLiteral("keyboard-script"));
+		QVERIFY2(toggle, "the toggle was never built");
+		QVERIFY2(!toggle->isHidden(), "Russian is not offered a script toggle");
+
+		/* The label says what pressing it will GIVE you. */
+		QCOMPARE(toggle->text(), QStringLiteral("RU"));
+		QVERIFY2(!toggle->accessibleName().isEmpty(),
+		          "the toggle draws a label and says nothing");
+
+		toggle->click();
+		QCOMPARE(toggle->text(), QStringLiteral("abc"));
+		QVERIFY2(!bssh_latin_mode(), "pressing the toggle changed nothing");
+	}
+}
+
 namespace {
 
 /* Windows of ours that are currently alive, for a test that makes one. */

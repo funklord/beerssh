@@ -152,6 +152,22 @@ bool bssh_set_keyboard_layout(const QString &id);
 
 QString bssh_keyboard_layout();
 
+/*
+ * The Latin toggle, for a layout whose letter block is not Latin.
+ *
+ * bssh_layout_has_latin() is false for Russian, Greek and Ukrainian and
+ * true for every Latin layout, so it is also the test for whether the
+ * toggle should be offered at all -- a Swedish keyboard has no second
+ * script to reach and must not be given a button that does nothing.
+ *
+ * Latin mode is ON by default and reset to ON whenever the layout
+ * changes: a terminal is written in Latin, so that is what a non-Latin
+ * layout opens in, and its own script is one tap away.
+ */
+bool bssh_layout_has_latin();
+bool bssh_latin_mode();
+void bssh_set_latin_mode(bool on);
+
 class bssh_soft_keyboard_catalog {
 public:
 	/*

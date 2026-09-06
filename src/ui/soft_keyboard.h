@@ -95,6 +95,7 @@ protected:
 private:
 	void rebuild();
 	void refresh_side_icons();
+	void refresh_script_button();
 	bssh_key_cap *make_button(const QString &label);
 	bool altgr_armed() const;
 	void add_key(const bssh_key_t &key, int row, int column);
@@ -135,6 +136,7 @@ private:
 	 */
 	QAbstractButton *m_settings_button;
 	QAbstractButton *m_hide_button;
+	QAbstractButton *m_script_button;
 
 	int m_group;
 	bssh_soft_keyboard_catalog::style_t m_style;

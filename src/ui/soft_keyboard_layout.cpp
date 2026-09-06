@@ -1507,6 +1507,159 @@ const bssh_layout_slot_t BSSH_LAYOUT_MT[] = {
 	{ "LSGT", { "\u017c", "", "\\", "|" } },
 };
 
+const bssh_layout_slot_t BSSH_LAYOUT_RU[] = {
+	{ "TLDE", { "\u0451", "", "", "" } },
+	{ "AE01", { "1", "!", "", "" } },
+	{ "AE02", { "2", "\"", "", "" } },
+	{ "AE03", { "3", "\u2116", "", "" } },
+	{ "AE04", { "4", ";", "", "" } },
+	{ "AE05", { "5", "%", "", "" } },
+	{ "AE06", { "6", ":", "", "" } },
+	{ "AE07", { "7", "?", "", "" } },
+	{ "AE08", { "8", "*", "\u20bd", "" } },
+	{ "AE09", { "9", "(", "", "" } },
+	{ "AE10", { "0", ")", "", "" } },
+	{ "AE11", { "-", "_", "", "" } },
+	{ "AE12", { "=", "+", "", "" } },
+	{ "AD01", { "\u0439", "", "", "" } },
+	{ "AD02", { "\u0446", "", "", "" } },
+	{ "AD03", { "\u0443", "", "", "" } },
+	{ "AD04", { "\u043a", "", "", "" } },
+	{ "AD05", { "\u0435", "", "", "" } },
+	{ "AD06", { "\u043d", "", "", "" } },
+	{ "AD07", { "\u0433", "", "", "" } },
+	{ "AD08", { "\u0448", "", "", "" } },
+	{ "AD09", { "\u0449", "", "", "" } },
+	{ "AD10", { "\u0437", "", "", "" } },
+	{ "AD11", { "\u0445", "", "", "" } },
+	{ "AD12", { "\u044a", "", "", "" } },
+	{ "BKSL", { "\\", "/", "", "" } },
+	{ "AC01", { "\u0444", "", "", "" } },
+	{ "AC02", { "\u044b", "", "", "" } },
+	{ "AC03", { "\u0432", "", "", "" } },
+	{ "AC04", { "\u0430", "", "", "" } },
+	{ "AC05", { "\u043f", "", "", "" } },
+	{ "AC06", { "\u0440", "", "", "" } },
+	{ "AC07", { "\u043e", "", "", "" } },
+	{ "AC08", { "\u043b", "", "", "" } },
+	{ "AC09", { "\u0434", "", "", "" } },
+	{ "AC10", { "\u0436", "", "", "" } },
+	{ "AC11", { "\u044d", "", "", "" } },
+	{ "AB01", { "\u044f", "", "", "" } },
+	{ "AB02", { "\u0447", "", "", "" } },
+	{ "AB03", { "\u0441", "", "", "" } },
+	{ "AB04", { "\u043c", "", "", "" } },
+	{ "AB05", { "\u0438", "", "", "" } },
+	{ "AB06", { "\u0442", "", "", "" } },
+	{ "AB07", { "\u044c", "", "", "" } },
+	{ "AB08", { "\u0431", "", "", "" } },
+	{ "AB09", { "\u044e", "", "", "" } },
+	{ "AB10", { ".", ",", "", "" } },
+	{ "LSGT", { "/", "|", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_GR[] = {
+	{ "TLDE", { "`", "~", "\u2015", "" } },
+	{ "AE01", { "1", "!", "\u2022", "\u00b9" } },
+	{ "AE02", { "2", "@", "\u00bd", "\u00b2" } },
+	{ "AE03", { "3", "#", "\u00a3", "\u00b3" } },
+	{ "AE04", { "4", "$", "\u00bc", "\u00be" } },
+	{ "AE05", { "5", "%", "\u20ac", "\u2030" } },
+	{ "AE06", { "6", "^", "\u03f0", "\u00b6" } },
+	{ "AE07", { "7", "&", "\u03d7", "\u03cf" } },
+	{ "AE08", { "8", "*", "\u20af", "\u00a4" } },
+	{ "AE09", { "9", "(", "\u00a6", "\u2018" } },
+	{ "AE10", { "0", ")", "\u00b0", "\u2019" } },
+	{ "AE11", { "-", "_", "\u00b1", "" } },
+	{ "AE12", { "=", "+", "", "" } },
+	{ "AD01", { ";", ":", "\u00b7", "" } },
+	{ "AD02", { "\u03c2", "", "\u03db", "\u03da" } },
+	{ "AD03", { "\u03b5", "", "\u20ac", "\u03f5" } },
+	{ "AD04", { "\u03c1", "", "\u00ae", "\u03f1" } },
+	{ "AD05", { "\u03c4", "", "", "" } },
+	{ "AD06", { "\u03c5", "", "\u03d2", "\u00a5" } },
+	{ "AD07", { "\u03b8", "", "\u03d1", "\u03f4" } },
+	{ "AD08", { "\u03b9", "", "\u037b", "\u03fd" } },
+	{ "AD09", { "\u03bf", "", "\u03d9", "\u03d8" } },
+	{ "AD10", { "\u03c0", "", "\u03e1", "\u03e0" } },
+	{ "AD11", { "[", "{", "~", "\u00af" } },
+	{ "AD12", { "]", "}", "\u037a", "\u02d8" } },
+	{ "BKSL", { "\\", "|", "\u00ac", "" } },
+	{ "AC01", { "\u03b1", "", "", "" } },
+	{ "AC02", { "\u03c3", "", "\u00a7", "" } },
+	{ "AC03", { "\u03b4", "", "\u2193", "\u2191" } },
+	{ "AC04", { "\u03c6", "", "\u03d5", "" } },
+	{ "AC05", { "\u03b3", "", "\u03dd", "\u03dc" } },
+	{ "AC06", { "\u03b7", "", "\u03f3", "\u037f" } },
+	{ "AC07", { "\u03be", "", "\u037c", "\u03fe" } },
+	{ "AC08", { "\u03ba", "", "\u03df", "\u03de" } },
+	{ "AC09", { "\u03bb", "", "\u03f2", "\u03f9" } },
+	{ "AC10", { "'", "\"", "'", "" } },
+	{ "AC11", { "'", "\"", "`", "" } },
+	{ "AB01", { "\u03b6", "", "\u037d", "\u03ff" } },
+	{ "AB02", { "\u03c7", "", "\u2192", "\u2190" } },
+	{ "AB03", { "\u03c8", "", "\u00a9", "" } },
+	{ "AB04", { "\u03c9", "", "\u03d6", "" } },
+	{ "AB05", { "\u03b2", "", "\u03d0", "" } },
+	{ "AB06", { "\u03bd", "", "\u0374", "\u0375" } },
+	{ "AB07", { "\u03bc", "", "\u03fb", "\u03fa" } },
+	{ "AB08", { ",", "<", "\u00ab", "\u2026" } },
+	{ "AB09", { ".", ">", "\u00bb", "\u00b7" } },
+	{ "AB10", { "/", "?", "", "" } },
+	{ "LSGT", { "\u00ab", "\u00bb", "|", "\u00a6" } },
+};
+
+const bssh_layout_slot_t BSSH_LAYOUT_UA[] = {
+	{ "TLDE", { "'", "\u02bc", "\u0301", "~" } },
+	{ "AE01", { "1", "!", "\u00b9", "" } },
+	{ "AE02", { "2", "\"", "\u00b2", "\u2019" } },
+	{ "AE03", { "3", "\u2116", "\u00a7", "\u20b4" } },
+	{ "AE04", { "4", ";", "$", "\u20ac" } },
+	{ "AE05", { "5", "%", "\u00b0", "" } },
+	{ "AE06", { "6", ":", "<", "" } },
+	{ "AE07", { "7", "?", ">", "" } },
+	{ "AE08", { "8", "*", "\u2022", "" } },
+	{ "AE09", { "9", "(", "[", "{" } },
+	{ "AE10", { "0", ")", "]", "}" } },
+	{ "AE11", { "-", "_", "\u2014", "\u2013" } },
+	{ "AE12", { "=", "+", "\u2260", "\u00b1" } },
+	{ "AD01", { "\u0439", "", "\u0458", "\u0408" } },
+	{ "AD02", { "\u0446", "", "\u045f", "\u040f" } },
+	{ "AD03", { "\u0443", "", "\u045e", "\u040e" } },
+	{ "AD04", { "\u043a", "", "\u00ae", "" } },
+	{ "AD05", { "\u0435", "", "\u0451", "\u0401" } },
+	{ "AD06", { "\u043d", "", "\u045a", "\u040a" } },
+	{ "AD07", { "\u0433", "", "\u0491", "\u0490" } },
+	{ "AD08", { "\u0448", "", "", "" } },
+	{ "AD09", { "\u0449", "", "", "" } },
+	{ "AD10", { "\u0437", "", "", "" } },
+	{ "AD11", { "\u0445", "", "", "" } },
+	{ "AD12", { "\u0457", "", "\u044a", "\u042a" } },
+	{ "BKSL", { "\u0491", "", "\\", "|" } },
+	{ "AC01", { "\u0444", "", "", "" } },
+	{ "AC02", { "\u0456", "", "\u044b", "\u042b" } },
+	{ "AC03", { "\u0432", "", "", "" } },
+	{ "AC04", { "\u0430", "", "", "" } },
+	{ "AC05", { "\u043f", "", "", "" } },
+	{ "AC06", { "\u0440", "", "", "" } },
+	{ "AC07", { "\u043e", "", "", "" } },
+	{ "AC08", { "\u043b", "", "\u0459", "\u0409" } },
+	{ "AC09", { "\u0434", "", "\u0452", "\u0402" } },
+	{ "AC10", { "\u0436", "", "", "" } },
+	{ "AC11", { "\u0454", "", "\u044d", "\u042d" } },
+	{ "AB01", { "\u044f", "", "", "" } },
+	{ "AB02", { "\u0447", "", "\u045b", "\u040b" } },
+	{ "AB03", { "\u0441", "", "\u00a9", "" } },
+	{ "AB04", { "\u043c", "", "", "" } },
+	{ "AB05", { "\u0438", "", "", "" } },
+	{ "AB06", { "\u0442", "", "\u2122", "" } },
+	{ "AB07", { "\u044c", "", "", "" } },
+	{ "AB08", { "\u0431", "", "\u00ab", "\u201e" } },
+	{ "AB09", { "\u044e", "", "\u00bb", "\u201c" } },
+	{ "AB10", { ".", ",", "/", "\u2026" } },
+	{ "LSGT", { "/", "|", "|", "\u00a6" } },
+};
+
 struct bssh_layout_t {
 	const char *id;
 	const char *display_name;
@@ -1578,6 +1731,12 @@ const bssh_layout_t BSSH_LAYOUTS[] = {
 	   BSSH_LAYOUT_TR, int(sizeof BSSH_LAYOUT_TR / sizeof *BSSH_LAYOUT_TR) },
 	{ "mt", "Maltese",
 	   BSSH_LAYOUT_MT, int(sizeof BSSH_LAYOUT_MT / sizeof *BSSH_LAYOUT_MT) },
+	{ "ru", "Russian",
+	   BSSH_LAYOUT_RU, int(sizeof BSSH_LAYOUT_RU / sizeof *BSSH_LAYOUT_RU) },
+	{ "gr", "Greek",
+	   BSSH_LAYOUT_GR, int(sizeof BSSH_LAYOUT_GR / sizeof *BSSH_LAYOUT_GR) },
+	{ "ua", "Ukrainian",
+	   BSSH_LAYOUT_UA, int(sizeof BSSH_LAYOUT_UA / sizeof *BSSH_LAYOUT_UA) },
 };
 
 /*
@@ -1590,6 +1749,49 @@ const bssh_layout_t BSSH_LAYOUTS[] = {
  * layout_slot().
  */
 const bssh_layout_t *g_layout = &BSSH_LAYOUTS[0];
+
+/*
+ * Whether a non-Latin layout is currently showing Latin instead.
+ *
+ * A terminal without a-z is not a terminal: Russian, Greek and
+ * Ukrainian put Cyrillic or Greek on the whole letter block, and the
+ * ASCII palette carries punctuation only, so choosing one of them used
+ * to cost the alphabet a shell is written in. They were refused on that
+ * for exactly as long as there was nothing to switch with.
+ *
+ * Default ON, which is the half worth arguing. The alternative -- start
+ * in the layout the user chose and make them find a toggle -- reads as
+ * more respectful and is wrong here: the first thing anybody types into
+ * a terminal is a command, and a command is Latin. So a non-Latin
+ * layout opens in US International and the toggle reaches its own
+ * script, rather than the other way round.
+ */
+bool g_latin_mode = true;
+
+/*
+ * Does this layout put a-z on its LETTER BLOCK -- AD, AC, AB?
+ *
+ * The letter block rather than the whole table, because the question is
+ * whether the alphabet is there for typing, and a stray Latin character
+ * on the digit row is not an alphabet. Only the plain level is read: a
+ * Latin letter reachable through AltGr is a curiosity, not a keyboard.
+ */
+bool layout_has_latin(const bssh_layout_t *table) {
+	for (int i = 0; i < table->count; ++i) {
+		const char *slot = table->entries[i].slot;
+		if (qstrncmp(slot, "AD", 2) != 0 && qstrncmp(slot, "AC", 2) != 0
+		     && qstrncmp(slot, "AB", 2) != 0) {
+			continue;
+		}
+
+		const QString plain = QString::fromUtf8(table->entries[i].level[0]);
+		if (plain.size() != 1) continue;
+
+		const QChar letter = plain.at(0).toLower();
+		if (letter >= QLatin1Char('a') && letter <= QLatin1Char('z')) return true;
+	}
+	return false;
+}
 
 /* The slot with this id in the current layout, or nullptr. */
 const bssh_layout_slot_t *layout_slot(const char *id) {
@@ -2408,6 +2610,20 @@ void bssh_soft_keyboard_catalog::rebuild() {
 	m_groups.clear();
 	m_full.clear();
 
+	/*
+	 * Latin mode swaps the WHOLE layout, not just the letter rows.
+	 *
+	 * A language toggle on a real keyboard changes the keyboard, and
+	 * doing it here by pointing g_layout at US International for the
+	 * length of the build means every builder below is reused exactly
+	 * as written -- no second code path for the letters, the digit row,
+	 * the fourth page or the full board, and so no second code path to
+	 * go stale. The pointer is restored before returning, and nothing
+	 * reads it in between except the builders.
+	 */
+	const bssh_layout_t *chosen = g_layout;
+	if (g_latin_mode && !layout_has_latin(chosen)) g_layout = &BSSH_LAYOUTS[0];
+
 	m_groups.append(letters_group());
 	m_groups.append(numbers_group());
 	m_groups.append(terminal_group());
@@ -2433,6 +2649,8 @@ void bssh_soft_keyboard_catalog::rebuild() {
 
 	m_full.append(full_main_group());
 	m_full.append(full_keypad_group());
+
+	g_layout = chosen;
 }
 
 QList<bssh_keyboard_layout_t> bssh_keyboard_layouts() {
@@ -2444,6 +2662,20 @@ QList<bssh_keyboard_layout_t> bssh_keyboard_layouts() {
 		layouts.append(described);
 	}
 	return layouts;
+}
+
+bool bssh_layout_has_latin() {
+	return layout_has_latin(g_layout);
+}
+
+bool bssh_latin_mode() {
+	return g_latin_mode;
+}
+
+void bssh_set_latin_mode(bool on) {
+	if (g_latin_mode == on) return;
+	g_latin_mode = on;
+	bssh_soft_keyboard_catalog::instance().rebuild();
 }
 
 QString bssh_keyboard_layout() {
@@ -2464,6 +2696,15 @@ bool bssh_set_keyboard_layout(const QString &id) {
 		 * existing pointer into it valid -- and the widget rebuilds
 		 * from the catalog anyway, which is the only consumer.
 		 */
+		/*
+		 * A new layout starts in Latin, whatever the last one was
+		 * left showing. The toggle is a state of the keyboard rather
+		 * than of the setting, and carrying it across a change would
+		 * mean choosing Russian and getting a keyboard whose mode was
+		 * decided by whatever came before it.
+		 */
+		g_latin_mode = true;
+
 		bssh_soft_keyboard_catalog::instance().rebuild();
 		return true;
 	}

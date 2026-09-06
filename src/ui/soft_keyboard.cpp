@@ -188,6 +188,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
       m_group_button(nullptr),
       m_settings_button(nullptr),
       m_hide_button(nullptr),
+      m_script_button(nullptr),
       m_group(0),
       m_style(bssh_soft_keyboard_catalog::STYLE_COMPACT) {
 	QHBoxLayout *outer = new QHBoxLayout(this);
@@ -241,6 +242,35 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	m_settings_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 	m_settings_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	side->addWidget(m_settings_button, 0);
+
+	/*
+	 * The script toggle, and it is only here for a layout that needs it.
+	 *
+	 * Russian, Greek and Ukrainian put their own script on the whole
+	 * letter block, so a terminal opened under one of them had no a-z at
+	 * all -- which is why they were refused rather than shipped. A Latin
+	 * layout has no second script to reach, so it gets no button: an
+	 * always-present control that does nothing on 27 of 30 layouts is
+	 * worse than an absent one, and sec 11's absent-not-faked rule says
+	 * which way to fall.
+	 *
+	 * In the side column rather than on a key, because it belongs to the
+	 * KEYBOARD and not to a page -- the same argument that put settings
+	 * and hide here, and it means the script can be changed from the
+	 * numbers page without going back to the letters first.
+	 */
+	m_script_button = new QToolButton(this);
+	m_script_button->setObjectName(QStringLiteral("keyboard-script"));
+	m_script_button->setFocusPolicy(Qt::NoFocus);
+	m_script_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
+	m_script_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	m_script_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+	side->addWidget(m_script_button, 0);
+
+	connect(m_script_button, &QAbstractButton::clicked, this, [this] {
+		bssh_set_latin_mode(!bssh_latin_mode());
+		rebuild_keys();
+	});
 
 	m_group_button = new QToolButton(this);
 	m_group_button->setFocusPolicy(Qt::NoFocus);
@@ -427,6 +457,8 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 }
 
 void bssh_soft_keyboard::rebuild() {
+	refresh_script_button();
+
 	m_modifier_buttons.clear();
 	m_modifier_values.clear();
 	m_letter_buttons.clear();
@@ -515,6 +547,44 @@ bool bssh_soft_keyboard::altgr_armed() const {
  * bssh_key_cap avoids by using alpha and this cannot, an icon being
  * pixels.
  */
+/*
+ * Show, hide and relabel the script toggle.
+ *
+ * The label says what the button will GIVE you, the way the page button
+ * names the page it will move to: under Russian in Latin mode it reads
+ * RU, and pressing it reads abc.
+ *
+ * The id in capitals rather than a sample of the script, which was tried
+ * and does not generalise. Three letters of the layout's own AD row is
+ * idiomatic for Cyrillic -- YTsU is to a Russian keyboard what QWERTY is
+ * to this one -- and wrong for Greek, whose AD row opens on a semicolon
+ * and a final sigma. A two-letter id is short, fits the column, and is
+ * the same string the setting uses.
+ */
+void bssh_soft_keyboard::refresh_script_button() {
+	if (!m_script_button) return;
+
+	const bool offered = !bssh_layout_has_latin();
+	m_script_button->setVisible(offered);
+	if (!offered) return;
+
+	const QString id = bssh_keyboard_layout();
+
+	QString named = id;
+	for (const bssh_keyboard_layout_t &known : bssh_keyboard_layouts()) {
+		if (known.id == id) named = known.display_name;
+	}
+
+	const bool latin = bssh_latin_mode();
+	m_script_button->setText(latin ? id.toUpper() : QStringLiteral("abc"));
+
+	const QString says = latin
+	        ? QStringLiteral("Switch to %1 letters").arg(named)
+	        : QStringLiteral("Switch to Latin letters");
+	m_script_button->setAccessibleName(says);
+	m_script_button->setToolTip(says);
+}
+
 void bssh_soft_keyboard::refresh_side_icons() {
 	if (!m_settings_button || !m_hide_button) return;
 

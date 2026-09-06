@@ -2103,12 +2103,54 @@ than to the content it happens to carry, and its middle row's keys are
 simply wider. **Made to fail on purpose afterwards** — admitting the
 page unconditionally turns the counting test red with exit 2.
 
-**Three non-Latin candidates failed differently and worse.** Russian,
-Greek and Ukrainian lose `a`–`z` *entirely*, on both keyboards: the
-letter block is Cyrillic or Greek and the palette carries punctuation
-only. A terminal without the Latin alphabet is not a terminal, so a
-non-Latin layout needs a Latin route the design does not currently have
-— a toggle, or a palette that carries letters. Recorded, not attempted.
+**Three non-Latin candidates needed a toggle, and now ship —
+[BUILT 2026-09-06].** Russian, Greek and Ukrainian put Cyrillic or Greek
+on the whole letter block, and the ASCII palette carries punctuation
+only, so choosing one of them cost `a`-`z` entirely, on both keyboards.
+A terminal without the Latin alphabet is not a terminal, so they were
+refused until there was something to switch with.
+
+**Latin mode swaps the WHOLE layout, not just the letter rows.** A
+language toggle on a real keyboard changes the keyboard, and doing it
+here by pointing `g_layout` at US International for the length of the
+build means every builder is reused exactly as written — no second code
+path for the letters, the digit row, the fourth page or the full board,
+and so no second path to go stale.
+
+**It defaults ON, which is the half worth arguing.** Starting in the
+layout the user chose and making them find a toggle reads as more
+respectful and is wrong here: the first thing anybody types into a
+terminal is a command, and a command is Latin. So a non-Latin layout
+opens in US International and its own script is one tap away. A layout
+change resets the mode, since carrying it across would mean choosing
+Greek and getting whichever script the last layout was left showing.
+
+**The button is in the side column and only exists where it does
+something.** `bssh_layout_has_latin()` reads the plain level of the AD,
+AC and AB slots — the letter block, because a stray Latin character on
+the digit row is not an alphabet — and is false for exactly these three.
+A Latin layout has no second script to reach, and an always-present
+control that does nothing on 27 of 30 layouts is worse than an absent
+one, which is §11's absent-not-faked rule applied to a button. It sits
+beside settings and hide rather than on a key because it belongs to the
+KEYBOARD and not to a page, so the script can be changed from the
+numbers page without going back to the letters first.
+
+**The label is the id in capitals, and a script sample was tried
+first.** Three letters of the layout's own AD row is idiomatic for
+Cyrillic — YTsU is to a Russian keyboard what QWERTY is to this one —
+and wrong for Greek, whose AD row opens on a semicolon and a final
+sigma. `RU` is short, fits the column, and is the same string the
+setting uses. It names what pressing it will GIVE you, the way the page
+button names the page it moves to.
+
+**Proved by the contract that already existed.** Disabling the
+substitution makes `both_keyboards_reach_every_printable_character`
+report *layout ru, style 0 cannot type: abcdefghijklmnopqrstuvwxyz* —
+the exact failure the feature exists to prevent, from a test written
+long before it. On a device: Russian opens in Latin, the button reads
+`RU`, pressing it draws YTsUKEN and reads `abc`, and typing sends
+Cyrillic to the wire.
 
 **The setting is global**, at `[input] keyboard_layout`, defaulting to
 `us-intl`, with a control on the settings page listed from the catalogue
