@@ -2422,6 +2422,40 @@ bssh_main_window *bssh_main_window::tear_out_tab(int index) {
 	return tear_out(session_at_tab(index));
 }
 
+/*
+ * Move a pane one place earlier or later. See the header for why this
+ * exists rather than a touch drag.
+ *
+ * The INTENT is what moves, not the visible list: the intent is what the
+ * layout is rebuilt from and what survives a rotation that changes how
+ * many panes fit, so reordering the visible subset would be undone the
+ * next time the window resized.
+ */
+void bssh_main_window::move_pane(bssh_session *session, int direction) {
+	if (!session || !m_layout || !m_panes || direction == 0) return;
+
+	QList<bssh_session *> intent = m_layout->intent();
+	const int from = intent.indexOf(session);
+	if (from < 0) return;
+
+	const int to = from + (direction < 0 ? -1 : 1);
+	if (to < 0 || to >= intent.size()) return;
+
+	intent.move(from, to);
+	m_layout->set_intent(intent);
+	m_panes->rebuild();
+
+	/*
+	 * Focus follows the pane rather than the position. A user who moved
+	 * this terminal is still working in it, and leaving focus where the
+	 * pane used to be hands their next keystroke to a different host.
+	 */
+	m_panes->focus_session(session);
+
+	refresh_tab_bar();
+	update_status();
+}
+
 bssh_main_window *bssh_main_window::tear_out(bssh_session *session) {
 	if (!session || !m_shown.contains(session)) return nullptr;
 
@@ -3296,6 +3330,24 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	as_tab->setObjectName(QStringLiteral("terminal_show_as_tab"));
 	as_tab->setEnabled(m_current && m_layout && m_layout->intent().size() > 1);
 
+	/*
+	 * Reordering, which is the one arrangement a touch user could not
+	 * reach: Split adds a pane and Show as Tab removes one, and neither
+	 * moves a pane past its neighbour. The grip's drag does it with a
+	 * pointer and cannot by touch -- see move_pane().
+	 */
+	const QList<bssh_session *> arrangement =
+	        m_layout ? m_layout->intent() : QList<bssh_session *>();
+	const int here = m_current ? arrangement.indexOf(m_current) : -1;
+
+	QAction *move_left = menu->addAction(QStringLiteral("Move Pane &Left"));
+	move_left->setObjectName(QStringLiteral("terminal_move_pane_left"));
+	move_left->setEnabled(here > 0);
+
+	QAction *move_right = menu->addAction(QStringLiteral("Move Pane &Right"));
+	move_right->setObjectName(QStringLiteral("terminal_move_pane_right"));
+	move_right->setEnabled(here >= 0 && here < arrangement.size() - 1);
+
 	QAction *new_tab = menu->addAction(QStringLiteral("New &Tab"));
 	new_tab->setObjectName(QStringLiteral("terminal_new_tab"));
 	new_tab->setShortcut(
@@ -3388,6 +3440,20 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	const QAction *split = menu->findChild<QAction *>(QStringLiteral("terminal_split"));
 	if (chosen == split) {
 		split_beside_current();
+		return;
+	}
+
+	const QAction *move_left =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_move_pane_left"));
+	if (chosen == move_left) {
+		move_pane(m_current, -1);
+		return;
+	}
+
+	const QAction *move_right =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_move_pane_right"));
+	if (chosen == move_right) {
+		move_pane(m_current, 1);
 		return;
 	}
 

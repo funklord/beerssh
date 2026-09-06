@@ -610,6 +610,26 @@ public:
 	/* The session into a window of its own; nullptr if it will not go. */
 	bssh_main_window *tear_out(bssh_session *session);
 
+	/*
+	 * Move a pane one place earlier or later in the arrangement.
+	 *
+	 * The touch route to REORDERING, and the reason it is a method
+	 * rather than a drag: dragging a pane by its grip works with a
+	 * pointer and cannot work by touch. QDrag hands the gesture to the
+	 * platform, Android makes the whole window the payload, and this
+	 * device's window manager claims it as drag-to-split-screen -- the
+	 * app is halved, an app picker appears, and dropEvent never runs.
+	 * Measured on a Fold at two drag distances and confirmed by hand.
+	 *
+	 * So the arrangement is reordered through the menu, which nothing
+	 * can intercept, and the desktop keeps the drag it already had.
+	 * Direction is negative for earlier and positive for later; a move
+	 * off either end does nothing rather than wrapping, since a wrap
+	 * makes "left" mean "far right" at exactly the moment a user is
+	 * looking at the leftmost pane.
+	 */
+	void move_pane(bssh_session *session, int direction);
+
 private:
 	/*
 	 * The ownership half of adopting, without deciding how it is shown.

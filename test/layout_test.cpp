@@ -1420,25 +1420,74 @@ int bssh_main_window_count() {
  * and returned nullptr would satisfy the first alone.
  */
 /*
- * Touch gets a pane grip where a drag can achieve something (sec 8.4).
+ * Touch can REORDER panes, which is the one arrangement it could not
+ * reach (sec 8.4).
  *
- * The grip is drawn only under the pointer, because it covers a couple
- * of the terminal's own cells and the terminal's pixels are the
- * terminal's. Touch never hovers, so a phone got no grip at all -- and
- * the note that justified it said touch "loses nothing", because a pane
- * is reachable through the tab bar or the Detach item.
+ * Split adds a pane and Show as Tab removes one; neither moves a pane
+ * past its neighbour. A grip drawn for touch would have, and it cannot:
+ * QDrag hands the gesture to the platform, Android makes the whole
+ * window the payload, and this device's window manager claims it as
+ * drag-to-split-screen -- the app is halved, an app picker appears, and
+ * dropEvent never runs. Measured on a Fold at two drag distances and
+ * confirmed by hand, which is why the route is a menu item that nothing
+ * can intercept.
  *
- * That was true about REACHING a pane and wrong about ARRANGING one.
- * Both routes take a pane out of the arrangement; neither reorders two
- * panes against each other, which on a screen wide enough to split is a
- * gesture touch had no equivalent for at all.
- *
- * So it persists for touch when there is more than one pane, and the
- * occlusion argument keeps its force everywhere else. Asserted in both
- * directions, because "the grip is up" alone would be satisfied by
- * drawing it always -- which is the thing the pixel tests refused.
+ * Asserted on the INTENT rather than on the visible panes: the intent is
+ * what the layout rebuilds from and what survives a rotation, so a
+ * reorder of the visible subset alone would be undone by the next
+ * resize.
  */
-void layout_test::a_touch_pane_keeps_its_grip_when_there_is_one_to_drag() {
+void layout_test::a_pane_can_be_moved_along_the_arrangement() {
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	bssh_session *first = registry->create(named(QStringLiteral("first")));
+	window.adopt_session(first);
+	bssh_session *second = registry->create(named(QStringLiteral("second")));
+	window.adopt_session(second);
+	window.split_beside_current();
+
+	bssh_layout_manager *layout = window.findChild<bssh_layout_manager *>();
+	QVERIFY2(layout, "the window has no layout manager");
+	QVERIFY2(layout->intent().size() > 1, "nothing split, so this tests nothing");
+
+	const QList<bssh_session *> before = layout->intent();
+	bssh_session *last = before.last();
+
+	/* Later, then back, so the move is shown to go both ways. */
+	window.move_pane(last, -1);
+	QVERIFY2(layout->intent() != before, "moving a pane left changed nothing");
+	QCOMPARE(layout->intent().indexOf(last), before.indexOf(last) - 1);
+
+	window.move_pane(last, 1);
+	QCOMPARE(layout->intent(), before);
+
+	/*
+	 * And it stops at the ends rather than wrapping, because a wrap makes
+	 * "left" mean "far right" at the moment somebody is looking at the
+	 * leftmost pane.
+	 */
+	window.move_pane(layout->intent().first(), -1);
+	QCOMPARE(layout->intent(), before);
+	window.move_pane(layout->intent().last(), 1);
+	QCOMPARE(layout->intent(), before);
+}
+
+/*
+ * And touch still gets NO grip, which is the other half (sec 8.4).
+ *
+ * It was given one and taken back: the grip is a drag handle, the drag
+ * cannot complete on Android, and a control that hands the window to the
+ * platform's split-screen is worse than an absent one. sec 11's
+ * absent-not-faked rule, applied to a control rather than a capability.
+ */
+void layout_test::touch_gets_no_pane_grip() {
 	const forced_touch_t arrangement(1);
 
 	bssh_main_window window;
@@ -1451,28 +1500,16 @@ void layout_test::a_touch_pane_keeps_its_grip_when_there_is_one_to_drag() {
 	const registry_left_as_found_t tidy(registry);
 
 	window.adopt_session(registry->create(named(QStringLiteral("first"))));
-
-	/* One pane: nothing to drag it against, so no grip and no lost cells. */
-	QList<bssh_terminal_view *> views = window.findChildren<bssh_terminal_view *>();
-	QVERIFY2(!views.isEmpty(), "the window shows no pane at all");
-	for (bssh_terminal_view *view : views) {
-		QVERIFY2(!view->grip_visible(),
-		          "a lone pane has nothing to be rearranged against, and the "
-		          "grip costs the cells it covers");
-	}
-
-	/* A second, split, so the arrangement is now something a drag can change. */
 	window.adopt_session(registry->create(named(QStringLiteral("second"))));
 	window.split_beside_current();
 
-	views = window.findChildren<bssh_terminal_view *>();
+	const QList<bssh_terminal_view *> views =
+	        window.findChildren<bssh_terminal_view *>();
 	QVERIFY2(views.size() > 1, "the window did not split, so this tests nothing");
-
-	int with_grip = 0;
 	for (bssh_terminal_view *view : views) {
-		if (view->grip_visible()) ++with_grip;
+		QVERIFY2(!view->grip_visible(),
+		          "touch has a grip again, and its drag becomes the platform's");
 	}
-	QCOMPARE(with_grip, int(views.size()));
 }
 
 void layout_test::the_last_tab_does_not_tear_out() {

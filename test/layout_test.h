@@ -52,7 +52,8 @@ private slots:
 	void the_script_toggle_is_offered_only_where_it_does_something();
 	void the_detach_action_makes_a_window();
 	void the_last_tab_does_not_tear_out();
-	void a_touch_pane_keeps_its_grip_when_there_is_one_to_drag();
+	void a_pane_can_be_moved_along_the_arrangement();
+	void touch_gets_no_pane_grip();
 	void the_keyboard_side_icons_are_still_named();
 	void a_pane_dropped_back_changes_nothing();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();

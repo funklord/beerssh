@@ -4879,30 +4879,55 @@ occludes cells. Three constraints shaped it:
   in a view 0 wide, which draws nothing and would still have answered
   `contains()` for a press.
 
-**Touch gets the grip where a drag can achieve something —
-[BUILT 2026-09-06].** Touch never hovers, so the hover rule gave a phone
-no grip at all, and the sentence that stood here said it lost nothing:
+**Touch gets no grip, and it was given one first — [MEASURED
+2026-09-07].** Touch never hovers, so the hover rule left a phone
+without one, and the note that stood here said it lost nothing:
 cross-window drag needs more than one window, which a phone has not got.
 
 **That was right about reaching a pane and wrong about arranging one.**
-The tab bar and the Detach item both take a pane OUT of the
-arrangement; neither reorders two panes against each other, and on a
-screen wide enough to split that is a gesture touch had no equivalent
-for at all. A folding phone shows two panes unfolded, so this is not a
-desktop-only case.
+The tab bar and the Detach item both take a pane OUT; neither reorders
+two panes against each other, and a folding phone shows two panes
+unfolded. So the grip was made to persist for touch wherever more than
+one pane existed, with a test asserting it both ways.
 
-**It persists only where a drag can DO something**, which keeps the
-occlusion argument above intact rather than overruling it:
-`bssh_pane_container` sets it for touch when there is more than one
-pane. A single pane has nothing to be rearranged against, so a phone
-narrow enough to show one terminal still loses no cells — and the
-container decides it rather than the view, because whether a drag can
-achieve anything is a question about the LAYOUT that one view cannot
-answer.
+**On the device the gesture it enables cannot complete, and the failure
+is worse than the gap.** Dragging the grip calls `QDrag::exec()`;
+Android makes the whole WINDOW the drag payload, and this device's
+window manager claims it as drag-to-split-screen. The app shrinks to a
+thumbnail over the wallpaper with a Cancel chip, the drop lands in the
+system's app picker, beerssh is halved into multi-window, and
+`dropEvent` never runs. Measured at two drag distances -- one crossing
+the window, one staying well inside it -- and confirmed by the copyright
+holder by hand: *when I grab it to move, it disappears quite easily.*
 
-`a_touch_pane_keeps_its_grip_when_there_is_one_to_drag` asserts both
-directions. "The grip is up" alone would be satisfied by drawing it
-always, which is exactly what the two pixel tests above refused.
+**So the grip is hover-only again**, which is §11's absent-not-faked
+rule applied to a control rather than a capability: a handle that hands
+the window to the platform is worse than no handle. `touch_gets_no_pane_grip`
+pins the absence so it cannot come back unnoticed.
+
+**Reordering moved to the menu instead, where nothing can intercept
+it.** *Move Pane Left* and *Move Pane Right* are on the terminal's
+context menu, enabled only where there is somewhere to go, and they
+move the INTENT rather than the visible list -- the intent is what the
+layout rebuilds from, so reordering the visible subset alone would be
+undone by the next rotation. Focus follows the pane rather than the
+position, since somebody who just moved a terminal is still working in
+it and the alternative hands their next keystroke to a different host.
+A move off either end does nothing rather than wrapping, because a wrap
+makes "left" mean "far right" at the moment a user is looking at the
+leftmost pane.
+
+**Verified on a phone as far as it goes.** The Note 9 shows both items
+correctly greyed with one pane, and no grip. The live half -- two panes
+on the Fold's inner screen, the items enabled, the panes swapping --
+is unverified: that device stopped enumerating over USB across two
+cables and three ports.
+
+**And the general lesson is the one this section keeps paying for.** The
+grip's visibility was tested, asserted both ways, sabotaged and seen on
+glass, and none of that touched whether the gesture it exists for can
+finish. A correct function is not a working feature, and the device is
+where the difference showed.
 
 **What the pointer carries.** Qt's default is no pixmap at all, so a
 session drag looked like a text drag, a file drag, or nothing. It now

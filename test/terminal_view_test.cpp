@@ -2113,7 +2113,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 11);
+	QCOMPARE(actions.size(), 13);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -2145,8 +2145,20 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * one-session window has no tab bar either.
 	 */
 	QCOMPARE(actions.at(6)->text(), QStringLiteral("Show as &Tab"));
-	QCOMPARE(actions.at(7)->text(), QStringLiteral("New &Tab"));
-	QCOMPARE(actions.at(8)->text(), QStringLiteral("New &Window"));
+
+	/*
+	 * Then reordering, which is beside the other two arrangement verbs
+	 * because it is the third of them: Split adds a pane, Show as Tab
+	 * removes one, and these move one past its neighbour. It is a menu
+	 * item rather than a drag because the drag cannot complete on
+	 * Android -- QDrag hands the gesture to the platform, which claims
+	 * it as drag-to-split-screen (sec 8.4).
+	 */
+	QCOMPARE(actions.at(7)->text(), QStringLiteral("Move Pane &Left"));
+	QCOMPARE(actions.at(8)->text(), QStringLiteral("Move Pane &Right"));
+
+	QCOMPARE(actions.at(9)->text(), QStringLiteral("New &Tab"));
+	QCOMPARE(actions.at(10)->text(), QStringLiteral("New &Window"));
 
 	/*
 	 * And the way to the configuration, behind its own separator (sec 2):
@@ -2155,8 +2167,8 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * different kind of thing again, and separated for the same reason
 	 * Select All is separated from Copy.
 	 */
-	QVERIFY(actions.at(9)->isSeparator());
-	QCOMPARE(actions.at(10)->text(), QStringLiteral("&Hosts and Settings"));
+	QVERIFY(actions.at(11)->isSeparator());
+	QCOMPARE(actions.at(12)->text(), QStringLiteral("&Hosts and Settings"));
 
 	/*
 	 * Access keys on every verb, which is what makes the menu usable from
@@ -2181,7 +2193,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * unavailable" would be caught here even if the order above still
 	 * lined up.
 	 */
-	QCOMPARE(actions.size(), 11);
+	QCOMPARE(actions.size(), 13);
 
 	delete menu;
 }
