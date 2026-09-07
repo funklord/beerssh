@@ -1,15 +1,31 @@
 # Sabotage for the one write loop of three that did not bound its wait.
 #
-# NOTE: expect names a LIVE test. tool/sabotage.py runs `make test`, where
-# live_ssh_test skips without a server -- so this entry reports MISSED
-# under the ordinary runner and is meaningful only under:
+# NOTE: expect names a LIVE test. live_ssh_test QSKIPs without a server,
+# so under the default `make test` this entry reports MISSED -- which is
+# the runner saying the covering test did not RUN, not that none exists.
 #
-#   BSSH_TEST_BIN=./build-tests/beerssh_test ./tool/check-ssh.sh
+# The runner can prove it now, and this is the command:
 #
-# Recorded here rather than left out, because the alternative is a guard
-# with no written trace of how it was verified. It WAS verified: with this
-# edit applied, against a real sshd, the phase fails on the session never
-# reaching DISCONNECTED.
+#   BSSH_SABOTAGE_SUITE="make check-ssh" tool/sabotage.py \
+#           tool/sabotage/ssh-send-window.toml
+#
+# Run 2026-09-07: baseline 29 passing, and the edit CAUGHT with exactly
+# one failure -- a_send_to_a_remote_that_is_not_reading_still_lets_go and
+# nothing else. The tree came back byte-identical and the journal empty.
+#
+# The suite command has to BUILD as well as run, or the edit is never
+# compiled in and the verdict describes the previous binary. `make
+# check-ssh` does, through its $(TEST_BIN) prerequisite; a bare
+# ./tool/check-ssh.sh does not.
+#
+# It had been unprovable for longer than the note above admitted, and not
+# for the reason that note gave. `make check-ssh` could not run AT ALL
+# between 2026-08-25 and 2026-09-07: the singular-directory pass rewrote
+# `build-tests` to `build-test` in the script while the Makefile that
+# creates the directory kept the plural, so it answered "is not built,
+# run make test" to everyone who had just done that. Neither that check
+# nor check-keepalive runs under `make test` or check-ci, so nothing
+# said so for thirteen days.
 #
 # The session is blocking and is never set otherwise, and no
 # SSH_OPTIONS_TIMEOUT is set anywhere in the tree, so ssh_channel_write

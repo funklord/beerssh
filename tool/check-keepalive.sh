@@ -80,6 +80,21 @@ tar xf /in/src.tar && tar xf /in/vterm.tar
 # repository, and an extracted tree is not one.
 make -j"$(nproc)" test >/tmp/build.log 2>&1 || { tail -20 /tmp/build.log; exit 1; }
 
+# Named ONCE, and checked, because it was written out three times and all
+# three were wrong. The singular-directory pass of 2026-08-25 rewrote
+# `build-tests` to `build-test` here and in check-ssh.sh while the
+# Makefile that creates the directory kept the plural, so every phase
+# below ran a binary that does not exist -- failing after a 60-second
+# wait with "session never came up", which is a true sentence about the
+# wrong thing. Neither script runs under `make test` or check-ci, so
+# nothing said so for thirteen days.
+BIN=./build-tests/beerssh_test
+if [ ! -x "$BIN" ]; then
+	echo "check-keepalive: $BIN was not built by make test -- the build"
+	echo "check-keepalive:   directory has moved and this path is stale."
+	exit 1
+fi
+
 D=/tmp/k && mkdir -p $D/home/.ssh && mkdir -p /run/sshd
 ssh-keygen -q -t ed25519 -f $D/hostkey -N ""
 ssh-keygen -q -t ed25519 -f $D/home/.ssh/id -N ""
@@ -131,7 +146,7 @@ wait_for_file() {
 
 # ---- phase: the link goes away and stays away -------------------------
 rm -f "$READY" "$NOTICED"
-BSSH_TEST_SSH_PHASE=drop ./build-test/beerssh_test --live-ssh > $D/drop.log 2>&1 &
+BSSH_TEST_SSH_PHASE=drop "$BIN" --live-ssh > $D/drop.log 2>&1 &
 APP=$!
 wait_for_file "$READY" 120 || { echo "session never came up"; cat $D/drop.log; exit 1; }
 echo "check-keepalive: session up; black-holing port $PORT"
@@ -143,7 +158,7 @@ grep -q "^Totals: .* 0 failed" $D/drop.log
 
 # ---- phase: it goes away, is noticed, and comes back ------------------
 rm -f "$READY" "$NOTICED"
-BSSH_TEST_SSH_PHASE=reconnect ./build-test/beerssh_test --live-ssh > $D/reconnect.log 2>&1 &
+BSSH_TEST_SSH_PHASE=reconnect "$BIN" --live-ssh > $D/reconnect.log 2>&1 &
 APP=$!
 wait_for_file "$READY" 120 || { echo "session never came up"; cat $D/reconnect.log; exit 1; }
 echo "check-keepalive: session up; dropping the link again"
@@ -170,7 +185,7 @@ grep -q "^Totals: .* 0 failed" $D/reconnect.log
 # until that one was given the same treatment a black-holed link left the
 # session looking connected for as long as anyone cared to wait.
 rm -f "$READY" "$NOTICED"
-BSSH_TEST_SSH_PHASE=tunnel_black_hole ./build-test/beerssh_test --live-ssh > $D/tunnel.log 2>&1 &
+BSSH_TEST_SSH_PHASE=tunnel_black_hole "$BIN" --live-ssh > $D/tunnel.log 2>&1 &
 APP=$!
 wait_for_file "$READY" 120 || { echo "tunnelled session never came up"; cat $D/tunnel.log; exit 1; }
 echo "check-keepalive: session up through a jump host; black-holing port $PORT"

@@ -74,6 +74,7 @@ from __future__ import annotations
 import functools
 import re
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -92,7 +93,28 @@ JOURNAL = ROOT / "build" / "sabotage-restore"
 # A suite run that has not finished in this long is wedged. Generous: the
 # suite takes minutes on a loaded machine, and a deadline that fires on a
 # slow run rather than a stuck one is worse than none.
-RUN_DEADLINE_S = 1800
+RUN_DEADLINE_S = int(os.environ.get("BSSH_SABOTAGE_DEADLINE", "1800"))
+
+# What counts as "the suite", so a spec whose covering test does not run
+# under `make test` can be proved by the runner rather than by hand.
+#
+# ssh-send-window.toml is the case that asked for this. Its test lives in
+# live_ssh_test, which QSKIPs without a server, so under `make test` the
+# entry reports MISSED for ever -- and MISSED reads as a missing test.
+# Its own comment said to run check-ssh by hand instead, which meant the
+# one guard it covers had no way to be checked by the thing built to
+# check guards.
+#
+#   BSSH_SABOTAGE_SUITE="make check-ssh" tool/sabotage.py \
+#           tool/sabotage/ssh-send-window.toml
+#
+# The command has to BUILD as well as run, or the edit is never compiled
+# in and every verdict describes the previous binary. `make test` does;
+# `make check-ssh` does, through its $(TEST_BIN) prerequisite. A bare
+# ./tool/check-ssh.sh does NOT, and would report a green suite over code
+# that was never sabotaged -- the vacuous pass, from the one direction
+# this tool is supposed to be immune to.
+SUITE = shlex.split(os.environ.get("BSSH_SABOTAGE_SUITE", "make test"))
 
 
 def say(*args: object) -> None:
@@ -278,7 +300,7 @@ def run_suite() -> tuple[bool, int, list[str]]:
 		# also detaches it from the terminal's foreground group, which is
 		# why on_signal below has to pass a Ctrl-C on rather than trusting
 		# the child to receive one.
-		current = subprocess.Popen(["make", "test"], cwd=ROOT, stdout=log,
+		current = subprocess.Popen(SUITE, cwd=ROOT, stdout=log,
 		                            stderr=subprocess.STDOUT, start_new_session=True)
 		try:
 			current.wait(timeout=RUN_DEADLINE_S)
@@ -736,7 +758,11 @@ def main(argv: list[str]) -> int:
 	for number in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
 		signal.signal(number, functools.partial(on_signal, edits))
 
-	say(f"sabotage: {len(edits)} edit(s); one suite run each, plus a baseline")
+	# Named, because a verdict means something different under a different
+	# suite and a report that does not say which is a report nobody can
+	# re-take. sec 12.3's rule about recording the method beside the fact.
+	say(f"sabotage: {len(edits)} edit(s); one run of `{' '.join(SUITE)}` "
+	     f"each, plus a baseline")
 
 	ran, baseline_passes, baseline_failing = run_suite()
 	if not ran:

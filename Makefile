@@ -575,7 +575,7 @@ shots: $(TEST_BIN)
 	@# status of its last command, so `binary | grep` would report grep's
 	@# and swallow a crash into a clean-looking run.
 	@# BSSH_FONT_DIR because the candidate paths are relative to the
-	@# BINARY, and the test binary lives in build-test/ -- so it looks
+	@# BINARY, and the test binary lives in build-tests/ -- so it looks
 	@# one level above the checkout and finds nothing. Without it the
 	@# terminal shots are drawn in whatever monospace the machine has,
 	@# which is not what the app does. The renderer says which font it
@@ -680,8 +680,12 @@ check-ci:
 # sec 12.3's one test against a real server. Needs sshd; not part of
 # `test`, which runs entirely against the fake transport. The libssh
 # binding is the only layer a fake cannot exercise.
+# BSSH_TEST_BIN is passed rather than defaulted in the script, so the
+# path to the binary is written once. It was written twice and they
+# disagreed: the script said build-test and this says build-tests, so
+# the target could not run at all between 2026-08-25 and 2026-09-07.
 check-ssh: $(TEST_BIN)
-	./tool/check-ssh.sh
+	BSSH_TEST_BIN=$(TEST_BIN) ./tool/check-ssh.sh
 
 # Sec 8.4's process migration, and the one part of it with no prior art to
 # copy: moving a LIVE connection between processes without the peer

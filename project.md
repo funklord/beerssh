@@ -4267,7 +4267,7 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   drawing, wide glyphs, the disambiguation set, in several schemes with the §9.3
   contrast floor on and off. It loads the bundled set through `BSSH_FONT_DIR`
   and **prints which family actually drew the picture**, because the candidate
-  paths are relative to the *binary* and the test binary sits in `build-test/`
+  paths are relative to the *binary* and the test binary sits in `build-tests/`
   — so it looked one level above the checkout, found nothing, and drew the
   terminal in whatever monospace the machine had. CJK came out as tofu in a
   picture of a renderer that handles it. A shot of a renderer is uninterpretable
@@ -8327,6 +8327,86 @@ and is not.
 the tests they name, including both entries repaired here — the keyboard
 visibility anchor at 3 failures and the re-aimed AC row at 32. The tree
 came back clean and the journal empty.
+
+### 12.2e `make check-ssh` was dead for thirteen days — **[FIXED 2026-09-07]**
+
+Found while trying to run `ssh-send-window.toml`, which is the one spec
+whose covering test needs a real server. The target could not run at all:
+
+    check-ssh: ./build-test/beerssh_test is not built. Run: make test
+    make: *** [Makefile:684: check-ssh] Error 1
+
+`make test` had of course already been run. `TEST_BUILD_DIR` is
+`build-tests`; the script looked for `build-test`, so it sent everybody
+round the same circle.
+
+**The cause is a rename that reached outside what it owned.** `1080cee`
+(2026-08-25, *"build: singular directory names -- test, vterm-patch"*)
+rewrote `tests` to `test` and caught `build-tests` in two scripts, while
+the Makefile that CREATES that directory kept the plural. It was measured
+with `git log --follow -S`, after a first attempt blamed the `tool/`
+rename of the same day — `e360f38` moved the file with **zero** content
+changes, and `-S` on the new path alone reports the rename because that
+is where the string first appears under that name.
+
+**Nothing noticed because nothing runs it.** `check-ssh` and
+`check-keepalive` are in neither `make test` nor `check-ci`. The rename
+commit's message cites `make style` and `make test` both passing, which
+is true and says nothing about a check that runs under neither —
+`evidence.md`'s *a check that runs only in CI is a check you have stopped
+running*, with "by hand" in place of CI.
+
+**`check-keepalive` had it three times**, inside its container, where the
+build also produces `build-tests/`. Its phases wait 120 half-seconds for
+a session that can never come up and then report *"session never came
+up"* — a true sentence about the wrong thing.
+
+**Fixed so the path cannot disagree again.** `make check-ssh` passes
+`BSSH_TEST_BIN=$(TEST_BIN)`, and the script no longer carries a default:
+it refuses and names the target rather than guessing a second copy of a
+value the Makefile owns. `check-keepalive.sh` names the binary once with
+a guard that fails at the right place if the directory moves. Three stale
+prose references — in the Makefile, `test/ui_shots.cpp` and this document
+— said `build-test/` too and now do not.
+
+**Verified by running it**: `make check-ssh` exits 0, three phases, 29
+passes and 0 failures. **`check-keepalive` is NOT verified by running
+it** — it needs a container build and `NET_ADMIN` and several minutes —
+so that half is a fix reasoned from the Makefile, and this sentence is
+here so nobody reads the two as equally proved.
+
+### 12.2f The live-only sabotage is provable by the runner — **[DONE 2026-09-07]**
+
+`sabotage.py` took `make test` as the suite and nothing else, so
+`ssh-send-window.toml` — whose test QSKIPs without a server — reported
+MISSED for ever, and its own comment told the reader to reproduce it by
+hand. A guard covered by a test the guard-checking tool cannot run is a
+guard checked by nobody.
+
+`BSSH_SABOTAGE_SUITE` names the command instead, and the runner prints
+which one it used, because a verdict means something different under a
+different suite and a report that does not say which cannot be re-taken:
+
+    BSSH_SABOTAGE_SUITE="make check-ssh" tool/sabotage.py \
+            tool/sabotage/ssh-send-window.toml
+
+**Run 2026-09-07: baseline 29 passing, and the edit CAUGHT with exactly
+one failure** — `a_send_to_a_remote_that_is_not_reading_still_lets_go`
+and nothing else. Tree byte-identical afterwards, journal empty. So the
+MISSED this spec used to report was the runner saying the covering test
+did not run, exactly as its comment claimed, and that claim is now
+checked rather than asserted.
+
+**The trap the option carries, stated in the source.** The command must
+BUILD as well as run, or the edit is never compiled in and every verdict
+describes the previous binary — a green suite over code that was never
+sabotaged, which is the vacuous pass arriving through the tool built to
+prevent it. `make test` and `make check-ssh` both build; a bare
+`./tool/check-ssh.sh` does not.
+
+`--check` still names this spec among the four whose `expect` can QSKIP,
+which is correct: under the DEFAULT suite it still cannot run, and the
+line is about what a reader of a MISSED verdict should suspect.
 
 ### 12.2d The anchor check is permanent now -- **[DONE 2026-09-07]**
 

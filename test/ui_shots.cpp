@@ -115,7 +115,7 @@ void shoot(const QString &name, QWidget *widget, int width, int height) {
 void bssh_ui_shots::initTestCase() {
 	/*
 	 * Before anything is drawn. The candidate paths are relative to the
-	 * BINARY and the test binary lives in build-test/, so BSSH_FONT_DIR
+	 * BINARY and the test binary lives in build-tests/, so BSSH_FONT_DIR
 	 * is what points it at the checkout -- `make shots` sets it.
 	 *
 	 * Without this the pictures are drawn in whatever monospace the

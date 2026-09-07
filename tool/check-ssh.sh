@@ -15,7 +15,30 @@
 
 set -eu
 
-BIN=${BSSH_TEST_BIN:-./build-test/beerssh_test}
+# The Makefile passes this, and there is deliberately no default any
+# more. There was one, it said ./build-test/beerssh_test, and the build
+# directory is build-tests -- so from 2026-08-25 until 2026-09-07 this
+# script told everyone who ran it to `make test` and then failed again
+# for the same reason, in a circle. `make check-ssh` could not run at
+# all for thirteen days and nothing said so, because this check is in
+# neither `make test` nor check-ci.
+#
+# The singular-directory pass that day rewrote `tests` to `test` and
+# reached into `build-tests`, which is a build output directory the
+# Makefile names and that pass did not own. Its commit message cites
+# `make style` and `make test` both passing, which is true and says
+# nothing about a check that runs under neither.
+#
+# So the path is written once, in the Makefile, and this refuses rather
+# than guessing a second copy of it.
+BIN=${BSSH_TEST_BIN:-}
+
+if [ -z "$BIN" ]; then
+	echo "check-ssh: BSSH_TEST_BIN is not set, and this no longer guesses." >&2
+	echo "check-ssh:   Run: make check-ssh" >&2
+	echo "check-ssh:   or:  BSSH_TEST_BIN=./build-tests/beerssh_test $0" >&2
+	exit 1
+fi
 
 if [ ! -x "$BIN" ]; then
 	echo "check-ssh: $BIN is not built. Run: make test" >&2
