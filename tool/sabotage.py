@@ -48,6 +48,14 @@ and then the run was killed, so hours of work reported nothing at all.
 
 Usage:
     tool/sabotage.py tool/sabotage/<spec>.toml [...]
+    tool/sabotage.py --check [tool/sabotage/<spec>.toml ...]
+
+--check is the cheap half: it reads the specs and the tree, builds
+nothing, breaks nothing, and answers only whether every spec is still
+aimed at something that exists. It is what `make style` runs. What it
+cannot answer is whether an edit still BREAKS anything -- see the comment
+above check_specs, which says so at length, because a green line from a
+cheap check gets quoted for the expensive one's guarantee.
 
 A spec is a list of edits, each naming the test that must notice it:
 
@@ -122,6 +130,15 @@ class Edit:
 		The spec file's own comment already claimed each entry "is checked
 		to match exactly once before the runner is started". It was not;
 		this is that claim becoming true.
+
+		THE FILE ONLY, deliberately, where problems_with() below also
+		consults the build's patch set. The difference is not an
+		oversight and is not worth harmonising away: --check answers
+		"is this spec still aimed at something", which a patch supplies
+		as truly as a file does, while THIS is about to edit the file on
+		disk. An anchor that exists only in vterm-patch/ means the tree
+		has not been patched, and running a sabotage against unpatched
+		libvterm would measure the wrong library. Refusing is right.
 		"""
 		found = self.path.read_text().count(self.find)
 		if found == 1:
@@ -317,10 +334,281 @@ def on_signal(edits: list[Edit], number: int, frame: object) -> None:
 	sys.exit(128 + number)
 
 
+
+# --------------------------------------------------------------------------
+# The cheap half: is every spec still aimed at something.
+#
+# A sabotage that no longer applies is indistinguishable from a check that
+# cannot fail, and nothing in a build or a test run says so. Fifteen of
+# this tree's anchors had rotted that way before anybody looked (sec 12.3),
+# and finding them cost a hand-written script somebody had to think of.
+# Running the specs would have found them too, at one suite run per edit --
+# which is why nobody did.
+#
+# WHAT THIS ESTABLISHES: every spec parses, names a file that exists, has a
+# find string matching exactly once, and names a test the suite declares.
+#
+# WHAT IT DOES NOT, and the distinction is the whole reason to write it
+# down rather than let a green line be quoted for more than it bought:
+#
+#   - Whether the edit CHANGES anything a test can see. sec 12.3 records
+#     one that matched its anchor for months and broke nothing, because
+#     the call it deleted ran on a path no test reaches.
+#   - Whether the named test COVERS the defect, or even runs on this
+#     machine. Both report as MISSED, which reads like a hole in the code
+#     and is not.
+#   - Whether the `replace` half is right. Two were wrong while their
+#     anchors matched perfectly.
+#
+# Only running the spec answers those, and this does not replace it.
+# --------------------------------------------------------------------------
+
+
+def declared_tests(root: Path = ROOT) -> set[str]:
+	"""Every test method the suite headers declare.
+
+	Read out of the headers rather than out of a built binary, so this
+	works on a tree nobody has compiled -- which is the state a cheap
+	gate has to run in if it is going to run at all.
+	"""
+	names: set[str] = set()
+	for header in sorted((root / "test").glob("*.h")):
+		for line in header.read_text().splitlines():
+			stripped = line.strip()
+			if not stripped.startswith("void ") or not stripped.endswith("();"):
+				continue
+			names.add(stripped[len("void "):-len("();")].strip())
+	return names
+
+
+def patch_additions(root: Path, vendored: str) -> list[str]:
+	"""What `<vendored>-patch/*.patch` ADDS, as contiguous runs of lines.
+
+	Runs rather than one blob, and this is the whole care in the function:
+	joining every added line into one string would let an anchor spanning
+	two unrelated hunks match, which is a false PASS -- the direction that
+	costs something. Contiguous added lines land contiguous in the file,
+	so a run is exactly what a multi-line anchor can legitimately match.
+	"""
+	runs: list[str] = []
+	current: list[str] = []
+
+	for patch in sorted((root / f"{vendored}-patch").glob("*.patch")):
+		for line in patch.read_text().splitlines():
+			if line.startswith("+") and not line.startswith("+++"):
+				current.append(line[1:])
+				continue
+			if current:
+				runs.append("\n".join(current))
+			current = []
+		if current:
+			runs.append("\n".join(current))
+		current = []
+
+	return runs
+
+
+def problems_with(entry: dict, source: Path, declared: set[str],
+                   root: Path = ROOT) -> list[str]:
+	"""What is wrong with one spec entry, or an empty list.
+
+	Every arm returns rather than raising, because the caller wants ALL
+	of them: a checker that stops at the first bad anchor turns one sweep
+	into one fix per run, which is how a rotted set stays rotted.
+	"""
+	found: list[str] = []
+
+	for field in ("name", "file", "find", "expect"):
+		if field not in entry:
+			found.append(f"has no `{field}`")
+	if found:
+		return found
+
+	path = root / entry["file"]
+	if not path.is_file():
+		return [f"names {entry['file']}, which is not a file"]
+
+	count = path.read_text().count(entry["find"])
+
+	# A vendored tree is patched at BUILD time, so where this runs decides
+	# what is in the file. Five anchors live in text vterm-patch/ adds, and
+	# `make style` runs before `make` -- so on a developer machine they are
+	# in state.c and in the container, which starts from the submodule at
+	# its gitlink commit, they are not. Measured: 1 and 0 respectively.
+	#
+	# Skipping them there would be the vacuous pass this whole check exists
+	# against, so the fallback ASKS THE PATCH SET instead: an anchor absent
+	# from the file must be supplied by exactly one of the runs those
+	# patches add. That is a real check in both states rather than an
+	# excuse in one, and it is strictly stronger than reading the file --
+	# a patch rewritten without updating the spec goes to zero in both.
+	#
+	# The file wins when it has the text, or a patched tree would count it
+	# twice and report a duplicate that is one line seen from two sides.
+	from_patch = 0
+	vendored = entry["file"].split("/", 1)[0]
+	if count == 0 and (root / f"{vendored}-patch").is_dir():
+		from_patch = sum(1 for run in patch_additions(root, vendored)
+		                  if entry["find"] in run)
+
+	if count != 1 and from_patch != 1:
+		if count == 0 and from_patch == 0:
+			was = f"is in neither {entry['file']} nor {vendored}-patch/"
+		elif count == 0:
+			was = f"is added {from_patch} times by {vendored}-patch/"
+		else:
+			was = f"appears {count} times in {entry['file']}"
+		found.append(f"the text to break {was}")
+
+	# Matched the way the runner matches it: `expect` is a substring of a
+	# failing test's name, and a spec may spell that qualified or bare.
+	wanted = entry["expect"].rsplit("::", 1)[-1]
+	if not any(wanted in name for name in declared):
+		found.append(f"expects `{entry['expect']}`, which no test declares")
+
+	return found
+
+
+def control(declared: set[str]) -> bool:
+	"""Proves the checker can speak, before it is believed when silent.
+
+	The corpus is expected to be clean, so a run over it reports nothing
+	whether the checker works or not -- `evidence.md`'s static detector
+	over an all-clean corpus, which is a green light with no demonstrated
+	ability to be anything else. These fixtures are deliberately wrong in
+	each of the four ways, plus one that is right, and every verdict is
+	asserted before a real spec is read.
+
+	Inside the tool rather than beside it, because a control that lives
+	beside a tool is run when somebody remembers.
+	"""
+	good = sorted(declared)[0] if declared else ""
+
+	with tempfile.TemporaryDirectory(prefix="sabotage-control-") as where:
+		root = Path(where)
+		(root / "test").mkdir()
+		(root / "src").mkdir()
+		(root / "src" / "thing.cpp").write_text("alpha\nbeta\nalpha\ngamma\n")
+
+		# A vendored tree as the container gets it -- pristine, with the
+		# build's patches not yet applied -- so the fallback that reads
+		# them is exercised rather than assumed. Without this the five
+		# real vterm anchors would be the only thing that ever ran it,
+		# and they pass, which is the state a control exists to refuse.
+		(root / "vend").mkdir()
+		(root / "vend" / "file.c").write_text("upstream line\n")
+		(root / "vend-patch").mkdir()
+		(root / "vend-patch" / "0001-x.patch").write_text(
+			"--- a/file.c\n+++ b/file.c\n@@\n"
+			" upstream line\n+ours first\n+ours second\n")
+
+		spec = Path("control.toml")
+		cases = [
+			("a sound entry", {
+				"name": "x", "file": "src/thing.cpp",
+				"find": "gamma", "expect": good,
+			}, False),
+			("a missing file", {
+				"name": "x", "file": "src/gone.cpp",
+				"find": "gamma", "expect": good,
+			}, True),
+			("an anchor that matches nothing", {
+				"name": "x", "file": "src/thing.cpp",
+				"find": "delta", "expect": good,
+			}, True),
+			("an anchor that matches twice", {
+				"name": "x", "file": "src/thing.cpp",
+				"find": "alpha", "expect": good,
+			}, True),
+			("an expect naming no test", {
+				"name": "x", "file": "src/thing.cpp",
+				"find": "gamma",
+				"expect": "no_test_is_called_this_and_none_ever_will_be",
+			}, True),
+			("an entry missing a field", {
+				"name": "x", "file": "src/thing.cpp", "find": "gamma",
+			}, True),
+			("an anchor the build's patches supply", {
+				"name": "x", "file": "vend/file.c",
+				"find": "ours first\nours second", "expect": good,
+			}, False),
+			("an anchor in neither the file nor the patches", {
+				"name": "x", "file": "vend/file.c",
+				"find": "ours third", "expect": good,
+			}, True),
+		]
+
+		for label, entry, should_complain in cases:
+			complained = bool(problems_with(entry, spec, declared, root))
+			if complained != should_complain:
+				say(f"sabotage: THE CONTROL FAILED -- {label} was "
+				     f"{'not ' if should_complain else ''}reported.")
+				say("sabotage:   No result below would mean anything, so "
+				     "nothing was checked.")
+				return False
+
+	return True
+
+
+def check_specs(paths: list[Path]) -> int:
+	"""Checks every spec and says what it checked. Non-zero on any problem."""
+	declared = declared_tests()
+	if not declared:
+		say("sabotage: no test declarations found under test/ -- the expect "
+		     "check would pass everything, so this refuses rather than "
+		     "reporting a clean sweep.")
+		return 2
+
+	if not control(declared):
+		return 2
+
+	edits = 0
+	bad: list[str] = []
+
+	for path in paths:
+		try:
+			spec = tomllib.loads(path.read_text())
+		except (OSError, tomllib.TOMLDecodeError) as error:
+			bad.append(f"{path}: will not parse: {error}")
+			continue
+
+		entries = spec.get("sabotage", [])
+		if not entries:
+			bad.append(f"{path}: holds no [[sabotage]] entry")
+			continue
+
+		for entry in entries:
+			edits += 1
+			for problem in problems_with(entry, path, declared):
+				bad.append(f"{path}: {entry.get('name', '<unnamed>')}: {problem}")
+
+	for line in bad:
+		say(f"sabotage: {line}")
+
+	if bad:
+		say(f"sabotage: {len(bad)} problem(s) in {len(paths)} spec(s), "
+		     f"{edits} edit(s)")
+		return 1
+
+	say(f"sabotage: {len(paths)} spec(s), {edits} edit(s): every anchor "
+	     f"matches once and every expect names a declared test")
+	say("sabotage:   which does NOT say the edits still break anything -- "
+	     "only running them says that")
+	return 0
+
+
 def main(argv: list[str]) -> int:
 	if len(argv) < 2:
 		say(__doc__)
 		return 2
+
+	# --check reads and builds nothing, so it is safe to run anywhere and
+	# is what `make style` calls. With no specs named it takes the whole
+	# directory, because a checker somebody has to list the files for is a
+	# checker that goes out of date with the directory.
+	if argv[1] == "--check":
+		named = [Path(name) for name in argv[2:]]
+		return check_specs(named or sorted((ROOT / "tool" / "sabotage").glob("*.toml")))
 
 	if JOURNAL.exists() and any(JOURNAL.iterdir()):
 		say(f"sabotage: {JOURNAL.relative_to(ROOT)} still holds originals from "

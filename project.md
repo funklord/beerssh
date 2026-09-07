@@ -8198,7 +8198,7 @@ references were updated across the specs and `tool/gen-layout.py`.
 answer was fifteen of 167 — [FIXED 2026-09-06].** Measured by parsing
 every spec and counting its `find` anchor in the file it names. The same
 fifteen failed at `6faac65`, before the move, so the move caused none of
-them. All 165 edits now match exactly once.
+them. Every edit matches exactly once -- and `make style` recounts that now rather than this sentence carrying a number, which is why the figure is gone from it.
 
 **They had rotted in four distinct ways, and only one was a simple
 drift.** Seven anchors still described live code that had moved — a slot
@@ -8327,6 +8327,74 @@ and is not.
 the tests they name, including both entries repaired here — the keyboard
 visibility anchor at 3 failures and the re-aimed AC row at 32. The tree
 came back clean and the journal empty.
+
+### 12.2d The anchor check is permanent now -- **[DONE 2026-09-07]**
+
+The fifteen rotted anchors above were found by a script somebody had to
+think of writing, on a day they happened to look. Nothing would have said
+so otherwise: a sabotage whose anchor no longer matches is
+indistinguishable from a check that cannot fail, and neither a build nor a
+test run mentions it. The only standing alternative was to RUN the specs,
+at one suite run per edit, which is exactly why nobody did.
+
+`tool/sabotage.py --check` is that script made permanent, and `make style`
+runs it -- so it runs on every push, because `check-ci.sh` runs `make
+style` in the container against `git archive HEAD`. It reads and builds
+nothing and takes about a second. Under `style` rather than `test` for the
+same reason the style gate's own suite is there.
+
+**What it establishes:** every spec parses and holds entries, every entry
+has its four fields, every named file exists, every `find` matches exactly
+once, and every `expect` names a test the suite declares. That last one is
+new -- nothing before could catch an `expect` left behind by a renamed
+test, and it is the same rot as an anchor with a different surface.
+
+**What it does not**, stated in the tool at length because a cheap check's
+green line gets quoted for the expensive one's guarantee: whether the edit
+CHANGES anything a test can see (one anchor matched for months while the
+call it deleted ran on a path no test reaches), whether the named test
+covers the defect or even runs here, and whether the `replace` half is
+right. Only running the spec answers those.
+
+**The vendored tree nearly made it a gate that blocks every push.** Five
+anchors live in text `vterm-patch/` ADDS, and `make style` runs before
+`make` applies the patches -- so they are in `state.c` on a developer
+machine and absent in the container, which starts from the submodule at
+its gitlink commit. Measured: 1 and 0. Skipping them there would have been
+the vacuous pass this check exists against, so an anchor absent from the
+file must instead be supplied by exactly one contiguous run of added lines
+in `<vendored>-patch/`. That is a real check in both states and strictly
+stronger than reading the file, because a patch rewritten without updating
+the spec goes to zero in both. The file wins where it has the text, or a
+patched tree counts one line twice and reports a duplicate.
+
+Runs are per contiguous block rather than one joined blob, which is the
+only care the function needs: joining every added line would let an anchor
+spanning two unrelated hunks match, and that is a false PASS.
+
+**`Edit.check()` in run mode deliberately does NOT take that fallback**,
+and the comment there says so, so nobody harmonises them later. `--check`
+asks whether a spec is aimed at something; the runner is about to edit the
+file on disk, and an anchor that exists only in a patch means the tree is
+unpatched, where a sabotage would measure the wrong libvterm.
+
+**Seen to fail before it was believed, on every arm.** A rotted anchor, an
+anchor matching 180 times, a missing file, an `expect` naming no test, an
+entry missing a field, a spec that will not parse, and an empty spec: each
+exits 1 on its own. Two of them were run through `make style` end to end
+so the GATE was watched going red rather than the tool -- `Error 1`, with
+all 166 edits still counted, which is what says the run was not truncated.
+The first attempt at that proved nothing and is worth recording: the
+sabotage landed inside a `'''` block and broke the TOML, so the gate failed
+through the parse arm while the anchor arm stayed inert -- `evidence.md`'s
+*a control has to fail through the check you are testing*, met head on.
+
+**The control lives inside the tool and refuses.** The corpus is clean, so
+a run over it reports nothing whether the checker works or not. Six
+deliberately-wrong fixtures and one sound one are classified before any
+real spec is read, and a wrong verdict prints *the control failed, so no
+result below means anything* and exits 2. Proved by breaking the
+classifier and by breaking the patch-set fallback: both refuse.
 
 ### 12.2c Three sweeps that found nothing, and what they were — **[2026-09-06]**
 

@@ -635,7 +635,7 @@ check-deb:
 # tree exported from `git archive HEAD`, so the suite is proved on a
 # clean checkout as well as on a developer machine. `make test` never
 # leaves this machine.
-style: style-tool style-source style-docs
+style: style-tool style-source style-docs style-sabotage
 
 style-tool:
 	python3 tool/test_style_gate.py
@@ -649,6 +649,25 @@ style-source:
 # one with the answer.
 style-docs:
 	python3 tool/style_gate.py docs
+
+# The sabotage specs are held to the tree too, and for a sharper reason
+# than the docs are: a sabotage whose anchor no longer matches is
+# indistinguishable from a check that cannot fail, and NOTHING in a build
+# or a test run says so. Fifteen of them had rotted that way before
+# anybody thought to look (sec 12.3), and the only thing that would have
+# found them sooner is running the specs -- one suite run per edit, which
+# is why nobody did.
+#
+# Under `style` rather than `test` because it reads and builds nothing, so
+# it costs a second and runs everywhere; and because check-ci.sh runs
+# `make style` in the container against `git archive HEAD`, which puts it
+# in front of every push. It is the same argument that put the style
+# gate's own suite here.
+#
+# What it does NOT establish is in tool/sabotage.py, at length, because a
+# cheap check's green line gets quoted for the expensive one's guarantee.
+style-sabotage:
+	python3 tool/sabotage.py --check
 
 # sec 12.4's runner-parity check. Needs docker; not part of `test`, and
 # deliberately not a CI step -- CI already IS the runner. Run it before
