@@ -8369,11 +8369,29 @@ a guard that fails at the right place if the directory moves. Three stale
 prose references — in the Makefile, `test/ui_shots.cpp` and this document
 — said `build-test/` too and now do not.
 
-**Verified by running it**: `make check-ssh` exits 0, three phases, 29
-passes and 0 failures. **`check-keepalive` is NOT verified by running
-it** — it needs a container build and `NET_ADMIN` and several minutes —
-so that half is a fix reasoned from the Makefile, and this sentence is
-here so nobody reads the two as equally proved.
+**Both halves are verified by running them.** `make check-ssh` exits 0
+— three phases, 29 passes, 0 failures. `check-keepalive` exits 0 too,
+and the entry above said it was unverified for about an hour before that
+run happened; the sentence is rewritten rather than appended to, because
+a reader who finds both believes the more cautious one.
+
+What the keepalive run establishes, and it is more than the path fix.
+Three tests ran that `make test` and `make check-ssh` can BOTH only skip,
+because each needs packets to vanish rather than be refused:
+
+    a_black_holed_link_is_noticed                      PASS   67s
+    a_dropped_session_reconnects_when_the_link_returns PASS   68s
+    a_black_holed_jump_host_is_noticed                 PASS   66s
+
+Those timings sit against this script's own header, which recorded 62s
+with the socket options and still-connected after 240s without them — so
+the budget §5.3 exists to hold is still being held, measured rather than
+assumed, on Qt 6.4.2 in the container rather than the desktop's 6.8.2.
+
+**And the guard added with the path fix stayed silent**, which is the
+part that could not be settled by reading. It refuses if
+`build-tests/beerssh_test` is missing after the container's own `make
+test`, and the fix rested on that being where the build puts it. It is.
 
 ### 12.2f The live-only sabotage is provable by the runner — **[DONE 2026-09-07]**
 
