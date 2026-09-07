@@ -8389,6 +8389,47 @@ sabotage landed inside a `'''` block and broke the TOML, so the gate failed
 through the parse arm while the anchor arm stayed inert -- `evidence.md`'s
 *a control has to fail through the check you are testing*, met head on.
 
+**Two further arms, added while their cells were EMPTY**, which is the
+point rather than an admission that they found nothing. A `replace`
+identical to its `find` applies cleanly and changes nothing, so its
+verdict is MISSED for ever and reads as a hole in the code's tests; and
+two entries breaking exactly the same `(file, find, replace)` spend two
+suite runs to learn one fact, the second usually a copy somebody meant
+to re-aim. There are none of either today. Asserting the partition now
+is what makes one arriving later fail as a message to whoever added it,
+rather than being absorbed by a condition that would have passed it.
+
+**The no-op arm is EXACT equality and nothing cleverer, deliberately.**
+`replace` CONTAINING `find` is the normal way to write a break -- six
+entries prepend an `if(0)` or a guard and keep the original text -- so a
+containment test would report six false findings on a clean corpus, and
+a gate with false findings is one somebody switches off by instalments.
+Measured before the arm was written, which is why it is not a
+containment test.
+
+**And the one thing that CAN be said in advance about the third failure
+mode.** An `expect` naming a test that does not RUN reports MISSED, and
+MISSED reads like a hole in the code's tests when it is a guard that did
+not fire — the entry above calls that invisible until a spec is
+executed. Half of it is not: whether a guard EXISTS is a property of the
+source. `--check` now cross-references every `expect` against the test
+methods whose body can `QSKIP`, and names the four that match:
+
+    delete-both-halves     the credential is erased before the write that can fail
+    remember-both-halves   a flag that could not be written leaves the secret behind
+    settings-per-window    a settings page writes every field, not the one that changed
+    ssh-send-window        do_send asks for more than the channel window
+
+Four of 166. It cannot say a guard will fire and does not try; it says
+one is there, which is enough to stop a MISSED from those four being
+read as a finding without a second look. **Reported and never failed
+on**, because a guard that exists is not a guard that fires and refusing
+would be a false finding on every run — the distinction between an
+investigative sweep and a standing gate. The parser IS refused on: no
+`QSKIP` anywhere under `test/` is not credible, so it exits 2 saying the
+cross-reference is not being made rather than printing a reassuring
+zero. Proved by breaking the match and watching it refuse.
+
 **The control lives inside the tool and refuses.** The corpus is clean, so
 a run over it reports nothing whether the checker works or not. Six
 deliberately-wrong fixtures and one sound one are classified before any

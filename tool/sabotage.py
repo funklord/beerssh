@@ -72,6 +72,7 @@ so a partial name is enough.
 from __future__ import annotations
 
 import functools
+import re
 import os
 import shutil
 import signal
@@ -408,6 +409,33 @@ def patch_additions(root: Path, vendored: str) -> list[str]:
 	return runs
 
 
+def skippable_tests(root: Path = ROOT) -> set[str]:
+	"""Test methods whose body can QSKIP.
+
+	Named because of the runner's third failure mode, which sec 12.3 calls
+	invisible until a spec is executed: an `expect` naming a test that does
+	not RUN reports MISSED, and MISSED reads like a hole in the code's
+	tests. It is not one -- it is a guard that did not fire on this
+	machine -- and nothing in the verdict says which.
+
+	This cannot say whether a guard WILL fire, and does not try: it says
+	that one exists, which is enough to stop a MISSED being read as a
+	finding without a second look. Reported rather than refused for that
+	reason; failing on it would be a false finding on every run.
+	"""
+	names: set[str] = set()
+
+	for source in sorted((root / "test").glob("*.cpp")):
+		text = source.read_text()
+		# [before, class, name, body, class, name, body, ...]
+		parts = re.split(r"\nvoid\s+(\w+)::(\w+)\s*\(\s*\)\s*\{", text)
+		for i in range(1, len(parts) - 2, 3):
+			if "QSKIP" in parts[i + 2]:
+				names.add(parts[i + 1])
+
+	return names
+
+
 def problems_with(entry: dict, source: Path, declared: set[str],
                    root: Path = ROOT) -> list[str]:
 	"""What is wrong with one spec entry, or an empty list.
@@ -459,6 +487,21 @@ def problems_with(entry: dict, source: Path, declared: set[str],
 		else:
 			was = f"appears {count} times in {entry['file']}"
 		found.append(f"the text to break {was}")
+
+	# A replace identical to the find is an edit that applies cleanly and
+	# changes nothing, so its verdict is MISSED for ever and reads as a
+	# hole in the code's tests. There are none today; the arm is here so
+	# that one arriving fails as a message to whoever added it rather
+	# than being absorbed by a condition that would pass it.
+	#
+	# Deliberately EXACT equality and nothing cleverer. `replace`
+	# containing `find` is the normal way to write a break -- six entries
+	# prepend an `if(0)` or a guard and keep the original text -- so a
+	# containment test would report six false findings, and a gate with
+	# false findings is one somebody switches off by instalments.
+	if entry.get("replace", "") == entry["find"]:
+		found.append("replaces the text to break with itself, so the edit "
+		              "changes nothing and can never fail")
 
 	# Matched the way the runner matches it: `expect` is a substring of a
 	# failing test's name, and a spec may spell that qualified or bare.
@@ -536,6 +579,14 @@ def control(declared: set[str]) -> bool:
 				"name": "x", "file": "vend/file.c",
 				"find": "ours third", "expect": good,
 			}, True),
+			("a replace that changes nothing", {
+				"name": "x", "file": "src/thing.cpp",
+				"find": "gamma", "replace": "gamma", "expect": good,
+			}, True),
+			("a replace that keeps the text and adds to it", {
+				"name": "x", "file": "src/thing.cpp",
+				"find": "gamma", "replace": "if(0) gamma", "expect": good,
+			}, False),
 		]
 
 		for label, entry, should_complain in cases:
@@ -565,6 +616,16 @@ def check_specs(paths: list[Path]) -> int:
 	edits = 0
 	bad: list[str] = []
 
+	# (file, find, replace) -> where it came from. Two entries breaking
+	# exactly the same thing spend two suite runs to learn one fact, and
+	# the second is usually a copy somebody meant to re-aim. None today.
+	seen: dict[tuple[str, str, str], str] = {}
+
+	# Kept so the skip cross-reference below can be made over exactly the
+	# entries that were checked, rather than over a second walk of the
+	# directory that could disagree with this one.
+	entries_seen: list[tuple[Path, dict]] = []
+
 	for path in paths:
 		try:
 			spec = tomllib.loads(path.read_text())
@@ -579,8 +640,19 @@ def check_specs(paths: list[Path]) -> int:
 
 		for entry in entries:
 			edits += 1
+			entries_seen.append((path, entry))
+			where = f"{path}: {entry.get('name', '<unnamed>')}"
+
 			for problem in problems_with(entry, path, declared):
-				bad.append(f"{path}: {entry.get('name', '<unnamed>')}: {problem}")
+				bad.append(f"{where}: {problem}")
+
+			if all(field in entry for field in ("file", "find")):
+				target = (entry["file"], entry["find"], entry.get("replace", ""))
+				if target in seen:
+					bad.append(f"{where}: breaks exactly what "
+					            f"{seen[target]} already breaks")
+				else:
+					seen[target] = where
 
 	for line in bad:
 		say(f"sabotage: {line}")
@@ -594,6 +666,29 @@ def check_specs(paths: list[Path]) -> int:
 	     f"matches once and every expect names a declared test")
 	say("sabotage:   which does NOT say the edits still break anything -- "
 	     "only running them says that")
+
+	# The one thing that CAN be said in advance about the runner's third
+	# failure mode. Reported, never failed on: a guard that exists is not
+	# a guard that fires, and refusing here would be a false finding on
+	# every run.
+	skippable = skippable_tests()
+	if not skippable:
+		say("sabotage:   no QSKIP found anywhere under test/, which is not "
+		     "credible -- the skip cross-reference below is not being made")
+		return 2
+
+	ambiguous = sorted(
+		f"{path.name}: {entry.get('name', '<unnamed>')}"
+		for path, entry in entries_seen
+		if any(entry.get("expect", "").rsplit("::", 1)[-1] in name
+		        for name in skippable)
+	)
+	if ambiguous:
+		say(f"sabotage:   {len(ambiguous)} of them name a test that can "
+		     f"QSKIP, so a MISSED there may be the guard rather than a gap:")
+		for line in ambiguous:
+			say(f"sabotage:     {line}")
+
 	return 0
 
 
