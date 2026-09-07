@@ -8426,6 +8426,57 @@ prevent it. `make test` and `make check-ssh` both build; a bare
 which is correct: under the DEFAULT suite it still cannot run, and the
 line is about what a reader of a MISSED verdict should suspect.
 
+### 12.2g The full sweep: 165 edits, and the one miss was the harness — **[2026-09-07]**
+
+Every spec run end to end except `ssh-send-window`, which was proved
+under `make check-ssh` the same day. **54 specs, 165 edits, 2h42m from a
+541-passing baseline: 164 caught, 1 MISSED — and re-aimed, 165 of 165.**
+Tree byte-identical afterwards, journal empty.
+
+**The estimate given beforehand was 8 to 16 hours and was wrong by a
+factor of three.** It came from timing a suite run while a container was
+building: 159s idle and 343s after touching one source file, quoted
+without saying they were contended. The real cost is about 55s an edit.
+A number that decides whether to commit a machine overnight is worth
+re-measuring on a quiet machine before it is passed to anybody, and this
+one was passed to the copyright holder and to a peer before it was.
+
+**The single MISSED was a sabotage that could not fail, not a missing
+test** — and it is worth reading closely, because it reported as the
+opposite. `a pane moved off the end wraps around instead of stopping`
+replaced the range guard
+
+    if (to < 0 || to >= intent.size()) return;
+
+with a SIZE check, `if (intent.size() < 2) return;`, which leaves `to`
+out of range rather than wrapping. With two panes the edit then reached
+`QList::move(0, -1)` and `move(1, 2)`. `QList` asserts both indices and
+the suite builds with `QT_NO_DEBUG`, so the asserts are compiled out and
+the result is UNDEFINED rather than wrapped — it happened to leave the
+list unchanged, the test's `QCOMPARE` against `before` passed, and the
+runner called it a hole in the tests.
+
+`a_pane_can_be_moved_along_the_arrangement` covers the no-wrap case
+exactly and its fixture reaches it. Re-aimed at modulo arithmetic — what
+a hurried fix actually reaches for, since it makes the operation total —
+and re-run: **caught, with exactly one failure, that test and nothing
+else.**
+
+**So: a sabotage has to produce the DEFECT its name claims, not merely
+break the guard that prevents it.** Breaking the guard is the easy half
+and it is what a first draft writes. §12.3 already records two `replace`
+halves that were wrong, and `--check` cannot see this one either, by
+construction: the anchor matched exactly once and the `expect` named a
+real test. Only running it says anything, which is the whole argument for
+running them.
+
+**What 164 confirmations are worth, stated because a large green number
+invites the wrong reading.** They do not say the code is correct. Each
+says one named test really does defend one named behaviour — that the
+test would go red if somebody removed the guard. That is a property of
+the SUITE rather than of the program, and it is the property this tree
+keeps finding it did not have.
+
 ### 12.2d The anchor check is permanent now -- **[DONE 2026-09-07]**
 
 The fifteen rotted anchors above were found by a script somebody had to

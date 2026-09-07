@@ -52,11 +52,25 @@ expect = "a_pane_dropped_on_the_tab_bar_becomes_a_tab"
 # than wrapping, because a wrap makes "left" mean "far right" at exactly
 # the moment somebody is looking at the leftmost pane -- and a wrap is
 # what a hurried fix reaches for, since it makes the operation total.
+#
+# The replace here WRAPS, and the first version did not -- it swapped the
+# range guard for a size check and left `to` out of range, so with two
+# panes the edit reached QList::move(0, -1) and move(1, 2). Those are
+# out-of-range rotates; QList asserts both indices and the suite builds
+# with QT_NO_DEBUG, so the asserts are gone and the result is undefined
+# rather than wrapped. It happened to leave the list unchanged, the test's
+# QCOMPARE against `before` passed, and the sweep of 2026-09-07 reported
+# this as the one MISSED of 165 -- reading as a hole in the tests when the
+# tests were right and this line was wrong.
+#
+# A sabotage has to produce the DEFECT its name claims, not merely break
+# the guard that prevents it. Modulo arithmetic is what a hurried fix
+# actually reaches for, because it makes the operation total.
 [[sabotage]]
 name = "a pane moved off the end wraps around instead of stopping"
 file = "src/ui/main_window.cpp"
-find = "\tif (to < 0 || to >= intent.size()) return;"
-replace = "\tif (intent.size() < 2) return;"
+find = "\tconst int to = from + (direction < 0 ? -1 : 1);\n\tif (to < 0 || to >= intent.size()) return;"
+replace = "\tconst int to = (from + (direction < 0 ? -1 : 1) + intent.size()) % intent.size();"
 expect = "a_pane_can_be_moved_along_the_arrangement"
 
 # The gesture. Alt and the left button picks a pane up; a plain drag
