@@ -9,6 +9,7 @@
 #include <QComboBox>
 #include <QFormLayout>
 #include <QKeySequenceEdit>
+#include <QStyle>
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QScroller>
@@ -27,6 +28,31 @@
 #include "platform/platform.h"
 #include "platform/secret_store.h"
 #include "ui/theme.h"
+
+/*
+ * A combo box wide enough for the longest thing it can show.
+ *
+ * QComboBox's own minimum lets it shrink below its current item, so on a
+ * 320dp screen the keyboard row drew "BeerSSH's own, compac" -- a control
+ * reporting a setting by a name that is not the setting's name. The width
+ * assertion cannot see it: a widget happy to clip has a small minimum and
+ * therefore FITS.
+ *
+ * Stating the real requirement is also what lets WrapLongRows do its job:
+ * a field that admits it needs the room stops sharing a row with its
+ * label, rather than silently truncating beside it.
+ */
+static void bssh_fit_items(QComboBox *box) {
+	int widest = 0;
+	for (int i = 0; i < box->count(); ++i) {
+		widest = qMax(widest, box->fontMetrics().horizontalAdvance(box->itemText(i)));
+	}
+
+	/* The frame and the drop-down arrow, which the text does not include. */
+	const int chrome = box->style()->pixelMetric(QStyle::PM_ScrollBarExtent)
+	                    + box->fontMetrics().horizontalAdvance(QLatin1Char('W')) * 2;
+	box->setMinimumWidth(widest + chrome);
+}
 
 bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
     : QWidget(parent) {
@@ -72,11 +98,20 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	QFormLayout *form = new QFormLayout();
 	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
+	/*
+	 * The same policy as the chord form below, for the same reason and so
+	 * that the two halves of one page cannot answer a narrow screen
+	 * differently. This form's labels are shorter, so in practice it
+	 * wraps later -- which is what WrapLongRows means.
+	 */
+	form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+
 	m_key_row = new QComboBox(this);
 	m_key_row->addItem(QStringLiteral("Automatic"), int(bssh_app_settings::KEY_ROW_AUTO));
 	m_key_row->addItem(QStringLiteral("Always show"), int(bssh_app_settings::KEY_ROW_ALWAYS));
 	m_key_row->addItem(QStringLiteral("Never show"), int(bssh_app_settings::KEY_ROW_NEVER));
 
+	bssh_fit_items(m_key_row);
 	form->addRow(QStringLiteral("On-screen keys"), m_key_row);
 
 	/*
@@ -99,6 +134,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                     int(bssh_app_settings::KEYBOARD_BUILT_IN));
 	m_keyboard->addItem(QStringLiteral("BeerSSH's own, full size"),
 	                     int(bssh_app_settings::KEYBOARD_BUILT_IN_FULL));
+	bssh_fit_items(m_keyboard);
 	form->addRow(QStringLiteral("Keyboard"), m_keyboard);
 
 	/*
@@ -118,6 +154,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
 		m_keyboard_layout->addItem(layout.display_name, layout.id);
 	}
+	bssh_fit_items(m_keyboard_layout);
 	form->addRow(QStringLiteral("Layout"), m_keyboard_layout);
 
 	QLabel *keyboard_note = bssh_wrapped_note(
@@ -197,6 +234,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_theme->addItem(QStringLiteral("Follow the system"), QStringLiteral("system"));
 	m_theme->addItem(QStringLiteral("Light"), QStringLiteral("light"));
 	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
+	bssh_fit_items(m_theme);
 	form->addRow(QStringLiteral("Appearance"), m_theme);
 
 	/*
@@ -227,6 +265,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                      int(bssh_app_settings::SCROLLBAR_LEFT));
 	m_scrollbar->addItem(QStringLiteral("Hidden"),
 	                      int(bssh_app_settings::SCROLLBAR_HIDDEN));
+	bssh_fit_items(m_scrollbar);
 	form->addRow(QStringLiteral("Scrollbar"), m_scrollbar);
 
 	QLabel *scrollbar_note = bssh_wrapped_note(
@@ -260,6 +299,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	        QStringLiteral("Everything adds the terminal's size in cells and which "
 	                        "windowing system this build is using."),
 	        this);
+	bssh_fit_items(m_status_line);
 	form->addRow(QStringLiteral("Status line"), m_status_line);
 	form->addRow(status_note);
 
@@ -287,6 +327,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                         int(bssh_app_settings::CONTEXT_MENU_DESKTOP));
 	m_context_menu->addItem(QStringLiteral("Touch-sized"),
 	                         int(bssh_app_settings::CONTEXT_MENU_TOUCH));
+	bssh_fit_items(m_context_menu);
 	form->addRow(QStringLiteral("Terminal menu"), m_context_menu);
 
 	/*
@@ -561,6 +602,26 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * be bound again.
 	 */
 	QFormLayout *chords = new QFormLayout;
+
+	/*
+	 * The label goes ABOVE its field when the row will not fit beside it,
+	 * which on this form is most of them on a narrow phone.
+	 *
+	 * Every shortcut's description is its row label -- "Open another
+	 * session in a window" is 195px of the 306 a 320dp screen leaves
+	 * inside the scroll area -- so beside a QKeySequenceEdit the row
+	 * demanded 313px and the whole page scrolled sideways. Measured on a
+	 * Galaxy Z Fold 3 cover screen, which is 320dp folded.
+	 *
+	 * WrapLongRows rather than WrapAllRows: it wraps only the rows that
+	 * do not fit, so a desktop keeps the two-column form it has always
+	 * had and the phone gets a readable one. Shortening the descriptions
+	 * would have been the other way to reach the number, and it is the
+	 * wrong way -- the description is the only thing on the row that says
+	 * what the chord DOES.
+	 */
+	chords->setRowWrapPolicy(QFormLayout::WrapLongRows);
+
 	const bssh_app_settings bound;
 
 	for (const bssh_input_router::chord_t &chord : bssh_input_router::default_chords()) {
@@ -568,6 +629,28 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 
 		QKeySequenceEdit *edit = new QKeySequenceEdit(this);
 		edit->setObjectName(QStringLiteral("chord_") + name);
+
+		/*
+		 * Wide enough for the chord it holds, and that is what makes
+		 * WrapLongRows above work at all.
+		 *
+		 * A QKeySequenceEdit's minimum lets it shrink below its own
+		 * text, so on a 320dp screen the form kept both columns, gave
+		 * the field whatever was left, and drew "trl+Shift+C" and
+		 * "ft+PgDown". The width assertion passed throughout -- it asks
+		 * for a minimum that FITS, and a field happy to clip has a small
+		 * one. `make shots` at 320 is what found it, which is the whole
+		 * argument for rendering the pictures at the same floor the
+		 * assertions use.
+		 *
+		 * So the field states what it actually needs, the row no longer
+		 * fits beside its label, and WrapLongRows puts the label above
+		 * it -- which is the outcome the policy was chosen for.
+		 */
+		const QString shown = QKeySequence(chord.label, QKeySequence::PortableText)
+		                              .toString(QKeySequence::NativeText);
+		edit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)
+		                       + edit->fontMetrics().horizontalAdvance(QLatin1Char('W')) * 2);
 		edit->setKeySequence(QKeySequence(bound.has_chord(name) ? bound.chord(name)
 		                                                         : chord.label,
 		                                   QKeySequence::PortableText));

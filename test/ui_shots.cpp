@@ -44,7 +44,18 @@ namespace {
  * a narrow phone (sec 8.2's COMPACT class) and a small desktop window --
  * the half-screen column sec 8.2 names when it talks about tiling.
  */
-const int BSSH_PHONE_W = 360;
+/*
+ * The same 320 the fit assertions use, and for the same reason: a Galaxy
+ * Z Fold 3's cover screen is 320dp and folded is how it is carried.
+ *
+ * These were rendered at 360 until 2026-09-07, which is 40dp wider than
+ * the narrowest screen the suite guards -- so the pictures could not show
+ * the case the assertions had started failing on, and a reader browsing
+ * them would have concluded the narrow layout was fine because the only
+ * picture of it was of a wider one. A gallery of the second-narrowest
+ * case is a gallery that cannot find the defect it exists to find.
+ */
+const int BSSH_PHONE_W = 320;
 const int BSSH_PHONE_H = 640;
 const int BSSH_DESKTOP_W = 800;
 const int BSSH_DESKTOP_H = 600;

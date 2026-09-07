@@ -83,6 +83,16 @@ private slots:
 
 private:
 	void refresh_preview();
+
+protected:
+	/*
+	 * The swatch strip is drawn to the width it HAS, so a resize has to
+	 * redraw it. See the strip's own comment in the .cpp: it used to be
+	 * a fixed 16*18 pixmap, which is exactly the 288px minimum that put
+	 * this picker -- and both editors that embed it -- off the edge of a
+	 * 320dp screen.
+	 */
+	void resizeEvent(QResizeEvent *event) override;
 	QList<QWidget *> label_widgets() const;
 
 	QFormLayout *m_form;

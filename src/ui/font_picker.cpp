@@ -7,6 +7,7 @@
 #include <QPixmap>
 #include <QFormLayout>
 #include <QLabel>
+#include <QResizeEvent>
 
 #include "ui/wrapped_note.h"
 #include <QSpinBox>
@@ -36,18 +37,44 @@ static const char *const BSSH_PREVIEW_TEXT =
 static const int BSSH_SWATCH_HEIGHT = 18;
 
 /*
+ * Eight columns, each carrying a normal colour above its bright one, and
+ * the floor is one pixel per column: below that there is no strip left to
+ * look at. There is deliberately no PREFERRED width -- the size policy
+ * below is Ignored, so the layout hands the strip whatever the form has
+ * and a preferred number would have no reader.
+ */
+static const int BSSH_SWATCH_COLUMNS = 8;
+
+/*
  * The scheme's sixteen ANSI colours as one strip: normal on the top half,
  * bright underneath, in ANSI order. Two rows rather than sixteen squares
  * in a line, because the bright half is what distinguishes two schemes
  * that look alike at a glance.
  */
-static QPixmap bssh_swatch_strip(const bssh_colour_scheme_t &scheme, int height, bool raise) {
-	const int width = 16 * 18;
+/*
+ * The strip is drawn to the width it is GIVEN, and that is the whole
+ * point of the parameter.
+ *
+ * It used to be a fixed `16 * 18` pixmap, and a QLabel holding a pixmap
+ * demands the pixmap's width -- so this one control asked for 288px and
+ * carried the entire font picker, plus the host editor and the preset
+ * editor that embed it, past the edge of a 320dp screen. Measured on a
+ * Galaxy Z Fold 3 cover screen, which is 320dp: the picker's minimum was
+ * 288 and its widest child was this label, to the pixel.
+ *
+ * Eight columns of two rows is what the strip IS, so a narrower strip is
+ * narrower cells rather than fewer colours -- nothing is lost by fitting.
+ * The previous width survives as the PREFERRED one rather than as a
+ * floor, which is why sizeHint() still asks for it.
+ */
+static QPixmap bssh_swatch_strip(const bssh_colour_scheme_t &scheme, int width,
+                                  int height, bool raise) {
+	width = qMax(BSSH_SWATCH_COLUMNS, width);
 	QPixmap strip(width, qMax(2, height));
 	strip.fill(QColor(scheme.background));
 
 	QPainter painter(&strip);
-	const int cell = width / 8;
+	const int cell = width / BSSH_SWATCH_COLUMNS;
 	const int half = strip.height() / 2;
 
 	/*
@@ -59,7 +86,7 @@ static QPixmap bssh_swatch_strip(const bssh_colour_scheme_t &scheme, int height,
 	 * reports it wrongly -- a nearly invisible blue block beside a
 	 * perfectly readable blue prompt.
 	 */
-	for (int i = 0; i < 8; ++i) {
+	for (int i = 0; i < BSSH_SWATCH_COLUMNS; ++i) {
 		const QRgb top = raise ? bssh_raise_contrast(scheme.ansi[i], scheme.background)
 		                        : scheme.ansi[i];
 		const QRgb bottom = raise ? bssh_raise_contrast(scheme.ansi[i + 8], scheme.background)
@@ -139,14 +166,47 @@ void bssh_font_picker::align_labels(QFormLayout *host, bssh_font_picker *picker)
 	if (picker->m_form) picker->m_form->setHorizontalSpacing(host->horizontalSpacing());
 }
 
+/*
+ * Every pointer member starts null, and that is load-bearing rather than
+ * tidy: resizeEvent() below runs while this constructor is still building
+ * them -- adding a widget to a layout can lay the parent out again -- and
+ * it guards on these being null. Only m_form was initialised, so that
+ * guard would have read uninitialised memory and passed on garbage.
+ */
 bssh_font_picker::bssh_font_picker(QWidget *parent)
     : QWidget(parent),
-      m_form(nullptr) {
+      m_form(nullptr),
+      m_family(nullptr),
+      m_scheme(nullptr),
+      m_size(nullptr),
+      m_preview(nullptr),
+      m_swatches(nullptr),
+      m_note(nullptr) {
 	QVBoxLayout *outer = new QVBoxLayout(this);
 	outer->setContentsMargins(0, 0, 0, 0);
 
 	QFormLayout *form = new QFormLayout();
 	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+
+	/*
+	 * Label above field where the row will not fit beside it, exactly as
+	 * the settings page does -- and here the reason is portability rather
+	 * than one screen.
+	 *
+	 * This picker's minimum is the sum of a label column and a combo
+	 * whose items are FONT FAMILY NAMES, so it is a function of the UI
+	 * font's metrics: 222px on the machine this was written on and 285
+	 * to 302 in the CI container, which draws in a different face. A
+	 * two-column form that only just fits is one that stops fitting on
+	 * somebody else's fonts, and check-ci caught exactly that after the
+	 * local suite went green.
+	 *
+	 * Wrapping makes the row's minimum max(label, field) rather than
+	 * their sum, which is what removes the dependency instead of leaving
+	 * it with a little more headroom.
+	 */
+	form->setRowWrapPolicy(QFormLayout::WrapLongRows);
+
 	m_form = form;
 
 	m_family = new QComboBox(this);
@@ -223,6 +283,19 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	 */
 	m_swatches = new QLabel(this);
 	m_swatches->setFixedHeight(BSSH_SWATCH_HEIGHT);
+
+	/*
+	 * Ignored horizontally, so the pixmap this label is about to hold
+	 * cannot decide the form's width. A QLabel takes its minimum from
+	 * its pixmap, and the pixmap is drawn from the label's width -- left
+	 * to itself that is a widget arguing with the layout about a number
+	 * it made up. Ignored means the layout decides and the strip follows,
+	 * which is the direction that terminates.
+	 */
+	m_swatches->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+	m_swatches->setMinimumWidth(BSSH_SWATCH_COLUMNS);
+	m_swatches->setToolTip(QStringLiteral(
+	        "The scheme's sixteen colours: normal above, bright below."));
 	outer->addWidget(m_swatches);
 
 	m_note = new QLabel(this);
@@ -321,6 +394,28 @@ void bssh_font_picker::on_choice_changed() {
 	emit font_chosen(font_id(), point_size());
 }
 
+/*
+ * The strip follows the width it is given, so a resize redraws it.
+ *
+ * refresh_preview() is the one place that renders it, and calling the
+ * whole function rather than the strip alone is deliberate: the preview
+ * font, the note and the strip are one picture of one scheme, and a
+ * resize path that refreshed only part of it is how two of them come to
+ * disagree.
+ */
+void bssh_font_picker::resizeEvent(QResizeEvent *event) {
+	QWidget::resizeEvent(event);
+
+	/*
+	 * Guarded, because a resize can arrive while the constructor is still
+	 * building these -- adding a widget to a layout can lay the parent
+	 * out again, and refresh_preview() dereferences every one of them.
+	 */
+	if (!m_preview || !m_swatches || !m_note) return;
+
+	refresh_preview();
+}
+
 void bssh_font_picker::refresh_preview() {
 	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
 	const QString id = font_id();
@@ -352,7 +447,8 @@ void bssh_font_picker::refresh_preview() {
 		m_preview->setStyleSheet(QStringLiteral("background: %1; color: %2;")
 		                                 .arg(QColor(scheme->background).name(),
 		                                      QColor(foreground).name()));
-		m_swatches->setPixmap(bssh_swatch_strip(*scheme, m_swatches->height(), raise));
+		m_swatches->setPixmap(bssh_swatch_strip(*scheme, m_swatches->width(),
+		                                         m_swatches->height(), raise));
 	}
 
 	const QString note = catalog.substitution_note(id);

@@ -8477,6 +8477,115 @@ test would go red if somebody removed the guard. That is a property of
 the SUITE rather than of the program, and it is the property this tree
 keeps finding it did not have.
 
+### 12.3b The phone floor is 320dp, and three surfaces did not fit it — **[FIXED 2026-09-07]**
+
+**`BSSH_PHONE_DP` was 360 and the device is 320.** A Galaxy Z Fold 3's
+cover screen is 832x2268 at 420dpi — 320dp — and folded is how it is
+carried. So every "fits a phone" assertion in the suite, and every
+picture `make shots` renders, described a screen 40dp wider than one this
+app is used on daily. Not a hypothetical population: `evidence.md`'s *a
+set of tabulated extremes is not a worst case*, met on hardware.
+
+At 320, three of seven surfaces overflowed. **Neither cause was the one
+guessed at**, and both guesses were confident:
+
+    host editor      320px of 306      widest child: bssh_font_picker 288
+    preset editor    288px of 284      widest child: bssh_font_picker 288
+    settings         313px of 306      widest child: a checkbox at 241
+
+- **The font picker's colour strip was a fixed `16 * 18` pixmap**, and a
+  QLabel demands its pixmap's width — so one decorative strip set the
+  floor for the picker and for both editors embedding it, at 288 to the
+  pixel. It draws to the width it is GIVEN now, eight columns of narrower
+  cells rather than fewer colours, with `QSizePolicy::Ignored` so the
+  pixmap cannot argue with the layout about a number it invented. 288 to
+  222, and both editors fit.
+- **Every shortcut's description IS its form row's label**, and
+  QFormLayout does not wrap labels — so the settings page's floor was its
+  longest description beside a QKeySequenceEdit. `WrapLongRows` rather
+  than shorter text: the description is the only thing on the row saying
+  what the chord does, and trimming it to reach a number is deforming the
+  thing being measured.
+
+**The first two guesses were the combo boxes, twice, and they were 166
+and 134.** Only instrumenting the pages — every visible child by minimum
+width, with its text and word-wrap flag — found either cause. Recorded
+because the guesses were the plausible ones.
+
+**And a latent defect fell out of it that has nothing to do with width.**
+Adding a null guard to the picker's new `resizeEvent` prompted a look at
+the constructor, where only `m_form` of seven pointer members was
+initialised. The guard would have read uninitialised memory and passed a
+garbage pointer into a dereference. All seven are initialised now.
+
+### 12.3d The fix fitted here and not in the container — **[2026-09-07]**
+
+The local suite was green over all 20 classes and `check-ci` refused the
+push:
+
+    host editor    317px of 306    picker asking 285
+    preset editor  302px of 284    picker asking 302
+
+**The same picker is 222 here and 285 to 302 there.** Its minimum is a
+label column plus a combo whose items are FONT FAMILY NAMES, so it is a
+function of the UI font's metrics, and the container draws in a different
+face from this desktop.
+
+So the first fix was not wrong, it was FRAGILE: 288 taken to 222 against a
+306 budget, called fixed, when the quantity reduced varies by about a
+third across machines. **A two-column form that only just fits is one
+that stops fitting on somebody else's fonts** — and a margin is not a fix
+when the thing measured is machine-dependent.
+
+`WrapLongRows` on the picker's own form is the answer for the same reason
+it was on the settings page, and a better one: it makes a row's minimum
+`max(label, field)` rather than their sum, which REMOVES the font-metric
+dependency instead of leaving it more headroom. At 320 with this
+machine's fonts the picker still draws two columns, because the policy
+wraps only what does not fit; the container gets the wrapped form.
+
+**This is what the container gate is for, stated plainly because the
+local suite agreed with the mistake.** sec 12.4 justifies check-ci by Qt
+and libssh version skew; this is a third kind — the same Qt, the same
+code, different installed fonts — and it is the kind no version check
+would predict. The thing that disagreed was right.
+
+### 12.3c The gate went green while the page was unreadable — **[2026-09-07]**
+
+Worth its own entry, because the fix above passed the assertion and was
+still wrong, and only a PICTURE said so.
+
+With `WrapLongRows` the settings page dropped 313 to 273 and the width
+assertion passed. Rendered at 320 it read:
+
+    trl+Shift+C          Ctrl+Shift+C, clipped from the left
+    ft+PgDown            Shift+PgDown
+    l+Alt+Right          Ctrl+Alt+Right
+    BeerSSH's own, compac
+
+The rows had not wrapped. The FIELDS had shrunk, and were truncating.
+
+**The assertion asks whether a widget's MINIMUM fits, and a widget
+willing to clip its own content has a small minimum — so a control that
+truncates passes more easily than one that does not.** That is the gate
+being satisfied by deforming what it measures, arrived at honestly and
+one step at a time.
+
+`make shots` caught it only because the renders had just been moved to
+the same 320 floor as the assertions. At 360 every picture showed a page
+that fitted. **A gallery rendered at the second-narrowest case cannot
+find the defect it exists to find**, which is the argument for the two
+numbers being one number.
+
+The fix is fields stating what they actually need — the chord editors
+sized to their sequence text, the combos to their longest item, both from
+font metrics rather than a constant — and that is also what makes
+`WrapLongRows` work: a field that admits it needs the room stops sharing
+a row with its label, so Qt moves the label above rather than truncating
+beside it. Verified in the render: "Open another session in a window"
+wraps with a full-width editor beneath, "BeerSSH's own, compact" is whole,
+and the desktop page still draws its two-column form untouched.
+
 ### 12.2d The anchor check is permanent now -- **[DONE 2026-09-07]**
 
 The fifteen rotted anchors above were found by a script somebody had to

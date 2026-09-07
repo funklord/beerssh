@@ -394,7 +394,29 @@ struct forced_touch_t {
 	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
 };
 
-const int BSSH_PHONE_DP = 360;
+/*
+ * 320, not 360, and the number is a DEVICE rather than a round figure.
+ *
+ * A Galaxy Z Fold 3's cover screen is 832x2268 at 420dpi, which is 320dp
+ * wide, and folded is how it is carried. Every "fits a phone" assertion
+ * here ran at 360 until 2026-09-07, so the narrowest case the suite knew
+ * was 40dp wider than a screen this app is used on daily -- a set of
+ * tabulated extremes that did not include the extreme.
+ *
+ * Measured rather than assumed: at 320 three surfaces overflowed, and the
+ * two causes were not the ones guessed at. The font picker's colour strip
+ * was a fixed `16 * 18` pixmap and a QLabel demands its pixmap's width,
+ * so one decorative strip set the floor for the picker and for both
+ * editors that embed it -- 288px, to the pixel. And every shortcut's
+ * description IS its form row's label, which QFormLayout does not wrap,
+ * so the settings page's floor was its longest description beside a
+ * QKeySequenceEdit. Both are fixed at the cause; neither was the combo
+ * boxes, which is what the first two guesses said.
+ *
+ * Lowering this is how the gate gets satisfied by deforming the thing it
+ * measures. Lower it only for a device that is genuinely narrower.
+ */
+const int BSSH_PHONE_DP = 320;
 const int BSSH_PHONE_TALL_DP = 640;
 
 QString too_wide(const QString &name, const QWidget *widget)
