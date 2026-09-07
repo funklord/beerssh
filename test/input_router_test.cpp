@@ -516,6 +516,31 @@ void input_router_test::a_held_key_repeats() {
 	QTest::mousePress(left, Qt::LeftButton);
 	QTest::mouseRelease(left, Qt::LeftButton);
 	QCOMPARE(emulator.take_output(), once);
+
+	/*
+	 * WHAT THIS TEST CANNOT REACH, and it is the half a thumb uses.
+	 *
+	 * The row grabs a QScroller gesture on its scroll area's viewport
+	 * (sec 6.2 -- the keys do not fit and are dragged sideways), and a
+	 * scroller HOLDS a press for a quarter of a second before deciding it
+	 * is not a drag and replaying it to the widget underneath. So a real
+	 * press arrives late, and whether auto-repeat survives that is a
+	 * question about the scroller rather than about the button.
+	 *
+	 * It was written, and the instrument could not answer it. Pressing
+	 * `scroll->viewport()` at the button's mapped position produced ZERO
+	 * bytes -- and the control settles which side that is: a plain TAP
+	 * through the viewport produced zero as well, on a row that works
+	 * perfectly well under a finger. QTest's synthetic press does not
+	 * survive QScroller's filter under the offscreen plugin, so the
+	 * fixture was measuring itself.
+	 *
+	 * Recorded rather than deleted, because an absent test and a test
+	 * that could not be written look the same from outside, and the next
+	 * person to want this should know it has been tried and how it
+	 * failed. The press above goes straight to the button, which proves
+	 * the repeat and deliberately does not prove the reach.
+	 */
 }
 
 void input_router_test::key_row_visibility_follows_the_input_device() {

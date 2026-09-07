@@ -597,6 +597,85 @@ it, and with TalkBack deliberately on as one arm.
 
 
 
+**A SECOND unstartable app, measured 2026-09-07, and the process was
+never a service restart.** Reported as *"Beerssh cannot be started on my
+phone now, it hangs at the logo screen"*, on the Note 9 carrying the
+2026-09-07 00:39 build. The framework's own usage-event log is what
+settles the shape, and it is worth knowing that this record exists,
+because logcat had already rolled and this had not:
+
+    time="2026-09-07 00:39:52" ACTIVITY_RESUMED   QtActivity
+    time="2026-09-07 00:39:59" FOREGROUND_SERVICE_START  BsshService
+    time="2026-09-07 08:37:11" ACTIVITY_PAUSED
+    time="2026-09-07 08:37:12" ACTIVITY_RESUMED
+    time="2026-09-07 08:40:02" ACTIVITY_PAUSED
+    time="2026-09-07 08:40:04" ACTIVITY_STOPPED
+    -- nothing at all until an am force-stop at 15:09 --
+
+    adb bugreport, then grep the usage events out of dumpstate.txt
+
+So the app RAN, for eight hours, with a live session and the foreground
+service. What failed is everything after `ACTIVITY_STOPPED`: not one
+launch between 08:40 and the force-stop produced an `ACTIVITY_RESUMED`,
+which is what a splash screen that never becomes a window looks like from
+the framework's side.
+
+The process was pid 12035, **started 2026-09-06 00:52** -- so it predated
+the 00:39 install by a day, survived it, and served the activity
+afterwards, meaning the user spent that morning running the previous
+day's code. It was still alive at 15:09 with 30 threads, all sleeping,
+and `am_finish_activity ... proc died without state saved` on task 324
+when it was killed, which is what proves it owned the activity rather
+than merely sharing the package's name.
+
+**What that rules out.** It is not the START_STICKY resurrection above:
+the process was the original one, with Qt in it, not a service recreated
+in a fresh process -- that fix landed 2026-09-04 and is not implicated.
+It is also not the four ANRs on 2026-09-05 that a first reading of this
+attributed to beerssh; **the traces name `se.vibes.bbq_predictor:fetch`
+in all of them** and contain the string "beerssh" zero times. No
+tombstone was written for beerssh at any point; the newest on the device
+is from 2026-08-27.
+
+**What is established, and what is not.** Established: a beerssh process
+can outlive its own window, hold the app's identity together with the
+foreground-service notification, and leave the launcher unable to bring
+the app up until somebody force-stops it -- the same USER-VISIBLE failure
+the entry above records, by a different route. Not established: why the
+window stopped coming back at 08:40. There is no crash, no ANR and no
+tombstone to point at, and the log that would have carried the
+`AndroidDeadlockProtector` holder line had been cleared by the session
+investigating -- which is the mistake to avoid next time. **Capture
+`adb logcat -v threadtime` to a file BEFORE clearing anything**, as the
+EGL entry above already says, and the usage-event dump is the record that
+survives when logcat has not.
+
+**One CANDIDATE mechanism, named as a candidate and with the experiment
+that would settle it, because an unexplained failure keeps somebody
+looking and a comfortable story stops them.** The process staying alive
+at 08:40 was CORRECT: a session was live and the foreground service
+exists precisely so the UI can go to the background without dropping it
+(sec 5.1). What failed is the return trip. The activity record still
+existed -- killing the process named task 324 -- so Android had somewhere
+to deliver a resume and the app did not take it, which is the shape of a
+Qt-thread/Android-UI-thread deadlock rather than of a dead process. The
+EGL entry above establishes that cycle exists in this Qt and that ONE of
+its call sites turns it into a `qFatal` while every other returns
+silently; a silent return is a hang, and a hang here looks exactly like
+this. **This is a candidate and not a finding** -- nothing was captured
+that names a holder, and the four flag-holders remain four. What would
+settle it: `adb logcat -v threadtime` to a file left running, and, at the
+moment the launcher fails, `adb shell kill -3 <pid>` to dump the Java
+thread stacks into `/data/anr`, which `adb bugreport` can then retrieve
+even unrooted. Neither was available this time, because the process had
+already been force-stopped.
+
+**The cure is `adb shell am force-stop se.vibes.beerssh`**, and it worked
+here. Nothing in the app can do it for the user, which is what makes this
+worth its own entry rather than a line in the one above: two distinct
+mechanisms now produce an app that cannot be started, and neither is
+recoverable from inside the app.
+
 **Stopping it is a START.** `startForegroundService()` opens a contract: the
 service has about five seconds to call `startForeground()` or Android throws
 `RemoteServiceException` and kills the process. A plain `stopService()` arriving
@@ -2285,6 +2364,21 @@ One helper, `bssh_set_key_repeat()` in `keyboard/key_cap.h`, because the
 key row builds plain `QToolButton`s and the built-in board builds
 `bssh_key_cap`s: two boards, one rule, and the way it would drift is a key
 added to one of them without the call.
+
+**What the end-to-end test cannot reach, recorded rather than left
+silent.** The key row grabs a `QScroller` gesture on its scroll area's
+viewport, and a scroller holds a press for a quarter of a second before
+deciding it is not a drag and replaying it underneath -- so a real thumb
+reaches the button late, and whether the repeat survives that is a
+question about the scroller. It was written and the instrument could not
+answer it: pressing the viewport at the button's mapped position produced
+zero bytes, and the control settles which side that is -- a plain TAP
+through the viewport produced zero as well, on a row that works under a
+finger. `QTest`'s synthetic press does not survive `QScroller`'s filter
+under the offscreen plugin. The press that IS asserted goes straight to
+the button, which proves the repeat and deliberately does not prove the
+reach; the built-in keyboard's grid has no scroller and is unaffected,
+and `Bksp` and `Del` live there.
 
 The test is a **partition**, not a list of keys — a keycap repeats if and
 only if it is not checkable, and nothing outside the key grid repeats at
