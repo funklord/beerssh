@@ -630,6 +630,23 @@ public:
 	 */
 	void move_pane(bssh_session *session, int direction);
 
+	/*
+	 * Move a tab one place along THIS window's bar.
+	 *
+	 * The window's own order, not the registry's, for the reason the
+	 * drag handler gives: which order a window shows its tabs in is that
+	 * window's business, and moving them in the registry rearranges
+	 * every other window's tabs as a side effect (sec 8.4).
+	 *
+	 * It also has to be the tab order rather than the registry because a
+	 * registry step can be INVISIBLE: the sessions on screen as panes sit
+	 * in the same registry and are not in the bar, so moving a tab past
+	 * one of those changes nothing a user can see. Measured on a phone --
+	 * the menu item fired, the session moved from registry index 0 to 1,
+	 * and the bar did not move.
+	 */
+	void move_tab(int from, int to);
+
 private:
 	/*
 	 * The ownership half of adopting, without deciding how it is shown.

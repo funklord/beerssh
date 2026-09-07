@@ -1437,6 +1437,80 @@ int bssh_main_window_count() {
  * reorder of the visible subset alone would be undone by the next
  * resize.
  */
+/*
+ * A tab moves along the BAR, not along the registry (sec 8.3).
+ *
+ * The drag that does this is desktop-only -- the bar scrolls
+ * horizontally on a phone and cannot both scroll and rearrange under one
+ * drag -- so touch reaches it through the menu, and both routes go
+ * through move_tab().
+ *
+ * The registry is the wrong list twice over, and the first version of
+ * this used it. It holds the sessions shown as PANES, which are not in
+ * the bar, so a registry step past one of those moves nothing a user can
+ * see: measured on a phone, the item fired, the session went from
+ * registry index 0 to 1, and the bar did not move. And the registry is
+ * shared, so reordering it rearranges every other window's tabs.
+ *
+ * The last tab is what separates the two. With three sessions -- one on
+ * screen as a pane, two in the bar -- the second tab is LAST in the bar
+ * and not last in the registry, so a registry-based Move Right is
+ * offered and does nothing, while a bar-based one is correctly refused.
+ */
+void layout_test::a_tab_can_be_moved_along_the_bar() {
+	const forced_touch_t arrangement(1);
+
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	window.adopt_session(registry->create(named(QStringLiteral("first"))));
+	window.adopt_session(registry->create(named(QStringLiteral("second"))));
+	window.adopt_session(registry->create(named(QStringLiteral("shown"))));
+
+	QMenu *at_first = window.build_tab_menu(0, &window);
+	QVERIFY2(at_first, "the first tab has no menu");
+	QAction *first_left = at_first->findChild<QAction *>(QStringLiteral("tab_move_left"));
+	QAction *first_right = at_first->findChild<QAction *>(QStringLiteral("tab_move_right"));
+	QVERIFY2(first_left && first_right, "the tab menu offers no way to reorder");
+	QVERIFY2(!first_left->isEnabled(), "the first tab was offered a move left");
+	QVERIFY2(first_right->isEnabled(), "a tab with a tab beside it was refused");
+	delete at_first;
+
+	/*
+	 * The discriminating half. This session is not last in the registry
+	 * -- the on-screen one follows it -- so a registry-based enablement
+	 * offers a move that would do nothing.
+	 */
+	QMenu *at_last = window.build_tab_menu(1, &window);
+	QVERIFY2(at_last, "the second tab has no menu, so there is no second tab");
+	QVERIFY(at_last->findChild<QAction *>(QStringLiteral("tab_move_left"))->isEnabled());
+	QVERIFY2(!at_last->findChild<QAction *>(QStringLiteral("tab_move_right"))->isEnabled(),
+	          "the last TAB was offered a move right, so the bar is being read "
+	          "as the registry");
+	delete at_last;
+
+	/*
+	 * And the move itself lands, both ways, without touching the
+	 * registry's own order -- which is what keeps another window's bar
+	 * out of it.
+	 */
+	const QList<bssh_session *> registry_before = registry->sessions();
+
+	window.move_tab(0, 1);
+	QMenu *moved = window.build_tab_menu(0, &window);
+	QVERIFY(moved);
+	QVERIFY2(!moved->findChild<QAction *>(QStringLiteral("tab_move_left"))->isEnabled(),
+	          "the first tab must still refuse a move left after a swap");
+	delete moved;
+
+	QCOMPARE(registry->sessions(), registry_before);
+
+	window.move_tab(1, 0);
+	QCOMPARE(registry->sessions(), registry_before);
+}
+
 void layout_test::a_pane_can_be_moved_along_the_arrangement() {
 	bssh_main_window window;
 	window.resize(1400, 700);
@@ -3273,19 +3347,28 @@ void layout_test::the_tab_menu_offers_sec_8_3s_three_verbs() {
 	 * menu leads with Connect. Without it a restored tab would be a dead
 	 * end -- the one-way door sec 8.3 already had to fix once.
 	 */
-	QCOMPARE(actions.size(), 5);
+	QCOMPARE(actions.size(), 7);
 
 	QCOMPARE(actions.at(0)->text(), QStringLiteral("Co&nnect"));
 	QCOMPARE(actions.at(1)->text(), QStringLiteral("&Duplicate"));
 	QCOMPARE(actions.at(2)->text(), QStringLiteral("Show &beside current"));
 
 	/*
+	 * Then reordering, above the separator because it is not
+	 * destructive. The drag that does this is desktop-only -- the bar
+	 * scrolls horizontally on a phone and cannot both scroll and
+	 * rearrange under one drag -- so touch reaches it here, as panes do.
+	 */
+	QCOMPARE(actions.at(3)->text(), QStringLiteral("Move &Left"));
+	QCOMPARE(actions.at(4)->text(), QStringLiteral("Move &Right"));
+
+	/*
 	 * The separator earns its place: Close is the one verb here that
 	 * cannot be undone, and a menu that puts it flush against the others
 	 * is one a slipped thumb closes a session with.
 	 */
-	QVERIFY2(actions.at(3)->isSeparator(), "the destructive verb needs separating");
-	QCOMPARE(actions.at(4)->text(), QStringLiteral("&Close"));
+	QVERIFY2(actions.at(5)->isSeparator(), "the destructive verb needs separating");
+	QCOMPARE(actions.at(6)->text(), QStringLiteral("&Close"));
 
 	for (const QAction *action : actions) {
 		if (action->isSeparator()) continue;

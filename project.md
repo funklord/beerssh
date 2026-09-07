@@ -4934,6 +4934,59 @@ the Fold's cable rather than its socket or the hub -- worth recording
 only because two false diagnoses were published on the way, one blaming
 the hub and one blaming the phone's USB mode.
 
+**The same lens was pointed at the TAB drag and came back negative,
+which is the useful half.** Both gestures reach one `QDrag` --
+`start_tab_drag()` calls `start_session_drag()`, the tree's only drag
+site, with no platform branch anywhere near it -- so a tab drag was
+predicted to be claimed by the window manager exactly as the grip was.
+It is not: measured on the Fold, dragging a tab starts no system drag,
+the app never leaves the foreground, and nothing moves. Confirmed by
+hand.
+
+**Nothing moves because the bar is deliberately not movable on touch,
+and §8.3 already says why**: the tab bar scrolls horizontally on a
+phone, and a bar that both scrolls and rearranges under one drag picks
+between them by accident. `m_tabs->setMovable(pointer)`, eight hundred
+lines from the grip, is that decision -- so this project had already met
+the class of problem the grip walked into, and answered it by refusing
+the gesture rather than shipping it half-working. That is the standard
+the grip should have been held to, and the answer was in the same file.
+
+**The asymmetry it left is closed — [BUILT 2026-09-07].** Panes could be
+reordered on touch through the menu and tabs could not, the drag being
+off by design and nothing replacing it. *Move Left* and *Move Right* are
+on the tab's own menu now, above the separator so the destructive verb
+stays alone below it, at the holder's instruction.
+
+**The first version moved the wrong list, and only the device said so.**
+It reordered the REGISTRY, and that is wrong twice. The registry holds
+the sessions shown as panes, which are not in the bar, so a step past
+one of those moves nothing a user can see: measured on a phone, the item
+fired, the session went from registry index 0 to 1, and the bar did not
+move. And the registry is shared between windows, so reordering it
+rearranges every other window's tabs -- which the desktop drag handler
+had said in a comment since long before, eight hundred lines from where
+the menu was being written.
+
+**So the drag's own logic became `move_tab()` and both callers use it.**
+One implementation, two entry points; the menu having a second and worse
+copy is exactly how this arrived.
+
+**The test that separates them is the last TAB that is not the last
+session.** With three sessions -- one on screen as a pane, two in the
+bar -- the second tab is last in the bar and not last in the registry,
+so a registry-based Move Right is offered and does nothing while a
+bar-based one is correctly refused. It also asserts the registry's own
+order is untouched, which is the two-window half.
+
+**Verified on the device as far as the hardware allowed**: both items
+present, *Move Left* greyed on the first tab and *Move Right* live with
+a tab beside it. **Not verified: that the fixed version visibly swaps
+two marked tabs.** Three attempts could not establish it because
+selecting a tab stopped switching the shown session -- which worked on
+the previous build twenty minutes earlier and wants looking at -- and
+the phone left the USB bus mid-investigation.
+
 **And the general lesson is the one this section keeps paying for.** The
 grip's visibility was tested, asserted both ways, sabotaged and seen on
 glass, and none of that touched whether the gesture it exists for can

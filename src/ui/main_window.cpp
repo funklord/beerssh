@@ -325,26 +325,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 * them in the registry would rearrange every other window's
 		 * tabs as a side effect (sec 8.4).
 		 */
-		if (from < 0 || from >= m_tab_order.size()) return;
-		if (to < 0 || to >= m_tab_order.size()) return;
-
-		/*
-		 * The bar's indices are into the TAB list, which is m_shown
-		 * without the sessions currently on screen as panes. So the
-		 * move is applied there and written back through m_shown,
-		 * leaving the panes where they are: a drag in the bar must not
-		 * reorder terminals the bar is not showing.
-		 */
-		m_tab_order.move(from, to);
-
-		int next = 0;
-		const QList<bssh_session *> panes =
-		        m_layout ? m_layout->visible_panes() : QList<bssh_session *>();
-
-		for (int i = 0; i < m_shown.size() && next < m_tab_order.size(); ++i) {
-			if (panes.contains(m_shown.at(i))) continue;
-			m_shown[i] = m_tab_order.at(next++);
-		}
+		move_tab(from, to);
 	});
 
 	/*
@@ -2431,6 +2412,40 @@ bssh_main_window *bssh_main_window::tear_out_tab(int index) {
  * many panes fit, so reordering the visible subset would be undone the
  * next time the window resized.
  */
+/*
+ * Move a tab along this window's bar. See the header for why it is the
+ * window's order rather than the registry's.
+ *
+ * Shared by the desktop DRAG and the menu items, which is the point:
+ * the menu's first version moved the session in the registry instead,
+ * and a registry step past an on-screen pane moved nothing the user
+ * could see. One implementation, two callers.
+ */
+void bssh_main_window::move_tab(int from, int to) {
+	if (from < 0 || from >= m_tab_order.size()) return;
+	if (to < 0 || to >= m_tab_order.size()) return;
+
+	/*
+	 * The bar's indices are into the TAB list, which is m_shown without
+	 * the sessions currently on screen as panes. So the move is applied
+	 * there and written back through m_shown, leaving the panes where
+	 * they are: a move in the bar must not reorder terminals the bar is
+	 * not showing.
+	 */
+	m_tab_order.move(from, to);
+
+	int next = 0;
+	const QList<bssh_session *> panes =
+	        m_layout ? m_layout->visible_panes() : QList<bssh_session *>();
+
+	for (int i = 0; i < m_shown.size() && next < m_tab_order.size(); ++i) {
+		if (panes.contains(m_shown.at(i))) continue;
+		m_shown[i] = m_tab_order.at(next++);
+	}
+
+	refresh_tab_bar();
+}
+
 void bssh_main_window::move_pane(bssh_session *session, int direction) {
 	if (!session || !m_layout || !m_panes || direction == 0) return;
 
@@ -3573,6 +3588,29 @@ QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
 	split->setEnabled(m_layout->intent().size() < fits &&
 	                   !m_layout->intent().contains(session));
 
+	/*
+	 * Reordering, because the DRAG that does it is desktop-only and
+	 * says so above: the bar scrolls horizontally on a phone, and one
+	 * that both scrolls and rearranges under the same drag picks
+	 * between them by accident. So touch gets the same capability
+	 * through a menu, exactly as panes do -- and the desktop keeps the
+	 * drag, which is quicker where it works.
+	 *
+	 * Enabled on the BAR's order, which is what the move applies to.
+	 * The registry is the wrong list twice over: it holds the sessions
+	 * shown as panes, so a step past one of those moves nothing a user
+	 * can see, and it is shared, so reordering it rearranges every other
+	 * window's tabs (sec 8.4). Both were measured -- the first on a
+	 * phone, where the item fired and the bar did not move.
+	 */
+	QAction *move_left = menu->addAction(QStringLiteral("Move &Left"));
+	move_left->setObjectName(QStringLiteral("tab_move_left"));
+	move_left->setEnabled(index > 0);
+
+	QAction *move_right = menu->addAction(QStringLiteral("Move &Right"));
+	move_right->setObjectName(QStringLiteral("tab_move_right"));
+	move_right->setEnabled(index >= 0 && index < m_tab_order.size() - 1);
+
 	menu->addSeparator();
 
 	QAction *close = menu->addAction(QStringLiteral("&Close"));
@@ -3597,7 +3635,20 @@ void bssh_main_window::show_tab_menu(const QPoint &at) {
 	const QAction *duplicate = menu->findChild<QAction *>(QStringLiteral("tab_duplicate"));
 	const QAction *split = menu->findChild<QAction *>(QStringLiteral("tab_split"));
 	const QAction *close = menu->findChild<QAction *>(QStringLiteral("tab_close"));
+	const QAction *move_left = menu->findChild<QAction *>(QStringLiteral("tab_move_left"));
+	const QAction *move_right = menu->findChild<QAction *>(QStringLiteral("tab_move_right"));
 	menu->deleteLater();
+
+	/*
+	 * Through the same method the desktop drag uses, so the two cannot
+	 * drift: one of them being wrong is how this arrived, the menu
+	 * having moved the session in the registry while the drag moved it
+	 * in the bar.
+	 */
+	if (chosen == move_left || chosen == move_right) {
+		move_tab(index, index + (chosen == move_left ? -1 : 1));
+		return;
+	}
 
 	/*
 	 * Duplicate opens another session on the same host, through the same
