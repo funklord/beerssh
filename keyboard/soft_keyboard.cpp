@@ -374,6 +374,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 
 	case bssh_key_t::KEY: {
 		const int code = key.value;
+		bssh_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, code] {
 			if (m_router) m_router->send_key(code, bssh_emulator::MOD_NONE);
 		});
@@ -416,6 +417,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 			m_letter_keys.append(key);
 		}
 
+		bssh_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, key] {
 			if (!m_router) return;
 
@@ -438,6 +440,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 	case bssh_key_t::CHORD: {
 		const int code = key.value;
 		const quint8 modifier = key.modifier;
+		bssh_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, code, modifier] {
 			if (m_router) m_router->send_key(code, modifier);
 		});

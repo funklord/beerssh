@@ -6,6 +6,27 @@
 
 bssh_key_cap::bssh_key_cap(QWidget *parent) : QToolButton(parent) {}
 
+/*
+ * 500ms before the first repeat, then twenty a second.
+ *
+ * The delay is the load-bearing number and it is chosen against the
+ * TAP, not against a physical keyboard: a deliberate tap on a phone is
+ * well under 200ms, so half a second cannot be reached by anyone who
+ * meant to press once. X11's own default is 660ms, which is safer still
+ * and too slow to be worth the extra 160ms on a key somebody is holding
+ * because they want twenty of it.
+ *
+ * The interval is Qt's own default rather than X11's 25ms, because each
+ * repeat here is a round trip through the router into the emulator and
+ * out to the remote, and a rate that outruns the connection just queues
+ * deletions the user cannot see happening.
+ */
+void bssh_set_key_repeat(QAbstractButton *button) {
+	button->setAutoRepeat(true);
+	button->setAutoRepeatDelay(500);
+	button->setAutoRepeatInterval(50);
+}
+
 bool bssh_key_cap::needs_own_paint(const QString &text, const QString &hint) {
 	return !hint.isEmpty() || text.contains(QLatin1Char('&'));
 }

@@ -75,6 +75,16 @@ private slots:
 	void the_built_in_keyboard_fits_a_phone();
 	void only_one_on_screen_keyboard_is_ever_shown();
 	void the_key_row_fits_a_phone();
+
+	/*
+	 * Auto-repeat, on both on-screen keyboards at once (sec 6.2).
+	 *
+	 * One test rather than two because there is one rule, and the two
+	 * boards build their buttons in different files: a rule enforced in
+	 * two places is a rule that drifts, and the way it would drift is a
+	 * key added to one board and not given the call.
+	 */
+	void every_key_that_sends_something_repeats();
 	void the_desktop_opens_a_shell_and_the_phone_opens_its_config();
 	void the_config_is_reachable_from_a_terminal();
 	void the_host_list_offers_the_local_shell();

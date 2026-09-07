@@ -2260,6 +2260,46 @@ the reasoning outlives the answer:**
   and the fonts' v2 question, and should be answered for all of them at
   once rather than three times.
 
+**Auto-repeat — [DONE 2026-09-07].** Reported from the phone: holding
+Backspace deleted one character, and the arrows were a tap per column,
+which makes correcting a mistyped path on a phone worse than retyping the
+line. Every key that *sends* something now repeats after 500ms at 20/s;
+modifiers, the Fn toggle and the side column (settings, script, page,
+hide) do not.
+
+The rule is a physical keyboard's, deliberately, and the alternative was
+measured against it rather than dismissed: a phone's own keyboard repeats
+Backspace and the arrows and never a letter, which is right for prose
+where a stray `aa` is a typo somebody has to spot. It is wrong here. The
+thing being typed into is a shell, the user came from a keyboard where
+everything repeats, and a rule that repeats some keys and not others is
+one nobody can predict at the moment they need it. What makes it safe is
+the **delay**, not the exclusion list: a deliberate tap on a phone is well
+under 200ms, so 500ms cannot be reached by anyone who meant to press once.
+X11's own 660ms is safer still and buys nothing on a key somebody is
+already holding down. The interval is Qt's 50ms rather than X11's 40ms,
+because each repeat is a round trip through the router into the emulator
+and out to the remote.
+
+One helper, `bssh_set_key_repeat()` in `keyboard/key_cap.h`, because the
+key row builds plain `QToolButton`s and the built-in board builds
+`bssh_key_cap`s: two boards, one rule, and the way it would drift is a key
+added to one of them without the call.
+
+The test is a **partition**, not a list of keys — a keycap repeats if and
+only if it is not checkable, and nothing outside the key grid repeats at
+all — so a kind added to `bssh_key_t` without a repeat call lands in the
+wrong half and fails, where a list could not fail about a key it does not
+name. Both halves were seen to fail through their own assertion:
+`Bksp` on the letters group with the call removed, and
+`side button "keyboard-hide" repeats` with it wrongly added. The
+property check says the flag is set on the right buttons; a separate
+end-to-end test holds the left arrow for 900ms through the row and the
+router and asserts the emulator got more than one `ESC [ D`, because Qt's
+auto-repeat is a timer on a *mouse press* and `click()` never starts it —
+the first version of that test used `click()`, passed against a row with
+no repeat set at all, and proved nothing.
+
 ### 6.3 Input routing
 Central **`bssh_input_router`** converts (key, modifiers, terminal mode) → bytes,
 using the emulator's current modes (application cursor keys, keypad mode,

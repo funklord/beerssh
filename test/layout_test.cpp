@@ -4707,6 +4707,101 @@ void layout_test::the_key_row_fits_a_phone() {
 	                                     "scroll area").arg(widest)));
 }
 
+void layout_test::every_key_that_sends_something_repeats() {
+	/*
+	 * Holding a key must go on sending it (sec 6.2). Reported from the
+	 * phone: Backspace deleted one character however long it was held,
+	 * which makes correcting a mistyped path a tap per character, and
+	 * the arrows unusable for moving along a line.
+	 *
+	 * Asserted as a PARTITION rather than as a list of keys, because a
+	 * list goes stale the first time somebody adds a key and the test
+	 * cannot fail about a key it does not name. The rule is:
+	 *
+	 *   a keycap repeats if and only if it is not checkable
+	 *   nothing outside the key grid repeats at all
+	 *
+	 * "Checkable" is the modifiers and the Fn toggle -- the keys that
+	 * change a state rather than send something -- so the two halves of
+	 * that sentence are exactly "sends something" and "does not". A kind
+	 * added to bssh_key_t without a repeat call lands in the wrong half
+	 * and fails here, which is the whole point of writing it this way.
+	 */
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	int repeating = 0;
+	int stateful = 0;
+
+	const bssh_key_row_catalog catalog;
+	QVERIFY(!catalog.all().isEmpty());
+
+	for (const bssh_key_row_layout_t &layout : catalog.all()) {
+		bssh_key_row row(&router);
+		row.set_layout(layout.id);
+
+		for (const QAbstractButton *button : row.findChildren<QAbstractButton *>()) {
+			const QString where =
+			        QStringLiteral("key row %1, key \"%2\"").arg(layout.id, button->text());
+			QVERIFY2(button->autoRepeat() == !button->isCheckable(), qPrintable(where));
+			if (button->isCheckable()) ++stateful;
+			else ++repeating;
+		}
+	}
+
+	/*
+	 * The built-in keyboard, every group of both styles: the keys that
+	 * needed this most -- Backspace, Delete, the arrows -- live on the
+	 * terminal group rather than on the letters, so a check of whatever
+	 * group the board opens on would have missed them.
+	 */
+	const bssh_soft_keyboard_catalog::style_t styles[] = {
+		bssh_soft_keyboard_catalog::STYLE_COMPACT,
+		bssh_soft_keyboard_catalog::STYLE_FULL
+	};
+
+	for (bssh_soft_keyboard_catalog::style_t style : styles) {
+		bssh_soft_keyboard keyboard(&router);
+		keyboard.set_style(style);
+
+		const int groups = bssh_soft_keyboard_catalog::instance().all(style).size();
+		QVERIFY(groups > 0);
+
+		for (int group = 0; group < groups; ++group) {
+			keyboard.set_group(group);
+
+			for (const bssh_key_cap *cap : keyboard.findChildren<bssh_key_cap *>()) {
+				const QString where = QStringLiteral("keyboard group %1, key \"%2\"")
+				        .arg(keyboard.group_id(), cap->text());
+				QVERIFY2(cap->autoRepeat() == !cap->isCheckable(), qPrintable(where));
+				if (cap->isCheckable()) ++stateful;
+				else ++repeating;
+			}
+
+			/*
+			 * And the side column stays put. Settings, hide, the page
+			 * button and the script toggle are about the KEYBOARD, and a
+			 * thumb resting on the page button must not walk through
+			 * every group -- which is what a repeat there would do.
+			 */
+			for (const QAbstractButton *button :
+			      keyboard.findChildren<QAbstractButton *>()) {
+				if (qobject_cast<const bssh_key_cap *>(button)) continue;
+				QVERIFY2(!button->autoRepeat(),
+				          qPrintable(QStringLiteral("side button \"%1\" repeats")
+				                             .arg(button->objectName())));
+			}
+		}
+	}
+
+	/*
+	 * Both halves have to be non-empty, or this passes over a board that
+	 * has lost its keys exactly as loudly as over one that works.
+	 */
+	QVERIFY2(repeating > 100, qPrintable(QStringLiteral("only %1 repeating keys").arg(repeating)));
+	QVERIFY2(stateful > 0, "no modifier anywhere, so the exclusion was never tested");
+}
+
 void layout_test::the_desktop_opens_a_shell_and_the_phone_opens_its_config() {
 	/*
 	 * sec 2's reversed non-goal. The desktop opens a local shell, because

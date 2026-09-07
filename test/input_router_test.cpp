@@ -460,6 +460,64 @@ void input_router_test::key_row_goes_through_the_router() {
 	QVERIFY(!ctrl->isChecked());
 }
 
+void input_router_test::a_held_key_repeats() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_key_row row(&router);
+
+	row.resize(800, 64);
+	row.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&row));
+
+	/*
+	 * The left arrow, because moving along a line is the case that was
+	 * reported and because its output is one fixed sequence -- so the
+	 * count below is a count of PRESSES rather than of bytes that might
+	 * have come from anywhere.
+	 */
+	QAbstractButton *left = nullptr;
+	for (QAbstractButton *button : row.findChildren<QAbstractButton *>()) {
+		if (button->text() == QString::fromUtf8("\xe2\x86\x90")) left = button;
+	}
+	QVERIFY(left != nullptr);
+
+	const QByteArray once = QByteArrayLiteral("\x1b[D");
+
+	/*
+	 * A press, held past the delay, and a release. Not click(), which
+	 * emits the signal directly and never starts the repeat timer -- the
+	 * first version of this test used it, passed against a row with no
+	 * repeat set at all, and proved nothing.
+	 */
+	emulator.take_output();
+	QTest::mousePress(left, Qt::LeftButton);
+	QTest::qWait(900);
+	QTest::mouseRelease(left, Qt::LeftButton);
+
+	const QByteArray held = emulator.take_output();
+
+	/*
+	 * At least twice, not exactly N: how many repeats fit in 900ms is a
+	 * property of the machine's scheduler, and a test that pins the
+	 * count would fail on a loaded one for a reason that is not a
+	 * defect. What is being asserted is that holding sends MORE than
+	 * tapping, which is the whole feature.
+	 */
+	QVERIFY2(held.size() >= once.size() * 2,
+	          qPrintable(QStringLiteral("held for 900ms and sent %1 bytes; one press is %2")
+	                             .arg(held.size()).arg(once.size())));
+	QVERIFY(held.startsWith(once));
+
+	/*
+	 * And a tap does not repeat, which is what the 500ms delay is for.
+	 * Without this the test above would pass on a keyboard that repeated
+	 * instantly -- and that keyboard would type two of everything.
+	 */
+	QTest::mousePress(left, Qt::LeftButton);
+	QTest::mouseRelease(left, Qt::LeftButton);
+	QCOMPARE(emulator.take_output(), once);
+}
+
 void input_router_test::key_row_visibility_follows_the_input_device() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

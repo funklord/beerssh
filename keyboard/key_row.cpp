@@ -10,6 +10,7 @@
 #include <QToolButton>
 
 #include "input/input_router.h"
+#include "keyboard/key_cap.h"
 #include "platform/platform.h"
 #include "term/emulator.h"
 #include "keyboard/key_row_layout.h"
@@ -177,6 +178,7 @@ void bssh_key_row::add_function_toggle(const QString &label) {
 
 void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier) {
 	QAbstractButton *button = make_button(label);
+	bssh_set_key_repeat(button);
 
 	connect(button, &QAbstractButton::clicked, this, [this, ch, modifier] {
 		if (!m_router) return;
@@ -240,6 +242,7 @@ QAbstractButton *bssh_key_row::make_button(const QString &label) {
 
 void bssh_key_row::add_key(const QString &label, int key) {
 	QAbstractButton *button = make_button(label);
+	bssh_set_key_repeat(button);
 	connect(button, &QAbstractButton::clicked, this, [this, key] {
 		if (m_router) m_router->send_key(key, bssh_emulator::MOD_NONE);
 	});
@@ -247,6 +250,7 @@ void bssh_key_row::add_key(const QString &label, int key) {
 
 void bssh_key_row::add_text(const QString &label, char32_t ch) {
 	QAbstractButton *button = make_button(label);
+	bssh_set_key_repeat(button);
 	connect(button, &QAbstractButton::clicked, this, [this, ch] {
 		if (!m_router) return;
 		/* Through the router, so a sticky Ctrl applies to these too. */

@@ -52,6 +52,15 @@ private slots:
 	void modify_other_keys_encodes_and_reports_its_level();
 	void pane_chords_are_kept_by_the_app();
 	void key_row_goes_through_the_router();
+
+	/*
+	 * That a HELD key actually sends more than once, end to end through
+	 * the row and the router into the emulator's output. The property
+	 * check in layout_test says the flag is set on the right buttons;
+	 * only this says the flag does anything, and Qt's auto-repeat is a
+	 * timer on a mouse press rather than something a click() can reach.
+	 */
+	void a_held_key_repeats();
 	void a_modifier_button_stops_claiming_a_session_that_has_gone();
 	void key_row_visibility_follows_the_input_device();
 	void a_key_row_layout_changes_which_keys_exist();

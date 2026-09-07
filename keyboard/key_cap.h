@@ -31,6 +31,38 @@
  * caps showing two glyphs each is twice the reading at the one moment
  * the user is already looking for something.
  */
+/*
+ * Auto-repeat, for a key that sends something when it is held.
+ *
+ * A physical keyboard repeats every key but its modifiers, and a terminal
+ * is where that matters most: backspacing over a mistyped path, or moving
+ * the cursor along a line, is dozens of presses without it. On a phone,
+ * where each press is a separate deliberate tap, that is the difference
+ * between usable and not -- reported from the phone, where holding
+ * Backspace deleted exactly one character.
+ *
+ * The rule this applies: EVERY key that sends something repeats, and
+ * nothing else does. Modifiers are excluded because they are checkable
+ * and a repeat would cycle armed-locked-off under a stationary thumb;
+ * the page, settings, hide and script buttons are excluded because they
+ * are about the keyboard rather than about the terminal.
+ *
+ * The alternative considered was repeating only the navigation keys, the
+ * way a phone's own keyboard does -- Gboard repeats Backspace and the
+ * arrows and never a letter. That is the right rule for prose, where an
+ * accidental "aa" is a typo somebody has to spot. It is the wrong one
+ * here: the thing being typed into is a shell, the user came from a
+ * physical keyboard, and a rule that repeats some keys and not others is
+ * one nobody can predict. The delay is what stops an ordinary tap
+ * repeating, and it is set long enough to do that rather than tuned for
+ * speed.
+ *
+ * A free function rather than a method, because the key row builds plain
+ * QToolButtons and this board builds bssh_key_caps: one rule, one place,
+ * and the two boards cannot drift apart about what repeats.
+ */
+void bssh_set_key_repeat(QAbstractButton *button);
+
 class bssh_key_cap : public QToolButton {
 	/*
 	 * Q_OBJECT for the metaobject rather than for signals: this class
