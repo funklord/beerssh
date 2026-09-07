@@ -4917,11 +4917,22 @@ A move off either end does nothing rather than wrapping, because a wrap
 makes "left" mean "far right" at the moment a user is looking at the
 leftmost pane.
 
-**Verified on a phone as far as it goes.** The Note 9 shows both items
-correctly greyed with one pane, and no grip. The live half -- two panes
-on the Fold's inner screen, the items enabled, the panes swapping --
-is unverified: that device stopped enumerating over USB across two
-cables and three ports.
+**Verified on hardware, both halves — [2026-09-07].** On a phone screen
+and on the Fold folded, both items are greyed with one pane and there is
+no grip. Unfolded, with two panes and focus on the LEFT one, *Move Pane
+Left* is greyed and *Move Pane Right* is live -- the end-stop, on the
+device rather than only in the test -- and choosing it swaps the panes
+with the focus border following the session that moved. No drag, no
+system picker, and the app stayed in the foreground throughout.
+
+The neighbouring items move with the arrangement as they should: with
+one pane *Split Beside Current* is live and *Show as Tab* greyed, and
+with two the pair reverses, a third pane not fitting.
+
+**Getting there cost three cables and four ports**, and the fault was
+the Fold's cable rather than its socket or the hub -- worth recording
+only because two false diagnoses were published on the way, one blaming
+the hub and one blaming the phone's USB mode.
 
 **And the general lesson is the one this section keeps paying for.** The
 grip's visibility was tested, asserted both ways, sabotaged and seen on
