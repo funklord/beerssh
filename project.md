@@ -8635,6 +8635,43 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3g A null guard is only as good as the value it reads — **[FIXED 2026-09-08]**
+
+Found in `bssh_font_picker` by accident: a `resizeEvent` was added, it
+needed a null guard because a resize can arrive while the constructor is
+still building the widgets it touches, and only then did anyone look at
+the constructor -- where **one of seven pointer members was initialised**.
+The guard would have read uninitialised memory and passed a garbage
+pointer into a dereference.
+
+**Swept as a lens rather than left as an anecdote**, which is what found
+the rest. Seven classes in `src/ui` and `keyboard/` have uninitialised
+pointer members; three of them have an event override that READS one
+before the constructor can have assigned it, and those three are the
+defect:
+
+    bssh_app_settings_view   17   resizeEvent -> a guard on
+                                  !m_keyboard || !m_keyboard_fallback
+    bssh_host_list            4   resizeEvent dereferences m_add,
+                                  with no guard at all
+    bssh_pane_container       1   showEvent -> update_on_screen() reads
+                                  m_splitter
+
+The settings page is the same defect as the picker's and predates it: a
+guard written to make the resize path safe, reading memory that has not
+been assigned. `bssh_host_list` is worse -- no guard, a straight
+dereference to position the floating button.
+
+**The other four were deliberately left alone.** `host_editor`,
+`licences_view`, `preset_editor` and `session_dialog` carry about 38
+uninitialised pointer members between them and override no event
+handlers, so nothing reads them before assignment and the hazard is not
+reachable. Editing 38 members for a defect that cannot occur is the
+sweep `working-practice.md` warns about; the reachable three are a
+defect fix. **Recorded so the absence reads as a decision rather than an
+oversight** -- and so that adding an event override to any of those four
+is known to need the constructor looked at first.
+
 ### 12.3f Today's guards gained sabotage, and three of them were wrong — **[2026-09-08]**
 
 `--check` reported all 166 edits healthy while `src/ui/font_picker.cpp`

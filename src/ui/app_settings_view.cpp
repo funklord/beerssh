@@ -54,8 +54,37 @@ static void bssh_fit_items(QComboBox *box) {
 	box->setMinimumWidth(widest + chrome);
 }
 
+/*
+ * Every pointer member starts null, and on this class it is load-bearing
+ * rather than tidy: resizeEvent() calls refresh_keyboard_fallback(),
+ * which guards on `!m_keyboard || !m_keyboard_fallback` -- and a resize
+ * can arrive while this constructor is still building them, because
+ * adding a widget to a layout can lay the parent out again. With none of
+ * them initialised that guard read uninitialised memory and would pass a
+ * garbage pointer straight into a dereference.
+ *
+ * Found by the same lens that caught it in bssh_font_picker: a null
+ * guard is only as good as the value it reads.
+ */
 bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
-    : QWidget(parent) {
+    : QWidget(parent),
+      m_key_row(nullptr),
+      m_keyboard(nullptr),
+      m_keyboard_fallback(nullptr),
+      m_keyboard_layout(nullptr),
+      m_theme(nullptr),
+      m_scrollbar(nullptr),
+      m_status_line(nullptr),
+      m_window_title(nullptr),
+      m_context_menu(nullptr),
+      m_caps_as_ctrl(nullptr),
+      m_warn_multiline_paste(nullptr),
+      m_focus_follows_mouse(nullptr),
+      m_hide_from_screenshots(nullptr),
+      m_raise_contrast(nullptr),
+      m_text_brightness(nullptr),
+      m_custom_colours(nullptr),
+      m_text_brightness_value(nullptr) {
 	const bssh_platform *platform = bssh_platform::instance();
 	const bool touch = platform && platform->is_touch_primary();
 

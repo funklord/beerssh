@@ -19,9 +19,18 @@
 
 #include "model/profile_store.h"
 
+/*
+ * Every pointer member starts null. resizeEvent() dereferences m_add
+ * with no guard at all -- it positions the floating button -- and a
+ * resize can arrive while this constructor is still building it.
+ */
 bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
     : QWidget(parent),
-      m_store(store) {
+      m_store(store),
+      m_list(nullptr),
+      m_long_press(nullptr),
+      m_add(nullptr),
+      m_menu(nullptr) {
 	/*
 	 * The list is rebuilt from the store rather than edited alongside it,
 	 * which is the rule sec 8.4 already states for the tab bar and the

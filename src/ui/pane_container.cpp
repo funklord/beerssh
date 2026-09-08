@@ -14,10 +14,16 @@
 #include "ui/layout_manager.h"
 #include "ui/terminal_view.h"
 
+/*
+ * Every pointer member starts null. showEvent() calls
+ * update_on_screen(), which reads m_splitter, and a show can arrive
+ * before the constructor has finished building it.
+ */
 bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *parent)
     : QWidget(parent),
       m_layout(layout),
-      m_focused(nullptr) {
+      m_focused(nullptr),
+      m_splitter(nullptr) {
 	qRegisterMetaType<bssh_session *>();
 
 	QVBoxLayout *outer = new QVBoxLayout(this);
