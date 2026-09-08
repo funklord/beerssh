@@ -10,6 +10,7 @@
 #include "ui/theme.h"
 #include <QPalette>
 #include "platform_test.h"
+#include "phone_metrics.h"
 #include "ui/main_window.h"
 
 void platform_test::desktop_platform_is_selected_and_named() {
@@ -114,7 +115,7 @@ void platform_test::the_window_opens_on_the_front_door() {
 
 void platform_test::a_long_failure_does_not_widen_the_window() {
 	bssh_main_window window;
-	window.resize(360, 640);
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	window.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 

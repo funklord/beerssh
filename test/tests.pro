@@ -128,6 +128,7 @@ SOURCES += \
 HEADERS += \
     ../keyboard/key_cap.h \
     fake_ssh_session.h \
+    phone_metrics.h \
     command_line_test.h \
     conn_manager_test.h \
     emulator_bench.h \

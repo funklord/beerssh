@@ -36,29 +36,9 @@
 #include "ui/terminal_view.h"
 #include "ui/ssh_config_import.h"
 #include "ui_shots.h"
+#include "phone_metrics.h"
 
 namespace {
-
-/*
- * The two shapes worth looking at, and the sizes the tests hold them to:
- * a narrow phone (sec 8.2's COMPACT class) and a small desktop window --
- * the half-screen column sec 8.2 names when it talks about tiling.
- */
-/*
- * The same 320 the fit assertions use, and for the same reason: a Galaxy
- * Z Fold 3's cover screen is 320dp and folded is how it is carried.
- *
- * These were rendered at 360 until 2026-09-07, which is 40dp wider than
- * the narrowest screen the suite guards -- so the pictures could not show
- * the case the assertions had started failing on, and a reader browsing
- * them would have concluded the narrow layout was fine because the only
- * picture of it was of a wider one. A gallery of the second-narrowest
- * case is a gallery that cannot find the defect it exists to find.
- */
-const int BSSH_PHONE_W = 320;
-const int BSSH_PHONE_H = 640;
-const int BSSH_DESKTOP_W = 800;
-const int BSSH_DESKTOP_H = 600;
 
 /*
  * Forces the arrangement for as long as it is in scope, so an early
@@ -171,7 +151,7 @@ void shoot_whole_page(const QString &name, QWidget *surface) {
 	 * Lay the page out at the phone size and ASK the scroll area how wide
 	 * its viewport came out, rather than guessing.
 	 *
-	 * This was BSSH_PHONE_W - 20 until 2026-09-08, and the 20 was a fudge
+	 * This was BSSH_PHONE_DP - 20 until 2026-09-08, and the 20 was a fudge
 	 * for a scrollbar nobody had measured. It cost a false report: the
 	 * Keyboard combo was announced as clipping on the copyright holder's
 	 * phone on the strength of a picture drawn at 300, where the device
@@ -183,15 +163,15 @@ void shoot_whole_page(const QString &name, QWidget *surface) {
 	 * a reader can check against the phone, which is the whole argument for
 	 * having a gallery at all.
 	 */
-	surface->resize(BSSH_PHONE_W, BSSH_PHONE_H);
+	surface->resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	surface->show();
 	QVERIFY(QTest::qWaitForWindowExposed(surface));
 	QTest::qWait(50);
 
 	const int width = area->viewport()->width();
-	QVERIFY2(width > 0 && width <= BSSH_PHONE_W,
+	QVERIFY2(width > 0 && width <= BSSH_PHONE_DP,
 	          qPrintable(QStringLiteral("%1: viewport came out %2 wide inside %3")
-	                          .arg(name).arg(width).arg(BSSH_PHONE_W)));
+	                          .arg(name).arg(width).arg(BSSH_PHONE_DP)));
 
 	const QSize was = content->size();
 
@@ -232,22 +212,22 @@ void bssh_ui_shots::render_touch_surfaces() {
 	store.save(profile);
 
 	QTextStream(stdout) << QStringLiteral("touch, at %1x%2:\n")
-	                               .arg(BSSH_PHONE_W).arg(BSSH_PHONE_H);
+	                               .arg(BSSH_PHONE_DP).arg(BSSH_PHONE_TALL_DP);
 
 	bssh_host_list list(&store);
-	shoot(QStringLiteral("touch-host-list"), &list, BSSH_PHONE_W, BSSH_PHONE_H);
+	shoot(QStringLiteral("touch-host-list"), &list, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 
 	bssh_host_editor editor(&store);
 	editor.set_profile(profile);
-	shoot(QStringLiteral("touch-host-editor"), &editor, BSSH_PHONE_W, BSSH_PHONE_H);
+	shoot(QStringLiteral("touch-host-editor"), &editor, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	shoot_whole_page(QStringLiteral("touch-host-editor"), &editor);
 
 	bssh_preset_editor presets(&store, bssh_preset_editor::TOUCH);
-	shoot(QStringLiteral("touch-preset-editor"), &presets, BSSH_PHONE_W, BSSH_PHONE_H);
+	shoot(QStringLiteral("touch-preset-editor"), &presets, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	shoot_whole_page(QStringLiteral("touch-preset-editor"), &presets);
 
 	bssh_app_settings_view settings;
-	shoot(QStringLiteral("touch-settings"), &settings, BSSH_PHONE_W, BSSH_PHONE_H);
+	shoot(QStringLiteral("touch-settings"), &settings, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 
 	shoot_whole_page(QStringLiteral("touch-settings"), &settings);
 
@@ -304,7 +284,7 @@ void bssh_ui_shots::render_touch_surfaces() {
 
 			const QString name = QStringLiteral("touch-keyboard-%1-%2")
 			        .arg(QLatin1String(which.name), groups.at(g).id);
-			shoot(name, &keys, BSSH_PHONE_W, keys.sizeHint().height());
+			shoot(name, &keys, BSSH_PHONE_DP, keys.sizeHint().height());
 
 			/*
 			 * And the full one again at a tablet's width, because a
@@ -341,7 +321,7 @@ void bssh_ui_shots::render_touch_surfaces() {
 				shoot(name + QStringLiteral("-altgr"), &keys,
 				       which.style == bssh_soft_keyboard_catalog::STYLE_FULL
 				               ? 800
-				               : BSSH_PHONE_W,
+				               : BSSH_PHONE_DP,
 				       keys.sizeHint().height());
 
 				/* Armed, locked, off: leave the router as it was found. */
@@ -356,7 +336,7 @@ void bssh_ui_shots::render_touch_surfaces() {
 		row.set_layout(layout.id);
 
 		shoot(QStringLiteral("touch-key-row-") + layout.id, &row,
-		       BSSH_PHONE_W, row.sizeHint().height());
+		       BSSH_PHONE_DP, row.sizeHint().height());
 
 		/*
 		 * And the whole row, not the seven keys a phone shows.
@@ -417,14 +397,14 @@ void bssh_ui_shots::render_touch_surfaces() {
 	}
 
 	bssh_font_picker picker;
-	shoot(QStringLiteral("touch-font-picker"), &picker, BSSH_PHONE_W, BSSH_PHONE_H);
+	shoot(QStringLiteral("touch-font-picker"), &picker, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 
 	bssh_password_prompt prompt(
 	        QStringLiteral("nabbe.testing@build.internal.example.com:2299"), true);
-	shoot(QStringLiteral("touch-password-prompt"), &prompt, BSSH_PHONE_W, BSSH_PHONE_H);
+	shoot(QStringLiteral("touch-password-prompt"), &prompt, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 
 	bssh_licences_view licences;
-	shoot(QStringLiteral("touch-licences"), &licences, BSSH_PHONE_W, BSSH_PHONE_H);
+	shoot(QStringLiteral("touch-licences"), &licences, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 
 }
 
@@ -437,15 +417,15 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	store.save(sample_profile());
 
 	QTextStream(stdout) << QStringLiteral("\ndesktop, at %1x%2:\n")
-	                               .arg(BSSH_DESKTOP_W).arg(BSSH_DESKTOP_H);
+	                               .arg(BSSH_SMALL_DESKTOP_W).arg(BSSH_SMALL_DESKTOP_H);
 
 	bssh_session_dialog front_door(&store);
 	shoot(QStringLiteral("desktop-front-door"), &front_door,
-	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 
 	bssh_preset_editor presets(&store, bssh_preset_editor::DESKTOP);
 	shoot(QStringLiteral("desktop-preset-editor"), &presets,
-	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 
 	/*
 	 * The assembled WINDOW, which nothing rendered until now -- every
@@ -473,7 +453,7 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	second.host = QStringLiteral("web.internal.example.com");
 	window.adopt_session(window.registry()->create(second));
 
-	shoot(QStringLiteral("desktop-window"), &window, BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	shoot(QStringLiteral("desktop-window"), &window, BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 
 	/*
 	 * And the same window after "Detach to a Window", which is the one
@@ -508,9 +488,9 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	QVERIFY2(torn, "Detach produced no window");
 
 	shoot(QStringLiteral("desktop-detach-source"), &window,
-	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 	shoot(QStringLiteral("desktop-detach-torn-out"), torn,
-	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 
 	delete torn;
 
@@ -530,7 +510,7 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	panes->views().first()->set_being_dragged(true);
 
 	shoot(QStringLiteral("desktop-pane-being-dragged"), &window,
-	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 
 	panes->views().first()->set_being_dragged(false);
 
@@ -617,7 +597,7 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	 * and made a tab. The picture showed a single terminal and was
 	 * perfectly honest about it: the wrong thing had happened.
 	 */
-	window.resize(BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	window.resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 	window.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 	QTest::qWait(50);
@@ -626,7 +606,7 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	QTest::qWait(50);
 
 	shoot(QStringLiteral("desktop-window-split"), &window,
-	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 	bssh_ssh_session::set_factory(nullptr);
@@ -691,7 +671,7 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	bssh_ssh_config_import import(&store);
 	import.set_hosts(parsed);
 	shoot(QStringLiteral("desktop-config-import"), &import,
-	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 
 	/*
 	 * And the front door at its own minimum, which is where a layout
@@ -704,7 +684,7 @@ void bssh_ui_shots::render_desktop_surfaces() {
 
 	bssh_licences_view licences;
 	shoot(QStringLiteral("desktop-licences"), &licences,
-	       BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 
 }
 
@@ -716,7 +696,7 @@ void bssh_ui_shots::render_front_door_pages() {
 	store.save(sample_profile());
 
 	bssh_session_dialog front_door(&store);
-	front_door.resize(BSSH_DESKTOP_W, BSSH_DESKTOP_H);
+	front_door.resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 	front_door.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&front_door));
 
@@ -754,7 +734,7 @@ void bssh_ui_shots::render_front_door_pages() {
 	 * nobody had looked past the first screen.
 	 */
 	QTextStream(stdout) << QStringLiteral("\nfront door pages, at %1x%2:\n")
-	                               .arg(BSSH_DESKTOP_W).arg(BSSH_DESKTOP_H);
+	                               .arg(BSSH_SMALL_DESKTOP_W).arg(BSSH_SMALL_DESKTOP_H);
 
 	for (QTreeWidgetItem *item : items) {
 		categories->setCurrentItem(item);
@@ -800,7 +780,7 @@ void bssh_ui_shots::render_front_door_pages() {
 		        : nullptr;
 		QWidget *content = area ? area->widget() : nullptr;
 
-		if (content && content->sizeHint().height() > BSSH_DESKTOP_H) {
+		if (content && content->sizeHint().height() > BSSH_SMALL_DESKTOP_H) {
 			const QSize was = content->size();
 
 			/* The width the scroll area actually gives it, for the
@@ -808,7 +788,7 @@ void bssh_ui_shots::render_front_door_pages() {
 			 * nobody stated is evidence about the picture. */
 			const int width = area->viewport()->width() > 0
 			                   ? area->viewport()->width()
-			                   : BSSH_DESKTOP_W - 220;
+			                   : BSSH_SMALL_DESKTOP_W - 220;
 
 			content->resize(width, qMin(content->sizeHint().height(), 3000));
 			QTest::qWait(50);

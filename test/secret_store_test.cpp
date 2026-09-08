@@ -12,6 +12,7 @@
 #include "ui/app_settings_view.h"
 #include "ui/password_prompt.h"
 #include "secret_store_test.h"
+#include "phone_metrics.h"
 
 /*
  * These exercise the FILE backend by name rather than through
@@ -383,7 +384,7 @@ void secret_store_test::the_settings_page_names_the_secret_backend()
 void secret_store_test::no_setting_is_cut_off_at_a_phone_width()
 {
 	bssh_app_settings_view view;
-	view.resize(360, 640);
+	view.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	view.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&view));
 
@@ -416,11 +417,16 @@ void secret_store_test::the_password_prompt_fits_a_phone()
 	QVERIFY(QTest::qWaitForWindowExposed(&prompt));
 
 	/*
-	 * 360dp is the narrow phone width sec 8.2 designs to. Asked of the
-	 * MINIMUM size hint: that is what a window manager cannot go below,
-	 * so anything wider than the screen is content the user cannot reach.
+	 * Asked of the MINIMUM size hint: that is what a window manager
+	 * cannot go below, so anything wider than the screen is content the
+	 * user cannot reach.
+	 *
+	 * The width comes from phone_metrics.h rather than from a number
+	 * here. It said 360 until 2026-09-08, citing a section that had
+	 * moved to 320 a day earlier -- a local copy of a shared rule, which
+	 * is the case that header exists for.
 	 */
-	const int phone = 360;
+	const int phone = BSSH_PHONE_DP;
 	QVERIFY2(prompt.minimumSizeHint().width() <= phone,
 	          qPrintable(QStringLiteral("the prompt demands %1px on a %2px screen")
 	                             .arg(prompt.minimumSizeHint().width()).arg(phone)));

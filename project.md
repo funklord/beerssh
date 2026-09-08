@@ -8635,6 +8635,54 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3k The phone width was written in four files under two names — **[FIXED 2026-09-08]**
+
+The lens sec 12.3j suggests: **an instrument whose output is a function
+of a constant nobody measured, checked against nothing.** Swept over
+`test/` and `tool/` for numbers standing in for a value the code could
+have asked for.
+
+Most literal sizes in the suite are innocent -- a test picking a window
+to work in is not claiming to represent a device. Five sites were the
+other kind, all of them the string `360`:
+
+    secret_store_test  no_setting_is_cut_off_at_a_phone_width   WEAKENED
+    secret_store_test  const int phone = 360                    WEAKENED
+    layout_test        two resize(360, 640) crossing a class    cosmetic
+    platform_test      a_long_failure_does_not_widen_the_window cosmetic
+
+**Two are genuinely weakened, and in the direction that hides
+defects.** A word-wrapped label needs MORE height as the screen narrows,
+so a test asserting that no setting is cut off "at a phone width" was
+asking the easier question -- the gallery bug of sec 12.3j, in an
+assertion instead of a picture. The other asserts the password prompt's
+minimum fits, which 320 makes stricter, and its comment cited a section
+that had moved.
+
+**Measured at 320: nothing fails.** 543 passed, same as at 360. So there
+is no defect behind this, and the entry is a record of a method rather
+than of a bug -- the labels and the prompt are genuinely fine at the
+device's width, which is worth knowing precisely because the old
+assertion could not have told anyone.
+
+**The structural cause is the part worth fixing.** sec 12.3b moved the
+floor from 360 to 320 by hand, and reached two of six sites, because
+every file carried its own copy -- and the two it did reach spelled it
+differently from each other, `BSSH_PHONE_DP` against `BSSH_PHONE_W`, the
+same 320 under two names.
+
+`test/phone_metrics.h` holds it once now. **`touch_metrics.h` already
+made this exact argument** about sec 6.2's touch floor, which had been a
+static in seven files under four names: *the danger is not the
+duplication -- it is that a rule written in seven places is one that can
+be changed in six.* The phone width is that rule, and it has now been the
+exception twice.
+
+**The rename carried a proof rather than a reading.** Values asserted
+identical before any substitution, then use counts compared across it:
+15, 9, 14 and 14 before and after. A rename that moved every use and
+invented none.
+
 ### 12.3j The gallery was drawn at a width nobody had measured — **[FIXED 2026-09-08]**
 
 `make shots` sized every scrolling page at `BSSH_PHONE_W - 20`, and the

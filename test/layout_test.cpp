@@ -59,6 +59,7 @@
 #include "ui/long_press.h"
 #include "ui/main_window.h"
 #include "fake_ssh_session.h"
+#include "phone_metrics.h"
 #include "layout_test.h"
 #include "input/input_router.h"
 #include "model/app_settings.h"
@@ -395,30 +396,6 @@ struct forced_touch_t {
 	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
 };
 
-/*
- * 320, not 360, and the number is a DEVICE rather than a round figure.
- *
- * A Galaxy Z Fold 3's cover screen is 832x2268 at 420dpi, which is 320dp
- * wide, and folded is how it is carried. Every "fits a phone" assertion
- * here ran at 360 until 2026-09-07, so the narrowest case the suite knew
- * was 40dp wider than a screen this app is used on daily -- a set of
- * tabulated extremes that did not include the extreme.
- *
- * Measured rather than assumed: at 320 three surfaces overflowed, and the
- * two causes were not the ones guessed at. The font picker's colour strip
- * was a fixed `16 * 18` pixmap and a QLabel demands its pixmap's width,
- * so one decorative strip set the floor for the picker and for both
- * editors that embed it -- 288px, to the pixel. And every shortcut's
- * description IS its form row's label, which QFormLayout does not wrap,
- * so the settings page's floor was its longest description beside a
- * QKeySequenceEdit. Both are fixed at the cause; neither was the combo
- * boxes, which is what the first two guesses said.
- *
- * Lowering this is how the gate gets satisfied by deforming the thing it
- * measures. Lower it only for a device that is genuinely narrower.
- */
-const int BSSH_PHONE_DP = 320;
-const int BSSH_PHONE_TALL_DP = 640;
 
 QString too_wide(const QString &name, const QWidget *widget)
 {
@@ -3152,8 +3129,6 @@ namespace {
  * 680 and lands in the MEDIUM size class. 800x600 is the round number
  * safely inside that, and the classic floor besides.
  */
-const int BSSH_SMALL_DESKTOP_W = 800;
-const int BSSH_SMALL_DESKTOP_H = 600;
 
 bool has_button(const QWidget *root, const QString &text)
 {
@@ -4135,7 +4110,7 @@ void layout_test::narrowing_a_window_turns_its_extra_panes_into_tabs() {
 	QCOMPARE(bar->count(), 0);
 
 	/* Phone width: one pane is all that fits (sec 8.2). */
-	window.resize(360, 640);
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	QCoreApplication::processEvents();
 
 	QCOMPARE(window.panes()->views().size(), 1);
@@ -5856,7 +5831,7 @@ void layout_test::a_drop_on_the_panes_tiles_where_there_is_room() {
 	 * tab instead of nothing at all.
 	 */
 	bssh_main_window narrow;
-	narrow.resize(360, 640);
+	narrow.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	narrow.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&narrow));
 
