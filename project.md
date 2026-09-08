@@ -8635,6 +8635,41 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3i A fifth that found nothing: combos on the other surfaces — **[2026-09-08]**
+
+§12.3e asserts that nothing on the settings page is drawn narrower than
+its own text, and scopes that to one page. The obvious extension is
+every touch surface, so it was MEASURED before an assertion was written
+rather than after.
+
+Combos only, deliberately: a `QLineEdit` scrolling long user text is
+normal -- the host editor legitimately shows
+`e@bastion.internal.example.com:2222` clipped from the left because the
+cursor is at the end -- so asserting on line edits across every surface
+would manufacture false positives. A truncated `QComboBox` is never
+legitimate, because it cannot be scrolled and the setting simply reads
+as the wrong word.
+
+At 320dp, nothing clips:
+
+    font picker     270 wide,  89 needed
+    host editor     218 wide,  89 needed
+    preset editor   212 wide,  89 needed;  116/55;  85/44
+
+The narrowest is the preset editor's cursor-style combo at roughly double
+what it needs, against the nine pixels the settings page had.
+
+**The settings page is the outlier and the reason is structural**: its
+combos sit in a form whose LABEL COLUMN is long -- shortcut descriptions
+and setting names -- so the field gets what is left. The editors put
+theirs in forms with short labels ("Font", "Colours"), so the field gets
+most of the width. Same widget, same style, different neighbours.
+
+So the assertion stays scoped to the page where it has been seen to
+fire. **A guard that cannot fail on three of the four pages it covered
+would read as broader coverage than it has**, which is the failure this
+document keeps recording from the other direction.
+
 ### 12.3h A fourth sweep that found nothing: dangling session pointers — **[2026-09-08]**
 
 Derived from §12.3g by inverting it. That defect is a value read before
