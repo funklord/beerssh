@@ -8635,6 +8635,42 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3h A fourth sweep that found nothing: dangling session pointers — **[2026-09-08]**
+
+Derived from §12.3g by inverting it. That defect is a value read before
+it is valid; the mirror image is a value read after it stops being --
+a raw `bssh_session *` held in a container while the session is
+destroyed elsewhere. A multi-window terminal that hands sessions between
+windows is where that would live.
+
+**What would have matched:** a container of `bssh_session *` with no path
+that removes an entry when the session closes. Six exist -- `m_shown`,
+`m_tab_order`, `m_current` and `m_wired_sessions` in the window,
+`m_intent` in the layout manager, `m_sessions` and `m_focused` in the
+pane container.
+
+**What the code does instead**, and it is a design rather than a set of
+individual removals: `session_closing` clears the window's wired set and
+calls `m_layout->forget()`, and the registry's `changed()` reaches
+`on_registry_changed()`, which prunes `m_shown` against the registry by
+`index_of` -- a pointer comparison, never a dereference -- while
+`refresh_tab_bar()` REBUILDS `m_tab_order` from scratch each time rather
+than editing it. `m_tab_order` has no removal path at all and needs
+none, which is what made it look like a finding until the rebuild was
+read.
+
+That is §8.4's own rule showing up as a safety property: the tab bar is
+rebuilt from the registry rather than edited alongside it, because two
+lists kept in step by hand drift. Kept in step by hand they would also
+dangle.
+
+**Two places already use `QPointer` and both carry a comment naming the
+bug that put it there** -- `session_registry.cpp`'s deferred emit and
+`main_window.h`'s held session -- so the hazard is known where a raw
+pointer genuinely had to survive a turn of the event loop.
+
+So this family is swept and the next lens should be somewhere else.
+
 ### 12.3g A null guard is only as good as the value it reads — **[FIXED 2026-09-08]**
 
 Found in `bssh_font_picker` by accident: a `resizeEvent` was added, it
