@@ -8635,6 +8635,53 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3m A sixth sweep that found nothing: wrapped notes — **[2026-09-09]**
+
+The lens after sec 12.3l, derived from `wrapped_note.h` existing at all:
+**a helper written because a plain call gets something wrong, with a
+caller that makes the plain call anyway.** One site in the tree reaches
+`setWordWrap(true)` without going through it -- the licences view's
+identity label, which carries the version and the copyright line
+`harmonization.md` requires on that surface.
+
+The comfortable story was ready: that label's text is 48 characters, the
+render shows it ending flush with the edge at 320dp, and sec 12.3d has
+already established that a widget's width is a function of the UI font
+and that the container's are wider. A defect in waiting.
+
+**The experiment that would have confirmed it refused it.** Squeezing the
+view from 320dp to 160 so the copyright line must wrap to a third line
+and a fourth:
+
+    320    label 298 wide    h=34  need=34   ok
+    260    label 238 wide    h=51  need=51   ok
+    200    label 178 wide    h=51  need=51   ok
+    160    label 138 wide    h=68  need=68   ok
+
+The height tracks the need at every step. `wrapped_note` is scoped to a
+note in a FORM -- QFormLayout asks how tall a label is, is told one line
+because the size policy does not advertise the dependency, and prints
+the next row through the rest of the sentence. This label is in a box
+layout, which asks `heightForWidth` and honours it. The bypass is
+correct, and the site now says so, because an unstated precondition and
+an absent one look identical to the next sweep.
+
+**And the wider measurement is worth keeping.** Every wrapped label on
+all seven touch surfaces, at 320dp: 22 of them, none cut off.
+
+    licences 1    colours 2    picker 2    prompt 1
+    settings 11   hosts 2      presets 3
+
+Twenty of the twenty-two sit at slack=0 -- height exactly equal to need,
+which is the layout doing its job rather than a margin to worry about.
+
+**No assertion was added for the six surfaces beyond the settings
+page**, and that is sec 12.3i's rule rather than laziness: outside a
+form the mechanism cannot bite, so six arms would be six that cannot
+fail. The settings page keeps the one that can, and this entry records
+that the others were swept, by what method, and what the code does
+instead.
+
 ### 12.3l The same starved form on the narrowest page — **[FIXED 2026-09-08]**
 
 sec 12.3j fixed the host editor's two-column form on a phone and left

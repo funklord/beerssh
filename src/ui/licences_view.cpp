@@ -91,6 +91,24 @@ bssh_licences_view::bssh_licences_view(QWidget *parent)
 	                      QString(QStringLiteral(BSSH_COPYRIGHT_LINE)).toHtmlEscaped()),
 	        this);
 	identity->setTextFormat(Qt::RichText);
+	/*
+	 * setWordWrap directly, and NOT bssh_wrapped_note, which is the only
+	 * place in the tree that does. Deliberate, and measured, because a
+	 * sweep for exactly this bypass found it and had to be talked out of
+	 * "fixing" it.
+	 *
+	 * That helper exists for a note in a FORM: a wrapped QLabel does not
+	 * advertise the height-for-width dependency in its size policy, so
+	 * QFormLayout asks how tall it is, is told one line, and prints the
+	 * next row through the rest of the sentence. This label is in the
+	 * box layout above, which asks heightForWidth and honours it.
+	 *
+	 * Squeezed from 320dp down to 160 so the copyright line has to wrap
+	 * to a third and fourth line, the height tracks the need exactly at
+	 * every step -- 34/34, 51/51, 51/51, 68/68. Routing it through the
+	 * helper would change nothing and would imply the box layout has the
+	 * form's problem.
+	 */
 	identity->setWordWrap(true);
 	identity->setObjectName(QStringLiteral("licences_identity"));
 	outer->addWidget(identity);
