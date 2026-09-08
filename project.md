@@ -8844,7 +8844,22 @@ methods whose body can `QSKIP`, and names the four that match:
 
 Four of 166. It cannot say a guard will fire and does not try; it says
 one is there, which is enough to stop a MISSED from those four being
-read as a finding without a second look. **Reported and never failed
+read as a finding without a second look.
+
+**Measured on this machine, the practical count is ONE, not four**
+(2026-09-08). Three of the four tests RUN and pass here -- their guards
+are the read-only-directory and settings-page ones §12.2c already found
+do not fire -- so a MISSED from `delete-both-halves`,
+`remember-both-halves` or `settings-per-window` is a real hole rather
+than a dormant guard, and should be chased rather than shrugged at. Only
+`ssh-send-window` is genuinely ambiguous under `make test`, and that one
+is provable under `make check-ssh` (§12.2f).
+
+The warning stays as written, because the SOURCE can only say a guard
+exists and that is a property of the tree rather than of this laptop.
+What this adds is the reading: check whether the named test actually
+skipped in the run that produced the MISSED, which the suite's own
+output answers in one grep. **Reported and never failed
 on**, because a guard that exists is not a guard that fires and refusing
 would be a false finding on every run — the distinction between an
 investigative sweep and a standing gate. The parser IS refused on: no
