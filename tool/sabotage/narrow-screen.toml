@@ -1,0 +1,63 @@
+# Sabotages for the 320dp floor (sec 12.3b), which is a Galaxy Z Fold 3's
+# cover screen rather than a round number. Three surfaces overflowed it
+# when it was first measured, and these break the fixes.
+#
+# src/ui/font_picker.cpp had NO spec at all until this file: the swatch
+# strip fix took three surfaces from overflowing to fitting and nothing
+# in the harness guarded it, while --check reported every anchor healthy.
+# That check verifies the specs that exist; nothing asserts new behaviour
+# gained one.
+
+# The colour strip was a fixed 16*18 pixmap, and a QLabel demands its
+# pixmap's width -- so one decorative strip set the floor for the picker
+# and for both editors that embed it, at 288px to the pixel.
+#
+# BOTH HALVES IN ONE EDIT, and that is the finding rather than the
+# convenience. The fix is two independent protections: the strip draws to
+# the width it is GIVEN, and the label's size policy is Ignored so the
+# pixmap cannot decide the form's width. Sabotaged separately, each was
+# MISSED -- a fixed pixmap is harmless while the policy ignores it, and a
+# Preferred policy is harmless while the pixmap follows the layout. Two
+# conditions each independently saving the case, so neither one's
+# sabotage can fail.
+#
+# Recorded because the first version of this spec had them as two entries
+# and reported two MISSED, which reads as two holes in the tests and is
+# not: it is one guard with a spare.
+#
+# And the SECOND version still read MISSED, for a different reason worth
+# keeping: it replaced only the size-policy line, and the very next line
+# -- setMinimumWidth(BSSH_SWATCH_COLUMNS) -- overwrote the 288 it had
+# just injected. The edit applied cleanly, matched its anchor exactly
+# once, compiled, and did nothing. A sabotage that lands and is then
+# undone by the line below it is indistinguishable from a test that
+# cannot fail, and only measuring the widget said which: the picker
+# reported 172px with the sabotage confirmed present in the built source.
+# Both lines are in the find now, which is why it is two lines long.
+[[sabotage]]
+name = "the swatch strip demands a fixed width again"
+file = "src/ui/font_picker.cpp"
+find = "\tm_swatches->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);\n\tm_swatches->setMinimumWidth(BSSH_SWATCH_COLUMNS);"
+replace = "\tm_swatches->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);\n\tm_swatches->setMinimumWidth(16 * 18);"
+expect = "every_touch_surface_fits_a_phone"
+
+# Every shortcut's description is its form row's label and QFormLayout
+# does not wrap labels, so without this the settings page's floor is its
+# longest description beside a QKeySequenceEdit.
+[[sabotage]]
+name = "the settings form stops wrapping its long rows"
+file = "src/ui/app_settings_view.cpp"
+find = "\tchords->setRowWrapPolicy(QFormLayout::WrapLongRows);"
+replace = "\tchords->setRowWrapPolicy(QFormLayout::DontWrapRows);"
+expect = "every_touch_surface_fits_a_phone"
+
+# The chord editors stating the width they need. This one is NOT caught
+# by the fit assertion -- a field willing to clip has a small minimum and
+# therefore fits -- which is exactly why the clipping assertion exists,
+# and why this entry names it rather than the fit test.
+[[sabotage]]
+name = "the chord editors stop stating the width they need"
+file = "src/ui/app_settings_view.cpp"
+find = "\t\tedit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)"
+replace = "\t\tif (false) edit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)"
+expect = "no_control_is_narrower_than_the_text_it_shows"

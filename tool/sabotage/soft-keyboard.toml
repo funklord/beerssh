@@ -74,3 +74,27 @@ find = '''
 replace = '''
 	group.rows.append(slot_run("AC", 1, 10, 2));'''
 expect = "every_keyboard_group_is_the_same_shape"
+
+# A key that is held stops repeating. Reported from a phone: Backspace
+# deleted one character however long it was held, which makes correcting
+# a mistyped path a tap per character. The partition test is what notices
+# -- a cap repeats if and only if it is not checkable -- so removing the
+# call on ONE board is enough to break the rule the test asserts.
+[[sabotage]]
+name = "the built-in keyboard's keys stop repeating when held"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\tconst int code = key.value;\n\t\tbssh_set_key_repeat(button);"
+replace = "\t\tconst int code = key.value;"
+expect = "every_key_that_sends_something_repeats"
+
+# The other board, and it is a separate edit on purpose: the two build
+# their buttons in different files, which is the drift the single helper
+# exists to prevent. A sabotage of one that the other's coverage caught
+# would report the rule as guarded when half of it is not.
+[[sabotage]]
+name = "the key row's keys stop repeating when held"
+file = "keyboard/key_row.cpp"
+find = "\tQAbstractButton *button = make_button(label);\n\tbssh_set_key_repeat(button);\n\tconnect(button, &QAbstractButton::clicked, this, [this, key] {"
+replace = "\tQAbstractButton *button = make_button(label);\n\tconnect(button, &QAbstractButton::clicked, this, [this, key] {"
+expect = "every_key_that_sends_something_repeats"
+

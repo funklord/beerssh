@@ -8635,6 +8635,53 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3f Today's guards gained sabotage, and three of them were wrong — **[2026-09-08]**
+
+`--check` reported all 166 edits healthy while `src/ui/font_picker.cpp`
+had **no spec at all**: the swatch-strip fix took three surfaces from
+overflowing to fitting with nothing in the harness guarding it. That
+check verifies the specs that EXIST; nothing asserts that new behaviour
+acquired one. Six entries added — the key repeat on both boards, the
+strip, the settings wrap policy, the chord editors — and all six caught.
+
+**Getting the strip entry right took three attempts, each wrong in a
+different way, and every one passed `--check`:**
+
+- **Two entries, one guard with a spare.** The fix is two independent
+  protections -- the strip draws to the width it is GIVEN, and the
+  label's policy is `Ignored` so the pixmap cannot decide the form's
+  width. Sabotaged separately each was MISSED, because a fixed pixmap is
+  harmless while the policy ignores it and a `Preferred` policy is
+  harmless while the pixmap follows the layout. Neither one's sabotage
+  CAN fail.
+- **One entry that was undone by the next line.** Replacing only the
+  size-policy line left
+  `m_swatches->setMinimumWidth(BSSH_SWATCH_COLUMNS)` immediately below
+  it, overwriting the 288 just injected. It matched its anchor exactly
+  once, compiled, ran, and did nothing: the picker measured 172px with
+  the sabotage confirmed present in the built source. **A sabotage that
+  lands and is then overwritten is indistinguishable from a test that
+  cannot fail.**
+- **Both adjacent lines in one `find`** -- caught, failing the two
+  editors that embed the picker.
+
+**None of the three is detectable by the anchor check**, which is the
+limit §12.2d states and this demonstrates rather than asserts: each
+matched exactly once and named a declared test. Together with the
+pane-wrap entry that produced undefined behaviour instead of the defect
+it named (§12.2g), that is four distinct ways a spec can be aimed at
+something real and still be unable to fail.
+
+**And twice today a conclusion was drawn from a build that did not
+contain the change.** Once from `make` rather than `make test` -- plain
+`make` does not build the test binary -- which "disproved" a correct
+TERM diagnosis; once from an edit never confirmed to have survived to
+the compiler, which produced a widget measurement from the wrong binary.
+Both made a WRONG conclusion look verified, which is the expensive
+direction: a false negative ends an investigation rather than prolonging
+it. The habit that catches it is one line -- grep the marker out of the
+source AFTER the build, not before.
+
 ### 12.3e Clipping has its own assertion, and one arm of it is unproved — **[2026-09-08]**
 
 §12.3c records that a width assertion cannot see truncation: it asks
