@@ -33,7 +33,15 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
       m_title(nullptr),
       m_font_scope(nullptr),
       m_font_revert(nullptr),
-      m_save(nullptr) {
+      m_save(nullptr),
+      m_name(nullptr),
+      m_identity(nullptr),
+      m_jump(nullptr),
+      m_biometric(nullptr),
+      m_host(nullptr),
+      m_user(nullptr),
+      m_port(nullptr),
+      m_font_picker(nullptr) {
 	/*
 	 * The fields scroll; the actions do not.
 	 *

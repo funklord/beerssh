@@ -8662,15 +8662,39 @@ guard written to make the resize path safe, reading memory that has not
 been assigned. `bssh_host_list` is worse -- no guard, a straight
 dereference to position the floating button.
 
-**The other four were deliberately left alone.** `host_editor`,
-`licences_view`, `preset_editor` and `session_dialog` carry about 38
-uninitialised pointer members between them and override no event
-handlers, so nothing reads them before assignment and the hazard is not
-reachable. Editing 38 members for a defect that cannot occur is the
-sweep `working-practice.md` warns about; the reachable three are a
-defect fix. **Recorded so the absence reads as a decision rather than an
-oversight** -- and so that adding an event override to any of those four
-is known to need the constructor looked at first.
+**The first version of this entry stopped at three, and the reason it
+gave was wrong.** It said the other four "override no event handlers, so
+nothing reads them before assignment". True about event handlers and not
+a characterisation of the set: **a `connect` made in a constructor is
+the other way in**, and a signal can fire before the constructor
+finishes. All four connect during construction.
+
+Re-measured by the ordering that actually decides it -- is the first
+`connect(` after the last `m_... = new`:
+
+    host_editor       connect at 193, last assignment at 203   HAZARD
+    session_dialog    connect at  25, last assignment at 121   HAZARD
+    licences_view     connect at  81, last assignment at  68   safe
+    preset_editor     connect at 261, last assignment at 246   safe
+
+Both hazards are the same defect again. `session_dialog` connects
+`bssh_profile_store::changed` to a lambda guarding on `m_sessions &&`
+-- a guard on uninitialised memory, 96 lines before `m_sessions` is
+assigned. `host_editor` connects the font picker's `font_chosen` and
+`scheme_chosen` to `update_override_badge()` while `m_save` is still
+ten lines from being assigned. Both are initialised now.
+
+**`licences_view` and `preset_editor` stay untouched, and now for a
+measured reason rather than the wrong one**: every member is assigned
+before anything is connected, so nothing can reach one early. Editing
+them for a defect that cannot occur is the sweep
+`working-practice.md` warns about.
+
+**The discriminator is not "overrides an event handler".** It is
+"anything can reach a member before the constructor assigns it", and
+event overrides are one instance of it. A narrower rule looked like a
+characterisation because every case it had been checked against agreed
+with it.
 
 ### 12.3f Today's guards gained sabotage, and three of them were wrong — **[2026-09-08]**
 

@@ -40,7 +40,16 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
       m_font_picker(nullptr),
       m_preset_editor(nullptr),
       m_font_scope(nullptr),
-      m_font_revert(nullptr) {
+      m_font_revert(nullptr),
+      m_categories(nullptr),
+      m_pages(nullptr),
+      m_host(nullptr),
+      m_port(nullptr),
+      m_user(nullptr),
+      m_identity(nullptr),
+      m_jump(nullptr),
+      m_session_name(nullptr),
+      m_sessions(nullptr) {
 	setWindowTitle(QStringLiteral("BeerSSH Configuration"));
 
 	/*
