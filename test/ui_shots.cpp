@@ -167,20 +167,47 @@ void shoot_whole_page(const QString &name, QWidget *surface) {
 	QWidget *content = area ? area->widget() : nullptr;
 	if (!content) return;
 
+	/*
+	 * Lay the page out at the phone size and ASK the scroll area how wide
+	 * its viewport came out, rather than guessing.
+	 *
+	 * This was BSSH_PHONE_W - 20 until 2026-09-08, and the 20 was a fudge
+	 * for a scrollbar nobody had measured. It cost a false report: the
+	 * Keyboard combo was announced as clipping on the copyright holder's
+	 * phone on the strength of a picture drawn at 300, where the device
+	 * gives its content 306. Six pixels, and the finding was wrong.
+	 *
+	 * A width nobody measured is a width the picture cannot be trusted at,
+	 * so the number is now taken from the widget that decides it and
+	 * PRINTED beside the picture -- a shot whose width is in the log is one
+	 * a reader can check against the phone, which is the whole argument for
+	 * having a gallery at all.
+	 */
+	surface->resize(BSSH_PHONE_W, BSSH_PHONE_H);
+	surface->show();
+	QVERIFY(QTest::qWaitForWindowExposed(surface));
+	QTest::qWait(50);
+
+	const int width = area->viewport()->width();
+	QVERIFY2(width > 0 && width <= BSSH_PHONE_W,
+	          qPrintable(QStringLiteral("%1: viewport came out %2 wide inside %3")
+	                          .arg(name).arg(width).arg(BSSH_PHONE_W)));
+
 	const QSize was = content->size();
 
 	/* Capped, so a page asking for something absurd makes a large
 	 * picture rather than exhausting memory. */
-	content->resize(BSSH_PHONE_W - 20, qMin(content->sizeHint().height(), 3000));
+	content->resize(width, qMin(content->sizeHint().height(), 3000));
 	QTest::qWait(50);
 
 	const QString path = shot_dir() + QStringLiteral("/") + name
 	                      + QStringLiteral("-full.png");
 	content->grab().save(path);
-	QTextStream(stdout) << QStringLiteral("  %1  the whole page (%2 tall)\n")
-	                               .arg(path, -44).arg(content->height());
+	QTextStream(stdout) << QStringLiteral("  %1  the whole page (%2 wide, %3 tall)\n")
+	                               .arg(path, -44).arg(width).arg(content->height());
 
 	content->resize(was);
+	surface->hide();
 }
 
 void bssh_ui_shots::render_touch_surfaces() {
@@ -776,16 +803,21 @@ void bssh_ui_shots::render_front_door_pages() {
 		if (content && content->sizeHint().height() > BSSH_DESKTOP_H) {
 			const QSize was = content->size();
 
-			content->resize(content->width() > 0 ? content->width()
-			                                      : BSSH_DESKTOP_W - 220,
-			                 qMin(content->sizeHint().height(), 3000));
+			/* The width the scroll area actually gives it, for the
+			 * reason shoot_whole_page() gives: a picture whose width
+			 * nobody stated is evidence about the picture. */
+			const int width = area->viewport()->width() > 0
+			                   ? area->viewport()->width()
+			                   : BSSH_DESKTOP_W - 220;
+
+			content->resize(width, qMin(content->sizeHint().height(), 3000));
 			QTest::qWait(50);
 
 			const QString tall = shot_dir() + QStringLiteral("/desktop-page-")
 			                      + slug + QStringLiteral("-full.png");
 			content->grab().save(tall);
-			QTextStream(stdout) << QStringLiteral("  %1  the whole page (%2 tall)\n")
-			                               .arg(tall, -44).arg(content->height());
+			QTextStream(stdout) << QStringLiteral("  %1  the whole page (%2 wide, %3 tall)\n")
+			                               .arg(tall, -44).arg(width).arg(content->height());
 
 			content->resize(was);
 		}

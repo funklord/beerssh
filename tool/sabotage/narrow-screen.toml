@@ -61,3 +61,23 @@ file = "src/ui/app_settings_view.cpp"
 find = "\t\tedit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)"
 replace = "\t\tif (false) edit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)"
 expect = "no_control_is_narrower_than_the_text_it_shows"
+
+# The host editor stacking its labels on touch. Every field there holds
+# text of a length nobody chose -- a hostname, a key path, a ProxyJump --
+# so unlike the chord editors above they cannot state a width, and the
+# only fix available is to give them the whole row.
+#
+# This one names the FREE-FORM arm of the clipping test rather than its
+# clipping arm, and the distinction is the finding: with the fields
+# sharing a row the sample host's ProxyJump arrives in 218px of the 245
+# its text needs, which the clipping arm used to report -- and reporting
+# it was wrong, because no width satisfies arbitrary text and an
+# assertion nothing can satisfy is a waiver waiting to happen. The arm
+# asks instead whether the label is above the field, which is a question
+# the layout can answer.
+[[sabotage]]
+name = "the host editor's fields go back to sharing a row with their label"
+file = "src/ui/host_editor.cpp"
+find = "\t\tform->setRowWrapPolicy(QFormLayout::WrapAllRows);"
+replace = "\t\tform->setRowWrapPolicy(QFormLayout::WrapLongRows);"
+expect = "no_control_is_narrower_than_the_text_it_shows"

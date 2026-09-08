@@ -8635,6 +8635,84 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3j The gallery was drawn at a width nobody had measured — **[FIXED 2026-09-08]**
+
+`make shots` sized every scrolling page at `BSSH_PHONE_W - 20`, and the
+20 was a fudge for a scrollbar nobody had measured. It asks the scroll
+area now:
+
+    touch-host-editor-full.png     306 wide      was 300
+    touch-preset-editor-full.png   284 wide      was 300
+    touch-settings-full.png        306 wide      was 300
+
+306 is the same number sec 12.3b's instrumentation reported from the
+other side, walking the settings page's children -- two instruments, one
+answer, which is what makes it a measurement rather than a second guess.
+
+**Both directions of the error are here, and only one of them had been
+noticed.** sec 12.3e records the narrow direction: at 300 the settings
+page's Keyboard combo looked clipped, was reported as a device defect,
+and is not one. The preset editor is the other direction and is worse.
+Its viewport is 284, so the gallery drew it **sixteen pixels wider than
+the device** -- and a control clipping between 284 and 300 there would
+have been invisible in the one instrument that exists to show it. A
+picture too narrow manufactures a defect and somebody checks it; a
+picture too wide hides one and nobody does.
+
+So the width is printed beside every picture now. A shot whose width is
+in the log can be checked against the phone; one whose width is a
+constant two files away is checked by nobody, which is how a six-pixel
+fudge survived long enough to produce a wrong report.
+
+**And the thing it had been hiding was not on the preset editor.** With
+the pages laid out at their real widths, the host editor's ProxyJump
+field shows `nabbe@bastion.internal.example.com:2222` in 218px of the
+245 its text needs.
+
+**sec 12.3i had already seen that and read it correctly**, which is why
+this entry is underneath it rather than correcting it: a line edit
+scrolls, no width fits text nobody chose, and asserting that it fits
+would have been an assertion no layout can satisfy. **An assertion
+nothing can satisfy is not a guard -- it is a finding waiting to be
+waived, and the waiver is what switches a check off.**
+
+What sec 12.3i did not ask is why the field was 218px wide. The form was
+two columns on a phone: the label column took 88 of the 306 available,
+and the fields got what was left. Nothing about that is forced. On touch
+the host editor stacks now -- `QFormLayout::WrapAllRows` -- and every
+field gets the whole row.
+
+**WrapAllRows rather than the settings page's WrapLongRows, and the
+difference is the same distinction one layer down.** WrapLongRows wraps
+a row whose MINIMUM will not fit; a field willing to scroll its own text
+has a small minimum, so it would never fire here. The settings page's
+fields hold chords from a fixed table and can state what they need.
+These cannot, so they are given the room unconditionally.
+
+**Which gives the free-form fields an assertion that IS satisfiable**:
+not that the field fits its text, but that its label sits above it and
+the two share a left edge. That is a question the layout can answer, it
+fails naming all five fields when the policy is reverted, and it has a
+spec in `narrow-screen.toml` that says so.
+
+**The bounded/free-form split is structural rather than a list of
+names.** A spin box and a key-sequence editor each own a QLineEdit and
+`findChildren` reaches it, so excluding those and combo boxes leaves
+exactly the fields somebody types into. Applied to the settings page it
+removed one control from the clipping arm -- the window-title format,
+`%t - BeerSSH`, which was being measured and passed only because that
+string is short.
+
+**The clipping arm stays on the one page sec 12.3i scoped it to.** Its
+argument still holds: the other surfaces' combos sit at roughly double
+what they need, so an arm there could not fail, and a guard that cannot
+fail on three of four pages reads as broader coverage than it has. The
+extension was written, measured -- 4 controls on the host editor, 7 on
+the preset editor, 15 on the settings page, nothing clipping -- and
+taken back out. **A decision recorded yesterday is cheaper to read than
+to re-derive**, and re-deriving it is what produced the measurement above
+rather than a second opinion.
+
 ### 12.3i A fifth that found nothing: combos on the other surfaces — **[2026-09-08]**
 
 §12.3e asserts that nothing on the settings page is drawn narrower than
@@ -8832,12 +8910,15 @@ rather than leaving it to guesswork — with the combo fix disabled,
 `BeerSSH's own, compact` is 161px wide needing 152. It FITS.
 
 **Which corrects a claim made from the render.** The clipped
-*"BeerSSH's own, compac"* in `make shots` is at that tool's page width of
-`BSSH_PHONE_W - 20` = 300, six pixels narrower than the 306 a real 320dp
-screen leaves inside the scroll area. The chord editors clip at 306 and
-are a real device defect; the combo does not, and was reported as one.
-**A picture rendered six pixels narrower than the device is evidence
-about the picture.**
+*"BeerSSH's own, compac"* in `make shots` was at that tool's page width
+of `BSSH_PHONE_W - 20` = 300, six pixels narrower than the 306 a real
+320dp screen leaves inside the scroll area. The chord editors clip at
+306 and are a real device defect; the combo does not, and was reported
+as one. **A picture rendered six pixels narrower than the device is
+evidence about the picture.**
+
+The fudge is gone -- sec 12.3j -- and the pictures now state the width
+they were drawn at.
 
 **`bssh_fit_items` stays, justified by a different measurement.** Nine
 pixels of slack is not a margin worth trusting when the same font picker

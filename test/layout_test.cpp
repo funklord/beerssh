@@ -8,6 +8,7 @@
 #include <QSlider>
 #include <QAction>
 #include <QComboBox>
+#include <QFormLayout>
 #include <QClipboard>
 #include <QJsonObject>
 #include <QAbstractScrollArea>
@@ -761,32 +762,91 @@ void layout_test::every_touch_surface_fits_a_phone()
 
 }
 
-void layout_test::no_control_is_narrower_than_the_text_it_shows() {
-	const forced_touch_t thumb(1);
+namespace {
 
-	bssh_app_settings_view settings;
-	settings.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
-	settings.show();
-	QVERIFY(QTest::qWaitForWindowExposed(&settings));
+/*
+ * Every visible control on one scrolling page, measured against its own
+ * text, at the width the page's scroll area actually gives it.
+ *
+ * A helper rather than one page's test body, because the fudge that
+ * prompted this covered THREE pages and the check covered one. The
+ * settings page's viewport comes out 306 inside 320dp; the preset
+ * editor's is 284, and 284 was never measured by anything -- `make
+ * shots` drew it at BSSH_PHONE_W - 20 = 300, sixteen pixels WIDER than
+ * the device, so a control clipping between 284 and 300 was invisible
+ * in the one instrument that could have shown it.
+ *
+ * That is the more dangerous direction of the same error that made the
+ * combo look clipped on the settings page: there the picture was six
+ * pixels narrow and manufactured a defect, here it was sixteen wide and
+ * would have hidden one.
+ */
+/*
+ * Whether a line edit shows text the APPLICATION chose.
+ *
+ * The distinction decides what may be asserted about it, and getting it
+ * wrong is how this check nearly acquired an unsatisfiable arm. A chord,
+ * a port number, a scrollback count and a combo's current item all come
+ * from a bounded vocabulary, so there is a width that fits them and a
+ * field narrower than that is a defect. A hostname, a key path or a
+ * ProxyJump is whatever somebody typed: no width fits it, and scrolling
+ * horizontally is what a QLineEdit is FOR.
+ *
+ * So the free-form fields get a different question asked of them, below,
+ * rather than an assertion no layout could ever satisfy. An assertion
+ * nothing can satisfy is not a guard -- it is a finding waiting to be
+ * waived, and the waiver is what switches the check off.
+ *
+ * Qt makes the test structural rather than a list of names: a spin box
+ * and a key-sequence editor each own a QLineEdit, and findChildren
+ * reaches it, so what is left after those and combo boxes are excluded
+ * is exactly the free-form set. It earns its place on the settings page
+ * alone: that page's window-title format is free-form, was being
+ * measured, and passed only because "%t - BeerSSH" happens to be short.
+ */
+bool bssh_shows_a_chosen_value(const QLineEdit *edit) {
+	if (edit->isReadOnly()) return true;
+	for (const QWidget *up = edit->parentWidget(); up; up = up->parentWidget()) {
+		if (qobject_cast<const QAbstractSpinBox *>(up)) return true;
+		if (qobject_cast<const QKeySequenceEdit *>(up)) return true;
+		if (qobject_cast<const QComboBox *>(up)) return true;
+	}
+	return false;
+}
+
+QStringList bssh_clipped_controls(QWidget *surface, int *checked) {
+	QStringList clipped;
+	*checked = 0;
+
+	QScrollArea *scroll = surface->findChild<QScrollArea *>();
+	if (!scroll) return clipped;
+	QWidget *page = scroll->widget();
+	if (!page) return clipped;
 
 	/*
 	 * The page is inside a scroll area, so it has to be given its real
 	 * height before anything is measured -- a widget still at its
 	 * default size reports widths nobody will ever see.
 	 */
-	QScrollArea *scroll = settings.findChild<QScrollArea *>();
-	QVERIFY(scroll);
-	QWidget *page = scroll->widget();
-	QVERIFY(page);
 	page->resize(scroll->viewport()->width(), page->sizeHint().height());
 	QCoreApplication::processEvents();
 
-	int checked = 0;
-	QStringList clipped;
-
 	for (const QLineEdit *edit : page->findChildren<QLineEdit *>()) {
 		if (!edit->isVisible() || edit->text().isEmpty()) continue;
-		++checked;
+		if (!bssh_shows_a_chosen_value(edit)) continue;
+		/*
+		 * A combo's own line edit is measured by the combo arm below,
+		 * against the combo's width -- counting it here as well would
+		 * inflate the population the floor is checked against, which
+		 * is the number standing in for "this measured something".
+		 */
+		bool inside_a_combo = false;
+		for (const QWidget *up = edit->parentWidget(); up && !inside_a_combo;
+		      up = up->parentWidget())
+			if (qobject_cast<const QComboBox *>(up)) inside_a_combo = true;
+		if (inside_a_combo) continue;
+
+		++*checked;
 		const int needs = edit->fontMetrics().horizontalAdvance(edit->text());
 		if (edit->contentsRect().width() < needs) {
 			clipped.append(QStringLiteral("%1 shows \"%2\" in %3px of %4 needed")
@@ -798,7 +858,7 @@ void layout_test::no_control_is_narrower_than_the_text_it_shows() {
 
 	for (const QComboBox *box : page->findChildren<QComboBox *>()) {
 		if (!box->isVisible() || box->currentText().isEmpty()) continue;
-		++checked;
+		++*checked;
 		const int arrow = box->style()->pixelMetric(QStyle::PM_ScrollBarExtent);
 		const int needs = box->fontMetrics().horizontalAdvance(box->currentText()) + arrow;
 		if (box->width() < needs) {
@@ -808,43 +868,166 @@ void layout_test::no_control_is_narrower_than_the_text_it_shows() {
 		}
 	}
 
+	return clipped;
+}
+
+/*
+ * The other half of the question, for the fields no width can satisfy.
+ *
+ * A free-form field cannot be asserted to fit its text, so what IS
+ * assertable is that it was given every pixel the page has: on a phone
+ * its label sits ABOVE it rather than beside it, and the two share a
+ * left edge. That is the outcome QFormLayout::WrapAllRows produces and
+ * the thing a reader can check against the picture.
+ *
+ * Asked of the label's geometry rather than of the policy, because the
+ * policy is the mechanism and a form can be given one and still lay out
+ * two columns -- WrapLongRows is exactly that case, wrapping only rows
+ * whose minimum will not fit, which a field willing to scroll never has.
+ */
+void check_free_form_fields_own_their_row(QWidget *surface) {
 	/*
-	 * WHAT THIS HAS AND HAS NOT BEEN SEEN TO CATCH, because the two arms
-	 * are not equally proved and the pass reads as though they were.
+	 * At the phone floor and laid out, or every geometry read below is
+	 * the widget's default -- which is a size nobody will ever see, and
+	 * would answer the question about a form that was never arranged.
+	 */
+	surface->resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	surface->show();
+	QVERIFY(QTest::qWaitForWindowExposed(surface));
+	QCoreApplication::processEvents();
+
+	QFormLayout *form = surface->findChild<QFormLayout *>();
+	QVERIFY2(form, "the host editor is a form, and this found none");
+
+	int checked = 0;
+	QStringList beside;
+
+	for (int row = 0; row < form->rowCount(); ++row) {
+		QLayoutItem *label_item = form->itemAt(row, QFormLayout::LabelRole);
+		QLayoutItem *field_item = form->itemAt(row, QFormLayout::FieldRole);
+		if (!label_item || !field_item) continue;
+
+		QWidget *label = label_item->widget();
+		QLineEdit *field = qobject_cast<QLineEdit *>(field_item->widget());
+		if (!label || !field || bssh_shows_a_chosen_value(field)) continue;
+
+		++checked;
+		if (label->x() != field->x())
+			beside.append(QStringLiteral("\"%1\" starts at x=%2 with its label at "
+			                              "x=%3, so it is sharing the row -- %4px wide")
+			                      .arg(field->text()).arg(field->x())
+			                      .arg(label->x()).arg(field->width()));
+	}
+
+	QTextStream(stdout) << QStringLiteral("  %1  %2 free-form fields\n")
+	                               .arg(QStringLiteral("host editor"), -16).arg(checked);
+
+	QVERIFY2(checked >= 5,
+	          qPrintable(QStringLiteral("only %1 free-form fields were found, so this "
+	                                     "checked almost nothing").arg(checked)));
+
+	QVERIFY2(beside.isEmpty(),
+	          qPrintable(QStringLiteral("at %1dp, %2 free-form field(s) still share a row "
+	                                     "with their label:\n  %3")
+	                             .arg(BSSH_PHONE_DP).arg(beside.size())
+	                             .arg(beside.join(QStringLiteral("\n  ")))));
+}
+
+/*
+ * One page, shown at the phone floor and measured.
+ *
+ * The floor is passed in rather than shared, because a page that laid
+ * out none of its controls would otherwise report nothing clipped and
+ * read as a pass -- the gate over an empty file list, in a form this
+ * project has met before. It is the count this page actually measures,
+ * so adding a control keeps it green and losing one does not.
+ */
+void check_no_control_clips(const QString &name, QWidget *surface, int floor) {
+	surface->resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	surface->show();
+	QVERIFY(QTest::qWaitForWindowExposed(surface));
+
+	int checked = 0;
+	const QStringList clipped = bssh_clipped_controls(surface, &checked);
+
+	QTextStream(stdout) << QStringLiteral("  %1  %2 controls measured\n")
+	                               .arg(name, -16).arg(checked);
+
+	QVERIFY2(checked >= floor,
+	          qPrintable(QStringLiteral("%1: only %2 controls were measured of %3 "
+	                                     "expected, so this checked almost nothing")
+	                             .arg(name).arg(checked).arg(floor)));
+
+	QVERIFY2(clipped.isEmpty(),
+	          qPrintable(QStringLiteral("%1 at %2dp: %3 control(s) are drawn narrower "
+	                                     "than their own text:\n  %4")
+	                             .arg(name).arg(BSSH_PHONE_DP).arg(clipped.size())
+	                             .arg(clipped.join(QStringLiteral("\n  ")))));
+}
+
+}
+
+void layout_test::no_control_is_narrower_than_the_text_it_shows() {
+	const forced_touch_t thumb(1);
+
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("build server (europe)");
+	profile.host = QStringLiteral("build.internal.example.com");
+	profile.user = QStringLiteral("nabbe.testing");
+	profile.port = 2299;
+	profile.identity_file = QStringLiteral("~/.ssh/id_ed25519_work");
+	profile.proxy_jump = QStringLiteral("nabbe@bastion.internal.example.com:2222");
+	QVERIFY(store.save(profile) != 0);
+
+	/*
+	 * WHAT THIS HAS AND HAS NOT BEEN SEEN TO CATCH, because the arms are
+	 * not equally proved and a pass reads as though they were.
 	 *
 	 * The QLineEdit arm HAS: removing the chord editors' minimum width
-	 * makes this fail naming four of them -- "Shift+PgDown" in 67px of
-	 * 80 needed, and three more. That is the fix it exists to guard.
+	 * makes the settings page fail naming four of them -- "Shift+PgDown"
+	 * in 67px of 80 needed, and three more. That is the fix it guards.
 	 *
 	 * The QComboBox arm has NOT, and not because it cannot fire.
-	 * Measured with the combo fix disabled at this page width:
+	 * Measured with the combo fix disabled at the settings page's width:
 	 * "BeerSSH's own, compact" is 161px wide needing 152, so it FITS
 	 * with nine to spare and there is nothing to report. The clipping
-	 * visible in `make shots` happens at that tool's page width of
-	 * BSSH_PHONE_W - 20 = 300, six pixels narrower than the 306 a real
-	 * 320dp screen leaves inside this scroll area.
+	 * once seen in `make shots` was at that tool's old page width of 300
+	 * -- six pixels narrower than the 306 this page really gets -- and
+	 * was reported as a device defect it is not. That fudge is gone.
 	 *
-	 * Nine pixels is not a margin worth trusting -- the font picker was
+	 * Nine pixels is not a margin worth trusting: the font picker was
 	 * 222px here and 285 to 302 in the CI container on the same code,
 	 * because a form's width is a function of the UI font. So the combo
 	 * fix stays, justified by that measurement rather than by this test,
 	 * and this comment stands instead of a claim that it was proved.
 	 */
-
 	/*
-	 * A count, because a page that laid out none of its controls would
-	 * otherwise report nothing clipped and read as a pass -- the gate
-	 * over an empty file list, in a form this project has met before.
+	 * THE CLIPPING ARM STAYS ON ONE PAGE, and that is sec 12.3i's
+	 * decision rather than an oversight -- it measured the combos on
+	 * every other touch surface and found the narrowest at roughly
+	 * double what it needs, against the nine pixels the settings page
+	 * had. A guard that cannot fail on three of the four pages it
+	 * covered reads as broader coverage than it has.
+	 *
+	 * What sec 12.3i did NOT ask is why the host editor's field was
+	 * 218px wide in the first place. It read the clipping there as
+	 * legitimate, which it is -- a line edit scrolls, and no width fits
+	 * text nobody chose -- and stopped, because the question it was
+	 * asking was whether to assert. The layout underneath was still
+	 * two columns on a phone, and that is what the second arm is for.
 	 */
-	QVERIFY2(checked >= 8, qPrintable(QStringLiteral("only %1 controls were measured, so "
-	                                                  "this checked almost nothing")
-	                                           .arg(checked)));
-
-	QVERIFY2(clipped.isEmpty(),
-	          qPrintable(QStringLiteral("at %1dp, %2 control(s) are drawn narrower than "
-	                                     "their own text:\n  %3")
-	                             .arg(BSSH_PHONE_DP).arg(clipped.size())
-	                             .arg(clipped.join(QStringLiteral("\n  ")))));
+	{
+		bssh_app_settings_view settings;
+		check_no_control_clips(QStringLiteral("settings"), &settings, 15);
+	}
+	{
+		bssh_host_editor editor(&store);
+		editor.set_profile(profile);
+		check_free_form_fields_own_their_row(&editor);
+	}
 }
 
 namespace {
