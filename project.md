@@ -8477,6 +8477,91 @@ test would go red if somebody removed the guard. That is a property of
 the SUITE rather than of the program, and it is the property this tree
 keeps finding it did not have.
 
+### 12.3a Backspace across a wrapped line is the SHELL's job — **[2026-09-07]**
+
+Reported from the phone: holding Backspace deleted back to the start of
+the wrapped row and stopped, *"unless the terminal is weird"*. It is not
+weird, and it is not ours — but the answer was only worth having because
+it was measured rather than reasoned about.
+
+**What a shell emits, measured with a plain pty at 40 columns**, 60
+characters typed and 55 deleted, no beerssh involved:
+
+    bash    53 BS, 3 CR, 2 cursor-up      redraws across the wrap
+    dash   110 BS,  no CR, no cursor-up   never moves up
+
+A line editor tracks the wrap and moves the cursor; a shell in the
+kernel's canonical mode emits nothing but `\b \b`, and a backspace at
+column 0 cannot climb to the row above on ANY terminal, xterm included.
+The characters are still deleted from the buffer — only the display stops
+reflecting it.
+
+**The first measurement was wrong and nearly settled it the other way.**
+It sent 30 deletions, and with a 10-character prompt 60 characters at 40
+columns puts exactly 30 on the second row: it measured up to the wrap
+boundary and never across it, reporting zero cursor-ups for bash. 55
+deletions is what showed bash redrawing. A fixture that stops exactly at
+the boundary it is testing looks like a result.
+
+**The half that IS ours is asserted**:
+`pty_session_test::backspace_crosses_a_wrapped_line` drives a real bash
+through `bssh_emulator` at 40 columns and counts what is left on screen —
+five or fewer of sixty after deleting 55. It passes, so the emulator
+follows bash's redraw.
+
+**Seen to fail, with a control that is a different shell rather than a
+broken emulator**: the same test pointed at dash fails on the ERASE
+assertion — reaching the typing stage first, so it fails through the
+check under test rather than being caught upstream by the prompt wait.
+That is what makes the pass evidence, and it pins the finding: the
+difference is the shell's, and no change here can make dash behave.
+
+**The control was re-run after the test was rewritten**, because a
+control taken against an instrument since replaced has stopped being
+evidence about it.
+
+**Seven instrument bugs in one small test, and the code under test never
+changed.** Worth listing, because each would have been "fixed" by
+weakening the assertion, and because they share one shape: an unstated
+dependency on the environment the test happened to run in.
+
+The seventh is the one worth reading twice. A control rebuilt with plain
+`make` -- which does NOT build the test binary, `test:` being its own
+target -- ran a STALE binary and passed, "disproving" a correct
+diagnosis. That retraction was published before it was checked. **The
+first six made a correct thing look broken; that one made a wrong
+conclusion look verified**, which is worse, because a false negative
+ends an investigation instead of prolonging it. `build-and-commit.md`
+names it exactly: never conclude a test passes or fails from a binary
+the build step did not rebuild.
+
+And the cause it nearly buried: **`TERM`**. Measured in the CI image
+rather than inferred -- the same bash 5.2.21 with TERM unset emits 104
+backspaces of `\b \b` and zero cursor-up, where this machine emits
+`\b ESC[K` and two cursor-ups. Readline runs in both; with no terminfo
+it has no cursor movement available. The test sets `TERM=xterm` now, and
+with that line removed and TERM cleared it fails on the container's exact
+assertion.
+
+The other six:
+
+- **A fixed `qWait`.** Passed here, failed in the container at *only 25
+  of 60 characters arrived*. A sleep turns a slower machine into a false
+  verdict about the code.
+- **A missing precondition.** Replacing the sleeps with condition waits
+  also removed the wait for the PROMPT, so the characters were typed
+  before bash reached readline, the kernel's canonical mode echoed them,
+  and the test reproduced the very failure it exists to rule out.
+- **A marker a terminal shows twice.** Waiting for `echo bssh-up` matched
+  the ECHO of the command as it was typed, which happens before the
+  command runs — so the wait returned while the shell was still busy.
+  The fix is shell quoting: `PS1="RE""ADY> "` types as `RE""ADY>` and
+  draws as `READY>`, so the string waited for can only be the prompt.
+
+The last one also closed a vacuous-pass route: a bash that came up
+non-interactive prints no prompt, so the wait expires and the test fails
+rather than measuring the line discipline and calling it a line editor.
+
 ### 12.3b The phone floor is 320dp, and three surfaces did not fit it — **[FIXED 2026-09-07]**
 
 **`BSSH_PHONE_DP` was 360 and the device is 320.** A Galaxy Z Fold 3's

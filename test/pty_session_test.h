@@ -23,6 +23,20 @@ private slots:
 	void a_command_that_cannot_be_run_says_so();
 	void a_big_send_does_not_block_the_ui_thread();
 	void a_local_profile_is_valid_without_a_host();
+
+	/*
+	 * The user's report: typing past the right edge and then holding
+	 * Backspace deleted back to the start of the wrapped row and stopped.
+	 *
+	 * Driven through a REAL shell, because the interesting half is what
+	 * the shell emits. Measured with a plain pty first: bash crosses the
+	 * wrap with cursor-up and a redraw, and dash emits nothing but
+	 * `\b \b` and never moves up -- so the same keystrokes are correct
+	 * on one shell and visually stuck on the other, on every terminal
+	 * including xterm. This asserts the half that is ours: that the
+	 * emulator follows a line editor that does it properly.
+	 */
+	void backspace_crosses_a_wrapped_line();
 };
 
 #endif /* BSSH_PTY_SESSION_TEST_H */
