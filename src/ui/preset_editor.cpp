@@ -110,6 +110,28 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	QFormLayout *form = new QFormLayout();
 	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
 
+	/*
+	 * On a phone the label goes ABOVE its field, for the reason the host
+	 * editor's form gives and with the measurement this page supplied.
+	 *
+	 * Three of these fields hold text of a length nobody chose -- Name,
+	 * TERM and On connect -- and this is the NARROWEST page in the app:
+	 * its scroll area leaves 284px where the settings page and the host
+	 * editor get 306. Two columns took 72 of that for the label, leaving
+	 * 212, and an entirely ordinary
+	 *
+	 *     tmux attach -t main || tmux new -s main
+	 *
+	 * in On connect needs 230. So the field a person is most likely to
+	 * paste a long string into was the one with the least room.
+	 *
+	 * WrapAllRows rather than WrapLongRows: the latter wraps a row whose
+	 * MINIMUM will not fit, and a line edit willing to scroll its own
+	 * text has a small minimum, so it never fires. Desktop keeps two
+	 * columns, where the width is not scarce.
+	 */
+	if (m_touch) form->setRowWrapPolicy(QFormLayout::WrapAllRows);
+
 	m_name = new QLineEdit(this);
 
 	m_term = new QLineEdit(this);

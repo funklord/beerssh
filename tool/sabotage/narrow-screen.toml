@@ -81,3 +81,20 @@ file = "src/ui/host_editor.cpp"
 find = "\t\tform->setRowWrapPolicy(QFormLayout::WrapAllRows);"
 replace = "\t\tform->setRowWrapPolicy(QFormLayout::WrapLongRows);"
 expect = "no_control_is_narrower_than_the_text_it_shows"
+
+# The same on the preset editor, and it is a second instance rather than
+# a copy: that page's scroll area leaves 284px where the other two get
+# 306, so it is the narrowest in the app, and three of its fields are
+# free-form -- Name, TERM and On connect. Measured with the label column
+# taking 72 of the 284, an ordinary
+#
+#     tmux attach -t main || tmux new -s main
+#
+# in On connect needs 230px and had 212. The field most likely to carry a
+# long string had the least room of any in the app.
+[[sabotage]]
+name = "the preset editor's fields go back to sharing a row with their label"
+file = "src/ui/preset_editor.cpp"
+find = "\tif (m_touch) form->setRowWrapPolicy(QFormLayout::WrapAllRows);"
+replace = "\tif (m_touch) form->setRowWrapPolicy(QFormLayout::WrapLongRows);"
+expect = "no_control_is_narrower_than_the_text_it_shows"

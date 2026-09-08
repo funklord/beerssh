@@ -862,7 +862,8 @@ QStringList bssh_clipped_controls(QWidget *surface, int *checked) {
  * two columns -- WrapLongRows is exactly that case, wrapping only rows
  * whose minimum will not fit, which a field willing to scroll never has.
  */
-void check_free_form_fields_own_their_row(QWidget *surface) {
+void check_free_form_fields_own_their_row(const QString &name, QWidget *surface,
+                                            int floor) {
 	/*
 	 * At the phone floor and laid out, or every geometry read below is
 	 * the widget's default -- which is a size nobody will ever see, and
@@ -874,7 +875,8 @@ void check_free_form_fields_own_their_row(QWidget *surface) {
 	QCoreApplication::processEvents();
 
 	QFormLayout *form = surface->findChild<QFormLayout *>();
-	QVERIFY2(form, "the host editor is a form, and this found none");
+	QVERIFY2(form, qPrintable(QStringLiteral("%1 is a form, and this found none")
+	                                  .arg(name)));
 
 	int checked = 0;
 	QStringList beside;
@@ -897,16 +899,17 @@ void check_free_form_fields_own_their_row(QWidget *surface) {
 	}
 
 	QTextStream(stdout) << QStringLiteral("  %1  %2 free-form fields\n")
-	                               .arg(QStringLiteral("host editor"), -16).arg(checked);
+	                               .arg(name, -16).arg(checked);
 
-	QVERIFY2(checked >= 5,
-	          qPrintable(QStringLiteral("only %1 free-form fields were found, so this "
-	                                     "checked almost nothing").arg(checked)));
+	QVERIFY2(checked >= floor,
+	          qPrintable(QStringLiteral("%1: only %2 free-form fields were found of %3 "
+	                                     "expected, so this checked almost nothing")
+	                             .arg(name).arg(checked).arg(floor)));
 
 	QVERIFY2(beside.isEmpty(),
-	          qPrintable(QStringLiteral("at %1dp, %2 free-form field(s) still share a row "
-	                                     "with their label:\n  %3")
-	                             .arg(BSSH_PHONE_DP).arg(beside.size())
+	          qPrintable(QStringLiteral("%1 at %2dp: %3 free-form field(s) still share a "
+	                                     "row with their label:\n  %4")
+	                             .arg(name).arg(BSSH_PHONE_DP).arg(beside.size())
 	                             .arg(beside.join(QStringLiteral("\n  ")))));
 }
 
@@ -1003,7 +1006,19 @@ void layout_test::no_control_is_narrower_than_the_text_it_shows() {
 	{
 		bssh_host_editor editor(&store);
 		editor.set_profile(profile);
-		check_free_form_fields_own_their_row(&editor);
+		check_free_form_fields_own_their_row(QStringLiteral("host editor"), &editor, 5);
+	}
+	{
+		/*
+		 * The narrowest page in the app -- 284px of scroll-area width
+		 * against the other two pages' 306 -- and three of its fields
+		 * are free-form: Name, TERM and On connect. The last one holds
+		 * a shell command, so it is the field most likely to carry a
+		 * long string and it had the least room of any in the app.
+		 */
+		bssh_preset_editor editor(&store, bssh_preset_editor::TOUCH);
+		check_free_form_fields_own_their_row(QStringLiteral("preset editor"),
+		                                      &editor, 3);
 	}
 }
 

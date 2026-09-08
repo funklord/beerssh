@@ -8635,6 +8635,57 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3l The same starved form on the narrowest page — **[FIXED 2026-09-08]**
+
+sec 12.3j fixed the host editor's two-column form on a phone and left
+the obvious question unasked: what else. The lens is the bug's own shape
+-- **a QFormLayout on a touch surface with no row wrap policy** -- and it
+is three greps:
+
+    src/ui/host_editor.cpp        forms=1  wrap=1  touch-aware=1
+    src/ui/preset_editor.cpp      forms=1  wrap=0  touch-aware=3   <--
+    src/ui/session_dialog.cpp     forms=1  wrap=0  touch-aware=0
+    src/ui/font_picker.cpp        forms=1  wrap=1  touch-aware=2
+    src/ui/app_settings_view.cpp  forms=2  wrap=2  touch-aware=1
+
+One candidate. `session_dialog.cpp` has no touch awareness at all and is
+the desktop dialog, so a two-column form there is correct.
+
+**Measured rather than predicted, because the first reading was that it
+would be fine.** The preset editor's fields are mostly bounded -- spin
+boxes, combos, checkboxes -- and its combos were already measured at
+roughly double what they need in sec 12.3i. Instrumenting the form row
+by row at 320dp said otherwise:
+
+    label w=66  field x=72 w=212  needs= 23   "BSD"          Name
+    label w=66  field x=72 w=212  needs= 34   "xterm"        TERM
+    label w=66  field x=72 w=212  needs=230   tmux command   On connect
+
+**212 against 230.** Three of its rows are free-form after all -- Name,
+TERM and On connect -- and the last holds a shell command. An entirely
+ordinary `tmux attach -t main || tmux new -s main` does not fit.
+
+**And this is the narrowest page in the app**: its scroll area leaves
+284px where the settings page and the host editor get 306, so the label
+column's 72px costs proportionally more here than anywhere else. The
+field a person is most likely to paste a long string into had the least
+room of any in the tree.
+
+The fix is the host editor's, guarded on the widget's own `m_touch`
+rather than re-asking the platform, and the free-form assertion now
+covers both editors: 5 fields on one, 3 on the other. The page grows 950
+to 1111 tall, and the checkbox rows cost nothing -- Qt collapses an empty
+label, so only the labelled rows stack.
+
+**Two instances is what makes it a rule rather than a fix.** One page
+with a starved form is a defect; two, found by asking the same question
+of every form in the tree, says phone forms stack and the desktop's two
+columns are the special case. The remaining two-column touch forms are
+the font picker's and the settings page's, both `WrapLongRows`, both
+holding fields that CAN state a width because their contents come from a
+fixed table -- which is the distinction sec 12.3j drew and the reason
+they are not the same case.
+
 ### 12.3k The phone width was written in four files under two names — **[FIXED 2026-09-08]**
 
 The lens sec 12.3j suggests: **an instrument whose output is a function
