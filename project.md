@@ -8635,6 +8635,38 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3e Clipping has its own assertion, and one arm of it is unproved — **[2026-09-08]**
+
+§12.3c records that a width assertion cannot see truncation: it asks
+whether a MINIMUM fits, and a control willing to clip its own text has a
+small one, so a clipping widget passes MORE easily than an honest one.
+That was recorded and then left resting on a screenshot somebody happened
+to look at. `no_control_is_narrower_than_the_text_it_shows` is the
+assertion it should have had — every visible line edit and combo on the
+settings page, laid out at 320dp, against the width its own text needs.
+
+**The two arms are not equally proved, and the pass reads as though they
+were.** The QLineEdit arm fires on demand: removing the chord editors'
+minimum width names four of them, *"Shift+PgDown" in 67px of 80 needed*
+among them. The QComboBox arm has never fired, and measuring says why
+rather than leaving it to guesswork — with the combo fix disabled,
+`BeerSSH's own, compact` is 161px wide needing 152. It FITS.
+
+**Which corrects a claim made from the render.** The clipped
+*"BeerSSH's own, compac"* in `make shots` is at that tool's page width of
+`BSSH_PHONE_W - 20` = 300, six pixels narrower than the 306 a real 320dp
+screen leaves inside the scroll area. The chord editors clip at 306 and
+are a real device defect; the combo does not, and was reported as one.
+**A picture rendered six pixels narrower than the device is evidence
+about the picture.**
+
+**`bssh_fit_items` stays, justified by a different measurement.** Nine
+pixels of slack is not a margin worth trusting when the same font picker
+measured 222px here and 285 to 302 in the CI container on identical
+code: a form's width is a function of the UI font, so a margin that thin
+is machine-dependent by construction. The fix is defensive and the
+comment says so, rather than claiming a test proved it.
+
 ### 12.3c The gate went green while the page was unreadable — **[2026-09-07]**
 
 Worth its own entry, because the fix above passed the assertion and was

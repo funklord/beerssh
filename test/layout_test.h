@@ -38,6 +38,15 @@ private slots:
 	 * before it ships rather than after.
 	 */
 	void every_touch_surface_fits_a_phone();
+
+	/*
+	 * The other half of fitting, and the fit assertion cannot see it: it
+	 * asks whether a MINIMUM fits, and a control willing to truncate its
+	 * own text has a small minimum -- so a clipping widget passes more
+	 * easily than an honest one. Measured: the settings page went green
+	 * at 320dp while drawing "trl+Shift+C" and "BeerSSH's own, compac".
+	 */
+	void no_control_is_narrower_than_the_text_it_shows();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
 	void both_keyboards_read_one_layout();

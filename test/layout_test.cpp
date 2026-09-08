@@ -761,6 +761,92 @@ void layout_test::every_touch_surface_fits_a_phone()
 
 }
 
+void layout_test::no_control_is_narrower_than_the_text_it_shows() {
+	const forced_touch_t thumb(1);
+
+	bssh_app_settings_view settings;
+	settings.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	settings.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&settings));
+
+	/*
+	 * The page is inside a scroll area, so it has to be given its real
+	 * height before anything is measured -- a widget still at its
+	 * default size reports widths nobody will ever see.
+	 */
+	QScrollArea *scroll = settings.findChild<QScrollArea *>();
+	QVERIFY(scroll);
+	QWidget *page = scroll->widget();
+	QVERIFY(page);
+	page->resize(scroll->viewport()->width(), page->sizeHint().height());
+	QCoreApplication::processEvents();
+
+	int checked = 0;
+	QStringList clipped;
+
+	for (const QLineEdit *edit : page->findChildren<QLineEdit *>()) {
+		if (!edit->isVisible() || edit->text().isEmpty()) continue;
+		++checked;
+		const int needs = edit->fontMetrics().horizontalAdvance(edit->text());
+		if (edit->contentsRect().width() < needs) {
+			clipped.append(QStringLiteral("%1 shows \"%2\" in %3px of %4 needed")
+			                       .arg(QString::fromLatin1(edit->metaObject()->className()),
+			                             edit->text())
+			                       .arg(edit->contentsRect().width()).arg(needs));
+		}
+	}
+
+	for (const QComboBox *box : page->findChildren<QComboBox *>()) {
+		if (!box->isVisible() || box->currentText().isEmpty()) continue;
+		++checked;
+		const int arrow = box->style()->pixelMetric(QStyle::PM_ScrollBarExtent);
+		const int needs = box->fontMetrics().horizontalAdvance(box->currentText()) + arrow;
+		if (box->width() < needs) {
+			clipped.append(QStringLiteral("QComboBox shows \"%1\" in %2px of %3 needed")
+			                       .arg(box->currentText())
+			                       .arg(box->width()).arg(needs));
+		}
+	}
+
+	/*
+	 * WHAT THIS HAS AND HAS NOT BEEN SEEN TO CATCH, because the two arms
+	 * are not equally proved and the pass reads as though they were.
+	 *
+	 * The QLineEdit arm HAS: removing the chord editors' minimum width
+	 * makes this fail naming four of them -- "Shift+PgDown" in 67px of
+	 * 80 needed, and three more. That is the fix it exists to guard.
+	 *
+	 * The QComboBox arm has NOT, and not because it cannot fire.
+	 * Measured with the combo fix disabled at this page width:
+	 * "BeerSSH's own, compact" is 161px wide needing 152, so it FITS
+	 * with nine to spare and there is nothing to report. The clipping
+	 * visible in `make shots` happens at that tool's page width of
+	 * BSSH_PHONE_W - 20 = 300, six pixels narrower than the 306 a real
+	 * 320dp screen leaves inside this scroll area.
+	 *
+	 * Nine pixels is not a margin worth trusting -- the font picker was
+	 * 222px here and 285 to 302 in the CI container on the same code,
+	 * because a form's width is a function of the UI font. So the combo
+	 * fix stays, justified by that measurement rather than by this test,
+	 * and this comment stands instead of a claim that it was proved.
+	 */
+
+	/*
+	 * A count, because a page that laid out none of its controls would
+	 * otherwise report nothing clipped and read as a pass -- the gate
+	 * over an empty file list, in a form this project has met before.
+	 */
+	QVERIFY2(checked >= 8, qPrintable(QStringLiteral("only %1 controls were measured, so "
+	                                                  "this checked almost nothing")
+	                                           .arg(checked)));
+
+	QVERIFY2(clipped.isEmpty(),
+	          qPrintable(QStringLiteral("at %1dp, %2 control(s) are drawn narrower than "
+	                                     "their own text:\n  %3")
+	                             .arg(BSSH_PHONE_DP).arg(clipped.size())
+	                             .arg(clipped.join(QStringLiteral("\n  ")))));
+}
+
 namespace {
 
 /*
