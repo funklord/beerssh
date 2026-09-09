@@ -10,6 +10,11 @@
 #include <QHash>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QDir>
+#include <QDirIterator>
+#include <QFile>
+#include <QFileInfo>
+#include <QStandardPaths>
 
 namespace {
 
@@ -367,6 +372,67 @@ public:
 		        BSSH_SERVICE_CLASS, "updateStatus",
 		        "(Landroid/content/Context;Ljava/lang/String;)V",
 		        context.object(), status.object<jstring>());
+	}
+
+	QString terminfo_directory() const override {
+		/*
+		 * Unpacked out of the package, because this path is read by
+		 * open(2) rather than by Qt: an asset is a compressed member of
+		 * the APK and has no filesystem path at all, so "assets:/..."
+		 * is a name only Qt's file engine understands. ncurses, and
+		 * anything the user runs, would find nothing there.
+		 *
+		 * Once, and then never again. The copy is skipped when the
+		 * unpacked file is already there at the same size, so this
+		 * costs a stat per entry after the first run -- and it still
+		 * refreshes when an app update ships a different database,
+		 * which a bare existence check would not.
+		 *
+		 * Nothing bundled is not an error: the build skips the
+		 * terminfo target when ncurses is absent, exactly as it skips
+		 * fonts, and the app then behaves as it did before this
+		 * existed.
+		 */
+		static QString unpacked;
+		static bool tried = false;
+		static QMutex guard;
+		QMutexLocker locked(&guard);
+		if (tried) return unpacked;
+		tried = true;
+
+		const QString target = QStandardPaths::writableLocation(
+		                               QStandardPaths::AppDataLocation)
+		                        + QStringLiteral("/terminfo");
+
+		QDirIterator entries(QStringLiteral("assets:/terminfo"),
+		                      QDir::Files, QDirIterator::Subdirectories);
+		int copied = 0, present = 0;
+		while (entries.hasNext()) {
+			const QString source = entries.next();
+			const QString relative =
+			        source.mid(QStringLiteral("assets:/terminfo/").size());
+			const QString destination = target + QStringLiteral("/") + relative;
+
+			QDir().mkpath(QFileInfo(destination).absolutePath());
+
+			QFile packaged(source);
+			if (!packaged.open(QIODevice::ReadOnly)) continue;
+			const QByteArray bytes = packaged.readAll();
+
+			QFile existing(destination);
+			if (existing.exists() && existing.size() == bytes.size()) {
+				++present;
+				continue;
+			}
+			if (!existing.open(QIODevice::WriteOnly)) continue;
+			existing.write(bytes);
+			existing.close();
+			++copied;
+		}
+
+		if (copied == 0 && present == 0) return unpacked; /* empty */
+		unpacked = target;
+		return unpacked;
 	}
 
 	QString font_directory() const override {

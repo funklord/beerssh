@@ -1,0 +1,41 @@
+# The terminfo database a platform ships reaching the child that needs it
+# (project.md sec 12.3p). Android has no terminfo at all, so a local
+# shell there is handed TERM=xterm-256color naming an entry nothing on
+# the device can look up.
+#
+# Two edits, because the mechanism has two halves and either alone is
+# silent: the environment variable the child is given, and the platform
+# answer the factory asks for. Neither failure produces an error -- the
+# shell simply goes on not finding a terminfo, exactly as it did before
+# any of this existed, which is the shape sec 12.3p was written about.
+
+# The setenv between fork and exec. One line, and the whole feature.
+#
+# It sets the WRONG NAME rather than being switched off, which models
+# the failure that actually happens -- wiring that exists and reaches
+# the wrong place -- and keeps `terminfo` used, so the edit compiles
+# rather than being refused for an unused local.
+#
+# Seen to fail: 544 passed, 1 failed, and the one is the test named
+# below.
+[[sabotage]]
+name = "the child is never told where the terminfo database is"
+file = "src/ssh/pty_session.cpp"
+find = "\t\tif (!terminfo.isEmpty()) setenv(\"TERMINFO\", terminfo.constData(), 1);"
+replace = "\t\tif (!terminfo.isEmpty()) setenv(\"TERMINFO_X\", terminfo.constData(), 1);"
+expect = "a_shipped_terminfo_reaches_the_shell"
+
+# THE FACTORY HALF IS NOT GUARDED, and this says so rather than
+# shipping a spec that reports MISSED.
+#
+# create_local() asks the platform for the directory. A test on a
+# desktop cannot see whether it did: the desktop platform returns empty
+# BY DESIGN -- /usr/share/terminfo is already there and pointing
+# TERMINFO at one entry of ours would shadow it -- so a factory that
+# asks correctly and one that never asks produce the same empty answer.
+# The test above therefore sets the directory through the setter, which
+# is the half a desktop can measure.
+#
+# What would close it is a platform test double, which this tree does
+# not have; bssh_platform exposes only force_touch_primary(). Adding one
+# is its own piece of work and is not smuggled in here.

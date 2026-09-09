@@ -198,6 +198,28 @@ public:
 	virtual QString font_directory() const = 0;
 
 	/*
+	 * A directory holding a compiled terminfo database, or empty where
+	 * the system already has one (project.md sec 12.3p).
+	 *
+	 * Empty is the ordinary answer and is not an error, exactly as
+	 * font_directory()'s is: a desktop has /usr/share/terminfo and
+	 * anything the app shipped would be a worse copy of it.
+	 *
+	 * Android is why this exists. It has no terminfo database at all,
+	 * so a local shell there is handed TERM=xterm-256color naming an
+	 * entry nothing on the device can look up -- and every program that
+	 * asks the library what the terminal can do gets no answer.
+	 *
+	 * A REAL path, never a Qt virtual one. font_directory() may return
+	 * "assets:/fonts" because only Qt reads it; this is read by ncurses
+	 * and by whatever the user runs, through open(2), which knows
+	 * nothing about Qt's file engine. An implementation that bundles
+	 * the database in the package therefore has to unpack it before
+	 * answering.
+	 */
+	virtual QString terminfo_directory() const = 0;
+
+	/*
 	 * The user's OpenSSH directory (~/.ssh), or empty where that is not a
 	 * meaningful place (project.md sec 10.6, sec 11).
 	 *

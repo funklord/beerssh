@@ -36,6 +36,7 @@ private slots:
 	 * including xterm. This asserts the half that is ours: that the
 	 * emulator follows a line editor that does it properly.
 	 */
+	void a_shipped_terminfo_reaches_the_shell();
 	void backspace_crosses_a_wrapped_line();
 };
 

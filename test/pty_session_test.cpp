@@ -2,6 +2,7 @@
 #include <QtTest>
 
 #include <QStandardPaths>
+#include <QTemporaryDir>
 
 #include "model/profile.h"
 #include "term/emulator.h"
@@ -274,6 +275,73 @@ void pty_session_test::a_local_profile_is_valid_without_a_host() {
 	 * check this one must not have weakened. */
 	bssh_profile_t remote;
 	QVERIFY2(!remote.is_valid(), "an SSH profile still needs a host");
+}
+
+void pty_session_test::a_shipped_terminfo_reaches_the_shell() {
+	if (QStandardPaths::findExecutable(QStringLiteral("sh")).isEmpty()) {
+		QSKIP("no sh, and the child's environment is the point");
+	}
+
+	/*
+	 * sec 12.3p: Android has no terminfo database, so a local shell
+	 * there is handed a TERM naming an entry nothing on the device can
+	 * look up. The platform may ship one; this is the wiring that hands
+	 * it to the child.
+	 *
+	 * Asked of the CHILD's environment rather than of the setter,
+	 * because the setter agreeing with itself proves nothing about
+	 * whether anything reaches an exec'd process -- and the whole
+	 * mechanism is one setenv between fork and exec, which is exactly
+	 * the code a unit test cannot see.
+	 */
+	QTemporaryDir shipped;
+	QVERIFY(shipped.isValid());
+
+	struct { QString directory; bool expected; } cases[] = {
+		{ shipped.path(), true },
+		{ QString(),      false },   /* what a desktop's platform returns */
+	};
+
+	for (const auto &one : cases) {
+		bssh_pty_session session;
+		session.set_shell(QStringLiteral("sh"));
+		session.set_terminfo_directory(one.directory);
+
+		session.connect_to_host(QString(), 0, QString());
+		QCOMPARE(session.state(), bssh_ssh_session::CONNECTED);
+
+		QByteArray seen;
+		connect(&session, &bssh_ssh_session::bytes_received,
+		         &session, [&seen](const QByteArray &bytes) { seen.append(bytes); });
+
+		session.open_shell(80, 24);
+
+		/*
+		 * A marker split so the echoed command cannot satisfy the wait
+		 * -- the shell prints what it was given before it runs it, and
+		 * a test that matched that would pass without the child ever
+		 * having been exec'd.
+		 */
+		session.send(QByteArrayLiteral(
+		        "printf 'TI''=[%s]\\n' \"$TERMINFO\"\n"));
+
+		QTRY_VERIFY_WITH_TIMEOUT(seen.contains(QByteArrayLiteral("TI=[")), 15000);
+		QTRY_VERIFY_WITH_TIMEOUT(seen.contains(QByteArrayLiteral("]")), 15000);
+
+		const int open_at = seen.lastIndexOf(QByteArrayLiteral("TI=["));
+		const int close_at = seen.indexOf(']', open_at);
+		QVERIFY(close_at > open_at);
+		const QByteArray value = seen.mid(open_at + 4, close_at - open_at - 4);
+
+		if (one.expected) {
+			QCOMPARE(value, one.directory.toLocal8Bit());
+		} else {
+			QVERIFY2(value.isEmpty(),
+			          qPrintable(QStringLiteral("TERMINFO was set to \"%1\" when the "
+			                                     "platform ships nothing")
+			                             .arg(QString::fromLocal8Bit(value))));
+		}
+	}
 }
 
 void pty_session_test::backspace_crosses_a_wrapped_line() {

@@ -856,6 +856,53 @@ ANDROID_BASE_FONTS = \
 	unifont.otf
 
 ANDROID_ASSET_DIR = android/assets/fonts
+ANDROID_TERMINFO_DIR = android/assets/terminfo
+
+# The terminfo entry a device with no terminfo database needs
+# (project.md sec 12.3p).
+#
+# xterm-256color and nothing else, because that is the TERM this app
+# already sends -- BSSH_TERM in the libssh backend, and the default
+# preset's. Shipping it adds no claim; it lets the device look up the
+# claim we make everywhere else. Shipping a DIFFERENT entry would be a
+# new claim about what the terminal can do, which sec 7.1 owns.
+#
+# Generated from the build machine's own ncurses rather than checked in,
+# which is what fonts/ does and for the same reason: it is somebody
+# else's data with somebody else's terms, and a tree that generates it
+# carries neither. `infocmp` then `tic` rather than copying the compiled
+# file, so the provenance is a command anybody can re-run.
+BSSH_TERMINFO_ENTRY = xterm-256color
+
+terminfo:
+	@if ! command -v infocmp >/dev/null 2>&1 || ! command -v tic >/dev/null 2>&1; then \
+		echo "terminfo: no infocmp/tic here -- skipping"; \
+		echo "terminfo:   a device without a terminfo database keeps the"; \
+		echo "terminfo:   behaviour it has now (sec 12.3p)"; \
+		exit 0; \
+	fi; \
+	mkdir -p terminfo; \
+	infocmp -x $(BSSH_TERMINFO_ENTRY) > terminfo/$(BSSH_TERMINFO_ENTRY).src; \
+	tic -x -o terminfo terminfo/$(BSSH_TERMINFO_ENTRY).src; \
+	rm -f terminfo/$(BSSH_TERMINFO_ENTRY).src; \
+	echo "terminfo: $$(find terminfo -type f | wc -l) entry(ies), $$(du -sh terminfo | cut -f1)"
+
+# Copied rather than symlinked, for android-fonts' reason: androiddeployqt
+# packages what it FINDS in the asset directory.
+#
+# Skipped silently when terminfo/ is absent, so `make android` keeps
+# working on a machine with no ncurses -- the app then behaves exactly as
+# it did before this existed, which is what an empty
+# terminfo_directory() means.
+android-terminfo: terminfo
+	@if [ ! -d terminfo ]; then \
+		echo "android-terminfo: no terminfo/ -- APK ships none"; \
+		exit 0; \
+	fi; \
+	mkdir -p $(ANDROID_TERMINFO_DIR); \
+	cp -r terminfo/. $(ANDROID_TERMINFO_DIR)/; \
+	echo "android-terminfo: bundled $$(find $(ANDROID_TERMINFO_DIR) -type f | wc -l) entry(ies)"
+
 
 # Copied rather than symlinked: androiddeployqt packages what it finds in
 # the asset directory, and a symlink into a directory that is not there on
@@ -907,7 +954,7 @@ android-fonts:
 # what number you built.
 AAB_NAME = beerssh-$(VERSION).aab
 
-android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
+android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts android-terminfo
 	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
 	@src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs -name '*.aab' -print -quit); \
 	if [ -z "$$src" ]; then echo "android-aab: no .aab was produced" >&2; exit 1; fi; \
@@ -946,7 +993,7 @@ android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts
 # halves recombined per recipe is how a name and a path drift apart.
 ANDROID_ARTIFACT = $(ANDROID_BUILD_DIR)/$(TARGET)-$(VERSION)-$(ANDROID_ABI).apk
 
-android: $(ANDROID_BUILD_DIR)/Makefile android-fonts
+android: $(ANDROID_BUILD_DIR)/Makefile android-fonts android-terminfo
 ifneq ($(ANDROID_KEYSTORE),)
 	@# The flags go to androiddeployqt itself, because Qt's generated
 	@# Makefile hardcodes its command line and accepts nothing from here.
@@ -1280,7 +1327,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts uninstall \
+.PHONY: all run test bench style check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check

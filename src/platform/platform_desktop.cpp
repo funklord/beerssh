@@ -146,6 +146,20 @@ public:
 		if (m_tray) m_tray->showMessage(title, body);
 	}
 
+	QString terminfo_directory() const override {
+		/*
+		 * The system's, and deliberately not ours. A desktop has
+		 * /usr/share/terminfo with thousands of entries maintained by
+		 * somebody whose job that is; shipping one entry beside it
+		 * would shadow the real database for exactly one TERM and
+		 * leave every other name worse off.
+		 *
+		 * Empty means "say nothing", so TERMINFO is left unset and the
+		 * library looks where it always looks.
+		 */
+		return QString();
+	}
+
 	QString font_directory() const override {
 		/*
 		 * Three places, in the order that makes a developer's checkout

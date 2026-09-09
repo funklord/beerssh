@@ -85,6 +85,17 @@ public:
 	 * line refuses it.
 	 */
 	void set_working_directory(const QString &directory) { m_working_directory = directory; }
+
+	/*
+	 * A terminfo database to hand the child, or empty to say nothing
+	 * (project.md sec 12.3p). Set from bssh_platform by create_local();
+	 * a test sets it directly, which is why it is here rather than
+	 * looked up inside open_shell().
+	 */
+	void set_terminfo_directory(const QString &directory) {
+		m_terminfo_directory = directory;
+	}
+	QString terminfo_directory() const { return m_terminfo_directory; }
 	QString working_directory() const { return m_working_directory; }
 
 	/* TERM reaches the child's environment rather than a protocol field. */
@@ -112,6 +123,7 @@ private:
 	QString m_shell;
 	QStringList m_command;
 	QString m_working_directory;
+	QString m_terminfo_directory;
 	QString m_term;
 
 	int m_master;

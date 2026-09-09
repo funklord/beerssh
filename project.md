@@ -8635,6 +8635,59 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3q Shipping a terminfo for local shells — **[BUILT 2026-09-10]**
+
+sec 12.3p left the question open and the copyright holder settled it:
+ship one.
+
+**The concern raised before building it, because it changes what the
+change is worth.** Android's `/bin/sh` is mksh, whose line editor does
+not link ncurses and does not read terminfo -- it emits `\b` and spaces
+directly and takes its width from `TIOCGWINSZ`. So this is unlikely to
+change the backspace behaviour that prompted it. What it does fix is
+every terminfo-consuming program run inside that shell, which today
+sees `TERM=xterm-256color` naming an entry the device cannot look up.
+Unverified on hardware: the phone was disconnected by the time this was
+written, and the one command that settles it is a look at whether
+`/system/bin/sh` references terminfo at all.
+
+**`xterm-256color` and nothing else, which adds no claim.** It is
+already what `BSSH_TERM` sends and what the default preset carries, so
+shipping the matching entry lets the device look up a claim this app
+makes everywhere else. A DIFFERENT entry would be a new statement about
+what the terminal can do, and sec 7.1 owns that question.
+
+**Generated, not committed.** `make terminfo` runs `infocmp` then `tic`,
+which is the same trade `fonts/` makes: somebody else's data with
+somebody else's terms, so the tree carries the command rather than the
+file. A machine without ncurses skips it and the app behaves exactly as
+it did before -- which is what an empty `terminfo_directory()` means.
+
+**A REAL path, never a Qt virtual one**, and that is the whole reason
+the Android side has code in it rather than one `return`.
+`font_directory()` may answer `assets:/fonts` because only Qt reads it;
+this is read by ncurses through `open(2)`, which knows nothing about
+Qt's file engine. So the Android implementation unpacks the database out
+of the APK once, skipping files already there at the same size -- which
+still refreshes when an update ships a different one, where a bare
+existence check would not.
+
+**The desktop deliberately answers empty.** It has `/usr/share/terminfo`
+with thousands of entries; pointing `TERMINFO` at one entry of ours
+would shadow the real database for exactly one name and leave every
+other name worse off.
+
+**What is guarded and what is not**, because the two halves are not
+equal. The child's environment is tested end to end -- a real shell,
+`printf` reading `$TERMINFO` back -- with the empty case as the control,
+and the sabotage sets the wrong variable name and is caught. The
+FACTORY half, `create_local()` asking the platform, cannot be tested on
+a desktop at all: the desktop platform returns empty by design, so a
+factory that asks correctly and one that never asks produce the same
+answer. Closing that needs a platform test double, which this tree does
+not have, and `terminfo.toml` says so rather than shipping a spec that
+would report MISSED.
+
 ### 12.3p The stale glyph on the phone is not ours — **[2026-09-09]**
 
 Found while testing key repeat on the device: eight characters typed at

@@ -1,5 +1,7 @@
 #include "ssh/pty_session.h"
 
+#include "platform/platform.h"
+
 #include <QList>
 #include <QProcessEnvironment>
 #include <QSocketNotifier>
@@ -184,6 +186,11 @@ void bssh_pty_session::open_shell(int cols, int rows) {
 
 	const QByteArray directory = m_working_directory.toLocal8Bit();
 	const QByteArray term = m_term.toLocal8Bit();
+	/*
+	 * Converted here for the reason the comment above gives: the child
+	 * may not allocate, and toLocal8Bit does.
+	 */
+	const QByteArray terminfo = m_terminfo_directory.toLocal8Bit();
 
 	int master = -1;
 	const pid_t child = forkpty(&master, nullptr, nullptr, &size);
@@ -202,6 +209,17 @@ void bssh_pty_session::open_shell(int cols, int rows) {
 		 * processes running the same event loop.
 		 */
 		if (!term.isEmpty()) setenv("TERM", term.constData(), 1);
+
+		/*
+		 * And WHERE to look that TERM up, when the platform ships a
+		 * database because the system has none (sec 12.3p). Empty on a
+		 * desktop, where /usr/share/terminfo is already there and
+		 * pointing TERMINFO at one entry of ours would shadow it.
+		 *
+		 * setenv rather than putenv: the buffer below is a local, and
+		 * putenv would keep a pointer into it.
+		 */
+		if (!terminfo.isEmpty()) setenv("TERMINFO", terminfo.constData(), 1);
 
 		/*
 		 * chdir before exec, and refuse loudly (sec 8.6's --workdir).
@@ -470,5 +488,15 @@ bssh_ssh_session *bssh_ssh_session::create_local(const QString &shell,
 	bssh_pty_session *session = new bssh_pty_session(parent);
 	session->set_shell(shell);
 	session->set_working_directory(working_directory);
+
+	/*
+	 * The platform's terminfo database, asked for HERE rather than
+	 * inside open_shell(), so the one place that knows it is building a
+	 * local shell is the one place that consults the platform -- and so
+	 * a test can set it to a directory it made itself.
+	 */
+	if (const bssh_platform *platform = bssh_platform::instance())
+		session->set_terminfo_directory(platform->terminfo_directory());
+
 	return session;
 }

@@ -23,6 +23,13 @@ deps/
 # alongside them are what sec 9.4's licences screen is built from.
 fonts/
 
+# Generated from the build machine's ncurses (the terminfo target,
+# project.md sec 12.3p). Somebody else's data, so the tree carries the
+# command that produces it rather than the file itself -- the same trade
+# fonts/ makes just above.
+terminfo/
+android/assets/terminfo/
+
 # The built binary, copied out of build/ by `make`
 /beerssh
 
