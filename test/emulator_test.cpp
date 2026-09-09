@@ -332,6 +332,69 @@ void emulator_test::title_is_reported_from_osc() {
 	QCOMPARE(spy.first().first().toString(), QStringLiteral("user@host: ~"));
 }
 
+/*
+ * A glyph in the LAST column survives the canonical erase, and that is
+ * correct rather than a defect. Pinned because it looks exactly like a
+ * bug on screen and the obvious fix would break conformance.
+ *
+ * Seen on a phone: eight characters typed at a local shell, backspace
+ * held until they were gone, and one of them left sitting at the right
+ * edge of the line -- surviving the shell redrawing the line and fresh
+ * output scrolling past below it.
+ *
+ * The mechanism, from the vendored library rather than from reasoning
+ * about the spec. libvterm's own t/20state_wrapping.test pins that
+ * after a glyph is written into the 80th column the cursor still
+ * reports `0,79`: the wrap is PENDING, held in an `at_phantom` flag,
+ * and the cursor has not left the last column. `on_control` ends with
+ * `updatecursor(state, &oldpos, 1)`, so BS is an explicit cursor move
+ * and cancels that flag -- which upstream's last case calls "phantom
+ * cancelled by explicit cursor move". So BS from the last column lands
+ * on N-2, the space rewrites N-2, and nothing the sequence does can
+ * reach N-1 again.
+ *
+ * `\b \b` is therefore incapable of erasing the last column on any
+ * terminal that follows this model, xterm included.
+ *
+ * WHY IT IS RARELY SEEN, which is the part that decides whether this is
+ * worth chasing: a line editor with terminfo emits `\b ESC[K` instead,
+ * and clear-to-end-of-line takes the last column with it. sec 12.3's
+ * pty test records the same shell emitting `\b ESC[K` with TERM=xterm
+ * and falling back to the canonical `\b \b` with TERM unset. Android
+ * ships no terminfo database, so the local shell there gets the
+ * fallback and the artifact is visible.
+ *
+ * That is a question about what the app gives a LOCAL shell on Android,
+ * not about this emulator, and it is recorded in project.md rather than
+ * answered here.
+ */
+void emulator_test::the_last_column_survives_the_canonical_erase() {
+	/*
+	 * A 7-character prompt in 20 columns, so fill=13 puts the last
+	 * character in column 19 and 11 and 12 do not. The two that do not
+	 * are the control: without them a clean erase everywhere and a
+	 * broken erase everywhere are the same result.
+	 */
+	struct { int fill; int survivors; } cases[] = {
+		{ 11, 0 }, { 12, 0 }, { 13, 1 },
+	};
+
+	for (const auto &one : cases) {
+		bssh_emulator emulator(20, 5);
+		emulator.feed(QByteArrayLiteral("READY> "));
+		emulator.feed(QByteArray(one.fill, 'z'));
+
+		for (int i = 0; i < one.fill; ++i)
+			emulator.feed(QByteArrayLiteral("\b \b"));
+
+		const QString left = row(emulator, 0);
+		QCOMPARE(left.count(QLatin1Char('z')), one.survivors);
+		QVERIFY2(left.startsWith(QStringLiteral("READY>")),
+		          qPrintable(QStringLiteral("the erase ate into the prompt: \"%1\"")
+		                             .arg(left)));
+	}
+}
+
 void emulator_test::resize_keeps_existing_text() {
 	bssh_emulator emulator(20, 5);
 	emulator.feed(QByteArrayLiteral("stays"));

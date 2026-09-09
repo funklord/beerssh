@@ -8635,6 +8635,60 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3p The stale glyph on the phone is not ours — **[2026-09-09]**
+
+Found while testing key repeat on the device: eight characters typed at
+a local shell, Backspace held until they were gone, and **one of them
+left sitting in the last column** -- surviving the shell redrawing the
+line and fresh output scrolling past below it.
+
+It looks exactly like a rendering bug, and the first guess was the
+renderer failing to repaint a damaged cell. **It is in the model.**
+Reproduced locally by feeding the emulator the canonical erase pattern,
+with the two cases that do not reach the last column as the control:
+
+    prompt 7 chars, 20 columns, then `\b \b` per character
+
+    fill=11   last char at col 17   erased "READY>"                z left=0
+    fill=12   last char at col 18   erased "READY>"                z left=0
+    fill=13   last char at col 19   erased "READY>             z"  z left=1
+
+**And it is correct.** The mechanism comes from the vendored library
+rather than from reasoning about ECMA-48: libvterm's own
+`t/20state_wrapping.test` pins that after a glyph is written into the
+80th column the cursor still reports `0,79` -- the wrap is PENDING, held
+in `at_phantom`, and the cursor has not left the last column. Its
+`on_control` ends with `updatecursor(state, &oldpos, 1)`, so BS is an
+explicit cursor move and cancels the flag, which is upstream's own
+"phantom cancelled by explicit cursor move" case. BS therefore lands on
+N-2, the space rewrites N-2, and nothing in the sequence can reach N-1
+again. **`\b \b` cannot erase the last column on any terminal that
+follows this model, xterm included.**
+
+Pinned as a test rather than fixed, because the obvious fix breaks
+conformance and the artifact is convincing enough that somebody will try
+it.
+
+**What DOES vary is whether a shell uses that pattern.** sec 12.3's pty
+test already records the same bash emitting `\b ESC[K` with `TERM=xterm`
+and falling back to the canonical `\b \b` with TERM unset --
+clear-to-end-of-line takes the last column with it. Android ships no
+terminfo database, so the local shell there gets the fallback.
+
+**So there is a real question, and it is the holder's**: whether a local
+shell on Android should be given a terminfo the app ships. It is a
+convenience feature rather than the app's purpose, the cost is shipping
+and pointing `TERMINFO` at a database, and the benefit is a line editor
+that behaves the way it does everywhere else. Recorded rather than
+decided.
+
+**And it is NOT the vibes.se report.** That one is a remote shell with
+its own terminfo, reached over SSH with the preset's TERM -- which
+sec 12.3n establishes we send correctly. The two share a shape and not a
+cause, and `echo "${TERM:-<unset>}"` on that host is still what
+separates them. Writing them up as one explanation would have closed a
+question that is still open.
+
 ### 12.3o The untestable half was testable — **[FIXED 2026-09-09]**
 
 `a_held_key_repeats` carried a long comment headed *WHAT THIS TEST
