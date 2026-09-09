@@ -1,3 +1,6 @@
+#include <QApplication>
+#include <QScrollArea>
+#include <QMouseEvent>
 #include <QAbstractButton>
 #include <QKeyEvent>
 #include <QSignalSpy>
@@ -7,6 +10,7 @@
 #include "keyboard/key_row_layout.h"
 #include "ui/long_press.h"
 #include "input_router_test.h"
+#include "phone_metrics.h"
 #include "term/emulator.h"
 #include "keyboard/key_row.h"
 
@@ -465,9 +469,16 @@ void input_router_test::a_held_key_repeats() {
 	bssh_input_router router(&emulator);
 	bssh_key_row row(&router);
 
-	row.resize(800, 64);
+	/*
+	 * A PHONE width, so the strip genuinely scrolls -- the default key
+	 * row is 652px of keys and the narrow screen is 320. At a width
+	 * where everything fits, the scroller is grabbed and has nothing to
+	 * do, which is not the case a thumb meets.
+	 */
+	row.resize(BSSH_PHONE_DP, 64);
 	row.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&row));
+	QCoreApplication::processEvents();
 
 	/*
 	 * The left arrow, because moving along a line is the case that was
@@ -481,20 +492,51 @@ void input_router_test::a_held_key_repeats() {
 	}
 	QVERIFY(left != nullptr);
 
+	/*
+	 * PRESSED AT THE VIEWPORT, not at the button, and that is the whole
+	 * point of this test rather than a detail of it.
+	 *
+	 * The row grabs a QScroller gesture on its scroll area's viewport
+	 * (sec 6.2 -- the keys do not fit and are dragged sideways), so a
+	 * real touch is filtered by the scroller before any button sees it.
+	 * A press sent straight to the button is not: an event filter runs
+	 * on its receiver, and the button is not the viewport. So the
+	 * obvious version of this test proves the button repeats and says
+	 * nothing about whether a finger can reach it -- `evidence.md`'s
+	 * "a correct function is not a working feature", with the wiring
+	 * being the half that was untested.
+	 *
+	 * What the scroller does, measured here rather than assumed: it
+	 * withholds the press (isDown() is false immediately afterwards),
+	 * decides it is not a drag, and replays it to the widget underneath
+	 * (isDown() is true by the time the hold is over). Auto-repeat
+	 * survives that, which was the open question.
+	 */
+	QScrollArea *area = row.findChild<QScrollArea *>();
+	QVERIFY2(area, "the key row scrolls, and this found no scroll area");
+	QWidget *viewport = area->viewport();
+
+	const QPoint at = left->mapTo(viewport, left->rect().center());
+	const QPointF global = viewport->mapToGlobal(QPointF(at));
+
 	const QByteArray once = QByteArrayLiteral("\x1b[D");
 
-	/*
-	 * A press, held past the delay, and a release. Not click(), which
-	 * emits the signal directly and never starts the repeat timer -- the
-	 * first version of this test used it, passed against a row with no
-	 * repeat set at all, and proved nothing.
-	 */
 	emulator.take_output();
-	QTest::mousePress(left, Qt::LeftButton);
+	QMouseEvent press(QEvent::MouseButtonPress, QPointF(at), global,
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(viewport, &press);
 	QTest::qWait(900);
-	QTest::mouseRelease(left, Qt::LeftButton);
+
+	QVERIFY2(left->isDown(),
+	          "a press at the viewport never reached the key, so the scroller "
+	          "swallowed it and nothing below measures the repeat");
 
 	const QByteArray held = emulator.take_output();
+
+	QMouseEvent release(QEvent::MouseButtonRelease, QPointF(at), global,
+	                     Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(viewport, &release);
+	QCoreApplication::processEvents();
 
 	/*
 	 * At least twice, not exactly N: how many repeats fit in 900ms is a
@@ -512,35 +554,34 @@ void input_router_test::a_held_key_repeats() {
 	 * And a tap does not repeat, which is what the 500ms delay is for.
 	 * Without this the test above would pass on a keyboard that repeated
 	 * instantly -- and that keyboard would type two of everything.
+	 *
+	 * Through the viewport as well, so the control travels the same road
+	 * as the case.
+	 *
+	 * WITH 80ms BETWEEN PRESS AND RELEASE, and that is a property of the
+	 * scroller rather than a fudge. It withholds a press while it decides
+	 * whether the finger is dragging, and that decision runs on a timer:
+	 * a press and release delivered back to back, with no turn of the
+	 * event loop between them, is released before the scroller has
+	 * decided anything and reaches no button at all. Measured -- it sends
+	 * zero bytes, where the same tap 80ms apart sends exactly one.
+	 *
+	 * A human tap is tens of milliseconds, so the instantaneous version
+	 * was the fixture describing something nobody can do. It is worth
+	 * recording because zero bytes is also what a fixture that has
+	 * stopped delivering produces, and the two are told apart only by
+	 * the held case above still working.
 	 */
-	QTest::mousePress(left, Qt::LeftButton);
-	QTest::mouseRelease(left, Qt::LeftButton);
+	emulator.take_output();
+	QMouseEvent tap(QEvent::MouseButtonPress, QPointF(at), global,
+	                 Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(viewport, &tap);
+	QTest::qWait(80);
+	QMouseEvent lift(QEvent::MouseButtonRelease, QPointF(at), global,
+	                  Qt::NoButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(viewport, &lift);
+	QCoreApplication::processEvents();
 	QCOMPARE(emulator.take_output(), once);
-
-	/*
-	 * WHAT THIS TEST CANNOT REACH, and it is the half a thumb uses.
-	 *
-	 * The row grabs a QScroller gesture on its scroll area's viewport
-	 * (sec 6.2 -- the keys do not fit and are dragged sideways), and a
-	 * scroller HOLDS a press for a quarter of a second before deciding it
-	 * is not a drag and replaying it to the widget underneath. So a real
-	 * press arrives late, and whether auto-repeat survives that is a
-	 * question about the scroller rather than about the button.
-	 *
-	 * It was written, and the instrument could not answer it. Pressing
-	 * `scroll->viewport()` at the button's mapped position produced ZERO
-	 * bytes -- and the control settles which side that is: a plain TAP
-	 * through the viewport produced zero as well, on a row that works
-	 * perfectly well under a finger. QTest's synthetic press does not
-	 * survive QScroller's filter under the offscreen plugin, so the
-	 * fixture was measuring itself.
-	 *
-	 * Recorded rather than deleted, because an absent test and a test
-	 * that could not be written look the same from outside, and the next
-	 * person to want this should know it has been tried and how it
-	 * failed. The press above goes straight to the button, which proves
-	 * the repeat and deliberately does not prove the reach.
-	 */
 }
 
 void input_router_test::key_row_visibility_follows_the_input_device() {

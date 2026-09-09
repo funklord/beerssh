@@ -8635,6 +8635,65 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3o The untestable half was testable — **[FIXED 2026-09-09]**
+
+`a_held_key_repeats` carried a long comment headed *WHAT THIS TEST
+CANNOT REACH*, and it was wrong. That is the class `evidence.md` says to
+sweep for in preference to gap language: **an impossibility claim that
+was never true tells the next person not to write a test that would
+work**, and this one had already sent the question to the copyright
+holder's thumb as one of two things "still yours".
+
+The claim was that a press delivered at the scroll area's viewport
+produced zero bytes, tap included, so QTest's synthetic press must not
+survive QScroller's filter and the fixture was measuring itself. It does
+not reproduce. Sending a `QMouseEvent` to the viewport, in a fixture
+doing nothing else:
+
+    down_after_press = 0     down_during_hold = 1
+    held 900ms       = 12 bytes, four left-arrows
+    tap, instant     = 0 bytes
+    tap, 80ms        = 3 bytes, exactly one
+
+**Two things had to be got right at once, which is why the earlier
+attempt read as a broken instrument.** The press must go to the
+VIEWPORT, because an event filter runs on its receiver and a press sent
+to the button is not filtered at all -- so the old test proved the
+button repeats and said nothing about a finger reaching it. And the tap
+must take HUMAN time: the scroller withholds a press while it decides
+whether the finger is dragging, and that decision runs on a timer, so a
+press and release with no turn of the event loop between them is
+released before anything is decided and reaches no button. An
+instantaneous tap is a gesture nobody can perform.
+
+**Zero bytes is also what a dead fixture produces, and that is what
+made the wrong reading reasonable.** What separates them is the held
+case working while the instant tap does not: a fixture that had stopped
+delivering would have zeroed both. The earlier run had no case that
+could tell the two apart.
+
+So the scroller does not swallow a held press -- it delays it and
+replays it, and auto-repeat survives that. The test now presses where a
+thumb presses, and asserts `isDown()` before measuring anything, so a
+press that really were swallowed fails loudly instead of quietly
+measuring nothing.
+
+**And the touch path was measured too, on the device, the same day.**
+The desktop test exercises the mouse events Qt synthesises rather than a
+`QTouchEvent` arriving from Android, so it was written up as the
+remaining gap. `adb shell input swipe X Y X Y 1500` closes it: that is a
+real MotionEvent through Android's input stack. On a Galaxy Z Fold 3
+cover screen -- 840px at 420dpi, which is 320dp, the device this floor
+is named for -- with `abcdefgh` typed at a local shell, one hold of the
+key row strip's left arrow walked the cursor all eight cells to column
+zero. The built-in keyboard answers the same way: eight characters, one
+hold of Backspace, all eight gone.
+
+**So the item that stood as "needs the copyright holder's thumb" never
+needed it.** Between the viewport test and `adb shell input`, both
+halves are measured, and neither instrument is the one the original
+comment said was impossible.
+
 ### 12.3n Half the TERM question is ours, and it is sound — **[2026-09-09]**
 
 The report behind sec 12.3's wrap investigation left two one-line
