@@ -10345,6 +10345,24 @@ entries were settled elsewhere here while this section went on calling them
 open, which is worse than an out-of-date list, because a reader who trusts it
 relitigates a decision that has already been made and built.
 
+**Re-derived 2026-09-09, and it had gone stale again by one.** The method is
+`evidence.md`'s — ask the source, not the sentence — so each entry was put to
+the code rather than read: a grep for what would exist if it were settled, and
+the answer taken from the tree. Ten of the eleven survived, one of those being
+the holder's to decide on grounds this document does not hold.
+
+The one that did not is the bundled soft keyboard, and §6.2 answers it in as
+many words — *"a bundled soft keyboard was the open question here, and it is
+answered"* — while this list went on calling it a lean no for v1. It has
+`keyboard/`, ten files; a catalog with two styles; `KEYBOARD_SYSTEM` against
+`KEYBOARD_BUILT_IN` as a setting a user picks; and 17 sabotage edits across
+five specs. **The register contradicted the section it cited**, which is the
+one disagreement a reader has no way to notice, because following the pointer
+is the thing they do only when they already doubt the entry.
+
+One in eleven, **34 days** after the last correction (`bf5b1a1`, 2026-08-06)
+— so re-derive rather than read, and record the date when you do.
+
 **Still open:**
 
 - libssh (LGPL, dynamic link) vs libssh2 (BSD) — licensing may decide it, and it
@@ -10362,7 +10380,6 @@ relitigates a decision that has already been made and built.
   Iosevka's 42 MB ships by asset pack (§9.4, M9).
 - Honour system font-scale for the terminal grid? (Leaning no; setting instead.)
 - Host groups/folders in addition to presets? (§10.5.)
-- Bundle an optional custom soft-keyboard? (Lean no for v1 — §6.2.)
 - Persist scrollback across restarts?
 - Icon and branding direction (§0.1), which the placeholder in §12.2 is waiting
   on.
@@ -10379,6 +10396,7 @@ relitigates a decision that has already been made and built.
 | Focus-follows-mouse on desktop — offered, off by default | §8.3 |
 | Font shortlist — six selectable, two fallback-only | §9.2 |
 | `~/.ssh/config` import — built, an explicit import and never a live read | §10.5 |
+| Bundled soft keyboard — built, `KEYBOARD_SYSTEM` or `KEYBOARD_BUILT_IN` | §6.2 |
 
 ---
 
