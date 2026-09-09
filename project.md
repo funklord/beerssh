@@ -8732,6 +8732,31 @@ thumb presses, and asserts `isDown()` before measuring anything, so a
 press that really were swallowed fails loudly instead of quietly
 measuring nothing.
 
+**The press was only half of it, and the half that was wrong shipped.**
+The first version of this test sent the release to the viewport with
+`Qt::NoButton` named as the button that changed. Both are wrong and each
+alone looks like the other one failing, so the single-variable attempts
+each read as the theory collapsing. Bytes arriving in the 300ms AFTER
+the release:
+
+    viewport, NoButton     18     runaway
+    button,   NoButton     18     runaway
+    viewport, LeftButton   18     runaway
+    button,   LeftButton    0     stops
+
+The release goes to the BUTTON because it holds the mouse grab once the
+scroller replays the press, and it must name `LeftButton` as the button
+that CHANGED because `QAbstractButton` ignores any other release. A
+release the button never sees leaves the key down repeating for ever --
+and the tap assertion then reads those repeats rather than a tap, which
+is green often enough that it **passed a container run and was pushed**.
+
+**The arm that catches it is the quiet after the release**, which the
+pushed version did not have. That is `evidence.md`'s rule about a
+control having to fail the way the thing it controls for fails: the tap
+count could be right for the wrong reason, and only asserting that
+nothing more arrives can tell the two apart.
+
 **And the touch path was measured too, on the device, the same day.**
 The desktop test exercises the mouse events Qt synthesises rather than a
 `QTouchEvent` arriving from Android, so it was written up as the
@@ -8743,10 +8768,13 @@ key row strip's left arrow walked the cursor all eight cells to column
 zero. The built-in keyboard answers the same way: eight characters, one
 hold of Backspace, all eight gone.
 
-**So the item that stood as "needs the copyright holder's thumb" never
-needed it.** Between the viewport test and `adb shell input`, both
-halves are measured, and neither instrument is the one the original
-comment said was impossible.
+**But the device could not have shown a runaway, and saying it closed
+the question was too strong.** Both device cases are clamped at a
+boundary -- the cursor stops at column zero, backspace stops at the
+start of the line -- so a key that never stopped repeating would look
+exactly like one that stopped on time. The device settles that repeat
+STARTS under real touch, which was the open question; that it STOPS is
+the desktop test's half, and that is the half that had been broken.
 
 ### 12.3n Half the TERM question is ours, and it is sound — **[2026-09-09]**
 

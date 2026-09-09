@@ -533,10 +533,46 @@ void input_router_test::a_held_key_repeats() {
 
 	const QByteArray held = emulator.take_output();
 
+	/*
+	 * TWO THINGS HAVE TO BE RIGHT AT ONCE, and each alone looks like the
+	 * other one failing.
+	 *
+	 * The release is sent to the BUTTON, because once the scroller
+	 * replays the press and the button accepts it the button holds the
+	 * mouse grab, and every later event in that stream goes to it
+	 * directly rather than through the viewport's filter again. And it
+	 * names LEFTBUTTON as the button that CHANGED, with none still
+	 * held, because QAbstractButton ignores a release whose button() is
+	 * not the left one.
+	 *
+	 * Measured over the four combinations, bytes arriving in the 300ms
+	 * AFTER the release:
+	 *
+	 *     viewport, NoButton     18     runaway
+	 *     button,   NoButton     18     runaway
+	 *     viewport, LeftButton   18     runaway
+	 *     button,   LeftButton    0     stops
+	 *
+	 * A release the button never sees leaves the key down repeating for
+	 * ever, and the tap assertion below then reads those repeats rather
+	 * than a tap -- which is green about half the time, often enough to
+	 * pass a container run. The assertion on the quiet after the release
+	 * is what makes that failure loud instead.
+	 */
 	QMouseEvent release(QEvent::MouseButtonRelease, QPointF(at), global,
-	                     Qt::NoButton, Qt::NoButton, Qt::NoModifier);
-	QApplication::sendEvent(viewport, &release);
+	                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(left, &release);
 	QCoreApplication::processEvents();
+	/*
+	 * NOTHING MORE ARRIVES. This is the arm that the pushed version of
+	 * this test did not have, and the defect it would have caught was
+	 * in the test itself.
+	 */
+	QTest::qWait(300);
+	const QByteArray after = emulator.take_output();
+	QVERIFY2(after.isEmpty(),
+	          qPrintable(QStringLiteral("the key went on repeating after the release: "
+	                                     "%1 more byte(s)").arg(after.size())));
 
 	/*
 	 * At least twice, not exactly N: how many repeats fit in 900ms is a
@@ -578,9 +614,10 @@ void input_router_test::a_held_key_repeats() {
 	QApplication::sendEvent(viewport, &tap);
 	QTest::qWait(80);
 	QMouseEvent lift(QEvent::MouseButtonRelease, QPointF(at), global,
-	                  Qt::NoButton, Qt::NoButton, Qt::NoModifier);
-	QApplication::sendEvent(viewport, &lift);
+	                  Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(left, &lift);
 	QCoreApplication::processEvents();
+	QTest::qWait(300);
 	QCOMPARE(emulator.take_output(), once);
 }
 
