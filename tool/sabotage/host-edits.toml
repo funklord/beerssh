@@ -31,6 +31,33 @@ file = "src/model/session.cpp"
 find = "\n\tm_emulator->set_term_name(m_settings.value(QStringLiteral(\"term\")).toString());"
 expect = "every_resolved_setting_reaches_something_that_uses_it"
 
+# And the OTHER consumer, which had no spec until 2026-09-09 while the
+# emulator's had one.
+#
+# TERM is the setting `evidence.md` cites when it says a test whose name
+# quantifies -- every_x_reaches_something_that_uses_it -- asserts
+# exhaustiveness in its name and enumerates whatever its author listed.
+# It has two consumers, the emulator's capability mirror and the channel,
+# and the historical defect was that only the working one was checked.
+# Pinning one of a pair is how that comes back: the entry above would go
+# on passing with this call deleted.
+#
+# This is the call a FIRST connection uses. Settings resolve before a
+# transport exists, so set_settings()' whole transport block is skipped,
+# and without this line the remote is told BSSH_TERM -- the compiled-in
+# default -- while the preset says something else. A terminal naming
+# itself one thing to the shell and another when asked is what sec 7.1
+# calls worse than declining to answer, and this is that failure aimed
+# at the wire instead of at XTGETTCAP.
+#
+# Verified by running it rather than assumed: caught, 1 failed.
+[[sabotage]]
+name = "the transport never hears the resolved TERM"
+file = "src/model/session.cpp"
+find = "\n\tm_transport->set_term(m_settings.value(QStringLiteral(\"term\")).toString());\n\n\t/*\n\t * The emulator's copy too"
+replace = "\n\n\t/*\n\t * The emulator's copy too"
+expect = "every_resolved_setting_reaches_something_that_uses_it"
+
 # The store's changed() signal reaching live sessions. It had no listener
 # anywhere in src/, so a host edited while connected was inert -- and
 # worse than inert, since a later preset edit re-resolved against the

@@ -8635,6 +8635,55 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3n Half the TERM question is ours, and it is sound — **[2026-09-09]**
+
+The report behind sec 12.3's wrap investigation left two one-line
+questions for the copyright holder, and one of them is only half theirs:
+if `TERM` is unset on `vibes.se` it explains the backspace behaviour, but
+it would ALSO mean the preset's `xterm` never reached the remote, and
+that half is our code and answerable here.
+
+**Traced end to end, by reading every link rather than the two ends:**
+
+    preset.term
+      -> to_json()["term"]                       preset.cpp:28
+      -> resolver copies every key it finds      settings_resolver.cpp:19-21
+      -> session's m_settings["term"]
+      -> m_transport->set_term(...)              session.cpp:66 and :170
+      -> m_term                                  ssh_session_libssh.cpp:1146
+      -> ssh_channel_request_pty_size(m_term)    ssh_session_libssh.cpp:1083
+
+Nothing renames the key: the resolver iterates `preset.to_json()` and
+copies whatever it holds, so a mismatch is not available by
+construction. **Which matters because a mismatch here is silent** -- a
+missing key yields an empty QString and the backend maps empty to
+`BSSH_TERM`, so the remote would get the compiled-in default while the
+preset said otherwise, and nothing anywhere would say so.
+
+**Both call sites are needed and both are load-bearing.** Settings
+resolve before a transport exists, so `set_settings()`' transport block
+is skipped on a first connection and `:170` is the only one that runs --
+which is the connection that matters.
+
+**And the guard was half there.** `host-edits.toml` pinned the EMULATOR's
+copy of the resolved TERM and nothing pinned the transport's. That is
+exactly the shape `evidence.md` cites for this test by name: a test
+called `every_x_reaches_something_that_uses_it` asserts exhaustiveness in
+its name and enumerates whatever its author listed, and TERM's two
+consumers -- the capability mirror and the channel -- were the original
+incident, where the working one was the one checked.
+
+Measured rather than assumed: deleting `:170` **is** caught by that test
+today, so the enumeration is currently honest. It is now pinned by a
+spec of its own, because "currently honest" is what the emulator entry's
+own comment says a sabotage cannot rely on -- an anchor can go on
+matching while the fix moves out from under it.
+
+**So the answer to the holder is narrower than it was.** Whatever
+`vibes.se` reports for `TERM`, it is not because this app failed to send
+one. The remaining question is what the remote does with what it is
+given.
+
 ### 12.3m A sixth sweep that found nothing: wrapped notes — **[2026-09-09]**
 
 The lens after sec 12.3l, derived from `wrapped_note.h` existing at all:
