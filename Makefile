@@ -460,7 +460,62 @@ $(TEST_BIN): $(VTERM_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wil
 # not get to edit the config of whoever ran it, so it runs against a
 # throwaway HOME. The unit tests sandbox themselves for the same reason;
 # see test/main.cpp.
-test: $(TARGET) $(TEST_BIN)
+# A generated source whose header has MOVED looks current to make, and
+# stays that way until somebody deletes its object file.
+#
+# Measured: `keyboard: move the keyboard to its own directory` (6a03c7c,
+# 2026-09-06) was a rename, so keyboard/key_row.h kept its old mtime of
+# 2026-08-07. The moc generated back when the header was at
+# src/ui/key_row.h is dated 2026-09-04 -- NEWER than its own header --
+# so make correctly saw nothing to do. Two of these sat in build/ and
+# build-tests/ for six days, and both only surfaced when an out-of-memory
+# kill made a rebuild delete the objects and compile the stale sources
+# for the first time. The error then blames a missing header and names
+# neither the move nor the fix.
+#
+# Timestamps cannot see this: make compares mtimes and never content, so
+# the check has to read what the generated file actually includes. One
+# line each, no false positives across the 86 in this tree.
+#
+# It says HOW MANY it read, because a gate over an empty list reports
+# success exactly as loudly as a real pass and the empty case is
+# reachable -- a clone that has never been built has no moc anywhere.
+#
+# The count earned itself immediately by correcting a guess. Without it
+# the container run was assumed to have inspected nothing, on the
+# reasoning that check-ci builds from `git archive HEAD`; with it, the
+# container reports 31, because it builds the application before running
+# the suite and that populates $(BUILD_DIR) first. A number is the
+# difference between knowing and assuming what a check looked at, which
+# is the whole argument for printing one.
+check-build-tree:
+	@bad=0; seen=0; \
+	for dir in $(BUILD_DIR) build-tests; do \
+		[ -d "$$dir" ] || continue; \
+		for moc in "$$dir"/moc_*.cpp; do \
+			[ -e "$$moc" ] || continue; \
+			seen=$$((seen + 1)); \
+			header=$$(grep -m1 -oE '#include "[^"]+\.h"' "$$moc" \
+			          | sed 's/#include "//; s/"//'); \
+			[ -n "$$header" ] || continue; \
+			if [ ! -f "$$dir/$$header" ]; then \
+				echo "check-build-tree: $$moc was generated from $$header," >&2; \
+				echo "check-build-tree:   which no longer exists -- the header moved" >&2; \
+				echo "check-build-tree:   and this file is newer than its own source," >&2; \
+				echo "check-build-tree:   so make cannot see it. Remove it:" >&2; \
+				echo "check-build-tree:     rm $$moc $${moc%.cpp}.o" >&2; \
+				bad=1; \
+			fi; \
+		done; \
+	done; \
+	[ $$bad -eq 0 ] || exit 1; \
+	if [ $$seen -eq 0 ]; then \
+		echo "check-build-tree: no build tree here yet, so nothing was checked"; \
+	else \
+		echo "check-build-tree: $$seen generated source(s), every one names a header that exists"; \
+	fi
+
+test: check-build-tree $(TARGET) $(TEST_BIN)
 	@sandbox=$$(mktemp -d) && \
 	 HOME=$$sandbox XDG_CONFIG_HOME=$$sandbox/config XDG_DATA_HOME=$$sandbox/data \
 	 QT_QPA_PLATFORM=offscreen ./$(TARGET) --self-test; \
@@ -1327,7 +1382,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo uninstall \
+.PHONY: all run test bench style check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check

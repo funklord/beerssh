@@ -8635,6 +8635,62 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3r A generated file newer than its own header — **[FIXED 2026-09-10]**
+
+Two `moc_*.cpp` in `build/` and two in `build-tests/` had been generated
+back when their headers lived under `src/ui/` and `src/keyboard/`. They
+sat there for six days and no build noticed.
+
+**Timestamps are why, and the mechanism is worth keeping because nothing
+about it looks wrong.** `6a03c7c`, "keyboard: move the keyboard to its
+own directory", was a RENAME, so `keyboard/key_row.h` kept the mtime it
+had at its old path -- 2026-08-07. The moc generated from that old path
+is dated 2026-09-04. **The generated file is NEWER than its own header**,
+so make compared the two and correctly concluded there was nothing to
+do.
+
+**It stays invisible until an object file goes missing.** The stale
+`.cpp` is only compiled when its `.o` is absent, so the tree builds
+happily for as long as nobody cleans. Here it surfaced because an
+out-of-memory kill left a rebuild to redo the objects, and the error
+then blames a missing header and names neither the move nor the fix:
+
+    moc_key_row.cpp:9:10: fatal error: ../src/ui/key_row.h:
+    No such file or directory
+
+It cost three builds to diagnose, and the second instance only appeared
+after the first was fixed -- one per rebuild, because each stale file
+stops the build before the next is reached.
+
+**`make check-build-tree` reads what the file INCLUDES**, because
+timestamps provably cannot see this: make compares mtimes and never
+content. One grep per generated source, 86 of them in this tree, no
+false positives. It runs BEFORE the build as a prerequisite of `test`,
+which is a detail that had to be corrected -- prerequisites are made
+left to right, so listing it last let a full compile happen and then
+reported the problem.
+
+**Seen to fail**, by planting a `moc_planted.cpp` including a header
+that never existed: both `make check-build-tree` and `make test` refuse,
+and the message names the two files to remove.
+
+**It reports how many files it read**, because a gate over an empty
+list reports success as loudly as a real one, and the empty case is
+reachable: a clone that has never been built has no moc anywhere.
+
+**The count corrected a guess of mine within one run, which is the
+argument for it.** The first container run was written up here as having
+inspected nothing -- reasoned from check-ci building out of
+`git archive HEAD` -- and that was asserted without being read. With the
+count printed, the container says **31**: it builds the application
+before running the suite, and that populates `build/` first. The
+reasoning was sound and the fact was not, which is the difference a
+number makes.
+
+**What it does not cover**: a generated file whose header still exists
+but whose CONTENT is stale. Nothing here can see that, and the honest
+scope of this check is the header-moved case that produced it.
+
 ### 12.3q Shipping a terminfo for local shells — **[BUILT 2026-09-10]**
 
 sec 12.3p left the question open and the copyright holder settled it:
