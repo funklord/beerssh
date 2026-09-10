@@ -121,6 +121,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_keyboard(nullptr),
       m_keyboard_hidden_by_user(false),
       m_device_settings(nullptr),
+      m_settings_sections(nullptr),
       m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
       m_window_title_format(QStringLiteral("%t - BeerSSH")),
       m_asked_about_closing(false),
@@ -659,6 +660,15 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 */
 		sections->setFocusPolicy(Qt::NoFocus);
 		sections->setSelectionMode(QAbstractItemView::NoSelection);
+
+		/*
+		 * A rule between the rows, for the reason sec 8.5 records
+		 * about the host list: without one the screen read as
+		 * paragraphs of text rather than as a list to tap. The index
+		 * arrived with the same fault, which is what a gallery is for.
+		 */
+		m_settings_sections = sections;
+		style_settings_index();
 		QScroller::grabGesture(sections->viewport(),
 		                        QScroller::LeftMouseButtonGesture);
 		index_layout->addWidget(sections, 1);
@@ -2778,9 +2788,18 @@ void bssh_main_window::keyPressEvent(QKeyEvent *event) {
 	QWidget::keyPressEvent(event);
 }
 
+void bssh_main_window::style_settings_index() {
+	if (!m_settings_sections) return;
+
+	m_settings_sections->setStyleSheet(QStringLiteral(
+	        "QListWidget::item { border-bottom: 1px solid %1; padding-left: 8px; }")
+	                                            .arg(palette().color(QPalette::Mid).name()));
+}
+
 void bssh_main_window::changeEvent(QEvent *event) {
 	QWidget::changeEvent(event);
 	if (event && event->type() == QEvent::PaletteChange) on_registry_changed();
+	if (event && event->type() == QEvent::PaletteChange) style_settings_index();
 }
 
 void bssh_main_window::refresh_tab_bar() {

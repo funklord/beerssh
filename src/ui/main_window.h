@@ -17,6 +17,7 @@ class QAction;
 class QLabel;
 class QMenuBar;
 class QTabBar;
+class QListWidget;
 class QStackedWidget;
 class QKeyEvent;
 class QDragEnterEvent;
@@ -408,6 +409,15 @@ private:
 	 */
 	bool m_keyboard_hidden_by_user;
 	QWidget *m_device_settings;
+
+	/*
+	 * The settings index's rows, kept so their separator can be redrawn
+	 * when the palette changes (sec 8.5). A fixed grey that reads as a
+	 * hairline on the light theme is invisible on the dark one, which is
+	 * the reason the host list rebuilds its own.
+	 */
+	QListWidget *m_settings_sections;
+	void style_settings_index();
 	void apply_device_settings();
 
 	/*
