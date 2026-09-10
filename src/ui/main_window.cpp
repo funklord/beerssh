@@ -1,6 +1,8 @@
 #include <QApplication>
 #include "ui/touch_metrics.h"
+#include "term/font_catalog.h"
 
+#include <QAbstractItemView>
 #include <QListWidget>
 #include <QScroller>
 #include <QListWidgetItem>
@@ -630,9 +632,33 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		index_layout->setContentsMargins(0, 0, 0, 0);
 		index_layout->setSpacing(0);
 
+		/*
+		 * A heading, the same shape the host list gives itself: a
+		 * 1.4x bold title in a 56px band. Rendered on the device the
+		 * index had none, so its first row sat directly under the
+		 * status bar and the page read as a list that had lost its
+		 * title rather than as a screen. Every assertion passed
+		 * throughout -- sec 12.3c's point about a picture again.
+		 */
+		QLabel *index_title = new QLabel(QStringLiteral("  Settings"), index);
+		QFont index_font = bssh_scaled_font(index_title->font(), 1.4);
+		index_font.setBold(true);
+		index_title->setFont(index_font);
+		index_title->setMinimumHeight(56);
+		index_layout->addWidget(index_title);
+
 		QListWidget *sections = new QListWidget(index);
 		sections->setFrameShape(QFrame::NoFrame);
 		sections->setTextElideMode(Qt::ElideRight);
+
+		/*
+		 * Nothing is chosen until a thumb chooses it. A QListWidget
+		 * gives its first row the current-item focus rectangle, which
+		 * on a touch list reads as a selection the user did not make --
+		 * on the device the Keyboard row came up already boxed.
+		 */
+		sections->setFocusPolicy(Qt::NoFocus);
+		sections->setSelectionMode(QAbstractItemView::NoSelection);
 		QScroller::grabGesture(sections->viewport(),
 		                        QScroller::LeftMouseButtonGesture);
 		index_layout->addWidget(sections, 1);

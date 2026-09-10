@@ -249,6 +249,34 @@ void bssh_ui_shots::render_touch_surfaces() {
 	}
 
 	/*
+	 * THE SETTINGS INDEX (sec 8.5), which is a main-window page rather
+	 * than a widget of its own -- so it is shot through the window, the
+	 * way desktop-window is, instead of being constructed standalone.
+	 *
+	 * It had no picture at all when it was built, which is the gap this
+	 * gallery exists to close: a new surface nobody can look at is one
+	 * whose layout is checked only by assertions, and sec 12.3c records
+	 * what that misses.
+	 */
+	{
+		bssh_main_window window;
+		window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+		window.show();
+		if (QTest::qWaitForWindowExposed(&window)) {
+			QWidget *index = window.findChild<QWidget *>(
+			        QStringLiteral("settings-index"));
+			QStackedWidget *pages = window.findChild<QStackedWidget *>();
+			if (index && pages) {
+				pages->setCurrentWidget(index);
+				QTest::qWait(50);
+				shoot(QStringLiteral("touch-settings-index"), &window,
+				       BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+			}
+		}
+		window.hide();
+	}
+
+	/*
 	 * The on-screen key row (sec 6.2), which nothing had ever rendered.
 	 *
 	 * It is the surface a phone user touches most and the only one in
