@@ -8703,9 +8703,43 @@ directly and takes its width from `TIOCGWINSZ`. So this is unlikely to
 change the backspace behaviour that prompted it. What it does fix is
 every terminfo-consuming program run inside that shell, which today
 sees `TERM=xterm-256color` naming an entry the device cannot look up.
-Unverified on hardware: the phone was disconnected by the time this was
-written, and the one command that settles it is a look at whether
-`/system/bin/sh` references terminfo at all.
+**Verified on hardware 2026-09-10, and the concern was right.**
+
+The mechanism works. The database unpacks to
+`files/terminfo/x/xterm-256color` at 4071 bytes, the same size as
+shipped, and the shell's own `/proc/<pid>/environ` carries
+
+    TERM=xterm-256color
+    TERMINFO=/data/user/0/se.vibes.beerssh/files/terminfo
+
+**It changes nothing about the local shell's line editing**, which is
+what prompted it. Typing 46 characters at the prompt shows a WINDOW of
+the input -- the first 13 scrolled off the left, a literal `<` at the
+right edge -- rather than a line wrapped across two rows. That is mksh
+scrolling one line, not a terminal failing to wrap, and it is what the
+copyright holder's original report described as backspace "only
+deleting until the start of that line": there is no second row, only a
+viewport. Deleting all 46 leaves the line clean.
+
+So the benefit is what was predicted and no more: every OTHER
+terminfo-consuming program in that shell can now look up the TERM the
+app sends. In a sandbox with almost no userland that is a small
+population, and the entry says so rather than claiming the feature
+fixed the symptom that motivated it.
+
+**And `evidence.md` had already named this trap**: a stray character at
+a terminal's edge that survived five sound hypotheses about the
+emulator across two sessions, where the answer was in the bytes and the
+shell had written a literal horizontal-scroll marker. The same `<`, the
+same terminal, found again from the other direction.
+
+**One instrument error worth keeping.** Reading the value with
+`adb shell input text 'echo TI=[$TERMINFO]'` reports it EMPTY, and that
+is not the app: adb hands the string to the device's own shell, which
+expands `$TERMINFO` in ITS environment before `input` types the result.
+The measurement was of the adb session, whose `TERM=screen` is this
+desktop's value propagated over the wire. `/proc/<pid>/environ` of the
+child is the reading that answers the question asked.
 
 **`xterm-256color` and nothing else, which adds no claim.** It is
 already what `BSSH_TERM` sends and what the default preset carries, so
