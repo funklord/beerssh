@@ -8635,6 +8635,55 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3s Cancelling a password prompt said "reconnecting" — **[FIXED 2026-09-10]**
+
+Found in real use on the phone: cancelling the password dialog for
+`funk@vibes.se` left the status line reading *"funk@vibes.se
+disconnected -- reconnecting..."*.
+
+**`note_user_disconnect()` had no caller anywhere in `src/`.** It
+existed, it was correct, and the flag it sets was reachable only from a
+test that called it directly -- `evidence.md`'s *an interface is only as
+wired as its least-used method*, where a method with no caller hides
+better than a signal with no listener because a complete-looking
+interface looks done.
+
+**And the suite was green about it.** `a_user_disconnect_is_not_retried`
+calls `manager.note_user_disconnect()` itself and then asserts the
+manager stays quiet: it proves the flag works when set and says nothing
+about whether anything sets it. That is the case `evidence.md` states as
+*a test that calls the helper it is verifying cannot see a wrong
+caller*, found here in the wild rather than in the abstract.
+
+**Two corrections to my own reading, both worth keeping.**
+
+The symptom is not what it was first reported as. `bssh_session::
+reconnect()` guards on the SESSION's own flag, so the attempts the
+manager schedules all no-op: there is no second password prompt. What is
+wrong is a status line claiming a reconnect that will never happen, and
+a backoff timer cycling through its ten attempts for nothing. Saying it
+would re-prompt was inference stated as fact.
+
+The first reproduction PASSED and nearly closed the investigation. It
+built a `bssh_session` with no transport, so `disconnect_from_host()`
+changed no state, `state_changed` never fired, and
+`on_session_state_changed` -- the code under test -- never ran. A
+vacuous pass, written while hunting one. Only with a
+`bssh_fake_ssh_session` injected does it fail, and that failure is the
+defect on the production path.
+
+**The fix wires the method that was already there.** The session gains a
+`user_disconnected()` signal, emitted from `disconnect_from_host()`
+BEFORE the transport is told -- the manager decides from the state
+change that follows, so being told afterwards would be one scheduled
+attempt too late -- and the manager connects it to
+`note_user_disconnect()`.
+
+**The control that matters is not the new test.**
+`a_dropped_connection_is_still_retried` has to stay green: a fix that
+simply stopped reconnecting would satisfy the new assertion and quietly
+remove the feature sec 5.3 exists for. Both pass.
+
 ### 12.3r A generated file newer than its own header — **[FIXED 2026-09-10]**
 
 Two `moc_*.cpp` in `build/` and two in `build-tests/` had been generated

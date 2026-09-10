@@ -276,6 +276,51 @@ void conn_manager_test::a_user_disconnect_is_not_retried() {
 	QCOMPARE(scheduled.count(), 0);
 }
 
+void conn_manager_test::a_user_disconnect_is_not_retried_when_nobody_calls_the_setter() {
+	/*
+	 * PRODUCTION'S WIRING, which is the difference between this and the
+	 * test above it.
+	 *
+	 * That one calls note_user_disconnect() itself and then asserts the
+	 * manager stays quiet, so it proves the flag works when it is set and
+	 * says nothing about whether anything sets it -- `evidence.md`'s "a
+	 * test that calls the helper it is verifying cannot see a wrong
+	 * caller". note_user_disconnect() had no caller anywhere in src/.
+	 *
+	 * A REAL TRANSPORT, because the first version of this test had none
+	 * and passed while proving nothing: with no transport
+	 * disconnect_from_host() changes no state, state_changed never fires,
+	 * and on_session_state_changed -- the code under test -- never runs
+	 * at all. It was a vacuous pass of exactly the kind sec 12.3 keeps
+	 * finding, written while looking for one.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("cancelled")));
+	bssh_conn_manager manager(&session);
+	session.connect_to_host();
+	QVERIFY(fake);
+
+	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
+
+	/*
+	 * What cancelling the password prompt does: main_window's
+	 * ask_for_password() calls exactly this when the dialog is not
+	 * accepted. Reported from the phone as a session that says
+	 * "disconnected -- reconnecting..." after the prompt was dismissed.
+	 */
+	session.disconnect_from_host();
+
+	QCOMPARE(scheduled.count(), 0);
+	QVERIFY(!manager.is_reconnecting());
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void conn_manager_test::auto_reconnect_can_be_switched_off() {
 	bssh_session session(host(QStringLiteral("b")));
 	bssh_conn_manager manager(&session);

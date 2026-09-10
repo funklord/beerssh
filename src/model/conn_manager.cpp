@@ -34,6 +34,19 @@ bssh_conn_manager::bssh_conn_manager(bssh_session *session, QObject *parent)
 	if (m_session) {
 		connect(m_session, &bssh_session::state_changed,
 		         this, &bssh_conn_manager::on_session_state_changed);
+
+		/*
+		 * A deliberate close, so this manager stops rather than
+		 * treating the drop that follows as an outage.
+		 *
+		 * note_user_disconnect() existed for exactly this and had no
+		 * caller anywhere -- the flag it sets was reachable only from a
+		 * test that called it directly, which is why the suite was
+		 * green while a cancelled password prompt still ended in
+		 * "disconnected -- reconnecting...".
+		 */
+		connect(m_session, &bssh_session::user_disconnected,
+		         this, &bssh_conn_manager::note_user_disconnect);
 	}
 }
 

@@ -23,6 +23,7 @@ private slots:
 	void an_exited_shell_is_not_reopened();
 	void a_dropped_connection_is_still_retried();
 	void a_user_disconnect_is_not_retried();
+	void a_user_disconnect_is_not_retried_when_nobody_calls_the_setter();
 	void auto_reconnect_can_be_switched_off();
 };
 

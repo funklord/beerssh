@@ -302,6 +302,16 @@ void bssh_session::connect_to_host() {
 
 void bssh_session::disconnect_from_host() {
 	m_user_disconnected = true;
+
+	/*
+	 * Announced before the transport is touched, because the reconnect
+	 * manager decides from the state change that is about to follow. Told
+	 * afterwards it would already have scheduled an attempt, and the
+	 * session would say "reconnecting..." about a connection nobody asked
+	 * it to make.
+	 */
+	emit user_disconnected();
+
 	if (m_transport) m_transport->disconnect_from_host();
 }
 

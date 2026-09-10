@@ -156,6 +156,16 @@ signals:
 	 */
 	void settings_changed();
 
+	/*
+	 * Somebody closed this session on purpose (sec 5.3).
+	 *
+	 * Emitted BEFORE the transport is told, so that whatever is watching
+	 * has the fact before the DISCONNECTED state arrives -- the reconnect
+	 * manager decides from the state change, and learning afterwards
+	 * would be learning one scheduled attempt too late.
+	 */
+	void user_disconnected();
+
 	/* The shell ended: the window says so instead of silently retrying. */
 	void shell_exited(int exit_status);
 
