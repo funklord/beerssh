@@ -46,6 +46,7 @@ private slots:
 	 * easily than an honest one. Measured: the settings page went green
 	 * at 320dp while drawing "trl+Shift+C" and "BeerSSH's own, compac".
 	 */
+	void every_setting_is_on_exactly_one_section();
 	void no_control_is_narrower_than_the_text_it_shows();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();

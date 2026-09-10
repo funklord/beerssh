@@ -226,10 +226,27 @@ void bssh_ui_shots::render_touch_surfaces() {
 	shoot(QStringLiteral("touch-preset-editor"), &presets, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 	shoot_whole_page(QStringLiteral("touch-preset-editor"), &presets);
 
-	bssh_app_settings_view settings;
-	shoot(QStringLiteral("touch-settings"), &settings, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
-
-	shoot_whole_page(QStringLiteral("touch-settings"), &settings);
+	/*
+	 * ONE SHOT PER SECTION, because that is what a phone shows now
+	 * (sec 8.5). Rendering the whole page here would be a picture of a
+	 * surface touch never displays -- this file's own rule, and the
+	 * reason the stale screens were deleted from the gallery.
+	 *
+	 * The whole page is still built, and still shot: it is the DESKTOP's
+	 * "This device" category, which desktop_pages() renders.
+	 */
+	const struct { bssh_app_settings_view::section_t which; const char *name; } sections[] = {
+		{ bssh_app_settings_view::SECTION_KEYBOARD,   "touch-settings-keyboard" },
+		{ bssh_app_settings_view::SECTION_APPEARANCE, "touch-settings-appearance" },
+		{ bssh_app_settings_view::SECTION_TERMINAL,   "touch-settings-terminal" },
+		{ bssh_app_settings_view::SECTION_PASSWORDS,  "touch-settings-passwords" },
+		{ bssh_app_settings_view::SECTION_SHORTCUTS,  "touch-settings-shortcuts" },
+	};
+	for (const auto &one : sections) {
+		bssh_app_settings_view section(one.which, nullptr);
+		shoot(QString::fromLatin1(one.name), &section, BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+		shoot_whole_page(QString::fromLatin1(one.name), &section);
+	}
 
 	/*
 	 * The on-screen key row (sec 6.2), which nothing had ever rendered.

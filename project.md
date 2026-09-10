@@ -8635,6 +8635,77 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3t The settings page became an index and five pages — **[2026-09-10]**
+
+It was the tallest surface in the app: **1929px at 320dp**, three screens
+of a 640px phone.
+
+**Measured before anything was designed**, because the obvious fix is the
+wrong one:
+
+    controls  912px   45%
+    labels    532px   26%
+    notes     510px   25%
+    other      96px
+
+Nearly half is the settings themselves, which cannot shrink without
+removing features, and a quarter is the explanatory notes -- which
+sec 12.3b says explicitly must not be trimmed to reach a number, since
+that deforms the thing being measured. So shortening the prose could
+never have been the answer, and the measurement is what says so rather
+than taste.
+
+**sec 8.5 rules out the desktop's answer by name**: no category tree,
+"a desktop idiom that survives neither a thumb nor a 5-inch screen". What
+it does not rule out is full-screen pages in sequence, which is what the
+platform's own settings do -- and `show_page()`/`go_back()` already did
+it for the host editor and the licences, so the navigation is not a new
+concept, only a new user of one.
+
+    Keyboard    483px  fits        Passwords   141px  fits
+    Appearance  687px  scrolls     Shortcuts   633px  fits
+    Terminal    215px  fits
+
+**Four of the five need no scrolling at all.**
+
+**The desktop is untouched, and that is structural rather than careful.**
+The same view is the "This device" category inside sec 8.5's PuTTY tree
+(`session_dialog`), so it builds `EVERYTHING` -- one level of navigation
+is already above it and a second would be a tree inside a tree. Both
+modes ship, which is what keeps the whole-page path honest: it is not a
+legacy branch nobody exercises.
+
+**Two measurement errors on the way, both mine.**
+
+The first heights read `content->height()` after a resize, and three
+sections came back at exactly 592px. They were the VIEWPORT: the scroll
+area is `widgetResizable`, so anything shorter than the screen is
+stretched back up to fill it and `height()` can never report less. Three
+identical numbers is what made it obvious. `sizeHint()` is the honest
+reading, and it also moved the whole page from 2038 to 1929.
+
+The second was reading a sabotage's result through `head -3`, where the
+warnings ate the window and the FAIL line never appeared -- so a caught
+sabotage looked uncaught. *Never reduce a check's output before you know
+it passed*, met in miniature while applying it.
+
+**What guards the split is not the height.** A row whose section nobody
+assigned would simply stop existing on touch, and every other test would
+stay green because the desktop still builds the whole page. So the test
+counts controls: the sections must carry exactly what `EVERYTHING` does.
+Seen to fail by removing one row's guard -- *"the sections carry 32
+controls and the whole page has 28"*, which is the unguarded row landing
+on all five pages at once.
+
+The height is asserted as a RELATIONSHIP -- every section at most half
+the whole page -- rather than against a pixel bound, which would be a
+constant to maintain and, worse, could be satisfied by shrinking the
+content the entry above refuses to shrink.
+
+**And the gallery renders the sections now**, not the whole page. `make
+shots` was drawing a surface touch no longer displays, which is this
+tree's own rule about pictures of things the app never does.
+
 ### 12.3s Cancelling a password prompt said "reconnecting" — **[FIXED 2026-09-10]**
 
 Found in real use on the phone: cancelling the password dialog for

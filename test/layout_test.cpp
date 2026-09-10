@@ -947,6 +947,89 @@ void check_no_control_clips(const QString &name, QWidget *surface, int floor) {
 
 }
 
+/*
+ * Every setting is on exactly one section page, and every section is
+ * shorter than the page it came out of (project.md sec 8.5).
+ *
+ * The first half is what makes splitting a page safe: a row whose
+ * section nobody assigned would simply stop existing on touch, and
+ * nothing else here would notice -- the desktop still builds EVERYTHING,
+ * so its own tests would stay green while the phone quietly lost a
+ * setting.
+ *
+ * The second is asserted as a RELATIONSHIP rather than against a number.
+ * A pixel bound would be a constant somebody has to maintain, and worse,
+ * it could be met by shrinking the content -- which sec 12.3b is
+ * explicit about, since trimming the descriptions to reach a figure
+ * deforms the thing being measured. Half the whole page cannot be
+ * satisfied that way.
+ */
+void layout_test::every_setting_is_on_exactly_one_section() {
+	const forced_touch_t thumb(1);
+
+	const bssh_app_settings_view::section_t order[] = {
+		bssh_app_settings_view::SECTION_KEYBOARD,
+		bssh_app_settings_view::SECTION_APPEARANCE,
+		bssh_app_settings_view::SECTION_TERMINAL,
+		bssh_app_settings_view::SECTION_PASSWORDS,
+		bssh_app_settings_view::SECTION_SHORTCUTS,
+	};
+
+	const auto controls_on = [](bssh_app_settings_view *page) {
+		int seen = 0;
+		for (QWidget *w : page->findChildren<QWidget *>()) {
+			if (!w->isVisible()) continue;
+			if (qobject_cast<QComboBox *>(w) || qobject_cast<QCheckBox *>(w)
+			     || qobject_cast<QLineEdit *>(w) || qobject_cast<QSlider *>(w)
+			     || qobject_cast<QKeySequenceEdit *>(w))
+				++seen;
+		}
+		return seen;
+	};
+
+	const auto natural = [](bssh_app_settings_view *page) {
+		QScrollArea *area = page->findChild<QScrollArea *>();
+		QWidget *content = area ? area->widget() : nullptr;
+		if (!content) return 0;
+		content->resize(area->viewport()->width(), 1);
+		QCoreApplication::processEvents();
+		return content->sizeHint().height();
+	};
+
+	bssh_app_settings_view whole(bssh_app_settings_view::EVERYTHING, nullptr);
+	whole.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	whole.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&whole));
+	const int all_controls = controls_on(&whole);
+	const int all_height = natural(&whole);
+	QVERIFY2(all_controls > 10,
+	          qPrintable(QStringLiteral("only %1 controls on the whole page, so this "
+	                                     "compares almost nothing").arg(all_controls)));
+
+	int summed = 0;
+	for (bssh_app_settings_view::section_t which : order) {
+		bssh_app_settings_view page(which, nullptr);
+		page.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+		page.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&page));
+
+		summed += controls_on(&page);
+
+		const int tall = natural(&page);
+		QVERIFY2(tall * 2 <= all_height,
+		          qPrintable(QStringLiteral("the %1 section is %2px against the whole "
+		                                     "page's %3 -- splitting it bought nothing")
+		                             .arg(bssh_app_settings_view::section_name(which))
+		                             .arg(tall).arg(all_height)));
+		page.hide();
+	}
+
+	QVERIFY2(summed == all_controls,
+	          qPrintable(QStringLiteral("the sections carry %1 controls and the whole "
+	                                     "page has %2 -- a setting is on no section, or "
+	                                     "on two").arg(summed).arg(all_controls)));
+}
+
 void layout_test::no_control_is_narrower_than_the_text_it_shows() {
 	const forced_touch_t thumb(1);
 
@@ -1003,6 +1086,7 @@ void layout_test::no_control_is_narrower_than_the_text_it_shows() {
 		bssh_app_settings_view settings;
 		check_no_control_clips(QStringLiteral("settings"), &settings, 15);
 	}
+
 	{
 		bssh_host_editor editor(&store);
 		editor.set_profile(profile);
@@ -2777,8 +2861,14 @@ void layout_test::the_keyboard_config_key_opens_the_settings_page() {
 	const registry_left_as_found_t tidy(window.registry());
 
 	QStackedWidget *pages = window.findChild<QStackedWidget *>();
-	bssh_app_settings_view *device = window.findChild<bssh_app_settings_view *>();
-	QVERIFY2(pages && device, "the touch window must have a page stack and a settings page");
+	/*
+	 * The INDEX, not a settings view: sec 8.5's settings are a list of
+	 * sections now, each its own page, so the key opens the list and
+	 * findChild<bssh_app_settings_view *> would return whichever section
+	 * happens to be first in the stack.
+	 */
+	QWidget *device = window.findChild<QWidget *>(QStringLiteral("settings-index"));
+	QVERIFY2(pages && device, "the touch window must have a page stack and a settings index");
 	QVERIFY2(pages->currentWidget() != device,
 	          "the settings page must not be what a session opens on");
 
@@ -2787,7 +2877,7 @@ void layout_test::the_keyboard_config_key_opens_the_settings_page() {
 	QVERIFY2(config, "the keyboard must carry a configuration key");
 	config->click();
 
-	QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(device));
+	QCOMPARE(pages->currentWidget(), device);
 
 	settings.set_keyboard(before);
 	bssh_ssh_session::set_factory(nullptr);
@@ -2830,8 +2920,14 @@ void layout_test::the_back_key_leaves_the_page_not_the_app() {
 	const registry_left_as_found_t tidy(window.registry());
 
 	QStackedWidget *pages = window.findChild<QStackedWidget *>();
-	bssh_app_settings_view *device = window.findChild<bssh_app_settings_view *>();
-	QVERIFY2(pages && device, "the touch window must have a page stack and a settings page");
+	/*
+	 * The INDEX, not a settings view: sec 8.5's settings are a list of
+	 * sections now, each its own page, so the key opens the list and
+	 * findChild<bssh_app_settings_view *> would return whichever section
+	 * happens to be first in the stack.
+	 */
+	QWidget *device = window.findChild<QWidget *>(QStringLiteral("settings-index"));
+	QVERIFY2(pages && device, "the touch window must have a page stack and a settings index");
 
 	QWidget *came_from = pages->currentWidget();
 	QVERIFY2(came_from != device, "the settings page must not be what a session opens on");
@@ -2840,7 +2936,7 @@ void layout_test::the_back_key_leaves_the_page_not_the_app() {
 	        QStringLiteral("keyboard-settings"));
 	QVERIFY2(config, "the keyboard must carry a configuration key");
 	config->click();
-	QCOMPARE(pages->currentWidget(), static_cast<QWidget *>(device));
+	QCOMPARE(pages->currentWidget(), device);
 
 	/*
 	 * Back returns to the page it was opened FROM, not to the host

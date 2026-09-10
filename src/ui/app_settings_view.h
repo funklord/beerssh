@@ -30,7 +30,40 @@ class bssh_app_settings_view : public QWidget {
 	Q_OBJECT
 
 public:
+	/*
+	 * Which part of the page to build (project.md sec 8.5).
+	 *
+	 * EVERYTHING is the DESKTOP's, and it is not a legacy mode: there the
+	 * view is one category inside PuTTY's tree (session_dialog), so it
+	 * already sits behind a level of navigation and nesting it again
+	 * would be a tree inside a tree.
+	 *
+	 * Touch builds one page per section instead, reached from a list and
+	 * left with Back. sec 8.5 rules out a category tree beside a form of
+	 * small fields -- "a desktop idiom that survives neither a thumb nor
+	 * a 5-inch screen" -- and this is the other thing: full-screen pages
+	 * in sequence, which is what the platform's own settings do and what
+	 * show_page()/go_back() was already built for.
+	 *
+	 * The page was 2038px tall at 320dp, against a 640px screen. Measured
+	 * before it was split: 912px of controls, 532 of labels, 510 of
+	 * explanatory notes -- so trimming the prose could never have been
+	 * the answer, and sec 12.3b says why it must not be tried.
+	 */
+	enum section_t {
+		EVERYTHING,
+		SECTION_KEYBOARD,
+		SECTION_APPEARANCE,
+		SECTION_TERMINAL,
+		SECTION_PASSWORDS,
+		SECTION_SHORTCUTS,
+	};
+
+	/* The heading a section page shows, and the row that opens it. */
+	static QString section_name(section_t section);
+
 	explicit bssh_app_settings_view(QWidget *parent = nullptr);
+	bssh_app_settings_view(section_t section, QWidget *parent);
 
 signals:
 	/* Something changed; whoever owns the key row should re-read it. */
@@ -63,6 +96,21 @@ private:
 	 * would not do: both windows' settings pages can be open at once.
 	 */
 	void commit(const std::function<void(bssh_app_settings &)> &write);
+
+	/*
+	 * Whether this row belongs on this page, hiding the widget when it
+	 * does not. preset_editor.cpp's shown() lambda, which exists for the
+	 * same reason: a widget left out of a form but still parented here
+	 * would otherwise be drawn at the top-left corner.
+	 *
+	 * Skipping the addRow rather than hiding afterwards is what disposes
+	 * of the LABEL too -- addRow(QString, QWidget) builds one internally,
+	 * and hiding only the field would leave its caption behind.
+	 */
+	bool on_this_page(section_t section, QWidget *widget);
+
+
+	section_t m_section;
 
 	QComboBox *m_key_row;
 	QComboBox *m_keyboard;

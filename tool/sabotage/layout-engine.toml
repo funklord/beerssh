@@ -49,9 +49,15 @@ expect = "an_unknown_layout_is_refused_and_changes_nothing"
 #    The catalog stays right about every layout and the user has no way
 #    to choose one -- a correct function with nothing wired to it, which
 #    is this tree's most repeated defect.
+#
+#    The anchor gained its section guard when sec 8.5's settings became
+#    an index and five pages (sec 12.3t). `--check` is what noticed:
+#    the edit still described code that had moved, which is the way a
+#    sabotage rots without its find string ever failing to match
+#    anything else.
 [[sabotage]]
 name = "the layout cannot be chosen"
 file = "src/ui/app_settings_view.cpp"
-find = "\tform->addRow(QStringLiteral(\"Layout\"), m_keyboard_layout);"
+find = "\tif (on_this_page(SECTION_KEYBOARD, m_keyboard_layout)) form->addRow(QStringLiteral(\"Layout\"), m_keyboard_layout);"
 replace = "\tm_keyboard_layout->hide();"
 expect = "the_layout_setting_reaches_the_keyboard"

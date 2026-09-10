@@ -66,8 +66,30 @@ static void bssh_fit_items(QComboBox *box) {
  * Found by the same lens that caught it in bssh_font_picker: a null
  * guard is only as good as the value it reads.
  */
+QString bssh_app_settings_view::section_name(section_t section) {
+	switch (section) {
+	case SECTION_KEYBOARD:   return QStringLiteral("Keyboard");
+	case SECTION_APPEARANCE: return QStringLiteral("Appearance");
+	case SECTION_TERMINAL:   return QStringLiteral("Terminal");
+	case SECTION_PASSWORDS:  return QStringLiteral("Stored passwords");
+	case SECTION_SHORTCUTS:  return QStringLiteral("Shortcuts");
+	case EVERYTHING:         break;
+	}
+	return QStringLiteral("This device");
+}
+
+bool bssh_app_settings_view::on_this_page(section_t section, QWidget *widget) {
+	const bool wanted = (m_section == EVERYTHING || m_section == section);
+	if (!wanted && widget) widget->hide();
+	return wanted;
+}
+
 bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
+    : bssh_app_settings_view(EVERYTHING, parent) {}
+
+bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *parent)
     : QWidget(parent),
+      m_section(section),
       m_key_row(nullptr),
       m_keyboard(nullptr),
       m_keyboard_fallback(nullptr),
@@ -121,7 +143,16 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	QScroller::grabGesture(scroll->viewport(), QScroller::LeftMouseButtonGesture);
 	outer->addWidget(scroll, 1);
 
-	QLabel *heading = new QLabel(QStringLiteral("<b>This device</b>"), this);
+	/*
+	 * The heading names the page rather than always saying "This device".
+	 * On the desktop that is still what it says, because there the whole
+	 * view IS the "This device" category of sec 8.5's tree; a touch
+	 * section page says which section it is, since the user arrived by
+	 * tapping that row and Back is the way out.
+	 */
+	QLabel *heading = new QLabel(QStringLiteral("<b>%1</b>")
+	                                     .arg(section_name(m_section).toHtmlEscaped()),
+	                              this);
 	body->addWidget(heading);
 
 	QFormLayout *form = new QFormLayout();
@@ -141,7 +172,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_key_row->addItem(QStringLiteral("Never show"), int(bssh_app_settings::KEY_ROW_NEVER));
 
 	bssh_fit_items(m_key_row);
-	form->addRow(QStringLiteral("On-screen keys"), m_key_row);
+	if (on_this_page(SECTION_KEYBOARD, m_key_row)) form->addRow(QStringLiteral("On-screen keys"), m_key_row);
 
 	/*
 	 * Which keyboard, above the row's own setting in importance and
@@ -164,7 +195,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_keyboard->addItem(QStringLiteral("BeerSSH's own, full size"),
 	                     int(bssh_app_settings::KEYBOARD_BUILT_IN_FULL));
 	bssh_fit_items(m_keyboard);
-	form->addRow(QStringLiteral("Keyboard"), m_keyboard);
+	if (on_this_page(SECTION_KEYBOARD, m_keyboard)) form->addRow(QStringLiteral("Keyboard"), m_keyboard);
 
 	/*
 	 * Which layout the built-in keyboard draws (sec 6.2).
@@ -184,7 +215,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		m_keyboard_layout->addItem(layout.display_name, layout.id);
 	}
 	bssh_fit_items(m_keyboard_layout);
-	form->addRow(QStringLiteral("Layout"), m_keyboard_layout);
+	if (on_this_page(SECTION_KEYBOARD, m_keyboard_layout)) form->addRow(QStringLiteral("Layout"), m_keyboard_layout);
 
 	QLabel *keyboard_note = bssh_wrapped_note(
 	        QStringLiteral("This device's keyboard keeps its prediction, languages and "
@@ -192,7 +223,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "arrows it has none of. Choose BeerSSH's own where no keyboard "
 	                        "comes up at all, or where you would rather have the terminal "
 	                        "keys on the keyboard itself."), this);
-	form->addRow(keyboard_note);
+	if (on_this_page(SECTION_KEYBOARD, keyboard_note)) form->addRow(keyboard_note);
 
 	/*
 	 * What the choice will ACTUALLY give on this screen.
@@ -209,7 +240,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * where it would be saying nothing.
 	 */
 	m_keyboard_fallback = bssh_wrapped_note(QString(), this);
-	form->addRow(m_keyboard_fallback);
+	if (on_this_page(SECTION_KEYBOARD, m_keyboard_fallback)) form->addRow(m_keyboard_fallback);
 	m_keyboard_fallback->hide();
 
 	connect(m_keyboard, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -243,7 +274,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	        QStringLiteral("Automatic shows the key row when touch is this device's main "
 	                        "input. Override it if you have a keyboard attached to a "
 	                        "tablet, or a touchscreen on a laptop."), this);
-	form->addRow(note);
+	if (on_this_page(SECTION_KEYBOARD, note)) form->addRow(note);
 
 	/*
 	 * Light/dark, defaulting to whatever the desktop is asking for
@@ -264,7 +295,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_theme->addItem(QStringLiteral("Light"), QStringLiteral("light"));
 	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
 	bssh_fit_items(m_theme);
-	form->addRow(QStringLiteral("Appearance"), m_theme);
+	if (on_this_page(SECTION_APPEARANCE, m_theme)) form->addRow(QStringLiteral("Appearance"), m_theme);
 
 	/*
 	 * sec 9.3's contrast floor. The schemes are faithful reproductions
@@ -295,14 +326,14 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_scrollbar->addItem(QStringLiteral("Hidden"),
 	                      int(bssh_app_settings::SCROLLBAR_HIDDEN));
 	bssh_fit_items(m_scrollbar);
-	form->addRow(QStringLiteral("Scrollbar"), m_scrollbar);
+	if (on_this_page(SECTION_APPEARANCE, m_scrollbar)) form->addRow(QStringLiteral("Scrollbar"), m_scrollbar);
 
 	QLabel *scrollbar_note = bssh_wrapped_note(
 	        QStringLiteral("Automatic shows one where there is a pointer to drag it "
 	                        "with. How much there is to scroll through is the host's "
 	                        "own setting."),
 	        this);
-	form->addRow(scrollbar_note);
+	if (on_this_page(SECTION_APPEARANCE, scrollbar_note)) form->addRow(scrollbar_note);
 
 	/*
 	 * What the status line says, or that it says nothing (sec 8.4). It
@@ -329,8 +360,8 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "windowing system this build is using."),
 	        this);
 	bssh_fit_items(m_status_line);
-	form->addRow(QStringLiteral("Status line"), m_status_line);
-	form->addRow(status_note);
+	if (on_this_page(SECTION_APPEARANCE, m_status_line)) form->addRow(QStringLiteral("Status line"), m_status_line);
+	if (on_this_page(SECTION_APPEARANCE, status_note)) form->addRow(status_note);
 
 	/*
 	 * The window title, as a format. A list of three canned choices would
@@ -340,14 +371,14 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	m_window_title = new QLineEdit(this);
 	m_window_title->setPlaceholderText(QStringLiteral("%t - BeerSSH"));
-	form->addRow(QStringLiteral("Window title"), m_window_title);
+	if (on_this_page(SECTION_APPEARANCE, m_window_title)) form->addRow(QStringLiteral("Window title"), m_window_title);
 
 	QLabel *title_note = bssh_wrapped_note(
 	        QStringLiteral("%t is what the session calls itself, %n its saved name, "
 	                        "%u the user, %h the host, %p the port, %a this app. "
 	                        "Empty means the default."),
 	        this);
-	form->addRow(title_note);
+	if (on_this_page(SECTION_APPEARANCE, title_note)) form->addRow(title_note);
 
 	m_context_menu = new QComboBox(this);
 	m_context_menu->addItem(QStringLiteral("Automatic"),
@@ -357,7 +388,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	m_context_menu->addItem(QStringLiteral("Touch-sized"),
 	                         int(bssh_app_settings::CONTEXT_MENU_TOUCH));
 	bssh_fit_items(m_context_menu);
-	form->addRow(QStringLiteral("Terminal menu"), m_context_menu);
+	if (on_this_page(SECTION_TERMINAL, m_context_menu)) form->addRow(QStringLiteral("Terminal menu"), m_context_menu);
 
 	/*
 	 * Offered only where the platform can actually do it (sec 11: "No
@@ -375,7 +406,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		                        "the recent-apps thumbnail. That thumbnail is a picture of "
 		                        "whatever was last on screen, which here is your shell. It "
 		                        "stops you screenshotting the terminal too."));
-		form->addRow(m_hide_from_screenshots);
+		if (on_this_page(SECTION_TERMINAL, m_hide_from_screenshots)) form->addRow(m_hide_from_screenshots);
 	}
 
 	/*
@@ -393,7 +424,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		                        "gives it the keyboard without clicking. Off by default: "
 		                        "it surprises anyone expecting click-to-focus, and the "
 		                        "cost of that surprise is typing into the wrong shell."));
-		form->addRow(m_focus_follows_mouse);
+		if (on_this_page(SECTION_TERMINAL, m_focus_follows_mouse)) form->addRow(m_focus_follows_mouse);
 	}
 
 	/*
@@ -403,13 +434,13 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 */
 	m_warn_multiline_paste = new QCheckBox(
 	        QStringLiteral("Ask before pasting more than one line"), this);
-	form->addRow(m_warn_multiline_paste);
+	if (on_this_page(SECTION_TERMINAL, m_warn_multiline_paste)) form->addRow(m_warn_multiline_paste);
 
 	QLabel *paste_note = bssh_wrapped_note(
 	        QStringLiteral("A newline in a paste is Enter to the shell, so every line "
 	                        "but the last runs before you can read it."),
 	        this);
-	form->addRow(paste_note);
+	if (on_this_page(SECTION_TERMINAL, paste_note)) form->addRow(paste_note);
 
 	m_caps_as_ctrl = new QCheckBox(QStringLiteral("Caps Lock sends Ctrl"), this);
 	m_caps_as_ctrl->setObjectName(QStringLiteral("caps_as_ctrl"));
@@ -418,14 +449,14 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	                        "Your system still toggles its own caps lock -- no application "
 	                        "can prevent that -- so a permanent swap belongs in your "
 	                        "keyboard layout instead."));
-	form->addRow(m_caps_as_ctrl);
+	if (on_this_page(SECTION_KEYBOARD, m_caps_as_ctrl)) form->addRow(m_caps_as_ctrl);
 
 	m_raise_contrast = new QCheckBox(QStringLiteral("Raise low-contrast colours"), this);
 	m_raise_contrast->setToolTip(
 	        QStringLiteral("Colour schemes are reproduced exactly, and some of them are hard "
 	                        "to read. This lifts a colour only while drawing it, and only when "
 	                        "it falls below the readable minimum."));
-	form->addRow(m_raise_contrast);
+	if (on_this_page(SECTION_APPEARANCE, m_raise_contrast)) form->addRow(m_raise_contrast);
 
 	/*
 	 * The night knob (sec 9.3). A slider rather than a light/dark toggle
@@ -464,13 +495,13 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	brightness_layout->addWidget(m_text_brightness_value);
 
 	/* Sized by the walk at the end of this constructor, never by name. */
-	form->addRow(QStringLiteral("Text brightness"), brightness_row);
+	if (on_this_page(SECTION_APPEARANCE, brightness_row)) form->addRow(QStringLiteral("Text brightness"), brightness_row);
 
 	QLabel *brightness_note = bssh_wrapped_note(
 	        QStringLiteral("For reading at night. Applies to every terminal on this "
 	                        "device, not to one host."),
 	        this);
-	form->addRow(brightness_note);
+	if (on_this_page(SECTION_APPEARANCE, brightness_note)) form->addRow(brightness_note);
 
 	/*
 	 * The escape hatch (sec 9.3). A button to a dialog rather than
@@ -520,7 +551,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	colours_layout->addWidget(m_custom_colours);
 	colours_layout->addStretch(1);
 
-	form->addRow(colours_row);
+	if (on_this_page(SECTION_APPEARANCE, colours_row)) form->addRow(colours_row);
 
 	/*
 	 * Where stored passwords actually live (sec 11), stated rather than
@@ -553,7 +584,7 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		 */
 		backend->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
 		backend->setMinimumHeight(backend->sizeHint().height());
-		form->addRow(QStringLiteral("Stored passwords"), backend);
+		if (on_this_page(SECTION_PASSWORDS, backend)) form->addRow(QStringLiteral("Stored passwords"), backend);
 
 		/*
 		 * Derived from what the store reports, never from which class it
@@ -585,10 +616,16 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 		}
 
 		QLabel *backend_note = bssh_wrapped_note(detail, this);
-		form->addRow(backend_note);
+		if (on_this_page(SECTION_PASSWORDS, backend_note)) form->addRow(backend_note);
 	}
 
-	body->addLayout(form);
+	/*
+	 * Not added at all when this page has no rows in it -- a
+	 * shortcuts-only page would otherwise carry an empty form and the
+	 * spacing that goes with it.
+	 */
+	if (form->rowCount() > 0) body->addLayout(form);
+	else delete form;
 
 	/*
 	 * The chords this app keeps for itself (sec 6.1), which asks that the
@@ -609,102 +646,104 @@ bssh_app_settings_view::bssh_app_settings_view(QWidget *parent)
 	 * build it again, and the honest reasons in it are what make the
 	 * claim credible.
 	 */
-	QLabel *chords_heading = new QLabel(
-	        QStringLiteral("<b>Keys this app keeps</b>"), this);
-	body->addWidget(chords_heading);
+	if (m_section == EVERYTHING || m_section == SECTION_SHORTCUTS) {
+		QLabel *chords_heading = new QLabel(
+		        QStringLiteral("<b>Keys this app keeps</b>"), this);
+		body->addWidget(chords_heading);
 
-	QLabel *chords_note = bssh_wrapped_note(
-	        QStringLiteral("These never reach the remote shell."), this);
-	body->addWidget(chords_note);
-
-	/*
-	 * Editable, which sec 6.1 asked for and nothing had built: "a chord a
-	 * user wants back is one they cannot yet have". A QKeySequenceEdit
-	 * because it is the control the platform already has for this job --
-	 * it records the chord you press rather than making you spell it,
-	 * which is the difference between a setting people use and one they
-	 * read about.
-	 *
-	 * Built from default_chords() rather than from the effective list, so
-	 * every action has a row even when the user has given its chord back
-	 * -- an action that vanished from the page once unbound could never
-	 * be bound again.
-	 */
-	QFormLayout *chords = new QFormLayout;
-
-	/*
-	 * The label goes ABOVE its field when the row will not fit beside it,
-	 * which on this form is most of them on a narrow phone.
-	 *
-	 * Every shortcut's description is its row label -- "Open another
-	 * session in a window" is 195px of the 306 a 320dp screen leaves
-	 * inside the scroll area -- so beside a QKeySequenceEdit the row
-	 * demanded 313px and the whole page scrolled sideways. Measured on a
-	 * Galaxy Z Fold 3 cover screen, which is 320dp folded.
-	 *
-	 * WrapLongRows rather than WrapAllRows: it wraps only the rows that
-	 * do not fit, so a desktop keeps the two-column form it has always
-	 * had and the phone gets a readable one. Shortening the descriptions
-	 * would have been the other way to reach the number, and it is the
-	 * wrong way -- the description is the only thing on the row that says
-	 * what the chord DOES.
-	 */
-	chords->setRowWrapPolicy(QFormLayout::WrapLongRows);
-
-	const bssh_app_settings bound;
-
-	for (const bssh_input_router::chord_t &chord : bssh_input_router::default_chords()) {
-		const QString name = QString::fromLatin1(chord.name);
-
-		QKeySequenceEdit *edit = new QKeySequenceEdit(this);
-		edit->setObjectName(QStringLiteral("chord_") + name);
+		QLabel *chords_note = bssh_wrapped_note(
+		        QStringLiteral("These never reach the remote shell."), this);
+		body->addWidget(chords_note);
 
 		/*
-		 * Wide enough for the chord it holds, and that is what makes
-		 * WrapLongRows above work at all.
+		 * Editable, which sec 6.1 asked for and nothing had built: "a chord a
+		 * user wants back is one they cannot yet have". A QKeySequenceEdit
+		 * because it is the control the platform already has for this job --
+		 * it records the chord you press rather than making you spell it,
+		 * which is the difference between a setting people use and one they
+		 * read about.
 		 *
-		 * A QKeySequenceEdit's minimum lets it shrink below its own
-		 * text, so on a 320dp screen the form kept both columns, gave
-		 * the field whatever was left, and drew "trl+Shift+C" and
-		 * "ft+PgDown". The width assertion passed throughout -- it asks
-		 * for a minimum that FITS, and a field happy to clip has a small
-		 * one. `make shots` at 320 is what found it, which is the whole
-		 * argument for rendering the pictures at the same floor the
-		 * assertions use.
-		 *
-		 * So the field states what it actually needs, the row no longer
-		 * fits beside its label, and WrapLongRows puts the label above
-		 * it -- which is the outcome the policy was chosen for.
+		 * Built from default_chords() rather than from the effective list, so
+		 * every action has a row even when the user has given its chord back
+		 * -- an action that vanished from the page once unbound could never
+		 * be bound again.
 		 */
-		const QString shown = QKeySequence(chord.label, QKeySequence::PortableText)
-		                              .toString(QKeySequence::NativeText);
-		edit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)
-		                       + edit->fontMetrics().horizontalAdvance(QLatin1Char('W')) * 2);
-		edit->setKeySequence(QKeySequence(bound.has_chord(name) ? bound.chord(name)
-		                                                         : chord.label,
-		                                   QKeySequence::PortableText));
-
-		connect(edit, &QKeySequenceEdit::editingFinished, this, [this, name, edit] {
-			bssh_app_settings stored;
-			stored.set_chord(name, edit->keySequence().toString(QKeySequence::PortableText));
-			emit changed();
-		});
+		QFormLayout *chords = new QFormLayout;
 
 		/*
-		 * The description IS the row label, which is how every shortcut
-		 * editor from Konsole's onwards lays this out: the reader is
-		 * looking for the action and wants to see what it is bound to,
-		 * not the other way round.
+		 * The label goes ABOVE its field when the row will not fit beside it,
+		 * which on this form is most of them on a narrow phone.
+		 *
+		 * Every shortcut's description is its row label -- "Open another
+		 * session in a window" is 195px of the 306 a 320dp screen leaves
+		 * inside the scroll area -- so beside a QKeySequenceEdit the row
+		 * demanded 313px and the whole page scrolled sideways. Measured on a
+		 * Galaxy Z Fold 3 cover screen, which is 320dp folded.
+		 *
+		 * WrapLongRows rather than WrapAllRows: it wraps only the rows that
+		 * do not fit, so a desktop keeps the two-column form it has always
+		 * had and the phone gets a readable one. Shortening the descriptions
+		 * would have been the other way to reach the number, and it is the
+		 * wrong way -- the description is the only thing on the row that says
+		 * what the chord DOES.
 		 */
-		chords->addRow(QString::fromLatin1(chord.what), edit);
+		chords->setRowWrapPolicy(QFormLayout::WrapLongRows);
+
+		const bssh_app_settings bound;
+
+		for (const bssh_input_router::chord_t &chord : bssh_input_router::default_chords()) {
+			const QString name = QString::fromLatin1(chord.name);
+
+			QKeySequenceEdit *edit = new QKeySequenceEdit(this);
+			edit->setObjectName(QStringLiteral("chord_") + name);
+
+			/*
+			 * Wide enough for the chord it holds, and that is what makes
+			 * WrapLongRows above work at all.
+			 *
+			 * A QKeySequenceEdit's minimum lets it shrink below its own
+			 * text, so on a 320dp screen the form kept both columns, gave
+			 * the field whatever was left, and drew "trl+Shift+C" and
+			 * "ft+PgDown". The width assertion passed throughout -- it asks
+			 * for a minimum that FITS, and a field happy to clip has a small
+			 * one. `make shots` at 320 is what found it, which is the whole
+			 * argument for rendering the pictures at the same floor the
+			 * assertions use.
+			 *
+			 * So the field states what it actually needs, the row no longer
+			 * fits beside its label, and WrapLongRows puts the label above
+			 * it -- which is the outcome the policy was chosen for.
+			 */
+			const QString shown = QKeySequence(chord.label, QKeySequence::PortableText)
+			                              .toString(QKeySequence::NativeText);
+			edit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)
+			                       + edit->fontMetrics().horizontalAdvance(QLatin1Char('W')) * 2);
+			edit->setKeySequence(QKeySequence(bound.has_chord(name) ? bound.chord(name)
+			                                                         : chord.label,
+			                                   QKeySequence::PortableText));
+
+			connect(edit, &QKeySequenceEdit::editingFinished, this, [this, name, edit] {
+				bssh_app_settings stored;
+				stored.set_chord(name, edit->keySequence().toString(QKeySequence::PortableText));
+				emit changed();
+			});
+
+			/*
+			 * The description IS the row label, which is how every shortcut
+			 * editor from Konsole's onwards lays this out: the reader is
+			 * looking for the action and wants to see what it is bound to,
+			 * not the other way round.
+			 */
+			chords->addRow(QString::fromLatin1(chord.what), edit);
+		}
+		body->addLayout(chords);
+
+		QLabel *chords_reset_note = bssh_wrapped_note(
+		        QStringLiteral("Clear a chord to give it back to the remote shell. "
+		                        "Whatever this app keeps, the shell never sees."),
+		        this);
+		body->addWidget(chords_reset_note);
 	}
-	body->addLayout(chords);
-
-	QLabel *chords_reset_note = bssh_wrapped_note(
-	        QStringLiteral("Clear a chord to give it back to the remote shell. "
-	                        "Whatever this app keeps, the shell never sees."),
-	        this);
-	body->addWidget(chords_reset_note);
 
 	body->addStretch(1);
 

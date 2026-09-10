@@ -1,5 +1,9 @@
 #include <QApplication>
 #include "ui/touch_metrics.h"
+
+#include <QListWidget>
+#include <QScroller>
+#include <QListWidgetItem>
 #include "ui/main_window.h"
 
 #include <QCloseEvent>
@@ -599,17 +603,88 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 			go_back();
 		});
 
-		bssh_app_settings_view *device = new bssh_app_settings_view(this);
-		m_pages->addWidget(device);
-		m_device_settings = device;
+		/*
+		 * SETTINGS IS AN INDEX AND A PAGE PER SECTION (sec 8.5).
+		 *
+		 * One page carrying everything was 1929px tall at 320dp -- three
+		 * screens of a 640px phone, and the tallest surface in the app.
+		 * Split, four of the five sections need no scrolling at all:
+		 * Keyboard 483, Appearance 687, Terminal 215, Passwords 141,
+		 * Shortcuts 633.
+		 *
+		 * NOT a category tree, which sec 8.5 rules out by name as "a
+		 * desktop idiom that survives neither a thumb nor a 5-inch
+		 * screen". This is the other shape: full-screen pages in
+		 * sequence, reached by tapping a row and left with Back --
+		 * which is what show_page()/go_back() already does for the host
+		 * editor and the licences, so it adds no navigation concept.
+		 *
+		 * The desktop is untouched. There the same view is built whole,
+		 * as the "This device" category inside sec 8.5's PuTTY tree
+		 * (session_dialog), where it already sits behind one level of
+		 * navigation and a second would be a tree inside a tree.
+		 */
+		QWidget *index = new QWidget(this);
+		index->setObjectName(QStringLiteral("settings-index"));
+		QVBoxLayout *index_layout = new QVBoxLayout(index);
+		index_layout->setContentsMargins(0, 0, 0, 0);
+		index_layout->setSpacing(0);
 
-		connect(m_host_list, &bssh_host_list::settings_requested, this, [this, device] {
-			show_page(device);
+		QListWidget *sections = new QListWidget(index);
+		sections->setFrameShape(QFrame::NoFrame);
+		sections->setTextElideMode(Qt::ElideRight);
+		QScroller::grabGesture(sections->viewport(),
+		                        QScroller::LeftMouseButtonGesture);
+		index_layout->addWidget(sections, 1);
+
+		const bssh_app_settings_view::section_t order[] = {
+			bssh_app_settings_view::SECTION_KEYBOARD,
+			bssh_app_settings_view::SECTION_APPEARANCE,
+			bssh_app_settings_view::SECTION_TERMINAL,
+			bssh_app_settings_view::SECTION_PASSWORDS,
+			bssh_app_settings_view::SECTION_SHORTCUTS,
+		};
+
+		QList<QWidget *> section_pages;
+		for (bssh_app_settings_view::section_t which : order) {
+			bssh_app_settings_view *page =
+			        new bssh_app_settings_view(which, this);
+			m_pages->addWidget(page);
+			connect(page, &bssh_app_settings_view::changed,
+			         this, &bssh_main_window::apply_device_settings);
+			connect(page, &bssh_app_settings_view::back_requested,
+			         this, [this] { go_back(); });
+
+			QListWidgetItem *row = new QListWidgetItem(
+			        bssh_app_settings_view::section_name(which), sections);
+			row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+			section_pages.append(page);
+		}
+
+		/* The licences reach the same list, being the other thing a
+		 * person looks for under settings. */
+		QListWidgetItem *licences_row =
+		        new QListWidgetItem(QStringLiteral("Licences"), sections);
+		licences_row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		section_pages.append(licences);
+
+		connect(sections, &QListWidget::itemClicked, this,
+		         [this, section_pages](QListWidgetItem *item) {
+			const int row = item->listWidget()->row(item);
+			if (row >= 0 && row < section_pages.size())
+				show_page(section_pages.at(row));
 		});
-		connect(device, &bssh_app_settings_view::changed,
-		         this, &bssh_main_window::apply_device_settings);
-		connect(device, &bssh_app_settings_view::back_requested, this, [this] {
-			go_back();
+
+		QPushButton *index_back = new QPushButton(QStringLiteral("Back"), index);
+		index_back->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+		connect(index_back, &QPushButton::clicked, this, [this] { go_back(); });
+		index_layout->addWidget(index_back);
+
+		m_pages->addWidget(index);
+		m_device_settings = index;
+
+		connect(m_host_list, &bssh_host_list::settings_requested, this, [this, index] {
+			show_page(index);
 		});
 	} else {
 		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
