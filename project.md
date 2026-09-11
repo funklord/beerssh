@@ -5300,8 +5300,16 @@ handler reports *Back on the settings page was not handled* with the
 accepted flag false, exit 2.
 
 
-**Desktop borrows PuTTY's interface. Touch gets a mobile one. Same model
-underneath.**
+**Desktop borrows PuTTY's interface IN SPIRIT. Touch gets a mobile one.
+Same model underneath.**
+
+**"In spirit" is the copyright holder's own correction, 2026-09-11**, and
+it matters because this sentence has been quoted to refuse things: on
+2026-09-10 it was cited to rule out a category tree on touch and to keep
+the settings page whole as the "This device" category of that tree.
+*"I only meant to follow putty in spirit, not exactly. Its config menu is
+far from perfect."* Borrow the recognisability, not the layout -- and
+sec 8.7 supersedes the front-door half of this section.
 
 This is the one place the two platforms deliberately do *not* share a
 layout, and the reason is not screen size — it is that both idioms are
@@ -5498,6 +5506,142 @@ teaches for "act on this item" — rather than onto per-row buttons that
 would compete with the tap on every row. The lesson generalises past this
 screen: a front door that renders every field but cannot *do* half of what
 the other one does satisfies §14's rule only on paper.
+
+### 8.7 Portrait mode, one config menu, one input selector — **[AGREED 2026-09-11, NOT YET BUILT]**
+
+Recorded from the copyright holder's own words rather than inferred, and
+deliberately ahead of the code: this changes decisions sec 8.5 currently
+states, so the document has to say the new thing before anything is
+built against the old one.
+
+**The verdict that prompted it: "The UI on Android sucks and makes no
+sense."** Not a defect report -- a judgement about the structure, after
+a day spent fixing details inside it.
+
+**PuTTY was the spirit, not the letter.** sec 8.5 says the desktop
+"borrows PuTTY's configuration window" and is marked DECIDED, and it has
+been read strictly: on 2026-09-10 it was cited to refuse a category tree
+on touch and to keep the whole settings page intact as the "This device"
+category of that tree. The holder's correction: *"I only meant to follow
+putty in spirit, not exactly. Its config menu is far from perfect."* A
+sentence quoted to refuse things needs to say what it means.
+
+**Exactly one config menu.** Today there are several roads: the host
+list's overflow offers Import, Presets, This device and Licences, and
+"This device" opens an index that offers Licences again. Presets and
+import sit outside config entirely. Presets move INTO the config menu
+and stay editable -- and remain reachable from the picker too, since
+that is where a preset is chosen. Two roads to one page is a shape this
+tree already uses.
+
+**The host list becomes a picker, not a front door.** It appears when a
+terminal is being created, and when there is none: *"if it has no
+terminal, one has to be picked for the window to make sense."* So the
+first-run screen does not change; what changes is that a returning user
+with sessions lands in a terminal. The picker also carries the route
+into the config menu.
+
+**Portrait mode: a scrollable column of terminals.** One full-screen or
+two half-screen, resized freely down to the bottom of the screen with
+magnetic snapping to those two positions, snap radius about 5-10px and
+configurable. The column's SCROLLING snaps too, so a terminal starts at
+the top of the viewport rather than half off it. One terminal resizes at
+a time, so a drag is one neighbour growing as another shrinks.
+
+**A phone rarely shows more than two**, which is what keeps this cheap:
+at most one `SIGWINCH` per drag-end rather than a stream of them, and no
+general N-pane geometry to reason about.
+
+**One global input selector, visible at all times, five states.** Global
+rather than per terminal, and in every arrangement rather than portrait
+only:
+
+    scroll            body drag moves this terminal's scrollback
+    select            body drag highlights
+    click             the gesture is forwarded to the remote
+    scroll terminals  body drag moves the column
+    move terminals    body drag reorders the column
+
+**SCROLL IS THE DEFAULT, and that is the decision rather than the
+ordering.** The first four states were written as "normal (highlight),
+mouse click, scroll terminals, drag and drop", and scrolling INSIDE a
+terminal had no home at all -- the holder found the gap by asking "how
+do we scroll inside a terminal?". The original phrase "scroll terminals
+(in a larger window than shown)" reads both ways, and the first version
+of this section preserved that ambiguity instead of resolving it, which
+is how a sentence ends up quoted later as though it had decided
+something.
+
+It resolves by FREQUENCY. Scrollback is the commonest non-typing gesture
+in a terminal; selection is occasional. A mode you must enter to scroll
+taxes the constant action and guarantees a mode error every time someone
+forgets. So the names follow the frequency rather than the desktop's
+history: body drag scrolls, and selecting is the mode you ask for.
+
+**The states are not equally dangerous, and `click` is the one to arm
+deliberately.** Scrolling when you meant to select costs a scroll back.
+Forwarding a click when you meant to select can ACT -- hit a menu in
+`mc`, move a cursor, trigger something that cannot be undone by
+scrolling. The mode whose mistakes are destructive is the one that has
+to be explicit and visibly armed; the mode whose mistakes are harmless
+is the one that should be the default.
+
+**And the conflict is smaller than it looks where it matters most.**
+Full-screen programs like `mc` and `htop` run on the alternate screen,
+which has no scrollback -- so in exactly the situation that wants
+`click`, scrolling is mostly not competing for the gesture.
+
+**This answers a defect already on the record rather than adding a
+feature.** `working-practice.md` documents that every selection override
+in the terminal is gated on Shift and *"a phone has no Shift to hold"*,
+so inside `mc` or `htop` a phone has "no selection, no clipboard, no
+context menu and no way back". A visible selector is the escape that was
+missing.
+
+**The design argument that was raised and settled.** The four states are
+not one axis: two decide WHO receives a gesture (local highlight against
+a click forwarded to the remote) and two decide WHAT a gesture
+manipulates (the viewport, the layout). The case for splitting them was
+that a user wanting to select text should not have to think about a
+dimension that is not about selection.
+
+Settled the other way, and the reason is the Shift defect again: that
+failure was not too many modes but an override that was **invisible and
+unproducible** on the device. A selector that is permanently on screen
+and unmistakable is strictly better than a hidden modifier, whatever its
+arity. Handles stay as well for now.
+
+**And long press is not in conflict**, which was the other objection.
+Android separates them by movement: a press that does not move is a long
+press, a press that moves is a drag. So reordering by dragging can
+coexist with long-press-for-menu. What stays genuinely ambiguous is a
+drag INSIDE a terminal body -- select, scroll, or reorder -- which is
+precisely what the selector disambiguates.
+
+**The tab bar's off-by-one is structural, and portrait mode dissolves
+it.** Reported as "the current tabs are broken and seem to have an off
+by one problem". The cause, in `refresh_tabs()`:
+
+    m_tab_order.clear();
+    for (bssh_session *session : m_shown)
+        if (!panes.contains(session)) m_tab_order.append(session);
+
+The bar holds only sessions that are NOT currently visible as panes. A
+phone fits exactly one pane, so two sessions give one tab and three give
+two, and the session on screen has no tab at all. That is sec 8.2's
+"panes convert to tabs, preserving order" working as written --
+coherent on a desktop showing several panes, nonsense on a phone showing
+one. If the portrait column holds every session there is nothing left to
+convert, and the off-by-one goes with the concept rather than being
+fixed.
+
+**Everything currently built stays until it is replaced**, on the
+holder's instruction: *"We keep all the features we have for now and try
+to test our way forward."* Open, and cheap to settle when they come up:
+where the selector physically lives, given the key row scrolls and a
+control that can scroll off screen is not "always visible"; whether tabs
+survive on desktop and landscape; and whether the terminal's overflow
+menu goes once the picker carries the config route.
 
 ### 8.6 The command line — **[DECIDED]**
 
