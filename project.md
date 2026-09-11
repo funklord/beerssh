@@ -5561,10 +5561,45 @@ exactly that.
 **A touch desktop is the case that could not be expressed before.** It
 wants the desktop idiom with touch metrics, and one boolean could only
 offer both or neither. The two `WrapAllRows` calls added on 2026-09-10
-are the live instance: they key off touch, so an unfolded Galaxy Z Fold
-gets a 320dp stacked form across 840dp of screen. They belong to neither
-idiom nor metrics -- a form should stack when it is NARROW, which is
-arrangement's question or simply the width's.
+were the live instance: they keyed off touch, so an unfolded Galaxy Z
+Fold got a 320dp stacked form across 840dp of screen, while a desktop
+window dragged to 400px kept two columns and starved exactly the fields
+a phone is stacked to protect.
+
+**FIXED 2026-09-11, ahead of the rest of this section**, because it did
+not need any of it: a form stacks when it is NARROW, and sec 8.2 already
+says what narrow is. `ui/form_wrap.h` asks that -- COMPACT stacks,
+anything wider does not -- and watches the page, so unfolding re-lays it
+out rather than leaving the phone's answer on a screen that is no longer
+a phone's. A threshold of its own would have been a second answer to a
+question the tree had already settled for the pane count.
+
+**Guarded, and the guard seen to fail.** `tool/sabotage/form-wrap.toml`
+throws the width away and returns a constant -- which is what keying off
+touch did on a Fold -- and the verdict is `caught` rather than WRONG
+TEST against a 549-passing baseline. Only that direction is sabotaged:
+a form that NEVER stacks is already held by
+`check_free_form_fields_own_their_row`, which asserts the geometry at
+320dp and is reached first, so a second entry would report WRONG TEST
+and read as a hole that is not one. `narrow-screen.toml`'s two editor
+entries anchor on the calls now rather than on the policy lines that
+have gone -- two entries and not one edit in the shared helper, since an
+edit there could not say which editor had stopped asking.
+
+**Deriving one from the fields' own font metrics was tried first and
+dropped, and the reason generalises.** It compared the room left beside
+the label against forty characters of the page's own font -- forty
+because the two strings the editors' comments record are 38 and 39
+characters. On this machine's metrics that lands within a few pixels of
+the 245px those comments measured, which is the trouble: the phone's
+verdict was a few tens of pixels from flipping, and every term in it
+moves with the face the machine draws in. sec 12.3d already records the
+font picker's two-column minimum as 222px here against 285 to 302 in the
+CI container, on identical source. **A layout the container and the
+device can disagree about, while both are "measured", is worse than a
+coarser rule they must agree on.** The arithmetic was never checked
+against a running build -- it is recorded as an approach rejected, not
+as a measurement.
 
 **The host list becomes a picker, not a front door.** It appears when a
 terminal is being created, and when there is none: *"if it has no

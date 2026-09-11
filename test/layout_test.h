@@ -49,6 +49,20 @@ private slots:
 	void no_section_page_shows_a_widget_from_another_section();
 	void every_setting_is_on_exactly_one_section();
 	void no_control_is_narrower_than_the_text_it_shows();
+
+	/*
+	 * The editors stack their labels above their fields because they are
+	 * NARROW, not because a finger is doing the pointing.
+	 *
+	 * Both asked is_touch_primary() until 2026-09-11, which is a question
+	 * about the input device standing in for one about the room: an
+	 * unfolded Galaxy Z Fold got a 320dp form across 840dp, and a desktop
+	 * window dragged narrow kept two columns and starved the fields the
+	 * phone was stacked to protect. The assertion is the relationship --
+	 * one widget, two widths, two answers -- which no version keyed on the
+	 * platform can satisfy, since the platform does not change under it.
+	 */
+	void a_form_stacks_on_width_not_on_touch();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
 	void both_keyboards_read_one_layout();

@@ -9,6 +9,7 @@
 #include <QAction>
 #include <QComboBox>
 #include <QFormLayout>
+#include <QPair>
 #include <QClipboard>
 #include <QJsonObject>
 #include <QAbstractScrollArea>
@@ -40,6 +41,7 @@
 #include "term/emulator.h"
 #include "ui/host_list.h"
 #include "ui/host_editor.h"
+#include "ui/form_wrap.h"
 #include "ui/preset_editor.h"
 #include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
@@ -1102,6 +1104,80 @@ void layout_test::every_setting_is_on_exactly_one_section() {
 	          qPrintable(QStringLiteral("the sections carry %1 controls and the whole "
 	                                     "page has %2 -- a setting is on no section, or "
 	                                     "on two").arg(summed).arg(all_controls)));
+}
+
+void layout_test::a_form_stacks_on_width_not_on_touch() {
+	/*
+	 * The threshold first, so a failure below reads as a wiring fault
+	 * rather than an argument about where narrow starts -- and asserted
+	 * from both sides of sec 8.2's COMPACT boundary rather than sampled
+	 * from one, since a rule that only ever says "stack" passes the phone
+	 * arm and says nothing.
+	 */
+	QVERIFY(bssh_form_stacks(BSSH_PHONE_DP));
+	QVERIFY(bssh_form_stacks(599));
+	QVERIFY(!bssh_form_stacks(600));
+	QVERIFY(!bssh_form_stacks(BSSH_SMALL_DESKTOP_W));
+
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	/*
+	 * Asked of the forms that SAY they key off width, rather than of a
+	 * list written here: a hand-written population keeps passing about
+	 * the forms somebody remembered. Each editor also holds a font
+	 * picker with a form of its own, which is not watched -- so this
+	 * finding exactly one per page is itself the check that the name
+	 * selects rather than sweeps.
+	 */
+	const auto watched = [](QWidget *page) {
+		QList<QFormLayout *> forms;
+		for (QFormLayout *form : page->findChildren<QFormLayout *>()) {
+			if (form->objectName() == BSSH_WIDTH_KEYED_FORM) forms.append(form);
+		}
+
+		return forms;
+	};
+
+	for (int touch = 0; touch <= 1; ++touch) {
+		const forced_touch_t device(touch);
+
+		bssh_host_editor host(&store);
+		bssh_preset_editor presets(&store, bssh_preset_editor::TOUCH);
+
+		QList<QPair<QString, QWidget *> > pages;
+		pages.append(qMakePair(QStringLiteral("host editor"),
+		                        static_cast<QWidget *>(&host)));
+		pages.append(qMakePair(QStringLiteral("preset editor"),
+		                        static_cast<QWidget *>(&presets)));
+
+		for (const QPair<QString, QWidget *> &page : pages) {
+			const QList<QFormLayout *> forms = watched(page.second);
+			QVERIFY2(forms.size() == 1,
+			          qPrintable(QStringLiteral("%1 has %2 width-keyed forms, "
+			                                     "expected exactly one")
+			                             .arg(page.first).arg(forms.size())));
+
+			QFormLayout *form = forms.first();
+
+			page.second->resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+			page.second->show();
+			QCoreApplication::processEvents();
+			QVERIFY2(form->rowWrapPolicy() == QFormLayout::WrapAllRows,
+			          qPrintable(QStringLiteral("%1 at %2dp with touch=%3 kept its "
+			                                     "labels beside its fields")
+			                             .arg(page.first).arg(BSSH_PHONE_DP).arg(touch)));
+
+			page.second->resize(BSSH_SMALL_DESKTOP_W, BSSH_PHONE_TALL_DP);
+			QCoreApplication::processEvents();
+			QVERIFY2(form->rowWrapPolicy() == QFormLayout::DontWrapRows,
+			          qPrintable(QStringLiteral("%1 at %2px with touch=%3 stacked its "
+			                                     "labels above fields that had room")
+			                             .arg(page.first).arg(BSSH_SMALL_DESKTOP_W).arg(touch)));
+
+			page.second->hide();
+		}
+	}
 }
 
 void layout_test::no_control_is_narrower_than_the_text_it_shows() {

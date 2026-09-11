@@ -62,10 +62,19 @@ find = "\t\tedit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)"
 replace = "\t\tif (false) edit->setMinimumWidth(edit->fontMetrics().horizontalAdvance(shown)"
 expect = "no_control_is_narrower_than_the_text_it_shows"
 
-# The host editor stacking its labels on touch. Every field there holds
-# text of a length nobody chose -- a hostname, a key path, a ProxyJump --
-# so unlike the chord editors above they cannot state a width, and the
-# only fix available is to give them the whole row.
+# The host editor stacking its labels where the page is narrow. Every
+# field there holds text of a length nobody chose -- a hostname, a key
+# path, a ProxyJump -- so unlike the chord editors above they cannot
+# state a width, and the only fix available is to give them the whole
+# row.
+#
+# The anchor is the CALL and not a policy line: the decision moved into
+# ui/form_wrap.h on 2026-09-11, when it stopped keying off touch. Two
+# entries rather than one edit in the shared helper, because the two
+# editors are two instances -- see the one below -- and a spec that broke
+# them together could not tell which of them had stopped asking. What
+# form-wrap.toml guards is the shared decision; what these guard is each
+# editor still consulting it.
 #
 # This one names the FREE-FORM arm of the clipping test rather than its
 # clipping arm, and the distinction is the finding: with the fields
@@ -78,8 +87,8 @@ expect = "no_control_is_narrower_than_the_text_it_shows"
 [[sabotage]]
 name = "the host editor's fields go back to sharing a row with their label"
 file = "src/ui/host_editor.cpp"
-find = "\t\tform->setRowWrapPolicy(QFormLayout::WrapAllRows);"
-replace = "\t\tform->setRowWrapPolicy(QFormLayout::WrapLongRows);"
+find = "\tbssh_watch_form_width(form, this);"
+replace = "\tform->setRowWrapPolicy(QFormLayout::WrapLongRows);"
 expect = "no_control_is_narrower_than_the_text_it_shows"
 
 # The same on the preset editor, and it is a second instance rather than
@@ -95,6 +104,6 @@ expect = "no_control_is_narrower_than_the_text_it_shows"
 [[sabotage]]
 name = "the preset editor's fields go back to sharing a row with their label"
 file = "src/ui/preset_editor.cpp"
-find = "\tif (m_touch) form->setRowWrapPolicy(QFormLayout::WrapAllRows);"
-replace = "\tif (m_touch) form->setRowWrapPolicy(QFormLayout::WrapLongRows);"
+find = "\tbssh_watch_form_width(form, this);"
+replace = "\tform->setRowWrapPolicy(QFormLayout::WrapLongRows);"
 expect = "no_control_is_narrower_than_the_text_it_shows"

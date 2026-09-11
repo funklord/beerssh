@@ -68,6 +68,7 @@ SOURCES += \
     src/term/scrollback.cpp \
     src/term/screen.cpp \
     src/ui/font_picker.cpp \
+    src/ui/form_wrap.cpp \
     src/ui/password_prompt.cpp \
     src/ui/preset_editor.cpp \
     src/ui/host_editor.cpp \
@@ -124,6 +125,7 @@ HEADERS += \
     src/term/scrollback.h \
     src/term/screen.h \
     src/ui/font_picker.h \
+    src/ui/form_wrap.h \
     src/ui/password_prompt.h \
     src/ui/preset_editor.h \
     src/ui/host_editor.h \

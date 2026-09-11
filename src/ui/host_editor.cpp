@@ -19,6 +19,7 @@
 #include "platform/platform.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
+#include "ui/form_wrap.h"
 #include "ui/override_badge.h"
 
 #include "model/profile_store.h"
@@ -82,31 +83,6 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	QFormLayout *form = new QFormLayout();
 	form->setSpacing(12);
 	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-
-	/*
-	 * On a phone the label goes ABOVE its field rather than beside it.
-	 *
-	 * Every field here holds text of a length nobody chose -- a
-	 * hostname, a key path, a ProxyJump copied out of an ssh_config --
-	 * so there is no width that makes them fit and the only thing to do
-	 * is give them all the room there is. Two columns at 320dp did not:
-	 * the label column took 88 of the 306 the scroll area leaves, and
-	 * the sample host's "nabbe@bastion.internal.example.com:2222"
-	 * arrived in 218px of the 245 its own text needs.
-	 *
-	 * WrapAllRows rather than the settings page's WrapLongRows, and the
-	 * difference is the same distinction: WrapLongRows wraps a row whose
-	 * MINIMUM will not fit, and a field willing to scroll its own text
-	 * has a small minimum, so it would never fire here. That page's
-	 * fields hold chords from a fixed table and can state what they
-	 * need; these cannot.
-	 *
-	 * Desktop keeps two columns, where 800px makes the question moot and
-	 * a stacked form would just be tall.
-	 */
-	const bssh_platform *platform = bssh_platform::instance();
-	if (platform && platform->is_touch_primary())
-		form->setRowWrapPolicy(QFormLayout::WrapAllRows);
 
 	m_host = new QLineEdit(this);
 	m_host->setPlaceholderText(QStringLiteral("example.com or 10.0.0.42"));
@@ -172,6 +148,27 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	form->addRow(QStringLiteral("Key file"), m_identity);
 	form->addRow(QStringLiteral("Via"), m_jump);
 	body->addLayout(form);
+
+	/*
+	 * Where the room is short the label goes ABOVE its field rather than
+	 * beside it, and ui/form_wrap.h holds why and at what width.
+	 *
+	 * The measurement this page supplied: two columns at 320dp took 88 of
+	 * the 306 the scroll area leaves for the label column, and the sample
+	 * host's "nabbe@bastion.internal.example.com:2222" arrived in 218px
+	 * of the 245 its own text needs.
+	 *
+	 * WrapAllRows rather than the settings page's WrapLongRows, and the
+	 * difference is the same distinction: WrapLongRows wraps a row whose
+	 * MINIMUM will not fit, and a field willing to scroll its own text
+	 * has a small minimum, so it would never fire here. That page's
+	 * fields hold chords from a fixed table and can state what they
+	 * need; these cannot.
+	 *
+	 * Watched rather than set once, because the width changes under the
+	 * page: a foldable unfolds, a desktop window is dragged.
+	 */
+	bssh_watch_form_width(form, this);
 
 	/*
 	 * sec 11's per-host biometric release, and it is on the page only
