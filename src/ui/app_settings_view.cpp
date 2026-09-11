@@ -647,9 +647,21 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 * claim credible.
 	 */
 	if (m_section == EVERYTHING || m_section == SECTION_SHORTCUTS) {
-		QLabel *chords_heading = new QLabel(
-		        QStringLiteral("<b>Keys this app keeps</b>"), this);
-		body->addWidget(chords_heading);
+		/*
+		 * On a section page the page's own heading already says
+		 * "Shortcuts", so this one would be a second title for the same
+		 * block -- rendered, the page read "Shortcuts" and then "Keys
+		 * this app keeps" directly under it.
+		 *
+		 * Kept on the desktop, where the view is the whole "This device"
+		 * category and this is what separates the chords from everything
+		 * above them.
+		 */
+		if (m_section == EVERYTHING) {
+			QLabel *chords_heading = new QLabel(
+			        QStringLiteral("<b>Keys this app keeps</b>"), this);
+			body->addWidget(chords_heading);
+		}
 
 		QLabel *chords_note = bssh_wrapped_note(
 		        QStringLiteral("These never reach the remote shell."), this);
@@ -923,6 +935,25 @@ void bssh_app_settings_view::commit(const std::function<void(bssh_app_settings &
  */
 void bssh_app_settings_view::refresh_keyboard_fallback() {
 	if (!m_keyboard || !m_keyboard_fallback) return;
+
+	/*
+	 * NOT ON A PAGE THIS NOTE IS NOT ON, which is not the same as "not
+	 * built" (sec 8.5).
+	 *
+	 * on_this_page() hides the widgets a section page leaves out, and
+	 * hiding is all it can do -- they are still children of this view,
+	 * just not in its form. This slot ends by SHOWING the label, so on
+	 * any other section it put the note back, unlaid-out, at the
+	 * top-left corner: rendered on the device, "This screen is too
+	 * narrow for the full-size keyboard" was drawn across the Shortcuts
+	 * heading.
+	 *
+	 * It needs the device's own combination to appear at all -- the
+	 * built-in full keyboard chosen AND a screen too narrow to draw it
+	 * -- which is why every assertion stayed green and only opening the
+	 * page on a phone showed it.
+	 */
+	if (m_section != EVERYTHING && m_section != SECTION_KEYBOARD) return;
 
 	const bssh_app_settings::keyboard_t chosen =
 	        bssh_app_settings::keyboard_t(m_keyboard->currentData().toInt());

@@ -964,6 +964,80 @@ void check_no_control_clips(const QString &name, QWidget *surface, int floor) {
  * deforms the thing being measured. Half the whole page cannot be
  * satisfied that way.
  */
+/*
+ * A section page shows nothing belonging to another section (sec 8.5).
+ *
+ * The split hides the widgets a page leaves out, and hiding is all it
+ * can do: they stay children of the view, out of its form. So anything
+ * that SHOWS one again puts it back unlaid-out at the top-left corner,
+ * over whatever is drawn there.
+ *
+ * refresh_keyboard_fallback() did exactly that. It ends by showing the
+ * note, and it is called from resizeEvent, so on the device "This screen
+ * is too narrow for the full-size keyboard" was painted across the
+ * Shortcuts heading. Every assertion was green: the note is a legitimate
+ * widget, correctly built, and no width or height was wrong.
+ *
+ * Asserted STRUCTURALLY rather than against that one note, because the
+ * next slot to re-show a member would land in exactly the same corner
+ * and a test naming the keyboard fallback could not see it. A widget
+ * that is visible and not in the view's own layout is the fault, whoever
+ * put it there.
+ *
+ * It needs the device's combination to appear at all -- the built-in
+ * FULL keyboard chosen and a screen too narrow to draw it -- so the
+ * setting is forced here rather than left to whatever the machine has.
+ */
+void layout_test::no_section_page_shows_a_widget_from_another_section() {
+	const forced_touch_t thumb(1);
+
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN_FULL);
+
+	const bssh_app_settings_view::section_t order[] = {
+		bssh_app_settings_view::SECTION_APPEARANCE,
+		bssh_app_settings_view::SECTION_TERMINAL,
+		bssh_app_settings_view::SECTION_PASSWORDS,
+		bssh_app_settings_view::SECTION_SHORTCUTS,
+	};
+
+	for (bssh_app_settings_view::section_t which : order) {
+		bssh_app_settings_view page(which, nullptr);
+		page.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+		page.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&page));
+
+		/* A second resize, because the escape happens in resizeEvent. */
+		page.resize(BSSH_PHONE_DP - 4, BSSH_PHONE_TALL_DP);
+		QCoreApplication::processEvents();
+
+		QLayout *own = page.layout();
+		QVERIFY2(own, "the settings view must have a layout of its own");
+
+		QStringList stray;
+		for (QWidget *child : page.findChildren<QWidget *>(
+		             QString(), Qt::FindDirectChildrenOnly)) {
+			if (!child->isVisible()) continue;
+			if (own->indexOf(child) >= 0) continue;
+			stray.append(QStringLiteral("%1 \"%2\" at %3,%4")
+			                     .arg(QString::fromLatin1(child->metaObject()->className()),
+			                           child->property("text").toString().left(40))
+			                     .arg(child->x()).arg(child->y()));
+		}
+
+		QVERIFY2(stray.isEmpty(),
+		          qPrintable(QStringLiteral("the %1 page shows %2 widget(s) that are in "
+		                                     "no layout of its own:\n  %3")
+		                             .arg(bssh_app_settings_view::section_name(which))
+		                             .arg(stray.size())
+		                             .arg(stray.join(QStringLiteral("\n  ")))));
+		page.hide();
+	}
+
+	settings.set_keyboard(before);
+}
+
 void layout_test::every_setting_is_on_exactly_one_section() {
 	const forced_touch_t thumb(1);
 
