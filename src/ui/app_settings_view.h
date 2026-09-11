@@ -62,6 +62,14 @@ public:
 	/* The heading a section page shows, and the row that opens it. */
 	static QString section_name(section_t section);
 
+	/*
+	 * Which section this page IS, so a caller can check that the row it
+	 * tapped and the page it got are the same thing. The index maps rows
+	 * to pages by position, and a list whose two halves are kept in step
+	 * by hand is the shape sec 8.7 already records an off-by-one in.
+	 */
+	section_t section() const { return m_section; }
+
 	explicit bssh_app_settings_view(QWidget *parent = nullptr);
 	bssh_app_settings_view(section_t section, QWidget *parent);
 

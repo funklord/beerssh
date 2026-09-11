@@ -1387,6 +1387,123 @@ struct registry_left_as_found_t {
  * asserts the property that makes that worth having: the same slot sends
  * the same thing on both keyboards, at every level.
  */
+void layout_test::every_config_page_sits_on_the_one_index() {
+	const forced_touch_t thumb(1);
+
+	bssh_main_window window;
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	const registry_left_as_found_t tidy(window.registry());
+
+	QStackedWidget *pages = window.findChild<QStackedWidget *>();
+	QWidget *index = window.findChild<QWidget *>(QStringLiteral("settings-index"));
+	QVERIFY2(pages && index, "the touch window must have a page stack and a config index");
+
+	QListWidget *rows = index->findChild<QListWidget *>();
+	QVERIFY2(rows && rows->count() > 0, "the config index must be a list of rows");
+
+	QStringList row_names;
+	for (int row = 0; row < rows->count(); ++row)
+		row_names.append(rows->item(row)->text());
+
+	/*
+	 * HALF ONE: nothing is named in both places.
+	 *
+	 * Asserted as an intersection rather than by pinning either list,
+	 * because the report was about a DUPLICATE road and not about any
+	 * particular entry -- so this stays true as either list grows, and
+	 * fails the moment a page acquires a second way in.
+	 */
+	bssh_host_list *hosts = window.findChild<bssh_host_list *>();
+	QVERIFY2(hosts, "the touch front door must be a host list");
+
+	QMenu *overflow = hosts->findChild<QMenu *>();
+	QVERIFY2(overflow, "the host list must carry an overflow menu");
+
+	QStringList both;
+	QAction *into_config = nullptr;
+	for (QAction *entry : overflow->actions()) {
+		if (row_names.contains(entry->text())) both.append(entry->text());
+		if (entry->text() == QStringLiteral("Settings")) into_config = entry;
+	}
+
+	QVERIFY2(both.isEmpty(),
+	          qPrintable(QStringLiteral("%1 reachable from the overflow menu AND "
+	                                     "from the config index: %2")
+	                             .arg(both.size()).arg(both.join(QStringLiteral(", ")))));
+
+	/*
+	 * And the one road works, which is what makes the rest of this
+	 * reachable at all: the rows below have no geometry to click until
+	 * the index has been shown.
+	 */
+	QVERIFY2(into_config, "the overflow menu must offer a way into config");
+	into_config->trigger();
+	QCoreApplication::processEvents();
+	QCOMPARE(pages->currentWidget(), index);
+
+	/*
+	 * HALF TWO: each row lands on the page it names.
+	 *
+	 * Clicked rather than reasoned about, because the index maps rows to
+	 * pages by POSITION and the two lists are built by separate loops --
+	 * nothing in the code makes them agree, so nothing but this can say
+	 * they do.
+	 */
+	QList<QWidget *> landed;
+	for (int row = 0; row < rows->count(); ++row) {
+		const QString name = rows->item(row)->text();
+
+		rows->scrollToItem(rows->item(row));
+		QCoreApplication::processEvents();
+		QTest::mouseClick(rows->viewport(), Qt::LeftButton, Qt::NoModifier,
+		                   rows->visualItemRect(rows->item(row)).center());
+		QCoreApplication::processEvents();
+
+		QWidget *page = pages->currentWidget();
+
+		QVERIFY2(page && page != index,
+		          qPrintable(QStringLiteral("tapping \"%1\" left the index showing")
+		                             .arg(name)));
+
+		QString arrived;
+		if (qobject_cast<bssh_preset_editor *>(page)) {
+			arrived = QStringLiteral("Presets");
+		} else if (qobject_cast<bssh_licences_view *>(page)) {
+			arrived = QStringLiteral("Licences");
+		} else if (bssh_app_settings_view *view =
+		                   qobject_cast<bssh_app_settings_view *>(page)) {
+			arrived = bssh_app_settings_view::section_name(view->section());
+		} else {
+			arrived = QStringLiteral("a page of no config kind");
+		}
+
+		QVERIFY2(arrived == name,
+		          qPrintable(QStringLiteral("row %1 says \"%2\" and opens \"%3\"")
+		                             .arg(row).arg(name, arrived)));
+
+		QVERIFY2(!landed.contains(page),
+		          qPrintable(QStringLiteral("\"%1\" opens a page another row "
+		                                     "already opened").arg(name)));
+		landed.append(page);
+
+		/*
+		 * The system Back, which is how a person leaves one of these --
+		 * and the path sec 8.5 already has a test for, rather than a
+		 * second way in for the suite's convenience.
+		 */
+		QKeyEvent back(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
+		QApplication::sendEvent(&window, &back);
+		QCoreApplication::processEvents();
+
+		QCOMPARE(pages->currentWidget(), index);
+	}
+
+	QCOMPARE(landed.size(), row_names.size());
+}
+
 void layout_test::both_keyboards_read_one_layout() {
 	bssh_soft_keyboard_catalog &catalog = bssh_soft_keyboard_catalog::instance();
 

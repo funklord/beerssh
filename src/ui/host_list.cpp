@@ -109,12 +109,22 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 		        added == 1 ? QStringLiteral("1 host was added.")
 		                   : QStringLiteral("%1 hosts were added.").arg(added));
 	});
-	connect(menu->addAction(QStringLiteral("Presets")), &QAction::triggered,
-	         this, &bssh_host_list::presets_requested);
-	connect(menu->addAction(QStringLiteral("This device")), &QAction::triggered,
+	/*
+	 * ONE ROAD INTO CONFIG, and it is this one (sec 8.7).
+	 *
+	 * This menu used to offer Presets, "This device" and Licences as
+	 * three siblings, and "This device" opened an index that offered
+	 * Licences a second time -- so one of the four entries was a
+	 * duplicate of another and two of them were config pages that had
+	 * escaped config. The holder's verdict was "there should be exactly
+	 * one config menu"; Presets and Licences are rows on the index now.
+	 *
+	 * Named for the page it opens, which "This device" was not: the
+	 * index has been titled "Settings" since it was built, so the menu
+	 * entry and its destination disagreed about what they were.
+	 */
+	connect(menu->addAction(QStringLiteral("Settings")), &QAction::triggered,
 	         this, &bssh_host_list::settings_requested);
-	connect(menu->addAction(QStringLiteral("Licences")), &QAction::triggered,
-	         this, &bssh_host_list::licences_requested);
 
 	/*
 	 * A width, because the popup sized itself narrower than its own

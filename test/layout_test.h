@@ -63,6 +63,25 @@ private slots:
 	 * platform can satisfy, since the platform does not change under it.
 	 */
 	void a_form_stacks_on_width_not_on_touch();
+
+	/*
+	 * ONE CONFIG MENU, and every config page on it (sec 8.7).
+	 *
+	 * Reported as "there should be exactly one config menu" and "the
+	 * presets should be in the config menu, editable". The front door's
+	 * overflow offered Presets, "This device" and Licences as siblings,
+	 * and "This device" opened an index offering Licences AGAIN -- so
+	 * one entry duplicated another and two were config pages outside
+	 * config.
+	 *
+	 * Two halves, because the fault had two. The menu and the index must
+	 * name nothing in common, which is the duplicate the report was
+	 * about; and every row of the index must land on the page it names,
+	 * which is the failure a list mapped to pages BY POSITION invites --
+	 * the same shape sec 8.7 records the tab bar's off-by-one in, and
+	 * this change prepends a row to both halves of that mapping.
+	 */
+	void every_config_page_sits_on_the_one_index();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
 	void both_keyboards_read_one_layout();

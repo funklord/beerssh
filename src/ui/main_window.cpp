@@ -584,10 +584,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		                                          bssh_preset_editor::EVERYTHING, this);
 		m_pages->addWidget(m_preset_editor);
 
-		connect(m_host_list, &bssh_host_list::presets_requested, this, [this] {
-			m_preset_editor->reload();
-			show_page(m_preset_editor);
-		});
 		connect(m_preset_editor, &bssh_preset_editor::preset_saved,
 		         this, &bssh_main_window::reresolve_sessions);
 		connect(m_preset_editor, &bssh_preset_editor::preset_removed,
@@ -599,9 +595,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		bssh_licences_view *licences = new bssh_licences_view(this);
 		m_pages->addWidget(licences);
 
-		connect(m_host_list, &bssh_host_list::licences_requested, this, [this, licences] {
-			show_page(licences);
-		});
 		connect(licences, &bssh_licences_view::back_requested, this, [this] {
 			go_back();
 		});
@@ -682,6 +675,27 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		};
 
 		QList<QWidget *> section_pages;
+
+		/*
+		 * PRESETS IS A ROW HERE, not a sibling of this page (sec 8.7).
+		 *
+		 * It was in the host list's overflow menu beside "This device",
+		 * which made a preset -- the thing every host's font, colours,
+		 * scrollback and keepalive resolve through (sec 10.1) -- a
+		 * peer of config rather than part of it. The holder asked for
+		 * "exactly one config menu" with "the presets in the config
+		 * menu, editable", and this is that: same editor, same page,
+		 * reached from the one road.
+		 *
+		 * First rather than last because it is the setting that reaches
+		 * furthest -- the five below it describe this device, and a
+		 * preset describes every host that follows it.
+		 */
+		QListWidgetItem *presets_row =
+		        new QListWidgetItem(QStringLiteral("Presets"), sections);
+		presets_row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		section_pages.append(m_preset_editor);
+
 		for (bssh_app_settings_view::section_t which : order) {
 			bssh_app_settings_view *page =
 			        new bssh_app_settings_view(which, this);
@@ -707,8 +721,21 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		connect(sections, &QListWidget::itemClicked, this,
 		         [this, section_pages](QListWidgetItem *item) {
 			const int row = item->listWidget()->row(item);
-			if (row >= 0 && row < section_pages.size())
-				show_page(section_pages.at(row));
+			if (row < 0 || row >= section_pages.size()) return;
+
+			QWidget *page = section_pages.at(row);
+
+			/*
+			 * The preset editor reads the store when it is opened
+			 * rather than when it was built, which is what the
+			 * overflow menu's route did before this. Without it a
+			 * preset saved on one visit is missing on the next --
+			 * and the page would look correct, being a list that
+			 * simply has not been told.
+			 */
+			if (page == m_preset_editor) m_preset_editor->reload();
+
+			show_page(page);
 		});
 
 		QPushButton *index_back = new QPushButton(QStringLiteral("Back"), index);

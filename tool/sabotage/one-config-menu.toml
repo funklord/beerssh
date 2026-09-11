@@ -1,0 +1,41 @@
+# Exactly one config menu, with every config page on it (sec 8.7).
+#
+# Reported as "there should be exactly one config menu" and "the presets
+# should be in the config menu, editable". The front door's overflow
+# offered Presets, "This device" and Licences as siblings, and "This
+# device" opened an index that offered Licences AGAIN -- so one of four
+# entries duplicated another, and two were config pages outside config.
+#
+# Neither failure below produces an error. A duplicate road is a menu
+# that works; a misaligned index is a row that opens the wrong page and
+# looks like a page. Both are only visible to something that counts.
+
+# A row added to the list and not to the pages it indexes.
+#
+# The index builds its rows and its page list in two separate loops and
+# pairs them BY POSITION, so nothing in the code makes them agree. This
+# is the realistic way they stop agreeing -- somebody adds a row -- and
+# it is what adding the Presets row could have done.
+#
+# `(void)` rather than deleting the line, so m_preset_editor stays used
+# and the edit compiles rather than being refused for an unused member.
+[[sabotage]]
+name = "a config row is added without the page it indexes"
+file = "src/ui/main_window.cpp"
+find = "\t\tsection_pages.append(m_preset_editor);"
+replace = "\t\t(void) m_preset_editor;"
+expect = "every_config_page_sits_on_the_one_index"
+
+# A second road to a page the index already carries.
+#
+# This is the reported fault exactly: Licences reachable from the
+# overflow menu AND from the index. The action is added with nothing
+# connected to it, because what the guard asserts is that the two lists
+# name nothing in common -- an entry that goes nowhere is still a second
+# entry, and a wired one would need a signal this change removed.
+[[sabotage]]
+name = "a config page gets a second road, as Licences had"
+file = "src/ui/host_list.cpp"
+find = "\tconnect(menu->addAction(QStringLiteral(\"Settings\")), &QAction::triggered,"
+replace = "\tmenu->addAction(QStringLiteral(\"Licences\"));\n\tconnect(menu->addAction(QStringLiteral(\"Settings\")), &QAction::triggered,"
+expect = "every_config_page_sits_on_the_one_index"

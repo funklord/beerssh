@@ -56,13 +56,12 @@ signals:
 	void edit_requested(const bssh_profile_t &profile);
 	void delete_requested(const bssh_profile_t &profile);
 
-	/* The preset editor, reached from the only screen a phone starts on. */
-	void presets_requested();
-
-	/* sec 9.4's licences screen, the only other app-level page. */
-	void licences_requested();
-
-	/* sec 6.2's device settings. */
+	/*
+	 * The one road into config (sec 8.7). It used to be three -- Presets
+	 * and Licences had signals of their own here, and the index this
+	 * opens offered Licences again -- and they are rows on that index
+	 * now, so this front door names config once.
+	 */
 	void settings_requested();
 
 private slots:

@@ -5586,6 +5586,16 @@ out rather than leaving the phone's answer on a screen that is no longer
 a phone's. A threshold of its own would have been a second answer to a
 question the tree had already settled for the pane count.
 
+**Screenshotting this device needs the display named.** `adb exec-out
+screencap -p` with two displays prints a warning -- "no display id was
+specified ... this default is not guaranteed to be consistent across
+captures" -- and then the PNG, so the file is a banner with an image
+glued to the end of it and `file` calls it `data`. Pass
+`-d <id>` from `dumpsys SurfaceFlinger --display-id`: the inner screen is
+4630947232161729154 and the cover 4630947232161729155. On a device whose
+whole point is having two screens, a capture that does not say which one
+it is is not evidence.
+
 **Verified on the hardware, across the hinge.** Installed on the Fold 3
 2026-09-11 and opened at Add host: folded, labels above fields; unfolded,
 labels beside them -- and `am start` reported "its current task has been
@@ -5626,6 +5636,35 @@ device can disagree about, while both are "measured", is worse than a
 coarser rule they must agree on.** The arithmetic was never checked
 against a running build -- it is recorded as an approach rejected, not
 as a measurement.
+
+**Exactly one config menu -- DONE 2026-09-11.** The overflow is `Import from SSH config` and
+`Settings`; Presets is the first row of the index, above the five device
+sections, because those describe this device and a preset describes every
+host that resolves through it (sec 10.1). `presets_requested` and
+`licences_requested` are gone from `bssh_host_list` rather than left as
+signals nothing emits. Import STAYS on the host list: it adds hosts and
+is not a setting, and this section only says Presets moves in.
+
+**Guarded, and both guards seen to fail.** 550 passing with it, and
+`tool/sabotage/one-config-menu.toml` breaks it the two ways it can
+actually break -- a row added without the page it indexes, and a config
+page given a second road as Licences had. Both report `caught` rather
+than WRONG TEST, so the check that spoke is the one named.
+
+**Still owed: the menu read on the device.** A QMenu's rows are actions
+rather than widgets, so `bssh_apply_touch_heights` cannot reach them and
+no headless assertion sees their height -- they came up 23dp on a Note 9
+once, against sec 6.2's 48dp floor. `bssh_apply_touch_menu` exists for
+exactly that and this change did not touch it, but the menu has one
+fewer entry now and nobody has looked at it on a phone.
+
+**The index maps rows to pages BY POSITION, in two separate loops, and
+this change prepends a row to both.** That is the tab bar's off-by-one
+shape below. The test clicks every row and asserts the page that arrives
+is the one the row names; the other half asserts the menu and the index
+share no entry, as an intersection rather than by pinning either list, so
+it fails the moment a page acquires a second road. Against the old code
+it fails naming `Licences`.
 
 **The host list becomes a picker, not a front door.** It appears when a
 terminal is being created, and when there is none: *"if it has no
