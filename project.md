@@ -5534,12 +5534,71 @@ and stay editable -- and remain reachable from the picker too, since
 that is where a preset is chosen. Two roads to one page is a shape this
 tree already uses.
 
+**THREE INDEPENDENT DIMENSIONS, which is what the naming bought.** They
+had been one boolean -- `is_touch_primary()`, 36 calls across `src/`, 12
+of them in `main_window.cpp` -- answering questions that are not the
+same question:
+
+    idiom       mobile | desktop      front door, config shape, Back,
+                                      whether there is an overflow menu
+    arrangement tiled | column | row  how terminals occupy the window
+    metrics     auto | on | off       target sizes, kinetic scrolling,
+                                      row heights
+
+**"Desktop" names the idiom and nothing else**, which is why the
+arrangement values are geometric. `tiled` is today's `pane_container`,
+`column` is the portrait scrollable one, `row` its landscape mirror --
+wanted or not is still open, since a 700x390 cover screen in landscape
+is wide and short, where a column gives two useless 195dp terminals.
+
+**The idiom picks the arrangement's default and then lets go.** Mobile
+defaults to `column` and desktop to `tiled`, and either can be set to
+anything -- which is the point rather than a concession: `tiled` has to
+be runnable on a phone and `column` on a desktop, or neither can be
+tested without two devices. Every layout question today was slowed by
+exactly that.
+
+**A touch desktop is the case that could not be expressed before.** It
+wants the desktop idiom with touch metrics, and one boolean could only
+offer both or neither. The two `WrapAllRows` calls added on 2026-09-10
+are the live instance: they key off touch, so an unfolded Galaxy Z Fold
+gets a 320dp stacked form across 840dp of screen. They belong to neither
+idiom nor metrics -- a form should stack when it is NARROW, which is
+arrangement's question or simply the width's.
+
 **The host list becomes a picker, not a front door.** It appears when a
 terminal is being created, and when there is none: *"if it has no
 terminal, one has to be picked for the window to make sense."* So the
 first-run screen does not change; what changes is that a returning user
 with sessions lands in a terminal. The picker also carries the route
 into the config menu.
+
+**What opens on an empty window is the IDIOM's answer, and the code
+already holds it under the wrong name.** Desktop opens a local terminal;
+mobile opens the picker.
+
+**This is about what OPENS, never about what exists.** The local shell
+stays the first row of the picker on every platform, which sec 8.5
+already settles -- always there, and "present on touch as well, even
+though a phone does not *open* with one". The holder's reason for
+keeping it is that the population is not uniform: *"Some phones are
+different so we do not remove the local terminal, but the picker is
+important on mobile."* A rooted phone, or one with a real userland, has
+something worth driving.
+
+So the judgement is only that a default local shell is a poor FIRST
+SCREEN on mobile, not that it is useless -- which is the same call
+`opens_a_local_shell()` already makes, in sec 8.5's words: an
+unprivileged app sandbox has no userland worth driving from one. It is
+written
+
+    bool bssh_main_window::opens_a_local_shell(bool touch_primary) {
+        return !touch_primary;
+    }
+
+so it asks about the pointing device when it means the idiom, and a
+touch desktop would be handed the phone's answer. The decision survives
+the redesign intact; only its input changes.
 
 **Portrait mode: a scrollable column of terminals.** One full-screen or
 two half-screen, resized freely down to the bottom of the screen with
