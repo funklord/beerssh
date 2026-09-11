@@ -584,7 +584,17 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		 */
 		backend->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
 		backend->setMinimumHeight(backend->sizeHint().height());
-		if (on_this_page(SECTION_PASSWORDS, backend)) form->addRow(QStringLiteral("Stored passwords"), backend);
+		/*
+		 * No row label on its own page: there the heading already says
+		 * "Stored passwords", and this is the only row, so the words
+		 * appeared twice one line apart. The label earns its place on the
+		 * desktop, where the row sits among everything else in the "This
+		 * device" category and has to say which setting it is.
+		 */
+		if (on_this_page(SECTION_PASSWORDS, backend)) {
+			if (m_section == SECTION_PASSWORDS) form->addRow(backend);
+			else form->addRow(QStringLiteral("Stored passwords"), backend);
+		}
 
 		/*
 		 * Derived from what the store reports, never from which class it
