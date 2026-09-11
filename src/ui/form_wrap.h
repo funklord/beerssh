@@ -18,12 +18,18 @@ class QWidget;
  * and where the room is short that is the field's room being spent.
  *
  * Both editors asked is_touch_primary() until 2026-09-11, and that is the
- * fault this exists to remove: an unfolded Galaxy Z Fold is touch and is
- * 840dp wide, so it got a layout measured for 320dp across the whole
- * screen, while a desktop window dragged down to 400px kept two columns
- * and starved exactly the fields the phone was stacked to protect. Touch
- * says how big a target has to be (ui/touch_metrics.h); it does not say
- * how much room there is.
+ * fault this exists to remove: a Galaxy Z Fold 3 is touch on both of its
+ * screens and 674dp wide on the inner one, so unfolding it produced a
+ * layout measured for the 320dp cover screen stretched across 1768px,
+ * while a desktop window dragged down to 400px kept two columns and
+ * starved exactly the fields the phone was stacked to protect. Touch says
+ * how big a target has to be (ui/touch_metrics.h); it does not say how
+ * much room there is.
+ *
+ * Both figures are the device's, measured 2026-09-11 -- 840x2289 and
+ * 1768x2208 at density 420, so 320dp and 674dp. An earlier version of
+ * this comment said the unfolded screen was 840dp, which is the COVER
+ * screen's pixel width wearing the inner screen's name.
  *
  * The width it keys off is sec 8.2's, through bssh_layout_manager --
  * COMPACT stacks and anything wider does not. A second threshold invented

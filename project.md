@@ -5561,10 +5561,22 @@ exactly that.
 **A touch desktop is the case that could not be expressed before.** It
 wants the desktop idiom with touch metrics, and one boolean could only
 offer both or neither. The two `WrapAllRows` calls added on 2026-09-10
-were the live instance: they keyed off touch, so an unfolded Galaxy Z
-Fold got a 320dp stacked form across 840dp of screen, while a desktop
+were the live instance: they keyed off touch, so unfolding a Galaxy Z
+Fold 3 -- touch on both screens -- produced the 320dp cover screen's
+stacked form stretched across the inner screen's 1768px, while a desktop
 window dragged to 400px kept two columns and starved exactly the fields
 a phone is stacked to protect.
+
+**The two figures, measured on the device 2026-09-11:** the cover screen
+is 840x2289 and the inner 1768x2208, both at density 420, so **320dp and
+674dp**. An earlier draft of this section said the unfolded screen was
+840dp -- which is the COVER screen's pixel width wearing the inner
+screen's name, and it was wrong in a way nothing downstream would have
+re-derived. The size-class table in sec 8.2 had it right the whole time:
+Medium is 600-840dp and names "unfolded foldable" among its cases, so
+674dp lands there and gets two columns. **A sentence that contradicts a
+table four thousand lines up in its own document is a sentence nobody
+checked against it.**
 
 **FIXED 2026-09-11, ahead of the rest of this section**, because it did
 not need any of it: a form stacks when it is NARROW, and sec 8.2 already
@@ -5573,6 +5585,20 @@ anything wider does not -- and watches the page, so unfolding re-lays it
 out rather than leaving the phone's answer on a screen that is no longer
 a phone's. A threshold of its own would have been a second answer to a
 question the tree had already settled for the pane count.
+
+**Verified on the hardware, across the hinge.** Installed on the Fold 3
+2026-09-11 and opened at Add host: folded, labels above fields; unfolded,
+labels beside them -- and `am start` reported "its current task has been
+brought to the front", so it was the same activity re-laying-out rather
+than a fresh one built at the new width. That is the half a headless test
+cannot reach, and the half a constructor-time decision would have failed:
+the page was BUILT at 320dp.
+
+**The folded picture on its own proves nothing**, which is worth saying
+because it is the one that looks like the result. The cover screen is
+narrow AND touch, so the code this replaced drew it identically. Only the
+unfolded shot separates the two versions, and it is the one that needed a
+person to open the phone.
 
 **Guarded, and the guard seen to fail.** `tool/sabotage/form-wrap.toml`
 throws the width away and returns a constant -- which is what keying off

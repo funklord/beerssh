@@ -3,8 +3,9 @@
 #
 # Both editors asked is_touch_primary() until 2026-09-11, which answers a
 # question about the input device while the layout is asking one about the
-# room: an unfolded Galaxy Z Fold is touch and 840dp wide, so it got a
-# layout measured for 320dp stretched across the screen. Nothing about
+# room: a Galaxy Z Fold 3 is touch on both screens and 674dp wide on the
+# inner one, so unfolding it produced a layout measured for the 320dp
+# cover screen stretched across 1768px. Both measured on the device. Nothing about
 # that is an error -- the form lays out, every field is reachable, and the
 # only symptom is a picture -- which is why it needs a guard rather than a
 # crash to find it.
