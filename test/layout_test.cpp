@@ -1387,6 +1387,44 @@ struct registry_left_as_found_t {
  * asserts the property that makes that worth having: the same slot sends
  * the same thing on both keyboards, at every level.
  */
+void layout_test::the_front_door_overflow_menu_reaches_the_touch_floor() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	/*
+	 * The floor is applied at menu-construction time from
+	 * is_touch_primary(), so the host list is built under each forced
+	 * value rather than one list re-read: that is the seam the real
+	 * callers cross, and the arm that could silently pass is the one
+	 * where a pointer keeps its own metrics.
+	 */
+	const QString floor = QStringLiteral("min-height: %1px").arg(BSSH_TOUCH_TARGET_DP);
+
+	{
+		const forced_touch_t thumb(1);
+		bssh_host_list list(&store);
+		QMenu *overflow = list.findChild<QMenu *>();
+		QVERIFY2(overflow, "the front door must carry an overflow menu");
+		QVERIFY2(overflow->styleSheet().contains(floor),
+		          qPrintable(QStringLiteral("touch rows must reach the %1dp floor, "
+		                                     "stylesheet is: \"%2\"")
+		                             .arg(BSSH_TOUCH_TARGET_DP)
+		                             .arg(overflow->styleSheet())));
+	}
+
+	{
+		const forced_touch_t pointer(0);
+		bssh_host_list list(&store);
+		QMenu *overflow = list.findChild<QMenu *>();
+		QVERIFY2(overflow, "the front door must carry an overflow menu");
+		QVERIFY2(!overflow->styleSheet().contains(floor),
+		          qPrintable(QStringLiteral("a pointer keeps its own metrics, but the "
+		                                     "menu carries the touch floor: \"%1\"")
+		                             .arg(overflow->styleSheet())));
+	}
+}
+
 void layout_test::every_config_page_sits_on_the_one_index() {
 	const forced_touch_t thumb(1);
 

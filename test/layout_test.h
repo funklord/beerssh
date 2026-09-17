@@ -82,6 +82,21 @@ private slots:
 	 * this change prepends a row to both halves of that mapping.
 	 */
 	void every_config_page_sits_on_the_one_index();
+
+	/*
+	 * The front door's overflow menu reaches sec 6.2's 48dp floor under
+	 * touch, and keeps pointer metrics otherwise.
+	 *
+	 * bssh_apply_touch_menu() has three callers and had no test, while
+	 * touch_metrics.h's own comments record touch heights regressing in
+	 * exactly this shape more than once -- 23dp rows on a Note 9, a tab
+	 * menu left at pointer height until it was pulled out. A QMenu's rows
+	 * are QActions, so no widget-height walk can see them and no
+	 * every_touch_surface_fits check covers them; this is the one guard
+	 * that a menu keeps its floor. The device visual check sec 8.7 owes
+	 * is separate and still owed -- this pins the reachable half.
+	 */
+	void the_front_door_overflow_menu_reaches_the_touch_floor();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
 	void both_keyboards_read_one_layout();
