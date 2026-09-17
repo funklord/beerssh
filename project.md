@@ -676,6 +676,61 @@ worth its own entry rather than a line in the one above: two distinct
 mechanisms now produce an app that cannot be started, and neither is
 recoverable from inside the app.
 
+**REPORTED AGAIN 2026-09-17, on closing the LAST terminal, NOT YET
+REPRODUCED.** "Close the last terminal, the app will not start, just
+hangs, and the notification still reports those terminals." Same
+user-visible failure as the two incidents above -- a live-looking service
+outliving a broken process. Read against the code, the clean path does
+NOT explain it: closing the last session runs `registry->close()` ->
+`on_registry_changed()` -> `live_count()==0` -> `set_session_count(0)` and
+`set_keep_alive(false)`, which stops the service; and the window-close
+branch in `session_closing` that could quit the app is gated behind
+`opens_a_local_shell(is_touch_primary())`, false on Android because
+`platform_is_touch_primary()` is hardcoded true. So the service-stop is
+reached on every clean last-close. The stale count is the tell: the
+notification keeps its OLD number, not "0", so `updateStatus(0)` never
+ran -- meaning the process died BEFORE the service-stop, not that the stop
+failed.
+
+**The ordering is the fragility, and it is real independent of the
+crash.** The risky teardown -- `detach_session()` and the GL surface it
+destroys -- runs in the `session_closing` handler, at the START of
+`close()`; the service-stop runs from `emit changed()` at its END. So any
+abort during last-terminal teardown (the `QAndroidPlatformOpenGLWindow::
+eglSurface()` deadlock this Qt is known to hit, above) kills the process
+with the service still started and the notification still on its old
+count. That is a candidate, not a finding: it fits every symptom and it
+has not been captured.
+
+**Which flag-holder, narrowed by reading the teardown.** The IME-show
+burst the EGL entry names as the aggravating route does NOT fire on this
+path: closing the LAST terminal calls `bssh_pane_container::rebuild()`
+with an empty pane set, which sets `m_focused = nullptr` and calls
+`setFocus()` on nothing, so no `focusInEvent` and no
+`request_input_panel()`. So if the abort is the mechanism here, the
+holder is more likely ACCESSIBILITY -- `runInObjectContext()`, live in
+this process because `terminal_accessible.cpp` installs the factory
+(sec 14, M11), and the same holder hydra's confirmed instance captured.
+Tearing down the accessible terminal view on last-close is the trigger,
+and it bites only with an accessibility service running, which is why it
+is intermittent rather than on-demand. The log's *"while already locked
+by '<HOLDER>'"* line settles it in one read; capture it before clearing.
+
+**What discriminates it, and the harness is written**
+(session scratch, `repro_last_close.sh`, kept there until the repro
+confirms what to keep): capture `adb logcat -v threadtime` to a file
+BEFORE the repro and never clear after, then close the last terminal --
+with an accessibility service (TalkBack) ON, since that is the confirmed
+condition -- and read for the holder line, `eglSurface`, `SIGABRT` at the
+moment the notification freezes. If they appear, the fix is to make the
+service-stop not depend on surviving the teardown -- stop keep-alive from
+the registry's own `close()` before the view is torn down, or have the
+JVM service treat a process whose Qt has gone as the null-intent case it
+already handles. If they do NOT appear, the stop is being issued and
+lost, and the JVM side is where to look. Do not commit either fix before
+the log names the mechanism -- this family has cost two incidents already,
+and a comfortable story is what stops the next person capturing the log.
+
 **Stopping it is a START.** `startForegroundService()` opens a contract: the
 service has about five seconds to call `startForeground()` or Android throws
 `RemoteServiceException` and kills the process. A plain `stopService()` arriving
