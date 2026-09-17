@@ -676,60 +676,74 @@ worth its own entry rather than a line in the one above: two distinct
 mechanisms now produce an app that cannot be started, and neither is
 recoverable from inside the app.
 
-**REPORTED AGAIN 2026-09-17, on closing the LAST terminal, NOT YET
-REPRODUCED.** "Close the last terminal, the app will not start, just
-hangs, and the notification still reports those terminals." Same
-user-visible failure as the two incidents above -- a live-looking service
-outliving a broken process. Read against the code, the clean path does
-NOT explain it: closing the last session runs `registry->close()` ->
-`on_registry_changed()` -> `live_count()==0` -> `set_session_count(0)` and
-`set_keep_alive(false)`, which stops the service; and the window-close
-branch in `session_closing` that could quit the app is gated behind
-`opens_a_local_shell(is_touch_primary())`, false on Android because
-`platform_is_touch_primary()` is hardcoded true. So the service-stop is
-reached on every clean last-close. The stale count is the tell: the
-notification keeps its OLD number, not "0", so `updateStatus(0)` never
-ran -- meaning the process died BEFORE the service-stop, not that the stop
-failed.
+**REPORTED AGAIN 2026-09-17, on closing the LAST terminal. Reproduced on
+the device the same day -- the STATE, not yet the transition.** "Close
+the last terminal, the app will not start, just hangs, and the
+notification still reports those terminals." Same user-visible failure as
+the two incidents above. The clean path reaches the service-stop:
+`registry->close()` -> `on_registry_changed()` -> `live_count()==0` ->
+`set_session_count(0)` and `set_keep_alive(false)`; and the window-close
+branch in `session_closing` is gated behind
+`opens_a_local_shell(is_touch_primary())`, false on Android. So the
+service-stop IS issued on a clean last-close, which the device confirms.
 
-**The ordering is the fragility, and it is real independent of the
-crash.** The risky teardown -- `detach_session()` and the GL surface it
-destroys -- runs in the `session_closing` handler, at the START of
-`close()`; the service-stop runs from `emit changed()` at its END. So any
-abort during last-terminal teardown (the `QAndroidPlatformOpenGLWindow::
-eglSurface()` deadlock this Qt is known to hit, above) kills the process
-with the service still started and the notification still on its old
-count. That is a candidate, not a finding: it fits every symptom and it
-has not been captured.
+**What the device showed, and it corrects the theory this entry first
+carried.** On plugging in, a beerssh process was ALREADY hung from an
+earlier close: alive (not dead), foreground, holding the app token, and
+launching it drew only the SPLASH -- the "just hangs". The service record
+was the finding: `isForeground=true` with a STACK of `act=...STOP` intents
+QUEUED and unprocessed. So `stop()` had run and been delivered, more than
+once -- the notification kept its old count not because the stop was never
+issued but because `onStartCommand` never ran to process it. And
+`onStartCommand` runs on the MAIN (UI) thread. The main thread is stuck.
+That is the whole mechanism: a hung main thread cannot process the STOP,
+so the foreground service stays up, and a foreground service is exactly
+what keeps Android from reaping the hung process -- so it lingers holding
+the app identity, the notification frozen, and every relaunch lands on the
+stuck process. `am force-stop` clears it (service 0, process gone, next
+launch clean), which is why that is the only cure. The earlier "the
+process died before the service-stop" was wrong: it does not die, it
+hangs, and the service it cannot stop is what makes the hang permanent.
 
-**Which flag-holder, narrowed by reading the teardown.** The IME-show
-burst the EGL entry names as the aggravating route does NOT fire on this
-path: closing the LAST terminal calls `bssh_pane_container::rebuild()`
-with an empty pane set, which sets `m_focused = nullptr` and calls
-`setFocus()` on nothing, so no `focusInEvent` and no
-`request_input_panel()`. So if the abort is the mechanism here, the
-holder is more likely ACCESSIBILITY -- `runInObjectContext()`, live in
-this process because `terminal_accessible.cpp` installs the factory
-(sec 14, M11), and the same holder hydra's confirmed instance captured.
-Tearing down the accessible terminal view on last-close is the trigger,
-and it bites only with an accessibility service running, which is why it
-is intermittent rather than on-demand. The log's *"while already locked
-by '<HOLDER>'"* line settles it in one read; capture it before clearing.
+**The ACCESSIBILITY narrowing was wrong, measured.** This entry first
+reasoned the deadlock flag-holder must be accessibility, since last-close
+rebuilds with an empty pane set and fires no IME show. But the device had
+NO accessibility service enabled (`enabled_accessibility_services` null,
+`accessibility_enabled` 0) when it hung. So accessibility is not required,
+and the sibling instance that named it (hydra's) was a different route.
+Do not send the next person to turn TalkBack on.
 
-**What discriminates it, and the harness is written**
-(session scratch, `repro_last_close.sh`, kept there until the repro
-confirms what to keep): capture `adb logcat -v threadtime` to a file
-BEFORE the repro and never clear after, then close the last terminal --
-with an accessibility service (TalkBack) ON, since that is the confirmed
-condition -- and read for the holder line, `eglSurface`, `SIGABRT` at the
-moment the notification freezes. If they appear, the fix is to make the
-service-stop not depend on surviving the teardown -- stop keep-alive from
-the registry's own `close()` before the view is torn down, or have the
-JVM service treat a process whose Qt has gone as the null-intent case it
-already handles. If they do NOT appear, the stop is being issued and
-lost, and the JVM side is where to look. Do not commit either fix before
-the log names the mechanism -- this family has cost two incidents already,
-and a comfortable story is what stops the next person capturing the log.
+**It is a rare race, which is why a fix must not be guessed.** 26
+scripted open/close cycles -- plain, and with background+relaunch between
+them to force surface recreation -- did NOT reproduce the hang; every one
+took the clean path (service to 0, front door). The one captured instance
+was the pre-existing hung process. The likely trigger is the
+`eglSurface()` deadlock on SURFACE CREATION (foreground-resume, fold,
+rotate) rather than on the pane rebuild, which creates no Surface -- and a
+fold on this device is a hardware hinge no script can drive. Two live
+observations point the same way: a backgrounded beerssh spins
+`makeCurrent(): no EGLSurface, likely Surface destroyed by Android`
+roughly every 14s (the render thread stays hot while not visible, which is
+the precondition the deadlock needs), and the one system-level ANR near
+the hang was the camera timing out `Waited 10001ms for
+FocusEvent(hasFocus=false)` -- consistent with a hung beerssh window not
+releasing input focus, though the trace is `/data/anr` at mode 600 and
+unreadable without `adb bugreport`.
+
+**What is still owed before a fix.** The exact Qt thread stack -- the
+main thread's block and the flag holder -- was not captured: the hung
+process could not be `kill -3`'d as shell, and no fresh hang was
+provoked. Get it by `adb bugreport` while a hung instance exists, or by a
+physical fold/unfold with a session live and `logcat -v threadtime`
+running. The fix direction the evidence already supports is that a
+foreground service must not be able to keep a HUNG process alive -- but
+stopping the service earlier does not help, because the device showed the
+STOP already issued and unprocessable on the stuck main thread. So the
+lever is more likely to stop the backgrounded render activity (no repaint
+while not visible, so no surface race on resume) or to let the service
+self-terminate when its process stops drawing. Both are upstream-adjacent
+and want the stack first. Do not commit a fix before it -- this family has
+cost two incidents, and this entry has already corrected itself once.
 
 **Stopping it is a START.** `startForegroundService()` opens a contract: the
 service has about five seconds to call `startForeground()` or Android throws
