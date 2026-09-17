@@ -745,6 +745,58 @@ self-terminate when its process stops drawing. Both are upstream-adjacent
 and want the stack first. Do not commit a fix before it -- this family has
 cost two incidents, and this entry has already corrected itself once.
 
+**The fix that the evidence supports is a hang watchdog, and it is
+DESIGNED here 2026-09-18 rather than built, because its one risky failure
+cannot be validated without the deadlock.** A fold session on the device
+2026-09-17 did not reproduce the hang in half an hour of folding,
+backgrounding and resuming a LOCAL shell -- so it is rare, and probably
+wants a live SSH session's keepalive/reconnect churn during the surface
+swap, which a local shell has none of. Working it from the evidence
+instead:
+
+- **The only lever is killing the stuck process.** The service cannot be
+  stopped from within -- `onStartCommand` runs on the Android UI thread,
+  which the deadlock has blocked, which is why the STOP intents queued
+  and never ran. Nothing on that thread executes. So the process must be
+  terminated from ANOTHER thread, and `_exit()` from a watchdog thread
+  does it: the foreground service dies with the process, START_NOT_STICKY
+  keeps Android from recreating it, and the next launch is a clean
+  process. It turns "permanently unstartable until force-stop" into
+  "self-heals on relaunch", and a `kill(getpid(), SIGQUIT)` just before
+  the exit finally captures the holder line the manual repro could not.
+
+- **The gate is the whole risk, and its two failures are not
+  symmetric.** The watchdog must fire only when the app is FOREGROUND and
+  frozen, never when it is merely backgrounded -- Qt suspends its event
+  loop on background, so a stale heartbeat there is normal, not a hang. A
+  gate too STRICT misses the hang: no worse than today. A gate too LOOSE
+  kills a live backgrounded session: a regression worse than the rare
+  bug. So the gate must be the Android lifecycle's own resumed/paused
+  state (an `ActivityLifecycleCallbacks` flag read by the watchdog), not
+  Qt's `applicationState`, because the deadlock happens DURING the resume
+  and the timing of Qt's state signal relative to it is exactly what
+  cannot be checked without reproducing it.
+
+- **What stays unvalidated even when built: that `_exit()` cleanly
+  removes the service and the next launch is clean.** That is the
+  recovery, and only a real deadlock proves it. The firing DECISION --
+  `should_terminate(resumed, elapsed, threshold)` -- is a pure function
+  and is testable; a conservative threshold (30s, well past Android's own
+  10s ANR) makes a false fire require a 30-second foreground freeze, which
+  is itself a severe bug the SSH I/O on worker threads should never
+  produce.
+
+**So the decision, and it is the holder's:** ship a process-killing
+watchdog whose recovery is unvalidated until it first fires (tuned to
+never fire in normal use, and it captures the stack when it does), or
+roll it out DIAGNOSTIC-first -- the same detector dumping the stack via
+SIGQUIT WITHOUT the `_exit`, so the next real occurrence proves the gate
+timing and captures the holder line at zero regression risk, and the kill
+is added once. The second is the cautious order this family's history
+argues for; the first fixes it a release sooner. Not built either way
+until that is chosen, because a watchdog that kills the process is the
+one addition where being wrong is worse than the bug.
+
 **Stopping it is a START.** `startForegroundService()` opens a contract: the
 service has about five seconds to call `startForeground()` or Android throws
 `RemoteServiceException` and kills the process. A plain `stopService()` arriving
