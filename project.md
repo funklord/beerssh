@@ -5627,6 +5627,30 @@ be runnable on a phone and `column` on a desktop, or neither can be
 tested without two devices. Every layout question today was slowed by
 exactly that.
 
+**The split is scaffolding until a feature needs it, so it waits for
+one. Classified 2026-09-17.** All 37 `is_touch_primary()` sites were read
+and sorted: about five are IDIOM (`front_door_for`, `opens_a_local_shell`,
+the native-vs-Qt file pickers), about thirty are METRICS (touch heights,
+default font, long-press, splitter handle width, movable tabs, the
+scrollbar-auto default), and NONE is ARRANGEMENT, because `column` and
+`row` do not exist yet. Since all three dimensions equal
+`is_touch_primary()` today, splitting the boolean now would rename 37
+sites and change no behaviour and give nothing a consumer that sets the
+dimensions apart -- a sweep with no request behind it. So the split lands
+WITH the first feature that makes a dimension diverge (the portrait
+`column`, or a touch-desktop metrics toggle), introducing only the
+dimension that feature needs, not as a standalone refactor first.
+
+**The form-stack bug had no siblings, and that is a measurement.** The
+same classification was the lens the form_wrap fix earned -- a site that
+keys off TOUCH where it should key off WIDTH is a live bug on the
+unfolded Fold (touch and wide at once). Read against all 37: the metrics
+sites correctly want touch on an unfolded Fold, and the layout-choosing
+ones (settings page, preset editor) are already width-aware
+(`WrapLongRows`) or are file-picker idiom rather than width. The two
+`WrapAllRows` calls were the only instance of the shape, and they are
+fixed. So this is not systemic; the next Fold layout bug needs a new lens.
+
 **A touch desktop is the case that could not be expressed before.** It
 wants the desktop idiom with touch metrics, and one boolean could only
 offer both or neither. The two `WrapAllRows` calls added on 2026-09-10
