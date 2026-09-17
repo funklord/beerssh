@@ -5830,6 +5830,26 @@ taxes the constant action and guarantees a mode error every time someone
 forgets. So the names follow the frequency rather than the desktop's
 history: body drag scrolls, and selecting is the mode you ask for.
 
+**Today NO route scrolls a phone's scrollback, verified 2026-09-17, and
+that is what this must deliver.** All three ways in are closed at once:
+QScroller is named in a comment in `terminal_view.cpp` and never grabbed,
+so a body drag does not scroll; `SCROLLBAR_AUTO` hides the scrollbar on
+touch (`main_window.cpp`); and the keyboard route is dead because the
+soft keyboard's keys go through `send_key`/`send_text`, which -- unlike
+`handle_key` for a hardware key -- do NOT walk `stolen_chords()`, so
+Shift+PgUp on the on-screen board sends PageUp to the shell instead of
+scrolling. So the on-screen keyboard reaches none of the app chords the
+hardware path steals (scroll, and Ctrl+Shift+C/V), which is the "cannot
+be two lists" principle `handle_key` states, broken by a second entry
+point that steals nothing. Body-drag-scrolls closes the gap the design
+way; the keyboard hole is a separate call -- make `send_key` steal chords
+like `handle_key` (one input path, but the chord table is in Qt keys and
+`send_key` is in emulator keys, so it needs the translation `handle_key`
+already does), or leave the on-screen board a pure key-sender and let the
+selector's `scroll` state carry it. Not decided here; recorded so the
+selector work knows it is starting from zero, not from a keyboard
+fallback that already works.
+
 **The states are not equally dangerous, and `click` is the one to arm
 deliberately.** Scrolling when you meant to select costs a scroll back.
 Forwarding a click when you meant to select can ACT -- hit a menu in
