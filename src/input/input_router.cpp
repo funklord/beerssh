@@ -7,6 +7,74 @@
 
 #include "term/emulator.h"
 
+namespace {
+
+/*
+ * A Qt key to the emulator key that carries it, or KEY_NONE for one the
+ * emulator has no named code for -- a letter, whose bytes come from
+ * event->text() rather than from a code.
+ *
+ * Shared between handle_key(), which had this switch inline, and
+ * steal_chord(): the chord table is written in Qt keys and the on-screen
+ * keyboard sends emulator keys, so matching one against the other needs
+ * exactly this translation. Factored rather than copied because the
+ * stolen-chord list and the list the router acts on cannot be two lists
+ * (sec 6.1), and a second copy of the mapping is a second way to disagree.
+ */
+int emulator_key_for(int qt_key) {
+	switch (qt_key) {
+	case Qt::Key_Return:
+	case Qt::Key_Enter:
+		return bssh_emulator::KEY_ENTER;
+	case Qt::Key_Tab:
+	case Qt::Key_Backtab:
+		return bssh_emulator::KEY_TAB;
+	case Qt::Key_Backspace:
+		return bssh_emulator::KEY_BACKSPACE;
+	case Qt::Key_Escape:
+		return bssh_emulator::KEY_ESCAPE;
+	case Qt::Key_Up:
+		return bssh_emulator::KEY_UP;
+	case Qt::Key_Down:
+		return bssh_emulator::KEY_DOWN;
+	case Qt::Key_Left:
+		return bssh_emulator::KEY_LEFT;
+	case Qt::Key_Right:
+		return bssh_emulator::KEY_RIGHT;
+	case Qt::Key_Insert:
+		return bssh_emulator::KEY_INSERT;
+	case Qt::Key_Delete:
+		return bssh_emulator::KEY_DELETE;
+	case Qt::Key_Home:
+		return bssh_emulator::KEY_HOME;
+	case Qt::Key_End:
+		return bssh_emulator::KEY_END;
+	case Qt::Key_PageUp:
+		return bssh_emulator::KEY_PAGE_UP;
+	case Qt::Key_PageDown:
+		return bssh_emulator::KEY_PAGE_DOWN;
+	default:
+		break;
+	}
+
+	if (qt_key >= Qt::Key_F1 && qt_key <= Qt::Key_F35)
+		return bssh_emulator::KEY_FUNCTION_BASE + 1 + (qt_key - Qt::Key_F1);
+
+	return bssh_emulator::KEY_NONE;
+}
+
+/* The three modifiers the chord table names, in the emulator's bits. */
+quint8 emulator_mods_for(Qt::KeyboardModifiers mods) {
+	quint8 out = bssh_emulator::MOD_NONE;
+	if (mods & Qt::ShiftModifier) out |= bssh_emulator::MOD_SHIFT;
+	if (mods & Qt::ControlModifier) out |= bssh_emulator::MOD_CTRL;
+	if (mods & Qt::AltModifier) out |= bssh_emulator::MOD_ALT;
+
+	return out;
+}
+
+} /* namespace */
+
 bssh_input_router::bssh_input_router(bssh_emulator *emulator, QObject *parent)
     : QObject(parent),
       m_emulator(emulator),
@@ -280,61 +348,7 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 	}
 
 	const quint8 modifiers = modifiers_for(event);
-	int key = bssh_emulator::KEY_NONE;
-
-	switch (event->key()) {
-	case Qt::Key_Return:
-	case Qt::Key_Enter:
-		key = bssh_emulator::KEY_ENTER;
-		break;
-	case Qt::Key_Tab:
-	case Qt::Key_Backtab:
-		key = bssh_emulator::KEY_TAB;
-		break;
-	case Qt::Key_Backspace:
-		key = bssh_emulator::KEY_BACKSPACE;
-		break;
-	case Qt::Key_Escape:
-		key = bssh_emulator::KEY_ESCAPE;
-		break;
-	case Qt::Key_Up:
-		key = bssh_emulator::KEY_UP;
-		break;
-	case Qt::Key_Down:
-		key = bssh_emulator::KEY_DOWN;
-		break;
-	case Qt::Key_Left:
-		key = bssh_emulator::KEY_LEFT;
-		break;
-	case Qt::Key_Right:
-		key = bssh_emulator::KEY_RIGHT;
-		break;
-	case Qt::Key_Insert:
-		key = bssh_emulator::KEY_INSERT;
-		break;
-	case Qt::Key_Delete:
-		key = bssh_emulator::KEY_DELETE;
-		break;
-	case Qt::Key_Home:
-		key = bssh_emulator::KEY_HOME;
-		break;
-	case Qt::Key_End:
-		key = bssh_emulator::KEY_END;
-		break;
-	case Qt::Key_PageUp:
-		key = bssh_emulator::KEY_PAGE_UP;
-		break;
-	case Qt::Key_PageDown:
-		key = bssh_emulator::KEY_PAGE_DOWN;
-		break;
-	default:
-		break;
-	}
-
-	if (key == bssh_emulator::KEY_NONE
-	    && event->key() >= Qt::Key_F1 && event->key() <= Qt::Key_F35) {
-		key = bssh_emulator::KEY_FUNCTION_BASE + 1 + (event->key() - Qt::Key_F1);
-	}
+	const int key = emulator_key_for(event->key());
 
 	if (key != bssh_emulator::KEY_NONE) {
 		m_emulator->send_key(key, modifiers);
@@ -390,8 +404,50 @@ void bssh_input_router::send_key(int key, quint8 modifiers) {
 	 * modified.
 	 */
 	const quint8 sending = quint8((modifiers | effective_modifiers()) & ~MOD_ALTGR);
+
+	/*
+	 * Stolen chords first, exactly as handle_key does for a hardware key
+	 * (sec 6.1): a chord the app keeps -- scroll, copy, a pane move -- is
+	 * one the remote must never receive. This path is the on-screen
+	 * keyboard's, and until now it walked straight past the table, so
+	 * Shift+PgUp on the soft keyboard PAGED THE REMOTE instead of
+	 * scrolling the scrollback, and none of the app chords could be
+	 * reached from the one keyboard a phone has. That is the "cannot be
+	 * two lists" rule broken by a second entry point; this is the second
+	 * entry point learning the list.
+	 */
+	if (steal_chord(key, sending)) return;
+
 	m_emulator->send_key(key, sending);
 	spend_sticky_modifiers();
+}
+
+bool bssh_input_router::steal_chord(int key, quint8 modifiers) {
+	/*
+	 * Only the modifiers the table means, so an armed keypad or group
+	 * bit does not stop a match -- the same exact-but-only-the-meaningful
+	 * comparison handle_key makes, in the emulator's bits.
+	 */
+	const quint8 meaningful = bssh_emulator::MOD_SHIFT | bssh_emulator::MOD_CTRL
+	                          | bssh_emulator::MOD_ALT;
+
+	/*
+	 * A letter chord translates to KEY_NONE and its bytes come through
+	 * send_text, not here; guarding keeps a KEY_NONE from matching one.
+	 */
+	if (key == bssh_emulator::KEY_NONE) return false;
+
+	for (const chord_t &chord : stolen_chords()) {
+		if (emulator_key_for(chord.key) != key) continue;
+		if ((modifiers & meaningful) != emulator_mods_for(chord.modifiers)) continue;
+
+		emit shortcut_pressed(chord.action);
+		spend_sticky_modifiers();
+
+		return true;
+	}
+
+	return false;
 }
 
 void bssh_input_router::send_text(const QString &text) {

@@ -54,6 +54,14 @@ private slots:
 	void key_row_goes_through_the_router();
 
 	/*
+	 * The on-screen keyboard reaches the app chords the hardware keyboard
+	 * does -- notably scroll, the only way a phone can reach its
+	 * scrollback until body-drag lands (sec 8.7). send_key walked past
+	 * stolen_chords() and paged the remote instead.
+	 */
+	void the_on_screen_keyboard_reaches_stolen_chords();
+
+	/*
 	 * That a HELD key actually sends more than once, end to end through
 	 * the row and the router into the emulator's output. The property
 	 * check in layout_test says the flag is set on the right buttons;

@@ -278,6 +278,15 @@ signals:
 private:
 	quint8 modifiers_for(QKeyEvent *event) const;
 
+	/*
+	 * Steals a chord arriving through send_key -- the on-screen keyboard's
+	 * path -- the way handle_key steals one from a hardware key: emits
+	 * shortcut_pressed and returns true when the emulator key and
+	 * modifiers name a stolen chord, so the caller sends nothing to the
+	 * remote (sec 6.1).
+	 */
+	bool steal_chord(int key, quint8 modifiers);
+
 	/* Applied to the next key and then gone; see modifier_state_t. */
 	void spend_sticky_modifiers();
 

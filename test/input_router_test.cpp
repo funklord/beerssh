@@ -427,6 +427,38 @@ void input_router_test::a_modifier_button_stops_claiming_a_session_that_has_gone
 	          "a modifier pressed with no session must not stay pressed");
 }
 
+void input_router_test::the_on_screen_keyboard_reaches_stolen_chords() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	QSignalSpy spy(&router, &bssh_input_router::shortcut_pressed);
+
+	/*
+	 * The on-screen keyboard arms a sticky Shift and then presses its own
+	 * PgUp key, which reaches the router as send_key(KEY_PAGE_UP, NONE)
+	 * carrying the armed modifier -- exactly the path bssh_soft_keyboard
+	 * drives (sec 6.2). Before this it walked past the chord table and
+	 * paged the remote; it must steal the scroll chord like a hardware
+	 * Shift+PageUp does.
+	 */
+	router.cycle_modifier(bssh_emulator::MOD_SHIFT);
+	router.send_key(bssh_emulator::KEY_PAGE_UP, bssh_emulator::MOD_NONE);
+
+	QCOMPARE(spy.count(), 1);
+	QCOMPARE(spy.first().first().toInt(),
+	          int(bssh_input_router::SHORTCUT_SCROLL_PAGE_UP));
+	/* Stolen from the remote, so it must not also produce bytes. */
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	/*
+	 * PgUp with no Shift is NOT a chord: it is the page key a pager wants,
+	 * so it still reaches the remote and fires no shortcut. The armed
+	 * Shift was spent by the steal above, so this press carries none.
+	 */
+	router.send_key(bssh_emulator::KEY_PAGE_UP, bssh_emulator::MOD_NONE);
+	QCOMPARE(spy.count(), 1);
+	QVERIFY(!emulator.take_output().isEmpty());
+}
+
 void input_router_test::key_row_goes_through_the_router() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

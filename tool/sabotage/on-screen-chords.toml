@@ -1,0 +1,23 @@
+# The on-screen keyboard reaching the app chords it steals (project.md
+# sec 6.1, sec 8.7).
+#
+# handle_key steals a chord from a hardware key before it becomes bytes;
+# send_key -- the on-screen keyboard's path -- did not, so Shift+PgUp on
+# the soft keyboard paged the remote instead of scrolling, and on a phone
+# the scrollback had no keyboard route at all. Neither failure is an
+# error: the key simply goes to the shell, exactly as it did before the
+# steal was added, which is the shape this guards.
+
+# The steal removed from send_key: the chord goes to the remote again.
+#
+# Verified 2026-09-17 by removing the steal and rebuilding: the named test
+# goes red -- the on-screen Shift+PgUp is no longer stolen, so it pages the
+# remote and produces the bytes the test forbids -- and this exact edit
+# compiles and applies. Run it through sabotage.py for the tool's own
+# `caught` verdict.
+[[sabotage]]
+name = "the on-screen keyboard stops stealing the chords it should"
+file = "src/input/input_router.cpp"
+find = "\tif (steal_chord(key, sending)) return;"
+replace = "\t(void) &bssh_input_router::steal_chord;"
+expect = "the_on_screen_keyboard_reaches_stolen_chords"
