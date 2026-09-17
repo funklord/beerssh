@@ -1387,6 +1387,41 @@ struct registry_left_as_found_t {
  * asserts the property that makes that worth having: the same slot sends
  * the same thing on both keyboards, at every level.
  */
+void layout_test::a_soft_keyboard_letter_chord_is_kept_by_the_app() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_soft_keyboard keyboard(&router);
+	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_FULL);
+
+	/*
+	 * The 'c' key, found by its label before any Shift relabels it. Its
+	 * click handler carries the base letter, so pressing it drives
+	 * steal_char_chord('c') whatever the cap then reads.
+	 */
+	QAbstractButton *c_key = nullptr;
+	for (QAbstractButton *button : keyboard.findChildren<QAbstractButton *>()) {
+		if (button->text() == QStringLiteral("c")) { c_key = button; break; }
+	}
+	QVERIFY2(c_key, "the full keyboard has no 'c' key to press");
+
+	QSignalSpy fired(&router, &bssh_input_router::shortcut_pressed);
+
+	/* Arm Ctrl+Shift the way the modifier keys do, then press 'c'. */
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	router.cycle_modifier(bssh_emulator::MOD_SHIFT);
+	c_key->click();
+
+	QCOMPARE(fired.count(), 1);
+	QCOMPARE(fired.first().first().toInt(), int(bssh_input_router::SHORTCUT_COPY));
+	/* Kept by the app, so nothing reached the shell. */
+	QCOMPARE(emulator.take_output(), QByteArray());
+
+	/* And a bare 'c' still types: no chord, and it produces the letter. */
+	c_key->click();
+	QCOMPARE(fired.count(), 1);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("c"));
+}
+
 void layout_test::a_scroll_chord_scrolls_the_focused_terminal() {
 	bssh_main_window window;
 	window.resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);

@@ -450,6 +450,41 @@ bool bssh_input_router::steal_chord(int key, quint8 modifiers) {
 	return false;
 }
 
+bool bssh_input_router::steal_char_chord(char32_t ch) {
+	/*
+	 * The letter's Qt key, which for a-z and A-Z is the uppercase letter's
+	 * code -- Qt::Key_A is 'A'. Anything else carries no chord and is left
+	 * to send_text.
+	 */
+	int qt_key = 0;
+	if (ch >= U'a' && ch <= U'z') qt_key = Qt::Key_A + int(ch - U'a');
+	else if (ch >= U'A' && ch <= U'Z') qt_key = Qt::Key_A + int(ch - U'A');
+	else return false;
+
+	/*
+	 * Matched against the ARMED modifiers, before the board folds Shift
+	 * into the character: a chord's Shift is a modifier here, not a
+	 * request for a capital. So only Ctrl+Shift+C and its siblings match;
+	 * a bare letter, a capital, or Ctrl+C alone carries no chord and falls
+	 * through to the text it is.
+	 */
+	const quint8 mods = effective_modifiers();
+	const quint8 meaningful = bssh_emulator::MOD_SHIFT | bssh_emulator::MOD_CTRL
+	                          | bssh_emulator::MOD_ALT;
+
+	for (const chord_t &chord : stolen_chords()) {
+		if (chord.key != qt_key) continue;
+		if ((mods & meaningful) != emulator_mods_for(chord.modifiers)) continue;
+
+		emit shortcut_pressed(chord.action);
+		spend_sticky_modifiers();
+
+		return true;
+	}
+
+	return false;
+}
+
 void bssh_input_router::send_text(const QString &text) {
 	if (!m_emulator || text.isEmpty()) return;
 

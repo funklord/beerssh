@@ -107,6 +107,14 @@ private slots:
 	 * on is worth a test rather than three tested pieces and a hope.
 	 */
 	void a_scroll_chord_scrolls_the_focused_terminal();
+
+	/*
+	 * The soft keyboard's own letter key, pressed with Ctrl+Shift armed,
+	 * reaches the copy chord rather than sending the shell an interrupt --
+	 * the wiring from the button through steal_char_chord, which the
+	 * router-level test cannot see (sec 6.1, sec 8.7).
+	 */
+	void a_soft_keyboard_letter_chord_is_kept_by_the_app();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
 	void both_keyboards_read_one_layout();

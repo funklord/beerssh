@@ -422,6 +422,17 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 			if (!m_router) return;
 
 			/*
+			 * A chord first, exactly as a physical keyboard's letter chord
+			 * is stolen before it becomes text (sec 6.1): if the armed
+			 * modifiers make this letter Ctrl+Shift+C and the like, it is
+			 * the app's, not a character for the shell.
+			 */
+			if (m_router->steal_char_chord(char32_t(key.value))) {
+				refresh_letter_labels();
+				return;
+			}
+
+			/*
 			 * Shift is applied HERE, to the character, and not sent as a
 			 * modifier. That is what a shift key on a soft keyboard is:
 			 * the button sends a different character. The router masks

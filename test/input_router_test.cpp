@@ -427,6 +427,40 @@ void input_router_test::a_modifier_button_stops_claiming_a_session_that_has_gone
 	          "a modifier pressed with no session must not stay pressed");
 }
 
+void input_router_test::the_on_screen_keyboard_reaches_letter_chords() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	QSignalSpy spy(&router, &bssh_input_router::shortcut_pressed);
+
+	/*
+	 * The on-screen keyboard arms Ctrl and Shift, then presses its 'c'
+	 * key, which reaches the router as steal_char_chord('c') carrying the
+	 * armed pair. It must be the copy chord, not a capital C for the shell.
+	 */
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	router.cycle_modifier(bssh_emulator::MOD_SHIFT);
+	QVERIFY(router.steal_char_chord(U'c'));
+
+	QCOMPARE(spy.count(), 1);
+	QCOMPARE(spy.first().first().toInt(), int(bssh_input_router::SHORTCUT_COPY));
+
+	/*
+	 * A bare letter is text, not a chord: no shortcut, and it is left for
+	 * send_text to turn into bytes.
+	 */
+	QVERIFY(!router.steal_char_chord(U'c'));
+	QCOMPARE(spy.count(), 1);
+
+	/*
+	 * Ctrl alone is NOT the copy chord -- copy is Ctrl+Shift+C, and Ctrl+C
+	 * is the interrupt the shell must still receive. So this is not stolen,
+	 * and send_text will produce the interrupt byte as it should.
+	 */
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	QVERIFY(!router.steal_char_chord(U'c'));
+	QCOMPARE(spy.count(), 1);
+}
+
 void input_router_test::the_on_screen_keyboard_reaches_stolen_chords() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

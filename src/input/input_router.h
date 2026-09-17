@@ -135,6 +135,16 @@ public:
 	void send_key(int key, quint8 modifiers);
 
 	/*
+	 * The on-screen keyboard's LETTER path: returns true and fires the
+	 * shortcut when the armed modifiers make this letter a stolen chord
+	 * (Ctrl+Shift+C and the like), so the caller sends no text. send_key
+	 * cannot cover it -- a letter's bytes are a character, not a named key
+	 * with an emulator code -- so it is checked here against the chord
+	 * table in Qt keys, before Shift is folded into the character (sec 6.1).
+	 */
+	bool steal_char_chord(char32_t ch);
+
+	/*
 	 * Caps Lock arms Ctrl for the next key, rather than sending itself
 	 * (sec 6.1). Off by default.
 	 *
@@ -286,6 +296,7 @@ private:
 	 * remote (sec 6.1).
 	 */
 	bool steal_chord(int key, quint8 modifiers);
+
 
 	/* Applied to the next key and then gone; see modifier_state_t. */
 	void spend_sticky_modifiers();

@@ -62,6 +62,14 @@ private slots:
 	void the_on_screen_keyboard_reaches_stolen_chords();
 
 	/*
+	 * And its LETTER chords -- Ctrl+Shift+C and the like -- which arrive as
+	 * a character through send_text, not a named key, so Shift+PgUp's fix
+	 * does not cover them. Before this a soft-keyboard Ctrl+Shift+C sent
+	 * the shell an interrupt instead of copying (sec 6.1, sec 8.7).
+	 */
+	void the_on_screen_keyboard_reaches_letter_chords();
+
+	/*
 	 * That a HELD key actually sends more than once, end to end through
 	 * the row and the router into the emulator's output. The property
 	 * check in layout_test says the flag is set on the right buttons;
