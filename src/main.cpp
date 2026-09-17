@@ -12,6 +12,7 @@
 #include "model/profile_store.h"
 #include "platform/platform.h"
 #include "term/font_catalog.h"
+#include "hang_watchdog.h"
 #include "ui/main_window.h"
 #include "ui/theme.h"
 
@@ -286,6 +287,13 @@ int main(int argc, char *argv[]) {
 		QTimer::singleShot(0, &app, &QCoreApplication::quit);
 		return app.exec();
 	}
+
+	/*
+	 * The hang watchdog (sec 5.1), after show() so there is a foreground
+	 * window for it to speak about, and not under --self-test above, which
+	 * has no run to watch. It arms only on Android.
+	 */
+	bssh_start_hang_watchdog();
 
 	/*
 	 * After show(), so a confirmation has a window to sit on, and never

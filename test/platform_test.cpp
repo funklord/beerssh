@@ -3,6 +3,7 @@
 #include <QSettings>
 #include <QtTest>
 
+#include "hang_watchdog.h"
 #include "platform/platform.h"
 #include "model/app_settings.h"
 #include <QTemporaryDir>
@@ -59,6 +60,26 @@ void platform_test::going_out_of_sight_is_the_platforms_to_answer_for() {
 
 	/* And asking twice does not start meaning something else. */
 	QVERIFY(!platform->send_to_background());
+}
+
+void platform_test::the_hang_gate_fires_only_foreground_and_past_the_threshold() {
+	const qint64 threshold = 30000;
+
+	/* Foreground and well past: the one case that fires. */
+	QVERIFY(bssh_hang_should_dump(true, 30000, threshold));
+	QVERIFY(bssh_hang_should_dump(true, 45000, threshold));
+
+	/* Foreground but not yet past: a slow moment, not a hang. */
+	QVERIFY(!bssh_hang_should_dump(true, 29999, threshold));
+	QVERIFY(!bssh_hang_should_dump(true, 0, threshold));
+
+	/*
+	 * Backgrounded, however long the stall: Qt suspends the loop when the
+	 * app is put away, so this is the normal case, not a hang -- and the
+	 * arm that, if it fired, would kill a live backgrounded session.
+	 */
+	QVERIFY(!bssh_hang_should_dump(false, 45000, threshold));
+	QVERIFY(!bssh_hang_should_dump(false, 300000, threshold));
 }
 
 void platform_test::session_count_and_notify_are_safe_without_a_tray() {

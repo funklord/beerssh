@@ -42,6 +42,7 @@ INCLUDEPATH += $$PWD/src $$PWD
 
 SOURCES += \
     src/main.cpp \
+    src/hang_watchdog.cpp \
     src/model/app_settings.cpp \
     src/model/conn_manager.cpp \
     src/model/command_line.cpp \
@@ -99,6 +100,7 @@ SOURCES += \
 
 HEADERS += \
     src/input/input_router.h \
+    src/hang_watchdog.h \
     src/model/profile.h \
     src/model/app_settings.h \
     src/model/conn_manager.h \

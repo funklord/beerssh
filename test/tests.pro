@@ -67,6 +67,7 @@ SOURCES += \
     ssh_config_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
+    ../src/hang_watchdog.cpp \
     ../src/input/input_router.cpp \
     ../src/ssh/pty_session.cpp \
     ../src/ssh/ssh_session.cpp \
@@ -153,6 +154,7 @@ HEADERS += \
     screen_test.h \
     ssh_config_test.h \
     terminal_view_test.h \
+    ../src/hang_watchdog.h \
     ../src/input/input_router.h \
     ../src/ssh/pty_session.h \
     ../src/ssh/ssh_session.h \

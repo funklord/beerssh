@@ -20,6 +20,15 @@ private slots:
 	void keep_alive_controls_quit_on_last_window();
 	void going_out_of_sight_is_the_platforms_to_answer_for();
 	void session_count_and_notify_are_safe_without_a_tray();
+
+	/*
+	 * The hang watchdog's gate -- the whole risk of sec 5.1's fix -- as a
+	 * pure function: it fires only when the app was FOREGROUND at the last
+	 * beat and the loop has been silent past the threshold. A backgrounded
+	 * stall, which Qt's own suspend produces every time the app is put
+	 * away, must not read as a hang.
+	 */
+	void the_hang_gate_fires_only_foreground_and_past_the_threshold();
 	void close_policy_asks_only_when_something_is_live();
 	void the_window_opens_on_the_front_door();
 	void the_key_row_setting_survives_a_restart();
