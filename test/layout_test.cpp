@@ -1387,6 +1387,51 @@ struct registry_left_as_found_t {
  * asserts the property that makes that worth having: the same slot sends
  * the same thing on both keyboards, at every level.
  */
+void layout_test::a_scroll_chord_scrolls_the_focused_terminal() {
+	bssh_main_window window;
+	window.resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	bssh_session *session = registry->create(named(QStringLiteral("scrolls")));
+	QVERIFY(session && session->input_router() && session->emulator());
+	window.adopt_session(session);
+	QCoreApplication::processEvents();
+
+	/*
+	 * More lines than the screen holds, so the scrollback has somewhere
+	 * to scroll TO. Fed straight into the emulator, which is where a
+	 * remote's output lands.
+	 */
+	QByteArray output;
+	for (int i = 0; i < 300; ++i) output += QByteArrayLiteral("line\r\n");
+	session->emulator()->feed(output);
+	QCoreApplication::processEvents();
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY2(view, "the window built no terminal view for its session");
+	QCOMPARE(view->scroll_offset(), 0);
+
+	/*
+	 * Exactly the on-screen keyboard's path: arm a sticky Shift, then
+	 * press PgUp, which reaches the router as send_key(KEY_PAGE_UP, NONE)
+	 * carrying the armed modifier. It must steal the scroll chord and,
+	 * through the connection wire_session() makes, move the terminal.
+	 */
+	bssh_input_router *router = session->input_router();
+	router->cycle_modifier(bssh_emulator::MOD_SHIFT);
+	router->send_key(bssh_emulator::KEY_PAGE_UP, bssh_emulator::MOD_NONE);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(view->scroll_offset() > 0,
+	          qPrintable(QStringLiteral("a Shift+PgUp from the session router left the "
+	                                     "terminal at offset %1").arg(view->scroll_offset())));
+}
+
 void layout_test::the_front_door_overflow_menu_reaches_the_touch_floor() {
 	QTemporaryDir dir;
 	QVERIFY(dir.isValid());

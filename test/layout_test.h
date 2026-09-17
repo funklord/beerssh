@@ -97,6 +97,16 @@ private slots:
 	 * is separate and still owed -- this pins the reachable half.
 	 */
 	void the_front_door_overflow_menu_reaches_the_touch_floor();
+
+	/*
+	 * A scroll chord from the SESSION's router scrolls the window's
+	 * terminal -- the composition send_key -> steal_chord ->
+	 * shortcut_pressed -> handle_shortcut -> scroll_by, which nothing
+	 * tested end to end for either keyboard. The on-screen keyboard is
+	 * now a producer of that shortcut (sec 8.7), so the wiring it depends
+	 * on is worth a test rather than three tested pieces and a hope.
+	 */
+	void a_scroll_chord_scrolls_the_focused_terminal();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
 	void both_keyboards_read_one_layout();
