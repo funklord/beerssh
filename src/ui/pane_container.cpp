@@ -12,6 +12,7 @@
 #include "term/emulator.h"
 #include "platform/platform.h"
 #include "ui/layout_manager.h"
+#include "ui/pane_snap.h"
 #include "ui/terminal_view.h"
 
 /*
@@ -93,6 +94,17 @@ void bssh_pane_container::rebuild() {
 	if (!m_layout) return;
 
 	const QList<bssh_session *> panes = m_layout->visible_panes();
+
+	/*
+	 * The arrangement decides which way the splitter runs (sec 8.7):
+	 * a column stacks its panes and drags a horizontal divider up and
+	 * down, tiled keeps sec 8.4's side-by-side. Set before the new views
+	 * are added so they arrive in the right orientation; the divider
+	 * snapping keys off the same orientation below.
+	 */
+	m_splitter->setOrientation(
+	        m_layout->arrangement() == bssh_layout_manager::COLUMN
+	        ? Qt::Vertical : Qt::Horizontal);
 
 	/*
 	 * Destroy and rebuild rather than diff. A pane view holds no state of
@@ -293,14 +305,42 @@ void bssh_pane_container::focus_session(bssh_session *session) {
 void bssh_pane_container::snap_divider_to_cells() {
 	if (m_views.size() < 2) return;
 
-	const int cell = m_views.first()->cell_width();
+	/*
+	 * Snap along the axis the panes actually divide: a column's dividers
+	 * run across the width and cut the HEIGHT, so a half-column at a
+	 * pane's edge (sec 8.3) is a half-ROW there, and the cell to round to
+	 * is its height rather than its width.
+	 */
+	const bool vertical = m_splitter->orientation() == Qt::Vertical;
+	const int cell = vertical ? m_views.first()->cell_height()
+	                          : m_views.first()->cell_width();
 	if (cell <= 1) return;
 
 	QList<int> sizes = m_splitter->sizes();
+
+	/*
+	 * A two-pane column is sec 8.7's case: one divider, magnetically
+	 * pulled to the halfway line ("two half-screen") and otherwise on a
+	 * whole row. The math is pure and lives in pane_snap.h so a headless
+	 * test asserts it; the gesture that moves the handle is what needs a
+	 * device.
+	 */
+	if (vertical && sizes.size() == 2) {
+		const int total = sizes.at(0) + sizes.at(1);
+		const int first = bssh_snap_column_divider(sizes.at(0), total, cell,
+		                                            BSSH_COLUMN_SNAP_RADIUS);
+		if (first == sizes.at(0)) return;
+
+		sizes[0] = first;
+		sizes[1] = total - first;
+		m_splitter->setSizes(sizes);
+		return;
+	}
+
 	bool changed = false;
 
 	for (int i = 0; i < sizes.size() - 1; ++i) {
-		const int snapped = qMax(cell, (sizes.at(i) / cell) * cell);
+		const int snapped = bssh_snap_pane_extent(sizes.at(i), cell);
 		if (snapped == sizes.at(i)) continue;
 
 		/*

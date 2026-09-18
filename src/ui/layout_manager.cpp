@@ -2,7 +2,8 @@
 
 bssh_layout_manager::bssh_layout_manager(QObject *parent)
     : QObject(parent),
-      m_width_dp(0) {
+      m_width_dp(0),
+      m_arrangement(TILED) {
 }
 
 bssh_layout_manager::size_class_t bssh_layout_manager::size_class_for(int width_dp) {
@@ -28,6 +29,30 @@ int bssh_layout_manager::max_panes_for(size_class_t size_class) {
 	return 1;
 }
 
+int bssh_layout_manager::max_panes() const {
+	/*
+	 * A column stacks vertically, so a narrow window does not run out of
+	 * room the way side-by-side panes do: it shows one full-screen or two
+	 * half-screen (sec 8.7) at any width. Tiled is width's question.
+	 */
+	if (m_arrangement == COLUMN) return 2;
+	return max_panes_for(size_class());
+}
+
+void bssh_layout_manager::set_arrangement(arrangement_t arrangement) {
+	if (arrangement == m_arrangement) return;
+
+	m_arrangement = arrangement;
+
+	/*
+	 * A changed arrangement is a changed layout even at a fixed width:
+	 * the same two sessions are side by side or stacked, and the pane
+	 * container rebuilds to the new shape. So it emits like set_intent
+	 * rather than gating on a class change the way set_width does.
+	 */
+	emit layout_changed();
+}
+
 void bssh_layout_manager::set_width(int width_dp) {
 	if (width_dp == m_width_dp) return;
 
@@ -50,7 +75,7 @@ void bssh_layout_manager::set_intent(const QList<bssh_session *> &sessions) {
 }
 
 QList<bssh_session *> bssh_layout_manager::visible_panes() const {
-	const int allowed = max_panes_for(size_class());
+	const int allowed = max_panes();
 
 	QList<bssh_session *> visible = m_intent;
 	while (visible.size() > allowed) {

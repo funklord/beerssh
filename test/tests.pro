@@ -188,6 +188,7 @@ HEADERS += \
     ../src/ui/host_list.h \
     ../src/ui/layout_manager.h \
     ../src/ui/pane_container.h \
+    ../src/ui/pane_snap.h \
     ../src/ui/long_press.h \
     ../src/term/term_features.h \
     ../src/ui/scroll_guard.h \

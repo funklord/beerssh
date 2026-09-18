@@ -37,6 +37,28 @@ public:
 		EXPANDED  /* >= 840   -- tablet landscape, maximised desktop */
 	};
 
+	/*
+	 * How the visible terminals occupy the window (sec 8.7). This is the
+	 * `arrangement` dimension the three-way naming bought, introduced with
+	 * its first consumer rather than as a standalone refactor: `column` is
+	 * the portrait scrollable stack, `tiled` is everything sec 8.4 built.
+	 *
+	 * It is set here, defaulting from the idiom (mobile -> column, desktop
+	 * -> tiled) and then free to be anything, because `tiled` has to be
+	 * runnable on a phone and `column` on a desktop or neither can be
+	 * tested without two devices. The manager is TOLD the arrangement and
+	 * does not infer it, which keeps it as platform-free as the width it
+	 * already takes.
+	 *
+	 * `row`, the landscape mirror, is deliberately absent: it has no
+	 * decision and no consumer (sec 8.7 leaves it open), so an enum value
+	 * nothing produces would be the scaffolding this split exists to avoid.
+	 */
+	enum arrangement_t {
+		TILED,   /* side by side, dividers vertical (sec 8.4) */
+		COLUMN   /* stacked, one full or two half (sec 8.7) */
+	};
+
 	explicit bssh_layout_manager(QObject *parent = nullptr);
 
 	static size_class_t size_class_for(int width_dp);
@@ -46,12 +68,32 @@ public:
 	 * single nesting level for v1 (sec 8.1): it covers the realistic
 	 * cases and avoids a whole class of layout, focus and drag-target
 	 * bugs that an arbitrary tmux-style tree brings.
+	 *
+	 * This is the TILED answer, keyed on width because side-by-side panes
+	 * are what a narrow window cannot hold. A column stacks instead, so it
+	 * is not width that limits it -- see max_panes().
 	 */
 	static int max_panes_for(size_class_t size_class);
+
+	/*
+	 * The effective cap right now, arrangement and width together. A
+	 * column shows at most two (sec 8.7: one full-screen or two
+	 * half-screen), regardless of width, because stacking is not what a
+	 * narrow window runs out of room for. Tiled defers to max_panes_for.
+	 *
+	 * The "is there room for another pane" question every split and drop
+	 * asks goes through here rather than max_panes_for, or a phone in
+	 * column arrangement -- COMPACT, so max_panes_for is 1 -- would refuse
+	 * the second terminal the column exists to show.
+	 */
+	int max_panes() const;
 
 	void set_width(int width_dp);
 	int width() const { return m_width_dp; }
 	size_class_t size_class() const { return size_class_for(m_width_dp); }
+
+	void set_arrangement(arrangement_t arrangement);
+	arrangement_t arrangement() const { return m_arrangement; }
 
 	/* Sessions the user asked to see side by side, in order. */
 	void set_intent(const QList<bssh_session *> &sessions);
@@ -75,6 +117,7 @@ signals:
 
 private:
 	int m_width_dp;
+	arrangement_t m_arrangement;
 	QList<bssh_session *> m_intent;
 };
 

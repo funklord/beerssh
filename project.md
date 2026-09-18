@@ -5856,6 +5856,50 @@ a time, so a drag is one neighbour growing as another shrinks.
 at most one `SIGWINCH` per drag-end rather than a stream of them, and no
 general N-pane geometry to reason about.
 
+**The column's first increment is BUILT 2026-09-18**, and the
+`arrangement` dimension lands with it -- the feature this section said
+would carry the three-way split rather than a standalone refactor. Only
+`arrangement` (`tiled | column`) is introduced, on `bssh_layout_manager`,
+which is TOLD it rather than inferring it: the manager stays as
+platform-free as the width it already takes, and the idiom sets the
+default (`is_touch_primary()` still the proxy, mobile -> column) and lets
+go, so a desktop can be forced into a column and a phone into tiles for a
+headless test. `row` is still absent, because it still has no decision
+and no consumer.
+
+What the increment delivers: a column caps at two at any width
+(`max_panes()`, where the arrangement diverges from the width-keyed
+`max_panes_for`), so a phone-width column holds the second terminal a
+tile pushes to a tab; the pane container runs its splitter vertically and
+stacks; and the divider is magnetic to the halfway line ("two
+half-screen"), the math pure in `ui/pane_snap.h` so a headless test
+asserts the detent while the gesture that drives it waits for a device.
+Guarded by `tool/sabotage/column-mode.toml`, three edits, each seen to
+fail naming its own test against a 556-passing baseline.
+
+**What it does NOT yet do, so the next pass starts from the truth.** The
+intent and tab model are unchanged -- the column shows what the existing
+split/tab machinery puts in the intent, so the "holds every session,
+off-by-one dissolves" evolution above is not in yet and tabs still
+convert as before. There is no scroll area, so the ">2 terminals scroll
+the column" and the scroll-SNAP are absent (they arrive with the
+selector's `scroll terminals` state). The five-state input selector and
+body-drag-scroll are untouched. The snap radius is a constant
+(`BSSH_COLUMN_SNAP_RADIUS`, 8px) rather than the configurable value this
+section asks for -- there is no settings plumbing for it yet. And the
+resize/snap FEEL owes the same device pass every touch surface here does:
+the model is tested, the thumb is not.
+
+**"Full-screen" is the one-terminal case, read from the geometry.** A
+two-pane column cannot reach one-full-screen by dragging, because
+`setChildrenCollapsible(false)` keeps each pane a whole row -- so the
+magnetic detent within a two-pane column is the halfway line, and the
+full-screen position is simply the arrangement with one terminal in it.
+Recorded because "magnetic snapping to those two positions" reads as two
+divider detents and is one detent plus a pane count; the reading is
+chosen here rather than left for a later session to guess at from a
+gesture.
+
 **One global input selector, visible at all times, five states.** Global
 rather than per terminal, and in every arrangement rather than portrait
 only:

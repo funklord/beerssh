@@ -73,6 +73,7 @@
 #include "ui/layout_manager.h"
 #include "ui/touch_metrics.h"
 #include "ui/pane_container.h"
+#include "ui/pane_snap.h"
 #include "ui/terminal_view.h"
 
 static bssh_profile_t named(const QString &name) {
@@ -322,6 +323,132 @@ void layout_test::dividers_snap_to_whole_cells() {
 
 	const int width = container.view_at(0)->width();
 	QCOMPARE(width % cell, 0);
+}
+
+void layout_test::a_column_caps_where_a_tile_cannot() {
+	bssh_layout_manager layout;
+
+	/* Default is tiled -- sec 8.4, and what a desktop opens on. */
+	QCOMPARE(layout.arrangement(), bssh_layout_manager::TILED);
+
+	/*
+	 * A phone-width window. Tiled, it holds one pane (COMPACT); a column
+	 * holds two, because stacking is not what a narrow window runs out of
+	 * room for. That difference at THIS width is the whole feature -- the
+	 * two caps agreeing here would mean the arrangement changed nothing.
+	 */
+	layout.set_width(400);
+	QCOMPARE(layout.max_panes(), 1);
+
+	QSignalSpy spy(&layout, &bssh_layout_manager::layout_changed);
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+	QCOMPARE(spy.count(), 1);
+
+	QCOMPARE(layout.arrangement(), bssh_layout_manager::COLUMN);
+	QCOMPARE(layout.max_panes(), 2);
+
+	/* Idempotent: setting the same arrangement is not a layout change. */
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+	QCOMPARE(spy.count(), 1);
+}
+
+void layout_test::a_column_holds_the_terminal_a_tile_would_tab() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(400);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	/*
+	 * Two sessions the user asked to see together, on a phone-width
+	 * window. Tiled, the second collapses to a tab (sec 8.2).
+	 */
+	layout.set_intent({a, b});
+	QCOMPARE(layout.visible_panes().size(), 1);
+	QVERIFY(layout.is_collapsed());
+
+	/*
+	 * The column shows both -- the second terminal is on screen, not
+	 * behind a tab. That is sec 8.7's "one full-screen or two
+	 * half-screen" delivering the pane the tile hid.
+	 */
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+	QCOMPARE(layout.visible_panes().size(), 2);
+	QVERIFY(!layout.is_collapsed());
+	QVERIFY(layout.visible_panes().contains(a));
+	QVERIFY(layout.visible_panes().contains(b));
+}
+
+void layout_test::a_column_stacks_its_panes() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(400);
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(400, 800);
+	layout.set_intent({a, b});
+	QCoreApplication::processEvents();
+
+	QCOMPARE(container.pane_count(), 2);
+
+	bssh_terminal_view *top = container.view_at(0);
+	bssh_terminal_view *bottom = container.view_at(1);
+
+	/*
+	 * Stacked, not tiled: each pane spans the width and the second sits
+	 * below the first. A horizontal tile would put them at one height and
+	 * two x-positions, so this is the assertion that tells the two
+	 * arrangements apart from the outside.
+	 */
+	const QPoint top_tl = top->mapTo(&container, QPoint(0, 0));
+	const QPoint bottom_tl = bottom->mapTo(&container, QPoint(0, 0));
+
+	QCOMPARE(top_tl.x(), bottom_tl.x());
+	QVERIFY(bottom_tl.y() > top_tl.y());
+	QVERIFY(top->width() > container.width() / 2);
+	QVERIFY(bottom->width() > container.width() / 2);
+}
+
+void layout_test::a_column_divider_is_magnetic_to_the_halfway_line() {
+	const int total = 800;
+	const int cell = 20;
+	const int radius = BSSH_COLUMN_SNAP_RADIUS;
+
+	/*
+	 * Near the halfway line, the divider is pulled onto it (sec 8.7's
+	 * "two half-screen"). The value is chosen BELOW half by less than the
+	 * radius, where plain row-flooring lands on the row before it -- so
+	 * without the magnet the answer is a whole cell short of half, and the
+	 * test can tell the pull from the flooring rather than passing on
+	 * either.
+	 */
+	const int near = total / 2 - (radius - 3);
+	QVERIFY(bssh_snap_pane_extent(near, cell) != bssh_snap_pane_extent(total / 2, cell));
+	QCOMPARE(bssh_snap_column_divider(near, total, cell, radius),
+	         bssh_snap_pane_extent(total / 2, cell));
+
+	/*
+	 * Beyond the magnet's reach it snaps to a whole row instead, leaving
+	 * the halfway line alone -- one terminal genuinely larger than the
+	 * other.
+	 */
+	const int away = 592;
+	QCOMPARE(bssh_snap_column_divider(away, total, cell, radius),
+	         bssh_snap_pane_extent(away, cell));
+	QVERIFY(bssh_snap_column_divider(away, total, cell, radius) != total / 2);
+
+	/*
+	 * And never onto the neighbour's last row: dragged to the floor, the
+	 * bottom pane still keeps a whole cell.
+	 */
+	const int floored = bssh_snap_column_divider(total - 1, total, cell, radius);
+	QVERIFY(total - floored >= cell);
 }
 
 void layout_test::panes_collapse_to_tabs_and_come_back() {

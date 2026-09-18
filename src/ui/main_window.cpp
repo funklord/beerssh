@@ -236,6 +236,18 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * -- means the focused one.
 	 */
 	m_layout = new bssh_layout_manager(this);
+
+	/*
+	 * The idiom picks the arrangement's default and then lets go (sec
+	 * 8.7): a phone opens on the portrait column, a desktop on sec 8.4's
+	 * tiles. is_touch_primary() stands in for the idiom until the
+	 * three-way split lands -- the same proxy every idiom site uses today,
+	 * and set here before the pane container exists so the first rebuild
+	 * already reads the right shape.
+	 */
+	if (bssh_platform::instance() && bssh_platform::instance()->is_touch_primary())
+		m_layout->set_arrangement(bssh_layout_manager::COLUMN);
+
 	m_panes = new bssh_pane_container(m_layout, m_terminal_page);
 	layout->addWidget(m_panes, 1);
 	layout->addWidget(m_status_label, 0);
@@ -2328,8 +2340,7 @@ void bssh_main_window::drop_session(bssh_session *session, bool beside) {
 	 * in front of the person who dropped it.
 	 */
 	const bool room = beside && m_layout
-	                  && m_layout->intent().size()
-	                             < bssh_layout_manager::max_panes_for(m_layout->size_class());
+	                  && m_layout->intent().size() < m_layout->max_panes();
 
 	if (room) {
 		split_with(session);
@@ -3413,8 +3424,7 @@ void bssh_main_window::refresh_menu_bar() {
 	 */
 	if (m_split_action) {
 		const bool room = m_layout
-		        && m_layout->intent().size()
-		                   < bssh_layout_manager::max_panes_for(m_layout->size_class());
+		        && m_layout->intent().size() < m_layout->max_panes();
 		m_split_action->setEnabled(has_session && room);
 	}
 
@@ -3478,8 +3488,7 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	QAction *split = menu->addAction(QStringLiteral("Split &Beside Current"));
 	split->setObjectName(QStringLiteral("terminal_split"));
 	split->setEnabled(m_current && m_layout
-	                   && m_layout->intent().size()
-	                              < bssh_layout_manager::max_panes_for(m_layout->size_class()));
+	                   && m_layout->intent().size() < m_layout->max_panes());
 
 	/*
 	 * The un-split, and the reason it is a menu entry as well as a
@@ -3731,7 +3740,7 @@ QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
 	 * it invites the user to conclude the feature is broken rather
 	 * than that their window is narrow.
 	 */
-	const int fits = bssh_layout_manager::max_panes_for(m_layout->size_class());
+	const int fits = m_layout->max_panes();
 	split->setEnabled(m_layout->intent().size() < fits &&
 	                   !m_layout->intent().contains(session));
 

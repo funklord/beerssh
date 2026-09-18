@@ -26,6 +26,34 @@ private slots:
 	void panes_collapse_to_tabs_and_come_back();
 
 	/*
+	 * The arrangement dimension (sec 8.7): a manager defaults to tiled,
+	 * takes a column, and its effective pane cap follows the arrangement
+	 * rather than the width -- so a phone-width window in a column holds
+	 * the second terminal the same width tiled would push to a tab. The
+	 * relationship is the point: max_panes() and visible_panes() must
+	 * DIFFER between the two arrangements at exactly the width the column
+	 * exists for (COMPACT), or the column has changed nothing.
+	 */
+	void a_column_caps_where_a_tile_cannot();
+	void a_column_holds_the_terminal_a_tile_would_tab();
+
+	/*
+	 * And the container renders it stacked: a column runs its splitter
+	 * vertically, so the two panes share the width and sit at different
+	 * heights, where a tile shares the height at different x. Asserted
+	 * through the geometry rather than the private splitter, because that
+	 * is what a person sees.
+	 */
+	void a_column_stacks_its_panes();
+
+	/*
+	 * The magnetic divider (sec 8.7): pure math, so the detent is testable
+	 * without the gesture. Near the halfway line it snaps to it; away from
+	 * it, to a whole row; and never onto the neighbour's last row.
+	 */
+	void a_column_divider_is_magnetic_to_the_halfway_line();
+
+	/*
 	 * Every surface a thumb can reach, at the narrowest width sec 8.2
 	 * designs to.
 	 *

@@ -1,0 +1,55 @@
+# The portrait column: a stacked, scrollable arrangement of terminals
+# (project.md sec 8.7), and its first pieces -- the arrangement cap, the
+# vertical rendering, and the magnetic divider.
+#
+# None of the three failures below is an error. A column that caps like a
+# tile shows one terminal where it should show two; a column rendered
+# side by side is a working split in the wrong direction; a divider with
+# no magnet still resizes, it just never settles on the halfway line. Each
+# is a picture rather than a crash, which is why each needs a guard.
+#
+# All three seen to fail 2026-09-18, against a 556-passing baseline, and
+# each verdict is `caught` naming the test below rather than WRONG TEST.
+
+# The column's pane cap falling through to the tiled, width-keyed one.
+#
+# max_panes() is where the arrangement diverges from the width: a column
+# holds two at any width, a tile holds what the size class allows -- one
+# on a phone. Drop the column branch and a phone-width column silently
+# shows a single terminal, the second becoming a tab, which is the exact
+# thing the column exists to stop. Caught by the cap assertion; the
+# holds-the-terminal test fails with it, and either failing is `caught`.
+[[sabotage]]
+name = "the column cap falls through to the tiled width cap"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (m_arrangement == COLUMN) return 2;"
+replace = "\tif (m_arrangement == COLUMN) return max_panes_for(size_class());"
+expect = "a_column_caps_where_a_tile_cannot"
+
+# The column rendered side by side rather than stacked.
+#
+# The arrangement decides the splitter's orientation. Force it horizontal
+# and the two terminals tile across the width instead of stacking down it
+# -- a working split, and the wrong one for a phone. Only the geometry
+# test looks at which way the panes sit; the cap tests stay green, so this
+# is the one that speaks.
+[[sabotage]]
+name = "a column tiles horizontally instead of stacking"
+file = "src/ui/pane_container.cpp"
+find = "\t        ? Qt::Vertical : Qt::Horizontal);"
+replace = "\t        ? Qt::Horizontal : Qt::Horizontal);"
+expect = "a_column_stacks_its_panes"
+
+# The divider losing its magnetic pull to the halfway line.
+#
+# Without the pull, the divider only ever snaps to a whole row -- so a
+# drag that lands a few pixels short of half stays a few pixels short,
+# where sec 8.7 asks it to settle on "two half-screen". The test chooses
+# a position where row-flooring alone lands a cell short of half, so it
+# separates the magnet from the flooring rather than passing on either.
+[[sabotage]]
+name = "the column divider loses its pull to the halfway line"
+file = "src/ui/pane_snap.h"
+find = "\tint target = (delta <= radius) ? (total / 2) : first;"
+replace = "\tint target = first;"
+expect = "a_column_divider_is_magnetic_to_the_halfway_line"
