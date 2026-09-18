@@ -301,6 +301,14 @@ public:
 	void set_font_ligatures(bool ligatures);
 
 	/*
+	 * Whether the remote may change the cursor shape with DECSCUSR (sec
+	 * 6.4). On by default -- vim and friends expect it -- but a user who
+	 * wants one fixed cursor from the preset can turn the override off.
+	 */
+	bool honour_remote_cursor_shape() const;
+	void set_honour_remote_cursor_shape(bool honour);
+
+	/*
 	 * General key remapping (sec 6.1): a small set of "when I press this
 	 * key, send that key instead" rules, so CapsLock can be Escape or an
 	 * F-key a navigation key without touching the OS layout. Each rule is

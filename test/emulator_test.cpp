@@ -91,6 +91,43 @@ void emulator_test::a_reset_from_the_remote_clears_the_modes_it_did_not_set() {
 	QCOMPARE(row(emulator, 0), QStringLiteral("after the reset"));
 }
 
+void emulator_test::decscusr_sets_the_cursor_shape_and_blink() {
+	bssh_emulator emulator(40, 6);
+
+	/*
+	 * DECSCUSR (CSI Ps SP q): the remote asks for a cursor shape, the way
+	 * vim does between its modes. The emulator reports it in the preset's
+	 * own words so the view needs no translation. The spies are made after
+	 * construction, so the shape libvterm announces at its initial reset is
+	 * already past and only these deliberate changes are seen.
+	 */
+	QSignalSpy shape(&emulator, &bssh_emulator::cursor_shape_changed);
+	QSignalSpy blink(&emulator, &bssh_emulator::cursor_blink_changed);
+
+	/* Ps 4: steady underline. */
+	emulator.feed(QByteArrayLiteral("\x1b[4 q"));
+	QVERIFY2(!shape.isEmpty(), "DECSCUSR did not change the cursor shape");
+	QCOMPARE(shape.takeLast().at(0).toString(), QStringLiteral("underline"));
+
+	/* Ps 5: blinking bar -- shape and blink both move. */
+	shape.clear();
+	blink.clear();
+	emulator.feed(QByteArrayLiteral("\x1b[5 q"));
+	QVERIFY(!shape.isEmpty());
+	QCOMPARE(shape.takeLast().at(0).toString(), QStringLiteral("bar"));
+	QVERIFY2(!blink.isEmpty(), "DECSCUSR did not change the cursor blink");
+	QCOMPARE(blink.takeLast().at(0).toBool(), true);
+
+	/* Ps 2: steady block. */
+	shape.clear();
+	blink.clear();
+	emulator.feed(QByteArrayLiteral("\x1b[2 q"));
+	QVERIFY(!shape.isEmpty());
+	QCOMPARE(shape.takeLast().at(0).toString(), QStringLiteral("block"));
+	QVERIFY(!blink.isEmpty());
+	QCOMPARE(blink.takeLast().at(0).toBool(), false);
+}
+
 void emulator_test::a_reconnect_keeps_the_history_and_drops_the_modes() {
 	bssh_emulator emulator(40, 6);
 

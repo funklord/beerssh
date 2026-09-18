@@ -192,6 +192,16 @@ public:
 	static bool default_font_ligatures();
 
 	/*
+	 * Whether the remote's DECSCUSR is allowed to override the preset
+	 * cursor shape (sec 6.4). On by default -- that is how vim's cursor
+	 * works -- and a device setting, like the two above, so a user who
+	 * wants one fixed cursor can turn it off process-wide. Read live when
+	 * a shape change arrives, so toggling it takes effect at once.
+	 */
+	static void set_honour_remote_cursor_shape(bool honour);
+	static bool honour_remote_cursor_shape();
+
+	/*
 	 * The curated set's way in (project.md sec 9): a stable font id and a
 	 * point size, resolved through bssh_font_catalog rather than by naming
 	 * a family here. Going through the catalog is what gets the sec 9.3

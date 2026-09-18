@@ -421,6 +421,35 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		self->screen.set_cursor_visible(value->boolean);
 		self->notify_damaged();
 		return 1;
+	case VTERM_PROP_CURSORSHAPE: {
+		/*
+		 * DECSCUSR, mapped by libvterm to a shape. The view speaks
+		 * "block"/"underline"/"bar" (the preset's words), so translate
+		 * here rather than teaching the view libvterm's enum. An unknown
+		 * value is a block, which is every terminal's default cursor.
+		 *
+		 * This fires once at startup too, from the initial screen reset --
+		 * harmless, because no view is connected yet, so the preset's
+		 * chosen shape still stands until the remote actually asks.
+		 */
+		QString style;
+		switch (value->number) {
+		case VTERM_PROP_CURSORSHAPE_UNDERLINE:
+			style = QStringLiteral("underline");
+			break;
+		case VTERM_PROP_CURSORSHAPE_BAR_LEFT:
+			style = QStringLiteral("bar");
+			break;
+		default:
+			style = QStringLiteral("block");
+			break;
+		}
+		emit self->owner->cursor_shape_changed(style);
+		return 1;
+	}
+	case VTERM_PROP_CURSORBLINK:
+		emit self->owner->cursor_blink_changed(value->boolean);
+		return 1;
 	case VTERM_PROP_RESET:
 		/*
 		 * The terminal was reset -- RIS, DECSTR, or our own

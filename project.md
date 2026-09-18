@@ -3732,12 +3732,33 @@ tiers.)
   and treated empty as "no", so the only two answers available were a string
   and a refusal. A flag now replies with the name and no `=value`, which is
   what terminfo means by one.
-- **DECSCUSR and DECSCNM are answered by DECRQSS/DECRQM but have no effect** —
-  open, and a design question rather than a defect to fix in passing. Cursor
-  shape comes from the preset (§10.2); whether a remote gets to override it is
-  the same question §7.1 asks about every other negotiable property, and it
-  interacts with the cursor rules recorded in §10.2. Reverse video is simply
-  unconsumed.
+- **DECSCUSR is honoured — BUILT 2026-09-18.** The design question this
+  entry held open — whether a remote gets to override the preset cursor
+  shape — is decided the way every terminal decides it: the preset (§10.2)
+  is the DEFAULT and the remote overrides it at runtime, because that is how
+  vim shows a bar in insert mode and a block in normal, and a terminal that
+  ignores DECSCUSR is broken for its users. libvterm parses `CSI Ps SP q`
+  and reports a shape and a blink through settermprop; `on_set_term_prop`
+  maps the shape into the preset's own words ("block"/"underline"/"bar") and
+  emits `cursor_shape_changed`/`cursor_blink_changed`, and the pane showing
+  the session follows. It does not fight §10.2: the remote sets what is
+  WANTED, and focus still gates whether the cursor actually blinks, so an
+  unfocused pane stays asleep whatever the host asked for. The initial
+  screen reset announces a shape too, but before any view is connected, so
+  the preset's choice stands until the remote actually asks.
+  **It is opt-out**, on the holder's call 2026-09-18: "Let programs change
+  the cursor shape" in the appearance settings, on by default, and off
+  keeps the preset's cursor whatever the host sends. The preference rides a
+  process-wide flag on the view (`honour_remote_cursor_shape`, beside the
+  scrollbar and ligature defaults) that `apply_device_settings` sets and the
+  pane's DECSCUSR handler reads live, so turning it off takes hold on the
+  next change rather than at the next rebuild. Guarded by
+  `tool/sabotage/cursor-shape.toml`, six edits seen to fail: the emulator
+  dropping the shape or the blink, the pane unwired from either, the
+  override that cannot be turned off, and the preference that does not
+  persist.
+  **DECSCNM (reverse video) is still unconsumed**, and remains the open
+  half of this entry.
 
 **DA1 is the other half of the graphics story — fixed by the same patch.** It
 answered `?1;2c`, with no parameter 4, so a client probing for sixel the

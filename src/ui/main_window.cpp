@@ -1487,6 +1487,14 @@ void bssh_main_window::apply_device_settings() {
 	const bool ligatures_changed = bssh_terminal_view::default_font_ligatures() != ligatures;
 	bssh_terminal_view::set_default_font_ligatures(ligatures);
 
+	/*
+	 * Whether the remote may drive the cursor shape (sec 6.4). Read live
+	 * when a DECSCUSR arrives, so unlike the two above it needs no rebuild
+	 * -- toggling it changes what the next shape change does, at once.
+	 */
+	bssh_terminal_view::set_honour_remote_cursor_shape(
+	        settings.honour_remote_cursor_shape());
+
 	if (m_panes) {
 		for (bssh_terminal_view *view : m_panes->views()) {
 			if (!view) continue;

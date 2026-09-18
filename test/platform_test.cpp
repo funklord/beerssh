@@ -495,6 +495,33 @@ void platform_test::the_key_remaps_survive_a_restart() {
 	}
 }
 
+void platform_test::the_remote_cursor_shape_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	/*
+	 * On by default (sec 6.4): a program's DECSCUSR is honoured, the way
+	 * vim's cursor works. Off is the opt-out for a user who wants one fixed
+	 * cursor, and it has to stick.
+	 */
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(settings.honour_remote_cursor_shape(), "on by default, per sec 6.4");
+		settings.set_honour_remote_cursor_shape(false);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY(!reopened.honour_remote_cursor_shape());
+	}
+	{
+		bssh_app_settings settings(dir.path());
+		settings.set_honour_remote_cursor_shape(true);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY2(reopened.honour_remote_cursor_shape(), "and it can be turned back on");
+	}
+}
+
 void platform_test::the_scrollbar_setting_survives_a_restart() {
 	QTemporaryDir dir;
 

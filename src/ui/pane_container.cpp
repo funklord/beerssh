@@ -321,6 +321,24 @@ void bssh_pane_container::rebuild() {
 		connect(session->emulator(), &bssh_emulator::images_changed,
 		         view, QOverload<>::of(&QWidget::update));
 
+		/*
+		 * The remote's DECSCUSR reaches the view that shows it (sec 6.4):
+		 * vim asks for a bar in insert mode and a block in normal, and the
+		 * cursor follows. Connected to the view, so a rebuild drops it with
+		 * the view; the preset set the starting shape and the remote takes
+		 * it from there.
+		 */
+		connect(session->emulator(), &bssh_emulator::cursor_shape_changed,
+		         view, [view](const QString &style) {
+			if (bssh_terminal_view::honour_remote_cursor_shape())
+				view->set_cursor_style(style);
+		});
+		connect(session->emulator(), &bssh_emulator::cursor_blink_changed,
+		         view, [view](bool blink) {
+			if (bssh_terminal_view::honour_remote_cursor_shape())
+				view->set_cursor_blink(blink);
+		});
+
 		m_views.append(view);
 		view->show();
 	}

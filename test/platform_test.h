@@ -51,6 +51,9 @@ private slots:
 	/* Key remaps (sec 6.1): none by default, and the slots round-trip. */
 	void the_key_remaps_survive_a_restart();
 
+	/* The remote-cursor-shape override (sec 6.4): on by default, persists. */
+	void the_remote_cursor_shape_setting_survives_a_restart();
+
 	/* sec 8.3, sec 8.4, sec 6.1: the settings this app grew for its
 	 * desktop furniture, each stored as words a person can hand-edit. */
 	void the_scrollbar_setting_survives_a_restart();

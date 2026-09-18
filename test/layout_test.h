@@ -91,6 +91,14 @@ private slots:
 	void a_pan_gesture_scrolls_the_column();
 
 	/*
+	 * DECSCUSR (sec 6.4): the remote's cursor-shape change reaches the pane
+	 * showing that session, shape and blink both, so vim's insert-mode bar
+	 * appears where the preset had left a block.
+	 */
+	void a_remote_cursor_shape_reaches_the_pane();
+	void the_remote_cursor_shape_can_be_switched_off();
+
+	/*
 	 * Every surface a thumb can reach, at the narrowest width sec 8.2
 	 * designs to.
 	 *

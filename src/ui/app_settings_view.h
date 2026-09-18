@@ -137,6 +137,7 @@ private:
 	QCheckBox *m_warn_multiline_paste;
 	QCheckBox *m_honour_font_scale;
 	QCheckBox *m_font_ligatures;
+	QCheckBox *m_honour_remote_cursor;
 
 	/*
 	 * The general key-remap slots (sec 6.1), a from/to QKeySequenceEdit

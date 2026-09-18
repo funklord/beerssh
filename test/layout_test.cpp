@@ -835,6 +835,72 @@ void layout_test::a_pan_gesture_scrolls_the_column() {
 	          "a Pan drag up the screen did not scroll the column down");
 }
 
+void layout_test::a_remote_cursor_shape_reaches_the_pane() {
+	bssh_main_window window;
+	bssh_session *s = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(s);
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY(view);
+	QVERIFY(s->emulator());
+
+	/*
+	 * The remote asks for a blinking bar, the way vim does on entering
+	 * insert mode. feed() processes synchronously and the connection is
+	 * direct, so the pane has followed by the time it returns -- shape and
+	 * blink both, where the preset had left a steady block.
+	 */
+	s->emulator()->feed(QByteArrayLiteral("\x1b[5 q"));
+	QCOMPARE(view->cursor_style(), QStringLiteral("bar"));
+	QVERIFY2(view->cursor_blink_wanted(), "the remote's blink never reached the pane");
+
+	/* And back to a steady block on leaving insert mode. */
+	s->emulator()->feed(QByteArrayLiteral("\x1b[2 q"));
+	QCOMPARE(view->cursor_style(), QStringLiteral("block"));
+	QVERIFY2(!view->cursor_blink_wanted(),
+	          "the remote's steady cursor never reached the pane");
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::the_remote_cursor_shape_can_be_switched_off() {
+	/*
+	 * Turn the override off in the settings BEFORE the window reads them:
+	 * the window's apply_device_settings carries the preference to the
+	 * process-wide flag the pane's DECSCUSR handler checks (sec 6.4).
+	 */
+	bssh_app_settings before_settings;
+	const bool original = before_settings.honour_remote_cursor_shape();
+	before_settings.set_honour_remote_cursor_shape(false);
+
+	bssh_main_window window;
+	bssh_session *s = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(s);
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY(view);
+	QVERIFY(s->emulator());
+	const QString kept = view->cursor_style();
+
+	/*
+	 * The remote asks for a bar, and is ignored: the preset's cursor stays
+	 * exactly where it was, because the user turned the override off.
+	 */
+	s->emulator()->feed(QByteArrayLiteral("\x1b[5 q"));
+	QCOMPARE(view->cursor_style(), kept);
+	QVERIFY2(!view->cursor_blink_wanted(),
+	          "a blink slipped through with the override off");
+
+	/* Put the preference and the process-wide flag back for the next test. */
+	bssh_app_settings after_settings;
+	after_settings.set_honour_remote_cursor_shape(original);
+	bssh_terminal_view::set_honour_remote_cursor_shape(true);
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::panes_collapse_to_tabs_and_come_back() {
 	/*
 	 * sec 8.2's hard case, through the real container rather than the

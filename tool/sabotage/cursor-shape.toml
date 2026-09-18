@@ -1,0 +1,74 @@
+# The remote's cursor shape (project.md sec 6.4): DECSCUSR (CSI Ps SP q),
+# which vim and friends send to switch the cursor between a block in normal
+# mode and a bar in insert mode. libvterm parses it and reports a shape and
+# a blink; the emulator forwards both in the preset's own words, and the
+# pane that shows the session follows. Four seams: the emulator reporting
+# the shape and the blink, and the view wired to each.
+#
+# All four seen to fail 2026-09-18 against the passing baseline.
+
+# The emulator swallows the shape change.
+#
+# DECSCUSR reaches on_set_term_prop but the shape never leaves it, so a
+# program asking for a bar cursor is heard and dropped.
+[[sabotage]]
+name = "the cursor shape change is not reported"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\temit self->owner->cursor_shape_changed(style);"
+replace = "\t\t(void)style;"
+expect = "decscusr_sets_the_cursor_shape_and_blink"
+
+# The emulator swallows the blink change.
+#
+# Same for the blink half: a steady or blinking request is parsed and lost.
+[[sabotage]]
+name = "the cursor blink change is not reported"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\temit self->owner->cursor_blink_changed(value->boolean);"
+replace = "\t\t(void)value;"
+expect = "decscusr_sets_the_cursor_shape_and_blink"
+
+# The view is not wired to the shape change.
+#
+# The emulator reports it, but the pane showing the session never hears it,
+# so the cursor keeps the preset's shape while the remote asks for another.
+[[sabotage]]
+name = "the pane ignores the shape change"
+file = "src/ui/pane_container.cpp"
+find = "\t\t\t\tview->set_cursor_style(style);"
+replace = "\t\t\t\t(void)style;"
+expect = "a_remote_cursor_shape_reaches_the_pane"
+
+# The view is not wired to the blink change.
+#
+# The blink half of the same wiring: reported by the emulator, dropped
+# before the pane.
+[[sabotage]]
+name = "the pane ignores the blink change"
+file = "src/ui/pane_container.cpp"
+find = "\t\t\t\tview->set_cursor_blink(blink);"
+replace = "\t\t\t\t(void)blink;"
+expect = "a_remote_cursor_shape_reaches_the_pane"
+
+# The override cannot be turned off.
+#
+# The setting that disables the remote override reads through this static.
+# Pin it true and the "let programs change the cursor" preference does
+# nothing -- the override is always on, which is the setting not working.
+[[sabotage]]
+name = "the remote override cannot be disabled"
+file = "src/ui/terminal_view.cpp"
+find = "\treturn honour_remote_cursor;"
+replace = "\treturn true;"
+expect = "the_remote_cursor_shape_can_be_switched_off"
+
+# The setting does not survive a restart.
+#
+# Read the preference under a key nothing writes and it comes back to the
+# default every launch, so turning the override off never sticks.
+[[sabotage]]
+name = "the cursor-shape override setting is not stored"
+file = "src/model/app_settings.cpp"
+find = "value(QStringLiteral(\"appearance/honour_remote_cursor_shape\"), true)"
+replace = "value(QStringLiteral(\"appearance/honour_remote_cursor_gone\"), true)"
+expect = "the_remote_cursor_shape_setting_survives_a_restart"

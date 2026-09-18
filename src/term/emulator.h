@@ -393,6 +393,17 @@ signals:
 	 */
 	void alternate_screen_changed(bool alternate);
 
+	/*
+	 * The remote changed the cursor's shape or blink with DECSCUSR (sec
+	 * 6.4). A signal rather than a screen property, because the shape is a
+	 * choice about how the cursor is DRAWN rather than a cell that damage
+	 * would carry -- vim asks for a bar in insert mode and a block in
+	 * normal, and the view paints it. The style is "block", "underline" or
+	 * "bar", matching the preset's own vocabulary.
+	 */
+	void cursor_shape_changed(const QString &style);
+	void cursor_blink_changed(bool blink);
+
 private:
 	bssh_emulator_private *m_private;
 };

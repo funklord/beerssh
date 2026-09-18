@@ -769,6 +769,11 @@ bssh_terminal_view::scrollbar_position_t default_position = bssh_terminal_view::
  * read by every view's font build, for the same reason as the scrollbar. */
 bool default_ligatures = false;
 
+/* The remote may change the cursor shape by default (sec 6.4); set from the
+ * device settings, read when a DECSCUSR arrives so a change takes hold at
+ * once rather than at the next rebuild. */
+bool honour_remote_cursor = true;
+
 } /* namespace */
 
 void bssh_terminal_view::set_default_scrollbar_position(scrollbar_position_t where) {
@@ -785,6 +790,14 @@ void bssh_terminal_view::set_default_font_ligatures(bool ligatures) {
 
 bool bssh_terminal_view::default_font_ligatures() {
 	return default_ligatures;
+}
+
+void bssh_terminal_view::set_honour_remote_cursor_shape(bool honour) {
+	honour_remote_cursor = honour;
+}
+
+bool bssh_terminal_view::honour_remote_cursor_shape() {
+	return honour_remote_cursor;
 }
 
 int bssh_terminal_view::grid_origin_x() const {

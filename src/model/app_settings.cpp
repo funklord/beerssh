@@ -201,6 +201,13 @@ void bssh_app_settings::set_focus_follows_mouse(bool follows) {
 	store(QStringLiteral("input/focus_follows_mouse"), follows);
 }
 
+bool bssh_app_settings::honour_remote_cursor_shape() const {
+	return value(QStringLiteral("appearance/honour_remote_cursor_shape"), true).toBool();
+}
+void bssh_app_settings::set_honour_remote_cursor_shape(bool honour) {
+	store(QStringLiteral("appearance/honour_remote_cursor_shape"), honour);
+}
+
 QString bssh_app_settings::theme() const {
 	return value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString();
 }
