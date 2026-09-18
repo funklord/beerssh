@@ -292,6 +292,15 @@ private slots:
 	void a_bell_in_a_visible_pane_is_not_a_missed_one();
 	void a_bell_with_the_window_away_is_a_missed_one();
 	void the_caps_setting_reaches_a_sessions_router();
+
+	/*
+	 * A stored key remap (sec 6.1) reaches a session's router, so a
+	 * remapped key sends its target's bytes -- the wiring from the
+	 * settings through apply_device_settings that the router-level test
+	 * cannot see, and the "setting applied to nothing" this tree keeps
+	 * re-finding.
+	 */
+	void a_key_remap_setting_reaches_a_sessions_router();
 	void the_wheel_scrolls_the_settings_page_and_changes_nothing();
 	void the_screenshot_setting_is_absent_where_it_cannot_work();
 	void the_biometric_setting_is_absent_where_it_cannot_work();

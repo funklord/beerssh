@@ -26,6 +26,14 @@ private slots:
 	void a_chord_given_back_reaches_the_remote();
 
 	/*
+	 * General key remapping (sec 6.1): a remapped key sends its target's
+	 * bytes, an unmapped key is untouched, and a chord the app keeps beats
+	 * a remap on the same key -- the precedence handle_key promises.
+	 */
+	void a_key_remap_sends_the_targets_bytes();
+	void a_stolen_chord_beats_a_key_remap();
+
+	/*
 	 * Press-and-hold (sec 6.4, sec 8.3). Qt does not provide it and does
 	 * not synthesise a context-menu event from it on Android, so this is
 	 * the gesture both the terminal and the host list depend on.

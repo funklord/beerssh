@@ -1,6 +1,8 @@
 #ifndef BSSH_APP_SETTINGS_H
 #define BSSH_APP_SETTINGS_H
 
+#include <QList>
+#include <QPair>
 #include <QString>
 #include <QStringList>
 
@@ -297,6 +299,24 @@ public:
 	 */
 	bool font_ligatures() const;
 	void set_font_ligatures(bool ligatures);
+
+	/*
+	 * General key remapping (sec 6.1): a small set of "when I press this
+	 * key, send that key instead" rules, so CapsLock can be Escape or an
+	 * F-key a navigation key without touching the OS layout. Each rule is
+	 * a pair of QKeySequence portable strings (from, to); a rule with
+	 * either half empty is an unused slot. A fixed number of slots rather
+	 * than an add/remove list -- enough for the handful of remaps a person
+	 * keeps, and no dynamic table to build or a device to test one on.
+	 *
+	 * Key-to-key rather than key-to-bytes, so the emulator's own
+	 * translation renders the result and no escape sequence has to be
+	 * hand-typed; a rule whose target this app steals as a chord is left
+	 * to the chord, which is checked first.
+	 */
+	static const int BSSH_KEY_REMAP_SLOTS = 8;
+	QList<QPair<QString, QString>> key_remaps() const;
+	void set_key_remaps(const QList<QPair<QString, QString>> &remaps);
 
 	/*
 	 * sec 11: secret-store keys whose host row is gone but whose secret

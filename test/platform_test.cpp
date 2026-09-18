@@ -464,6 +464,37 @@ void platform_test::the_ligatures_setting_survives_a_restart() {
 	}
 }
 
+void platform_test::the_key_remaps_survive_a_restart() {
+	QTemporaryDir dir;
+
+	{
+		bssh_app_settings settings(dir.path());
+
+		/* Every slot empty by default -- no remaps until a user sets one. */
+		const QList<QPair<QString, QString>> fresh = settings.key_remaps();
+		QCOMPARE(fresh.size(), bssh_app_settings::BSSH_KEY_REMAP_SLOTS);
+		for (const QPair<QString, QString> &rule : fresh) {
+			QVERIFY2(rule.first.isEmpty() && rule.second.isEmpty(),
+			          "a fresh install remaps nothing");
+		}
+
+		QList<QPair<QString, QString>> remaps = fresh;
+		remaps[0] = qMakePair(QStringLiteral("F13"), QStringLiteral("Esc"));
+		remaps[2] = qMakePair(QStringLiteral("Home"), QStringLiteral("PgUp"));
+		settings.set_key_remaps(remaps);
+	}
+
+	{
+		bssh_app_settings reopened(dir.path());
+		const QList<QPair<QString, QString>> remaps = reopened.key_remaps();
+		QCOMPARE(remaps.at(0).first, QStringLiteral("F13"));
+		QCOMPARE(remaps.at(0).second, QStringLiteral("Esc"));
+		QCOMPARE(remaps.at(2).first, QStringLiteral("Home"));
+		/* And an untouched slot stays empty -- a write does not fill them all. */
+		QVERIFY(remaps.at(1).first.isEmpty());
+	}
+}
+
 void platform_test::the_scrollbar_setting_survives_a_restart() {
 	QTemporaryDir dir;
 

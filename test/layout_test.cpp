@@ -14,7 +14,9 @@
 #include <QJsonObject>
 #include <QAbstractScrollArea>
 #include <QScrollArea>
+#include <QKeyCombination>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QStackedWidget>
 #include <QSet>
 #include <QTreeWidget>
@@ -4737,6 +4739,56 @@ void layout_test::the_caps_setting_reaches_a_sessions_router() {
 	QCOMPARE(bssh_app_settings().caps_as_ctrl(), original);
 
 	/* Shared registry: leave it as it was found (sec 8.4). */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_key_remap_setting_reaches_a_sessions_router() {
+	const auto seq = [](Qt::Key key) {
+		return QKeySequence(QKeyCombination(Qt::NoModifier, key))
+		        .toString(QKeySequence::PortableText);
+	};
+
+	const QList<QPair<QString, QString>> original = bssh_app_settings().key_remaps();
+
+	QList<QPair<QString, QString>> remaps(bssh_app_settings::BSSH_KEY_REMAP_SLOTS);
+	remaps[0] = qMakePair(seq(Qt::Key_F13), seq(Qt::Key_Escape));
+	bssh_app_settings().set_key_remaps(remaps);
+
+	/*
+	 * Clear the process-wide table first, so the only thing that can arm
+	 * it is the window's own apply_device_settings. Without this a remap
+	 * left by an earlier test would let F13 speak even with the wiring
+	 * cut, and the sabotage that cuts it would read green.
+	 */
+	bssh_input_router::set_key_remaps(QHash<QString, QString>());
+
+	{
+		/*
+		 * A window built AFTER the remap is stored applies it through
+		 * apply_device_settings, exactly as it does the chords. A session
+		 * opened in that window then speaks the mapped key.
+		 */
+		bssh_main_window window;
+		bssh_session *session =
+		        window.registry()->create(named(QStringLiteral("a")));
+		QVERIFY(session->input_router());
+		QVERIFY(session->emulator());
+
+		QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+		session->input_router()->handle_key(&escape);
+		const QByteArray want = session->emulator()->take_output();
+		QVERIFY(!want.isEmpty());
+
+		QKeyEvent f13(QEvent::KeyPress, Qt::Key_F13, Qt::NoModifier);
+		session->input_router()->handle_key(&f13);
+		const QByteArray got = session->emulator()->take_output();
+		QVERIFY2(got == want, "the stored remap never reached the session's router");
+	}
+
+	bssh_app_settings().set_key_remaps(original);
+	bssh_input_router::set_key_remaps(QHash<QString, QString>());
+
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

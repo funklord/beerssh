@@ -441,6 +441,26 @@ void bssh_app_settings::set_font_ligatures(bool ligatures) {
 	store(QStringLiteral("appearance/font_ligatures"), ligatures);
 }
 
+QList<QPair<QString, QString>> bssh_app_settings::key_remaps() const {
+	QList<QPair<QString, QString>> remaps;
+	for (int i = 0; i < BSSH_KEY_REMAP_SLOTS; ++i) {
+		const QString from =
+		        value(QStringLiteral("remap/%1_from").arg(i), QString()).toString();
+		const QString to =
+		        value(QStringLiteral("remap/%1_to").arg(i), QString()).toString();
+		remaps.append(qMakePair(from, to));
+	}
+	return remaps;
+}
+
+void bssh_app_settings::set_key_remaps(const QList<QPair<QString, QString>> &remaps) {
+	for (int i = 0; i < BSSH_KEY_REMAP_SLOTS; ++i) {
+		const QPair<QString, QString> rule = remaps.value(i);
+		store(QStringLiteral("remap/%1_from").arg(i), rule.first);
+		store(QStringLiteral("remap/%1_to").arg(i), rule.second);
+	}
+}
+
 QStringList bssh_app_settings::orphaned_secrets() const {
 	return value(QStringLiteral("secrets/orphaned"), QStringList()).toStringList();
 }

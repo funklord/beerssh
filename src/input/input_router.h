@@ -267,6 +267,16 @@ public:
 	 */
 	static void set_bindings(const QHash<QString, QString> &bindings);
 
+	/*
+	 * General key remaps (sec 6.1): a portable "from" key sequence to the
+	 * "to" one the shell receives instead. Process-wide, like the
+	 * bindings, and for the same reason -- it is a fact about the keyboard
+	 * rather than about a session. Applied in handle_key after the stolen
+	 * chords, so a chord the app keeps still wins, and only for a target
+	 * that is a translatable key rather than a character.
+	 */
+	static void set_key_remaps(const QHash<QString, QString> &remaps);
+
 	/* What a chord is bound to now, as text -- empty when unbound. */
 	static QString binding_for(const QString &action_name);
 

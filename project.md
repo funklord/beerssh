@@ -1055,8 +1055,24 @@ quirks on Android.
   app defaults. A router test and a persistence test both pass with the window
   never calling the setter, so a third test opens a session through an actual
   window and asks the session's own router.
-  Still not built: general key remapping. `map keys` above is broader than one
-  key, and nothing yet lets a user say which.
+  **General key remapping is BUILT 2026-09-18**, key-to-key: a user says
+  "when I press this, send that instead" for a fixed set of slots
+  (`BSSH_KEY_REMAP_SLOTS`), stored as portable key-sequence pairs and
+  applied in `handle_key` after the stolen chords -- so a chord this app
+  keeps still wins -- and before the key's own translation. The target is
+  translated through `emulator_key_for` like any other key, so it covers
+  the remaps a person keeps (an F-key to a navigation key, a stray key to
+  Escape) without a second, text-sending path; a target that is a
+  character has no emulator key and is left alone. The UI is a fixed set of
+  from/to `QKeySequenceEdit` rows in the shortcuts settings, chosen over an
+  add/remove list because it needs no dynamic table to make fit a phone --
+  that shape is the implementer's call, since sec 6.1 says a user should be
+  able to remap keys but not how the control looks.
+  **CapsLock is deliberately not a remap source**: it is intercepted
+  earlier for Caps-as-Ctrl, and its OS lock state is beyond this window's
+  reach anyway (see that setting), so the classic CapsLock->Escape belongs
+  in the OS layout, not here. Guarded by
+  `tool/sabotage/key-remap.toml`.
 - **Pane navigation shortcuts** once splits exist (§8): e.g. `Ctrl+Alt+Arrow` to
   move focus between panes, `Ctrl+Shift+T` new tab. These must be **intercepted
   before** the byte translation and be **user-remappable**, because any chord you

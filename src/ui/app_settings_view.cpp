@@ -787,6 +787,69 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		                        "Whatever this app keeps, the shell never sees."),
 		        this);
 		body->addWidget(chords_reset_note);
+
+		/*
+		 * General key remapping (sec 6.1): send a different key for one you
+		 * press. A fixed set of slots rather than an add/remove list --
+		 * enough for the handful a person keeps, and no dynamic table to
+		 * make fit a phone. Each row is two QKeySequenceEdits, and
+		 * WrapLongRows stacks the second under the first where they do not
+		 * fit beside each other, the same way the chords above wrap.
+		 */
+		if (m_section == EVERYTHING) {
+			QLabel *remap_heading = new QLabel(
+			        QStringLiteral("<b>Remap keys</b>"), this);
+			body->addWidget(remap_heading);
+		}
+
+		QLabel *remap_note = bssh_wrapped_note(
+		        QStringLiteral("Send a different key for one you press -- a "
+		                        "special key such as Escape, an arrow, or a "
+		                        "function or navigation key. Leave a row blank to "
+		                        "use nothing."),
+		        this);
+		body->addWidget(remap_note);
+
+		QFormLayout *remaps = new QFormLayout;
+		remaps->setRowWrapPolicy(QFormLayout::WrapLongRows);
+
+		const bssh_app_settings remap_store;
+		const QList<QPair<QString, QString>> rules = remap_store.key_remaps();
+
+		m_remap_from.clear();
+		m_remap_to.clear();
+		for (int i = 0; i < bssh_app_settings::BSSH_KEY_REMAP_SLOTS; ++i) {
+			QKeySequenceEdit *from = new QKeySequenceEdit(this);
+			from->setObjectName(QStringLiteral("remap_from_%1").arg(i));
+			from->setKeySequence(
+			        QKeySequence(rules.value(i).first, QKeySequence::PortableText));
+
+			QKeySequenceEdit *to = new QKeySequenceEdit(this);
+			to->setObjectName(QStringLiteral("remap_to_%1").arg(i));
+			to->setKeySequence(
+			        QKeySequence(rules.value(i).second, QKeySequence::PortableText));
+
+			/*
+			 * States its own width so WrapLongRows can see the row does not
+			 * fit, exactly as the chord edits do -- a QKeySequenceEdit's own
+			 * minimum lets it clip its text otherwise.
+			 */
+			const int w = from->fontMetrics().horizontalAdvance(
+			                      QStringLiteral("Ctrl+Shift+Left"))
+			              + from->fontMetrics().horizontalAdvance(QLatin1Char('W')) * 2;
+			from->setMinimumWidth(w);
+			to->setMinimumWidth(w);
+
+			connect(from, &QKeySequenceEdit::editingFinished, this,
+			         &bssh_app_settings_view::save_key_remaps);
+			connect(to, &QKeySequenceEdit::editingFinished, this,
+			         &bssh_app_settings_view::save_key_remaps);
+
+			m_remap_from.append(from);
+			m_remap_to.append(to);
+			remaps->addRow(from, to);
+		}
+		body->addLayout(remaps);
 	}
 
 	body->addStretch(1);
@@ -968,6 +1031,20 @@ void bssh_app_settings_view::commit(const std::function<void(bssh_app_settings &
 	 */
 	bssh_theme::apply(bssh_theme::from_text(stored.theme()));
 	emit changed();
+}
+
+void bssh_app_settings_view::save_key_remaps() {
+	QList<QPair<QString, QString>> remaps;
+	for (int i = 0; i < bssh_app_settings::BSSH_KEY_REMAP_SLOTS; ++i) {
+		const QString from = m_remap_from.value(i)
+		        ? m_remap_from.at(i)->keySequence().toString(QKeySequence::PortableText)
+		        : QString();
+		const QString to = m_remap_to.value(i)
+		        ? m_remap_to.at(i)->keySequence().toString(QKeySequence::PortableText)
+		        : QString();
+		remaps.append(qMakePair(from, to));
+	}
+	commit([&remaps](bssh_app_settings &s) { s.set_key_remaps(remaps); });
 }
 
 /*

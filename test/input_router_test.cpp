@@ -2,7 +2,9 @@
 #include <QScrollArea>
 #include <QMouseEvent>
 #include <QAbstractButton>
+#include <QKeyCombination>
 #include <QKeyEvent>
+#include <QKeySequence>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -25,6 +27,58 @@ static QByteArray press(bssh_input_router &router, bssh_emulator &emulator,
 	QKeyEvent event(QEvent::KeyPress, key, modifiers, text);
 	router.handle_key(&event);
 	return emulator.take_output();
+}
+
+static QString seq_text(Qt::KeyboardModifiers mods, Qt::Key key) {
+	return QKeySequence(QKeyCombination(mods, key)).toString(QKeySequence::PortableText);
+}
+
+void input_router_test::a_key_remap_sends_the_targets_bytes() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/* What Escape and End produce on their own, to compare against. */
+	const QByteArray escape = press(router, emulator, Qt::Key_Escape);
+	const QByteArray end = press(router, emulator, Qt::Key_End);
+	QVERIFY(!escape.isEmpty());
+	QVERIFY(!end.isEmpty());
+
+	QHash<QString, QString> remaps;
+	remaps.insert(seq_text(Qt::NoModifier, Qt::Key_F13),
+	              seq_text(Qt::NoModifier, Qt::Key_Escape));
+	bssh_input_router::set_key_remaps(remaps);
+
+	/* F13 now speaks Escape, byte for byte. */
+	QCOMPARE(press(router, emulator, Qt::Key_F13), escape);
+
+	/* A key nobody remapped is untouched. */
+	QCOMPARE(press(router, emulator, Qt::Key_End), end);
+
+	bssh_input_router::set_key_remaps(QHash<QString, QString>());
+}
+
+void input_router_test::a_stolen_chord_beats_a_key_remap() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	QSignalSpy shortcuts(&router, &bssh_input_router::shortcut_pressed);
+
+	/*
+	 * Try to remap the scroll chord's own keys. handle_key checks the
+	 * stolen chords first (sec 6.1), so the app keeps the chord and the
+	 * remap never runs -- the scroll fires and nothing reaches the shell.
+	 */
+	QHash<QString, QString> remaps;
+	remaps.insert(seq_text(Qt::ShiftModifier, Qt::Key_PageUp),
+	              seq_text(Qt::NoModifier, Qt::Key_Escape));
+	bssh_input_router::set_key_remaps(remaps);
+
+	const QByteArray out = press(router, emulator, Qt::Key_PageUp, Qt::ShiftModifier);
+
+	QCOMPARE(shortcuts.count(), 1);
+	QCOMPARE(out, QByteArray());
+
+	bssh_input_router::set_key_remaps(QHash<QString, QString>());
 }
 
 void input_router_test::plain_characters_pass_through() {

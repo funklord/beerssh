@@ -1528,6 +1528,20 @@ void bssh_main_window::apply_device_settings() {
 	bssh_input_router::set_bindings(bindings);
 
 	/*
+	 * And the general key remaps (sec 6.1), from the fixed slots into a
+	 * from->to map, dropping any slot with an empty half. Process-wide for
+	 * the same reason the chords are: a fact about the keyboard, not the
+	 * session, so it reaches every router rather than the focused one.
+	 */
+	QHash<QString, QString> remaps;
+	for (const QPair<QString, QString> &rule : settings.key_remaps()) {
+		if (!rule.first.isEmpty() && !rule.second.isEmpty()) {
+			remaps.insert(rule.first, rule.second);
+		}
+	}
+	bssh_input_router::set_key_remaps(remaps);
+
+	/*
 	 * sec 11's FLAG_SECURE. Applied unconditionally rather than only
 	 * where the platform can honour it: the desktop implementation is a
 	 * no-op and says so, and a caller that had to check first would be

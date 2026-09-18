@@ -181,6 +181,14 @@ QString chord_label(Qt::KeyboardModifiers modifiers, int key) {
  */
 QHash<QString, QString> user_bindings;
 
+/*
+ * The general key remaps (sec 6.1): a portable "from" key sequence to the
+ * "to" one the shell should get instead. Process-wide like the bindings,
+ * because it is a fact about the keyboard in front of the user rather than
+ * about any one session, and empty until the window reads app.ini.
+ */
+QHash<QString, QString> user_remaps;
+
 /* Rebuilt whenever the bindings change; see stolen_chords(). */
 QList<bssh_input_router::chord_t> effective_chords;
 bool effective_current = false;
@@ -220,6 +228,10 @@ const QList<bssh_input_router::chord_t> &bssh_input_router::default_chords() {
 void bssh_input_router::set_bindings(const QHash<QString, QString> &bindings) {
 	user_bindings = bindings;
 	effective_current = false;
+}
+
+void bssh_input_router::set_key_remaps(const QHash<QString, QString> &remaps) {
+	user_remaps = remaps;
 }
 
 QString bssh_input_router::binding_for(const QString &action_name) {
@@ -345,6 +357,39 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 
 		emit shortcut_pressed(chord.action);
 		return false;
+	}
+
+	/*
+	 * General key remaps (sec 6.1): send a different key's bytes for this
+	 * one. After the stolen chords, so a chord the app keeps still wins,
+	 * and before the translation below, so the shell hears the mapped key
+	 * rather than the pressed one.
+	 *
+	 * Key-to-key only: the target is translated through emulator_key_for
+	 * like any other key, so a remap to a character -- which has no
+	 * emulator key and would go through send_text -- is left alone and the
+	 * pressed key takes its normal path. That covers the remaps a person
+	 * actually keeps (an F-key to a navigation key, a stray key to Escape)
+	 * without a second, text-sending path to reason about.
+	 */
+	if (!user_remaps.isEmpty()) {
+		const QKeySequence pressed(
+		        QKeyCombination(event->modifiers() & meaningful, Qt::Key(event->key())));
+		const QString to = user_remaps.value(pressed.toString(QKeySequence::PortableText));
+
+		if (!to.isEmpty()) {
+			const QKeySequence target(to, QKeySequence::PortableText);
+			if (target.count() == 1) {
+				const QKeyCombination combo = target[0];
+				const int mapped = emulator_key_for(combo.key());
+				if (mapped != bssh_emulator::KEY_NONE) {
+					m_emulator->send_key(mapped,
+					                     emulator_mods_for(combo.keyboardModifiers()));
+					spend_sticky_modifiers();
+					return true;
+				}
+			}
+		}
 	}
 
 	const quint8 modifiers = modifiers_for(event);

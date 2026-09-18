@@ -10,6 +10,7 @@ class QResizeEvent;
 #include "model/app_settings.h"
 
 class QCheckBox;
+class QKeySequenceEdit;
 class QLabel;
 class QPushButton;
 class QSlider;
@@ -105,6 +106,9 @@ private:
 	 */
 	void commit(const std::function<void(bssh_app_settings &)> &write);
 
+	/* Reads every remap slot's from/to edits into the stored list. */
+	void save_key_remaps();
+
 	/*
 	 * Whether this row belongs on this page, hiding the widget when it
 	 * does not. preset_editor.cpp's shown() lambda, which exists for the
@@ -133,6 +137,14 @@ private:
 	QCheckBox *m_warn_multiline_paste;
 	QCheckBox *m_honour_font_scale;
 	QCheckBox *m_font_ligatures;
+
+	/*
+	 * The general key-remap slots (sec 6.1), a from/to QKeySequenceEdit
+	 * per fixed slot. Kept so save_key_remaps can read them all together:
+	 * a slot is a pair, and one half changing rewrites the whole list.
+	 */
+	QList<QKeySequenceEdit *> m_remap_from;
+	QList<QKeySequenceEdit *> m_remap_to;
 
 	/* Null where there is no pointer to hover (sec 8.3). */
 	QCheckBox *m_focus_follows_mouse;

@@ -1,0 +1,47 @@
+# Key remapping (project.md sec 6.1): a person maps one key to another,
+# process-wide like the chords, and it is applied in handle_key BEFORE the
+# normal Qt-to-emulator translation. Three things have to hold, and each is
+# a separate site: the mapped key has to reach the wire, the slots have to
+# survive a restart, and a window has to push the stored remaps into the
+# router the way it does the chords.
+#
+# All three seen to fail 2026-09-18 against the passing baseline.
+
+# The remap never reaches the wire.
+#
+# handle_key looks the pressed chord up, parses the target, and sends the
+# target's emulator key. Invert the guard and a target that HAS an emulator
+# key (Escape does) is skipped -- the press falls through to the ordinary
+# translation, where F13 has no emulator key and nothing is sent. The
+# remap is silently inert.
+[[sabotage]]
+name = "a mapped key is never sent"
+file = "src/input/input_router.cpp"
+find = "\t\t\t\tif (mapped != bssh_emulator::KEY_NONE) {"
+replace = "\t\t\t\tif (mapped == bssh_emulator::KEY_NONE) {"
+expect = "a_key_remap_sends_the_targets_bytes"
+
+# The stored remap is read back under the wrong key.
+#
+# set_key_remaps writes remap/N_from and key_remaps reads it. Point the
+# read at a key nothing writes and every slot comes back empty -- the
+# remaps a person set do not survive the next launch.
+[[sabotage]]
+name = "the remap is read from the wrong key"
+file = "src/model/app_settings.cpp"
+find = "value(QStringLiteral(\"remap/%1_from\").arg(i), QString())"
+replace = "value(QStringLiteral(\"remap/%1_gone\").arg(i), QString())"
+expect = "the_key_remaps_survive_a_restart"
+
+# The window never pushes the stored remaps to the router.
+#
+# apply_device_settings builds the remap table from the settings and hands
+# it to the process-wide router, exactly as it does the chords. Hand it an
+# empty table instead and a session opened in that window speaks no remap,
+# though the setting is stored and correct.
+[[sabotage]]
+name = "the window applies no remaps"
+file = "src/ui/main_window.cpp"
+find = "\tbssh_input_router::set_key_remaps(remaps);"
+replace = "\tbssh_input_router::set_key_remaps(QHash<QString, QString>());"
+expect = "a_key_remap_setting_reaches_a_sessions_router"
