@@ -93,6 +93,10 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_cursor_on(true),
       m_cursor_blink_wanted(false),
       m_maybe_pane_drag(false),
+      m_input_mode(BSSH_INPUT_SCROLL),
+      m_scroll_dragging(false),
+      m_scroll_drag_moved(false),
+      m_scroll_drag_start_offset(0),
       m_blink_timer(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -1948,8 +1952,20 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 		return;
 	}
 
+	const bool touch = bssh_platform::instance()
+	                    && bssh_platform::instance()->is_touch_primary();
 	const bool shift = take_shift_override(event->modifiers());
-	if (m_emulator && m_emulator->mouse_reporting() && !shift) {
+
+	/*
+	 * On touch the input mode is the override that Shift is on a desktop
+	 * (sec 8.7): scroll and select keep the gesture local, click lets the
+	 * remote have it. A phone has no Shift, so without this a full-screen
+	 * program that grabbed the mouse could be neither scrolled nor
+	 * selected out of -- the defect sec 8.7 answers.
+	 */
+	const bool keep_local = touch ? (m_input_mode != BSSH_INPUT_CLICK) : shift;
+
+	if (m_emulator && m_emulator->mouse_reporting() && !keep_local) {
 		qint64 line = 0;
 		int col = 0;
 		if (cell_at(event->pos(), line, col)) {
@@ -2004,6 +2020,30 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 				event->accept();
 				return;
 			}
+		}
+	}
+
+	if (touch) {
+		/*
+		 * A body drag scrolls this terminal's scrollback (sec 8.7's
+		 * default), captured absolutely from the press so the offset
+		 * cannot drift; a tap is told from a drag on release. Select mode
+		 * falls through to the selection path below. Click mode has
+		 * already reached the remote where it wanted the mouse, and with
+		 * nothing listening a tap here just asks for the keyboard on
+		 * release rather than starting a selection the mode disallows.
+		 */
+		if (m_input_mode == BSSH_INPUT_SCROLL) {
+			m_scroll_dragging = true;
+			m_scroll_drag_moved = false;
+			m_scroll_drag_from = event->pos();
+			m_scroll_drag_start_offset = m_scroll_offset;
+			event->accept();
+			return;
+		}
+		if (m_input_mode != BSSH_INPUT_SELECT) {
+			event->accept();
+			return;
 		}
 	}
 
@@ -2076,6 +2116,28 @@ void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 		return;
 	}
 
+	if (m_scroll_dragging) {
+		const QPoint delta = event->pos() - m_scroll_drag_from;
+		if (!m_scroll_drag_moved
+		    && delta.manhattanLength() >= QApplication::startDragDistance())
+			m_scroll_drag_moved = true;
+
+		if (m_scroll_drag_moved && m_cell_height > 0) {
+			/*
+			 * Content follows the finger: dragging down reveals the
+			 * lines above, which is further back in the scrollback, so
+			 * a downward delta raises the offset. Measured from the
+			 * offset at the press, so a slow drag cannot accumulate
+			 * rounding into a drift.
+			 */
+			const int lines = delta.y() / m_cell_height;
+			set_scroll_offset(m_scroll_drag_start_offset + lines);
+		}
+
+		event->accept();
+		return;
+	}
+
 	if (!m_selecting) {
 		QWidget::mouseMoveEvent(event);
 		return;
@@ -2096,6 +2158,20 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 	/* An Alt+click that never moved is not a gesture. */
 	if (m_maybe_pane_drag) {
 		m_maybe_pane_drag = false;
+		event->accept();
+		return;
+	}
+
+	if (m_scroll_dragging) {
+		const bool tap = !m_scroll_drag_moved;
+		m_scroll_dragging = false;
+
+		/*
+		 * A press that never became a drag is a tap, and a tap asks for
+		 * the keyboard -- the same thing the no-selection release below
+		 * does, said here because the scroll path returns before it.
+		 */
+		if (tap) request_input_panel();
 		event->accept();
 		return;
 	}

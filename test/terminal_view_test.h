@@ -51,6 +51,16 @@ private slots:
 	void triple_click_selects_the_line();
 	void mouse_goes_to_the_remote_when_it_asks_for_it();
 	void shift_overrides_mouse_reporting_to_select();
+
+	/*
+	 * The touch input selector routes a body drag (sec 8.7): scroll moves
+	 * the scrollback -- the route a phone did not have -- select is the
+	 * Shift override a phone cannot press, and click leaves the gesture to
+	 * a remote that grabbed the mouse.
+	 */
+	void a_touch_body_drag_scrolls_in_scroll_mode();
+	void select_mode_is_the_touch_shift_override();
+	void click_mode_lets_the_remote_have_the_touch();
 	void a_sticky_shift_overrides_mouse_reporting_on_touch();
 	void a_long_press_reaches_the_menu_even_when_the_remote_has_the_mouse();
 	void the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse();

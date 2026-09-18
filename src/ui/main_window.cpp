@@ -58,6 +58,7 @@
 #include "model/window_title.h"
 #include "model/settings_resolver.h"
 #include "ui/layout_manager.h"
+#include "ui/input_selector.h"
 #include "ui/pane_container.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
@@ -110,6 +111,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_preset_editor(nullptr),
       m_terminal_view(nullptr),
       m_panes(nullptr),
+      m_input_selector(nullptr),
       m_wired_view(nullptr),
       m_status_label(new QLabel(this)),
       m_registry(bssh_session_registry::shared()),
@@ -252,6 +254,25 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	layout->addWidget(m_panes, 1);
 	layout->addWidget(m_status_label, 0);
 
+	/*
+	 * The input selector (sec 8.7), at the bottom edge where a thumb
+	 * reaches without stretching, and beneath the status line so it does
+	 * not push the terminal around as the status text changes. Shown only
+	 * where a thumb is the pointer: a desktop keeps Shift, the wheel and
+	 * drag-select, so the control there would be chrome doing nothing.
+	 *
+	 * Where it finally lives is sec 8.7's open question, resolved here to
+	 * the bottom bar on the holder's go-ahead 2026-09-18; it is one
+	 * addWidget to move.
+	 */
+	m_input_selector = new bssh_input_selector(m_terminal_page);
+	layout->addWidget(m_input_selector, 0);
+	m_input_selector->setVisible(bssh_platform::instance()
+	                              && bssh_platform::instance()->is_touch_primary());
+
+	connect(m_input_selector, &bssh_input_selector::mode_changed,
+	         this, [this] { apply_input_mode(); });
+
 	connect(m_panes, &bssh_pane_container::focus_changed,
 	         this, &bssh_main_window::on_pane_focus_changed);
 
@@ -305,6 +326,10 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 * otherwise opening a second host quietly ignores the choice.
 		 */
 		apply_device_settings();
+
+		/* The same for the input mode: a new pane starts from the view's
+		 * default and has to be told the window's current selection. */
+		apply_input_mode();
 	});
 
 	connect(m_tabs, &QTabBar::currentChanged, this, &bssh_main_window::on_tab_changed);
@@ -1315,6 +1340,15 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
  * arrive on the same signal and a caller that remembers one and forgets
  * the other is the bug this function exists to not have.
  */
+void bssh_main_window::apply_input_mode() {
+	if (!m_panes || !m_input_selector) return;
+
+	const bssh_input_mode_t mode = m_input_selector->mode();
+	for (bssh_terminal_view *view : m_panes->views()) {
+		if (view) view->set_input_mode(mode);
+	}
+}
+
 void bssh_main_window::apply_device_settings() {
 	apply_key_row_visibility();
 

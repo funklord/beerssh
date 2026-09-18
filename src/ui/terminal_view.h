@@ -12,6 +12,7 @@
 #include "term/image_store.h"
 #include "term/screen.h"
 #include "term/scrollback.h"
+#include "ui/input_mode.h"
 
 class QDragEnterEvent;
 class QDropEvent;
@@ -335,6 +336,16 @@ public:
 	void set_scroll_offset(int lines);
 	void scroll_by(int lines);
 	void scroll_to_live();
+
+	/*
+	 * What a touch body-drag does here (sec 8.7). Set from the window's
+	 * one selector, the same value for every pane, and read only where a
+	 * thumb is the pointer -- on a desktop the mouse keeps Shift, the
+	 * wheel and drag-select, so the mode is left out of the mouse handlers
+	 * entirely.
+	 */
+	void set_input_mode(bssh_input_mode_t mode) { m_input_mode = mode; }
+	bssh_input_mode_t input_mode() const { return m_input_mode; }
 
 	/*
 	 * Draws the focused-pane border (sec 8.3). Owned by the view because
@@ -798,6 +809,19 @@ private:
 	/* Alt+drag picks the pane up (sec 8.4); see mousePressEvent. */
 	bool m_maybe_pane_drag;
 	QPoint m_pane_drag_from;
+
+	/*
+	 * A touch body-drag in scroll mode (sec 8.7). The offset is captured
+	 * at the press so the drag is absolute -- a delta re-read each move
+	 * accumulates rounding into a drift the finger never asked for -- and
+	 * `moved` tells a scroll from a tap, so a tap still asks for the
+	 * keyboard rather than being eaten as a zero-length scroll.
+	 */
+	bssh_input_mode_t m_input_mode;
+	bool m_scroll_dragging;
+	bool m_scroll_drag_moved;
+	QPoint m_scroll_drag_from;
+	int m_scroll_drag_start_offset;
 	QTimer *m_blink_timer;
 
 	/*

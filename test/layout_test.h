@@ -54,6 +54,15 @@ private slots:
 	void a_column_divider_is_magnetic_to_the_halfway_line();
 
 	/*
+	 * The input selector (sec 8.7): the always-visible control defaults to
+	 * scroll, reports a user's change and reflects one made elsewhere
+	 * without emitting; and the window pushes its mode to every pane,
+	 * including a pane built after the mode was chosen.
+	 */
+	void the_input_selector_defaults_to_scroll_and_reports_changes();
+	void the_selector_pushes_its_mode_to_every_pane();
+
+	/*
 	 * Every surface a thumb can reach, at the narrowest width sec 8.2
 	 * designs to.
 	 *

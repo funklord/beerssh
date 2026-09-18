@@ -30,6 +30,7 @@ class bssh_preset_editor;
 class bssh_host_list;
 class bssh_layout_manager;
 class bssh_pane_container;
+class bssh_input_selector;
 class bssh_key_row;
 class bssh_soft_keyboard;
 class bssh_profile_store;
@@ -421,6 +422,14 @@ private:
 	void apply_device_settings();
 
 	/*
+	 * Pushes the selector's mode to every pane (sec 8.7). Called when the
+	 * user changes it and after a rebuild, because a freshly built view
+	 * starts from its own default and would otherwise ignore a mode set
+	 * before it existed -- the same shape as the device settings above.
+	 */
+	void apply_input_mode();
+
+	/*
 	 * Adds a session to the visible panes rather than replacing them
 	 * (sec 8.3's "move to split"). Separate from show_session because a
 	 * tab click that silently split the window would be one click doing
@@ -782,6 +791,13 @@ private:
 	 */
 	bssh_terminal_view *m_terminal_view;
 	bssh_pane_container *m_panes;
+
+	/*
+	 * The one input selector for this window (sec 8.7): the always-visible
+	 * control that says what a touch body-drag does, and the window pushes
+	 * its state to every pane. Present only where a thumb is the pointer.
+	 */
+	bssh_input_selector *m_input_selector;
 
 	/*
 	 * The view whose signals are already connected. A plain pointer

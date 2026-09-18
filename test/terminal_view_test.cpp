@@ -26,6 +26,7 @@
 #include <QClipboard>
 #include "input/input_router.h"
 #include "term/emulator.h"
+#include "platform/platform.h"
 #include "term/font_catalog.h"
 #include "ui/terminal_view.h"
 #include "model/session_registry.h"
@@ -206,6 +207,17 @@ static void drag(bssh_terminal_view &view, int from_col, int from_row,
 	QCoreApplication::sendEvent(&view, &move);
 	QCoreApplication::sendEvent(&view, &release);
 }
+
+/*
+ * Forces the touch idiom for the length of a scope and puts it back, even
+ * when a QVERIFY returns early -- the reset written at the bottom of a
+ * function is the one line that does not run on the day it matters, and a
+ * leaked force makes every later test measure a phone.
+ */
+struct forced_touch_t {
+	explicit forced_touch_t(int touch) { bssh_platform::force_touch_primary(touch); }
+	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
+};
 
 void terminal_view_test::drag_selects_text() {
 	bssh_terminal_view view;
@@ -452,6 +464,97 @@ void terminal_view_test::shift_overrides_mouse_reporting_to_select() {
 	QVERIFY(view.has_selection());
 	QCOMPARE(view.selection_text(), QStringLiteral("select"));
 	QCOMPARE(emulator.take_output(), QByteArray());
+}
+
+void terminal_view_test::a_touch_body_drag_scrolls_in_scroll_mode() {
+	forced_touch_t touch(1);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/* History to scroll into, and more than the drag below asks for. */
+	for (int i = 0; i < view.rows() + 30; ++i) {
+		emulator.feed(QByteArrayLiteral("scrollback line\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 8);
+	QCOMPARE(view.scroll_offset(), 0);
+
+	/*
+	 * Sec 8.7's default: a body drag scrolls this terminal's scrollback.
+	 * Dragging DOWN reveals the lines above -- further back -- so the
+	 * offset rises. This is the route that did not exist on a phone.
+	 */
+	view.set_input_mode(BSSH_INPUT_SCROLL);
+	drag(view, 2, 1, 2, 9);
+
+	QVERIFY2(view.scroll_offset() > 0,
+	          "a touch body-drag in scroll mode left the scrollback where it was");
+	QVERIFY(!view.has_selection());
+}
+
+void terminal_view_test::select_mode_is_the_touch_shift_override() {
+	forced_touch_t touch(1);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("selectable"));
+
+	/*
+	 * The remote grabbed the mouse. On a desktop Shift is the escape that
+	 * lets a user select text out of it; a phone has no Shift, so select
+	 * mode is that escape (sec 8.7). Without it the drag would be a report
+	 * and nothing could be copied out of htop.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h"));
+	QVERIFY(emulator.mouse_reporting());
+	emulator.take_output();
+
+	view.set_input_mode(BSSH_INPUT_SELECT);
+	drag(view, 0, 0, 5, 0);
+
+	QVERIFY(view.has_selection());
+	QCOMPARE(view.selection_text(), QStringLiteral("select"));
+	QCOMPARE(emulator.take_output(), QByteArray());
+}
+
+void terminal_view_test::click_mode_lets_the_remote_have_the_touch() {
+	forced_touch_t touch(1);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("text"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	QVERIFY(emulator.mouse_reporting());
+	emulator.take_output();
+
+	/*
+	 * Click mode is the one that forwards, so a full-screen program that
+	 * asked for the mouse can be driven from a phone -- the report goes
+	 * out and nothing is selected or scrolled locally.
+	 */
+	view.set_input_mode(BSSH_INPUT_CLICK);
+	drag(view, 2, 1, 2, 1);
+
+	QVERIFY(!emulator.take_output().isEmpty());
+	QVERIFY(!view.has_selection());
+	QCOMPARE(view.scroll_offset(), 0);
 }
 
 void terminal_view_test::the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse() {

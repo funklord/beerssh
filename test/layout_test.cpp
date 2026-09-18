@@ -72,9 +72,24 @@
 #include "keyboard/key_row_layout.h"
 #include "ui/layout_manager.h"
 #include "ui/touch_metrics.h"
+#include "ui/input_selector.h"
 #include "ui/pane_container.h"
 #include "ui/pane_snap.h"
 #include "ui/terminal_view.h"
+
+/*
+ * Forces the touch idiom for as long as it is in scope, and puts it back.
+ *
+ * A guard rather than a call and a matching reset at the bottom: QVERIFY
+ * returns from the function it fails in, so the reset at the bottom is
+ * exactly the line that does not run on the day it matters -- and every
+ * test after it would then be measuring a phone, reporting a failure
+ * somewhere else entirely.
+ */
+struct forced_touch_t {
+	explicit forced_touch_t(int touch) { bssh_platform::force_touch_primary(touch); }
+	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
+};
 
 static bssh_profile_t named(const QString &name) {
 	bssh_profile_t profile;
@@ -451,6 +466,70 @@ void layout_test::a_column_divider_is_magnetic_to_the_halfway_line() {
 	QVERIFY(total - floored >= cell);
 }
 
+void layout_test::the_input_selector_defaults_to_scroll_and_reports_changes() {
+	bssh_input_selector selector;
+
+	/* Scroll is sec 8.7's default, and the control opens on it. */
+	QCOMPARE(selector.mode(), BSSH_INPUT_SCROLL);
+
+	QSignalSpy spy(&selector, &bssh_input_selector::mode_changed);
+
+	QAbstractButton *select =
+	        selector.findChild<QAbstractButton *>(QStringLiteral("input_select"));
+	QVERIFY(select);
+	select->click();
+
+	QCOMPARE(selector.mode(), BSSH_INPUT_SELECT);
+	QCOMPARE(spy.count(), 1);
+
+	/*
+	 * set_mode reflects a mode changed elsewhere WITHOUT emitting -- a
+	 * control that only mirrored its own clicks would lie the first time
+	 * something else moved the mode, and a re-emit here would loop back
+	 * through the window that set it.
+	 */
+	selector.set_mode(BSSH_INPUT_CLICK);
+	QCOMPARE(selector.mode(), BSSH_INPUT_CLICK);
+	QCOMPARE(spy.count(), 1);
+
+	QAbstractButton *click =
+	        selector.findChild<QAbstractButton *>(QStringLiteral("input_click"));
+	QVERIFY(click);
+	QVERIFY(click->isChecked());
+}
+
+void layout_test::the_selector_pushes_its_mode_to_every_pane() {
+	forced_touch_t touch(1);
+
+	bssh_main_window window;
+	window.adopt_session(window.registry()->create(named(QStringLiteral("a"))));
+
+	bssh_input_selector *selector = window.findChild<bssh_input_selector *>();
+	QVERIFY(selector);
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY(view);
+
+	/*
+	 * The default reached the pane without anyone touching the selector:
+	 * a freshly built view starts from its own default, so the window has
+	 * to tell it the window's mode after every rebuild (sec 8.7).
+	 */
+	QCOMPARE(view->input_mode(), BSSH_INPUT_SCROLL);
+
+	QAbstractButton *select =
+	        selector->findChild<QAbstractButton *>(QStringLiteral("input_select"));
+	QVERIFY(select);
+	select->click();
+
+	QCOMPARE(selector->mode(), BSSH_INPUT_SELECT);
+	QVERIFY2(view->input_mode() == BSSH_INPUT_SELECT,
+	          "the selector's mode never reached the pane");
+
+	/* Shared registry: leave it as it was found (sec 8.4). */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::panes_collapse_to_tabs_and_come_back() {
 	/*
 	 * sec 8.2's hard case, through the real container rather than the
@@ -520,11 +599,6 @@ namespace {
  * test after it would then be measuring the wrong arrangement, reporting
  * a failure somewhere else entirely.
  */
-struct forced_touch_t {
-	explicit forced_touch_t(int touch) { bssh_platform::force_touch_primary(touch); }
-	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
-};
-
 
 QString too_wide(const QString &name, const QWidget *widget)
 {

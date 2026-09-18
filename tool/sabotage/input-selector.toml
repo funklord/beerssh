@@ -1,0 +1,72 @@
+# The touch input selector (project.md sec 8.7): what a body-drag does is
+# chosen at the always-visible control and routed by every terminal view.
+# A phone has no Shift, so the mode IS the override -- and none of these
+# failures is an error, only a phone that cannot scroll, cannot select out
+# of htop, or cannot drive it.
+#
+# All five seen to fail 2026-09-18 against a 565-passing baseline, each
+# `caught` naming its own test.
+
+# The scroll drag that goes nowhere.
+#
+# Scroll mode's whole job is to move the scrollback under a finger; pin
+# the offset at the press value and the drag does nothing, which is the
+# state the phone was already in before this landed.
+[[sabotage]]
+name = "a scroll-mode body drag does not move the scrollback"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tset_scroll_offset(m_scroll_drag_start_offset + lines);"
+replace = "\t\t\tset_scroll_offset(m_scroll_drag_start_offset);"
+expect = "a_touch_body_drag_scrolls_in_scroll_mode"
+
+# Select mode no longer overrides a grabbing remote.
+#
+# With keep_local forced false, a touch gesture always goes to a remote
+# that asked for the mouse -- so select mode cannot select out of a
+# full-screen program, which is the Shift override a phone cannot press.
+[[sabotage]]
+name = "select mode stops overriding mouse reporting"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst bool keep_local = touch ? (m_input_mode != BSSH_INPUT_CLICK) : shift;"
+replace = "\tconst bool keep_local = touch ? false : shift;"
+expect = "select_mode_is_the_touch_shift_override"
+
+# Click mode no longer reaches the remote.
+#
+# The opposite forcing: keep_local always true means click mode keeps the
+# gesture local, so the report never goes out and a phone cannot drive the
+# program that grabbed the mouse. Same line, opposite break -- each is one
+# test's to catch.
+[[sabotage]]
+name = "click mode stops forwarding to the remote"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst bool keep_local = touch ? (m_input_mode != BSSH_INPUT_CLICK) : shift;"
+replace = "\tconst bool keep_local = touch ? true : shift;"
+expect = "click_mode_lets_the_remote_have_the_touch"
+
+# The window stops telling the panes the mode.
+#
+# The selector changes and nothing reaches the views, so a pane keeps
+# whatever it was built with -- the setting-applied-to-nothing shape this
+# tree keeps re-finding. The default push masks it (a new view is already
+# scroll), so only the after-a-change half of the test fails, which is the
+# half that proves the wiring.
+[[sabotage]]
+name = "the selector's mode never reaches the panes"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (view) view->set_input_mode(mode);"
+replace = "\t\tif (view) (void) mode;"
+expect = "the_selector_pushes_its_mode_to_every_pane"
+
+# The control opens on the wrong state.
+#
+# Sec 8.7 makes scroll the default deliberately -- the constant action is
+# the one that costs no mode change. Open on select instead and a phone is
+# back to a drag that selects and a scrollback nobody can reach without
+# first switching.
+[[sabotage]]
+name = "the selector defaults to select rather than scroll"
+file = "src/ui/input_selector.cpp"
+find = "      m_mode(BSSH_INPUT_SCROLL) {"
+replace = "      m_mode(BSSH_INPUT_SELECT) {"
+expect = "the_input_selector_defaults_to_scroll_and_reports_changes"

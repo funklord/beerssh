@@ -5926,8 +5926,10 @@ taxes the constant action and guarantees a mode error every time someone
 forgets. So the names follow the frequency rather than the desktop's
 history: body drag scrolls, and selecting is the mode you ask for.
 
-**Today NO route scrolls a phone's scrollback, verified 2026-09-17, and
-that is what this must deliver.** All three ways in are closed at once:
+**On 2026-09-17 NO route scrolled a phone's scrollback -- since
+delivered, see below.** That was the gap this had to close, and the
+enumeration is kept because it is the shape of what was fixed. All three
+ways in were closed at once:
 QScroller is named in a comment in `terminal_view.cpp` and never grabbed,
 so a body drag does not scroll; `SCROLLBAR_AUTO` hides the scrollbar on
 touch (`main_window.cpp`); and the keyboard route is dead because the
@@ -5945,6 +5947,14 @@ already does), or leave the on-screen board a pure key-sender and let the
 selector's `scroll` state carry it. Not decided here; recorded so the
 selector work knows it is starting from zero, not from a keyboard
 fallback that already works.
+
+**Both routes are now open.** The keyboard hole was taken the first way
+-- `send_key` walks `stolen_chords()` now (the `steal_chord` translation
+into Qt keys), so Shift+PgUp on the on-screen board scrolls rather than
+paging the shell. And the body-drag route landed with the input selector
+below: `scroll` is the default, so a body drag moves the scrollback
+without a mode change. The gap this paragraph opened is closed from both
+ends.
 
 **The states are not equally dangerous, and `click` is the one to arm
 deliberately.** Scrolling when you meant to select costs a scroll back.
@@ -5965,6 +5975,38 @@ in the terminal is gated on Shift and *"a phone has no Shift to hold"*,
 so inside `mc` or `htop` a phone has "no selection, no clipboard, no
 context menu and no way back". A visible selector is the escape that was
 missing.
+
+**BUILT 2026-09-18: the three terminal-level states, and the bar.** The
+selector lands as `bssh_input_selector`, one per window, and the window
+pushes its state to every pane -- `scroll` (the default), `select` and
+`click`, the three that route a gesture WITHIN a terminal. The routing is
+in `bssh_terminal_view`: on touch the mode is exactly the override Shift
+is on a desktop, so `scroll` and `select` keep a gesture local even where
+the remote grabbed the mouse and `click` lets it through. A body drag in
+`scroll` mode moves the scrollback -- the route sec 8.7 said "must
+deliver" and that a phone did not have. Desktop is left untouched: it
+keeps Shift, the wheel and drag-select, so the mode is read only where a
+thumb is the pointer, and the bar is shown only there.
+
+**Where the bar lives -- the open placement, now resolved.** This section
+left "where the selector physically lives" open. Settled on the holder's
+go-ahead 2026-09-18 to the bottom edge of the terminal page, beneath the
+status line: always visible, thumb-reachable, and one `addWidget` to move
+if it should go elsewhere. It is not in the key row, which scrolls, so it
+cannot scroll off.
+
+**The two column-level states are NOT built, and wait for what they act
+on.** `scroll terminals` (move the column) and `move terminals` (reorder
+it) need the scrollable, reorderable column that does not exist yet -- the
+column caps at two and fills the viewport, so there is nothing to scroll
+or reorder. They are left off the bar rather than shown dead. The snap
+radius aside, this is the last of sec 8.7's selector that the scrollable
+column blocks.
+
+**Guarded by `tool/sabotage/input-selector.toml`**, five edits, each seen
+to fail naming its own test: a scroll drag that moves nothing, select
+losing its override, click losing its forward, the window not telling the
+panes, and the bar opening on the wrong state.
 
 **The design argument that was raised and settled.** The four states are
 not one axis: two decide WHO receives a gesture (local highlight against
