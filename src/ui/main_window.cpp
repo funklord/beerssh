@@ -58,6 +58,7 @@
 #include "model/window_title.h"
 #include "model/settings_resolver.h"
 #include "ui/layout_manager.h"
+#include "ui/find_bar.h"
 #include "ui/input_selector.h"
 #include "ui/pane_container.h"
 #include "input/input_router.h"
@@ -112,6 +113,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_terminal_view(nullptr),
       m_panes(nullptr),
       m_input_selector(nullptr),
+      m_find_bar(nullptr),
       m_wired_view(nullptr),
       m_status_label(new QLabel(this)),
       m_registry(bssh_session_registry::shared()),
@@ -281,6 +283,21 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 	connect(m_input_selector, &bssh_input_selector::mode_changed,
 	         this, [this] { apply_input_mode(); });
+
+	/*
+	 * The find bar (sec 6.4) lives at the bottom too, below the selector,
+	 * hidden until the find chord opens it. The search itself is the
+	 * focused pane's; the window only routes the bar's query and steps to
+	 * whichever view has focus, and puts the count back.
+	 */
+	m_find_bar = new bssh_find_bar(m_terminal_page);
+	layout->addWidget(m_find_bar, 0);
+	m_find_bar->hide();
+	connect(m_find_bar, &bssh_find_bar::search_changed,
+	         this, [this](const QString &query) { run_find(query); });
+	connect(m_find_bar, &bssh_find_bar::step_requested,
+	         this, [this](int direction) { step_find(direction); });
+	connect(m_find_bar, &bssh_find_bar::dismissed, this, [this] { close_find(); });
 
 	connect(m_panes, &bssh_pane_container::focus_changed,
 	         this, &bssh_main_window::on_pane_focus_changed);
@@ -1971,6 +1988,48 @@ void bssh_main_window::handle_shortcut(bssh_input_router::shortcut_t shortcut) {
 	 */
 	if (shortcut == bssh_input_router::SHORTCUT_NEW_TAB) open_another_session(false);
 	if (shortcut == bssh_input_router::SHORTCUT_NEW_WINDOW) open_another_session(true);
+
+	if (shortcut == bssh_input_router::SHORTCUT_FIND) open_find();
+}
+
+void bssh_main_window::open_find() {
+	if (!m_find_bar) return;
+
+	m_find_bar->show();
+	m_find_bar->take_focus();
+
+	/* Re-run the standing query against the pane now in focus. */
+	run_find(m_find_bar->query());
+}
+
+void bssh_main_window::run_find(const QString &query) {
+	if (bssh_terminal_view *view = m_panes ? m_panes->focused_view() : nullptr)
+		view->find_text(query);
+	update_find_status();
+}
+
+void bssh_main_window::step_find(int direction) {
+	if (bssh_terminal_view *view = m_panes ? m_panes->focused_view() : nullptr)
+		view->find_step(direction);
+	update_find_status();
+}
+
+void bssh_main_window::close_find() {
+	if (!m_find_bar) return;
+
+	m_find_bar->hide();
+	if (bssh_terminal_view *view = m_panes ? m_panes->focused_view() : nullptr) {
+		view->clear_find();
+		view->setFocus();
+	}
+}
+
+void bssh_main_window::update_find_status() {
+	if (!m_find_bar) return;
+
+	bssh_terminal_view *view = m_panes ? m_panes->focused_view() : nullptr;
+	m_find_bar->set_status(view ? view->current_find_index() : 0,
+	                        view ? view->find_match_count() : 0);
 }
 
 void bssh_main_window::ask_for_password(bssh_session *session) {

@@ -31,6 +31,7 @@ class bssh_host_list;
 class bssh_layout_manager;
 class bssh_pane_container;
 class bssh_input_selector;
+class bssh_find_bar;
 class bssh_key_row;
 class bssh_soft_keyboard;
 class bssh_profile_store;
@@ -430,6 +431,18 @@ private:
 	void apply_input_mode();
 
 	/*
+	 * Find in the scrollback (sec 6.4): open the bar and focus it, run the
+	 * focused pane's search as the query changes or a step is asked for,
+	 * and put the count back on the bar. The search lives in the view; the
+	 * window only routes the bar to whichever pane has focus.
+	 */
+	void open_find();
+	void run_find(const QString &query);
+	void step_find(int direction);
+	void close_find();
+	void update_find_status();
+
+	/*
 	 * Keeps the column's layout intent equal to the shown list (sec 8.7),
 	 * so the column holds every session the window holds and the tab bar
 	 * has nothing left to convert. Called wherever the shown list changes;
@@ -806,6 +819,7 @@ private:
 	 * its state to every pane. Present only where a thumb is the pointer.
 	 */
 	bssh_input_selector *m_input_selector;
+	bssh_find_bar *m_find_bar;
 
 	/*
 	 * The view whose signals are already connected. A plain pointer

@@ -1,0 +1,67 @@
+# Find in the scrollback (project.md sec 6.4): Ctrl+Shift+F opens a bar, a
+# query searches the focused pane's scrollback and screen, and the matches
+# are stepped through and highlighted. The search lives in the view, which
+# owns the buffers; the window routes the bar to the focused pane. Five
+# seams: the match-finding, the stepping, the scroll-to-match, the chord
+# that opens the bar, and the bar reaching the view.
+#
+# All five seen to fail 2026-09-18 against the passing baseline.
+
+# The search stops being case-insensitive.
+#
+# find_text is meant to ignore case -- a search for "needle" finds
+# "NEEDLE". Make it case-sensitive and the uppercase matches vanish, so a
+# mixed-case history reports fewer hits than it has.
+[[sabotage]]
+name = "find is case-sensitive"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tconst int idx = text.indexOf(query, from, Qt::CaseInsensitive);"
+replace = "\t\t\tconst int idx = text.indexOf(query, from, Qt::CaseSensitive);"
+expect = "find_locates_matches_navigates_and_scrolls"
+
+# Stepping ignores its direction.
+#
+# find_step(-1) should walk back up the matches; pin the step to +1 and
+# previous does the same as next, so a user can never reach an earlier
+# match except by wrapping all the way round.
+[[sabotage]]
+name = "find stepping ignores direction"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst int step = direction < 0 ? -1 : 1;"
+replace = "\tconst int step = 1;"
+expect = "find_locates_matches_navigates_and_scrolls"
+
+# A match off screen is not scrolled to.
+#
+# The whole point of find is to bring a match in the history onto the
+# screen. Drop the scroll and the current match can sit above the viewport
+# with nothing to show the user where it is.
+[[sabotage]]
+name = "find does not scroll to the match"
+file = "src/ui/terminal_view.cpp"
+find = "\tset_scroll_offset(int(qBound(qint64(0), offset, qint64(available_history()))));"
+replace = "\tset_scroll_offset(0);"
+expect = "find_locates_matches_navigates_and_scrolls"
+
+# The find chord does not open the bar.
+#
+# Ctrl+Shift+F reaches handle_shortcut but goes nowhere, so the one way in
+# to search is gone.
+[[sabotage]]
+name = "the find chord opens nothing"
+file = "src/ui/main_window.cpp"
+find = "\tif (shortcut == bssh_input_router::SHORTCUT_FIND) open_find();"
+replace = "\tif (shortcut == bssh_input_router::SHORTCUT_FIND) {}"
+expect = "the_find_chord_opens_a_bar_that_searches_the_pane"
+
+# The bar's query never reaches the view.
+#
+# run_find is where the bar's text becomes a search of the focused pane.
+# Hand the view an empty query instead and the bar looks alive but finds
+# nothing whatever is typed.
+[[sabotage]]
+name = "the find bar searches for nothing"
+file = "src/ui/main_window.cpp"
+find = "\t\tview->find_text(query);"
+replace = "\t\tview->find_text(QString());"
+expect = "the_find_chord_opens_a_bar_that_searches_the_pane"

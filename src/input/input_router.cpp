@@ -221,6 +221,9 @@ const QList<bssh_input_router::chord_t> &bssh_input_router::default_chords() {
 		{ SHORTCUT_NEW_WINDOW, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_N,
 			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_N),
 			"new-window", "Open another session in a window" },
+		{ SHORTCUT_FIND, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_F,
+			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_F),
+			"find", "Find in the scrollback" },
 	};
 	return chords;
 }

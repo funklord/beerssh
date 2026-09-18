@@ -86,6 +86,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_selection_anchor_col(0),
       m_selection_focus_line(-1),
       m_selection_focus_col(0),
+      m_current_match(-1),
       m_emulator(nullptr),
       m_input_router(nullptr),
       m_font_size(BSSH_DEFAULT_POINT_SIZE),
@@ -1402,6 +1403,25 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 				}
 			}
 
+			/*
+			 * Find highlight (sec 6.4), last so the brightness slider does
+			 * not dim the one thing a search exists to make findable: the
+			 * current match burns amber, the rest a muted amber, dark text
+			 * on both. A fixed pair rather than the scheme's, because a
+			 * match has to stand out against 256 possible backgrounds the
+			 * way a browser's find does.
+			 */
+			if (!m_find_matches.isEmpty()) {
+				const qint64 abs_line = line_for_row(row);
+				if (is_current_find_match(abs_line, col)) {
+					bg = QColor(0xff, 0xd5, 0x4f);
+					fg = QColor(0x1c, 0x1c, 0x1c);
+				} else if (is_find_match(abs_line, col)) {
+					bg = QColor(0x9a, 0x7a, 0x00);
+					fg = QColor(0xf4, 0xf4, 0xf4);
+				}
+			}
+
 			const int x = col * m_cell_width;
 			const int y = row * m_cell_height;
 			const int width = qMax(1, int(cell.width)) * m_cell_width;
@@ -1906,6 +1926,138 @@ QString bssh_terminal_view::selection_text() const {
 	}
 
 	return out;
+}
+
+int bssh_terminal_view::find_text(const QString &query) {
+	m_find_matches.clear();
+	m_current_match = -1;
+	m_find_query = query;
+
+	if (query.isEmpty()) {
+		update();
+		return 0;
+	}
+
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	const qint64 base = history_base();
+	const qint64 end = base + history + m_rows;
+
+	/*
+	 * The content's width, not the widget's: the scrollback and screen are
+	 * the emulator's size, which a laid-out view matches but an unshown one
+	 * (m_cols still zero) does not. Searching what is stored rather than
+	 * what is on screen keeps find independent of the pane's pixel size.
+	 */
+	const int width = m_screen ? m_screen->cols() : m_cols;
+
+	for (qint64 line = base; line < end; ++line) {
+		/*
+		 * Build the line's text and remember which column each character
+		 * came from, so a match maps back to whole cells -- the far half
+		 * of a wide glyph is skipped here just as the paint skips it.
+		 */
+		QString text;
+		QList<int> col_of;
+		for (int col = 0; col < width; ++col) {
+			const bssh_cell_t &cell = cell_for_line(line, col);
+			if (cell.width == 0) continue;
+			text.append(cell.ch ? QString::fromUcs4(&cell.ch, 1)
+			                    : QStringLiteral(" "));
+			col_of.append(col);
+		}
+
+		/* Trailing padding is not content, exactly as selection_text has it. */
+		while (text.endsWith(QLatin1Char(' '))) {
+			text.chop(1);
+			col_of.removeLast();
+		}
+
+		int from = 0;
+		while (from <= text.size() - query.size()) {
+			const int idx = text.indexOf(query, from, Qt::CaseInsensitive);
+			if (idx < 0) break;
+
+			const int last = idx + query.size() - 1;
+			find_match_t match;
+			match.line = line;
+			match.start_col = col_of.at(idx);
+			/*
+			 * The far edge of the last matched cell: the column before
+			 * the next character, or the last column when the match runs
+			 * to the end -- which covers a wide glyph's second cell.
+			 */
+			match.end_col = (last + 1 < col_of.size()) ? col_of.at(last + 1) - 1
+			                                           : width - 1;
+			m_find_matches.append(match);
+			from = idx + 1;
+		}
+	}
+
+	if (!m_find_matches.isEmpty()) {
+		/* The last match is the one nearest the live screen -- where a
+		 * search usually means "the most recent time this appeared". */
+		m_current_match = m_find_matches.size() - 1;
+		scroll_find_match_into_view(m_find_matches.at(m_current_match));
+	}
+
+	update();
+	return m_find_matches.size();
+}
+
+void bssh_terminal_view::find_step(int direction) {
+	if (m_find_matches.isEmpty()) return;
+
+	const int n = m_find_matches.size();
+	const int step = direction < 0 ? -1 : 1;
+	m_current_match = ((m_current_match + step) % n + n) % n;
+
+	scroll_find_match_into_view(m_find_matches.at(m_current_match));
+	update();
+}
+
+void bssh_terminal_view::clear_find() {
+	if (m_find_matches.isEmpty() && m_find_query.isEmpty()) return;
+
+	m_find_matches.clear();
+	m_current_match = -1;
+	m_find_query.clear();
+	update();
+}
+
+int bssh_terminal_view::current_find_index() const {
+	return m_current_match < 0 ? 0 : m_current_match + 1;
+}
+
+bool bssh_terminal_view::is_find_match(qint64 line, int col) const {
+	for (const find_match_t &match : m_find_matches) {
+		if (match.line == line && col >= match.start_col && col <= match.end_col)
+			return true;
+	}
+	return false;
+}
+
+bool bssh_terminal_view::is_current_find_match(qint64 line, int col) const {
+	if (m_current_match < 0) return false;
+
+	const find_match_t &match = m_find_matches.at(m_current_match);
+	return match.line == line && col >= match.start_col && col <= match.end_col;
+}
+
+void bssh_terminal_view::scroll_find_match_into_view(const find_match_t &match) {
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	const qint64 top = history_base() + history - m_scroll_offset;
+	const qint64 bottom = top + m_rows - 1;
+
+	/* Already on screen: leave the view where it is rather than jumping. */
+	if (match.line >= top && match.line <= bottom) return;
+
+	/*
+	 * Otherwise place it a third of the way down, so there is context
+	 * above the match. set_scroll_offset clamps to the available history.
+	 */
+	const qint64 target_row = m_rows / 3;
+	const qint64 offset = history_base() + history + target_row - match.line;
+	set_scroll_offset(int(qBound(qint64(0), offset, qint64(available_history()))));
 }
 
 void bssh_terminal_view::focusInEvent(QFocusEvent *event) {

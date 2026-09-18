@@ -197,7 +197,16 @@ public:
 		 * commonest thing a terminal does.
 		 */
 		SHORTCUT_NEW_TAB,
-		SHORTCUT_NEW_WINDOW
+		SHORTCUT_NEW_WINDOW,
+
+		/*
+		 * Find in the scrollback (sec 6.4). Ctrl+Shift+F, konsole's own
+		 * chord for it, and stolen for the same reason as the rest: a
+		 * remote shell almost never wants Ctrl+Shift+F, and a terminal
+		 * that cannot search its history is missing the thing a long
+		 * scrollback is FOR.
+		 */
+		SHORTCUT_FIND
 	};
 
 	/*

@@ -105,6 +105,7 @@ SOURCES += \
     ../src/ui/host_list.cpp \
     ../src/ui/layout_manager.cpp \
     ../src/ui/pane_container.cpp \
+    ../src/ui/find_bar.cpp \
     ../src/ui/input_selector.cpp \
     ../src/ui/long_press.cpp \
     ../src/term/term_features.cpp \
@@ -190,6 +191,7 @@ HEADERS += \
     ../src/ui/layout_manager.h \
     ../src/ui/pane_container.h \
     ../src/ui/pane_snap.h \
+    ../src/ui/find_bar.h \
     ../src/ui/input_selector.h \
     ../src/ui/input_mode.h \
     ../src/ui/interface_scale.h \

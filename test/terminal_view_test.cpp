@@ -579,6 +579,52 @@ void terminal_view_test::a_touch_body_drag_pans_the_column_in_pan_mode() {
 	QCOMPARE(spy.count(), 0);
 }
 
+void terminal_view_test::find_locates_matches_navigates_and_scrolls() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/*
+	 * One match deep in the history, one nearer, one on the live screen --
+	 * so navigation has both a scroll-to-find and an already-visible case.
+	 */
+	emulator.feed(QByteArrayLiteral("an early needle\r\n"));
+	for (int i = 0; i < view.rows() + 20; ++i)
+		emulator.feed(QByteArrayLiteral("filler line\r\n"));
+	emulator.feed(QByteArrayLiteral("a late NEEDLE\r\n"));
+	emulator.feed(QByteArrayLiteral("needle on the last row"));
+
+	/* Case-insensitive: all three are found, in top-to-bottom order. */
+	QCOMPARE(view.find_text(QStringLiteral("needle")), 3);
+	QCOMPARE(view.find_match_count(), 3);
+
+	/* The current match starts at the last one, nearest the live screen. */
+	QCOMPARE(view.current_find_index(), 3);
+	QCOMPARE(view.scroll_offset(), 0);
+
+	/* Stepping forward from the last wraps to the first, and the first is
+	 * deep in the history, so the view scrolls back to bring it in. */
+	view.find_step(1);
+	QCOMPARE(view.current_find_index(), 1);
+	QVERIFY2(view.scroll_offset() > 0, "the earliest match was not scrolled into view");
+
+	/* And back the other way returns to the last, on the live screen. */
+	view.find_step(-1);
+	QCOMPARE(view.current_find_index(), 3);
+
+	/* A query that is not there finds nothing and clears the current. */
+	QCOMPARE(view.find_text(QStringLiteral("haystack")), 0);
+	QCOMPARE(view.current_find_index(), 0);
+
+	view.clear_find();
+	QCOMPARE(view.find_match_count(), 0);
+	QVERIFY(view.find_query().isEmpty());
+}
+
 void terminal_view_test::select_mode_is_the_touch_shift_override() {
 	forced_touch_t touch(1);
 

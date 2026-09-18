@@ -77,6 +77,7 @@
 #include "ui/input_selector.h"
 #include "ui/pane_container.h"
 #include "ui/pane_snap.h"
+#include "ui/find_bar.h"
 #include "ui/terminal_view.h"
 
 /*
@@ -935,6 +936,57 @@ void layout_test::reverse_video_reaches_the_pane_and_flips_it() {
 	s->emulator()->feed(QByteArrayLiteral("\x1b[?5l"));
 	QVERIFY(!view->reverse_video());
 	QCOMPARE(view->effective_background(), bg);
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::the_find_chord_opens_a_bar_that_searches_the_pane() {
+	bssh_main_window window;
+	window.resize(800, 500);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *s = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(s);
+
+	/* A sized, shown window, so the pane -- and the emulator it drives --
+	 * has real columns for the fed text to land in. */
+	for (int i = 0; i < 40; ++i) s->emulator()->feed(QByteArrayLiteral("filler line\r\n"));
+	s->emulator()->feed(QByteArrayLiteral("find the treasure here\r\n"));
+	s->emulator()->feed(QByteArrayLiteral("and more filler"));
+
+	bssh_find_bar *bar = window.findChild<bssh_find_bar *>();
+	QVERIFY(bar);
+	QVERIFY2(bar->isHidden(), "the find bar is shown before it is asked for");
+
+	/* The find chord (Ctrl+Shift+F) reaches the router, which the window
+	 * turns into open_find. */
+	QKeyEvent chord(QEvent::KeyPress, Qt::Key_F,
+	                Qt::ControlModifier | Qt::ShiftModifier);
+	s->input_router()->handle_key(&chord);
+	QVERIFY2(!bar->isHidden(), "the find chord did not open the bar");
+
+	/* Typing a query searches the focused pane. */
+	QLineEdit *field = bar->findChild<QLineEdit *>(QStringLiteral("find_field"));
+	QVERIFY(field);
+	field->setText(QStringLiteral("treasure"));
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY(view);
+	QCOMPARE(view->find_match_count(), 1);
+	QCOMPARE(view->current_find_index(), 1);
+
+	/* And the count came back to the bar. */
+	QLabel *status = bar->findChild<QLabel *>(QStringLiteral("find_status"));
+	QVERIFY(status);
+	QCOMPARE(status->text(), QStringLiteral("1/1"));
+
+	/* Escape closes the bar and forgets the matches. */
+	QKeyEvent escape(QEvent::KeyPress, Qt::Key_Escape, Qt::NoModifier);
+	QCoreApplication::sendEvent(bar, &escape);
+	QVERIFY2(bar->isHidden(), "Escape did not close the find bar");
+	QCOMPARE(view->find_match_count(), 0);
 
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));

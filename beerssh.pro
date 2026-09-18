@@ -77,6 +77,7 @@ SOURCES += \
     src/ui/host_list.cpp \
     src/ui/layout_manager.cpp \
     src/ui/pane_container.cpp \
+    src/ui/find_bar.cpp \
     src/ui/input_selector.cpp \
     keyboard/key_cap.cpp \
     keyboard/key_row_layout.cpp \
@@ -136,6 +137,7 @@ HEADERS += \
     src/ui/host_list.h \
     src/ui/layout_manager.h \
     src/ui/pane_container.h \
+    src/ui/find_bar.h \
     src/ui/input_selector.h \
     src/ui/input_mode.h \
     src/ui/interface_scale.h \

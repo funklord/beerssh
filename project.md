@@ -1117,6 +1117,29 @@ quirks on Android.
   is built from the **defaults** rather than from the effective list, or an
   action whose chord had been given back would vanish from the page and could
   never be bound again.
+  **Find in the scrollback is BUILT 2026-09-18, and it is the ninth stolen
+  chord.** Ctrl+Shift+F (konsole's) opens a bar at the bottom of the terminal
+  page, below the input selector; typing searches the focused pane's
+  scrollback and screen incrementally, Enter and the up/down buttons walk the
+  matches, Escape closes it. The search itself lives in the VIEW -- it owns
+  the scrollback, the screen and the coordinate space that spans them
+  (`find_text`/`find_step`/`clear_find`), and searches the emulator's width
+  rather than the widget's so an unshown or half-laid-out pane still finds
+  what is stored. It is case-insensitive, it starts on the match nearest the
+  live screen (the most recent time the text appeared), and it scrolls a
+  match above the viewport into view a third of the way down for context.
+  Matches are highlighted amber -- the current one bright, the rest muted,
+  applied AFTER the brightness slider so a night setting cannot dim the one
+  thing a search exists to make findable. The bar (`bssh_find_bar`) is a
+  plain control that emits the query and the step and reads back a count; the
+  window routes it to whichever pane has focus, the same split the input
+  selector uses. Guarded by `tool/sabotage/scrollback-search.toml`, five
+  edits seen to fail: case-sensitivity, a step that ignores direction, a
+  match not scrolled to, the chord opening nothing, and the bar searching for
+  nothing. The per-cell highlight is a paint change tested by reading, like
+  the reverse-video and selection swaps it sits beside; a wrapped line's
+  match spanning the wrap is not found yet, which the per-physical-line
+  search leaves for a later pass.
   **The right-click menu was the second copy, and it was there all along.**
   Its Copy and Paste entries wrote their chords out as the literals
   `"Ctrl+Shift+C"` and `"Ctrl+Shift+V"`, while every other menu in the window

@@ -438,6 +438,29 @@ public:
 	void select_all();
 
 	/*
+	 * Find (project.md sec 6.4): search the scrollback and the screen for
+	 * a case-insensitive substring. The view searches its OWN content --
+	 * it holds the scrollback, the screen, and the one coordinate space
+	 * that spans them (see line_for_row) -- so the find bar hands it a
+	 * query and reads back matches rather than reaching into the buffers
+	 * itself.
+	 *
+	 * find_text records every match and makes the one nearest the live
+	 * screen current, scrolling it into view; find_step walks them
+	 * (+1 toward the screen, -1 up the history), wrapping; clear_find
+	 * forgets them. The is_*_match pair is what the paint path asks per
+	 * cell, the same shape as is_selected.
+	 */
+	int find_text(const QString &query);
+	void find_step(int direction);
+	void clear_find();
+	int find_match_count() const { return m_find_matches.size(); }
+	int current_find_index() const;
+	QString find_query() const { return m_find_query; }
+	bool is_find_match(qint64 line, int col) const;
+	bool is_current_find_match(qint64 line, int col) const;
+
+	/*
 	 * Whether a press-and-hold opens the menu.
 	 *
 	 * On by default nowhere: it is set from the resolved menu layout, so
@@ -832,6 +855,24 @@ private:
 	int m_selection_anchor_col;
 	qint64 m_selection_focus_line;
 	int m_selection_focus_col;
+
+	/*
+	 * Find matches in absolute line coordinates -- a column span per match
+	 * so the highlight covers a wide glyph's whole width, and the same
+	 * coordinate the selection uses so a match survives the ring evicting
+	 * lines beneath it (see history_base). m_current_match indexes into
+	 * the list, or -1 when there is nothing found.
+	 */
+	struct find_match_t {
+		qint64 line;
+		int start_col;
+		int end_col;
+	};
+	void scroll_find_match_into_view(const find_match_t &match);
+	QList<find_match_t> m_find_matches;
+	int m_current_match;
+	QString m_find_query;
+
 	bssh_emulator *m_emulator;
 	/*
 	 * The caret offset last ANNOUNCED to an assistive client, so a cursor

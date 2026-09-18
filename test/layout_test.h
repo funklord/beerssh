@@ -105,6 +105,13 @@ private slots:
 	void reverse_video_reaches_the_pane_and_flips_it();
 
 	/*
+	 * Find in the scrollback (sec 6.4): the chord opens the bar, a query
+	 * searches the focused pane and the count comes back, and Escape closes
+	 * it and clears the matches.
+	 */
+	void the_find_chord_opens_a_bar_that_searches_the_pane();
+
+	/*
 	 * Every surface a thumb can reach, at the narrowest width sec 8.2
 	 * designs to.
 	 *
