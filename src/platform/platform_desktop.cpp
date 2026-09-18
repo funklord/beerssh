@@ -36,7 +36,26 @@
  * the value changes while running and this is a DBus round trip on a
  * settings page, not on a paint.
  */
+/*
+ * Whether a session bus is configured, answered WITHOUT calling
+ * QDBusConnection::sessionBus() -- which is the whole point.
+ *
+ * With DBUS_SESSION_BUS_ADDRESS unset, sessionBus() does not fail: libdbus
+ * AUTOLAUNCHES a dbus-daemon and connects to that. In a headless run -- a
+ * test under the offscreen platform, an agent's shell, a build container --
+ * there is no session to reap it, so each run leaves one orphaned with a
+ * stale /tmp/dbus-* socket. Measured across this workspace's Qt projects:
+ * 1031 of them, 2.2 GB, the oldest six days old, every one launched from a
+ * project directory by a run that only wanted to ask the portal whether
+ * the desktop was dark. Reading the env first is the fix, and every
+ * project that consults the portal has the same leak to close.
+ */
+static bool session_bus_configured() {
+	return !qEnvironmentVariableIsEmpty("DBUS_SESSION_BUS_ADDRESS");
+}
+
 static bssh_appearance_t portal_appearance() {
+	if (!session_bus_configured()) return BSSH_APPEARANCE_UNKNOWN;
 	if (!QDBusConnection::sessionBus().isConnected()) return BSSH_APPEARANCE_UNKNOWN;
 
 	QDBusInterface settings(QStringLiteral("org.freedesktop.portal.Desktop"),
@@ -210,6 +229,13 @@ public:
 		connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged,
 		         this, [this](Qt::ColorScheme) { emit appearance_changed(); });
 #endif
+
+		/*
+		 * Only where a bus is configured: connect() would otherwise
+		 * autolaunch a dbus-daemon that nothing reaps -- see
+		 * session_bus_configured() above and the leak it records.
+		 */
+		if (!session_bus_configured()) return;
 
 		QDBusConnection::sessionBus().connect(
 		        QString(), QStringLiteral("/org/freedesktop/portal/desktop"),

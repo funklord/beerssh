@@ -1327,6 +1327,29 @@ up, a strip of modifiers has nothing to modify.
   Both change sources are watched — Qt's signal and the portal's
   `SettingChanged` — because either may be the one that notices, and a theme that
   is only right at startup is one a user calls broken.
+  **But touching the session bus to do it leaked a daemon per run, and it
+  is fixed.** `QDBusConnection::sessionBus()` does not fail when
+  `DBUS_SESSION_BUS_ADDRESS` is unset: libdbus AUTOLAUNCHES a
+  `dbus-daemon --session` and connects to that. In a headless run — a test
+  under the offscreen platform, an agent's shell, a build container — nothing
+  reaps it, so each invocation that asked whether the desktop was dark left a
+  daemon orphaned to init with a stale `/tmp/dbus-*` socket. Reported
+  2026-09-18 by the copyright holder and independently by the guidelines
+  session: **1031 of them across this workspace's Qt projects, ~2.2 GB, the
+  oldest six days old**, every readable one carrying `PWD` of a project source
+  directory — 43 were beerssh's. The fix is `session_bus_configured()`, which
+  reads the env rather than calling `sessionBus()`, guarding both the portal
+  read (`portal_appearance`) and the `SettingChanged` connect
+  (`watch_colour_scheme`): with no bus configured the tier abstains, which is
+  what it did already, only now without forking one to find out. It is the
+  running-code.md "a daemon that outlives the shell — ask what kills it" case,
+  and every project that consults the portal has the same leak to close (a
+  cross-project signal, since the guidelines session is aware). **Not asserted
+  in the suite**: the autolaunch needs an X display to succeed, `--self-test`
+  does not reach the portal tier, and the platform is a singleton built once,
+  so a test cannot re-enter the constructor to watch it happen — verified
+  instead by reading the code path and by the cleared backlog staying cleared
+  for beerssh's own runs once the guard was in.
   **On Android, Qt is right once and then stale.** Verified on an emulator with
   the app running: `QStyleHints::colorScheme()` reports the correct value at
   startup, and after the system switches to dark it goes on reporting Light while
