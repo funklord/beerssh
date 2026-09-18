@@ -1095,17 +1095,23 @@ void bssh_main_window::show_session(bssh_session *session) {
 	 * four, collapsing to tabs when the window narrows, is a question
 	 * about the LIST rather than about any one view.
 	 */
-	QList<bssh_session *> intent = m_layout->intent();
-
-	if (!intent.contains(session)) {
+	if (m_layout->arrangement() == bssh_layout_manager::COLUMN) {
+		/*
+		 * A column holds every session the window shows (sec 8.7), in the
+		 * order they arrived, so showing one shows the whole column and
+		 * there are no tabs to leave behind. That is what dissolves the
+		 * bar's off-by-one rather than fixing it: with nothing to convert
+		 * to a tab, the miscount has nowhere to happen.
+		 */
+		sync_column_intent();
+	} else if (!m_layout->intent().contains(session)) {
 		/*
 		 * Selecting a tab shows that session alone. Adding it BESIDE the
 		 * others is a separate, deliberate act (the tab context menu's
 		 * "Show beside current"), because a tab switch that silently
 		 * split the window would be a click doing two things.
 		 */
-		intent = QList<bssh_session *>{ session };
-		m_layout->set_intent(intent);
+		m_layout->set_intent(QList<bssh_session *>{ session });
 	}
 
 	m_panes->rebuild();
@@ -1171,6 +1177,13 @@ void bssh_main_window::split_beside_current() {
 
 void bssh_main_window::show_as_tab(bssh_session *session) {
 	if (!session || !m_layout || !m_panes) return;
+
+	/*
+	 * A column has no tabs (sec 8.7): it holds every session as a pane, so
+	 * "show as a tab" would drop a session out of the intent with no bar
+	 * to reach it by. Left where it is rather than hidden.
+	 */
+	if (m_layout->arrangement() == bssh_layout_manager::COLUMN) return;
 
 	QList<bssh_session *> intent = m_layout->intent();
 	if (!intent.contains(session)) return;
@@ -1340,6 +1353,19 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
  * arrive on the same signal and a caller that remembers one and forgets
  * the other is the bug this function exists to not have.
  */
+void bssh_main_window::sync_column_intent() {
+	/*
+	 * In a column every session the window shows is a pane (sec 8.7), so
+	 * the layout intent is exactly the shown list, in the same order. A
+	 * no-op in every other arrangement, and when the two already agree, so
+	 * a rebuild fires only on a real change.
+	 */
+	if (m_layout && m_layout->arrangement() == bssh_layout_manager::COLUMN
+	    && m_layout->intent() != m_shown) {
+		m_layout->set_intent(m_shown);
+	}
+}
+
 void bssh_main_window::apply_input_mode() {
 	if (!m_panes || !m_input_selector) return;
 
@@ -2969,6 +2995,13 @@ void bssh_main_window::on_registry_changed() {
 	for (int i = m_shown.size() - 1; i >= 0; --i) {
 		if (m_registry->index_of(m_shown.at(i)) < 0) m_shown.removeAt(i);
 	}
+
+	/*
+	 * A column follows the shown list (sec 8.7), so a session that just
+	 * left it has to leave the column too. Before the tab bar is rebuilt,
+	 * since in a column the bar is what this empties.
+	 */
+	sync_column_intent();
 
 	refresh_tab_bar();
 

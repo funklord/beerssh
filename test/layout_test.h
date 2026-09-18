@@ -54,6 +54,16 @@ private slots:
 	void a_column_divider_is_magnetic_to_the_halfway_line();
 
 	/*
+	 * The reported tab off-by-one, dissolved (sec 8.7): a column holds
+	 * every session the window shows as a pane, so there is nothing to
+	 * convert to a tab and the bar is empty. And an overflowing column
+	 * keeps every pane -- none dropped because they do not fit -- with the
+	 * scroll area there to reach the ones past the bottom of the screen.
+	 */
+	void a_column_holds_every_session_and_dissolves_the_tabs();
+	void an_overflowing_column_keeps_every_pane_reachable();
+
+	/*
 	 * The input selector (sec 8.7): the always-visible control defaults to
 	 * scroll, reports a user's change and reflects one made elsewhere
 	 * without emitting; and the window pushes its mode to every pane,

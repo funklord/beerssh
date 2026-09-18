@@ -31,11 +31,15 @@ int bssh_layout_manager::max_panes_for(size_class_t size_class) {
 
 int bssh_layout_manager::max_panes() const {
 	/*
-	 * A column stacks vertically, so a narrow window does not run out of
-	 * room the way side-by-side panes do: it shows one full-screen or two
-	 * half-screen (sec 8.7) at any width. Tiled is width's question.
+	 * A column holds every session the window shows (sec 8.7): it stacks
+	 * them and scrolls, so there is nothing to truncate to a tab and the
+	 * tab bar's off-by-one goes with the concept. What keeps that cheap is
+	 * not a pane cap but that a resize moves one neighbour, and a phone
+	 * rarely stacks more than two -- so this is a sanity ceiling against a
+	 * runaway, not the "one full or two half" of the common case. Tiled is
+	 * width's question, and stays capped by what fits side by side.
 	 */
-	if (m_arrangement == COLUMN) return 2;
+	if (m_arrangement == COLUMN) return BSSH_COLUMN_PANE_LIMIT;
 	return max_panes_for(size_class());
 }
 

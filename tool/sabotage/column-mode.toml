@@ -22,7 +22,7 @@
 [[sabotage]]
 name = "the column cap falls through to the tiled width cap"
 file = "src/ui/layout_manager.cpp"
-find = "\tif (m_arrangement == COLUMN) return 2;"
+find = "\tif (m_arrangement == COLUMN) return BSSH_COLUMN_PANE_LIMIT;"
 replace = "\tif (m_arrangement == COLUMN) return max_panes_for(size_class());"
 expect = "a_column_caps_where_a_tile_cannot"
 
@@ -36,8 +36,8 @@ expect = "a_column_caps_where_a_tile_cannot"
 [[sabotage]]
 name = "a column tiles horizontally instead of stacking"
 file = "src/ui/pane_container.cpp"
-find = "\t        ? Qt::Vertical : Qt::Horizontal);"
-replace = "\t        ? Qt::Horizontal : Qt::Horizontal);"
+find = "\tm_splitter->setOrientation(column ? Qt::Vertical : Qt::Horizontal);"
+replace = "\tm_splitter->setOrientation(column ? Qt::Horizontal : Qt::Horizontal);"
 expect = "a_column_stacks_its_panes"
 
 # The divider losing its magnetic pull to the halfway line.

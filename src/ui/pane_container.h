@@ -4,7 +4,9 @@
 #include <QList>
 #include <QWidget>
 
+class QScrollArea;
 class QSplitter;
+class QVBoxLayout;
 class bssh_layout_manager;
 class bssh_session;
 class bssh_terminal_view;
@@ -131,7 +133,18 @@ private:
 	void apply_focus_styling();
 
 	bssh_layout_manager *m_layout;
+	QVBoxLayout *m_outer;
 	QSplitter *m_splitter;
+
+	/*
+	 * A column can hold more sessions than fit the screen (sec 8.7), so
+	 * its splitter lives in a scroll area that scrolls when they overflow
+	 * -- built once, and the splitter is moved into it only in the column
+	 * arrangement, so a tiled window is byte-for-byte what it was. The
+	 * scroll's FEEL (kinetic flick, snap to a pane top) waits for a device
+	 * pass; this is reachability, not yet the gesture.
+	 */
+	QScrollArea *m_scroll;
 	QList<bssh_terminal_view *> m_views;
 	QList<bssh_session *> m_sessions;
 	bssh_session *m_focused;

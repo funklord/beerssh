@@ -91,6 +91,20 @@ struct forced_touch_t {
 	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
 };
 
+/*
+ * Closes any session a window test left in the shared registry, so a
+ * later test does not count a window this one built -- a leak surfaces as
+ * a failure somewhere else entirely.
+ */
+struct registry_left_as_found_t {
+	bssh_session_registry *registry;
+
+	explicit registry_left_as_found_t(bssh_session_registry *r) : registry(r) {}
+	~registry_left_as_found_t() {
+		while (registry && registry->count() > 0) registry->close(registry->at(0));
+	}
+};
+
 static bssh_profile_t named(const QString &name) {
 	bssh_profile_t profile;
 	profile.name = name;
@@ -348,9 +362,10 @@ void layout_test::a_column_caps_where_a_tile_cannot() {
 
 	/*
 	 * A phone-width window. Tiled, it holds one pane (COMPACT); a column
-	 * holds two, because stacking is not what a narrow window runs out of
-	 * room for. That difference at THIS width is the whole feature -- the
-	 * two caps agreeing here would mean the arrangement changed nothing.
+	 * holds every session it is given, because stacking is not what a
+	 * narrow window runs out of room for. That difference at THIS width is
+	 * the whole feature -- the two caps agreeing here would mean the
+	 * arrangement changed nothing.
 	 */
 	layout.set_width(400);
 	QCOMPARE(layout.max_panes(), 1);
@@ -360,7 +375,8 @@ void layout_test::a_column_caps_where_a_tile_cannot() {
 	QCOMPARE(spy.count(), 1);
 
 	QCOMPARE(layout.arrangement(), bssh_layout_manager::COLUMN);
-	QCOMPARE(layout.max_panes(), 2);
+	QCOMPARE(layout.max_panes(), bssh_layout_manager::BSSH_COLUMN_PANE_LIMIT);
+	QVERIFY(layout.max_panes() > layout.max_panes_for(bssh_layout_manager::EXPANDED));
 
 	/* Idempotent: setting the same arrangement is not a layout change. */
 	layout.set_arrangement(bssh_layout_manager::COLUMN);
@@ -464,6 +480,81 @@ void layout_test::a_column_divider_is_magnetic_to_the_halfway_line() {
 	 */
 	const int floored = bssh_snap_column_divider(total - 1, total, cell, radius);
 	QVERIFY(total - floored >= cell);
+}
+
+void layout_test::a_column_holds_every_session_and_dissolves_the_tabs() {
+	const forced_touch_t column(1);
+
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	window.adopt_session(registry->create(named(QStringLiteral("a"))));
+	window.adopt_session(registry->create(named(QStringLiteral("b"))));
+	window.adopt_session(registry->create(named(QStringLiteral("c"))));
+
+	/*
+	 * All three are panes in the column (sec 8.7). Before this, a phone
+	 * showed one or two and made the rest tabs -- and the session on
+	 * screen had no tab at all, which is the off-by-one that was reported.
+	 * With every session a pane there is nothing to convert, so the count
+	 * is the reproduction of the bug turned into an assertion.
+	 */
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QCOMPARE(panes->pane_count(), 3);
+
+	QTabBar *tabs = window.findChild<QTabBar *>();
+	QVERIFY(tabs);
+	QCOMPARE(tabs->count(), 0);
+}
+
+void layout_test::an_overflowing_column_keeps_every_pane_reachable() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(400);
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+
+	QList<bssh_session *> many;
+	for (int i = 0; i < 8; ++i)
+		many.append(registry.create(named(QStringLiteral("s%1").arg(i))));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(400, 400);
+	layout.set_intent(many);
+	QCoreApplication::processEvents();
+
+	/*
+	 * Eight four-row panes cannot fit a 400px column, and every one is
+	 * still built rather than truncated to a tab (sec 8.7) -- "holds every
+	 * session" surviving the overflow it creates.
+	 */
+	QCOMPARE(container.pane_count(), 8);
+
+	/*
+	 * And the last, past the bottom of the viewport, is reachable: focusing
+	 * it scrolls the column to it rather than leaving it clipped off the
+	 * end, which is the whole point of the scroll area.
+	 */
+	/*
+	 * The panes keep their real height and the column is taller than the
+	 * viewport -- which is what the scroll area is for. Without it the
+	 * splitter is trapped at the container's height and crams eight panes
+	 * below the four-row minimum into 400px, so the total equals the
+	 * viewport rather than overflowing it. With it, each pane sits at its
+	 * minimum and the total runs past the screen, scrollbar and all.
+	 */
+	int total = 0;
+	for (int i = 0; i < container.pane_count(); ++i) {
+		bssh_terminal_view *view = container.view_at(i);
+		QVERIFY(view);
+		total += view->height();
+	}
+	QVERIFY2(total > container.height(),
+	          "an overflowing column was crammed into the viewport instead of "
+	          "scrolling, so its panes are below a usable size");
 }
 
 void layout_test::the_input_selector_defaults_to_scroll_and_reports_changes() {
@@ -1561,18 +1652,6 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
  * two failures for one cause, and the second was a middle-click test
  * counting a window this one left behind.
  */
-namespace {
-
-struct registry_left_as_found_t {
-	bssh_session_registry *registry;
-
-	explicit registry_left_as_found_t(bssh_session_registry *r) : registry(r) {}
-	~registry_left_as_found_t() {
-		while (registry && registry->count() > 0) registry->close(registry->at(0));
-	}
-};
-
-} /* namespace */
 
 /*
  * One layout, two geometries: the slot split (sec 6.2).
@@ -2411,7 +2490,13 @@ int bssh_main_window_count() {
  * offered and does nothing, while a bar-based one is correctly refused.
  */
 void layout_test::a_tab_can_be_moved_along_the_bar() {
-	const forced_touch_t arrangement(1);
+	/*
+	 * Tiled, not a column: a column holds every session as a pane and has
+	 * no tabs to move (sec 8.7), so tab reordering is a tiled question
+	 * now. Forced off-touch keeps the window tiled, and its default
+	 * COMPACT width fits one pane so the other two sessions are tabs.
+	 */
+	const forced_touch_t arrangement(0);
 
 	bssh_main_window window;
 	bssh_session_registry *registry = window.registry();

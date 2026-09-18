@@ -1,0 +1,34 @@
+# The portrait column holds every session and scrolls (project.md sec
+# 8.7), which is what dissolves the reported tab off-by-one: with every
+# session a pane there is nothing to convert to a tab. None of these
+# failures is an error -- a column that truncates, a window that never
+# fills the column, or an overflow that clips the panes past the bottom of
+# the screen out of reach.
+#
+# Both seen to fail 2026-09-18 against a 574-passing baseline. The cap
+# itself -- a column truncating instead of holding every session -- is
+# already guarded by column-mode.toml, so it is not repeated here.
+
+# The window stops filling the column with the shown list.
+#
+# The layout can hold every session, but nothing tells it to: the column
+# never gets the sessions the window holds, so the panes never appear. The
+# window-level test is the one that sees the wiring, not the model.
+[[sabotage]]
+name = "the shown list never reaches the column"
+file = "src/ui/main_window.cpp"
+find = "\t\tm_layout->set_intent(m_shown);"
+replace = "\t\t(void) m_shown;"
+expect = "a_column_holds_every_session_and_dissolves_the_tabs"
+
+# The column never moves into its scroll area.
+#
+# Without the scroll area an overflowing column clips the panes past the
+# bottom of the viewport, and focusing the last one cannot bring it back:
+# holds-every-session becomes holds-every-session-you-cannot-reach.
+[[sabotage]]
+name = "an overflowing column is never made scrollable"
+file = "src/ui/pane_container.cpp"
+find = "\tif (column && m_scroll->widget() != m_splitter) {"
+replace = "\tif (false && m_scroll->widget() != m_splitter) {"
+expect = "an_overflowing_column_keeps_every_pane_reachable"

@@ -56,8 +56,15 @@ public:
 	 */
 	enum arrangement_t {
 		TILED,   /* side by side, dividers vertical (sec 8.4) */
-		COLUMN   /* stacked, one full or two half (sec 8.7) */
+		COLUMN   /* stacked, holds every session, scrolls (sec 8.7) */
 	};
+
+	/*
+	 * A column's sanity ceiling, not a design cap: it holds every session
+	 * (sec 8.7), and this only stops a runaway from stacking an absurd
+	 * number. The common case is one or two.
+	 */
+	static const int BSSH_COLUMN_PANE_LIMIT = 64;
 
 	explicit bssh_layout_manager(QObject *parent = nullptr);
 

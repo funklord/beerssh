@@ -3,6 +3,8 @@
 
 #include <QMetaType>
 #include <QEvent>
+#include <QFrame>
+#include <QScrollArea>
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QPointer>
@@ -23,13 +25,30 @@
 bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *parent)
     : QWidget(parent),
       m_layout(layout),
+      m_outer(nullptr),
       m_focused(nullptr),
-      m_splitter(nullptr) {
+      m_splitter(nullptr),
+      m_scroll(nullptr) {
 	qRegisterMetaType<bssh_session *>();
 
-	QVBoxLayout *outer = new QVBoxLayout(this);
-	outer->setContentsMargins(0, 0, 0, 0);
-	outer->setSpacing(0);
+	m_outer = new QVBoxLayout(this);
+	m_outer->setContentsMargins(0, 0, 0, 0);
+	m_outer->setSpacing(0);
+
+	/*
+	 * The column's scroll area, built once and empty until a column
+	 * rebuild moves the splitter into it (sec 8.7). Resizable so the
+	 * splitter fills the viewport where the panes fit, and scrolls only
+	 * when their minimum heights add up to more than the screen. No
+	 * QScroller: a kinetic flick would fight the terminal body-drag the
+	 * input selector routes, which is the gesture a device pass settles.
+	 */
+	m_scroll = new QScrollArea(this);
+	m_scroll->setWidgetResizable(true);
+	m_scroll->setFrameShape(QFrame::NoFrame);
+	m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+	m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	m_scroll->hide();
 
 	m_splitter = new QSplitter(Qt::Horizontal, this);
 
@@ -67,7 +86,7 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
 		snap_divider_to_cells();
 	});
 
-	outer->addWidget(m_splitter, 1);
+	m_outer->addWidget(m_splitter, 1);
 
 	if (m_layout) {
 		connect(m_layout, &bssh_layout_manager::layout_changed,
@@ -102,9 +121,28 @@ void bssh_pane_container::rebuild() {
 	 * are added so they arrive in the right orientation; the divider
 	 * snapping keys off the same orientation below.
 	 */
-	m_splitter->setOrientation(
-	        m_layout->arrangement() == bssh_layout_manager::COLUMN
-	        ? Qt::Vertical : Qt::Horizontal);
+	const bool column = m_layout->arrangement() == bssh_layout_manager::COLUMN;
+	m_splitter->setOrientation(column ? Qt::Vertical : Qt::Horizontal);
+
+	/*
+	 * A column scrolls when its panes overflow, so its splitter lives in
+	 * the scroll area; a tile fills the container directly, exactly as it
+	 * always has. Moved only when the arrangement's structure actually
+	 * differs -- the checks are idempotent, so an ordinary pane change
+	 * reparents nothing and a tiled window never touches the scroll area
+	 * at all.
+	 */
+	if (column && m_scroll->widget() != m_splitter) {
+		m_outer->removeWidget(m_splitter);
+		m_scroll->setWidget(m_splitter);
+		m_outer->insertWidget(0, m_scroll, 1);
+		m_scroll->show();
+	} else if (!column && m_scroll->widget() == m_splitter) {
+		m_scroll->takeWidget();
+		m_outer->removeWidget(m_scroll);
+		m_scroll->hide();
+		m_outer->insertWidget(0, m_splitter, 1);
+	}
 
 	/*
 	 * Destroy and rebuild rather than diff. A pane view holds no state of
@@ -297,7 +335,20 @@ void bssh_pane_container::focus_session(bssh_session *session) {
 	apply_focus_styling();
 
 	bssh_terminal_view *view = focused_view();
-	if (view) view->setFocus();
+	if (view) {
+		view->setFocus();
+
+		/*
+		 * In a scrolling column the focused pane may be off screen (sec
+		 * 8.7), so bring it into view -- a tap, Tab or a chord that moves
+		 * focus should not leave you looking at a pane you are no longer
+		 * typing in. Only when the splitter is actually in the scroll
+		 * area, so a tiled window does nothing.
+		 */
+		if (m_scroll && m_scroll->widget() == m_splitter) {
+			m_scroll->ensureWidgetVisible(view);
+		}
+	}
 
 	emit focus_changed(m_focused);
 }

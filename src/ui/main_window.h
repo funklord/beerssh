@@ -430,6 +430,14 @@ private:
 	void apply_input_mode();
 
 	/*
+	 * Keeps the column's layout intent equal to the shown list (sec 8.7),
+	 * so the column holds every session the window holds and the tab bar
+	 * has nothing left to convert. Called wherever the shown list changes;
+	 * a no-op outside the column arrangement.
+	 */
+	void sync_column_intent();
+
+	/*
 	 * Adds a session to the visible panes rather than replacing them
 	 * (sec 8.3's "move to split"). Separate from show_session because a
 	 * tab click that silently split the window would be one click doing

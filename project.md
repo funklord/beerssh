@@ -5877,14 +5877,16 @@ asserts the detent while the gesture that drives it waits for a device.
 Guarded by `tool/sabotage/column-mode.toml`, three edits, each seen to
 fail naming its own test against a 556-passing baseline.
 
-**What it does NOT yet do, so the next pass starts from the truth.** The
-intent and tab model are unchanged -- the column shows what the existing
-split/tab machinery puts in the intent, so the "holds every session,
-off-by-one dissolves" evolution above is not in yet and tabs still
-convert as before. There is no scroll area, so the ">2 terminals scroll
-the column" and the scroll-SNAP are absent (they arrive with the
-selector's `scroll terminals` state). The five-state input selector and
-body-drag-scroll are untouched. The snap radius is a constant
+**What this first increment did NOT do -- since largely closed.** It left
+the intent and tab model unchanged, so the column showed only what the
+existing split machinery put in the intent and tabs still converted. That
+is the "holds every session" evolution, and it landed 2026-09-18 (the
+BUILT note under the off-by-one below): the column now holds the whole
+shown list and scrolls, so this paragraph's first gap is closed and the
+scroll area exists. What is still open is the scroll's FEEL and the two
+column-level selector states -- `scroll terminals` and `move terminals`,
+the second of which is the touch reordering that dissolved with the tabs.
+The snap radius is a constant
 (`BSSH_COLUMN_SNAP_RADIUS`, 8px) rather than the configurable value this
 section asks for -- there is no settings plumbing for it yet. And the
 resize/snap FEEL owes the same device pass every touch surface here does:
@@ -6044,6 +6046,31 @@ coherent on a desktop showing several panes, nonsense on a phone showing
 one. If the portrait column holds every session there is nothing left to
 convert, and the off-by-one goes with the concept rather than being
 fixed.
+
+**BUILT 2026-09-18: the column now holds every session, and the
+off-by-one is gone with it.** `max_panes()` in a column is a sanity
+ceiling rather than the tiled cap (`BSSH_COLUMN_PANE_LIMIT`), so
+`visible_panes()` truncates nothing; `bssh_main_window::sync_column_intent`
+keeps the layout intent equal to the shown list wherever that list
+changes, so every session the window holds is a pane and the tab bar has
+nothing to build. A column taller than the screen scrolls: its splitter
+lives in a `QScrollArea` (`pane_container`), moved there only in the
+column arrangement so a tiled window is untouched, and focusing a pane
+past the bottom scrolls it into view. Guarded by
+`tool/sabotage/scrollable-column.toml` and the model half of
+`column-mode.toml`.
+
+**What this costs, and it is the honest half.** Dissolving the tabs
+dissolves the touch tab-REORDER with them -- there are no tabs to move on
+a phone now -- and its replacement, reordering the column itself (the
+selector's `move terminals` state), is not built. So on touch, reordering
+is temporarily gone until that lands; tab-reorder survives on the desktop,
+where tabs do, and `a_tab_can_be_moved_along_the_bar` moved there to prove
+it. The scroll is reachable but not yet FELT: there is a scrollbar on
+overflow, and no kinetic flick or snap-to-a-pane-top, because a body-drag
+that scrolled the column would fight the one that scrolls a terminal's
+scrollback (the input selector) -- the `scroll terminals` selector state
+and the snap are the device pass this still owes.
 
 **Everything currently built stays until it is replaced**, on the
 holder's instruction: *"We keep all the features we have for now and try
