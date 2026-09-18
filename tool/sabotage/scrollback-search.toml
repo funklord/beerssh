@@ -54,6 +54,18 @@ find = "\tif (shortcut == bssh_input_router::SHORTCUT_FIND) open_find();"
 replace = "\tif (shortcut == bssh_input_router::SHORTCUT_FIND) {}"
 expect = "the_find_chord_opens_a_bar_that_searches_the_pane"
 
+# A wrapped line is searched a row at a time.
+#
+# find joins a row with the continuation rows below it, so a match that
+# straddles the wrap is found. Stop the joining and each physical row is
+# searched alone, and the word split across the wrap disappears.
+[[sabotage]]
+name = "find does not join wrapped rows"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t} while (phys < end && line_is_continuation(phys));"
+replace = "\t\t} while (false);"
+expect = "find_matches_across_a_wrapped_line"
+
 # The bar's query never reaches the view.
 #
 # run_find is where the bar's text becomes a search of the focused pane.

@@ -857,15 +857,17 @@ private:
 	int m_selection_focus_col;
 
 	/*
-	 * Find matches in absolute line coordinates -- a column span per match
-	 * so the highlight covers a wide glyph's whole width, and the same
-	 * coordinate the selection uses so a match survives the ring evicting
-	 * lines beneath it (see history_base). m_current_match indexes into
-	 * the list, or -1 when there is nothing found.
+	 * A find match as a range in absolute line coordinates -- start and end
+	 * cell -- so it can span the wrap of a logical line the same way a
+	 * selection does, and the highlight covers a wide glyph's whole width.
+	 * The absolute coordinate is the one the selection uses, so a match
+	 * survives the ring evicting lines beneath it (see history_base).
+	 * m_current_match indexes into the list, or -1 when nothing is found.
 	 */
 	struct find_match_t {
-		qint64 line;
+		qint64 start_line;
 		int start_col;
+		qint64 end_line;
 		int end_col;
 	};
 	void scroll_find_match_into_view(const find_match_t &match);

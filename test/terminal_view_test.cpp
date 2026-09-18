@@ -625,6 +625,32 @@ void terminal_view_test::find_locates_matches_navigates_and_scrolls() {
 	QVERIFY(view.find_query().isEmpty());
 }
 
+void terminal_view_test::find_matches_across_a_wrapped_line() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	const int cols = view.cols();
+	QVERIFY(cols > 10);
+
+	/*
+	 * One logical line that wraps, with the word straddling the wrap:
+	 * (cols - 3) filler characters, then "needle", so "nee" ends the first
+	 * row and "dle" begins the continuation row. A per-row search would
+	 * miss it; the logical-line search joins the rows and finds the one
+	 * match, spanning both.
+	 */
+	emulator.feed(QByteArray(cols - 3, 'x'));
+	emulator.feed(QByteArrayLiteral("needle"));
+
+	QCOMPARE(view.find_text(QStringLiteral("needle")), 1);
+	QCOMPARE(view.current_find_index(), 1);
+}
+
 void terminal_view_test::select_mode_is_the_touch_shift_override() {
 	forced_touch_t touch(1);
 

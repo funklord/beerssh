@@ -1133,13 +1133,16 @@ quirks on Android.
   thing a search exists to make findable. The bar (`bssh_find_bar`) is a
   plain control that emits the query and the step and reads back a count; the
   window routes it to whichever pane has focus, the same split the input
-  selector uses. Guarded by `tool/sabotage/scrollback-search.toml`, five
-  edits seen to fail: case-sensitivity, a step that ignores direction, a
-  match not scrolled to, the chord opening nothing, and the bar searching for
-  nothing. The per-cell highlight is a paint change tested by reading, like
-  the reverse-video and selection swaps it sits beside; a wrapped line's
-  match spanning the wrap is not found yet, which the per-physical-line
-  search leaves for a later pass.
+  selector uses. A wrapped line is searched as one LOGICAL line: a row is
+  joined with the continuation rows below it (the fact `line_is_continuation`
+  and selection_text already rejoin on), so a word split across the wrap is
+  found, and a match is a start-to-end RANGE like a selection rather than a
+  single-row span, so its highlight covers both rows. Guarded by
+  `tool/sabotage/scrollback-search.toml`, six edits seen to fail:
+  case-sensitivity, a step that ignores direction, a match not scrolled to, a
+  wrapped line searched a row at a time, the chord opening nothing, and the
+  bar searching for nothing. The per-cell highlight is a paint change tested
+  by reading, like the reverse-video and selection swaps it sits beside.
   **The right-click menu was the second copy, and it was there all along.**
   Its Copy and Paste entries wrote their chords out as the literals
   `"Ctrl+Shift+C"` and `"Ctrl+Shift+V"`, while every other menu in the window

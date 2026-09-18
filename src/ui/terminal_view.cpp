@@ -1950,25 +1950,37 @@ int bssh_terminal_view::find_text(const QString &query) {
 	 */
 	const int width = m_screen ? m_screen->cols() : m_cols;
 
-	for (qint64 line = base; line < end; ++line) {
-		/*
-		 * Build the line's text and remember which column each character
-		 * came from, so a match maps back to whole cells -- the far half
-		 * of a wide glyph is skipped here just as the paint skips it.
-		 */
+	/*
+	 * Search LOGICAL lines, not physical rows: a line that wrapped is
+	 * stored as several rows, and a match straddling the wrap would be
+	 * missed if each row were searched alone. So a row is joined with the
+	 * continuation rows below it -- line_is_continuation marks them, the
+	 * fact selection_text rejoins on -- and each character remembers which
+	 * row and column it came from, so a match maps back to cells that may
+	 * span rows.
+	 */
+	for (qint64 line = base; line < end;) {
 		QString text;
+		QList<qint64> line_of;
 		QList<int> col_of;
-		for (int col = 0; col < width; ++col) {
-			const bssh_cell_t &cell = cell_for_line(line, col);
-			if (cell.width == 0) continue;
-			text.append(cell.ch ? QString::fromUcs4(&cell.ch, 1)
-			                    : QStringLiteral(" "));
-			col_of.append(col);
-		}
 
-		/* Trailing padding is not content, exactly as selection_text has it. */
+		qint64 phys = line;
+		do {
+			for (int col = 0; col < width; ++col) {
+				const bssh_cell_t &cell = cell_for_line(phys, col);
+				if (cell.width == 0) continue;
+				text.append(cell.ch ? QString::fromUcs4(&cell.ch, 1)
+				                    : QStringLiteral(" "));
+				line_of.append(phys);
+				col_of.append(col);
+			}
+			++phys;
+		} while (phys < end && line_is_continuation(phys));
+
+		/* Trailing padding on the last row is not content, as selection has it. */
 		while (text.endsWith(QLatin1Char(' '))) {
 			text.chop(1);
+			line_of.removeLast();
 			col_of.removeLast();
 		}
 
@@ -1979,18 +1991,24 @@ int bssh_terminal_view::find_text(const QString &query) {
 
 			const int last = idx + query.size() - 1;
 			find_match_t match;
-			match.line = line;
+			match.start_line = line_of.at(idx);
 			match.start_col = col_of.at(idx);
+			match.end_line = line_of.at(last);
 			/*
-			 * The far edge of the last matched cell: the column before
-			 * the next character, or the last column when the match runs
-			 * to the end -- which covers a wide glyph's second cell.
+			 * The far edge of the last matched cell: the column before the
+			 * next character when it is on the same row, else the row's end
+			 * -- which covers a wide glyph's second cell and a match ending
+			 * at a wrap.
 			 */
-			match.end_col = (last + 1 < col_of.size()) ? col_of.at(last + 1) - 1
-			                                           : width - 1;
+			match.end_col =
+			        (last + 1 < col_of.size() && line_of.at(last + 1) == match.end_line)
+			                ? col_of.at(last + 1) - 1
+			                : width - 1;
 			m_find_matches.append(match);
 			from = idx + 1;
 		}
+
+		line = phys;
 	}
 
 	if (!m_find_matches.isEmpty()) {
@@ -2030,8 +2048,10 @@ int bssh_terminal_view::current_find_index() const {
 
 bool bssh_terminal_view::is_find_match(qint64 line, int col) const {
 	for (const find_match_t &match : m_find_matches) {
-		if (match.line == line && col >= match.start_col && col <= match.end_col)
-			return true;
+		if (line < match.start_line || line > match.end_line) continue;
+		if (line == match.start_line && col < match.start_col) continue;
+		if (line == match.end_line && col > match.end_col) continue;
+		return true;
 	}
 	return false;
 }
@@ -2040,7 +2060,10 @@ bool bssh_terminal_view::is_current_find_match(qint64 line, int col) const {
 	if (m_current_match < 0) return false;
 
 	const find_match_t &match = m_find_matches.at(m_current_match);
-	return match.line == line && col >= match.start_col && col <= match.end_col;
+	if (line < match.start_line || line > match.end_line) return false;
+	if (line == match.start_line && col < match.start_col) return false;
+	if (line == match.end_line && col > match.end_col) return false;
+	return true;
 }
 
 void bssh_terminal_view::scroll_find_match_into_view(const find_match_t &match) {
@@ -2049,14 +2072,14 @@ void bssh_terminal_view::scroll_find_match_into_view(const find_match_t &match) 
 	const qint64 bottom = top + m_rows - 1;
 
 	/* Already on screen: leave the view where it is rather than jumping. */
-	if (match.line >= top && match.line <= bottom) return;
+	if (match.start_line >= top && match.start_line <= bottom) return;
 
 	/*
-	 * Otherwise place it a third of the way down, so there is context
-	 * above the match. set_scroll_offset clamps to the available history.
+	 * Otherwise place its first row a third of the way down, so there is
+	 * context above. set_scroll_offset clamps to the available history.
 	 */
 	const qint64 target_row = m_rows / 3;
-	const qint64 offset = history_base() + history + target_row - match.line;
+	const qint64 offset = history_base() + history + target_row - match.start_line;
 	set_scroll_offset(int(qBound(qint64(0), offset, qint64(available_history()))));
 }
 

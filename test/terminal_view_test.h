@@ -62,6 +62,7 @@ private slots:
 	void a_touch_body_drag_reorders_in_move_mode();
 	void a_touch_body_drag_pans_the_column_in_pan_mode();
 	void find_locates_matches_navigates_and_scrolls();
+	void find_matches_across_a_wrapped_line();
 	void select_mode_is_the_touch_shift_override();
 	void click_mode_lets_the_remote_have_the_touch();
 
