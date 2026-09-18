@@ -604,6 +604,33 @@ void terminal_view_test::the_terminal_grid_ignores_the_application_font() {
 	QCOMPARE(cell_under_huge_font, cell);
 }
 
+void terminal_view_test::a_view_builds_its_font_with_the_ligature_default() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+	/*
+	 * The wiring, not just make_font: a view reads the device default when
+	 * it builds its font (sec 9.2), so the setting reaches the grid rather
+	 * than sitting in the store. Dropping the default from the view's
+	 * make_font call leaves this the one test that goes red.
+	 */
+	const bool saved = bssh_terminal_view::default_font_ligatures();
+
+	bssh_terminal_view::set_default_font_ligatures(false);
+	bssh_terminal_view off;
+	QVERIFY2(off.display_font().isFeatureSet(QFont::Tag("liga")),
+	          "off pins the feature to 0 so the grid never draws a ligature");
+	QCOMPARE(off.display_font().featureValue(QFont::Tag("liga")), quint32(0));
+
+	bssh_terminal_view::set_default_font_ligatures(true);
+	bssh_terminal_view on;
+	QVERIFY2(!on.display_font().isFeatureSet(QFont::Tag("liga")),
+	          "on leaves the feature to the font's own defaults");
+
+	bssh_terminal_view::set_default_font_ligatures(saved);
+#else
+	QSKIP("per-font OpenType feature control needs Qt 6.7");
+#endif
+}
+
 void terminal_view_test::the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse() {
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 320);

@@ -11186,7 +11186,12 @@ background).
     resolves a stable id through §9.3's chain per glyph, fonts are built with
     font merging **off** so nothing proportional can be substituted in, real
     bold/italic faces are loaded rather than synthesised, ligatures are
-    disabled by default, the font directory is a `bssh_platform` question,
+    disabled by default with an opt-in setting for the user who wants them
+    (**BUILT 2026-09-18**: `appearance/font_ligatures`, off by default, fed
+    to `make_font` through `bssh_terminal_view`'s device default the same
+    way the scrollbar is, and effective on Qt 6.7+ where per-font feature
+    control exists; guarded by `tool/sabotage/font-ligatures.toml`), the
+    font directory is a `bssh_platform` question,
     and §9.6's validator runs in CI and fails the build on an unsuitable
     font. **On both platforms:** the base set (JetBrains Mono, DejaVu, Hack,
     Noto — 4.1 MB, 13 faces) ships inside the APK and is verified loading

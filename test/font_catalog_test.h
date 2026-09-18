@@ -31,6 +31,14 @@ private slots:
 	void an_unavailable_font_is_reported_rather_than_swapped_silently();
 	void glyph_lookup_answers_from_the_chain_and_repeats_itself();
 	void fonts_are_built_with_merging_off();
+
+	/*
+	 * Ligatures off by default and on when asked (sec 9.2): the liga/clig/
+	 * calt features are pinned to 0 for the grid, and left to the font's
+	 * own defaults when the user opts in. Qt 6.7+ only, where per-font
+	 * feature control exists.
+	 */
+	void ligatures_are_off_by_default_and_optional();
 	void the_bundled_set_loads_and_covers_what_it_promises();
 	void a_scheme_owns_the_background_and_the_text_not_the_palette();
 	void an_unknown_scheme_is_kept_but_drawn_in_the_default();

@@ -436,6 +436,34 @@ void platform_test::the_font_scale_setting_survives_a_restart() {
 	}
 }
 
+void platform_test::the_ligatures_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	/*
+	 * Off by default, and the default is the argued position (sec 9.2): a
+	 * ligature draws two characters as one shape while the grid counts
+	 * two columns. On is the opt-in for a user who wants them.
+	 */
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(!settings.font_ligatures(), "off by default, per sec 9.2");
+
+		settings.set_font_ligatures(true);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY(reopened.font_ligatures());
+	}
+	{
+		bssh_app_settings settings(dir.path());
+		settings.set_font_ligatures(false);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY2(!reopened.font_ligatures(), "and it can be turned off again");
+	}
+}
+
 void platform_test::the_scrollbar_setting_survives_a_restart() {
 	QTemporaryDir dir;
 

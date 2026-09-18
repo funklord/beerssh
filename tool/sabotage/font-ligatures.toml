@@ -1,0 +1,46 @@
+# Font ligatures in the terminal (project.md sec 9.2): off by default,
+# because a ligature draws two characters as one shape while the grid
+# counts two columns, and on for the user who wants them. None of these
+# failures is an error -- a grid that cannot turn ligatures off, a setting
+# that never reaches the grid, or a default that ships them on.
+#
+# All three seen to fail 2026-09-18 against a 572-passing baseline. The
+# feature and its tests need Qt 6.7's per-font feature control; on the
+# older CI Qt they QSKIP, and the sabotages are no-ops there rather than
+# false passes, because make_font sets no features at all below 6.7.
+
+# make_font ignores the ligatures argument and always disables them.
+#
+# The escape for a user who wants ligatures stops working: the grid pins
+# the features off whatever it is asked for.
+[[sabotage]]
+name = "make_font ignores the ligatures argument"
+file = "src/term/font_catalog.cpp"
+find = "\tif (!ligatures) {"
+replace = "\tif (false && !ligatures) {"
+expect = "ligatures_are_off_by_default_and_optional"
+
+# The view stops passing the device default to make_font.
+#
+# make_font still honours its argument, but the view hands it a constant,
+# so the setting reaches the store and not the grid -- the setting-applied-
+# to-nothing shape this tree keeps re-finding, which only the wiring test
+# sees.
+[[sabotage]]
+name = "a view stops reading the ligature default"
+file = "src/ui/terminal_view.cpp"
+find = "\t        bssh_font_catalog::instance().family_for(m_font_id), m_font_size,\n\t        default_font_ligatures());"
+replace = "\t        bssh_font_catalog::instance().family_for(m_font_id), m_font_size,\n\t        false);"
+expect = "a_view_builds_its_font_with_the_ligature_default"
+
+# Ligatures ship on by default.
+#
+# Sec 9.2 argues the default off: a selection that lands mid-glyph and a
+# search that highlights half of "!=". Flip it and every grid draws them
+# until the user finds the setting.
+[[sabotage]]
+name = "ligatures are on by default"
+file = "src/model/app_settings.cpp"
+find = "value(QStringLiteral(\"appearance/font_ligatures\"), false)"
+replace = "value(QStringLiteral(\"appearance/font_ligatures\"), true)"
+expect = "the_ligatures_setting_survives_a_restart"

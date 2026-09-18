@@ -205,8 +205,16 @@ public:
 	/*
 	 * A ready-to-use font: fixed pitch, monospace hint, and font merging
 	 * disabled so the explicit chain above is the only fallback there is.
+	 *
+	 * Ligatures OFF by default (sec 9.2): in a character-cell grid a
+	 * ligature draws two source characters as one shape while the emulator
+	 * still counts two columns. `ligatures` is the escape for the user who
+	 * wants them anyway, and it must stay off for the cell MEASUREMENT --
+	 * a probe font measures one glyph's advance, which a ligature does not
+	 * change, so measuring with them on would only invite a surprise.
 	 */
-	static QFont make_font(const QString &family, int point_size);
+	static QFont make_font(const QString &family, int point_size,
+	                        bool ligatures = false);
 
 	/*
 	 * Non-empty when the request could not be honoured, phrased for the

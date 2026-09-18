@@ -176,7 +176,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 
 	m_font_id = bssh_font_catalog::instance().default_id(compact);
 	m_font = bssh_font_catalog::make_font(
-	        bssh_font_catalog::instance().family_for(m_font_id), m_font_size);
+	        bssh_font_catalog::instance().family_for(m_font_id), m_font_size,
+	        default_font_ligatures());
 
 	setFocusPolicy(Qt::StrongFocus);
 
@@ -223,7 +224,8 @@ void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 
 	m_font_size = point_size > 0 ? point_size : BSSH_DEFAULT_POINT_SIZE;
 
-	m_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id), m_font_size);
+	m_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id), m_font_size,
+	                                      default_font_ligatures());
 
 	/*
 	 * A different font is a different cell size, which is a different
@@ -361,7 +363,8 @@ const QFont &bssh_terminal_view::cell_font(const QString &family, bool bold, boo
 	const auto cached = m_font_cache.constFind(key);
 	if (cached != m_font_cache.constEnd()) return cached.value();
 
-	QFont font = bssh_font_catalog::make_font(family, m_font_size);
+	QFont font = bssh_font_catalog::make_font(family, m_font_size,
+	                                          default_font_ligatures());
 	font.setBold(bold);
 	font.setItalic(italic);
 
@@ -758,6 +761,10 @@ namespace {
  */
 bssh_terminal_view::scrollbar_position_t default_position = bssh_terminal_view::SCROLLBAR_NONE;
 
+/* Ligatures off by default (sec 9.2); set once from the device settings,
+ * read by every view's font build, for the same reason as the scrollbar. */
+bool default_ligatures = false;
+
 } /* namespace */
 
 void bssh_terminal_view::set_default_scrollbar_position(scrollbar_position_t where) {
@@ -766,6 +773,14 @@ void bssh_terminal_view::set_default_scrollbar_position(scrollbar_position_t whe
 
 bssh_terminal_view::scrollbar_position_t bssh_terminal_view::default_scrollbar_position() {
 	return default_position;
+}
+
+void bssh_terminal_view::set_default_font_ligatures(bool ligatures) {
+	default_ligatures = ligatures;
+}
+
+bool bssh_terminal_view::default_font_ligatures() {
+	return default_ligatures;
 }
 
 int bssh_terminal_view::grid_origin_x() const {

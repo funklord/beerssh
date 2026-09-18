@@ -98,6 +98,13 @@ public:
 	int cell_height() const { return m_cell_height; }
 
 	/*
+	 * The resolved base font the grid draws with, exposed so a test can
+	 * confirm what the view actually built -- the font is painted rather
+	 * than set on the widget, so QWidget::font() does not answer for it.
+	 */
+	const QFont &display_font() const { return m_font; }
+
+	/*
 	 * How big this widget has to be to hold a grid of cols x rows
 	 * (project.md sec 8.6's --geometry).
 	 *
@@ -173,6 +180,16 @@ public:
 	 */
 	static void set_default_scrollbar_position(scrollbar_position_t where);
 	static scrollbar_position_t default_scrollbar_position();
+
+	/*
+	 * Ligatures for the terminal font (sec 9.2), a device default set from
+	 * the settings and read by every view's font build -- the same shape
+	 * as the scrollbar default, and for the same reason: the pane
+	 * container builds views in a loop that has no business reading
+	 * settings.
+	 */
+	static void set_default_font_ligatures(bool ligatures);
+	static bool default_font_ligatures();
 
 	/*
 	 * The curated set's way in (project.md sec 9): a stable font id and a

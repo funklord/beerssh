@@ -102,6 +102,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
       m_caps_as_ctrl(nullptr),
       m_warn_multiline_paste(nullptr),
       m_honour_font_scale(nullptr),
+      m_font_ligatures(nullptr),
       m_focus_follows_mouse(nullptr),
       m_hide_from_screenshots(nullptr),
       m_raise_contrast(nullptr),
@@ -390,6 +391,16 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	                        "own font, so its column count does not change."));
 	if (on_this_page(SECTION_APPEARANCE, m_honour_font_scale))
 		form->addRow(m_honour_font_scale);
+
+	m_font_ligatures = new QCheckBox(
+	        QStringLiteral("Font ligatures in the terminal"), this);
+	m_font_ligatures->setObjectName(QStringLiteral("font_ligatures"));
+	m_font_ligatures->setToolTip(
+	        QStringLiteral("Draw ligatures like a combined arrow where the font "
+	                        "has them. Off by default: the grid still counts the "
+	                        "separate characters, so a selection can land mid-glyph."));
+	if (on_this_page(SECTION_APPEARANCE, m_font_ligatures))
+		form->addRow(m_font_ligatures);
 
 	m_context_menu = new QComboBox(this);
 	m_context_menu->addItem(QStringLiteral("Automatic"),
@@ -802,6 +813,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_warn_multiline_paste->setChecked(settings.warn_multiline_paste());
 	m_honour_font_scale->setChecked(settings.honour_system_font_scale());
+	m_font_ligatures->setChecked(settings.font_ligatures());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 	m_text_brightness->setValue(settings.text_brightness());
 	m_text_brightness_value->setText(QStringLiteral("%1%").arg(settings.text_brightness()));
@@ -909,6 +921,11 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	connect(m_honour_font_scale, &QCheckBox::toggled, this, [this] {
 		commit([this](bssh_app_settings &s) {
 			s.set_honour_system_font_scale(m_honour_font_scale->isChecked());
+		});
+	});
+	connect(m_font_ligatures, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_font_ligatures(m_font_ligatures->isChecked());
 		});
 	});
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] {

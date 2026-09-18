@@ -288,6 +288,17 @@ public:
 	void set_honour_system_font_scale(bool honour);
 
 	/*
+	 * Font ligatures in the terminal (sec 9.2). OFF by default, and the
+	 * default is the argued position: a ligature draws two characters as
+	 * one shape while the grid still counts two columns, so a search that
+	 * highlights "!=" highlights half a glyph. On is for the user who
+	 * knows that and wants them anyway. Effective only on Qt 6.7+, where
+	 * per-font feature control exists.
+	 */
+	bool font_ligatures() const;
+	void set_font_ligatures(bool ligatures);
+
+	/*
 	 * sec 11: secret-store keys whose host row is gone but whose secret
 	 * could not be erased, because the passphrase-derived store was
 	 * locked at the time and erasing means re-encrypting the whole blob.

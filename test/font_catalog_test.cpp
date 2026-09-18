@@ -213,6 +213,28 @@ void font_catalog_test::fonts_are_built_with_merging_off() {
 	QCOMPARE(font.pointSize(), 11);
 }
 
+void font_catalog_test::ligatures_are_off_by_default_and_optional() {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+	/*
+	 * Off by default (sec 9.2): a ligature draws two source characters as
+	 * one shape while the emulator counts two columns, so the liga/clig/
+	 * calt features are pinned to 0. The escape for the user who wants
+	 * them anyway is to build the font with ligatures on, which leaves the
+	 * features unset so the font's own defaults render.
+	 */
+	const QFont off = bssh_font_catalog::make_font(QStringLiteral("Fira Code"), 12, false);
+	QVERIFY(off.isFeatureSet(QFont::Tag("liga")));
+	QCOMPARE(off.featureValue(QFont::Tag("liga")), quint32(0));
+	QCOMPARE(off.featureValue(QFont::Tag("calt")), quint32(0));
+
+	const QFont on = bssh_font_catalog::make_font(QStringLiteral("Fira Code"), 12, true);
+	QVERIFY(!on.isFeatureSet(QFont::Tag("liga")));
+	QVERIFY(!on.isFeatureSet(QFont::Tag("calt")));
+#else
+	QSKIP("per-font OpenType feature control needs Qt 6.7");
+#endif
+}
+
 void font_catalog_test::the_bundled_set_loads_and_covers_what_it_promises() {
 	/*
 	 * The only test here that touches the real font files, and therefore

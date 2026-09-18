@@ -70,6 +70,13 @@ private slots:
 	 */
 	void the_interface_font_scales_and_no_ops_at_one();
 	void the_terminal_grid_ignores_the_application_font();
+
+	/*
+	 * The ligature setting reaches the grid: a view builds its font with
+	 * the device default (sec 9.2), which is the wiring make_font's own
+	 * test cannot see.
+	 */
+	void a_view_builds_its_font_with_the_ligature_default();
 	void a_sticky_shift_overrides_mouse_reporting_on_touch();
 	void a_long_press_reaches_the_menu_even_when_the_remote_has_the_mouse();
 	void the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse();

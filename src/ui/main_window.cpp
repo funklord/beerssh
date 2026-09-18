@@ -1437,6 +1437,19 @@ void bssh_main_window::apply_device_settings() {
 	const bool bar_changed = bssh_terminal_view::default_scrollbar_position() != bar;
 	bssh_terminal_view::set_default_scrollbar_position(bar);
 
+	/*
+	 * Ligatures are the font's shape (sec 9.2), so they ride the same
+	 * default-and-rebuild path as the scrollbar: set the device default,
+	 * and rebuild the panes once when it changes so every view's font is
+	 * built afresh with the new value. Unlike the scrollbar this cannot
+	 * feed back into the layout -- a ligature does not change a monospace
+	 * cell's width -- but the mechanism is worth sharing rather than
+	 * poking each live view's font by a second route.
+	 */
+	const bool ligatures = settings.font_ligatures();
+	const bool ligatures_changed = bssh_terminal_view::default_font_ligatures() != ligatures;
+	bssh_terminal_view::set_default_font_ligatures(ligatures);
+
 	if (m_panes) {
 		for (bssh_terminal_view *view : m_panes->views()) {
 			if (!view) continue;
@@ -1453,7 +1466,7 @@ void bssh_main_window::apply_device_settings() {
 		}
 	}
 
-	if (bar_changed && m_panes) m_panes->rebuild();
+	if ((bar_changed || ligatures_changed) && m_panes) m_panes->rebuild();
 
 	/*
 	 * Caps as Ctrl reaches every session's router, not just the focused

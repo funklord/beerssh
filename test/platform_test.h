@@ -45,6 +45,9 @@ private slots:
 	void the_desktop_adds_no_interface_scale();
 	void the_font_scale_setting_survives_a_restart();
 
+	/* Font ligatures (sec 9.2): off by default, and the choice persists. */
+	void the_ligatures_setting_survives_a_restart();
+
 	/* sec 8.3, sec 8.4, sec 6.1: the settings this app grew for its
 	 * desktop furniture, each stored as words a person can hand-edit. */
 	void the_scrollbar_setting_survives_a_restart();

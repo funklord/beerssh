@@ -322,7 +322,8 @@ QString bssh_font_catalog::family_for_glyph(const QString &id, char32_t ch) cons
 	return chosen;
 }
 
-QFont bssh_font_catalog::make_font(const QString &family, int point_size) {
+QFont bssh_font_catalog::make_font(const QString &family, int point_size,
+                                    bool ligatures) {
 	QFont font(family);
 	font.setPointSize(point_size);
 	font.setFixedPitch(true);
@@ -350,9 +351,13 @@ QFont bssh_font_catalog::make_font(const QString &family, int point_size) {
 	 * distribution CI images still carry) renders with the font's own
 	 * defaults, which is a cosmetic difference rather than a broken grid.
 	 */
-	font.setFeature(QFont::Tag("liga"), 0);
-	font.setFeature(QFont::Tag("clig"), 0);
-	font.setFeature(QFont::Tag("calt"), 0);
+	if (!ligatures) {
+		font.setFeature(QFont::Tag("liga"), 0);
+		font.setFeature(QFont::Tag("clig"), 0);
+		font.setFeature(QFont::Tag("calt"), 0);
+	}
+#else
+	(void) ligatures;
 #endif
 
 	return font;

@@ -433,6 +433,14 @@ void bssh_app_settings::set_honour_system_font_scale(bool honour) {
 	store(QStringLiteral("appearance/honour_system_font_scale"), honour);
 }
 
+bool bssh_app_settings::font_ligatures() const {
+	return value(QStringLiteral("appearance/font_ligatures"), false).toBool();
+}
+
+void bssh_app_settings::set_font_ligatures(bool ligatures) {
+	store(QStringLiteral("appearance/font_ligatures"), ligatures);
+}
+
 QStringList bssh_app_settings::orphaned_secrets() const {
 	return value(QStringLiteral("secrets/orphaned"), QStringList()).toStringList();
 }
