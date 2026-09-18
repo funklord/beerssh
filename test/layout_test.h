@@ -83,6 +83,14 @@ private slots:
 	void a_move_gesture_reorders_the_column();
 
 	/*
+	 * The Pan state (sec 8.7), which scrolls the column's viewport: offered
+	 * only where the column can overflow, and a body drag moves the
+	 * viewport under the finger.
+	 */
+	void the_pan_state_is_offered_only_in_a_column();
+	void a_pan_gesture_scrolls_the_column();
+
+	/*
 	 * Every surface a thumb can reach, at the narrowest width sec 8.2
 	 * designs to.
 	 *

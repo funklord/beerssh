@@ -538,6 +538,47 @@ void terminal_view_test::a_touch_body_drag_reorders_in_move_mode() {
 	QCOMPARE(view.scroll_offset(), 0);
 }
 
+void terminal_view_test::a_touch_body_drag_pans_the_column_in_pan_mode() {
+	forced_touch_t touch(1);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < view.rows() + 30; ++i) {
+		emulator.feed(QByteArrayLiteral("scrollback line\r\n"));
+	}
+	QCOMPARE(view.scroll_offset(), 0);
+
+	/*
+	 * Pan mode (sec 8.7): a body drag scrolls the COLUMN, not this
+	 * terminal's scrollback. The view owns no scroll area, so it reports
+	 * the step since the last move and leaves its own scrollback alone.
+	 * The container turns those steps into a viewport scroll.
+	 */
+	view.set_input_mode(BSSH_INPUT_COLUMN_SCROLL);
+	QSignalSpy spy(&view, &bssh_terminal_view::column_scroll_requested);
+
+	drag(view, 2, 1, 2, 9);
+	QVERIFY2(spy.count() > 0, "a Pan drag reported no scroll");
+
+	/* The steps sum to the downward distance the finger travelled. */
+	int total = 0;
+	while (!spy.isEmpty()) total += spy.takeFirst().at(0).toInt();
+	QVERIFY2(total > 0, "a downward Pan drag did not ask to scroll down");
+
+	/* Pan is not Scroll: this terminal's own scrollback did not move. */
+	QCOMPARE(view.scroll_offset(), 0);
+
+	/* A tap reports nothing and asks for the keyboard instead. */
+	drag(view, 2, 5, 2, 5);
+	QCOMPARE(spy.count(), 0);
+}
+
 void terminal_view_test::select_mode_is_the_touch_shift_override() {
 	forced_touch_t touch(1);
 

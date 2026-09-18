@@ -1,0 +1,56 @@
+# Panning the portrait column (project.md sec 8.7): the Pan state of the
+# input selector, where a body drag scrolls the column's viewport when the
+# column is taller than the screen. Unlike the reorder, the scroll is the
+# container's own -- it owns the scroll area -- so it runs live during the
+# drag and never rebuilds. Four seams: the state offered only in a column,
+# the view reporting the step, the container turning the step into a scroll,
+# and the container wired to the view at all.
+#
+# All four seen to fail 2026-09-18 against the passing baseline.
+
+# The Pan state is offered even with no column to scroll.
+#
+# Pan is column_only, like Move: shown only where there is a column. Clear
+# the flag and the button is present from the start, in the tiles where a
+# viewport scroll means nothing.
+[[sabotage]]
+name = "the Pan state is not marked column-only"
+file = "src/ui/input_selector.cpp"
+find = "\t{ BSSH_INPUT_COLUMN_SCROLL, \"input_pan\",    \"Pan\",    true  },"
+replace = "\t{ BSSH_INPUT_COLUMN_SCROLL, \"input_pan\",    \"Pan\",    false },"
+expect = "the_pan_state_is_offered_only_in_a_column"
+
+# The view reports the scroll in the wrong direction.
+#
+# Each move emits the step since the last one; the container scrolls the
+# viewport by it. Negate the step and the column scrolls against the finger.
+[[sabotage]]
+name = "the Pan gesture reverses its direction"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\temit column_scroll_requested(dy);"
+replace = "\t\t\temit column_scroll_requested(-dy);"
+expect = "a_touch_body_drag_pans_the_column_in_pan_mode"
+
+# The container scrolls the wrong way.
+#
+# Content follows the finger, so a step subtracts from the scroll position.
+# Add instead and a drag up the screen moves the column up, away from where
+# the finger is going.
+[[sabotage]]
+name = "the column scroll follows the finger backwards"
+file = "src/ui/pane_container.cpp"
+find = "\tbar->setValue(bar->value() - delta);"
+replace = "\tbar->setValue(bar->value() + delta);"
+expect = "a_pan_gesture_scrolls_the_column"
+
+# The container is not wired to the view's scroll.
+#
+# The last hop: the view's column_scroll_requested reaches scroll_column_by.
+# Connect it to a handler that does nothing and the gesture is inert though
+# the view still reports every step.
+[[sabotage]]
+name = "the container ignores the view's scroll"
+file = "src/ui/pane_container.cpp"
+find = "\t\t         this, &bssh_pane_container::scroll_column_by);"
+replace = "\t\t         this, [](int) {});"
+expect = "a_pan_gesture_scrolls_the_column"

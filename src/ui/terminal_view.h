@@ -474,6 +474,15 @@ signals:
 	void pane_move_requested(int direction);
 
 	/*
+	 * A body drag in Pan mode (sec 8.7): scroll the column's viewport by
+	 * this many pixels since the last move. Unlike the reorder this
+	 * rebuilds nothing -- the container only moves its scroll area -- so it
+	 * fires live during the drag and the view keeps receiving the gesture.
+	 * The container owns that scroll area, so it is what listens.
+	 */
+	void column_scroll_requested(int delta);
+
+	/*
 	 * A tap that selected nothing: somebody asking to type (sec 6.2).
 	 *
 	 * Emitted whichever keyboard is in use, and BEFORE the system-panel
@@ -860,6 +869,17 @@ private:
 	bool m_move_dragging;
 	bool m_move_drag_moved;
 	QPoint m_move_drag_from;
+
+	/*
+	 * A touch body-drag in Pan mode (sec 8.7), which scrolls the column's
+	 * viewport. Tracked incrementally -- each move emits the delta since
+	 * the last one -- because the thing it scrolls is the container's, not
+	 * this view's, so there is no absolute offset here to measure from.
+	 * `moved` tells a drag from a tap, as the others do.
+	 */
+	bool m_colscroll_dragging;
+	bool m_colscroll_moved;
+	QPoint m_colscroll_last;
 	QTimer *m_blink_timer;
 
 	/*

@@ -5,6 +5,7 @@
 #include <QEvent>
 #include <QFrame>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QPointer>
@@ -302,6 +303,15 @@ void bssh_pane_container::rebuild() {
 			emit pane_move_requested(alive.data(), direction);
 		}, Qt::QueuedConnection);
 
+		/*
+		 * The Pan scroll is the container's own -- it owns the scroll area
+		 * -- so it is handled here rather than forwarded to the window,
+		 * and directly rather than queued: scrolling rebuilds nothing, so
+		 * the view is still there when the next move arrives.
+		 */
+		connect(view, &bssh_terminal_view::column_scroll_requested,
+		         this, &bssh_pane_container::scroll_column_by);
+
 		connect(view, &bssh_terminal_view::focus_lost, this, [session] {
 			if (session->emulator()) session->emulator()->set_focused(false);
 		});
@@ -466,6 +476,20 @@ void bssh_pane_container::remeasure_panes() {
 			session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
 		}
 	}
+}
+
+void bssh_pane_container::scroll_column_by(int delta) {
+	if (!m_scroll || m_scroll->widget() != m_splitter) return;
+
+	QScrollBar *bar = m_scroll->verticalScrollBar();
+	if (!bar) return;
+
+	/*
+	 * Content follows the finger: a downward drag (positive delta) reveals
+	 * the panes above, which is a smaller scroll position. setValue clamps
+	 * to the range on its own, so a drag past either end simply stops.
+	 */
+	bar->setValue(bar->value() - delta);
 }
 
 void bssh_pane_container::equalize_panes() {

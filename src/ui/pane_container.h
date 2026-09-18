@@ -71,6 +71,14 @@ public:
 	 */
 	void remeasure_panes();
 
+	/*
+	 * Scrolls the column's viewport by a delta (sec 8.7's Pan state): the
+	 * content follows the finger, so a downward drag reveals the panes
+	 * above. A no-op outside the column arrangement, where the splitter is
+	 * not in the scroll area and there is nothing to scroll.
+	 */
+	void scroll_column_by(int delta);
+
 private:
 	/* Marks the panes on screen, or away if this widget is not showing. */
 	void update_on_screen();

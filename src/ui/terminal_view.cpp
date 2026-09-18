@@ -99,6 +99,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_scroll_drag_start_offset(0),
       m_move_dragging(false),
       m_move_drag_moved(false),
+      m_colscroll_dragging(false),
+      m_colscroll_moved(false),
       m_blink_timer(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -2070,6 +2072,17 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 			event->accept();
 			return;
 		}
+		/*
+		 * Pan mode: a drag scrolls the column's viewport. Tracked from the
+		 * press so each move can emit the step since the last one.
+		 */
+		if (m_input_mode == BSSH_INPUT_COLUMN_SCROLL) {
+			m_colscroll_dragging = true;
+			m_colscroll_moved = false;
+			m_colscroll_last = event->pos();
+			event->accept();
+			return;
+		}
 		if (m_input_mode != BSSH_INPUT_SELECT) {
 			event->accept();
 			return;
@@ -2181,6 +2194,22 @@ void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 		return;
 	}
 
+	if (m_colscroll_dragging) {
+		/*
+		 * Emit the step since the last move and remember where the finger
+		 * is now: the container has the scroll area, so the view reports
+		 * deltas and keeps no offset of its own.
+		 */
+		const int dy = event->pos().y() - m_colscroll_last.y();
+		m_colscroll_last = event->pos();
+		if (dy != 0) {
+			m_colscroll_moved = true;
+			emit column_scroll_requested(dy);
+		}
+		event->accept();
+		return;
+	}
+
 	if (!m_selecting) {
 		QWidget::mouseMoveEvent(event);
 		return;
@@ -2233,6 +2262,17 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 		 */
 		if (moved && dy != 0) emit pane_move_requested(dy < 0 ? -1 : 1);
 		else if (!moved) request_input_panel();
+		event->accept();
+		return;
+	}
+
+	if (m_colscroll_dragging) {
+		const bool tap = !m_colscroll_moved;
+		m_colscroll_dragging = false;
+
+		/* A press that never scrolled is a tap, and asks for the keyboard
+		 * as the other drag paths do. */
+		if (tap) request_input_panel();
 		event->accept();
 		return;
 	}

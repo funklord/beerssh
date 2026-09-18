@@ -6050,12 +6050,28 @@ survives the next session opening rather than being undone by
 `sync_column_intent`. A single step per drag is deliberate for now -- the
 continuous drag, and the snap, are the device pass, as the scroll's feel is.
 Losing the column falls the mode back to Scroll so it is never stranded on a
-hidden button. `scroll terminals` (move the column viewport) is still not
-built: it is the remaining selector state the device pass owes, alongside the
-snap radius. Guarded by `tool/sabotage/column-reorder.toml`, five edits each
-seen to fail: the state offered without a column, a reorder that skips
+hidden button. Guarded by `tool/sabotage/column-reorder.toml`, five edits
+each seen to fail: the state offered without a column, a reorder that skips
 m_shown, the gesture reversing direction, the container swallowing it, and
 the window not wired to it.
+
+**`scroll terminals` is BUILT 2026-09-18 too**, as the Pan state, so both
+column states now exist. Where the overflow scrollbar and focus-scrolling
+gave reachability, Pan gives the thumb-drag: in Pan mode a body drag scrolls
+the column's viewport, content following the finger. It is simpler than the
+reorder and needs no window -- the container owns the scroll area, so the
+view reports the step since the last move (it holds no offset of its own,
+the scroll being the container's) and the container turns it into a scroll,
+live and unqueued because scrolling rebuilds nothing and the view stays put
+under the finger. Pan is column-only beside Move, and falls back to Scroll
+the same way when the column goes. The selector disambiguates it from the
+scrollback scroll, which is the fight the earlier note worried about: the
+mode says which the drag means. Guarded by `tool/sabotage/pan-scroll.toml`,
+four edits seen to fail: the state offered without a column, the view
+reversing the step, the container scrolling backwards, and the container
+left unwired. The snap-to-a-pane-top and kinetic flick are still the device
+pass; a step-per-move drag is the reachable version, as the reorder's
+single step is.
 
 **Guarded by `tool/sabotage/input-selector.toml`**, five edits, each seen
 to fail naming its own test: a scroll drag that moves nothing, select
@@ -6118,11 +6134,10 @@ a phone now -- and its replacement, reordering the column itself (the
 selector's `move terminals` state), is now BUILT (see above), so touch
 reordering is back by that route; tab-reorder survives on the desktop,
 where tabs do, and `a_tab_can_be_moved_along_the_bar` moved there to prove
-it. The scroll is reachable but not yet FELT: there is a scrollbar on
-overflow, and no kinetic flick or snap-to-a-pane-top, because a body-drag
-that scrolled the column would fight the one that scrolls a terminal's
-scrollback (the input selector) -- the `scroll terminals` selector state
-and the snap are the device pass this still owes.
+it. The scroll now has its thumb-drag as well: the Pan state (see above)
+scrolls the column's viewport, the fight with the scrollback scroll settled
+by the selector saying which the drag means. What is still the device pass
+is the FEEL -- no kinetic flick or snap-to-a-pane-top -- and the snap radius.
 
 **Everything currently built stays until it is replaced**, on the
 holder's instruction: *"We keep all the features we have for now and try

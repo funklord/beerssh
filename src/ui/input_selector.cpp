@@ -23,10 +23,11 @@ struct state_t {
 };
 
 const state_t STATES[] = {
-	{ BSSH_INPUT_SCROLL, "input_scroll", "Scroll", false },
-	{ BSSH_INPUT_SELECT, "input_select", "Select", false },
-	{ BSSH_INPUT_CLICK,  "input_click",  "Click",  false },
-	{ BSSH_INPUT_MOVE,   "input_move",   "Move",   true  },
+	{ BSSH_INPUT_SCROLL,        "input_scroll", "Scroll", false },
+	{ BSSH_INPUT_SELECT,        "input_select", "Select", false },
+	{ BSSH_INPUT_CLICK,         "input_click",  "Click",  false },
+	{ BSSH_INPUT_MOVE,          "input_move",   "Move",   true  },
+	{ BSSH_INPUT_COLUMN_SCROLL, "input_pan",    "Pan",    true  },
 };
 
 } // namespace

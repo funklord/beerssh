@@ -754,6 +754,87 @@ void layout_test::a_move_gesture_reorders_the_column() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::the_pan_state_is_offered_only_in_a_column() {
+	bssh_input_selector selector;
+
+	QAbstractButton *pan =
+	        selector.findChild<QAbstractButton *>(QStringLiteral("input_pan"));
+	QVERIFY(pan);
+
+	/* Like Move, Pan acts on the column and is offered only where one is. */
+	QVERIFY2(pan->isHidden(), "Pan is offered before there is a column");
+	selector.set_column_available(true);
+	QVERIFY2(!pan->isHidden(), "Pan is not offered once a column exists");
+
+	pan->click();
+	QCOMPARE(selector.mode(), BSSH_INPUT_COLUMN_SCROLL);
+
+	QSignalSpy spy(&selector, &bssh_input_selector::mode_changed);
+	selector.set_column_available(false);
+	QVERIFY2(pan->isHidden(), "the Pan button stayed after its column went");
+	QCOMPARE(selector.mode(), BSSH_INPUT_SCROLL);
+	QCOMPARE(spy.count(), 1);
+}
+
+void layout_test::a_pan_gesture_scrolls_the_column() {
+	/* The body-drag path is the touch one, so the gesture needs a thumb. */
+	const forced_touch_t touch(1);
+
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(400);
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+
+	QList<bssh_session *> many;
+	for (int i = 0; i < 8; ++i)
+		many.append(registry.create(named(QStringLiteral("s%1").arg(i))));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(400, 400);
+	layout.set_intent(many);
+	QCoreApplication::processEvents();
+	QVERIFY(QTest::qWaitForWindowExposed(&container));
+
+	/*
+	 * Eight four-row panes overflow a 400px column, so its scroll area has
+	 * somewhere to go -- the precondition the Pan gesture acts on.
+	 */
+	QScrollArea *scroll = container.findChild<QScrollArea *>();
+	QVERIFY(scroll);
+	QScrollBar *bar = scroll->verticalScrollBar();
+	QVERIFY(bar);
+	QVERIFY2(bar->maximum() > 0, "the column does not overflow, so there is nothing to pan");
+
+	/* Start in the middle, so a drag either way has room. */
+	bar->setValue(bar->maximum() / 2);
+	const int before = bar->value();
+
+	bssh_terminal_view *view = container.view_at(0);
+	QVERIFY(view);
+	view->set_input_mode(BSSH_INPUT_COLUMN_SCROLL);
+
+	/*
+	 * Drag up the screen. Content follows the finger, so the viewport moves
+	 * DOWN the column to a larger scroll position -- and the whole route,
+	 * view emit to container scroll, has to run for that to happen.
+	 */
+	const QPoint from(view->cell_width() + 1, 9 * view->cell_height() + 1);
+	const QPoint to(view->cell_width() + 1, 1 * view->cell_height() + 1);
+	QMouseEvent press(QEvent::MouseButtonPress, from, view->mapToGlobal(from),
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QMouseEvent moved(QEvent::MouseMove, to, view->mapToGlobal(to),
+	                   Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QMouseEvent release(QEvent::MouseButtonRelease, to, view->mapToGlobal(to),
+	                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(view, &press);
+	QCoreApplication::sendEvent(view, &moved);
+	QCoreApplication::sendEvent(view, &release);
+
+	QVERIFY2(bar->value() > before,
+	          "a Pan drag up the screen did not scroll the column down");
+}
+
 void layout_test::panes_collapse_to_tabs_and_come_back() {
 	/*
 	 * sec 8.2's hard case, through the real container rather than the
