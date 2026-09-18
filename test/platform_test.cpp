@@ -395,6 +395,47 @@ void platform_test::the_focus_follows_mouse_setting_survives_a_restart() {
 	}
 }
 
+void platform_test::the_desktop_adds_no_interface_scale() {
+	bssh_platform *platform = bssh_platform::instance();
+	QVERIFY(platform);
+
+	/*
+	 * 1.0 is "already applied", not "unsupported": Qt scales the desktop's
+	 * own font, so there is nothing left for this to add. Only Android,
+	 * whose fontScale Qt ignores, returns anything else.
+	 */
+	QVERIFY2(qFuzzyCompare(platform->system_font_scale(), 1.0),
+	          "the desktop must not double-apply the system font size");
+}
+
+void platform_test::the_font_scale_setting_survives_a_restart() {
+	QTemporaryDir dir;
+
+	/*
+	 * On by default, because a user who enlarged their device text meant
+	 * it -- the accessibility-respecting default (sec 9.5). The off state
+	 * is for someone who wants this app's chrome at its own size.
+	 */
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(settings.honour_system_font_scale(), "on by default, per sec 9.5");
+
+		settings.set_honour_system_font_scale(false);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY(!reopened.honour_system_font_scale());
+	}
+	{
+		bssh_app_settings settings(dir.path());
+		settings.set_honour_system_font_scale(true);
+	}
+	{
+		bssh_app_settings reopened(dir.path());
+		QVERIFY2(reopened.honour_system_font_scale(), "and it can be turned back on");
+	}
+}
+
 void platform_test::the_scrollbar_setting_survives_a_restart() {
 	QTemporaryDir dir;
 

@@ -6737,16 +6737,30 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   since this fires on an event the window does not control and one that
   resized every session each time would be sending window-change for no
   reason. The behaviour on real hardware remains unverified.
-- **[OPEN]** Whether to honour the system font-scale accessibility setting.
-  Leaning **no** by default for the terminal grid (it would silently change
-  column count), but do honour it for app chrome. Offer it as an explicit
-  setting.
-  **What is measured, so the decision starts from facts rather than from this
-  paragraph.** *Nothing in this tree reads the system font scale* — no
-  reference to `fontScale` anywhere in `src/`. The grid builds its own `QFont`
+- **BUILT 2026-09-18, the lean taken as written.** The interface follows
+  the system font-scale accessibility setting; the terminal grid does not,
+  because it would silently change the column count; and it is an explicit
+  setting, on by default. `bssh_platform::system_font_scale()` reads it --
+  Android from `Configuration.fontScale` through JNI, exactly as
+  `android_night_mode` reads `uiMode`, and the desktop returns 1.0 because
+  Qt applies the desktop's own font size already. `main()` scales the
+  application font by it, before any widget, when
+  `honour_system_font_scale()` is on; the grid is untouched because
+  `make_font` sets an explicit point size, which
+  `the_terminal_grid_ignores_the_application_font` now pins as a
+  regression. Guarded by `tool/sabotage/interface-scale.toml`.
+  **The Android value itself is unverified on hardware** -- the desktop
+  half, the setting, the scaling arithmetic and the grid's insulation are
+  all tested headlessly, but that a real device reports the fontScale the
+  user set is the one part only the phone can show, like every other
+  Android reading here.
+  **What was measured before building, and it still holds.** *Nothing in this
+  tree read the system font scale* before this — no reference to `fontScale`
+  anywhere in `src/`, until the Android backend added one. The grid builds its own `QFont`
   and sets an explicit point size (`bssh_font_catalog::make_font`); app chrome
-  inherits the application font, which nothing here overrides — the only
-  `setFont` calls are two page titles.
+  inherits the application font, which — until this feature — nothing here
+  overrode beyond two page titles. `main()` now sets it once, scaled, which
+  is what moves the chrome and leaves the grid alone.
   **So whether the leaning is already the behaviour depends on a fact about
   Qt that has not been measured here**, and it is worth naming rather than
   assuming, because the two possibilities give opposite answers. If Qt applies
@@ -6761,13 +6775,13 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   renders — noise from an animated preview strip, with every label, field and
   row identical in size and position. Qt does not apply Android's `fontScale`
   at all, to chrome or to the grid.
-  So the leaning's first half is already satisfied — the grid does not move,
-  which is what §9.5 wants — and its second half is **not implemented and
-  needs new code**. It is implementable, and the mechanism is the one measured
-  above: setting the application font from `fontScale` would move chrome and
-  leave the grid alone, because the grid sets its own point size explicitly in
-  `bssh_font_catalog::make_font`. What remains is the decision, not the
-  question.
+  So the leaning's first half was already satisfied — the grid does not move,
+  which is what §9.5 wants — and its second half was the new code the BUILT
+  note above describes: `main()` sets the application font from the platform's
+  reported scale, which moves the chrome and leaves the grid alone, because
+  the grid sets its own point size explicitly in `bssh_font_catalog::make_font`.
+  That measurement is what made the mechanism safe to write without a device
+  in hand.
 
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every

@@ -278,6 +278,16 @@ public:
 	void set_warn_multiline_paste(bool warn);
 
 	/*
+	 * Whether the interface follows the system font-scale accessibility
+	 * setting (sec 9.5). On by default, because a user who enlarged their
+	 * device's text meant it; off is for someone who wants this app's
+	 * chrome at its own size regardless. The terminal grid never follows
+	 * it either way.
+	 */
+	bool honour_system_font_scale() const;
+	void set_honour_system_font_scale(bool honour);
+
+	/*
 	 * sec 11: secret-store keys whose host row is gone but whose secret
 	 * could not be erased, because the passphrase-derived store was
 	 * locked at the time and erasing means re-encrypting the whole blob.

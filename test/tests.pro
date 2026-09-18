@@ -192,6 +192,7 @@ HEADERS += \
     ../src/ui/pane_snap.h \
     ../src/ui/input_selector.h \
     ../src/ui/input_mode.h \
+    ../src/ui/interface_scale.h \
     ../src/ui/long_press.h \
     ../src/term/term_features.h \
     ../src/ui/scroll_guard.h \

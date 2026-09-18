@@ -101,6 +101,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
       m_context_menu(nullptr),
       m_caps_as_ctrl(nullptr),
       m_warn_multiline_paste(nullptr),
+      m_honour_font_scale(nullptr),
       m_focus_follows_mouse(nullptr),
       m_hide_from_screenshots(nullptr),
       m_raise_contrast(nullptr),
@@ -379,6 +380,16 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	                        "Empty means the default."),
 	        this);
 	if (on_this_page(SECTION_APPEARANCE, title_note)) form->addRow(title_note);
+
+	m_honour_font_scale = new QCheckBox(
+	        QStringLiteral("Follow the system font size"), this);
+	m_honour_font_scale->setObjectName(QStringLiteral("honour_font_scale"));
+	m_honour_font_scale->setToolTip(
+	        QStringLiteral("Scale menus, forms and lists with the device's "
+	                        "text-size setting. The terminal itself keeps its "
+	                        "own font, so its column count does not change."));
+	if (on_this_page(SECTION_APPEARANCE, m_honour_font_scale))
+		form->addRow(m_honour_font_scale);
 
 	m_context_menu = new QComboBox(this);
 	m_context_menu->addItem(QStringLiteral("Automatic"),
@@ -790,6 +801,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	}
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_warn_multiline_paste->setChecked(settings.warn_multiline_paste());
+	m_honour_font_scale->setChecked(settings.honour_system_font_scale());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 	m_text_brightness->setValue(settings.text_brightness());
 	m_text_brightness_value->setText(QStringLiteral("%1%").arg(settings.text_brightness()));
@@ -892,6 +904,11 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	connect(m_warn_multiline_paste, &QCheckBox::toggled, this, [this] {
 		commit([this](bssh_app_settings &s) {
 			s.set_warn_multiline_paste(m_warn_multiline_paste->isChecked());
+		});
+	});
+	connect(m_honour_font_scale, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_honour_system_font_scale(m_honour_font_scale->isChecked());
 		});
 	});
 	connect(m_raise_contrast, &QCheckBox::toggled, this, [this] {

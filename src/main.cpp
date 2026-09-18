@@ -6,6 +6,7 @@
 #include <QTimer>
 
 #include "model/app_settings.h"
+#include "ui/interface_scale.h"
 #include "model/command_line.h"
 #include "term/term_features.h"
 #include "model/profile.h"
@@ -168,6 +169,23 @@ int main(int argc, char *argv[]) {
 	 * perfectly well.
 	 */
 	bssh_platform *platform = bssh_platform::instance();
+
+	/*
+	 * Scale the interface with the system font-size accessibility setting
+	 * (sec 9.5), before any widget is built so chrome is measured at the
+	 * right size from the first one. The terminal grid is untouched: it
+	 * builds its own font with an explicit point size, so this moves the
+	 * menus, forms and host list around it and never the column count.
+	 *
+	 * Only Android reports anything but 1.0, and there a font-size change
+	 * recreates the activity, so reading it once here is enough -- the
+	 * next value arrives on the next start. Off is honoured for the user
+	 * who wants this app's chrome at its own size regardless.
+	 */
+	if (platform && bssh_app_settings().honour_system_font_scale()) {
+		app.setFont(bssh_interface_font(app.font(), platform->system_font_scale()));
+	}
+
 	if (platform) {
 		const QString font_dir = platform->font_directory();
 		const int faces = bssh_font_catalog::instance().load_bundled(font_dir);

@@ -271,6 +271,20 @@ public:
 	virtual bssh_appearance_t system_appearance() const = 0;
 
 	/*
+	 * The system's font-scale accessibility setting, 1.0 being the
+	 * default (sec 9.5). It scales the interface -- menus, forms, the host
+	 * list -- and deliberately NOT the terminal grid, which sets its own
+	 * point size and whose column count must not move under a font
+	 * setting; the caller applies it to the application font only.
+	 *
+	 * Only Android returns anything but 1.0. Qt applies the desktop's own
+	 * font size to the default font already, so a desktop has nothing to
+	 * add; Android's fontScale Qt ignores, measured on a Note 9, so the
+	 * Android backend reads it and hands it back for the caller to apply.
+	 */
+	virtual double system_font_scale() const = 0;
+
+	/*
 	 * Tier 4 of the shared dark-desktop rule (claude-guidelines
 	 * harmonization.md): the scheme the desktop wrote down, for a
 	 * desktop that tells Qt nothing.

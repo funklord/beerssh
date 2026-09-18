@@ -1,0 +1,47 @@
+# The system font-scale accessibility feature (project.md sec 9.5): the
+# interface follows the device's text-size setting while the terminal grid
+# keeps its own font. None of these failures is an error -- a chrome that
+# ignores the setting, a desktop that double-applies it, or a default that
+# silently opts a user out.
+#
+# The grid-ignores-the-application-font property has no sabotage here: the
+# grid does not read the application font at all (make_font sets an
+# explicit point size), so breaking it means ADDING a read rather than
+# editing a line. `the_terminal_grid_ignores_the_application_font` guards
+# it as a regression test, built two views under two application fonts.
+#
+# All three below seen to fail 2026-09-18 against a 569-passing baseline.
+
+# The scaling helper stops scaling.
+#
+# Drop the multiply and a larger system font size changes nothing -- the
+# chrome stays put where the user asked for bigger text.
+[[sabotage]]
+name = "the interface font stops scaling"
+file = "src/ui/interface_scale.h"
+find = "\t\tscaled.setPointSizeF(base.pointSizeF() * scale);"
+replace = "\t\tscaled.setPointSizeF(base.pointSizeF());"
+expect = "the_interface_font_scales_and_no_ops_at_one"
+
+# The desktop double-applies the system font size.
+#
+# Qt already scales the desktop font, so anything but 1.0 here scales it a
+# second time -- the interface grows twice as fast as the user's setting.
+[[sabotage]]
+name = "the desktop reports a spurious font scale"
+file = "src/platform/platform_desktop.cpp"
+find = "\t\treturn 1.0;"
+replace = "\t\treturn 2.0;"
+expect = "the_desktop_adds_no_interface_scale"
+
+# The feature is off by default.
+#
+# Sec 9.5 makes honouring the system font size the default, because a user
+# who enlarged their device text meant it. Flip the default and a
+# large-text device is ignored until the user finds the setting.
+[[sabotage]]
+name = "honouring the system font size is off by default"
+file = "src/model/app_settings.cpp"
+find = "value(QStringLiteral(\"appearance/honour_system_font_scale\"), true)"
+replace = "value(QStringLiteral(\"appearance/honour_system_font_scale\"), false)"
+expect = "the_font_scale_setting_survives_a_restart"

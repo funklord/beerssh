@@ -27,6 +27,7 @@
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "platform/platform.h"
+#include "ui/interface_scale.h"
 #include "term/font_catalog.h"
 #include "ui/terminal_view.h"
 #include "model/session_registry.h"
@@ -555,6 +556,52 @@ void terminal_view_test::click_mode_lets_the_remote_have_the_touch() {
 	QVERIFY(!emulator.take_output().isEmpty());
 	QVERIFY(!view.has_selection());
 	QCOMPARE(view.scroll_offset(), 0);
+}
+
+void terminal_view_test::the_interface_font_scales_and_no_ops_at_one() {
+	QFont base;
+	base.setPointSizeF(10.0);
+
+	/*
+	 * A real scale grows the chrome font; 1.0 and a broken reading leave
+	 * it exactly as it was, so an absent or nonsensical system value is a
+	 * no-op rather than a collapsed interface (sec 9.5).
+	 */
+	QCOMPARE(bssh_interface_font(base, 1.5).pointSizeF(), 15.0);
+	QCOMPARE(bssh_interface_font(base, 1.0).pointSizeF(), 10.0);
+	QCOMPARE(bssh_interface_font(base, 0.0).pointSizeF(), 10.0);
+	QCOMPARE(bssh_interface_font(base, -2.0).pointSizeF(), 10.0);
+}
+
+void terminal_view_test::the_terminal_grid_ignores_the_application_font() {
+	/*
+	 * The property the whole font-scale feature rests on (sec 9.5): the
+	 * grid builds its own font with an explicit point size, so scaling the
+	 * application font moves the chrome around it and never the column
+	 * count. Measured rather than trusted, because if the grid ever DID
+	 * read the application font, chrome-scaling would silently reflow the
+	 * remote's layout.
+	 */
+	const QFont saved = QApplication::font();
+
+	bssh_terminal_view before;
+	before.show();
+	before.resize(400, 200);
+	const int cell = before.cell_width();
+	QVERIFY(cell > 1);
+
+	QFont huge = saved;
+	huge.setPointSize(saved.pointSize() > 0 ? saved.pointSize() * 3 : 36);
+	QApplication::setFont(huge);
+
+	bssh_terminal_view after;
+	after.show();
+	after.resize(400, 200);
+	const int cell_under_huge_font = after.cell_width();
+
+	QApplication::setFont(saved);
+
+	QCOMPARE(cell_under_huge_font, cell);
 }
 
 void terminal_view_test::the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse() {

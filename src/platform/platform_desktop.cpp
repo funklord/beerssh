@@ -223,6 +223,16 @@ public:
 		return home + QStringLiteral("/.ssh");
 	}
 
+	double system_font_scale() const override {
+		/*
+		 * Nothing to add: Qt applies the desktop's own font size to the
+		 * default application font already, so the interface is already
+		 * at the size the user chose. Returning 1.0 is not "unsupported",
+		 * it is "already applied".
+		 */
+		return 1.0;
+	}
+
 	bssh_appearance_t system_appearance() const override {
 		/*
 		 * 1. Qt, where a platform theme is engaged. Correct on Windows,

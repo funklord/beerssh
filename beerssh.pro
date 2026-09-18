@@ -138,6 +138,7 @@ HEADERS += \
     src/ui/pane_container.h \
     src/ui/input_selector.h \
     src/ui/input_mode.h \
+    src/ui/interface_scale.h \
     keyboard/key_cap.h \
     keyboard/key_row_layout.h \
     keyboard/soft_keyboard.h \

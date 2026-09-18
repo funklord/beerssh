@@ -131,6 +131,7 @@ private:
 	QComboBox *m_context_menu;
 	QCheckBox *m_caps_as_ctrl;
 	QCheckBox *m_warn_multiline_paste;
+	QCheckBox *m_honour_font_scale;
 
 	/* Null where there is no pointer to hover (sec 8.3). */
 	QCheckBox *m_focus_follows_mouse;

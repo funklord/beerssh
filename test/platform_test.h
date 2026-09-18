@@ -36,6 +36,15 @@ private slots:
 	void hiding_from_screenshots_is_not_promised_where_it_cannot_work();
 	void the_focus_follows_mouse_setting_survives_a_restart();
 
+	/*
+	 * The system font-scale accessibility feature (sec 9.5). The desktop
+	 * adds nothing -- Qt already applies the desktop's font size -- so it
+	 * reports 1.0, which is "already applied" rather than "unsupported".
+	 * And the honour-it setting persists, on by default.
+	 */
+	void the_desktop_adds_no_interface_scale();
+	void the_font_scale_setting_survives_a_restart();
+
 	/* sec 8.3, sec 8.4, sec 6.1: the settings this app grew for its
 	 * desktop furniture, each stored as words a person can hand-edit. */
 	void the_scrollbar_setting_survives_a_restart();

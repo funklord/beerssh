@@ -525,6 +525,40 @@ public:
 		return QString();
 	}
 
+	double system_font_scale() const override {
+		/*
+		 * Configuration.fontScale, the accessibility "Font size" the
+		 * user set for the whole device. Qt ignores it (measured on a
+		 * Note 9: chrome and grid both stay put across a change), so it
+		 * is read here and applied to the interface font by the caller.
+		 * A public float field on Configuration, read exactly as
+		 * android_night_mode reads uiMode -- no Java added (sec 17).
+		 */
+		const QJniObject context = android_context();
+		if (!context.isValid()) return 1.0;
+
+		const QJniObject resources =
+		        context.callObjectMethod("getResources",
+		                                  "()Landroid/content/res/Resources;");
+		if (!resources.isValid()) return 1.0;
+
+		const QJniObject config =
+		        resources.callObjectMethod("getConfiguration",
+		                                    "()Landroid/content/res/Configuration;");
+		if (!config.isValid()) return 1.0;
+
+		const float scale = config.getField<jfloat>("fontScale");
+
+		/*
+		 * Clamped rather than trusted: a broken launcher or a future
+		 * Android could report a scale that would make the interface
+		 * unusable, and 0 would collapse it. The band is generous enough
+		 * to cover Android's own largest accessibility step.
+		 */
+		if (scale < 0.5f || scale > 3.0f) return 1.0;
+		return double(scale);
+	}
+
 	bssh_appearance_t system_appearance() const override {
 		/*
 		 * Android's Configuration first, because it is the only source

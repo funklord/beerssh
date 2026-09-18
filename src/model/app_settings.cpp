@@ -425,6 +425,14 @@ void bssh_app_settings::set_warn_multiline_paste(bool warn) {
 	store(QStringLiteral("input/warn_multiline_paste"), warn);
 }
 
+bool bssh_app_settings::honour_system_font_scale() const {
+	return value(QStringLiteral("appearance/honour_system_font_scale"), true).toBool();
+}
+
+void bssh_app_settings::set_honour_system_font_scale(bool honour) {
+	store(QStringLiteral("appearance/honour_system_font_scale"), honour);
+}
+
 QStringList bssh_app_settings::orphaned_secrets() const {
 	return value(QStringLiteral("secrets/orphaned"), QStringList()).toStringList();
 }

@@ -61,6 +61,15 @@ private slots:
 	void a_touch_body_drag_scrolls_in_scroll_mode();
 	void select_mode_is_the_touch_shift_override();
 	void click_mode_lets_the_remote_have_the_touch();
+
+	/*
+	 * The system font-scale feature (sec 9.5): the pure scaling helper
+	 * grows chrome and no-ops on a 1.0 or broken reading, and -- the
+	 * property it all rests on -- the terminal grid ignores the
+	 * application font entirely, so scaling chrome never moves the columns.
+	 */
+	void the_interface_font_scales_and_no_ops_at_one();
+	void the_terminal_grid_ignores_the_application_font();
 	void a_sticky_shift_overrides_mouse_reporting_on_touch();
 	void a_long_press_reaches_the_menu_even_when_the_remote_has_the_mouse();
 	void the_wheel_goes_to_the_remote_when_it_asked_for_the_mouse();
