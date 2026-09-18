@@ -35,6 +35,7 @@ private slots:
 	void a_reconnect_keeps_the_history_and_drops_the_modes();
 	void a_reset_from_the_remote_clears_the_modes_it_did_not_set();
 	void decscusr_sets_the_cursor_shape_and_blink();
+	void decscnm_toggles_reverse_video();
 	void newline_and_carriage_return_move_as_expected();
 	void cursor_addressing_places_text();
 	void erase_display_clears_everything();

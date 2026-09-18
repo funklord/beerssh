@@ -3757,8 +3757,23 @@ tiers.)
   dropping the shape or the blink, the pane unwired from either, the
   override that cannot be turned off, and the preference that does not
   persist.
-  **DECSCNM (reverse video) is still unconsumed**, and remains the open
-  half of this entry.
+- **DECSCNM (reverse video) is honoured — BUILT 2026-09-18**, closing the
+  other half of the entry above. `CSI ?5h/l` flips the whole screen's
+  foreground and background; libvterm tracks the mode and the emulator
+  forwards `reverse_video_changed`, and the view swaps every cell as it
+  paints. The scheme colours are untouched, so an OSC 10/11 query still
+  answers what the user configured -- what changes is only what is PAINTED,
+  through `effective_background()`/`effective_foreground()`, which the base
+  fill and the per-cell background compares read so a default cell matches
+  the flipped base and is not repainted. The swap sits on top of the
+  per-cell SGR inverse and before the selection swap, so a selection stays
+  visible by re-inverting whatever it lands on. Guarded by
+  `tool/sabotage/reverse-video.toml`, three edits seen to fail: the emulator
+  dropping the change, the pane unwired from it, and the flip that swaps no
+  colours. The per-cell `std::swap` in the paint loop is a mirror of the
+  SGR-inverse swap right above it, covered by that reading rather than by a
+  pixel test; what the tests pin is the state and the effective-colour flip
+  the paint reads.
 
 **DA1 is the other half of the graphics story — fixed by the same patch.** It
 answered `?1;2c`, with no parameter 4, so a client probing for sixel the

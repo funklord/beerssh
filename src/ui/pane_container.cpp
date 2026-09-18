@@ -339,6 +339,10 @@ void bssh_pane_container::rebuild() {
 				view->set_cursor_blink(blink);
 		});
 
+		/* DECSCNM reverse video (sec 6.4): the whole screen flips. */
+		connect(session->emulator(), &bssh_emulator::reverse_video_changed,
+		         view, &bssh_terminal_view::set_reverse_video);
+
 		m_views.append(view);
 		view->show();
 	}

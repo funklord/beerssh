@@ -128,6 +128,26 @@ void emulator_test::decscusr_sets_the_cursor_shape_and_blink() {
 	QCOMPARE(blink.takeLast().at(0).toBool(), false);
 }
 
+void emulator_test::decscnm_toggles_reverse_video() {
+	bssh_emulator emulator(40, 6);
+
+	/*
+	 * DECSCNM (CSI ?5h/l): the remote flips the whole screen. The emulator
+	 * only reports it -- the swap is the view's -- so a spy on the signal
+	 * is what there is to assert here.
+	 */
+	QSignalSpy reverse(&emulator, &bssh_emulator::reverse_video_changed);
+
+	emulator.feed(QByteArrayLiteral("\x1b[?5h"));
+	QVERIFY2(!reverse.isEmpty(), "DECSCNM on was not reported");
+	QCOMPARE(reverse.takeLast().at(0).toBool(), true);
+
+	reverse.clear();
+	emulator.feed(QByteArrayLiteral("\x1b[?5l"));
+	QVERIFY2(!reverse.isEmpty(), "DECSCNM off was not reported");
+	QCOMPARE(reverse.takeLast().at(0).toBool(), false);
+}
+
 void emulator_test::a_reconnect_keeps_the_history_and_drops_the_modes() {
 	bssh_emulator emulator(40, 6);
 

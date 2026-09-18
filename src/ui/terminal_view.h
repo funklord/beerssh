@@ -238,6 +238,22 @@ public:
 	QColor terminal_background() const { return m_background; }
 
 	/*
+	 * DECSCNM reverse video (sec 6.4): the remote flips the whole screen's
+	 * foreground and background. The scheme colours above are unchanged --
+	 * an OSC 10/11 query still answers what the user configured -- but what
+	 * is PAINTED swaps, so the paint path reads the effective pair and
+	 * inverts every cell. Off by default; set by the emulator's signal.
+	 */
+	void set_reverse_video(bool reverse);
+	bool reverse_video() const { return m_reverse_video; }
+	QColor effective_background() const {
+		return m_reverse_video ? m_foreground : m_background;
+	}
+	QColor effective_foreground() const {
+		return m_reverse_video ? m_background : m_foreground;
+	}
+
+	/*
 	 * The host's low sixteen, for the emulator to answer OSC 4 with. The
 	 * scheme's own values rather than anything the renderer has adjusted:
 	 * OSC 4 means the mapping from index to colour, and the brightness
@@ -901,6 +917,7 @@ private:
 
 	QColor m_background;
 	QColor m_foreground;
+	bool m_reverse_video;
 	quint64 m_content_revision;
 	bool m_raise_contrast;
 	int m_text_brightness;

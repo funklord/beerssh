@@ -1,0 +1,41 @@
+# Reverse video (project.md sec 6.4): DECSCNM (CSI ?5h/l), which flips the
+# whole screen's foreground and background. libvterm tracks the mode and
+# answers DECRQM; the emulator forwards it and the view swaps every cell as
+# it paints. Three seams: the emulator reporting the change, the view wired
+# to it, and the effective-colour flip the paint path reads.
+#
+# All three seen to fail 2026-09-18 against the passing baseline.
+
+# The emulator swallows the reverse-video change.
+#
+# DECSCNM reaches on_set_term_prop but the flip never leaves it, so a
+# program that inverts the screen is heard and dropped.
+[[sabotage]]
+name = "the reverse-video change is not reported"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\temit self->owner->reverse_video_changed(value->boolean);"
+replace = "\t\t(void)value;"
+expect = "decscnm_toggles_reverse_video"
+
+# The view is not wired to the reverse-video change.
+#
+# The emulator reports it, but the pane never hears it, so the screen keeps
+# painting the normal way while the remote asked for reverse.
+[[sabotage]]
+name = "the pane ignores the reverse-video change"
+file = "src/ui/pane_container.cpp"
+find = "\t\t         view, &bssh_terminal_view::set_reverse_video);"
+replace = "\t\t         view, [](bool) {});"
+expect = "reverse_video_reaches_the_pane_and_flips_it"
+
+# The flip does not actually swap the colours.
+#
+# effective_background() is what the base fill and the per-cell compares
+# read; pin it to the scheme background and reverse video is recorded but
+# paints nothing differently -- the screen never inverts.
+[[sabotage]]
+name = "reverse video does not swap the colours"
+file = "src/ui/terminal_view.h"
+find = "\t\treturn m_reverse_video ? m_foreground : m_background;"
+replace = "\t\treturn m_background;"
+expect = "reverse_video_reaches_the_pane_and_flips_it"

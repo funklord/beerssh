@@ -99,6 +99,12 @@ private slots:
 	void the_remote_cursor_shape_can_be_switched_off();
 
 	/*
+	 * DECSCNM reverse video (sec 6.4): the remote flips the pane, the
+	 * effective colours trading places while the scheme is untouched.
+	 */
+	void reverse_video_reaches_the_pane_and_flips_it();
+
+	/*
 	 * Every surface a thumb can reach, at the narrowest width sec 8.2
 	 * designs to.
 	 *

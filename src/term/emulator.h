@@ -404,6 +404,15 @@ signals:
 	void cursor_shape_changed(const QString &style);
 	void cursor_blink_changed(bool blink);
 
+	/*
+	 * The remote turned reverse video on or off with DECSCNM (CSI ?5h/l),
+	 * which flips the whole screen's foreground and background (sec 6.4).
+	 * A signal because it is a rendering choice for the view, not a cell
+	 * the damage machinery would carry -- the screen contents do not
+	 * change, only how they are painted.
+	 */
+	void reverse_video_changed(bool reverse);
+
 private:
 	bssh_emulator_private *m_private;
 };

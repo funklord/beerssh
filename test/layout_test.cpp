@@ -901,6 +901,45 @@ void layout_test::the_remote_cursor_shape_can_be_switched_off() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::reverse_video_reaches_the_pane_and_flips_it() {
+	bssh_main_window window;
+	bssh_session *s = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(s);
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY(view);
+	QVERIFY(s->emulator());
+
+	const QColor fg = view->terminal_foreground();
+	const QColor bg = view->terminal_background();
+	QVERIFY2(fg != bg, "a scheme whose fg and bg match cannot show a flip");
+
+	/* Off to begin with: what is painted is the scheme as configured. */
+	QVERIFY(!view->reverse_video());
+	QCOMPARE(view->effective_background(), bg);
+	QCOMPARE(view->effective_foreground(), fg);
+
+	/*
+	 * The remote turns reverse video on. The pane flips -- the effective
+	 * pair the paint path reads trade places -- while the scheme colours
+	 * stay put, so an OSC 10/11 query still answers what the user chose.
+	 */
+	s->emulator()->feed(QByteArrayLiteral("\x1b[?5h"));
+	QVERIFY(view->reverse_video());
+	QCOMPARE(view->effective_background(), fg);
+	QCOMPARE(view->effective_foreground(), bg);
+	QCOMPARE(view->terminal_background(), bg);
+	QCOMPARE(view->terminal_foreground(), fg);
+
+	/* And off again, back to the scheme. */
+	s->emulator()->feed(QByteArrayLiteral("\x1b[?5l"));
+	QVERIFY(!view->reverse_video());
+	QCOMPARE(view->effective_background(), bg);
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::panes_collapse_to_tabs_and_come_back() {
 	/*
 	 * sec 8.2's hard case, through the real container rather than the

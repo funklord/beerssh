@@ -450,6 +450,16 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 	case VTERM_PROP_CURSORBLINK:
 		emit self->owner->cursor_blink_changed(value->boolean);
 		return 1;
+	case VTERM_PROP_REVERSE:
+		/*
+		 * DECSCNM: the whole screen paints in reverse. libvterm tracks the
+		 * mode and answers DECRQM for it; the swap itself is the view's,
+		 * so forward it and let the view repaint. Announced at the initial
+		 * reset too, before a view is connected, so a default screen is
+		 * not reverse until the remote asks.
+		 */
+		emit self->owner->reverse_video_changed(value->boolean);
+		return 1;
 	case VTERM_PROP_RESET:
 		/*
 		 * The terminal was reset -- RIS, DECSTR, or our own

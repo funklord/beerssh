@@ -104,6 +104,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_blink_timer(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
+      m_reverse_video(false),
       m_content_revision(1),
       m_raise_contrast(true),
       m_text_brightness(100),
@@ -298,6 +299,13 @@ void bssh_terminal_view::set_cursor_blink(bool blink) {
 
 	m_cursor_blink_wanted = blink;
 	sync_blink_timer();
+}
+
+void bssh_terminal_view::set_reverse_video(bool reverse) {
+	if (reverse == m_reverse_video) return;
+
+	m_reverse_video = reverse;
+	update();
 }
 
 void bssh_terminal_view::sync_blink_timer() {
@@ -1223,7 +1231,7 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	Q_UNUSED(event);
 
 	QPainter painter(this);
-	painter.fillRect(rect(), m_background);
+	painter.fillRect(rect(), effective_background());
 	painter.setFont(m_font);
 	painter.setPen(m_foreground);
 
@@ -1333,6 +1341,16 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			if (cell.attrs & bssh_cell_t::INVERSE) std::swap(fg, bg);
 
 			/*
+			 * DECSCNM reverse video (sec 6.4) flips the whole screen, so
+			 * it swaps every cell here, on top of the per-cell inverse and
+			 * before the selection swap -- a selection stays visible by
+			 * re-inverting whatever it lands on. The comparisons below use
+			 * effective_background(), so a default cell now matches the
+			 * base fill and is not redundantly repainted.
+			 */
+			if (m_reverse_video) std::swap(fg, bg);
+
+			/*
 			 * Selection inverts rather than tinting: it stays visible
 			 * whatever colours the cell already carries, which a fixed
 			 * highlight colour cannot promise against 256 possible
@@ -1379,7 +1397,7 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 				 * pure black and only a cell that asked for a colour
 				 * of its own comes down.
 				 */
-				if (bg != m_background) {
+				if (bg != effective_background()) {
 					bg = QColor(bssh_dim(bg.rgb(), m_text_brightness));
 				}
 			}
@@ -1388,7 +1406,7 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			const int y = row * m_cell_height;
 			const int width = qMax(1, int(cell.width)) * m_cell_width;
 
-			if (bg != m_background) painter.fillRect(x, y, width, m_cell_height, bg);
+			if (bg != effective_background()) painter.fillRect(x, y, width, m_cell_height, bg);
 
 			const bool blank_cell = cell.ch == U'\0' || cell.ch == U' ';
 			const bool wide = cell.width > 1;
