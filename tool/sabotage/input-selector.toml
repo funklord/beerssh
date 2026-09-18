@@ -67,6 +67,6 @@ expect = "the_selector_pushes_its_mode_to_every_pane"
 [[sabotage]]
 name = "the selector defaults to select rather than scroll"
 file = "src/ui/input_selector.cpp"
-find = "      m_mode(BSSH_INPUT_SCROLL) {"
-replace = "      m_mode(BSSH_INPUT_SELECT) {"
+find = "      m_mode(BSSH_INPUT_SCROLL),"
+replace = "      m_mode(BSSH_INPUT_SELECT),"
 expect = "the_input_selector_defaults_to_scroll_and_reports_changes"

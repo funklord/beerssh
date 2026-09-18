@@ -126,6 +126,14 @@ signals:
 
 	void pane_drag_requested(bssh_session *session);
 
+	/*
+	 * A body drag in Move mode reordered this pane (sec 8.7): move the
+	 * session one place in the shown list, negative toward the top.
+	 * Queued for the same reason as pane_drag_requested -- the move
+	 * rebuilds the panes and destroys the view that asked for it.
+	 */
+	void pane_move_requested(bssh_session *session, int direction);
+
 	/* A view was built or destroyed; the window rewires what it needs. */
 	void panes_rebuilt();
 

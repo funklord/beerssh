@@ -296,6 +296,12 @@ void bssh_pane_container::rebuild() {
 			emit pane_drag_requested(alive.data());
 		}, Qt::QueuedConnection);
 
+		connect(view, &bssh_terminal_view::pane_move_requested, this,
+		         [this, alive = QPointer<bssh_session>(session)](int direction) {
+			if (!alive) return;
+			emit pane_move_requested(alive.data(), direction);
+		}, Qt::QueuedConnection);
+
 		connect(view, &bssh_terminal_view::focus_lost, this, [session] {
 			if (session->emulator()) session->emulator()->set_focused(false);
 		});

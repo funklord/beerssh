@@ -623,6 +623,137 @@ void layout_test::the_selector_pushes_its_mode_to_every_pane() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::the_move_state_is_offered_only_in_a_column() {
+	bssh_input_selector selector;
+
+	QAbstractButton *move =
+	        selector.findChild<QAbstractButton *>(QStringLiteral("input_move"));
+	QVERIFY(move);
+
+	/* No column to reorder yet, so the state is not offered. */
+	QVERIFY2(move->isHidden(),
+	          "Move is offered before there is a column to reorder");
+
+	selector.set_column_available(true);
+	QVERIFY2(!move->isHidden(), "Move is not offered once a column exists");
+
+	/*
+	 * Select Move, then lose the column. The mode must not be stranded on
+	 * a control the user can no longer see: it falls back to Scroll and
+	 * says so, because a body drag now has to scroll scrollback again
+	 * rather than reorder a column that is gone.
+	 */
+	move->click();
+	QCOMPARE(selector.mode(), BSSH_INPUT_MOVE);
+
+	QSignalSpy spy(&selector, &bssh_input_selector::mode_changed);
+	selector.set_column_available(false);
+	QVERIFY2(move->isHidden(), "the Move button stayed after its column went");
+	QCOMPARE(selector.mode(), BSSH_INPUT_SCROLL);
+	QCOMPARE(spy.count(), 1);
+}
+
+void layout_test::a_column_reorder_survives_a_new_session() {
+	const forced_touch_t column(1);
+
+	bssh_main_window window;
+	bssh_session_registry *reg = window.registry();
+	QVERIFY(reg);
+
+	bssh_session *a = reg->create(named(QStringLiteral("a")));
+	bssh_session *b = reg->create(named(QStringLiteral("b")));
+	bssh_session *c = reg->create(named(QStringLiteral("c")));
+	window.adopt_session(a);
+	window.adopt_session(b);
+	window.adopt_session(c);
+
+	bssh_layout_manager *layout = window.findChild<bssh_layout_manager *>();
+	QVERIFY(layout);
+	QCOMPARE(layout->arrangement(), bssh_layout_manager::COLUMN);
+	QCOMPARE(layout->intent(), (QList<bssh_session *>{ a, b, c }));
+
+	/* Move the last pane up one place: a, c, b. */
+	window.move_pane(c, -1);
+	QCOMPARE(layout->intent(), (QList<bssh_session *>{ a, c, b }));
+
+	/*
+	 * Opening a new session resyncs the column's intent from the shown
+	 * list. The reorder has to survive that -- it moved m_shown, the
+	 * column's order of record, not just the intent -- or every reorder
+	 * would be silently undone the next time a terminal was opened.
+	 */
+	bssh_session *d = reg->create(named(QStringLiteral("d")));
+	window.adopt_session(d);
+	QCOMPARE(layout->intent(), (QList<bssh_session *>{ a, c, b, d }));
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::a_move_gesture_reorders_the_column() {
+	const forced_touch_t column(1);
+
+	bssh_main_window window;
+	window.resize(360, 800);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *reg = window.registry();
+	bssh_session *a = reg->create(named(QStringLiteral("a")));
+	bssh_session *b = reg->create(named(QStringLiteral("b")));
+	window.adopt_session(a);
+	window.adopt_session(b);
+
+	bssh_layout_manager *layout = window.findChild<bssh_layout_manager *>();
+	QVERIFY(layout);
+	QCOMPARE(layout->intent(), (QList<bssh_session *>{ a, b }));
+
+	/* Put the window in Move mode through the selector, as a user would. */
+	bssh_input_selector *selector = window.findChild<bssh_input_selector *>();
+	QVERIFY(selector);
+	QAbstractButton *move =
+	        selector->findChild<QAbstractButton *>(QStringLiteral("input_move"));
+	QVERIFY(move);
+	move->click();
+	QCOMPARE(selector->mode(), BSSH_INPUT_MOVE);
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	bssh_terminal_view *view_b = panes->view_for(b);
+	QVERIFY(view_b);
+
+	/*
+	 * Drag the second pane up the screen. The gesture has to travel the
+	 * whole route -- view to container to window to move_pane -- and leave
+	 * the column as b, a. Anything unwired anywhere on that path leaves it
+	 * a, b, which every earlier assertion here would still pass.
+	 */
+	const QPoint from(view_b->cell_width() + 1, 9 * view_b->cell_height() + 1);
+	const QPoint to(view_b->cell_width() + 1, 1 * view_b->cell_height() + 1);
+	QMouseEvent press(QEvent::MouseButtonPress, from, view_b->mapToGlobal(from),
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QMouseEvent moved(QEvent::MouseMove, to, view_b->mapToGlobal(to),
+	                   Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QMouseEvent release(QEvent::MouseButtonRelease, to, view_b->mapToGlobal(to),
+	                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(view_b, &press);
+	QCoreApplication::sendEvent(view_b, &moved);
+	QCoreApplication::sendEvent(view_b, &release);
+
+	/*
+	 * pane_move_requested is queued -- acting on it rebuilds the panes and
+	 * destroys the view that asked -- so deliver the posted events before
+	 * reading the result.
+	 */
+	QCoreApplication::sendPostedEvents();
+	QCoreApplication::processEvents();
+
+	QCOMPARE(layout->intent(), (QList<bssh_session *>{ b, a }));
+
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::panes_collapse_to_tabs_and_come_back() {
 	/*
 	 * sec 8.2's hard case, through the real container rather than the

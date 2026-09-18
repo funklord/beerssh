@@ -17,9 +17,10 @@ class QButtonGroup;
  * the defect sec 8.7 exists to answer. So it is a plain segmented control a
  * thumb can always reach, not a menu the user has to remember to open.
  *
- * It shows the three states that route a gesture within a terminal. The two
- * that act on the column -- scroll it, reorder it -- wait for the scrollable
- * column and are not offered yet.
+ * It always shows the three states that route a gesture within a terminal.
+ * The Move state, which reorders the column, is shown only when the window
+ * is in the column arrangement -- there is no column to reorder otherwise,
+ * so offering it would be a control that does nothing.
  */
 class bssh_input_selector : public QWidget {
 	Q_OBJECT
@@ -37,6 +38,15 @@ public:
 	 */
 	void set_mode(bssh_input_mode_t mode);
 
+	/*
+	 * Shows or hides the column-only states (Move) as the arrangement
+	 * gains or loses a column. Hiding the button a user had selected
+	 * would strand the mode on a control they can no longer see, so this
+	 * falls the mode back to SCROLL and emits -- the one path where a
+	 * change of arrangement, not a click, moves the mode.
+	 */
+	void set_column_available(bool available);
+
 signals:
 	void mode_changed(bssh_input_mode_t mode);
 
@@ -45,6 +55,7 @@ private:
 
 	QButtonGroup *m_group;
 	bssh_input_mode_t m_mode;
+	bool m_column_available;
 };
 
 #endif /* BSSH_INPUT_SELECTOR_H */

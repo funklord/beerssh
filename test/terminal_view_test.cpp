@@ -498,6 +498,46 @@ void terminal_view_test::a_touch_body_drag_scrolls_in_scroll_mode() {
 	QVERIFY(!view.has_selection());
 }
 
+void terminal_view_test::a_touch_body_drag_reorders_in_move_mode() {
+	forced_touch_t touch(1);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/*
+	 * Move mode (sec 8.7): a body drag reorders this pane in the column.
+	 * The view does not reorder anything itself -- that rebuilds the panes
+	 * and would destroy this view mid-gesture -- it only asks, on release,
+	 * with the direction the finger travelled. Up the screen is toward the
+	 * top of the column (negative), down toward the bottom (positive).
+	 */
+	view.set_input_mode(BSSH_INPUT_MOVE);
+	QSignalSpy spy(&view, &bssh_terminal_view::pane_move_requested);
+
+	drag(view, 2, 9, 2, 1);
+	QCOMPARE(spy.count(), 1);
+	QCOMPARE(spy.takeFirst().at(0).toInt(), -1);
+
+	drag(view, 2, 1, 2, 9);
+	QCOMPARE(spy.count(), 1);
+	QCOMPARE(spy.takeFirst().at(0).toInt(), 1);
+
+	/*
+	 * A tap that never moved is not a reorder -- it asks for the keyboard,
+	 * as the scroll path does, and must not shuffle the column by accident.
+	 */
+	drag(view, 2, 5, 2, 5);
+	QCOMPARE(spy.count(), 0);
+
+	/* And the scrollback stayed put: Move is not Scroll. */
+	QCOMPARE(view.scroll_offset(), 0);
+}
+
 void terminal_view_test::select_mode_is_the_touch_shift_override() {
 	forced_touch_t touch(1);
 

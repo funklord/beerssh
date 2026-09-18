@@ -463,6 +463,17 @@ signals:
 	void pane_drag_requested();
 
 	/*
+	 * A body drag in Move mode (sec 8.7): reorder this pane within the
+	 * column, by one place, in the given direction -- negative toward the
+	 * top, positive toward the bottom. Emitted on RELEASE, not during the
+	 * drag: acting on it reorders the column, which rebuilds the panes and
+	 * destroys this view, so it must not fire while this view's own event
+	 * handler is still on the stack. The container names the session and
+	 * the window does the move, for the same reason as pane_drag_requested.
+	 */
+	void pane_move_requested(int direction);
+
+	/*
 	 * A tap that selected nothing: somebody asking to type (sec 6.2).
 	 *
 	 * Emitted whichever keyboard is in use, and BEFORE the system-panel
@@ -839,6 +850,16 @@ private:
 	bool m_scroll_drag_moved;
 	QPoint m_scroll_drag_from;
 	int m_scroll_drag_start_offset;
+
+	/*
+	 * A touch body-drag in Move mode (sec 8.7), which reorders the column.
+	 * `moved` tells a drag from a tap so a tap here is inert rather than
+	 * an accidental reorder, and the start point gives the net direction
+	 * the finger travelled, decided once on release.
+	 */
+	bool m_move_dragging;
+	bool m_move_drag_moved;
+	QPoint m_move_drag_from;
 	QTimer *m_blink_timer;
 
 	/*

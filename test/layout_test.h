@@ -73,6 +73,16 @@ private slots:
 	void the_selector_pushes_its_mode_to_every_pane();
 
 	/*
+	 * The Move state (sec 8.7), which reorders the portrait column: the
+	 * selector offers it only where there is a column, a reorder sticks
+	 * against the next session opening, and the touch gesture reaches the
+	 * window that does the move.
+	 */
+	void the_move_state_is_offered_only_in_a_column();
+	void a_column_reorder_survives_a_new_session();
+	void a_move_gesture_reorders_the_column();
+
+	/*
 	 * Every surface a thumb can reach, at the narrowest width sec 8.2
 	 * designs to.
 	 *

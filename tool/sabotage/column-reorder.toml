@@ -1,0 +1,70 @@
+# Reordering the portrait column (project.md sec 8.7): the Move state of the
+# input selector, which a body drag uses to move a pane up or down the
+# column. It replaces the touch tab-reorder the portrait column dissolved.
+# Five seams, each its own site: the selector offers Move only where there
+# is a column, a reorder sticks against the next session opening, the view
+# asks with the right direction, and the gesture travels the view -> container
+# -> window path to the code that does the move.
+#
+# All five seen to fail 2026-09-18 against the passing baseline.
+
+# The Move state is offered even with no column to reorder.
+#
+# set_column_available shows or hides the column-only buttons. Invert it and
+# the Move button appears when there is no column and vanishes when there is
+# -- a control that does nothing on a phone with one terminal, and none on a
+# phone with several.
+[[sabotage]]
+name = "the Move state ignores whether a column exists"
+file = "src/ui/input_selector.cpp"
+find = "\t\t\tbutton->setVisible(available);"
+replace = "\t\t\tbutton->setVisible(!available);"
+expect = "the_move_state_is_offered_only_in_a_column"
+
+# A reorder touches only the intent, not the column's order of record.
+#
+# In a column m_shown is what sync_column_intent copies into the intent, so
+# a move that skips m_shown is undone the next time a session opens. Turn
+# the m_shown move into a no-op and every reorder silently reverts.
+[[sabotage]]
+name = "a reorder does not move the shown list"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tm_shown.move(sfrom, sto);"
+replace = "\t\t\tm_shown.move(sfrom, sfrom);"
+expect = "a_column_reorder_survives_a_new_session"
+
+# The reorder gesture asks for the wrong direction.
+#
+# A drag up the screen should move the pane toward the top of the column.
+# Flip the sign and up moves it down: the column reorders the opposite way
+# from the finger.
+[[sabotage]]
+name = "the move gesture reverses its direction"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (moved && dy != 0) emit pane_move_requested(dy < 0 ? -1 : 1);"
+replace = "\t\tif (moved && dy != 0) emit pane_move_requested(dy < 0 ? 1 : -1);"
+expect = "a_touch_body_drag_reorders_in_move_mode"
+
+# The container never forwards the view's reorder to the window.
+#
+# The view has no idea which session it shows; the container names it and
+# re-emits. Drop the re-emit and the gesture dies at the container -- the
+# view asked and nothing was listening.
+[[sabotage]]
+name = "the container swallows the reorder"
+file = "src/ui/pane_container.cpp"
+find = "\t\t\temit pane_move_requested(alive.data(), direction);"
+replace = "\t\t\t(void)direction;"
+expect = "a_move_gesture_reorders_the_column"
+
+# The window is not wired to the container's reorder.
+#
+# The last hop: the container's pane_move_requested reaches move_pane.
+# Connect it to a handler that does nothing and the whole gesture is inert
+# though every piece of it still fires.
+[[sabotage]]
+name = "the window ignores the container's reorder"
+file = "src/ui/main_window.cpp"
+find = "\t         this, &bssh_main_window::move_pane);"
+replace = "\t         this, [](bssh_session *, int) {});"
+expect = "a_move_gesture_reorders_the_column"

@@ -6036,13 +6036,26 @@ status line: always visible, thumb-reachable, and one `addWidget` to move
 if it should go elsewhere. It is not in the key row, which scrolls, so it
 cannot scroll off.
 
-**The two column-level states are NOT built, and wait for what they act
-on.** `scroll terminals` (move the column) and `move terminals` (reorder
-it) need the scrollable, reorderable column that does not exist yet -- the
-column caps at two and fills the viewport, so there is nothing to scroll
-or reorder. They are left off the bar rather than shown dead. The snap
-radius aside, this is the last of sec 8.7's selector that the scrollable
-column blocks.
+**`move terminals` is BUILT 2026-09-18; `scroll terminals` waits.** The two
+column-level states needed the scrollable column, which now exists.
+`move terminals` (reorder the column) is built: a fourth selector state,
+Move, offered only in the column arrangement -- there is nothing to reorder
+in the tiles -- where a body drag moves the pane one place, up the screen
+toward the top of the column. The gesture only ASKS, on release: the reorder
+rebuilds the panes and would destroy the dragging view mid-gesture, so it is
+queued through the container (which names the session) to the window's
+existing `move_pane`, the same method the desktop's context menu uses. That
+method now also moves m_shown, the column's order of record, so a reorder
+survives the next session opening rather than being undone by
+`sync_column_intent`. A single step per drag is deliberate for now -- the
+continuous drag, and the snap, are the device pass, as the scroll's feel is.
+Losing the column falls the mode back to Scroll so it is never stranded on a
+hidden button. `scroll terminals` (move the column viewport) is still not
+built: it is the remaining selector state the device pass owes, alongside the
+snap radius. Guarded by `tool/sabotage/column-reorder.toml`, five edits each
+seen to fail: the state offered without a column, a reorder that skips
+m_shown, the gesture reversing direction, the container swallowing it, and
+the window not wired to it.
 
 **Guarded by `tool/sabotage/input-selector.toml`**, five edits, each seen
 to fail naming its own test: a scroll drag that moves nothing, select
@@ -6102,8 +6115,8 @@ past the bottom scrolls it into view. Guarded by
 **What this costs, and it is the honest half.** Dissolving the tabs
 dissolves the touch tab-REORDER with them -- there are no tabs to move on
 a phone now -- and its replacement, reordering the column itself (the
-selector's `move terminals` state), is not built. So on touch, reordering
-is temporarily gone until that lands; tab-reorder survives on the desktop,
+selector's `move terminals` state), is now BUILT (see above), so touch
+reordering is back by that route; tab-reorder survives on the desktop,
 where tabs do, and `a_tab_can_be_moved_along_the_bar` moved there to prove
 it. The scroll is reachable but not yet FELT: there is a scrollbar on
 overflow, and no kinetic flick or snap-to-a-pane-top, because a body-drag

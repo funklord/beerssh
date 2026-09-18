@@ -59,6 +59,7 @@ private slots:
 	 * a remote that grabbed the mouse.
 	 */
 	void a_touch_body_drag_scrolls_in_scroll_mode();
+	void a_touch_body_drag_reorders_in_move_mode();
 	void select_mode_is_the_touch_shift_override();
 	void click_mode_lets_the_remote_have_the_touch();
 

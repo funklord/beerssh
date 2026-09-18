@@ -97,6 +97,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_scroll_dragging(false),
       m_scroll_drag_moved(false),
       m_scroll_drag_start_offset(0),
+      m_move_dragging(false),
+      m_move_drag_moved(false),
       m_blink_timer(nullptr),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
@@ -2056,6 +2058,18 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 			event->accept();
 			return;
 		}
+		/*
+		 * Move mode: a drag reorders this pane in the column. The reorder
+		 * itself waits for release (it rebuilds the panes and would
+		 * destroy this view mid-gesture), so the press only arms it.
+		 */
+		if (m_input_mode == BSSH_INPUT_MOVE) {
+			m_move_dragging = true;
+			m_move_drag_moved = false;
+			m_move_drag_from = event->pos();
+			event->accept();
+			return;
+		}
 		if (m_input_mode != BSSH_INPUT_SELECT) {
 			event->accept();
 			return;
@@ -2153,6 +2167,20 @@ void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 		return;
 	}
 
+	if (m_move_dragging) {
+		/*
+		 * Only tell a drag from a tap here; the reorder is decided on
+		 * release, from the net direction the finger travelled. Doing it
+		 * live would reorder and rebuild the panes under the finger.
+		 */
+		if (!m_move_drag_moved
+		    && (event->pos() - m_move_drag_from).manhattanLength()
+		           >= QApplication::startDragDistance())
+			m_move_drag_moved = true;
+		event->accept();
+		return;
+	}
+
 	if (!m_selecting) {
 		QWidget::mouseMoveEvent(event);
 		return;
@@ -2187,6 +2215,24 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 		 * does, said here because the scroll path returns before it.
 		 */
 		if (tap) request_input_panel();
+		event->accept();
+		return;
+	}
+
+	if (m_move_dragging) {
+		const bool moved = m_move_drag_moved;
+		const int dy = event->pos().y() - m_move_drag_from.y();
+		m_move_dragging = false;
+
+		/*
+		 * A drag with vertical travel reorders by one place -- up the
+		 * screen toward the top of the column, down toward the bottom.
+		 * A press that never moved is a tap and asks for the keyboard,
+		 * as the scroll path above does; a purely sideways drag reorders
+		 * nothing and is left alone.
+		 */
+		if (moved && dy != 0) emit pane_move_requested(dy < 0 ? -1 : 1);
+		else if (!moved) request_input_panel();
 		event->accept();
 		return;
 	}

@@ -270,6 +270,15 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_input_selector->setVisible(bssh_platform::instance()
 	                              && bssh_platform::instance()->is_touch_primary());
 
+	/*
+	 * The Move state is offered only where there is a column to reorder.
+	 * The arrangement is fixed at construction today (touch opens a
+	 * column, a desktop opens tiles), so this is set once; when a runtime
+	 * arrangement switch lands it calls the same setter.
+	 */
+	m_input_selector->set_column_available(
+	        m_layout->arrangement() == bssh_layout_manager::COLUMN);
+
 	connect(m_input_selector, &bssh_input_selector::mode_changed,
 	         this, [this] { apply_input_mode(); });
 
@@ -305,6 +314,8 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 	connect(m_panes, &bssh_pane_container::pane_drag_requested,
 	         this, &bssh_main_window::start_session_drag);
+	connect(m_panes, &bssh_pane_container::pane_move_requested,
+	         this, &bssh_main_window::move_pane);
 	connect(m_panes, &bssh_pane_container::panes_rebuilt, this, [this] {
 		on_pane_focus_changed(m_panes->focused_session());
 
@@ -2694,6 +2705,20 @@ void bssh_main_window::move_pane(bssh_session *session, int direction) {
 
 	intent.move(from, to);
 	m_layout->set_intent(intent);
+
+	/*
+	 * In a column m_shown is the order of record -- sync_column_intent
+	 * copies it into the intent -- so a reorder that touched only the
+	 * intent would be undone the next time a session is opened or closed.
+	 * Move it there too, by the same step, to make the change stick.
+	 */
+	if (m_layout->arrangement() == bssh_layout_manager::COLUMN) {
+		const int sfrom = m_shown.indexOf(session);
+		const int sto = sfrom + (direction < 0 ? -1 : 1);
+		if (sfrom >= 0 && sto >= 0 && sto < m_shown.size())
+			m_shown.move(sfrom, sto);
+	}
+
 	m_panes->rebuild();
 
 	/*
