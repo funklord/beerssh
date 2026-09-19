@@ -294,13 +294,26 @@ into it, so a tree where they have not been applied fails on
 `VTERM_PROP_RESET` — which is §7.1 working as designed rather than a
 problem with either build.
 
-`fmake.toml` says the three things fmake cannot read off the tree: the
-version, from `VERSION` rather than written a third time; `vterm/include`,
-which qmake carries as `INCLUDEPATH` and without which every
-`bssh_emulator` method is missing at the link; and that the Android
-translation units, the Android dependency trees and `build-*` are not part
-of a desktop build. `make` remains the interface — fmake builds the
-program and none of the gates, the APK or the packaging.
+**And not in a tree where `tool/build-deps-android.sh` has run.**
+`fmake.toml` excludes `build-deps-android`, which keeps its sources out of
+the build — but the exclusion does not reach the include path. libssh's
+headers land on it and shadow the C library's `<string.h>`, and every file
+that includes a Qt header fails. The tree is untracked, so a fresh clone
+has nothing to shadow: measured both ways, a clean clone with the vterm
+step above builds, and the same clone with the dependency tree copied in
+does not. Signalled as fmake's §293; until it is settled, `make` is the
+way in a tree that has built the Android dependencies.
+
+`fmake.toml` says what fmake cannot read off the tree: the version, from
+`VERSION` rather than written a third time; `BSSH_TEST_FONT_DIR`, which
+`test/tests.pro` passes and the font catalogue test reads;
+`QT_QPA_PLATFORM=offscreen`, which the test program needs and the `test`
+target already sets; `vterm/include`, which qmake carries as
+`INCLUDEPATH` and without which every `bssh_emulator` method is missing at
+the link; and that the Android translation units, the Android dependency
+trees and `build-*` are not part of a desktop build. `make` remains the
+interface — fmake builds the program and none of the gates, the APK or the
+packaging.
 
 
 `make` wraps qmake, which does the actual Qt build in `build/`; everything
