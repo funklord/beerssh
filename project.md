@@ -11545,6 +11545,15 @@ is the thing they do only when they already doubt the entry.
 One in eleven, **34 days** after the last correction (`bf5b1a1`, 2026-08-06)
 — so re-derive rather than read, and record the date when you do.
 
+**Stale again on 2026-09-19, one day after the fact.** `8b4590b` settled the
+system font-scale question — honour it for the interface, never for the
+terminal grid, with an explicit setting — and §9.5 records it in those words.
+This list still called it open. Found by the same method, putting the entry to
+the code rather than reading it. What the interval says is worth keeping: it
+is not the ten days since the last re-derivation that matter but the one day
+since the decision. **A register goes stale the moment a decision lands, not
+on a schedule**, so the re-derivation catches a backlog rather than a drift.
+
 **Still open:**
 
 - libssh (LGPL, dynamic link) vs libssh2 (BSD) — licensing may decide it, and it
@@ -11560,7 +11569,6 @@ One in eleven, **34 days** after the last correction (`bf5b1a1`, 2026-08-06)
 - Which font is the **phone** default (JetBrains Mono vs condensed Iosevka).
   The shortlist itself is settled; this half is not, and cannot be until
   Iosevka's 42 MB ships by asset pack (§9.4, M9).
-- Honour system font-scale for the terminal grid? (Leaning no; setting instead.)
 - Host groups/folders in addition to presets? (§10.5.)
 - Persist scrollback across restarts?
 - Icon and branding direction (§0.1), which the placeholder in §12.2 is waiting
@@ -11579,6 +11587,7 @@ One in eleven, **34 days** after the last correction (`bf5b1a1`, 2026-08-06)
 | Font shortlist — six selectable, two fallback-only | §9.2 |
 | `~/.ssh/config` import — built, an explicit import and never a live read | §10.5 |
 | Bundled soft keyboard — built, `KEYBOARD_SYSTEM` or `KEYBOARD_BUILT_IN` | §6.2 |
+| System font-scale — honoured for the interface, never for the grid | §9.5 |
 
 ---
 
