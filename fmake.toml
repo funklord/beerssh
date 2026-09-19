@@ -1,7 +1,22 @@
 [project]
 # The version qmake passes as BSSH_VERSION_STRING, read from the file it
 # and debian/changelog already agree about rather than written a third time.
-defines = ['BSSH_VERSION_STRING="$file(VERSION)"']
+#
+# BSSH_TEST_FONT_DIR is what test/tests.pro:36 passes as `$$PWD/../fonts`,
+# and it is project-wide rather than per-target on purpose: the test
+# program is one binary rooted by test/main.cpp, so a per-target define
+# reaches that root and not test/font_catalog_test.cpp, which is where the
+# macro is actually used. Without it `--eject make` -- which compiles the
+# test program to write its rules -- stops inside Qt's qstringliteral.h
+# with `expected primary-expression before '(' token', the same shape
+# BSSH_VERSION_STRING had before the line above carried it.
+defines = ['BSSH_VERSION_STRING="$file(VERSION)"',
+           'BSSH_TEST_FONT_DIR="$root/fonts"']
+
+# What the Makefile's test target already sets. Without it the test program
+# builds and then aborts for want of a display, which reads as a broken
+# build rather than a missing variable.
+test-env = ["QT_QPA_PLATFORM=offscreen"]
 
 # The vendored libvterm's public header. qmake carries the same path as
 # INCLUDEPATH; without it src/term/emulator_vterm.cpp does not compile and
