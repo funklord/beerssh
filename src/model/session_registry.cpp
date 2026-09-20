@@ -47,6 +47,62 @@ bssh_session *bssh_session_registry::create(const bssh_profile_t &profile) {
 	         manager, &bssh_conn_manager::note_network_changed);
 
 	/*
+	 * The three things sec 5.5 says a desktop notification carries:
+	 * reconnecting, reconnect failed, and a bell in a pane nobody is
+	 * looking at. bssh_platform::notify() was declared with exactly that
+	 * list beside it and implemented on both platforms, and until now
+	 * **nothing called it** -- an interface complete enough that reading
+	 * it found nothing wrong, which is why reading the callers is the
+	 * only thing that could have.
+	 *
+	 * Here rather than in a window, for the reason the shell-ended
+	 * handler below gives: it is a fact about a session, not about a view
+	 * of one. A window-level handler cannot even ask the question -- each
+	 * knows only whether IT shows the session, so with two windows open
+	 * the answer needs agreement between objects that deliberately hold
+	 * no pointer to each other, and a session no view is showing at all
+	 * is the case that matters most.
+	 *
+	 * The guard is the INVERSE of the status line's. Every window handler
+	 * for these signals starts `if (session != m_current) return' and
+	 * writes into the status area, so the focused session is already
+	 * covered and a notification for it would be a popup about something
+	 * on screen. What had no signal at all was the session reconnecting
+	 * behind another tab, which is the one a person needs told about.
+	 */
+	connect(manager, &bssh_conn_manager::reconnect_started,
+	         this, [session](int attempt) {
+		if (session->is_on_screen()) return;
+
+		bssh_platform::instance()->notify(
+		        QStringLiteral("Reconnecting"),
+		        QStringLiteral("%1 -- attempt %2")
+		                .arg(session->title())
+		                .arg(attempt));
+	});
+
+	connect(manager, &bssh_conn_manager::gave_up, this, [session] {
+		/*
+		 * Not guarded on the screen, unlike the other two. Giving up is
+		 * terminal: the shell is gone and will not come back on its own,
+		 * and that is worth saying whether or not the pane is visible --
+		 * a person watching a pane that has quietly stopped retrying has
+		 * no way to tell it from one still trying.
+		 */
+		bssh_platform::instance()->notify(
+		        QStringLiteral("Reconnect failed"),
+		        QStringLiteral("%1 -- gave up; the shell is gone, not suspended")
+		                .arg(session->title()));
+	});
+
+	connect(session, &bssh_session::bell_while_away, this, [session] {
+		bssh_platform::instance()->notify(
+		        QStringLiteral("Bell"),
+		        QStringLiteral("%1 rang while you were elsewhere")
+		                .arg(session->title()));
+	});
+
+	/*
 	 * A session whose shell ended closes itself, unless it was opened to
 	 * hold (sec 8.6). This is what every terminal since xterm does when
 	 * the thing it was running finishes, and until now nothing did it:

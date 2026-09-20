@@ -37,6 +37,15 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 
 		m_unseen_bell = true;
 		emit state_changed();
+
+		/*
+		 * And tell whoever is listening that it happened out of sight
+		 * (sec 5.5). Emitted here rather than derived by a listener,
+		 * because the two conditions that make a bell worth reporting --
+		 * the host wants bells at all, and nothing is showing this
+		 * session -- have both just been evaluated above.
+		 */
+		emit bell_while_away();
 	});
 
 	connect(m_emulator, &bssh_emulator::title_changed, this, [this](const QString &title) {

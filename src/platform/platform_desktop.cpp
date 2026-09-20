@@ -154,7 +154,7 @@ public:
 		                              : QStringLiteral("BeerSSH -- %1 sessions connected").arg(count));
 	}
 
-	void notify(const QString &title, const QString &body) override {
+	void platform_notify(const QString &title, const QString &body) override {
 		/*
 		 * Qt routes this through the platform's own notification service
 		 * where one exists, and falls back to a balloon otherwise. A

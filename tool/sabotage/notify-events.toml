@@ -1,0 +1,51 @@
+# sec 5.5's three notifications, which had no call site at all.
+#
+# bssh_platform::notify() was declared with the list beside it --
+# "Reconnecting, reconnect failed, a bell in an unfocused pane" --
+# implemented on desktop and on Android, and invoked by nothing for as
+# long as it existed. Reading the interface found nothing wrong because
+# nothing was: the declarations are the part that is not missing. It is
+# sec 11's erase() a second time, and the lesson is the same one --
+# a method with no caller hides better than a signal with no listener.
+#
+# These guard the call sites rather than the formatting, because the
+# call site is what was absent.
+
+[[sabotage]]
+name = "a reconnect out of sight is announced to nobody"
+file = "src/model/session_registry.cpp"
+find = "\t\tif (session->is_on_screen()) return;\n\n\t\tbssh_platform::instance()->notify("
+replace = "\t\tif (session->is_on_screen()) return;\n\n\t\tif (true) return;\n\t\tbssh_platform::instance()->notify("
+expect = "the_three_events_sec_5_5_names_reach_the_platform"
+
+# The inverse guard. Notifying for the pane the user is looking at is a
+# popup about something already on screen, and the window's status line
+# covers that case -- every one of its handlers opens with a check that
+# the session is the current one. Drop the guard and the two halves
+# report the same event twice.
+[[sabotage]]
+name = "the pane you are watching also raises a popup"
+file = "src/model/session_registry.cpp"
+find = "\t\tif (session->is_on_screen()) return;"
+replace = "\t\tif (false) return;"
+expect = "the_three_events_sec_5_5_names_reach_the_platform"
+
+# The bell. Its condition is evaluated once in the session, where
+# bell_enabled and the on-screen flag are both already in hand, so this
+# listener must not re-derive it -- and must exist.
+[[sabotage]]
+name = "a bell out of sight reaches no notification"
+file = "src/model/session_registry.cpp"
+find = "\tconnect(session, &bssh_session::bell_while_away, this, [session] {"
+replace = "\tconnect(session, &bssh_session::state_changed, this, [session] {\n\t\tif (true) return;"
+expect = "the_three_events_sec_5_5_names_reach_the_platform"
+
+# And the signal the session raises for it. Emitting nothing where the
+# condition is computed leaves the registry listening to something that
+# never fires, which is the shape this whole spec exists for.
+[[sabotage]]
+name = "the session never says the bell rang out of sight"
+file = "src/model/session.cpp"
+find = "\t\temit bell_while_away();"
+replace = "\t\t(void)0;"
+expect = "the_three_events_sec_5_5_names_reach_the_platform"

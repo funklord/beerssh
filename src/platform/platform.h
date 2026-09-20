@@ -111,6 +111,7 @@ public:
 protected:
 	virtual bool platform_is_touch_primary() const = 0;
 	virtual bool platform_has_biometric() const = 0;
+	virtual void platform_notify(const QString &title, const QString &body) = 0;
 
 public:
 
@@ -177,8 +178,25 @@ public:
 	 */
 	virtual void set_session_count(int count) = 0;
 
-	/* Reconnecting, reconnect failed, a bell in an unfocused pane. */
-	virtual void notify(const QString &title, const QString &body) = 0;
+	/*
+	 * Reconnecting, reconnect failed, a bell in an unfocused pane.
+	 *
+	 * Split public-from-virtual the way has_biometric() and
+	 * is_touch_primary() already are, and for a reason this one paid for:
+	 * it was a bare pure virtual, implemented on both platforms, and
+	 * called by NOTHING for as long as it existed. Reading the interface
+	 * found nothing wrong because nothing was -- the declarations are
+	 * exactly what is not missing. What finds it is asking each method
+	 * who calls it, and what keeps it found is `notified', which a test
+	 * can hear.
+	 */
+	void notify(const QString &title, const QString &body);
+
+signals:
+	/* Emitted for every notify(), before the platform shows anything. */
+	void notified(const QString &title, const QString &body);
+
+public:
 
 	/*
 	 * Where the curated font set lives (sec 9.4).

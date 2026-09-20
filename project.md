@@ -994,6 +994,58 @@ holds a socket open simply keeps holding it. What still needs deciding is what
 - **Desktop notifications** (via `QSystemTrayIcon`, or the platform's native
   service) carry the same events the Android notification does: reconnecting,
   reconnect failed, bell rang in an unfocused pane.
+  **[BUILT 2026-09-20], and what was there before was the whole feature
+  except the part that runs.** `bssh_platform::notify()` was declared with
+  those three events written beside it as a comment, implemented on desktop
+  (tray `showMessage`) and on Android (the notification channel), and
+  **called by nothing, ever**. Both halves a reader would check were
+  present and correct; the only thing missing was an invocation.
+  **Reading the interface could not have found it, and that is the point.**
+  The declarations are exactly the part that is not missing, so an
+  interface review passes a half-wired implementation. What finds it is
+  asking, of each method in turn, who calls it -- which is how §11's
+  `erase()` was found leaving credentials in the keyring, and this is the
+  second instance in this tree of the same lens. **The next sweep after an
+  empty one should be the lens the last FIND suggests, not the one that
+  just reported nothing.**
+  The consequence was specific rather than cosmetic. Every window handler
+  for these signals opens `if (session != m_current) return` and writes
+  into the status line, so the focused session was covered and everything
+  else had **no signal at all** -- a session reconnecting behind another
+  tab, or in a window the user is not looking at, retried and gave up in
+  silence. So the notification's guard is the **inverse** of the status
+  line's, and the two together cover the sessions exactly once.
+  Wired in `bssh_session_registry`, not in a window, for the reason the
+  shell-ended handler beside it already gives: it is a fact about a
+  session rather than about a view of one. A window cannot even ask the
+  question -- each knows only whether IT shows the session, and §8.4 has
+  them holding no pointer to each other on purpose, so with two windows
+  open the answer needs an agreement none of them can reach. The registry
+  owns the `bssh_conn_manager`s and is process-wide, so it fires once.
+  **Giving up notifies whether or not the pane is visible**, unlike the
+  other two: it is terminal, and a pane that has quietly stopped retrying
+  looks exactly like one still trying.
+  `notify()` is now a public non-virtual that emits `notified()` and
+  delegates to a protected `platform_notify()` -- the split
+  `has_biometric()`/`platform_has_biometric()` already uses, so it is this
+  class's own convention rather than a new one, and it makes the call
+  observable to a test without a test-only hook. Guarded by
+  `tool/sabotage/notify-events.toml`, four edits.
+  **One of the four was MISSED on the first run, and the TEST was what
+  was wrong** -- the second miss of the day and the opposite cause to the
+  first. §6.2's had been a sabotage that could not break anything; this
+  was a sabotage that broke the code correctly while the test could not
+  see it. The test raised `bell_while_away` itself, so deleting the only
+  thing that legitimately raises it changed nothing it observed: a test
+  that calls the helper it is verifying cannot see a wrong caller. It
+  feeds a BEL byte now, which exercises the two conditions the session
+  evaluates rather than assuming their result, and asserts the other
+  direction too -- a bell rung while the session IS on screen must be
+  remembered and not announced.
+  **From outside the two misses are identical** -- a green suite under a
+  broken thing -- and only running them says which one you have. That is
+  the argument for the harness rather than for care: it removes the
+  moment where being careful is a choice.
 
 ---
 

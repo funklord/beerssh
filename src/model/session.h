@@ -91,6 +91,18 @@ public:
 	void mark_seen();
 
 	/*
+	 * Whether a view is showing this session right now (sec 8.4: exactly
+	 * one place, or none at all).
+	 *
+	 * Readable because the registry has to know it: a notification is for
+	 * the session you are NOT looking at, and the window-level handlers
+	 * cannot answer it -- each one knows only whether IT is showing the
+	 * session, so with two windows open every one of them would have to
+	 * agree, and none of them holds a pointer to another.
+	 */
+	bool is_on_screen() const { return m_on_screen; }
+
+	/*
 	 * True when the remote shell ended by itself rather than the
 	 * connection dropping. Reconnecting one of these reopens a shell the
 	 * user deliberately exited, which is the difference between a
@@ -145,6 +157,16 @@ public:
 	void set_on_screen(bool on_screen);
 
 signals:
+	/*
+	 * A bell rang while nothing was showing this session (sec 5.5).
+	 *
+	 * Separate from state_changed, which fires for everything and would
+	 * make a listener re-derive the one fact it wants. The condition is
+	 * evaluated once, where bell_enabled and the on-screen flag are
+	 * already in hand, so a listener cannot get it subtly different.
+	 */
+	void bell_while_away();
+
 	void title_changed();
 	void state_changed();
 

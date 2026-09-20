@@ -3,6 +3,8 @@
 
 #include <QTemporaryDir>
 
+#include "model/conn_manager.h"
+#include "platform/platform.h"
 #include "model/session.h"
 #include "model/profile_store.h"
 #include "model/session_registry.h"
@@ -692,4 +694,82 @@ void session_registry_test::the_window_title_expands_what_the_session_knows() {
 	 */
 	QCOMPARE(bssh_expand_window_title(QStringLiteral("%t - BeerSSH"), nullptr),
 	          QStringLiteral("BeerSSH"));
+}
+
+/*
+ * sec 5.5 says a desktop notification carries three things: reconnecting,
+ * reconnect failed, and a bell in a pane nobody is looking at.
+ * bssh_platform::notify() was declared with that list written beside it,
+ * implemented on both platforms, and called by nothing at all.
+ *
+ * Reading the interface could not find that, because the interface was
+ * complete -- the declarations are exactly the part that is not missing.
+ * Only asking each method who calls it does, which is sec 11's erase()
+ * again: a method with no caller anywhere hides better than a signal with
+ * no listener, because a dangling signal at least looks unfinished.
+ */
+void session_registry_test::the_three_events_sec_5_5_names_reach_the_platform() {
+	QStringList titles;
+	QObject sink;
+	QObject::connect(bssh_platform::instance(), &bssh_platform::notified, &sink,
+	                  [&titles](const QString &title, const QString &) {
+		titles.append(title);
+	});
+
+	bssh_session_registry registry;
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("box.example.com");
+	bssh_session *session = registry.create(profile);
+
+	bssh_conn_manager *manager = registry.conn_manager_for(session);
+	QVERIFY(manager != nullptr);
+
+	/*
+	 * On screen first, and nothing is announced. A notification for the
+	 * pane you are looking at is a popup about something already visible,
+	 * and the window's own status line covers that case -- every one of
+	 * its handlers for these signals opens `if (session != m_current)'.
+	 */
+	session->set_on_screen(true);
+	emit manager->reconnect_started(1);
+	QVERIFY2(titles.isEmpty(), "announced a reconnect the user was watching");
+
+	/* Out of sight, and it is. */
+	session->set_on_screen(false);
+	emit manager->reconnect_started(2);
+	QCOMPARE(titles.size(), 1);
+	QCOMPARE(titles.first(), QStringLiteral("Reconnecting"));
+
+	/*
+	 * Giving up is announced either way, deliberately: it is terminal,
+	 * and a pane that has quietly stopped retrying looks exactly like one
+	 * still trying.
+	 */
+	session->set_on_screen(true);
+	emit manager->gave_up();
+	QCOMPARE(titles.size(), 2);
+	QCOMPARE(titles.at(1), QStringLiteral("Reconnect failed"));
+
+	/*
+	 * And the bell, fed as a BEL byte rather than by emitting the signal.
+	 *
+	 * The first version of this did `emit session->bell_while_away()',
+	 * and the sabotage that DELETES that emit from the session stayed
+	 * green -- the test was raising the signal itself, so removing the
+	 * only thing that legitimately raises it changed nothing it could
+	 * see. A test that calls the helper it is verifying cannot see a
+	 * wrong caller. Driving it from the wire exercises the two
+	 * conditions the session evaluates (bell_enabled, and nothing
+	 * showing it) instead of assuming their result.
+	 */
+	QVERIFY(session->emulator() != nullptr);
+	session->set_on_screen(false);
+	session->emulator()->feed(QByteArrayLiteral("\a"));
+	QCOMPARE(titles.size(), 3);
+	QCOMPARE(titles.at(2), QStringLiteral("Bell"));
+
+	/* And on screen it is remembered rather than announced (sec 8.3). */
+	session->set_on_screen(true);
+	session->emulator()->feed(QByteArrayLiteral("\a"));
+	QCOMPARE(titles.size(), 3);
 }

@@ -79,6 +79,11 @@ bool bssh_platform::has_biometric() const {
 	return platform_has_biometric();
 }
 
+void bssh_platform::notify(const QString &title, const QString &body) {
+	emit notified(title, body);
+	platform_notify(title, body);
+}
+
 void bssh_platform::force_biometric(int available) {
 	bssh_forced_biometric = available;
 }

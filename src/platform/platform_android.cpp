@@ -348,7 +348,7 @@ public:
 		        context.object(), status.object<jstring>());
 	}
 
-	void notify(const QString &title, const QString &body) override {
+	void platform_notify(const QString &title, const QString &body) override {
 		/*
 		 * Folded into the service's own notification rather than posting
 		 * a second one: two notifications from a terminal that is doing
