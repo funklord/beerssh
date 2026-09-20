@@ -3247,3 +3247,107 @@ void terminal_view_test::a_reattached_screen_is_not_read_from_the_old_one() {
 	QVERIFY2(!now.contains(QStringLiteral("the first terminal")),
 	          "and the old text must be gone, not merely joined by the new");
 }
+
+/*
+ * OSC 8 was the only clickable link, and almost nothing emits OSC 8.
+ * Every URL a person actually meets in a terminal -- curl's output, a git
+ * remote, a log line, the address in an error message -- is plain text
+ * that some program printed knowing nothing about the convention, and
+ * none of it was clickable at all.
+ *
+ * These cases are about where a URL STOPS, because that is the whole
+ * difficulty. Finding `https://' is trivial; handing the browser
+ * `page).' is finding the address and breaking it.
+ */
+void terminal_view_test::a_bare_url_is_clickable_and_stops_where_it_should() {
+	bssh_terminal_view view;
+	show_and_resize(view, 900, 200);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/*
+	 * The top row's line index, taken the way a click takes it rather
+	 * than from an internal. cell_at is what mousePressEvent uses, so the
+	 * test addresses cells through the same mapping the feature does.
+	 */
+	qint64 first = 0;
+	int ignored = 0;
+	QVERIFY(view.cell_at(QPoint(2, 2), first, ignored));
+
+	emulator.feed(QByteArrayLiteral("see https://example.com/a/page for more\r\n"));
+
+	/* Clicked inside the address: the whole address, and not the word
+	 * after it. */
+	QCOMPARE(view.url_at(first, 10), QStringLiteral("https://example.com/a/page"));
+
+	/* Clicked on the prose either side: nothing. A stray Ctrl+click on a
+	 * line of output must not launch anything. */
+	QVERIFY2(view.url_at(first, 1).isEmpty(), "found a URL in the word 'see'");
+	QVERIFY2(view.url_at(first, 34).isEmpty(), "found a URL in the word 'more'");
+
+	/*
+	 * Sentence punctuation is not an address. This is the case that
+	 * makes the difference between a link that works and one that
+	 * 404s, and it is the reason trimming is done by counting brackets
+	 * rather than by stripping a character class.
+	 */
+	emulator.feed(QByteArrayLiteral("(see https://example.com/page).\r\n"));
+	QCOMPARE(view.url_at(first + 1, 12), QStringLiteral("https://example.com/page"));
+
+	/* But a bracket whose opener is inside the address belongs to it --
+	 * Wikipedia's own URLs are the everyday case. */
+	emulator.feed(QByteArrayLiteral("https://en.wikipedia.org/wiki/Fo_(bar)\r\n"));
+	QCOMPARE(view.url_at(first + 2, 5),
+	          QStringLiteral("https://en.wikipedia.org/wiki/Fo_(bar)"));
+
+	/*
+	 * Only http and https. A marked OSC 8 link is an explicit act by the
+	 * program that drew it and may carry any scheme; text that merely
+	 * LOOKS like a link is not, so what is inferred is deliberately
+	 * narrower than what is declared.
+	 */
+	emulator.feed(QByteArrayLiteral("ftp://example.com/x file:///etc/passwd\r\n"));
+	QVERIFY2(view.url_at(first + 3, 3).isEmpty(), "inferred an ftp:// link from text");
+	QVERIFY2(view.url_at(first + 3, 22).isEmpty(), "inferred a file:// link from text");
+
+	/*
+	 * A scheme with no host is not an address, though it matches the
+	 * pattern. The first version of this case fed `https:// nothing',
+	 * which never reaches the check at all: the pattern needs a non-space
+	 * after the slashes, so it simply does not match and the assertion
+	 * passed without exercising anything. Sabotaging the host check
+	 * stayed green and said so. `https:///path' matches and has no host.
+	 */
+	emulator.feed(QByteArrayLiteral("https:///path here\r\n"));
+	QVERIFY2(view.url_at(first + 4, 2).isEmpty(), "accepted a scheme with no host");
+
+	/*
+	 * And the CALL SITE, which everything above this misses.
+	 *
+	 * Every assertion so far asks url_at directly, so removing its call
+	 * from mousePressEvent changes nothing they can see -- the sabotage
+	 * that does exactly that stayed green. A test that calls the helper
+	 * it is verifying cannot see a wrong caller, which is the same trap
+	 * the session bell fell into earlier and the reason this is here:
+	 * the wiring is a separate fact from the parsing.
+	 */
+	QSignalSpy activated(&view, &bssh_terminal_view::link_activated);
+
+	emulator.feed(QByteArrayLiteral("go to https://example.com/clicked now\r\n"));
+
+	const QRect target = view.cell_rect(first + 5, 12);
+	QVERIFY2(target.isValid(), "the address is not on screen to be clicked");
+
+	/* Without Ctrl nothing opens: a stray tap on output must not launch
+	 * a browser at an address the remote chose. */
+	QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, target.center());
+	QCOMPARE(activated.count(), 0);
+
+	QTest::mouseClick(&view, Qt::LeftButton, Qt::ControlModifier, target.center());
+	QCOMPARE(activated.count(), 1);
+	QCOMPARE(activated.first().first().toString(),
+	          QStringLiteral("https://example.com/clicked"));
+}

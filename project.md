@@ -4102,6 +4102,46 @@ modifier, and BeerSSH additionally shows the address before opening it. The
 widget does not open anything itself: what to do with a remote's URL is the
 window's decision, not a terminal component's.
 
+**[BUILT 2026-09-21] A bare URL in plain text is clickable too, and that is
+the case that was actually missing.** OSC 8 was the only thing Ctrl+click
+could open, and OSC 8 is rare: almost nothing a person runs emits it, so
+every address from `curl`, a git remote, a log line or an error message was
+inert. `url_at()` reads the LOGICAL line -- the same rejoining `find_text`
+does, because a URL worth clicking is long enough to wrap and the half on
+the next row is the half with the path in it -- and hands the result to the
+same `link_activated` signal, so it inherits the prompt above rather than
+opening a second door beside it.
+
+**http and https only, deliberately narrower than the marked path.** An
+OSC 8 link is an explicit act by the program that drew it and may carry any
+scheme; text that merely LOOKS like a link is not, so what is inferred from
+it is held to less. A host printing `file:///etc/passwd` gets no offer to
+open it.
+
+**The whole difficulty is where a URL stops**, and the trim counts brackets
+rather than stripping a character class. `(see https://example.com/page).`
+ends at `page`; handing a browser `page).` is finding the address and
+breaking it. But `https://en.wikipedia.org/wiki/Fo_(bar)` keeps its
+parens, because the opener is inside -- and no character test separates
+those two cases.
+
+**Two of the five sabotages were MISSED first time and both were the
+test.** One deleted the CALL from `mousePressEvent` and the suite stayed
+green, because every assertion asked `url_at()` directly: a test that calls
+the helper it is verifying cannot see a wrong caller. That is the same trap
+the session bell hit hours earlier in this same session, written down at
+the time, and repeated anyway -- **knowing the trap did not prevent it and
+running the sabotage did**, which is the argument for the harness over
+care. It drives a real Ctrl+click now, and asserts the negative too: a
+click without the modifier emits nothing.
+The other fed `https:// nothing` to prove a scheme with no host is refused.
+The pattern needs a non-space after the slashes, so it never matched and
+the assertion passed having exercised nothing -- **a fixture that does not
+reach the hazard is indistinguishable from one that reaches it and finds
+the code correct.** `https:///path` matches and has no host.
+Guarded by `tool/sabotage/bare-urls.toml`, five edits each aimed at a
+different way of getting the end wrong rather than at one way five times.
+
 **[DONE]** Image scrollback, its memory budget, and `z < 0`. A placement
 scrolled off the top keeps going into negative rows — row −3 means three lines
 above the live screen, where the text it belongs to now is — so scrolling back

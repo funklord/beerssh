@@ -1,3 +1,4 @@
+#include <QRegularExpression>
 #include "ui/terminal_view.h"
 
 #include <QDragEnterEvent>
@@ -1928,6 +1929,108 @@ QString bssh_terminal_view::selection_text() const {
 	return out;
 }
 
+namespace {
+
+/*
+ * Where a URL stops, which is not where the whitespace does.
+ *
+ * `(see https://example.com/page).' ends the address at `page', and a
+ * terminal that hands the browser `page).' has found the URL and broken
+ * it. Trailing sentence punctuation is never part of an address in
+ * practice, and a closing bracket only is when its opener is inside the
+ * URL -- which is why the count matters rather than the character:
+ * Wikipedia's own addresses carry balanced parens.
+ */
+QString trim_url_tail(QString url) {
+	forever {
+		if (url.isEmpty()) break;
+
+		const QChar last = url.at(url.size() - 1);
+
+		if (QStringLiteral(".,;:!?'\"").contains(last)) {
+			url.chop(1);
+			continue;
+		}
+
+		if (last == QLatin1Char(')') || last == QLatin1Char(']')
+		    || last == QLatin1Char('>')) {
+			const QChar opener = last == QLatin1Char(')') ? QLatin1Char('(')
+			                   : last == QLatin1Char(']') ? QLatin1Char('[')
+			                                              : QLatin1Char('<');
+			if (url.count(opener) < url.count(last)) {
+				url.chop(1);
+				continue;
+			}
+		}
+
+		break;
+	}
+	return url;
+}
+
+} /* namespace */
+
+QString bssh_terminal_view::url_at(qint64 line, int col) const {
+	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
+	const qint64 base = history_base();
+	const qint64 end = base + history + m_rows;
+
+	if (line < base || line >= end) return QString();
+
+	const int width = m_screen ? m_screen->cols() : m_cols;
+	if (width <= 0) return QString();
+
+	/*
+	 * Back to the row the logical line starts on. A click lands on
+	 * whichever physical row the eye found, and that is as likely to be
+	 * the continuation as the start.
+	 */
+	qint64 first = line;
+	while (first > base && line_is_continuation(first)) --first;
+
+	QString text;
+	int clicked = -1;
+
+	qint64 phys = first;
+	do {
+		for (int c = 0; c < width; ++c) {
+			const bssh_cell_t &cell = cell_for_line(phys, c);
+			if (cell.width == 0) continue;
+			if (phys == line && c == col) clicked = text.size();
+			text.append(cell.ch ? QString::fromUcs4(&cell.ch, 1)
+			                    : QStringLiteral(" "));
+		}
+		++phys;
+	} while (phys < end && line_is_continuation(phys));
+
+	if (clicked < 0) return QString();
+
+	static const QRegularExpression pattern(
+	        QStringLiteral("https?://[^\\s]+"),
+	        QRegularExpression::CaseInsensitiveOption);
+
+	QRegularExpressionMatchIterator it = pattern.globalMatch(text);
+	while (it.hasNext()) {
+		const QRegularExpressionMatch match = it.next();
+		const QString trimmed = trim_url_tail(match.captured());
+		if (trimmed.isEmpty()) continue;
+
+		const int start = match.capturedStart();
+		if (clicked < start || clicked >= start + trimmed.size()) continue;
+
+		/*
+		 * A scheme and something after it. `https://' alone is not an
+		 * address, and QUrl will happily accept it.
+		 */
+		const QUrl url(trimmed);
+		if (!url.isValid() || url.host().isEmpty()) return QString();
+
+		return trimmed;
+	}
+
+	return QString();
+}
+
 int bssh_terminal_view::find_text(const QString &query) {
 	m_find_matches.clear();
 	m_current_match = -1;
@@ -2245,6 +2348,22 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 				event->accept();
 				return;
 			}
+		}
+
+		/*
+		 * No OSC 8 here, so look at what the text says. A marked link
+		 * is the reliable case and is tried first; this is the common
+		 * one, because almost nothing a person runs emits OSC 8.
+		 *
+		 * Same signal, so the same gate: the window asks before opening
+		 * anything, and an address inferred from text deserves that at
+		 * least as much as one a program declared.
+		 */
+		const QString guessed = url_at(line, col);
+		if (!guessed.isEmpty()) {
+			emit link_activated(guessed);
+			event->accept();
+			return;
 		}
 	}
 

@@ -1,0 +1,59 @@
+# Bare URLs in terminal output (sec 7.1, sec 6.4).
+#
+# OSC 8 marks a run of cells as a link and was the only clickable thing.
+# It is also the rare case: almost nothing a person runs emits OSC 8, so
+# every address from curl, a git remote, a log line or an error message
+# was inert text.
+#
+# The difficulty is entirely about where a URL STOPS. Finding `https://'
+# is trivial; handing the browser `page).' is finding the address and
+# breaking it. Each edit below aims at a different way of getting the end
+# wrong, rather than at the same one four times.
+
+# The feature itself. Without the call the OSC 8 path still works, so the
+# suite stays green on every marked link and only plain text goes quiet
+# -- which is the state this whole change is about.
+[[sabotage]]
+name = "plain text stops being examined for a link"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tconst QString guessed = url_at(line, col);"
+replace = "\t\tconst QString guessed = QString();"
+expect = "a_bare_url_is_clickable_and_stops_where_it_should"
+
+# Sentence punctuation. The everyday case, and the one that produces a
+# link which looks right and 404s.
+[[sabotage]]
+name = "a trailing full stop is part of the address"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (QStringLiteral(\".,;:!?'\\\"\").contains(last)) {"
+replace = "\t\tif (QStringLiteral(\",;:!?'\\\"\").contains(last)) {"
+expect = "a_bare_url_is_clickable_and_stops_where_it_should"
+
+# And the other direction, which a character-class trim gets wrong:
+# a bracket whose opener is inside the URL belongs to it. Counting is
+# what tells the two apart, so remove the count and keep the trim.
+[[sabotage]]
+name = "a balanced bracket is stripped off a wikipedia address"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tif (url.count(opener) < url.count(last)) {"
+replace = "\t\t\tif (true) {"
+expect = "a_bare_url_is_clickable_and_stops_where_it_should"
+
+# The scheme limit. A marked link is an explicit act by the program that
+# drew it; text that merely looks like one is not, so what is inferred
+# stays narrower than what is declared. Widen the pattern and the
+# terminal starts offering to open file:// paths a host printed.
+[[sabotage]]
+name = "any scheme in the text becomes openable"
+file = "src/ui/terminal_view.cpp"
+find = "\t        QStringLiteral(\"https?://[^\\\\s]+\"),"
+replace = "\t        QStringLiteral(\"[a-z]+://[^\\\\s]+\"),"
+expect = "a_bare_url_is_clickable_and_stops_where_it_should"
+
+# A scheme with no host matches the pattern and is not an address.
+[[sabotage]]
+name = "a scheme with nothing after it is offered"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (!url.isValid() || url.host().isEmpty()) return QString();"
+replace = "\t\tif (false) return QString();"
+expect = "a_bare_url_is_clickable_and_stops_where_it_should"

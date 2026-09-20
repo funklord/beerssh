@@ -451,6 +451,27 @@ public:
 	 * forgets them. The is_*_match pair is what the paint path asks per
 	 * cell, the same shape as is_selected.
 	 */
+	/*
+	 * The bare URL under a cell, or empty where there is none.
+	 *
+	 * OSC 8 marks a run of cells as a link and the emulator holds the
+	 * target, which is the reliable case and the one Ctrl+click already
+	 * had. It is also the rare one: almost every URL a person sees in a
+	 * terminal is plain text that some program printed without knowing
+	 * anything about OSC 8 -- curl output, a git remote, a log line, the
+	 * address in an error message. Those were not clickable at all.
+	 *
+	 * Searched across the LOGICAL line, for the reason find_text is: a
+	 * URL long enough to be worth clicking is long enough to wrap, and
+	 * the half on the next row is the half with the path in it.
+	 *
+	 * http and https only. The OSC 8 path takes whatever scheme the host
+	 * sends, because a marked link is an explicit act by the program that
+	 * drew it; text that merely LOOKS like a link is not, so what is
+	 * inferred from it is deliberately narrower than what is declared.
+	 */
+	QString url_at(qint64 line, int col) const;
+
 	int find_text(const QString &query);
 	void find_step(int direction);
 	void clear_find();
