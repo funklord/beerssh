@@ -44,6 +44,17 @@
  */
 const int BSSH_URI_PROMPT_CHARS = 96;
 /*
+ * And how much of one fits a MENU entry, which is a narrower question.
+ *
+ * The prompt above is a dialog that may be as wide as the screen; a
+ * context menu opens where the press was and a phone gives it 360dp
+ * total, so the same 96 would push the menu off the edge or elide it
+ * again at a width nobody chose. 48 keeps an ordinary address whole --
+ * `https://example.com/some/page' is 29 -- and cuts only the ones that
+ * were never going to fit anywhere.
+ */
+const int BSSH_URI_MENU_CHARS = 48;
+/*
  * How deep the kitty keyboard flags stack may go.
  *
  * The push had no bound: five bytes on the wire per entry, cleared only

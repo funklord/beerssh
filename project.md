@@ -4142,6 +4142,50 @@ the code correct.** `https:///path` matches and has no host.
 Guarded by `tool/sabotage/bare-urls.toml`, five edits each aimed at a
 different way of getting the end wrong rather than at one way five times.
 
+**[BUILT 2026-09-21] And a link is reachable without a control key, which
+it had never been.** Every route in went through Ctrl+click -- the marked
+kind and the inferred kind alike -- and a phone has no Ctrl. The
+long-press menu offered Copy, Paste and Select All, so on Android the
+entire hyperlink feature simply did not exist, on a project whose §14
+rule is that a milestone lands on both platforms before the next one
+starts. Adding bare-URL detection the same day had made that asymmetry
+larger rather than smaller.
+
+This is `working-practice`'s recorded shape rather than a new one: **an
+override that only one input device can produce is not an override on the
+other**, and the question is not who owns the gesture but what the user
+can still reach. The Shift-on-a-phone lockout is the same sentence about
+a different key.
+
+`link_at()` answers for a position -- marked link first, then inferred --
+and both front doors ask it, so they cannot answer differently. The
+window's prompt was extracted into `open_remote_link()` for the same
+reason: two ways in and one copy of the question, because a second copy is
+a second place to forget it. The entry appears only where there IS a link,
+rather than being always present and usually disabled, and its label names
+the address elided to 48 characters -- "Open link" alone asks somebody to
+authorise something they cannot see, and the whole reason it asks is that
+the remote chose the URL.
+
+**The refactor broke a sabotage spec that had shipped hours earlier**, and
+`--check` caught it the same day. Routing both doors through `link_at`
+deleted the line `bare-urls.toml` anchored on, so that edit could no
+longer apply: a guard that had quietly stopped guarding, one commit after
+being added. It is repaired by aiming inside `link_at` so the edit still
+MEANS what it meant -- the marked path keeps working and only inferred
+text goes quiet. **Repointing a stale anchor at the nearest line instead
+would have been a different test wearing the old name**, which is worse
+than a broken one, and is the reason the specs are held to the tree as
+tightly as the code is.
+
+**The fixture found something about the suite, too.** Every other
+window-level test here asks a question that needs no geometry -- a cursor
+style, a status dot, a tab title -- so none had noticed that a shown
+`bssh_main_window`'s view still reports a 0x0 grid until the pane
+container has had a resize. This is the first that asks where a cell IS,
+and it waits for the layout. Recorded because the next geometry-dependent
+window test will meet it as a confusing failure otherwise.
+
 **[DONE]** Image scrollback, its memory budget, and `z < 0`. A placement
 scrolled off the top keeps going into negative rows — row −3 means three lines
 above the live screen, where the text it belongs to now is — so scrolling back

@@ -528,6 +528,13 @@ public:
 
 private:
 	void show_terminal_menu(const QPoint &at);
+
+	/*
+	 * Open a URL the remote chose, after asking. One method because there
+	 * are two ways in -- Ctrl+click and the long-press menu -- and a
+	 * second copy of the prompt is a second place for it to be forgotten.
+	 */
+	void open_remote_link(const QString &uri);
 	void show_tab_menu(const QPoint &at);
 
 	/*
@@ -743,7 +750,7 @@ public:
 	 * the part worth testing is the contents: which verbs, in what order,
 	 * which of them are available, and how big the rows are.
 	 */
-	QMenu *build_terminal_menu(QWidget *parent) const;
+	QMenu *build_terminal_menu(QWidget *parent, const QString &link = QString()) const;
 
 	/*
 	 * The tab menu, likewise built but not shown, and for the same reason

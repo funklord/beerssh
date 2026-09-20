@@ -33,6 +33,7 @@
 
 #include <QAccessible>
 #include <QAbstractSlider>
+#include <QTimer>
 #include "model/command_line.h"
 #include "model/profile.h"
 #include "platform/platform.h"
@@ -8442,4 +8443,110 @@ void layout_test::every_touch_surface_names_its_controls() {
 	          qPrintable(QStringLiteral("only %1 controls inspected across six "
 	                                     "surfaces -- the sweep has stopped seeing them")
 	                             .arg(counted)));
+}
+
+/*
+ * Every way of opening a link went through Ctrl+click, and a phone has
+ * no Ctrl.
+ *
+ * That made the whole hyperlink feature -- OSC 8 and the inferred kind
+ * alike -- desktop-only, on a project whose sec 14 rule is that a
+ * milestone lands on both platforms before the next one starts. It is
+ * working-practice's recorded shape: an override only one input device
+ * can produce is not an override on the other, and the question is not
+ * who owns the gesture but what the user can still reach.
+ *
+ * Driven through context_menu_requested because that is what BOTH routes
+ * emit -- contextMenuEvent for a right-click, and the long-press handler
+ * for a finger -- so this covers the receiver that was missing rather
+ * than one platform's way of reaching it.
+ */
+void layout_test::a_link_is_reachable_without_a_control_key() {
+	bssh_main_window window;
+	window.resize(900, 400);
+	window.show();
+
+	bssh_session *session = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(session);
+
+	/*
+	 * Let the layout happen. Every other window test here asks questions
+	 * that do not need geometry -- a cursor style, a status dot -- and so
+	 * never noticed that a shown window's view still reports a 0x0 grid
+	 * until the pane container has had a resize. This one asks where a
+	 * cell IS, which is the first question in the suite that cannot be
+	 * answered before the pixels exist.
+	 */
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	QApplication::processEvents();
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY(view);
+	QVERIFY(session->emulator());
+
+	session->emulator()->feed(QByteArrayLiteral("see https://example.com/touched here\r\n"));
+
+	qint64 line = 0;
+	int col = 0;
+	QVERIFY(view->cell_at(QPoint(2, 2), line, col));
+
+	const QRect target = view->cell_rect(line, 10);
+	QVERIFY2(target.isValid(), "the address is not on screen");
+
+	/*
+	 * The view answers for the position without any modifier at all,
+	 * which is the fact the menu depends on.
+	 */
+	QCOMPARE(view->link_at(target.center()),
+	          QStringLiteral("https://example.com/touched"));
+
+	/*
+	 * And the menu that a long press opens carries it. The popup is
+	 * modal, so it is inspected and dismissed from a timer -- what is
+	 * asserted is that show_terminal_menu ASKED, which is the wiring a
+	 * test of build_terminal_menu alone would not have seen.
+	 */
+	bool offered = false;
+	QString label;
+	QTimer::singleShot(0, [&offered, &label] {
+		QWidget *popup = QApplication::activePopupWidget();
+		QMenu *menu = qobject_cast<QMenu *>(popup);
+		if (!menu) return;
+
+		if (QAction *open = menu->findChild<QAction *>(
+		            QStringLiteral("terminal_open_link"))) {
+			offered = true;
+			label = open->text();
+		}
+		menu->close();
+	});
+
+	emit view->context_menu_requested(view->mapToGlobal(target.center()));
+
+	QVERIFY2(offered, "a long press over a link offers no way to open it");
+
+	/*
+	 * The label names the address. "Open link" alone asks somebody to
+	 * authorise something they cannot see, and the reason it asks at all
+	 * is that the remote chose the URL.
+	 */
+	QVERIFY2(label.contains(QStringLiteral("example.com/touched")),
+	          qPrintable(QStringLiteral("the entry does not say where it goes: %1")
+	                             .arg(label)));
+
+	/* And no entry where there is no link, rather than a disabled one:
+	 * an item that is always there and usually dead is one people learn
+	 * to skip. */
+	bool offered_on_prose = false;
+	const QRect prose = view->cell_rect(line, 1);
+	QTimer::singleShot(0, [&offered_on_prose] {
+		QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+		if (!menu) return;
+		offered_on_prose = menu->findChild<QAction *>(
+		                           QStringLiteral("terminal_open_link")) != nullptr;
+		menu->close();
+	});
+	emit view->context_menu_requested(view->mapToGlobal(prose.center()));
+
+	QVERIFY2(!offered_on_prose, "offered to open a link over the word 'see'");
 }

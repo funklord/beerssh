@@ -1970,6 +1970,24 @@ QString trim_url_tail(QString url) {
 
 } /* namespace */
 
+QString bssh_terminal_view::link_at(const QPoint &widget_pos) const {
+	qint64 line = 0;
+	int col = 0;
+	if (!cell_at(widget_pos, line, col)) return QString();
+
+	/* A marked link first: it is what the program that drew it meant,
+	 * and it carries a target the text need not contain. */
+	if (m_emulator) {
+		const bssh_cell_t &cell = cell_for_line(line, col);
+		if (cell.link != 0) {
+			const QString uri = m_emulator->link_uri(cell.link);
+			if (!uri.isEmpty()) return uri;
+		}
+	}
+
+	return url_at(line, col);
+}
+
 QString bssh_terminal_view::url_at(qint64 line, int col) const {
 	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
 	const qint64 base = history_base();
@@ -2339,29 +2357,16 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	 * able to launch a browser at an address someone else chose -- which
 	 * is why every terminal that supports OSC 8 asks for a modifier.
 	 */
-	if (event->modifiers().testFlag(Qt::ControlModifier) && m_emulator) {
-		const bssh_cell_t &cell = cell_for_line(line, col);
-		if (cell.link != 0) {
-			const QString uri = m_emulator->link_uri(cell.link);
-			if (!uri.isEmpty()) {
-				emit link_activated(uri);
-				event->accept();
-				return;
-			}
-		}
-
-		/*
-		 * No OSC 8 here, so look at what the text says. A marked link
-		 * is the reliable case and is tried first; this is the common
-		 * one, because almost nothing a person runs emits OSC 8.
-		 *
-		 * Same signal, so the same gate: the window asks before opening
-		 * anything, and an address inferred from text deserves that at
-		 * least as much as one a program declared.
-		 */
-		const QString guessed = url_at(line, col);
-		if (!guessed.isEmpty()) {
-			emit link_activated(guessed);
+	/*
+	 * Ctrl+click is the pointer's way in. The long-press menu is the
+	 * other, and both ask link_at so the two front doors cannot answer
+	 * differently -- the same signal either way, so the window's prompt
+	 * applies whichever was used.
+	 */
+	if (event->modifiers().testFlag(Qt::ControlModifier)) {
+		const QString uri = link_at(event->pos());
+		if (!uri.isEmpty()) {
+			emit link_activated(uri);
 			event->accept();
 			return;
 		}

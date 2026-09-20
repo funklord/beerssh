@@ -13,11 +13,19 @@
 # The feature itself. Without the call the OSC 8 path still works, so the
 # suite stays green on every marked link and only plain text goes quiet
 # -- which is the state this whole change is about.
+# The anchor moved when both front doors were routed through link_at,
+# and `--check' caught it the same day: a sabotage whose anchor no longer
+# matches is a guard that has quietly stopped guarding, which is why the
+# specs are held to the tree as tightly as the code is.
+#
+# Aimed inside link_at now, so it still means what it meant: the MARKED
+# path keeps working and only inferred text goes quiet, which is the
+# state this whole change was about.
 [[sabotage]]
 name = "plain text stops being examined for a link"
 file = "src/ui/terminal_view.cpp"
-find = "\t\tconst QString guessed = url_at(line, col);"
-replace = "\t\tconst QString guessed = QString();"
+find = "\treturn url_at(line, col);"
+replace = "\treturn QString();"
 expect = "a_bare_url_is_clickable_and_stops_where_it_should"
 
 # Sentence punctuation. The everyday case, and the one that produces a

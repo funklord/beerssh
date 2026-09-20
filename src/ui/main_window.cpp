@@ -1818,22 +1818,7 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 	 * as a delivery mechanism.
 	 */
 		connect(m_terminal_view, &bssh_terminal_view::link_activated,
-		       this, [this](const QString &uri) {
-			/*
-			 * SHOWN elided, OPENED whole. The question is what the
-			 * user is being asked to read, and a URI put in
-			 * verbatim makes a dialog wider than the screen -- see
-			 * bssh_uri_for_prompt. What openUrl gets is the address
-			 * itself, because a shortened one is a different one.
-			 */
-			const QMessageBox::StandardButton answer = QMessageBox::question(
-			      this, QStringLiteral("Open link"),
-			      QStringLiteral("Open this address, sent by the remote host?\n\n%1")
-			              .arg(bssh_uri_for_prompt(uri, BSSH_URI_PROMPT_CHARS)),
-			      QMessageBox::Open | QMessageBox::Cancel, QMessageBox::Cancel);
-
-			if (answer == QMessageBox::Open) QDesktopServices::openUrl(QUrl(uri));
-		});
+		       this, &bssh_main_window::open_remote_link);
 
 		connect(m_terminal_view, &bssh_terminal_view::selection_changed, this, [this] {
 			/*
@@ -3634,7 +3619,7 @@ void bssh_main_window::refresh_menu_bar() {
 	if (m_detach_action) m_detach_action->setEnabled(m_shown.size() > 1);
 }
 
-QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
+QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &link) const {
 	const bssh_app_settings::context_menu_t layout =
 	        context_menu_layout(bssh_app_settings().context_menu(),
 	                             bssh_platform::instance()
@@ -3654,6 +3639,23 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent) const {
 	 * on cannot be two lists". A hardcoded label is a second list that
 	 * happens to agree until somebody changes the first.
 	 */
+	/*
+	 * First, and only when there is one. An entry that is always present
+	 * and usually disabled teaches a user to ignore it; an entry that
+	 * appears exactly when it will work is the one they read.
+	 *
+	 * The label says the address, elided, because "Open link" alone asks
+	 * somebody to authorise something they cannot see -- and the whole
+	 * reason this asks at all is that the URL came from the remote.
+	 */
+	if (!link.isEmpty()) {
+		QAction *open_link = menu->addAction(
+		        QStringLiteral("&Open %1")
+		                .arg(bssh_uri_for_prompt(link, BSSH_URI_MENU_CHARS)));
+		open_link->setObjectName(QStringLiteral("terminal_open_link"));
+		menu->addSeparator();
+	}
+
 	QAction *copy = menu->addAction(QStringLiteral("&Copy"));
 	copy->setObjectName(QStringLiteral("terminal_copy"));
 	copy->setShortcut(
@@ -3783,13 +3785,51 @@ void bssh_main_window::apply_menu_layout(QMenu *menu,
 	bssh_apply_touch_menu(menu, true);
 }
 
+void bssh_main_window::open_remote_link(const QString &uri) {
+	if (uri.isEmpty()) return;
+
+	/*
+	 * SHOWN elided, OPENED whole. The question is what the user is being
+	 * asked to read, and a URI put in verbatim makes a dialog wider than
+	 * the screen -- see bssh_uri_for_prompt. What openUrl gets is the
+	 * address itself, because a shortened one is a different one.
+	 */
+	const QMessageBox::StandardButton answer = QMessageBox::question(
+	      this, QStringLiteral("Open link"),
+	      QStringLiteral("Open this address, sent by the remote host?\n\n%1")
+	              .arg(bssh_uri_for_prompt(uri, BSSH_URI_PROMPT_CHARS)),
+	      QMessageBox::Open | QMessageBox::Cancel, QMessageBox::Cancel);
+
+	if (answer == QMessageBox::Open) QDesktopServices::openUrl(QUrl(uri));
+}
+
 void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	if (!m_terminal_view) return;
 
-	QMenu *menu = build_terminal_menu(this);
+	/*
+	 * A link under the press, which is the only route a touch user has.
+	 * Ctrl+click is the pointer's, and a phone has no Ctrl -- so without
+	 * this entry the whole hyperlink feature, marked and inferred alike,
+	 * simply did not exist on the platform sec 14 says every milestone
+	 * has to land on.
+	 *
+	 * Asked at the position the menu was opened AT rather than wherever
+	 * the cursor now is: a long press has already moved on by the time
+	 * the menu appears.
+	 */
+	const QString link = m_terminal_view->link_at(m_terminal_view->mapFromGlobal(at));
+
+	QMenu *menu = build_terminal_menu(this, link);
 	const QAction *chosen = menu->exec(at);
 	menu->deleteLater();
 	if (!chosen) return;
+
+	const QAction *open_link =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_open_link"));
+	if (open_link && chosen == open_link) {
+		open_remote_link(link);
+		return;
+	}
 
 	const QAction *copy = menu->findChild<QAction *>(QStringLiteral("terminal_copy"));
 	const QAction *paste = menu->findChild<QAction *>(QStringLiteral("terminal_paste"));

@@ -1,0 +1,49 @@
+# Opening a link without a control key (sec 6.4, sec 14).
+#
+# Every route to a link went through Ctrl+click, and a phone has no
+# Ctrl. So the whole hyperlink feature -- OSC 8 and the inferred kind
+# alike -- did not exist on Android, on a project whose rule is that a
+# milestone lands on both platforms before the next one starts.
+#
+# working-practice records the shape: an override that only one input
+# device can produce is not an override on the other, and the question
+# is not who owns the gesture but what the user can still reach.
+
+# The call site. build_terminal_menu can be perfect and the entry still
+# never appear, because nothing asked -- which is the failure this whole
+# entry is about and the one a test of the builder alone cannot see.
+[[sabotage]]
+name = "the menu never asks whether there is a link"
+file = "src/ui/main_window.cpp"
+find = "\tconst QString link = m_terminal_view->link_at(m_terminal_view->mapFromGlobal(at));"
+replace = "\tconst QString link = QString();"
+expect = "a_link_is_reachable_without_a_control_key"
+
+# The entry itself.
+[[sabotage]]
+name = "the menu offers no way to open one"
+file = "src/ui/main_window.cpp"
+find = "\tif (!link.isEmpty()) {\n\t\tQAction *open_link = menu->addAction("
+replace = "\tif (false) {\n\t\tQAction *open_link = menu->addAction("
+expect = "a_link_is_reachable_without_a_control_key"
+
+# The label. "Open link" alone asks somebody to authorise something they
+# cannot see, and the reason it asks at all is that the remote chose the
+# address.
+[[sabotage]]
+name = "the entry stops saying where it goes"
+file = "src/ui/main_window.cpp"
+find = "\t\t        QStringLiteral(\"&Open %1\")\n\t\t                .arg(bssh_uri_for_prompt(link, BSSH_URI_MENU_CHARS)));"
+replace = "\t\t        QStringLiteral(\"&Open link\"));"
+expect = "a_link_is_reachable_without_a_control_key"
+
+# And the other direction: an entry over ordinary prose. Offering to
+# open something that is not a link trains a user to ignore the entry,
+# and the assertion that it is ABSENT rather than disabled is what this
+# proves is live.
+[[sabotage]]
+name = "every press offers to open a link"
+file = "src/ui/terminal_view.cpp"
+find = "QString bssh_terminal_view::link_at(const QPoint &widget_pos) const {"
+replace = "QString bssh_terminal_view::link_at(const QPoint &widget_pos) const {\n\treturn QStringLiteral(\"https://example.invalid/\");"
+expect = "a_link_is_reachable_without_a_control_key"

@@ -472,6 +472,19 @@ public:
 	 */
 	QString url_at(qint64 line, int col) const;
 
+	/*
+	 * The link under a widget position, marked or inferred, or empty.
+	 *
+	 * The click path had this logic inline and Ctrl-gated, which made the
+	 * whole hyperlink feature desktop-only: a phone has no Ctrl, so
+	 * neither an OSC 8 link nor a bare one could be opened there at all.
+	 * Pulled out so the long-press menu can ask the same question and get
+	 * the same answer -- sec 14's rule is that a milestone lands on both
+	 * platforms, and an override only one input device can produce is not
+	 * an override on the other.
+	 */
+	QString link_at(const QPoint &widget_pos) const;
+
 	int find_text(const QString &query);
 	void find_step(int direction);
 	void clear_find();
