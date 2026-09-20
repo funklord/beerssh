@@ -78,6 +78,7 @@
 #include "model/preset.h"
 #include "ui/preset_editor.h"
 #include "term/colour_scheme.h"
+#include "keyboard/key_row_layout.h"
 #include "ui/session_dialog.h"
 #include "ui/password_prompt.h"
 #include "ui/tab_status.h"
@@ -1417,6 +1418,21 @@ void bssh_main_window::apply_device_settings() {
 	 * settings hands it over, and this is the one place that happens.
 	 */
 	bssh_colour_scheme_catalog::instance().set_custom(settings.custom_scheme());
+
+	/*
+	 * And the custom key row, for exactly the same reason and in the same
+	 * place: keyboard/ does not read the settings store either.
+	 *
+	 * An empty spec is left alone rather than pushed, so the catalogue
+	 * keeps the copy of the default it starts with. Pushing an empty row
+	 * would be refused anyway -- it carries no Escape -- but relying on
+	 * the refusal would mean the difference between "not composed" and
+	 * "composed badly" showed up only as a return value nobody reads.
+	 */
+	const QString row_spec = settings.custom_key_row();
+	if (!row_spec.isEmpty()) {
+		bssh_key_row_catalog::instance().set_custom(bssh_parse_key_row(row_spec));
+	}
 
 	/*
 	 * Press-and-hold opens the menu wherever the touch layout is in use,

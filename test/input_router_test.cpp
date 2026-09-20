@@ -10,6 +10,7 @@
 
 #include "input/input_router.h"
 #include "keyboard/key_row_layout.h"
+#include "ui/key_row_editor.h"
 #include "ui/long_press.h"
 #include "input_router_test.h"
 #include "phone_metrics.h"
@@ -768,17 +769,16 @@ void input_router_test::a_key_row_layout_changes_which_keys_exist() {
 		QVERIFY2(!layout.description.isEmpty(),
 		         qPrintable("no description for " + layout.id));
 
-		bool has_escape = false;
-		bool has_modifier = false;
-		for (const bssh_key_t &key : layout.keys) {
-			if (key.kind == bssh_key_t::KEY && key.value == bssh_emulator::KEY_ESCAPE) {
-				has_escape = true;
-			}
-			if (key.kind == bssh_key_t::MODIFIER) has_modifier = true;
-		}
-
-		QVERIFY2(has_escape, qPrintable("no Escape in " + layout.id));
-		QVERIFY2(has_modifier, qPrintable("no modifier in " + layout.id));
+		/*
+		 * The same predicate a user-composed row is admitted by, rather
+		 * than a copy of its reasoning. This assertion used to spell the
+		 * rule out here, which was fine while every row in the catalogue
+		 * was compiled in -- once a user can add one, a rule that lives
+		 * in the test can only report the breach after it has happened,
+		 * and it would report it against the five rows that are correct.
+		 */
+		QVERIFY2(bssh_key_row_usable(layout.keys),
+		         qPrintable("no Escape or no modifier in " + layout.id));
 	}
 
 	bssh_emulator emulator(80, 24);
@@ -1294,4 +1294,103 @@ void input_router_test::a_paste_cannot_close_its_own_bracket() {
 	router.paste(QStringLiteral("a\tb"));
 	QVERIFY2(emulator.take_output().contains(QByteArrayLiteral("a\tb")),
 	          "a tab in a paste has to survive");
+}
+
+/*
+ * sec 6.2 left "letting a user compose their own row" open and sec 6.3
+ * says it is one question for fonts, colour schemes, key rows and
+ * keyboard layouts. The colour scheme answered it first -- a reserved
+ * catalogue entry written by a push from the settings layer -- and these
+ * three cover the same answer applied to the row.
+ */
+void input_router_test::a_custom_key_row_is_composed_from_words() {
+	const QList<bssh_key_t> keys =
+	        bssh_parse_key_row(QStringLiteral("esc tab ctrl alt left down up right | ctrl-b gap"));
+
+	QCOMPARE(keys.size(), 11);
+	QCOMPARE(keys.at(0).kind, bssh_key_t::KEY);
+	QCOMPARE(keys.at(0).value, int(bssh_emulator::KEY_ESCAPE));
+	QCOMPARE(keys.at(2).kind, bssh_key_t::MODIFIER);
+	QCOMPARE(keys.at(2).modifier, quint8(bssh_emulator::MOD_CTRL));
+
+	/* A bare character is itself, which is how the punctuation a soft
+	 * keyboard buries gets onto the row at all. */
+	QCOMPARE(keys.at(8).kind, bssh_key_t::TEXT);
+	QCOMPARE(keys.at(8).value, int('|'));
+
+	/* One press sending what two would (sec 6.2's tmux case). */
+	QCOMPARE(keys.at(9).kind, bssh_key_t::CHORD);
+	QCOMPARE(keys.at(9).value, int('b'));
+	QCOMPARE(keys.at(9).modifier, quint8(bssh_emulator::MOD_CTRL));
+
+	QCOMPARE(keys.at(10).kind, bssh_key_t::SPACER);
+
+	/*
+	 * Round-trip, because app.ini is what stores this and a spec that
+	 * does not survive being read back is one that rewrites the user's
+	 * row every time the app starts.
+	 */
+	const QString spec = bssh_key_row_spec(keys);
+	QCOMPARE(bssh_key_row_spec(bssh_parse_key_row(spec)), spec);
+	QCOMPARE(bssh_parse_key_row(spec).size(), keys.size());
+
+	/* And it reaches the catalogue under the reserved id, keys only. */
+	bssh_key_row_catalog catalog;
+	QVERIFY(catalog.set_custom(keys));
+
+	const bssh_key_row_layout_t *custom = catalog.by_id(QStringLiteral("custom"));
+	QVERIFY(custom != nullptr);
+	QCOMPARE(custom->keys.size(), keys.size());
+	QCOMPARE(custom->display_name, QStringLiteral("Custom"));
+	QVERIFY(!custom->description.isEmpty());
+}
+
+void input_router_test::a_custom_row_that_cannot_drive_a_terminal_is_refused() {
+	bssh_key_row_catalog catalog;
+
+	const bssh_key_row_layout_t *before = catalog.by_id(QStringLiteral("custom"));
+	QVERIFY(before != nullptr);
+	const QList<bssh_key_t> kept = before->keys;
+
+	/* The entry starts as a copy of the default, so it satisfies the
+	 * contract before anybody has written to it. */
+	QVERIFY(bssh_key_row_usable(kept));
+
+	/* No Escape: arrows and a modifier are not a row you can get out of
+	 * anything with. */
+	QVERIFY(!catalog.set_custom(bssh_parse_key_row(QStringLiteral("ctrl left right"))));
+
+	/* No modifier: sticky Ctrl is the thing the row exists to provide. */
+	QVERIFY(!catalog.set_custom(bssh_parse_key_row(QStringLiteral("esc tab left right"))));
+
+	/* Nothing at all, which is what an emptied settings line parses to. */
+	QVERIFY(!catalog.set_custom(bssh_parse_key_row(QString())));
+
+	/*
+	 * And each refusal left the last good row alone. A refusal that
+	 * cleared the entry would hand the user an empty strip and no way
+	 * back to a working one except the file this is meant to save them
+	 * from opening.
+	 */
+	const bssh_key_row_layout_t *after = catalog.by_id(QStringLiteral("custom"));
+	QVERIFY(after != nullptr);
+	QCOMPARE(after->keys.size(), kept.size());
+}
+
+void input_router_test::the_custom_row_note_names_only_words_that_parse() {
+	/*
+	 * The dialog explains the vocabulary in prose, and prose is where a
+	 * word that no longer exists survives longest: nothing fails, the
+	 * user simply types what they were told and loses that key. Both come
+	 * off one table, and this is what holds them together.
+	 */
+	const QStringList words = bssh_key_row_editor::vocabulary();
+	QVERIFY(!words.isEmpty());
+
+	for (const QString &word : words) {
+		const QList<bssh_key_t> parsed = bssh_parse_key_row(word);
+		QVERIFY2(parsed.size() == 1,
+		         qPrintable(QStringLiteral("the note names '%1', which does not parse")
+		                            .arg(word)));
+	}
 }

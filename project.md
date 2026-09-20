@@ -1215,7 +1215,55 @@ up, a strip of modifiers has nothing to modify.
   usually follows it), **vi / vim** (Esc first, then `:` `/` `$` `^`), and
   **Minimal** (four keys and the arrows, for a narrow screen). Every layout is
   checked to carry Escape and a modifier — a row without those cannot drive a
-  terminal at all. Still open: letting a user compose their own row.
+  terminal at all.
+  **A user can compose their own now** (2026-09-20), which closes the half
+  this line carried open and answers the second of the four things §6.3
+  says are one question. It is the colour scheme's mechanism rather than a
+  new one: a reserved `custom` entry compiled into the catalogue, written
+  by a push from whoever owns the settings, never by the catalogue reaching
+  into them. The entry is born as a copy of **Default**, so selecting it
+  before editing anything gives a working row instead of a blank strip.
+  The row is written **as words** — `esc tab ctrl alt left down up right`
+  — and that is the decision rather than a shortcut: the spec is what
+  `app.ini` stores, which §10.6 wants hand-editable, so an editor
+  producing anything else would be a second representation to keep in step
+  with the first. Composing is a trip to a dialog (Settings → Keyboard →
+  *Custom key row...*) with a live preview, for the colour editor's reason:
+  a choice that takes a deliberate trip is one somebody made, where one
+  offered in a dropdown on the way past is one they made by accident.
+  **The floor moved out of the test and into the code, and that is the
+  part worth keeping.** "Escape and a modifier" was an assertion walking
+  the curated layouts, which is the right place for it while every row is
+  compiled in. Once a user can add one, a rule that lives in the test can
+  only report the breach after it has happened — and it reports it
+  against the five rows that are correct, because the assertion walks
+  `all()`. `bssh_key_row_usable()` is the predicate now: `set_custom()`
+  refuses at the door and the contract test calls the same function, which
+  is §6.3's *"they become the contract every layout must satisfy rather
+  than tests about the two boards we happen to have"* arriving a milestone
+  early and by a route nobody planned.
+  A refusal leaves the last good row alone, which is not fastidiousness:
+  the row is the only way to send Escape on a device with no system
+  keyboard, so an emptied one cannot be used to reach the settings that
+  would fix it.
+  Guarded by `tool/sabotage/custom-key-row.toml`, six edits seen to fail:
+  an unusable row accepted, a refused row written before it is judged, the
+  reserved id renamed, a chord not surviving the write-back, the dialog
+  naming a key the parser cannot read, and the stored row never reaching
+  the catalogue. The last of those is the call site rather than the
+  object, which M5 is the reason for: its three edits inside the reset
+  were caught and removing the CALL SITE was missed, because a push
+  nothing invokes is indistinguishable from a working one.
+  **One of the six was MISSED on the first run, and the sabotage was what
+  was wrong.** It read `layout.keys.clear()` immediately before
+  `layout.keys = keys`, which is the assignment and nothing else — an
+  edit that cannot break the code, so the green suite proved nothing
+  about it. That is the positive control that cannot fail, one layer out:
+  the harness exists to ask whether the test would notice, and it can
+  only answer for the edit actually written. Rewritten to write the row
+  before judging it, it is caught. Worth recording because reading the
+  edit did not find it and running it did, on a spec whose other five
+  were right.
 - **The key row did not fit a phone, and never had.** Its own key list at §6.2's
   own 48dp touch floor is twelve keys before `Fn` was added; the default row
   measured **652px of minimum width against a 360px screen**, and all five
@@ -2436,9 +2484,19 @@ decision.**
 - **Curated, compiled in, addressed by a stable id, identical on both
   platforms** — the pattern §9.2 set for fonts, §10.2 for colour schemes
   and §6.2 for key rows. A layout is the same kind of object and gets the
-  same treatment. Whether a user can supply their own is the *same open
-  question* the key row already carries ("still open: letting a user
-  compose their own row") and should be answered once, for all four.
+  same treatment. Whether a user can supply their own is one question for
+  all four, and **two of them have now answered it the same way**: the
+  colour scheme first (a reserved `custom` entry, written by a push from
+  the settings layer) and the key row after it, deliberately copying that
+  mechanism rather than inventing a second. What is still open is the
+  other two — a user-supplied font and a user-supplied keyboard layout —
+  and the answer for them is expected to be the same shape, which is the
+  point of having written it twice before anybody generalises it. A
+  layout differs from a row in one way that matters: a row is refused
+  unless it carries Escape and a modifier, and the layout's equivalent is
+  `both_keyboards_reach_every_printable_character` — a heavier contract,
+  and the reason that one is not simply the row's code with a different
+  table.
 - **The soft keyboard only.** §6.1 already decided this without naming it:
   physical keys arrive as `QKeyEvent` with the OS layout *already applied*,
   and dead keys arrive through `inputMethodEvent`. A Swedish USB keyboard

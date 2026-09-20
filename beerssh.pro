@@ -85,6 +85,7 @@ SOURCES += \
     keyboard/soft_keyboard_layout.cpp \
     src/ui/app_settings_view.cpp \
     src/ui/colour_editor.cpp \
+    src/ui/key_row_editor.cpp \
     src/ui/licences_view.cpp \
     keyboard/key_row.cpp \
     src/ui/long_press.cpp \
@@ -147,6 +148,7 @@ HEADERS += \
     keyboard/soft_keyboard_layout.h \
     src/ui/app_settings_view.h \
     src/ui/colour_editor.h \
+    src/ui/key_row_editor.h \
     src/ui/licences_view.h \
     keyboard/key_row.h \
     src/ui/long_press.h \

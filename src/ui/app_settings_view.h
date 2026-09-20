@@ -155,6 +155,7 @@ private:
 	QCheckBox *m_raise_contrast;
 	QSlider *m_text_brightness;
 	QPushButton *m_custom_colours;
+	QPushButton *m_custom_key_row;
 	QLabel *m_text_brightness_value;
 };
 

@@ -88,6 +88,9 @@ private slots:
 	void a_modifier_button_stops_claiming_a_session_that_has_gone();
 	void key_row_visibility_follows_the_input_device();
 	void a_key_row_layout_changes_which_keys_exist();
+	void a_custom_key_row_is_composed_from_words();
+	void a_custom_row_that_cannot_drive_a_terminal_is_refused();
+	void the_custom_row_note_names_only_words_that_parse();
 	void the_fn_key_reaches_the_function_keys();
 	void caps_lock_can_be_made_to_send_ctrl();
 	void a_chord_key_sends_one_press_not_a_sticky_modifier();

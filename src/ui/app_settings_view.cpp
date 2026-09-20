@@ -20,6 +20,7 @@
 #include "ui/wrapped_note.h"
 #include "term/colour_scheme.h"
 #include "ui/colour_editor.h"
+#include "ui/key_row_editor.h"
 #include "input/input_router.h"
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -109,6 +110,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
       m_raise_contrast(nullptr),
       m_text_brightness(nullptr),
       m_custom_colours(nullptr),
+      m_custom_key_row(nullptr),
       m_text_brightness_value(nullptr) {
 	const bssh_platform *platform = bssh_platform::instance();
 	const bool touch = platform && platform->is_touch_primary();
@@ -176,6 +178,62 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 
 	bssh_fit_items(m_key_row);
 	if (on_this_page(SECTION_KEYBOARD, m_key_row)) form->addRow(QStringLiteral("On-screen keys"), m_key_row);
+
+	/*
+	 * Composing your own row (sec 6.2, sec 6.3). Device-wide, like the
+	 * custom palette above and for the same reason: WHICH row a host uses
+	 * is the host's question and lives with the host, while what "Custom"
+	 * contains is this device's.
+	 *
+	 * Behind a dialog rather than on the page, which is the colour
+	 * editor's argument repeated: a row is a dozen decisions, and a
+	 * control that takes a deliberate trip is a choice somebody made
+	 * instead of one they made by accident on the way past.
+	 */
+	m_custom_key_row = new QPushButton(QStringLiteral("Custom key row..."), this);
+	m_custom_key_row->setToolTip(
+	        QStringLiteral("Compose the row the Custom layout uses. Choose Custom for a "
+	                        "host in its Appearance settings to see it."));
+	connect(m_custom_key_row, &QPushButton::clicked, this, [this] {
+		bssh_app_settings stored;
+
+		/*
+		 * Seeded from what is stored, or from the catalogue's default
+		 * where nothing is -- an empty field would make the first use of
+		 * this dialog start by failing its own validity check, which
+		 * reads as the feature being broken.
+		 */
+		QString seed = stored.custom_key_row();
+		if (seed.isEmpty()) {
+			const bssh_key_row_catalog catalog;
+			if (const bssh_key_row_layout_t *fallback =
+			            catalog.by_id(catalog.default_id())) {
+				seed = bssh_key_row_spec(fallback->keys);
+			}
+		}
+
+		bssh_key_row_editor editor(seed, this);
+		if (editor.exec() != QDialog::Accepted) return;
+
+		stored.set_custom_key_row(editor.spec());
+
+		/*
+		 * Into the catalogue at once, the same as the palette: the id
+		 * has not changed, so nothing else would prompt a re-read and
+		 * every open row would keep the keys it copied.
+		 */
+		bssh_key_row_catalog::instance().set_custom(
+		        bssh_parse_key_row(editor.spec()));
+		emit changed();
+	});
+
+	QWidget *key_row_row = new QWidget(this);
+	QHBoxLayout *key_row_layout = new QHBoxLayout(key_row_row);
+	key_row_layout->setContentsMargins(0, 0, 0, 0);
+	key_row_layout->addWidget(m_custom_key_row);
+	key_row_layout->addStretch(1);
+
+	if (on_this_page(SECTION_KEYBOARD, key_row_row)) form->addRow(key_row_row);
 
 	/*
 	 * Which keyboard, above the row's own setting in importance and

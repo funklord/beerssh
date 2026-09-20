@@ -325,6 +325,14 @@ bssh_colour_scheme_t bssh_app_settings::custom_scheme() const {
 	return scheme;
 }
 
+QString bssh_app_settings::custom_key_row() const {
+	return value(QStringLiteral("keyboard/custom_key_row"), QString()).toString();
+}
+
+void bssh_app_settings::set_custom_key_row(const QString &spec) {
+	store(QStringLiteral("keyboard/custom_key_row"), spec);
+}
+
 void bssh_app_settings::set_custom_scheme(const bssh_colour_scheme_t &scheme) {
 	for (int i = 0; i < 16; ++i) {
 		store(ansi_key(i), QColor(scheme.ansi[i]).name());

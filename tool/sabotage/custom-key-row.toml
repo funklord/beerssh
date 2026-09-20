@@ -1,0 +1,83 @@
+# Sabotages for sec 6.2's user-composed key row.
+#
+# sec 6.2 shipped five curated rows and left "letting a user compose their
+# own" open; sec 6.3 says that is one question for fonts, colour schemes,
+# key rows and keyboard layouts, to be answered once. This is that answer
+# for the row, and it is the colour scheme's answer copied: one reserved
+# catalogue entry, written by a push from the layer that owns the
+# settings, never by the catalogue reaching into them.
+#
+# The class these guard against is the one this tree keeps meeting -- a
+# setting stored, read, and applied to nothing, or a control that writes
+# somewhere nothing looks. sec 11's biometric spec opens with the same
+# sentence about the same shape.
+
+# The floor. sec 6.2 says a row without Escape or a modifier cannot drive
+# a terminal, and a user can now write one. If the refusal goes, the
+# invalid row reaches the catalogue -- and the damage is not only that
+# row: the CONTRACT test walks every layout, so the failure surfaces
+# against the five curated rows that are correct.
+[[sabotage]]
+name = "an unusable custom row is accepted"
+file = "keyboard/key_row_layout.cpp"
+find = "\tif (!bssh_key_row_usable(keys)) return false;"
+replace = "\t(void)0;"
+expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
+
+# And the other half of the refusal: it must leave the last good row in
+# place. A set_custom that cleared the entry before validating would hand
+# the user an empty strip, which is worse than refusing -- the row is the
+# only way to send Escape on a device with no system keyboard, so an
+# empty one cannot be used to reach the settings that would fix it.
+# The first version of this edit was `layout.keys.clear()' immediately
+# before `layout.keys = keys', and the runner reported MISSED. It was
+# right to: an assignment over a cleared list is the assignment, so the
+# edit changed nothing and a green suite proved nothing about it. A
+# sabotage that cannot break the code is the positive control that cannot
+# fail, one layer out -- and only running it says which one you wrote.
+[[sabotage]]
+name = "a refused row is written before it is judged"
+file = "keyboard/key_row_layout.cpp"
+find = "bool bssh_key_row_catalog::set_custom(const QList<bssh_key_t> &keys) {\n\tif (!bssh_key_row_usable(keys)) return false;"
+replace = "bool bssh_key_row_catalog::set_custom(const QList<bssh_key_t> &keys) {\n\tfor (bssh_key_row_layout_t &early : m_layouts) {\n\t\tif (early.id == QStringLiteral(\"custom\")) early.keys = keys;\n\t}\n\tif (!bssh_key_row_usable(keys)) return false;"
+expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
+
+# The catalogue owns the name. set_custom takes the keys and nothing
+# else, because a custom row that could rename itself is one the picker
+# cannot find -- the rule the colour catalogue states in as many words.
+[[sabotage]]
+name = "the custom entry loses its reserved id"
+file = "keyboard/key_row_layout.cpp"
+find = "\t\tlayout.id = QStringLiteral(\"custom\");"
+replace = "\t\tlayout.id = QStringLiteral(\"user\");"
+expect = "a_custom_key_row_is_composed_from_words"
+
+# The spec round-trips or the user's row is rewritten every start. This
+# breaks the way a serialiser breaks: the parse still works, so nothing
+# looks wrong until a row has been through app.ini once.
+[[sabotage]]
+name = "a chord does not survive being written back"
+file = "keyboard/key_row_layout.cpp"
+find = "\t\t\t\twords.append(QStringLiteral(\"%1-%2\")"
+replace = "\t\t\t\twords.append(QStringLiteral(\"%1_%2\")"
+expect = "a_custom_key_row_is_composed_from_words"
+
+# The note and the parser share one table so they cannot drift. Point the
+# note at a word the parser does not know and the user is told to type
+# something that silently does nothing.
+[[sabotage]]
+name = "the dialog names a key the parser cannot read"
+file = "src/ui/key_row_editor.cpp"
+find = "\t  \"esc tab enter bksp ins del home end pgup pgdn up down left right\","
+replace = "\t  \"esc tab enter bksp ins del home end pgup pgdn up down left right meta\","
+expect = "the_custom_row_note_names_only_words_that_parse"
+
+# The push-in. Without it the spec is stored, read back, and applied to
+# nothing -- the row keeps the copy of the default it was born with, and
+# the user's own row exists only in the settings file.
+[[sabotage]]
+name = "the stored row never reaches the catalogue"
+file = "src/ui/main_window.cpp"
+find = "\t\tbssh_key_row_catalog::instance().set_custom(bssh_parse_key_row(row_spec));"
+replace = "\t\t(void)row_spec;"
+expect = "the_custom_row_reaches_the_catalogue_at_startup"

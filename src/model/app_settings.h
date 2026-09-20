@@ -152,6 +152,21 @@ public:
 	bssh_colour_scheme_t custom_scheme() const;
 	void set_custom_scheme(const bssh_colour_scheme_t &scheme);
 
+	/*
+	 * The custom key row, as the words bssh_parse_key_row reads (sec 6.2).
+	 *
+	 * A string rather than a parsed row, because this is the layer that
+	 * talks to app.ini and the keyboard/ catalogue is the layer that knows
+	 * what a key is -- the same division the custom colour scheme keeps,
+	 * and the reason neither of them reaches across it.
+	 *
+	 * Empty means the user has not composed one, which is different from
+	 * having composed an empty one: the catalogue's "custom" entry starts
+	 * as a copy of the default, so empty leaves that copy alone.
+	 */
+	QString custom_key_row() const;
+	void set_custom_key_row(const QString &spec);
+
 	QString theme() const;
 	void set_theme(const QString &theme);
 

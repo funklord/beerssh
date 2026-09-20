@@ -346,6 +346,7 @@ private slots:
 	void every_surface_names_the_copyright_holder();
 	void focus_reporting_follows_the_focused_pane();
 	void backing_out_of_a_session_reaches_the_host_list();
+	void the_custom_row_reaches_the_catalogue_at_startup();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

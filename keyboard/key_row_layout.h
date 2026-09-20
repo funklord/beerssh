@@ -158,6 +158,42 @@ struct bssh_key_row_layout_t {
  */
 QList<bssh_key_t> bssh_function_keys();
 
+/*
+ * Whether a row can drive a terminal at all: it needs Escape and at least
+ * one modifier. Without those it is a strip of keys with nothing to escape
+ * out of and nothing to modify the rest with, which is sec 6.2's floor.
+ *
+ * This lived as an assertion inside a test that walked the curated
+ * layouts, and a user-composed row turns that inside out: an invalid row
+ * reaching the catalogue would make the CONTRACT test fail rather than
+ * being refused at the door, so the failure would land on the five rows
+ * that are correct. The rule is here now, the test calls it over the
+ * curated set, and set_custom() refuses anything failing it -- sec 6.3's
+ * "they become the contract every layout must satisfy rather than tests
+ * about the two boards we happen to have".
+ */
+bool bssh_key_row_usable(const QList<bssh_key_t> &keys);
+
+/*
+ * A row as words, because app.ini is meant to be opened and edited
+ * (sec 10.6) and a row stored as numbers is one nobody can fix by hand.
+ *
+ * Tokens are separated by spaces: `esc tab ctrl alt left down up right`.
+ * A reserved word names a key (esc, tab, enter, bksp, ins, del, home,
+ * end, pgup, pgdn, up, down, left, right, f1..f12), a modifier (ctrl,
+ * alt, shift), the function bank's toggle (fn), or a blank column (gap).
+ * `ctrl-b` is a chord, one press sending what two would. Any single
+ * character is itself -- `|`, `/`, `~` -- which is why every reserved
+ * word is at least two characters and none of them can collide with one.
+ *
+ * bssh_parse_key_row skips a token it does not know rather than refusing
+ * the row: a spec typed by hand with one word wrong should lose that key
+ * and not the other eleven, and bssh_key_row_usable is what decides
+ * whether what survived is still a row.
+ */
+QList<bssh_key_t> bssh_parse_key_row(const QString &spec);
+QString bssh_key_row_spec(const QList<bssh_key_t> &keys);
+
 class bssh_key_row_catalog {
 public:
 	static bssh_key_row_catalog &instance();
@@ -171,6 +207,23 @@ public:
 	 * a preset from a newer build still shows what it asked for. */
 	QString effective_id(const QString &stored) const;
 	QString default_id() const;
+
+	/*
+	 * Replaces the "custom" entry with the user's own row -- the same
+	 * push-in the colour catalogue uses, and for the same reason: this
+	 * lives in keyboard/ and the setting lives in model/, so a catalogue
+	 * that read the settings store would be a dependency running the
+	 * wrong way. Whoever owns the settings calls this.
+	 *
+	 * The keys only. The id, the display name and the description are
+	 * this catalogue's -- a custom row that could rename itself would be
+	 * one the picker cannot find.
+	 *
+	 * Returns false and changes nothing where the row could not drive a
+	 * terminal, so a spec that has been edited into uselessness leaves
+	 * the last good one in place rather than emptying the strip.
+	 */
+	bool set_custom(const QList<bssh_key_t> &keys);
 
 private:
 	QList<bssh_key_row_layout_t> m_layouts;

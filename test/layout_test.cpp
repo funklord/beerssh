@@ -8180,3 +8180,42 @@ void layout_test::a_pane_drag_is_not_raised_from_inside_the_views_own_handler() 
 	QVERIFY2(raised.count() == 1,
 	          "the drag never arrived at all, so queueing lost it");
 }
+
+/*
+ * The call site, which is the half a catalogue test cannot reach.
+ *
+ * sec 6.2's custom row is stored by the settings layer and pushed into
+ * the keyboard catalogue by whoever owns the settings -- the catalogue
+ * does not read them, because that dependency runs the wrong way. So
+ * "the row is stored" and "the row is in use" are two facts, and M5's
+ * sabotage recorded what happens when only the first is tested: the
+ * three edits inside the reset were caught and removing the CALL SITE
+ * was missed, because the test asked the object directly and a push
+ * nothing invokes is indistinguishable from a working one.
+ */
+void layout_test::the_custom_row_reaches_the_catalogue_at_startup() {
+	bssh_app_settings settings;
+	const QString original = settings.custom_key_row();
+
+	/*
+	 * Deliberately not the default's keys: a spec that happened to match
+	 * what the entry is born with would pass with the push removed, which
+	 * is the fixture that does not reach the hazard.
+	 */
+	const QString spec = QStringLiteral("esc ctrl ~ pgup");
+	settings.set_custom_key_row(spec);
+
+	bssh_main_window window;
+
+	const bssh_key_row_layout_t *custom =
+	        bssh_key_row_catalog::instance().by_id(QStringLiteral("custom"));
+	QVERIFY(custom != nullptr);
+	QCOMPARE(bssh_key_row_spec(custom->keys), spec);
+
+	/* Put the setting and the process-wide catalogue back, since both
+	 * outlive this test. */
+	settings.set_custom_key_row(original);
+	if (!original.isEmpty()) {
+		bssh_key_row_catalog::instance().set_custom(bssh_parse_key_row(original));
+	}
+}

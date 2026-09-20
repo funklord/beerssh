@@ -2,6 +2,8 @@
 
 #include "term/emulator.h"
 
+#include <QStringList>
+
 namespace {
 
 bssh_key_t named(const QString &label, int key) {
@@ -52,6 +54,72 @@ QList<bssh_key_t> arrows() {
 		named(QStringLiteral("↑"), bssh_emulator::KEY_UP),
 		named(QStringLiteral("→"), bssh_emulator::KEY_RIGHT)
 	};
+}
+
+
+/*
+ * The vocabulary a custom row is written in. One table, read both ways,
+ * so a spec and its parse cannot disagree about what `pgup' means -- two
+ * tables would be two things to keep in step, which is the shape sec 6.4
+ * records for the context menu's hardcoded chords.
+ */
+struct token_t {
+	const char *word;
+	bssh_key_t::kind_t kind;
+	int value;
+	quint8 modifier;
+	const char *label;
+};
+
+const token_t BSSH_KEY_WORDS[] = {
+	{ "esc",   bssh_key_t::KEY, bssh_emulator::KEY_ESCAPE,    0, "Esc" },
+	{ "tab",   bssh_key_t::KEY, bssh_emulator::KEY_TAB,       0, "Tab" },
+	{ "enter", bssh_key_t::KEY, bssh_emulator::KEY_ENTER,     0, "Enter" },
+	{ "bksp",  bssh_key_t::KEY, bssh_emulator::KEY_BACKSPACE, 0, "Bksp" },
+	{ "ins",   bssh_key_t::KEY, bssh_emulator::KEY_INSERT,    0, "Ins" },
+	{ "del",   bssh_key_t::KEY, bssh_emulator::KEY_DELETE,    0, "Del" },
+	{ "home",  bssh_key_t::KEY, bssh_emulator::KEY_HOME,      0, "Home" },
+	{ "end",   bssh_key_t::KEY, bssh_emulator::KEY_END,       0, "End" },
+	{ "pgup",  bssh_key_t::KEY, bssh_emulator::KEY_PAGE_UP,   0, "PgUp" },
+	{ "pgdn",  bssh_key_t::KEY, bssh_emulator::KEY_PAGE_DOWN, 0, "PgDn" },
+	/* The arrows carry the glyphs the curated rows use, so a custom row
+	 * sits beside them without looking like a different widget. */
+	{ "left",  bssh_key_t::KEY, bssh_emulator::KEY_LEFT,  0, "\xe2\x86\x90" },
+	{ "down",  bssh_key_t::KEY, bssh_emulator::KEY_DOWN,  0, "\xe2\x86\x93" },
+	{ "up",    bssh_key_t::KEY, bssh_emulator::KEY_UP,    0, "\xe2\x86\x91" },
+	{ "right", bssh_key_t::KEY, bssh_emulator::KEY_RIGHT, 0, "\xe2\x86\x92" },
+
+	{ "ctrl",  bssh_key_t::MODIFIER, 0, bssh_emulator::MOD_CTRL,  "Ctrl" },
+	{ "alt",   bssh_key_t::MODIFIER, 0, bssh_emulator::MOD_ALT,   "Alt" },
+	{ "shift", bssh_key_t::MODIFIER, 0, bssh_emulator::MOD_SHIFT, "Shift" },
+
+	{ "fn",    bssh_key_t::FUNCTION_TOGGLE, 0, 0, "Fn" },
+	{ "gap",   bssh_key_t::SPACER,          0, 0, "" }
+};
+
+const token_t *word_for(const QString &word) {
+	for (const token_t &entry : BSSH_KEY_WORDS) {
+		if (word.compare(QLatin1String(entry.word), Qt::CaseInsensitive) == 0) {
+			return &entry;
+		}
+	}
+	return nullptr;
+}
+
+/* `ctrl-b' and `alt-x': the modifier's word, a hyphen, one character. */
+bool parse_chord(const QString &word, bssh_key_t *out) {
+	const int dash = word.indexOf(QLatin1Char('-'));
+	if (dash <= 0 || dash + 2 != word.size()) return false;
+
+	const token_t *mod = word_for(word.left(dash));
+	if (!mod || mod->kind != bssh_key_t::MODIFIER) return false;
+
+	const QChar ch = word.at(dash + 1);
+	*out = chord(QStringLiteral("%1-%2")
+	                     .arg(QString(QLatin1String(mod->word)).at(0).toUpper())
+	                     .arg(ch),
+	              char32_t(ch.unicode()), mod->modifier);
+	return true;
 }
 
 } /* namespace */
@@ -212,6 +280,23 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 
 		m_layouts.append(layout);
 	}
+
+	/*
+	 * The user's own, last so it reads as the escape hatch rather than as
+	 * a sixth curated row. It starts as a copy of the default -- the same
+	 * choice the colour catalogue makes -- so somebody who selects it
+	 * before editing anything gets a working row instead of a blank
+	 * strip, and so the contract below holds from the first moment it
+	 * exists rather than from the first time it is written.
+	 */
+	{
+		bssh_key_row_layout_t layout = m_layouts.first();
+		layout.id = QStringLiteral("custom");
+		layout.display_name = QStringLiteral("Custom");
+		layout.description = QStringLiteral(
+		        "Your own row, composed in Settings and stored on this device.");
+		m_layouts.append(layout);
+	}
 }
 
 const bssh_key_row_layout_t *bssh_key_row_catalog::by_id(const QString &id) const {
@@ -234,4 +319,104 @@ QString bssh_key_row_catalog::effective_id(const QString &stored) const {
 
 QString bssh_key_row_catalog::default_id() const {
 	return QStringLiteral("default");
+}
+
+bool bssh_key_row_usable(const QList<bssh_key_t> &keys) {
+	bool has_escape = false;
+	bool has_modifier = false;
+
+	for (const bssh_key_t &key : keys) {
+		if (key.kind == bssh_key_t::KEY && key.value == bssh_emulator::KEY_ESCAPE) {
+			has_escape = true;
+		}
+		if (key.kind == bssh_key_t::MODIFIER) has_modifier = true;
+	}
+
+	return has_escape && has_modifier;
+}
+
+QList<bssh_key_t> bssh_parse_key_row(const QString &spec) {
+	QList<bssh_key_t> keys;
+
+	const QStringList words = spec.split(QLatin1Char(' '), Qt::SkipEmptyParts);
+	for (const QString &word : words) {
+		if (const token_t *entry = word_for(word)) {
+			bssh_key_t key;
+			key.label = QString::fromUtf8(entry->label);
+			key.kind = entry->kind;
+			key.value = entry->value;
+			key.modifier = entry->modifier;
+			keys.append(key);
+			continue;
+		}
+
+		bssh_key_t as_chord;
+		if (parse_chord(word, &as_chord)) {
+			keys.append(as_chord);
+			continue;
+		}
+
+		/*
+		 * One character is itself. Longer than that and it is a word
+		 * this build does not know -- a newer spelling, or a typo -- and
+		 * it is dropped rather than rendered as a button whose label is
+		 * the mistake.
+		 */
+		if (word.size() == 1) {
+			keys.append(text(word, char32_t(word.at(0).unicode())));
+		}
+	}
+
+	return keys;
+}
+
+QString bssh_key_row_spec(const QList<bssh_key_t> &keys) {
+	QStringList words;
+
+	for (const bssh_key_t &key : keys) {
+		if (key.kind == bssh_key_t::TEXT) {
+			words.append(QString(QChar(char16_t(key.value))));
+			continue;
+		}
+
+		if (key.kind == bssh_key_t::CHORD) {
+			for (const token_t &entry : BSSH_KEY_WORDS) {
+				if (entry.kind != bssh_key_t::MODIFIER) continue;
+				if (entry.modifier != key.modifier) continue;
+
+				words.append(QStringLiteral("%1-%2")
+				                     .arg(QLatin1String(entry.word))
+				                     .arg(QChar(char16_t(key.value))));
+				break;
+			}
+			continue;
+		}
+
+		for (const token_t &entry : BSSH_KEY_WORDS) {
+			if (entry.kind != key.kind) continue;
+			if (entry.kind == bssh_key_t::MODIFIER
+			    ? entry.modifier != key.modifier
+			    : entry.value != key.value) {
+				continue;
+			}
+
+			words.append(QLatin1String(entry.word));
+			break;
+		}
+	}
+
+	return words.join(QLatin1Char(' '));
+}
+
+bool bssh_key_row_catalog::set_custom(const QList<bssh_key_t> &keys) {
+	if (!bssh_key_row_usable(keys)) return false;
+
+	for (bssh_key_row_layout_t &layout : m_layouts) {
+		if (layout.id != QStringLiteral("custom")) continue;
+
+		layout.keys = keys;
+		return true;
+	}
+
+	return false;
 }
