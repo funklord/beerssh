@@ -72,6 +72,7 @@
 #include "term/emulator.h"
 #include "keyboard/key_row.h"
 #include "keyboard/key_row_layout.h"
+#include "term/colour_scheme.h"
 #include "ui/layout_manager.h"
 #include "ui/touch_metrics.h"
 #include "ui/input_selector.h"
@@ -8218,4 +8219,48 @@ void layout_test::the_custom_row_reaches_the_catalogue_at_startup() {
 	if (!original.isEmpty()) {
 		bssh_key_row_catalog::instance().set_custom(bssh_parse_key_row(original));
 	}
+}
+
+/*
+ * The colour scheme's half of the same push, which had no test at all.
+ *
+ * Found while building the key row's version of this mechanism: the row
+ * was copied from the palette, so the palette's call site was read
+ * closely, and nothing in the suite touched it. One line in
+ * apply_device_settings hands the stored palette to a catalogue that
+ * deliberately does not read settings itself -- delete it and every
+ * custom scheme silently falls back to the black-and-white the entry is
+ * born with, while the picker still says Custom and the id still
+ * resolves. sec 10.1's "stored, read and applied to nothing", in the
+ * feature this project cites as the pattern for the other three.
+ *
+ * It is the same shape as the key row's test above and deliberately not
+ * shared with it: the two push different things into different
+ * catalogues, and a helper covering both would pass if either worked.
+ */
+void layout_test::the_custom_palette_reaches_the_catalogue_at_startup() {
+	bssh_app_settings settings;
+	const bssh_colour_scheme_t original = settings.custom_scheme();
+
+	/*
+	 * A colour the entry is not born holding. The custom entry starts as
+	 * black on white, so asserting on either would pass with the push
+	 * removed -- the fixture that does not reach the hazard.
+	 */
+	bssh_colour_scheme_t wanted = original;
+	wanted.background = qRgb(0x12, 0x34, 0x56);
+	wanted.foreground = qRgb(0xab, 0xcd, 0xef);
+	settings.set_custom_scheme(wanted);
+
+	bssh_main_window window;
+
+	const bssh_colour_scheme_t *custom =
+	        bssh_colour_scheme_catalog::instance().by_id(QStringLiteral("custom"));
+	QVERIFY(custom != nullptr);
+	QCOMPARE(custom->background, wanted.background);
+	QCOMPARE(custom->foreground, wanted.foreground);
+
+	/* Both the setting and the process-wide catalogue outlive this test. */
+	settings.set_custom_scheme(original);
+	bssh_colour_scheme_catalog::instance().set_custom(original);
 }

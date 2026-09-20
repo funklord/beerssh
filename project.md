@@ -6686,6 +6686,26 @@ So `custom` means "this device's custom palette", and the two questions stay in
 the two places that already answer them — the same split the brightness slider
 uses.
 
+**The push from the settings into the catalogue had no test until
+2026-09-20, and this feature is the one the others are copied from.** The
+editor was covered and the store was covered; the single line in
+`apply_device_settings` joining them was not. Remove it and every custom
+palette silently falls back to the black-and-white the entry is born
+with — while the picker still says *Custom*, the id still resolves, and
+nothing goes red. §10.1's "stored, read and applied to nothing", sitting
+in the exemplar rather than in a copy of it.
+
+It was found while building §6.2's user-composed key row, which copies
+this mechanism deliberately: imitating something is a reason to read it
+closely, and reading it closely is what found the hole. Worth keeping as
+method, because nothing else had prompted anybody to look — the feature
+works, and a call site that is never exercised looks exactly like one
+that is. `the_custom_palette_reaches_the_catalogue_at_startup` asserts a
+colour the entry is NOT born holding, since asserting on black or white
+would pass with the push removed; `tool/sabotage/custom-palette-push.toml`
+holds both halves, the missing push and the entry written under another
+id, each seen to fail.
+
 Three details that are each a decision:
 
 - **`Classic ANSI` resets the sixteen only.** Background, text and cursor are

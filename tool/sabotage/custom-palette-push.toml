@@ -1,0 +1,30 @@
+# The custom palette's call site (sec 10.2, sec 9.3).
+#
+# sec 10.2's custom scheme is the pattern the key row, and eventually the
+# font and the keyboard layout, are copied from: a reserved catalogue
+# entry written by a push from whoever owns the settings, because the
+# catalogue lives in term/ and must not read model/.
+#
+# The push itself had no test. The editor was covered, the store was
+# covered, and the one line joining them was not -- which is the same
+# gap M5 records for reset_modes(), where three edits inside the function
+# were caught and removing the CALL SITE was missed. Found while copying
+# this mechanism for the key row: the original was read closely because
+# it was being imitated, which is a reason to imitate things deliberately.
+[[sabotage]]
+name = "the stored palette never reaches the catalogue"
+file = "src/ui/main_window.cpp"
+find = "\tbssh_colour_scheme_catalog::instance().set_custom(settings.custom_scheme());"
+replace = "\t(void)0;"
+expect = "the_custom_palette_reaches_the_catalogue_at_startup"
+
+# And the catalogue keeps its own identity. set_custom takes the colours
+# and nothing else -- a custom scheme that could rename itself is one the
+# picker cannot find, which the catalogue says in as many words and
+# nothing checked.
+[[sabotage]]
+name = "the custom scheme is written under another id"
+file = "src/term/colour_scheme.cpp"
+find = "\t\tif (entry.id != QStringLiteral(\"custom\")) continue;"
+replace = "\t\tif (entry.id != QStringLiteral(\"classic\")) continue;"
+expect = "the_custom_palette_reaches_the_catalogue_at_startup"
