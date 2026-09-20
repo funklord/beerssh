@@ -31,6 +31,8 @@
 #include <QDropEvent>
 #include <QtTest>
 
+#include <QAccessible>
+#include <QAbstractSlider>
 #include "model/command_line.h"
 #include "model/profile.h"
 #include "platform/platform.h"
@@ -8263,4 +8265,181 @@ void layout_test::the_custom_palette_reaches_the_catalogue_at_startup() {
 	/* Both the setting and the process-wide catalogue outlive this test. */
 	settings.set_custom_scheme(original);
 	bssh_colour_scheme_catalog::instance().set_custom(original);
+}
+
+namespace {
+
+/*
+ * What a screen reader would actually be told about every control on one
+ * surface, and how many controls that was.
+ *
+ * sec 14's M11 measured this by hand and found three states: one page
+ * correct by accident (QFormLayout::addRow makes the label a buddy for
+ * you), one with 4 of 13 anonymous because its rows are a label and a
+ * field side by side in a box layout, and the phone's FIRST screen with
+ * 2 of 2 read out as "vertical ellipsis" and "plus" -- what they look
+ * like, not what they do. All were named, and nothing since then has
+ * stopped them being renamed back.
+ *
+ * The existing sweep in terminal_view_test walks one dialog and looks at
+ * QLineEdit and QSpinBox only. The two controls that were worst are
+ * QToolButtons on a surface it does not visit, so widening the population
+ * is the whole point of this one.
+ *
+ * Ask QAccessible rather than accessibleName(): a control with no
+ * accessibleName can still be perfectly announced through a buddy label
+ * or its own text, and asserting on the property would demand redundant
+ * names for controls that already work. The interface answers the
+ * question a user has.
+ */
+QString unnamed_controls(const QString &surface, QWidget *root, int *counted) {
+	root->resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	root->show();
+
+	QStringList anonymous;
+	int seen = 0;
+
+	for (QWidget *w : root->findChildren<QWidget *>()) {
+		/*
+		 * A scroll bar is deliberately not in this population, and it is
+		 * the one the first run caught: QScrollBar is a QAbstractSlider,
+		 * so the obvious filter picks it up, and it has no name to give.
+		 * A reader announces it by ROLE -- "scroll bar" -- and naming it
+		 * would be inventing a label for something already announced.
+		 * Excluded by type rather than by an ignore list, because the
+		 * rule is about what the class IS, not about this one instance.
+		 */
+		const bool interactive = qobject_cast<QAbstractButton *>(w)
+		        || qobject_cast<QLineEdit *>(w) || qobject_cast<QComboBox *>(w)
+		        || qobject_cast<QAbstractSpinBox *>(w)
+		        || (qobject_cast<QAbstractSlider *>(w) && !qobject_cast<QScrollBar *>(w));
+		if (!interactive || !w->isVisible()) continue;
+
+		/*
+		 * A spin box and a combo each own an internal line edit, and a
+		 * reader lands on the container rather than its guts -- the same
+		 * exclusion the terminal_view sweep already makes, for the same
+		 * reason, and without it every combo on the page reports twice.
+		 */
+		bool internal = false;
+		for (QWidget *up = w->parentWidget(); up; up = up->parentWidget()) {
+			if (qobject_cast<QAbstractSpinBox *>(up) || qobject_cast<QComboBox *>(up)
+			    || qobject_cast<QKeySequenceEdit *>(up)) {
+				internal = true;
+			}
+		}
+		if (internal) continue;
+
+		++seen;
+
+		QAccessibleInterface *a = QAccessible::queryAccessibleInterface(w);
+		if (!a) continue;
+
+		/*
+		 * Emptiness is NOT the failure, and asserting on it was this
+		 * sweep's own first mistake -- caught by sabotaging the two
+		 * names M11 added and watching the suite stay green.
+		 *
+		 * `m_add' carries setText("+") beside its accessible name, so
+		 * removing the name leaves QAccessible falling back to the text
+		 * and answering "+". Non-empty, and exactly the state M11
+		 * measured and fixed: a reader announcing "plus" and "vertical
+		 * ellipsis", which is what the controls LOOK like rather than
+		 * what they do.
+		 *
+		 * So the condition is that the name says something a person
+		 * could act on. One character cannot: a glyph is an appearance,
+		 * and a control announcing its own appearance is the defect
+		 * whatever the character is.
+		 */
+		const QString name = a->text(QAccessible::Name).trimmed();
+
+		bool describes = name.size() > 1;
+		if (describes) {
+			describes = false;
+			for (const QChar ch : name) {
+				if (ch.isLetterOrNumber()) { describes = true; break; }
+			}
+		}
+		if (describes) continue;
+
+		anonymous.append(QStringLiteral("%1 (%2) says \"%3\"")
+		                         .arg(w->objectName().isEmpty()
+		                                      ? QStringLiteral("unnamed")
+		                                      : w->objectName())
+		                         .arg(QString::fromLatin1(w->metaObject()->className()))
+		                         .arg(name.isEmpty() ? QStringLiteral("empty") : name));
+	}
+
+	*counted += seen;
+
+	if (anonymous.isEmpty()) return QString();
+	return QStringLiteral("%1: %2 of %3 announce a glyph or nothing -- %4")
+	        .arg(surface).arg(anonymous.size()).arg(seen)
+	        .arg(anonymous.join(QStringLiteral(", ")));
+}
+
+} /* namespace */
+
+void layout_test::every_touch_surface_names_its_controls() {
+	const forced_touch_t arrangement(1);
+
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("build server (europe)");
+	profile.host = QStringLiteral("build.internal.example.com");
+	profile.user = QStringLiteral("nabbe.testing");
+	profile.port = 2299;
+	QVERIFY(store.save(profile) != 0);
+
+	int counted = 0;
+	QString complaint;
+
+	{
+		bssh_host_list list(&store);
+		complaint = unnamed_controls(QStringLiteral("host list"), &list, &counted);
+		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
+	}
+	{
+		bssh_host_editor editor(&store);
+		editor.set_profile(profile);
+		complaint = unnamed_controls(QStringLiteral("host editor"), &editor, &counted);
+		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
+	}
+	{
+		bssh_preset_editor editor(&store, bssh_preset_editor::TOUCH);
+		complaint = unnamed_controls(QStringLiteral("preset editor"), &editor, &counted);
+		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
+	}
+	{
+		bssh_app_settings_view settings;
+		complaint = unnamed_controls(QStringLiteral("settings"), &settings, &counted);
+		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
+	}
+	{
+		bssh_font_picker picker;
+		complaint = unnamed_controls(QStringLiteral("font picker"), &picker, &counted);
+		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
+	}
+	{
+		bssh_password_prompt prompt(
+		        QStringLiteral("nabbe.testing@build.internal.example.com:2299"), true);
+		complaint = unnamed_controls(QStringLiteral("password prompt"), &prompt, &counted);
+		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
+	}
+
+	/*
+	 * And say how many were looked at, because a sweep that inspected
+	 * nothing reports success exactly as loudly as one that inspected
+	 * everything. If a filter above stops matching -- a control type
+	 * renamed, a surface that no longer builds its children until shown --
+	 * this is the assertion that notices, and the number is the only
+	 * thing separating "all named" from "none found".
+	 */
+	QVERIFY2(counted >= 20,
+	          qPrintable(QStringLiteral("only %1 controls inspected across six "
+	                                     "surfaces -- the sweep has stopped seeing them")
+	                             .arg(counted)));
 }

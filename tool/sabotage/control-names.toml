@@ -1,0 +1,49 @@
+# Every control on a touch surface says what it is (sec 14, M11).
+#
+# M11 measured this by hand and found three states: one page correct by
+# accident, because QFormLayout::addRow makes the label a buddy for you;
+# the desktop Session page with 4 of 13 anonymous, its rows being a label
+# and a field side by side in a box layout; and the phone's FIRST screen
+# with 2 of 2 read out as "vertical ellipsis" and "plus" -- what they
+# look like rather than what they do.
+#
+# All were named, and until now nothing stopped them being renamed back.
+# The sweep that guards them asserts a POPULATION rather than a widget,
+# and it found a real one on its first run: the text-brightness slider,
+# in a box layout, announcing nothing -- M11's own cause on a control
+# M11 did not reach.
+
+[[sabotage]]
+name = "the brightness slider goes back to announcing nothing"
+file = "src/ui/app_settings_view.cpp"
+find = "\tm_text_brightness->setAccessibleName(QStringLiteral(\"Text brightness\"));"
+replace = "\t(void)0;"
+expect = "every_touch_surface_names_its_controls"
+
+# The phone's first screen, which is where this was worst. A picture of
+# three dots is not a name, and a reader with no name for it announces
+# the glyph.
+[[sabotage]]
+name = "the host list's menu button is a picture again"
+file = "src/ui/host_list.cpp"
+find = "\tm_menu->setAccessibleName(QStringLiteral(\"More options\"));"
+replace = "\t(void)0;"
+expect = "every_touch_surface_names_its_controls"
+
+[[sabotage]]
+name = "the host list's add button is a picture again"
+file = "src/ui/host_list.cpp"
+find = "\tm_add->setAccessibleName(QStringLiteral(\"Add host\"));"
+replace = "\t(void)0;"
+expect = "every_touch_surface_names_its_controls"
+
+# And the sweep has to be able to see anything at all. A filter that
+# stops matching turns this into a gate over an empty list, which reports
+# success exactly as loudly as a real pass -- so the count is asserted
+# and this edit proves the assertion is live rather than decorative.
+[[sabotage]]
+name = "the sweep stops finding controls to inspect"
+file = "test/layout_test.cpp"
+find = "\t\tif (!interactive || !w->isVisible()) continue;"
+replace = "\t\tif (!interactive || !w->isVisible() || true) continue;"
+expect = "every_touch_surface_names_its_controls"

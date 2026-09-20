@@ -566,6 +566,16 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	brightness_layout->setContentsMargins(0, 0, 0, 0);
 
 	m_text_brightness = new QSlider(Qt::Horizontal, brightness_row);
+	/*
+	 * Named for a reader, because nothing else names it. sec 14's M11
+	 * found four controls anonymous on the desktop Session page for
+	 * exactly this reason -- a label and a field side by side in a box
+	 * layout, where QFormLayout::addRow would have made the label a buddy
+	 * and done it for free. The tooltip beside it is not an answer: a
+	 * reader announces the NAME, and a slider that says nothing is one a
+	 * blind user cannot tell from the next slider along.
+	 */
+	m_text_brightness->setAccessibleName(QStringLiteral("Text brightness"));
 	m_text_brightness->setRange(BSSH_TEXT_BRIGHTNESS_MIN, 100);
 	m_text_brightness->setSingleStep(5);
 	m_text_brightness->setPageStep(10);

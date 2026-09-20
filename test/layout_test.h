@@ -348,6 +348,7 @@ private slots:
 	void backing_out_of_a_session_reaches_the_host_list();
 	void the_custom_row_reaches_the_catalogue_at_startup();
 	void the_custom_palette_reaches_the_catalogue_at_startup();
+	void every_touch_surface_names_its_controls();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

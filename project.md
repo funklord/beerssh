@@ -11583,6 +11583,49 @@ background).
     host list's **2 of 2** controls — every control on the phone's first screen —
     were read out as "vertical ellipsis" and "plus", which is what they look like
     and not what they do. All named now.
+    **And guarded since 2026-09-20, which they were not before.** The naming
+    was a measurement taken once by hand; nothing stopped a control being
+    renamed back, and nothing looked at a control added later.
+    `every_touch_surface_names_its_controls` walks the six touch surfaces
+    the phone-fit sweep already builds and asks `QAccessible` what a reader
+    would be told -- not `accessibleName()`, because a control with none can
+    still be announced perfectly through a buddy or its own text, and
+    asserting on the property would demand redundant names for controls
+    that already work.
+    **It found a real one on its first run**: the text-brightness slider
+    announced nothing. Its form label says *Text brightness*, but `addRow`
+    makes the CONTAINER the buddy, so a slider inside a box row inherits
+    no name -- M11's own cause, on a control M11 never reached. It has a
+    tooltip, which is not what a reader announces.
+    **Two of the three findings were the instrument, and the split is the
+    useful part.** A `QScrollBar` is a `QAbstractSlider` with no name to
+    give, announced by role; a `QKeySequenceEdit` owns an internal line
+    edit the reader never lands on, like a spin box or a combo. Both are
+    excluded by TYPE rather than by forgiving the instance, because the
+    rule is about what the class is -- a gate carrying a list of pardoned
+    instances has been switched off by instalments. The probe
+    over-reported and that is the direction worth having: a false positive
+    prints something to go and read, a false negative prints nothing, and
+    nothing is what a clean result looks like.
+    **The count is asserted too.** A filter that stops matching turns the
+    sweep into a gate over an empty list, which reports success exactly as
+    loudly as a real pass -- so the number of controls inspected is checked
+    as well as the number anonymous, and a sabotage proves that assertion
+    is live rather than decorative.
+    **And the first version asserted the wrong property, which the
+    sabotage caught and reading never would have.** It checked that the
+    accessible name was not EMPTY. Sabotaging the two names M11 added left
+    the suite green: `m_add` carries `setText("+")` beside its accessible
+    name, so removing the name makes `QAccessible` fall back to the text
+    and answer `"+"` -- non-empty, and precisely the state M11 measured.
+    **Emptiness was never the symptom.** What a reader announced was the
+    GLYPH: "plus", "vertical ellipsis". So the assertion is now that the
+    name says something a person could act on -- more than one character,
+    and containing a letter or a digit -- because a glyph is an appearance
+    and a control announcing its own appearance is the defect whatever the
+    character is. A true condition that is not the one you mean passes for
+    the same reason a correct one does, and only breaking the thing it
+    claims to guard tells them apart.
     **The terminal itself was the real gap**, and naming would not have fixed it:
     a widget that paints characters appeared as role `Client` with no name, no
     value and no text interface, so the entire content of the application was
