@@ -3977,6 +3977,55 @@ void terminal_view_test::a_session_can_be_closed_without_a_tab_bar() {
 	delete menu;
 }
 
+void terminal_view_test::dropping_the_history_takes_the_selection_with_it() {
+	/*
+	 * A selection names ABSOLUTE lines, and bssh_scrollback::clear says
+	 * in as many words why: "a cleared line is gone rather than
+	 * renumbered, so anything still holding a name for one must fail to
+	 * find it". The view holds exactly such a name and nothing told it.
+	 *
+	 * So: select in the history, drop the history, and Copy is still
+	 * offered and hands back blanks -- the selected lines resolve to
+	 * empty cells, the trailing-space trim leaves nothing, and what
+	 * reaches the clipboard is newlines. Two taps apart on a phone now
+	 * that Clear Scrollback is on the terminal menu (sec 6.4).
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	for (int i = 0; i < 20; ++i) {
+		emulator.feed(QByteArrayLiteral("row") + QByteArray::number(i)
+		               + QByteArrayLiteral("\r\n"));
+	}
+	QVERIFY(emulator.scrollback().count() > 0);
+
+	view.scroll_by(5);
+	drag(view, 0, 0, 3, 0);
+	QVERIFY(view.has_selection());
+	QVERIFY2(view.selection_text().startsWith(QStringLiteral("row")),
+	          "the fixture did not select history, so the drop has nothing "
+	          "to take with it");
+
+	emulator.clear_scrollback();
+	QCoreApplication::processEvents();
+
+	/*
+	 * Asserted on has_selection rather than on the text, because the text
+	 * is the symptom and the state is the defect: a view still claiming a
+	 * selection keeps Copy enabled, keeps painting a highlight over rows
+	 * that hold something else now, and answers the next Copy with
+	 * whatever those rows contain.
+	 */
+	QVERIFY2(!view.has_selection(),
+	          "the history went and the view still claims a selection in it");
+	QCOMPARE(view.selection_text(), QString());
+}
+
 void terminal_view_test::the_history_can_be_dropped_without_the_remote() {
 	/*
 	 * ED 3 -- what `clear` sends -- was the only way to drop the

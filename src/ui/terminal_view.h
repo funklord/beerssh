@@ -449,6 +449,13 @@ public:
 	void clear_selection();
 
 	/*
+	 * Drops a selection whose lines the scrollback has evicted (sec 6.4).
+	 * Called wherever the history changes; see the definition for why it
+	 * refuses to drop one that is only partly gone.
+	 */
+	void drop_evicted_selection();
+
+	/*
 	 * Everything the view can reach: the whole scrollback and the screen
 	 * below it. One coordinate space covers both (see line_for_row), so
 	 * this is line zero to the last line rather than anything special.

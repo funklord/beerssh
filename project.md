@@ -3711,6 +3711,42 @@ view still scrolled into lines that no longer exist -- the defect that
 handler's comment already describes, which a second copy would have
 reintroduced silently. Both edits seen to fail.
 
+**And it left a selection pointing at lines that were gone --
+[FIXED 2026-09-22].** The same verb, two taps away on a phone, met a
+hazard the scrollback itself had already named and nobody had connected
+to the selection. `bssh_scrollback::clear` advances the base rather than
+renumbering, and its comment says why: *"a cleared line is gone rather
+than renumbered, so anything still holding a name for one must fail to
+find it rather than find a different line under the same name"*. A
+selection is two absolute line numbers -- exactly such a name -- and
+nothing in the view was listening.
+
+So after dropping the history the view still reported a selection. Copy
+stayed offered, and it answered: the evicted lines resolve to empty
+cells, the trailing-space trim takes what is left, and what reaches the
+clipboard is newlines. A copy that silently yields blanks is worse than
+one that is greyed out, and this one is reachable from the menu entry
+the paragraphs above added.
+
+**Only when the WHOLE selection has gone, and that half is guarded
+separately.** A ring evicting its oldest line under a selection that
+reaches down into the live screen has taken part of it, and the part
+that survives still copies what it says. Dropping the selection there
+would lose it because output arrived, which is the commonest thing a
+terminal does -- so the existing
+`a_selection_stays_on_its_text_when_the_scrollback_evicts` is the other
+sabotage's target, and it fails when the guard goes. Both seen to fail
+naming their own test.
+
+**And the finding came from a sweep rather than from use, which is worth
+the sentence.** Asking which methods the header declares and nothing in
+`src/` calls, `bssh_terminal_view::clear_selection` came back with the
+tests as its only callers -- the same shape as every other find in this
+section. The first run of that sweep reported nothing at all, because
+its threshold counted a declaration and a definition as two hits when a
+definition matches twice; an uncalled method scores three, so the check
+could not have fired. It found this the moment the threshold could.
+
 **And the modes a dead program left behind are a user's to clear too.**
 `reset_modes()` -- sec 5.3's soft reset, kept soft because the hard
 branch erases the screen a reconnect exists to preserve -- had one
@@ -6323,12 +6359,22 @@ would compete with the tap on every row. The lesson generalises past this
 screen: a front door that renders every field but cannot *do* half of what
 the other one does satisfies §14's rule only on paper.
 
-### 8.7 Portrait mode, one config menu, one input selector — **[AGREED 2026-09-11, NOT YET BUILT]**
+### 8.7 Portrait mode, one config menu, one input selector — **[AGREED 2026-09-11, BUILT EXCEPT WHERE NOTED]**
 
 Recorded from the copyright holder's own words rather than inferred, and
 deliberately ahead of the code: this changes decisions sec 8.5 currently
 states, so the document has to say the new thing before anything is
 built against the old one.
+
+**The heading said NOT YET BUILT until 2026-09-22**, by which point the
+column, the scroll area, the five-state selector, the arrangement
+setting and the scroll's own snap had all landed and said so in their
+own paragraphs -- so the section disagreed with itself, and the half a
+reader sees first was the stale one. What is still outstanding is named
+where it belongs rather than summarised here, and is three things: the
+`row` arrangement, which has no decision and no consumer; the kinetic
+flick, which is the device pass; and the snap radius, which sec 8.7
+asks to be configurable and has no settings plumbing.
 
 **The verdict that prompted it: "The UI on Android sucks and makes no
 sense."** Not a defect report -- a judgement about the structure, after

@@ -556,6 +556,7 @@ void bssh_terminal_view::attach_emulator(bssh_emulator *emulator) {
 			 * is a content change whether or not a cell was
 			 * damaged.
 			 */
+			drop_evicted_selection();
 			note_content_changed();
 		});
 	}
@@ -1999,6 +2000,30 @@ void bssh_terminal_view::select_all() {
 
 	update();
 	note_selection_changed();
+}
+
+void bssh_terminal_view::drop_evicted_selection() {
+	if (!has_selection()) return;
+
+	/*
+	 * bssh_scrollback::clear says why this is necessary rather than
+	 * tidy: "a cleared line is gone rather than renumbered, so anything
+	 * still holding a name for one must fail to find it". A selection is
+	 * exactly such a name -- two absolute line numbers -- and failing to
+	 * find them is not something the view noticed. It went on reporting
+	 * a selection, so Copy stayed enabled and answered with the blanks
+	 * those lines resolve to, which reaches the clipboard as newlines.
+	 *
+	 * Only when the WHOLE selection has gone. A ring evicting its oldest
+	 * line under a selection that reaches down into the live screen has
+	 * taken part of it, and the part that survives still copies what it
+	 * says -- dropping that would lose a selection because output
+	 * arrived, which is the commonest thing a terminal does.
+	 */
+	const qint64 base = history_base();
+	if (m_selection_anchor_line >= base || m_selection_focus_line >= base) return;
+
+	clear_selection();
 }
 
 void bssh_terminal_view::clear_selection() {

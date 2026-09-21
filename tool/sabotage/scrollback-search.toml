@@ -147,3 +147,28 @@ file = "src/ui/main_window.cpp"
 find = "\treset_terminal->setObjectName(QStringLiteral(\"menu_reset_terminal\"));"
 replace = "\treset_terminal->setObjectName(QStringLiteral(\"menu_reset_disabled\"));"
 expect = "the_history_can_be_dropped_without_the_remote"
+
+# A selection outlives the history it named.
+#
+# bssh_scrollback::clear advances the base so a cleared line fails to be
+# found rather than being found as a different line -- and the view held
+# exactly such a name in its selection and was never told. It went on
+# reporting a selection over lines that were gone, so Copy stayed offered
+# and answered with the blanks they resolve to.
+[[sabotage]]
+name = "a selection survives the history it pointed into"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tdrop_evicted_selection();"
+replace = ""
+expect = "dropping_the_history_takes_the_selection_with_it"
+
+# And the other way, which is the half that costs more if it is wrong: a
+# ring evicting its oldest line under a selection reaching down into the
+# live screen has taken PART of it, and dropping the whole thing there
+# would lose a selection because output arrived.
+[[sabotage]]
+name = "an evicted line takes a selection that is still mostly there"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_selection_anchor_line >= base || m_selection_focus_line >= base) return;"
+replace = "\t(void) base;"
+expect = "a_selection_stays_on_its_text_when_the_scrollback_evicts"

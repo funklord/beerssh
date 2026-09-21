@@ -8,5 +8,5 @@
 [[sabotage]]
 name = "the view never hears the history shrink"
 file = "src/ui/terminal_view.cpp"
-find = "\t\tm_scrollback_connection =\n\t\t        connect(m_emulator, &bssh_emulator::scrollback_changed, this, [this] {\n\t\t\t/*\n\t\t\t * The same three things this used to do, plus the two\n\t\t\t * it did not: the content revision and the reader's\n\t\t\t * event. A trim changes what the terminal HAS, which\n\t\t\t * is a content change whether or not a cell was\n\t\t\t * damaged.\n\t\t\t */\n\t\t\tnote_content_changed();\n\t\t});"
+find = "\t\tm_scrollback_connection =\n\t\t        connect(m_emulator, &bssh_emulator::scrollback_changed, this, [this] {\n\t\t\t/*\n\t\t\t * The same three things this used to do, plus the two\n\t\t\t * it did not: the content revision and the reader's\n\t\t\t * event. A trim changes what the terminal HAS, which\n\t\t\t * is a content change whether or not a cell was\n\t\t\t * damaged.\n\t\t\t */\n\t\t\tdrop_evicted_selection();\n\t\t\tnote_content_changed();\n\t\t});"
 expect = "shrinking_the_scrollback_brings_the_view_back_with_it"
