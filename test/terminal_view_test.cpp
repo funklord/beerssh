@@ -33,6 +33,7 @@
 #include "ui/terminal_view.h"
 #include "model/session_registry.h"
 #include "ui/pane_container.h"
+#include "ui/find_bar.h"
 #include "model/preset.h"
 #include <QWheelEvent>
 
@@ -4142,4 +4143,151 @@ void terminal_view_test::choosing_a_menu_entry_does_what_it_says() {
 	QCOMPARE(registry->count(), before - 1);
 
 	delete menu;
+}
+
+void terminal_view_test::the_edit_verbs_on_that_menu_act_too() {
+	/*
+	 * The rest of what act_on_terminal_menu made reachable. Copy, Paste,
+	 * Select All and Find were in the same position as Close and Clear:
+	 * present, enabled, and asserted only to exist.
+	 *
+	 * Open link is deliberately not here. Choosing it hands a URL to
+	 * QDesktopServices, which on a developer's machine opens a browser
+	 * -- a test that launches an application is one nobody can run twice
+	 * in a row, and the confirmation in front of it needs an answer no
+	 * headless suite can give.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	/*
+	 * SHOWN and sized, which the first version of this fixture was not.
+	 * An unshown window lays its pane out at nothing, the pane reports a
+	 * degenerate grid, and the container resizes the emulator to match --
+	 * so "selectable" went into a terminal about one column wide and Copy
+	 * honestly returned "s". The test measured the fixture.
+	 */
+	bssh_main_window window;
+	window.resize(1000, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("edits");
+	profile.host = QStringLiteral("edits.example");
+	bssh_session *session = registry->create(profile);
+	window.adopt_session(session);
+	QCoreApplication::processEvents();
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY2(view, "no pane, so no verb has anything to act on");
+	QVERIFY2(view->cols() > 20,
+	          qPrintable(QStringLiteral("the grid is %1 columns wide, so this fixture "
+	                                     "cannot hold the word it selects")
+	                             .arg(view->cols())));
+	QVERIFY2(!view->has_selection(), "the fixture is already selected");
+
+	bssh_emulator *emulator = session->emulator();
+	QVERIFY(emulator);
+	emulator->feed(QByteArrayLiteral("selectable"));
+	QCoreApplication::processEvents();
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	window.act_on_terminal_menu(
+	        menu, menu->findChild<QAction *>(QStringLiteral("terminal_select_all")));
+	QVERIFY2(view->has_selection(), "Select All selected nothing");
+
+	QGuiApplication::clipboard()->clear();
+	window.act_on_terminal_menu(
+	        menu, menu->findChild<QAction *>(QStringLiteral("terminal_copy")));
+	QVERIFY2(QGuiApplication::clipboard()->text().contains(QStringLiteral("selectable")),
+	          qPrintable(QStringLiteral("Copy put %1 on the clipboard")
+	                             .arg(QGuiApplication::clipboard()->text())));
+
+	/*
+	 * One line, deliberately: more than one line of content is what
+	 * paste_needs_confirming asks about, and a dialog is a thing this
+	 * suite cannot answer.
+	 */
+	emulator->take_output();
+	QGuiApplication::clipboard()->setText(QStringLiteral("pasted"));
+	window.act_on_terminal_menu(
+	        menu, menu->findChild<QAction *>(QStringLiteral("terminal_paste")));
+	QVERIFY2(emulator->take_output().contains(QByteArrayLiteral("pasted")),
+	          "Paste sent the remote nothing");
+
+	bssh_find_bar *bar = window.findChild<bssh_find_bar *>();
+	QVERIFY(bar);
+	QVERIFY2(!bar->isVisible(), "the find bar is up before anybody asked");
+
+	window.act_on_terminal_menu(
+	        menu, menu->findChild<QAction *>(QStringLiteral("terminal_find")));
+	QVERIFY2(bar->isVisible(), "choosing Find did not open the find bar");
+
+	delete menu;
+}
+
+void terminal_view_test::the_arrangement_verbs_on_that_menu_act_too() {
+	/*
+	 * Split and Show as Tab, which sec 6.4 put on this menu because a
+	 * one-session window hides its tab bar and a two-pane window has no
+	 * bar to drop a pane onto -- so for those arrangements this menu is
+	 * the only route, and until now nothing asserted it was a working
+	 * one.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(1200, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t first;
+	first.name = QStringLiteral("one");
+	first.host = QStringLiteral("one.example");
+	window.adopt_session(registry->create(first));
+
+	bssh_profile_t second;
+	second.name = QStringLiteral("two");
+	second.host = QStringLiteral("two.example");
+	window.adopt_session(registry->create(second));
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.panes();
+	QVERIFY(panes);
+	QCOMPARE(panes->pane_count(), 1);
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	QAction *split = menu->findChild<QAction *>(QStringLiteral("terminal_split"));
+	QVERIFY(split);
+	QVERIFY2(split->isEnabled(), "this window has no room to split, so the verb proves nothing");
+
+	window.act_on_terminal_menu(menu, split);
+	QCoreApplication::processEvents();
+	QCOMPARE(panes->pane_count(), 2);
+
+	/*
+	 * And back, through the entry that exists because a two-pane window
+	 * has no tab bar to drop onto.
+	 */
+	QMenu *after = window.build_terminal_menu(&window);
+	QVERIFY(after);
+	window.act_on_terminal_menu(
+	        after, after->findChild<QAction *>(QStringLiteral("terminal_show_as_tab")));
+	QCoreApplication::processEvents();
+	QCOMPARE(panes->pane_count(), 1);
+
+	delete menu;
+	delete after;
 }

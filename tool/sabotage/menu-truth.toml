@@ -37,3 +37,23 @@ file = "src/ui/main_window.cpp"
 find = "\tconnect(QGuiApplication::clipboard(), &QClipboard::dataChanged,\n\t         this, &bssh_main_window::refresh_menu_bar);"
 replace = "\t/* sabotage: no clipboard subscription */"
 expect = "both_menus_agree_on_when_paste_is_offered"
+
+# Choosing Copy copies nothing.
+#
+# Another entry that act_on_terminal_menu made assertable: before the
+# seam the verb could be shown, enabled, and wired to a branch that did
+# nothing, and only a person with a mouse would ever find out.
+[[sabotage]]
+name = "choosing Copy puts nothing on the clipboard"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (!selected.isEmpty()) QGuiApplication::clipboard()->setText(selected);\n\t\treturn;"
+replace = "\t\treturn;"
+expect = "the_edit_verbs_on_that_menu_act_too"
+
+# Choosing Split does not split.
+[[sabotage]]
+name = "choosing Split does not split"
+file = "src/ui/main_window.cpp"
+find = "\tconst QAction *split = menu->findChild<QAction *>(QStringLiteral(\"terminal_split\"));\n\tif (chosen == split) {\n\t\tsplit_beside_current();"
+replace = "\tconst QAction *split = menu->findChild<QAction *>(QStringLiteral(\"terminal_split\"));\n\tif (chosen == split) {"
+expect = "the_arrangement_verbs_on_that_menu_act_too"

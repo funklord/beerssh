@@ -3807,6 +3807,22 @@ moving the composition out of the UI shell into code the suite can call.
 It adds no behaviour; `show_terminal_menu` builds, execs and hands the
 chosen action to it.
 
+**Six more verbs followed, and one of them caught the FIXTURE rather
+than the code.** Select All, Copy, Paste, Find, Split and Show as Tab
+are asserted to act now. Copy first returned `"s"` -- one character --
+because the window in that fixture was never shown, so its pane laid out
+at nothing, reported a degenerate grid, and the container resized the
+emulator to match. The verb was right and the terminal was one column
+wide. The fixture shows and sizes the window now, and asserts
+`cols() > 20` **before** selecting a ten-character word, so the same
+mistake fails saying "the grid is N columns wide" rather than quietly
+measuring a one-column terminal.
+
+**Open link is deliberately excluded**, and this is the record of why:
+choosing it hands a URL to `QDesktopServices`, so the test would launch
+a browser, and the confirmation in front of it wants an answer no
+headless suite can give.
+
 **What it bought, measured**: gutting the Close, Clear Scrollback and
 Reset handlers -- each leaving its entry present and enabled -- is now
 three caught sabotages against a 624-passing baseline. **This morning

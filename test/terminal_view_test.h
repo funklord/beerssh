@@ -144,6 +144,8 @@ private slots:
 	void the_history_can_be_dropped_without_the_remote();
 	void a_substituted_font_says_so_somewhere_a_user_looks();
 	void choosing_a_menu_entry_does_what_it_says();
+	void the_edit_verbs_on_that_menu_act_too();
+	void the_arrangement_verbs_on_that_menu_act_too();
 	void a_zoom_past_the_limit_still_steps_back();
 	void a_cursor_under_the_floor_is_lifted_like_text_is();
 };
