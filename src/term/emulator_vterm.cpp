@@ -2321,6 +2321,33 @@ void bssh_emulator::send_char(char32_t ch, quint8 modifiers) {
 		}
 	}
 
+	/*
+	 * And the other half of the same rule, which was missing: a
+	 * character with NO control byte -- a comma, a digit, a bracket
+	 * beyond the @ to _ run -- must arrive as itself.
+	 *
+	 * libvterm emits CSI u for any non-letter carrying a modifier,
+	 * whether or not the remote asked for a keyboard protocol, so
+	 * Ctrl+comma reached a plain shell as ESC [ 44 ; 5 u and landed on
+	 * its command line as text. Measured, not supposed: the test next to
+	 * this one failed with exactly those bytes before this existed.
+	 *
+	 * Dropping the Ctrl is what a VT100 did with a key it had no code
+	 * for, and Alt is kept so that libvterm still prefixes ESC -- Alt
+	 * alone was never broken, because its own path does not need CSI u.
+	 *
+	 * What is NOT done here, deliberately: xterm additionally maps
+	 * Ctrl+2 to NUL and Ctrl+3 through Ctrl+8 to ESC, FS, GS, RS, US and
+	 * DEL. Those are a keyboard's historical wiring rather than this
+	 * rule, and adding them is a decision rather than a fix.
+	 */
+	if (modifiers & MOD_CTRL) {
+		const quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);
+		vterm_keyboard_unichar(m_private->vt, ch,
+		                        static_cast<VTermModifier>(without_ctrl));
+		return;
+	}
+
 	vterm_keyboard_unichar(m_private->vt, ch, static_cast<VTermModifier>(modifiers));
 }
 

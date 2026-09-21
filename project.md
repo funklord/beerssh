@@ -3806,6 +3806,37 @@ best one it can:
   silently getting 2 could not tell the difference.
 - **Legacy** — what everything falls back to, with its ambiguities intact.
 
+  **And the legacy tier was not legacy, which was measured on 2026-09-21
+  rather than suspected.** `send_char` states the rule -- *"A remote that
+  has not enabled a keyboard protocol must get exactly what a VT100 would
+  have sent, or it sees a sequence it cannot parse"* -- and enforced it
+  only for the `@` to `_` run, which is the set that HAS a control byte.
+  Everything else fell through to libvterm, whose
+  `vterm_keyboard_unichar` emits `CSI u` for any non-letter carrying a
+  modifier whether or not anybody asked. So **Ctrl+comma reached a plain
+  shell as `ESC [ 44 ; 5 u`** and landed on its command line as text.
+  The test was written to fail first and did, printing those bytes; the
+  fix drops the Ctrl for a character with no control byte, which is what
+  a VT100 did with a key it had no code for. Alt keeps its `ESC` prefix,
+  since Alt alone never took the `CSI u` road and was never broken.
+
+  **Three assertions rather than one, because the boundary is the
+  interesting part**: `Ctrl+,` and `Ctrl+1` arrive as themselves, `Ctrl+[`
+  is still `ESC` -- it has a control byte, so the rule does not reach it
+  -- and `Alt+,` is still `ESC ,`. Guarded in
+  `tool/sabotage/keys-to-the-wire.toml`, which is where the key-to-wire
+  chain's other three edits live.
+
+  **What is deliberately NOT done**: xterm additionally maps `Ctrl+2` to
+  NUL and `Ctrl+3` through `Ctrl+8` to `ESC`, `FS`, `GS`, `RS`, `US` and
+  `DEL`. That is a keyboard's historical wiring rather than this rule,
+  and adding it is a decision rather than a fix.
+
+  **How it survived**: every test of this area asserts a protocol that
+  was enabled first, because that is the half that is interesting to
+  write. The fallback is what a shell gets when nothing was negotiated,
+  and nothing asked it anything until a chord change made somebody look.
+
 The sibling `fuzzypickles` TUI probes exactly these tiers from the client
 side (see its `gui/project.md`); BeerSSH is the other half of that
 conversation, and should let it reach its best tier.

@@ -1394,3 +1394,59 @@ void input_router_test::the_custom_row_note_names_only_words_that_parse() {
 		                            .arg(word)));
 	}
 }
+
+void input_router_test::ctrl_punctuation_reaches_a_legacy_shell_as_a_vt100_would() {
+	/*
+	 * bssh_emulator::send_char states the rule this asserts: "A remote
+	 * that has not enabled a keyboard protocol must get exactly what a
+	 * VT100 would have sent, or it sees a sequence it cannot parse." It
+	 * enforces it for the @ to _ range, which is the set with a control
+	 * byte, and everything else falls through to libvterm --
+	 * vterm_keyboard_unichar emits CSI u for any non-letter with a
+	 * modifier, whether or not anybody asked.
+	 *
+	 * So this is about the keys that HAVE no control byte: a comma, a
+	 * digit. In a plain shell they must arrive as themselves, because an
+	 * escape sequence there lands on the command line as text.
+	 *
+	 * Deliberately with no protocol enabled. The modern encodings are
+	 * tested next door and are not in question: what is in question is
+	 * the fallback, which is what a shell that never asked will get.
+	 */
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	QCOMPARE(press(router, emulator, Qt::Key_Comma, Qt::ControlModifier,
+	                QStringLiteral(",")),
+	          QByteArrayLiteral(","));
+
+	QCOMPARE(press(router, emulator, Qt::Key_1, Qt::ControlModifier,
+	                QStringLiteral("1")),
+	          QByteArrayLiteral("1"));
+
+	/*
+	 * A bracket beyond the @ to _ run, which is the case that shows the
+	 * boundary is the CONTROL BYTE and not "punctuation": Ctrl+[ is ESC
+	 * and stays ESC, while Ctrl+, has no byte of its own.
+	 */
+	QCOMPARE(press(router, emulator, Qt::Key_BracketLeft, Qt::ControlModifier,
+	                QStringLiteral("[")),
+	          QByteArrayLiteral("\x1b"));
+
+	/*
+	 * Alt keeps its ESC prefix, which was never broken and must not be
+	 * broken by dropping the Ctrl: the two modifiers take different
+	 * roads through libvterm.
+	 */
+	QCOMPARE(press(router, emulator, Qt::Key_Comma, Qt::AltModifier,
+	                QStringLiteral(",")),
+	          QByteArrayLiteral("\x1b,"));
+
+	/*
+	 * And the control-byte range still wins, which is what says this did
+	 * not simply switch the modern path off: Ctrl+C is ETX.
+	 */
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::ControlModifier,
+	                QStringLiteral("\x03")),
+	          QByteArrayLiteral("\x03"));
+}

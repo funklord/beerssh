@@ -49,3 +49,18 @@ file = "src/ui/terminal_view.cpp"
 find = "\t\t\tm_emulator->send_mouse_move(screen_row_for_line(line), col, 0);\n\t\t\tm_emulator->send_mouse_button(button, true, 0);"
 replace = "\t\t\tm_emulator->send_mouse_move(screen_row_for_line(line), col, 0);"
 expect = "a_mouse_report_reaches_the_wire"
+
+# The legacy fallback emits CSI u again.
+#
+# Restores the state measured on 2026-09-21: a character with no control
+# byte -- a comma, a digit -- reaching a shell that never enabled a
+# keyboard protocol as ESC [ 44 ; 5 u, which is text on its command line.
+# Nothing else changes, which is what made it live this long: every
+# modern-protocol test still passes, because the modern path is not the
+# one at fault.
+[[sabotage]]
+name = "ctrl on a key with no control byte goes back to CSI u"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (modifiers & MOD_CTRL) {\n\t\tconst quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);"
+replace = "\tif (false) {\n\t\tconst quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);"
+expect = "ctrl_punctuation_reaches_a_legacy_shell_as_a_vt100_would"

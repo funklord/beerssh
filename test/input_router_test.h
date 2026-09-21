@@ -95,6 +95,7 @@ private slots:
 	void caps_lock_can_be_made_to_send_ctrl();
 	void a_chord_key_sends_one_press_not_a_sticky_modifier();
 	void every_stolen_chord_is_the_table_and_nothing_else();
+	void ctrl_punctuation_reaches_a_legacy_shell_as_a_vt100_would();
 };
 
 #endif /* BSSH_INPUT_ROUTER_TEST_H */
