@@ -2625,6 +2625,17 @@ decision.**
   `bssh_layout_slot_spec()` owns it now, beside the parser the way the
   key row pairs its two, so the round trip is a property of the code
   rather than of whoever calls it.
+  **All three of the built answers are now asserted at their controls**,
+  not only this one. The key row's chooser and the colour scheme's were
+  reasoned about rather than checked -- both iterate `all()`, so both
+  must list it -- and that reasoning was equally true of `notify()`, the
+  palette's own push and the selection handles, each correct one layer
+  down and reaching nobody. Both hold; the sweep found nothing, which is
+  worth recording because the colour scheme is the feature the other two
+  were copied FROM, so a hole in the pattern would have been there
+  first. Neither combo had an `objectName` until now, which is why one
+  hop was assertable and two were not.
+
   **And the last hop is asserted on the CONTROL, not the catalogue.**
   `bssh_keyboard_layouts()` can be perfectly right while the chooser was
   built from something else, and every assertion about the catalogue

@@ -168,6 +168,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	 * picking up the phone.
 	 */
 	m_key_row = new QComboBox(this);
+	m_key_row->setObjectName(QStringLiteral("preset-key-row"));
 	for (const bssh_key_row_layout_t &layout : bssh_key_row_catalog::instance().all()) {
 		m_key_row->addItem(layout.display_name, layout.id);
 		m_key_row->setItemData(m_key_row->count() - 1, layout.description, Qt::ToolTipRole);

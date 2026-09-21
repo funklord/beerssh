@@ -8665,3 +8665,50 @@ void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
 	QVERIFY2(chooser->findData(QStringLiteral("us-intl")) >= 0,
 	          "the chooser lost the shipped layouts");
 }
+
+/*
+ * sec 6.3's answer is a reserved `custom' entry in a catalogue, and a
+ * catalogue entry nobody can choose is the same nothing as no entry.
+ *
+ * Three features share that mechanism now -- the colour scheme, the key
+ * row and the keyboard layout -- and until this only the layout's last
+ * hop was asserted. The other two were reasoned about: both choosers
+ * iterate all(), so both must list it. That reasoning is exactly what
+ * was true of bssh_platform::notify(), the palette's push and the
+ * selection handles, each of which was correct one layer down and
+ * reached nobody.
+ */
+void layout_test::every_custom_entry_reaches_the_control_that_offers_it() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+
+	/*
+	 * The key row's, which this session added. Its custom entry is born
+	 * as a copy of the default, so it exists from the first run and
+	 * needs nothing written before the chooser should list it.
+	 */
+	{
+		bssh_preset_editor editor(&store, bssh_preset_editor::DESKTOP);
+		QComboBox *rows =
+		        editor.findChild<QComboBox *>(QStringLiteral("preset-key-row"));
+		QVERIFY2(rows, "the preset editor has no key row chooser");
+		QVERIFY2(rows->findData(QStringLiteral("custom")) >= 0,
+		          "a user can compose a key row and not choose it");
+		QVERIFY2(rows->findData(QStringLiteral("default")) >= 0,
+		          "the chooser lost the shipped rows");
+	}
+
+	/*
+	 * And the colour scheme's, which predates this session and is the
+	 * feature the other two were copied from -- so if the pattern has a
+	 * hole, it has it here first.
+	 */
+	{
+		bssh_font_picker picker;
+		QComboBox *schemes =
+		        picker.findChild<QComboBox *>(QStringLiteral("font-picker-scheme"));
+		QVERIFY2(schemes, "the font picker has no scheme chooser");
+		QVERIFY2(schemes->findData(QStringLiteral("custom")) >= 0,
+		          "a user can edit the custom palette and not choose it");
+	}
+}

@@ -239,6 +239,7 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	}
 
 	m_scheme = new QComboBox(this);
+	m_scheme->setObjectName(QStringLiteral("font-picker-scheme"));
 	m_scheme->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
 	for (const bssh_colour_scheme_t &scheme : bssh_colour_scheme_catalog::instance().all()) {
