@@ -1610,7 +1610,29 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		 * strength would leave the one object most likely to be the
 		 * reason somebody reached for the slider.
 		 */
-		const QColor cursor_colour(bssh_dim(m_scheme.cursor, m_text_brightness));
+		/*
+		 * sec 9.3's floor reaches the cursor too, and it did not.
+		 *
+		 * The setting says it lifts "a drawn colour ... when the
+		 * scheme's own value falls under it", and a cursor is a drawn
+		 * colour a person picks: the colour editor offers Background,
+		 * Text and Cursor, so a cursor that vanishes into its own
+		 * background is reachable through the feature that exists to
+		 * choose one. The five shipped schemes all set cursor equal to
+		 * foreground, which is why nothing had ever noticed -- their
+		 * cursor clears the floor because their TEXT does.
+		 *
+		 * Against the background, before the dim, in that order: the
+		 * comment on the text path twenty lines up says why -- the
+		 * floor lifts until it clears, so a dim applied first is simply
+		 * undone.
+		 */
+		QRgb cursor_ink = m_scheme.cursor;
+		if (m_raise_contrast)
+			cursor_ink = bssh_raise_contrast(cursor_ink,
+			                                   effective_background().rgb());
+
+		const QColor cursor_colour(bssh_dim(cursor_ink, m_text_brightness));
 
 		/*
 		 * An UNFOCUSED terminal gets a hollow block, whatever shape it
@@ -1663,7 +1685,21 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 				painter.setFont(cell_font(family,
 				                            cell.attrs & bssh_cell_t::BOLD,
 				                            cell.attrs & bssh_cell_t::ITALIC));
-				painter.setPen(m_background);
+				/*
+				 * The screen's background, and it needs no
+				 * floor of its own: the block above was lifted
+				 * AGAINST this very colour, so the glyph drawn
+				 * on it clears the floor by construction
+				 * whenever the setting is on -- and when it is
+				 * off, faithful colours are what was asked for.
+				 *
+				 * Written down because the obvious edit here is
+				 * to raise it against the cursor, which was
+				 * tried: it is a no-op in every reachable case,
+				 * and a change nothing can observe is one the
+				 * next reader has to re-derive.
+				 */
+				painter.setPen(effective_background());
 				painter.drawText(QPointF(x, m_baseline + m_screen->cursor_row() * m_cell_height),
 				                  QString::fromUcs4(&cell.ch, 1));
 			}

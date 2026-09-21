@@ -3738,3 +3738,91 @@ void terminal_view_test::a_zoom_past_the_limit_still_steps_back() {
 
 	QCOMPARE(view->font_point_size(), BSSH_PRESET_MAX_POINT_SIZE - 1);
 }
+
+void terminal_view_test::a_cursor_under_the_floor_is_lifted_like_text_is() {
+	/*
+	 * sec 9.3's floor says it lifts "a drawn colour when the scheme's own
+	 * value falls under it", and the cursor is a drawn colour a person
+	 * picks -- the colour editor offers Background, Text and Cursor. It
+	 * was the one drawn thing the floor did not reach.
+	 *
+	 * Unreachable with a shipped scheme, which is why nothing noticed:
+	 * all five set cursor equal to foreground, so their cursor clears the
+	 * floor because their text does. The custom scheme is the one a
+	 * person makes by hand, and it is the case this guards.
+	 */
+	bssh_colour_scheme_t hidden;
+	hidden.id = QStringLiteral("custom");
+	hidden.display_name = QStringLiteral("Custom");
+	hidden.dark = true;
+	hidden.background = qRgb(0, 0, 0);
+	hidden.foreground = qRgb(255, 255, 255);
+	hidden.cursor = qRgb(16, 16, 16);
+	for (int i = 0; i < 16; ++i) hidden.ansi[i] = qRgb(255, 255, 255);
+
+	QVERIFY2(bssh_contrast_ratio(hidden.cursor, hidden.background) < BSSH_CONTRAST_FLOOR,
+	          "the fixture's cursor already clears the floor, so it proves nothing");
+
+	bssh_colour_scheme_catalog::instance().set_custom(hidden);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	view.set_colour_scheme(QStringLiteral("custom"));
+	view.set_cursor_style(QStringLiteral("block"));
+
+	/* grab() renders child widgets, and a scrollbar is not the cursor. */
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_NONE);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	view.activateWindow();
+	view.setFocus();
+	QTRY_VERIFY2(view.hasFocus(), "an unfocused view draws an outline, not a block");
+
+	/* An empty cell under the cursor, so the block is what is sampled. */
+	emulator.feed(QByteArrayLiteral("\x1b[2J\x1b[H"));
+
+	/*
+	 * Found rather than computed: with the screen cleared and no
+	 * scrollbar, the block is the only thing on the widget that is not
+	 * the background, so the first pixel that differs IS the cursor.
+	 * Asking for its rectangle would need the grid's inset, which is the
+	 * view's own business and not a thing to reproduce here.
+	 */
+	const auto cursor_pixel = [&view](const QColor &background) {
+		const QImage frame = view.grab().toImage();
+		for (int y = 0; y < frame.height(); ++y) {
+			for (int x = 0; x < frame.width(); ++x) {
+				const QColor here = frame.pixelColor(x, y);
+				if (here != background) return here;
+			}
+		}
+		return background;
+	};
+
+	const QColor ground(hidden.background);
+
+	view.set_raise_contrast(true);
+	const QColor lifted = cursor_pixel(ground);
+	QVERIFY2(lifted != ground, "nothing but background was drawn: no cursor to measure");
+	QVERIFY2(bssh_contrast_ratio(lifted.rgb(), hidden.background) >= BSSH_CONTRAST_FLOOR,
+	          qPrintable(QStringLiteral("the cursor was drawn at %1:1 against its own "
+	                                     "background, under the %2:1 floor")
+	                             .arg(bssh_contrast_ratio(lifted.rgb(), hidden.background))
+	                             .arg(BSSH_CONTRAST_FLOOR)));
+
+	/*
+	 * And with the setting OFF the faithful value is drawn, which is what
+	 * says this measures the floor rather than a constant: a view that
+	 * always lifted would pass the assertion above and fail this one.
+	 */
+	view.set_raise_contrast(false);
+	const QColor faithful = cursor_pixel(ground);
+	QVERIFY2(faithful != ground, "nothing but background was drawn with the setting off");
+	QVERIFY2(bssh_contrast_ratio(faithful.rgb(), hidden.background) < BSSH_CONTRAST_FLOOR,
+	          "the cursor was lifted with the setting off, so the setting does nothing");
+}

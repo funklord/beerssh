@@ -7471,6 +7471,50 @@ question is worth asking because "not persisted" is a choice a phone
 might reasonably want reversed -- a session that is always read outdoors
 is a host preference wearing a gesture's clothes.
 
+**The floor did not reach the cursor, and one scheme in five could
+show it.** Found 2026-09-21 by asking which drawn colours go through
+`bssh_raise_contrast`: the cell foreground does, after both inverse
+swaps and before the dim, and the pane grip does unconditionally
+because it is chrome. The cursor did not. It took the brightness dim
+and nothing else.
+
+**The setting's own words are what make this a defect rather than a
+choice** -- it lifts *"a drawn colour when the scheme's own value falls
+under it"*, it is ON by default, and the colour editor offers exactly
+three colours to pick: Background, Text and Cursor. So a person can
+choose a cursor that vanishes into their own background, have their
+TEXT rescued on the same screen, and watch the cursor stay gone.
+
+**Unreachable with a shipped scheme, which is why it lasted.** All five
+set `cursor` equal to `foreground`, so their cursor clears the floor
+because their text does -- the five cases anybody would have tested are
+the five that cannot fail. Only `custom`, the scheme a person makes by
+hand, reaches it. A remote cannot: OSC 10, 11 and 4 answer queries here
+and refuse to set, so this is the user's own choice and nobody else's.
+
+**Lifted against `effective_background()`, before the dim.** The
+reference is the reverse-video-aware background, because DECSCNM flips
+what the cursor is actually drawn over; and the order is the one the
+text path twenty lines above already argues for, since the floor lifts
+until it clears and a dim applied first is simply undone.
+
+**The obvious companion edit was written, measured and reverted.**
+Raising the block's punched-out glyph against the cursor looks
+necessary and is a no-op in every reachable case: the glyph is drawn in
+the very colour the block was lifted AGAINST, so it clears the floor by
+construction whenever the setting is on, and when it is off faithful
+colours are what was asked for. The reasoning is now a comment at that
+site rather than code, because a change nothing can observe is one the
+next reader has to re-derive.
+
+**Guarded by a pixel test.** `a_cursor_under_the_floor_is_lifted_like_text_is`
+pushes a custom scheme whose cursor is `#101010` on black, asserts the
+fixture really is under the floor before measuring anything, then
+samples what was actually painted -- and asserts the faithful value is
+drawn with the setting OFF, so a view that always lifted would fail.
+The edit that removes the lift was seen to fail against a 618-passing
+baseline.
+
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every
 bundled font it asserts uniform advance width, presence of the required

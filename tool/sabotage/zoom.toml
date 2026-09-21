@@ -133,3 +133,18 @@ file = "src/ui/main_window.cpp"
 find = "\tQAction *zoom_in = text_size->addAction(QStringLiteral(\"Zoom &In\"));"
 replace = "\tQAction *zoom_in = menu->addAction(QStringLiteral(\"Zoom &In\"));"
 expect = "the_terminal_menu_offers_the_three_verbs_in_order"
+
+# The contrast floor stops reaching the cursor.
+#
+# Restores the state found on 2026-09-21: the setting lifts a scheme's
+# text and leaves its cursor where it was, so a custom scheme whose
+# cursor falls under sec 9.3's floor draws an invisible one while the
+# text on the same screen is rescued. Unreachable with a shipped scheme,
+# which is why it lived this long -- all five set cursor equal to
+# foreground.
+[[sabotage]]
+name = "the floor does not reach the cursor"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (m_raise_contrast)\n\t\t\tcursor_ink = bssh_raise_contrast(cursor_ink,"
+replace = "\t\tif (false)\n\t\t\tcursor_ink = bssh_raise_contrast(cursor_ink,"
+expect = "a_cursor_under_the_floor_is_lifted_like_text_is"
