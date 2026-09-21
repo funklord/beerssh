@@ -32,3 +32,29 @@ file = "src/ui/pane_container.cpp"
 find = "\tif (column && m_scroll->widget() != m_splitter) {"
 replace = "\tif (false && m_scroll->widget() != m_splitter) {"
 expect = "an_overflowing_column_keeps_every_pane_reachable"
+
+# The scroll settles on a pane top when a pan ends (sec 8.7's "a terminal
+# starts at the top of the viewport rather than half off it"). Two edits,
+# because the math and the wiring fail independently and only one of them
+# is visible from a test that calls the helper.
+
+# The release stops settling. The drag still scrolls, so the column is
+# usable and simply leaves a terminal half off the top -- which is the
+# defect this was written for and is invisible to anything asserting that
+# the pan moved.
+[[sabotage]]
+name = "letting go of a pan leaves the column where the finger did"
+file = "src/ui/terminal_view.cpp"
+find = "\t\telse emit column_scroll_settled();"
+replace = ""
+expect = "letting_go_of_a_pan_settles_the_column"
+
+# The end of the scroll range stops being a candidate, so a settle near
+# the bottom is hauled back up to the last reachable pane top and the
+# final terminal can never be seen whole.
+[[sabotage]]
+name = "the bottom of the column is not somewhere the scroll may settle"
+file = "src/ui/pane_snap.h"
+find = "\tint best = max_offset;"
+replace = "\tint best = 0;"
+expect = "a_column_scroll_settles_on_a_pane_top"

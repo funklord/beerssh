@@ -489,6 +489,132 @@ void layout_test::a_column_divider_is_magnetic_to_the_halfway_line() {
 	QVERIFY(total - floored >= cell);
 }
 
+void layout_test::a_column_scroll_settles_on_a_pane_top() {
+	/*
+	 * sec 8.7: "The column's SCROLLING snaps too, so a terminal starts at
+	 * the top of the viewport rather than half off it." The pure half,
+	 * asserted without a widget for the same reason the divider's is.
+	 */
+	const int tops[] = { 0, 200, 400, 600 };
+	const int count = int(sizeof(tops) / sizeof(tops[0]));
+	const int max_offset = 500;
+
+	/*
+	 * A finger that stopped just past a top comes back to it, and one
+	 * that stopped just short goes on to it. Both directions, because a
+	 * settle that only ever rounded one way would pass the first of
+	 * these and leave the terminal half off the top in the other.
+	 */
+	QCOMPARE(bssh_settle_column_scroll(215, tops, count, max_offset), 200);
+	QCOMPARE(bssh_settle_column_scroll(385, tops, count, max_offset), 400);
+
+	/*
+	 * The end of the range is a candidate alongside the tops. The last
+	 * pane starts at 600, which the scrollbar cannot reach, so a drag
+	 * near the bottom settles showing that pane's bottom rather than
+	 * being hauled back up to 400.
+	 */
+	QCOMPARE(bssh_settle_column_scroll(480, tops, count, max_offset), max_offset);
+
+	/*
+	 * And a tie goes to the smaller offset rather than to whichever way
+	 * the arithmetic happened to round.
+	 */
+	QCOMPARE(bssh_settle_column_scroll(300, tops, count, max_offset), 200);
+
+	/* Out of range in either direction lands inside it. */
+	QCOMPARE(bssh_settle_column_scroll(-40, tops, count, max_offset), 0);
+	QCOMPARE(bssh_settle_column_scroll(9000, tops, count, max_offset), max_offset);
+}
+
+void layout_test::letting_go_of_a_pan_settles_the_column() {
+	/*
+	 * And the wiring, which the case above cannot see: a correct function
+	 * is not a working feature. The gesture is a Pan drag in a column
+	 * tall enough to scroll, and what is asserted is that RELEASING it
+	 * leaves the viewport on a pane top -- not that the helper agrees
+	 * with itself.
+	 */
+	/* The body-drag path is the touch one, so the gesture needs a thumb. */
+	const forced_touch_t touch(1);
+
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(400);
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+
+	QList<bssh_session *> many;
+	for (int i = 0; i < 6; ++i)
+		many.append(registry.create(named(QStringLiteral("p%1").arg(i))));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(400, 400);
+	layout.set_intent(many);
+	QCoreApplication::processEvents();
+	QVERIFY(QTest::qWaitForWindowExposed(&container));
+
+	QScrollArea *area = container.findChild<QScrollArea *>();
+	QVERIFY(area);
+	QScrollBar *bar = area->verticalScrollBar();
+	QVERIFY(bar);
+	QVERIFY2(bar->maximum() > 0, "the column did not overflow, so there is "
+	                              "nothing for a settle to land on");
+
+	bssh_terminal_view *view = container.view_at(0);
+	QVERIFY(view);
+	view->set_input_mode(BSSH_INPUT_COLUMN_SCROLL);
+
+	/*
+	 * Park the viewport deliberately between two pane tops, which is the
+	 * state this feature exists to remove. Asserted first, so a settle
+	 * that did nothing cannot pass by the column happening to sit on a
+	 * top already.
+	 */
+	QList<int> tops;
+	for (int i = 0; i < container.pane_count(); ++i) {
+		bssh_terminal_view *pane = container.view_at(i);
+		QVERIFY(pane);
+		tops.append(pane->y());
+	}
+	QVERIFY(tops.size() >= 2);
+
+	const int between = (tops.at(0) + tops.at(1)) / 2 + 3;
+	QVERIFY(between < bar->maximum());
+	bar->setValue(between);
+	QVERIFY2(!tops.contains(bar->value()),
+	          "the column was parked on a pane top, so a settle that does "
+	          "nothing would pass");
+
+	/*
+	 * A drag of a few pixels and then a release, sent as explicit events
+	 * for the reason the Pan test beside this one is written that way:
+	 * QTest::mouseMove posts to the window rather than handing the view
+	 * a move with the button down, and the gesture never starts.
+	 */
+	const QPoint from(view->cell_width() + 1, view->cell_height() + 1);
+	const QPoint to = from - QPoint(0, 6);
+	QMouseEvent press(QEvent::MouseButtonPress, from, view->mapToGlobal(from),
+	                   Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+	QMouseEvent moved(QEvent::MouseMove, to, view->mapToGlobal(to),
+	                   Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QMouseEvent release(QEvent::MouseButtonRelease, to, view->mapToGlobal(to),
+	                     Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(view, &press);
+	QCoreApplication::sendEvent(view, &moved);
+
+	/* The drag itself moved it, which is the existing behaviour and the
+	 * state the release has to settle. */
+	QVERIFY2(bar->value() != between, "the Pan drag did not scroll at all, "
+	                                   "so the release has nothing to settle");
+
+	QCoreApplication::sendEvent(view, &release);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(tops.contains(bar->value()) || bar->value() == bar->maximum(),
+	          "letting go of a pan left the column between two terminals");
+}
+
 void layout_test::a_column_holds_every_session_and_dissolves_the_tabs() {
 	const forced_touch_t column(1);
 

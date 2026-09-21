@@ -360,6 +360,8 @@ void bssh_pane_container::rebuild() {
 		 */
 		connect(view, &bssh_terminal_view::column_scroll_requested,
 		         this, &bssh_pane_container::scroll_column_by);
+		connect(view, &bssh_terminal_view::column_scroll_settled,
+		         this, &bssh_pane_container::settle_column_scroll);
 
 		connect(view, &bssh_terminal_view::focus_lost, this, [session] {
 			if (session->emulator()) session->emulator()->set_focused(false);
@@ -561,6 +563,26 @@ void bssh_pane_container::scroll_column_by(int delta) {
 	 * to the range on its own, so a drag past either end simply stops.
 	 */
 	bar->setValue(bar->value() - delta);
+}
+
+void bssh_pane_container::settle_column_scroll() {
+	if (!m_scroll || m_scroll->widget() != m_splitter) return;
+
+	QScrollBar *bar = m_scroll->verticalScrollBar();
+	if (!bar) return;
+
+	/*
+	 * The pane tops in the splitter's own coordinates, which is the space
+	 * the scrollbar's value is in -- the splitter IS the scroll area's
+	 * widget, so a pane's y() and a scroll position are the same number.
+	 */
+	QList<int> tops;
+	for (bssh_terminal_view *view : m_views) {
+		if (view) tops.append(view->y());
+	}
+
+	bar->setValue(bssh_settle_column_scroll(bar->value(), tops.constData(),
+	                                         int(tops.size()), bar->maximum()));
 }
 
 void bssh_pane_container::equalize_panes() {

@@ -616,6 +616,15 @@ signals:
 	void column_scroll_requested(int delta);
 
 	/*
+	 * That drag ended (sec 8.7): the container settles its scroll on a
+	 * pane top, so a terminal starts at the top of the viewport rather
+	 * than half off it. Emitted only when the drag actually moved --
+	 * a tap has nothing to settle and would jump the column under a
+	 * finger that never asked it to.
+	 */
+	void column_scroll_settled();
+
+	/*
 	 * A tap that selected nothing: somebody asking to type (sec 6.2).
 	 *
 	 * Emitted whichever keyboard is in use, and BEFORE the system-panel

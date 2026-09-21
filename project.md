@@ -6614,6 +6614,37 @@ section asks for -- there is no settings plumbing for it yet. And the
 resize/snap FEEL owes the same device pass every touch surface here does:
 the model is tested, the thumb is not.
 
+**The column's scrolling snaps too, BUILT 2026-09-22.** The section
+asked for it in the same breath as the divider -- "so a terminal starts
+at the top of the viewport rather than half off it" -- and it had been
+grouped with the kinetic flick as part of the device pass. It is not the
+same kind of thing. A flick needs a thumb because it is about velocity
+and easing; where a released drag SETTLES is geometry, pure, and
+assertable with no device at all, which is what `bssh_snap_column_divider`
+already demonstrated for the divider one paragraph up. Grouping the two
+is how a piece of testable work sat behind a hardware dependency it did
+not have.
+
+`bssh_settle_column_scroll` in `ui/pane_snap.h` takes the offset the
+finger left, the pane tops and the end of the scroll range, and returns
+where the viewport lands; the view emits on release only when the drag
+actually moved, and the container gathers the tops and sets the bar. The
+drag itself stays free -- a snap applied to every step would fight the
+finger -- so it is the release that lands it.
+
+**Nearest top, not a magnetic radius, and that is a reading rather than
+a quotation.** The divider takes a radius because positions outside it
+are legitimate: one terminal genuinely larger than the other. A scroll
+has no such position to protect -- the thing the radius would leave
+reachable is exactly "a terminal half off the top", which is what the
+sentence above objects to. The end of the range is a candidate alongside
+the tops, so a last pane shorter than the viewport settles showing its
+bottom rather than being hauled back to a top the scrollbar cannot
+reach. Written down for the same reason the full-screen reading below
+is: a later session should not have to re-derive it from the gesture.
+Guarded by two more edits in `tool/sabotage/scrollable-column.toml`,
+both seen to fail naming their own test.
+
 **"Full-screen" is the one-terminal case, read from the geometry.** A
 two-pane column cannot reach one-full-screen by dragging, because
 `setChildrenCollapsible(false)` keeps each pane a whole row -- so the
@@ -6752,9 +6783,10 @@ scrollback scroll, which is the fight the earlier note worried about: the
 mode says which the drag means. Guarded by `tool/sabotage/pan-scroll.toml`,
 four edits seen to fail: the state offered without a column, the view
 reversing the step, the container scrolling backwards, and the container
-left unwired. The snap-to-a-pane-top and kinetic flick are still the device
-pass; a step-per-move drag is the reachable version, as the reorder's
-single step is.
+left unwired. The kinetic flick is still the device pass; a step-per-move
+drag is the reachable version, as the reorder's single step is. The
+snap-to-a-pane-top is BUILT 2026-09-22 and was never a device question
+-- see below.
 
 **Guarded by `tool/sabotage/input-selector.toml`**, five edits, each seen
 to fail naming its own test: a scroll drag that moves nothing, select
@@ -6820,7 +6852,10 @@ where tabs do, and `a_tab_can_be_moved_along_the_bar` moved there to prove
 it. The scroll now has its thumb-drag as well: the Pan state (see above)
 scrolls the column's viewport, the fight with the scrollback scroll settled
 by the selector saying which the drag means. What is still the device pass
-is the FEEL -- no kinetic flick or snap-to-a-pane-top -- and the snap radius.
+is the FEEL -- no kinetic flick -- and the snap radius. The
+snap-to-a-pane-top landed 2026-09-22 and is not part of that: it is the
+same kind of pure geometry the divider detent is, and a device adds
+nothing to asserting it.
 
 **And it cost two more verbs than that paragraph noticed, which is the
 part worth keeping.** Close and Duplicate lived on the tab bar and its

@@ -79,6 +79,16 @@ public:
 	 */
 	void scroll_column_by(int delta);
 
+	/*
+	 * Settles that scroll on a pane top when the gesture ends (sec 8.7's
+	 * "a terminal starts at the top of the viewport rather than half off
+	 * it"). Separate from scroll_column_by because a snap applied to
+	 * every step would fight the finger: the drag is free and the
+	 * release is what lands it. The math is bssh_settle_column_scroll,
+	 * in ui/pane_snap.h, so it can be asserted without a widget.
+	 */
+	void settle_column_scroll();
+
 private:
 	/* Marks the panes on screen, or away if this widget is not showing. */
 	void update_on_screen();

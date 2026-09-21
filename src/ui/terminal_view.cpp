@@ -2819,6 +2819,7 @@ void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
 		/* A press that never scrolled is a tap, and asks for the keyboard
 		 * as the other drag paths do. */
 		if (tap) request_input_panel();
+		else emit column_scroll_settled();
 		event->accept();
 		return;
 	}

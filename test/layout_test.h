@@ -52,6 +52,8 @@ private slots:
 	 * it, to a whole row; and never onto the neighbour's last row.
 	 */
 	void a_column_divider_is_magnetic_to_the_halfway_line();
+	void a_column_scroll_settles_on_a_pane_top();
+	void letting_go_of_a_pan_settles_the_column();
 
 	/*
 	 * The reported tab off-by-one, dissolved (sec 8.7): a column holds
