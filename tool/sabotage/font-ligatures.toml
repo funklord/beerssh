@@ -44,3 +44,31 @@ file = "src/model/app_settings.cpp"
 find = "value(QStringLiteral(\"appearance/font_ligatures\"), false)"
 replace = "value(QStringLiteral(\"appearance/font_ligatures\"), true)"
 expect = "the_ligatures_setting_survives_a_restart"
+
+# The substitution goes back to being silent.
+#
+# Restores the state found on 2026-09-21: the note is written, the view
+# hands it on, and no window reads it -- so a host whose font is not on
+# this device renders in a substitute with no explanation. Everything
+# about the FONT still works, which is what kept it invisible: the
+# fallback chain is correct, the picker marks unavailable families, and
+# only the sentence explaining what happened goes unread.
+[[sabotage]]
+name = "a substituted font says nothing"
+file = "src/ui/main_window.cpp"
+find = "\tif (!m_font_note.isEmpty()) session_text += QStringLiteral(\" -- \") + m_font_note;"
+replace = ""
+expect = "a_substituted_font_says_so_somewhere_a_user_looks"
+
+# The note is computed once and never refreshed.
+#
+# The id comparison is what makes asking in update_status affordable;
+# pinning it to the first answer means a session that changes font keeps
+# the note it had -- including keeping an empty one forever, which is
+# the silent case again by a subtler route.
+[[sabotage]]
+name = "the note is never recomputed after the first font"
+file = "src/ui/main_window.cpp"
+find = "\tif (font_id != m_font_note_id) {"
+replace = "\tif (m_font_note_id.isEmpty() && !font_id.isEmpty()) {"
+expect = "a_substituted_font_says_so_somewhere_a_user_looks"

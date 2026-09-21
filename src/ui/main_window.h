@@ -898,6 +898,18 @@ private:
 	 */
 	QString m_status_text;
 
+	/*
+	 * sec 9.4's substitution note, and the font id it was computed for.
+	 *
+	 * Cached against the id because answering it costs a
+	 * QFontDatabase::families() scan, and update_status() runs on every
+	 * state change, every resize and every keystroke that scrolls -- the
+	 * same argument the status-line setting is read elsewhere for, and
+	 * the same paint path.
+	 */
+	QString m_font_note;
+	QString m_font_note_id;
+
 	/* Remembered answer to the close prompt; unset until asked once. */
 	/*
 	 * Read once by apply_device_settings and kept: update_status runs on

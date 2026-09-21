@@ -4028,3 +4028,50 @@ void terminal_view_test::the_history_can_be_dropped_without_the_remote() {
 	          "touch has no way back");
 	delete menu;
 }
+
+void terminal_view_test::a_substituted_font_says_so_somewhere_a_user_looks() {
+	/*
+	 * bssh_font_catalog::substitution_note() writes a whole sentence for
+	 * a person -- "X is not installed on this device yet. Showing Y until
+	 * it is." -- and bssh_terminal_view::font_substitution_note() hands it
+	 * on. The view's own header says who displays it: "The window shows
+	 * it; the view only knows it."
+	 *
+	 * No window did. Nothing in src referenced either function, so a host
+	 * whose font is not on this device rendered in a substitute with no
+	 * explanation, and the sentence written to explain it was produced
+	 * for nobody.
+	 *
+	 * Asserted on the status line rather than on the view, because the
+	 * defect is not in the note: the note was always right, and what was
+	 * missing is anywhere a user could read it.
+	 */
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("odd font");
+	profile.host = QStringLiteral("fonts.example");
+
+	bssh_session *session = registry->create(profile);
+	window.adopt_session(session);
+
+	/*
+	 * A font id the catalogue does not know, which is the branch that
+	 * needs no missing file to reach -- and is what a preset carrying a
+	 * font this build dropped would look like.
+	 */
+	QJsonObject settings = session->settings();
+	settings.insert(QStringLiteral("font_family"), QStringLiteral("not-a-bundled-font"));
+	session->set_settings(settings);
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY2(view, "the window built no pane, so nothing resolved a font");
+	QVERIFY2(!view->font_substitution_note().isEmpty(),
+	          "the fixture's font resolved cleanly, so there is no note to show");
+
+	QVERIFY2(window.status_text().contains(QStringLiteral("not-a-bundled-font")),
+	          qPrintable(QStringLiteral("the status line says nothing about the "
+	                                     "substitution: %1").arg(window.status_text())));
+}

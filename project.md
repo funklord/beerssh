@@ -7665,6 +7665,42 @@ drawn with the setting OFF, so a view that always lifted would fail.
 The edit that removes the lift was seen to fail against a 618-passing
 baseline.
 
+**The substitution note was written for nobody, for as long as it has
+existed.** `bssh_font_catalog::substitution_note()` composes a whole
+sentence for a person -- *"X is not installed on this device yet.
+Showing Y until it is."* -- and `bssh_terminal_view::font_substitution_note()`
+hands it on. That function's header names its consumer: *"The window
+shows it; the view only knows it."* **No window did.** Nothing under
+`src/` referenced either function.
+
+**So a host whose font is not on this device rendered in a substitute
+with no explanation**, and the explanation existed the whole time. §9.4
+already lists unavailable families in the picker and marks them, which
+is the answer at CHOOSING time; this is the answer at looking-at-it
+time, and it was the half nobody could reach.
+
+**Found by a mechanical sweep, and the first version of that sweep
+lied.** Walking the view's public methods for ones referenced nowhere
+outside their own class first reported `set_reverse_video` as unwired --
+and `pane_container` connects it, as a pointer-to-member, which a
+`name(`-shaped pattern cannot match. The corrected sweep matches
+`::name` too, which is *Four ways to manufacture an absence* paid for
+again: the pattern, not the tree.
+
+**It is on the status line, recomputed only when the font id moves.**
+Answering costs a `QFontDatabase::families()` scan and `update_status()`
+runs on every state change, every resize and every keystroke that
+scrolls -- the same paint-path argument that keeps the status-line
+setting out of that function. Comparing one string is what makes asking
+in ONE place affordable, and one place cannot have a call site somebody
+forgot: there are three places a view can change.
+
+**Two edits, both seen to fail** against 622 passing: the line that
+shows the note, and the id comparison pinned so the note is computed
+once and never refreshed. The second is the subtler of the two -- it
+leaves a session that changes font wearing the note it had, including
+an empty one forever, which is the silent case again by a quieter road.
+
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every
 bundled font it asserts uniform advance width, presence of the required

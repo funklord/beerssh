@@ -4497,6 +4497,30 @@ void bssh_main_window::update_status() {
 	if (!m_error.isEmpty()) session_text += QStringLiteral(" -- ") + m_error;
 
 	/*
+	 * And what is actually being drawn, when it is not what was asked
+	 * for (sec 9.4). bssh_font_catalog writes the sentence -- "X is not
+	 * installed on this device yet. Showing Y until it is." -- and
+	 * bssh_terminal_view hands it on; its header has said since it was
+	 * written that "the window shows it", and no window did. A host
+	 * whose font is not on this device rendered in a substitute with no
+	 * explanation, and the explanation existed the whole time.
+	 *
+	 * Recomputed only when the font id moves: the answer costs a
+	 * QFontDatabase::families() scan, and this function runs far too
+	 * often to pay that every time. Comparing one string is what makes
+	 * asking here -- rather than at each of the three places a view can
+	 * change -- affordable, and one place cannot have a call site
+	 * somebody forgot.
+	 */
+	const QString font_id = m_terminal_view ? m_terminal_view->font_id() : QString();
+	if (font_id != m_font_note_id) {
+		m_font_note_id = font_id;
+		m_font_note = m_terminal_view ? m_terminal_view->font_substitution_note()
+		                              : QString();
+	}
+	if (!m_font_note.isEmpty()) session_text += QStringLiteral(" -- ") + m_font_note;
+
+	/*
 	 * Asked of the view rather than kept in a member of this window.
 	 *
 	 * The copy went stale: the window read the grid once while the pane

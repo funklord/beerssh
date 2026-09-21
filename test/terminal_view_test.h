@@ -142,6 +142,7 @@ private slots:
 	void the_scrollback_search_is_reachable_without_a_keyboard();
 	void a_session_can_be_closed_without_a_tab_bar();
 	void the_history_can_be_dropped_without_the_remote();
+	void a_substituted_font_says_so_somewhere_a_user_looks();
 	void a_zoom_past_the_limit_still_steps_back();
 	void a_cursor_under_the_floor_is_lifted_like_text_is();
 };
