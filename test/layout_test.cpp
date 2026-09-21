@@ -1405,6 +1405,43 @@ void layout_test::every_touch_surface_fits_a_phone()
 		                             true);
 		check_fits(QStringLiteral("password prompt"), &prompt);
 	}
+	{
+		/*
+		 * sec 8.7's selector, which is on screen the whole time a phone
+		 * is showing a terminal -- so it is the one surface here a user
+		 * cannot navigate away from. It was not in this sweep and has
+		 * no desktop form to be noticed on, the same two properties
+		 * that left the key row unmeasured until it asked for 652px of
+		 * a 360px screen.
+		 *
+		 * Not sideways: a row of five states that scrolls is a row
+		 * whose last state is hidden, and sec 8.7 wants all of them
+		 * visible at once.
+		 */
+		bssh_input_selector selector;
+
+		/*
+		 * The population first, because a bar that built no buttons
+		 * would fit a phone beautifully and mean nothing -- the gate
+		 * over an empty list, wearing this sweep's clothes. Five
+		 * states, and two of them (Move and Pan) exist only where a
+		 * column does, so this asks for the three that are always
+		 * there plus the two that must at least have been built.
+		 */
+		const QStringList states = { QStringLiteral("input_scroll"),
+		                              QStringLiteral("input_select"),
+		                              QStringLiteral("input_click"),
+		                              QStringLiteral("input_move"),
+		                              QStringLiteral("input_pan") };
+		for (const QString &state : states) {
+			QVERIFY2(selector.findChild<QAbstractButton *>(state),
+			          qPrintable(QStringLiteral("the selector has no %1 button, so "
+			                                     "measuring it proves nothing")
+			                             .arg(state)));
+		}
+
+		check_fits(QStringLiteral("input selector"), &selector);
+	}
 
 }
 

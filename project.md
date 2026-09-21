@@ -3687,6 +3687,27 @@ because the number is the useful half for whoever trips it next. This
 surface was not in `every_touch_surface_fits_a_phone` -- it is not a page
 -- so nothing had ever measured it.
 
+**The same lens, pointed at the surfaces around it, found nothing —
+and what it found is worth the sentence anyway.** Two were swept on
+2026-09-21 after the menu:
+
+- **The input selector fits**, and is guarded now. It is the one
+  surface a phone user cannot navigate away from (§8.7 keeps it on
+  screen the whole time a terminal is), it has no desktop form to be
+  noticed on, and it was not in `every_touch_surface_fits_a_phone` --
+  the same two properties that left the key row unmeasured until it
+  asked for 652px of a 360px screen. Its entry asserts the five state
+  buttons exist *before* measuring, because a bar that built none
+  would fit beautifully and mean nothing.
+- **The tab menu is not a touch surface at all**, which is why it has
+  no guard rather than an oversight. `m_tab_order` is the shown
+  sessions minus the visible panes, and §8.7's column holds every
+  session -- so nothing is ever left to be a tab. Measured by trying:
+  three sessions in a shown 900x600 window under forced touch produced
+  no tab at index 0, and the code path says why. A phone-fit assertion
+  there would have been measuring a state touch cannot reach, so the
+  one written for it was deleted rather than repaired.
+
 **A QMenu fails more mildly than a form and it still fails.** Qt gives an
 oversized menu scroll arrows rather than squeezing rows until they
 overlap, which is what `check_fits` describes; what it costs is entries
