@@ -53,3 +53,16 @@ file = "src/ui/main_window.cpp"
 find = "\tduplicate->setObjectName(QStringLiteral(\"terminal_duplicate\"));"
 replace = "\tduplicate->setObjectName(QStringLiteral(\"terminal_duplicate_disabled\"));"
 expect = "a_session_can_be_closed_without_a_tab_bar"
+
+# A session that is not live loses its way back.
+#
+# sec 8.4's restore reopens every remembered host and connects none of
+# them, so this is the state a phone wakes up in. Without the entry the
+# tab menu carried -- and touch has no tab menu -- a restored session is
+# the dead end that entry was written to prevent.
+[[sabotage]]
+name = "a dead session is offered no way to connect"
+file = "src/ui/main_window.cpp"
+find = "\t\tconnect_now->setObjectName(QStringLiteral(\"terminal_connect\"));"
+replace = "\t\tconnect_now->setObjectName(QStringLiteral(\"terminal_connect_disabled\"));"
+expect = "a_session_can_be_closed_without_a_tab_bar"

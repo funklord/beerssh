@@ -3865,6 +3865,24 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	QMenu *session_menu = menu->addMenu(QStringLiteral("&Session"));
 	session_menu->setObjectName(QStringLiteral("terminal_session_menu"));
 
+	/*
+	 * Connect, first, and only for a session that is not live -- the tab
+	 * menu's own rule and its own wording, because it is the same verb.
+	 * Absent rather than disabled on a live session, since "connect" on
+	 * something already connected is not a state a user should have to
+	 * reason about.
+	 *
+	 * It is here for the reason the rest of this group is: sec 8.4's
+	 * restore reopens every remembered host and connects none of them,
+	 * and the tab menu that carried this is not reachable where there
+	 * are no tabs. That made a restored session on a phone the dead end
+	 * the tab menu's entry was written to prevent.
+	 */
+	if (m_current && !m_current->is_live()) {
+		QAction *connect_now = session_menu->addAction(QStringLiteral("Co&nnect"));
+		connect_now->setObjectName(QStringLiteral("terminal_connect"));
+	}
+
 	QAction *new_tab = session_menu->addAction(QStringLiteral("New &Tab"));
 	new_tab->setObjectName(QStringLiteral("terminal_new_tab"));
 	new_tab->setShortcut(
@@ -4023,6 +4041,13 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	}
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
+		return;
+	}
+
+	const QAction *connect_now =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_connect"));
+	if (connect_now && chosen == connect_now) {
+		if (m_current) m_current->connect_to_host();
 		return;
 	}
 

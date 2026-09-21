@@ -2525,6 +2525,12 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * Close sits behind a separator because it is the one here that
 	 * cannot be undone.
 	 */
+	/*
+	 * Five here rather than six: this window has no session, so Connect
+	 * is absent by the same rule the tab menu follows -- a verb offered
+	 * only where it applies. a_session_can_be_closed_without_a_tab_bar
+	 * is where its presence is asserted, with a session that is not live.
+	 */
 	const QList<QAction *> sessions = actions.at(9)->menu()->actions();
 	QCOMPARE(sessions.size(), 5);
 	QCOMPARE(sessions.at(0)->text(), QStringLiteral("New &Tab"));
@@ -3910,7 +3916,17 @@ void terminal_view_test::a_session_can_be_closed_without_a_tab_bar() {
 	bssh_profile_t profile;
 	profile.name = QStringLiteral("closes");
 	profile.host = QStringLiteral("closes.example");
-	window.adopt_session(registry->create(profile));
+
+	bssh_session *session = registry->create(profile);
+	window.adopt_session(session);
+
+	/*
+	 * Never connected, which is the state Connect exists for -- sec 8.4's
+	 * restore leaves every reopened host exactly here. Asserted, because
+	 * a live session is deliberately offered no Connect and the check
+	 * below would then be asking for a verb that should not be there.
+	 */
+	QVERIFY2(!session->is_live(), "the fixture connected, so Connect is not expected");
 
 	QMenu *menu = window.build_terminal_menu(&window);
 	QVERIFY(menu);
@@ -3927,6 +3943,21 @@ void terminal_view_test::a_session_can_be_closed_without_a_tab_bar() {
 	 */
 	QVERIFY2(menu->findChild<QAction *>(QStringLiteral("terminal_duplicate")),
 	          "the terminal menu offers no way to duplicate a session");
+
+	/*
+	 * And Connect, which the tab menu offers for a session that is not
+	 * live. sec 8.4's restore reopens every remembered host and connects
+	 * none of them, so without a route to connect, a restored session on
+	 * a phone is the dead end that entry was written to prevent -- and
+	 * the only thing carrying it was the tab bar's menu.
+	 *
+	 * This fixture's session was never connected, which is the state the
+	 * entry exists for; asserting it on a live one would be asking for a
+	 * verb that is deliberately absent.
+	 */
+	QVERIFY2(menu->findChild<QAction *>(QStringLiteral("terminal_connect")),
+	          "a session that is not live has no way to connect: after a restore "
+	          "that is a dead end on any device with no tab bar");
 
 	delete menu;
 }

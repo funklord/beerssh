@@ -6714,6 +6714,17 @@ unmentioned -- so the check that matters when a surface is dissolved is
 not "what did this surface do" but **"what could ONLY be reached here"**,
 enumerated rather than recalled.
 
+**A third verb went the same way and is the sharpest of the three.**
+The tab menu offers **Connect** for a session that is not live, and its
+comment says exactly why: *"a restore reopens every remembered host as a
+tab and connects none of them, so without this a restored tab would be a
+dead end."* Dissolving the tab bar recreated that dead end on the
+platform the entry was written for -- a phone restores, shows every
+session in the column, and had no way to connect any of them. Asserted
+red before it was built, with the fixture checking its session really
+was not live, because a live one is deliberately offered no Connect and
+the test would otherwise be demanding a verb that should be absent.
+
 **Both are on the terminal menu now, in a `Session` group** with New Tab
 and New Window, Close behind a separator because it is the one that
 cannot be undone. Grouped rather than flat for the measured reason Text
