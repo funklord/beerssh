@@ -9328,6 +9328,31 @@ without an icon is defective, so there is a plain one meant to be replaced.
   justification is not the same as an ignore list**, which is how a gate
   gets switched off by instalments.
 
+  **[FIXED 2026-09-21] Four gates read "0 failed" as success, which a run
+  that verified nothing also satisfies.** `check-ssh.sh` and
+  `check-keepalive.sh` judged their phases with
+  `grep -q "^Totals: .* 0 failed"`. QtTest prints
+  `Totals: 0 passed, 0 failed, 1 skipped` for a run where every case
+  skipped, and that matches — so each gate could pass having executed
+  nothing. `evidence.md` on a tally and a status being halves of one
+  result, in four shipped gates at once.
+  It is reachable rather than theoretical: `check-ssh.sh` runs
+  `ssh ... || true` and, if that fails, silently never exports
+  `BSSH_TEST_OPENSSH_KNOWN_HOSTS`, whereupon the OpenSSH-interop cases
+  `QSKIP`. There is no `else` and no message, so the gate cannot tell
+  "interop verified" from "interop never attempted".
+  **The obvious fix was wrong and the baseline is what caught it.**
+  Forbidding skips looks right — a skip is how the interop check vanishes
+  — and skips here are STRUCTURAL: each phase runs a filtered subset, so
+  the other phases' cases skip. Measured on a real run against a live
+  sshd: 18 passed with 5 skipped, then 8 with 15, then 3 with 20.
+  Requiring zero skipped would have reddened a working gate on its first
+  run for something that is not a defect.
+  What went in requires a positive PASS count instead, which closes the
+  hole while leaving the structural skips alone, and was checked against
+  all three shapes — a real run, an all-skipped run, and a genuine
+  failure — before the files were touched.
+
   **A trap worth knowing before editing `check-deb.sh`:** its whole body
   is one single-quoted argument, so a comment containing an apostrophe
   ends the quote sixty lines early. The first version of this block did

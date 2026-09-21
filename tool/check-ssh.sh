@@ -211,7 +211,29 @@ kill "$LISTENER" 2>/dev/null || true
 
 wait $DROP_APP || true
 cat "$DIR/tunnel_drop.log"
-grep -q "^Totals: .* 0 failed" "$DIR/tunnel_drop.log"
+# A positive PASS count, not just "0 failed".
+#
+# NOTE: this script body is a single-quoted argument, so nothing here may
+# contain an apostrophe. The first version of this note did and ended the
+# quote early; bash -n caught it, as it did for the same mistake in
+# check-deb.sh two hours earlier.
+#
+# The old pattern was "^Totals: .* 0 failed", which a run where every
+# case skipped satisfies: QtTest prints "0 passed, 0 failed, 1 skipped"
+# and the grep matches. The gate could pass having verified nothing --
+# evidence.md on a tally and a status being halves of one result, neither
+# of them the answer alone.
+#
+# Skips are NORMAL here and stay allowed: each phase runs a filtered
+# subset, so the cases belonging to other phases skip. Measured on a real
+# run -- 18 passed with 5 skipped, then 8 with 15, then 3 with 20 --
+# which is why this does not forbid them. Requiring zero skipped would
+# have reddened a working gate for something that is not a defect.
+#
+# Stronger still would be a minimum count per phase, catching a phase
+# that silently runs fewer cases than it used to. That needs expected
+# numbers which drift, so it is not done here.
+grep -qE "^Totals: [1-9][0-9]* passed, 0 failed" "$DIR/tunnel_drop.log"
 
 # The server is already down, so the swap below only has to give it a new
 # identity and start it again.
