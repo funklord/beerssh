@@ -125,6 +125,7 @@ private slots:
 	void both_menus_agree_on_when_paste_is_offered();
 	void the_touch_layout_grows_the_rows_and_drops_the_chords();
 	void a_bare_url_is_clickable_and_stops_where_it_should();
+	void a_finger_can_reach_the_scrollback();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */

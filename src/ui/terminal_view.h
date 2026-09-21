@@ -377,6 +377,23 @@ public:
 	bool cell_at(const QPoint &point, qint64 &line, int &col) const;
 	QRect cell_rect(qint64 line, int col) const;
 	void set_scroll_offset(int lines);
+
+	/*
+	 * Kinetic touch scrolling (sec 6.4), which the table there asks for
+	 * and which this widget did not have.
+	 *
+	 * A phone has no wheel, no Shift+PageUp and -- until this -- no
+	 * gesture either, so the only way to reach the scrollback was to drag
+	 * a scrollbar a few pixels wide, on the one platform where a
+	 * few-pixel target is unusable. Reviewing output that has gone past
+	 * is most of what a terminal is FOR, so that was a core activity a
+	 * finger could not perform.
+	 *
+	 * QScroller drives the same set_scroll_offset the wheel does rather
+	 * than a second scrolling path, which is what the wheel's own comment
+	 * promised in the future tense and nothing delivered.
+	 */
+	bool event(QEvent *event) override;
 	void scroll_by(int lines);
 	void scroll_to_live();
 

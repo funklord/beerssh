@@ -1,4 +1,7 @@
 #include <QRegularExpression>
+#include <QScrollEvent>
+#include <QScrollPrepareEvent>
+#include <QScroller>
 #include "ui/terminal_view.h"
 
 #include <QDragEnterEvent>
@@ -163,6 +166,18 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 * the host list, because Qt does not provide it and writing the timer
 	 * out twice is the shape this project keeps unpicking.
 	 */
+	/*
+	 * Kinetic scrolling by finger (sec 6.4). TouchGesture rather than
+	 * LeftMouseButtonGesture, because a left drag on a desktop is a text
+	 * selection and handing it to the scroller would take selection away
+	 * from every mouse user to give scrolling to a phone.
+	 *
+	 * Grabbed unconditionally rather than behind is_touch_primary: a
+	 * touchscreen on a desktop is a real arrangement, and a machine with
+	 * no touch device simply never produces the events.
+	 */
+	QScroller::grabGesture(this, QScroller::TouchGesture);
+
 	m_long_press = new bssh_long_press(this, this);
 	connect(m_long_press, &bssh_long_press::triggered, this, [this](const QPoint &at) {
 		/*
@@ -508,6 +523,48 @@ int bssh_terminal_view::available_history() const {
 	if (m_emulator && m_emulator->alternate_screen()) return 0;
 
 	return m_scrollback ? m_scrollback->count() : 0;
+}
+
+bool bssh_terminal_view::event(QEvent *event) {
+	/*
+	 * QScroller on a plain widget is not the one-liner it is on a scroll
+	 * area: grabbing the gesture only starts the machine, and the widget
+	 * has to answer where the content is and accept where it should go.
+	 *
+	 * The coordinate is PIXELS from the top of the history, because that
+	 * is what a kinetic scroller interpolates over and lines are too
+	 * coarse to flick smoothly. Lines are what the view stores, so the
+	 * conversion happens here and nowhere else.
+	 */
+	if (event->type() == QEvent::ScrollPrepare) {
+		QScrollPrepareEvent *prepare = static_cast<QScrollPrepareEvent *>(event);
+		const int history = available_history();
+		const int cell = qMax(1, m_cell_height);
+
+		prepare->setViewportSize(QSizeF(size()));
+		prepare->setContentPosRange(QRectF(0, 0, 0, qreal(history) * cell));
+
+		/*
+		 * Offset counts lines scrolled BACK from the live screen, so it
+		 * runs the opposite way to a scrollbar's position: at the
+		 * bottom of the content the offset is zero.
+		 */
+		prepare->setContentPos(QPointF(0, qreal(history - m_scroll_offset) * cell));
+		prepare->accept();
+		return true;
+	}
+
+	if (event->type() == QEvent::Scroll) {
+		QScrollEvent *scroll = static_cast<QScrollEvent *>(event);
+		const int history = available_history();
+		const int cell = qMax(1, m_cell_height);
+
+		const int from_top = qRound(scroll->contentPos().y() / cell);
+		set_scroll_offset(history - from_top);
+		return true;
+	}
+
+	return QWidget::event(event);
 }
 
 void bssh_terminal_view::set_scroll_offset(int lines) {

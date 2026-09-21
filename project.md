@@ -2714,12 +2714,71 @@ model on a finger.
 | Select text | Click-drag, double-click for word, triple-click for line — **all done** | Long-press then drag handles |
 | Copy | `Ctrl+Shift+C` (never bare `Ctrl+C` — that's `SIGINT`) | Selection toolbar |
 | Paste | `Ctrl+Shift+V`, middle-click on X11/Wayland | Selection toolbar / key row |
-| Scroll | Wheel, `Shift+PgUp/PgDn` | Kinetic touch scroll (`QScroller`) |
+| Scroll | Wheel, `Shift+PgUp/PgDn` | Kinetic touch scroll (`QScroller`) — **built 2026-09-21** |
 | Drop a file | Pastes its path, shell-quoted — **built** | No system drag source in practice |
 
 - **Paste always goes through the router** so bracketed-paste mode applies. A
   paste that bypasses it will silently break `vim` and any shell with bracketed
   paste enabled.
+- **A finger could not reach the scrollback at all until 2026-09-21**, and
+  the row above had said otherwise since it was written. No wheel on a
+  phone, no `Shift+PgUp` without a keyboard, no gesture — so the only way
+  back through the history was dragging a scrollbar a few pixels wide, on
+  the one platform where a few-pixel target is unusable. **Reviewing output
+  that has gone past is most of what a terminal is for**, so this was a
+  core activity the touch platform could not perform, sitting behind a
+  table row that listed it as the answer.
+  **The wheel handler had promised it in the future tense** — *"Touch
+  (QScroller, §6.4) will drive the same `set_scroll_offset` rather than
+  growing a second scrolling path"* — and `QScroller` was grabbed on the
+  host list and the host editor, so the mechanism was familiar in this
+  tree and simply never applied here. A promise in a comment reads exactly
+  like a description of what the code does, which is why it survived.
+  `TouchGesture`, not `LeftMouseButtonGesture`: a left drag on a desktop is
+  a text selection, and handing it to the scroller would take selection
+  away from every mouse user to give scrolling to a phone. Grabbed
+  unconditionally rather than behind `is_touch_primary`, because a
+  touchscreen on a desktop is a real arrangement and a machine without one
+  never produces the events.
+  **`QScroller` on a plain widget is not the one-liner it is on a scroll
+  area.** Grabbing the gesture only starts the machine: the widget answers
+  `ScrollPrepare` with where the content is and how far it goes, and
+  accepts `Scroll` with where it should be. The scroller works in PIXELS
+  because a kinetic flick interpolates continuously and lines are too
+  coarse to flick smoothly; the view stores LINES, so the conversion lives
+  in exactly one place.
+  **The axis runs opposite ways on the two sides** — the offset counts
+  lines back from the live screen, the scroller counts pixels down from
+  the top of the history — which is the plausible mistake and the reason
+  the test pins both endpoints. The **midpoint** is asserted separately,
+  because a conversion off by a factor still lands on live and on the far
+  end correctly and puts every flick in between somewhere wrong: endpoints
+  pin the direction, only halfway pins the scale.
+  Guarded by `tool/sabotage/touch-scroll.toml`, four edits.
+  **One was MISSED because the test's own setup manufactured the answer.**
+  It called `QScroller::scroller(&view)` and then asserted
+  `hasScroller()` — and `scroller()` is a get-or-create, so the assertion
+  was true whether or not any gesture had ever been grabbed, and the
+  scroll checks below then drove the handlers through the scroller the
+  test had just built. Removing the grab left everything green: a working
+  conversion with nothing connected to it, which is exactly the state the
+  entry above describes. **A question whose setup creates the condition
+  it asks about cannot be answered no.**
+  **The first replacement was wrong too, and measuring settled it where
+  two rounds of reasoning had not.** `grabbedGesture()` looked like the
+  more direct question — ask what was grabbed rather than what exists —
+  and it does not report per widget: with the grab deleted it still
+  answers **256**, Qt's custom-gesture base, so the assertion passed
+  under the sabotage exactly as the self-answering one had. It also
+  returns a `Qt::GestureType` rather than the `ScrollerGestureType` that
+  was passed in, two unrelated enums that both convert to `int`, so
+  comparing them compiled and failed for a third reason again.
+  What decided it was one run with the sabotage applied by hand and both
+  values printed: grabbed gives `1575/1`, ungrabbed gives `256/0`. So
+  `hasScroller()` is the discriminating question after all — **the
+  original instinct, whose only fault was its ORDER** — and it is asked
+  before anything can create what it looks for. Three attempts, and the
+  one that worked was the first one asked at the right moment.
 - **Mouse reporting** (SGR 1006 et al.) matters mainly on desktop, where TUIs
   expect clicks to reach the remote app. When the remote enables it, clicks go
   to the remote — with a modifier (conventionally `Shift`) to override and select
