@@ -11988,13 +11988,33 @@ background).
    test holds that ground now.
 7. **M6 – Security & profiles.** `bssh_secret_store` with both backends, key
    auth, host-key verification, host profiles, biometric unlock where available.
-   **Built, except biometric unlock:** public-key authentication is tried before any password
+   **Built.** ~~Except biometric unlock.~~ Public-key authentication is tried before any password
    (agent, then the default identities), so a key-authenticated session holds
    no credential at all and can reconnect on its own; passphrase-protected
    keys are offered an unlock prompt before any password, since for a
    key-only server a password prompt is not a fallback but a prompt that
-   cannot succeed; and the trust-on-first-use prompt is built (§11). Still
-   open: biometric unlock. The store IS wired
+   cannot succeed; and the trust-on-first-use prompt is built (§11).
+   ~~Still open: biometric unlock.~~ **Built, and this line was stale.**
+   Checked against the code on 2026-09-21 rather than read: the release
+   point in `main_window.cpp` gates on `require_biometric` **and**
+   `platform->has_biometric()`, calls `authenticate()`, hands the stored
+   password over on success, and falls through to the typed prompt on a
+   refusal or a cancel — with a `QPointer` because a system dialog
+   outlives the session that raised it. §11 has recorded it as built
+   since 2026-08-30, proven on a Galaxy Note 9 at API 29, while this
+   summary went on calling it open.
+   **What §11 still calls unproven stays unproven**, and the difference
+   matters: the capability half is evidence, and that the prompt itself
+   appears and its callback reaches the Qt thread needs a saved password
+   on a real host. A summary that promoted that to "built" would be the
+   same error pointing the other way.
+   **The sweep that found it, and what it cost**: §14's claims of
+   ABSENCE are the ones that send a reader at work already done, and
+   there are three — this, Play asset-pack delivery, and the
+   multi-monitor DPI check. Put to the code one at a time, one of the
+   three was stale. The other two are true and need a Play account and a
+   second monitor respectively, which is why they are still written down.
+   The store IS wired
    in: a password can be remembered per host (off by default), the profile
    row carries a non-secret `has_password` flag so the app knows whether
    asking for the store's passphrase is worth it, and a remembered password
