@@ -2446,7 +2446,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 13);
+	QCOMPARE(actions.size(), 12);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -2482,8 +2482,8 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QCOMPARE(actions.at(8)->text(), QStringLiteral("&Pane"));
 	QVERIFY2(actions.at(8)->menu(), "Pane must be a submenu, not a verb");
 
-	QCOMPARE(actions.at(9)->text(), QStringLiteral("New &Tab"));
-	QCOMPARE(actions.at(10)->text(), QStringLiteral("New &Window"));
+	QCOMPARE(actions.at(9)->text(), QStringLiteral("&Session"));
+	QVERIFY2(actions.at(9)->menu(), "Session must be a submenu, not a verb");
 
 	/*
 	 * And the way to the configuration, behind its own separator (sec 2):
@@ -2492,8 +2492,8 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * different kind of thing again, and separated for the same reason
 	 * Select All is separated from Copy.
 	 */
-	QVERIFY(actions.at(11)->isSeparator());
-	QCOMPARE(actions.at(12)->text(), QStringLiteral("&Hosts and Settings"));
+	QVERIFY(actions.at(10)->isSeparator());
+	QCOMPARE(actions.at(11)->text(), QStringLiteral("&Hosts and Settings"));
 
 	/*
 	 * The groups' own contents, in their own order. Grouping moved these
@@ -2519,9 +2519,24 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * into the groups as well, since a row that moved into one did not
 	 * stop being a verb.
 	 */
+	/*
+	 * The session group, whose last two verbs were unreachable on touch
+	 * until sec 8.7's column left them without a tab bar to live on.
+	 * Close sits behind a separator because it is the one here that
+	 * cannot be undone.
+	 */
+	const QList<QAction *> sessions = actions.at(9)->menu()->actions();
+	QCOMPARE(sessions.size(), 5);
+	QCOMPARE(sessions.at(0)->text(), QStringLiteral("New &Tab"));
+	QCOMPARE(sessions.at(1)->text(), QStringLiteral("New &Window"));
+	QCOMPARE(sessions.at(2)->text(), QStringLiteral("&Duplicate"));
+	QVERIFY(sessions.at(3)->isSeparator());
+	QCOMPARE(sessions.at(4)->text(), QStringLiteral("&Close"));
+
 	QList<QAction *> every = actions;
 	every += sizes;
 	every += panes;
+	every += sessions;
 	for (const QAction *action : every) {
 		if (action->isSeparator()) continue;
 		QVERIFY2(action->text().contains(QLatin1Char('&')),
@@ -2541,7 +2556,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * unavailable" would be caught here even if the order above still
 	 * lined up.
 	 */
-	QCOMPARE(menu->actions().size(), 13);
+	QCOMPARE(menu->actions().size(), 12);
 }
 
 void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() {
@@ -3866,6 +3881,52 @@ void terminal_view_test::the_scrollback_search_is_reachable_without_a_keyboard()
 	 */
 	QCOMPARE(menu_find->shortcut(),
 	          QKeySequence(bssh_input_router::binding_for(QStringLiteral("find"))));
+
+	delete menu;
+}
+
+void terminal_view_test::a_session_can_be_closed_without_a_tab_bar() {
+	/*
+	 * Every route that closes ONE session went through the tab bar or
+	 * the menu bar: the bar's own close button, middle-click on a tab,
+	 * the tab context menu's Close, and File > Close Tab. sec 8.7
+	 * dissolved the tab bar on touch -- the column holds every session,
+	 * so m_tab_order is empty and there are no tabs -- and the menu bar
+	 * is built only for the desktop front door.
+	 *
+	 * So a phone could open sessions and never close one. The section
+	 * that dissolved the tabs accounted for losing the tab REORDER and
+	 * replaced it with the column's Move state; Close and Duplicate went
+	 * with them and were not replaced.
+	 *
+	 * Asserted on the terminal menu because that is the surface touch
+	 * has. An entry that is not on it is not a route, however well the
+	 * registry closes things.
+	 */
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("closes");
+	profile.host = QStringLiteral("closes.example");
+	window.adopt_session(registry->create(profile));
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	QAction *close = menu->findChild<QAction *>(QStringLiteral("terminal_close_session"));
+	QVERIFY2(close,
+	          "the terminal menu offers no way to close this session, and on "
+	          "touch there is no tab bar and no menu bar to offer one either");
+	QVERIFY2(close->isEnabled(), "the only way to close a session is disabled");
+
+	/*
+	 * Duplicate went the same way and for the same reason: it lived on
+	 * the tab menu, which touch no longer reaches.
+	 */
+	QVERIFY2(menu->findChild<QAction *>(QStringLiteral("terminal_duplicate")),
+	          "the terminal menu offers no way to duplicate a session");
 
 	delete menu;
 }

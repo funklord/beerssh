@@ -6692,6 +6692,39 @@ scrolls the column's viewport, the fight with the scrollback scroll settled
 by the selector saying which the drag means. What is still the device pass
 is the FEEL -- no kinetic flick or snap-to-a-pane-top -- and the snap radius.
 
+**And it cost two more verbs than that paragraph noticed, which is the
+part worth keeping.** Close and Duplicate lived on the tab bar and its
+menu (§8.3) and nowhere else: every route that closes ONE session went
+through the bar's own close button, a middle-click on a tab, that
+menu's Close, or File > Close Tab. Dissolving the bar on touch took the
+first three, and the menu bar is built only for the desktop front door,
+so **a phone could open sessions and never close one.**
+
+**Measured 2026-09-21 rather than reasoned about**: the assertion was
+written first and failed, reporting that the terminal menu offers no way
+to close and that touch has no tab bar or menu bar to offer one either.
+The registry closes perfectly throughout, which is exactly what kept
+this invisible -- every test that closes a session does it through the
+registry, and the defect is that nothing a thumb can reach calls it.
+
+**The reorder is the tell.** This section DID notice the reorder going
+and replaced it with the column's Move state, in the paragraph directly
+above. Two verbs on the same menu, lost by the same edit, went
+unmentioned -- so the check that matters when a surface is dissolved is
+not "what did this surface do" but **"what could ONLY be reached here"**,
+enumerated rather than recalled.
+
+**Both are on the terminal menu now, in a `Session` group** with New Tab
+and New Window, Close behind a separator because it is the one that
+cannot be undone. Grouped rather than flat for the measured reason Text
+Size and Pane already carry: four more rows do not fit a 640dp cover
+screen and one submenu row does -- the menu went 584px back to 520.
+**What is asserted is the ROUTE**: that the entries exist and are
+enabled. That choosing one closes the session is not pinned, because the
+dispatch happens after `QMenu::exec` and a headless suite cannot reach
+it -- the same limit every other entry on this menu has, recorded here
+rather than left for somebody to assume otherwise.
+
 **Everything currently built stays until it is replaced**, on the
 holder's instruction: *"We keep all the features we have for now and try
 to test our way forward."* Open, and cheap to settle when they come up:

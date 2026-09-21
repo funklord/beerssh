@@ -3845,15 +3845,56 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	move_right->setObjectName(QStringLiteral("terminal_move_pane_right"));
 	move_right->setEnabled(here >= 0 && here < arrangement.size() - 1);
 
-	QAction *new_tab = menu->addAction(QStringLiteral("New &Tab"));
+	/*
+	 * The session verbs, and two of them were unreachable on touch until
+	 * now. Close and Duplicate lived on the TAB bar and its menu --
+	 * sec 8.3 put them there -- and sec 8.7 then dissolved the tab bar on
+	 * a phone, because the column holds every session and nothing is
+	 * left to be a tab. That section accounted for losing the tab
+	 * REORDER and replaced it with the column's Move state; these two
+	 * went with them and were not replaced, so a phone could open
+	 * sessions and never close one.
+	 *
+	 * Grouped rather than added flat, and the reason is the measured one
+	 * from Text Size and Pane above: every row here is 48dp on touch, and
+	 * this menu has less than one row of headroom against a 640dp cover
+	 * screen. Four verbs as four rows would not fit; as one submenu they
+	 * do, and the group is coherent -- all four are about the SESSION
+	 * rather than about the text or the panes.
+	 */
+	QMenu *session_menu = menu->addMenu(QStringLiteral("&Session"));
+	session_menu->setObjectName(QStringLiteral("terminal_session_menu"));
+
+	QAction *new_tab = session_menu->addAction(QStringLiteral("New &Tab"));
 	new_tab->setObjectName(QStringLiteral("terminal_new_tab"));
 	new_tab->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("new-tab"))));
 
-	QAction *new_window = menu->addAction(QStringLiteral("New &Window"));
+	QAction *new_window = session_menu->addAction(QStringLiteral("New &Window"));
 	new_window->setObjectName(QStringLiteral("terminal_new_window"));
 	new_window->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("new-window"))));
+
+	/*
+	 * Duplicate opens a new session on the same profile through the front
+	 * door's own path (sec 8.3), so a host needing a password is asked for
+	 * one: copying the session would mean copying a connection, which SSH
+	 * cannot do.
+	 */
+	QAction *duplicate = session_menu->addAction(QStringLiteral("&Duplicate"));
+	duplicate->setObjectName(QStringLiteral("terminal_duplicate"));
+	duplicate->setEnabled(m_current != nullptr);
+
+	/*
+	 * Behind a separator, because Close is the only verb here that cannot
+	 * be undone -- the same shape and the same argument as the tab menu's
+	 * own ordering.
+	 */
+	session_menu->addSeparator();
+
+	QAction *close_session = session_menu->addAction(QStringLiteral("&Close"));
+	close_session->setObjectName(QStringLiteral("terminal_close_session"));
+	close_session->setEnabled(m_current != nullptr);
 
 	menu->addSeparator();
 
@@ -3982,6 +4023,26 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	}
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
+		return;
+	}
+
+	const QAction *duplicate =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_duplicate"));
+	if (chosen == duplicate) {
+		if (m_current) open_profile(m_current->profile());
+		return;
+	}
+
+	const QAction *close_session =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_close_session"));
+	if (chosen == close_session) {
+		/*
+		 * Straight to the registry, which is what every other close
+		 * route ends in: the tab bar's button, middle-click and the
+		 * tab menu all turn an index into a session and call this.
+		 * Here the session is the one in front of you.
+		 */
+		if (m_current && m_registry) m_registry->close(m_current);
 		return;
 	}
 

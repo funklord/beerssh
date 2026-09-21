@@ -31,3 +31,25 @@ file = "src/ui/main_window.cpp"
 find = "\t\tbssh_session *successor = session_at_tab(m_tabs->currentIndex());\n\t\tshow_session(successor ? successor : m_shown.first());"
 replace = "\t\t(void)0;"
 expect = "closing_the_visible_tab_leaves_no_view_on_a_dead_session"
+
+# The only touch route to closing a session goes away again.
+#
+# Restores the state measured on 2026-09-21: every close route ran
+# through the tab bar or the menu bar, sec 8.7 dissolved the first on
+# touch and the second is desktop-only, so a phone could open sessions
+# and never close one. The registry still closes perfectly, which is
+# what kept this invisible to every test that closes through it.
+[[sabotage]]
+name = "the terminal menu stops offering close"
+file = "src/ui/main_window.cpp"
+find = "\tclose_session->setObjectName(QStringLiteral(\"terminal_close_session\"));"
+replace = "\tclose_session->setObjectName(QStringLiteral(\"terminal_close_disabled\"));"
+expect = "a_session_can_be_closed_without_a_tab_bar"
+
+# And duplicate, which went the same way for the same reason.
+[[sabotage]]
+name = "the terminal menu stops offering duplicate"
+file = "src/ui/main_window.cpp"
+find = "\tduplicate->setObjectName(QStringLiteral(\"terminal_duplicate\"));"
+replace = "\tduplicate->setObjectName(QStringLiteral(\"terminal_duplicate_disabled\"));"
+expect = "a_session_can_be_closed_without_a_tab_bar"
