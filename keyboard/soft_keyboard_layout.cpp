@@ -2653,6 +2653,265 @@ void bssh_soft_keyboard_catalog::rebuild() {
 	g_layout = chosen;
 }
 
+namespace {
+
+/*
+ * The custom layout's own storage.
+ *
+ * `bssh_layout_slot_t` holds `const char *`, which for the shipped
+ * tables are literals that outlive everything. A user's legends arrive
+ * as QStrings at run time, so the UTF-8 has to be kept alive for exactly
+ * as long as the table pointing into it -- these two statics are that
+ * lifetime, and nothing else may point into them.
+ */
+QList<QByteArray> g_custom_bytes;
+QVector<bssh_layout_slot_t> g_custom_entries;
+QByteArray g_custom_name;
+
+bssh_layout_t g_custom_layout = { "custom", "Custom", nullptr, 0 };
+
+bool custom_layout_ready() {
+	return g_custom_layout.entries != nullptr && g_custom_layout.count > 0;
+}
+
+/*
+ * Every printable ASCII a keyboard can type under whatever layout is
+ * current, in the style given. The same walk the suite's
+ * check_every_printable_character does, moved here because a user can
+ * now write a layout that fails it and a check that lives in the suite
+ * cannot refuse one.
+ */
+QString unreachable_printables(bssh_soft_keyboard_catalog::style_t style) {
+	QSet<uint> reachable;
+	for (const bssh_soft_key_group_t &group :
+	     bssh_soft_keyboard_catalog::instance().all(style)) {
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind != bssh_key_t::TEXT) continue;
+
+				const int levels[4] = { key.value, key.shifted_value,
+				                         key.altgr_value, key.shift_altgr_value };
+				for (int level : levels) {
+					if (level > 0) reachable.insert(uint(level));
+				}
+			}
+		}
+	}
+
+	QString missing;
+	for (uint ch = '!'; ch <= '~'; ++ch) {
+		/* A-Z are a case mapping of a-z rather than legends of their
+		 * own, exactly as the tables leave level 2 empty on letters. */
+		if (ch >= 'A' && ch <= 'Z') continue;
+		if (!reachable.contains(ch)) missing.append(QChar(ch));
+	}
+	return missing;
+}
+
+/* A level shown with no modifier offering it is a legend nobody can
+ * reach, which is the other half of sec 6.3's contract. */
+bool levels_are_reachable(bssh_soft_keyboard_catalog::style_t style) {
+	quint8 offered = 0;
+	quint8 advertised = 0;
+
+	for (const bssh_soft_key_group_t &group :
+	     bssh_soft_keyboard_catalog::instance().all(style)) {
+		for (const QList<bssh_key_t> &row : group.rows) {
+			for (const bssh_key_t &key : row) {
+				if (key.kind == bssh_key_t::MODIFIER) offered |= key.modifier;
+				if (key.kind != bssh_key_t::TEXT) continue;
+
+				if (key.shifted_value != 0 || QChar::isLetter(uint(key.value))) {
+					advertised |= quint8(bssh_emulator::MOD_SHIFT);
+				}
+				if (key.altgr_value != 0 || key.shift_altgr_value != 0) {
+					advertised |= bssh_input_router::MOD_ALTGR;
+				}
+			}
+		}
+	}
+
+	return (advertised & ~offered) == 0;
+}
+
+} /* namespace */
+
+QList<bssh_custom_slot_t> bssh_parse_layout_slots(const QMap<QString, QString> &rows) {
+	QList<bssh_custom_slot_t> parsed;
+
+	for (QMap<QString, QString>::const_iterator it = rows.cbegin();
+	     it != rows.cend(); ++it) {
+		const QString slot = it.key().trimmed().toUpper();
+		if (slot.isEmpty()) continue;
+
+		/*
+		 * Split on an UNESCAPED pipe. Walking it rather than using
+		 * split() because `\|' has to survive as a legend: BKSL carries
+		 * a literal bar on most layouts, and a split that ate it would
+		 * quietly drop the one key this escape exists for.
+		 */
+		QStringList levels;
+		QString current;
+		const QString spec = it.value();
+		for (int i = 0; i < spec.size(); ++i) {
+			const QChar ch = spec.at(i);
+			/*
+			 * Two escapes, not one. `\\|' is a pipe, and `\\\\' is a
+			 * backslash -- which is needed for the same reason the
+			 * first is: a level that IS a backslash, written raw,
+			 * would sit against the separator that follows it and the
+			 * pair would read as an escaped pipe. Found by
+			 * transcribing a shipped layout and watching it come back
+			 * unable to type one.
+			 */
+			if (ch == QLatin1Char('\\') && i + 1 < spec.size()) {
+				const QChar next = spec.at(i + 1);
+				if (next == QLatin1Char('|') || next == QLatin1Char('\\')) {
+					current.append(next);
+					++i;
+					continue;
+				}
+			}
+			if (ch == QLatin1Char('|')) {
+				levels.append(current);
+				current.clear();
+				continue;
+			}
+			current.append(ch);
+		}
+		levels.append(current);
+
+		/* Four levels or it is not a row. Fewer is a truncated line and
+		 * more is a stray bar; either way the slot is dropped and the
+		 * rest of the layout stands. */
+		if (levels.size() != 4) continue;
+
+		bssh_custom_slot_t entry;
+		entry.slot = slot;
+		for (int i = 0; i < 4; ++i) entry.level[i] = levels.at(i);
+		parsed.append(entry);
+	}
+
+	return parsed;
+}
+
+QList<bssh_custom_slot_t> bssh_shipped_layout_slots(const QString &id) {
+	QList<bssh_custom_slot_t> out;
+
+	for (const bssh_layout_t &entry : BSSH_LAYOUTS) {
+		if (id != QLatin1String(entry.id)) continue;
+
+		for (int i = 0; i < entry.count; ++i) {
+			bssh_custom_slot_t row;
+			row.slot = QString::fromUtf8(entry.entries[i].slot);
+			for (int level = 0; level < 4; ++level) {
+				row.level[level] = QString::fromUtf8(entry.entries[i].level[level]);
+			}
+			out.append(row);
+		}
+		break;
+	}
+
+	return out;
+}
+
+QString bssh_layout_slot_spec(const bssh_custom_slot_t &row) {
+	QStringList levels;
+
+	for (int i = 0; i < 4; ++i) {
+		QString level = row.level[i];
+		level.replace(QLatin1Char('\\'), QStringLiteral("\\\\"));
+		level.replace(QLatin1Char('|'), QStringLiteral("\\|"));
+		levels.append(level);
+	}
+
+	return levels.join(QLatin1Char('|'));
+}
+
+bool bssh_set_custom_layout(const QString &display_name,
+                             const QList<bssh_custom_slot_t> &rows,
+                             QString *why) {
+	const auto fail = [why](const QString &reason) {
+		if (why) *why = reason;
+		return false;
+	};
+
+	if (rows.isEmpty()) return fail(QStringLiteral("no slots were readable"));
+
+	/*
+	 * Built aside and installed only once it passes, so a refused layout
+	 * leaves the working one in place. The key row learned this: a
+	 * refusal that clears first hands the user a broken keyboard and no
+	 * way back to the settings that would fix it.
+	 */
+	QList<QByteArray> bytes;
+	QVector<bssh_layout_slot_t> entries;
+	bytes.reserve(rows.size() * 5);
+	entries.reserve(rows.size());
+
+	for (const bssh_custom_slot_t &row : rows) {
+		bytes.append(row.slot.toUtf8());
+		for (int i = 0; i < 4; ++i) bytes.append(row.level[i].toUtf8());
+	}
+
+	for (int i = 0; i < rows.size(); ++i) {
+		bssh_layout_slot_t entry;
+		entry.slot = bytes.at(i * 5).constData();
+		for (int level = 0; level < 4; ++level) {
+			entry.level[level] = bytes.at(i * 5 + 1 + level).constData();
+		}
+		entries.append(entry);
+	}
+
+	/* Keep what is current so a refusal can put it back. */
+	const bssh_layout_t *before = g_layout;
+	QList<QByteArray> kept_bytes = g_custom_bytes;
+	QVector<bssh_layout_slot_t> kept_entries = g_custom_entries;
+	QByteArray kept_name = g_custom_name;
+
+	g_custom_bytes = bytes;
+	g_custom_entries = entries;
+	g_custom_name = display_name.isEmpty() ? QByteArrayLiteral("Custom")
+	                                        : display_name.toUtf8();
+	g_custom_layout.display_name = g_custom_name.constData();
+	g_custom_layout.entries = g_custom_entries.constData();
+	g_custom_layout.count = g_custom_entries.size();
+
+	g_layout = &g_custom_layout;
+	bssh_soft_keyboard_catalog::instance().rebuild();
+
+	QString reason;
+	const QString missing_compact =
+	        unreachable_printables(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	const QString missing_full =
+	        unreachable_printables(bssh_soft_keyboard_catalog::STYLE_FULL);
+
+	if (!missing_compact.isEmpty() || !missing_full.isEmpty()) {
+		reason = QStringLiteral("cannot type: %1")
+		                 .arg(missing_compact.isEmpty() ? missing_full : missing_compact);
+	} else if (!levels_are_reachable(bssh_soft_keyboard_catalog::STYLE_COMPACT)
+	            || !levels_are_reachable(bssh_soft_keyboard_catalog::STYLE_FULL)) {
+		reason = QStringLiteral("shows a level no modifier on it can reach");
+	}
+
+	if (!reason.isEmpty()) {
+		g_custom_bytes = kept_bytes;
+		g_custom_entries = kept_entries;
+		g_custom_name = kept_name;
+		g_custom_layout.entries =
+		        g_custom_entries.isEmpty() ? nullptr : g_custom_entries.constData();
+		g_custom_layout.count = g_custom_entries.size();
+		g_custom_layout.display_name =
+		        g_custom_name.isEmpty() ? "Custom" : g_custom_name.constData();
+
+		g_layout = before;
+		bssh_soft_keyboard_catalog::instance().rebuild();
+		return fail(reason);
+	}
+
+	return true;
+}
+
 QList<bssh_keyboard_layout_t> bssh_keyboard_layouts() {
 	QList<bssh_keyboard_layout_t> layouts;
 	for (const bssh_layout_t &entry : BSSH_LAYOUTS) {
@@ -2661,6 +2920,19 @@ QList<bssh_keyboard_layout_t> bssh_keyboard_layouts() {
 		described.display_name = QString::fromUtf8(entry.display_name);
 		layouts.append(described);
 	}
+
+	/*
+	 * The user's own, last and only once it exists. An entry offered
+	 * before anything has been written into it is a chooser row that
+	 * selects an empty keyboard.
+	 */
+	if (custom_layout_ready()) {
+		bssh_keyboard_layout_t described;
+		described.id = QString::fromUtf8(g_custom_layout.id);
+		described.display_name = QString::fromUtf8(g_custom_layout.display_name);
+		layouts.append(described);
+	}
+
 	return layouts;
 }
 
@@ -2683,6 +2955,21 @@ QString bssh_keyboard_layout() {
 }
 
 bool bssh_set_keyboard_layout(const QString &id) {
+	/*
+	 * The user's own is not in BSSH_LAYOUTS -- that array is const and
+	 * built at compile time -- so it is matched first and separately.
+	 * Only once it exists: selecting `custom' before anything has been
+	 * written into it would point the builders at an empty table.
+	 */
+	if (id == QLatin1String(g_custom_layout.id) && custom_layout_ready()) {
+		if (g_layout == &g_custom_layout) return true;
+
+		g_layout = &g_custom_layout;
+		bssh_set_latin_mode(true);
+		bssh_soft_keyboard_catalog::instance().rebuild();
+		return true;
+	}
+
 	for (const bssh_layout_t &entry : BSSH_LAYOUTS) {
 		if (id != QLatin1String(entry.id)) continue;
 		if (g_layout == &entry) return true;

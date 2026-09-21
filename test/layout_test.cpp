@@ -8550,3 +8550,101 @@ void layout_test::a_link_is_reachable_without_a_control_key() {
 
 	QVERIFY2(!offered_on_prose, "offered to open a link over the word 'see'");
 }
+
+/*
+ * sec 6.3's fourth answer: a user's own keyboard layout.
+ *
+ * The other three are values a user picks or composes; a layout had
+ * nowhere to live, being a C table the key builders read through
+ * g_layout. It is text now -- one entry per XKB slot, four levels
+ * separated by a pipe -- and the interesting half is not the parse but
+ * the REFUSAL: sec 6.3 asks that the catalogue's checks become the
+ * contract every layout must satisfy, and the key row already showed
+ * what it costs to leave such a rule in the suite. A rule that lives in
+ * a test reports the breach after it has happened, and reports it
+ * against the layouts that are correct.
+ */
+void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
+	const layout_left_as_found_t restore;
+
+	/* Start from a shipped table so the fixture is a real layout with one
+	 * thing changed, rather than a hand-built toy that reaches nothing. */
+	QMap<QString, QString> rows;
+	rows.insert(QStringLiteral("AE01"), QStringLiteral("1|!|¹|¡"));
+	rows.insert(QStringLiteral("AD01"), QStringLiteral("q|||"));
+	rows.insert(QStringLiteral("AC01"), QStringLiteral("a|||"));
+
+	const QList<bssh_custom_slot_t> parsed = bssh_parse_layout_slots(rows);
+	QCOMPARE(parsed.size(), 3);
+
+	/*
+	 * A pipe is a real legend on BKSL, so the escape is the one thing
+	 * the format cannot do without -- a split that ate it would drop the
+	 * single key the escape exists for.
+	 */
+	QMap<QString, QString> bar;
+	bar.insert(QStringLiteral("BKSL"), QStringLiteral("\\||\u00a6||"));
+	const QList<bssh_custom_slot_t> bar_parsed = bssh_parse_layout_slots(bar);
+	QCOMPARE(bar_parsed.size(), 1);
+	QCOMPARE(bar_parsed.first().level[0], QStringLiteral("|"));
+
+	/* A row with the wrong number of levels is dropped, and the rest of
+	 * the layout stands: one mistyped line should cost that slot. */
+	QMap<QString, QString> ragged;
+	ragged.insert(QStringLiteral("AE01"), QStringLiteral("1|!"));
+	ragged.insert(QStringLiteral("AE02"), QStringLiteral("2|@||"));
+	QCOMPARE(bssh_parse_layout_slots(ragged).size(), 1);
+
+	/*
+	 * Three slots cannot type ASCII, so the contract refuses them -- and
+	 * says which characters are missing rather than "invalid", because a
+	 * person who has transcribed 47 rows needs to know which one is
+	 * wrong.
+	 */
+	QString why;
+	QVERIFY2(!bssh_set_custom_layout(QStringLiteral("Toy"), parsed, &why),
+	          "a three-key layout was accepted as able to type");
+	QVERIFY2(why.contains(QStringLiteral("cannot type")),
+	          qPrintable(QStringLiteral("refused without saying what is missing: %1")
+	                             .arg(why)));
+
+	/*
+	 * And the refusal left the keyboard alone. This is the half that
+	 * matters on a phone: the layout IS the keyboard, so a refusal that
+	 * cleared first would leave somebody unable to reach the settings
+	 * that would fix it.
+	 */
+	QVERIFY2(!bssh_keyboard_layouts().isEmpty(), "the catalogue lost its layouts");
+	bool custom_offered = false;
+	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+		if (layout.id == QStringLiteral("custom")) custom_offered = true;
+	}
+	QVERIFY2(!custom_offered,
+	          "a layout that was refused is offered in the chooser anyway");
+
+	/*
+	 * A whole layout, transcribed from a shipped one, IS accepted -- the
+	 * positive control, without which every assertion above is satisfied
+	 * by a function that refuses everything.
+	 */
+	QMap<QString, QString> whole;
+	for (const bssh_custom_slot_t &slot : bssh_shipped_layout_slots(QStringLiteral("us-intl"))) {
+		whole.insert(slot.slot, bssh_layout_slot_spec(slot));
+	}
+	QVERIFY2(whole.size() > 40, "the shipped layout came back too small to be one");
+
+	why.clear();
+	QVERIFY2(bssh_set_custom_layout(QStringLiteral("Mine"),
+	                                 bssh_parse_layout_slots(whole), &why),
+	          qPrintable(QStringLiteral("a transcription of US International was "
+	                                     "refused: %1").arg(why)));
+
+	/* Now it is offered, and selecting it works. */
+	custom_offered = false;
+	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+		if (layout.id == QStringLiteral("custom")) custom_offered = true;
+	}
+	QVERIFY2(custom_offered, "an accepted layout is not in the chooser");
+	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("custom")));
+	QCOMPARE(bssh_keyboard_layout(), QStringLiteral("custom"));
+}

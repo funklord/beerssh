@@ -2550,8 +2550,9 @@ decision.**
   and the reason that one is not simply the row's code with a different
   table.
 
-  **[PROPOSED 2026-09-21 — not built, and wants approval before it is.]
-  How a user-supplied keyboard LAYOUT would be expressed.** The other
+  **[BUILT 2026-09-21, approved from the proposal below, with one
+  correction the build found.] How a user-supplied keyboard LAYOUT is
+  expressed.** The other
   three of §6.3's four are values a user picks or composes; a layout is
   the one with no representation to fill in, because today it is code:
   `bssh_keyboard_layout_t` carries `{id, display_name}` and the layout
@@ -2611,8 +2612,26 @@ decision.**
   it before editing gives a working board, written by a push from
   whoever owns the settings, never by `keyboard/` reading them.
 
-  **What this proposal does NOT settle, and should not be built until it
-  is.** Whether a 188-legend table is something a person will ever type
+  **The proposal specified ONE escape and needed two, which the positive
+  control found and nothing else would have.** `\\|` for a pipe was
+  right and incomplete: a level that IS a backslash, written raw, sits
+  against the separator that follows it and the parser reads the pair as
+  an escaped pipe. So the format as designed could not round-trip US
+  International — the layout every transcription starts from — and the
+  symptom was a keyboard that could not type `\\`.
+  The cause was structural rather than a slip: there was **no writer**.
+  The parser existed alone and the test joined the four levels by hand,
+  which is exactly how the escaping got forgotten.
+  `bssh_layout_slot_spec()` owns it now, beside the parser the way the
+  key row pairs its two, so the round trip is a property of the code
+  rather than of whoever calls it.
+  **Only a case that must be ACCEPTED could find this.** Every negative
+  assertion — a three-slot layout refused, not offered in the chooser,
+  the keyboard left intact — passes against a function that refuses
+  everything. The control transcribes all 47 rows of a shipped table
+  back through the text form and requires them accepted.
+
+  **What this does NOT settle, and is still open.** Whether a 188-legend table is something a person will ever type
   into `app.ini`, or whether the useful version is an import of an
   existing xkb file — which is where the transcription actually comes
   from, and would make the hand-editable form a debugging aid rather than

@@ -350,6 +350,7 @@ private slots:
 	void the_custom_palette_reaches_the_catalogue_at_startup();
 	void every_touch_surface_names_its_controls();
 	void a_link_is_reachable_without_a_control_key();
+	void a_user_layout_is_transcribed_and_refused_if_it_cannot_type();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

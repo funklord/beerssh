@@ -1,0 +1,64 @@
+# sec 6.3's fourth answer: a user's own keyboard layout.
+#
+# The other three are values a user picks or composes. A layout had
+# nowhere to live at all -- bssh_keyboard_layout_t is {id, display_name}
+# and the layout itself is a C table the key builders read through
+# g_layout -- so this is the one that needed a representation before it
+# needed code.
+#
+# The edits below aim at the two halves that can each be wrong while the
+# other looks right: the text format round-tripping, and the contract
+# refusing a layout that cannot type.
+
+# The contract, which is the whole reason this is not just a parser.
+# sec 6.3 asks that the catalogue's checks become the contract every
+# layout must satisfy; without the refusal a user can install a keyboard
+# that cannot type ASCII and find out by trying to use it.
+[[sabotage]]
+name = "a layout that cannot type is installed anyway"
+file = "keyboard/soft_keyboard_layout.cpp"
+find = "\tif (!reason.isEmpty()) {"
+replace = "\tif (false) {"
+expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
+
+# And the other half of a refusal: it must leave the working keyboard in
+# place. On a phone the layout IS the keyboard, so a refusal that cleared
+# first would leave somebody unable to reach the settings that fix it --
+# the same failure the key row's refusal was built to avoid.
+[[sabotage]]
+name = "a refused layout is offered in the chooser"
+file = "keyboard/soft_keyboard_layout.cpp"
+find = "\tif (custom_layout_ready()) {\n\t\tbssh_keyboard_layout_t described;"
+replace = "\tif (true) {\n\t\tbssh_keyboard_layout_t described;"
+expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
+
+# The pipe escape. A pipe is a real legend on BKSL, so a split that ate
+# it would drop the single key the escape exists for.
+[[sabotage]]
+name = "an escaped pipe stops being a legend"
+file = "keyboard/soft_keyboard_layout.cpp"
+find = "\t\t\t\tif (next == QLatin1Char('|') || next == QLatin1Char('\\\\')) {"
+replace = "\t\t\t\tif (next == QLatin1Char('\\\\')) {"
+expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
+
+# The backslash escape, which the design did NOT have and the positive
+# control found: a level that is a backslash, written raw, sits against
+# the separator and the pair reads as an escaped pipe. Remove either
+# half of the writer's escaping and a shipped layout stops surviving
+# transcription.
+[[sabotage]]
+name = "a backslash legend is written unescaped"
+file = "keyboard/soft_keyboard_layout.cpp"
+find = "\t\tlevel.replace(QLatin1Char('\\\\'), QStringLiteral(\"\\\\\\\\\"));"
+replace = "\t\t(void)0;"
+expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
+
+# A row with the wrong number of levels is dropped and the rest stands.
+# Accepting a ragged row instead puts a half-read slot into the table,
+# which is worse than losing it: the levels shift.
+[[sabotage]]
+name = "a truncated row is accepted with fewer levels"
+file = "keyboard/soft_keyboard_layout.cpp"
+find = "\t\tif (levels.size() != 4) continue;"
+replace = "\t\twhile (levels.size() < 4) levels.append(QString());"
+expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"

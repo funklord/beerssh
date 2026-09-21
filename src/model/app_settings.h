@@ -4,6 +4,7 @@
 #include <QList>
 #include <QPair>
 #include <QString>
+#include <QMap>
 #include <QStringList>
 
 #include "term/colour_scheme.h"
@@ -166,6 +167,24 @@ public:
 	 */
 	QString custom_key_row() const;
 	void set_custom_key_row(const QString &spec);
+
+	/*
+	 * The custom keyboard layout (sec 6.3), as one entry per XKB slot.
+	 *
+	 * A map rather than a string, unlike the key row: a layout is ~47
+	 * rows and app.ini is meant to be opened and edited (sec 10.6), so
+	 * it gets a section of its own where each line is a slot a person
+	 * can find and change. Keyed by the slot name, valued as the four
+	 * levels the keyboard catalogue parses.
+	 *
+	 * Empty means none has been written, which is different from one
+	 * that failed: the catalogue refuses a layout that cannot type, and
+	 * a refusal leaves whatever worked before in place.
+	 */
+	QMap<QString, QString> custom_keyboard_layout() const;
+	QString custom_keyboard_layout_name() const;
+	void set_custom_keyboard_layout(const QString &name,
+	                                 const QMap<QString, QString> &rows);
 
 	QString theme() const;
 	void set_theme(const QString &theme);

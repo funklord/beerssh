@@ -79,6 +79,7 @@
 #include "ui/preset_editor.h"
 #include "term/colour_scheme.h"
 #include "keyboard/key_row_layout.h"
+#include "keyboard/soft_keyboard_layout.h"
 #include "ui/session_dialog.h"
 #include "ui/password_prompt.h"
 #include "ui/tab_status.h"
@@ -1432,6 +1433,26 @@ void bssh_main_window::apply_device_settings() {
 	const QString row_spec = settings.custom_key_row();
 	if (!row_spec.isEmpty()) {
 		bssh_key_row_catalog::instance().set_custom(bssh_parse_key_row(row_spec));
+	}
+
+	/*
+	 * And the custom keyboard layout (sec 6.3), pushed the same way and
+	 * for the same reason: keyboard/ does not read the settings store.
+	 *
+	 * The return is read. A layout that cannot type is refused by the
+	 * catalogue and the reason comes back here -- which is the only
+	 * place that can tell a user, since the catalogue has no way to say
+	 * anything to anybody. Ignoring it would leave a person who wrote a
+	 * broken layout with a chooser that silently does not list it.
+	 */
+	const QMap<QString, QString> layout_rows = settings.custom_keyboard_layout();
+	if (!layout_rows.isEmpty()) {
+		QString why;
+		if (!bssh_set_custom_layout(settings.custom_keyboard_layout_name(),
+		                             bssh_parse_layout_slots(layout_rows), &why)) {
+			m_error = QStringLiteral("custom keyboard layout refused: %1").arg(why);
+			update_status();
+		}
 	}
 
 	/*

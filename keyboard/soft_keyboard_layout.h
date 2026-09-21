@@ -2,6 +2,7 @@
 #define BSSH_SOFT_KEYBOARD_LAYOUT_H
 
 #include <QList>
+#include <QMap>
 #include <QString>
 
 #include "keyboard/key_row_layout.h"
@@ -135,6 +136,71 @@ struct bssh_keyboard_layout_t {
  * the default, and is US International.
  */
 QList<bssh_keyboard_layout_t> bssh_keyboard_layouts();
+
+/*
+ * A user's own layout (sec 6.3), as rows of an XKB slot and its four
+ * levels -- plain, Shift, AltGr, Shift+AltGr -- empty where the slot has
+ * none.
+ *
+ * The shipped tables are `const char *` literals with static lifetime;
+ * a user's is text that arrives at run time, so it needs owning. This
+ * carries the owned copy and `bssh_set_custom_layout` builds the C table
+ * the existing slot lookup already reads, rather than teaching that
+ * lookup about a second kind of layout.
+ */
+struct bssh_custom_slot_t {
+	QString slot;
+	QString level[4];
+};
+
+/*
+ * Parse the app.ini form: one entry per slot, four levels separated by
+ * `|', `\|' for a literal one -- needed because `|' is a real legend on
+ * BKSL. Unknown or malformed rows are dropped rather than refusing the
+ * whole layout: one mistyped row should cost that slot, not the other
+ * forty-six, and what decides whether the remainder is usable is the
+ * contract below rather than the parse.
+ */
+QList<bssh_custom_slot_t> bssh_parse_layout_slots(const QMap<QString, QString> &rows);
+
+/*
+ * A shipped layout's slots, as the same rows a user would write.
+ *
+ * The transcription this whole format is for starts somewhere, and
+ * starting from a table that already satisfies the contract is the only
+ * starting point that does. Empty for an id the catalogue does not hold.
+ */
+QList<bssh_custom_slot_t> bssh_shipped_layout_slots(const QString &id);
+
+/*
+ * One slot as the text app.ini holds, escaped so it parses back.
+ *
+ * Beside the parser rather than left to callers, because the round trip
+ * is the whole point of the format and a caller that joins the four
+ * levels itself will forget the escapes. That is not hypothetical: the
+ * first version of this had no writer, the test joined them by hand, and
+ * a transcription of US International came back unable to type a
+ * backslash -- a level that IS a backslash, written raw, puts one
+ * immediately before the separator and the parser reads the pair as an
+ * escaped pipe.
+ */
+QString bssh_layout_slot_spec(const bssh_custom_slot_t &row);
+
+/*
+ * Install those as the reserved `custom' entry, or refuse and say why.
+ *
+ * sec 6.3 asks that the catalogue's checks "become the contract every
+ * layout must satisfy rather than tests about the two boards we happen
+ * to have", and the key row showed what that costs if it is left in the
+ * suite: a rule living only in a test reports the breach after it has
+ * happened, and reports it against the layouts that are correct. So the
+ * two checks run HERE -- every printable ASCII reachable, and no level
+ * shown that no modifier offers -- and a layout failing either is not
+ * installed.
+ */
+bool bssh_set_custom_layout(const QString &display_name,
+                             const QList<bssh_custom_slot_t> &rows,
+                             QString *why);
 
 /*
  * Read the catalog through this layout from now on.

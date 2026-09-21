@@ -325,6 +325,52 @@ bssh_colour_scheme_t bssh_app_settings::custom_scheme() const {
 	return scheme;
 }
 
+QMap<QString, QString> bssh_app_settings::custom_keyboard_layout() const {
+	QMap<QString, QString> rows;
+
+	/*
+	 * Read as a GROUP rather than by asking for slots by name. The slot
+	 * vocabulary belongs to keyboard/, and a list of names here would be
+	 * a second copy of it -- one that goes stale the first time a layout
+	 * uses a slot this file has not heard of.
+	 */
+	if (m_path.isEmpty()) return rows;
+
+	QSettings file(m_path, QSettings::IniFormat);
+	file.beginGroup(QStringLiteral("keyboard_custom_layout"));
+	for (const QString &key : file.childKeys()) {
+		if (key == QStringLiteral("name")) continue;
+		rows.insert(key, file.value(key).toString());
+	}
+	file.endGroup();
+
+	return rows;
+}
+
+QString bssh_app_settings::custom_keyboard_layout_name() const {
+	return value(QStringLiteral("keyboard_custom_layout/name"), QString()).toString();
+}
+
+void bssh_app_settings::set_custom_keyboard_layout(const QString &name,
+                                                    const QMap<QString, QString> &rows) {
+	if (m_path.isEmpty()) return;
+
+	/*
+	 * The whole group is replaced, not merged. A layout is one table: a
+	 * slot removed from it has to disappear rather than survive from the
+	 * last one and leave a keyboard nobody wrote.
+	 */
+	QSettings file(m_path, QSettings::IniFormat);
+	file.beginGroup(QStringLiteral("keyboard_custom_layout"));
+	file.remove(QString());
+	if (!name.isEmpty()) file.setValue(QStringLiteral("name"), name);
+	for (QMap<QString, QString>::const_iterator it = rows.cbegin();
+	     it != rows.cend(); ++it) {
+		file.setValue(it.key(), it.value());
+	}
+	file.endGroup();
+}
+
 QString bssh_app_settings::custom_key_row() const {
 	return value(QStringLiteral("keyboard/custom_key_row"), QString()).toString();
 }
