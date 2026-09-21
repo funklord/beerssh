@@ -3388,9 +3388,31 @@ void terminal_view_test::a_long_press_selects_and_handles_adjust_it() {
 	 */
 	const QRect middle = view.cell_rect(line, 12);
 	QVERIFY(middle.isValid());
-	view.select_word_at(line, 12);
 
-	QVERIFY(view.has_selection());
+	/*
+	 * A real press-and-hold, not select_word_at() directly.
+	 *
+	 * The first version called the helper, so the sabotage that deletes
+	 * the selection FROM the long press left the suite green: a test
+	 * that calls the helper it is verifying cannot see a wrong caller,
+	 * which is the third time that trap has been walked into here.
+	 * BSSH_HOLD_MS is 500, so the wait is deliberate rather than a
+	 * sleep-and-hope.
+	 */
+	/*
+	 * The press-and-hold is off unless something turns it on -- a pointer
+	 * keeps press-and-hold meaning "start a selection and think about
+	 * it", so the window enables it only where touch is primary. A
+	 * standalone view in a test is nobody's window, so it is enabled
+	 * here the way a touch session would.
+	 */
+	view.set_long_press_menu(true);
+
+	QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, middle.center());
+	QTest::qWait(700);
+	QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, middle.center());
+
+	QVERIFY2(view.has_selection(), "a long press selected nothing");
 	QCOMPARE(view.selection_text(), QStringLiteral("/usr/local/bin/thing"));
 
 	/*
@@ -3428,4 +3450,27 @@ void terminal_view_test::a_long_press_selects_and_handles_adjust_it() {
 	QVERIFY2(view.selection_text().size() < 20,
 	          qPrintable(QStringLiteral("the end did not move: %1")
 	                             .arg(view.selection_text())));
+
+	/*
+	 * And the START handle, which the case above cannot reach: dragging
+	 * the end exercises one branch, and a sabotage that anchors the
+	 * START to the wrong end passes a test that only ever drags the end.
+	 * Two handles are two paths.
+	 */
+	view.select_word_at(line, 12);
+	const QString whole = view.selection_text();
+	const QRect start_handle = view.selection_handle_rect(true);
+	QVERIFY(start_handle.isValid());
+
+	const QPoint to = view.cell_rect(line, 10).center();
+	QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, start_handle.center());
+	QTest::mouseMove(&view, to);
+	QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, to);
+
+	/* The end stayed: the selection still finishes where it did. */
+	QVERIFY2(view.selection_text().endsWith(QStringLiteral("thing")),
+	          qPrintable(QStringLiteral("the end moved with the start handle: %1")
+	                             .arg(view.selection_text())));
+	QVERIFY2(view.selection_text() != whole,
+	          "the start handle moved nothing");
 }

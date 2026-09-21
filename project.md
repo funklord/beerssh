@@ -2744,6 +2744,24 @@ model on a finger.
   Reading found nothing wrong because nothing was wrong; only pressing
   one did. A handle drag is neither scrolling nor a new selection, so
   neither mode should see it.
+  Guarded by `tool/sabotage/selection-handles.toml`, five edits.
+  **Two were MISSED first time and both were the test, in two different
+  ways.** It called `select_word_at()` directly, so deleting the
+  selection from the long press changed nothing it could see -- the
+  third time in one session that a test has been written against the
+  helper rather than the caller, after the lesson had been written down
+  twice. It drives a real press-and-hold now, which also surfaced a
+  precondition the direct call hid: the gesture is OFF unless something
+  enables it, because a pointer keeps press-and-hold meaning "start a
+  selection and think about it", and only a window turns it on for
+  touch. **A test that skips the real path skips the switches on it**,
+  and a switch left off is how a built feature fails to reach anybody.
+  The other miss was a fixture that could not reach its hazard: the
+  sabotage breaks the START handle's anchoring and the test only ever
+  dragged the END, so one of two paths was exercised while the name said
+  *handles*. Both are dragged now, and each drag asserts in both
+  directions -- the end that moved did, and the end that should not
+  have, did not.
 - **~~A finger could not reach the scrollback until 2026-09-21.~~ That was
   wrong, and it was committed and pushed before anybody checked it.**
   Touch drag-to-scroll has existed since `c123e12` -- the input selector

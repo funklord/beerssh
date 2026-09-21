@@ -1,0 +1,64 @@
+# sec 6.4's touch selection handles.
+#
+# The table gave touch "long press then drag handles" from the start and
+# nothing implemented either half: a long press opened the menu and
+# selected nothing, so Copy there was live only where a selection
+# already existed, and sec 8.7's SELECT mode was the only way to make
+# one.
+#
+# Each edit below aims at a different way of having handles that look
+# right and do not work, because that is the state this arrived in
+# twice: they drew correctly and hit-tested correctly and nothing ever
+# called them.
+
+# The long press selecting at all. Without it the menu opens over
+# nothing and Copy is dead, which is the state before this existed.
+[[sabotage]]
+name = "a long press opens the menu and selects nothing"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (!has_selection() && cell_at(mapFromGlobal(at), line, col)) {\n\t\t\tselect_word_at(line, col);\n\t\t}"
+replace = "\t\t(void)line; (void)col;"
+expect = "a_long_press_selects_and_handles_adjust_it"
+
+# The ORDER, which is the bug the test caught rather than one invented
+# for this spec. sec 8.7's default touch mode is scroll, and that branch
+# returns before any selection code -- so a hit-test placed after it is
+# never reached on the platform the handles exist for. Moving it back
+# below the mode dispatch restores exactly that.
+[[sabotage]]
+name = "the hit-test sits below the input mode that returns first"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (has_selection()) {\n\t\tfor (int which = 0; which < 2; ++which) {\n\t\t\tif (!selection_handle_rect(which == 0).contains(event->pos())) continue;"
+replace = "\tif (false) {\n\t\tfor (int which = 0; which < 2; ++which) {\n\t\t\tif (!selection_handle_rect(which == 0).contains(event->pos())) continue;"
+expect = "a_long_press_selects_and_handles_adjust_it"
+
+# Dragging one handle must move ONE end. Anchoring to the end being
+# dragged instead of its partner turns a handle into a fresh drag, which
+# looks like it works until you watch the other end follow.
+[[sabotage]]
+name = "a handle drags both ends, like a new selection"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tif (m_dragging_handle == 0) {\n\t\t\t\tm_selection_anchor_line = last_line;\n\t\t\t\tm_selection_anchor_col = last_col;"
+replace = "\t\t\tif (m_dragging_handle == 0) {\n\t\t\t\tm_selection_anchor_line = first_line;\n\t\t\t\tm_selection_anchor_col = first_col;"
+expect = "a_long_press_selects_and_handles_adjust_it"
+
+# The touch target. Shrinking it to the drawn circle is the plausible
+# tidy-up -- the rect and the ink would agree -- and it is exactly
+# wrong: what a finger has to hit is not what an eye has to see, and a
+# sixth of 48dp is not a target anybody can press.
+[[sabotage]]
+name = "the hit target shrinks to the size of the drawn mark"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst int side = BSSH_TOUCH_TARGET_DP;"
+replace = "\tconst int side = BSSH_TOUCH_TARGET_DP / 6;"
+expect = "a_long_press_selects_and_handles_adjust_it"
+
+# And where they sit. A handle over the text hides the thing it is there
+# to adjust, so the rect hangs below the cell -- put it on the cell and
+# the selection is covered by its own controls.
+[[sabotage]]
+name = "the handles are drawn over the text they adjust"
+file = "src/ui/terminal_view.cpp"
+find = "\treturn QRect(x, cell.bottom(), side, side);"
+replace = "\treturn QRect(x, cell.top() - side, side, side);"
+expect = "a_long_press_selects_and_handles_adjust_it"
