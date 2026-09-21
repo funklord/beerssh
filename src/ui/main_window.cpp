@@ -2034,6 +2034,16 @@ void bssh_main_window::reset_zoom_current() {
 	m_current->set_font_zoom(0);
 }
 
+void bssh_main_window::reset_terminal_state() {
+	/*
+	 * The same call a reconnect makes (sec 5.3), for the same reason:
+	 * the modes belong to programs that are no longer running. One
+	 * implementation, so a mode the reconnect learns to clear is one
+	 * this clears too.
+	 */
+	if (m_current && m_current->emulator()) m_current->emulator()->reset_modes();
+}
+
 void bssh_main_window::clear_scrollback() {
 	/*
 	 * The emulator's own method, which announces -- see its comment. The
@@ -3545,6 +3555,18 @@ void bssh_main_window::build_menu_bar() {
 	connect(clear_history, &QAction::triggered, this, [this] { clear_scrollback(); });
 	m_session_actions.append(clear_history);
 
+	/*
+	 * Flat here, grouped on the context menu, and the difference is not
+	 * an oversight: a menu BAR has no 640dp ceiling to respect, and
+	 * konsole keeps both of these in Edit. The two menus already differ
+	 * in shape for the same kind of reason -- this one has no Pane or
+	 * Session group, because a bar has File and View to put them in.
+	 */
+	QAction *reset_terminal = edit->addAction(QStringLiteral("&Reset Terminal"));
+	reset_terminal->setObjectName(QStringLiteral("menu_reset_terminal"));
+	connect(reset_terminal, &QAction::triggered, this, [this] { reset_terminal_state(); });
+	m_session_actions.append(reset_terminal);
+
 	QMenu *view = m_menu_bar->addMenu(QStringLiteral("&View"));
 
 	m_split_action = view->addAction(QStringLiteral("Split &Beside Current"));
@@ -3769,9 +3791,37 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	 * "are you sure" on a privacy action is a prompt that makes people
 	 * hesitate at exactly the wrong moment.
 	 */
-	QAction *clear_history = menu->addAction(QStringLiteral("Clear Scroll&back"));
+	/*
+	 * Putting the terminal back in order: dropping the history, and
+	 * clearing the MODES a dead program left behind.
+	 *
+	 * A group rather than two rows, and the reason is the measured one
+	 * this menu keeps meeting: at 13 top-level rows it is 584px of a
+	 * 640dp cover screen, and a fourteenth would not fit. One row that
+	 * opens two is what does.
+	 */
+	QMenu *terminal_menu = menu->addMenu(QStringLiteral("&Terminal"));
+	terminal_menu->setObjectName(QStringLiteral("terminal_state_menu"));
+
+	QAction *clear_history = terminal_menu->addAction(QStringLiteral("Clear Scroll&back"));
 	clear_history->setObjectName(QStringLiteral("terminal_clear_scrollback"));
 	clear_history->setEnabled(m_current != nullptr);
+
+	/*
+	 * The soft reset a wedged terminal needs, and the one route to it
+	 * that does not require a working shell. `cat` of a binary leaves
+	 * mouse reporting on, the alternate screen up, or the keypad in
+	 * application mode; the cure is `reset`, which has to be TYPED into
+	 * the shell that is wedged -- and on a session that has dropped
+	 * there is no shell to type it into at all.
+	 *
+	 * Soft, like the reconnect's: sec 5.3 argues it, and the hard branch
+	 * homes the cursor and erases the screen, which is the history
+	 * somebody reaching for this is trying to keep.
+	 */
+	QAction *reset_terminal = terminal_menu->addAction(QStringLiteral("&Reset Terminal"));
+	reset_terminal->setObjectName(QStringLiteral("terminal_reset"));
+	reset_terminal->setEnabled(m_current != nullptr);
 
 	menu->addSeparator();
 
@@ -4072,6 +4122,13 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	}
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
+		return;
+	}
+
+	const QAction *reset_terminal =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_reset"));
+	if (chosen == reset_terminal) {
+		reset_terminal_state();
 		return;
 	}
 

@@ -127,3 +127,23 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tm_private->scrollback.clear();\n\n\t/*\n\t * Announced, for the reason on_sb_clear gives"
 replace = "\tm_private->scrollback.clear();\n\treturn;\n\n\t/*\n\t * Announced, for the reason on_sb_clear gives"
 expect = "the_history_can_be_dropped_without_the_remote"
+
+# The wedged-terminal cure goes away on the surface touch has.
+#
+# `reset` in the shell still works, which is what would make this look
+# fine -- and it is exactly what a wedged terminal makes hard to type,
+# and what a DROPPED session offers no shell for at all.
+[[sabotage]]
+name = "the terminal menu stops offering reset"
+file = "src/ui/main_window.cpp"
+find = "\treset_terminal->setObjectName(QStringLiteral(\"terminal_reset\"));"
+replace = "\treset_terminal->setObjectName(QStringLiteral(\"terminal_reset_disabled\"));"
+expect = "the_history_can_be_dropped_without_the_remote"
+
+# And on the desktop's own.
+[[sabotage]]
+name = "the menu bar stops offering reset"
+file = "src/ui/main_window.cpp"
+find = "\treset_terminal->setObjectName(QStringLiteral(\"menu_reset_terminal\"));"
+replace = "\treset_terminal->setObjectName(QStringLiteral(\"menu_reset_disabled\"));"
+expect = "the_history_can_be_dropped_without_the_remote"

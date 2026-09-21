@@ -3711,6 +3711,26 @@ view still scrolled into lines that no longer exist -- the defect that
 handler's comment already describes, which a second copy would have
 reintroduced silently. Both edits seen to fail.
 
+**And the modes a dead program left behind are a user's to clear too.**
+`reset_modes()` -- sec 5.3's soft reset, kept soft because the hard
+branch erases the screen a reconnect exists to preserve -- had one
+caller, the reconnect. Nothing local could ask for it. The classic need
+is older than this program: `cat` of a binary leaves mouse reporting on,
+the alternate screen up or the keypad in application mode, and the cure
+is `reset`, which has to be **typed into the shell that is wedged** --
+and a session that has dropped has no shell to type it into at all.
+
+`Reset Terminal` sits beside `Clear Scrollback` now, in a `Terminal`
+group on the context menu and flat in the desktop Edit menu. The two
+menus differing in shape is deliberate: a menu BAR has no 640dp ceiling,
+konsole keeps both of these in Edit, and this menu at 13 top-level rows
+is 584px of a cover screen, so a fourteenth would not fit. One row that
+opens two is what does.
+
+**One implementation again**: the window calls the same `reset_modes()`
+the reconnect does, so a mode the reconnect learns to clear is one this
+clears too, rather than a second list to keep in step.
+
 **The runner counts skips now, because of what that disagreement
 showed.** A skipped test asserts nothing and reports no failure, so a
 sabotage that turns a test INTO a skip printed `MISSED: the suite stayed

@@ -2466,7 +2466,8 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * route until now, which on a phone meant no route at all.
 	 */
 	QCOMPARE(actions.at(4)->text(), QStringLiteral("&Find..."));
-	QCOMPARE(actions.at(5)->text(), QStringLiteral("Clear Scroll&back"));
+	QCOMPARE(actions.at(5)->text(), QStringLiteral("&Terminal"));
+	QVERIFY2(actions.at(5)->menu(), "Terminal must be a submenu, not a verb");
 
 	/*
 	 * Then the two GROUPS, and they are groups for a measured reason
@@ -2532,6 +2533,17 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * only where it applies. a_session_can_be_closed_without_a_tab_bar
 	 * is where its presence is asserted, with a session that is not live.
 	 */
+	/*
+	 * Putting the terminal back in order: the history, and the modes a
+	 * dead program left behind. Two rows in a group rather than two at
+	 * the top level, because a fourteenth top-level row does not fit a
+	 * 640dp cover screen.
+	 */
+	const QList<QAction *> state = actions.at(5)->menu()->actions();
+	QCOMPARE(state.size(), 2);
+	QCOMPARE(state.at(0)->text(), QStringLiteral("Clear Scroll&back"));
+	QCOMPARE(state.at(1)->text(), QStringLiteral("&Reset Terminal"));
+
 	const QList<QAction *> sessions = actions.at(10)->menu()->actions();
 	QCOMPARE(sessions.size(), 5);
 	QCOMPARE(sessions.at(0)->text(), QStringLiteral("New &Tab"));
@@ -2544,6 +2556,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	every += sizes;
 	every += panes;
 	every += sessions;
+	every += state;
 	for (const QAction *action : every) {
 		if (action->isSeparator()) continue;
 		QVERIFY2(action->text().contains(QLatin1Char('&')),
@@ -4002,5 +4015,16 @@ void terminal_view_test::the_history_can_be_dropped_without_the_remote() {
 	QVERIFY(menu);
 	QVERIFY2(menu->findChild<QAction *>(QStringLiteral("terminal_clear_scrollback")),
 	          "the terminal menu offers no way to drop the history, so touch has none");
+
+	/*
+	 * And the modes, which is the other half of putting a wedged
+	 * terminal back in order -- and the half that cannot be done from
+	 * the shell when the session has dropped, because there is no shell.
+	 */
+	QVERIFY2(window.findChild<QAction *>(QStringLiteral("menu_reset_terminal")),
+	          "the menu bar offers no way to reset the terminal");
+	QVERIFY2(menu->findChild<QAction *>(QStringLiteral("terminal_reset")),
+	          "the terminal menu offers no way to reset, so a wedged session on "
+	          "touch has no way back");
 	delete menu;
 }

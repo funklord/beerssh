@@ -446,6 +446,9 @@ private:
 	/* Drop the focused session's history (sec 6.4). */
 	void clear_scrollback();
 
+	/* Clear the modes a dead program left behind (sec 6.4, sec 5.3). */
+	void reset_terminal_state();
+
 	void open_find();
 	void run_find(const QString &query);
 	void step_find(int direction);
