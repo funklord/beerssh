@@ -8881,3 +8881,36 @@ void layout_test::the_touch_terminal_menu_fits_a_phone() {
 
 	delete menu;
 }
+
+void layout_test::the_settings_page_says_what_unset_gives_you() {
+	/*
+	 * bssh_app_settings::default_keyboard() decides what an installation
+	 * that has never been asked gets, and it differs by device: a phone
+	 * opens with the built-in board, a desktop with the system one. Its
+	 * header says it is public "because the settings page shows which one
+	 * that is, and a second copy of the rule would be a second thing to
+	 * be wrong" -- and nothing on that page called it, so the rule was
+	 * public for a consumer nobody had written.
+	 *
+	 * Asserted on BOTH devices, because one of them would pass against a
+	 * note that named a constant: the answer has to move with the device
+	 * or it is not reporting the rule at all.
+	 */
+	for (int touch = 0; touch <= 1; ++touch) {
+		const forced_touch_t arrangement(touch);
+
+		bssh_app_settings_view page;
+		QLabel *note = page.findChild<QLabel *>(QStringLiteral("keyboard_default_note"));
+		QVERIFY2(note, "the settings page never says what an unset keyboard gives");
+
+		QComboBox *choices = page.findChild<QComboBox *>(QStringLiteral("keyboard"));
+		QVERIFY(choices);
+
+		const int row = choices->findData(int(bssh_app_settings::default_keyboard()));
+		QVERIFY2(row >= 0, "the default keyboard is not among the offered ones");
+
+		QVERIFY2(note->text().contains(choices->itemText(row)),
+		          qPrintable(QStringLiteral("the note says %1, the default is %2")
+		                             .arg(note->text(), choices->itemText(row))));
+	}
+}

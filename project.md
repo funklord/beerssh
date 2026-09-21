@@ -7679,6 +7679,33 @@ already lists unavailable families in the picker and marks them, which
 is the answer at CHOOSING time; this is the answer at looking-at-it
 time, and it was the half nobody could reach.
 
+**The same sweep, run again, found one more and cleared four classes.**
+`bssh_app_settings::default_keyboard()` decides what an installation
+that has never been asked gets, and it differs by device -- a phone
+opens with the built-in board, a desktop with the system one. Its header
+says it is public *"because the settings page shows which one that is,
+and a second copy of the rule would be a second thing to be wrong"*, and
+the page never called it: the rule was public for a consumer nobody had
+written, and a user was never told what "unset" would give them. The
+page says so now, as a wrapped note rather than a longer combo item --
+sec 12.3l records that combo's width as load-bearing at 320dp -- and it
+reads the NAME back out of the combo, since two lists of the same three
+names is the second copy the comment is about.
+
+**And asserting it on both devices is what makes it a test.** A note
+naming a constant is right on a desktop; the sabotage that writes
+`KEYBOARD_SYSTEM` in place of the call is caught only because the same
+assertion runs under forced touch.
+
+**Swept and clean**: the public APIs of `bssh_session`,
+`bssh_pane_container`, `bssh_emulator` and `bssh_session_registry`, and
+five other comments that name a consumer -- `back_requested` on three
+touch pages, `can_hide_from_screenshots`, `hosts_using` before a preset
+delete. Every one of those consumers exists. The instrument cannot see
+intra-file use, so a method called only from its own `.cpp` reads as
+unreferenced; that is what made `mark_seen`, `equalize_panes` and
+`scroll_column_by` look unwired when they are not.
+
 **Found by a mechanical sweep, and the first version of that sweep
 lied.** Walking the view's public methods for ones referenced nowhere
 outside their own class first reported `set_reverse_video` as unwired --

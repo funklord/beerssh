@@ -20,3 +20,26 @@ replace = '''void bssh_soft_keyboard::set_group(int index) {
 	        bssh_soft_keyboard_catalog::instance().all(
 	                bssh_soft_keyboard_catalog::STYLE_COMPACT);'''
 expect = "the_full_keyboard_answers_about_itself"
+
+# The page stops saying what an unset keyboard gives.
+#
+# Restores the state found on 2026-09-21: default_keyboard() is public
+# "because the settings page shows which one that is", and no page did.
+[[sabotage]]
+name = "the settings page stops naming the device default"
+file = "src/ui/app_settings_view.cpp"
+find = "\t\tkeyboard_default->setObjectName(QStringLiteral(\"keyboard_default_note\"));"
+replace = "\t\tkeyboard_default->setObjectName(QStringLiteral(\"keyboard_default_gone\"));"
+expect = "the_settings_page_says_what_unset_gives_you"
+
+# The note names a constant instead of asking.
+#
+# This is what a second copy of the rule looks like, and it is why the
+# test asserts on BOTH devices: on a desktop the constant is right, so a
+# one-device test would pass while a phone was told the wrong thing.
+[[sabotage]]
+name = "the default note is written rather than asked for"
+file = "src/ui/app_settings_view.cpp"
+find = "\t        m_keyboard->findData(int(bssh_app_settings::default_keyboard()));"
+replace = "\t        m_keyboard->findData(int(bssh_app_settings::KEYBOARD_SYSTEM));"
+expect = "the_settings_page_says_what_unset_gives_you"

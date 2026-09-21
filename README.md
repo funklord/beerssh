@@ -100,6 +100,18 @@ session in front of you, on top of whatever size that host resolves to, and
 owns the wheel. It is not saved: a size you want every time is the host's own
 font setting.
 
+**The terminal's own menu is where a phone reaches everything else** —
+right-click on a desktop, press and hold on a touch screen. Find in the
+scrollback, text size, the panes, and the session verbs: another tab or
+window, duplicate this host, connect a session that is not live, and close
+one. It also clears the scrollback and resets the terminal, which are the two
+things a wedged or dropped session cannot ask its shell to do — `clear` and
+`reset` both need a shell that is listening.
+
+Most of those have a chord or a menu-bar entry on the desktop as well. The
+menu exists because a phone has neither, and because a tab bar it could have
+used is not drawn when every session is already on screen in the column.
+
 Closing the window with a session still connected asks whether to keep it
 running in the background or disconnect and quit, and remembers the answer.
 On desktop "background" means a tray icon and a process that outlives its
