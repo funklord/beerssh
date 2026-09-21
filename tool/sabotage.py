@@ -285,7 +285,7 @@ def kill_group(child: subprocess.Popen) -> None:
 			say(f"  !! the suite ignored signal {number}; escalating")
 
 
-def run_suite() -> tuple[bool, int, list[str]]:
+def run_suite() -> tuple[bool, int, list[str], int]:
 	"""Runs the suite: (did it run at all, passes, failing test names).
 
 	The first element is the one that matters. `make test` that fails to
@@ -308,7 +308,7 @@ def run_suite() -> tuple[bool, int, list[str]]:
 			say(f"  !! the suite did not finish within {RUN_DEADLINE_S}s")
 			kill_group(current)
 			current = None
-			return False, 0, []
+			return False, 0, [], 0
 
 		current = None
 
@@ -316,16 +316,25 @@ def run_suite() -> tuple[bool, int, list[str]]:
 		text = log.read()
 
 	passes = 0
+	skips = 0
 	failing = []
 	for line in text.splitlines():
 		if line.startswith("PASS"):
 			passes += 1
+		elif line.startswith("SKIP"):
+			# A skipped test asserts nothing and reports no failure, so a
+			# sabotage that turns one INTO a skip is indistinguishable
+			# here from a sabotage nothing noticed -- and it is the worse
+			# outcome, because the test is still in the suite claiming to
+			# cover the thing it no longer touches. Counted so that the
+			# verdict below can say which of the two happened.
+			skips += 1
 		elif line.startswith("FAIL!"):
 			# "FAIL!  : suite::test_name() ..." -- the name a spec matches.
 			part = line.split(":", 2)[-1].strip()
 			failing.append(part.split("(")[0].strip())
 
-	return (passes + len(failing)) > 0, passes, failing
+	return (passes + len(failing)) > 0, passes, failing, skips
 
 
 def restore_all(edits: list[Edit]) -> bool:
@@ -764,7 +773,7 @@ def main(argv: list[str]) -> int:
 	say(f"sabotage: {len(edits)} edit(s); one run of `{' '.join(SUITE)}` "
 	     f"each, plus a baseline")
 
-	ran, baseline_passes, baseline_failing = run_suite()
+	ran, baseline_passes, baseline_failing, baseline_skips = run_suite()
 	if not ran:
 		say("sabotage: the suite did not run at all -- a build failure, most "
 		     "likely. Nothing below would mean anything.")
@@ -774,7 +783,12 @@ def main(argv: list[str]) -> int:
 		     f"{', '.join(baseline_failing[:3])}")
 		say("sabotage:   nothing here means anything until it is green.")
 		return 1
-	say(f"  baseline: {baseline_passes} passing")
+	# The skips are printed even when there are none, because the useful
+	# moment for this number is when somebody compares two runs: a
+	# baseline that quietly counts one test fewer than the suite's own
+	# Totals is a test that skipped, and without this the only way to
+	# learn that is to notice the arithmetic disagreeing.
+	say(f"  baseline: {baseline_passes} passing, {baseline_skips} skipped")
 
 	results: list[tuple[str, str, str]] = []
 	clean = True
@@ -783,7 +797,7 @@ def main(argv: list[str]) -> int:
 		say(f"  breaking: {edit.name}")
 		try:
 			edit.apply()
-			ran, _, failing = run_suite()
+			ran, _, failing, skips = run_suite()
 
 			if not ran:
 				# The sabotage stopped it compiling. That is not a test
@@ -795,6 +809,14 @@ def main(argv: list[str]) -> int:
 			elif failing:
 				verdict = "WRONG TEST"
 				detail = f"{len(failing)} failed: {', '.join(failing[:2])}"
+			elif skips > baseline_skips:
+				# Nothing failed AND a test stopped running. Reporting
+				# this as a plain MISSED would hide the more alarming
+				# half: the guard is still listed in the suite and has
+				# quietly stopped asserting anything.
+				verdict = "MISSED"
+				detail = (f"the suite stayed green and {skips - baseline_skips} "
+				           f"more test(s) SKIPPED than at baseline")
 			else:
 				verdict, detail = "MISSED", "the suite stayed green"
 

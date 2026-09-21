@@ -3711,6 +3711,20 @@ view still scrolled into lines that no longer exist -- the defect that
 handler's comment already describes, which a second copy would have
 reintroduced silently. Both edits seen to fail.
 
+**The runner counts skips now, because of what that disagreement
+showed.** A skipped test asserts nothing and reports no failure, so a
+sabotage that turns a test INTO a skip printed `MISSED: the suite stayed
+green` -- the same words as a sabotage nothing noticed, and the worse of
+the two outcomes, since the test is still listed in the suite claiming
+to cover what it no longer touches. The baseline line now reads
+`N passing, M skipped`, and an edit that raises the skip count says so.
+
+**Proved with a control rather than by reading it.** A scratch spec put
+a `QSKIP` at the top of a real test; the runner reported
+*"the suite stayed green and 1 more test(s) SKIPPED than at baseline"*,
+where before it would have said only the first half. The control was
+never committed, and the tree came back clean.
+
 **And the two ways of counting that run disagreed by one, which is
 recorded rather than explained.** The suite's own `Totals:` lines sum to
 621 passing for this tree and the sabotage runner's baseline reported
