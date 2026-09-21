@@ -8712,3 +8712,88 @@ void layout_test::every_custom_entry_reaches_the_control_that_offers_it() {
 		          "a user can edit the custom palette and not choose it");
 	}
 }
+
+void layout_test::a_rebuilt_pane_keeps_the_sessions_zoom() {
+	/*
+	 * The zoom lives on the session for exactly this reason: a pane is
+	 * destroyed and rebuilt by every layout change, so a number kept on
+	 * the widget is lost the first time a window splits or narrows --
+	 * which is the moment somebody wants bigger text.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("zoomed")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({ a });
+	container.rebuild();
+
+	QPointer<bssh_terminal_view> first = container.view_at(0);
+	QVERIFY(first);
+	const int base = first->font_point_size();
+
+	a->set_font_zoom(3);
+	QCOMPARE(first->font_point_size(), base + 3);
+
+	/* A second pane, which rebuilds every view in the container. */
+	bssh_session *b = registry.create(named(QStringLiteral("other")));
+	layout.set_intent({ a, b });
+	container.rebuild();
+
+	/*
+	 * The fixture has to have REACHED the hazard: if the container had
+	 * kept the old widget, this would pass without saying anything about
+	 * where the zoom lives.
+	 */
+	QVERIFY2(first.isNull(), "the rebuild did not destroy the pane it was given");
+
+	bssh_terminal_view *rebuilt = container.view_for(a);
+	QVERIFY(rebuilt);
+	QCOMPARE(rebuilt->font_point_size(), base + 3);
+
+	/* And the session beside it was not dragged along with it. */
+	bssh_terminal_view *neighbour = container.view_for(b);
+	QVERIFY(neighbour);
+	QCOMPARE(neighbour->font_point_size(), base);
+}
+
+void layout_test::ctrl_wheel_in_a_pane_zooms_that_panes_session() {
+	/*
+	 * The gesture's control: the view reports that it happened and the
+	 * container names the session. Asserted on the SESSION, because the
+	 * view emitting correctly into nothing is the shape this tree keeps
+	 * finding.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({ a, b });
+	container.rebuild();
+
+	bssh_terminal_view *second = container.view_at(1);
+	QVERIFY(second);
+
+	/* Which session that pane is showing, asked rather than assumed. */
+	QCOMPARE(container.view_for(b), second);
+
+	const QPointF at(10, 10);
+	QWheelEvent event(at, second->mapToGlobal(at.toPoint()), QPoint(0, 0),
+	                   QPoint(0, 120), Qt::NoButton, Qt::ControlModifier,
+	                   Qt::NoScrollPhase, false);
+	QApplication::sendEvent(second, &event);
+
+	/* The pane that was turned in, and only that one. */
+	QCOMPARE(b->font_zoom(), 1);
+	QCOMPARE(a->font_zoom(), 0);
+}

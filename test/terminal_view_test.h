@@ -126,6 +126,20 @@ private slots:
 	void the_touch_layout_grows_the_rows_and_drops_the_chords();
 	void a_bare_url_is_clickable_and_stops_where_it_should();
 	void a_long_press_selects_and_handles_adjust_it();
+
+	/*
+	 * Zoom (sec 9.5). The first three are about the view's arithmetic;
+	 * the last two are the ones that can catch a feature wired to
+	 * nothing -- the chord reaching the session, and the menu offering
+	 * the entries at all.
+	 */
+	void zoom_moves_the_size_the_grid_is_drawn_at();
+	void a_resolve_moves_the_base_under_the_zoom();
+	void the_zoom_stops_where_the_settings_layer_does();
+	void ctrl_wheel_zooms_while_the_remote_owns_the_wheel();
+	void the_zoom_chords_reach_the_focused_session();
+	void the_terminal_menu_offers_zoom();
+	void a_zoom_past_the_limit_still_steps_back();
 };
 
 #endif /* BSSH_TERMINAL_VIEW_TEST_H */

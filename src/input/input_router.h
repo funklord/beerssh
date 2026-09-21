@@ -206,7 +206,29 @@ public:
 		 * that cannot search its history is missing the thing a long
 		 * scrollback is FOR.
 		 */
-		SHORTCUT_FIND
+		SHORTCUT_FIND,
+
+		/*
+		 * Zoom (sec 9.5). Ctrl+= , Ctrl+- and Ctrl+0 -- the spelling
+		 * browsers and editors settled on, and chosen over the
+		 * Ctrl+Shift+plus a terminal might use because the modifiers
+		 * here must match EXACTLY: "Ctrl and plus" is physically
+		 * Ctrl+Shift+equal on a US keyboard and plain Ctrl+plus on a
+		 * keypad, so one declaration cannot cover both while
+		 * Ctrl+equal covers everybody.
+		 *
+		 * What is being given up is small and worth saying, and it is
+		 * NOT a control byte: the ASCII control set runs over @ A-Z
+		 * [ \ ] ^ _ and ? and holds no digit, equals or minus, so
+		 * bssh_emulator::send_char hands all three straight to
+		 * libvterm. What a remote loses is therefore a CSI-u report --
+		 * the one it asked for if it enabled sec 7.1's disambiguation,
+		 * and one libvterm emits unasked-for if it did not. A user who
+		 * wants a chord back unbinds it by name, like any other.
+		 */
+		SHORTCUT_ZOOM_IN,
+		SHORTCUT_ZOOM_OUT,
+		SHORTCUT_ZOOM_RESET
 	};
 
 	/*

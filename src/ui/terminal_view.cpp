@@ -38,6 +38,7 @@
 #include "platform/platform.h"
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
+#include "model/preset.h"
 
 /*
  * Matches bssh_preset_t's default, so a view built before any settings are
@@ -95,6 +96,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_emulator(nullptr),
       m_input_router(nullptr),
       m_font_size(BSSH_DEFAULT_POINT_SIZE),
+      m_font_zoom(0),
       m_cursor_style(QStringLiteral("block")),
       m_cursor_on(true),
       m_cursor_blink_wanted(false),
@@ -206,7 +208,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 
 	m_font_id = bssh_font_catalog::instance().default_id(compact);
 	m_font = bssh_font_catalog::make_font(
-	        bssh_font_catalog::instance().family_for(m_font_id), m_font_size,
+	        bssh_font_catalog::instance().family_for(m_font_id), font_point_size(),
 	        default_font_ligatures());
 
 	setFocusPolicy(Qt::StrongFocus);
@@ -254,8 +256,51 @@ void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 
 	m_font_size = point_size > 0 ? point_size : BSSH_DEFAULT_POINT_SIZE;
 
-	m_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id), m_font_size,
-	                                      default_font_ligatures());
+	/*
+	 * The zoom is deliberately NOT cleared here. This is the path a
+	 * resolve takes -- a preset edit, a host reopened, a pane rebuilt --
+	 * and a user who has made this session's text bigger has not asked
+	 * for it back every time one of those happens. It is re-clamped
+	 * against the new base instead, which is what rebuild_font does.
+	 */
+	rebuild_font();
+}
+
+int bssh_terminal_view::font_point_size() const {
+	return qBound(BSSH_PRESET_MIN_POINT_SIZE, m_font_size + m_font_zoom,
+	               BSSH_PRESET_MAX_POINT_SIZE);
+}
+
+void bssh_terminal_view::set_font_zoom(int steps) {
+	if (steps == m_font_zoom) return;
+
+	/*
+	 * Stored as asked and clamped in ONE place, rebuild_font, which is
+	 * the only code here that knows the base. Clamping in both would be
+	 * two answers to one question, and the narrower of them would win
+	 * silently.
+	 */
+	m_font_zoom = steps;
+	rebuild_font();
+}
+
+void bssh_terminal_view::rebuild_font() {
+	bssh_font_catalog &catalog = bssh_font_catalog::instance();
+
+	/*
+	 * The one clamp, and it is applied to the ZOOM rather than to the
+	 * sum. Bounding only the sum leaves the stored steps climbing while
+	 * the drawn size stands still, so the first few steps back do
+	 * nothing -- which reads, from the keyboard, as the zoom having
+	 * broken. It also re-clamps after a RESOLVE, since a new base can
+	 * leave a zoom that was legal against the old one out of range.
+	 */
+	m_font_zoom = qBound(BSSH_PRESET_MIN_POINT_SIZE - m_font_size, m_font_zoom,
+	                      BSSH_PRESET_MAX_POINT_SIZE - m_font_size);
+
+	m_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id),
+	                                       font_point_size(),
+	                                       default_font_ligatures());
 
 	/*
 	 * A different font is a different cell size, which is a different
@@ -400,7 +445,7 @@ const QFont &bssh_terminal_view::cell_font(const QString &family, bool bold, boo
 	const auto cached = m_font_cache.constFind(key);
 	if (cached != m_font_cache.constEnd()) return cached.value();
 
-	QFont font = bssh_font_catalog::make_font(family, m_font_size,
+	QFont font = bssh_font_catalog::make_font(family, font_point_size(),
 	                                          default_font_ligatures());
 	font.setBold(bold);
 	font.setItalic(italic);
@@ -566,6 +611,24 @@ void bssh_terminal_view::scroll_to_live() {
 
 void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 	const int notches = event->angleDelta().y() / 120;
+
+	/*
+	 * Ctrl+wheel zooms, and it is tested FIRST -- before the remote's
+	 * claim on the wheel below -- because that is the one place a user
+	 * reaches for it. Text too small to read is most often text inside
+	 * less, vim or htop, and those are exactly the programs that have
+	 * turned mouse reporting on; a zoom that worked everywhere except
+	 * there would be missing at the moment it is wanted.
+	 *
+	 * It steals nothing from the shell. A wheel is not a key, the remote
+	 * hears no zoom either way, and Ctrl+wheel is what every other
+	 * terminal does with this gesture.
+	 */
+	if (event->modifiers().testFlag(Qt::ControlModifier)) {
+		if (notches != 0) emit zoom_requested(notches);
+		event->accept();
+		return;
+	}
 
 	/*
 	 * When the remote asked for the mouse, the wheel is ITS wheel -- the

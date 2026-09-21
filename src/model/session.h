@@ -68,6 +68,25 @@ public:
 	const QJsonObject &settings() const { return m_settings; }
 	void set_settings(const QJsonObject &settings);
 
+	/*
+	 * How far the user has zoomed this session's text, in points on top
+	 * of whatever the settings above resolve to (sec 9.5).
+	 *
+	 * It lives here for the reason the comment on settings() gives: a
+	 * pane is destroyed and rebuilt by any layout change, so a zoom kept
+	 * on the widget would be lost the first time the window was narrowed
+	 * enough to collapse a split -- which is the moment somebody is most
+	 * likely to want bigger text.
+	 *
+	 * Not persisted, and that is the deliberate half: a zoom is what this
+	 * session looks like right now, while what a HOST should look like is
+	 * a preset field with an editor and an override badge behind it
+	 * (sec 10.1). Writing a zoom into either would quietly answer a
+	 * question the user did not ask.
+	 */
+	int font_zoom() const { return m_font_zoom; }
+	void set_font_zoom(int steps);
+
 	bssh_emulator *emulator() const { return m_emulator; }
 	bssh_input_router *input_router() const { return m_input_router; }
 	bssh_ssh_session *transport() const { return m_transport; }
@@ -179,6 +198,14 @@ signals:
 	void settings_changed();
 
 	/*
+	 * The zoom moved. Separate from settings_changed because nothing was
+	 * resolved: the host's answer is unchanged and only this session's
+	 * view of it moved, so anything that re-reads settings on that signal
+	 * would be re-reading the same values.
+	 */
+	void font_zoom_changed();
+
+	/*
 	 * Somebody closed this session on purpose (sec 5.3).
 	 *
 	 * Emitted BEFORE the transport is told, so that whatever is watching
@@ -204,6 +231,7 @@ signals:
 private:
 	bssh_profile_t m_profile;
 	QJsonObject m_settings;
+	int m_font_zoom;
 	bssh_ssh_session *m_transport;
 	bssh_emulator *m_emulator;
 	bssh_input_router *m_input_router;

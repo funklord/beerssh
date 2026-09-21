@@ -33,6 +33,8 @@
 #include "ui/terminal_view.h"
 #include "model/session_registry.h"
 #include "ui/pane_container.h"
+#include "model/preset.h"
+#include <QWheelEvent>
 
 
 /*
@@ -2444,7 +2446,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 13);
+	QCOMPARE(actions.size(), 17);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -2459,14 +2461,25 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QCOMPARE(actions.at(3)->text(), QStringLiteral("Select &All"));
 
 	/*
+	 * Then zoom (sec 9.5), between the edit verbs and the session
+	 * verbs because it is neither: it changes what the pane in front of
+	 * you looks like, and it is on this menu at all for the device that
+	 * has no chord and no wheel to reach it with.
+	 */
+	QVERIFY(actions.at(4)->isSeparator());
+	QCOMPARE(actions.at(5)->text(), QStringLiteral("Zoom &In"));
+	QCOMPARE(actions.at(6)->text(), QStringLiteral("Zoom &Out"));
+	QCOMPARE(actions.at(7)->text(), QStringLiteral("&Reset Zoom"));
+
+	/*
 	 * Then the session verbs. These lived only on the TAB bar's menu,
 	 * which is a target you have to know about -- and a window with one
 	 * session hides its tab bar entirely, so splitting was unreachable
 	 * from anywhere but a chord. Reported as exactly that: a terminal
 	 * cannot be split from its right-click menu.
 	 */
-	QVERIFY(actions.at(4)->isSeparator());
-	QCOMPARE(actions.at(5)->text(), QStringLiteral("Split &Beside Current"));
+	QVERIFY(actions.at(8)->isSeparator());
+	QCOMPARE(actions.at(9)->text(), QStringLiteral("Split &Beside Current"));
 
 	/*
 	 * The un-split, next to the split and for a reason of its own: with
@@ -2475,7 +2488,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * The same argument as Split's, which is on this menu because a
 	 * one-session window has no tab bar either.
 	 */
-	QCOMPARE(actions.at(6)->text(), QStringLiteral("Show as &Tab"));
+	QCOMPARE(actions.at(10)->text(), QStringLiteral("Show as &Tab"));
 
 	/*
 	 * Then reordering, which is beside the other two arrangement verbs
@@ -2485,11 +2498,11 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * Android -- QDrag hands the gesture to the platform, which claims
 	 * it as drag-to-split-screen (sec 8.4).
 	 */
-	QCOMPARE(actions.at(7)->text(), QStringLiteral("Move Pane &Left"));
-	QCOMPARE(actions.at(8)->text(), QStringLiteral("Move Pane &Right"));
+	QCOMPARE(actions.at(11)->text(), QStringLiteral("Move Pane &Left"));
+	QCOMPARE(actions.at(12)->text(), QStringLiteral("Move Pane &Right"));
 
-	QCOMPARE(actions.at(9)->text(), QStringLiteral("New &Tab"));
-	QCOMPARE(actions.at(10)->text(), QStringLiteral("New &Window"));
+	QCOMPARE(actions.at(13)->text(), QStringLiteral("New &Tab"));
+	QCOMPARE(actions.at(14)->text(), QStringLiteral("New &Window"));
 
 	/*
 	 * And the way to the configuration, behind its own separator (sec 2):
@@ -2498,8 +2511,8 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * different kind of thing again, and separated for the same reason
 	 * Select All is separated from Copy.
 	 */
-	QVERIFY(actions.at(11)->isSeparator());
-	QCOMPARE(actions.at(12)->text(), QStringLiteral("&Hosts and Settings"));
+	QVERIFY(actions.at(15)->isSeparator());
+	QCOMPARE(actions.at(16)->text(), QStringLiteral("&Hosts and Settings"));
 
 	/*
 	 * Access keys on every verb, which is what makes the menu usable from
@@ -2524,7 +2537,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * unavailable" would be caught here even if the order above still
 	 * lined up.
 	 */
-	QCOMPARE(actions.size(), 13);
+	QCOMPARE(actions.size(), 17);
 
 	delete menu;
 }
@@ -3473,4 +3486,241 @@ void terminal_view_test::a_long_press_selects_and_handles_adjust_it() {
 	                             .arg(view.selection_text())));
 	QVERIFY2(view.selection_text() != whole,
 	          "the start handle moved nothing");
+}
+
+/*
+ * Zoom (sec 9.5). The view's half: the size it draws at, and the two
+ * arithmetic properties that were easy to get wrong -- a resolve arriving
+ * under a zoom, and where the clamp is applied.
+ */
+void terminal_view_test::zoom_moves_the_size_the_grid_is_drawn_at() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	view.set_font_id(QString(), 11);
+
+	QCOMPARE(view.font_point_size(), 11);
+	const int plain_cell = view.cell_width();
+
+	view.set_font_zoom(3);
+
+	QCOMPARE(view.font_zoom(), 3);
+	QCOMPARE(view.font_point_size(), 14);
+
+	/*
+	 * The CELL, not only the number. A zoom that moved a member and not
+	 * the font would satisfy every assertion above it, and the cell width
+	 * is what the grid, the remote's column count and the user all
+	 * actually see.
+	 */
+	QVERIFY2(view.cell_width() > plain_cell,
+	          qPrintable(QStringLiteral("14pt drew the same cell as 11pt: %1")
+	                             .arg(view.cell_width())));
+
+	view.set_font_zoom(0);
+	QCOMPARE(view.font_point_size(), 11);
+	QCOMPARE(view.cell_width(), plain_cell);
+}
+
+void terminal_view_test::a_resolve_moves_the_base_under_the_zoom() {
+	/*
+	 * A preset edit, a host reopened, a pane rebuilt: all of them arrive
+	 * as a resolve, and a user who has zoomed has not asked for it back.
+	 * The base moves and the zoom rides on top.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	view.set_font_id(QString(), 11);
+	view.set_font_zoom(2);
+	QCOMPARE(view.font_point_size(), 13);
+
+	QJsonObject resolved;
+	resolved.insert(QStringLiteral("font_size"), 14);
+	bssh_apply_appearance(&view, resolved);
+
+	QCOMPARE(view.font_zoom(), 2);
+	QCOMPARE(view.font_point_size(), 16);
+
+	/*
+	 * And a base that leaves no room re-clamps the zoom rather than
+	 * carrying steps the view will not draw. Kept honest at the moment
+	 * the base moves, because the alternative is a stored number that
+	 * disagrees with the screen and a handful of dead keypresses the
+	 * next time somebody steps back.
+	 */
+	QJsonObject at_the_top;
+	at_the_top.insert(QStringLiteral("font_size"), BSSH_PRESET_MAX_POINT_SIZE);
+	bssh_apply_appearance(&view, at_the_top);
+
+	QCOMPARE(view.font_point_size(), BSSH_PRESET_MAX_POINT_SIZE);
+	QCOMPARE(view.font_zoom(), 0);
+}
+
+void terminal_view_test::the_zoom_stops_where_the_settings_layer_does() {
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	view.set_font_id(QString(), 11);
+
+	view.set_font_zoom(1000);
+	QCOMPARE(view.font_point_size(), BSSH_PRESET_MAX_POINT_SIZE);
+
+	/*
+	 * And the step back MOVES, which is the whole reason the clamp is on
+	 * the zoom rather than on the sum. Bound only the sum and the stored
+	 * steps keep climbing while the size stands still, so the first step
+	 * back does nothing -- from the keyboard, a zoom that has stopped
+	 * working.
+	 */
+	view.set_font_zoom(view.font_zoom() - 1);
+	QCOMPARE(view.font_point_size(), BSSH_PRESET_MAX_POINT_SIZE - 1);
+
+	view.set_font_zoom(-1000);
+	QCOMPARE(view.font_point_size(), BSSH_PRESET_MIN_POINT_SIZE);
+}
+
+void terminal_view_test::ctrl_wheel_zooms_while_the_remote_owns_the_wheel() {
+	/*
+	 * The case the ordering exists for: text too small to read is usually
+	 * text inside less, vim or htop, and those are exactly the programs
+	 * that have asked for the wheel. A zoom that worked everywhere except
+	 * there would be missing where it is wanted.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/* 1000: report presses, which is what a pager turns on. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h"));
+	QVERIFY2(emulator.mouse_reporting(),
+	          "the fixture never reached the case: the remote does not own the wheel");
+	emulator.take_output();
+
+	QSignalSpy zoomed(&view, &bssh_terminal_view::zoom_requested);
+
+	const QPointF at(20, 20);
+	QWheelEvent event(at, view.mapToGlobal(at.toPoint()), QPoint(0, 0),
+	                   QPoint(0, 120), Qt::NoButton, Qt::ControlModifier,
+	                   Qt::NoScrollPhase, false);
+	QApplication::sendEvent(&view, &event);
+
+	QCOMPARE(zoomed.count(), 1);
+	QCOMPARE(zoomed.at(0).at(0).toInt(), 1);
+
+	/* And the remote heard nothing: a zoom is local, like a selection. */
+	QCOMPARE(emulator.take_output(), QByteArray());
+}
+
+void terminal_view_test::the_zoom_chords_reach_the_focused_session() {
+	/*
+	 * The control. Every assertion above is about a function that is
+	 * already correct; this one asks whether anything CALLS it, which is
+	 * the defect this tree keeps finding -- a value with two consumers
+	 * and only one of them wired.
+	 *
+	 * Through the router's own handle_key, which is the road a real key
+	 * takes, rather than through handle_shortcut.
+	 */
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("zooms");
+	profile.host = QStringLiteral("zooms.example");
+
+	bssh_session *session = registry->create(profile);
+	window.adopt_session(session);
+
+	QKeyEvent bigger(QEvent::KeyPress, Qt::Key_Equal, Qt::ControlModifier, QString());
+	QVERIFY2(!session->input_router()->handle_key(&bigger),
+	          "Ctrl+= was not stolen from the remote");
+	QCOMPARE(session->font_zoom(), 1);
+
+	QKeyEvent smaller(QEvent::KeyPress, Qt::Key_Minus, Qt::ControlModifier, QString());
+	session->input_router()->handle_key(&smaller);
+	QCOMPARE(session->font_zoom(), 0);
+
+	session->set_font_zoom(4);
+	QKeyEvent reset(QEvent::KeyPress, Qt::Key_0, Qt::ControlModifier, QString());
+	session->input_router()->handle_key(&reset);
+	QCOMPARE(session->font_zoom(), 0);
+}
+
+void terminal_view_test::the_terminal_menu_offers_zoom() {
+	/*
+	 * Asked of the MENU rather than of the window's handler, because a
+	 * device with no keyboard and no wheel has no other way in: an entry
+	 * that is not on the menu is not a route however well the handler
+	 * works. The same reasoning as the config route's test in layout_test.
+	 */
+	bssh_main_window window;
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	const QStringList wanted = { QStringLiteral("terminal_zoom_in"),
+	                              QStringLiteral("terminal_zoom_out"),
+	                              QStringLiteral("terminal_zoom_reset") };
+
+	for (const QString &name : wanted) {
+		QAction *action = menu->findChild<QAction *>(name);
+		QVERIFY2(action, qPrintable(QStringLiteral("the terminal menu has no %1")
+		                                    .arg(name)));
+		QVERIFY2(action->isEnabled(),
+		          qPrintable(QStringLiteral("%1 is on the menu and disabled").arg(name)));
+	}
+
+	/*
+	 * And the chord it advertises comes from the router, like Copy's --
+	 * a literal here would be a second list, free to drift the moment
+	 * somebody rebinds one.
+	 */
+	QAction *zoom_in = menu->findChild<QAction *>(QStringLiteral("terminal_zoom_in"));
+	QCOMPARE(zoom_in->shortcut(),
+	          QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-in"))));
+
+	delete menu;
+}
+
+void terminal_view_test::a_zoom_past_the_limit_still_steps_back() {
+	/*
+	 * Holding the key down past the limit must not cost anything on the
+	 * way back. The session counts presses and the VIEW is the only one
+	 * that knows the size the host resolved to, so a session left
+	 * counting refusals is a session whose next several steps back
+	 * change nothing on screen -- the shape of "the zoom has stopped
+	 * working" that no arithmetic test on the view can see.
+	 */
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("held down");
+	profile.host = QStringLiteral("held.example");
+
+	bssh_session *session = registry->create(profile);
+	window.adopt_session(session);
+
+	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
+	QVERIFY2(view, "the window built no pane to zoom");
+
+	const int base = view->font_point_size();
+	QVERIFY2(base < BSSH_PRESET_MAX_POINT_SIZE,
+	          "the fixture starts at the limit and cannot reach past it");
+
+	QKeyEvent bigger(QEvent::KeyPress, Qt::Key_Equal, Qt::ControlModifier, QString());
+	for (int i = 0; i < BSSH_PRESET_MAX_POINT_SIZE * 2; ++i) {
+		session->input_router()->handle_key(&bigger);
+	}
+
+	QCOMPARE(view->font_point_size(), BSSH_PRESET_MAX_POINT_SIZE);
+	QCOMPARE(session->font_zoom(), BSSH_PRESET_MAX_POINT_SIZE - base);
+
+	QKeyEvent smaller(QEvent::KeyPress, Qt::Key_Minus, Qt::ControlModifier, QString());
+	session->input_router()->handle_key(&smaller);
+
+	QCOMPARE(view->font_point_size(), BSSH_PRESET_MAX_POINT_SIZE - 1);
 }

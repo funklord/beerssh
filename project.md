@@ -1130,7 +1130,13 @@ quirks on Android.
   before** the byte translation and be **user-remappable**, because any chord you
   steal is a chord the remote shell can no longer receive. Keep the stolen set
   minimal and document it.
-  **The set is eight chords, and it is now written down exactly once.**
+  **The set is written down exactly once, and its SIZE is not written
+  down here.** It was eight when this paragraph was written, nine when
+  Find landed and twelve since zoom (§9.5); the count belongs to
+  `bssh_input_router::default_chords()`, where it can be recounted, and a
+  number in this sentence would be a claim that goes stale every time the
+  feature it describes is extended -- which is what happened twice before
+  the sentence was rewritten.
   Ctrl+Shift+C, Ctrl+Shift+V, Shift+PageUp, Shift+PageDown,
   Ctrl+Alt+Left/Right, and — Konsole's, and named here long before anything
   took them — Ctrl+Shift+T and Ctrl+Shift+N for another session in a tab or
@@ -7335,6 +7341,67 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   the grid sets its own point size explicitly in `bssh_font_catalog::make_font`.
   That measurement is what made the mechanism safe to write without a device
   in hand.
+
+**Zoom is BUILT 2026-09-21, and it is a DELTA rather than a second size.**
+A terminal that cannot make its own text bigger for the next two minutes
+is one that sends a user to a settings page, a preset field and a decision
+about every future connection -- and nothing in this document had asked
+for it, which is why it is recorded here with the shape rather than only
+the fact.
+
+**Where the number lives decided the design.** A pane is destroyed and
+rebuilt by every layout change (`bssh_pane_container::rebuild`
+`qDeleteAll`s its views), so a zoom kept on the widget is lost the first
+time a window narrows enough to collapse a split -- which is exactly when
+somebody wants bigger text. It lives on `bssh_session`, beside the
+resolved settings and for the reason those live there, and the view is
+told at build time and on `font_zoom_changed`.
+
+**And it is a delta on top of the resolved size, not a replacement for
+it.** Storing the zoomed size instead would make the next resolve either
+lose the zoom or silently overwrite what the host's preset says -- a
+preset edit arriving while a pane is zoomed has to move the base under
+the zoom, and that only works if the two are separate numbers.
+`set_font_id()` therefore keeps the zoom rather than clearing it, and
+re-clamps it against the new base.
+
+**Bounded by the range §10.5 already clamps a preset's font size to**
+(6 to 32 points), in both places that hold the number, and clamped as a
+ZOOM rather than as a size. Bounding only the sum lets the stored steps
+walk past the limit while the drawn size stands still, so the first step
+back does nothing -- which reads, from the keyboard, as the zoom having
+broken.
+
+**Three ways in, and the third is the one that is not about desktops.**
+Ctrl+= , Ctrl+- and Ctrl+0 are the twelfth, eleventh and tenth stolen
+chords (§6.1); Ctrl+wheel is tested **before** the remote's claim on the
+wheel, because text too small to read is most often text inside `less` or
+`vim` and those are precisely the programs that have turned mouse
+reporting on. The terminal context menu carries all three as well, and
+that is for the phone: a device with no keyboard and no wheel had no
+route to this at all, and §8.7's menu is the surface both platforms
+already have.
+
+**Guarded by `tool/sabotage/zoom.toml`, nine edits, all nine seen to
+fail** against a 615-passing baseline: the font built from the base
+rather than the zoomed size, a resolve throwing the zoom away, the clamp
+removed, the clamped value not written back, a rebuilt pane starting at
+the resolved size, Ctrl+wheel falling through to the remote, the
+container not naming the session a wheel zoom happened to, the chord
+swallowed, and the menu losing the entries. Six of the nine are wiring
+rather than arithmetic, which is where this feature could most easily
+have been present and inert.
+
+**What is deliberately NOT done.** The zoom is not persisted -- not into
+the profile, not into the preset. What a HOST should look like is a
+preset field with an editor and an override badge behind it (§10.1), and
+writing a zoom into either would answer a question the user did not ask.
+**Pinch-to-zoom is not built**, and is the obvious next increment on
+touch: the menu makes the feature reachable there, a gesture would make
+it natural. Whether either should change is the holder's, and the
+question is worth asking because "not persisted" is a choice a phone
+might reasonably want reversed -- a session that is always read outdoors
+is a host preference wearing a gesture's clothes.
 
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every

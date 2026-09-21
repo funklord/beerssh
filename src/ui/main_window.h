@@ -436,6 +436,13 @@ private:
 	 * and put the count back on the bar. The search lives in the view; the
 	 * window only routes the bar to whichever pane has focus.
 	 */
+	/*
+	 * Zoom the focused session's text (sec 9.5). The window names the
+	 * session; the session owns the number; the pane redraws.
+	 */
+	void zoom_current(int steps);
+	void reset_zoom_current();
+
 	void open_find();
 	void run_find(const QString &query);
 	void step_find(int direction);

@@ -29,8 +29,8 @@ expect = "ligatures_are_off_by_default_and_optional"
 [[sabotage]]
 name = "a view stops reading the ligature default"
 file = "src/ui/terminal_view.cpp"
-find = "\t        bssh_font_catalog::instance().family_for(m_font_id), m_font_size,\n\t        default_font_ligatures());"
-replace = "\t        bssh_font_catalog::instance().family_for(m_font_id), m_font_size,\n\t        false);"
+find = "\t        bssh_font_catalog::instance().family_for(m_font_id), font_point_size(),\n\t        default_font_ligatures());"
+replace = "\t        bssh_font_catalog::instance().family_for(m_font_id), font_point_size(),\n\t        false);"
 expect = "a_view_builds_its_font_with_the_ligature_default"
 
 # Ligatures ship on by default.

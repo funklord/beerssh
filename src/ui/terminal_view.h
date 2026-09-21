@@ -214,6 +214,24 @@ public:
 	QString font_id() const { return m_font_id; }
 
 	/*
+	 * Zoom (sec 9.5): a per-session step ON TOP of the size the host
+	 * resolved to, rather than a second size. Kept as a delta so that a
+	 * preset edit arriving while a pane is zoomed still moves the base --
+	 * storing the zoomed size instead would make the next resolve either
+	 * lose the zoom or silently overwrite the preset's answer.
+	 *
+	 * The step is one point, and the sum is bounded by the same limits
+	 * sec 10.5 already clamps a preset's font size to: a zoom that could
+	 * reach a size the settings layer refuses would be a second opinion
+	 * about what this program can render.
+	 */
+	void set_font_zoom(int steps);
+	int font_zoom() const { return m_font_zoom; }
+
+	/* What is actually being drawn: the resolved size plus the zoom. */
+	int font_point_size() const;
+
+	/*
 	 * Non-empty when the chosen font is not on this device and something
 	 * else is being drawn (sec 9.4). The window shows it; the view only
 	 * knows it, because a terminal that pops up its own banner is a
@@ -561,6 +579,15 @@ public slots:
 
 signals:
 	/*
+	 * Ctrl+wheel (sec 9.5): zoom this pane by the given number of steps.
+	 * A request rather than an action, for the same reason as the drag
+	 * signals below -- the view does not know which session it shows, and
+	 * the zoom belongs to the session so that it survives this widget,
+	 * which is destroyed and rebuilt whenever the panes change.
+	 */
+	void zoom_requested(int steps);
+
+	/*
 	 * Alt+drag: this pane wants to be picked up and dropped somewhere
 	 * else -- another window, the tab bar, or the desktop (sec 8.4).
 	 * The view does not know which session it shows, so it says only
@@ -770,6 +797,14 @@ protected:
 	void dropEvent(QDropEvent *event) override;
 
 private:
+	/*
+	 * One place that builds m_font from the id, the size and the zoom,
+	 * and then re-measures. Both ways in -- a resolve and a zoom -- go
+	 * through it, because the three steps a font change takes are the
+	 * thing that was already forgotten once (see update_metrics).
+	 */
+	void rebuild_font();
+
 	void update_metrics();
 	void recompute_grid();
 
@@ -954,6 +989,13 @@ private:
 	 */
 	QString m_font_id;
 	int m_font_size;
+
+	/*
+	 * Points added to m_font_size by the user's zoom, and never folded
+	 * into it: m_font_size stays the answer the host resolved to, so the
+	 * two can be told apart when the next resolve arrives.
+	 */
+	int m_font_zoom;
 
 	/*
 	 * Per-repaint font cache, keyed by family and the two attributes that

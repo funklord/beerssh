@@ -3,10 +3,12 @@
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "term/term_features.h"
+#include "model/preset.h"
 
 bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
     : QObject(parent),
       m_profile(profile),
+      m_font_zoom(0),
       m_transport(nullptr),
       m_user_disconnected(false),
       m_unseen_bell(false),
@@ -55,6 +57,28 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 }
 
 bssh_session::~bssh_session() {
+}
+
+void bssh_session::set_font_zoom(int steps) {
+	/*
+	 * Bounded here as well as in the view, and not because one of them is
+	 * a duplicate of the other: the view clamps against the size it is
+	 * drawing, while this bound is what stops a held-down key or a fast
+	 * wheel from walking the stored number away from anything the view
+	 * will ever accept. Without it the two disagree after the first step
+	 * past the limit, and every step back is then a step that does
+	 * nothing.
+	 *
+	 * The range is the widest a preset's own font size may span (sec
+	 * 10.5), which is the largest a zoom could ever need to be.
+	 */
+	const int span = BSSH_PRESET_MAX_POINT_SIZE - BSSH_PRESET_MIN_POINT_SIZE;
+	const int bounded = qBound(-span, steps, span);
+
+	if (bounded == m_font_zoom) return;
+
+	m_font_zoom = bounded;
+	emit font_zoom_changed();
 }
 
 void bssh_session::set_settings(const QJsonObject &settings) {

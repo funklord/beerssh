@@ -224,6 +224,15 @@ const QList<bssh_input_router::chord_t> &bssh_input_router::default_chords() {
 		{ SHORTCUT_FIND, Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_F,
 			chord_label(Qt::ControlModifier | Qt::ShiftModifier, Qt::Key_F),
 			"find", "Find in the scrollback" },
+		{ SHORTCUT_ZOOM_IN, Qt::ControlModifier, Qt::Key_Equal,
+			chord_label(Qt::ControlModifier, Qt::Key_Equal),
+			"zoom-in", "Make this session's text bigger" },
+		{ SHORTCUT_ZOOM_OUT, Qt::ControlModifier, Qt::Key_Minus,
+			chord_label(Qt::ControlModifier, Qt::Key_Minus),
+			"zoom-out", "Make this session's text smaller" },
+		{ SHORTCUT_ZOOM_RESET, Qt::ControlModifier, Qt::Key_0,
+			chord_label(Qt::ControlModifier, Qt::Key_0),
+			"zoom-reset", "Back to the size this host resolves to" },
 	};
 	return chords;
 }

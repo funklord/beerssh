@@ -1,0 +1,110 @@
+# Zoom (project.md sec 9.5): a per-session delta on top of the size the
+# host resolves to, reached by chord, by Ctrl+wheel and from the terminal
+# menu. Every edit here is a way for the feature to be present and do
+# nothing -- which is the shape this tree keeps finding, so the tests it
+# names are mostly wiring tests rather than arithmetic ones.
+
+# The view draws at the base and ignores the zoom.
+#
+# Everything else still works: the number is stored, the session keeps it
+# across a rebuild, the menu offers the entries. Only the glyphs never
+# change size, which is the whole feature.
+[[sabotage]]
+name = "the font is built from the base, not the zoomed size"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id),\n\t                                       font_point_size(),"
+replace = "\tm_font = bssh_font_catalog::make_font(catalog.family_for(m_font_id),\n\t                                       m_font_size,"
+expect = "zoom_moves_the_size_the_grid_is_drawn_at"
+
+# A resolve clears the zoom.
+#
+# A preset edit, a host reopened or a pane rebuilt all arrive here, so a
+# user's zoom would be taken away by events they did not cause and cannot
+# see -- the version of this bug that looks like flakiness rather than
+# like a missing feature.
+[[sabotage]]
+name = "a resolve throws the zoom away"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_font_size = point_size > 0 ? point_size : BSSH_DEFAULT_POINT_SIZE;"
+replace = "\tm_font_size = point_size > 0 ? point_size : BSSH_DEFAULT_POINT_SIZE;\n\tm_font_zoom = 0;"
+expect = "a_resolve_moves_the_base_under_the_zoom"
+
+# The clamp goes, so the stored steps run past what can be drawn.
+#
+# Nothing looks wrong going up: the size stops at the limit either way.
+# It shows on the way back, where the first several steps change nothing
+# because the session is still counting presses the view refused.
+[[sabotage]]
+name = "the zoom is not clamped against the base"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_font_zoom = qBound(BSSH_PRESET_MIN_POINT_SIZE - m_font_size, m_font_zoom,\n\t                      BSSH_PRESET_MAX_POINT_SIZE - m_font_size);"
+replace = ""
+expect = "a_zoom_past_the_limit_still_steps_back"
+
+# The view stops telling the session what it settled on.
+#
+# The same symptom by the other route: the view clamps correctly and the
+# session never hears, so the two disagree from the limit onwards.
+[[sabotage]]
+name = "the clamped zoom is not written back to the session"
+file = "src/ui/pane_container.cpp"
+find = "\t\t\tsession->set_font_zoom(view->font_zoom());"
+replace = ""
+expect = "a_zoom_past_the_limit_still_steps_back"
+
+# A rebuilt pane does not ask the session for its zoom.
+#
+# Every view in this container is new on every layout change, so this is
+# the edit that makes a zoom vanish when a window splits or narrows --
+# and no test on the view alone can see it.
+[[sabotage]]
+name = "a new pane starts at the resolved size"
+file = "src/ui/pane_container.cpp"
+find = "\t\tview->set_font_zoom(session->font_zoom());\n\t\tsession->set_font_zoom(view->font_zoom());\n"
+replace = ""
+expect = "a_rebuilt_pane_keeps_the_sessions_zoom"
+
+# Ctrl+wheel falls through to the remote.
+#
+# The gesture then scrolls, or is reported to a pager as a wheel turn,
+# exactly where somebody was trying to make the text readable.
+[[sabotage]]
+name = "ctrl+wheel is not taken by the zoom"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (event->modifiers().testFlag(Qt::ControlModifier)) {\n\t\tif (notches != 0) emit zoom_requested(notches);"
+replace = "\tif (false) {\n\t\tif (notches != 0) emit zoom_requested(notches);"
+expect = "ctrl_wheel_zooms_while_the_remote_owns_the_wheel"
+
+# The wheel's report never reaches a session.
+#
+# The view emits into nothing: correct one layer down and wired to
+# nobody, which is the defect this whole spec is shaped around.
+[[sabotage]]
+name = "the container does not name the session a wheel zoom happened to"
+file = "src/ui/pane_container.cpp"
+find = "\t\t\tsession->set_font_zoom(session->font_zoom() + steps);"
+replace = ""
+expect = "ctrl_wheel_in_a_pane_zooms_that_panes_session"
+
+# The chord is stolen and does nothing.
+#
+# The remote stops receiving Ctrl+= -- so the cost is paid -- and the
+# zoom never happens, which is worse than not having taken the chord.
+[[sabotage]]
+name = "the zoom-in chord is swallowed"
+file = "src/ui/main_window.cpp"
+find = "\tif (shortcut == bssh_input_router::SHORTCUT_ZOOM_IN) zoom_current(1);"
+replace = ""
+expect = "the_zoom_chords_reach_the_focused_session"
+
+# The menu loses the entries.
+#
+# Desktop still has the chords and the wheel; a phone has neither, so
+# this is the edit that removes the feature from the platform that
+# cannot work around it.
+[[sabotage]]
+name = "the terminal menu stops offering zoom"
+file = "src/ui/main_window.cpp"
+find = "\tzoom_in->setObjectName(QStringLiteral(\"terminal_zoom_in\"));"
+replace = "\tzoom_in->setObjectName(QStringLiteral(\"terminal_zoom_in_disabled\"));"
+expect = "the_terminal_menu_offers_zoom"

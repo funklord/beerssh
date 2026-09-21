@@ -352,6 +352,15 @@ private slots:
 	void a_link_is_reachable_without_a_control_key();
 	void a_user_layout_is_transcribed_and_refused_if_it_cannot_type();
 	void every_custom_entry_reaches_the_control_that_offers_it();
+
+	/*
+	 * Zoom (sec 9.5) where it can actually be lost: every view here is
+	 * destroyed and rebuilt by any layout change, so these two ask
+	 * whether the session kept the number and whether a gesture in a
+	 * pane reaches the session at all.
+	 */
+	void a_rebuilt_pane_keeps_the_sessions_zoom();
+	void ctrl_wheel_in_a_pane_zooms_that_panes_session();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

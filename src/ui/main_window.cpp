@@ -2012,6 +2012,26 @@ void bssh_main_window::handle_shortcut(bssh_input_router::shortcut_t shortcut) {
 	if (shortcut == bssh_input_router::SHORTCUT_NEW_WINDOW) open_another_session(true);
 
 	if (shortcut == bssh_input_router::SHORTCUT_FIND) open_find();
+
+	/*
+	 * Zoom (sec 9.5), on the FOCUSED session rather than on the view:
+	 * m_current is what the chord handler above acts on throughout, and
+	 * the session is where a zoom has to live to survive the pane being
+	 * rebuilt.
+	 */
+	if (shortcut == bssh_input_router::SHORTCUT_ZOOM_IN) zoom_current(1);
+	if (shortcut == bssh_input_router::SHORTCUT_ZOOM_OUT) zoom_current(-1);
+	if (shortcut == bssh_input_router::SHORTCUT_ZOOM_RESET) reset_zoom_current();
+}
+
+void bssh_main_window::zoom_current(int steps) {
+	if (!m_current) return;
+	m_current->set_font_zoom(m_current->font_zoom() + steps);
+}
+
+void bssh_main_window::reset_zoom_current() {
+	if (!m_current) return;
+	m_current->set_font_zoom(0);
 }
 
 void bssh_main_window::open_find() {
@@ -3697,6 +3717,36 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	menu->addSeparator();
 
 	/*
+	 * Zoom (sec 9.5), and it is on this menu for the platform that has no
+	 * keyboard to press the chords with and no wheel to turn. A phone's
+	 * only other route to bigger text is the host's own font size, which
+	 * is a settings page, a preset field and a decision about every
+	 * future connection -- for something a user wants for the next two
+	 * minutes because they are reading a log outdoors.
+	 *
+	 * Reset is offered whether or not it would do anything, unlike Copy
+	 * and Split above: whether a session is zoomed is not visible from
+	 * the menu, and an entry that vanishes when the answer is "it is
+	 * already at the normal size" is one that cannot say so.
+	 */
+	QAction *zoom_in = menu->addAction(QStringLiteral("Zoom &In"));
+	zoom_in->setObjectName(QStringLiteral("terminal_zoom_in"));
+	zoom_in->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-in"))));
+
+	QAction *zoom_out = menu->addAction(QStringLiteral("Zoom &Out"));
+	zoom_out->setObjectName(QStringLiteral("terminal_zoom_out"));
+	zoom_out->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-out"))));
+
+	QAction *zoom_reset = menu->addAction(QStringLiteral("&Reset Zoom"));
+	zoom_reset->setObjectName(QStringLiteral("terminal_zoom_reset"));
+	zoom_reset->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-reset"))));
+
+	menu->addSeparator();
+
+	/*
 	 * The session verbs, on the surface a pointer is already over.
 	 *
 	 * These existed only on the TAB bar's menu, which is a different
@@ -3868,6 +3918,26 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	}
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
+		return;
+	}
+
+	const QAction *zoom_in = menu->findChild<QAction *>(QStringLiteral("terminal_zoom_in"));
+	if (chosen == zoom_in) {
+		zoom_current(1);
+		return;
+	}
+
+	const QAction *zoom_out =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_zoom_out"));
+	if (chosen == zoom_out) {
+		zoom_current(-1);
+		return;
+	}
+
+	const QAction *zoom_reset =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_zoom_reset"));
+	if (chosen == zoom_reset) {
+		reset_zoom_current();
 		return;
 	}
 

@@ -203,6 +203,55 @@ void bssh_pane_container::rebuild() {
 		 */
 		bssh_apply_appearance(view, session->settings());
 
+		/*
+		 * And the zoom on top of it (sec 9.5), which is why the session
+		 * holds it: this view is new -- every view here is, on every
+		 * layout change -- and a zoom the user set before the split
+		 * would otherwise be gone.
+		 */
+		view->set_font_zoom(session->font_zoom());
+		session->set_font_zoom(view->font_zoom());
+
+		connect(session, &bssh_session::font_zoom_changed, view, [view, session] {
+			view->set_font_zoom(session->font_zoom());
+
+			/*
+			 * And BACK, which is what keeps the two from disagreeing
+			 * once the zoom reaches its limit. The view is the only
+			 * one that knows the size the host resolved to, so it is
+			 * the only one that can say which steps are legal; without
+			 * this the session goes on counting presses the view has
+			 * refused, and the first several steps back then change
+			 * nothing on screen.
+			 *
+			 * It terminates: set_font_zoom returns without emitting
+			 * when the value is unchanged, which it now is.
+			 */
+			session->set_font_zoom(view->font_zoom());
+
+			/*
+			 * The same three the resolve path below sends, and for
+			 * the same reason: a zoom is a new cell size, so the
+			 * emulator's pixel geometry and the remote's idea of the
+			 * window both move with it. grid_resized carries the
+			 * resize on its own only while the pane is visible.
+			 */
+			session->emulator()->set_cell_pixels(view->cell_width(),
+			                                      view->cell_height());
+			session->resize(view->cols(), view->rows());
+		});
+
+		/*
+		 * Ctrl+wheel, named. The view says the gesture happened; which
+		 * session it happened to is this container's answer, and the
+		 * zoom is stored on the session rather than on the widget that
+		 * reported it.
+		 */
+		connect(view, &bssh_terminal_view::zoom_requested, session,
+		         [session](int steps) {
+			session->set_font_zoom(session->font_zoom() + steps);
+		});
+
 		connect(session, &bssh_session::settings_changed, view, [view, session] {
 			bssh_apply_appearance(view, session->settings());
 			session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());

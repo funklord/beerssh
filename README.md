@@ -93,6 +93,13 @@ triple-click for a whole line,
 X11/Wayland. When a full-screen program asks for the mouse it gets the
 clicks instead — hold `Shift` to select anyway.
 
+**Zoom** with `Ctrl+=`, `Ctrl+-` and `Ctrl+0`, or `Ctrl`+wheel, or from the
+right-click menu — which is how a phone reaches it. It moves the text of the
+session in front of you, on top of whatever size that host resolves to, and
+`Ctrl`+wheel works inside `less` and `vim` too, where the remote otherwise
+owns the wheel. It is not saved: a size you want every time is the host's own
+font setting.
+
 Closing the window with a session still connected asks whether to keep it
 running in the background or disconnect and quit, and remembers the answer.
 On desktop "background" means a tray icon and a process that outlives its
