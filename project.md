@@ -3738,6 +3738,42 @@ terminal does -- so the existing
 sabotage's target, and it fails when the guard goes. Both seen to fail
 naming their own test.
 
+**The find matches had it too, and that is the lens rather than a second
+instance — [FIXED 2026-09-22].** A `find_match_t` is a pair of absolute
+line numbers, so the feature on the same menu failed the same way, and
+worse to look at: a selection that has gone quietly stops highlighting,
+while the bar's match count is a NUMBER. It went on saying two matches
+with neither of them anywhere, Next walked lines that were gone, and the
+view scrolled to where they used to be.
+
+**Dropped on the START line, where the selection is all-or-nothing, and
+the difference is not an inconsistency.** A selection is a range the
+user drew, and half of it is still half of what they drew. A match is an
+occurrence of a string, and an occurrence whose beginning has gone is
+not a shorter occurrence — it is not one.
+
+**And the count is PULLED, which is a second seam and a second
+sabotage.** `update_find_status` runs when the query changes or a step
+is taken; nothing else asks. So a view that drops its matches perfectly
+leaves the old number on screen until the next keystroke. The view
+emits, the pane container relays, the window pulls — three places the
+signal can stop, so the wiring test asserts on the TEXT the bar shows
+rather than on the view's count.
+
+**The lens: state that names something the scrollback can take away.**
+It came from the selection fix rather than from a category list, which
+is `working-practice.md`'s rule about deriving the next lens from the
+last bug. Both instances were found by asking the same question of the
+same signal, and the shape is worth keeping for the next one: anything
+holding an absolute line number outside the buffers that own them.
+
+**And the shrink sabotage's anchor was the cost of all this, which is
+its own small finding.** `scrollback-shrink.toml` quoted the whole
+`scrollback_changed` lambda as its anchor, so both fixes above broke it
+-- twice in one day, in a spec about neither. It anchors on the connect
+now and rebinds to a signal that never fires here, which is what "the
+view never hears it" means and does not move when the body grows.
+
 **And the finding came from a sweep rather than from use, which is worth
 the sentence.** Asking which methods the header declares and nothing in
 `src/` calls, `bssh_terminal_view::clear_selection` came back with the

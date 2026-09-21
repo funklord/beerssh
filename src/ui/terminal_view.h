@@ -456,6 +456,13 @@ public:
 	void drop_evicted_selection();
 
 	/*
+	 * The same for the find matches, which name lines the same way
+	 * (sec 6.4). Dropped on the start line; see the definition for why
+	 * that differs from the selection's rule.
+	 */
+	void drop_evicted_find_matches();
+
+	/*
 	 * Everything the view can reach: the whole scrollback and the screen
 	 * below it. One coordinate space covers both (see line_for_row), so
 	 * this is line zero to the last line rather than anything special.
@@ -699,6 +706,15 @@ signals:
 
 	/* A selection was made or cleared -- the window updates the clipboard. */
 	void selection_changed();
+
+	/*
+	 * The find matches changed without anybody asking for a search (sec
+	 * 6.4). The bar's count is PULLED -- update_find_status runs when the
+	 * query changes or a step is taken -- so a drop that nothing
+	 * announces leaves a true-looking number on screen until the next
+	 * keystroke.
+	 */
+	void find_matches_changed();
 
 	/*
 	 * A hyperlink was activated (sec 7.1). The view does not open it: what

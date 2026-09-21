@@ -155,6 +155,14 @@ signals:
 	/* A view was built or destroyed; the window rewires what it needs. */
 	void panes_rebuilt();
 
+	/*
+	 * A pane's find matches changed without a search being asked for
+	 * (sec 6.4) -- the history under them was dropped or trimmed. The
+	 * window owns the find bar and pulls the count, so it has to be told
+	 * or the bar keeps a number that was true a moment ago.
+	 */
+	void find_matches_changed();
+
 private:
 	void apply_focus_styling();
 

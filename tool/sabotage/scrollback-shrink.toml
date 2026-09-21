@@ -4,9 +4,18 @@
 # happen to damage the screen, so the bar stayed honest by accident --
 # which is why this went unnoticed: the two paths that fire the signal
 # most often did not need it.
+#
+# The anchor is the CONNECT rather than the whole lambda, and that is a
+# fix rather than a shortening. It used to quote the body, so every line
+# added inside -- two in one day, as the selection and the find matches
+# each learned to drop what the history had evicted -- broke the anchor
+# and the style gate, in a spec about neither of them. Rebinding to a
+# signal that never fires here leaves the handler compiled and unreached,
+# which is exactly what "the view never hears it" means.
 
 [[sabotage]]
 name = "the view never hears the history shrink"
 file = "src/ui/terminal_view.cpp"
-find = "\t\tm_scrollback_connection =\n\t\t        connect(m_emulator, &bssh_emulator::scrollback_changed, this, [this] {\n\t\t\t/*\n\t\t\t * The same three things this used to do, plus the two\n\t\t\t * it did not: the content revision and the reader's\n\t\t\t * event. A trim changes what the terminal HAS, which\n\t\t\t * is a content change whether or not a cell was\n\t\t\t * damaged.\n\t\t\t */\n\t\t\tdrop_evicted_selection();\n\t\t\tnote_content_changed();\n\t\t});"
+find = "\t\tm_scrollback_connection =\n\t\t        connect(m_emulator, &bssh_emulator::scrollback_changed, this, [this] {"
+replace = "\t\tm_scrollback_connection =\n\t\t        connect(m_emulator, &bssh_emulator::destroyed, this, [this] {"
 expect = "shrinking_the_scrollback_brings_the_view_back_with_it"

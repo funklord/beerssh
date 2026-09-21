@@ -172,3 +172,24 @@ file = "src/ui/terminal_view.cpp"
 find = "\tif (m_selection_anchor_line >= base || m_selection_focus_line >= base) return;"
 replace = "\t(void) base;"
 expect = "a_selection_stays_on_its_text_when_the_scrollback_evicts"
+
+# The find matches outlive the history they named, which is the same
+# fault as the selection's one entry up, in the feature on the same menu
+# -- and worse to look at, because the count is a NUMBER: the bar goes on
+# saying three matches with none of them anywhere.
+[[sabotage]]
+name = "find matches survive the history they pointed into"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tdrop_evicted_find_matches();"
+replace = ""
+expect = "dropping_the_history_takes_the_find_matches_too"
+
+# And the route to the bar. The view can drop them perfectly and the
+# count on screen still be the old one: it is PULLED, by the window, when
+# a query changes or a step is taken. Nothing else asks.
+[[sabotage]]
+name = "the bar is never told the matches went"
+file = "src/ui/main_window.cpp"
+find = "\tconnect(m_panes, &bssh_pane_container::find_matches_changed,\n\t         this, &bssh_main_window::update_find_status);"
+replace = ""
+expect = "the_find_bars_count_is_told_when_the_matches_go"

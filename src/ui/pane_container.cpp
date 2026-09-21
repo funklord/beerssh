@@ -363,6 +363,9 @@ void bssh_pane_container::rebuild() {
 		connect(view, &bssh_terminal_view::column_scroll_settled,
 		         this, &bssh_pane_container::settle_column_scroll);
 
+		connect(view, &bssh_terminal_view::find_matches_changed,
+		         this, &bssh_pane_container::find_matches_changed);
+
 		connect(view, &bssh_terminal_view::focus_lost, this, [session] {
 			if (session->emulator()) session->emulator()->set_focused(false);
 		});

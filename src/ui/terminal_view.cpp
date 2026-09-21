@@ -557,6 +557,7 @@ void bssh_terminal_view::attach_emulator(bssh_emulator *emulator) {
 			 * damaged.
 			 */
 			drop_evicted_selection();
+			drop_evicted_find_matches();
 			note_content_changed();
 		});
 	}
@@ -2328,6 +2329,60 @@ void bssh_terminal_view::find_step(int direction) {
 
 	scroll_find_match_into_view(m_find_matches.at(m_current_match));
 	update();
+}
+
+void bssh_terminal_view::drop_evicted_find_matches() {
+	if (m_find_matches.isEmpty()) return;
+
+	/*
+	 * A match is a pair of absolute line numbers, which is the same kind
+	 * of name a selection is and fails the same way when the scrollback
+	 * drops the lines under it. What a person sees is worse than a stale
+	 * highlight, because the count is a NUMBER: the bar goes on saying
+	 * three matches with none of them anywhere, Next walks lines that are
+	 * gone, and the view scrolls to where they used to be.
+	 *
+	 * Dropped on the START line, unlike the selection's all-or-nothing
+	 * rule, and for a reason rather than for variety. A selection is a
+	 * range the user drew and half of it is still half of it; a match is
+	 * an occurrence of a string, and an occurrence whose beginning has
+	 * gone is not a shorter occurrence -- it is not one.
+	 */
+	const qint64 base = history_base();
+
+	const int before = m_find_matches.size();
+	const find_match_t current = m_current_match >= 0 && m_current_match < before
+	                              ? m_find_matches.at(m_current_match)
+	                              : find_match_t{ -1, 0, -1, 0 };
+
+	QList<find_match_t> kept;
+	for (const find_match_t &match : m_find_matches) {
+		if (match.start_line >= base) kept.append(match);
+	}
+
+	if (kept.size() == before) return;
+
+	m_find_matches = kept;
+
+	/*
+	 * Keep the user on the match they were on where it survived. Falling
+	 * back to the last one matches what a fresh search does -- nearest
+	 * the live screen -- rather than to an index that now names somebody
+	 * else's match.
+	 */
+	m_current_match = -1;
+	for (int i = 0; i < m_find_matches.size(); ++i) {
+		if (m_find_matches.at(i).start_line == current.start_line
+		    && m_find_matches.at(i).start_col == current.start_col) {
+			m_current_match = i;
+			break;
+		}
+	}
+	if (m_current_match < 0 && !m_find_matches.isEmpty())
+		m_current_match = m_find_matches.size() - 1;
+
+	update();
+	emit find_matches_changed();
 }
 
 void bssh_terminal_view::clear_find() {

@@ -143,6 +143,8 @@ private slots:
 	void a_session_can_be_closed_without_a_tab_bar();
 	void the_history_can_be_dropped_without_the_remote();
 	void dropping_the_history_takes_the_selection_with_it();
+	void dropping_the_history_takes_the_find_matches_too();
+	void the_find_bars_count_is_told_when_the_matches_go();
 	void a_substituted_font_says_so_somewhere_a_user_looks();
 	void choosing_a_menu_entry_does_what_it_says();
 	void the_edit_verbs_on_that_menu_act_too();

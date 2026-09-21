@@ -7,6 +7,7 @@
 #include <QtTest>
 
 #include <QAccessible>
+#include <QLabel>
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QTemporaryDir>
@@ -4024,6 +4025,123 @@ void terminal_view_test::dropping_the_history_takes_the_selection_with_it() {
 	QVERIFY2(!view.has_selection(),
 	          "the history went and the view still claims a selection in it");
 	QCOMPARE(view.selection_text(), QString());
+}
+
+void terminal_view_test::dropping_the_history_takes_the_find_matches_too() {
+	/*
+	 * The same shape as the selection one beside this, in the feature on
+	 * the same menu. A find match is a pair of absolute line numbers,
+	 * which is another name the scrollback promises will fail to resolve
+	 * rather than resolve to something else -- and the find bar keeps
+	 * reporting a count that was true before the history went.
+	 *
+	 * What a person sees: search, drop the history, and the bar still
+	 * says three matches with none of them anywhere, Next walks through
+	 * lines that are gone, and the view scrolls to where they used to
+	 * be.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("an early needle\r\n"));
+	emulator.feed(QByteArrayLiteral("a second needle\r\n"));
+	for (int i = 0; i < view.rows() + 20; ++i)
+		emulator.feed(QByteArrayLiteral("filler line\r\n"));
+
+	/*
+	 * Both matches are in the history and none is on the live screen,
+	 * which is the arrangement the drop can empty completely. Asserted
+	 * rather than assumed: a match still on the screen would survive and
+	 * the count below would be right for the wrong reason.
+	 */
+	QCOMPARE(view.find_text(QStringLiteral("needle")), 2);
+	QVERIFY2(emulator.scrollback().count() > 0,
+	          "the fixture scrolled nothing off, so there is no history to drop");
+
+	QSignalSpy told(&view, &bssh_terminal_view::find_matches_changed);
+
+	emulator.clear_scrollback();
+	QCoreApplication::processEvents();
+
+	QVERIFY2(view.find_match_count() == 0,
+	          "the history went and the find bar still counts matches in it");
+	QCOMPARE(view.current_find_index(), 0);
+
+	/*
+	 * And the bar is TOLD, because the count is pulled rather than
+	 * pushed: update_find_status runs when the query changes or a step
+	 * is taken, so a stale count sits on screen until the next keystroke
+	 * unless something announces the change.
+	 */
+	QVERIFY2(told.count() > 0,
+	          "the matches went without a word, so the bar keeps its count");
+}
+
+void terminal_view_test::the_find_bars_count_is_told_when_the_matches_go() {
+	/*
+	 * And the route, which the view-level case above cannot see: the
+	 * view emits, the pane container relays, and the window pulls the
+	 * count into the bar. Every one of those is a place the signal can
+	 * stop, and a signal with no listener is the defect this tree keeps
+	 * finding -- so this asserts on the TEXT the bar shows a person.
+	 */
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("finds");
+	profile.host = QStringLiteral("finds.example");
+
+	bssh_session *session = registry->create(profile);
+	window.adopt_session(session);
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	QVERIFY(session->emulator());
+	session->emulator()->feed(QByteArrayLiteral("an early needle\r\n"));
+	session->emulator()->feed(QByteArrayLiteral("a second needle\r\n"));
+	for (int i = 0; i < 80; ++i)
+		session->emulator()->feed(QByteArrayLiteral("filler line\r\n"));
+	QVERIFY2(session->emulator()->scrollback().count() > 0,
+	          "the fixture scrolled nothing off, so there is no history to drop");
+
+	/* Open the search the way touch does, then type into it. */
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+	QAction *find = menu->findChild<QAction *>(QStringLiteral("terminal_find"));
+	QVERIFY(find);
+	window.act_on_terminal_menu(menu, find);
+	delete menu;
+
+	bssh_find_bar *bar = window.findChild<bssh_find_bar *>();
+	QVERIFY(bar);
+	QLineEdit *field = bar->findChild<QLineEdit *>();
+	QVERIFY(field);
+	QLabel *status = bar->findChild<QLabel *>();
+	QVERIFY(status);
+
+	field->setText(QStringLiteral("needle"));
+	QCoreApplication::processEvents();
+
+	const QString counted = status->text();
+	QVERIFY2(counted.contains(QLatin1Char('2')),
+	          qPrintable(QStringLiteral("the bar did not report the two matches, "
+	                                     "so there is no stale count to catch: ")
+	                     + counted));
+
+	session->emulator()->clear_scrollback();
+	QCoreApplication::processEvents();
+
+	QVERIFY2(status->text() != counted,
+	          qPrintable(QStringLiteral("the history went and the find bar still "
+	                                     "reads ") + status->text()));
 }
 
 void terminal_view_test::the_history_can_be_dropped_without_the_remote() {

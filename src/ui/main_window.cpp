@@ -363,6 +363,9 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::start_session_drag);
 	connect(m_panes, &bssh_pane_container::pane_move_requested,
 	         this, &bssh_main_window::move_pane);
+	connect(m_panes, &bssh_pane_container::find_matches_changed,
+	         this, &bssh_main_window::update_find_status);
+
 	connect(m_panes, &bssh_pane_container::panes_rebuilt, this, [this] {
 		on_pane_focus_changed(m_panes->focused_session());
 
