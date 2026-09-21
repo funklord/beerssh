@@ -11935,9 +11935,12 @@ background).
    and never restoring would only prove the backoff can count. The session
    reconnects. Neutering `attempt_reconnect()` fails exactly that assertion,
    which is what says the test is measuring the machine and not the weather.
-   Key authentication is what makes it seamless, exactly as §5.3 claims: the
-   password is consumed at first connect and deliberately not kept (§11), so a
-   password-authenticated session could only reconnect as far as asking again.
+   Key authentication is what makes it seamless, exactly as §5.3 claims.
+   ~~The password is consumed at first connect and deliberately not kept
+   (§11), so a password-authenticated session could only reconnect as far as
+   asking again.~~ **That is not what the code does, and the disagreement is
+   recorded rather than resolved** — see *A password outlives the connect it
+   was typed for* below.
    **And the shell that comes back gets a clean terminal, which it did not.**
    The emulator survives a reconnect on purpose so the user keeps their
    history — and that meant every MODE the old shell's programs set survived
@@ -11974,7 +11977,48 @@ background).
    in: a password can be remembered per host (off by default), the profile
    row carries a non-secret `has_password` flag so the app knows whether
    asking for the store's passphrase is worth it, and a remembered password
-   is replayed on reconnect instead of being held in memory all session.
+   is replayed on reconnect ~~instead of being held in memory all session~~ —
+   and then held for the rest of it, by the same line that holds a typed one.
+   See *A password outlives the connect it was typed for* below.
+
+**A password outlives the connect it was typed for — [OPEN, and the holder's]**
+
+**Measured 2026-09-21 by reading the code, not by inference.**
+`bssh_session::supply_password` assigns `m_password` (`src/model/session.cpp`),
+**nothing anywhere clears it** — there is no `m_password.clear()` in the tree —
+and the `password_required` handler replays it. So a password-authenticated
+session reconnects without asking, for as long as the session object lives, and
+a *stored* password goes down the same road: the window hands it to
+`supply_password` too, so after the first replay it is in process memory
+exactly like a typed one.
+
+**Two claims in this document say otherwise**, both struck above: M5's "consumed
+at first connect and deliberately not kept ... could only reconnect as far as
+asking again", and M10's "replayed on reconnect instead of being held in memory
+all session". The behaviour half of both is false.
+
+**The code is not careless about it, which is why this is a question rather
+than a bug.** Its comment argues the narrower rule deliberately: *"A reconnect
+can answer for itself if a password was given before; a first connection has to
+ask. Keeping the password only once it has actually been needed is narrower
+than keeping it always, which is what this did before keys were tried."* That
+reads like a considered change the summaries never caught up with — the shape
+§16 keeps finding.
+
+**What is genuinely open, and it is a security posture rather than a defect.**
+Seamless reconnect after a drop (§5.3's whole point) and not holding a
+credential for a session's lifetime are in direct tension, and §11 owns the
+trade. Three things would decide it: whether a reconnect may reuse a typed
+password at all; if so, for how long — the session, a bounded window, or one
+retry; and whether a `QString` is an acceptable home for it, since it is not
+wiped on destruction and Qt may have copied it.
+
+**Not resolved here on purpose.** `working-practice.md` asks that a
+document-versus-code disagreement be flagged rather than settled in either
+direction, and this is the case it describes: implementing the document would
+remove a reconnect that works, and amending the document would record an
+exposure window as intent. The third answer neither branch contains is the one
+worth having.
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,
    tab bar, OSC titles (and desktop window title), per-tab status, layout
    persistence. *(Do this before splits — the registry is the foundation.)*
@@ -12278,6 +12322,10 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   Iosevka's 42 MB ships by asset pack (§9.4, M9).
 - Host groups/folders in addition to presets? (§10.5.)
 - Persist scrollback across restarts?
+- **How long may a session keep a password it authenticated with?** The code
+  keeps it for the session's lifetime and replays it on reconnect; two
+  milestone lines said it was discarded. Opened 2026-09-21 — see *A password
+  outlives the connect it was typed for* in §14.
 - Icon and branding direction (§0.1), which the placeholder in §12.2 is waiting
   on.
 
