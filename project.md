@@ -2549,6 +2549,76 @@ decision.**
   `both_keyboards_reach_every_printable_character` — a heavier contract,
   and the reason that one is not simply the row's code with a different
   table.
+
+  **[PROPOSED 2026-09-21 — not built, and wants approval before it is.]
+  How a user-supplied keyboard LAYOUT would be expressed.** The other
+  three of §6.3's four are values a user picks or composes; a layout is
+  the one with no representation to fill in, because today it is code:
+  `bssh_keyboard_layout_t` carries `{id, display_name}` and the layout
+  itself is a `bssh_layout_t` table the key builders read through
+  `g_layout`. There is nothing for a user to write into.
+
+  **The shape is already decided and the code says so**, which is what
+  makes this a transcription rather than a design: a layout is ~47 rows
+  of `{slot, {level 1, 2, 3, 4}}`, the slot being an XKB name — `AE01`
+  the leftmost digit key, `AD01` of the QWERTY row, `AC01` the home row,
+  `AB01` the bottom, `TLDE` left of `AE01`, `BKSL` above Enter — and the
+  levels being plain, Shift, AltGr and Shift+AltGr in UTF-8. The file's
+  own comment states the consequence: *"A Swedish layout is then a second
+  table of these same 47 rows and no change to any geometry at all — and
+  it can be transcribed from that layout's own xkb definition rather than
+  recalled."* So the user's job is transcription from a source that
+  already exists, not invention.
+
+  **Proposed form**, in `app.ini` under its own section, because §10.6
+  wants that file hand-editable and 47 rows on one line is not:
+
+      [keyboard_custom_layout]
+      name = Swedish
+      AE01 = 1|!|©|¡
+      AE02 = 2|"|@|
+      AD01 = q|||
+      AC10 = ö|Ö||
+
+  One key per slot, four levels separated by `|`, empty where the slot
+  has none — the same `""` the C table uses. A literal pipe is `\|`,
+  which is the one escape and is needed because `|` is a real legend on
+  `BKSL`. **Level 2 stays empty on letters**, as in every shipped table:
+  Shift on a letter is a case mapping and is computed, not a second
+  legend, and a user writing `Q` there would be stating something the
+  code already knows.
+
+  **Acceptance runs the contract, and refuses.** §6.3 already says the
+  catalogue's checks *"become the contract every layout must satisfy
+  rather than tests about the two boards we happen to have"*, and the key
+  row has since shown what that means in practice: the rule moves out of
+  the test and into a predicate the setter calls, because a rule that
+  lives only in the test reports the breach after it has happened and
+  reports it against the layouts that are correct.
+  `both_keyboards_reach_every_printable_character` and
+  `a_keyboard_can_reach_every_level_it_shows` are the two to promote.
+
+  **Latin is the one thing a custom layout can get catastrophically
+  wrong**, and it is already handled for the shipped ones:
+  `layout_has_latin()` computes it, and a layout without `a`-`z` is
+  refused the Latin toggle rather than leaving a terminal with no Latin
+  alphabet. A custom layout goes through the same function — not a
+  declared flag, because a flag is a claim and this is a fact about the
+  table.
+
+  **The mechanism is the one already built twice**: a reserved `custom`
+  entry in the catalogue, born as a copy of US International so selecting
+  it before editing gives a working board, written by a push from
+  whoever owns the settings, never by `keyboard/` reading them.
+
+  **What this proposal does NOT settle, and should not be built until it
+  is.** Whether a 188-legend table is something a person will ever type
+  into `app.ini`, or whether the useful version is an import of an
+  existing xkb file — which is where the transcription actually comes
+  from, and would make the hand-editable form a debugging aid rather than
+  the interface. That is a question about who this is for, and it is the
+  holder's.
+
 - **The soft keyboard only.** §6.1 already decided this without naming it:
   physical keys arrive as `QKeyEvent` with the OS layout *already applied*,
   and dead keys arrive through `inputMethodEvent`. A Swedish USB keyboard
