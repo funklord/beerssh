@@ -3729,17 +3729,27 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	 * the menu, and an entry that vanishes when the answer is "it is
 	 * already at the normal size" is one that cannot say so.
 	 */
-	QAction *zoom_in = menu->addAction(QStringLiteral("Zoom &In"));
+	/*
+	 * A SUBMENU rather than three rows, and the reason is measured
+	 * rather than tidy: on touch every row is sec 6.2's 48dp, and this
+	 * menu wanted 776px of a 640dp cover screen with the three of them
+	 * on it. See the_touch_terminal_menu_fits_a_phone, which is the
+	 * assertion that now says so.
+	 */
+	QMenu *text_size = menu->addMenu(QStringLiteral("Text &Size"));
+	text_size->setObjectName(QStringLiteral("terminal_text_size"));
+
+	QAction *zoom_in = text_size->addAction(QStringLiteral("Zoom &In"));
 	zoom_in->setObjectName(QStringLiteral("terminal_zoom_in"));
 	zoom_in->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-in"))));
 
-	QAction *zoom_out = menu->addAction(QStringLiteral("Zoom &Out"));
+	QAction *zoom_out = text_size->addAction(QStringLiteral("Zoom &Out"));
 	zoom_out->setObjectName(QStringLiteral("terminal_zoom_out"));
 	zoom_out->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-out"))));
 
-	QAction *zoom_reset = menu->addAction(QStringLiteral("&Reset Zoom"));
+	QAction *zoom_reset = text_size->addAction(QStringLiteral("&Reset Zoom"));
 	zoom_reset->setObjectName(QStringLiteral("terminal_zoom_reset"));
 	zoom_reset->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-reset"))));
@@ -3760,7 +3770,20 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	 * everybody expects first, object-specific commands after a rule.
 	 * Shown disabled rather than hidden for the same reason as the rest.
 	 */
-	QAction *split = menu->addAction(QStringLiteral("Split &Beside Current"));
+	/*
+	 * The four arrangement verbs, grouped for the same measured reason
+	 * as Text Size above: with them flat this menu is 776px on a 640dp
+	 * screen, and with both groups it is comfortably inside it.
+	 *
+	 * Grouped rather than dropped, because sec 8.7 put Move Pane here
+	 * precisely so touch could reach it -- a submenu is one more tap and
+	 * still a route, where a removal is not. That trade is a judgement
+	 * about somebody else's menu and is recorded in project.md as one.
+	 */
+	QMenu *pane_menu = menu->addMenu(QStringLiteral("&Pane"));
+	pane_menu->setObjectName(QStringLiteral("terminal_pane_menu"));
+
+	QAction *split = pane_menu->addAction(QStringLiteral("Split &Beside Current"));
 	split->setObjectName(QStringLiteral("terminal_split"));
 	split->setEnabled(m_current && m_layout
 	                   && m_layout->intent().size() < m_layout->max_panes());
@@ -3772,7 +3795,7 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	 * split with no way out. The same reasoning as Split's, which is on
 	 * this menu because a one-session window has no tab bar either.
 	 */
-	QAction *as_tab = menu->addAction(QStringLiteral("Show as &Tab"));
+	QAction *as_tab = pane_menu->addAction(QStringLiteral("Show as &Tab"));
 	as_tab->setObjectName(QStringLiteral("terminal_show_as_tab"));
 	as_tab->setEnabled(m_current && m_layout && m_layout->intent().size() > 1);
 
@@ -3786,11 +3809,11 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	        m_layout ? m_layout->intent() : QList<bssh_session *>();
 	const int here = m_current ? arrangement.indexOf(m_current) : -1;
 
-	QAction *move_left = menu->addAction(QStringLiteral("Move Pane &Left"));
+	QAction *move_left = pane_menu->addAction(QStringLiteral("Move Pane &Left"));
 	move_left->setObjectName(QStringLiteral("terminal_move_pane_left"));
 	move_left->setEnabled(here > 0);
 
-	QAction *move_right = menu->addAction(QStringLiteral("Move Pane &Right"));
+	QAction *move_right = pane_menu->addAction(QStringLiteral("Move Pane &Right"));
 	move_right->setObjectName(QStringLiteral("terminal_move_pane_right"));
 	move_right->setEnabled(here >= 0 && here < arrangement.size() - 1);
 
@@ -3841,6 +3864,19 @@ void bssh_main_window::apply_menu_layout(QMenu *menu,
 
 	for (QAction *action : menu->actions()) {
 		if (action->isSeparator()) continue;
+
+		/*
+		 * A submenu's rows are a menu of their own, and Qt applies
+		 * neither the stylesheet below nor this loop to them. Without
+		 * recursing, the moment this menu grouped anything the group's
+		 * contents went back to pointer-height rows with their chords
+		 * still on -- which is the failure the comment on this function
+		 * already names, arriving by the one route it did not cover.
+		 */
+		if (QMenu *child = action->menu()) {
+			apply_menu_layout(child, layout);
+			continue;
+		}
 
 		/*
 		 * The shortcut text goes: it is telling somebody with no

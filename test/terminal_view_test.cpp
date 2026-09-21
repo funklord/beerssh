@@ -2446,7 +2446,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 17);
+	QCOMPARE(actions.size(), 12);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -2461,48 +2461,22 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QCOMPARE(actions.at(3)->text(), QStringLiteral("Select &All"));
 
 	/*
-	 * Then zoom (sec 9.5), between the edit verbs and the session
-	 * verbs because it is neither: it changes what the pane in front of
-	 * you looks like, and it is on this menu at all for the device that
-	 * has no chord and no wheel to reach it with.
+	 * Then the two GROUPS, and they are groups for a measured reason
+	 * rather than a tidy one: flat, this menu wanted 776px of a 640dp
+	 * cover screen, because touch gives every row sec 6.2's 48dp.
+	 * the_touch_terminal_menu_fits_a_phone is the assertion that says
+	 * so, and this one pins what the grouping did to the shape.
 	 */
 	QVERIFY(actions.at(4)->isSeparator());
-	QCOMPARE(actions.at(5)->text(), QStringLiteral("Zoom &In"));
-	QCOMPARE(actions.at(6)->text(), QStringLiteral("Zoom &Out"));
-	QCOMPARE(actions.at(7)->text(), QStringLiteral("&Reset Zoom"));
+	QCOMPARE(actions.at(5)->text(), QStringLiteral("Text &Size"));
+	QVERIFY2(actions.at(5)->menu(), "Text Size must be a submenu, not a verb");
 
-	/*
-	 * Then the session verbs. These lived only on the TAB bar's menu,
-	 * which is a target you have to know about -- and a window with one
-	 * session hides its tab bar entirely, so splitting was unreachable
-	 * from anywhere but a chord. Reported as exactly that: a terminal
-	 * cannot be split from its right-click menu.
-	 */
-	QVERIFY(actions.at(8)->isSeparator());
-	QCOMPARE(actions.at(9)->text(), QStringLiteral("Split &Beside Current"));
+	QVERIFY(actions.at(6)->isSeparator());
+	QCOMPARE(actions.at(7)->text(), QStringLiteral("&Pane"));
+	QVERIFY2(actions.at(7)->menu(), "Pane must be a submenu, not a verb");
 
-	/*
-	 * The un-split, next to the split and for a reason of its own: with
-	 * two panes and nothing else a window has no tab bar to drop a pane
-	 * onto, so the gesture alone would leave a split with no way out.
-	 * The same argument as Split's, which is on this menu because a
-	 * one-session window has no tab bar either.
-	 */
-	QCOMPARE(actions.at(10)->text(), QStringLiteral("Show as &Tab"));
-
-	/*
-	 * Then reordering, which is beside the other two arrangement verbs
-	 * because it is the third of them: Split adds a pane, Show as Tab
-	 * removes one, and these move one past its neighbour. It is a menu
-	 * item rather than a drag because the drag cannot complete on
-	 * Android -- QDrag hands the gesture to the platform, which claims
-	 * it as drag-to-split-screen (sec 8.4).
-	 */
-	QCOMPARE(actions.at(11)->text(), QStringLiteral("Move Pane &Left"));
-	QCOMPARE(actions.at(12)->text(), QStringLiteral("Move Pane &Right"));
-
-	QCOMPARE(actions.at(13)->text(), QStringLiteral("New &Tab"));
-	QCOMPARE(actions.at(14)->text(), QStringLiteral("New &Window"));
+	QCOMPARE(actions.at(8)->text(), QStringLiteral("New &Tab"));
+	QCOMPARE(actions.at(9)->text(), QStringLiteral("New &Window"));
 
 	/*
 	 * And the way to the configuration, behind its own separator (sec 2):
@@ -2511,14 +2485,37 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * different kind of thing again, and separated for the same reason
 	 * Select All is separated from Copy.
 	 */
-	QVERIFY(actions.at(15)->isSeparator());
-	QCOMPARE(actions.at(16)->text(), QStringLiteral("&Hosts and Settings"));
+	QVERIFY(actions.at(10)->isSeparator());
+	QCOMPARE(actions.at(11)->text(), QStringLiteral("&Hosts and Settings"));
+
+	/*
+	 * The groups' own contents, in their own order. Grouping moved these
+	 * rows; it must not have lost one, and a test that only counted the
+	 * top level would not notice if it had.
+	 */
+	const QList<QAction *> sizes = actions.at(5)->menu()->actions();
+	QCOMPARE(sizes.size(), 3);
+	QCOMPARE(sizes.at(0)->text(), QStringLiteral("Zoom &In"));
+	QCOMPARE(sizes.at(1)->text(), QStringLiteral("Zoom &Out"));
+	QCOMPARE(sizes.at(2)->text(), QStringLiteral("&Reset Zoom"));
+
+	const QList<QAction *> panes = actions.at(7)->menu()->actions();
+	QCOMPARE(panes.size(), 4);
+	QCOMPARE(panes.at(0)->text(), QStringLiteral("Split &Beside Current"));
+	QCOMPARE(panes.at(1)->text(), QStringLiteral("Show as &Tab"));
+	QCOMPARE(panes.at(2)->text(), QStringLiteral("Move Pane &Left"));
+	QCOMPARE(panes.at(3)->text(), QStringLiteral("Move Pane &Right"));
 
 	/*
 	 * Access keys on every verb, which is what makes the menu usable from
-	 * the keyboard and is half of what those guidelines are about.
+	 * the keyboard and is half of what those guidelines are about. Walked
+	 * into the groups as well, since a row that moved into one did not
+	 * stop being a verb.
 	 */
-	for (const QAction *action : actions) {
+	QList<QAction *> every = actions;
+	every += sizes;
+	every += panes;
+	for (const QAction *action : every) {
 		if (action->isSeparator()) continue;
 		QVERIFY2(action->text().contains(QLatin1Char('&')),
 		          qPrintable(action->text() + QStringLiteral(" has no access key")));
@@ -2537,9 +2534,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * unavailable" would be caught here even if the order above still
 	 * lined up.
 	 */
-	QCOMPARE(actions.size(), 17);
-
-	delete menu;
+	QCOMPARE(menu->actions().size(), 12);
 }
 
 void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() {
@@ -2561,6 +2556,19 @@ void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() 
 	QVERIFY2(!verb->shortcut().isEmpty(), "a pointer keeps its chord");
 	QVERIFY2(menu.styleSheet().isEmpty(), "a pointer keeps its own metrics");
 
+	/*
+	 * A submenu's rows are a menu of their own: Qt applies neither the
+	 * stylesheet nor the shortcut sweep to them, so the moment this menu
+	 * grouped anything the group's contents kept pointer-height rows
+	 * with their chords still on. Built here rather than asserted on
+	 * build_terminal_menu's own groups, for the reason the comment above
+	 * gives -- this is a test about the metrics, not about which verbs
+	 * exist.
+	 */
+	QMenu *group = menu.addMenu(QStringLiteral("&Group"));
+	QAction *inner = group->addAction(QStringLiteral("&Inner"));
+	inner->setShortcut(QKeySequence(QStringLiteral("Ctrl+I")));
+
 	bssh_main_window::apply_menu_layout(&menu, bssh_app_settings::CONTEXT_MENU_TOUCH);
 
 	/*
@@ -2568,6 +2576,12 @@ void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() 
 	 * text is what makes a touch row wide as well as short.
 	 */
 	QVERIFY2(verb->shortcut().isEmpty(), "the touch layout must drop the chord");
+
+	QVERIFY2(inner->shortcut().isEmpty(),
+	          "a row inside a group kept its chord: the layout did not recurse");
+	QVERIFY2(group->styleSheet().contains(QStringLiteral("min-height: 48px")),
+	          qPrintable(QStringLiteral("a group's own rows must reach the 48dp floor, "
+	                                     "got: ") + group->styleSheet()));
 
 	/*
 	 * And the row reaches sec 6.2's floor. Asserted on the number, not

@@ -8797,3 +8797,50 @@ void layout_test::ctrl_wheel_in_a_pane_zooms_that_panes_session() {
 	QCOMPARE(b->font_zoom(), 1);
 	QCOMPARE(a->font_zoom(), 0);
 }
+
+void layout_test::the_touch_terminal_menu_fits_a_phone() {
+	/*
+	 * The surface every_touch_surface_fits_a_phone does not cover, and
+	 * the one that grows every time somebody adds a verb: sec 6.4's
+	 * terminal menu is where this app has been putting the things a
+	 * phone cannot otherwise reach -- split, un-split, move a pane, the
+	 * way back to the configuration, and now zoom.
+	 *
+	 * Each of those was the right call on its own. Nothing was counting
+	 * the total, which is how a menu ends up taller than the screen it
+	 * pops up on: 48dp rows (sec 6.2) buy sixteen of them in 640dp and
+	 * this menu passed that on the way past.
+	 *
+	 * A QMenu does not overlap its rows the way a form does -- Qt gives
+	 * it scroll arrows instead -- so the failure is milder than the one
+	 * check_fits describes, and it is still a menu whose bottom entries
+	 * are behind a gesture nobody looks for.
+	 */
+	const forced_touch_t arrangement(1);
+
+	bssh_main_window window;
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	menu->ensurePolished();
+	const QSize wanted = menu->sizeHint();
+
+	/*
+	 * Named in the failure, because the useful half of this assertion is
+	 * the number: whoever trips it needs to know by how much and what
+	 * the menu is carrying.
+	 */
+	QVERIFY2(wanted.height() <= BSSH_PHONE_TALL_DP,
+	          qPrintable(QStringLiteral("the touch terminal menu wants %1px of a %2px "
+	                                     "screen, with %3 entries")
+	                             .arg(wanted.height())
+	                             .arg(BSSH_PHONE_TALL_DP)
+	                             .arg(menu->actions().size())));
+
+	QVERIFY2(wanted.width() <= BSSH_PHONE_DP,
+	          qPrintable(QStringLiteral("the touch terminal menu wants %1px of a %2px "
+	                                     "screen in width")
+	                             .arg(wanted.width()).arg(BSSH_PHONE_DP)));
+
+	delete menu;
+}

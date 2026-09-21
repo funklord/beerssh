@@ -3671,6 +3671,43 @@ changes, it is one function (`apply_menu_layout`) applied to every context menu
 this window raises, rather than a rule written out inside each menu builder —
 the tab menu had pointer-height rows until it was pulled out.
 
+**The menu ran out of screen, and the arithmetic says it had to.**
+Measured 2026-09-21 by an assertion written for the purpose: flat, this
+menu wanted **776px of a 640dp cover screen** with 17 entries. Working it
+back -- fourteen verbs at the 48dp floor above, three separators and the
+frame -- it had about **16px of headroom before zoom arrived, and a row
+costs 48**. So no fourth top-level verb could ever have fitted, and the
+three zoom rows were simply the ones that walked into it.
+
+**Grouping is what fits, and the gate is new.** *Text Size* holds the
+three zoom verbs and *Pane* the four arrangement ones, which takes the
+menu to 12 entries and **520px**. `the_touch_terminal_menu_fits_a_phone`
+now asserts it, and names the height and the entry count when it fails,
+because the number is the useful half for whoever trips it next. This
+surface was not in `every_touch_surface_fits_a_phone` -- it is not a page
+-- so nothing had ever measured it.
+
+**A QMenu fails more mildly than a form and it still fails.** Qt gives an
+oversized menu scroll arrows rather than squeezing rows until they
+overlap, which is what `check_fits` describes; what it costs is entries
+sitting behind a gesture nobody looks for.
+
+**Grouping the PANE verbs was a judgement about somebody else's menu**
+and is recorded as one: §8.7 put *Move Pane* on this menu precisely so
+touch could reach it, and a submenu is one more tap where a removal
+would be no route at all. The alternative -- leaving them flat and
+dropping something else -- takes the same 48px from a different verb,
+and that is a choice worth making deliberately rather than by whoever
+next needs a row.
+
+**And grouping introduced a bug that the same pass had to fix.**
+`apply_menu_layout` walked one menu's actions; a submenu is a menu of
+its own, so the moment anything was grouped its contents went back to
+pointer-height rows with their chords still on -- the exact failure that
+function's own comment describes, arriving by the one route it did not
+cover. It recurses now, and the metrics test builds a submenu of its own
+to prove it rather than asserting on the terminal menu's groups.
+
 **Press-and-hold is ours, because Qt does not provide it.** Qt raises
 `customContextMenuRequested` from a right-click and does **not** synthesise a
 context-menu event from a long press on Android — checked on a device, where

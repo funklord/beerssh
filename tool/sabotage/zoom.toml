@@ -108,3 +108,28 @@ file = "src/ui/main_window.cpp"
 find = "\tzoom_in->setObjectName(QStringLiteral(\"terminal_zoom_in\"));"
 replace = "\tzoom_in->setObjectName(QStringLiteral(\"terminal_zoom_in_disabled\"));"
 expect = "the_terminal_menu_offers_zoom"
+
+# The touch layout stops reaching a group's rows.
+#
+# Grouping the menu to fit a phone (project.md sec 6.4) made this
+# reachable: a submenu is a menu of its own, so without the recursion its
+# rows keep pointer heights and their chords -- on the platform whose
+# whole reason for the grouping was that 48dp rows do not fit.
+[[sabotage]]
+name = "the touch menu layout does not reach a group"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (QMenu *child = action->menu()) {\n\t\t\tapply_menu_layout(child, layout);"
+replace = "\t\tif (QMenu *child = action->menu()) {\n\t\t\t(void)child;"
+expect = "the_touch_layout_grows_the_rows_and_drops_the_chords"
+
+# The menu goes flat again.
+#
+# Restores the 776px measured on 2026-09-21: every zoom verb back at the
+# top level, which is where they were when the menu stopped fitting a
+# 640dp cover screen.
+[[sabotage]]
+name = "the zoom verbs go back to the top level"
+file = "src/ui/main_window.cpp"
+find = "\tQAction *zoom_in = text_size->addAction(QStringLiteral(\"Zoom &In\"));"
+replace = "\tQAction *zoom_in = menu->addAction(QStringLiteral(\"Zoom &In\"));"
+expect = "the_terminal_menu_offers_the_three_verbs_in_order"
