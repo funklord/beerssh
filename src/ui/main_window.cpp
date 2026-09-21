@@ -2034,6 +2034,16 @@ void bssh_main_window::reset_zoom_current() {
 	m_current->set_font_zoom(0);
 }
 
+void bssh_main_window::clear_scrollback() {
+	/*
+	 * The emulator's own method, which announces -- see its comment. The
+	 * view re-clamps a scroll offset that now points past the end, and
+	 * the accessibility layer rebuilds its flattened text, both off that
+	 * one signal.
+	 */
+	if (m_current && m_current->emulator()) m_current->emulator()->clear_scrollback();
+}
+
 void bssh_main_window::open_find() {
 	if (!m_find_bar) return;
 
@@ -3530,6 +3540,11 @@ void bssh_main_window::build_menu_bar() {
 	connect(find, &QAction::triggered, this, [this] { open_find(); });
 	m_session_actions.append(find);
 
+	QAction *clear_history = edit->addAction(QStringLiteral("Clear Scroll&back"));
+	clear_history->setObjectName(QStringLiteral("menu_clear_scrollback"));
+	connect(clear_history, &QAction::triggered, this, [this] { clear_scrollback(); });
+	m_session_actions.append(clear_history);
+
 	QMenu *view = m_menu_bar->addMenu(QStringLiteral("&View"));
 
 	m_split_action = view->addAction(QStringLiteral("Split &Beside Current"));
@@ -3741,6 +3756,22 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	find->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("find"))));
 	find->setEnabled(m_current != nullptr);
+
+	/*
+	 * Dropping the history, which only the REMOTE could ask for until
+	 * now: ED 3 is what `clear` sends, and sec 6.4 records why somebody
+	 * runs it -- "before pasting a password". A user who wanted their own
+	 * scrollback gone had to hope the far end cooperated, which a
+	 * disconnected session cannot do at all.
+	 *
+	 * No confirmation, which is konsole's behaviour and the honest one:
+	 * the scrollback is not a document, the screen is untouched, and an
+	 * "are you sure" on a privacy action is a prompt that makes people
+	 * hesitate at exactly the wrong moment.
+	 */
+	QAction *clear_history = menu->addAction(QStringLiteral("Clear Scroll&back"));
+	clear_history->setObjectName(QStringLiteral("terminal_clear_scrollback"));
+	clear_history->setEnabled(m_current != nullptr);
 
 	menu->addSeparator();
 
@@ -4041,6 +4072,13 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	}
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
+		return;
+	}
+
+	const QAction *clear_history =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_clear_scrollback"));
+	if (chosen == clear_history) {
+		clear_scrollback();
 		return;
 	}
 

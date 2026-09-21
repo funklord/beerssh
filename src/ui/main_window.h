@@ -443,6 +443,9 @@ private:
 	void zoom_current(int steps);
 	void reset_zoom_current();
 
+	/* Drop the focused session's history (sec 6.4). */
+	void clear_scrollback();
+
 	void open_find();
 	void run_find(const QString &query);
 	void step_find(int direction);

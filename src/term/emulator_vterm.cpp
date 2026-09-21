@@ -1514,15 +1514,13 @@ int on_sb_pushline4(int cols, const VTermScreenCell *cells, bool continuation, v
 int on_sb_clear(void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 
-	self->scrollback.clear();
-
 	/*
-	 * Announced, because the view holds a scroll offset measured against
-	 * a history that has just gone: the same signal a trim sends, and the
-	 * handler already re-clamps rather than leaving the bar advertising
-	 * lines that are not there.
+	 * Through the emulator's own method, so the remote's route and the
+	 * user's are one implementation. The announcement below used to live
+	 * here alone, and it is the half that is easy to leave out of a
+	 * second copy.
 	 */
-	emit self->owner->scrollback_changed();
+	self->owner->clear_scrollback();
 	return 1;
 }
 
@@ -2120,6 +2118,18 @@ void bssh_emulator_private::apply_graphics(const bssh_graphics_result_t &result)
 	case bssh_graphics_result_t::NOTHING:
 		break;
 	}
+}
+
+void bssh_emulator::clear_scrollback() {
+	m_private->scrollback.clear();
+
+	/*
+	 * Announced, for the reason on_sb_clear gives: a view holds a scroll
+	 * offset measured against a history that has just gone, and the
+	 * handler for this signal re-clamps rather than leaving the bar
+	 * advertising lines that are not there.
+	 */
+	emit scrollback_changed();
 }
 
 const bssh_scrollback &bssh_emulator::scrollback() const {

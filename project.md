@@ -3690,6 +3690,38 @@ changes, it is one function (`apply_menu_layout`) applied to every context menu
 this window raises, rather than a rule written out inside each menu builder —
 the tab menu had pointer-height rows until it was pulled out.
 
+**Dropping the history was the REMOTE's to decide, and now it is not.**
+`ED 3` -- what `clear` sends -- has been handled since the scrollback
+existed, and the handler's own comment says what somebody is relying on
+when they run it: *"before pasting a password"*. Nothing local could ask.
+So a user who wanted their own history gone had to hope the far end
+cooperated, and **a disconnected session cannot cooperate at all** --
+which is the state a restore leaves every session in.
+
+`Clear Scrollback` is on the terminal menu and in the desktop Edit menu,
+where konsole keeps it. No confirmation: the screen is untouched, the
+scrollback is not a document, and an "are you sure" on a privacy action
+is a prompt that makes people hesitate at the moment they least want to.
+
+**One implementation with two callers, and the second sabotage is why.**
+`bssh_emulator::clear_scrollback()` clears AND announces;
+`on_sb_clear` now calls it rather than repeating both halves. An edit
+that removes the announcement leaves a clear that works perfectly and a
+view still scrolled into lines that no longer exist -- the defect that
+handler's comment already describes, which a second copy would have
+reintroduced silently. Both edits seen to fail.
+
+**And the two ways of counting that run disagreed by one, which is
+recorded rather than explained.** The suite's own `Totals:` lines sum to
+621 passing for this tree and the sabotage runner's baseline reported
+620, with no failure either time -- so one test SKIPPED in the runner's
+baseline that passed minutes earlier. It does not weaken these verdicts,
+because each edit was caught by a test that actively FAILED, which is
+evidence independent of any count. It is written down because a test
+that sometimes skips is a gate that is sometimes not there, and the
+first step in finding one is noticing that two counts of the same tree
+did not agree.
+
 **The menu ran out of screen, and the arithmetic says it had to.**
 Measured 2026-09-21 by an assertion written for the purpose: flat, this
 menu wanted **776px of a 640dp cover screen** with 17 entries. Working it

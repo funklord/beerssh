@@ -286,6 +286,19 @@ public:
 	const bssh_scrollback &scrollback() const;
 
 	/*
+	 * Drop the history, announcing it (sec 6.4). The REMOTE can already
+	 * ask for this -- ED 3 is what `clear` sends -- and nothing local
+	 * could, so a user who wanted their scrollback gone had to hope the
+	 * far end cooperated.
+	 *
+	 * One implementation with two callers rather than two clears: the
+	 * announcement is the half that is easy to forget, and a view holding
+	 * a scroll offset into a history that has just gone is the defect
+	 * on_sb_clear's own comment describes.
+	 */
+	void clear_scrollback();
+
+	/*
 	 * Whether a LIVE SCREEN row is the tail of the row above it -- one
 	 * logical line that ran past the right edge, not two lines.
 	 *

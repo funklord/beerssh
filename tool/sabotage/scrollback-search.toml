@@ -101,3 +101,29 @@ file = "src/ui/main_window.cpp"
 find = "\tfind->setObjectName(QStringLiteral(\"menu_find\"));"
 replace = "\tfind->setObjectName(QStringLiteral(\"menu_find_disabled\"));"
 expect = "the_scrollback_search_is_reachable_without_a_keyboard"
+
+# The local route to dropping the history goes away.
+#
+# ED 3 still works, so a shell running `clear` is unaffected -- which is
+# what would make this look fine: the remote's route is the one every
+# emulator test drives. What goes is the user's own, and a disconnected
+# session has no remote to ask.
+[[sabotage]]
+name = "the terminal menu stops offering clear scrollback"
+file = "src/ui/main_window.cpp"
+find = "\tclear_history->setObjectName(QStringLiteral(\"terminal_clear_scrollback\"));"
+replace = "\tclear_history->setObjectName(QStringLiteral(\"terminal_clear_disabled\"));"
+expect = "the_history_can_be_dropped_without_the_remote"
+
+# The clear stops announcing itself.
+#
+# The history goes and nothing is told, so a view stays scrolled into
+# lines that no longer exist and the accessibility layer keeps a
+# flattened copy of them. This is the half a second implementation
+# forgets, which is why the remote's route now calls this one.
+[[sabotage]]
+name = "dropping the history says nothing"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->scrollback.clear();\n\n\t/*\n\t * Announced, for the reason on_sb_clear gives"
+replace = "\tm_private->scrollback.clear();\n\treturn;\n\n\t/*\n\t * Announced, for the reason on_sb_clear gives"
+expect = "the_history_can_be_dropped_without_the_remote"

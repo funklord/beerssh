@@ -2446,7 +2446,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 12);
+	QCOMPARE(actions.size(), 13);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -2466,6 +2466,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * route until now, which on a phone meant no route at all.
 	 */
 	QCOMPARE(actions.at(4)->text(), QStringLiteral("&Find..."));
+	QCOMPARE(actions.at(5)->text(), QStringLiteral("Clear Scroll&back"));
 
 	/*
 	 * Then the two GROUPS, and they are groups for a measured reason
@@ -2474,16 +2475,16 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * the_touch_terminal_menu_fits_a_phone is the assertion that says
 	 * so, and this one pins what the grouping did to the shape.
 	 */
-	QVERIFY(actions.at(5)->isSeparator());
-	QCOMPARE(actions.at(6)->text(), QStringLiteral("Text &Size"));
-	QVERIFY2(actions.at(6)->menu(), "Text Size must be a submenu, not a verb");
+	QVERIFY(actions.at(6)->isSeparator());
+	QCOMPARE(actions.at(7)->text(), QStringLiteral("Text &Size"));
+	QVERIFY2(actions.at(7)->menu(), "Text Size must be a submenu, not a verb");
 
-	QVERIFY(actions.at(7)->isSeparator());
-	QCOMPARE(actions.at(8)->text(), QStringLiteral("&Pane"));
-	QVERIFY2(actions.at(8)->menu(), "Pane must be a submenu, not a verb");
+	QVERIFY(actions.at(8)->isSeparator());
+	QCOMPARE(actions.at(9)->text(), QStringLiteral("&Pane"));
+	QVERIFY2(actions.at(9)->menu(), "Pane must be a submenu, not a verb");
 
-	QCOMPARE(actions.at(9)->text(), QStringLiteral("&Session"));
-	QVERIFY2(actions.at(9)->menu(), "Session must be a submenu, not a verb");
+	QCOMPARE(actions.at(10)->text(), QStringLiteral("&Session"));
+	QVERIFY2(actions.at(10)->menu(), "Session must be a submenu, not a verb");
 
 	/*
 	 * And the way to the configuration, behind its own separator (sec 2):
@@ -2492,21 +2493,21 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * different kind of thing again, and separated for the same reason
 	 * Select All is separated from Copy.
 	 */
-	QVERIFY(actions.at(10)->isSeparator());
-	QCOMPARE(actions.at(11)->text(), QStringLiteral("&Hosts and Settings"));
+	QVERIFY(actions.at(11)->isSeparator());
+	QCOMPARE(actions.at(12)->text(), QStringLiteral("&Hosts and Settings"));
 
 	/*
 	 * The groups' own contents, in their own order. Grouping moved these
 	 * rows; it must not have lost one, and a test that only counted the
 	 * top level would not notice if it had.
 	 */
-	const QList<QAction *> sizes = actions.at(6)->menu()->actions();
+	const QList<QAction *> sizes = actions.at(7)->menu()->actions();
 	QCOMPARE(sizes.size(), 3);
 	QCOMPARE(sizes.at(0)->text(), QStringLiteral("Zoom &In"));
 	QCOMPARE(sizes.at(1)->text(), QStringLiteral("Zoom &Out"));
 	QCOMPARE(sizes.at(2)->text(), QStringLiteral("&Reset Zoom"));
 
-	const QList<QAction *> panes = actions.at(8)->menu()->actions();
+	const QList<QAction *> panes = actions.at(9)->menu()->actions();
 	QCOMPARE(panes.size(), 4);
 	QCOMPARE(panes.at(0)->text(), QStringLiteral("Split &Beside Current"));
 	QCOMPARE(panes.at(1)->text(), QStringLiteral("Show as &Tab"));
@@ -2531,7 +2532,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * only where it applies. a_session_can_be_closed_without_a_tab_bar
 	 * is where its presence is asserted, with a session that is not live.
 	 */
-	const QList<QAction *> sessions = actions.at(9)->menu()->actions();
+	const QList<QAction *> sessions = actions.at(10)->menu()->actions();
 	QCOMPARE(sessions.size(), 5);
 	QCOMPARE(sessions.at(0)->text(), QStringLiteral("New &Tab"));
 	QCOMPARE(sessions.at(1)->text(), QStringLiteral("New &Window"));
@@ -2562,7 +2563,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * unavailable" would be caught here even if the order above still
 	 * lined up.
 	 */
-	QCOMPARE(menu->actions().size(), 12);
+	QCOMPARE(menu->actions().size(), 13);
 }
 
 void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() {
@@ -3959,5 +3960,47 @@ void terminal_view_test::a_session_can_be_closed_without_a_tab_bar() {
 	          "a session that is not live has no way to connect: after a restore "
 	          "that is a dead end on any device with no tab bar");
 
+	delete menu;
+}
+
+void terminal_view_test::the_history_can_be_dropped_without_the_remote() {
+	/*
+	 * ED 3 -- what `clear` sends -- was the only way to drop the
+	 * scrollback, so a user who wanted their own history gone had to
+	 * hope the far end cooperated. A disconnected session cannot
+	 * cooperate at all, and sec 6.4 records why somebody asks: "before
+	 * pasting a password".
+	 *
+	 * Asserted on the emulator's own method AND on the route to it,
+	 * because they fail differently: a clear nothing calls is the defect
+	 * this tree keeps finding, and a menu entry calling a clear that
+	 * does not announce leaves the view scrolled into a history that is
+	 * gone.
+	 */
+	bssh_emulator emulator(80, 24);
+	for (int i = 0; i < 40; ++i) {
+		emulator.feed(QByteArrayLiteral("line ") + QByteArray::number(i)
+		               + QByteArrayLiteral("\r\n"));
+	}
+
+	QVERIFY2(emulator.scrollback().count() > 0,
+	          "the fixture scrolled nothing off, so there is no history to drop");
+
+	QSignalSpy announced(&emulator, &bssh_emulator::scrollback_changed);
+	emulator.clear_scrollback();
+
+	QCOMPARE(emulator.scrollback().count(), 0);
+	QVERIFY2(announced.count() > 0,
+	          "the history went without a word, so a view stays scrolled into it");
+
+	/* And a route a person can take, on both surfaces. */
+	bssh_main_window window;
+	QVERIFY2(window.findChild<QAction *>(QStringLiteral("menu_clear_scrollback")),
+	          "the menu bar offers no way to drop the history");
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+	QVERIFY2(menu->findChild<QAction *>(QStringLiteral("terminal_clear_scrollback")),
+	          "the terminal menu offers no way to drop the history, so touch has none");
 	delete menu;
 }
