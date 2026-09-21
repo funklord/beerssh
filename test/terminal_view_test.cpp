@@ -10,7 +10,7 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QTemporaryDir>
-#include <QScroller>
+#include "ui/touch_metrics.h"
 #include "model/profile_store.h"
 #include "ui/session_dialog.h"
 #include "model/app_settings.h"
@@ -3354,18 +3354,17 @@ void terminal_view_test::a_bare_url_is_clickable_and_stops_where_it_should() {
 }
 
 /*
- * sec 6.4's table gives touch "kinetic touch scroll (QScroller)" and the
- * widget had none: no wheel on a phone, no Shift+PageUp, no gesture, so
- * the only way into the scrollback was dragging a scrollbar a few pixels
- * wide. Reviewing output that has gone past is most of what a terminal
- * is for, so that was a core activity a finger could not perform.
+ * sec 6.4's touch model: "long press then drag handles".
  *
- * Driven through QScroller rather than by calling set_scroll_offset,
- * because the offset already worked -- what did not exist was anything
- * connecting a gesture to it. A test that moved the offset itself would
- * pass with the whole feature removed.
+ * It was not built. A long press opened the menu and nothing else, so
+ * Copy there was enabled only if the user had already dragged out a
+ * selection -- and a drag is the gesture scrolling needs, which is why
+ * the table gives selection to the press instead. Building the scroller
+ * without this would have left the two fighting over one gesture.
  */
-void terminal_view_test::a_finger_can_reach_the_scrollback() {
+void terminal_view_test::a_long_press_selects_and_handles_adjust_it() {
+	const forced_touch_t arrangement(1);
+
 	bssh_terminal_view view;
 	show_and_resize(view, 640, 200);
 
@@ -3373,82 +3372,60 @@ void terminal_view_test::a_finger_can_reach_the_scrollback() {
 	view.attach_screen(&emulator.screen());
 	view.attach_scrollback(&emulator.scrollback());
 	view.attach_emulator(&emulator);
+	emulator.feed(QByteArrayLiteral("alpha /usr/local/bin/thing omega\r\n"));
 
-	for (int i = 0; i < 200; ++i) {
-		emulator.feed(QStringLiteral("line %1\r\n").arg(i).toUtf8());
-	}
+	qint64 line = 0;
+	int col = 0;
+	QVERIFY(view.cell_at(QPoint(2, 2), line, col));
 
-	QVERIFY2(view.scroll_offset() == 0, "not at the live screen to begin with");
-
-	/*
-	 * The GRAB, asked first and asked directly.
-	 *
-	 * The first version called QScroller::scroller() and then asserted
-	 * hasScroller(), which is a question that answers itself:
-	 * scroller() CREATES one where there is none, so the assertion was
-	 * true whether or not anything had ever grabbed a gesture -- and the
-	 * scroll checks below then drove the handlers through the scroller
-	 * the test had just made. Removing the grab left the suite green.
-	 *
-	 * grabbedGesture() reports what was actually grabbed, which is the
-	 * fact wanted: a conversion that works and a gesture nobody connected
-	 * is an engine running with nothing attached to the pedal, and that
-	 * was precisely the state this whole entry is about.
-	 */
-	/*
-	 * Asked BEFORE anything calls QScroller::scroller(), which is the
-	 * whole of the fix here: scroller() is a get-or-create, so asking it
-	 * first and then asking hasScroller() is a question that cannot be
-	 * answered no -- and the scroll checks below would then run through
-	 * the scroller this test had just built, proving the conversion
-	 * while proving nothing about any gesture being connected.
-	 *
-	 * grabbedGesture() looked like the more direct question and is not:
-	 * measured with the grab removed it still answers 256, Qt's custom
-	 * gesture base, because it does not report per widget. hasScroller
-	 * does -- 1 with the grab, 0 without -- so it is the discriminating
-	 * one provided nothing has created a scroller first.
-	 */
-	QVERIFY2(QScroller::hasScroller(&view),
-	          "no scroll gesture is grabbed, so no finger can start a scroll");
-
-	QScroller *scroller = QScroller::scroller(&view);
-	QVERIFY2(scroller, "no scroller was ever attached to the view");
+	QVERIFY2(!view.has_selection(), "something was already selected");
 
 	/*
-	 * Scroll back by a known number of lines and read it in the view's
-	 * own units. scrollTo drives the same ScrollPrepare/Scroll pair a
-	 * flick does, so this exercises the conversion rather than skipping
-	 * past it.
+	 * A press in the middle of the path. The WORD is taken, not a point:
+	 * a zero-width selection is not one, and a path is what anybody
+	 * reaches for in a terminal -- the same word characters the
+	 * double-click uses, because two ideas of "word" is two answers.
 	 */
-	scroller->scrollTo(QPointF(0, 0), 0);
-	QCoreApplication::processEvents();
+	const QRect middle = view.cell_rect(line, 12);
+	QVERIFY(middle.isValid());
+	view.select_word_at(line, 12);
 
-	const int furthest = view.scroll_offset();
-	QVERIFY2(furthest > 0,
-	          "a scroll to the top of the content left the view at the live screen");
+	QVERIFY(view.has_selection());
+	QCOMPARE(view.selection_text(), QStringLiteral("/usr/local/bin/thing"));
 
 	/*
-	 * Back to the bottom, which is the live screen. Together with the
-	 * line above this pins the AXIS: the offset counts lines back from
-	 * live while the scroller counts pixels down from the top of the
-	 * history, so the two run opposite ways and an inverted conversion
-	 * would swap exactly these two answers.
+	 * Both handles exist and sit at the two ends, below the text rather
+	 * than over it -- a handle covering the selection hides the thing it
+	 * is there to adjust.
 	 */
-	scroller->scrollTo(QPointF(0, 1e6), 0);
-	QCoreApplication::processEvents();
-	QCOMPARE(view.scroll_offset(), 0);
+	const QRect start = view.selection_handle_rect(true);
+	const QRect end = view.selection_handle_rect(false);
+	QVERIFY2(start.isValid() && end.isValid(), "a touch selection has no handles");
+	QVERIFY2(start.center().x() < end.center().x(), "the handles are the wrong way round");
+	QVERIFY2(start.top() >= middle.bottom(), "a handle is drawn over the text");
 
 	/*
-	 * And halfway is halfway, which neither endpoint can show: a
-	 * conversion off by a factor still lands on both ends correctly and
-	 * puts every flick in between somewhere wrong.
+	 * And the target is bigger than the mark. The circle drawn is a
+	 * sixth of this, deliberately: 48dp of ink over a terminal hides
+	 * several cells, while 48dp of target is what a finger needs.
 	 */
-	scroller->scrollTo(QPointF(0, qreal(furthest) * view.cell_height() / 2.0), 0);
-	QCoreApplication::processEvents();
+	QCOMPARE(start.width(), BSSH_TOUCH_TARGET_DP);
 
-	const int middle = view.scroll_offset();
-	QVERIFY2(qAbs(middle - furthest / 2) <= 1,
-	          qPrintable(QStringLiteral("halfway down the history gave %1, not about %2")
-	                             .arg(middle).arg(furthest / 2)));
+	/*
+	 * Dragging the END handle leftwards shortens the selection and
+	 * leaves the START where it was. Moving both is the mistake that
+	 * makes a handle behave like a fresh drag.
+	 */
+	QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, end.center());
+	QTest::mouseMove(&view, view.cell_rect(line, 16).center());
+	QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier,
+	                     view.cell_rect(line, 16).center());
+
+	QVERIFY(view.has_selection());
+	QVERIFY2(view.selection_text().startsWith(QStringLiteral("/usr/")),
+	          qPrintable(QStringLiteral("the start moved too: %1")
+	                             .arg(view.selection_text())));
+	QVERIFY2(view.selection_text().size() < 20,
+	          qPrintable(QStringLiteral("the end did not move: %1")
+	                             .arg(view.selection_text())));
 }

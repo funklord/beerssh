@@ -1,7 +1,7 @@
 #include <QRegularExpression>
 #include <QScrollEvent>
 #include <QScrollPrepareEvent>
-#include <QScroller>
+#include "ui/touch_metrics.h"
 #include "ui/terminal_view.h"
 
 #include <QDragEnterEvent>
@@ -90,6 +90,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_selection_anchor_col(0),
       m_selection_focus_line(-1),
       m_selection_focus_col(0),
+      m_dragging_handle(-1),
       m_current_match(-1),
       m_emulator(nullptr),
       m_input_router(nullptr),
@@ -166,18 +167,6 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 * the host list, because Qt does not provide it and writing the timer
 	 * out twice is the shape this project keeps unpicking.
 	 */
-	/*
-	 * Kinetic scrolling by finger (sec 6.4). TouchGesture rather than
-	 * LeftMouseButtonGesture, because a left drag on a desktop is a text
-	 * selection and handing it to the scroller would take selection away
-	 * from every mouse user to give scrolling to a phone.
-	 *
-	 * Grabbed unconditionally rather than behind is_touch_primary: a
-	 * touchscreen on a desktop is a real arrangement, and a machine with
-	 * no touch device simply never produces the events.
-	 */
-	QScroller::grabGesture(this, QScroller::TouchGesture);
-
 	m_long_press = new bssh_long_press(this, this);
 	connect(m_long_press, &bssh_long_press::triggered, this, [this](const QPoint &at) {
 		/*
@@ -190,6 +179,25 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 		 * suppressing it left a phone with no menu, no clipboard and no
 		 * way to reach either (sec 6.4).
 		 */
+
+		/*
+		 * And it SELECTS first, which is sec 6.4's touch model: "long
+		 * press then drag handles". The menu that follows carries Copy,
+		 * so the press that opens it also gives it something to copy --
+		 * before this, Copy on a phone was enabled only if the user had
+		 * already dragged out a selection, and a drag is the gesture
+		 * scrolling needs.
+		 *
+		 * The word rather than a point, because a zero-width selection
+		 * is not one and because a path is what people reach for in a
+		 * terminal. Handles adjust it from there.
+		 */
+		qint64 line = 0;
+		int col = 0;
+		if (!has_selection() && cell_at(mapFromGlobal(at), line, col)) {
+			select_word_at(line, col);
+		}
+
 		emit context_menu_requested(at);
 	});
 
@@ -523,48 +531,6 @@ int bssh_terminal_view::available_history() const {
 	if (m_emulator && m_emulator->alternate_screen()) return 0;
 
 	return m_scrollback ? m_scrollback->count() : 0;
-}
-
-bool bssh_terminal_view::event(QEvent *event) {
-	/*
-	 * QScroller on a plain widget is not the one-liner it is on a scroll
-	 * area: grabbing the gesture only starts the machine, and the widget
-	 * has to answer where the content is and accept where it should go.
-	 *
-	 * The coordinate is PIXELS from the top of the history, because that
-	 * is what a kinetic scroller interpolates over and lines are too
-	 * coarse to flick smoothly. Lines are what the view stores, so the
-	 * conversion happens here and nowhere else.
-	 */
-	if (event->type() == QEvent::ScrollPrepare) {
-		QScrollPrepareEvent *prepare = static_cast<QScrollPrepareEvent *>(event);
-		const int history = available_history();
-		const int cell = qMax(1, m_cell_height);
-
-		prepare->setViewportSize(QSizeF(size()));
-		prepare->setContentPosRange(QRectF(0, 0, 0, qreal(history) * cell));
-
-		/*
-		 * Offset counts lines scrolled BACK from the live screen, so it
-		 * runs the opposite way to a scrollbar's position: at the
-		 * bottom of the content the offset is zero.
-		 */
-		prepare->setContentPos(QPointF(0, qreal(history - m_scroll_offset) * cell));
-		prepare->accept();
-		return true;
-	}
-
-	if (event->type() == QEvent::Scroll) {
-		QScrollEvent *scroll = static_cast<QScrollEvent *>(event);
-		const int history = available_history();
-		const int cell = qMax(1, m_cell_height);
-
-		const int from_top = qRound(scroll->contentPos().y() / cell);
-		set_scroll_offset(history - from_top);
-		return true;
-	}
-
-	return QWidget::event(event);
 }
 
 void bssh_terminal_view::set_scroll_offset(int lines) {
@@ -1731,6 +1697,35 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		const int inset = outline.width() / 2;
 		painter.drawRect(rect().adjusted(inset, inset, -inset - 1, -inset - 1));
 	}
+
+	/*
+	 * The selection handles, last so nothing draws over them (sec 6.4).
+	 *
+	 * Drawn SMALLER than the rect that answers for them: the circle is a
+	 * third of the touch target, because a 48dp disc over a terminal hides
+	 * several cells of the text it is there to help select, while the
+	 * thing a finger has to hit stays 48dp. What you see is a marker and
+	 * what you press is a target.
+	 */
+	for (int which = 0; which < 2; ++which) {
+		const QRect box = selection_handle_rect(which == 0);
+		if (!box.isValid()) continue;
+
+		const int radius = box.width() / 6;
+		const QPoint centre(box.center().x(), box.top() + radius);
+
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(palette().highlight());
+		painter.drawEllipse(centre, radius, radius);
+
+		/* A stem up to the cell, so the disc reads as attached to the
+		 * end of the selection rather than floating under it. */
+		QPen stem(palette().highlight().color());
+		stem.setWidth(qMax(2, radius / 3));
+		painter.setPen(stem);
+		painter.drawLine(centre.x(), box.top() - m_cell_height,
+		                  centre.x(), box.top());
+	}
 }
 
 /*
@@ -2355,6 +2350,27 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 		return;
 	}
 
+	/*
+	 * A selection handle claims the press before anything else looks at
+	 * it (sec 6.4), and BEFORE sec 8.7's input mode is consulted.
+	 *
+	 * Dragging a handle is neither scrolling nor starting a selection,
+	 * so neither mode should see it -- and in the DEFAULT touch mode the
+	 * scroll branch returns before any of the selection code runs, which
+	 * left the handles unreachable exactly where they are for. Found by
+	 * the test rather than by reading: the handle drew, the hit-test was
+	 * correct, and nothing ever called it.
+	 */
+	if (has_selection()) {
+		for (int which = 0; which < 2; ++which) {
+			if (!selection_handle_rect(which == 0).contains(event->pos())) continue;
+
+			m_dragging_handle = which;
+			event->accept();
+			return;
+		}
+	}
+
 	const bool touch = bssh_platform::instance()
 	                    && bssh_platform::instance()->is_touch_primary();
 	const bool shift = take_shift_override(event->modifiers());
@@ -2522,6 +2538,44 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 
 void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 	/*
+	 * Moving a handle moves ONE end and leaves the other where it is,
+	 * which is what a handle means -- dragging the start up must not
+	 * carry the end with it.
+	 */
+	if (m_dragging_handle >= 0) {
+		qint64 line = 0;
+		int col = 0;
+		if (cell_at(event->pos(), line, col)) {
+			qint64 first_line = 0;
+			int first_col = 0;
+			qint64 last_line = 0;
+			int last_col = 0;
+			normalised_selection(first_line, first_col, last_line, last_col);
+
+			/*
+			 * Anchor the end NOT being dragged, then move the other.
+			 * Normalising afterwards lets a handle be dragged past its
+			 * partner and keep working, rather than collapsing the
+			 * selection the moment the two cross.
+			 */
+			if (m_dragging_handle == 0) {
+				m_selection_anchor_line = last_line;
+				m_selection_anchor_col = last_col;
+			} else {
+				m_selection_anchor_line = first_line;
+				m_selection_anchor_col = first_col;
+			}
+			m_selection_focus_line = line;
+			m_selection_focus_col = col;
+
+			update();
+			note_selection_changed();
+		}
+		event->accept();
+		return;
+	}
+
+	/*
 	 * The pane drag begins once the pointer has moved far enough to be a
 	 * drag rather than a click -- Qt's own threshold, so it agrees with
 	 * every other drag the user has ever started.
@@ -2614,6 +2668,12 @@ void bssh_terminal_view::mouseMoveEvent(QMouseEvent *event) {
 }
 
 void bssh_terminal_view::mouseReleaseEvent(QMouseEvent *event) {
+	if (m_dragging_handle >= 0) {
+		m_dragging_handle = -1;
+		event->accept();
+		return;
+	}
+
 	/* An Alt+click that never moved is not a gesture. */
 	if (m_maybe_pane_drag) {
 		m_maybe_pane_drag = false;
@@ -2725,14 +2785,33 @@ void bssh_terminal_view::request_input_panel() {
 	QGuiApplication::inputMethod()->show();
 }
 
-void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
-	qint64 line = 0;
-	int col = 0;
-	if (event->button() != Qt::LeftButton || !cell_at(event->pos(), line, col)) {
-		QWidget::mouseDoubleClickEvent(event);
-		return;
-	}
+QRect bssh_terminal_view::selection_handle_rect(bool start) const {
+	const bssh_platform *platform = bssh_platform::instance();
+	if (!platform || !platform->is_touch_primary()) return QRect();
+	if (!has_selection()) return QRect();
 
+	qint64 first_line = 0;
+	int first_col = 0;
+	qint64 last_line = 0;
+	int last_col = 0;
+	normalised_selection(first_line, first_col, last_line, last_col);
+
+	/*
+	 * The start handle hangs under the LEFT edge of the first cell and
+	 * the end handle under the RIGHT edge of the last, which is where
+	 * every touch platform puts them -- a handle over the text would
+	 * cover the thing being selected.
+	 */
+	const QRect cell = start ? cell_rect(first_line, first_col)
+	                         : cell_rect(last_line, last_col);
+	if (!cell.isValid()) return QRect();
+
+	const int side = BSSH_TOUCH_TARGET_DP;
+	const int x = (start ? cell.left() : cell.right() + 1) - side / 2;
+	return QRect(x, cell.bottom(), side, side);
+}
+
+void bssh_terminal_view::select_word_at(qint64 line, int col) {
 	/*
 	 * Word selection, using the same word characters a shell does -- a
 	 * double-click on a path should take the whole path, which is most of
@@ -2758,6 +2837,20 @@ void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
 	m_selection_focus_line = line;
 	m_selection_focus_col = to;
 	m_selecting = false;
+
+	update();
+	note_selection_changed();
+}
+
+void bssh_terminal_view::mouseDoubleClickEvent(QMouseEvent *event) {
+	qint64 line = 0;
+	int col = 0;
+	if (event->button() != Qt::LeftButton || !cell_at(event->pos(), line, col)) {
+		QWidget::mouseDoubleClickEvent(event);
+		return;
+	}
+
+	select_word_at(line, col);
 
 	/*
 	 * The double-click counts itself. Qt delivers press, double-click,

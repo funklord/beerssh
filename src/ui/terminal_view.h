@@ -377,23 +377,6 @@ public:
 	bool cell_at(const QPoint &point, qint64 &line, int &col) const;
 	QRect cell_rect(qint64 line, int col) const;
 	void set_scroll_offset(int lines);
-
-	/*
-	 * Kinetic touch scrolling (sec 6.4), which the table there asks for
-	 * and which this widget did not have.
-	 *
-	 * A phone has no wheel, no Shift+PageUp and -- until this -- no
-	 * gesture either, so the only way to reach the scrollback was to drag
-	 * a scrollbar a few pixels wide, on the one platform where a
-	 * few-pixel target is unusable. Reviewing output that has gone past
-	 * is most of what a terminal is FOR, so that was a core activity a
-	 * finger could not perform.
-	 *
-	 * QScroller drives the same set_scroll_offset the wheel does rather
-	 * than a second scrolling path, which is what the wheel's own comment
-	 * promised in the future tense and nothing delivered.
-	 */
-	bool event(QEvent *event) override;
 	void scroll_by(int lines);
 	void scroll_to_live();
 
@@ -501,6 +484,29 @@ public:
 	 * an override on the other.
 	 */
 	QString link_at(const QPoint &widget_pos) const;
+
+	/*
+	 * Select the word under a cell, the way a double-click does.
+	 *
+	 * Extracted because a long press wants the same answer (sec 6.4's
+	 * touch model) and two copies of "what counts as a word" is two
+	 * places for a path to stop being one thing.
+	 */
+	void select_word_at(qint64 line, int col);
+
+
+	/*
+	 * Where the two selection handles sit (sec 6.4), in widget
+	 * coordinates, or a null rect where there are none.
+	 *
+	 * `start' is the handle on the beginning of the selection. They are
+	 * BSSH_TOUCH_TARGET_DP across because they are dragged with a
+	 * finger, which is wider than the cell they mark -- the CIRCLE is
+	 * drawn smaller than the rect it answers with, so the thing a person
+	 * can hit is bigger than the thing they can see. That asymmetry is
+	 * the point rather than a mistake.
+	 */
+	QRect selection_handle_rect(bool start) const;
 
 	int find_text(const QString &query);
 	void find_step(int direction);
@@ -793,6 +799,9 @@ private:
 	 * the rows still on it.
 	 */
 	bool line_is_continuation(qint64 line) const;
+
+	/* Which handle a drag is moving: -1 for none, 0 start, 1 end. */
+	int m_dragging_handle;
 
 	qint64 line_for_row(int row) const;
 
