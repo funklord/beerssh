@@ -9270,6 +9270,33 @@ without an icon is defective, so there is a plain one meant to be replaced.
   the Qt-version-skew problem across distros) is deferred rather than dropped.
   Ship a `.desktop` file, an AppStream `.metainfo.xml`, and hicolor icons —
   without them the app is invisible to software centres.
+  **The metainfo shipped unvalidated until 2026-09-21, and did not
+  validate.** `check-deb.sh` ran `desktop-file-validate` on the desktop
+  entry from the day it existed and never asked `appstreamcli` anything
+  about the file beside it, so `appstreamcli validate` had two complaints
+  nobody had seen: a missing developer and a missing homepage. §17's rule
+  that a rule which is not mechanically checked stops being true, applied
+  to the one metadata file that decides whether a software centre shows
+  the app correctly.
+  The developer is added — factual, and `harmonization.md` already asks
+  the holder be named on the surfaces a reader looks at, of which a
+  software centre is one.
+  **The homepage is deliberately still absent.** The repository is
+  private, measured with `gh repo view` rather than assumed, so a
+  homepage would send a user to a 404: absent is the correct value and
+  the warning is right to raise it. It goes in when the repository goes
+  public.
+  **The gate asserts the expected issues as a SET rather than ignoring
+  them.** `appstreamcli` exits 3 for any issue at all, so the status
+  cannot discriminate the known warning from a new one; the check fails
+  on any error and on any warning that is not the homepage. An ignore
+  list would let the next complaint in silently, which is how a gate gets
+  switched off by instalments.
+  **A trap worth knowing before editing `check-deb.sh`:** its whole body
+  is one single-quoted argument, so a comment containing an apostrophe
+  ends the quote sixty lines early. The first version of this block did
+  exactly that and `bash -n` caught it; the note is now in the file where
+  the next person will meet it.
 - **macOS/Windows:** `.dmg` / installer, best-effort per §1, unsigned until
   someone actually wants them (code signing on both is a cost, not a checkbox).
 

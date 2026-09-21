@@ -178,6 +178,45 @@ echo "check-deb: --help works with no display"
 desktop-file-validate /usr/share/applications/se.vibes.beerssh.desktop
 echo "check-deb: the desktop entry validates"
 
+# And the AppStream metadata beside it, which shipped unchecked until
+# 2026-09-21 and did not validate: appstreamcli wanted a developer and a
+# homepage, and nothing here ever asked it.
+#
+# NOTE: this whole script body is one single-quoted argument, so nothing
+# below may contain an apostrophe. The first version of this comment did
+# and ended the quote 60 lines early; bash -n caught it.
+#
+# The status alone cannot gate this. appstreamcli exits 3 for ANY issue,
+# and one of them is url-homepage-missing, which cannot be answered while
+# the repository is private because a homepage there would send a user to
+# a 404. Absent is the correct value today and the warning is right to
+# raise it.
+#
+# So the known issues are asserted as a SET rather than ignored: any error
+# fails, and any warning that is not the homepage one fails. An ignore
+# list would let the next warning in silently, which is how a gate gets
+# switched off by instalments; naming the whole expected population means
+# a NEW complaint breaks the build and the known one does not.
+#
+# When the repository goes public the URL goes in and the warning stops.
+metainfo=/usr/share/metainfo/se.vibes.beerssh.metainfo.xml
+appstreamcli validate "$metainfo" > /tmp/metainfo.log 2>&1 || true
+
+if grep -q "^E:" /tmp/metainfo.log; then
+	echo "check-deb: the AppStream metadata has errors" >&2
+	cat /tmp/metainfo.log >&2
+	exit 1
+fi
+
+unexpected=$(grep "^W:" /tmp/metainfo.log | grep -vc "url-homepage-missing" || true)
+if [ "$unexpected" -ne 0 ]; then
+	echo "check-deb: an AppStream warning that is not the known missing" >&2
+	echo "check-deb:   homepage (the repository is private):" >&2
+	cat /tmp/metainfo.log >&2
+	exit 1
+fi
+echo "check-deb: the AppStream metadata validates, bar the known homepage"
+
 # The icon the entry names has to be the icon that shipped, or the app has
 # no icon anywhere it matters (sec 12.2).
 icon=$(sed -n "s/^Icon=//p" /usr/share/applications/se.vibes.beerssh.desktop)

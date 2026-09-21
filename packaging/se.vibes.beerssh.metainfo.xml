@@ -12,6 +12,21 @@
   <id>se.vibes.beerssh</id>
 
   <name>BeerSSH</name>
+
+  <!--
+       Who wrote it, which appstreamcli asks for and harmonization.md
+       already requires on the surfaces a reader looks at: the version
+       output, the About window, the README. A software centre is one of
+       those.
+
+       No <url type="homepage">: the repository is private today, so a
+       homepage here would send a user to a 404. The absence is correct
+       rather than missing, and it is the one thing appstreamcli warns
+       about that cannot be honestly answered yet.
+  -->
+  <developer id="se.vibes">
+    <name>Nabeel Sowan</name>
+  </developer>
   <summary>SSH terminal for desktop and Android</summary>
 
   <metadata_license>CC0-1.0</metadata_license>
