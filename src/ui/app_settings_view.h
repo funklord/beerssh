@@ -130,6 +130,7 @@ private:
 	QComboBox *m_keyboard_layout;
 	QComboBox *m_theme;
 	QComboBox *m_scrollbar;
+	QComboBox *m_arrangement;
 	QComboBox *m_status_line;
 	QLineEdit *m_window_title;
 	QComboBox *m_context_menu;

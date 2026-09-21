@@ -420,7 +420,6 @@ private:
 	 */
 	QListWidget *m_settings_sections;
 	void style_settings_index();
-	void apply_device_settings();
 
 	/*
 	 * Pushes the selector's mode to every pane (sec 8.7). Called when the
@@ -773,6 +772,16 @@ public:
 	 */
 	void act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	                           const QString &link = QString());
+
+	/*
+	 * Re-read the device settings and apply what changed. Public for the
+	 * reason above in its own form: the only callers are signals from the
+	 * settings surfaces, so a suite could reach this code only by
+	 * building one of those pages and driving it -- and a setting that
+	 * takes effect at the next start but not in the window somebody
+	 * changed it in is a defect no startup test can see.
+	 */
+	void apply_device_settings();
 
 	/*
 	 * The tab menu, likewise built but not shown, and for the same reason

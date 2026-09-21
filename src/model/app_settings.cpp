@@ -104,6 +104,8 @@ void bssh_app_settings::set_key_row_visibility(key_row_visibility_t visibility) 
 namespace {
 
 const char *const BSSH_KEYBOARD_KEYS[] = { "system", "built_in", "built_in_full" };
+const char *const BSSH_ARRANGEMENT_KEYS[] = { "auto", "tiled", "column" };
+const int BSSH_ARRANGEMENT_COUNT = 3;
 const int BSSH_KEYBOARD_COUNT = 3;
 
 } /* namespace */
@@ -130,6 +132,25 @@ bssh_app_settings::keyboard_t bssh_app_settings::default_keyboard() {
 	const bssh_platform *platform = bssh_platform::instance();
 	return (platform && platform->is_touch_primary()) ? KEYBOARD_BUILT_IN
 	                                                   : KEYBOARD_SYSTEM;
+}
+
+bssh_app_settings::arrangement_t bssh_app_settings::arrangement() const {
+	const QString text = value(QStringLiteral("layout/arrangement"), QString()).toString();
+	for (int i = 0; i < BSSH_ARRANGEMENT_COUNT; ++i) {
+		if (text == QLatin1String(BSSH_ARRANGEMENT_KEYS[i])) return arrangement_t(i);
+	}
+
+	/*
+	 * Unset or unreadable is AUTO, which is the behaviour this setting
+	 * was added on top of: a typo in app.ini leaves the window arranged
+	 * the way the device would have arranged it anyway.
+	 */
+	return ARRANGEMENT_AUTO;
+}
+
+void bssh_app_settings::set_arrangement(arrangement_t arrangement) {
+	store(QStringLiteral("layout/arrangement"),
+	       QString::fromLatin1(BSSH_ARRANGEMENT_KEYS[int(arrangement)]));
 }
 
 bssh_app_settings::keyboard_t bssh_app_settings::keyboard() const {

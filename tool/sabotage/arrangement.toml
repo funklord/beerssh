@@ -44,3 +44,26 @@ file = "src/ui/main_window.cpp"
 find = "\t\t\tQWidget *strip = m_tab_row ? m_tab_row : static_cast<QWidget *>(m_tabs);"
 replace = "\t\t\tQWidget *strip = m_tabs;"
 expect = "a_reorder_along_the_strip_is_not_a_tear_out"
+
+# The setting is read but never applied to a window that is open.
+#
+# The constructor's own early call still sets it, so a window opened
+# AFTER the change is right and only the one somebody changed it in is
+# wrong -- which is why this needs the live case in the test rather than
+# another startup one. A startup-only pair was MISSED by both halves,
+# because either one alone still gives a fresh window the right shape.
+#
+# The edit neuters the COMPARISON rather than the assignment, and the
+# difference is not cosmetic. Deleting `set_arrangement(wanted)` leaves
+# arrangement_changed permanently true, which rebuilds on every settings
+# pass, re-enters this function and runs the stack out -- so the suite
+# died inside the very test that covers this and the harness, reading
+# only PASS and FAIL lines, called that green. Holding the flag false
+# leaves a program that runs and does nothing, which is the defect a
+# user would actually meet and the one the test can answer.
+[[sabotage]]
+name = "changing the arrangement does not rebuild the panes"
+file = "src/ui/main_window.cpp"
+find = "\t\tarrangement_changed = m_layout->arrangement() != wanted;"
+replace = "\t\tarrangement_changed = false;"
+expect = "a_desktop_can_be_asked_for_the_column"

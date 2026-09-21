@@ -8914,3 +8914,106 @@ void layout_test::the_settings_page_says_what_unset_gives_you() {
 		                             .arg(note->text(), choices->itemText(row))));
 	}
 }
+
+void layout_test::a_desktop_can_be_asked_for_the_column() {
+	/*
+	 * sec 8.7: "the idiom picks the arrangement's default and then lets
+	 * go ... either can be set to anything -- which is the point rather
+	 * than a concession: tiled has to be runnable on a phone and column
+	 * on a desktop, or neither can be tested without two devices."
+	 *
+	 * Nothing could set it. The window called set_arrangement(COLUMN)
+	 * once, in its constructor, keyed on is_touch_primary(), and offered
+	 * no way back -- so on a desktop the column was reachable only by a
+	 * test fixture forcing the platform to lie about itself.
+	 *
+	 * Asserted on the SPLITTER's orientation rather than on the setting,
+	 * because the setting agreeing with itself proves nothing: what a
+	 * column means is that the panes stack.
+	 */
+	/*
+	 * The suite already runs against a sandbox HOME (test/main.cpp), so
+	 * writing a device setting here does not touch anybody's app.ini.
+	 */
+	const forced_touch_t desktop(0);
+
+	bssh_app_settings restore;
+	const bssh_app_settings::arrangement_t was = restore.arrangement();
+
+	{
+		bssh_main_window window;
+		window.resize(1200, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		QSplitter *splitter = window.findChild<QSplitter *>();
+		QVERIFY(splitter);
+		QCOMPARE(splitter->orientation(), Qt::Horizontal);
+	}
+
+	bssh_app_settings stored;
+	stored.set_arrangement(bssh_app_settings::ARRANGEMENT_COLUMN);
+
+	{
+		bssh_main_window window;
+		window.resize(1200, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		QSplitter *splitter = window.findChild<QSplitter *>();
+		QVERIFY(splitter);
+		QVERIFY2(splitter->orientation() == Qt::Vertical,
+		          "a desktop asked for the column still tiled side by side");
+	}
+
+	/*
+	 * And back to tiled, so the assertion is about the SETTING rather
+	 * than about a window that happens to stack: a value that was
+	 * ignored in one direction would pass the check above by accident if
+	 * the default had been the column all along.
+	 */
+	stored.set_arrangement(bssh_app_settings::ARRANGEMENT_TILED);
+
+	{
+		bssh_main_window window;
+		window.resize(1200, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		QSplitter *splitter = window.findChild<QSplitter *>();
+		QVERIFY(splitter);
+		QCOMPARE(splitter->orientation(), Qt::Horizontal);
+	}
+
+	/*
+	 * And the window that is ALREADY OPEN, which is the half the two
+	 * startup cases cannot see. Both paths set the arrangement -- the
+	 * constructor early, so the first pane build reads the right shape,
+	 * and apply_device_settings when somebody changes it -- so a test
+	 * that only ever builds a fresh window passes with EITHER of them
+	 * broken. Both sabotages were MISSED until this case existed, which
+	 * is what a green test proving nothing looks like from the outside.
+	 */
+	{
+		bssh_main_window window;
+		window.resize(1200, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		QSplitter *splitter = window.findChild<QSplitter *>();
+		QVERIFY(splitter);
+		QCOMPARE(splitter->orientation(), Qt::Horizontal);
+
+		bssh_app_settings live;
+		live.set_arrangement(bssh_app_settings::ARRANGEMENT_COLUMN);
+		window.apply_device_settings();
+		QCoreApplication::processEvents();
+
+		QSplitter *after = window.findChild<QSplitter *>();
+		QVERIFY(after);
+		QVERIFY2(after->orientation() == Qt::Vertical,
+		          "the setting changed and the open window kept its arrangement");
+	}
+
+	bssh_app_settings().set_arrangement(was);
+}

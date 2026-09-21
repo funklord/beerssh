@@ -112,6 +112,36 @@ public:
 	 */
 	static keyboard_t default_keyboard();
 
+	/*
+	 * How terminals occupy the window (sec 8.7's ARRANGEMENT dimension).
+	 *
+	 * sec 8.7 says the idiom picks the default "and then lets go":
+	 * mobile defaults to a column and desktop to tiles, and either can
+	 * be set to anything -- for a stated reason, that "`tiled` has to be
+	 * runnable on a phone and `column` on a desktop, or neither can be
+	 * tested without two devices". Nothing could set it: the constructor
+	 * chose from is_touch_primary() once and offered no way back.
+	 *
+	 * Only this dimension, deliberately. sec 8.7 asks that the three-way
+	 * split land WITH the feature that makes a dimension diverge and
+	 * introduce "only the dimension that feature needs, not as a
+	 * standalone refactor first" -- so the idiom and the metrics stay on
+	 * is_touch_primary() exactly as they were.
+	 */
+	enum arrangement_t {
+		/* Whatever this device's idiom picks -- the behaviour so far. */
+		ARRANGEMENT_AUTO,
+
+		/* sec 8.4's side by side, which a desktop opens with. */
+		ARRANGEMENT_TILED,
+
+		/* sec 8.7's stack, which a phone opens with. */
+		ARRANGEMENT_COLUMN
+	};
+
+	arrangement_t arrangement() const;
+	void set_arrangement(arrangement_t arrangement);
+
 	keyboard_t keyboard() const;
 	void set_keyboard(keyboard_t keyboard);
 

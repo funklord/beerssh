@@ -363,6 +363,7 @@ private slots:
 	void ctrl_wheel_in_a_pane_zooms_that_panes_session();
 	void the_touch_terminal_menu_fits_a_phone();
 	void the_settings_page_says_what_unset_gives_you();
+	void a_desktop_can_be_asked_for_the_column();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

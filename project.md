@@ -6572,6 +6572,33 @@ asserts the detent while the gesture that drives it waits for a device.
 Guarded by `tool/sabotage/column-mode.toml`, three edits, each seen to
 fail naming its own test against a 556-passing baseline.
 
+**The arrangement became a SETTING 2026-09-22, which is what this
+section actually asked for.** The increment above gave the manager the
+dimension and left `is_touch_primary()` choosing it, once, in the
+window's constructor -- so "either can be set to anything" was true of
+the manager and false of the program: on a desktop the column was
+reachable only by a test fixture forcing the platform to lie, which is
+the arrangement that cannot be demonstrated to anybody holding a phone.
+`layout/arrangement` now carries `auto | tiled | column`, AUTO being the
+idiom's old answer, read by a file-local `chosen_arrangement()` that the
+constructor and `apply_device_settings` both consult, and offered on the
+settings page under *Terminals* as Automatic / Side by side / Stacked.
+The test asserts the SPLITTER's orientation rather than the setting,
+because a setting agreeing with itself proves nothing and what a column
+means is that the panes stack.
+
+**Two paths that agree are one path as far as a startup test can see.**
+Both sabotages for this were MISSED: the constructor sets the
+arrangement and so does `apply_device_settings`, so a test that opens a
+fresh window for every case passes with either of them broken. The case
+that separates them opens one window, changes the setting under it and
+asserts the splitter turned -- which is also the defect a user meets,
+since a setting that takes effect at the next start and not in the
+window you changed it in is the thing being complained about. It is why
+`apply_device_settings` is public: its only callers are signals from the
+settings surfaces, so the suite could otherwise reach it only by
+building one of those pages and driving it.
+
 **What this first increment did NOT do -- since largely closed.** It left
 the intent and tab model unchanged, so the column showed only what the
 existing split machinery put in the intent and tabs still converted. That

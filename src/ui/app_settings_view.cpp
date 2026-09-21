@@ -97,6 +97,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
       m_keyboard_layout(nullptr),
       m_theme(nullptr),
       m_scrollbar(nullptr),
+      m_arrangement(nullptr),
       m_status_line(nullptr),
       m_window_title(nullptr),
       m_context_menu(nullptr),
@@ -427,6 +428,32 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	                        "own setting."),
 	        this);
 	if (on_this_page(SECTION_APPEARANCE, scrollbar_note)) form->addRow(scrollbar_note);
+
+	/*
+	 * How terminals occupy the window (sec 8.7's ARRANGEMENT). The idiom
+	 * picks the default and then lets go, which that section asked for in
+	 * as many words and nothing implemented: the window chose once from
+	 * is_touch_primary() and offered no way back, so a desktop could not
+	 * be shown the column at all except from a test fixture.
+	 */
+	m_arrangement = new QComboBox(this);
+	m_arrangement->setObjectName(QStringLiteral("arrangement"));
+	m_arrangement->addItem(QStringLiteral("Automatic"),
+	                        int(bssh_app_settings::ARRANGEMENT_AUTO));
+	m_arrangement->addItem(QStringLiteral("Side by side"),
+	                        int(bssh_app_settings::ARRANGEMENT_TILED));
+	m_arrangement->addItem(QStringLiteral("Stacked"),
+	                        int(bssh_app_settings::ARRANGEMENT_COLUMN));
+	bssh_fit_items(m_arrangement);
+	if (on_this_page(SECTION_APPEARANCE, m_arrangement))
+		form->addRow(QStringLiteral("Terminals"), m_arrangement);
+
+	QLabel *arrangement_note = bssh_wrapped_note(
+	        QStringLiteral("Automatic stacks them on a phone and puts them side by "
+	                        "side on a desktop. Stacked holds every session and "
+	                        "scrolls."),
+	        this);
+	if (on_this_page(SECTION_APPEARANCE, arrangement_note)) form->addRow(arrangement_note);
 
 	/*
 	 * What the status line says, or that it says nothing (sec 8.4). It
@@ -996,6 +1023,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	const int bar_index = m_scrollbar->findData(int(settings.scrollbar()));
 	m_scrollbar->setCurrentIndex(bar_index < 0 ? 0 : bar_index);
 
+	const int arrangement_index = m_arrangement->findData(int(settings.arrangement()));
+	m_arrangement->setCurrentIndex(arrangement_index < 0 ? 0 : arrangement_index);
+
 	const int status_index = m_status_line->findData(int(settings.status_line()));
 	m_status_line->setCurrentIndex(status_index < 0 ? 0 : status_index);
 
@@ -1054,6 +1084,12 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		commit([this](bssh_app_settings &s) {
 			s.set_scrollbar(bssh_app_settings::scrollbar_t(
 			        m_scrollbar->currentData().toInt()));
+		});
+	});
+	connect(m_arrangement, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_arrangement(bssh_app_settings::arrangement_t(
+			        m_arrangement->currentData().toInt()));
 		});
 	});
 	connect(m_status_line, &QComboBox::currentIndexChanged, this, [this] {

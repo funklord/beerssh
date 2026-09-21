@@ -95,6 +95,35 @@
  */
 static const int BSSH_TEAR_OUT_DP = 40;
 
+namespace {
+
+bssh_layout_manager::arrangement_t chosen_arrangement() {
+	/*
+	 * sec 8.7's arrangement, asked of the setting rather than decided
+	 * from the idiom. AUTO is what the idiom would have picked, which is
+	 * the behaviour this setting was added on top of -- a phone opens on
+	 * the column and a desktop on sec 8.4's tiles.
+	 *
+	 * The setting exists because sec 8.7 asked for it in as many words:
+	 * "tiled has to be runnable on a phone and column on a desktop, or
+	 * neither can be tested without two devices". The constructor chose
+	 * once from is_touch_primary() and offered no way back, so on a
+	 * desktop the column could only be reached by a test fixture.
+	 */
+	const bssh_app_settings::arrangement_t wanted = bssh_app_settings().arrangement();
+
+	if (wanted == bssh_app_settings::ARRANGEMENT_TILED)
+		return bssh_layout_manager::TILED;
+	if (wanted == bssh_app_settings::ARRANGEMENT_COLUMN)
+		return bssh_layout_manager::COLUMN;
+
+	const bssh_platform *platform = bssh_platform::instance();
+	return (platform && platform->is_touch_primary()) ? bssh_layout_manager::COLUMN
+	                                                   : bssh_layout_manager::TILED;
+}
+
+} /* namespace */
+
 bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent)
     : QWidget(parent),
       m_pages(new QStackedWidget(this)),
@@ -251,8 +280,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * and set here before the pane container exists so the first rebuild
 	 * already reads the right shape.
 	 */
-	if (bssh_platform::instance() && bssh_platform::instance()->is_touch_primary())
-		m_layout->set_arrangement(bssh_layout_manager::COLUMN);
+	m_layout->set_arrangement(chosen_arrangement());
 
 	m_panes = new bssh_pane_container(m_layout, m_terminal_page);
 	layout->addWidget(m_panes, 1);
@@ -1565,7 +1593,23 @@ void bssh_main_window::apply_device_settings() {
 		}
 	}
 
-	if ((bar_changed || ligatures_changed) && m_panes) m_panes->rebuild();
+	/*
+	 * sec 8.7's arrangement, which rides the same default-and-rebuild
+	 * path: setting it changes the splitter's orientation and whether
+	 * the panes live in a scroll area, and only a rebuild reaches both.
+	 * Compared before assigning for the reason the scrollbar's comment
+	 * gives at length -- rebuilding on every settings pass re-enters this
+	 * function and does not terminate.
+	 */
+	bool arrangement_changed = false;
+	if (m_layout) {
+		const bssh_layout_manager::arrangement_t wanted = chosen_arrangement();
+		arrangement_changed = m_layout->arrangement() != wanted;
+		if (arrangement_changed) m_layout->set_arrangement(wanted);
+	}
+
+	if ((bar_changed || ligatures_changed || arrangement_changed) && m_panes)
+		m_panes->rebuild();
 
 	/*
 	 * Caps as Ctrl reaches every session's router, not just the focused
@@ -2043,6 +2087,7 @@ void bssh_main_window::reset_terminal_state() {
 	 */
 	if (m_current && m_current->emulator()) m_current->emulator()->reset_modes();
 }
+
 
 void bssh_main_window::clear_scrollback() {
 	/*
