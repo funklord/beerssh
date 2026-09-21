@@ -62,3 +62,15 @@ file = "keyboard/soft_keyboard_layout.cpp"
 find = "\t\tif (levels.size() != 4) continue;"
 replace = "\t\twhile (levels.size() < 4) levels.append(QString());"
 expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
+
+# The last hop, from the catalogue to the control a person looks at.
+# bssh_keyboard_layouts() can be perfectly right while the combo was
+# built from something else, and every assertion about the catalogue
+# would still pass -- which is this tree's most repeated defect, and the
+# reason the test asks the QComboBox rather than the catalogue twice.
+[[sabotage]]
+name = "the chooser drops the layout the catalogue offers"
+file = "src/ui/app_settings_view.cpp"
+find = "\t\tm_keyboard_layout->addItem(layout.display_name, layout.id);"
+replace = "\t\tif (layout.id != QStringLiteral(\"custom\")) m_keyboard_layout->addItem(layout.display_name, layout.id);"
+expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"

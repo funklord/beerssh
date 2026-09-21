@@ -2625,6 +2625,15 @@ decision.**
   `bssh_layout_slot_spec()` owns it now, beside the parser the way the
   key row pairs its two, so the round trip is a property of the code
   rather than of whoever calls it.
+  **And the last hop is asserted on the CONTROL, not the catalogue.**
+  `bssh_keyboard_layouts()` can be perfectly right while the chooser was
+  built from something else, and every assertion about the catalogue
+  would still pass -- which is this tree's most repeated defect, the one
+  `notify()`, the palette push and the selection handles all are. The
+  test asks the `QComboBox` whether it offers the layout, and a sabotage
+  drops `custom` from the combo while leaving the catalogue correct: five
+  edits catch nothing and that one goes red.
+
   **Only a case that must be ACCEPTED could find this.** Every negative
   assertion — a three-slot layout refused, not offered in the chooser,
   the keyboard left intact — passes against a function that refuses

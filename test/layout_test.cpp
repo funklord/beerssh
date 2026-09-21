@@ -8647,4 +8647,21 @@ void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
 	QVERIFY2(custom_offered, "an accepted layout is not in the chooser");
 	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("custom")));
 	QCOMPARE(bssh_keyboard_layout(), QStringLiteral("custom"));
+
+	/*
+	 * And the CONTROL a person actually looks at, which is one hop
+	 * further than the catalogue and the hop this tree keeps losing
+	 * things at: bssh_keyboard_layouts() can be perfectly right while
+	 * the combo was built from something else, and the assertion above
+	 * would not notice.
+	 */
+	bssh_app_settings_view settings;
+	QComboBox *chooser =
+	        settings.findChild<QComboBox *>(QStringLiteral("keyboard-layout"));
+	QVERIFY2(chooser, "the layout chooser was never built");
+
+	QVERIFY2(chooser->findData(QStringLiteral("custom")) >= 0,
+	          "the chooser does not offer the layout the catalogue accepted");
+	QVERIFY2(chooser->findData(QStringLiteral("us-intl")) >= 0,
+	          "the chooser lost the shipped layouts");
 }
