@@ -2446,7 +2446,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(menu);
 
 	const QList<QAction *> actions = menu->actions();
-	QCOMPARE(actions.size(), 12);
+	QCOMPARE(actions.size(), 13);
 
 	/*
 	 * The order is the Windows Interface Guidelines' and every desktop
@@ -2461,22 +2461,29 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QCOMPARE(actions.at(3)->text(), QStringLiteral("Select &All"));
 
 	/*
+	 * Find beside Select All, because it acts on the text in front of
+	 * you like the verbs above it -- and because the chord was its only
+	 * route until now, which on a phone meant no route at all.
+	 */
+	QCOMPARE(actions.at(4)->text(), QStringLiteral("&Find..."));
+
+	/*
 	 * Then the two GROUPS, and they are groups for a measured reason
 	 * rather than a tidy one: flat, this menu wanted 776px of a 640dp
 	 * cover screen, because touch gives every row sec 6.2's 48dp.
 	 * the_touch_terminal_menu_fits_a_phone is the assertion that says
 	 * so, and this one pins what the grouping did to the shape.
 	 */
-	QVERIFY(actions.at(4)->isSeparator());
-	QCOMPARE(actions.at(5)->text(), QStringLiteral("Text &Size"));
-	QVERIFY2(actions.at(5)->menu(), "Text Size must be a submenu, not a verb");
+	QVERIFY(actions.at(5)->isSeparator());
+	QCOMPARE(actions.at(6)->text(), QStringLiteral("Text &Size"));
+	QVERIFY2(actions.at(6)->menu(), "Text Size must be a submenu, not a verb");
 
-	QVERIFY(actions.at(6)->isSeparator());
-	QCOMPARE(actions.at(7)->text(), QStringLiteral("&Pane"));
-	QVERIFY2(actions.at(7)->menu(), "Pane must be a submenu, not a verb");
+	QVERIFY(actions.at(7)->isSeparator());
+	QCOMPARE(actions.at(8)->text(), QStringLiteral("&Pane"));
+	QVERIFY2(actions.at(8)->menu(), "Pane must be a submenu, not a verb");
 
-	QCOMPARE(actions.at(8)->text(), QStringLiteral("New &Tab"));
-	QCOMPARE(actions.at(9)->text(), QStringLiteral("New &Window"));
+	QCOMPARE(actions.at(9)->text(), QStringLiteral("New &Tab"));
+	QCOMPARE(actions.at(10)->text(), QStringLiteral("New &Window"));
 
 	/*
 	 * And the way to the configuration, behind its own separator (sec 2):
@@ -2485,21 +2492,21 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * different kind of thing again, and separated for the same reason
 	 * Select All is separated from Copy.
 	 */
-	QVERIFY(actions.at(10)->isSeparator());
-	QCOMPARE(actions.at(11)->text(), QStringLiteral("&Hosts and Settings"));
+	QVERIFY(actions.at(11)->isSeparator());
+	QCOMPARE(actions.at(12)->text(), QStringLiteral("&Hosts and Settings"));
 
 	/*
 	 * The groups' own contents, in their own order. Grouping moved these
 	 * rows; it must not have lost one, and a test that only counted the
 	 * top level would not notice if it had.
 	 */
-	const QList<QAction *> sizes = actions.at(5)->menu()->actions();
+	const QList<QAction *> sizes = actions.at(6)->menu()->actions();
 	QCOMPARE(sizes.size(), 3);
 	QCOMPARE(sizes.at(0)->text(), QStringLiteral("Zoom &In"));
 	QCOMPARE(sizes.at(1)->text(), QStringLiteral("Zoom &Out"));
 	QCOMPARE(sizes.at(2)->text(), QStringLiteral("&Reset Zoom"));
 
-	const QList<QAction *> panes = actions.at(7)->menu()->actions();
+	const QList<QAction *> panes = actions.at(8)->menu()->actions();
 	QCOMPARE(panes.size(), 4);
 	QCOMPARE(panes.at(0)->text(), QStringLiteral("Split &Beside Current"));
 	QCOMPARE(panes.at(1)->text(), QStringLiteral("Show as &Tab"));
@@ -2534,7 +2541,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * unavailable" would be caught here even if the order above still
 	 * lined up.
 	 */
-	QCOMPARE(menu->actions().size(), 12);
+	QCOMPARE(menu->actions().size(), 13);
 }
 
 void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() {
@@ -3825,4 +3832,40 @@ void terminal_view_test::a_cursor_under_the_floor_is_lifted_like_text_is() {
 	QVERIFY2(faithful != ground, "nothing but background was drawn with the setting off");
 	QVERIFY2(bssh_contrast_ratio(faithful.rgb(), hidden.background) < BSSH_CONTRAST_FLOOR,
 	          "the cursor was lifted with the setting off, so the setting does nothing");
+}
+
+void terminal_view_test::the_scrollback_search_is_reachable_without_a_keyboard() {
+	/*
+	 * sec 6.1 calls the search "the thing a long scrollback is FOR", and
+	 * until now it had exactly one route: Ctrl+Shift+F. A phone has no
+	 * chord to press, so the feature was built, wired, tested -- the find
+	 * bar is constructed on the terminal page whatever the device -- and
+	 * unreachable on the platform sec 8.7 was written about.
+	 *
+	 * Asked of both surfaces, because they fail differently: the menu bar
+	 * is the desktop's discoverable route, and the context menu is the
+	 * only route touch has.
+	 */
+	bssh_main_window window;
+
+	QAction *bar_find = window.findChild<QAction *>(QStringLiteral("menu_find"));
+	QVERIFY2(bar_find, "the menu bar offers no way to search the scrollback");
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	QAction *menu_find = menu->findChild<QAction *>(QStringLiteral("terminal_find"));
+	QVERIFY2(menu_find,
+	          "the terminal menu offers no way to search: a device with no "
+	          "keyboard cannot reach the scrollback search at all");
+
+	/*
+	 * And it advertises the chord the router would actually steal, like
+	 * Copy does -- a literal here would be a second list, wrong the
+	 * moment somebody rebinds it.
+	 */
+	QCOMPARE(menu_find->shortcut(),
+	          QKeySequence(bssh_input_router::binding_for(QStringLiteral("find"))));
+
+	delete menu;
 }

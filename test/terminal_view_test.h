@@ -139,6 +139,7 @@ private slots:
 	void ctrl_wheel_zooms_while_the_remote_owns_the_wheel();
 	void the_zoom_chords_reach_the_focused_session();
 	void the_terminal_menu_offers_zoom();
+	void the_scrollback_search_is_reachable_without_a_keyboard();
 	void a_zoom_past_the_limit_still_steps_back();
 	void a_cursor_under_the_floor_is_lifted_like_text_is();
 };

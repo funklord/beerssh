@@ -77,3 +77,27 @@ file = "src/ui/main_window.cpp"
 find = "\t\tview->find_text(query);"
 replace = "\t\tview->find_text(QString());"
 expect = "the_find_chord_opens_a_bar_that_searches_the_pane"
+
+# The touch route to the search goes away again.
+#
+# Restores the state found on 2026-09-21: the chord is the only way in,
+# so a device with no keyboard cannot search its scrollback at all. The
+# find bar is still built, still wired and still correct -- which is what
+# made this invisible to every test that drives it directly.
+[[sabotage]]
+name = "the terminal menu stops offering find"
+file = "src/ui/main_window.cpp"
+find = "\tfind->setObjectName(QStringLiteral(\"terminal_find\"));"
+replace = "\tfind->setObjectName(QStringLiteral(\"terminal_find_disabled\"));"
+expect = "the_scrollback_search_is_reachable_without_a_keyboard"
+
+# And the desktop's discoverable route.
+#
+# Ctrl+Shift+F still works, so this costs nobody who already knew; it
+# costs everybody who did not.
+[[sabotage]]
+name = "the menu bar stops offering find"
+file = "src/ui/main_window.cpp"
+find = "\tfind->setObjectName(QStringLiteral(\"menu_find\"));"
+replace = "\tfind->setObjectName(QStringLiteral(\"menu_find_disabled\"));"
+expect = "the_scrollback_search_is_reachable_without_a_keyboard"

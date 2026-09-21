@@ -3517,6 +3517,19 @@ void bssh_main_window::build_menu_bar() {
 	});
 	m_session_actions.append(select_all);
 
+	/*
+	 * Find, which had exactly one route -- Ctrl+Shift+F -- and so was
+	 * discoverable only by somebody who already knew it was there.
+	 * sec 6.1 calls the search "the thing a long scrollback is FOR", and
+	 * Edit is where every desktop application has kept it since the
+	 * menus were invented.
+	 */
+	QAction *find = edit->addAction(QStringLiteral("&Find..."));
+	find->setObjectName(QStringLiteral("menu_find"));
+	find->setShortcut(chord("find"));
+	connect(find, &QAction::triggered, this, [this] { open_find(); });
+	m_session_actions.append(find);
+
 	QMenu *view = m_menu_bar->addMenu(QStringLiteral("&View"));
 
 	m_split_action = view->addAction(QStringLiteral("Split &Beside Current"));
@@ -3713,6 +3726,21 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 
 	QAction *select_all = menu->addAction(QStringLiteral("Select &All"));
 	select_all->setObjectName(QStringLiteral("terminal_select_all"));
+
+	/*
+	 * And the same verb where a phone can reach it. The chord is the
+	 * only other way in, so before this a device with no keyboard could
+	 * not search its scrollback at all -- the shape sec 8.7 was written
+	 * about, on the feature sec 6.1 calls the point of keeping history.
+	 *
+	 * Beside Select All rather than in a group: it acts on the text in
+	 * front of you, which is what the verbs above it do.
+	 */
+	QAction *find = menu->addAction(QStringLiteral("&Find..."));
+	find->setObjectName(QStringLiteral("terminal_find"));
+	find->setShortcut(
+	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("find"))));
+	find->setEnabled(m_current != nullptr);
 
 	menu->addSeparator();
 
@@ -3954,6 +3982,12 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	}
 	if (chosen == select_all) {
 		m_terminal_view->select_all();
+		return;
+	}
+
+	const QAction *find = menu->findChild<QAction *>(QStringLiteral("terminal_find"));
+	if (chosen == find) {
+		open_find();
 		return;
 	}
 

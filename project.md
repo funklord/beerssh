@@ -1175,6 +1175,25 @@ quirks on Android.
   is built from the **defaults** rather than from the effective list, or an
   action whose chord had been given back would vanish from the page and could
   never be bound again.
+  **And for three days it had exactly one route, which on a phone is
+  none.** Found 2026-09-21 by asking what opens the find bar: a grep for
+  `open_find()` returns the chord handler and nothing else, and a grep
+  for *Find* across `main_window.cpp` returns no menu entry at all. The
+  bar itself is built on the terminal page whatever the device, wired,
+  and covered by six sabotage edits -- so every test that drives it
+  directly passed throughout, because the defect is not in the search.
+  A phone has no chord to press, so the feature sec 6.1 calls *"the thing
+  a long scrollback is FOR"* could not be reached on the platform sec 8.7
+  exists to complain about. It is on the terminal menu now, which is the
+  surface both platforms have, and in the desktop menu bar's **Edit**
+  menu, where every application has kept Find since menus were invented
+  -- the discoverable half of a chord that worked only for somebody who
+  already knew it.
+  **The menu had room because it had just been grouped**: 520px became
+  584 of a 640dp screen, and what is left is 56px, less than one more
+  row. The next verb trips `the_touch_terminal_menu_fits_a_phone` rather
+  than a screenshot, which is the whole reason that gate exists.
+
   **Find in the scrollback is BUILT 2026-09-18, and it is the ninth stolen
   chord.** Ctrl+Shift+F (konsole's) opens a bar at the bottom of the terminal
   page, below the input selector; typing searches the focused pane's
