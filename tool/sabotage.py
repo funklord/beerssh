@@ -95,6 +95,11 @@ JOURNAL = ROOT / "build" / "sabotage-restore"
 # slow run rather than a stuck one is worse than none.
 RUN_DEADLINE_S = int(os.environ.get("BSSH_SABOTAGE_DEADLINE", "1800"))
 
+# The exit code reported for a run killed at the deadline. 124 is what
+# timeout(1) uses for the same thing, and a suite cannot return it itself
+# without make already having called that a failure.
+TIMED_OUT = 124
+
 # What counts as "the suite", so a spec whose covering test does not run
 # under `make test` can be proved by the runner rather than by hand.
 #
@@ -285,13 +290,24 @@ def kill_group(child: subprocess.Popen) -> None:
 			say(f"  !! the suite ignored signal {number}; escalating")
 
 
-def run_suite() -> tuple[bool, int, list[str], int]:
-	"""Runs the suite: (did it run at all, passes, failing test names).
+def run_suite() -> tuple[bool, int, list[str], int, int]:
+	"""Runs the suite: (did it run, passes, failing names, skips, exit code).
 
 	The first element is the one that matters. `make test` that fails to
 	build prints neither PASS nor FAIL, which counts identically to a green
 	run if you only look at failures -- so a sabotage would be reported as
 	uncaught when in truth nothing was ever executed.
+
+	The exit code is the second, and it is here because the first is not
+	enough. A suite that CRASHES partway has already printed hundreds of
+	PASS lines, so `ran` is true and `failing` is empty, and the verdict
+	that follows reads a segfault as a clean green run. Measured: removing
+	one line from apply_device_settings left the arrangement permanently
+	"changed", which re-entered the settings pass until the stack ran out
+	-- the suite died inside the very test that was meant to cover it and
+	this was reported as MISSED, which sends the next reader to write a
+	test that already exists. `make` reports the crash in its status and
+	nowhere else, so the status is the only place to read it.
 	"""
 	global current
 
@@ -308,8 +324,9 @@ def run_suite() -> tuple[bool, int, list[str], int]:
 			say(f"  !! the suite did not finish within {RUN_DEADLINE_S}s")
 			kill_group(current)
 			current = None
-			return False, 0, [], 0
+			return False, 0, [], 0, TIMED_OUT
 
+		rc = current.returncode
 		current = None
 
 		log.seek(0)
@@ -334,7 +351,7 @@ def run_suite() -> tuple[bool, int, list[str], int]:
 			part = line.split(":", 2)[-1].strip()
 			failing.append(part.split("(")[0].strip())
 
-	return (passes + len(failing)) > 0, passes, failing, skips
+	return (passes + len(failing)) > 0, passes, failing, skips, rc
 
 
 def restore_all(edits: list[Edit]) -> bool:
@@ -773,7 +790,7 @@ def main(argv: list[str]) -> int:
 	say(f"sabotage: {len(edits)} edit(s); one run of `{' '.join(SUITE)}` "
 	     f"each, plus a baseline")
 
-	ran, baseline_passes, baseline_failing, baseline_skips = run_suite()
+	ran, baseline_passes, baseline_failing, baseline_skips, baseline_rc = run_suite()
 	if not ran:
 		say("sabotage: the suite did not run at all -- a build failure, most "
 		     "likely. Nothing below would mean anything.")
@@ -782,6 +799,11 @@ def main(argv: list[str]) -> int:
 		say(f"sabotage: the suite ALREADY fails ({len(baseline_failing)}): "
 		     f"{', '.join(baseline_failing[:3])}")
 		say("sabotage:   nothing here means anything until it is green.")
+		return 1
+	if baseline_rc != 0:
+		say(f"sabotage: the suite exited {baseline_rc} with nothing failing -- "
+		     f"it stopped partway rather than passing.")
+		say("sabotage:   nothing here means anything until it runs to the end.")
 		return 1
 	# The skips are printed even when there are none, because the useful
 	# moment for this number is when somebody compares two runs: a
@@ -797,9 +819,15 @@ def main(argv: list[str]) -> int:
 		say(f"  breaking: {edit.name}")
 		try:
 			edit.apply()
-			ran, _, failing, skips = run_suite()
+			ran, _, failing, skips, rc = run_suite()
 
-			if not ran:
+			if not ran and rc == TIMED_OUT:
+				# Killed at the deadline having printed nothing, which is
+				# a hang rather than a failing test. Same reasoning as the
+				# crash branch below: the test never got to speak.
+				verdict = "NO VERDICT"
+				detail = f"the suite did not finish within {RUN_DEADLINE_S}s"
+			elif not ran:
 				# The sabotage stopped it compiling. That is not a test
 				# noticing anything, and reporting it as one would be a
 				# lie in the direction of comfort.
@@ -809,6 +837,15 @@ def main(argv: list[str]) -> int:
 			elif failing:
 				verdict = "WRONG TEST"
 				detail = f"{len(failing)} failed: {', '.join(failing[:2])}"
+			elif rc != 0:
+				# Nothing failed and the suite still exited badly, so it
+				# did not reach the end: a crash, a killed binary, a make
+				# error after the last PASS. Whatever the test would have
+				# said, it did not get to say it, and calling that MISSED
+				# claims a coverage gap that has not been measured.
+				verdict = "NO VERDICT"
+				detail = (f"the suite exited {rc} without failing a test -- "
+				           f"it crashed or stopped partway")
 			elif skips > baseline_skips:
 				# Nothing failed AND a test stopped running. Reporting
 				# this as a plain MISSED would hide the more alarming

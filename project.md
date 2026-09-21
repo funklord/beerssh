@@ -10300,6 +10300,44 @@ and libssh version skew; this is a third kind — the same Qt, the same
 code, different installed fonts — and it is the kind no version check
 would predict. The thing that disagreed was right.
 
+### 12.3u A crashed suite was reported as a green one — **[FIXED 2026-09-22]**
+
+`tool/sabotage.py` read only the PASS, SKIP and FAIL lines the suite
+prints. A run that dies partway has already printed hundreds of PASS
+lines and no FAIL line, so `ran` was true, `failing` was empty, and the
+verdict was **MISSED: the suite stayed green** — the harness telling
+you a guard does not exist while the guard was killing the process.
+
+Found on §8.7's arrangement. Deleting `m_layout->set_arrangement(wanted)`
+leaves `arrangement_changed` permanently true, so every settings pass
+rebuilds the panes, re-enters `apply_device_settings` and runs the stack
+out; `layout_test` took a SIGSEGV inside
+`a_desktop_can_be_asked_for_the_column`, which is the exact test the
+spec named, and the report said nothing had noticed.
+
+**The direction of the error is what makes it expensive.** A MISSED
+verdict sends the next reader to write a test that already exists, and
+it arrives with a number and a name attached, which is the shape
+`evidence.md` says nobody re-derives. The harness's own docstring
+already warned about this class for a build failure — neither PASS nor
+FAIL — and the guard it grew for that case, `passes + failing > 0`, is
+defeated by a crash, because the passes are real.
+
+**`make`'s exit status is the only place the crash is reported, so the
+status is what had to be read.** `run_suite` returns it now, and the
+verdict tells three things apart that all used to be "green": a test
+failed (caught), nothing failed and the suite exited 0 (MISSED), and
+nothing failed and the suite exited badly (**NO VERDICT**, which is
+neither a covered case nor a gap but a run to go and look at). A
+deadline kill gets the same verdict by a sentinel code rather than being
+called a broken build, which is what it was reported as before.
+
+The control is the case that found it: the crashing edit reported MISSED
+before the change and NO VERDICT after it, same edit, same suite. The
+spec then moved to an edit that breaks the feature without breaking the
+process — holding `arrangement_changed` false, so the program runs and
+does nothing — and that one is caught.
+
 ### 12.3t The settings page became an index and five pages — **[2026-09-10]**
 
 It was the tallest surface in the app: **1929px at 320dp**, three screens
