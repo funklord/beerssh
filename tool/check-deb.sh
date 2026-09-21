@@ -111,7 +111,7 @@ echo "check-deb: installing $(ls "$DEB_DIR"/*.deb | wc -l) package(s) into $IMAG
 docker run --rm --name "$CONTAINER" -v "$(cd "$DEB_DIR" && pwd)":/in:ro "$IMAGE" sh -c '
 set -e
 apt-get update -qq >/dev/null 2>&1
-apt-get install -y -qq desktop-file-utils >/dev/null 2>&1
+apt-get install -y -qq desktop-file-utils appstream lintian >/dev/null 2>&1
 
 # apt rather than dpkg: dpkg -i would leave the dependencies unresolved
 # and report success, which is the failure this exists to catch.
@@ -200,7 +200,31 @@ echo "check-deb: the desktop entry validates"
 #
 # When the repository goes public the URL goes in and the warning stops.
 metainfo=/usr/share/metainfo/se.vibes.beerssh.metainfo.xml
+
+# The tool has to BE here, and its absence has to fail.
+#
+# The first version of this check ran appstreamcli with a trailing
+# || true and then grepped the output for E: and W: lines. appstreamcli
+# is not in debian:trixie, so the command failed, the log held a shell
+# error instead of findings, the greps matched nothing, and the check
+# printed that the metadata validates -- a gate over an empty list,
+# reporting success exactly as loudly as a real pass. It shipped that way
+# for one commit. A guard whose failure is not the callers failure is not
+# a guard.
+command -v appstreamcli >/dev/null || {
+	echo "check-deb: appstreamcli is missing, so nothing validated the" >&2
+	echo "check-deb:   AppStream metadata. Refusing to report a pass." >&2
+	exit 1
+}
+
 appstreamcli validate "$metainfo" > /tmp/metainfo.log 2>&1 || true
+
+# And it has to have SAID something. An empty log means it ran and
+# reported nothing, which for this tool means it did not read the file.
+if [ ! -s /tmp/metainfo.log ]; then
+	echo "check-deb: appstreamcli produced no output at all" >&2
+	exit 1
+fi
 
 if grep -q "^E:" /tmp/metainfo.log; then
 	echo "check-deb: the AppStream metadata has errors" >&2
@@ -216,6 +240,57 @@ if [ "$unexpected" -ne 0 ]; then
 	exit 1
 fi
 echo "check-deb: the AppStream metadata validates, bar the known homepage"
+
+# lintian over the installed packages, which is the standard check for
+# this format and was not run at all. It is the tool that WOULD have
+# caught the metainfo shipping invalid: its one complaint about this
+# package is appstream-metadata-validation-failed, raised because
+# appstreamcli exits non-zero for any issue including the homepage that
+# cannot be answered while the repository is private.
+#
+# Same shape as above: errors fail, and the expected warnings are named
+# as a set so a NEW tag breaks the build while the known one does not.
+command -v lintian >/dev/null || {
+	echo "check-deb: lintian is missing, so nothing checked the packages" >&2
+	exit 1
+}
+
+lintian /in/*.deb > /tmp/lintian.log 2>&1 || true
+
+if grep -q "^E:" /tmp/lintian.log; then
+	echo "check-deb: lintian reports errors" >&2
+	cat /tmp/lintian.log >&2
+	exit 1
+fi
+
+# The expected tags, each named with the reason it is expected. This is a
+# POPULATION, not an ignore list: every entry has to be justified here, and
+# a tag that is not in it fails the build.
+#
+#   appstream-metadata-validation-failed
+#       the homepage cannot be answered while the repository is private
+#   duplicate-font-file
+#       sec 9.2 ships a curated, PINNED set on purpose rather than
+#       depending on the distributions font packages, which is the whole
+#       point of pinning: version skew is what it exists to avoid
+#   debug-file-with-no-debug-symbols
+#       NOT deliberate and NOT settled. dh_auto_build runs the Makefile,
+#       which wraps qmake, so Debian build flags never reach
+#       QMAKE_CXXFLAGS_RELEASE and nothing emits -g -- so the -dbgsym
+#       package ships a debug file with nothing in it. Fixing it is a
+#       packaging decision with a trade: -g globally also inflates a
+#       from-source make install, and scoping it to packaging needs a
+#       hook the Makefile does not have. Recorded in project.md sec 12.2
+#       as a live finding, tolerated here so the gate can run at all,
+#       and this line is what somebody deletes when it is settled.
+expected="appstream-metadata-validation-failed|duplicate-font-file|debug-file-with-no-debug-symbols"
+strays=$(grep "^W:" /tmp/lintian.log | grep -Evc "$expected" || true)
+if [ "$strays" -ne 0 ]; then
+	echo "check-deb: a lintian warning outside the expected set:" >&2
+	cat /tmp/lintian.log >&2
+	exit 1
+fi
+echo "check-deb: lintian reports only the expected tags"
 
 # The icon the entry names has to be the icon that shipped, or the app has
 # no icon anywhere it matters (sec 12.2).

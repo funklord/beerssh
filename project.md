@@ -9292,6 +9292,42 @@ without an icon is defective, so there is a plain one meant to be replaced.
   on any error and on any warning that is not the homepage. An ignore
   list would let the next complaint in silently, which is how a gate gets
   switched off by instalments.
+  **And that check shipped VACUOUS for one commit, which is the sharper
+  lesson.** `appstreamcli` is not in `debian:trixie`. The first version
+  ran it with a trailing `|| true` and then grepped the output for `E:`
+  and `W:` lines, so the command failed, the log held a shell error
+  rather than findings, both greps matched nothing, and the check printed
+  that the metadata validates. **A gate over an empty list, reporting
+  success exactly as loudly as a real pass** -- written into `b5547c6`,
+  whose own message quotes the neighbouring rule about checks that are
+  not mechanically run. The tool is installed in the image now, its
+  absence is a hard failure rather than `|| true`, and an empty log is
+  refused: a guard whose failure is not the caller's failure is not a
+  guard.
+
+  **[BUILT 2026-09-21] `lintian` runs over the installed packages**, which
+  it never had. It is the standard check for this format and it is the
+  tool that WOULD have caught the metainfo shipping invalid -- its first
+  honest run reported `appstream-metadata-validation-failed` alongside two
+  things nobody had seen.
+  The expected tags are named as a POPULATION with the reason for each,
+  and a tag outside it fails the build. `duplicate-font-file` is
+  deliberate: §9.2 pins a curated set precisely so the app does not depend
+  on a distribution's font versions, which is what pinning is for.
+  **`debug-file-with-no-debug-symbols` is a live finding and is NOT
+  settled.** `dh_auto_build` runs the Makefile, which wraps qmake, so
+  Debian's build flags never reach `QMAKE_CXXFLAGS_RELEASE`; nothing emits
+  `-g`, and the `-dbgsym` package therefore ships a debug file with
+  nothing in it -- a package that claims to carry symbols and does not.
+  Both fixes cost something and neither is recorded anywhere: `-g`
+  globally also inflates a from-source `make install`, and scoping it to
+  the packaging build needs a hook the Makefile does not have. It is
+  tolerated in the expected set so the gate can run at all, named there
+  with this reasoning, and that line is what somebody deletes when the
+  question is answered. **Tolerating it in a named set with a
+  justification is not the same as an ignore list**, which is how a gate
+  gets switched off by instalments.
+
   **A trap worth knowing before editing `check-deb.sh`:** its whole body
   is one single-quoted argument, so a comment containing an apostrophe
   ends the quote sixty lines early. The first version of this block did
