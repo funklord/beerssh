@@ -4075,3 +4075,71 @@ void terminal_view_test::a_substituted_font_says_so_somewhere_a_user_looks() {
 	          qPrintable(QStringLiteral("the status line says nothing about the "
 	                                     "substitution: %1").arg(window.status_text())));
 }
+
+void terminal_view_test::choosing_a_menu_entry_does_what_it_says() {
+	/*
+	 * Every test of this menu until now asserted that an entry EXISTS.
+	 * None could assert that choosing it does anything, because the
+	 * dispatch sat after QMenu::exec() -- which runs its own event loop
+	 * and returns when somebody clicks, so a headless suite could never
+	 * reach past it.
+	 *
+	 * That is the weaker half of the day's findings: the defect being
+	 * hunted was entries that reach nothing, and the guard could only
+	 * see whether they were drawn. act_on_terminal_menu() is the seam,
+	 * and these are the assertions it makes possible.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("acts");
+	profile.host = QStringLiteral("acts.example");
+
+	bssh_session *session = registry->create(profile);
+	window.adopt_session(session);
+
+	/* A history to drop, and a mode to clear. */
+	bssh_emulator *emulator = session->emulator();
+	QVERIFY(emulator);
+	for (int i = 0; i < 40; ++i) {
+		emulator->feed(QByteArrayLiteral("line ") + QByteArray::number(i)
+		                + QByteArrayLiteral("\r\n"));
+	}
+	emulator->feed(QByteArrayLiteral("\x1b[?1000h"));
+
+	QVERIFY2(emulator->scrollback().count() > 0, "nothing scrolled off to drop");
+	QVERIFY2(emulator->mouse_reporting(), "no mode set, so a reset proves nothing");
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	window.act_on_terminal_menu(
+	        menu, menu->findChild<QAction *>(QStringLiteral("terminal_clear_scrollback")));
+	QCOMPARE(emulator->scrollback().count(), 0);
+
+	QVERIFY2(emulator->mouse_reporting(),
+	          "clearing the history also cleared a mode, which is a different verb");
+
+	window.act_on_terminal_menu(
+	        menu, menu->findChild<QAction *>(QStringLiteral("terminal_reset")));
+	QVERIFY2(!emulator->mouse_reporting(),
+	          "Reset Terminal left the mode a dead program set");
+
+	/*
+	 * And the one that cannot be undone, last: closing takes the session
+	 * out of the registry, which is what every other close route does.
+	 */
+	const int before = registry->count();
+	QVERIFY(before > 0);
+
+	window.act_on_terminal_menu(
+	        menu, menu->findChild<QAction *>(QStringLiteral("terminal_close_session")));
+	QCOMPARE(registry->count(), before - 1);
+
+	delete menu;
+}

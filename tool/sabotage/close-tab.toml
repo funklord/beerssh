@@ -66,3 +66,32 @@ file = "src/ui/main_window.cpp"
 find = "\t\tconnect_now->setObjectName(QStringLiteral(\"terminal_connect\"));"
 replace = "\t\tconnect_now->setObjectName(QStringLiteral(\"terminal_connect_disabled\"));"
 expect = "a_session_can_be_closed_without_a_tab_bar"
+
+# Choosing Close does nothing.
+#
+# Before act_on_terminal_menu existed this edit could not be caught by
+# anything: the entry is still on the menu, still enabled, and the
+# dispatch that ignores it ran only after QMenu::exec, where no headless
+# test could reach. The registry still closes sessions perfectly.
+[[sabotage]]
+name = "choosing Close does not close"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (m_current && m_registry) m_registry->close(m_current);"
+replace = ""
+expect = "choosing_a_menu_entry_does_what_it_says"
+
+# Choosing Clear Scrollback does nothing.
+[[sabotage]]
+name = "choosing Clear Scrollback does not clear"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_current && m_current->emulator()) m_current->emulator()->clear_scrollback();"
+replace = ""
+expect = "choosing_a_menu_entry_does_what_it_says"
+
+# Choosing Reset Terminal does nothing.
+[[sabotage]]
+name = "choosing Reset Terminal does not reset"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_current && m_current->emulator()) m_current->emulator()->reset_modes();"
+replace = ""
+expect = "choosing_a_menu_entry_does_what_it_says"

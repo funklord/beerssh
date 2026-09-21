@@ -3793,6 +3793,27 @@ and what it found is worth the sentence anyway.** Two were swept on
   there would have been measuring a state touch cannot reach, so the
   one written for it was deleted rather than repaired.
 
+**And choosing an entry is assertable now, which it was not all day.**
+Every test of this menu asserted that an entry EXISTS; none could assert
+that choosing it does anything, because the dispatch sat after
+`QMenu::exec()` -- a call that runs its own event loop and returns when
+somebody clicks, so a headless suite could never reach past it. That
+limit was recorded three times today while the day's whole hunt was for
+entries that reach nothing: the guard could see only whether they were
+drawn.
+
+`act_on_terminal_menu()` is the seam -- the remedy `evidence.md` names,
+moving the composition out of the UI shell into code the suite can call.
+It adds no behaviour; `show_terminal_menu` builds, execs and hands the
+chosen action to it.
+
+**What it bought, measured**: gutting the Close, Clear Scrollback and
+Reset handlers -- each leaving its entry present and enabled -- is now
+three caught sabotages against a 624-passing baseline. **This morning
+all three would have left the suite green.** The test also asserts a
+CROSS effect, that clearing the history leaves mouse reporting alone, so
+a verb that quietly did its neighbour's job would fail too.
+
 **A QMenu fails more mildly than a form and it still fails.** Qt gives an
 oversized menu scroll arrows rather than squeezing rows until they
 overlap, which is what `check_fits` describes; what it costs is entries

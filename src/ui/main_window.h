@@ -766,6 +766,15 @@ public:
 	QMenu *build_terminal_menu(QWidget *parent, const QString &link = QString()) const;
 
 	/*
+	 * What choosing one of that menu's entries does. Public and separate
+	 * from show_terminal_menu so the suite can drive it: QMenu::exec runs
+	 * its own event loop, so a headless test can build the menu and find
+	 * an entry but can never choose one.
+	 */
+	void act_on_terminal_menu(QMenu *menu, const QAction *chosen,
+	                           const QString &link = QString());
+
+	/*
 	 * The tab menu, likewise built but not shown, and for the same reason
 	 * -- it was a menu nothing could inspect, so which verbs it carried
 	 * and which of them were available went untested while the terminal's

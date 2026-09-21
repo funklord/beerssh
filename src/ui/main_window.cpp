@@ -4097,7 +4097,28 @@ void bssh_main_window::show_terminal_menu(const QPoint &at) {
 	QMenu *menu = build_terminal_menu(this, link);
 	const QAction *chosen = menu->exec(at);
 	menu->deleteLater();
-	if (!chosen) return;
+
+	act_on_terminal_menu(menu, chosen, link);
+}
+
+/*
+ * What a chosen entry DOES, separated from the menu being shown.
+ *
+ * It was inline after QMenu::exec(), which a headless suite cannot
+ * reach: exec() runs its own event loop and returns only when somebody
+ * clicks. So every test of this menu could assert that an entry EXISTS
+ * and none could assert that choosing it does anything -- and this
+ * project has spent the day finding entries that existed and reached
+ * nothing. The seam is the remedy evidence.md names: move the
+ * composition out of the UI shell into code the suite can call.
+ *
+ * The menu comes along because the dispatch identifies entries by
+ * findChild rather than by pointer identity, which is what lets
+ * build_terminal_menu decide what exists without this function knowing.
+ */
+void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
+        const QString &link) {
+	if (!menu || !chosen) return;
 
 	const QAction *open_link =
 	        menu->findChild<QAction *>(QStringLiteral("terminal_open_link"));
