@@ -3820,6 +3820,29 @@ already correct for a different reason: `note_content_changed()` bumps
 the revision the cache is keyed on and announces the text update, which
 is the fix §9.5 recorded when the trim case found it.
 
+**And the sweep that found all this had the wrong SCOPE for a day,
+which is worth more than the finds.** It walked `src/` -- and this tree
+keeps its on-screen keyboards in `keyboard/`, a sibling directory since
+§12.2b. Widened, one earlier candidate turns out to have a caller all
+along (`steal_char_chord`, called from the key row), and a separate
+sweep for signals with no listener went from three findings to one:
+`sticky_modifiers_changed` and `locked_modifiers_changed` are consumed
+by both on-screen keyboards, exactly as the router's comment says they
+are. **A narrow scope manufactures absences**, and the one it
+manufactured here would have been read as "the sticky modifier
+machinery is wired to nothing", which is the opposite of true. Nothing
+published depended on it -- every finding acted on survived the wider
+run -- but that is luck rather than method. The scope is `src/` and
+`keyboard/`, and the next person to point this lens at the tree should
+check what other top-level directories hold code.
+
+**And the menus' enabled conditions were swept against their handlers
+and came back clean apart from Show as Tab.** Twenty `setEnabled` sites
+in `main_window.cpp`; the three Split conditions agree in substance
+across the menu bar, the terminal menu and the tab menu, and the tab
+menu's extra clause is right for its different verb. Recorded because
+an empty result with no method behind it licenses nothing.
+
 **And the reset path was swept the same way and came back clean, which
 is worth recording with its method.** The emulator's other accumulators
 -- `apc_buffer`, `osc_buffer` and `selection_buffer` -- all clear on
@@ -7099,6 +7122,23 @@ on a phone it looked available and did nothing when chosen. An entry
 that declines silently is worse than one that is greyed out, which is
 the argument the paragraph above makes about `tear_out`; it is greyed
 out in a column now.
+
+**The zoom was the mirror image, on the surface a DESKTOP user looks
+at — [FIXED 2026-09-22].** Text Size is on the terminal menu and the
+chords work, so every test and every phone saw a feature that was
+present twice. The menu bar had nothing, which is the argument its own
+Find entry was added under: *the chord still works, so this costs
+nobody who already knew and it costs everybody who did not.* Flat in
+View rather than in a group, for the reason Clear Scrollback and Reset
+Terminal are flat in Edit -- a bar has no 640dp ceiling to respect, and
+the group on the context menu exists because that one does.
+
+**So the enumeration runs in both directions, and saying so is the
+point.** §8.7 asked what could only be reached on the surface it
+dissolved, and that question found four verbs. Asked the other way --
+what can only be reached on a surface a POINTER has -- it finds the
+zoom. Neither question is the other's complement by accident: a verb
+lands on the surface whoever added it was using.
 
 **The fit gate had stopped being able to see this class of growth, and
 that is the more general finding.** `the_touch_terminal_menu_fits_a_phone`

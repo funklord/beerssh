@@ -3643,6 +3643,43 @@ void bssh_main_window::build_menu_bar() {
 		if (m_current) tear_out(m_current);
 	});
 
+	/*
+	 * Zoom, which had a chord and a touch menu and nothing a desktop
+	 * user could find. The argument is the one Find already carries on
+	 * this bar: the chords still work, so this costs nobody who already
+	 * knew them and it costs everybody who did not. Every terminal with
+	 * a menu bar keeps these in View, which is also where this one keeps
+	 * the other things that change how the window looks.
+	 *
+	 * Flat rather than in a Text Size group, for the reason Clear
+	 * Scrollback and Reset Terminal are flat in Edit: a menu bar has no
+	 * 640dp ceiling to respect, and the group on the context menu exists
+	 * because that one does.
+	 *
+	 * The chord is read from the router rather than written here, so a
+	 * rebinding moves the label with it -- a literal would be a second
+	 * list, wrong the moment somebody changes one.
+	 */
+	view->addSeparator();
+
+	QAction *zoom_in = view->addAction(QStringLiteral("Zoom &In"));
+	zoom_in->setObjectName(QStringLiteral("menu_zoom_in"));
+	zoom_in->setShortcut(chord("zoom-in"));
+	connect(zoom_in, &QAction::triggered, this, [this] { zoom_current(1); });
+	m_session_actions.append(zoom_in);
+
+	QAction *zoom_out = view->addAction(QStringLiteral("Zoom &Out"));
+	zoom_out->setObjectName(QStringLiteral("menu_zoom_out"));
+	zoom_out->setShortcut(chord("zoom-out"));
+	connect(zoom_out, &QAction::triggered, this, [this] { zoom_current(-1); });
+	m_session_actions.append(zoom_out);
+
+	QAction *zoom_reset = view->addAction(QStringLiteral("&Reset Zoom"));
+	zoom_reset->setObjectName(QStringLiteral("menu_zoom_reset"));
+	zoom_reset->setShortcut(chord("zoom-reset"));
+	connect(zoom_reset, &QAction::triggered, this, [this] { reset_zoom_current(); });
+	m_session_actions.append(zoom_reset);
+
 	QMenu *settings = m_menu_bar->addMenu(QStringLiteral("&Settings"));
 
 	QAction *front_door = settings->addAction(QStringLiteral("&Hosts and Settings..."));

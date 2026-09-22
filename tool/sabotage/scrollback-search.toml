@@ -193,3 +193,16 @@ file = "src/ui/main_window.cpp"
 find = "\tconnect(m_panes, &bssh_pane_container::find_matches_changed,\n\t         this, &bssh_main_window::update_find_status);"
 replace = ""
 expect = "the_find_bars_count_is_told_when_the_matches_go"
+
+# The desktop's discoverable route to the zoom goes away.
+#
+# Ctrl+= and Ctrl+- still work, and the touch menu still offers Text
+# Size, so everything a chord test or a phone sees is fine. What goes is
+# the surface a desktop user looks at -- the same argument the Find entry
+# on this bar was added under.
+[[sabotage]]
+name = "the menu bar stops offering zoom"
+file = "src/ui/main_window.cpp"
+find = "\tzoom_in->setObjectName(QStringLiteral(\"menu_zoom_in\"));"
+replace = "\tzoom_in->setObjectName(QStringLiteral(\"menu_zoom_disabled\"));"
+expect = "the_terminal_menu_offers_zoom"

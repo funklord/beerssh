@@ -3746,6 +3746,30 @@ void terminal_view_test::the_terminal_menu_offers_zoom() {
 	QCOMPARE(zoom_in->shortcut(),
 	          QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-in"))));
 
+	/*
+	 * And on the menu BAR, which is the desktop's discoverable surface
+	 * and had none of these. The chords worked throughout, which is what
+	 * made this invisible: it costs nobody who already knew them and
+	 * everybody who did not -- the same sentence this bar's Find entry
+	 * was added under.
+	 */
+	const QStringList on_the_bar = { QStringLiteral("menu_zoom_in"),
+	                                  QStringLiteral("menu_zoom_out"),
+	                                  QStringLiteral("menu_zoom_reset") };
+
+	for (const QString &name : on_the_bar) {
+		QAction *action = window.findChild<QAction *>(name);
+		QVERIFY2(action, qPrintable(QStringLiteral("the menu bar has no %1, so a "
+		                                            "desktop user can only reach the "
+		                                            "zoom by a chord nobody told them")
+		                                    .arg(name)));
+	}
+
+	QAction *bar_zoom_out = window.findChild<QAction *>(QStringLiteral("menu_zoom_out"));
+	QVERIFY(bar_zoom_out);
+	QCOMPARE(bar_zoom_out->shortcut(),
+	          QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-out"))));
+
 	delete menu;
 }
 
