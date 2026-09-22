@@ -4317,6 +4317,62 @@ scroll area's minimum is tiny by design. A floor of three rows fixes it
 phone and a minimum demanding every row would not fit the screen it
 opens on.
 
+**And the instrument had a picture of its own that said nothing.**
+`touch-key-row-custom.png` was BYTE-IDENTICAL to
+`touch-key-row-default.png`, because the catalogue's custom row is born
+as a copy of Default and the shot took it as found: two of the seventy-
+one images saying the same thing, and the one named *custom* saying
+nothing about what a custom row is. A reader browsing the directory
+would conclude the custom row IS the default. It is shot with a row
+written the way a person writes one now -- `esc tab ctrl alt gap left
+down up right` -- which is also the only picture in which `gap` can be
+seen holding its space, since that token is reachable nowhere else. The
+catalogue is put back afterwards, like the modifier cycling in the same
+loop.
+
+**And the sharpest of them: `desktop-window-split.png` had never shown
+a split.** The fixture dropped a third session to create one -- and by
+the time it runs the window is ALREADY split, because the drag shot
+fifty lines above calls `split_beside_current()` and asserts two panes.
+An 800px window is MEDIUM, which §8.1 caps at two, so the drop found no
+room, took `drop_session`'s documented fallback, and `show_session()`
+replaced the intent with the dropped session alone. **The split the
+picture is named for was destroyed by the line that was supposed to
+create it**, and the saved image was one terminal filling the window,
+under a name promising two, for as long as the shot has existed.
+
+**Measured rather than reasoned about**, after two wrong guesses about
+stale geometry: at the drop the layout held width=800, max=2, intent=2,
+and afterwards intent=1 with four tabs. The numbers are in the fixture's
+comment so the next reader does not re-derive them. The picture now
+shows the divider, the focused pane's blue border and the two grids --
+which is what the comment beside it always claimed it showed.
+
+**The fix is an assertion as much as a deletion.** A picture is evidence
+only if something checked it was of the thing it is named for, and the
+drag shot beside it already carried exactly that check. This one has it
+now.
+
+**And a design question falls out of it, which is not mine to settle.**
+Dropping a session onto a window that is already at its pane cap
+collapses the split: both panes become tabs and the dropped session
+becomes the only pane. Nobody is told, and §8.2's "the layout intent is
+remembered per tab-group" does not survive it, because the intent is
+what gets overwritten. The sessions are all still there -- §8.2's rule
+holds -- but an arrangement the user made by hand is gone in one drag.
+Recorded rather than changed.
+
+**All seventy-one were checked for the same fault and two more pairs
+came back identical, both honestly so.** `desktop-front-door.png` and
+`desktop-page-session.png` coincide because the front door opens ON the
+Session page, and `touch-key-row-default.png` matches
+`touch-key-row-minimal.png` because the two rows agree for the first
+seven keys, which is all a 320dp crop shows -- their `-full` pictures
+differ. Recorded with the method (`md5sum` over the directory, pairs
+read by hand) because an identical pair is exactly as easy to produce by
+a shot that lies as by two things that genuinely look alike, and the
+next person should not have to re-derive which is which.
+
 **Neither was visible to a sweep, and that is the entry.** The fit check
 asks whether a surface fits 320x640 and this one does; the accessibility
 check asks whether controls are named and they are. What found both was

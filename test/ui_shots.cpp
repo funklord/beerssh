@@ -16,6 +16,7 @@
 #include "ui/font_picker.h"
 #include "input/input_router.h"
 #include "keyboard/key_row_layout.h"
+#include "ui/layout_manager.h"
 #include "keyboard/key_row.h"
 #include "ui/pane_container.h"
 #include "keyboard/soft_keyboard.h"
@@ -377,6 +378,34 @@ void bssh_ui_shots::render_touch_surfaces() {
 		}
 	}
 
+	/*
+	 * The custom row is born as a copy of Default (see the catalogue's
+	 * constructor), so shooting it as found produced a picture
+	 * BYTE-IDENTICAL to touch-key-row-default.png -- two of these images
+	 * saying the same thing, and the one named "custom" saying nothing
+	 * at all about what a custom row is. A reader browsing the directory
+	 * would conclude the custom row IS the default.
+	 *
+	 * Given one written the way a person writes one, as words (sec 6.2),
+	 * and with a `gap` in it: that token is reachable only here, so this
+	 * is also the only picture in which it can be seen holding its
+	 * space.
+	 *
+	 * Put back afterwards, like the modifier cycling above: the
+	 * catalogue is process-wide and the next thing to ask it for a
+	 * custom row must not get this one.
+	 */
+	const QList<bssh_key_t> found_custom = [] {
+		for (const bssh_key_row_layout_t &layout
+		      : bssh_key_row_catalog::instance().all()) {
+			if (layout.id == QStringLiteral("custom")) return layout.keys;
+		}
+		return QList<bssh_key_t>();
+	}();
+
+	bssh_key_row_catalog::instance().set_custom(
+	        bssh_parse_key_row(QStringLiteral("esc tab ctrl alt gap left down up right")));
+
 	for (const bssh_key_row_layout_t &layout : bssh_key_row_catalog::instance().all()) {
 		bssh_key_row row(&key_router);
 		row.set_layout(layout.id);
@@ -417,6 +446,9 @@ void bssh_ui_shots::render_touch_surfaces() {
 			}
 		}
 	}
+
+	/* And the catalogue back as it was found. */
+	if (!found_custom.isEmpty()) bssh_key_row_catalog::instance().set_custom(found_custom);
 
 	/*
 	 * The same menu with a thumb in front of it (sec 6.4).
@@ -625,31 +657,43 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	 * the layout that can look wrong in a way no size check sees is two
 	 * panes beside each other, and it was the part with no picture.
 	 *
-	 * Through drop_session(), which sec 8.3 exposes precisely so the
-	 * model can be driven without synthesising a drag.
-	 */
-	bssh_profile_t third = sample_profile();
-	third.name = QStringLiteral("db primary");
-	third.host = QStringLiteral("db01.internal.example.com");
-
-	/*
-	 * Shown and laid out BEFORE the drop, which is not ceremony.
-	 *
-	 * Whether a drop tiles or falls back to a tab is decided by the size
-	 * class, and the size class comes from a resizeEvent -- which Qt does
-	 * not deliver to a hidden widget. Resizing this window while it was
-	 * still hidden left the layout manager holding the previous shot's
-	 * 214px, so the drop found a COMPACT window with room for one pane
-	 * and made a tab. The picture showed a single terminal and was
-	 * perfectly honest about it: the wrong thing had happened.
+	 * Shown and laid out at the size it is shot at, which is not
+	 * ceremony: the size class comes from a resizeEvent, and Qt does not
+	 * deliver one to a hidden widget. A window resized while hidden
+	 * keeps the previous shot's geometry, and everything the layout
+	 * decides from width is then decided from the wrong number.
 	 */
 	window.resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
 	window.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 	QTest::qWait(50);
 
-	window.drop_session(window.registry()->create(third), true);
-	QTest::qWait(50);
+	/*
+	 * THE DROP IS GONE, and the reason is the picture it produced.
+	 *
+	 * This fixture dropped a third session to create the split. By the
+	 * time it runs the window is ALREADY split -- the drag shot above
+	 * calls split_beside_current() and asserts two panes -- and an
+	 * 800px window is MEDIUM, which sec 8.1 caps at two. So the drop
+	 * found no room, took drop_session's documented fallback, and
+	 * show_session() replaced the intent with the dropped session
+	 * alone: the split this picture is named for was destroyed by the
+	 * line that was supposed to create it.
+	 *
+	 * Measured rather than reasoned about: at the drop the layout held
+	 * width=800, max=2, intent=2, and afterwards intent=1 with four
+	 * tabs. The saved image was one terminal filling the window, under a
+	 * name promising two, for as long as the shot has existed.
+	 *
+	 * The assertion below is what stops that recurring, and it is the
+	 * one the drag shot fifty lines up already carries. A picture is
+	 * evidence only if something checked it was of the thing it is
+	 * named for.
+	 */
+	bssh_pane_container *split_panes = window.findChild<bssh_pane_container *>();
+	QVERIFY2(split_panes, "the window has no pane container");
+	QVERIFY2(split_panes->views().size() >= 2,
+	          "the split picture would show fewer than two panes");
 
 	shoot(QStringLiteral("desktop-window-split"), &window,
 	       BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
