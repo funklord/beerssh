@@ -110,6 +110,9 @@ public:
 
 protected:
 	virtual bool platform_is_touch_primary() const = 0;
+
+	/* What terminfo_directory() answers when nothing is forcing it. */
+	virtual QString platform_terminfo_directory() const = 0;
 	virtual bool platform_has_biometric() const = 0;
 	virtual void platform_notify(const QString &title, const QString &body) = 0;
 
@@ -235,7 +238,23 @@ public:
 	 * the database in the package therefore has to unpack it before
 	 * answering.
 	 */
-	virtual QString terminfo_directory() const = 0;
+	QString terminfo_directory() const;
+
+	/*
+	 * The same seam force_touch_primary() is, and it closes a gap this
+	 * tree had written down: `create_local()` asks the platform for this
+	 * directory, and on a desktop the answer is empty BY DESIGN -- so a
+	 * factory that asks correctly and one that never asks produce the
+	 * same session, and sec 12.3q recorded that as untestable for want
+	 * of "a platform test double, which this tree does not have". It
+	 * needed one answer forced, not a whole double.
+	 *
+	 * A NULL string stops forcing; an EMPTY one forces the desktop's own
+	 * answer. The two are different here -- empty means "say nothing, let
+	 * the library look where it always looks" -- which is why this takes
+	 * a QString and tests isNull() rather than isEmpty().
+	 */
+	static void force_terminfo_directory(const QString &directory);
 
 	/*
 	 * The user's OpenSSH directory (~/.ssh), or empty where that is not a

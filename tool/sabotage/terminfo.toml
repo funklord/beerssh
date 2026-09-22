@@ -25,17 +25,48 @@ find = "\t\tif (!terminfo.isEmpty()) setenv(\"TERMINFO\", terminfo.constData(), 
 replace = "\t\tif (!terminfo.isEmpty()) setenv(\"TERMINFO_X\", terminfo.constData(), 1);"
 expect = "a_shipped_terminfo_reaches_the_shell"
 
-# THE FACTORY HALF IS NOT GUARDED, and this says so rather than
-# shipping a spec that reports MISSED.
+# THE FACTORY HALF IS GUARDED SINCE 2026-09-22, and the paragraph this
+# replaces is worth keeping in the commit that removed it: it said the
+# half was untestable, because create_local() asks the platform for the
+# directory and the desktop platform returns empty BY DESIGN -- so a
+# factory that asks correctly and one that never asks produce the same
+# empty answer. It ended "what would close it is a platform test double,
+# which this tree does not have".
 #
-# create_local() asks the platform for the directory. A test on a
-# desktop cannot see whether it did: the desktop platform returns empty
-# BY DESIGN -- /usr/share/terminfo is already there and pointing
-# TERMINFO at one entry of ours would shadow it -- so a factory that
-# asks correctly and one that never asks produce the same empty answer.
-# The test above therefore sets the directory through the setter, which
-# is the half a desktop can measure.
+# It needed one ANSWER forced rather than a whole double.
+# bssh_platform::force_terminfo_directory() is the same seam
+# force_touch_primary() has been since sec 6.2, and with it a test can
+# watch the factory carry a directory the platform was told to give.
 #
-# What would close it is a platform test double, which this tree does
-# not have; bssh_platform exposes only force_touch_primary(). Adding one
-# is its own piece of work and is not smuggled in here.
+# Which is this file's own lesson about an untestable condition: the
+# differences are usually smaller than the label, and a recorded
+# impossibility is worth re-reading whenever the fixture grows.
+
+# The factory stops asking the platform.
+#
+# The setter still works and the environment half above still passes, so
+# everything a desktop could previously see is unchanged; what goes is
+# the one call that puts the shipped database in front of a local shell
+# on a device that has no other one.
+[[sabotage]]
+name = "the local factory never asks for the terminfo directory"
+file = "src/ssh/pty_session.cpp"
+find = "\t\tsession->set_terminfo_directory(platform->terminfo_directory());"
+replace = ""
+expect = "the_factory_asks_the_platform_for_the_terminfo_directory"
+
+# THE SENTINEL IS NOT GUARDED EITHER, and this is the same shape as the
+# paragraph above one level in, which is why it is written down rather
+# than left as a spec that reports MISSED.
+#
+# force_terminfo_directory() tests isNull rather than isEmpty, because
+# EMPTY is a real answer -- the desktop's own, meaning "say nothing".
+# Swap isNull for isEmpty and forcing the empty answer silently stops
+# working: the call falls through to the platform, which on a DESKTOP
+# answers empty as well. The two paths produce the same value here, so
+# the sabotage was written, run, and came back MISSED for the reason the
+# whole entry is about.
+#
+# It is observable where the platform's own answer is NOT empty, which
+# is Android -- the one platform this suite cannot run on. Recorded
+# rather than shipped, per this file's own rule.

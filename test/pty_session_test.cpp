@@ -6,6 +6,7 @@
 
 #include "model/profile.h"
 #include "term/emulator.h"
+#include "platform/platform.h"
 #include "ssh/pty_session.h"
 #include "pty_session_test.h"
 
@@ -275,6 +276,55 @@ void pty_session_test::a_local_profile_is_valid_without_a_host() {
 	 * check this one must not have weakened. */
 	bssh_profile_t remote;
 	QVERIFY2(!remote.is_valid(), "an SSH profile still needs a host");
+}
+
+void pty_session_test::the_factory_asks_the_platform_for_the_terminfo_directory() {
+	/*
+	 * sec 12.3q recorded this half as untestable: `create_local()` asks
+	 * the platform for the terminfo directory, and on a desktop the
+	 * answer is empty BY DESIGN -- so a factory that asks correctly and
+	 * one that never asks produce the same session. "Closing that needs
+	 * a platform test double, which this tree does not have."
+	 *
+	 * It needed one ANSWER forced rather than a whole double, which is
+	 * the shape force_touch_primary() has had since sec 6.2 wanted the
+	 * idiom decided in a test. That is this file's own lesson about an
+	 * untestable condition: the differences are usually smaller than the
+	 * label.
+	 */
+	const QString forced = QStringLiteral("/nonexistent/terminfo-for-a-test");
+	bssh_platform::force_terminfo_directory(forced);
+
+	bssh_ssh_session *made = bssh_ssh_session::create_local(QString(), QString());
+	QVERIFY(made);
+
+	bssh_pty_session *pty = qobject_cast<bssh_pty_session *>(made);
+	QVERIFY2(pty, "create_local did not build a pty session");
+
+	QCOMPARE(pty->terminfo_directory(), forced);
+
+	/*
+	 * And the EMPTY answer, which is the desktop's real one and means
+	 * "say nothing, let the library look where it always looks". It is a
+	 * different state from "nothing is forcing this", which is why the
+	 * hook takes a QString and tests isNull -- and a test that only ever
+	 * forced a path would not have exercised the distinction the
+	 * sentinel exists for.
+	 */
+	bssh_platform::force_terminfo_directory(QString(QLatin1String("")));
+
+	bssh_ssh_session *quiet = bssh_ssh_session::create_local(QString(), QString());
+	QVERIFY(quiet);
+
+	bssh_pty_session *quiet_pty = qobject_cast<bssh_pty_session *>(quiet);
+	QVERIFY(quiet_pty);
+	QVERIFY2(quiet_pty->terminfo_directory().isEmpty(),
+	          "an empty platform answer arrived as something else");
+
+	bssh_platform::force_terminfo_directory(QString());
+
+	delete made;
+	delete quiet;
 }
 
 void pty_session_test::a_shipped_terminfo_reaches_the_shell() {

@@ -71,6 +71,23 @@ void bssh_platform::force_touch_primary(int touch) {
 	bssh_forced_touch = touch;
 }
 
+/*
+ * Null until something says otherwise. Null rather than empty, because
+ * empty is a real answer here -- the desktop returns it to mean "say
+ * nothing" -- and a sentinel that collides with a legitimate value is
+ * not a sentinel.
+ */
+static QString bssh_forced_terminfo;
+
+QString bssh_platform::terminfo_directory() const {
+	if (!bssh_forced_terminfo.isNull()) return bssh_forced_terminfo;
+	return platform_terminfo_directory();
+}
+
+void bssh_platform::force_terminfo_directory(const QString &directory) {
+	bssh_forced_terminfo = directory;
+}
+
 /* -1 until something says otherwise, exactly as above. */
 static int bssh_forced_biometric = -1;
 

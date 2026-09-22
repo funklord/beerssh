@@ -374,7 +374,7 @@ public:
 		        context.object(), status.object<jstring>());
 	}
 
-	QString terminfo_directory() const override {
+	QString platform_terminfo_directory() const override {
 		/*
 		 * Unpacked out of the package, because this path is read by
 		 * open(2) rather than by Qt: an asset is a compressed member of

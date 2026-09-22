@@ -37,6 +37,7 @@ private slots:
 	 * emulator follows a line editor that does it properly.
 	 */
 	void a_shipped_terminfo_reaches_the_shell();
+	void the_factory_asks_the_platform_for_the_terminfo_directory();
 	void backspace_crosses_a_wrapped_line();
 };
 

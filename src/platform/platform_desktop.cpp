@@ -165,7 +165,7 @@ public:
 		if (m_tray) m_tray->showMessage(title, body);
 	}
 
-	QString terminfo_directory() const override {
+	QString platform_terminfo_directory() const override {
 		/*
 		 * The system's, and deliberately not ours. A desktop has
 		 * /usr/share/terminfo with thousands of entries maintained by

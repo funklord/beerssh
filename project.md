@@ -11310,12 +11310,28 @@ other name worse off.
 equal. The child's environment is tested end to end -- a real shell,
 `printf` reading `$TERMINFO` back -- with the empty case as the control,
 and the sabotage sets the wrong variable name and is caught. The
-FACTORY half, `create_local()` asking the platform, cannot be tested on
-a desktop at all: the desktop platform returns empty by design, so a
-factory that asks correctly and one that never asks produce the same
-answer. Closing that needs a platform test double, which this tree does
-not have, and `terminfo.toml` says so rather than shipping a spec that
-would report MISSED.
+FACTORY half, `create_local()` asking the platform, ~~cannot be tested on
+a desktop at all~~ **is guarded since 2026-09-22.** The claim was that
+the desktop platform returns empty by design, so a factory that asks
+correctly and one that never asks produce the same answer, and that
+"closing that needs a platform test double, which this tree does not
+have".
+
+**It needed one ANSWER forced rather than a whole double.**
+`bssh_platform::force_terminfo_directory()` is the seam
+`force_touch_primary()` has been since §6.2, and with it a test watches
+the factory carry a directory the platform was told to give. **An
+impossibility claim is worth re-reading whenever the fixture grows**,
+and the differences behind one are usually smaller than the label -- a
+lesson this section already carried and had not applied to itself.
+
+**And a NULL forced value means "nothing is forcing this" while an EMPTY
+one is the desktop's real answer**, so the hook tests `isNull`. That
+distinction has no sabotage, and the reason is the original claim one
+level in: swap it for `isEmpty` and the call falls through to the
+platform, which on a DESKTOP also answers empty. Written, run, MISSED,
+and recorded in `terminfo.toml` rather than shipped -- it is observable
+only where the platform's answer is not empty, which is Android.
 
 ### 12.3p The stale glyph on the phone is not ours — **[2026-09-09]**
 
