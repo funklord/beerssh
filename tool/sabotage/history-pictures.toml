@@ -1,0 +1,31 @@
+# Dropping the scrollback drops the pictures that were in it (project.md
+# sec 6.4, sec 7.1).
+#
+# An image scrolled off the top is placed at a NEGATIVE row so that
+# scrolling back brings it with its output. That makes it part of the
+# history, and clear_scrollback took the text and left the picture
+# decoded in memory -- unreachable by any route, since with the history
+# gone there is nothing to scroll back to, and still charged to the
+# budget. sec 6.4 records why somebody runs the verb: "before pasting a
+# password".
+#
+# Two edits, because the error falls both ways and only one of them is
+# visible: keeping a dead picture costs memory quietly, while dropping a
+# live one deletes what the user is reading.
+
+# The history goes and its pictures stay.
+[[sabotage]]
+name = "dropping the history leaves its pictures decoded"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->images.drop_above_the_fold();"
+replace = ""
+expect = "dropping_the_history_drops_the_pictures_in_it"
+
+# And the other way: the above-the-fold test goes, so the drop takes the
+# image on the live screen with it.
+[[sabotage]]
+name = "dropping the history takes the picture on screen too"
+file = "src/term/image_store.cpp"
+find = "\t\tif (placement.row + placement.rows > 0) continue;\n\t\tm_placements.removeAt(i);"
+replace = "\t\tm_placements.removeAt(i);"
+expect = "dropping_the_history_drops_the_pictures_in_it"

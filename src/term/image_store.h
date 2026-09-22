@@ -81,6 +81,18 @@ public:
 	 * budget that has misunderstood its job.
 	 */
 	void set_memory_budget(qint64 bytes);
+
+	/*
+	 * Drop every placement that has gone entirely above the live screen
+	 * -- the pictures that were in the scrollback (sec 6.4). Called when
+	 * the history is dropped, because an image scrolled off the top is
+	 * in the history as much as the text around it, and with the history
+	 * gone there is no route left that could ever draw it.
+	 *
+	 * The same test enforce_budget uses for "above the fold", so a
+	 * picture still touching the screen is as safe here as it is there.
+	 */
+	void drop_above_the_fold();
 	qint64 memory_budget() const { return m_budget; }
 	qint64 memory_used() const;
 

@@ -124,8 +124,8 @@ expect = "the_history_can_be_dropped_without_the_remote"
 [[sabotage]]
 name = "dropping the history says nothing"
 file = "src/term/emulator_vterm.cpp"
-find = "\tm_private->scrollback.clear();\n\n\t/*\n\t * Announced, for the reason on_sb_clear gives"
-replace = "\tm_private->scrollback.clear();\n\treturn;\n\n\t/*\n\t * Announced, for the reason on_sb_clear gives"
+find = "\tm_private->scrollback.clear();\n"
+replace = "\tm_private->scrollback.clear();\n\treturn;\n"
 expect = "the_history_can_be_dropped_without_the_remote"
 
 # The wedged-terminal cure goes away on the surface touch has.

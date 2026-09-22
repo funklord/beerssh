@@ -36,6 +36,7 @@ private slots:
 	void the_memory_budget_drops_the_oldest_but_never_the_visible();
 	void a_background_image_is_drawn_under_the_text();
 	void an_image_that_arrived_as_bytes_reaches_the_screen();
+	void dropping_the_history_drops_the_pictures_in_it();
 };
 
 #endif /* BSSH_GRAPHICS_TEST_H */

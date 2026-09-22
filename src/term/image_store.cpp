@@ -150,6 +150,14 @@ qint64 bssh_image_store::memory_used() const {
 	return total;
 }
 
+void bssh_image_store::drop_above_the_fold() {
+	for (int i = m_placements.size() - 1; i >= 0; --i) {
+		const bssh_image_placement_t &placement = m_placements.at(i);
+		if (placement.row + placement.rows > 0) continue;
+		m_placements.removeAt(i);
+	}
+}
+
 void bssh_image_store::enforce_budget() {
 	if (m_budget <= 0) return;
 

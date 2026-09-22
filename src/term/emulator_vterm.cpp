@@ -2124,6 +2124,18 @@ void bssh_emulator::clear_scrollback() {
 	m_private->scrollback.clear();
 
 	/*
+	 * And the pictures that were in it. An image scrolled off the top is
+	 * placed at a negative row so that scrolling back brings it with its
+	 * output (sec 7.1) -- so it is in the history as much as the text
+	 * around it, and dropping the text alone left it decoded in memory,
+	 * unreachable by any route and still charged to the budget. sec 6.4
+	 * says why somebody runs this: "before pasting a password".
+	 */
+	const int pictures = m_private->images.count();
+	m_private->images.drop_above_the_fold();
+	if (m_private->images.count() != pictures) emit images_changed();
+
+	/*
 	 * Announced, for the reason on_sb_clear gives: a view holds a scroll
 	 * offset measured against a history that has just gone, and the
 	 * handler for this signal re-clamps rather than leaving the bar

@@ -867,3 +867,52 @@ void graphics_test::a_frame_drawn_over_an_earlier_one_does_not_keep_it_alive() {
 
 	QCOMPARE(layered.count(), 2);
 }
+
+
+void graphics_test::dropping_the_history_drops_the_pictures_in_it() {
+	/*
+	 * sec 6.4 records why somebody drops the scrollback: "before pasting
+	 * a password". A screenshot that scrolled off the top is in the
+	 * history as much as the text around it -- it is placed at a
+	 * NEGATIVE row precisely so that scrolling back brings it with its
+	 * output -- and clear_scrollback took the text and left the picture
+	 * decoded in memory, unreachable and still charged to the budget.
+	 *
+	 * Unreachable is what makes it purely a cost: with the history gone
+	 * there is nothing to scroll back to, so the placement can never be
+	 * drawn again by any route.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"),
+	                            png_of(64, 64, qRgb(0, 128, 255))));
+	QCOMPARE(emulator.images().count(), 1);
+
+	/* Push it off the top, so it lives in the history and nowhere else. */
+	for (int i = 0; i < 40; ++i) emulator.feed(QByteArrayLiteral("filler\r\n"));
+
+	const bssh_image_placement_t &above = emulator.images().placements().first();
+	QVERIFY2(above.row + above.rows <= 0,
+	          "the fixture left the image on the live screen, where dropping "
+	          "it would be a terminal deleting what the user is reading");
+	QVERIFY(emulator.images().memory_used() > 0);
+
+	/*
+	 * And one on the live screen, which must survive: dropping that
+	 * would be a terminal deleting the picture being looked at, which is
+	 * the thing enforce_budget already refuses to do. Placed after the
+	 * assertion above so the fixture cannot confuse the two.
+	 */
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"),
+	                            png_of(32, 32, qRgb(255, 0, 0))));
+	QCOMPARE(emulator.images().count(), 2);
+
+	emulator.clear_scrollback();
+
+	QCOMPARE(emulator.images().count(), 1);
+	QVERIFY2(emulator.images().placements().first().row
+	                 + emulator.images().placements().first().rows > 0,
+	          "the one left is the one that was in the history");
+	QVERIFY(emulator.images().memory_used() > 0);
+}

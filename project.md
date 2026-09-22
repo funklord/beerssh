@@ -3760,6 +3760,27 @@ emits, the pane container relays, the window pulls — three places the
 signal can stop, so the wiring test asserts on the TEXT the bar shows
 rather than on the view's count.
 
+**And the pictures in it — [FIXED 2026-09-22].** The third instance of
+the same lens, one layer down. An image scrolled off the top is placed
+at a NEGATIVE row precisely so that scrolling back brings it with its
+output (§7.1), which makes it part of the history as much as the text
+around it. `clear_scrollback` took the text and left the picture decoded
+in memory: unreachable by any route, since with the history gone there
+is nothing to scroll back to, and still charged to the 32 MB budget.
+
+**It is the privacy half of the verb as much as the memory half.** §6.4
+records why somebody runs it -- *"before pasting a password"* -- and a
+screenshot or a plot that was on screen a moment ago is exactly the kind
+of thing that motivates the request. Dropping the text and keeping the
+picture is the wrong half.
+
+**Guarded in both directions, because the errors are not the same size.**
+Keeping a dead picture costs memory quietly; dropping a live one deletes
+what the user is reading, which is the thing `enforce_budget` already
+refuses to do. The test places one image above the fold and one on the
+live screen and asserts which survives, and
+`tool/sabotage/history-pictures.toml` breaks it each way.
+
 **The lens: state that names something the scrollback can take away.**
 It came from the selection fix rather than from a category list, which
 is `working-practice.md`'s rule about deriving the next lens from the
