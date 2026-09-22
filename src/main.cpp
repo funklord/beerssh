@@ -128,6 +128,10 @@ int main(int argc, char *argv[]) {
 		out << bssh_command_line_man_page(QStringLiteral(BSSH_VERSION_STRING));
 		return 0;
 	}
+	if (line.completion) {
+		out << bssh_command_line_completion();
+		return 0;
+	}
 
 	int qt_argc = 1;
 	char *qt_argv[] = { argv[0], nullptr };

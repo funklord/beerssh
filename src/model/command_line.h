@@ -116,6 +116,7 @@ struct bssh_command_line_t {
 	bool help;
 	bool version;
 	bool man;
+	bool completion;
 
 	/*
 	 * Something to print on stdout and stop, or empty --
@@ -140,11 +141,13 @@ struct bssh_command_line_t {
 
 	bssh_command_line_t()
 	    : cols(0), rows(0), x(0), y(0), has_position(false), hold(false),
-	      self_test(false), help(false), version(false), man(false) {}
+	      self_test(false), help(false), version(false), man(false),
+	      completion(false) {}
 
 	/* Nothing to open: the program prints something and stops. */
 	bool exits_immediately() const {
-		return help || version || man || !listing.isEmpty() || !error.isEmpty();
+		return help || version || man || completion || !listing.isEmpty()
+		        || !error.isEmpty();
 	}
 
 	/*
@@ -218,6 +221,25 @@ QString bssh_command_line_usage();
  * because --man runs before there is one (see bssh_command_line()).
  */
 QString bssh_command_line_man_page(const QString &version);
+
+/*
+ * The bash completion script, built from the same table, for the reason
+ * the manual page is: a completion kept as a file is a third copy of the
+ * option list, and it is worse than the page at showing its age -- a
+ * page that omits a flag is merely unhelpful, while a completion that
+ * omits one actively refuses to finish what somebody is typing, and they
+ * conclude the flag does not exist.
+ *
+ * Bash only, and deliberately: zsh and fish want different shapes rather
+ * than the same script under another name, and a generator that emits
+ * three dialects nobody here runs is three things to be wrong. The table
+ * is what matters; another shell is another function over it when
+ * somebody wants one.
+ *
+ * Needs no display, like --man and for the same reason -- it is answered
+ * before QApplication exists, so a package build can generate it.
+ */
+QString bssh_command_line_completion();
 
 /*
  * The command line THIS PROCESS was started with, parsed once.

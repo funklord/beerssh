@@ -7292,6 +7292,55 @@ places a terminal emulator has no business needing a display. They are answered
 before Qt exists now, and `tool/check-deb.sh` runs `--help` with no display
 against the installed package rather than trusting that it works.
 
+**And the completion is generated too, BUILT 2026-09-22.** The
+paragraph above cited fmake's `--man` and its `--completion` as being on
+the same footing, adopted the first and left the second -- so `beerssh`
+had no shell completion at all, and a user typing `beerssh --ge` got
+nothing. `--completion` writes a bash script built from the same table,
+`make` produces `beerssh.bash` beside `beerssh.1`, and `make install`
+puts it where bash-completion loads it on demand:
+`share/bash-completion/completions/beerssh`, named for the command and
+carrying no suffix, because that filename is the lookup.
+
+**The argument for generating it is the page's, and sharper.** A page
+that omits a flag is merely unhelpful; a completion that omits one
+refuses to finish what somebody is typing, and they conclude the flag
+does not exist. So the same both-directions test the page gets: every
+option in the offered word list, and every word in that list an option
+the parser takes.
+
+**What it completes is keyed on the table's `value_name`, not on the
+option's name.** A `directory` is a directory on anybody's machine and a
+`command` is on their PATH, so an option added later that takes either
+is completed without anybody editing the generator. Everything else --
+a session name in this user's host store, a term-features spec, a title
+-- gets a case arm that deliberately offers NOTHING, because falling
+through to the option list would propose `beerssh -e --help` as a thing
+to run. `-o default` carries the positional argument, which is a host or
+a preset path and only the second of those is completable.
+
+**Bash only, and that is a decision rather than a first instalment.**
+zsh and fish want different shapes rather than the same script under
+another name, and a generator emitting three dialects nobody here runs
+is three things to be wrong. The table is what matters; another shell is
+another function over it when somebody wants one.
+
+**A MISSED verdict found the weak assertion again, the third time
+today.** The sabotage that COMMENTS OUT the `complete -F` line left the
+suite green: the test asked whether the script *contained* that text,
+and a commented line contains it. It reads whole lines now. A true
+condition that is not the one you mean passes for the same reason a
+correct one does, and only breaking the thing it claims to guard tells
+them apart.
+
+**`check-deb` sources the installed file and asks bash**, rather than
+grepping it: `complete -p beerssh` answers whether anything actually
+registered, which a grep for the word cannot do about a line that is
+commented out. And the build runs `bash -n` on the generated file and
+removes it when that fails, because a completion that does not parse is
+sourced by every new shell of everybody who installed it, and the
+failure lands in their prompt rather than anywhere near a build.
+
 **Considered and not built**, each for a reason rather than by omission:
 
 - **`-fn`/`-bg`/`-fg`-style appearance overrides.** A per-invocation font or

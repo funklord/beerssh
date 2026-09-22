@@ -1,0 +1,44 @@
+# The bash completion, generated from the option table (project.md
+# sec 8.6).
+#
+# The same argument the manual page is generated under, and a sharper
+# one: a page that omits a flag is merely unhelpful, while a completion
+# that omits one refuses to finish what somebody is typing and they
+# conclude the flag does not exist.
+#
+# Three edits, because the script can be wrong in three ways that look
+# nothing alike from outside.
+
+# The list stops carrying the short spellings.
+#
+# -e and -T are the ones people type, and a completion that offers only
+# the long forms is one that appears to know nothing about half the
+# options.
+[[sabotage]]
+name = "the completion forgets the short options"
+file = "src/model/command_line.cpp"
+find = "\t\tif (!shrt.isEmpty()) flags.append(QStringLiteral(\"-\") + shrt);"
+replace = ""
+expect = "the_completion_offers_the_options_the_parser_takes"
+
+# An option that takes a value loses its case arm.
+#
+# Then `beerssh -e <TAB>` falls through to the option list and offers
+# --help as the command to run, which is worse than offering nothing.
+[[sabotage]]
+name = "an option that takes a value has no case arm"
+file = "src/model/command_line.cpp"
+find = "\t\tif (value == QLatin1String(\"command\")) takes_a_command += spellings;\n\t\telse if (value == QLatin1String(\"directory\")) takes_a_directory += spellings;\n\t\telse takes_something_else += spellings;"
+replace = "\t\t(void) value;"
+expect = "the_completion_offers_the_options_the_parser_takes"
+
+# The script never registers itself.
+#
+# Every word of it is right and sourcing it does nothing at all, which is
+# the failure a reader of the file cannot see.
+[[sabotage]]
+name = "the completion script registers nothing"
+file = "src/model/command_line.cpp"
+find = "\t        \"complete -F _beerssh -o default beerssh\\n\")"
+replace = "\t        \"# complete -F _beerssh -o default beerssh\\n\")"
+expect = "the_completion_offers_the_options_the_parser_takes"

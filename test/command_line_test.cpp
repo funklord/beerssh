@@ -325,6 +325,112 @@ void command_line_test::the_manual_page_describes_the_options_the_parser_takes()
 	          "the page must name every option, not a subset that happens to match");
 }
 
+void command_line_test::the_completion_offers_the_options_the_parser_takes() {
+	/*
+	 * The same both-directions check the manual page gets, and for a
+	 * sharper reason. A page that omits a flag is merely unhelpful; a
+	 * completion that omits one actively refuses to finish what somebody
+	 * is typing, and they conclude the flag does not exist.
+	 */
+	const QString script = bssh_command_line_completion();
+
+	/*
+	 * Asked of whole LINES rather than of the text, because a shell
+	 * script's comment marker makes `contains` answer yes about a line
+	 * that does nothing. The sabotage that comments the register out
+	 * left this green until it was written this way -- the assertion was
+	 * true and about the wrong thing, which is how a true condition
+	 * passes for the same reason a correct one does.
+	 */
+	const QStringList lines = script.split(QLatin1Char('\n'));
+	bool registers = false;
+	bool defines = false;
+
+	for (const QString &line : lines) {
+		const QString bare = line.trimmed();
+		if (bare.startsWith(QStringLiteral("complete -F _beerssh -o default beerssh")))
+			registers = true;
+		if (bare.startsWith(QStringLiteral("_beerssh()"))) defines = true;
+	}
+
+	QVERIFY2(registers,
+	          "the script registers no completion, so sourcing it does nothing");
+	QVERIFY2(defines, "the function the complete line names is not defined");
+
+	/*
+	 * The word list is the part that has to agree with the table. Pulled
+	 * out by itself rather than searched for in the whole script,
+	 * because a spelling that appears only in a `case` arm is not one
+	 * bash will ever OFFER.
+	 */
+	static const QRegularExpression words(QStringLiteral("compgen -W \"([^\"]*)\""));
+	const QRegularExpressionMatch found = words.match(script);
+	QVERIFY2(found.hasMatch(), "the script offers no option list at all");
+
+	const QStringList offered = found.captured(1).split(QLatin1Char(' '),
+	                                                     Qt::SkipEmptyParts);
+
+	for (const bssh_option_t &option : bssh_command_line_options()) {
+		const QString name = QStringLiteral("--")
+		        + QString::fromLatin1(option.name);
+		QVERIFY2(offered.contains(name),
+		          qPrintable(QStringLiteral("%1 is accepted and not offered").arg(name)));
+
+		const QString shrt = QString::fromLatin1(option.short_name);
+		if (shrt.isEmpty()) continue;
+
+		QVERIFY2(offered.contains(QStringLiteral("-") + shrt),
+		          qPrintable(QStringLiteral("-%1 is accepted and not offered").arg(shrt)));
+	}
+
+	/*
+	 * And the other direction, which catches an option REMOVED from the
+	 * parser and left in the script -- the half that makes this a
+	 * relationship rather than a spot check.
+	 */
+	for (const QString &word : offered) {
+		bool known = false;
+
+		for (const bssh_option_t &option : bssh_command_line_options()) {
+			const QString name = QStringLiteral("--")
+			        + QString::fromLatin1(option.name);
+			const QString shrt = QString::fromLatin1(option.short_name);
+
+			if (word == name) known = true;
+			if (!shrt.isEmpty() && word == QStringLiteral("-") + shrt) known = true;
+		}
+
+		QVERIFY2(known, qPrintable(QStringLiteral("the completion offers %1, which "
+		                                           "the parser does not take").arg(word)));
+	}
+
+	/*
+	 * An option that takes a VALUE has to be in a case arm, or bash
+	 * offers the option list where a value belongs -- `beerssh -e
+	 * --help` as a thing to run. Asked of both spellings, because the
+	 * short one is what people type.
+	 */
+	for (const bssh_option_t &option : bssh_command_line_options()) {
+		if (!*option.value_name) continue;
+
+		const QString name = QStringLiteral("--")
+		        + QString::fromLatin1(option.name);
+		QVERIFY2(script.contains(name + QStringLiteral(")"))
+		                 || script.contains(name + QStringLiteral("|")),
+		          qPrintable(QStringLiteral("%1 takes a value and has no case arm")
+		                             .arg(name)));
+
+		const QString shrt = QString::fromLatin1(option.short_name);
+		if (shrt.isEmpty()) continue;
+
+		const QString dash = QStringLiteral("-") + shrt;
+		QVERIFY2(script.contains(dash + QStringLiteral(")"))
+		                 || script.contains(dash + QStringLiteral("|")),
+		          qPrintable(QStringLiteral("%1 takes a value and has no case arm")
+		                             .arg(dash)));
+	}
+}
+
 void command_line_test::a_target_with_colons_is_a_host_not_a_port() {
 	/*
 	 * from_target split on the LAST colon, so every IPv6 literal was

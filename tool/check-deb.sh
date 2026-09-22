@@ -159,6 +159,28 @@ if ! zcat -f /usr/share/man/man1/beerssh.1* | grep -q "execute"; then
 fi
 echo "check-deb: the manual page is installed and documents the options"
 
+# The bash completion, on the same footing and for the same reason: it is
+# generated at build time, so what is worth checking here is that the
+# generation ran and the result reached the package.
+#
+# Sourced rather than grepped, because a completion that does not PARSE
+# is one every new shell of everybody who installed it fails to load --
+# and the failure lands in their prompt rather than anywhere near a
+# build. `complete -p beerssh` then asks bash itself whether the file
+# registered anything, which is the question a grep for the word
+# "complete" cannot answer about a line that is commented out.
+completion=/usr/share/bash-completion/completions/beerssh
+if [ ! -f "$completion" ]; then
+	echo "check-deb: the package has no bash completion" >&2
+	exit 1
+fi
+
+if ! bash -c ". \"$completion\" && complete -p beerssh >/dev/null"; then
+	echo "check-deb: the bash completion does not register a completion" >&2
+	exit 1
+fi
+echo "check-deb: the bash completion is installed and registers"
+
 # --help with no display, which is how it is read over SSH and in a build
 # chroot -- and how the manual page above was generated. This died with
 # "could not connect to display" until QApplication stopped being built

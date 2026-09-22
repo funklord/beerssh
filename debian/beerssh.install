@@ -1,5 +1,6 @@
 usr/bin/beerssh
 usr/share/man
+usr/share/bash-completion
 usr/share/applications
 usr/share/icons
 usr/share/metainfo
