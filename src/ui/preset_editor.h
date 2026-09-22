@@ -142,6 +142,7 @@ private:
 	QLineEdit *m_on_connect;
 	QComboBox *m_key_row;
 
+	QPushButton *m_features;
 	QPushButton *m_save;
 	QPushButton *m_clone;
 	QPushButton *m_delete;

@@ -367,6 +367,7 @@ private slots:
 	void the_settings_page_says_what_unset_gives_you();
 	void a_desktop_can_be_asked_for_the_column();
 	void the_divider_magnet_is_the_users_to_set_or_switch_off();
+	void a_host_can_be_given_a_reduced_terminal_without_a_text_editor();
 };
 
 #endif /* BSSH_LAYOUT_TEST_H */

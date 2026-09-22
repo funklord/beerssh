@@ -1,0 +1,46 @@
+# Setting a host's terminal features without a text editor (project.md
+# sec 7.1).
+#
+# sec 7.1 says the spec string "is a preset field, so a host that always
+# wants a reduced terminal says it once". It could not be said at all:
+# the field was stored, validated on load and applied to the session,
+# and no editor had a control for it -- alone among every field a preset
+# carries.
+#
+# Three edits, because the dialog, its round trip and the ROUTE to it
+# fail apart, and the last is the one the other two cannot see.
+
+# The route goes, which is the state this was built out of.
+#
+# The dialog still exists, still works and is still tested; nothing
+# opens it, so a host's spec is back to being an app.ini edit.
+[[sabotage]]
+name = "nothing in the preset editor opens the features dialog"
+file = "src/ui/preset_editor.cpp"
+find = "\tm_features->setObjectName(QStringLiteral(\"preset-term-features\"));"
+replace = "\tm_features->setObjectName(QStringLiteral(\"preset-term-features-gone\"));"
+expect = "a_host_can_be_given_a_reduced_terminal_without_a_text_editor"
+
+# The list stops covering every feature.
+#
+# A loop that stops early leaves a feature the dialog silently does not
+# govern -- it reads as present, it is ticked, and turning it off is
+# impossible. The population assertion is what sees this; the boxes that
+# ARE there behave perfectly.
+[[sabotage]]
+name = "the features dialog covers all but the last feature"
+file = "src/ui/term_features_editor.cpp"
+find = "\tfor (int i = 0; i < bssh_term_features_t::FEATURE_COUNT; ++i) {\n\t\tconst bssh_term_features_t::feature_t feature ="
+replace = "\tfor (int i = 0; i < bssh_term_features_t::FEATURE_COUNT - 1; ++i) {\n\t\tconst bssh_term_features_t::feature_t feature ="
+expect = "a_host_can_be_given_a_reduced_terminal_without_a_text_editor"
+
+# The dialog opens at the default whatever the host had stored.
+#
+# Every box ticked, every time -- so opening the dialog on a host with a
+# reduced terminal and pressing OK silently gives it a whole one back.
+[[sabotage]]
+name = "the features dialog ignores what the host had stored"
+file = "src/ui/term_features_editor.cpp"
+find = "\t\tbox->setChecked(features.enabled(feature));"
+replace = "\t\tbox->setChecked(true);"
+expect = "a_host_can_be_given_a_reduced_terminal_without_a_text_editor"

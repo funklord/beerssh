@@ -48,6 +48,7 @@
 #include "ui/host_editor.h"
 #include "ui/form_wrap.h"
 #include "ui/preset_editor.h"
+#include "ui/term_features_editor.h"
 #include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
 #include "ui/font_picker.h"
@@ -1514,6 +1515,18 @@ void layout_test::every_touch_surface_fits_a_phone()
 	{
 		bssh_preset_editor editor(&store, bssh_preset_editor::TOUCH);
 		check_fits(QStringLiteral("preset editor"), &editor);
+	}
+	{
+		/*
+		 * The dialog behind the preset editor's Features button (sec
+		 * 7.1). Fourteen rows at a touch height is taller than a phone
+		 * by construction, so it carries a scroll area -- and this is
+		 * the assertion that says the scroll area is doing the job
+		 * rather than the dialog merely being long.
+		 */
+		const QString nothing_off;
+		bssh_term_features_editor features(nothing_off);
+		check_fits(QStringLiteral("terminal features"), &features);
 	}
 	{
 		bssh_app_settings_view settings;
@@ -9082,6 +9095,109 @@ void layout_test::the_settings_page_says_what_unset_gives_you() {
 		QVERIFY2(note->text().contains(choices->itemText(row)),
 		          qPrintable(QStringLiteral("the note says %1, the default is %2")
 		                             .arg(note->text(), choices->itemText(row))));
+	}
+}
+
+void layout_test::a_host_can_be_given_a_reduced_terminal_without_a_text_editor() {
+	/*
+	 * sec 7.1: "The same string is a preset field, so a host that always
+	 * wants a reduced terminal says it once." It could not be said once,
+	 * or at all. The field was stored, validated on load and applied to
+	 * the session, and no editor had a control for it -- alone among
+	 * every field a preset carries -- so the only way to set one was to
+	 * hand-edit app.ini.
+	 *
+	 * Three claims, and they fail apart: the dialog covers every
+	 * feature, it round trips a spec, and the preset editor offers a way
+	 * in. The last is the one the other two cannot see.
+	 */
+	{
+		/*
+		 * Named rather than a temporary, because
+		 * `editor(QString())` declares a function -- the most vexing
+		 * parse, and the compiler's message about it names neither.
+		 */
+		const QString nothing_off;
+		bssh_term_features_editor editor(nothing_off);
+
+		/*
+		 * The POPULATION, asserted rather than the presence of a few
+		 * boxes. The list is generated from the feature table, so a
+		 * loop that stopped early would leave a feature this dialog
+		 * silently does not govern -- and nothing else would say so.
+		 */
+		const QList<QCheckBox *> boxes = editor.findChildren<QCheckBox *>();
+		QCOMPARE(boxes.size(), int(bssh_term_features_t::FEATURE_COUNT));
+
+		/* An empty spec is a whole terminal, so every box is ticked. */
+		for (QCheckBox *box : boxes) {
+			QVERIFY2(box->isChecked(),
+			          qPrintable(QStringLiteral("%1 opened unticked for a host that "
+			                                     "turned nothing off")
+			                             .arg(box->objectName())));
+		}
+
+		QCOMPARE(editor.spec(), QString());
+		QCOMPARE(bssh_term_features_editor::summary(QString()),
+		          QStringLiteral("All on"));
+	}
+
+	/*
+	 * And a stored spec opens on it, named by sec 7.1's own spelling
+	 * rather than by position: an enum renumbered underneath this would
+	 * otherwise point the assertion at another feature and pass.
+	 */
+	{
+		bssh_term_features_editor editor(QStringLiteral("-sixel,-hyperlinks"));
+
+		QCheckBox *sixel =
+		        editor.findChild<QCheckBox *>(QStringLiteral("feature_sixel"));
+		QCheckBox *links =
+		        editor.findChild<QCheckBox *>(QStringLiteral("feature_hyperlinks"));
+		QCheckBox *paste =
+		        editor.findChild<QCheckBox *>(QStringLiteral("feature_bracketed-paste"));
+		QVERIFY(sixel && links && paste);
+
+		QVERIFY2(!sixel->isChecked(), "a feature the spec turns off opened ticked");
+		QVERIFY2(!links->isChecked(), "a feature the spec turns off opened ticked");
+		QVERIFY2(paste->isChecked(), "a feature the spec leaves alone opened unticked");
+
+		/*
+		 * Round trip through the grammar rather than string equality:
+		 * to_spec writes the off ones in the table's order, which is
+		 * not necessarily the order somebody typed them in.
+		 */
+		QString ignored;
+		const bssh_term_features_t back =
+		        bssh_term_features_t::from_spec(editor.spec(), ignored);
+		QVERIFY(!back.enabled(bssh_term_features_t::SIXEL));
+		QVERIFY(!back.enabled(bssh_term_features_t::HYPERLINKS));
+		QVERIFY(back.enabled(bssh_term_features_t::BRACKETED_PASTE));
+
+		QCOMPARE(bssh_term_features_editor::summary(editor.spec()),
+		          QStringLiteral("2 off"));
+	}
+
+	/*
+	 * And the ROUTE, which is the half the two above cannot see: a
+	 * dialog nothing opens is a dialog nobody reaches, and that was the
+	 * state this whole entry describes.
+	 */
+	for (int touch = 0; touch <= 1; ++touch) {
+		const forced_touch_t arrangement(touch);
+
+		QTemporaryDir dir;
+		bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+		bssh_preset_editor editor(&store, touch ? bssh_preset_editor::TOUCH
+		                                         : bssh_preset_editor::DESKTOP);
+
+		QPushButton *button = editor.findChild<QPushButton *>(
+		        QStringLiteral("preset-term-features"));
+		QVERIFY2(button, "the preset editor offers no way to reach the terminal "
+		                  "features, so a host's spec can only be set by editing "
+		                  "app.ini");
+		QVERIFY2(!button->text().isEmpty(),
+		          "the button says nothing about what this host has turned off");
 	}
 }
 

@@ -4260,6 +4260,41 @@ library's own idea of one. `--term-features=-sixel,-kitty-graphics`, or
 `--term-features=?` lists the names. The same string is a preset field, so a
 host that always wants a reduced terminal says it once.
 
+**Which could not be said at all until 2026-09-22.** The field was
+there, stored, validated on load and applied to the session -- and no
+editor had a control for it, alone among every field a preset carries.
+The only way to give a host a reduced terminal was to hand-edit
+`app.ini`, so the sentence above described a capability the program did
+not offer.
+
+**Found by enumerating the preset's fields against the editor's
+controls**, which is the same question §8.7 asked of its dissolved
+surfaces turned on a data structure: not "what does this editor show"
+but "what does this record hold that nothing shows". Twelve fields,
+eleven with a control, one without.
+
+**A button to a dialog, which is the colour editor's shape and its
+argument.** Fourteen checkboxes are a page of their own, and this is the
+rarer choice of the two -- `term_features.h` calls it "not a preference
+knob: it is a test instrument", so it belongs a deliberate trip away
+rather than beside the cursor style. The button carries the state
+("All on", "2 off"), because a button that says only *Terminal
+features...* answers nothing for somebody scanning the page.
+
+**The list is generated from the feature table**, on the argument the
+manual page and the completion are generated under -- and here the stale
+copy would be worse than either, because it would be a checkbox that
+silently governs nothing. So the test asserts the POPULATION against
+`FEATURE_COUNT` rather than checking that a few boxes are present, and
+the sabotage that shortens the loop by one is caught by that assertion
+alone.
+
+**And `to_spec()` has its consumer.** It had none: it writes the off
+ones as `-name` and nothing when they are all on, which is exactly the
+shape a checkbox dialog produces and exactly what a preset wants to
+store. A function whose output shape fits one caller that does not exist
+is a design waiting for the other half of itself.
+
 **The rule that makes it worth building: switching a feature off changes what
 the terminal ANSWERS about it, not only what it does.** This section has
 already paid for both polarities of getting that wrong — DEC 2026 answering

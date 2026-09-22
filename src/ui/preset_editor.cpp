@@ -24,6 +24,7 @@
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
+#include "ui/term_features_editor.h"
 #include "ui/form_wrap.h"
 #include "keyboard/key_row_layout.h"
 
@@ -130,6 +131,39 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 
 	m_cursor_blink = new QCheckBox(QStringLiteral("Cursor blinks"), this);
 
+	/*
+	 * Which extensions this host's terminal speaks (sec 7.1). A button
+	 * to a dialog rather than fourteen checkboxes on this page, which is
+	 * the colour editor's shape and its argument: this is the rarer of
+	 * the two choices and sec 7.1 calls it "not a preference knob: it is
+	 * a test instrument", so it belongs a deliberate trip away rather
+	 * than beside the cursor style.
+	 *
+	 * The label carries the state, because a button reading only
+	 * "Terminal features..." says nothing about whether this host has
+	 * any turned off -- and that is the whole question somebody scanning
+	 * the page is asking.
+	 */
+	m_features = new QPushButton(this);
+	m_features->setObjectName(QStringLiteral("preset-term-features"));
+	m_features->setToolTip(
+	        QStringLiteral("Turn terminal extensions off for this host, to see how a "
+	                        "program behaves against a terminal that lacks them."));
+	connect(m_features, &QPushButton::clicked, this, [this] {
+		bssh_term_features_editor editor(m_current.term_features, this);
+		if (editor.exec() != QDialog::Accepted) return;
+
+		/*
+		 * Straight into m_current, which is what save() starts from --
+		 * the same route colour_scheme and key_row_layout take, and for
+		 * the reason the comment there gives: a field this form holds
+		 * outside its own widget must not be read back off a widget
+		 * that does not exist.
+		 */
+		m_current.term_features = editor.spec();
+		m_features->setText(bssh_term_features_editor::summary(m_current.term_features));
+	});
+
 	m_font = new bssh_font_picker(this);
 
 	m_keepalive = new QSpinBox(this);
@@ -208,6 +242,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	if (shown(m_bell, terminal)) form->addRow(QString(), m_bell);
 	if (shown(m_cursor_style, terminal)) form->addRow(QStringLiteral("Cursor"), m_cursor_style);
 	if (shown(m_cursor_blink, terminal)) form->addRow(QString(), m_cursor_blink);
+	if (shown(m_features, terminal)) form->addRow(QStringLiteral("Features"), m_features);
 
 	if (shown(m_keepalive, connection)) form->addRow(QStringLiteral("Keepalive"), m_keepalive);
 	if (shown(m_compression, connection)) form->addRow(QString(), m_compression);
@@ -406,6 +441,7 @@ void bssh_preset_editor::show_preset(const bssh_preset_t &preset) {
 	m_name->setText(preset.name);
 	m_term->setText(preset.term);
 	m_scrollback->setValue(preset.scrollback_lines);
+	m_features->setText(bssh_term_features_editor::summary(preset.term_features));
 	m_bell->setChecked(preset.bell_enabled);
 	m_cursor_blink->setChecked(preset.cursor_blink);
 	m_keepalive->setValue(preset.keepalive_seconds);
