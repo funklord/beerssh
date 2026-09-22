@@ -28,9 +28,9 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
     : QWidget(parent),
       m_layout(layout),
       m_outer(nullptr),
-      m_focused(nullptr),
       m_splitter(nullptr),
-      m_scroll(nullptr) {
+      m_scroll(nullptr),
+      m_focused(nullptr) {
 	qRegisterMetaType<bssh_session *>();
 
 	m_outer = new QVBoxLayout(this);

@@ -4443,16 +4443,41 @@ width now, a key's, rather than a stretch -- the enum's own comment says
 is a gap you can count rather than however much room is spare, and a
 stretch would have shared the slack with the row's own trailing one.
 
+**The wall is gone, 2026-09-22, and the build is warning-clean.** A full
+`make test` -- the app and the test binary together -- now emits **zero**
+warnings of any kind, where it emitted 33. The measurement below is kept
+because it is what the pass was sized from.
+
+**The proof was the compiler, not the tool, and the difference cost a
+run.** The reorder tool checked what `evidence.md` asks a mechanical
+change to check: the MULTISET of initialisers unchanged, and the one
+initialiser that reads another member (`m_tabs(new
+QTabBar(m_terminal_page))`) still behind the member it reads. Both held,
+and the result was still wrong -- because the tool's target ORDER came
+from its own reading of the header, and that reading had matched
+`return m_reverse_video ? m_foreground : m_background;` inside an inline
+accessor as a declaration of `m_foreground`. **A gate comparing an
+artifact to its own generator**, exactly: the set was right, the target
+was wrong, and nothing in the proof could tell. What caught it was gcc
+still reporting `-Wreorder` afterwards. The witness disagreed and the
+witness was right.
+
+**So the acceptance test for this pass is the warning count rather than
+the tool's own verdict**, which is the shape to copy the next time
+something rewrites source in bulk here: keep the invariant, and find
+something outside the tool that can still say no.
+
 **The wall it hid in is worth a decision rather than a sweep, so here is
 the measurement.** The container build emits 33 warnings: 30
 `-Wreorder` across ten sites in four constructors, the one `-Wswitch`
 above, and one `-Wunused-result`. The last is fixed here -- a test
 discarded `qWaitForWindowExposed`, and an unexposed window grabs an
 empty frame, so every measurement after it would have been about
-nothing. The `-Wreorder` thirty are **not** swept, and that is a
-judgement rather than an oversight: they are 108 initialisers across the
-four busiest files in the tree, which is a deliberate pass in a shared
-working copy rather than a drive-by.
+nothing. The `-Wreorder` thirty were left at the time, as a judgement
+rather than an oversight -- 109 initialisers across the four busiest
+files in the tree, which is a deliberate pass rather than a drive-by --
+and the pass was made later the same day, on the holder's repeated
+instruction to carry on.
 
 **What a pass would need is already established, so it need not be
 re-derived.** Checked before deciding: exactly one initialiser in the

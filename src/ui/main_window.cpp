@@ -126,6 +126,9 @@ bssh_layout_manager::arrangement_t chosen_arrangement() {
 
 bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent)
     : QWidget(parent),
+      m_keyboard_hidden_by_user(false),
+      m_device_settings(nullptr),
+      m_settings_sections(nullptr),
       m_pages(new QStackedWidget(this)),
       m_back_target(nullptr),
       m_front_door_up(false),
@@ -154,9 +157,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_tab_long_press(nullptr),
       m_key_row(nullptr),
       m_keyboard(nullptr),
-      m_keyboard_hidden_by_user(false),
-      m_device_settings(nullptr),
-      m_settings_sections(nullptr),
       m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
       m_window_title_format(QStringLiteral("%t - BeerSSH")),
       m_asked_about_closing(false),

@@ -74,6 +74,7 @@ static const char *const BSSH_PLACEHOLDER = "BeerSSH -- no session (M0 skeleton)
 
 bssh_terminal_view::bssh_terminal_view(QWidget *parent)
     : QWidget(parent),
+      m_dragging_handle(-1),
       m_screen(nullptr),
       m_images(nullptr),
       m_scrollback(nullptr),
@@ -81,10 +82,10 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_scroll_offset(0),
       m_scrollbar(nullptr),
       m_scrollbar_position(default_scrollbar_position()),
+      m_focus_border(false),
       m_being_dragged(false),
       m_pointer_inside(false),
       m_pane_handle(false),
-      m_focus_border(false),
       m_click_count(0),
       m_last_click_line(-1),
       m_selecting(false),
@@ -93,7 +94,6 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_selection_anchor_col(0),
       m_selection_focus_line(-1),
       m_selection_focus_col(0),
-      m_dragging_handle(-1),
       m_current_match(-1),
       m_emulator(nullptr),
       m_input_router(nullptr),
