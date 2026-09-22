@@ -208,8 +208,37 @@ tar xf /in/vterm.tar
 # extracted tree is not one.
 
 make style
-make -j\"\$(nproc)\"
-QT_QPA_PLATFORM=offscreen make test
+
+# Kept so the WARNINGS can be counted, and printed either way so the
+# log a person reads is the same one it counted. Redirected rather than
+# piped to tee: a pipeline reports its LAST command's status, which is
+# how a failing build gets swallowed into a clean-looking run, and this
+# script's own comments record that trap twice already.
+if ! make -j\"\$(nproc)\" > /build/build.log 2>&1; then
+	cat /build/build.log
+	exit 1
+fi
+cat /build/build.log
+
+if ! QT_QPA_PLATFORM=offscreen make test > /build/test.log 2>&1; then
+	cat /build/test.log
+	exit 1
+fi
+cat /build/test.log
+
+# \`|| true\` because grep -c prints 0 and EXITS 1 when nothing matched,
+# which under set -e ends the run at the moment there is nothing to
+# report. That is this workspace's own recorded trap, met here.
+warnings=\$(grep -c 'warning:' /build/build.log /build/test.log 2>/dev/null \
+	| awk -F: '{ total += \$2 } END { print total + 0 }' || true)
+
+echo \"check-ci: the build emitted \$warnings warning(s)\"
+if [ \"\$warnings\" -gt 0 ]; then
+	echo 'check-ci:   this build was warning-free on 2026-09-22 -- see sec 12.3.'
+	echo 'check-ci:   REPORTED rather than refused: making a warning fatal is a'
+	echo \"check-ci:   build-policy change and the holder's to make.\"
+	grep -h 'warning:' /build/build.log /build/test.log | sort -u | head -20
+fi
 " &
 # `wait` rather than a plain call, because a shell trap CANNOT preempt a
 # foreground command -- it runs only once that command returns. Measured:

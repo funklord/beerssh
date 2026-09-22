@@ -4443,6 +4443,24 @@ width now, a key's, rather than a stretch -- the enum's own comment says
 is a gap you can count rather than however much room is spare, and a
 stretch would have shared the slack with the row's own trailing one.
 
+**And `check-ci` counts them now, so it stays that way visibly.** The
+container's build and test output is captured, printed as before, and
+the `warning:` lines counted; the count is reported on every run and the
+distinct warnings are listed when there are any. **Reported rather than
+refused**, deliberately: making a warning fatal is a build-policy change
+-- a new compiler with a new warning would then block every push -- and
+that is the holder's to make. What this buys without asking anybody is
+that the next one is visible in the gate's own summary rather than
+inside a wall nobody reads, which is exactly how the `SPACER` defect
+survived.
+
+**The counter was seen to fire before it was trusted.** Run against the
+33-warning log from before the pass it reports 15 for the build half and
+0 for a clean one, and `set -e` survives both -- which needed `|| true`,
+because `grep -c` prints `0` and EXITS 1 when nothing matched. That is
+this workspace's own recorded trap, met in the code written to report
+its absence.
+
 **The wall is gone, 2026-09-22, and the build is warning-clean.** A full
 `make test` -- the app and the test binary together -- now emits **zero**
 warnings of any kind, where it emitted 33. The measurement below is kept
