@@ -51,7 +51,10 @@ struct bssh_graphics_result_t {
  * initial fragment. It does not bound a TRANSMISSION, which m=1 stitches
  * together from any number of complete, in-budget payloads -- and the
  * only things that ever emptied it were m=0, which a remote need never
- * send, and a reset. So the wire could hand this 8 MB at a time for as
+ * send, and a reset -- and the reset half of that was a claim rather
+ * than a fact until 2026-09-22, since the soft reset goes through
+ * libvterm and this buffer is ours. bssh_emulator::reset_modes clears
+ * it now, which is what sec 6.4's Reset Terminal is for. So the wire could hand this 8 MB at a time for as
  * long as it liked: the product of two bounds, which is not a bound.
  *
  * 32 MB of base64 is about 24 MB decoded, which is already past the image

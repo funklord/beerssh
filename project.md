@@ -3781,12 +3781,49 @@ refuses to do. The test places one image above the fold and one on the
 live screen and asserts which survives, and
 `tool/sabotage/history-pictures.toml` breaks it each way.
 
+**And the OTHER verb on that menu had the same shape — [FIXED
+2026-09-22].** Reset Terminal exists for "the modes a dead program left
+behind", and §6.4 names the classic cause: a binary landing on the
+terminal. A binary can open a chunked kitty transmission -- `m=1` means
+another chunk follows -- and die. The only things that ever emptied that
+buffer were the final chunk and the over-budget abandon, and a program
+killed mid-send produces neither, so up to 32 MB sat held for a picture
+that was never coming and the next transmission was prepended to it.
+
+**The comment already said a reset emptied it, and nothing did.** The
+soft reset goes through libvterm and that buffer is ours, so none of
+`vterm_screen_reset`'s work reached it. That is a claim in a header
+rather than in this document, which makes it the cheaper kind to check
+and the easier kind to leave standing: a test asked it and the answer
+was no. The whole struct is replaced rather than the bytes cleared,
+because `abandoned` and the pending controls are the same mid-stream
+state and a reset that cleared only the bytes would leave the terminal
+refusing the next image -- which the test's control catches.
+
 **The lens: state that names something the scrollback can take away.**
 It came from the selection fix rather than from a category list, which
 is `working-practice.md`'s rule about deriving the next lens from the
-last bug. Both instances were found by asking the same question of the
-same signal, and the shape is worth keeping for the next one: anything
-holding an absolute line number outside the buffers that own them.
+last bug. Each instance was found by asking the same question of the
+same signal, and the shape is worth keeping: anything holding an
+absolute line number outside the buffers that own them.
+
+**And the population was enumerated rather than sampled, which is what
+lets this be closed.** The view declares three `qint64` line members --
+`m_last_click_line`, `m_selection_anchor_line` and
+`m_selection_focus_line` -- and the last two were the selection. The
+list holders are `m_find_matches` and the image store's `m_placements`,
+both now dropped with the lines they name.
+`m_last_click_line` is compared only inside a double-click interval, so
+a history that went between two clicks cannot mislead it. The
+accessibility layer holds offsets into the flattened stream and is
+already correct for a different reason: `note_content_changed()` bumps
+the revision the cache is keyed on and announces the text update, which
+is the fix §9.5 recorded when the trim case found it.
+
+**The limit of that enumeration, stated so nobody reads it as wider than
+it is:** it was a grep for `qint64` members named for a line or a row in
+`src/ui` and `src/term` headers, plus the two containers above. A class
+holding a line in an `int`, or under another name, is not in it.
 
 **And the shrink sabotage's anchor was the cost of all this, which is
 its own small finding.** `scrollback-shrink.toml` quoted the whole

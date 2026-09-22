@@ -37,6 +37,7 @@ private slots:
 	void a_background_image_is_drawn_under_the_text();
 	void an_image_that_arrived_as_bytes_reaches_the_screen();
 	void dropping_the_history_drops_the_pictures_in_it();
+	void resetting_the_terminal_drops_a_half_sent_image();
 };
 
 #endif /* BSSH_GRAPHICS_TEST_H */

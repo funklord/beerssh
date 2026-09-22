@@ -29,3 +29,18 @@ file = "src/term/image_store.cpp"
 find = "\t\tif (placement.row + placement.rows > 0) continue;\n\t\tm_placements.removeAt(i);"
 replace = "\t\tm_placements.removeAt(i);"
 expect = "dropping_the_history_drops_the_pictures_in_it"
+
+# And the other verb on that menu: a half-sent image survives the reset.
+#
+# A chunked kitty transmission says m=1 for "another chunk follows", so
+# the bytes wait. The only things that ever emptied the buffer were the
+# final chunk and the over-budget abandon, and a program killed mid-send
+# produces neither -- so the user's own cure left up to 32 MB held for a
+# picture that is not coming. graphics_internal.h named a reset as one of
+# the things that empties it, and nothing did.
+[[sabotage]]
+name = "a reset leaves a half-sent image in the buffer"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->graphics = bssh_graphics_transmission_t();"
+replace = ""
+expect = "resetting_the_terminal_drops_a_half_sent_image"

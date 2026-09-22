@@ -2228,6 +2228,26 @@ void bssh_emulator::reset_modes() {
 	 */
 	vterm_screen_reset(m_private->vts, 0);
 
+	/*
+	 * And the half-sent image, which is ours rather than libvterm's and
+	 * so was reached by none of the above. A chunked kitty transmission
+	 * says m=1 for "another chunk follows", and the only things that
+	 * emptied the buffer were the final chunk and the over-budget
+	 * abandon -- neither of which a program killed mid-send will ever
+	 * produce. graphics_internal.h names a reset as one of the things
+	 * that empties it; nothing did.
+	 *
+	 * It is the case sec 6.4's Reset Terminal is FOR: a binary landing
+	 * on the terminal can open a transmission and die, and the user's
+	 * own cure left up to 32 MB held for a picture that is not coming,
+	 * with the next transmission prepended to it.
+	 *
+	 * The whole struct, not just the buffer: `abandoned` and the
+	 * controls are the same mid-stream state, and clearing the bytes
+	 * alone would leave a reset terminal refusing the next image.
+	 */
+	m_private->graphics = bssh_graphics_transmission_t();
+
 	emit damaged();
 }
 

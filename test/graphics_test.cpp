@@ -916,3 +916,45 @@ void graphics_test::dropping_the_history_drops_the_pictures_in_it() {
 	          "the one left is the one that was in the history");
 	QVERIFY(emulator.images().memory_used() > 0);
 }
+
+
+void graphics_test::resetting_the_terminal_drops_a_half_sent_image() {
+	/*
+	 * sec 6.4's Reset Terminal exists for "the modes a dead program left
+	 * behind", and the classic cause it names is a binary landing on the
+	 * terminal. A binary can open a chunked kitty transmission and never
+	 * close it: m=1 says another chunk follows, so the bytes accumulate
+	 * and wait, and the only things that ever emptied the buffer were the
+	 * final chunk and the over-budget abandon.
+	 *
+	 * graphics_internal.h says a reset is one of the things that empties
+	 * it. Nothing did -- the soft reset goes through libvterm, and this
+	 * buffer is ours -- so the user's own cure left up to 32 MB held for
+	 * a picture that is never going to arrive, and the next transmission
+	 * was prepended to it.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+
+	const QByteArray chunk(64 * 1024, 'A');   /* valid base64 alphabet */
+	emulator.feed(QByteArrayLiteral("\x1b_Ga=T,f=100,m=1;") + chunk
+	               + QByteArrayLiteral("\x1b\\"));
+
+	QVERIFY2(emulator.pending_transmission_bytes() > 0,
+	          "the fixture left nothing pending, so the reset has nothing "
+	          "to drop");
+
+	emulator.reset_modes();
+
+	QCOMPARE(emulator.pending_transmission_bytes(), qint64(0));
+
+	/*
+	 * And the terminal still takes an image afterwards, which is the
+	 * control: a reset that cleared the bytes and left the transmission
+	 * marked mid-stream would refuse the next one, and counting bytes
+	 * cannot tell that from a clean buffer.
+	 */
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"),
+	                            png_of(16, 16, qRgb(0, 255, 0))));
+	QCOMPARE(emulator.images().count(), 1);
+}
