@@ -3854,6 +3854,28 @@ Synchronised output has carried a 150 ms release since it was written,
 for the same dead-program case. So the reset verb has one fix rather
 than four, and the next reader has the list.
 
+**And the unwired-method sweep was narrower than I said it was.** It
+was published as "612 declarations inspected ... now exhausted", and
+its pattern required a declaration ending in `;` -- so every INLINE
+accessor, the `int attempt() const { return m_attempt; }` shape, was
+outside it. There are **120** of those in `src/` and `keyboard/`, never
+looked at. Re-run over them: 36 have no caller in `src/`, and reading
+them they are overwhelmingly test seams (`panes`, `shown_sessions`,
+`scroll_offset`, `colour_for_test`) or read-backs beside a setter that
+does have one. Eight have no caller ANYWHERE, and none is a missing
+feature -- `soft_keyboard`'s `group` and `group_button`,
+`locked_modifiers` where `effective_modifiers` is what callers want,
+`used_key_auth` and `disconnect_was_requested`, `working_directory`,
+`memory_budget`, `being_dragged`. Listed rather than acted on, because
+an unread accessor is not a finding on its own.
+
+**What is worth carrying is the correction, not the list.** "Exhausted"
+was a claim about the tree and the instrument could only support a claim
+about one shape of declaration. That is the second time in two days this
+sweep's SCOPE has been the thing at fault rather than what it measured
+-- first the directory, now the syntax -- and both times the wrong half
+was the confident sentence rather than the finding.
+
 **The limit of that enumeration, stated so nobody reads it as wider than
 it is:** it was a grep for `qint64` members named for a line or a row in
 `src/ui` and `src/term` headers, plus the two containers above. A class
@@ -4352,6 +4374,23 @@ which is what the comment beside it always claimed it showed.
 only if something checked it was of the thing it is named for, and the
 drag shot beside it already carried exactly that check. This one has it
 now.
+
+**And `shoot()` itself had been resizing every widget while it was
+hidden**, which is the same fault the split fixture had worked around
+locally. Qt delivers no resizeEvent to a hidden widget, so the geometry
+was set silently and everything a widget recomputes on resize kept the
+answer it had at construction. Measured on the main window: its status
+line elides against the room it has when the text is set and re-elides
+from the original on `resizeEvent` -- correct, and never reached, so
+`desktop-window.png` read *"nabbe.testing..."* across an 800px window
+with acres of room, and its one tab read *"build ...urope)"*. Shown
+before it is resized now, and both read in full.
+
+**The workaround was right and the place was wrong**, which is the
+transferable half: the split fixture's own comment had diagnosed this
+exactly -- *"Qt does not deliver [a resizeEvent] to a hidden widget"* --
+and fixed it for one shot out of seventy-one, in the function that calls
+`shoot()` rather than in `shoot()`.
 
 **And a design question falls out of it, which is not mine to settle.**
 Dropping a session onto a window that is already at its pane cap

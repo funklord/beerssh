@@ -84,9 +84,27 @@ bssh_profile_t sample_profile() {
  * in this project had, and it is visible here before anybody scrolls.
  */
 void shoot(const QString &name, QWidget *widget, int width, int height) {
-	widget->resize(width, height);
+	/*
+	 * SHOWN before it is resized, and that order is the whole of this
+	 * comment. Qt does not deliver a resizeEvent to a hidden widget, so
+	 * resizing first and showing second set the geometry silently and
+	 * everything a widget recomputes on resize kept the answer it had at
+	 * construction.
+	 *
+	 * Measured on the main window: its status line elides against the
+	 * room it has when the text is set and re-elides from the original
+	 * on resizeEvent -- correct, and never reached here, so
+	 * desktop-window.png showed "nabbe.testing..." across an 800px
+	 * window that had acres of room. A picture of something the app does
+	 * not do, which is this directory's own rule.
+	 *
+	 * The split fixture below had already met this and worked around it
+	 * locally, resizing and showing before its drop. The workaround was
+	 * right and the place was wrong: every shot goes through here.
+	 */
 	widget->show();
 	QVERIFY(QTest::qWaitForWindowExposed(widget));
+	widget->resize(width, height);
 	QTest::qWait(50);
 
 	const QSize needed = widget->minimumSizeHint();
