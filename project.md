@@ -4304,6 +4304,25 @@ says a ~47-row layout "gets a section of its own where each line is a
 slot a person can find and change", which is §10.6's argument that
 `app.ini` is meant to be opened.
 
+**And into `make shots`, which is where the two things no sweep asked
+about turned up.** The button read *All on* with no ellipsis, beside an
+*Import...* and an *Export...* on the same page -- a status label that
+happens to be clickable rather than one that says it opens something.
+And the dialog's own minimum was **274x197**, rendered with the
+explanatory note clipped through its top and two checkboxes below it:
+the note reports its height correctly (that is what `bssh_wrapped_note`
+is for) and the dialog was allowed to be shorter than the sum, because a
+scroll area's minimum is tiny by design. A floor of three rows fixes it
+-- three rather than fourteen, since the list is MEANT to scroll on a
+phone and a minimum demanding every row would not fit the screen it
+opens on.
+
+**Neither was visible to a sweep, and that is the entry.** The fit check
+asks whether a surface fits 320x640 and this one does; the accessibility
+check asks whether controls are named and they are. What found both was
+rendering the screen and looking at it, which is the same sentence
+`wrapped_note.h` already carries about the defect it exists to prevent.
+
 **The dialog went into both sweeps the day it was written**, which is
 the habit §12.3's own record asks for: the phone-fit one, where it
 caught the checkbox floor before anybody saw it on a device, and the
@@ -4328,6 +4347,27 @@ width now, a key's, rather than a stretch -- the enum's own comment says
 "the geometry has to hold the space or every key after it shifts", which
 is a gap you can count rather than however much room is spare, and a
 stretch would have shared the slack with the row's own trailing one.
+
+**The wall it hid in is worth a decision rather than a sweep, so here is
+the measurement.** The container build emits 33 warnings: 30
+`-Wreorder` across ten sites in four constructors, the one `-Wswitch`
+above, and one `-Wunused-result`. The last is fixed here -- a test
+discarded `qWaitForWindowExposed`, and an unexposed window grabs an
+empty frame, so every measurement after it would have been about
+nothing. The `-Wreorder` thirty are **not** swept, and that is a
+judgement rather than an oversight: they are 108 initialisers across the
+four busiest files in the tree, which is a deliberate pass in a shared
+working copy rather than a drive-by.
+
+**What a pass would need is already established, so it need not be
+re-derived.** Checked before deciding: exactly one initialiser in the
+four reads another member -- `m_tabs(new QTabBar(m_terminal_page))` --
+and it is correct today, because C++ initialises in DECLARATION order
+whatever the list says, and `m_terminal_page` is declared 73 lines
+earlier. So reordering each list to declaration order preserves it by
+construction, and the proof a mechanical pass owes is that the set of
+initialisers is unchanged and that this one pair keeps its order. The
+other three constructors have no such dependency at all.
 
 **And the first assertion passed for the layout's reason rather than the
 fix's**, which the second sabotage caught: `wide > narrow` is true of a

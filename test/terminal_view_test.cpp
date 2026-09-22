@@ -3203,7 +3203,23 @@ void terminal_view_test::the_cursor_style_reaches_the_pixels() {
 		view.attach_screen(&screen);
 
 		view.show();
-		QTest::qWaitForWindowExposed(&view);
+
+		/*
+		 * The result is read rather than discarded, which the compiler
+		 * had been asking for -- qWaitForWindowExposed is nodiscard and
+		 * this was the one site ignoring it. An unexposed window grabs
+		 * an empty frame, so every measurement below would be about
+		 * nothing, and the assertions that follow would report a cursor
+		 * that drew nothing rather than a window that never appeared.
+		 *
+		 * A null box rather than a QVERIFY, because this is a lambda
+		 * returning a value and QVERIFY returns void. The caller
+		 * already asserts each box is valid, with a message naming all
+		 * three and the cell -- so an unexposed window lands there,
+		 * which is the failure that says the most.
+		 */
+		if (!QTest::qWaitForWindowExposed(&view))
+			return QPair<QRect, QSize>(QRect(), QSize());
 
 		const QImage frame = view.grab().toImage();
 		const QColor background = frame.pixelColor(frame.width() / 2,

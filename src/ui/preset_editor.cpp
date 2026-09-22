@@ -25,6 +25,23 @@
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
 #include "ui/term_features_editor.h"
+
+namespace {
+
+/*
+ * The state, and the ellipsis that says it opens something. Every other
+ * button on this page that leads to a dialog carries one -- Import...,
+ * Export... -- and without it a button reading "All on" is a status
+ * label that happens to be clickable.
+ *
+ * The ellipsis is added HERE rather than inside summary(), which stays a
+ * plain statement of the state for anybody else who wants to say it.
+ */
+QString features_button_text(const QString &spec) {
+	return bssh_term_features_editor::summary(spec) + QStringLiteral("...");
+}
+
+} /* namespace */
 #include "ui/form_wrap.h"
 #include "keyboard/key_row_layout.h"
 
@@ -161,7 +178,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 		 * that does not exist.
 		 */
 		m_current.term_features = editor.spec();
-		m_features->setText(bssh_term_features_editor::summary(m_current.term_features));
+		m_features->setText(features_button_text(m_current.term_features));
 	});
 
 	m_font = new bssh_font_picker(this);
@@ -441,7 +458,7 @@ void bssh_preset_editor::show_preset(const bssh_preset_t &preset) {
 	m_name->setText(preset.name);
 	m_term->setText(preset.term);
 	m_scrollback->setValue(preset.scrollback_lines);
-	m_features->setText(bssh_term_features_editor::summary(preset.term_features));
+	m_features->setText(features_button_text(preset.term_features));
 	m_bell->setChecked(preset.bell_enabled);
 	m_cursor_blink->setChecked(preset.cursor_blink);
 	m_keepalive->setValue(preset.keepalive_seconds);

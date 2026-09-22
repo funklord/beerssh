@@ -25,6 +25,7 @@
 #include "ui/licences_view.h"
 #include "ui/password_prompt.h"
 #include "ui/colour_editor.h"
+#include "ui/term_features_editor.h"
 #include "ui/preset_editor.h"
 #include "fake_ssh_session.h"
 #include "model/session.h"
@@ -673,6 +674,22 @@ void bssh_ui_shots::render_desktop_surfaces() {
 	const QSize wanted = colours.minimumSizeHint();
 	shoot(QStringLiteral("desktop-colour-editor"), &colours,
 	       wanted.width(), wanted.height());
+
+	/*
+	 * sec 7.1's features dialog, on the same footing and for the same
+	 * reason: it is a dialog, so its MINIMUM is the measurement worth
+	 * having -- fourteen checkboxes and a note either fit in a sensible
+	 * box or they do not.
+	 *
+	 * Shot with two turned off rather than bare, because the state is
+	 * the thing a reader is looking at: a picture of every box ticked
+	 * shows the list and nothing about what a reduced terminal looks
+	 * like here.
+	 */
+	bssh_term_features_editor features(QStringLiteral("-sixel,-kitty-graphics"));
+	const QSize features_wanted = features.minimumSizeHint();
+	shoot(QStringLiteral("desktop-term-features"), &features,
+	       features_wanted.width(), features_wanted.height());
 
 	/*
 	 * Fed a parsed config, because the surface's whole job is the

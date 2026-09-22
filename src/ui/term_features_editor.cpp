@@ -72,6 +72,22 @@ bssh_term_features_editor::bssh_term_features_editor(const QString &spec,
 	QScrollArea *scroll = new QScrollArea(this);
 	scroll->setWidgetResizable(true);
 	scroll->setWidget(body);
+
+	/*
+	 * A floor of three rows, because a scroll area's own minimum is
+	 * tiny by design -- it scrolls -- and without one this dialog's
+	 * minimum was 274x197, which `make shots` rendered with the
+	 * explanatory note clipped through its top and two checkboxes
+	 * visible. That is the wrapped-note failure this tree has already
+	 * paid for, arriving from the other side: there a label
+	 * under-reported its height, here it reports it correctly and the
+	 * dialog is allowed to be shorter than the sum.
+	 *
+	 * Three rather than all fourteen: the list is MEANT to scroll on a
+	 * phone, and a minimum that demanded every row would be a dialog
+	 * that does not fit the screen it opens on.
+	 */
+	scroll->setMinimumHeight(3 * BSSH_TOUCH_TARGET_DP);
 	outer->addWidget(scroll, 1);
 
 	QDialogButtonBox *buttons = new QDialogButtonBox(
