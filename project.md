@@ -7556,6 +7556,44 @@ places a terminal emulator has no business needing a display. They are answered
 before Qt exists now, and `tool/check-deb.sh` runs `--help` with no display
 against the installed package rather than trusting that it works.
 
+**`--load=?` lists the saved sessions, BUILT 2026-09-22.** The option
+took a session name and there was no way to find out what it would
+accept short of opening the app -- which is the state `--term-features=?`
+already exists to avoid, and the reason the generated completion had to
+stay silent about `--load`. Names only, one per line, sorted
+case-insensitively, on stdout with a zero status: the completion reads
+it as well as a person, so a header would be a candidate that is not a
+session name.
+
+**Answered before Qt is up, like the other listings, and that needed one
+ordering fix.** The store's default directory is
+`QStandardPaths::AppConfigLocation`, which reads `QCoreApplication`'s
+application name -- a static that answers with no instance, but answers
+"beerssh" only once it has been told. So the identity is set before the
+listing is built; without it the listing would read a different
+directory from the one the app uses and confidently print nothing.
+
+**The listing lives in `profile_store.cpp` rather than `main.cpp`, where
+it started, because `main.cpp` is the one file the test build leaves
+out** -- a listing nothing can call is a listing nothing can check. It
+takes an optional store, like the orphan sweep beside it, so the test
+hands over its own.
+
+**And two sabotages went MISSED against the completion's own test, which
+is what fixed it.** The test asserted that every value-taking option has
+a case ARM; every value shape falls back to a silent arm, so deleting
+the whole classification -- or just the session branch -- left an arm
+behind and the suite green. What it asserts now is the RELATIONSHIP
+between the table's `value_name` and what the arm DOES: a `command`
+completes with `compgen -c`, a `directory` with `compgen -d`, a
+`session` by asking the program. All four are caught.
+
+**And the flag list is picked out of the script by its contents rather
+than by position.** It was the first `compgen -W` in the file until
+`--load` learned to ask the program, whose word list is a command
+substitution -- and the assertion then read that as the options and
+reported every flag missing. A position is not an identity.
+
 **And the completion is generated too, BUILT 2026-09-22.** The
 paragraph above cited fmake's `--man` and its `--completion` as being on
 the same footing, adopted the first and left the second -- so `beerssh`
@@ -13311,12 +13349,10 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   hand is gone in one drag, and §8.2's "the layout intent is remembered per
   tab-group" cannot survive it, because the intent is what gets overwritten.
   Opened 2026-09-22 from the shot fixture that met it (§12.3).
-- **Should `--load` be able to list what it accepts?** `--term-features=?`
-  sets the precedent -- a question answered on stdout with exit 0 -- and a
-  `--load=?` would also let the generated bash completion complete session
-  names, which it deliberately stays silent about today. It is new command-
-  line surface that §8.6 does not ask for, which is why it is here rather
-  than built. Raised 2026-09-22.
+- ~~**Should `--load` be able to list what it accepts?**~~ **BUILT
+  2026-09-22** on the holder's repeated instruction to carry on, being the
+  one of the four that overwrites no recorded decision: it is additive, and
+  `--term-features=?` had already set the shape. See §8.6.
 
 **Decided, and kept here so they are not reopened:**
 

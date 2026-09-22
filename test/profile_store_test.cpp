@@ -1796,6 +1796,61 @@ void profile_store_test::a_hand_typed_port_out_of_range_falls_back_rather_than_w
 	QCOMPARE(fine, quint16(2222));
 }
 
+void profile_store_test::the_saved_sessions_can_be_listed_without_opening_the_app() {
+	/*
+	 * sec 8.6's `--load=?`. The option took a session name and there was
+	 * no way to find out what it would accept short of opening the app,
+	 * which is the state `--term-features=?` already exists to avoid --
+	 * and the generated bash completion had to stay silent about `--load`
+	 * for the same reason.
+	 *
+	 * Names only, one per line, sorted case-insensitively: the completion
+	 * reads this as well as a person, so a header or a decoration would
+	 * be a candidate that is not a session name.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+
+	bssh_profile_store store(dir.path());
+	QVERIFY(store.is_open());
+
+	bssh_profile_t web;
+	web.name = QStringLiteral("web front end");
+	web.host = QStringLiteral("web.example.invalid");
+	QVERIFY(store.save(web) != 0);
+
+	bssh_profile_t build;
+	build.name = QStringLiteral("Build server");
+	build.host = QStringLiteral("build.example.invalid");
+	QVERIFY(store.save(build) != 0);
+
+	const QStringList listed =
+	        bssh_saved_session_listing(&store).split(QLatin1Char('\n'),
+	                                                  Qt::SkipEmptyParts);
+
+	QCOMPARE(listed.size(), 2);
+
+	/*
+	 * Sorted by NAME rather than by the order ids were minted in, and
+	 * case-insensitively -- "Build server" before "web front end" is the
+	 * assertion, because a case-sensitive sort puts every capitalised
+	 * name in a block of its own and a person scanning the list would
+	 * not find theirs where they looked.
+	 */
+	QCOMPARE(listed.at(0), QStringLiteral("Build server"));
+	QCOMPARE(listed.at(1), QStringLiteral("web front end"));
+
+	/*
+	 * And an empty store answers with nothing rather than refusing: a
+	 * script asking what is available on a fresh install must read "none"
+	 * rather than an error.
+	 */
+	QTemporaryDir empty;
+	QVERIFY(empty.isValid());
+	bssh_profile_store nothing_saved(empty.path());
+	QCOMPARE(bssh_saved_session_listing(&nothing_saved), QString());
+}
+
 void profile_store_test::a_hand_typed_override_meets_the_same_bounds_as_a_preset() {
 	/*
 	 * A preset's numbers are clamped by from_json, because sec 10.5 makes

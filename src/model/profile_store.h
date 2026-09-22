@@ -246,6 +246,21 @@ bool bssh_note_orphaned_secret(const QString &key);
 void bssh_sweep_orphaned_secrets(const bssh_profile_store *store = nullptr);
 
 /*
+ * What `--load` will accept, one name per line (sec 8.6).
+ *
+ * `--term-features=?` set the shape: a program that takes a vocabulary
+ * should be able to say what is in it, or the only way to find out is to
+ * open the app. The generated bash completion reads this too, which is
+ * why it is names only and carries no header -- a line that is not a
+ * session name is a completion candidate that is not one either.
+ *
+ * Here rather than in main.cpp, where it started, because main.cpp is
+ * the one file the test build leaves out: a listing nothing can call is
+ * a listing nothing can check.
+ */
+QString bssh_saved_session_listing(const bssh_profile_store *store = nullptr);
+
+/*
  * "Remember this password" -- the credential and the flag that says it is
  * there, written as one act (sec 11).
  *

@@ -874,6 +874,32 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 	return state;
 }
 
+QString bssh_saved_session_listing(const bssh_profile_store *store) {
+	/*
+	 * Sorted, because the order a store happens to return is the order
+	 * ids were minted in, and a person scanning for a name wants it
+	 * where they would look for it. Case-insensitively, for the same
+	 * reason the lookup that consumes these names is.
+	 *
+	 * The store is an argument with a default, like the orphan sweep
+	 * above and for the same reason: a caller that has one says so, and
+	 * a test can hand over its own rather than writing into whatever
+	 * the default location resolves to.
+	 */
+	const bssh_profile_store *owner = store ? store : bssh_profile_store::shared();
+	if (!owner) return QString();
+
+	QStringList names;
+	for (const bssh_profile_t &profile : owner->profiles()) {
+		if (!profile.name.isEmpty()) names.append(profile.name);
+	}
+	names.sort(Qt::CaseInsensitive);
+
+	QString out;
+	for (const QString &name : names) out += name + QLatin1Char('\n');
+	return out;
+}
+
 bool bssh_note_orphaned_secret(const QString &key) {
 	if (key.isEmpty()) return false;
 

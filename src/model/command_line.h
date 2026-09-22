@@ -56,6 +56,12 @@ struct bssh_command_line_t {
 	QString saved_session;
 
 	/*
+	 * `--load=?` asks what the option accepts rather than naming one.
+	 * Answered in main() like the other listings -- it needs the host
+	 * store, which the parser has no business opening.
+	 */
+
+	/*
 	 * What to run instead of a shell (-e), argv-style and already split.
 	 *
 	 * Empty means the login shell locally, and the remote's own shell

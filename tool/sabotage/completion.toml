@@ -28,8 +28,8 @@ expect = "the_completion_offers_the_options_the_parser_takes"
 [[sabotage]]
 name = "an option that takes a value has no case arm"
 file = "src/model/command_line.cpp"
-find = "\t\tif (value == QLatin1String(\"command\")) takes_a_command += spellings;\n\t\telse if (value == QLatin1String(\"directory\")) takes_a_directory += spellings;\n\t\telse takes_something_else += spellings;"
-replace = "\t\t(void) value;"
+find = "\t\tif (value == QLatin1String(\"command\")) takes_a_command += spellings;\n\t\telse if (value == QLatin1String(\"directory\")) takes_a_directory += spellings;\n\t\telse if (value == QLatin1String(\"session\")) takes_a_session += spellings;\n\t\telse takes_something_else += spellings;"
+replace = "\t\ttakes_something_else += spellings;"
 expect = "the_completion_offers_the_options_the_parser_takes"
 
 # The script never registers itself.
@@ -41,4 +41,17 @@ name = "the completion script registers nothing"
 file = "src/model/command_line.cpp"
 find = "\t        \"complete -F _beerssh -o default beerssh\\n\")"
 replace = "\t        \"# complete -F _beerssh -o default beerssh\\n\")"
+expect = "the_completion_offers_the_options_the_parser_takes"
+
+# `--load` stops completing session names.
+#
+# The word list, the case arms and the register line are all still
+# right; what goes is the one arm that asks the program what it can
+# open, so `beerssh --load <TAB>` falls back to filenames and offers a
+# directory listing where a session name belongs.
+[[sabotage]]
+name = "the completion stops asking which sessions exist"
+file = "src/model/command_line.cpp"
+find = "\t\telse if (value == QLatin1String(\"session\")) takes_a_session += spellings;"
+replace = ""
 expect = "the_completion_offers_the_options_the_parser_takes"

@@ -364,11 +364,24 @@ void command_line_test::the_completion_offers_the_options_the_parser_takes() {
 	 * bash will ever OFFER.
 	 */
 	static const QRegularExpression words(QStringLiteral("compgen -W \"([^\"]*)\""));
-	const QRegularExpressionMatch found = words.match(script);
-	QVERIFY2(found.hasMatch(), "the script offers no option list at all");
 
-	const QStringList offered = found.captured(1).split(QLatin1Char(' '),
-	                                                     Qt::SkipEmptyParts);
+	/*
+	 * The list of LITERAL flags, picked out by its contents rather than
+	 * by being the first `compgen -W` in the file. It was the first
+	 * until `--load` learned to complete session names by asking the
+	 * program, whose word list is a command substitution -- and this
+	 * assertion then read THAT as the options and reported every flag
+	 * missing. A position is not an identity.
+	 */
+	QString list;
+	QRegularExpressionMatchIterator lists = words.globalMatch(script);
+	while (lists.hasNext()) {
+		const QString candidate = lists.next().captured(1);
+		if (candidate.startsWith(QLatin1Char('-'))) list = candidate;
+	}
+	QVERIFY2(!list.isEmpty(), "the script offers no option list at all");
+
+	const QStringList offered = list.split(QLatin1Char(' '), Qt::SkipEmptyParts);
 
 	for (const bssh_option_t &option : bssh_command_line_options()) {
 		const QString name = QStringLiteral("--")
@@ -409,7 +422,52 @@ void command_line_test::the_completion_offers_the_options_the_parser_takes() {
 	 * offers the option list where a value belongs -- `beerssh -e
 	 * --help` as a thing to run. Asked of both spellings, because the
 	 * short one is what people type.
+	 *
+	 * And the arm has to be the RIGHT one, which is the half this check
+	 * was missing: every value shape falls back to a silent arm, so
+	 * "has an arm" stayed true with the classification deleted. Two
+	 * sabotages went MISSED against it -- the one that removes the
+	 * whole classification and the one that removes just the session
+	 * branch -- because both leave an arm behind, a silent one. The
+	 * relationship worth asserting is between the table's value_name
+	 * and what the arm DOES.
 	 */
+	static const QMap<QString, QString> completes_with = {
+		{ QStringLiteral("command"), QStringLiteral("compgen -c") },
+		{ QStringLiteral("directory"), QStringLiteral("compgen -d") },
+		{ QStringLiteral("session"), QStringLiteral("--load=?") },
+	};
+
+	for (const bssh_option_t &option : bssh_command_line_options()) {
+		const QString value = QString::fromLatin1(option.value_name);
+		if (!completes_with.contains(value)) continue;
+
+		const QString name = QStringLiteral("--")
+		        + QString::fromLatin1(option.name);
+
+		/*
+		 * The arm's BODY, sliced from its label to the `;;` that ends
+		 * it, so a match cannot come from a different arm further down.
+		 */
+		const int at = script.indexOf(name + QStringLiteral(")"));
+		const int bar = script.indexOf(name + QStringLiteral("|"));
+		const int start = at >= 0 ? at : bar;
+		QVERIFY2(start >= 0,
+		          qPrintable(QStringLiteral("%1 takes a %2 and has no case arm")
+		                             .arg(name, value)));
+
+		const int end = script.indexOf(QStringLiteral(";;"), start);
+		QVERIFY2(end > start, qPrintable(QStringLiteral("%1's case arm never ends")
+		                                          .arg(name)));
+
+		const QString arm = script.mid(start, end - start);
+		QVERIFY2(arm.contains(completes_with.value(value)),
+		          qPrintable(QStringLiteral("%1 takes a %2 and its arm does not "
+		                                     "use %3, so it completes nothing "
+		                                     "where it could")
+		                             .arg(name, value, completes_with.value(value))));
+	}
+
 	for (const bssh_option_t &option : bssh_command_line_options()) {
 		if (!*option.value_name) continue;
 

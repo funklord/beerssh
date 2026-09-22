@@ -26,6 +26,7 @@ private slots:
 	void a_device_setting_that_cannot_be_written_says_so();
 	void a_hand_typed_port_out_of_range_falls_back_rather_than_wrapping();
 	void a_hand_typed_override_meets_the_same_bounds_as_a_preset();
+	void the_saved_sessions_can_be_listed_without_opening_the_app();
 	void saves_and_lists_profiles();
 	void updates_rather_than_duplicating();
 	void removes_profiles();

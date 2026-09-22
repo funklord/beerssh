@@ -109,7 +109,8 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 			"optional +X+Y places the window, in pixels." },
 		{ "load", "", "session",
 			"Open a saved session by name, as PuTTY's -load does. The "
-			"name is the one the host list shows." },
+			"name is the one the host list shows. Run --load=? to list "
+			"them." },
 		{ "term-features", "", "spec",
 			"Which terminal extensions to speak, for testing a TUI "
 			"against a terminal that lacks one. A comma-separated list "
@@ -353,6 +354,7 @@ QString bssh_command_line_completion() {
 	QStringList flags;
 	QStringList takes_a_command;
 	QStringList takes_a_directory;
+	QStringList takes_a_session;
 	QStringList takes_something_else;
 
 	for (const bssh_option_t &option : bssh_command_line_options()) {
@@ -378,6 +380,7 @@ QString bssh_command_line_completion() {
 		const QString value = QString::fromLatin1(option.value_name);
 		if (value == QLatin1String("command")) takes_a_command += spellings;
 		else if (value == QLatin1String("directory")) takes_a_directory += spellings;
+		else if (value == QLatin1String("session")) takes_a_session += spellings;
 		else takes_something_else += spellings;
 	}
 
@@ -425,6 +428,27 @@ QString bssh_command_line_completion() {
 		        .arg(takes_a_command.join(QLatin1Char('|')));
 		out += QStringLiteral(
 		        "\t\t\tCOMPREPLY=( $(compgen -c -- \"$cur\") )\n"
+		        "\t\t\treturn 0\n"
+		        "\t\t\t;;\n");
+	}
+
+	/*
+	 * A session name, which only this installation knows -- so the
+	 * script asks the program rather than guessing. `--load=?` prints
+	 * them one per line with a zero status, which is the shape that
+	 * makes it readable here as well as by a person.
+	 *
+	 * `2>/dev/null` because a completion must never print: a program
+	 * that cannot read its host list would otherwise spray an error
+	 * across the command line somebody is still typing.
+	 */
+	if (!takes_a_session.isEmpty()) {
+		out += QStringLiteral("\t\t%1)\n")
+		        .arg(takes_a_session.join(QLatin1Char('|')));
+		out += QStringLiteral(
+		        "\t\t\tlocal IFS=$'\\n'\n"
+		        "\t\t\tCOMPREPLY=( $(compgen -W \"$(beerssh --load=? 2>/dev/null)\" "
+		        "-- \"$cur\") )\n"
 		        "\t\t\treturn 0\n"
 		        "\t\t\t;;\n");
 	}

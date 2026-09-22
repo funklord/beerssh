@@ -133,6 +133,31 @@ int main(int argc, char *argv[]) {
 		return 0;
 	}
 
+	/*
+	 * `--load=?`, answered here with the others and for the same reason:
+	 * a script asking what this program can open has no business needing
+	 * a display, and the shell completion that calls it runs in every
+	 * terminal somebody opens.
+	 *
+	 * The identity is set BEFORE the store is built, because the store's
+	 * default directory is QStandardPaths::AppConfigLocation and that
+	 * reads QCoreApplication's application name -- which is a static and
+	 * answers with no instance, but answers "beerssh" only once it has
+	 * been told. Without this the listing would read a different
+	 * directory from the one the app uses, and would confidently print
+	 * nothing.
+	 *
+	 * Setting them twice is harmless: the calls below are left where they
+	 * are so the ordinary path still reads in one place.
+	 */
+	if (line.saved_session == QStringLiteral("?")) {
+		QCoreApplication::setOrganizationDomain(QStringLiteral("vibes.se"));
+		QCoreApplication::setApplicationName(QStringLiteral("beerssh"));
+
+		out << bssh_saved_session_listing();
+		return 0;
+	}
+
 	int qt_argc = 1;
 	char *qt_argv[] = { argv[0], nullptr };
 	QApplication app(qt_argc, qt_argv);
