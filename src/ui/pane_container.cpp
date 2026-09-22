@@ -15,6 +15,7 @@
 #include "term/emulator.h"
 #include "platform/platform.h"
 #include "ui/layout_manager.h"
+#include "model/app_settings.h"
 #include "ui/pane_snap.h"
 #include "ui/terminal_view.h"
 
@@ -470,8 +471,14 @@ void bssh_pane_container::snap_divider_to_cells() {
 	 */
 	if (vertical && sizes.size() == 2) {
 		const int total = sizes.at(0) + sizes.at(1);
-		const int first = bssh_snap_column_divider(sizes.at(0), total, cell,
-		                                            BSSH_COLUMN_SNAP_RADIUS);
+		/*
+		 * The radius is the user's (sec 8.7 asks for it to be
+		 * configurable), read here rather than cached: a drag is a rare
+		 * event beside anything this class does per frame, and a cached
+		 * copy is one more thing for a settings change to have to reach.
+		 */
+		const int first = bssh_snap_column_divider(
+		        sizes.at(0), total, cell, bssh_app_settings().column_snap_radius());
 		if (first == sizes.at(0)) return;
 
 		sizes[0] = first;

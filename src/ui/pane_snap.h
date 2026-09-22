@@ -15,6 +15,16 @@
  */
 static const int BSSH_COLUMN_SNAP_RADIUS = 8;
 
+/*
+ * The most a stored radius may be. A magnet wider than the panes would
+ * hold the divider on the halfway line whatever the finger did, which
+ * reads as a divider that cannot be moved rather than as a setting
+ * somebody typed wrong -- so the value is clamped rather than trusted.
+ * Twenty is comfortably past the 5-10 sec 8.7 suggests and comfortably
+ * short of a phone's half-screen.
+ */
+static const int BSSH_MAX_COLUMN_SNAP_RADIUS = 20;
+
 /* Round a pane's extent down to whole character cells (sec 8.3), never
  * below one cell. */
 inline int bssh_snap_pane_extent(int extent, int cell) {

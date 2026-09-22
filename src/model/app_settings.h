@@ -142,6 +142,22 @@ public:
 	arrangement_t arrangement() const;
 	void set_arrangement(arrangement_t arrangement);
 
+	/*
+	 * How close to the halfway line the column's divider is pulled onto
+	 * it, in pixels (sec 8.7: "snap radius about 5-10px and
+	 * configurable"). The default is BSSH_COLUMN_SNAP_RADIUS, which is 8
+	 * and sits in that range.
+	 *
+	 * Zero is the meaningful end of the range rather than a degenerate
+	 * value: it turns the magnet off, which is the reason somebody would
+	 * come looking for this at all. Clamped to
+	 * BSSH_MAX_COLUMN_SNAP_RADIUS rather than trusted, because a number
+	 * in app.ini larger than the panes would pin the divider to the
+	 * halfway line and read as a divider that cannot be moved.
+	 */
+	int column_snap_radius() const;
+	void set_column_snap_radius(int pixels);
+
 	keyboard_t keyboard() const;
 	void set_keyboard(keyboard_t keyboard);
 

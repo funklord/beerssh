@@ -1,0 +1,46 @@
+# The column divider's magnet is the user's to set or switch off
+# (project.md sec 8.7: "snap radius about 5-10px and configurable").
+#
+# The radius was a constant, so the configurable half had never been
+# built and zero -- which turns the magnet off, and is the end somebody
+# actually comes looking for -- could not be reached at all.
+#
+# Three edits, because the setting, the clamp and the DIVIDER reading it
+# fail separately and a setting that agrees with itself proves none of
+# them.
+
+# The divider stops reading the setting.
+#
+# The setting still round trips and the page still offers it, so
+# everything a settings test can see is right; what is wrong is that
+# moving the slider does nothing to a divider.
+[[sabotage]]
+name = "the divider ignores the radius the user set"
+file = "src/ui/pane_container.cpp"
+find = "\t\t        sizes.at(0), total, cell, bssh_app_settings().column_snap_radius());"
+replace = "\t\t        sizes.at(0), total, cell, BSSH_COLUMN_SNAP_RADIUS);"
+expect = "the_divider_magnet_is_the_users_to_set_or_switch_off"
+
+# The clamp goes.
+#
+# A radius wider than the panes holds the divider on the halfway line
+# whatever the finger does, which reads as a divider that cannot be
+# moved rather than as a number somebody typed wrong.
+[[sabotage]]
+name = "a stored radius is trusted however large"
+file = "src/model/app_settings.cpp"
+find = "\treturn qBound(0, pixels, BSSH_MAX_COLUMN_SNAP_RADIUS);"
+replace = "\treturn pixels;"
+expect = "the_divider_magnet_is_the_users_to_set_or_switch_off"
+
+# An unset radius stops meaning the default.
+#
+# Zero is a legal stored value here -- it is the switch-off -- so a
+# missing key falling through to it would silently turn the magnet off
+# for everybody who has never opened the settings page.
+[[sabotage]]
+name = "an unset radius reads as no magnet at all"
+file = "src/model/app_settings.cpp"
+find = "\tif (!stored.isValid()) return BSSH_COLUMN_SNAP_RADIUS;"
+replace = "\tif (!stored.isValid()) return 0;"
+expect = "the_divider_magnet_is_the_users_to_set_or_switch_off"

@@ -16,6 +16,7 @@
 #include <QFrame>
 #include <QLabel>
 
+#include "ui/pane_snap.h"
 #include "ui/scroll_guard.h"
 #include "ui/wrapped_note.h"
 #include "term/colour_scheme.h"
@@ -98,6 +99,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
       m_theme(nullptr),
       m_scrollbar(nullptr),
       m_arrangement(nullptr),
+      m_snap_radius(nullptr),
+      m_snap_radius_value(nullptr),
       m_status_line(nullptr),
       m_window_title(nullptr),
       m_context_menu(nullptr),
@@ -454,6 +457,47 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	                        "scrolls."),
 	        this);
 	if (on_this_page(SECTION_APPEARANCE, arrangement_note)) form->addRow(arrangement_note);
+
+	/*
+	 * How far the stacked divider is pulled onto the halfway line (sec
+	 * 8.7 asks for the radius to be configurable). A slider rather than a
+	 * spin box for the reason the brightness one is: a thumb cannot hit a
+	 * spin box's arrows, and this is a touch surface first.
+	 *
+	 * Zero is the end somebody actually comes here for -- it turns the
+	 * magnet off -- so the range starts there rather than at sec 8.7's
+	 * suggested five.
+	 */
+	QWidget *snap_row = new QWidget(this);
+	QHBoxLayout *snap_layout = new QHBoxLayout(snap_row);
+	snap_layout->setContentsMargins(0, 0, 0, 0);
+
+	m_snap_radius = new QSlider(Qt::Horizontal, snap_row);
+	m_snap_radius->setObjectName(QStringLiteral("snap_radius"));
+	/* Named for a reader: a slider in a box layout gets no buddy. */
+	m_snap_radius->setAccessibleName(QStringLiteral("Divider snap"));
+	m_snap_radius->setRange(0, BSSH_MAX_COLUMN_SNAP_RADIUS);
+	m_snap_radius->setSingleStep(1);
+	m_snap_radius->setPageStep(4);
+	m_snap_radius->setToolTip(
+	        QStringLiteral("How close to half the divider between stacked terminals "
+	                        "has to be before it settles there. Zero turns it off."));
+
+	m_snap_radius_value = new QLabel(snap_row);
+	m_snap_radius_value->setMinimumWidth(
+	        m_snap_radius_value->fontMetrics().horizontalAdvance(QStringLiteral("00 px")));
+
+	snap_layout->addWidget(m_snap_radius, 1);
+	snap_layout->addWidget(m_snap_radius_value);
+
+	if (on_this_page(SECTION_APPEARANCE, snap_row))
+		form->addRow(QStringLiteral("Divider snap"), snap_row);
+
+	QLabel *snap_note = bssh_wrapped_note(
+	        QStringLiteral("Only stacked terminals have a divider to drag. Zero means "
+	                        "it settles wherever you leave it."),
+	        this);
+	if (on_this_page(SECTION_APPEARANCE, snap_note)) form->addRow(snap_note);
 
 	/*
 	 * What the status line says, or that it says nothing (sec 8.4). It
@@ -1025,6 +1069,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 
 	const int arrangement_index = m_arrangement->findData(int(settings.arrangement()));
 	m_arrangement->setCurrentIndex(arrangement_index < 0 ? 0 : arrangement_index);
+	m_snap_radius->setValue(settings.column_snap_radius());
+	m_snap_radius_value->setText(QStringLiteral("%1 px").arg(settings.column_snap_radius()));
 
 	const int status_index = m_status_line->findData(int(settings.status_line()));
 	m_status_line->setCurrentIndex(status_index < 0 ? 0 : status_index);
@@ -1091,6 +1137,10 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 			s.set_arrangement(bssh_app_settings::arrangement_t(
 			        m_arrangement->currentData().toInt()));
 		});
+	});
+	connect(m_snap_radius, &QSlider::valueChanged, this, [this](int value) {
+		m_snap_radius_value->setText(QStringLiteral("%1 px").arg(value));
+		commit([value](bssh_app_settings &s) { s.set_column_snap_radius(value); });
 	});
 	connect(m_status_line, &QComboBox::currentIndexChanged, this, [this] {
 		commit([this](bssh_app_settings &s) {

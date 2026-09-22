@@ -3820,6 +3820,17 @@ already correct for a different reason: `note_content_changed()` bumps
 the revision the cache is keyed on and announces the text update, which
 is the fix §9.5 recorded when the trim case found it.
 
+**And the reset path was swept the same way and came back clean, which
+is worth recording with its method.** The emulator's other accumulators
+-- `apc_buffer`, `osc_buffer` and `selection_buffer` -- all clear on
+their sequence's INITIAL fragment, so a half-arrived one cannot prefix
+the next. The transmission buffer was the only member of that family
+without such a clear, because it is the one that stitches across several
+complete payloads, which is exactly why it was the one that broke.
+Synchronised output has carried a 150 ms release since it was written,
+for the same dead-program case. So the reset verb has one fix rather
+than four, and the next reader has the list.
+
 **The limit of that enumeration, stated so nobody reads it as wider than
 it is:** it was a grep for `qint64` members named for a line or a row in
 `src/ui` and `src/term` headers, plus the two containers above. A class
@@ -6748,11 +6759,10 @@ shown list and scrolls, so this paragraph's first gap is closed and the
 scroll area exists. What is still open is the scroll's FEEL and the two
 column-level selector states -- `scroll terminals` and `move terminals`,
 the second of which is the touch reordering that dissolved with the tabs.
-The snap radius is a constant
-(`BSSH_COLUMN_SNAP_RADIUS`, 8px) rather than the configurable value this
-section asks for -- there is no settings plumbing for it yet. And the
-resize/snap FEEL owes the same device pass every touch surface here does:
-the model is tested, the thumb is not.
+The snap radius is the user's since
+2026-09-22 (see below). And the resize/snap FEEL owes the same device
+pass every touch surface here does: the model is tested, the thumb is
+not.
 
 **The column's scrolling snaps too, BUILT 2026-09-22.** The section
 asked for it in the same breath as the divider -- "so a terminal starts
@@ -6784,6 +6794,31 @@ reach. Written down for the same reason the full-screen reading below
 is: a later session should not have to re-derive it from the gesture.
 Guarded by two more edits in `tool/sabotage/scrollable-column.toml`,
 both seen to fail naming their own test.
+
+**The snap radius is configurable, BUILT 2026-09-22.** §8.7 asked for
+it in the same sentence as the magnet -- "snap radius about 5-10px and
+configurable" -- and it had been a constant since the column landed.
+`layout/column_snap_radius` carries it, defaulting to
+`BSSH_COLUMN_SNAP_RADIUS`, on a slider beside the arrangement rather
+than a spin box, for the reason the brightness one is a slider: a thumb
+cannot hit a spin box's arrows.
+
+**Zero is the end somebody comes here for, which is why the range starts
+below §8.7's five.** The reason to go looking for this setting is to
+turn the magnet off; a range of 5 to 10 offers only degrees of a thing
+you cannot decline. The other end is clamped at
+`BSSH_MAX_COLUMN_SNAP_RADIUS`, because a magnet wider than the panes
+holds the divider on the halfway line whatever the finger does, and that
+reads as a divider that cannot be moved rather than as a number somebody
+typed wrong.
+
+**The clamp on the way IN was untested and its sabotage said so.** The
+setter clamps too, so a value written through it is already in range and
+the reader's clamp was never asked -- two assertions passing throughout
+while the edit that removed it stayed green. The case the reader exists
+for is somebody editing `app.ini`, so the fixture writes the file the
+way they would. That is the MISSED verdict doing the job it was fixed
+for this morning, on the same day.
 
 **"Full-screen" is the one-terminal case, read from the geometry.** A
 two-pane column cannot reach one-full-screen by dragging, because

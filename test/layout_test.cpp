@@ -58,6 +58,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
+#include <QSettings>
 #include <QSplitter>
 #include <QVBoxLayout>
 #include <QSplitterHandle>
@@ -9039,6 +9040,122 @@ void layout_test::the_settings_page_says_what_unset_gives_you() {
 		          qPrintable(QStringLiteral("the note says %1, the default is %2")
 		                             .arg(note->text(), choices->itemText(row))));
 	}
+}
+
+void layout_test::the_divider_magnet_is_the_users_to_set_or_switch_off() {
+	/*
+	 * sec 8.7: "magnetic snapping to those two positions, snap radius
+	 * about 5-10px and configurable". The radius was a constant, so the
+	 * configurable half was never built -- and zero, which turns the
+	 * magnet off, is the end somebody actually comes looking for.
+	 *
+	 * Two claims, and they fail differently. The setting has to round
+	 * trip and refuse a number that would pin the divider; and the
+	 * DIVIDER has to read it, which the setting agreeing with itself
+	 * cannot show.
+	 */
+	bssh_app_settings store;
+	const int was = store.column_snap_radius();
+
+	QCOMPARE(store.column_snap_radius(), BSSH_COLUMN_SNAP_RADIUS);
+
+	store.set_column_snap_radius(3);
+	QCOMPARE(bssh_app_settings().column_snap_radius(), 3);
+
+	/*
+	 * Clamped rather than trusted: a radius wider than the panes holds
+	 * the divider on the halfway line whatever the finger does, which
+	 * reads as a divider that cannot be moved.
+	 */
+	store.set_column_snap_radius(9000);
+	QCOMPARE(bssh_app_settings().column_snap_radius(), BSSH_MAX_COLUMN_SNAP_RADIUS);
+	store.set_column_snap_radius(-4);
+	QCOMPARE(bssh_app_settings().column_snap_radius(), 0);
+
+	/*
+	 * And on the way IN, which the two above cannot reach: the setter
+	 * clamps as well, so a value written through it is already in range
+	 * and the reader's clamp is never asked. The case the reader exists
+	 * for is somebody editing app.ini, so the fixture has to write the
+	 * file the way they would. Its sabotage was MISSED until this was
+	 * here, with the two assertions above passing throughout.
+	 */
+	{
+		QSettings raw(store.path(), QSettings::IniFormat);
+		raw.setValue(QStringLiteral("layout/column_snap_radius"), 9000);
+		raw.sync();
+	}
+	QCOMPARE(bssh_app_settings().column_snap_radius(), BSSH_MAX_COLUMN_SNAP_RADIUS);
+
+	/*
+	 * And the divider reads it. Two panes in a column, the splitter set
+	 * a few pixels off the halfway line -- inside the default magnet and
+	 * outside a switched-off one -- so the same gesture has to land in
+	 * two different places depending only on the setting.
+	 */
+	const forced_touch_t desktop(0);
+
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(400);
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+
+	QList<bssh_session *> pair;
+	for (int i = 0; i < 2; ++i)
+		pair.append(registry.create(named(QStringLiteral("d%1").arg(i))));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(400, 600);
+	layout.set_intent(pair);
+	QCoreApplication::processEvents();
+	QVERIFY(QTest::qWaitForWindowExposed(&container));
+	QCOMPARE(container.pane_count(), 2);
+
+	bssh_terminal_view *top = container.view_at(0);
+	QVERIFY(top);
+	const int cell = top->cell_height();
+	QVERIFY(cell > 1);
+
+	QSplitter *splitter = container.findChild<QSplitter *>();
+	QVERIFY(splitter);
+
+	const QList<int> sizes = splitter->sizes();
+	QCOMPARE(sizes.size(), 2);
+	const int total = sizes.at(0) + sizes.at(1);
+
+	/*
+	 * A position inside the default magnet whose own row-floor is NOT
+	 * the halfway line's, so the two settings give different answers.
+	 * Searched rather than computed: which side of the halfway line the
+	 * nearest row boundary falls on depends on the widget's height and
+	 * the font's cell, and a fixed offset happens to separate nothing at
+	 * some of them -- which is a test that passes while asking nothing.
+	 */
+	const int half = total / 2;
+	int near = -1;
+	for (int d = 1; d <= BSSH_COLUMN_SNAP_RADIUS && near < 0; ++d) {
+		if (bssh_snap_pane_extent(half - d, cell) != bssh_snap_pane_extent(half, cell))
+			near = half - d;
+		else if (bssh_snap_pane_extent(half + d, cell) != bssh_snap_pane_extent(half, cell))
+			near = half + d;
+	}
+	QVERIFY2(near > 0, "no position inside the magnet floors to a different row, "
+	                    "so this geometry cannot tell the settings apart");
+
+	store.set_column_snap_radius(BSSH_COLUMN_SNAP_RADIUS);
+	splitter->setSizes(QList<int>() << near << (total - near));
+	container.snap_divider_to_cells();
+	QCOMPARE(splitter->sizes().at(0), bssh_snap_pane_extent(half, cell));
+
+	store.set_column_snap_radius(0);
+	splitter->setSizes(QList<int>() << near << (total - near));
+	container.snap_divider_to_cells();
+	QVERIFY2(splitter->sizes().at(0) != bssh_snap_pane_extent(half, cell),
+	          "the magnet was switched off and the divider still jumped to half");
+	QCOMPARE(splitter->sizes().at(0), bssh_snap_pane_extent(near, cell));
+
+	bssh_app_settings().set_column_snap_radius(was);
 }
 
 void layout_test::a_desktop_can_be_asked_for_the_column() {

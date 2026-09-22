@@ -131,6 +131,8 @@ private:
 	QComboBox *m_theme;
 	QComboBox *m_scrollbar;
 	QComboBox *m_arrangement;
+	QSlider *m_snap_radius;
+	QLabel *m_snap_radius_value;
 	QComboBox *m_status_line;
 	QLineEdit *m_window_title;
 	QComboBox *m_context_menu;

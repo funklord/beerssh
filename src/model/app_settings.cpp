@@ -1,6 +1,7 @@
 #include "model/app_settings.h"
 
 #include "platform/platform.h"
+#include "ui/pane_snap.h"
 
 #include <QColor>
 
@@ -151,6 +152,23 @@ bssh_app_settings::arrangement_t bssh_app_settings::arrangement() const {
 void bssh_app_settings::set_arrangement(arrangement_t arrangement) {
 	store(QStringLiteral("layout/arrangement"),
 	       QString::fromLatin1(BSSH_ARRANGEMENT_KEYS[int(arrangement)]));
+}
+
+int bssh_app_settings::column_snap_radius() const {
+	const QVariant stored = value(QStringLiteral("layout/column_snap_radius"),
+	                               QVariant());
+	if (!stored.isValid()) return BSSH_COLUMN_SNAP_RADIUS;
+
+	bool ok = false;
+	const int pixels = stored.toInt(&ok);
+	if (!ok) return BSSH_COLUMN_SNAP_RADIUS;
+
+	return qBound(0, pixels, BSSH_MAX_COLUMN_SNAP_RADIUS);
+}
+
+void bssh_app_settings::set_column_snap_radius(int pixels) {
+	store(QStringLiteral("layout/column_snap_radius"),
+	       qBound(0, pixels, BSSH_MAX_COLUMN_SNAP_RADIUS));
 }
 
 bssh_app_settings::keyboard_t bssh_app_settings::keyboard() const {
