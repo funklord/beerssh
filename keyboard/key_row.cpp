@@ -149,11 +149,47 @@ void bssh_key_row::set_layout(const QString &id) {
 		case bssh_key_t::FUNCTION_TOGGLE:
 			add_function_toggle(key.label);
 			break;
+		case bssh_key_t::SPACER:
+			add_spacer();
+			break;
 		}
 	}
 
 	row->addStretch(1);
 	refresh_modifier_buttons();
+}
+
+void bssh_key_row::add_spacer() {
+	/*
+	 * `gap` is one of the words a custom row may be written with
+	 * (sec 6.2), and it did nothing at all: this switch had no case for
+	 * SPACER, so the token parsed, the editor's live preview showed the
+	 * row without it, and the keys after it closed up. The compiler had
+	 * been saying so -- `enumeration value 'SPACER' not handled in
+	 * switch` -- in a warning that rode along with the build for as long
+	 * as the token existed.
+	 *
+	 * A fixed width rather than a stretch, and the width of a key. The
+	 * enum's own comment says what a spacer is for: "the geometry has to
+	 * hold the space or every key after it shifts", which is a gap you
+	 * can see and count rather than however much room happens to be
+	 * spare. A stretch would also fight the row's own trailing stretch
+	 * and share the slack with it, so a row with two gaps would space
+	 * differently from one with one.
+	 *
+	 * No button, for the reason the soft keyboard gives at its own
+	 * spacer: "a button that does nothing is worse than a gap -- it
+	 * invites a press and answers with silence." Not appended to
+	 * m_buttons either, which is the list the modifier refresh and the
+	 * touch-height walk read: a spacer is not a key and must not be
+	 * counted as one.
+	 */
+	QWidget *gap = new QWidget(m_keys);
+	gap->setFixedWidth(BSSH_TOUCH_TARGET_DP);
+	gap->setFocusPolicy(Qt::NoFocus);
+
+	m_keys->layout()->addWidget(gap);
+	gap->show();
 }
 
 void bssh_key_row::add_function_toggle(const QString &label) {

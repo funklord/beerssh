@@ -4289,6 +4289,75 @@ silently governs nothing. So the test asserts the POPULATION against
 the sabotage that shortens the loop by one is caught by that assertion
 alone.
 
+**The same enumeration was run on the other two records and came back
+clean, which is worth its method rather than a sentence saying somebody
+looked.** The host profile holds thirteen fields; four have no control
+in the host editor and all four are right to have none --
+`has_stored_password` is the secret store's flag rather than a field
+(the remember-me offer is on the password prompt), and `local`, `shell`
+and `working_directory` describe a session the command line launches,
+which §8.5 settled deliberately: the local shell is "synthetic rather
+than stored ... there is nothing to save". The device settings hold
+twenty-four setters; twenty-three have a control and the twenty-fourth,
+`custom_keyboard_layout`, is file-only on purpose -- its own comment
+says a ~47-row layout "gets a section of its own where each line is a
+slot a person can find and change", which is §10.6's argument that
+`app.ini` is meant to be opened.
+
+**The dialog went into both sweeps the day it was written**, which is
+the habit §12.3's own record asks for: the phone-fit one, where it
+caught the checkbox floor before anybody saw it on a device, and the
+accessibility one, where fourteen checkboxes make it the surface with
+the most controls in the list. Both carry a population assertion, so
+both had their numbers moved with it -- a sweep whose count still says
+six surfaces after a seventh is added is a sweep that has stopped
+counting.
+
+**And the compiler had been reporting a defect for as long as the token
+existed.** `gap` is one of the words a custom key row may be written
+with (§6.2's "the row is written as words"), and it did nothing at all:
+the row's build switch had no case for `SPACER`, so the token parsed,
+the editor's live preview drew a row without it, and the keys after it
+closed up. A word in the vocabulary that is accepted and ignored is
+worse than one refused.
+
+`enumeration value 'SPACER' not handled in switch` had been riding along
+in every build, in a wall of `-Wreorder` noise nobody reads. **The
+warning was not a style complaint; it was the finding.** It is a fixed
+width now, a key's, rather than a stretch -- the enum's own comment says
+"the geometry has to hold the space or every key after it shifts", which
+is a gap you can count rather than however much room is spare, and a
+stretch would have shared the slack with the row's own trailing one.
+
+**And the first assertion passed for the layout's reason rather than the
+fix's**, which the second sabotage caught: `wide > narrow` is true of a
+ZERO-width placeholder, because a box layout charges its own spacing for
+the extra item. It asks for a key's width now. That is the fourth time
+today a MISSED verdict has found a true assertion about the wrong thing
+-- the clamp that the setter had already satisfied, the `contains` that
+matched a commented-out line, this, and the arrangement pair that
+started it.
+
+**And one more claim that outlived its subject, found beside the
+others.** `layout_manager.h` described `max_panes()` as "a column shows
+at most two (§8.7: one full-screen or two half-screen), regardless of
+width" -- true of the column's first increment and of nothing since.
+Eight lines above it, `BSSH_COLUMN_PANE_LIMIT`'s own comment says the
+opposite and is right: "a sanity ceiling, not a design cap: it holds
+every session". **The header contradicted itself, and the stale half is
+the one a reader meets first** -- somebody following it would conclude
+that Split must be refused at two panes, which is the opposite of what
+a column is for. The phrase remains true of the DIVIDER's detent, which
+is where `pane_snap.h` still says it, so the fix is to stop the
+function's own comment claiming it about the CAP.
+
+**And every preset field is written BACK, which is the same question
+pointed the other way.** A control that never reaches `save()` loses
+what somebody just typed, and this editor has lost host settings that
+way before -- the comment at the top of `save()` records it. All
+fifteen are either assigned there or carried in `m_current` by a control
+of their own.
+
 **And `to_spec()` has its consumer.** It had none: it writes the off
 ones as `-name` and nothing when they are all on, which is exactly the
 shape a checkbox dialog produces and exactly what a preset wants to

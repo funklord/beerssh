@@ -1,0 +1,28 @@
+# `gap` in a custom key row (project.md sec 6.2).
+#
+# The row is written as words, and `gap` is one of them -- it parses,
+# reaches the row, and did nothing at all: the build switch had no case
+# for SPACER, so the editor's live preview drew a row without it and the
+# keys after it closed up. A word in the vocabulary that is accepted and
+# ignored is worse than one refused.
+#
+# The compiler had been saying so for as long as the token existed:
+# `enumeration value 'SPACER' not handled in switch`, in every build.
+
+# The gap goes back to holding nothing.
+[[sabotage]]
+name = "a gap in a custom key row reserves no space"
+file = "keyboard/key_row.cpp"
+find = "\t\tcase bssh_key_t::SPACER:\n\t\t\tadd_spacer();\n\t\t\tbreak;"
+replace = "\t\tcase bssh_key_t::SPACER:\n\t\t\tbreak;"
+expect = "a_gap_in_a_custom_key_row_holds_its_space"
+
+# And a zero-width placeholder, which is the fix that looks right and is
+# not: a widget is added, a count of children rises, and the geometry --
+# the whole point of a spacer -- is unchanged.
+[[sabotage]]
+name = "the gap is a widget with no width"
+file = "keyboard/key_row.cpp"
+find = "\tgap->setFixedWidth(BSSH_TOUCH_TARGET_DP);"
+replace = "\tgap->setFixedWidth(0);"
+expect = "a_gap_in_a_custom_key_row_holds_its_space"

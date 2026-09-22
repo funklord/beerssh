@@ -6302,6 +6302,71 @@ void layout_test::focus_reporting_follows_the_focused_pane() {
 	QCOMPARE(b->emulator()->take_output(), QByteArray());
 }
 
+void layout_test::a_gap_in_a_custom_key_row_holds_its_space() {
+	/*
+	 * `gap` is one of the words a custom row may be written with (sec
+	 * 6.2's "the row is written as words"), and it did nothing at all.
+	 * The row's build switch had no case for SPACER, so the token
+	 * parsed, the editor's live preview drew a row without it, and the
+	 * keys after it closed up -- a word in the vocabulary that is
+	 * accepted and ignored, which is worse than one refused.
+	 *
+	 * The COMPILER had been saying so for as long as the token existed:
+	 * `enumeration value 'SPACER' not handled in switch`, riding along
+	 * in every build. This is that warning turned into an assertion.
+	 *
+	 * Asserted on the row's WIDTH rather than on a widget count, because
+	 * what a spacer is for is the geometry: the enum's own comment says
+	 * "the geometry has to hold the space or every key after it shifts".
+	 * A count would pass against a zero-width placeholder.
+	 */
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	const QList<bssh_key_t> plain = bssh_parse_key_row(QStringLiteral("esc tab ctrl"));
+	const QList<bssh_key_t> spaced =
+	        bssh_parse_key_row(QStringLiteral("esc tab gap ctrl"));
+
+	/*
+	 * The parser keeps the gap, which is the precondition: it skips a
+	 * token it does not know, so a `gap` it dropped would make the
+	 * comparison below trivially equal and the test would pass while
+	 * asserting nothing.
+	 */
+	QCOMPARE(plain.size(), 3);
+	QCOMPARE(spaced.size(), 4);
+
+	bssh_key_row_catalog &rows = bssh_key_row_catalog::instance();
+
+	QVERIFY2(rows.set_custom(plain), "the plain row was refused");
+	bssh_key_row without(&router);
+	without.set_layout(QStringLiteral("custom"));
+	without.adjustSize();
+	const int narrow = without.sizeHint().width();
+
+	QVERIFY2(rows.set_custom(spaced), "the spaced row was refused");
+	bssh_key_row with(&router);
+	with.set_layout(QStringLiteral("custom"));
+	with.adjustSize();
+	const int wide = with.sizeHint().width();
+
+	/*
+	 * A KEY's width, not merely wider. `wide > narrow` was the first
+	 * form and it passed against a zero-width placeholder, because a box
+	 * layout charges its own spacing for the extra item -- so the row
+	 * grew by a few pixels of spacing and the assertion read that as a
+	 * gap. The sabotage that sets the width to zero is what said so; the
+	 * suite was green and the reason was the layout rather than the fix.
+	 */
+	QVERIFY2(wide - narrow >= BSSH_TOUCH_TARGET_DP,
+	          qPrintable(QStringLiteral("a row with a gap wants %1px and the same "
+	                                     "row without one wants %2px -- %3px more, "
+	                                     "where a key is %4px, so the gap holds "
+	                                     "nothing a finger could see")
+	                             .arg(wide).arg(narrow)
+	                             .arg(wide - narrow).arg(BSSH_TOUCH_TARGET_DP)));
+}
+
 void layout_test::the_key_row_fits_a_phone() {
 	/*
 	 * The one touch surface that was not in every_touch_surface_fits_a_phone
@@ -8607,6 +8672,19 @@ void layout_test::every_touch_surface_names_its_controls() {
 		complaint = unnamed_controls(QStringLiteral("password prompt"), &prompt, &counted);
 		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
 	}
+	{
+		/*
+		 * sec 7.1's features dialog, added here the day it was written
+		 * rather than the next time somebody swept: it is fourteen
+		 * checkboxes, which is more controls than any other surface in
+		 * this list, and a reader meets every one of them.
+		 */
+		const QString nothing_off;
+		bssh_term_features_editor features(nothing_off);
+		complaint = unnamed_controls(QStringLiteral("terminal features"),
+		                              &features, &counted);
+		QVERIFY2(complaint.isEmpty(), qPrintable(complaint));
+	}
 
 	/*
 	 * And say how many were looked at, because a sweep that inspected
@@ -8616,8 +8694,8 @@ void layout_test::every_touch_surface_names_its_controls() {
 	 * this is the assertion that notices, and the number is the only
 	 * thing separating "all named" from "none found".
 	 */
-	QVERIFY2(counted >= 20,
-	          qPrintable(QStringLiteral("only %1 controls inspected across six "
+	QVERIFY2(counted >= 34,
+	          qPrintable(QStringLiteral("only %1 controls inspected across seven "
 	                                     "surfaces -- the sweep has stopped seeing them")
 	                             .arg(counted)));
 }

@@ -84,14 +84,24 @@ public:
 
 	/*
 	 * The effective cap right now, arrangement and width together. A
-	 * column shows at most two (sec 8.7: one full-screen or two
-	 * half-screen), regardless of width, because stacking is not what a
-	 * narrow window runs out of room for. Tiled defers to max_panes_for.
+	 * column ignores width entirely, because stacking is not what a
+	 * narrow window runs out of room for; tiled defers to max_panes_for.
 	 *
 	 * The "is there room for another pane" question every split and drop
 	 * asks goes through here rather than max_panes_for, or a phone in
 	 * column arrangement -- COMPACT, so max_panes_for is 1 -- would refuse
 	 * the second terminal the column exists to show.
+	 *
+	 * This used to say a column shows AT MOST TWO, citing sec 8.7's "one
+	 * full-screen or two half-screen", and it was true of the first
+	 * increment and of nothing since: the column learned to hold every
+	 * session, and BSSH_COLUMN_PANE_LIMIT became the sanity ceiling its
+	 * own comment describes. The two claims sat eight lines apart in this
+	 * header, and this is the one a reader meets first -- somebody
+	 * following it would conclude that Split must be refused at two
+	 * panes, which is the opposite of what a column is for. "One
+	 * full-screen or two half-screen" remains true of the DIVIDER's
+	 * detent, which is where pane_snap.h still says it.
 	 */
 	int max_panes() const;
 

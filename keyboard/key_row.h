@@ -66,6 +66,9 @@ private:
 	void add_text(const QString &label, char32_t ch);
 	void add_chord(const QString &label, char32_t ch, quint8 modifier);
 
+	/* `gap`: holds a key's width and draws nothing (sec 6.2). */
+	void add_spacer();
+
 	/* Fn: swaps the row for F1..F12 and back (sec 6.2). */
 	void add_function_toggle(const QString &label);
 	QAbstractButton *make_button(const QString &label);

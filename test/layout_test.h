@@ -240,6 +240,7 @@ private slots:
 	void the_built_in_keyboard_fits_a_phone();
 	void only_one_on_screen_keyboard_is_ever_shown();
 	void the_key_row_fits_a_phone();
+	void a_gap_in_a_custom_key_row_holds_its_space();
 
 	/*
 	 * Auto-repeat, on both on-screen keyboards at once (sec 6.2).
