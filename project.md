@@ -7076,6 +7076,39 @@ dispatch happens after `QMenu::exec` and a headless suite cannot reach
 it -- the same limit every other entry on this menu has, recorded here
 rather than left for somebody to assume otherwise.
 
+**A FOURTH went the same way, found 2026-09-22 by re-running that
+enumeration rather than by anybody meeting it.** *Detach to a Window* is
+on the menu bar's View menu, and its own comment states the case:
+*"It is also the only route a PANE has out of a window. Dragging one out
+is Alt and a drag, which works and which nobody discovers, so a menu
+item that does it is the discoverable half of the same gesture."* A
+phone has neither half -- no menu bar, and no Alt to hold -- so a
+session could be put into a column and never taken out of it. It is in
+the `Pane` group now, beside Split, where the menu bar has always kept
+it: they are the two halves of one question about where a session
+lives.
+
+**And it is refused where `tear_out` would refuse**, rather than offered
+and silently declining, which is §8.4's "a window will not empty
+itself" applied at the surface instead of one call in.
+
+**Show as Tab was the same mistake pointing the other way.** In a column
+`show_as_tab` returns early -- §8.7's column holds every session and has
+no bar to reach a dropped one by -- and the entry was enabled anyway, so
+on a phone it looked available and did nothing when chosen. An entry
+that declines silently is worse than one that is greyed out, which is
+the argument the paragraph above makes about `tear_out`; it is greyed
+out in a column now.
+
+**The fit gate had stopped being able to see this class of growth, and
+that is the more general finding.** `the_touch_terminal_menu_fits_a_phone`
+measured the top-level menu -- and verbs have been pushed into SUBMENUS
+precisely because the top level was full, four times now. So the one
+measurement guarding the menu was blind to exactly the place the next
+verb goes. It walks the groups too now, and asserts how many menus it
+measured, because a walk that stops finding groups reports success
+exactly as loudly as one that measured them all.
+
 **Everything currently built stays until it is replaced**, on the
 holder's instruction: *"We keep all the features we have for now and try
 to test our way forward."* Open, and cheap to settle when they come up:

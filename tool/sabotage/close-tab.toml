@@ -95,3 +95,29 @@ file = "src/ui/main_window.cpp"
 find = "\tif (m_current && m_current->emulator()) m_current->emulator()->reset_modes();"
 replace = ""
 expect = "choosing_a_menu_entry_does_what_it_says"
+
+# Detaching a pane into its own window had one route on one platform.
+#
+# The menu bar's entry says it: "the only route a PANE has out of a
+# window. Dragging one out is Alt and a drag, which works and which
+# nobody discovers." A phone has neither the menu bar nor the Alt, so
+# sec 8.3 put the verb on a desktop surface and sec 8.7 took that
+# surface away -- the same shape as Close and Duplicate above.
+[[sabotage]]
+name = "the terminal menu stops offering detach"
+file = "src/ui/main_window.cpp"
+find = "\tdetach->setObjectName(QStringLiteral(\"terminal_detach\"));"
+replace = "\tdetach->setObjectName(QStringLiteral(\"terminal_detach_disabled\"));"
+expect = "a_pane_can_leave_its_window_without_a_pointer"
+
+# And Show as Tab offered where it cannot act.
+#
+# show_as_tab returns early in a column -- sec 8.7's column holds every
+# session and has no bar to reach a dropped one by -- so an enabled entry
+# there is one that looks available and does nothing when chosen.
+[[sabotage]]
+name = "show as tab is offered in a column"
+file = "src/ui/main_window.cpp"
+find = "\t                    && m_layout->arrangement() != bssh_layout_manager::COLUMN);"
+replace = "\t                    );"
+expect = "a_pane_can_leave_its_window_without_a_pointer"

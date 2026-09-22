@@ -2510,12 +2510,19 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QCOMPARE(sizes.at(1)->text(), QStringLiteral("Zoom &Out"));
 	QCOMPARE(sizes.at(2)->text(), QStringLiteral("&Reset Zoom"));
 
+	/*
+	 * Five since 2026-09-22: Detach sits beside Split, where the menu bar
+	 * has always kept it, because they are the two halves of one question
+	 * about where a session lives. It was the last verb sec 8.3 had put
+	 * on a desktop-only surface and sec 8.7 had left there.
+	 */
 	const QList<QAction *> panes = actions.at(9)->menu()->actions();
-	QCOMPARE(panes.size(), 4);
+	QCOMPARE(panes.size(), 5);
 	QCOMPARE(panes.at(0)->text(), QStringLiteral("Split &Beside Current"));
 	QCOMPARE(panes.at(1)->text(), QStringLiteral("Show as &Tab"));
-	QCOMPARE(panes.at(2)->text(), QStringLiteral("Move Pane &Left"));
-	QCOMPARE(panes.at(3)->text(), QStringLiteral("Move Pane &Right"));
+	QCOMPARE(panes.at(2)->text(), QStringLiteral("&Detach to a Window"));
+	QCOMPARE(panes.at(3)->text(), QStringLiteral("Move Pane &Left"));
+	QCOMPARE(panes.at(4)->text(), QStringLiteral("Move Pane &Right"));
 
 	/*
 	 * Access keys on every verb, which is what makes the menu usable from
@@ -3903,6 +3910,73 @@ void terminal_view_test::the_scrollback_search_is_reachable_without_a_keyboard()
 	 */
 	QCOMPARE(menu_find->shortcut(),
 	          QKeySequence(bssh_input_router::binding_for(QStringLiteral("find"))));
+
+	delete menu;
+}
+
+void terminal_view_test::a_pane_can_leave_its_window_without_a_pointer() {
+	/*
+	 * The menu bar's own entry says it: "It is also the only route a PANE
+	 * has out of a window. Dragging one out is Alt and a drag, which
+	 * works and which nobody discovers." A phone has neither -- no menu
+	 * bar and no Alt -- so detaching was reachable on one platform only,
+	 * which is the shape sec 8.7 already found for Close and Duplicate.
+	 *
+	 * Asserted on the terminal menu because that is the surface touch
+	 * has, and the entry is in the Pane group beside Split for the same
+	 * reason the menu bar keeps Detach next to it: they are the two
+	 * halves of one question about where a session lives.
+	 */
+	const forced_touch_t phone(1);
+
+	bssh_main_window window;
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("detaches");
+	profile.host = QStringLiteral("detaches.example");
+	window.adopt_session(registry->create(profile));
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	QAction *detach = menu->findChild<QAction *>(QStringLiteral("terminal_detach"));
+	QVERIFY2(detach, "the terminal menu offers no way to move a pane into its "
+	                  "own window, so touch has none at all");
+
+	/*
+	 * And it is refused where it cannot act, rather than offered and
+	 * silently doing nothing: tear_out declines to empty a window, so a
+	 * lone session has nothing to detach.
+	 */
+	QVERIFY2(!detach->isEnabled(),
+	          "Detach was offered for the only session in the window, which "
+	          "tear_out refuses -- an entry that does nothing when chosen");
+
+	/*
+	 * Show as Tab is the same question asked of the other verb, and in a
+	 * column the answer is no: show_as_tab returns early there, because
+	 * a column holds every session and has no bar to reach a dropped one
+	 * by. The entry was enabled anyway.
+	 */
+	window.adopt_session(registry->create(profile));
+
+	delete menu;
+	menu = window.build_terminal_menu(&window);
+	QVERIFY(menu);
+
+	QAction *as_tab = menu->findChild<QAction *>(QStringLiteral("terminal_show_as_tab"));
+	QVERIFY(as_tab);
+	QVERIFY2(!as_tab->isEnabled(),
+	          "Show as Tab was offered in a column, where choosing it does "
+	          "nothing at all");
+
+	/* And with two sessions there is something to detach. */
+	QAction *detach_two = menu->findChild<QAction *>(QStringLiteral("terminal_detach"));
+	QVERIFY(detach_two);
+	QVERIFY2(detach_two->isEnabled(),
+	          "Detach stayed refused with two sessions, where it can act");
 
 	delete menu;
 }

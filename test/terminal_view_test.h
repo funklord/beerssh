@@ -141,6 +141,7 @@ private slots:
 	void the_terminal_menu_offers_zoom();
 	void the_scrollback_search_is_reachable_without_a_keyboard();
 	void a_session_can_be_closed_without_a_tab_bar();
+	void a_pane_can_leave_its_window_without_a_pointer();
 	void the_history_can_be_dropped_without_the_remote();
 	void dropping_the_history_takes_the_selection_with_it();
 	void dropping_the_history_takes_the_find_matches_too();

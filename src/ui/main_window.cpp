@@ -3954,7 +3954,33 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	 */
 	QAction *as_tab = pane_menu->addAction(QStringLiteral("Show as &Tab"));
 	as_tab->setObjectName(QStringLiteral("terminal_show_as_tab"));
-	as_tab->setEnabled(m_current && m_layout && m_layout->intent().size() > 1);
+	/*
+	 * Refused in a column, because show_as_tab refuses there: sec 8.7's
+	 * column holds every session and has no bar to reach a dropped one
+	 * by, so the verb returns early. Offered anyway, it was an entry
+	 * that looked available and did nothing when chosen -- which is the
+	 * thing tear_out's own comment calls worse than a refusal.
+	 */
+	as_tab->setEnabled(m_current && m_layout && m_layout->intent().size() > 1
+	                    && m_layout->arrangement() != bssh_layout_manager::COLUMN);
+
+	/*
+	 * The other way out of this window, and until now it had one route
+	 * on one platform. The menu bar's own entry says why it exists --
+	 * "the only route a PANE has out of a window. Dragging one out is
+	 * Alt and a drag, which works and which nobody discovers" -- and a
+	 * phone has neither the menu bar nor the Alt. Same shape as Close
+	 * and Duplicate above: a verb sec 8.3 put on a desktop surface, left
+	 * there when sec 8.7 took that surface away.
+	 *
+	 * Beside Split for the reason the menu bar keeps them together: they
+	 * are the two halves of one question about where a session lives.
+	 * Refused where tear_out would refuse, rather than offered and
+	 * silently declining -- "a window will not empty itself" (sec 8.4).
+	 */
+	QAction *detach = pane_menu->addAction(QStringLiteral("&Detach to a Window"));
+	detach->setObjectName(QStringLiteral("terminal_detach"));
+	detach->setEnabled(m_current && m_shown.size() > 1);
 
 	/*
 	 * Reordering, which is the one arrangement a touch user could not
@@ -4285,6 +4311,12 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	        menu->findChild<QAction *>(QStringLiteral("terminal_show_as_tab"));
 	if (chosen == as_tab) {
 		show_as_tab(m_current);
+		return;
+	}
+
+	const QAction *detach = menu->findChild<QAction *>(QStringLiteral("terminal_detach"));
+	if (chosen == detach) {
+		if (m_current) tear_out(m_current);
 		return;
 	}
 

@@ -9006,6 +9006,49 @@ void layout_test::the_touch_terminal_menu_fits_a_phone() {
 	                                     "screen in width")
 	                             .arg(wanted.width()).arg(BSSH_PHONE_DP)));
 
+	/*
+	 * And the GROUPS, which this stopped being able to see the moment it
+	 * worked. Verbs were pushed into submenus BECAUSE the top level was
+	 * full -- Text Size, Pane, Terminal, Session -- so a measurement of
+	 * the top level alone is now blind to exactly the place the next
+	 * verb will go. A submenu that outgrows the screen has the same
+	 * scroll arrows and the same entries behind a gesture nobody looks
+	 * for.
+	 */
+	int measured = 1;
+	for (QAction *action : menu->actions()) {
+		QMenu *group = action->menu();
+		if (!group) continue;
+
+		++measured;
+		group->ensurePolished();
+		const QSize group_wanted = group->sizeHint();
+
+		QVERIFY2(group_wanted.height() <= BSSH_PHONE_TALL_DP,
+		          qPrintable(QStringLiteral("the %1 group wants %2px of a %3px screen, "
+		                                     "with %4 entries")
+		                             .arg(action->text())
+		                             .arg(group_wanted.height())
+		                             .arg(BSSH_PHONE_TALL_DP)
+		                             .arg(group->actions().size())));
+		QVERIFY2(group_wanted.width() <= BSSH_PHONE_DP,
+		          qPrintable(QStringLiteral("the %1 group wants %2px of a %3px screen "
+		                                     "in width")
+		                             .arg(action->text())
+		                             .arg(group_wanted.width()).arg(BSSH_PHONE_DP)));
+	}
+
+	/*
+	 * The population, asserted alongside the verdict. A walk that stops
+	 * finding groups reports success exactly as loudly as one that
+	 * measured them all -- the vacuous pass, arriving in the gate that
+	 * was written to stop this menu growing unnoticed.
+	 */
+	QVERIFY2(measured >= 5,
+	          qPrintable(QStringLiteral("only %1 menu(s) were measured, so the groups "
+	                                     "this check exists for were not walked")
+	                             .arg(measured)));
+
 	delete menu;
 }
 
