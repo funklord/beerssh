@@ -10724,6 +10724,37 @@ part that could not be settled by reading. It refuses if
 `build-tests/beerssh_test` is missing after the container's own `make
 test`, and the fix rested on that being where the build puts it. It is.
 
+**Every gate was run on 2026-09-22 to ask the question this entry is
+about, rather than waiting to trip over the next one.** §12.2e's lesson
+is that a gate stops silently: the suite stays green, and the thing that
+would report the gap is the thing not running. So each was run and its
+result read, on this machine, with what it needs:
+
+    make check (style + test)   passes
+    make check-ci               passes, ubuntu:24.04
+    make check-deb              passes, debian:trixie
+    make check-ssh              passes, against /usr/sbin/sshd
+    make check-keepalive        passes, 66s, in the container
+    make check-fonts            passes, 8 families
+    make check-handoff          passes, both fault modes detectable
+    check-apk / check-java      need the Android SDK and NDK; not here
+
+**And the live SSH phases were enumerated against the gates that run
+them**, because a phase no gate selects is a test nothing executes --
+the same shape as a sabotage naming a test that cannot fail.
+`live_ssh_test` names six: `drop`, `reconnect`, `rekeyed`, `trust`,
+`tunnel_black_hole`, `tunnel_drop`. `check-ssh` runs `trust`,
+`tunnel_drop` and `rekeyed`; `check-keepalive` runs the other three. The
+two sets are equal -- no orphan either way.
+
+**The skip counts are the thing to read carefully, and they are
+honest.** `check-ssh` reports "3 passed, 20 skipped" for its last phase
+and `check-keepalive` "8 passed, 15 skipped", which looks alarming and
+is the harness working: each phase runs the whole binary and the tests
+belonging to other phases say so rather than pretending. What would be
+worth worrying about is a phase nobody runs, which is what the
+enumeration above exists to answer.
+
 ### 12.2f The live-only sabotage is provable by the runner — **[DONE 2026-09-07]**
 
 `sabotage.py` took `make test` as the suite and nothing else, so
