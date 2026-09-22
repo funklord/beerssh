@@ -15,6 +15,8 @@
 
 #include <QAccessible>
 
+#include <QGesture>
+#include <QGestureEvent>
 #include <QFontDatabase>
 #include <QPen>
 #include <QFontMetricsF>
@@ -97,6 +99,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_input_router(nullptr),
       m_font_size(BSSH_DEFAULT_POINT_SIZE),
       m_font_zoom(0),
+      m_pinch_scale(1.0),
       m_cursor_style(QStringLiteral("block")),
       m_cursor_on(true),
       m_cursor_blink_wanted(false),
@@ -212,6 +215,21 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	        default_font_ligatures());
 
 	setFocusPolicy(Qt::StrongFocus);
+
+	/*
+	 * Pinch-to-zoom (sec 9.5). Grabbed rather than recognised by hand:
+	 * Qt's own recogniser wants two touch points and reports a scale,
+	 * and a hand-rolled one would be a second answer to "what is a
+	 * pinch" living in a terminal widget.
+	 *
+	 * It does not disturb the one-finger gestures sec 8.7's input
+	 * selector routes. Those arrive as the mouse events Qt synthesises
+	 * from the primary touch point, and the pinch recogniser needs a
+	 * second point before it claims anything -- so a scroll, a select,
+	 * a pane move and a column pan all reach mousePressEvent exactly as
+	 * they did.
+	 */
+	grabGesture(Qt::PinchGesture);
 
 	/*
 	 * Assistive technology sees a terminal rather than an anonymous
@@ -609,6 +627,72 @@ void bssh_terminal_view::set_focus_border(bool focused) {
 
 void bssh_terminal_view::scroll_to_live() {
 	set_scroll_offset(0);
+}
+
+bool bssh_terminal_view::event(QEvent *event) {
+	/*
+	 * Pinch-to-zoom (sec 9.5). Qt recognises the gesture from the touch
+	 * points and delivers it here; there is no pinchEvent() to override.
+	 *
+	 * It emits the SAME signal Ctrl+wheel and the Text Size menu emit,
+	 * so every question already settled about zooming stays settled: the
+	 * session owns the number, the clamp lives in rebuild_font, and the
+	 * value is not persisted. This adds an input route and decides
+	 * nothing else -- whether the zoom should outlive the session is the
+	 * open question sec 9.5 records, and it is untouched.
+	 */
+	if (event->type() == QEvent::Gesture) {
+		QGestureEvent *gestures = static_cast<QGestureEvent *>(event);
+		if (QGesture *found = gestures->gesture(Qt::PinchGesture)) {
+			QPinchGesture *pinch = static_cast<QPinchGesture *>(found);
+			handle_pinch(pinch->scaleFactor());
+			gestures->accept(Qt::PinchGesture);
+			return true;
+		}
+	}
+
+	return QWidget::event(event);
+}
+
+void bssh_terminal_view::handle_pinch(qreal change) {
+	/*
+	 * A step per 20% of scale, accumulated from the INCREMENTAL factor
+	 * each update carries rather than from the gesture's total.
+	 *
+	 * That choice is what makes this testable at all, and it is not a
+	 * compromise. Reading the total needs to know where each pinch
+	 * BEGAN, and a gesture's state is set by Qt's recogniser through
+	 * private friends -- no test can produce a GestureStarted, so the
+	 * reset branch would have been the one thing here nothing could
+	 * reach. Accumulating instead has no beginning to detect: a new
+	 * pinch simply continues from whatever fraction of a step was left
+	 * over, which is at most one step's worth and is what a user who
+	 * pinches twice in the same direction would expect anyway.
+	 *
+	 * Steps rather than a continuous scale because the zoom is an
+	 * integer point-size offset (sec 9.5): the grid is whole cells and
+	 * there is no half a point to show. A continuous factor would have
+	 * to be rounded to these same steps one layer further from the
+	 * thing that owns them.
+	 */
+	static const qreal step = 1.2;
+
+	if (change <= 0.0) return;
+	if (m_pinch_scale <= 0.0) m_pinch_scale = 1.0;
+
+	m_pinch_scale *= change;
+
+	int steps = 0;
+	while (m_pinch_scale >= step) {
+		m_pinch_scale /= step;
+		++steps;
+	}
+	while (m_pinch_scale <= 1.0 / step) {
+		m_pinch_scale *= step;
+		--steps;
+	}
+
+	if (steps != 0) emit zoom_requested(steps);
 }
 
 void bssh_terminal_view::wheelEvent(QWheelEvent *event) {

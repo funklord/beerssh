@@ -137,6 +137,7 @@ private slots:
 	void a_resolve_moves_the_base_under_the_zoom();
 	void the_zoom_stops_where_the_settings_layer_does();
 	void ctrl_wheel_zooms_while_the_remote_owns_the_wheel();
+	void a_pinch_zooms_the_same_way_the_chord_does();
 	void the_zoom_chords_reach_the_focused_session();
 	void the_terminal_menu_offers_zoom();
 	void the_scrollback_search_is_reachable_without_a_keyboard();

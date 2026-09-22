@@ -7,6 +7,8 @@
 #include <QtTest>
 
 #include <QAccessible>
+#include <QGesture>
+#include <QGestureEvent>
 #include <QLabel>
 #include <QLineEdit>
 #include <QSpinBox>
@@ -3656,6 +3658,91 @@ void terminal_view_test::the_zoom_stops_where_the_settings_layer_does() {
 
 	view.set_font_zoom(-1000);
 	QCOMPARE(view.font_point_size(), BSSH_PRESET_MIN_POINT_SIZE);
+}
+
+void terminal_view_test::a_pinch_zooms_the_same_way_the_chord_does() {
+	/*
+	 * sec 9.5 calls pinch "the obvious next increment on touch: the menu
+	 * makes the feature reachable there, a gesture would make it
+	 * natural". It emits the SAME signal Ctrl+wheel and the Text Size
+	 * menu emit, so everything already settled about zooming stays
+	 * settled -- the session owns the number, the clamp lives in
+	 * rebuild_font, and the value is not persisted.
+	 *
+	 * Driven through a real QGestureEvent rather than by calling the
+	 * handler, because the half that fails on its own is the WIRING: a
+	 * widget that never grabbed the gesture receives nothing, and a
+	 * handler tested directly cannot see that.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	QSignalSpy zooms(&view, &bssh_terminal_view::zoom_requested);
+
+	/*
+	 * The INCREMENTAL factor each update carries, which is what the view
+	 * accumulates -- see handle_pinch for why it does not read the
+	 * gesture's total: a gesture's state is set by Qt's recogniser
+	 * through private friends, so no test can produce a GestureStarted
+	 * and a design needing one would have its reset unreachable.
+	 */
+	const auto pinch = [&view](qreal change) {
+		QPinchGesture gesture;
+		gesture.setScaleFactor(change);
+
+		QList<QGesture *> one;
+		one.append(&gesture);
+		QGestureEvent event(one);
+		QCoreApplication::sendEvent(&view, &event);
+	};
+
+	/*
+	 * Fingers apart by one step. The assertion is on the DIRECTION as
+	 * well as the count, because a sign error zooms out when somebody
+	 * spreads their fingers and no count would say so.
+	 */
+	pinch(1.2);
+
+	QCOMPARE(zooms.count(), 1);
+	QVERIFY2(zooms.at(0).at(0).toInt() > 0, "spreading two fingers zoomed OUT");
+
+	/* And further apart keeps stepping. */
+	pinch(1.2);
+	QCOMPARE(zooms.count(), 2);
+
+	/*
+	 * A move too small to reach the next threshold emits nothing --
+	 * without which a pinch barely held still would step on every touch
+	 * update the platform happens to send.
+	 */
+	pinch(1.05);
+	QCOMPARE(zooms.count(), 2);
+
+	/*
+	 * And back the other way. Two steps' worth, because the 1.05 above
+	 * is still carried: the first undoes it and the second crosses.
+	 */
+	zooms.clear();
+	pinch(1.0 / 1.2);
+	pinch(1.0 / 1.2);
+
+	QVERIFY2(zooms.count() >= 1, "bringing two fingers together did nothing");
+	QVERIFY2(zooms.at(zooms.count() - 1).at(0).toInt() < 0,
+	          "bringing two fingers together zoomed IN");
+
+	/*
+	 * WHAT THIS CANNOT REACH, said here rather than left for somebody to
+	 * assume otherwise: the grabGesture() call. Qt recognises a pinch
+	 * from real touch points and there is no public way to ask a widget
+	 * which gestures it grabbed, so a suite can drive the handler and
+	 * cannot prove the gesture would ever arrive. Sending the event
+	 * directly, as above, bypasses the grab entirely.
+	 *
+	 * The same limit the drop tests record for Qt's own drag target,
+	 * and it is why tool/sabotage/pinch-zoom.toml breaks the ARITHMETIC
+	 * rather than the grab: an edit nothing can catch is not a sabotage,
+	 * it is a claim.
+	 */
 }
 
 void terminal_view_test::ctrl_wheel_zooms_while_the_remote_owns_the_wheel() {

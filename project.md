@@ -8249,12 +8249,44 @@ have been present and inert.
 the profile, not into the preset. What a HOST should look like is a
 preset field with an editor and an override badge behind it (§10.1), and
 writing a zoom into either would answer a question the user did not ask.
-**Pinch-to-zoom is not built**, and is the obvious next increment on
-touch: the menu makes the feature reachable there, a gesture would make
-it natural. Whether either should change is the holder's, and the
-question is worth asking because "not persisted" is a choice a phone
+**Pinch-to-zoom is BUILT 2026-09-22**, which this section called "the
+obvious next increment on touch: the menu makes the feature reachable
+there, a gesture would make it natural". It emits the same
+`zoom_requested` the Ctrl+wheel and the Text Size menu emit, so every
+question already settled about zooming stays settled -- the session owns
+the number, the clamp lives in `rebuild_font`, and the value is not
+persisted. **This adds an input route and decides nothing else.**
+
+**The other half of the old paragraph is untouched and still open:**
+whether the zoom should PERSIST. "Not persisted" is a choice a phone
 might reasonably want reversed -- a session that is always read outdoors
-is a host preference wearing a gesture's clothes.
+is a host preference wearing a gesture's clothes -- and that remains the
+holder's.
+
+**Accumulating the incremental factor rather than reading the gesture's
+total is what makes it testable, and that is not a compromise.** Reading
+the total needs to know where each pinch BEGAN, and a gesture's state is
+set by Qt's recogniser through private friends: no test can produce a
+`GestureStarted`, so the reset branch would have been the one thing in
+this feature nothing could reach. Accumulating has no beginning to
+detect -- a new pinch continues from whatever fraction of a step was
+left, at most one step's worth, which is what somebody pinching twice in
+the same direction expects anyway.
+
+**Steps of 20% rather than a continuous scale**, because the zoom is an
+integer point-size offset: the grid is whole cells and there is no half
+a point to show, so a continuous factor would be rounded to these same
+steps one layer further from the thing that owns them.
+
+**What no test here can reach is the `grabGesture()` call itself.** Qt
+recognises a pinch from real touch points and offers no way to ask a
+widget which gestures it grabbed, so the suite drives the handler
+through a real `QGestureEvent` -- which proves `event()` routes it --
+and cannot prove the gesture would arrive on a device. The same limit
+the drop tests record for Qt's own drag target, and it is why
+`tool/sabotage/pinch-zoom.toml` breaks the ARITHMETIC rather than the
+grab: an edit nothing can catch is not a sabotage, it is a claim. The
+gesture itself owes the device pass every touch surface here does.
 
 **The floor did not reach the cursor, and one scheme in five could
 show it.** Found 2026-09-21 by asking which drawn colours go through

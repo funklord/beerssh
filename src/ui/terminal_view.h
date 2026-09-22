@@ -802,6 +802,23 @@ protected:
 
 	void keyPressEvent(QKeyEvent *event) override;
 	void wheelEvent(QWheelEvent *event) override;
+
+	/*
+	 * Pinch-to-zoom (sec 9.5). Qt delivers a recognised gesture as
+	 * QEvent::Gesture through event() rather than to a handler of its
+	 * own, so this is the one place it can be caught.
+	 */
+	bool event(QEvent *event) override;
+
+private:
+	/*
+	 * One pinch update: emits as many zoom steps as the scale has
+	 * crossed since the last one. Separate from event() so a test can
+	 * reach it without Qt's recogniser, which needs real touch points.
+	 */
+	void handle_pinch(qreal change);
+
+protected:
 	void mousePressEvent(QMouseEvent *event) override;
 	void focusInEvent(QFocusEvent *event) override;
 	void enterEvent(QEnterEvent *event) override;
@@ -1028,6 +1045,13 @@ private:
 	 * two can be told apart when the next resolve arrives.
 	 */
 	int m_font_zoom;
+
+	/*
+	 * Scale accumulated since the last zoom step a pinch produced, so a
+	 * pinch that keeps growing keeps stepping. See handle_pinch for why
+	 * it accumulates rather than reading the gesture's total.
+	 */
+	qreal m_pinch_scale;
 
 	/*
 	 * Per-repaint font cache, keyed by family and the two attributes that

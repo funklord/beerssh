@@ -1,0 +1,34 @@
+# Pinch-to-zoom (project.md sec 9.5).
+#
+# The gesture emits the same zoom_requested the Ctrl+wheel and the Text
+# Size menu emit, so everything already settled about zooming stays
+# settled and this adds an input route only.
+#
+# WHAT IS NOT GUARDED, and it is a real limit rather than an omission:
+# the grabGesture() call. Qt recognises a pinch from real touch points
+# and offers no way to ask a widget which gestures it grabbed, so a
+# headless suite can drive the handler and cannot prove the gesture
+# would ever arrive. terminal_view_test records the same limitation for
+# Qt's own drag target. An edit nothing can catch is not a sabotage, it
+# is a claim -- so these two break the arithmetic, which is reachable.
+
+# The direction is inverted: spreading two fingers zooms out.
+#
+# The count of steps is unchanged, so a test that only counted them
+# would stay green while the gesture did the opposite of what it looks
+# like.
+[[sabotage]]
+name = "a pinch zooms the wrong way"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (steps != 0) emit zoom_requested(steps);\n}"
+replace = "\tif (steps != 0) emit zoom_requested(-steps);\n}"
+expect = "a_pinch_zooms_the_same_way_the_chord_does"
+
+# The threshold goes, so every touch update the platform sends steps the
+# zoom -- a pinch held almost still walks the font size away.
+[[sabotage]]
+name = "a pinch steps on every update"
+file = "src/ui/terminal_view.cpp"
+find = "\twhile (m_pinch_scale >= step) {"
+replace = "\twhile (m_pinch_scale >= 1.0) {"
+expect = "a_pinch_zooms_the_same_way_the_chord_does"
