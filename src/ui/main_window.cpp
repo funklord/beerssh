@@ -2619,9 +2619,45 @@ void bssh_main_window::drop_session(bssh_session *session, bool beside) {
 
 	if (room) {
 		split_with(session);
-	} else {
-		show_session(session);
+		return;
 	}
+
+	/*
+	 * No room, and what happens then depends on whether there is an
+	 * ARRANGEMENT to lose.
+	 *
+	 * show_session() replaces the intent with this session alone. On a
+	 * window showing one pane that is exactly right: the drop is visible,
+	 * the session it displaced becomes a tab, and nothing the user built
+	 * is gone -- which is the case the paragraph above was written for,
+	 * a phone-width window with a single terminal.
+	 *
+	 * On a window showing SEVERAL it is the opposite. A user who has
+	 * arranged two panes side by side and drags a third onto them loses
+	 * the split: both panes become tabs and the dropped session takes the
+	 * whole window. Nothing is closed -- sec 8.2's rule holds -- but
+	 * sec 8.2's other half does not, because "the layout intent is
+	 * remembered per tab-group" cannot survive the intent being
+	 * overwritten. An arrangement made by hand goes in one drag, with no
+	 * warning and no way back.
+	 *
+	 * So a multi-pane window keeps its panes and the dropped session
+	 * arrives as a tab. take_session() above has already put it in the
+	 * shown list, which IS being a tab, so there is nothing more to do
+	 * for it to be reachable.
+	 *
+	 * Found from the picture: sec 12.3's split shot dropped a third
+	 * session to create a split and destroyed the one it already had.
+	 * Built on the copyright holder's repeated instruction to carry on
+	 * rather than on an answer to the question in sec 16, which asked
+	 * which of the two behaviours was wanted -- so the entry there
+	 * records what was chosen and why, and reversing it is deleting this
+	 * branch.
+	 */
+	const int showing = m_layout ? m_layout->visible_panes().size() : 0;
+	if (showing > 1) return;
+
+	show_session(session);
 }
 
 QString bssh_main_window::session_mime_type() {

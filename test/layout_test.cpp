@@ -5343,6 +5343,97 @@ void layout_test::a_key_remap_setting_reaches_a_sessions_router() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::a_drop_with_no_room_keeps_an_arrangement_it_cannot_join() {
+	/*
+	 * A drop the window has no room for used to replace the intent with
+	 * the dropped session ALONE: two panes somebody had arranged became
+	 * tabs and the newcomer took the whole window. Nothing was closed --
+	 * sec 8.2's rule held -- but its other half did not, because "the
+	 * layout intent is remembered per tab-group" cannot survive the
+	 * intent being overwritten. An arrangement made by hand went in one
+	 * drag, silently.
+	 *
+	 * Both halves are asserted, because the fix is a rule rather than a
+	 * removal: a window showing SEVERAL panes keeps them and the drop
+	 * arrives as a tab, and a window showing ONE still hands the screen
+	 * over -- there is no arrangement to lose there, and a drop that
+	 * appears to do nothing is what the fallback was written against.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_main_window window;
+	window.resize(800, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	QCoreApplication::processEvents();
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral("first")));
+	window.adopt_session(first);
+	window.split_beside_current();
+	QCoreApplication::processEvents();
+
+	/*
+	 * Two panes and no room for a third: 800px is MEDIUM, which sec 8.1
+	 * caps at two. Asserted rather than assumed, because a window that
+	 * still had room would take the split branch and this test would
+	 * pass while asking nothing.
+	 */
+	QCOMPARE(window.panes()->views().size(), 2);
+
+	QTabBar *bar = window.findChild<QTabBar *>();
+	QVERIFY(bar);
+	const int tabs_before = bar->count();
+
+	bssh_session *third = window.registry()->create(named(QStringLiteral("third")));
+	window.drop_session(third, true);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(window.panes()->views().size() == 2,
+	          "a drop with no room collapsed a split the user had arranged");
+	QCOMPARE(bar->count(), tabs_before + 1);
+
+	/*
+	 * And the one-pane case, where handing the screen over is right:
+	 * nothing is lost, and a drop that changed nothing would read as a
+	 * drop that failed.
+	 */
+	bssh_main_window narrow;
+	narrow.resize(400, 600);
+	narrow.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&narrow));
+	QCoreApplication::processEvents();
+
+	bssh_session *alone = narrow.registry()->create(named(QStringLiteral("alone")));
+	narrow.adopt_session(alone);
+	QCoreApplication::processEvents();
+	QCOMPARE(narrow.panes()->views().size(), 1);
+
+	bssh_session *dropped = narrow.registry()->create(named(QStringLiteral("dropped")));
+	narrow.drop_session(dropped, true);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(narrow.panes()->views().size(), 1);
+
+	/*
+	 * Asserted on WHICH session is the pane, through the tab the other
+	 * one was pushed into. "One pane, and the dropped session is in the
+	 * window" was the first form and it is true either way -- of a drop
+	 * that handed the screen over and of one that quietly made the
+	 * newcomer a tab. The sabotage that returns early said so; the count
+	 * could not tell them apart.
+	 */
+	QTabBar *narrow_bar = narrow.findChild<QTabBar *>();
+	QVERIFY(narrow_bar);
+	QCOMPARE(narrow_bar->count(), 1);
+	QVERIFY2(narrow_bar->tabText(0).contains(QStringLiteral("alone")),
+	          qPrintable(QStringLiteral("the displaced session should be the tab, "
+	                                     "and the bar reads \"%1\"")
+	                             .arg(narrow_bar->tabText(0))));
+	QVERIFY2(window.panes()->views().size() == 2,
+	          "the second window disturbed the first");
+}
+
 void layout_test::a_tiled_session_leaves_the_tab_bar() {
 	/*
 	 * Reported from use: "they become tabs. tabs, splits and windows are

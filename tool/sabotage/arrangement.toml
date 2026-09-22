@@ -67,3 +67,27 @@ file = "src/ui/main_window.cpp"
 find = "\t\tarrangement_changed = m_layout->arrangement() != wanted;"
 replace = "\t\tarrangement_changed = false;"
 expect = "a_desktop_can_be_asked_for_the_column"
+
+# A drop with no room collapses an arrangement it cannot join.
+#
+# Restores the behaviour found 2026-09-22: show_session replaces the
+# intent with the dropped session alone, so two panes somebody arranged
+# become tabs and the newcomer takes the window. Nothing is closed, which
+# is why it went unnoticed -- what goes is the arrangement, and sec 8.2's
+# "remembered per tab-group" cannot survive the intent being overwritten.
+[[sabotage]]
+name = "a drop with no room collapses the split"
+file = "src/ui/main_window.cpp"
+find = "\tif (showing > 1) return;"
+replace = ""
+expect = "a_drop_with_no_room_keeps_an_arrangement_it_cannot_join"
+
+# And the other half: a ONE-pane window must still hand the screen over,
+# or a drop onto a phone-width window changes nothing visible and reads
+# as a drop that failed.
+[[sabotage]]
+name = "a drop onto a single pane does nothing visible"
+file = "src/ui/main_window.cpp"
+find = "\tconst int showing = m_layout ? m_layout->visible_panes().size() : 0;\n\tif (showing > 1) return;"
+replace = "\treturn;"
+expect = "a_drop_with_no_room_keeps_an_arrangement_it_cannot_join"

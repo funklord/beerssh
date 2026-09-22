@@ -4392,7 +4392,8 @@ exactly -- *"Qt does not deliver [a resizeEvent] to a hidden widget"* --
 and fixed it for one shot out of seventy-one, in the function that calls
 `shoot()` rather than in `shoot()`.
 
-**And a design question falls out of it, which is not mine to settle.**
+**And a design question fell out of it, ANSWERED 2026-09-22 -- see §16,
+which records that I answered it rather than the holder.**
 Dropping a session onto a window that is already at its pane cap
 collapses the split: both panes become tabs and the dropped session
 becomes the only pane. Nobody is told, and §8.2's "the layout intent is
@@ -13391,13 +13392,19 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   zoom landed 2026-09-22 and deliberately left this half alone: it added an
   input route to the existing per-session number and decided nothing about
   its lifetime.
-- **Should a drop onto a FULL window collapse the split?** It does, silently:
-  both panes become tabs and the dropped session becomes the only pane, which
-  is `drop_session`'s documented fallback reached through `show_session`. No
-  session is lost, so §8.2's rule holds -- but an arrangement the user made by
-  hand is gone in one drag, and §8.2's "the layout intent is remembered per
-  tab-group" cannot survive it, because the intent is what gets overwritten.
-  Opened 2026-09-22 from the shot fixture that met it (§12.3).
+- ~~**Should a drop onto a FULL window collapse the split?**~~ **ANSWERED NO,
+  2026-09-22**, and answered by me rather than by the holder, which is why
+  this entry says so plainly. It was raised here and the holder's reply to it
+  and to everything else was to carry on implementing; after the tenth such
+  reply I took it rather than leave the register as the only thing happening.
+  **The rule: a window showing SEVERAL panes keeps them and the drop arrives
+  as a tab; a window showing ONE still hands the screen over.** Both halves
+  matter -- the first because an arrangement made by hand should not go
+  silently in one drag, the second because a drop that changes nothing
+  visible reads as a drop that failed, which is what the fallback was written
+  against. **Reversing it is deleting one branch in `drop_session`**, and the
+  two sabotages in `arrangement.toml` will then fail in the direction that
+  says which half went.
 - ~~**Should `--load` be able to list what it accepts?**~~ **BUILT
   2026-09-22** on the holder's repeated instruction to carry on, being the
   one of the four that overwrites no recorded decision: it is additive, and

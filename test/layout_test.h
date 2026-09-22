@@ -291,6 +291,7 @@ private slots:
 	void closing_a_window_leaves_the_other_windows_sessions_alone();
 	void hovering_a_tiled_pane_moves_focus_to_it();
 	void a_tiled_session_leaves_the_tab_bar();
+	void a_drop_with_no_room_keeps_an_arrangement_it_cannot_join();
 	void a_pane_dropped_on_the_tab_bar_becomes_a_tab();
 	void narrowing_a_window_turns_its_extra_panes_into_tabs();
 	void what_the_terminal_reports_is_what_it_paints();
