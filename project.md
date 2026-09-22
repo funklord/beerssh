@@ -13291,6 +13291,32 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   outlives the connect it was typed for* in §14.
 - Icon and branding direction (§0.1), which the placeholder in §12.2 is waiting
   on.
+- **Is the image budget per SESSION or per PROCESS?** §7.1 decided 32 MB of
+  decoded image per session, and `image_store.cpp` says in the same breath
+  that "the count that matters to Android is the process total, and sessions
+  are what multiply". §8.7's column then made every session a live pane on a
+  phone rather than converting most to tabs, so the multiplier grew after the
+  number was chosen. `set_memory_budget` exists and has no caller. Opened
+  2026-09-21.
+- **Should a session's zoom PERSIST?** §9.5 records "not persisted" as a
+  choice a phone might reasonably want reversed -- "a session that is always
+  read outdoors is a host preference wearing a gesture's clothes". Pinch-to-
+  zoom landed 2026-09-22 and deliberately left this half alone: it added an
+  input route to the existing per-session number and decided nothing about
+  its lifetime.
+- **Should a drop onto a FULL window collapse the split?** It does, silently:
+  both panes become tabs and the dropped session becomes the only pane, which
+  is `drop_session`'s documented fallback reached through `show_session`. No
+  session is lost, so §8.2's rule holds -- but an arrangement the user made by
+  hand is gone in one drag, and §8.2's "the layout intent is remembered per
+  tab-group" cannot survive it, because the intent is what gets overwritten.
+  Opened 2026-09-22 from the shot fixture that met it (§12.3).
+- **Should `--load` be able to list what it accepts?** `--term-features=?`
+  sets the precedent -- a question answered on stdout with exit 0 -- and a
+  `--load=?` would also let the generated bash completion complete session
+  names, which it deliberately stays silent about today. It is new command-
+  line surface that §8.6 does not ask for, which is why it is here rather
+  than built. Raised 2026-09-22.
 
 **Decided, and kept here so they are not reopened:**
 
