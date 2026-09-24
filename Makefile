@@ -445,6 +445,28 @@ $(VTERM_LIB): $(VTERM_OBJS)
 	fi
 	$(AR) rcs $@ $(VTERM_OBJS)
 
+# A qmake Makefile regenerates ITSELF from the project file it was made
+# from, before doing anything else -- including `clean`. So a build tree
+# that outlives a rename of its .pro cannot even be cleaned: build-tests/
+# made before 1080cee moved tests/ to test/ answered every `make -C` with
+# "Cannot find file: ../tests/tests.pro", and `make deb` died in
+# dh_auto_clean on a machine that had built the tests once.
+#
+# qmake records the file on its fourth line, `# Project:  <path>`, relative
+# to the build directory. Non-empty when DIR/Makefile names a project file
+# that no longer exists; empty when it is current, or when there is no
+# Makefile at all. `.` rather than a literal hash in the pattern, because
+# make reads that as a comment before the shell ever sees it -- and no
+# `case`, whose unbalanced `)` would end the $(shell) call early and make
+# every tree read as orphaned.
+bssh_qmake_orphaned = $(shell \
+	pro=$$(sed -n 's/^. Project: *//p' $(1)/Makefile 2>/dev/null); \
+	[ -n "$$pro" ] || exit 0; \
+	path="$$pro"; [ "$${pro#/}" != "$$pro" ] || path="$(1)/$$pro"; \
+	[ -f "$$path" ] || echo "$$pro")
+
+FORCE:
+
 $(BUILD_DIR)/Makefile: beerssh.pro
 	mkdir -p $(BUILD_DIR)
 	cd $(BUILD_DIR) && $(QMAKE) ../beerssh.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
@@ -462,7 +484,11 @@ run: $(TARGET)
 TEST_BUILD_DIR = build-tests
 TEST_BIN       = $(TEST_BUILD_DIR)/beerssh_test
 
-$(TEST_BUILD_DIR)/Makefile: test/tests.pro
+# FORCE only when the tree was generated from somewhere else: re-running
+# qmake is the one thing that repairs it, and the stale Makefile is always
+# newer than test/tests.pro, so the timestamp alone never would.
+$(TEST_BUILD_DIR)/Makefile: test/tests.pro \
+                            $(if $(call bssh_qmake_orphaned,$(TEST_BUILD_DIR)),FORCE)
 	mkdir -p $(TEST_BUILD_DIR)
 	cd $(TEST_BUILD_DIR) && $(QMAKE) ../test/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
 	        BSSH_VERSION=$(VERSION)
@@ -1351,9 +1377,23 @@ uninstall:
 # else here.
 clean:
 	rm -f $(ARTIFACTS)
-	@if [ -f $(BUILD_DIR)/Makefile ]; then $(MAKE) -C $(BUILD_DIR) clean; fi
-	@if [ -f $(TEST_BUILD_DIR)/Makefile ]; then $(MAKE) -C $(TEST_BUILD_DIR) clean; fi
-	@if [ -f $(ANDROID_BUILD_DIR)/Makefile ]; then $(MAKE) -C $(ANDROID_BUILD_DIR) clean; fi
+	$(call bssh_qmake_clean,$(BUILD_DIR))
+	$(call bssh_qmake_clean,$(TEST_BUILD_DIR))
+	$(call bssh_qmake_clean,$(ANDROID_BUILD_DIR))
+
+# qmake's own clean, in a tree that has one -- skipped, and said so, when
+# the tree names a project file that is gone (see bssh_qmake_orphaned):
+# recursing would only fail, and would take veryclean down with it, since
+# veryclean runs clean first and is the target that removes such a tree.
+define bssh_qmake_clean
+	@if [ -n "$(call bssh_qmake_orphaned,$(1))" ]; then \
+		echo "clean: skipping $(1)/ -- its Makefile was generated from" \
+		     "$(call bssh_qmake_orphaned,$(1)), which no longer exists;" \
+		     "make veryclean removes it"; \
+	elif [ -f $(1)/Makefile ]; then \
+		$(MAKE) -C $(1) clean; \
+	fi
+endef
 
 # Removes a whole directory, having first checked it is one we could
 # plausibly have made.
