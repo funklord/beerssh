@@ -82,6 +82,41 @@ void platform_test::the_hang_gate_fires_only_foreground_and_past_the_threshold()
 	QVERIFY(!bssh_hang_should_dump(false, 300000, threshold));
 }
 
+void platform_test::the_hang_gate_follows_the_lifecycle_not_the_last_beat() {
+	const qint64 threshold = 30000;
+	bssh_hang_state state;
+
+	/* The control: foreground, and the loop stops beating -- a hang. */
+	state.set_foreground(true, 0);
+	state.beat(1000);
+	QVERIFY(!state.should_dump(30999, threshold));
+	QVERIFY(state.should_dump(31000, threshold));
+
+	/*
+	 * Put away. Qt stops timers at pause, so there is no beat after this
+	 * one -- the case the old gate read as "foreground at the last beat"
+	 * and dumped half a minute into every trip to the background.
+	 */
+	state.set_foreground(false, 2000);
+	QVERIFY2(!state.should_dump(600000, threshold),
+	          "a backgrounded app is not a hung one, however long it is away");
+
+	/*
+	 * Brought back after ten minutes. The loop has not beaten since the
+	 * pause; a healthy resume must not be charged for the time it was away.
+	 */
+	state.set_foreground(true, 600000);
+	QVERIFY2(!state.should_dump(600500, threshold),
+	          "a resume after a long background read as a hang before its first beat");
+
+	/* And a loop that wedges during that resume is the hang this is for. */
+	QVERIFY(state.should_dump(630000, threshold));
+
+	/* Beats after the resume keep it quiet. */
+	state.beat(629000);
+	QVERIFY(!state.should_dump(630000, threshold));
+}
+
 void platform_test::session_count_and_notify_are_safe_without_a_tray() {
 	bssh_platform *platform = bssh_platform::instance();
 

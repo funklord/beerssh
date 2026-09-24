@@ -133,6 +133,20 @@ bool biometric_bridge_ready() {
 }
 
 /*
+ * The window's lifecycle, coming back from Java for the hang watchdog
+ * (project.md sec 5.1). Set once, before the Java side is registered,
+ * and called on Android's UI thread -- deliberately NOT queued onto the
+ * Qt thread the way the biometric answer is, because the one time this
+ * matters is when that thread has stopped. The watchdog's side is two
+ * atomics, which is what makes calling straight through safe.
+ */
+std::function<void(bool)> g_foreground_changed;
+
+void foreground_changed(JNIEnv *, jclass, jboolean foreground) {
+	if (g_foreground_changed) g_foreground_changed(foreground == JNI_TRUE);
+}
+
+/*
  * Asks for permission to post the notification the foreground service
  * shows (project.md sec 5.1, sec 13).
  *
@@ -328,6 +342,27 @@ public:
 				window.callMethod<void>("clearFlags", "(I)V", flag_secure);
 			}
 		});
+	}
+
+	bool watch_foreground(std::function<void(bool)> changed) override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return false;
+
+		g_foreground_changed = std::move(changed);
+
+		const JNINativeMethod method = {
+			"nativeForeground", "(Z)V", reinterpret_cast<void *>(foreground_changed)
+		};
+		QJniEnvironment env;
+		if (!env.registerNativeMethods("se/vibes/beerssh/BsshLifecycle", &method, 1)) {
+			g_foreground_changed = nullptr;
+			return false;
+		}
+
+		QJniObject::callStaticMethod<void>(
+		        "se/vibes/beerssh/BsshLifecycle", "watch",
+		        "(Landroid/content/Context;)V", context.object());
+		return !env.checkAndClearExceptions();
 	}
 
 	void set_session_count(int count) override {

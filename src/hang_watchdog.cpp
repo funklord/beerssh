@@ -29,13 +29,8 @@ const qint64 BSSH_HANG_THRESHOLD_MS = 30000;
 const int BSSH_HANG_BEAT_MS = 1000;
 const int BSSH_HANG_POLL_MS = 2000;
 
-/*
- * Written by the main thread's timer, read by the watchdog thread. Atomic
- * rather than locked, because a lock is the one thing a watchdog must not
- * take: the wedged thread could be holding it.
- */
-std::atomic<qint64> g_last_beat_ms{0};
-std::atomic<bool> g_foreground{false};
+/* The one the running app uses; see bssh_hang_state for who writes it. */
+bssh_hang_state g_state;
 
 qint64 now_ms() {
 	using namespace std::chrono;
@@ -44,9 +39,26 @@ qint64 now_ms() {
 
 } /* namespace */
 
-bool bssh_hang_should_dump(bool foreground_at_last_beat, qint64 idle_ms,
-                            qint64 threshold_ms) {
-	return foreground_at_last_beat && idle_ms >= threshold_ms;
+bool bssh_hang_should_dump(bool foreground, qint64 idle_ms, qint64 threshold_ms) {
+	return foreground && idle_ms >= threshold_ms;
+}
+
+void bssh_hang_state::beat(qint64 now_ms) {
+	m_last_beat_ms.store(now_ms);
+}
+
+void bssh_hang_state::set_foreground(bool foreground, qint64 now_ms) {
+	/*
+	 * The clock before the flag: the watcher must never see "foreground"
+	 * paired with a beat from before the pause.
+	 */
+	if (foreground) m_last_beat_ms.store(now_ms);
+	m_foreground.store(foreground);
+}
+
+bool bssh_hang_state::should_dump(qint64 now_ms, qint64 threshold_ms) const {
+	return bssh_hang_should_dump(m_foreground.load(), now_ms - m_last_beat_ms.load(),
+	                             threshold_ms);
 }
 
 void bssh_start_hang_watchdog() {
@@ -55,8 +67,19 @@ void bssh_start_hang_watchdog() {
 
 	if (!QCoreApplication::instance()) return;
 
-	g_last_beat_ms.store(now_ms());
-	g_foreground.store(QGuiApplication::applicationState() == Qt::ApplicationActive);
+	/*
+	 * Qt's state is read ONCE, here, for the starting value: this runs
+	 * after show(), on a loop that is plainly running, so it is the one
+	 * moment Qt's answer and the lifecycle's cannot disagree. Every
+	 * change after it comes from the lifecycle -- see bssh_hang_state.
+	 */
+	g_state.set_foreground(QGuiApplication::applicationState() == Qt::ApplicationActive,
+	                       now_ms());
+
+	const bool watching = bssh_platform::instance()->watch_foreground([](bool foreground) {
+		g_state.set_foreground(foreground, now_ms());
+	});
+	if (!watching) return;
 
 	/*
 	 * The heartbeat. Parented to the application so it lives as long as
@@ -65,11 +88,7 @@ void bssh_start_hang_watchdog() {
 	 */
 	QTimer *beat = new QTimer(QCoreApplication::instance());
 	beat->setInterval(BSSH_HANG_BEAT_MS);
-	QObject::connect(beat, &QTimer::timeout, [] {
-		g_last_beat_ms.store(now_ms());
-		g_foreground.store(QGuiApplication::applicationState()
-		                    == Qt::ApplicationActive);
-	});
+	QObject::connect(beat, &QTimer::timeout, [] { g_state.beat(now_ms()); });
 	beat->start();
 
 	/*
@@ -83,10 +102,7 @@ void bssh_start_hang_watchdog() {
 		for (;;) {
 			std::this_thread::sleep_for(std::chrono::milliseconds(BSSH_HANG_POLL_MS));
 
-			const qint64 idle = now_ms() - g_last_beat_ms.load();
-			const bool foreground = g_foreground.load();
-
-			if (!bssh_hang_should_dump(foreground, idle, BSSH_HANG_THRESHOLD_MS)) {
+			if (!g_state.should_dump(now_ms(), BSSH_HANG_THRESHOLD_MS)) {
 				/* Recovered, or never stalled: re-arm for the next time. */
 				dumped = false;
 				continue;

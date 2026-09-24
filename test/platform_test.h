@@ -23,12 +23,20 @@ private slots:
 
 	/*
 	 * The hang watchdog's gate -- the whole risk of sec 5.1's fix -- as a
-	 * pure function: it fires only when the app was FOREGROUND at the last
-	 * beat and the loop has been silent past the threshold. A backgrounded
-	 * stall, which Qt's own suspend produces every time the app is put
-	 * away, must not read as a hang.
+	 * pure function: it fires only when the app is FOREGROUND and the loop
+	 * has been silent past the threshold. A backgrounded stall, which
+	 * Qt's own suspend produces every time the app is put away, must not
+	 * read as a hang.
 	 */
 	void the_hang_gate_fires_only_foreground_and_past_the_threshold();
+
+	/*
+	 * And where "foreground" comes from: the platform's lifecycle, written
+	 * straight into the state, not Qt's state sampled by the heartbeat --
+	 * which on Android stops at pause still saying "foreground", and never
+	 * hears a resume the Qt thread wedged in.
+	 */
+	void the_hang_gate_follows_the_lifecycle_not_the_last_beat();
 	void close_policy_asks_only_when_something_is_live();
 	void the_window_opens_on_the_front_door();
 	void the_key_row_setting_survives_a_restart();

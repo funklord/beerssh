@@ -808,15 +808,44 @@ hang. **The `_exit()` half is still owed**, held until one real
 occurrence shows the gate fires and the dump names the holder; read it
 with `adb bugreport` or `logcat -v threadtime`.
 
-**[OPEN] The built gate is not the one designed above.** The bullet above
-says the gate must be the Android lifecycle's resumed/paused state and
-"not Qt's `applicationState`". The code reads
-`QGuiApplication::applicationState()` in the heartbeat
-(`bssh_start_hang_watchdog`), so the flag the watcher trusts is whatever
-Qt reported at the last beat before the wedge. Recorded, not resolved:
-whether that is an acceptable reading of the design or the design's
-objection still holds is the question to settle before the `_exit()`
-half lands -- that half is where a loose gate kills a live session.
+**The gate is the lifecycle's now, and the first one was wrong in the
+dangerous direction -- [FIXED 2026-09-24].** `1ab34c4` read "foreground"
+from `QGuiApplication::applicationState()` inside the heartbeat, where the
+bullet above says it must not. Reading Qt 6.12's own source settled what
+that costs rather than leaving it a matter of design:
+
+- **On pause, Qt stops delivering timers before it posts the state.**
+  `updateApplicationState` calls `QAndroidEventDispatcher::goingToStop(true)`
+  and only then `handleApplicationStateChanged`; from that moment
+  `processEvents` runs with `X11ExcludeTimers`. So the heartbeat stopped
+  with "foreground" as its last sample, and **every trip to the background
+  longer than 30s met the gate** -- a stack dump now, and a killed live
+  session the day the `_exit()` half landed. The one failure the design
+  called worse than the bug.
+- **On resume, Qt's state arrives late.** `QtActivityBase.onResume()`
+  reports it after `super.onResume()`, and the Qt thread applies it
+  asynchronously, after the window work where the deadlock is suspected --
+  so a thread wedged there never records the resume, and the hang this
+  exists for would have read as "backgrounded" and never fired.
+
+`bssh_platform::watch_foreground` now carries Android's
+`ActivityLifecycleCallbacks` (`BsshLifecycle.java`) into
+`bssh_hang_state` directly, on Android's UI thread: `onActivityResumed`
+fires from `super.onResume()`, before any of Qt's resume work, and
+`onActivityPaused` from `onPause()`. **Resume also restarts the clock**,
+or a healthy resume after ten minutes away would be charged for the ten
+minutes and dumped before its first beat. Tested as a state object
+(`the_hang_gate_follows_the_lifecycle_not_the_last_beat`) with three
+sabotage edits in `tool/sabotage/hang-gate.toml`.
+
+**Not proven on a device -- no phone was attached.** The wiring is
+Android-only and no desktop test reaches it. What to look for once one
+is: background the app for a minute and bring it back, and `adb logcat
+-d` must show no `Signal Catcher` stack dump from `se.vibes.beerssh`. The
+build installed on the Fold since 2026-09-18 carries the old gate, so
+its log from that period should show exactly such dumps -- which is the
+cheap confirmation of the reading above. The `_exit()` half stays held
+until a real hang has fired this gate.
 
 **Two observations above were weakened the same evening (2026-09-17).**
 The ~14s backgrounded `makeCurrent(): no EGLSurface` spin matches no

@@ -182,6 +182,18 @@ public:
 	virtual void set_session_count(int count) = 0;
 
 	/*
+	 * Reports, through `changed`, each time the app's window comes in front
+	 * of the user or goes away -- from the platform's own lifecycle, on
+	 * whatever thread the platform reports it, and never through Qt's event
+	 * loop. For the hang watchdog (sec 5.1), which has to know the answer
+	 * precisely when that loop is the thing that has stopped.
+	 *
+	 * False where the platform has no such signal, and `changed` is then
+	 * never called. Called once; a second call is not supported.
+	 */
+	virtual bool watch_foreground(std::function<void(bool foreground)> changed) = 0;
+
+	/*
 	 * Reconnecting, reconnect failed, a bell in an unfocused pane.
 	 *
 	 * Split public-from-virtual the way has_biometric() and

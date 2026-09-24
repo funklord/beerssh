@@ -132,6 +132,15 @@ public:
 		return false;
 	}
 
+	bool watch_foreground(std::function<void(bool)>) override {
+		/*
+		 * Nothing to watch with: a desktop has windows rather than an app
+		 * lifecycle, and the one caller -- the hang watchdog -- does not
+		 * arm here anyway, since SIGQUIT on a desktop is a core dump.
+		 */
+		return false;
+	}
+
 	bool can_hide_from_screenshots() const override {
 		/*
 		 * No. X11 has no such concept, Wayland's screencopy protocols do

@@ -1,0 +1,40 @@
+# The hang watchdog's gate (project.md sec 5.1): foreground from the
+# platform's lifecycle, the clock restarted on resume, and nothing firing
+# for an app that is merely away. The gate is the whole risk of the fix --
+# a loose one kills a live backgrounded session once the _exit() half
+# lands -- so each half of it is broken here on its own.
+#
+# NOT COVERED, and not coverable from the desktop suite: the wiring that
+# carries Android's callbacks in -- BsshLifecycle.java, the native
+# registration in platform_android.cpp, and watch_foreground being asked
+# at all. None of it is compiled into the desktop test binary. What proves
+# it is the device, and sec 5.1 says what to look for there.
+
+# The gate stops asking whether the app is in front. Every trip to the
+# background past the threshold then reads as a hang.
+[[sabotage]]
+name = "the gate fires for a backgrounded app"
+file = "src/hang_watchdog.cpp"
+find = "\treturn foreground && idle_ms >= threshold_ms;"
+replace = "\treturn idle_ms >= threshold_ms;"
+expect = "the_hang_gate_fires_only_foreground_and_past_the_threshold"
+
+# The lifecycle's answer never lands, so the gate keeps whatever it
+# started with -- the old shape, where "foreground" was a sample that
+# stopped being taken.
+[[sabotage]]
+name = "a lifecycle change is not recorded"
+file = "src/hang_watchdog.cpp"
+find = "\tm_foreground.store(foreground);"
+replace = ""
+expect = "the_hang_gate_follows_the_lifecycle_not_the_last_beat"
+
+# Resume does not restart the clock, so a healthy resume after a long
+# background is charged for the whole time away and dumped before its
+# first beat.
+[[sabotage]]
+name = "a resume is charged for the time the app was away"
+file = "src/hang_watchdog.cpp"
+find = "\tif (foreground) m_last_beat_ms.store(now_ms);"
+replace = ""
+expect = "the_hang_gate_follows_the_lifecycle_not_the_last_beat"
