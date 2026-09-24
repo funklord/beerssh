@@ -3423,7 +3423,19 @@ void bssh_main_window::import_launch_document() {
 	imported.name = m_profile_store->unique_preset_name(imported.name);
 
 	const int id = m_profile_store->save_preset(imported);
-	if (id == 0) return;
+	if (id == 0) {
+		/*
+		 * Two lines above "Preset imported" this used to return in
+		 * silence, so a file that was read and then not stored said
+		 * nothing -- the one outcome the not-a-preset warning above
+		 * exists to prevent.
+		 */
+		QMessageBox::warning(this, QStringLiteral("Not imported"),
+		                      QStringLiteral("The preset was read, but could not be "
+		                                      "added to your presets.\n\n%1")
+		                              .arg(m_profile_store->last_error()));
+		return;
+	}
 
 	QMessageBox::information(
 	        this, QStringLiteral("Preset imported"),

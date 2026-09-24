@@ -728,12 +728,31 @@ bssh_preset_t bssh_profile_store::preset(int id) const {
 int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
 	const QList<bssh_preset_t> presets_before = m_presets;
 	const QHash<int, QString> slugs_before = m_slugs;
-	if (!m_open || preset.name.isEmpty()) return 0;
+	if (!m_open) return 0;
+
+	/*
+	 * Cleared on entry, as remove() does, and every refusal below gives
+	 * its reason. The editor used to return in silence on a 0 from here,
+	 * so Save, Clone and Import could do nothing at all and look exactly
+	 * like a button that worked; a caller can only say why if this does.
+	 */
+	m_last_error.clear();
+
+	if (preset.name.isEmpty()) {
+		m_last_error = QStringLiteral("A preset needs a name.");
+		return 0;
+	}
 
 	/* Shipped presets are cloned, not edited (sec 10.4). */
-	if (preset.id != 0 && this->preset(preset.id).is_builtin) return 0;
+	if (preset.id != 0 && this->preset(preset.id).is_builtin) {
+		m_last_error = QStringLiteral("\"%1\" ships with BeerSSH and cannot be "
+		                               "changed; clone it instead.")
+		                       .arg(this->preset(preset.id).name);
+		return 0;
+	}
 
 	bssh_preset_t stored = preset;
+	bool renamed = false;
 
 	if (stored.id == 0) {
 		int highest = 0;
@@ -754,14 +773,25 @@ int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
 		 * seven back to the app defaults without saying so.
 		 */
 		const QString wanted = unique_slug(slug_for(stored.name), stored.id);
-		const bool renamed = m_slugs.value(stored.id) != wanted;
+		renamed = m_slugs.value(stored.id) != wanted;
 		if (renamed) m_slugs.insert(stored.id, wanted);
 
 		for (bssh_preset_t &existing : m_presets) {
 			if (existing.id == stored.id) existing = stored;
 		}
 
-		if (renamed) write_profiles();
+		/*
+		 * Read, not discarded. hosts.ini names a preset by its slug, so a
+		 * rename whose host rewrite failed went on to write presets.ini
+		 * under the NEW section while every following host still named
+		 * the old one -- and dropped to app defaults at the next start.
+		 */
+		if (renamed && !write_profiles()) {
+			m_presets = presets_before;
+			m_slugs = slugs_before;
+			emit changed();
+			return 0;
+		}
 	}
 
 	sort_presets();
@@ -769,6 +799,18 @@ int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
 		/* See save(): restored, not reloaded. */
 		m_presets = presets_before;
 		m_slugs = slugs_before;
+
+		/*
+		 * And after a rename, hosts.ini has already moved to the new
+		 * slug; put it back so the two files agree again. Best effort,
+		 * and its status is not allowed to replace the reason above --
+		 * the presets file is what failed.
+		 */
+		if (renamed) {
+			const QString reason = m_last_error;
+			write_profiles();
+			m_last_error = reason;
+		}
 		emit changed();
 		return 0;
 	}
@@ -781,21 +823,38 @@ bool bssh_profile_store::remove_preset(int id) {
 	const QList<bssh_preset_t> presets_before = m_presets;
 	const QHash<int, QString> slugs_before = m_slugs;
 	if (!m_open || id == 0) return false;
-	if (preset(id).is_builtin) return false;
+
+	/* Cleared on entry and given a reason; see save_preset(). */
+	m_last_error.clear();
+
+	if (preset(id).is_builtin) {
+		m_last_error = QStringLiteral("\"%1\" ships with BeerSSH and cannot be "
+		                               "deleted.").arg(preset(id).name);
+		return false;
+	}
 
 	/*
 	 * Refused while hosts still follow it. They would silently fall back
 	 * to app defaults, which is a change to every one of them made by
 	 * deleting something else.
 	 */
-	if (hosts_using(id) > 0) return false;
+	const int users = hosts_using(id);
+	if (users > 0) {
+		m_last_error = users == 1
+		        ? QStringLiteral("1 host still follows it.")
+		        : QStringLiteral("%1 hosts still follow it.").arg(users);
+		return false;
+	}
 
 	const qsizetype before = m_presets.size();
 	m_presets.erase(std::remove_if(m_presets.begin(), m_presets.end(),
 	                                [id](const bssh_preset_t &p) { return p.id == id; }),
 	                 m_presets.end());
 
-	if (m_presets.size() == before) return false;
+	if (m_presets.size() == before) {
+		m_last_error = QStringLiteral("It is no longer in your configuration.");
+		return false;
+	}
 
 	m_slugs.remove(id);
 	if (!write_presets()) {

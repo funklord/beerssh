@@ -41,6 +41,18 @@ QString features_button_text(const QString &spec) {
 	return bssh_term_features_editor::summary(spec) + QStringLiteral("...");
 }
 
+/*
+ * What did not happen, then the store's reason. Every one of these
+ * returned in silence once, so a refused Save, Clone, Delete or Import
+ * looked exactly like one that worked -- the host editor's "Not saved"
+ * (sec 10.6), met here in the preset editor, which had none.
+ */
+void warn_not_written(QWidget *parent, const QString &title,
+                      const QString &what, const QString &why) {
+	QMessageBox::warning(parent, title,
+	                      why.isEmpty() ? what : what + QStringLiteral("\n\n") + why);
+}
+
 } /* namespace */
 #include "ui/form_wrap.h"
 #include "keyboard/key_row_layout.h"
@@ -596,7 +608,12 @@ void bssh_preset_editor::on_save() {
 	}
 
 	const int id = m_store->save_preset(preset);
-	if (id == 0) return;
+	if (id == 0) {
+		warn_not_written(this, QStringLiteral("Not saved"),
+		                 QStringLiteral("This preset was not saved."),
+		                 m_store->last_error());
+		return;
+	}
 
 	m_current.id = id;
 	reload();
@@ -620,7 +637,12 @@ void bssh_preset_editor::on_clone() {
 	}
 
 	const int id = m_store->save_preset(clone);
-	if (id == 0) return;
+	if (id == 0) {
+		warn_not_written(this, QStringLiteral("Not cloned"),
+		                 QStringLiteral("The copy was not saved."),
+		                 m_store->last_error());
+		return;
+	}
 
 	m_current = clone;
 	m_current.id = id;
@@ -632,7 +654,12 @@ void bssh_preset_editor::on_delete() {
 	if (!m_store || m_current.id == 0) return;
 
 	const int id = m_current.id;
-	if (!m_store->remove_preset(id)) return;
+	if (!m_store->remove_preset(id)) {
+		warn_not_written(this, QStringLiteral("Not deleted"),
+		                 QStringLiteral("\"%1\" was not deleted.").arg(m_current.name),
+		                 m_store->last_error());
+		return;
+	}
 
 	m_current = bssh_preset_t();
 	reload();
@@ -752,7 +779,13 @@ void bssh_preset_editor::on_import() {
 	imported.name = m_store->unique_preset_name(imported.name);
 
 	const int id = m_store->save_preset(imported);
-	if (id == 0) return;
+	if (id == 0) {
+		warn_not_written(this, QStringLiteral("Not imported"),
+		                 QStringLiteral("%1 was read, but could not be added to "
+		                                 "your presets.").arg(path),
+		                 m_store->last_error());
+		return;
+	}
 
 	m_current = imported;
 	m_current.id = id;

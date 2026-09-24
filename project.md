@@ -9045,19 +9045,44 @@ double as documentation of what a preset can do.
   A script rather than app code, because the app no longer links Qt SQL at all
   and carrying a database driver forever to read one file once is a poor trade.
 
-#### The preset editor drops a failed write without a word — **[OPEN; fix approved 2026-09-03, never landed]**
+#### The preset editor dropped a failed write without a word — **[FIXED 2026-09-24]**
 
 Found 2026-09-03: `on_save`, `on_clone`, `on_delete` and `on_import` in
-`src/ui/preset_editor.cpp` all return silently when the store refuses --
-`if (id == 0) return;`, and `if (!m_store->remove_preset(id)) return;`
--- and so does the desktop preset import in `main_window.cpp`, two lines
-above its "Preset imported" message. The holder said "go ahead with the
-preset editor fix"; the patch was drafted and then displaced by the
-keyboard work that evening, and never applied. Re-checked in the source
-2026-09-24: all five sites unchanged. The drafted shape, for whoever takes
-it: `save_preset()` and `remove_preset()` clear `last_error()` on entry
-and give every refusal a reason; one `warn_not_written()` helper behind
-the four editor buttons and the desktop import; three store-level tests.
+`src/ui/preset_editor.cpp` returned in silence when the store refused,
+and so did the desktop preset import in `main_window.cpp`, two lines
+above its "Preset imported" message -- so a button that did nothing
+looked exactly like one that worked. The holder approved the fix that
+evening ("go ahead with the preset editor fix"); it was drafted, then
+displaced by the keyboard work, and landed 2026-09-24 on being asked a
+second time.
+
+**Both halves had to change.** The store gave no reason for most
+refusals -- an empty name, a shipped preset, a preset hosts still follow
+-- and did not clear `last_error()` on entry, so a caller had nothing
+true to show. `save_preset()` and `remove_preset()` now clear it and give
+every refusal a reason, as `remove()` already did; the editor's four
+buttons and the desktop import show "Not saved" / "Not cloned" / "Not
+deleted" / "Not imported" with that reason, the shape the host editor's
+"Not saved" already has.
+
+**And a rename could split the two files.** `hosts.ini` names a preset
+by its slug, so a rename rewrites it -- and that rewrite's status was
+discarded, so a failed host rewrite still wrote `presets.ini` under the
+new section; the opposite order, `presets.ini` failing after the hosts
+had moved, left them naming a section in neither file. Both now fail the
+save and put the files back in agreement.
+
+**Tested through a write that fails for root too**: a directory where
+the `.ini` goes. A read-only directory is the usual way, and the
+check-ci container runs as root, which writes one anyway -- so a
+permission-based test would skip in the one place every push is gated.
+`an_unwritable_preset_file_is_reported_and_undone` covers both rename
+orders; `a_save_or_delete_the_store_refused_is_said` clicks the real
+Save and Delete buttons and reads the warning they raise. Six sabotage
+edits in `tool/sabotage/preset-refusals.toml`. Not covered by a test:
+Clone, which takes Save's path but is not clicked by the fixture, and
+the two imports, which are reached through a file dialog or a handed-in
+document the fixture does not drive.
 
 ---
 

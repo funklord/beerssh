@@ -40,6 +40,9 @@ private slots:
 	void a_host_follows_a_preset_and_may_override_it();
 	void a_preset_in_use_cannot_be_deleted();
 	void a_shipped_preset_cannot_be_edited();
+	void a_refused_preset_save_says_why();
+	void a_refused_preset_removal_says_why();
+	void an_unwritable_preset_file_is_reported_and_undone();
 	void the_host_editor_builds_a_profile();
 	void front_door_follows_the_input_device();
 	void an_identity_file_survives_the_round_trip();

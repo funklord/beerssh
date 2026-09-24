@@ -27,6 +27,7 @@ private slots:
 	void an_imported_preset_naming_an_unknown_feature_is_refused();
 	void an_untouched_font_stays_unset_rather_than_being_pinned();
 	void a_file_url_is_read_as_a_file_rather_than_as_a_name();
+	void a_save_or_delete_the_store_refused_is_said();
 };
 
 #endif /* BSSH_PRESET_EDITOR_TEST_H */

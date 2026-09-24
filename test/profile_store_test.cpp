@@ -464,6 +464,151 @@ void profile_store_test::a_shipped_preset_cannot_be_edited() {
 	QVERIFY(!store.remove_preset(builtin.id));
 }
 
+/*
+ * A write that fails for everybody, root included: a directory where the
+ * file goes. A read-only directory is the usual way to fail a write, and
+ * the check-ci container runs as root, which writes one anyway -- so a
+ * test built on permissions skips in the one place every push is gated.
+ */
+static void block_presets_file(const QString &directory) {
+	const QString path = directory + QStringLiteral("/presets.ini");
+	QFile::remove(path);
+	QVERIFY(QDir().mkpath(path));
+}
+
+void profile_store_test::a_refused_preset_save_says_why() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_preset_t nameless;
+	QCOMPARE(store.save_preset(nameless), 0);
+	QVERIFY2(store.last_error().contains(QStringLiteral("name")),
+	          qPrintable(store.last_error()));
+
+	bssh_preset_t shipped = store.presets().first();
+	QVERIFY(shipped.is_builtin);
+	shipped.term = QStringLiteral("mangled");
+	QCOMPARE(store.save_preset(shipped), 0);
+	QVERIFY2(store.last_error().contains(QStringLiteral("clone")),
+	          qPrintable(store.last_error()));
+
+	/*
+	 * Cleared on entry: a caller reading the reason after a SUCCESSFUL
+	 * save must not be handed the refusal before it.
+	 */
+	bssh_preset_t fine;
+	fine.name = QStringLiteral("fine");
+	QVERIFY(store.save_preset(fine) != 0);
+	QVERIFY2(store.last_error().isEmpty(), qPrintable(store.last_error()));
+}
+
+void profile_store_test::a_refused_preset_removal_says_why() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	const bssh_preset_t shipped = store.presets().first();
+	QVERIFY(!store.remove_preset(shipped.id));
+	QVERIFY2(store.last_error().contains(QStringLiteral("ships with")),
+	          qPrintable(store.last_error()));
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("followed");
+	const int preset_id = store.save_preset(preset);
+	QVERIFY(preset_id != 0);
+
+	bssh_profile_t profile = make_profile(QStringLiteral("follower"),
+	                                      QStringLiteral("follower.example"));
+	profile.preset_id = preset_id;
+	const int profile_id = store.save(profile);
+	QVERIFY(profile_id != 0);
+
+	QVERIFY(!store.remove_preset(preset_id));
+	QCOMPARE(store.last_error(), QStringLiteral("1 host still follows it."));
+
+	QVERIFY(store.remove(profile_id));
+
+	/*
+	 * A refusal IMMEDIATELY before the success, since remove() above
+	 * clears the reason itself -- with it in between, a remove_preset()
+	 * that never cleared would pass this unseen. Measured: it did.
+	 */
+	QVERIFY(!store.remove_preset(shipped.id));
+	QVERIFY(!store.last_error().isEmpty());
+	QVERIFY(store.remove_preset(preset_id));
+	QVERIFY2(store.last_error().isEmpty(), qPrintable(store.last_error()));
+}
+
+void profile_store_test::an_unwritable_preset_file_is_reported_and_undone() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_preset_t preset;
+	preset.name = QStringLiteral("before");
+	const int preset_id = store.save_preset(preset);
+	QVERIFY(preset_id != 0);
+
+	bssh_profile_t profile = make_profile(QStringLiteral("follower"),
+	                                      QStringLiteral("follower.example"));
+	profile.preset_id = preset_id;
+	QVERIFY(store.save(profile) != 0);
+
+	const auto hosts_file = [&dir] {
+		QFile file(dir.path() + QStringLiteral("/hosts.ini"));
+		return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+	};
+	const QByteArray hosts_before = hosts_file();
+	QVERIFY2(hosts_before.contains("preset=before"),
+	          "the fixture has to have a host naming the preset by its slug");
+
+	block_presets_file(dir.path());
+	const int presets_before = store.presets().size();
+
+	/* A new one: refused, said, and not left in memory. */
+	bssh_preset_t added;
+	added.name = QStringLiteral("added");
+	QCOMPARE(store.save_preset(added), 0);
+	QVERIFY2(store.last_error().contains(QStringLiteral("could not write")),
+	          qPrintable(store.last_error()));
+	QCOMPARE(store.presets().size(), presets_before);
+
+	/*
+	 * A rename: hosts.ini is rewritten to the new slug BEFORE presets.ini
+	 * fails, so the failure has to put it back, or the host names a
+	 * section that exists in neither file.
+	 */
+	bssh_preset_t renamed = store.preset(preset_id);
+	renamed.name = QStringLiteral("after");
+	QCOMPARE(store.save_preset(renamed), 0);
+	QVERIFY2(store.last_error().contains(QStringLiteral("presets.ini")),
+	          qPrintable(store.last_error()));
+	QCOMPARE(store.preset(preset_id).name, QStringLiteral("before"));
+	QVERIFY2(hosts_file().contains("preset=before"),
+	          "hosts.ini was left naming the slug of a rename that failed");
+
+	/*
+	 * The other order: hosts.ini is the file that cannot be written. The
+	 * rename's host rewrite fails first, and nothing may go on to write
+	 * presets.ini under a section no host names.
+	 */
+	QVERIFY(QDir(dir.path() + QStringLiteral("/presets.ini")).removeRecursively());
+	QVERIFY(store.save_preset(store.preset(preset_id)) != 0);  /* rewrites presets.ini */
+	QVERIFY(QFile::remove(dir.path() + QStringLiteral("/hosts.ini")));
+	QVERIFY(QDir().mkpath(dir.path() + QStringLiteral("/hosts.ini")));
+
+	QCOMPARE(store.save_preset(renamed), 0);
+	QVERIFY2(store.last_error().contains(QStringLiteral("hosts.ini")),
+	          qPrintable(store.last_error()));
+	QCOMPARE(store.preset(preset_id).name, QStringLiteral("before"));
+
+	QFile presets(dir.path() + QStringLiteral("/presets.ini"));
+	QVERIFY(presets.open(QIODevice::ReadOnly));
+	QVERIFY2(!presets.readAll().contains("after"),
+	          "presets.ini took a rename whose hosts could not follow it");
+}
+
 void profile_store_test::the_host_editor_builds_a_profile() {
 	bssh_host_editor editor;
 

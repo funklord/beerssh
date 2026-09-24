@@ -1,11 +1,15 @@
 #include <QtTest>
+#include <QApplication>
+#include <QDir>
 #include <QFile>
+#include <QMessageBox>
 #include <QUrl>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPushButton>
 #include <QTemporaryDir>
+#include <QTimer>
 
 #include "preset_editor_test.h"
 #include "model/profile_store.h"
@@ -415,4 +419,73 @@ void preset_editor_test::a_file_url_is_read_as_a_file_rather_than_as_a_name() {
 	const QString written = dir.filePath(QStringLiteral("written.ini"));
 	QVERIFY(restored.write_ini(QUrl::fromLocalFile(written).toString()));
 	QVERIFY(QFile::exists(written));
+}
+
+/*
+ * Clicks a button and returns the text of the warning it raised, or an
+ * empty string if none came up. Re-arms rather than firing once, since the
+ * box is not up until exec() has started (the same shape layout_test uses).
+ */
+static QString warning_raised_by(QPushButton *button) {
+	QString text;
+	QTimer closer;
+	closer.setInterval(0);
+	QObject::connect(&closer, &QTimer::timeout, [&text] {
+		QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+		if (!box) return;
+		text = box->windowTitle() + QStringLiteral(": ") + box->text();
+		box->close();
+	});
+	closer.start();
+	button->click();
+	closer.stop();
+	return text;
+}
+
+void preset_editor_test::a_save_or_delete_the_store_refused_is_said() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	const int preset_id = make_editable_preset(store, QStringLiteral("Doomed"));
+	QVERIFY(preset_id != 0);
+
+	bssh_preset_editor editor(&store);
+	QListWidget *list = editor.findChild<QListWidget *>();
+	for (int i = 0; i < list->count(); ++i) {
+		if (list->item(i)->data(Qt::UserRole).toInt() == preset_id) list->setCurrentRow(i);
+	}
+	QCOMPARE(editor.current_preset_id(), preset_id);
+
+	QPushButton *save = nullptr;
+	QPushButton *remove = nullptr;
+	for (QPushButton *button : editor.findChildren<QPushButton *>()) {
+		if (button->text() == QStringLiteral("Save")) save = button;
+		if (button->text() == QStringLiteral("Delete")) remove = button;
+	}
+	QVERIFY(save && save->isEnabled());
+	QVERIFY(remove && remove->isEnabled());
+
+	/*
+	 * A directory where presets.ini goes: fails for root too, so this runs
+	 * in the check-ci container rather than skipping there.
+	 */
+	const QString path = dir.path() + QStringLiteral("/presets.ini");
+	QFile::remove(path);
+	QVERIFY(QDir().mkpath(path));
+
+	/*
+	 * Through the real buttons, because the defect was the editor's: the
+	 * store has always returned 0 here, and the button said nothing.
+	 */
+	const QString said_on_save = warning_raised_by(save);
+	QVERIFY2(said_on_save.startsWith(QStringLiteral("Not saved")),
+	          qPrintable(QStringLiteral("Save raised: [%1]").arg(said_on_save)));
+	QVERIFY2(said_on_save.contains(QStringLiteral("could not write")),
+	          "the store's reason has to reach the user, not only the fact");
+
+	const QString said_on_delete = warning_raised_by(remove);
+	QVERIFY2(said_on_delete.startsWith(QStringLiteral("Not deleted")),
+	          qPrintable(QStringLiteral("Delete raised: [%1]").arg(said_on_delete)));
+	QVERIFY(store.preset(preset_id).id == preset_id);
 }

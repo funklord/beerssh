@@ -1,0 +1,60 @@
+# A preset write the store refused, said rather than swallowed
+# (project.md sec 10.6). Save, Clone, Delete and Import in the preset
+# editor, and the desktop import, all returned in silence on a refusal,
+# so a button that did nothing looked exactly like one that worked.
+#
+# Two halves, and either alone is silent: the store has to give a
+# reason, and the editor has to show it.
+
+# The editor stops saying so. Silenced rather than deleted, which models
+# the failure that actually happened -- the refusal was reached and
+# nothing was done with it -- and keeps the helper used.
+[[sabotage]]
+name = "a refused Save says nothing"
+file = "src/ui/preset_editor.cpp"
+find = "\t\twarn_not_written(this, QStringLiteral(\"Not saved\"),"
+replace = "\t\tif (false) warn_not_written(this, QStringLiteral(\"Not saved\"),"
+expect = "a_save_or_delete_the_store_refused_is_said"
+
+[[sabotage]]
+name = "a refused Delete says nothing"
+file = "src/ui/preset_editor.cpp"
+find = "\t\twarn_not_written(this, QStringLiteral(\"Not deleted\"),"
+replace = "\t\tif (false) warn_not_written(this, QStringLiteral(\"Not deleted\"),"
+expect = "a_save_or_delete_the_store_refused_is_said"
+
+# The store keeps a stale reason. Without the clear on entry a caller
+# that reads last_error() after a SUCCESSFUL save is handed the refusal
+# before it -- the reason remove() already clears for.
+[[sabotage]]
+name = "save_preset leaves the last refusal's reason in place"
+file = "src/model/profile_store.cpp"
+find = "\tm_last_error.clear();\n\n\tif (preset.name.isEmpty()) {"
+replace = "\tif (preset.name.isEmpty()) {"
+expect = "a_refused_preset_save_says_why"
+
+[[sabotage]]
+name = "remove_preset leaves the last refusal's reason in place"
+file = "src/model/profile_store.cpp"
+find = "\t/* Cleared on entry and given a reason; see save_preset(). */\n\tm_last_error.clear();"
+replace = ""
+expect = "a_refused_preset_removal_says_why"
+
+# A rename whose hosts.ini rewrite failed goes on to write presets.ini
+# under a section no host names -- the host-rewrite status discarded
+# again, as it was.
+[[sabotage]]
+name = "a rename ignores the hosts.ini rewrite failing"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (renamed && !write_profiles()) {"
+replace = "\t\tif (renamed && !write_profiles() && false) {"
+expect = "an_unwritable_preset_file_is_reported_and_undone"
+
+# A rename whose presets.ini write failed leaves hosts.ini already moved
+# to the new slug.
+[[sabotage]]
+name = "a failed rename leaves hosts.ini on the new slug"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (renamed) {\n\t\t\tconst QString reason = m_last_error;"
+replace = "\t\tif (false) {\n\t\t\tconst QString reason = m_last_error;"
+expect = "an_unwritable_preset_file_is_reported_and_undone"
