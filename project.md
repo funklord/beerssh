@@ -10566,6 +10566,14 @@ without an icon is defective, so there is a plain one meant to be replaced.
   the Qt-version-skew problem across distros) is deferred rather than dropped.
   Ship a `.desktop` file, an AppStream `.metainfo.xml`, and hicolor icons —
   without them the app is invisible to software centres.
+  **Its menu category is System, beside the other terminals** (2026-09-24).
+  It said `Network;RemoteAccess;TerminalEmulator;`, which put it alone
+  under Internet in TDE's menu while Konsole, xterm, uxterm, QTerminal and
+  cool-retro-term all sat in System -- measured with `tde-menu
+  --print-menu-id` against a menu cache built in scratch, before and
+  after, so the live one was never rebuilt. Keeping `Network` beside
+  `System` would list it twice, and `desktop-file-validate` was already
+  hinting that `TerminalEmulator` belongs with `System`.
   **The metainfo shipped unvalidated until 2026-09-21, and did not
   validate.** `check-deb.sh` ran `desktop-file-validate` on the desktop
   entry from the day it existed and never asked `appstreamcli` anything

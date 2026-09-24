@@ -6,7 +6,13 @@ Comment=SSH terminal for desktop and Android
 Exec=beerssh %f
 Icon=se.vibes.beerssh
 Terminal=false
-Categories=Network;RemoteAccess;TerminalEmulator;
+# System, beside Konsole and xterm, because it is a terminal emulator as well
+# as an SSH client (project.md sec 8.6), and every desktop files those under
+# System. It said Network, which put it alone under Internet in TDE's menu while
+# every other terminal sat in System; adding Network back beside System would
+# list it twice, since a menu shows an entry under each main category it names.
+# The SSH half is still found by searching: Keywords below carries it.
+Categories=System;TerminalEmulator;
 Keywords=ssh;terminal;shell;remote;console;
 
 # The app is the handler for its own preset files (project.md sec 10.5), which
