@@ -797,6 +797,35 @@ argues for; the first fixes it a release sooner. Not built either way
 until that is chosen, because a watchdog that kills the process is the
 one addition where being wrong is worse than the bug.
 
+**Chosen and built diagnostic-first, 2026-09-18.** The holder said "stop
+here, work the fix from the evidence" and answered the kill-now versus
+diagnostic-first question with "continue"; the session took the cautious
+order. `1ab34c4` adds `src/hang_watchdog.cpp`: a 1s main-thread heartbeat,
+a detached watcher thread, and `SIGQUIT` (ART's stack dump to logcat and
+`/data/anr`) once the app was foreground and the beat has been silent 30s.
+It was installed on the Fold 2026-09-18 and has not yet fired on a real
+hang. **The `_exit()` half is still owed**, held until one real
+occurrence shows the gate fires and the dump names the holder; read it
+with `adb bugreport` or `logcat -v threadtime`.
+
+**[OPEN] The built gate is not the one designed above.** The bullet above
+says the gate must be the Android lifecycle's resumed/paused state and
+"not Qt's `applicationState`". The code reads
+`QGuiApplication::applicationState()` in the heartbeat
+(`bssh_start_hang_watchdog`), so the flag the watcher trusts is whatever
+Qt reported at the last beat before the wedge. Recorded, not resolved:
+whether that is an acceptable reading of the design or the design's
+objection still holds is the question to settle before the `_exit()`
+half lands -- that half is where a loose gate kills a live session.
+
+**Two observations above were weakened the same evening (2026-09-17).**
+The ~14s backgrounded `makeCurrent(): no EGLSurface` spin matches no
+beerssh timer and is Qt's own surface retry, so "stop the backgrounded
+render activity" is not a lever beerssh obviously holds. And the
+camera's `Waited 10001ms for FocusEvent` ANR is a recurring Samsung
+camera fault: it also fired 2026-09-15 and at 20:23 on 09-17 with no
+beerssh in the stack, so it is not evidence of a hung beerssh window.
+
 **Stopping it is a START.** `startForegroundService()` opens a contract: the
 service has about five seconds to call `startForeground()` or Android throws
 `RemoteServiceException` and kills the process. A plain `stopService()` arriving
@@ -1360,6 +1389,11 @@ up, a strip of modifiers has nothing to modify.
   Shrinking was not available: under the touch floor a key is one you cannot
   reliably hit, which is worse than one you have to scroll to. 652px of minimum
   width becomes **92**.
+  **It still has to scroll on the 320dp cover screen, whatever the layout**
+  (2026-09-10): the narrowest layout is 402px of keys against 320, and at
+  `BSSH_TOUCH_TARGET_DP` 48 about six keys fit, so the strip is always
+  dragged there. Raised with the holder as a design question and not
+  answered; scrolling remains the design until it is.
   Two things had to be understood first, and the first guess was wrong. A
   `QScroller` on the viewport was blamed for a crash in the first attempt; a
   20-line probe building and destroying that exact widget shape, with and
@@ -1840,6 +1874,21 @@ moving the tap report below the `WA_InputMethodEnabled` check. Neither
 looks wrong on the page and both make the feature useless.
 
 
+**Would a system-wide Android keyboard help Google eavesdrop? — answered
+2026-09-06, not a plan.** The holder asked: "If this keyboard were to be
+made into a proper Android keyboard applet. Would it make it easier for
+Google to eavesdrop on text etc?" The answer given was "no, not
+materially": an IME's text goes from the keyboard's process to the target
+app's `InputConnection` over Binder, and Google's position does not depend
+on the keyboard, since they ship the OS. **The in-app keyboard is itself a
+privacy feature today** — terminal input, commands and passwords never
+pass through Gboard. The real costs of becoming a system IME are the blast
+radius (it would see every app's text) and a long-lived service other apps
+bind to; if one is ever built, "never log, never persist, never network"
+is a hard constraint. Caveat recorded at the time: the `system_server`
+claim was not checked against AOSP, and Samsung's additions were not
+examined.
+
 **A second built-in keyboard, in a real keyboard's shape — [BUILT
 2026-09-04].** The compact one above is a phone keyboard: three groups of
 four rows, thumb-sized, letters where a phone user expects them. The
@@ -1882,8 +1931,17 @@ and Qt elides `Home`, `PgUp`, `Left` and `F10`–`F12` to an ellipsis; a Fold's
 cover screen at 317dp gives about 18dp; its inner screen at roughly 680dp
 gives about 42dp, which is usable. Rendered at 800dp it reads as a
 keyboard, every label intact. **So this is a large-screen keyboard**, and
-whether a narrow device should fall back to the compact one automatically —
-the way §8.2 collapses splits to tabs — is the holder's call and is open.
+**a narrow screen falls back to the compact one — [DECIDED 2026-09-04]**, the
+holder's words being "fall back to compact on narrow screens". `a9152c8`
+carries the reasoning: the threshold is §8.1's MEDIUM boundary, 600dp,
+reused rather than a second number; it is a deliberate compromise against
+the honest 770dp, which would exclude the Fold's inner screen (~680dp, 41dp
+keys) that this keyboard was asked for; it never rewrites the stored
+setting, so unfolding gives the full board back; and it only narrows — a
+compact choice on a tablet is respected. The same request asked to "move
+the leftmost groups of keys such as numpad into a second page"; it was read
+as the clusters outside the main block (the numpad is on the right), and
+the holder did not object.
 
 **The default was wrong and is now the platform's.** `keyboard()` returned
 SYSTEM everywhere. On a phone that hands a new user a keyboard with no Esc,
@@ -5133,6 +5191,15 @@ fails loudly at the patch step rather than silently dropping the fix, and
 `make veryclean` hands the submodule back pristine. All five patches are
 worth sending upstream.
 
+**So ` M vterm` in `git status` after a build is normal, and must not be
+tidied away.** The gitlink has not moved -- `git submodule status` shows
+the pinned commit with no `+` -- and the dirty files inside it
+(`include/vterm.h`, `src/screen.c`, `src/state.c`) are exactly the ones
+`vterm-patch/` touches. fuzzypickles' session once took it for a stray
+edit. `git submodule update --force` or a checkout inside the submodule
+silently reverts all five patches; `make veryclean` is the one sanctioned
+way back to pristine (checked by the guidelines session, 2026-08-27).
+
 **`vterm-patch/0005` is the fourth kind: a reset that clears state without
 telling anyone.** `vterm_state_reset()` cleared `mode.alt_screen` and
 `mouse_flags` by direct assignment, bypassing `vterm_state_set_termprop()`
@@ -7231,7 +7298,7 @@ status line: always visible, thumb-reachable, and one `addWidget` to move
 if it should go elsewhere. It is not in the key row, which scrolls, so it
 cannot scroll off.
 
-**`move terminals` is BUILT 2026-09-18; `scroll terminals` waits.** The two
+**`move terminals` is BUILT 2026-09-18.** The two
 column-level states needed the scrollable column, which now exists.
 `move terminals` (reorder the column) is built: a fourth selector state,
 Move, offered only in the column arrangement -- there is nothing to reorder
@@ -7435,10 +7502,29 @@ exactly as loudly as one that measured them all.
 **Everything currently built stays until it is replaced**, on the
 holder's instruction: *"We keep all the features we have for now and try
 to test our way forward."* Open, and cheap to settle when they come up:
-where the selector physically lives, given the key row scrolls and a
-control that can scroll off screen is not "always visible"; whether tabs
-survive on desktop and landscape; and whether the terminal's overflow
-menu goes once the picker carries the config route.
+whether tabs survive on desktop and landscape, and whether the terminal's
+overflow menu goes once the picker carries the config route. (Where the
+selector lives was the third, and is settled above: the bottom edge.)
+
+**[OPEN] Which arrangement applies in which device state -- the holder's
+words, 2026-09-11, never turned into a decision.** 08:26: *"Now that we
+have many disparate modes, we should probably configure which mode
+applies in which state. Like, in landscape mode we probably only want one
+terminal on screen but scrolling might be useful, in portrait mode 1-2 and
+scrolling, in folded out mode, act more like desktop but optimized for
+touch."* 08:40: *"Desktop might have touch too, so let's try to make the
+modes the same with minor differences for mobile and desktop, switchable
+for testing. Let's give them names, 1. Desktop mode, 2. Vertical
+scrollable. They can each also have tabs on top/bottom/left/right."* The
+two names became `tiled` and `column` in `layout/arrangement`; what was
+not built is the per-state policy and the **tab-bar position as its own
+axis** (top/bottom/left/right, and none). The session proposed deriving
+the default from the device's state with one override per behaviour --
+the "On-screen keys: Automatic/Always/Never" shape -- rather than a knob
+per state. Three questions went to the holder and were not answered: is
+"folded out" a third arrangement or just touch plus width; what does the
+cover screen in landscape (~700x390dp) get; and is "1-2 terminals" per
+window or per orientation.
 
 ### 8.6 The command line — **[DECIDED]**
 
@@ -8959,6 +9045,20 @@ double as documentation of what a preset can do.
   A script rather than app code, because the app no longer links Qt SQL at all
   and carrying a database driver forever to read one file once is a poor trade.
 
+#### The preset editor drops a failed write without a word — **[OPEN; fix approved 2026-09-03, never landed]**
+
+Found 2026-09-03: `on_save`, `on_clone`, `on_delete` and `on_import` in
+`src/ui/preset_editor.cpp` all return silently when the store refuses --
+`if (id == 0) return;`, and `if (!m_store->remove_preset(id)) return;`
+-- and so does the desktop preset import in `main_window.cpp`, two lines
+above its "Preset imported" message. The holder said "go ahead with the
+preset editor fix"; the patch was drafted and then displaced by the
+keyboard work that evening, and never applied. Re-checked in the source
+2026-09-24: all five sites unchanged. The drafted shape, for whoever takes
+it: `save_preset()` and `remove_preset()` clear `last_error()` on entry
+and give every refusal a reason; one `warn_not_written()` helper behind
+the four editor buttons and the desktop import; three store-level tests.
+
 ---
 
 ## 11. Security & credential storage
@@ -9891,6 +9991,13 @@ store is a no-op rather than a silent loss.
     they cannot say whether that build was incremental, and a zero from a
     build that never reopened an existing output is exactly what the
     fresh-write control predicts.
+    **Later the same day (2026-09-04): hydra confirmed stubs in its APK**,
+    so the measured scope is two of four projects, recorded in
+    `claude-guidelines`' `project.md`. Deleting the previous APK first was
+    reproduced on a second and third build here, 39,692,128 and then
+    39,708,512 bytes, each with zero stubs. **This tree's `make android`
+    still does not delete it** -- the measurement used a scratch script --
+    so the prevention is known and not wired in.
     **The artifact is kept, at the copyright holder's direction**, as
     `~/fixtures/beerssh-dead-space-46.5M.apk` — 46,499,926 bytes, sha256
     `08360537107f5c922582f5322047a068680766e94df704ed2776a7cfd31d6e5c`,
@@ -10278,6 +10385,29 @@ step that never appears look identical: with the override commented out
 `dh binary --no-act` lists `dh_auto_test`, and with it in place the step
 is gone. Checking only the after state would have shown nothing either
 way.
+
+**A cold `make android` compiles one file at a time unless the outer make
+has `-j`** (2026-08-19). The recipe recurses as `$(MAKE) -C
+$(ANDROID_BUILD_DIR) apk_install_target` with no `-j` of its own, so it
+inherits whatever the caller gave: the first device build hit a 40-minute
+`timeout` (exit 124, no compiler error) after ~70 objects built serially
+on twelve cores, and `make -j12 android` completed. Incremental rebuilds
+are ~20s and do not notice.
+
+**A killed compile can leave an object make believes** (2026-09-09). An
+out-of-memory kill left a truncated `emulator_test.o` with a fresh mtime;
+make took it as current and the link failed far from the cause. After any
+killed build, delete the objects newer than the last good link, or
+rebuild clean.
+
+**`.gitignore`'s `fonts/` is unanchored, so it also ignores
+`android/assets/fonts/`** (2026-08-20). That happens to be wanted, but by
+accident: `android/assets/terminfo/` has its own rule and the fonts
+directory rides on the root one. The consequence is that `android/assets`
+is an unignored directory whose every child is ignored, which `git
+status` reports as nothing at all while `git clean -xdn` lists 9 MB --
+so a cleanup report of "untracked-and-unignored: none" said nothing
+about it.
 
 ### 12.2 Desktop packaging — **[DECIDED]** tarball, `make install`, and a
 **`.deb`**; Flatpak and the rest deferred
@@ -11125,6 +11255,12 @@ content the entry above refuses to shrink.
 shots` was drawing a surface touch no longer displays, which is this
 tree's own rule about pictures of things the app never does.
 
+**The split was the holder's pick of three** (2026-09-10): "Nested
+sub-pages". Rejected: "Collapsible notes", which saves the ~510px of
+notes, about a quarter of the page, but makes the explanations
+undiscoverable; and "Tighten spacing only", worth 100-200px against a
+1929px page.
+
 ### 12.3s Cancelling a password prompt said "reconnecting" — **[FIXED 2026-09-10]**
 
 Found in real use on the phone: cancelling the password dialog for
@@ -11332,6 +11468,24 @@ level in: swap it for `isEmpty` and the call falls through to the
 platform, which on a DESKTOP also answers empty. Written, run, MISSED,
 and recorded in `terminfo.toml` rather than shipped -- it is observable
 only where the platform's answer is not empty, which is Android.
+
+**Known gap, left deliberately (2026-09-10):** an asset that is shipped
+but cannot be read makes `terminfo_directory()` answer empty, which is
+indistinguishable from "nothing shipped". It is not reported because the
+tree has no warning idiom for it, and inventing one is a convention
+change rather than part of this.
+
+**The holder's own answers on the original report, quoted because they
+do not settle it.** Asked on 2026-09-08 for `echo $SHELL` on `vibes.se`,
+the holder replied "it's bash" (08:30) and a minute later "it has no
+value". At 15:21, after being asked for `ps -p $$ -o comm=` and
+`echo "${TERM:-<unset>}"`, the reply was again "it has no value", and
+the session never acknowledged it. The mksh explanation above is
+measured on the phone's LOCAL shell; if the report was made against bash
+on `vibes.se`, `backspace_crosses_a_wrapped_line` says bash redraws
+across the wrap -- and an unset `TERM` on the remote (§12.3n measures
+only that ours is sent) would be the next thing to check. `printenv
+TERM` on `vibes.se` was still open when the session ended.
 
 ### 12.3p The stale glyph on the phone is not ours — **[2026-09-09]**
 
@@ -12151,6 +12305,14 @@ rather than refused (sec 8.2) -- `show_as_tab` repeats it and cites
 `tear_out`'s rule, and its sabotage is caught. `tear_out` was the one
 that was guarded and untested, and that is fixed above.
 
+**And one from hydra's lens, 2026-09-04: an environment variable gating
+an Android diagnostic.** hydra found diagnostics gated on
+`qEnvironmentVariableIsSet` never run on Android, because `am start`
+cannot pass environment variables. beerssh has four environment-variable
+reads and none gates a diagnostic: `SHELL` falls back to `/bin/sh`, which
+exists on Android, and the `USER` default is on a command-line path a
+phone never takes. Nothing found.
+
 ### 12.3 Testing
 The desktop build is what makes this project testable at all — use it.
 - **Unit tests run on the host**, no device and no server: the emulator fed
@@ -12843,6 +13005,20 @@ The desktop build is what makes this project testable at all — use it.
   `bssh-check-ci-$$` carries the pid of the shell to signal, so the thing
   being cleaned up names its own supervisor and no process-tree hunt, and no
   `pgrep` pattern, is needed to find it.
+- **The pre-push hook does not run `check-ci` itself, and an opt-in to make
+  it do so was declined** (2026-08-24/25). With three commits sitting
+  unpushed for up to four days because nobody had run the gate, an opt-in
+  `BSSH_PUSH_RUNS_CHECK=1` was proposed to run it inline. Its cost, stated
+  at the time: it reintroduces the idle-socket failure the hook's own
+  comment describes -- the remote closes a connection left idle for the
+  length of a container build and the push dies of SIGPIPE -- for anyone
+  who sets it, a foot-gun in a gate that has none. The holder: "leave it
+  as is".
+- **`tool/check-keepalive.sh` sends the whole in-container build to
+  `/tmp/build.log`** and shows only its tail on failure, so the "applying
+  N patch(es) to vendored libvterm" line that proves a reproduction from
+  pristine never appears in its output the way it does in `check-ci`'s.
+  Noted 2026-08-26, not changed.
 - Keep native dependency build scripts reproducible and pinned to versions.
 - Signing config for Play (upload key + Play App Signing).
 
@@ -13527,6 +13703,62 @@ existing test walked past, and none of them came from rendering a screen.
 They came from asking, of each primitive in the paint path, *what coordinate
 space is this in* — a question a screenshot cannot be asked.
 
+### Driving the shared phones over adb, without landing in somebody else's app
+
+The phones on this desk are shared -- with the holder, who may be holding
+one, and with hydra's and bbq-predictor's sessions, which launch their own
+apps on it. Collected from 2026-08-26 to 09-18, because every item cost
+something:
+
+- **Check the foreground app immediately before EVERY injected input**,
+  not once per sequence. Blind `input tap` / `input text` went, over those
+  weeks, into bbq-predictor, hydra's URL bar, a browser, the Camera (via
+  the dock, after `BACK` had left beerssh for the home screen), the Clock
+  while the holder held the phone -- and on 2026-09-03 into the holder's
+  live Teams call, typing `echo KEYBOARD_STAYS_UP` and Enter, because
+  hydra's session kept taking the foreground. Guard on
+  `topResumedActivity`: `mCurrentFocus` goes null during Qt window
+  transitions, so a guard on it refuses forever. When the foreground keeps
+  moving, stop and ask whether to drive the phone or only watch. Coordinate
+  with hydra's session before using the phone at all.
+- **`BACK` at the terminal leaves the app**, so the next tap lands on the
+  home screen; and when beerssh crashes mid-`input text`, the rest of the
+  typing goes to the launcher.
+- **A locked or dozing phone still reports beerssh as focused**, so any
+  reading taken then is void -- it produced a false Back-key "bug". `svc
+  power stayon usb` keeps it awake (approved by the holder); set it back
+  with `svc power stayon false`. A white capture means the screen is off,
+  a black one a lock screen, and `adb pull` of a fixed path can hand back
+  a stale screenshot another session left there.
+- **`dumpsys input_method`'s `mInputShown` read false while the keyboard
+  was on screen**; do not use it as the witness.
+- **Gestures**: `input swipe` arrives as a fling and never starts a drag;
+  `input motionevent DOWN/MOVE/UP` does. Coordinates are per rotation --
+  portrait coordinates on a landscape phone hit something else.
+- **The Fold**: logical display 0 swaps to the inner screen when unfolded,
+  and `input -d` wants the logical id (`screencap -d` is in §8.7).
+  `cmd device_state print-state` gives 0 for CLOSED and 2 for HALF_OPENED.
+  Unfolding re-enumerates USB and drops adb; the long outages were the
+  phone falling back to charge-only USB on reconnect, and one bad cable.
+  `lsusb` says whether the fault is below adb -- and a wrong `lsusb` probe
+  once sent the holder swapping cables for nothing. Restarting the adb
+  server drops hydra's tunnel.
+- **Editing the app's settings on the device**: force-stop the app, then
+  `run-as se.vibes.beerssh <cmd>` on `/data/user/0/...` rather than
+  `/data/data/...`; `run-as ... sh -c` loses the working directory.
+  toybox `sed` does not take the one-line `a` form and writes `\n`
+  literally, which once mangled `app.ini`.
+- **A tombstone is not ours until its header says so.** A "deadlock
+  protector" tombstone was nearly claimed as beerssh's; its `>>>
+  se.vibes.hydra <<<` line said otherwise. Read the package line first.
+- **Credentials are never typed by a session.** The `vibes.se` profile on
+  the phone has no key, so the local shell is the only credential-free
+  test surface; twice a session stopped at the password prompt, and the
+  holder's "go ahead and connect" was taken as a one-off each time. That
+  is the sessions' own practice, not an instruction from the holder.
+- **A shared device driven through screenshots cannot answer a question
+  about specific grid cells** -- measure those in the emulator or a test.
+
 ---
 
 ## 18. Code style and repo conventions — **[DECIDED]**
@@ -13630,6 +13862,10 @@ restated here; `code-style.md` carries what the hook itself does.
 - `tool/hooks/commit-msg`, installed by `make hooks`, enforces the two
   mechanical halves: no generator attribution, and a subject within 75
   columns. Everything else above is a review item.
+- **Three messages cite the wrong section**, and the log cannot be
+  corrected, so it is recorded here: `d0e1910` says §18 for a rule in
+  §12.4, `713ce39` says §2 for a non-goal in §1, and `a9152c8` says §8.2
+  for the 600dp MEDIUM boundary, which is §8.1's.
 
 ### 18.6 The gate's own suite runs before the gate's verdict
 
