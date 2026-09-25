@@ -609,6 +609,17 @@ public:
 	void drop_session(bssh_session *session, bool beside);
 
 	/*
+	 * A session dropped on the pane showing `target`, at `edge` (a
+	 * bssh_layout_manager::drop_edge_t) -- sec 8.3's placing drop. An
+	 * edge splits the target that way, the middle swaps the two. A pane
+	 * of this window moves; a tab or another window's session arrives,
+	 * and where there is no room for another pane it falls back to what
+	 * drop_session() does, a tab that keeps the arrangement. Public for
+	 * the reason drop_session is: the model can be driven without a drag.
+	 */
+	void drop_session_on(bssh_session *session, bssh_session *target, int edge);
+
+	/*
 	 * Whether a point in this window's coordinates is on the tab ROW.
 	 *
 	 * The row, not the widget, and that distinction was a bug: a QTabBar

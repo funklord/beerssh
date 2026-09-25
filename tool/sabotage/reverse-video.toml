@@ -24,8 +24,8 @@ expect = "decscnm_toggles_reverse_video"
 [[sabotage]]
 name = "the pane ignores the reverse-video change"
 file = "src/ui/pane_container.cpp"
-find = "\t\t         view, &bssh_terminal_view::set_reverse_video);"
-replace = "\t\t         view, [](bool) {});"
+find = "\t         view, &bssh_terminal_view::set_reverse_video);"
+replace = "\t         view, [](bool) {});"
 expect = "reverse_video_reaches_the_pane_and_flips_it"
 
 # The flip does not actually swap the colours.

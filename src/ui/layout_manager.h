@@ -4,7 +4,28 @@
 #include <QList>
 #include <QObject>
 
+#include <vector>
+
 class bssh_session;
+
+/*
+ * The shape of a tiled window: a tree of splits whose leaves are sessions
+ * (sec 8.1). A leaf has a session; a split has none, an orientation and
+ * two or more children laid out along it -- Qt::Horizontal is side by
+ * side, Qt::Vertical is one above the other.
+ *
+ * std::vector rather than QList because a node holds a list of itself,
+ * which the standard guarantees for vector since C++17 and Qt does not
+ * promise for QList.
+ */
+struct bssh_pane_node {
+	bssh_session *session = nullptr;
+	Qt::Orientation orientation = Qt::Horizontal;
+	std::vector<bssh_pane_node> children;
+
+	bool is_leaf() const { return session != nullptr; }
+	bool is_empty() const { return !session && children.empty(); }
+};
 
 /*
  * bssh_layout_manager -- the only thing that decides tabs versus splits
@@ -71,10 +92,12 @@ public:
 	static size_class_t size_class_for(int width_dp);
 
 	/*
-	 * How many panes may be shown at this width. Capped at 4 with a
-	 * single nesting level for v1 (sec 8.1): it covers the realistic
-	 * cases and avoids a whole class of layout, focus and drag-target
-	 * bugs that an arbitrary tmux-style tree brings.
+	 * How many panes may be shown at this width, however they are nested.
+	 * Capped at 4 (sec 8.1). This once also held splits to a single level
+	 * for v1; the holder asked for panes to be dropped above and below as
+	 * well as beside each other (2026-09-25), which is a tree, and the cap
+	 * on COUNT is what still keeps a window from being carved into panes
+	 * too small to hold a shell.
 	 *
 	 * This is the TILED answer, keyed on width because side-by-side panes
 	 * are what a narrow window cannot hold. A column stacks instead, so it
@@ -128,6 +151,39 @@ public:
 
 	void forget(bssh_session *session);
 
+	/*
+	 * Where a dropped pane goes, relative to the pane it was dropped on
+	 * (sec 8.3). An edge splits the target that way -- left and right
+	 * side by side, top and bottom one above the other -- and the middle
+	 * swaps the two.
+	 */
+	enum drop_edge_t { EDGE_LEFT, EDGE_RIGHT, EDGE_TOP, EDGE_BOTTOM, EDGE_MIDDLE };
+
+	/*
+	 * Puts `session` at `edge` of the pane showing `target`, which must be
+	 * in the intent. `session` may already be a pane here (it moves) or
+	 * not (it arrives); arriving in the middle takes the target's place,
+	 * and the target goes on being shown as a tab rather than closed
+	 * (sec 8.2). The caller asks max_panes() first when a session
+	 * arrives; this places what it is told to.
+	 *
+	 * False, changing nothing, for a target that is not a pane or a
+	 * session dropped on itself.
+	 */
+	bool place(bssh_session *session, bssh_session *target, drop_edge_t edge);
+
+	/*
+	 * The whole shape, and the shape as shown: the latter is pruned to
+	 * visible_panes(), so a window too narrow for all of it shows the
+	 * first panes in their places and the rest as tabs -- the same
+	 * truncation the flat list has always had, applied to a tree.
+	 *
+	 * The leaves in depth-first order ARE the intent, always; everything
+	 * that reads the intent as a list goes on working unchanged.
+	 */
+	const bssh_pane_node &tree() const { return m_tree; }
+	bssh_pane_node visible_tree() const;
+
 signals:
 	/* The visible arrangement changed; the pane container rebuilds. */
 	void layout_changed();
@@ -136,6 +192,7 @@ private:
 	int m_width_dp;
 	arrangement_t m_arrangement;
 	QList<bssh_session *> m_intent;
+	bssh_pane_node m_tree;
 };
 
 #endif /* BSSH_LAYOUT_MANAGER_H */

@@ -363,6 +363,27 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::start_session_drag);
 	connect(m_panes, &bssh_pane_container::pane_move_requested,
 	         this, &bssh_main_window::move_pane);
+
+	/*
+	 * A pane or tab dropped on a pane (sec 8.3), from EVERY pane. This was
+	 * connected to the focused view alone, so a drop on any other pane --
+	 * the one a user drags onto, nearly always -- was accepted by the view
+	 * and delivered to nothing: the drag looked taken and nothing moved.
+	 *
+	 * The session is read now, while the drop's data exists, and placed a
+	 * turn later: placing rebuilds the panes, and the view delivering this
+	 * drop is one of them, still inside its dropEvent.
+	 */
+	connect(m_panes, &bssh_pane_container::session_dropped, this,
+	         [this](const QMimeData *mime, bssh_session *target, int edge) {
+		QPointer<bssh_session> dropped = session_from_mime(mime);
+		QPointer<bssh_session> onto = target;
+		if (!dropped || !onto) return;
+
+		QMetaObject::invokeMethod(this, [this, dropped, onto, edge] {
+			if (dropped && onto) drop_session_on(dropped, onto, edge);
+		}, Qt::QueuedConnection);
+	});
 	connect(m_panes, &bssh_pane_container::find_matches_changed,
 	         this, &bssh_main_window::update_find_status);
 
@@ -1850,19 +1871,6 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		         this, [this](const QString &text) { paste_into_current(text); });
 
 		/*
-		 * And a TAB dropped on this pane, which the view accepts only so
-		 * that Qt delivers it at all -- it picks a target before
-		 * delivery and never re-targets to an ancestor, so a view that
-		 * refused meant the window was never offered the drop and the
-		 * tab tore out into a new window instead of tiling (sec 8.4).
-		 */
-		connect(m_terminal_view, &bssh_terminal_view::session_dropped,
-		         this, [this](const QMimeData *mime) {
-			bssh_session *dropped = session_from_mime(mime);
-			if (dropped) drop_session(dropped, true);
-		});
-
-		/*
 		 * Middle-click pastes the PRIMARY selection, not the clipboard.
 		 * They are different buffers and conflating them is what makes
 		 * middle-click paste surprising: it should deliver whatever was
@@ -2563,6 +2571,51 @@ void bssh_main_window::adopt_session(bssh_session *session) {
 
 	take_session(session);
 	show_session(session);
+}
+
+void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *target,
+                                        int edge) {
+	if (!session || !target || !m_layout || !m_panes || session == target) return;
+
+	const auto where = bssh_layout_manager::drop_edge_t(edge);
+
+	if (!m_layout->intent().contains(session)) {
+		/*
+		 * An arrival adds a pane unless it takes the target's place, and
+		 * a window with no room keeps its arrangement and shows the
+		 * arrival as a tab -- drop_session()'s rule, for its reason.
+		 */
+		if (where != bssh_layout_manager::EDGE_MIDDLE
+		    && m_layout->intent().size() >= m_layout->max_panes()) {
+			drop_session(session, true);
+			return;
+		}
+		take_session(session);
+	}
+
+	if (!m_layout->place(session, target, where)) return;
+
+	/*
+	 * In a column m_shown is the order of record (see move_pane), so the
+	 * new order is written back there too: the panes' slots in m_shown
+	 * take the intent's order, and the tabs around them stay put.
+	 */
+	if (m_layout->arrangement() == bssh_layout_manager::COLUMN) {
+		const QList<bssh_session *> order = m_layout->intent();
+		int next = 0;
+		for (int i = 0; i < m_shown.size() && next < order.size(); ++i) {
+			if (order.contains(m_shown.at(i))) m_shown[i] = order.at(next++);
+		}
+	}
+
+	/*
+	 * Focus goes with the pane that moved: the user just put it there,
+	 * and it is the one they are about to type in.
+	 */
+	m_panes->focus_session(session);
+
+	refresh_tab_bar();
+	update_status();
 }
 
 void bssh_main_window::drop_session(bssh_session *session, bool beside) {

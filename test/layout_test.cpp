@@ -3564,6 +3564,226 @@ void layout_test::the_tab_bar_row_takes_a_drop_beyond_the_tabs() {
  * gesture whose undo is destructive, which is worse than one that
  * cannot be undone.
  */
+/*
+ * A tree as text -- "V(a,H(b,c))" -- so a shape is compared in one line
+ * rather than walked node by node in every test.
+ */
+static QString shape_of(const bssh_pane_node &node,
+                        const QHash<bssh_session *, QString> &names) {
+	if (node.is_leaf()) return names.value(node.session, QStringLiteral("?"));
+	if (node.is_empty()) return QString();
+
+	QStringList parts;
+	for (const bssh_pane_node &child : node.children) parts.append(shape_of(child, names));
+	return (node.orientation == Qt::Horizontal ? QStringLiteral("H(") : QStringLiteral("V("))
+	       + parts.join(QLatin1Char(',')) + QLatin1Char(')');
+}
+
+void layout_test::a_pane_dropped_on_an_edge_splits_the_target_that_way() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")}, {c, QStringLiteral("c")}};
+
+	layout.set_intent({a, b});
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(a,b)"));
+
+	/* b dropped on a's bottom edge: the row becomes a column. */
+	QVERIFY(layout.place(b, a, bssh_layout_manager::EDGE_BOTTOM));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("V(a,b)"));
+
+	/* c arrives on b's right: across b's column, so b itself is split. */
+	QVERIFY(layout.place(c, b, bssh_layout_manager::EDGE_RIGHT));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("V(a,H(b,c))"));
+	QCOMPARE(layout.intent(), (QList<bssh_session *>{a, b, c}));
+
+	/* And a on c's left, along c's own row: one more beside, no new level. */
+	QVERIFY(layout.place(a, c, bssh_layout_manager::EDGE_LEFT));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(b,a,c)"));
+
+	/* A pane dropped on itself changes nothing. */
+	QVERIFY(!layout.place(a, a, bssh_layout_manager::EDGE_TOP));
+}
+
+void layout_test::a_pane_dropped_in_the_middle_swaps() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	bssh_session *d = registry.create(named(QStringLiteral("d")));
+	const QHash<bssh_session *, QString> names{{a, QStringLiteral("a")},
+		{b, QStringLiteral("b")}, {c, QStringLiteral("c")}, {d, QStringLiteral("d")}};
+
+	layout.set_intent({a, b});
+	QVERIFY(layout.place(c, b, bssh_layout_manager::EDGE_BOTTOM));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(a,V(b,c))"));
+
+	/* Two panes trade places; the shape stays. */
+	QVERIFY(layout.place(a, c, bssh_layout_manager::EDGE_MIDDLE));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(c,V(b,a))"));
+
+	/*
+	 * A session that was not a pane takes the target's place, and the
+	 * target leaves the panes -- a tab, never closed (sec 8.2).
+	 */
+	QVERIFY(layout.place(d, b, bssh_layout_manager::EDGE_MIDDLE));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(c,V(d,a))"));
+	QVERIFY(!layout.intent().contains(b));
+	QCOMPARE(registry.count(), 4);
+}
+
+void layout_test::reordering_the_panes_keeps_the_shape_they_are_in() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")}, {c, QStringLiteral("c")}};
+
+	layout.set_intent({a, b});
+	QVERIFY(layout.place(c, b, bssh_layout_manager::EDGE_BOTTOM));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(a,V(b,c))"));
+
+	/*
+	 * Everything that moves panes by the LIST -- the menu's Move Pane, a
+	 * column's reorder -- still says "these, in this order". The places
+	 * the user built stay, and the sessions move through them.
+	 */
+	layout.set_intent({c, a, b});
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(c,V(a,b))"));
+
+	/* A pane that goes leaves no hole: its split closes up. */
+	layout.forget(a);
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(c,b)"));
+
+	/* And a newcomer by the list arrives beside the rest, as a split always did. */
+	layout.set_intent({c, b, a});
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(c,b,a)"));
+}
+
+void layout_test::a_narrow_window_shows_the_first_panes_of_the_tree() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")}, {c, QStringLiteral("c")}};
+
+	layout.set_intent({a, b});
+	QVERIFY(layout.place(c, b, bssh_layout_manager::EDGE_RIGHT));
+	QVERIFY(layout.place(b, a, bssh_layout_manager::EDGE_BOTTOM));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(V(a,b),c)"));
+
+	/*
+	 * MEDIUM holds two. The first two keep their places and the third
+	 * becomes a tab; the whole shape is remembered for when there is room
+	 * again (sec 8.2), which the list alone could not do for a tree.
+	 */
+	layout.set_width(700);
+	QCOMPARE(shape_of(layout.visible_tree(), names), QStringLiteral("V(a,b)"));
+	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(V(a,b),c)"));
+
+	layout.set_width(1200);
+	QCOMPARE(shape_of(layout.visible_tree(), names), QStringLiteral("H(V(a,b),c)"));
+}
+
+void layout_test::the_drop_zones_are_the_edges_and_the_middle() {
+	const QSize pane(400, 200);
+
+	QCOMPARE(bssh_drop_edge_at(QPoint(10, 100), pane), int(bssh_layout_manager::EDGE_LEFT));
+	QCOMPARE(bssh_drop_edge_at(QPoint(390, 100), pane), int(bssh_layout_manager::EDGE_RIGHT));
+	QCOMPARE(bssh_drop_edge_at(QPoint(200, 10), pane), int(bssh_layout_manager::EDGE_TOP));
+	QCOMPARE(bssh_drop_edge_at(QPoint(200, 190), pane), int(bssh_layout_manager::EDGE_BOTTOM));
+	QCOMPARE(bssh_drop_edge_at(QPoint(200, 100), pane), int(bssh_layout_manager::EDGE_MIDDLE));
+
+	/*
+	 * Bands are a share of the pane, not pixels: 60 of 400 is inside the
+	 * left quarter, and 60 of 200 is outside the top one.
+	 */
+	QCOMPARE(bssh_drop_edge_at(QPoint(90, 60), pane), int(bssh_layout_manager::EDGE_LEFT));
+	QCOMPARE(bssh_drop_edge_at(QPoint(110, 60), pane), int(bssh_layout_manager::EDGE_MIDDLE));
+
+	/* In a corner the nearer edge wins. */
+	QCOMPARE(bssh_drop_edge_at(QPoint(5, 30), pane), int(bssh_layout_manager::EDGE_LEFT));
+	QCOMPARE(bssh_drop_edge_at(QPoint(60, 4), pane), int(bssh_layout_manager::EDGE_TOP));
+}
+
+void layout_test::a_drop_on_a_pane_that_is_not_focused_places_the_pane() {
+	bssh_main_window window;
+	window.resize(1000, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	bssh_session *first = registry->create(named(QStringLiteral("first")));
+	window.adopt_session(first);
+	window.split_beside_current();
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QCOMPARE(panes->views().size(), 2);
+
+	/*
+	 * The drop goes to the pane that is NOT focused, carrying the one
+	 * that is -- the ordinary gesture, and the one that reached nothing
+	 * while only the focused view was connected. Which sessions those are
+	 * is asked of the panes: the split opens a session of its own.
+	 */
+	bssh_session *moving = panes->focused_session();
+	bssh_session *target = nullptr;
+	for (int i = 0; i < registry->count(); ++i) {
+		bssh_session *each = registry->at(i);
+		if (each != moving && panes->view_for(each)) target = each;
+	}
+	QVERIFY2(moving && target, "the split did not leave two sessions on screen");
+	bssh_terminal_view *onto = panes->view_for(target);
+
+	QMimeData mime;
+	mime.setData(bssh_session_mime_type(), QByteArray::number(registry->index_of(moving)));
+
+	/* The bottom edge of the target: the moving pane goes below it. */
+	/*
+	 * Entered and moved over first, as a real drag is: Qt delivers a drop
+	 * only to the widget the drag is over, and the move is what lights
+	 * the zone.
+	 */
+	const QPoint at(onto->width() / 2, onto->height() - 4);
+	QDragEnterEvent enter(at, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(onto, &enter);
+	QDragMoveEvent move(at, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(onto, &move);
+
+	QDropEvent drop(QPointF(at), Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(onto, &drop);
+	QCoreApplication::processEvents();
+
+	QSplitter *root = panes->findChild<QSplitter *>(QString(), Qt::FindDirectChildrenOnly);
+	QVERIFY(root);
+	QCOMPARE(root->orientation(), Qt::Vertical);
+	QCOMPARE(panes->views().size(), 2);
+	QCOMPARE(panes->view_at(0), panes->view_for(target));
+	QCOMPARE(panes->view_at(1), panes->view_for(moving));
+	QCOMPARE(panes->focused_session(), moving);
+}
+
 void layout_test::a_pane_dropped_back_changes_nothing() {
 	bssh_main_window window;
 	window.resize(1000, 700);
@@ -7808,7 +8028,12 @@ void layout_test::a_tab_dropped_on_a_pane_reaches_the_window() {
 	mime->setData(bssh_session_mime_type(),
 	               QByteArray::number(onto.registry()->index_of(moving)));
 
-	const QPoint at(pane->width() / 2, pane->height() / 2);
+	/*
+	 * At the right edge, which puts it beside the pane (sec 8.3). The
+	 * middle is a swap now, which leaves one pane -- this is about the
+	 * ROUTE a drop takes, and an edge is the drop that makes it visible.
+	 */
+	const QPoint at(pane->width() - 8, pane->height() / 2);
 	QDragEnterEvent enter(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
 
 	/*

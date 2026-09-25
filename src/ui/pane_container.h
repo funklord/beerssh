@@ -4,10 +4,12 @@
 #include <QList>
 #include <QWidget>
 
+class QMimeData;
 class QScrollArea;
 class QSplitter;
 class QVBoxLayout;
 class bssh_layout_manager;
+struct bssh_pane_node;
 class bssh_session;
 class bssh_terminal_view;
 
@@ -59,7 +61,8 @@ public:
 	/*
 	 * Restores every pane to the same width, for sec 8.3's double-click or
 	 * double-tap on a divider. Public because it is a plain command --
-	 * a menu or a chord could reasonably want it too.
+	 * a menu or a chord could reasonably want it too. Every splitter; a
+	 * double-click equalizes only the one whose divider it was on.
 	 */
 	void equalize_panes();
 
@@ -102,7 +105,7 @@ public:
 	 */
 	void focus_adjacent(int direction);
 
-	/* Rounds pane widths down to whole cells (sec 8.3). */
+	/* Rounds pane widths down to whole cells (sec 8.3), in every splitter. */
 	void snap_divider_to_cells();
 
 protected:
@@ -145,6 +148,16 @@ signals:
 	void pane_drag_requested(bssh_session *session);
 
 	/*
+	 * A pane or tab was dropped on the pane showing `target`, at `edge`
+	 * (a bssh_layout_manager::drop_edge_t). Direct, not queued: the drop's
+	 * data is valid only while the drop is being delivered, so whoever
+	 * reads the session out of it has to do so now -- and must then defer
+	 * anything that rebuilds the panes, since the view delivering this is
+	 * one of them.
+	 */
+	void session_dropped(const QMimeData *mime, bssh_session *target, int edge);
+
+	/*
 	 * A body drag in Move mode reordered this pane (sec 8.7): move the
 	 * session one place in the shown list, negative toward the top.
 	 * Queued for the same reason as pane_drag_requested -- the move
@@ -165,6 +178,23 @@ signals:
 
 private:
 	void apply_focus_styling();
+
+	/*
+	 * The panes as QSplitters: one flat splitter for a column, and for a
+	 * tiled window one splitter per split in the layout's tree (sec 8.1),
+	 * nested as the tree is. Views are created in the tree's depth-first
+	 * order, which is the order of m_sessions, so view_at(i) still names
+	 * the i-th session.
+	 */
+	void build_panes(const QList<bssh_session *> &panes);
+	void add_split_children(const bssh_pane_node &node, QSplitter *into);
+	bssh_terminal_view *add_pane_view(bssh_session *session, QSplitter *parent);
+
+	/* Handle width, collapsing and the snap, the same for every splitter. */
+	void configure_splitter(QSplitter *splitter);
+	QList<QSplitter *> all_splitters() const;
+	void snap_splitter(QSplitter *splitter);
+	void equalize_splitter(QSplitter *splitter);
 
 	bssh_layout_manager *m_layout;
 	QVBoxLayout *m_outer;

@@ -1,0 +1,62 @@
+# Panes placed by where they are dropped (project.md sec 8.3), and the
+# tree that made "above" and "below" possible (sec 8.1, asked for by the
+# holder 2026-09-25). Each edit is the version this would have been with
+# one part missing.
+
+# The drop reaches only the focused pane again: the one a user drags ONTO
+# is nearly always the other one, and it was accepted and delivered to
+# nothing.
+[[sabotage]]
+name = "a drop on an unfocused pane goes nowhere"
+file = "src/ui/pane_container.cpp"
+find = "\t\temit session_dropped(mime, session, edge);"
+replace = ""
+expect = "a_drop_on_a_pane_that_is_not_focused_places_the_pane"
+
+# The window builds a flat row whatever the tree says.
+[[sabotage]]
+name = "the panes ignore the tree they were placed in"
+file = "src/ui/pane_container.cpp"
+find = "\tif (column || tree.is_empty() || tree.is_leaf()) {"
+replace = "\tif (true) {"
+expect = "a_drop_on_a_pane_that_is_not_focused_places_the_pane"
+
+# An edge across the target's split is treated as along it: no nesting,
+# which is the one-level layout this replaced.
+[[sabotage]]
+name = "a drop across a split does not nest"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (parent && parent->orientation == along) {"
+replace = "\tif (parent) {"
+expect = "a_pane_dropped_on_an_edge_splits_the_target_that_way"
+
+[[sabotage]]
+name = "the middle does not swap"
+file = "src/ui/layout_manager.cpp"
+find = "\t\tif (from >= 0) order.swapItemsAt(from, at);"
+replace = "\t\tif (from >= 0) {}"
+expect = "a_pane_dropped_in_the_middle_swaps"
+
+# Reordering by the list flattens the places the user built.
+[[sabotage]]
+name = "a reorder by the list forgets the shape"
+file = "src/ui/layout_manager.cpp"
+find = "\tprune(m_tree, [&sessions](bssh_session *session) { return sessions.contains(session); });"
+replace = "\tm_tree = bssh_pane_node();"
+expect = "reordering_the_panes_keeps_the_shape_they_are_in"
+
+# A narrow window shows the whole tree rather than its first panes.
+[[sabotage]]
+name = "the shown tree is not cut to what fits"
+file = "src/ui/layout_manager.cpp"
+find = "\tprune(shown, [&visible](bssh_session *session) { return visible.contains(session); });"
+replace = ""
+expect = "a_narrow_window_shows_the_first_panes_of_the_tree"
+
+# The edge bands swallow the whole pane, so there is no middle to swap in.
+[[sabotage]]
+name = "the drop bands leave no middle"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (nearest >= 0.25) return bssh_layout_manager::EDGE_MIDDLE;"
+replace = "\tif (nearest >= 0.5) return bssh_layout_manager::EDGE_MIDDLE;"
+expect = "the_drop_zones_are_the_edges_and_the_middle"

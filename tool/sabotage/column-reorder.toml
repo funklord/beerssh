@@ -53,8 +53,8 @@ expect = "a_touch_body_drag_reorders_in_move_mode"
 [[sabotage]]
 name = "the container swallows the reorder"
 file = "src/ui/pane_container.cpp"
-find = "\t\t\temit pane_move_requested(alive.data(), direction);"
-replace = "\t\t\t(void)direction;"
+find = "\t\temit pane_move_requested(alive.data(), direction);"
+replace = "\t\t(void)direction;"
 expect = "a_move_gesture_reorders_the_column"
 
 # The window is not wired to the container's reorder.

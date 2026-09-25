@@ -166,7 +166,8 @@ run.
   is amended below rather than dropped: the *core* stays PTY-free; the desktop
   gains a transport that is not a socket.
 - iOS (keep the core portable, but don't spend effort on it).
-- Arbitrary recursive tmux-style split trees (v1 caps pane count — see §8).
+- Unbounded tmux-style split trees. Panes nest as they are dropped (§8.1,
+  since 2026-09-25), but the count stays capped by width.
 - User-imported arbitrary fonts (v1 ships a curated set only; import is a v2
   candidate, and if added must run the §9.3 suitability check).
 
@@ -5302,7 +5303,7 @@ not the screen — multi-window, freeform and tiling WMs all matter:
 |---|---|---|
 | < 600dp | Compact (phone portrait, narrow desktop window) | **Tabs only.** Split UI hidden/disabled. |
 | 600–840dp | Medium (tablet portrait, unfolded foldable, phone landscape, half-screen desktop window) | **Up to 2 panes** (H or V split). |
-| ≥ 840dp | Expanded (tablet landscape, maximized desktop window, external display) | **Up to 4 panes**, one level of nesting. |
+| ≥ 840dp | Expanded (tablet landscape, maximized desktop window, external display) | **Up to 4 panes**, nested as the user drops them. |
 
 **Qt's logical pixels ARE dp, and converting them again cost three panes.**
 `resizeEvent` divided `width()` by `logicalDpiX()/160` to reach the thresholds
@@ -5317,9 +5318,47 @@ it for as long as it stood, because every test that cared passed a width
 straight to `bssh_layout_manager` and only the window did the conversion. What
 found it was a drop onto a 360-pixel window that tiled instead of declining.
 
-**[DECIDED]** Cap at 4 panes with a single nesting level for v1 — no arbitrary
-recursive tmux-style tree. It covers the realistic cases and avoids a whole class
-of layout, focus, and drag-target bugs. Revisit for v2 if there's demand.
+**[DECIDED, and REVISED 2026-09-25]** Cap at 4 panes. This first also held
+splits to a single level for v1 -- no tmux-style tree -- to avoid a class of
+layout, focus and drag-target bugs. The holder reversed that half when asking
+for panes to be rearranged by where they are dropped: "there needs to be a
+difference in where it is dropped, left right up down or middle, middle swaps
+them". Up and down on a side-by-side pane is a split the other way, which a
+single level cannot hold, and the holder chose nesting over two narrower
+readings (only the edges along the row, or an edge that flips the whole
+window). The cap on COUNT stays: it is what keeps a window from being carved
+into panes too small for a shell, however they are nested.
+
+**The shape is a tree the flat list still describes** (`bssh_pane_node` in
+`layout_manager.h`). Its leaves in depth-first order ARE the intent, always,
+so everything that reads the intent as a list -- the tab bar, focus order,
+Move Pane, a column -- goes on working unchanged. `set_intent()` keeps the
+shape around whatever list it is given: sessions no longer listed leave and
+their split closes up, new ones arrive beside the rest, and a reordered list
+moves sessions through the places the user built rather than flattening
+them. `place()` is the drop: an edge along the target's own split adds one
+more beside it, an edge across it splits the target itself, and the middle
+swaps -- or, for a session that was not a pane, takes the target's place and
+leaves the target a tab. A window narrower than the tree shows its first
+panes in their places (`visible_tree()`), and the rest of the shape is
+remembered for when there is room. A column ignores the tree and stacks the
+same sessions in order.
+
+**Two defects were in the way of any of this, and neither was the model.**
+A drop was wired from the FOCUSED pane only, so a pane dropped on the other
+one -- the ordinary gesture -- was accepted by that view and delivered to
+nothing. And a pane dropped anywhere in its own window read as "put back
+where it was". Drops now come from every pane through the container, the
+session is read from the drop while its data exists, and the placement runs
+a turn later, since placing rebuilds the panes and the view delivering the
+drop is one of them. The zones are a quarter of the pane deep along each
+edge, the nearer edge winning in a corner (`bssh_drop_edge_at`), and the one
+under the pointer is lit while a drag is over it. Guarded by
+`tool/sabotage/pane-drop-zones.toml`, seven edits.
+
+**Not persisted**: `layout.ini` still records the panes as a list, so a
+restart brings them back side by side. Restoring the shape is its own
+change.
 
 Also react to **fold state** (hinge/posture) where available, and to whatever
 each platform calls a size change — `onConfigurationChanged` on Android,
@@ -7554,6 +7593,23 @@ per state. Three questions went to the holder and were not answered: is
 "folded out" a third arrangement or just touch plus width; what does the
 cover screen in landscape (~700x390dp) get; and is "1-2 terminals" per
 window or per orientation.
+
+**Answered by the holder 2026-09-25, not yet built.** The unfolded Fold
+is side by side with touch sizing, not a third arrangement; the 1-2
+count follows orientation, so rotating a window re-flows it (landscape
+one terminal on screen, portrait up to two, the rest scrolled to, nothing
+closed); the tab bar's position is a setting per arrangement, each
+defaulting to where it is today; and the cover screen sideways (~700x390)
+takes the landscape rule, one terminal. The shape worked out for it,
+recorded so the build starts from it: AUTOMATIC on a touch device reads
+the SCREEN, never the window -- opening the on-screen keyboard shrinks the
+window's height, and a rule keyed on the window would flip the
+arrangement every time it opened. Shorter screen side of 600dp or more is
+side by side; below that a column, one on screen in landscape and two in
+portrait. A platform with no device screen to report (a desktop) keeps
+today's answer. "Two on screen" is the column's TOTAL height set from the
+viewport rather than a minimum per pane, so the divider between two
+panes stays draggable.
 
 ### 8.6 The command line — **[DECIDED]**
 

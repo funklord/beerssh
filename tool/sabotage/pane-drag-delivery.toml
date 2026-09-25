@@ -19,6 +19,6 @@
 [[sabotage]]
 name = "the pane drag is delivered directly, from inside the view's own emission"
 file = "src/ui/pane_container.cpp"
-find = "\t\t\temit pane_drag_requested(alive.data());\n\t\t}, Qt::QueuedConnection);"
-replace = "\t\t\temit pane_drag_requested(alive.data());\n\t\t});"
+find = "\t\temit pane_drag_requested(alive.data());\n\t}, Qt::QueuedConnection);"
+replace = "\t\temit pane_drag_requested(alive.data());\n\t});"
 expect = "a_pane_drag_is_not_raised_from_inside_the_views_own_handler"

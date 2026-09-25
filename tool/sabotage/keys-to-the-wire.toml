@@ -17,8 +17,8 @@
 [[sabotage]]
 name = "the pane is never given a router"
 file = "src/ui/pane_container.cpp"
-find = "\t\tview->attach_input_router(session->input_router());"
-replace = "\t\t(void)0;"
+find = "\tview->attach_input_router(session->input_router());"
+replace = "\t(void)0;"
 expect = "a_keystroke_in_a_pane_reaches_the_wire"
 
 # The session's end: the bytes are produced and never handed to the

@@ -2,6 +2,7 @@
 #include "ui/pane_container.h"
 
 #include <QMetaType>
+#include <QMimeData>
 #include <QEvent>
 #include <QFrame>
 #include <QScrollArea>
@@ -53,40 +54,7 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
 	m_scroll->hide();
 
 	m_splitter = new QSplitter(Qt::Horizontal, this);
-
-	/*
-	 * sec 8.3's divider, sized for the input rather than for the look.
-	 *
-	 * This said it was giving touch a 48dp target and then set 8 for
-	 * everything -- six times too small on a thumb, and the comment
-	 * asserting compliance is what stops the next reader checking. A
-	 * splitter's grab area is exactly its handle width; Qt has no
-	 * separate hit region for it, so the number IS the target.
-	 *
-	 * Desktop stays narrow because sec 8.3 allows it to ("desktop can be
-	 * tighter"), and a pointer lands on 8 pixels without trying. What
-	 * desktop must keep is the resize cursor, which QSplitterHandle sets
-	 * for itself -- nothing here overrides it.
-	 */
-	const bool thumb = bssh_platform::instance()
-	                    && bssh_platform::instance()->is_touch_primary();
-	m_splitter->setHandleWidth(thumb ? BSSH_TOUCH_TARGET_DP : 8);
-	m_splitter->setChildrenCollapsible(false);
-
-	/*
-	 * sec 8.3's double-click/double-tap to equalize. One handler covers
-	 * both: Qt synthesises a double-click from a double tap, so the
-	 * gesture arrives the same way on either input.
-	 */
-
-	/*
-	 * Dividers snap to whole character cells (sec 8.3): a pane that is
-	 * two and a half columns wide renders a half column at its edge, and
-	 * the half is not blank -- it is the left side of a glyph.
-	 */
-	connect(m_splitter, &QSplitter::splitterMoved, this, [this] {
-		snap_divider_to_cells();
-	});
+	configure_splitter(m_splitter);
 
 	m_outer->addWidget(m_splitter, 1);
 
@@ -109,6 +77,322 @@ bssh_terminal_view *bssh_pane_container::view_at(int index) const {
 bssh_terminal_view *bssh_pane_container::focused_view() const {
 	const int index = m_sessions.indexOf(m_focused);
 	return view_at(index);
+}
+
+void bssh_pane_container::build_panes(const QList<bssh_session *> &panes) {
+	/*
+	 * A column stacks every pane in order and has no shape to follow
+	 * (sec 8.7): the tree is a tiled window's, and a phone's column is the
+	 * same sessions one after another whatever they were beside.
+	 */
+	const bssh_pane_node tree = m_layout->visible_tree();
+	const bool column = m_layout->arrangement() == bssh_layout_manager::COLUMN;
+
+	if (column || tree.is_empty() || tree.is_leaf()) {
+		for (bssh_session *session : panes) add_pane_view(session, m_splitter);
+		return;
+	}
+
+	m_splitter->setOrientation(tree.orientation);
+	add_split_children(tree, m_splitter);
+}
+
+void bssh_pane_container::add_split_children(const bssh_pane_node &node, QSplitter *into) {
+	/*
+	 * In order, and that is what places them: a QSplitter lays out its
+	 * children in the order they were created in it, so building depth
+	 * first puts every pane and every nested split where the tree says.
+	 */
+	for (const bssh_pane_node &child : node.children) {
+		if (child.is_leaf()) {
+			add_pane_view(child.session, into);
+			continue;
+		}
+
+		QSplitter *nested = new QSplitter(child.orientation, into);
+		configure_splitter(nested);
+		add_split_children(child, nested);
+	}
+}
+
+QList<QSplitter *> bssh_pane_container::all_splitters() const {
+	QList<QSplitter *> splitters{m_splitter};
+	splitters += m_splitter->findChildren<QSplitter *>();
+	return splitters;
+}
+
+/*
+ * Every splitter the panes use, the root and any nested in it, gets the
+ * same divider: a split made by dropping a pane on another's edge is a
+ * divider like any other, and one that a thumb could not grab or that
+ * cut a glyph in half would be a worse one.
+ */
+void bssh_pane_container::configure_splitter(QSplitter *splitter) {
+	/*
+	 * sec 8.3's divider, sized for the input rather than for the look.
+	 *
+	 * This said it was giving touch a 48dp target and then set 8 for
+	 * everything -- six times too small on a thumb, and the comment
+	 * asserting compliance is what stops the next reader checking. A
+	 * splitter's grab area is exactly its handle width; Qt has no
+	 * separate hit region for it, so the number IS the target.
+	 *
+	 * Desktop stays narrow because sec 8.3 allows it to ("desktop can be
+	 * tighter"), and a pointer lands on 8 pixels without trying. What
+	 * desktop must keep is the resize cursor, which QSplitterHandle sets
+	 * for itself -- nothing here overrides it.
+	 */
+	const bool thumb = bssh_platform::instance()
+	                    && bssh_platform::instance()->is_touch_primary();
+	splitter->setHandleWidth(thumb ? BSSH_TOUCH_TARGET_DP : 8);
+	splitter->setChildrenCollapsible(false);
+
+	/*
+	 * sec 8.3's double-click/double-tap to equalize. One handler covers
+	 * both: Qt synthesises a double-click from a double tap, so the
+	 * gesture arrives the same way on either input.
+	 */
+
+	/*
+	 * Dividers snap to whole character cells (sec 8.3): a pane that is
+	 * two and a half columns wide renders a half column at its edge, and
+	 * the half is not blank -- it is the left side of a glyph.
+	 */
+	connect(splitter, &QSplitter::splitterMoved, this, [this, splitter] {
+		snap_splitter(splitter);
+	});
+}
+
+bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
+                                                    QSplitter *parent) {
+	bssh_terminal_view *view = new bssh_terminal_view(parent);
+
+	/*
+	 * It is a pane, so it gets the drag handle (sec 8.4). A view
+	 * built anywhere else is not something a window can be asked
+	 * to hand over.
+	 */
+	view->set_pane_handle(true);
+
+
+	view->attach_screen(&session->emulator()->screen());
+	view->attach_scrollback(&session->emulator()->scrollback());
+	view->attach_images(&session->emulator()->images());
+	view->attach_emulator(session->emulator());
+	view->attach_input_router(session->input_router());
+
+	/*
+	 * The host's resolved appearance (sec 9, sec 10.1), before the
+	 * cell metrics are read below: the font decides the cell size,
+	 * so applying it afterwards would tell the emulator a geometry
+	 * computed for a font that is no longer in use, and the remote
+	 * would lay out for the wrong width until the next resize.
+	 */
+	bssh_apply_appearance(view, session->settings());
+
+	/*
+	 * And the zoom on top of it (sec 9.5), which is why the session
+	 * holds it: this view is new -- every view here is, on every
+	 * layout change -- and a zoom the user set before the split
+	 * would otherwise be gone.
+	 */
+	view->set_font_zoom(session->font_zoom());
+	session->set_font_zoom(view->font_zoom());
+
+	connect(session, &bssh_session::font_zoom_changed, view, [view, session] {
+		view->set_font_zoom(session->font_zoom());
+
+		/*
+		 * And BACK, which is what keeps the two from disagreeing
+		 * once the zoom reaches its limit. The view is the only
+		 * one that knows the size the host resolved to, so it is
+		 * the only one that can say which steps are legal; without
+		 * this the session goes on counting presses the view has
+		 * refused, and the first several steps back then change
+		 * nothing on screen.
+		 *
+		 * It terminates: set_font_zoom returns without emitting
+		 * when the value is unchanged, which it now is.
+		 */
+		session->set_font_zoom(view->font_zoom());
+
+		/*
+		 * The same three the resolve path below sends, and for
+		 * the same reason: a zoom is a new cell size, so the
+		 * emulator's pixel geometry and the remote's idea of the
+		 * window both move with it. grid_resized carries the
+		 * resize on its own only while the pane is visible.
+		 */
+		session->emulator()->set_cell_pixels(view->cell_width(),
+		                                      view->cell_height());
+		session->resize(view->cols(), view->rows());
+	});
+
+	/*
+	 * Ctrl+wheel, named. The view says the gesture happened; which
+	 * session it happened to is this container's answer, and the
+	 * zoom is stored on the session rather than on the widget that
+	 * reported it.
+	 */
+	connect(view, &bssh_terminal_view::zoom_requested, session,
+	         [session](int steps) {
+		session->set_font_zoom(session->font_zoom() + steps);
+	});
+
+	connect(session, &bssh_session::settings_changed, view, [view, session] {
+		bssh_apply_appearance(view, session->settings());
+		session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
+		session->emulator()->set_colours(view->terminal_foreground().rgb(),
+		                                  view->terminal_background().rgb());
+		session->emulator()->set_palette(view->terminal_palette());
+		session->resize(view->cols(), view->rows());
+	});
+
+	session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
+
+	/*
+	 * And what it is painted in, for OSC 10 and OSC 11. Set beside
+	 * the cell metrics and on the same events, because it is the
+	 * same kind of fact: something the VIEW knows that the emulator
+	 * has to be able to answer for.
+	 */
+	session->emulator()->set_colours(view->terminal_foreground().rgb(),
+	                                  view->terminal_background().rgb());
+	session->emulator()->set_palette(view->terminal_palette());
+
+	/*
+	 * Per-pane geometry: each pane computes its own cols x rows from
+	 * its own size, and sends window-change for ITS session only
+	 * (sec 8.3, sec 7). Panes may legitimately differ, and a shared
+	 * geometry would tell one remote about the other's window.
+	 */
+	connect(view, &bssh_terminal_view::grid_resized, session,
+	         [session, view](int cols, int rows) {
+		session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
+		session->resize(cols, rows);
+	});
+
+	/*
+	 * sec 8.3's tap-to-focus. Qt moves the KEYBOARD to a clicked
+	 * pane on its own -- the view takes StrongFocus -- and moved
+	 * nothing else, so the focus border, the status line and what
+	 * copy and paste acted on all stayed with the pane the user had
+	 * left. That is the disagreement sec 8.3 calls non-negotiable,
+	 * since the panes are otherwise identical and the wrong one
+	 * taking a destructive command is a real outcome.
+	 */
+	connect(view, &bssh_terminal_view::focus_received, this, [this, session] {
+		focus_session(session);
+
+		/*
+		 * sec 7.1's focus reporting, told per session because that
+		 * is what the remote asked about: an editor in one pane
+		 * wants to know when THAT pane is being looked at, not
+		 * when some other one is.
+		 */
+		if (session->emulator()) session->emulator()->set_focused(true);
+	});
+
+	/*
+	 * QUEUED, and that is the whole point of it.
+	 *
+	 * This signal is emitted from the view's own mouseMoveEvent,
+	 * and what it reaches runs QDrag::exec() -- a nested event loop
+	 * that does not return until the pointer is released. Whatever
+	 * happens to the panes in the meantime comes back through
+	 * rebuild(), which qDeleteAll()s these views. So a direct
+	 * connection destroys the view whose event handler is still on
+	 * the stack, inside its own signal emission, which is a thing
+	 * Qt does not promise to survive.
+	 *
+	 * It does survive today, by an accident worth naming: nothing
+	 * after the emit in mouseMoveEvent touches `this` -- the two
+	 * remaining lines are event->accept() and return. That is a
+	 * property of two lines rather than a design, and the next edit
+	 * to that function has no way of knowing it is load-bearing.
+	 *
+	 * Queued, the emit returns at once and the drag begins from the
+	 * event loop, with the view's handler long finished.
+	 *
+	 * A QPointer because deferring by a turn is exactly what makes
+	 * a session able to disappear first -- the same guard, and for
+	 * the same reason, as the biometric prompt's.
+	 */
+	/*
+	 * Forwarded rather than connected straight to the window: views
+	 * are destroyed and rebuilt whenever the panes change, so a
+	 * window holding connections to them would be wiring itself to
+	 * objects that stop existing. The container outlives them.
+	 */
+	connect(view, &bssh_terminal_view::input_panel_requested,
+	         this, &bssh_pane_container::input_panel_requested);
+
+	connect(view, &bssh_terminal_view::pane_drag_requested, this,
+	         [this, alive = QPointer<bssh_session>(session)] {
+		if (!alive) return;
+		emit pane_drag_requested(alive.data());
+	}, Qt::QueuedConnection);
+
+	connect(view, &bssh_terminal_view::session_dropped, this,
+	         [this, session](const QMimeData *mime, int edge) {
+		emit session_dropped(mime, session, edge);
+	});
+
+	connect(view, &bssh_terminal_view::pane_move_requested, this,
+	         [this, alive = QPointer<bssh_session>(session)](int direction) {
+		if (!alive) return;
+		emit pane_move_requested(alive.data(), direction);
+	}, Qt::QueuedConnection);
+
+	/*
+	 * The Pan scroll is the container's own -- it owns the scroll area
+	 * -- so it is handled here rather than forwarded to the window,
+	 * and directly rather than queued: scrolling rebuilds nothing, so
+	 * the view is still there when the next move arrives.
+	 */
+	connect(view, &bssh_terminal_view::column_scroll_requested,
+	         this, &bssh_pane_container::scroll_column_by);
+	connect(view, &bssh_terminal_view::column_scroll_settled,
+	         this, &bssh_pane_container::settle_column_scroll);
+
+	connect(view, &bssh_terminal_view::find_matches_changed,
+	         this, &bssh_pane_container::find_matches_changed);
+
+	connect(view, &bssh_terminal_view::focus_lost, this, [session] {
+		if (session->emulator()) session->emulator()->set_focused(false);
+	});
+
+	connect(session->emulator(), &bssh_emulator::damaged,
+	         view, &bssh_terminal_view::on_screen_damaged);
+	connect(session->emulator(), &bssh_emulator::images_changed,
+	         view, QOverload<>::of(&QWidget::update));
+
+	/*
+	 * The remote's DECSCUSR reaches the view that shows it (sec 6.4):
+	 * vim asks for a bar in insert mode and a block in normal, and the
+	 * cursor follows. Connected to the view, so a rebuild drops it with
+	 * the view; the preset set the starting shape and the remote takes
+	 * it from there.
+	 */
+	connect(session->emulator(), &bssh_emulator::cursor_shape_changed,
+	         view, [view](const QString &style) {
+		if (bssh_terminal_view::honour_remote_cursor_shape())
+			view->set_cursor_style(style);
+	});
+	connect(session->emulator(), &bssh_emulator::cursor_blink_changed,
+	         view, [view](bool blink) {
+		if (bssh_terminal_view::honour_remote_cursor_shape())
+			view->set_cursor_blink(blink);
+	});
+
+	/* DECSCNM reverse video (sec 6.4): the whole screen flips. */
+	connect(session->emulator(), &bssh_emulator::reverse_video_changed,
+	         view, &bssh_terminal_view::set_reverse_video);
+
+	m_views.append(view);
+	view->show();
+
+	return view;
 }
 
 void bssh_pane_container::rebuild() {
@@ -157,6 +441,13 @@ void bssh_pane_container::rebuild() {
 	m_views.clear();
 
 	/*
+	 * And the nested splitters a tiled tree was built from. Only the
+	 * root's direct children: deleting one takes everything nested in it,
+	 * and the views inside are already gone above.
+	 */
+	qDeleteAll(m_splitter->findChildren<QSplitter *>(QString(), Qt::FindDirectChildrenOnly));
+
+	/*
 	 * Which sessions are ON SCREEN, which is this container's answer to
 	 * give and nobody else's (sec 8.3's bell dot).
 	 *
@@ -178,229 +469,7 @@ void bssh_pane_container::rebuild() {
 	m_sessions = panes;
 	update_on_screen();
 
-	for (bssh_session *session : panes) {
-		bssh_terminal_view *view = new bssh_terminal_view(m_splitter);
-
-		/*
-		 * It is a pane, so it gets the drag handle (sec 8.4). A view
-		 * built anywhere else is not something a window can be asked
-		 * to hand over.
-		 */
-		view->set_pane_handle(true);
-
-
-		view->attach_screen(&session->emulator()->screen());
-		view->attach_scrollback(&session->emulator()->scrollback());
-		view->attach_images(&session->emulator()->images());
-		view->attach_emulator(session->emulator());
-		view->attach_input_router(session->input_router());
-
-		/*
-		 * The host's resolved appearance (sec 9, sec 10.1), before the
-		 * cell metrics are read below: the font decides the cell size,
-		 * so applying it afterwards would tell the emulator a geometry
-		 * computed for a font that is no longer in use, and the remote
-		 * would lay out for the wrong width until the next resize.
-		 */
-		bssh_apply_appearance(view, session->settings());
-
-		/*
-		 * And the zoom on top of it (sec 9.5), which is why the session
-		 * holds it: this view is new -- every view here is, on every
-		 * layout change -- and a zoom the user set before the split
-		 * would otherwise be gone.
-		 */
-		view->set_font_zoom(session->font_zoom());
-		session->set_font_zoom(view->font_zoom());
-
-		connect(session, &bssh_session::font_zoom_changed, view, [view, session] {
-			view->set_font_zoom(session->font_zoom());
-
-			/*
-			 * And BACK, which is what keeps the two from disagreeing
-			 * once the zoom reaches its limit. The view is the only
-			 * one that knows the size the host resolved to, so it is
-			 * the only one that can say which steps are legal; without
-			 * this the session goes on counting presses the view has
-			 * refused, and the first several steps back then change
-			 * nothing on screen.
-			 *
-			 * It terminates: set_font_zoom returns without emitting
-			 * when the value is unchanged, which it now is.
-			 */
-			session->set_font_zoom(view->font_zoom());
-
-			/*
-			 * The same three the resolve path below sends, and for
-			 * the same reason: a zoom is a new cell size, so the
-			 * emulator's pixel geometry and the remote's idea of the
-			 * window both move with it. grid_resized carries the
-			 * resize on its own only while the pane is visible.
-			 */
-			session->emulator()->set_cell_pixels(view->cell_width(),
-			                                      view->cell_height());
-			session->resize(view->cols(), view->rows());
-		});
-
-		/*
-		 * Ctrl+wheel, named. The view says the gesture happened; which
-		 * session it happened to is this container's answer, and the
-		 * zoom is stored on the session rather than on the widget that
-		 * reported it.
-		 */
-		connect(view, &bssh_terminal_view::zoom_requested, session,
-		         [session](int steps) {
-			session->set_font_zoom(session->font_zoom() + steps);
-		});
-
-		connect(session, &bssh_session::settings_changed, view, [view, session] {
-			bssh_apply_appearance(view, session->settings());
-			session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
-			session->emulator()->set_colours(view->terminal_foreground().rgb(),
-			                                  view->terminal_background().rgb());
-			session->emulator()->set_palette(view->terminal_palette());
-			session->resize(view->cols(), view->rows());
-		});
-
-		session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
-
-		/*
-		 * And what it is painted in, for OSC 10 and OSC 11. Set beside
-		 * the cell metrics and on the same events, because it is the
-		 * same kind of fact: something the VIEW knows that the emulator
-		 * has to be able to answer for.
-		 */
-		session->emulator()->set_colours(view->terminal_foreground().rgb(),
-		                                  view->terminal_background().rgb());
-		session->emulator()->set_palette(view->terminal_palette());
-
-		/*
-		 * Per-pane geometry: each pane computes its own cols x rows from
-		 * its own size, and sends window-change for ITS session only
-		 * (sec 8.3, sec 7). Panes may legitimately differ, and a shared
-		 * geometry would tell one remote about the other's window.
-		 */
-		connect(view, &bssh_terminal_view::grid_resized, session,
-		         [session, view](int cols, int rows) {
-			session->emulator()->set_cell_pixels(view->cell_width(), view->cell_height());
-			session->resize(cols, rows);
-		});
-
-		/*
-		 * sec 8.3's tap-to-focus. Qt moves the KEYBOARD to a clicked
-		 * pane on its own -- the view takes StrongFocus -- and moved
-		 * nothing else, so the focus border, the status line and what
-		 * copy and paste acted on all stayed with the pane the user had
-		 * left. That is the disagreement sec 8.3 calls non-negotiable,
-		 * since the panes are otherwise identical and the wrong one
-		 * taking a destructive command is a real outcome.
-		 */
-		connect(view, &bssh_terminal_view::focus_received, this, [this, session] {
-			focus_session(session);
-
-			/*
-			 * sec 7.1's focus reporting, told per session because that
-			 * is what the remote asked about: an editor in one pane
-			 * wants to know when THAT pane is being looked at, not
-			 * when some other one is.
-			 */
-			if (session->emulator()) session->emulator()->set_focused(true);
-		});
-
-		/*
-		 * QUEUED, and that is the whole point of it.
-		 *
-		 * This signal is emitted from the view's own mouseMoveEvent,
-		 * and what it reaches runs QDrag::exec() -- a nested event loop
-		 * that does not return until the pointer is released. Whatever
-		 * happens to the panes in the meantime comes back through
-		 * rebuild(), which qDeleteAll()s these views. So a direct
-		 * connection destroys the view whose event handler is still on
-		 * the stack, inside its own signal emission, which is a thing
-		 * Qt does not promise to survive.
-		 *
-		 * It does survive today, by an accident worth naming: nothing
-		 * after the emit in mouseMoveEvent touches `this` -- the two
-		 * remaining lines are event->accept() and return. That is a
-		 * property of two lines rather than a design, and the next edit
-		 * to that function has no way of knowing it is load-bearing.
-		 *
-		 * Queued, the emit returns at once and the drag begins from the
-		 * event loop, with the view's handler long finished.
-		 *
-		 * A QPointer because deferring by a turn is exactly what makes
-		 * a session able to disappear first -- the same guard, and for
-		 * the same reason, as the biometric prompt's.
-		 */
-		/*
-		 * Forwarded rather than connected straight to the window: views
-		 * are destroyed and rebuilt whenever the panes change, so a
-		 * window holding connections to them would be wiring itself to
-		 * objects that stop existing. The container outlives them.
-		 */
-		connect(view, &bssh_terminal_view::input_panel_requested,
-		         this, &bssh_pane_container::input_panel_requested);
-
-		connect(view, &bssh_terminal_view::pane_drag_requested, this,
-		         [this, alive = QPointer<bssh_session>(session)] {
-			if (!alive) return;
-			emit pane_drag_requested(alive.data());
-		}, Qt::QueuedConnection);
-
-		connect(view, &bssh_terminal_view::pane_move_requested, this,
-		         [this, alive = QPointer<bssh_session>(session)](int direction) {
-			if (!alive) return;
-			emit pane_move_requested(alive.data(), direction);
-		}, Qt::QueuedConnection);
-
-		/*
-		 * The Pan scroll is the container's own -- it owns the scroll area
-		 * -- so it is handled here rather than forwarded to the window,
-		 * and directly rather than queued: scrolling rebuilds nothing, so
-		 * the view is still there when the next move arrives.
-		 */
-		connect(view, &bssh_terminal_view::column_scroll_requested,
-		         this, &bssh_pane_container::scroll_column_by);
-		connect(view, &bssh_terminal_view::column_scroll_settled,
-		         this, &bssh_pane_container::settle_column_scroll);
-
-		connect(view, &bssh_terminal_view::find_matches_changed,
-		         this, &bssh_pane_container::find_matches_changed);
-
-		connect(view, &bssh_terminal_view::focus_lost, this, [session] {
-			if (session->emulator()) session->emulator()->set_focused(false);
-		});
-
-		connect(session->emulator(), &bssh_emulator::damaged,
-		         view, &bssh_terminal_view::on_screen_damaged);
-		connect(session->emulator(), &bssh_emulator::images_changed,
-		         view, QOverload<>::of(&QWidget::update));
-
-		/*
-		 * The remote's DECSCUSR reaches the view that shows it (sec 6.4):
-		 * vim asks for a bar in insert mode and a block in normal, and the
-		 * cursor follows. Connected to the view, so a rebuild drops it with
-		 * the view; the preset set the starting shape and the remote takes
-		 * it from there.
-		 */
-		connect(session->emulator(), &bssh_emulator::cursor_shape_changed,
-		         view, [view](const QString &style) {
-			if (bssh_terminal_view::honour_remote_cursor_shape())
-				view->set_cursor_style(style);
-		});
-		connect(session->emulator(), &bssh_emulator::cursor_blink_changed,
-		         view, [view](bool blink) {
-			if (bssh_terminal_view::honour_remote_cursor_shape())
-				view->set_cursor_blink(blink);
-		});
-
-		/* DECSCNM reverse video (sec 6.4): the whole screen flips. */
-		connect(session->emulator(), &bssh_emulator::reverse_video_changed,
-		         view, &bssh_terminal_view::set_reverse_video);
-
-		m_views.append(view);
-		view->show();
-	}
+	build_panes(panes);
 
 	/*
 	 * The handles are QSplitter's own and are made and unmade with the
@@ -408,9 +477,11 @@ void bssh_pane_container::rebuild() {
 	 * Handle 0 is a zero-width one before the first pane and is not a
 	 * divider anybody can grab.
 	 */
-	for (int i = 1; i < m_splitter->count(); ++i) {
-		if (QSplitterHandle *handle = m_splitter->handle(i)) {
-			handle->installEventFilter(this);
+	for (QSplitter *splitter : all_splitters()) {
+		for (int i = 1; i < splitter->count(); ++i) {
+			if (QSplitterHandle *handle = splitter->handle(i)) {
+				handle->installEventFilter(this);
+			}
 		}
 	}
 
@@ -447,7 +518,11 @@ void bssh_pane_container::focus_session(bssh_session *session) {
 }
 
 void bssh_pane_container::snap_divider_to_cells() {
-	if (m_views.size() < 2) return;
+	for (QSplitter *splitter : all_splitters()) snap_splitter(splitter);
+}
+
+void bssh_pane_container::snap_splitter(QSplitter *splitter) {
+	if (m_views.size() < 2 || splitter->count() < 2) return;
 
 	/*
 	 * Snap along the axis the panes actually divide: a column's dividers
@@ -455,12 +530,12 @@ void bssh_pane_container::snap_divider_to_cells() {
 	 * pane's edge (sec 8.3) is a half-ROW there, and the cell to round to
 	 * is its height rather than its width.
 	 */
-	const bool vertical = m_splitter->orientation() == Qt::Vertical;
+	const bool vertical = splitter->orientation() == Qt::Vertical;
 	const int cell = vertical ? m_views.first()->cell_height()
 	                          : m_views.first()->cell_width();
 	if (cell <= 1) return;
 
-	QList<int> sizes = m_splitter->sizes();
+	QList<int> sizes = splitter->sizes();
 
 	/*
 	 * A two-pane column is sec 8.7's case: one divider, magnetically
@@ -483,7 +558,7 @@ void bssh_pane_container::snap_divider_to_cells() {
 
 		sizes[0] = first;
 		sizes[1] = total - first;
-		m_splitter->setSizes(sizes);
+		splitter->setSizes(sizes);
 		return;
 	}
 
@@ -503,7 +578,7 @@ void bssh_pane_container::snap_divider_to_cells() {
 		changed = true;
 	}
 
-	if (changed) m_splitter->setSizes(sizes);
+	if (changed) splitter->setSizes(sizes);
 }
 
 void bssh_pane_container::focus_adjacent(int direction) {
@@ -596,7 +671,11 @@ void bssh_pane_container::settle_column_scroll() {
 }
 
 void bssh_pane_container::equalize_panes() {
-	const int count = m_splitter->count();
+	for (QSplitter *splitter : all_splitters()) equalize_splitter(splitter);
+}
+
+void bssh_pane_container::equalize_splitter(QSplitter *splitter) {
+	const int count = splitter->count();
 	if (count < 2) return;
 
 	/*
@@ -606,21 +685,21 @@ void bssh_pane_container::equalize_panes() {
 	 */
 	QList<int> sizes;
 	for (int i = 0; i < count; ++i) sizes.append(1);
-	m_splitter->setSizes(sizes);
+	splitter->setSizes(sizes);
 
 	/*
 	 * And then back onto whole cells, because equal halves of an odd
 	 * width are not both a whole number of columns -- equalizing without
 	 * this would undo the snap the drag handler exists to apply.
 	 */
-	snap_divider_to_cells();
+	snap_splitter(splitter);
 }
 
 bool bssh_pane_container::eventFilter(QObject *watched, QEvent *event) {
 	if (event->type() == QEvent::MouseButtonDblClick) {
 		QSplitterHandle *handle = qobject_cast<QSplitterHandle *>(watched);
-		if (handle && handle->splitter() == m_splitter) {
-			equalize_panes();
+		if (handle && all_splitters().contains(handle->splitter())) {
+			equalize_splitter(handle->splitter());
 			return true;
 		}
 	}

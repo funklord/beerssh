@@ -3,6 +3,7 @@
 #include <QScrollPrepareEvent>
 #include "ui/touch_metrics.h"
 #include "ui/terminal_view.h"
+#include "ui/layout_manager.h"
 
 #include <QDragEnterEvent>
 #include <QEnterEvent>
@@ -84,6 +85,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_scrollbar_position(default_scrollbar_position()),
       m_focus_border(false),
       m_being_dragged(false),
+      m_drop_edge(-1),
       m_pointer_inside(false),
       m_pane_handle(false),
       m_click_count(0),
@@ -1167,6 +1169,25 @@ QString bssh_session_mime_type() {
 	return QStringLiteral("application/x-bssh-session");
 }
 
+int bssh_drop_edge_at(const QPoint &at, const QSize &pane) {
+	if (pane.width() <= 0 || pane.height() <= 0) return bssh_layout_manager::EDGE_MIDDLE;
+
+	/* Distance to each edge as a share of the pane, so a wide pane and a
+	 * tall one are divided alike. */
+	const double left = double(at.x()) / pane.width();
+	const double right = 1.0 - left;
+	const double top = double(at.y()) / pane.height();
+	const double bottom = 1.0 - top;
+
+	const double nearest = qMin(qMin(left, right), qMin(top, bottom));
+	if (nearest >= 0.25) return bssh_layout_manager::EDGE_MIDDLE;
+
+	if (nearest == left) return bssh_layout_manager::EDGE_LEFT;
+	if (nearest == right) return bssh_layout_manager::EDGE_RIGHT;
+	if (nearest == top) return bssh_layout_manager::EDGE_TOP;
+	return bssh_layout_manager::EDGE_BOTTOM;
+}
+
 void bssh_terminal_view::dragEnterEvent(QDragEnterEvent *event) {
 	/*
 	 * Text this view can paste, OR a session for the window to adopt.
@@ -1195,6 +1216,33 @@ void bssh_terminal_view::dragEnterEvent(QDragEnterEvent *event) {
 	}
 }
 
+/*
+ * Where a pane would land, followed as the pointer moves, so the drop is
+ * aimed rather than guessed: the zone under the pointer is lit and the
+ * rest of the pane is not.
+ */
+void bssh_terminal_view::dragMoveEvent(QDragMoveEvent *event) {
+	if (!event->mimeData()->hasFormat(bssh_session_mime_type())) {
+		QWidget::dragMoveEvent(event);
+		return;
+	}
+
+	const int edge = bssh_drop_edge_at(event->position().toPoint(), size());
+	if (edge != m_drop_edge) {
+		m_drop_edge = edge;
+		update();
+	}
+	event->acceptProposedAction();
+}
+
+void bssh_terminal_view::dragLeaveEvent(QDragLeaveEvent *event) {
+	if (m_drop_edge != -1) {
+		m_drop_edge = -1;
+		update();
+	}
+	QWidget::dragLeaveEvent(event);
+}
+
 void bssh_terminal_view::dropEvent(QDropEvent *event) {
 	/*
 	 * A session goes up to the window untouched: this view knows how to
@@ -1203,8 +1251,12 @@ void bssh_terminal_view::dropEvent(QDropEvent *event) {
 	 * all -- refusing meant nobody was delivered anything.
 	 */
 	if (event->mimeData()->hasFormat(bssh_session_mime_type())) {
+		const int edge = bssh_drop_edge_at(event->position().toPoint(), size());
+		m_drop_edge = -1;
+		update();
+
 		event->acceptProposedAction();
-		emit session_dropped(event->mimeData());
+		emit session_dropped(event->mimeData(), edge);
 		return;
 	}
 
@@ -1859,6 +1911,29 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	 * answer. The diagonal net rather than a tint, because a tint over a
 	 * dark scheme is a slightly different dark and reads as nothing.
 	 */
+	/*
+	 * The zone a dragged pane would land in: half the pane at the edge it
+	 * would split (the half the arrival would get), or a frame inset from
+	 * all four sides for the swap. Filled rather than hatched, because the
+	 * hatch already means "this is the pane being carried".
+	 */
+	if (m_drop_edge >= 0) {
+		QRect zone = rect();
+		switch (m_drop_edge) {
+		case bssh_layout_manager::EDGE_LEFT:   zone.setWidth(width() / 2); break;
+		case bssh_layout_manager::EDGE_RIGHT:  zone.setLeft(width() / 2); break;
+		case bssh_layout_manager::EDGE_TOP:    zone.setHeight(height() / 2); break;
+		case bssh_layout_manager::EDGE_BOTTOM: zone.setTop(height() / 2); break;
+		default:
+			zone = rect().adjusted(width() / 4, height() / 4, -width() / 4, -height() / 4);
+			break;
+		}
+
+		QColor fill(palette().color(QPalette::Highlight));
+		fill.setAlphaF(0.35);
+		painter.fillRect(zone, fill);
+	}
+
 	if (m_being_dragged) {
 		const QColor accent = palette().color(QPalette::Highlight);
 

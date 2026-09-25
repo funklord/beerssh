@@ -26,6 +26,17 @@ class QMimeData;
  * in. The window delegates to this.
  */
 QString bssh_session_mime_type();
+
+/*
+ * Which part of a pane a dropped pane lands on (sec 8.3), as
+ * bssh_layout_manager::drop_edge_t: the four edges split the pane that
+ * way and the middle swaps. A band a quarter of the pane deep along each
+ * edge; the rest is the middle, and where two bands meet in a corner the
+ * nearer edge wins. Pure, so the regions are asserted rather than
+ * eyeballed.
+ */
+int bssh_drop_edge_at(const QPoint &at, const QSize &pane);
+
 class QMouseEvent;
 class QPainter;
 class QScrollBar;
@@ -693,7 +704,7 @@ signals:
 	 * before delivery and never re-targets to an ancestor, so refusing
 	 * here meant the window was never offered the drop at all.
 	 */
-	void session_dropped(const QMimeData *mime);
+	void session_dropped(const QMimeData *mime, int edge);
 	void primary_paste_requested();
 
 	/*
@@ -843,6 +854,8 @@ protected:
 
 	/* sec 6.4's drops: a file's path, or the text itself. */
 	void dragEnterEvent(QDragEnterEvent *event) override;
+	void dragMoveEvent(QDragMoveEvent *event) override;
+	void dragLeaveEvent(QDragLeaveEvent *event) override;
 	void dropEvent(QDropEvent *event) override;
 
 private:
@@ -975,6 +988,13 @@ private:
 	void place_scrollbar();
 	bool m_focus_border;
 	bool m_being_dragged;
+
+	/*
+	 * The zone a pane being dragged over this one would land in, or -1
+	 * when none is -- drawn so the user sees where it will go before
+	 * letting go.
+	 */
+	int m_drop_edge;
 	bool m_pointer_inside;
 	bool m_pane_handle;
 

@@ -35,8 +35,8 @@ expect = "decscusr_sets_the_cursor_shape_and_blink"
 [[sabotage]]
 name = "the pane ignores the shape change"
 file = "src/ui/pane_container.cpp"
-find = "\t\t\t\tview->set_cursor_style(style);"
-replace = "\t\t\t\t(void)style;"
+find = "\t\t\tview->set_cursor_style(style);"
+replace = "\t\t\t(void)style;"
 expect = "a_remote_cursor_shape_reaches_the_pane"
 
 # The view is not wired to the blink change.
@@ -46,8 +46,8 @@ expect = "a_remote_cursor_shape_reaches_the_pane"
 [[sabotage]]
 name = "the pane ignores the blink change"
 file = "src/ui/pane_container.cpp"
-find = "\t\t\t\tview->set_cursor_blink(blink);"
-replace = "\t\t\t\t(void)blink;"
+find = "\t\t\tview->set_cursor_blink(blink);"
+replace = "\t\t\t(void)blink;"
 expect = "a_remote_cursor_shape_reaches_the_pane"
 
 # The override cannot be turned off.

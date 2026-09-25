@@ -32,7 +32,7 @@ expect = "split_beside_current_makes_a_second_pane"
 [[sabotage]]
 name = "a session dropped on a pane goes nowhere"
 file = "src/ui/terminal_view.cpp"
-find = "\t\temit session_dropped(event->mimeData());"
+find = "\t\temit session_dropped(event->mimeData(), edge);"
 expect = "a_tab_dropped_on_a_pane_reaches_the_window"
 
 # Reorder. The row lays the bar out at exactly its sizeHint, so measuring

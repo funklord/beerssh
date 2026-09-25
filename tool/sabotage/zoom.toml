@@ -48,7 +48,7 @@ expect = "a_zoom_past_the_limit_still_steps_back"
 [[sabotage]]
 name = "the clamped zoom is not written back to the session"
 file = "src/ui/pane_container.cpp"
-find = "\t\t\tsession->set_font_zoom(view->font_zoom());"
+find = "\t\tsession->set_font_zoom(view->font_zoom());"
 replace = ""
 expect = "a_zoom_past_the_limit_still_steps_back"
 
@@ -60,7 +60,7 @@ expect = "a_zoom_past_the_limit_still_steps_back"
 [[sabotage]]
 name = "a new pane starts at the resolved size"
 file = "src/ui/pane_container.cpp"
-find = "\t\tview->set_font_zoom(session->font_zoom());\n\t\tsession->set_font_zoom(view->font_zoom());\n"
+find = "\tview->set_font_zoom(session->font_zoom());\n\tsession->set_font_zoom(view->font_zoom());\n"
 replace = ""
 expect = "a_rebuilt_pane_keeps_the_sessions_zoom"
 
@@ -82,7 +82,7 @@ expect = "ctrl_wheel_zooms_while_the_remote_owns_the_wheel"
 [[sabotage]]
 name = "the container does not name the session a wheel zoom happened to"
 file = "src/ui/pane_container.cpp"
-find = "\t\t\tsession->set_font_zoom(session->font_zoom() + steps);"
+find = "\t\tsession->set_font_zoom(session->font_zoom() + steps);"
 replace = ""
 expect = "ctrl_wheel_in_a_pane_zooms_that_panes_session"
 

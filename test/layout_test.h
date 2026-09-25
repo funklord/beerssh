@@ -222,6 +222,19 @@ private slots:
 	void touch_gets_no_pane_grip();
 	void the_keyboard_side_icons_are_still_named();
 	void a_pane_dropped_back_changes_nothing();
+
+	/*
+	 * Panes placed by where they are dropped (sec 8.3): an edge splits
+	 * the target that way, nesting when it runs across the target's own
+	 * split, and the middle swaps. The holder asked for all four edges on
+	 * 2026-09-25, which made the layout a tree.
+	 */
+	void a_pane_dropped_on_an_edge_splits_the_target_that_way();
+	void a_pane_dropped_in_the_middle_swaps();
+	void reordering_the_panes_keeps_the_shape_they_are_in();
+	void a_narrow_window_shows_the_first_panes_of_the_tree();
+	void the_drop_zones_are_the_edges_and_the_middle();
+	void a_drop_on_a_pane_that_is_not_focused_places_the_pane();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();
 	void a_window_that_loses_its_last_session_closes();
 	void the_pane_grip_arms_a_drag();

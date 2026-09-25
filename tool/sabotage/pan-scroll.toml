@@ -51,6 +51,6 @@ expect = "a_pan_gesture_scrolls_the_column"
 [[sabotage]]
 name = "the container ignores the view's scroll"
 file = "src/ui/pane_container.cpp"
-find = "\t\t         this, &bssh_pane_container::scroll_column_by);"
-replace = "\t\t         this, [](int) {});"
+find = "\t         this, &bssh_pane_container::scroll_column_by);"
+replace = "\t         this, [](int) {});"
 expect = "a_pan_gesture_scrolls_the_column"
