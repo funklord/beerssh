@@ -53,6 +53,9 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
 	m_scroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 	m_scroll->hide();
 
+	/* The column's height follows the viewport's; see apply_column_visible. */
+	m_scroll->viewport()->installEventFilter(this);
+
 	m_splitter = new QSplitter(Qt::Horizontal, this);
 	configure_splitter(m_splitter);
 
@@ -488,6 +491,7 @@ void bssh_pane_container::rebuild() {
 	if (!panes.contains(m_focused)) m_focused = panes.isEmpty() ? nullptr : panes.first();
 
 	apply_focus_styling();
+	apply_column_visible();
 	emit panes_rebuilt();
 	emit focus_changed(m_focused);
 }
@@ -695,7 +699,36 @@ void bssh_pane_container::equalize_splitter(QSplitter *splitter) {
 	snap_splitter(splitter);
 }
 
+void bssh_pane_container::set_column_visible(int count) {
+	if (count == m_column_visible) return;
+	m_column_visible = count;
+	apply_column_visible();
+}
+
+void bssh_pane_container::apply_column_visible() {
+	const bool column = m_layout && m_layout->arrangement() == bssh_layout_manager::COLUMN;
+	const int panes = m_views.size();
+
+	/*
+	 * Only when there are more panes than are meant to be seen: fewer, and
+	 * they share the viewport as they always have, so two panes held
+	 * upright are two halves and one is the whole screen.
+	 */
+	if (!column || m_column_visible <= 0 || panes <= m_column_visible) {
+		m_splitter->setMinimumHeight(0);
+		return;
+	}
+
+	const int viewport = m_scroll->viewport()->height();
+	m_splitter->setMinimumHeight(viewport * panes / m_column_visible);
+}
+
 bool bssh_pane_container::eventFilter(QObject *watched, QEvent *event) {
+	if (watched == m_scroll->viewport() && event->type() == QEvent::Resize) {
+		apply_column_visible();
+		return false;
+	}
+
 	if (event->type() == QEvent::MouseButtonDblClick) {
 		QSplitterHandle *handle = qobject_cast<QSplitterHandle *>(watched);
 		if (handle && all_splitters().contains(handle->splitter())) {

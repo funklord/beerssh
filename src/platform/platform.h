@@ -3,6 +3,7 @@
 
 #include <QObject>
 #include <QPalette>
+#include <QSize>
 #include <Qt>
 #include <QString>
 #include <QStringList>
@@ -84,6 +85,21 @@ public:
 	static void force_touch_primary(int touch);
 
 	/*
+	 * The device's screen in dp, for arrangements that follow how the
+	 * device is held (sec 8.7): landscape or portrait, folded or open.
+	 * The SCREEN and never the window, because opening the on-screen
+	 * keyboard shrinks the window's height, and a rule keyed on the
+	 * window would change the arrangement every time it opened.
+	 *
+	 * Invalid where there is no such thing to follow -- a desktop's
+	 * windows are the user's to size -- and callers keep their older
+	 * answer there. force_screen_size() is the same seam
+	 * force_touch_primary() is, invalid to go back to asking.
+	 */
+	QSize screen_size() const;
+	static void force_screen_size(const QSize &size_dp);
+
+	/*
 	 * Whether this platform can ask the user to prove it is them --
 	 * BiometricPrompt on Android, and nothing on the desktops this
 	 * targets. sec 11 asks for the platform equivalent where one exists
@@ -110,6 +126,7 @@ public:
 
 protected:
 	virtual bool platform_is_touch_primary() const = 0;
+	virtual QSize platform_screen_size() const = 0;
 
 	/* What terminfo_directory() answers when nothing is forcing it. */
 	virtual QString platform_terminfo_directory() const = 0;

@@ -1,0 +1,36 @@
+# The arrangement a device's screen gets (project.md sec 8.7, the
+# holder's answers of 2026-09-25): 600dp both ways is side by side, less
+# stacks -- one terminal on screen held sideways, two held upright.
+
+# Held sideways still shows two.
+[[sabotage]]
+name = "the count ignores how the device is held"
+file = "src/ui/layout_manager.cpp"
+find = "\treturn {COLUMN, screen.width() > screen.height() ? 1 : 2};"
+replace = "\treturn {COLUMN, 2};"
+expect = "the_screen_decides_the_arrangement_and_the_count"
+
+# Wide enough in ONE direction counts as open, so the cover screen turned
+# sideways tiles.
+[[sabotage]]
+name = "a screen wide one way only counts as unfolded"
+file = "src/ui/layout_manager.cpp"
+find = "\t\t         && qMin(screen.width(), screen.height()) >= 600) arrangement = TILED;"
+replace = "\t\t         && qMax(screen.width(), screen.height()) >= 600) arrangement = TILED;"
+expect = "the_screen_decides_the_arrangement_and_the_count"
+
+# Turning or unfolding the device leaves the window as it was.
+[[sabotage]]
+name = "a rotation or a fold does not rearrange the window"
+file = "src/ui/main_window.cpp"
+find = "\tif (screen != m_arranged_for) apply_arrangement();"
+replace = ""
+expect = "turning_the_device_rearranges_the_window"
+
+# The count is chosen and never applied: the panes share the screen.
+[[sabotage]]
+name = "a column shows everything at once whatever the count"
+file = "src/ui/pane_container.cpp"
+find = "\tm_splitter->setMinimumHeight(viewport * panes / m_column_visible);"
+replace = "\tm_splitter->setMinimumHeight(0);"
+expect = "a_column_shows_the_count_and_scrolls_to_the_rest"

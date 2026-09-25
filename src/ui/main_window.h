@@ -775,6 +775,14 @@ private:
 	 */
 	void run_own_session_drag(bssh_session *session);
 
+	/*
+	 * The arrangement, how many terminals a column shows, and whether the
+	 * selector offers Move -- all from the setting and the device's screen
+	 * (sec 8.7). True when the arrangement itself changed.
+	 */
+	bool apply_arrangement();
+	QSize m_arranged_for;
+
 	/* What lies under a point on screen, for the drag above. */
 	struct drop_spot_t {
 		bssh_main_window *window = nullptr;

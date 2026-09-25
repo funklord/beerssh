@@ -7599,42 +7599,47 @@ whether tabs survive on desktop and landscape, and whether the terminal's
 overflow menu goes once the picker carries the config route. (Where the
 selector lives was the third, and is settled above: the bottom edge.)
 
-**[OPEN] Which arrangement applies in which device state -- the holder's
-words, 2026-09-11, never turned into a decision.** 08:26: *"Now that we
-have many disparate modes, we should probably configure which mode
-applies in which state. Like, in landscape mode we probably only want one
-terminal on screen but scrolling might be useful, in portrait mode 1-2 and
-scrolling, in folded out mode, act more like desktop but optimized for
-touch."* 08:40: *"Desktop might have touch too, so let's try to make the
-modes the same with minor differences for mobile and desktop, switchable
-for testing. Let's give them names, 1. Desktop mode, 2. Vertical
-scrollable. They can each also have tabs on top/bottom/left/right."* The
-two names became `tiled` and `column` in `layout/arrangement`; what was
-not built is the per-state policy and the **tab-bar position as its own
-axis** (top/bottom/left/right, and none). The session proposed deriving
-the default from the device's state with one override per behaviour --
-the "On-screen keys: Automatic/Always/Never" shape -- rather than a knob
-per state. Three questions went to the holder and were not answered: is
-"folded out" a third arrangement or just touch plus width; what does the
-cover screen in landscape (~700x390dp) get; and is "1-2 terminals" per
-window or per orientation.
+**Which arrangement applies in which device state -- [BUILT 2026-09-25]
+from the holder's answers.** 2026-09-11, 08:26: *"Now that we have many
+disparate modes, we should probably configure which mode applies in which
+state. Like, in landscape mode we probably only want one terminal on
+screen but scrolling might be useful, in portrait mode 1-2 and scrolling,
+in folded out mode, act more like desktop but optimized for touch."*
+08:40: *"Desktop might have touch too, so let's try to make the modes the
+same with minor differences for mobile and desktop, switchable for
+testing. Let's give them names, 1. Desktop mode, 2. Vertical scrollable.
+They can each also have tabs on top/bottom/left/right."* The two names
+became `tiled` and `column` in `layout/arrangement`.
 
-**Answered by the holder 2026-09-25, not yet built.** The unfolded Fold
-is side by side with touch sizing, not a third arrangement; the 1-2
-count follows orientation, so rotating a window re-flows it (landscape
-one terminal on screen, portrait up to two, the rest scrolled to, nothing
-closed); the tab bar's position is a setting per arrangement, each
-defaulting to where it is today; and the cover screen sideways (~700x390)
-takes the landscape rule, one terminal. The shape worked out for it,
-recorded so the build starts from it: AUTOMATIC on a touch device reads
-the SCREEN, never the window -- opening the on-screen keyboard shrinks the
-window's height, and a rule keyed on the window would flip the
-arrangement every time it opened. Shorter screen side of 600dp or more is
-side by side; below that a column, one on screen in landscape and two in
-portrait. A platform with no device screen to report (a desktop) keeps
-today's answer. "Two on screen" is the column's TOTAL height set from the
-viewport rather than a minimum per pane, so the divider between two
-panes stays draggable.
+Three questions stayed open until 2026-09-25, when the holder answered:
+the unfolded Fold is side by side with touch sizing, not a third
+arrangement; the 1-2 count follows orientation, so rotating a window
+re-flows it; and the cover screen sideways (~700x390) takes the landscape
+rule, one terminal.
+
+**The rule, as built** (`bssh_layout_manager::choose_arrangement`):
+AUTOMATIC on a touch device reads the device's SCREEN, never the window --
+opening the on-screen keyboard shrinks the window's height, and a rule
+keyed on the window would flip the arrangement every time it opened. A
+screen 600dp or more in BOTH directions is side by side; anything smaller
+is a column showing one terminal held sideways and two held upright, the
+rest scrolled to and nothing closed. A platform with no device screen to
+follow (`bssh_platform::screen_size()` invalid -- a desktop) keeps the
+older answer, touch stacks and a pointer tiles. A hand-chosen column on a
+device still counts by how it is held. "One on screen" is the column's
+TOTAL height set to the viewport times panes over the count, not a
+minimum per pane, so the divider between two stacked panes stays
+draggable. The window re-asks when the screen changes, not on every
+resize. Guarded by `tool/sabotage/arrangement-by-screen.toml`, four edits.
+
+**Found on the way**: the input selector's Move state was set once at
+construction, so a window that became a column at runtime -- through the
+setting, and now by being folded -- offered no way to reorder it.
+`apply_arrangement()` sets it with the arrangement.
+
+**[OPEN, answered but not built] The tab bar's position, per
+arrangement** -- top, bottom, left or right, each defaulting to where it
+is today. The holder chose per-arrangement over one global setting.
 
 ### 8.6 The command line — **[DECIDED]**
 

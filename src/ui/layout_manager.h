@@ -3,6 +3,7 @@
 
 #include <QList>
 #include <QObject>
+#include <QSize>
 
 #include <vector>
 
@@ -86,6 +87,31 @@ public:
 	 * number. The common case is one or two.
 	 */
 	static const int BSSH_COLUMN_PANE_LIMIT = 64;
+
+	/*
+	 * Which arrangement a window takes, and how many terminals a column
+	 * shows at once (sec 8.7) -- the holder's rule, answered 2026-09-25:
+	 * a screen at least 600dp both ways (a Fold unfolded, either way up)
+	 * is side by side; anything smaller stacks, one terminal on screen in
+	 * landscape and two in portrait, the rest scrolled to. The phone's
+	 * cover screen turned sideways is landscape and gets one.
+	 *
+	 * `screen` is the device's screen in dp, invalid where there is none
+	 * to follow (a desktop), which keeps the older answer: touch stacks,
+	 * a pointer tiles, and a column shows what fits. `wanted` is the
+	 * setting; only AUTOMATIC reads the screen, but a column chosen by
+	 * hand on a phone still follows the orientation for its count.
+	 *
+	 * `visible` is 0 for "no count": the panes share the space and the
+	 * column scrolls only when they stop fitting.
+	 */
+	enum preference_t { PREFER_AUTO, PREFER_TILED, PREFER_COLUMN };
+	struct arrangement_choice_t {
+		arrangement_t arrangement;
+		int visible;
+	};
+	static arrangement_choice_t choose_arrangement(preference_t wanted, bool touch,
+	                                               const QSize &screen);
 
 	explicit bssh_layout_manager(QObject *parent = nullptr);
 

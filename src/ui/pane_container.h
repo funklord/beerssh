@@ -67,6 +67,16 @@ public:
 	void equalize_panes();
 
 	/*
+	 * How many terminals a column shows at once (sec 8.7): 1 held
+	 * sideways, 2 upright, 0 for "whatever fits". Applied as the column's
+	 * TOTAL height -- the viewport times panes over this count -- rather
+	 * than a minimum per pane, so the divider between two stacked panes
+	 * stays draggable. Ignored outside a column.
+	 */
+	void set_column_visible(int count);
+	int column_visible() const { return m_column_visible; }
+
+	/*
 	 * Re-measures every visible pane against the display it is on now
 	 * (sec 9.5's multi-monitor case). Each view snaps its cell to whole
 	 * device pixels, so a window dragged to a differently-scaled monitor
@@ -195,6 +205,10 @@ private:
 	QList<QSplitter *> all_splitters() const;
 	void snap_splitter(QSplitter *splitter);
 	void equalize_splitter(QSplitter *splitter);
+
+	/* Sizes the column for m_column_visible; again whenever the viewport moves. */
+	void apply_column_visible();
+	int m_column_visible = 0;
 
 	bssh_layout_manager *m_layout;
 	QVBoxLayout *m_outer;

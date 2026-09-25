@@ -132,6 +132,14 @@ public:
 		return false;
 	}
 
+	QSize platform_screen_size() const override {
+		/*
+		 * None to follow: a desktop's windows are sized by the user, and
+		 * the arrangement stays whatever it was chosen to be.
+		 */
+		return QSize();
+	}
+
 	bool watch_foreground(std::function<void(bool)>) override {
 		/*
 		 * Nothing to watch with: a desktop has windows rather than an app

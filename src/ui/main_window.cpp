@@ -100,7 +100,7 @@ static const int BSSH_TEAR_OUT_DP = 40;
 
 namespace {
 
-bssh_layout_manager::arrangement_t chosen_arrangement() {
+bssh_layout_manager::arrangement_choice_t chosen_arrangement() {
 	/*
 	 * sec 8.7's arrangement, asked of the setting rather than decided
 	 * from the idiom. AUTO is what the idiom would have picked, which is
@@ -115,14 +115,19 @@ bssh_layout_manager::arrangement_t chosen_arrangement() {
 	 */
 	const bssh_app_settings::arrangement_t wanted = bssh_app_settings().arrangement();
 
-	if (wanted == bssh_app_settings::ARRANGEMENT_TILED)
-		return bssh_layout_manager::TILED;
-	if (wanted == bssh_app_settings::ARRANGEMENT_COLUMN)
-		return bssh_layout_manager::COLUMN;
+	const bssh_layout_manager::preference_t preference =
+	        wanted == bssh_app_settings::ARRANGEMENT_TILED    ? bssh_layout_manager::PREFER_TILED
+	        : wanted == bssh_app_settings::ARRANGEMENT_COLUMN ? bssh_layout_manager::PREFER_COLUMN
+	                                                          : bssh_layout_manager::PREFER_AUTO;
 
+	/*
+	 * AUTOMATIC follows how the device is held (the holder's answers of
+	 * 2026-09-25, sec 8.7), which the rule itself spells out.
+	 */
 	const bssh_platform *platform = bssh_platform::instance();
-	return (platform && platform->is_touch_primary()) ? bssh_layout_manager::COLUMN
-	                                                   : bssh_layout_manager::TILED;
+	return bssh_layout_manager::choose_arrangement(
+	        preference, platform && platform->is_touch_primary(),
+	        platform ? platform->screen_size() : QSize());
 }
 
 /*
@@ -383,7 +388,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * and set here before the pane container exists so the first rebuild
 	 * already reads the right shape.
 	 */
-	m_layout->set_arrangement(chosen_arrangement());
+	m_layout->set_arrangement(chosen_arrangement().arrangement);
 
 	m_panes = new bssh_pane_container(m_layout, m_terminal_page);
 	layout->addWidget(m_panes, 1);
@@ -406,13 +411,11 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	                              && bssh_platform::instance()->is_touch_primary());
 
 	/*
-	 * The Move state is offered only where there is a column to reorder.
-	 * The arrangement is fixed at construction today (touch opens a
-	 * column, a desktop opens tiles), so this is set once; when a runtime
-	 * arrangement switch lands it calls the same setter.
+	 * The arrangement's other two halves -- how many terminals a column
+	 * shows, and the Move state, offered only where there is a column to
+	 * reorder -- now the container and the selector both exist.
 	 */
-	m_input_selector->set_column_available(
-	        m_layout->arrangement() == bssh_layout_manager::COLUMN);
+	apply_arrangement();
 
 	connect(m_input_selector, &bssh_input_selector::mode_changed,
 	         this, [this] { apply_input_mode(); });
@@ -1478,6 +1481,30 @@ void bssh_main_window::on_screen_changed() {
 	update_status();
 }
 
+bool bssh_main_window::apply_arrangement() {
+	if (!m_layout) return false;
+
+	const bssh_layout_manager::arrangement_choice_t choice = chosen_arrangement();
+	m_arranged_for = bssh_platform::instance() ? bssh_platform::instance()->screen_size()
+	                                           : QSize();
+
+	const bool changed = m_layout->arrangement() != choice.arrangement;
+	if (changed) m_layout->set_arrangement(choice.arrangement);
+
+	if (m_panes) m_panes->set_column_visible(choice.visible);
+
+	/*
+	 * The Move state needs a column to reorder. This was set once, at
+	 * construction, and never again -- so a window switched to a column
+	 * in the settings, or turned into one by being folded, offered no way
+	 * to reorder it.
+	 */
+	if (m_input_selector)
+		m_input_selector->set_column_available(choice.arrangement
+		                                        == bssh_layout_manager::COLUMN);
+	return changed;
+}
+
 void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
 
@@ -1523,6 +1550,16 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	 * prevent, and this walked straight past it.
 	 */
 	m_layout->set_width(width());
+
+	/*
+	 * A rotation or a fold changes the SCREEN, and the arrangement follows
+	 * the screen (sec 8.7). Asked only when the screen moved: this runs for
+	 * every frame of the on-screen keyboard opening, which changes the
+	 * window and never the screen, and must not rebuild anything.
+	 */
+	const QSize screen = bssh_platform::instance() ? bssh_platform::instance()->screen_size()
+	                                              : QSize();
+	if (screen != m_arranged_for) apply_arrangement();
 
 	/*
 	 * The keyboard's own width question, which is not the layout
@@ -1728,12 +1765,7 @@ void bssh_main_window::apply_device_settings() {
 	 * gives at length -- rebuilding on every settings pass re-enters this
 	 * function and does not terminate.
 	 */
-	bool arrangement_changed = false;
-	if (m_layout) {
-		const bssh_layout_manager::arrangement_t wanted = chosen_arrangement();
-		arrangement_changed = m_layout->arrangement() != wanted;
-		if (arrangement_changed) m_layout->set_arrangement(wanted);
-	}
+	const bool arrangement_changed = apply_arrangement();
 
 	if ((bar_changed || ligatures_changed || arrangement_changed) && m_panes)
 		m_panes->rebuild();

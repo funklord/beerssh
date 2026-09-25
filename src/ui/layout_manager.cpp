@@ -122,6 +122,26 @@ bssh_layout_manager::size_class_t bssh_layout_manager::size_class_for(int width_
 	return EXPANDED;
 }
 
+bssh_layout_manager::arrangement_choice_t
+bssh_layout_manager::choose_arrangement(preference_t wanted, bool touch, const QSize &screen) {
+	if (wanted == PREFER_TILED) return {TILED, 0};
+
+	arrangement_t arrangement = COLUMN;
+	if (wanted == PREFER_AUTO) {
+		if (!touch) arrangement = TILED;
+		else if (screen.isValid()
+		         && qMin(screen.width(), screen.height()) >= 600) arrangement = TILED;
+	}
+	if (arrangement == TILED) return {TILED, 0};
+
+	/*
+	 * One on screen held sideways, two held upright. Only where there is
+	 * a device to hold: a desktop's column shows what fits.
+	 */
+	if (!screen.isValid()) return {COLUMN, 0};
+	return {COLUMN, screen.width() > screen.height() ? 1 : 2};
+}
+
 int bssh_layout_manager::max_panes_for(size_class_t size_class) {
 	switch (size_class) {
 	case COMPACT:

@@ -53,6 +53,8 @@ expect = "a_reorder_along_the_strip_is_not_a_tear_out"
 # another startup one. A startup-only pair was MISSED by both halves,
 # because either one alone still gives a fresh window the right shape.
 #
+# The comparison lives in apply_arrangement() now (sec 8.7's per-state
+# rule made the arrangement change at runtime), and the edit follows it.
 # The edit neuters the COMPARISON rather than the assignment, and the
 # difference is not cosmetic. Deleting `set_arrangement(wanted)` leaves
 # arrangement_changed permanently true, which rebuilds on every settings
@@ -64,8 +66,8 @@ expect = "a_reorder_along_the_strip_is_not_a_tear_out"
 [[sabotage]]
 name = "changing the arrangement does not rebuild the panes"
 file = "src/ui/main_window.cpp"
-find = "\t\tarrangement_changed = m_layout->arrangement() != wanted;"
-replace = "\t\tarrangement_changed = false;"
+find = "\tconst bool changed = m_layout->arrangement() != choice.arrangement;"
+replace = "\tconst bool changed = false;"
 expect = "a_desktop_can_be_asked_for_the_column"
 
 # A drop with no room collapses an arrangement it cannot join.

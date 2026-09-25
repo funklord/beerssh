@@ -71,6 +71,17 @@ void bssh_platform::force_touch_primary(int touch) {
 	bssh_forced_touch = touch;
 }
 
+static QSize bssh_forced_screen;
+
+QSize bssh_platform::screen_size() const {
+	if (bssh_forced_screen.isValid()) return bssh_forced_screen;
+	return platform_screen_size();
+}
+
+void bssh_platform::force_screen_size(const QSize &size_dp) {
+	bssh_forced_screen = size_dp;
+}
+
 /*
  * Null until something says otherwise. Null rather than empty, because
  * empty is a real answer here -- the desktop returns it to mean "say

@@ -1,6 +1,7 @@
 #include "platform/platform.h"
 
 #include <QGuiApplication>
+#include <QScreen>
 #include <QPalette>
 #include <QStyleHints>
 
@@ -342,6 +343,16 @@ public:
 				window.callMethod<void>("clearFlags", "(I)V", flag_secure);
 			}
 		});
+	}
+
+	QSize platform_screen_size() const override {
+		/*
+		 * Qt's logical pixels are dp on Android (sec 8.1), and the
+		 * primary screen is the one the app is on: a folding phone
+		 * reports its cover or its inner display as it is folded.
+		 */
+		const QScreen *screen = QGuiApplication::primaryScreen();
+		return screen ? screen->size() : QSize();
 	}
 
 	bool watch_foreground(std::function<void(bool)> changed) override {

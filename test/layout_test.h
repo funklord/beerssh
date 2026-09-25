@@ -243,6 +243,14 @@ private slots:
 	 */
 	void a_drag_released_outside_every_window_tears_out();
 	void a_drag_released_on_another_windows_pane_places_it();
+
+	/*
+	 * Which arrangement a device's screen gets, and how many terminals a
+	 * column shows (sec 8.7, the holder's answers of 2026-09-25).
+	 */
+	void the_screen_decides_the_arrangement_and_the_count();
+	void turning_the_device_rearranges_the_window();
+	void a_column_shows_the_count_and_scrolls_to_the_rest();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();
 	void a_window_that_loses_its_last_session_closes();
 	void the_pane_grip_arms_a_drag();

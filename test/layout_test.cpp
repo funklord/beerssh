@@ -100,6 +100,12 @@ struct forced_touch_t {
 	~forced_touch_t() { bssh_platform::force_touch_primary(-1); }
 };
 
+/* The device's screen, forced for a test and put back after it. */
+struct forced_screen_t {
+	explicit forced_screen_t(const QSize &size) { bssh_platform::force_screen_size(size); }
+	~forced_screen_t() { bssh_platform::force_screen_size(QSize()); }
+};
+
 /*
  * Closes any session a window test left in the shared registry, so a
  * later test does not count a window this one built -- a leak surfaces as
@@ -3877,6 +3883,118 @@ void layout_test::a_drag_released_on_another_windows_pane_places_it() {
 	QCOMPARE(onto.panes()->view_at(0), onto.panes()->view_for(moving));
 	QCOMPARE(onto.panes()->view_at(1), onto.panes()->view_for(resident));
 	QVERIFY(!from.panes()->view_for(moving));
+}
+
+void layout_test::the_screen_decides_the_arrangement_and_the_count() {
+	using lm = bssh_layout_manager;
+	const auto is = [](lm::arrangement_choice_t choice, lm::arrangement_t arrangement,
+	                   int visible) {
+		return choice.arrangement == arrangement && choice.visible == visible;
+	};
+
+	/* No screen to follow: the older answer -- touch stacks, a pointer tiles. */
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_AUTO, false, QSize()), lm::TILED, 0));
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_AUTO, true, QSize()), lm::COLUMN, 0));
+
+	/* A phone: two held upright, one held sideways. */
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_AUTO, true, QSize(360, 740)), lm::COLUMN, 2));
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_AUTO, true, QSize(740, 360)), lm::COLUMN, 1));
+
+	/* The Fold's cover screen sideways is landscape, whatever its width. */
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_AUTO, true, QSize(700, 390)), lm::COLUMN, 1));
+
+	/* Unfolded, either way up: side by side. */
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_AUTO, true, QSize(673, 841)), lm::TILED, 0));
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_AUTO, true, QSize(841, 673)), lm::TILED, 0));
+
+	/*
+	 * A choice made by hand stands, and a hand-chosen column on a device
+	 * still counts by how it is held.
+	 */
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_TILED, true, QSize(360, 740)), lm::TILED, 0));
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_COLUMN, true, QSize(841, 673)), lm::COLUMN, 1));
+	QVERIFY(is(lm::choose_arrangement(lm::PREFER_COLUMN, false, QSize()), lm::COLUMN, 0));
+}
+
+void layout_test::turning_the_device_rearranges_the_window() {
+	const forced_touch_t touch(1);
+	forced_screen_t held(QSize(360, 740));
+
+	bssh_main_window window;
+	window.resize(360, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+	window.adopt_session(registry->create(named(QStringLiteral("one"))));
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.panes();
+	QVERIFY(panes);
+	QCOMPARE(panes->column_visible(), 2);
+
+	/*
+	 * The on-screen keyboard shrinks the window and not the screen, and
+	 * must not rebuild the terminal it is typing into.
+	 */
+	QPointer<bssh_terminal_view> before = panes->views().value(0);
+	window.resize(360, 400);
+	QCoreApplication::processEvents();
+	QVERIFY2(before && panes->views().value(0) == before,
+	          "opening the keyboard rebuilt the pane");
+
+	/* Turned sideways: one on screen. */
+	bssh_platform::force_screen_size(QSize(740, 360));
+	window.resize(740, 340);
+	QCoreApplication::processEvents();
+	QCOMPARE(panes->column_visible(), 1);
+
+	/* Unfolded: side by side. */
+	bssh_platform::force_screen_size(QSize(673, 841));
+	window.resize(673, 800);
+	QCoreApplication::processEvents();
+	QSplitter *root = panes->findChild<QSplitter *>();
+	QVERIFY(root);
+	QCOMPARE(panes->column_visible(), 0);
+	QVERIFY2(!panes->findChild<QScrollArea *>()->isVisible(),
+	          "an unfolded screen is still stacking its terminals in a column");
+}
+
+void layout_test::a_column_shows_the_count_and_scrolls_to_the_rest() {
+	const forced_touch_t touch(1);
+	const forced_screen_t held(QSize(740, 360));
+
+	bssh_main_window window;
+	window.resize(740, 340);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+	window.adopt_session(registry->create(named(QStringLiteral("one"))));
+	window.adopt_session(registry->create(named(QStringLiteral("two"))));
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.panes();
+	QScrollArea *scroll = panes->findChild<QScrollArea *>();
+	QVERIFY(scroll && scroll->isVisible());
+	QCOMPARE(panes->views().size(), 2);
+	QCOMPARE(panes->column_visible(), 1);
+
+	/*
+	 * Held sideways, one terminal fills the screen and the other is
+	 * scrolled to: two viewports' worth of column.
+	 */
+	const int viewport = scroll->viewport()->height();
+	QVERIFY(viewport > 0);
+	QCOMPARE(scroll->widget()->minimumHeight(), viewport * 2);
+
+	/* Upright, two share it and nothing scrolls. */
+	panes->set_column_visible(2);
+	QCOMPARE(scroll->widget()->minimumHeight(), 0);
 }
 
 void layout_test::a_pane_dropped_back_changes_nothing() {
