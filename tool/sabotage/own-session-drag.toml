@@ -1,0 +1,34 @@
+# The end of the desktop's own session drag on X11 (project.md sec 8.4):
+# a platform drag was offered to every program under the pointer, TDE's
+# desktop accepted it and asked for a filename, and the pane never tore
+# out. The drag is the app's own now, and where it ends is decided here.
+#
+# NOT COVERED: the drag loop itself (session_drag_ghost) and the branch
+# that chooses it on xcb. It holds a real pointer grab, which the
+# offscreen platform the suite runs on does not have; what it hands over
+# -- a release point -- is what these edits break.
+
+# Released outside every window, and no window of its own opens.
+[[sabotage]]
+name = "a drag released outside every window does not tear out"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (bssh_main_window *window = tear_out(session)) {"
+replace = "\t\tif (bssh_main_window *window = nullptr) {"
+expect = "a_drag_released_outside_every_window_tears_out"
+
+# It tears out, but wherever a new window lands by default.
+[[sabotage]]
+name = "a torn-out window ignores where the pointer let go"
+file = "src/ui/main_window.cpp"
+find = "\t\t\twindow->move(global - QPoint(40, 20));"
+replace = ""
+expect = "a_drag_released_outside_every_window_tears_out"
+
+# The pane under the pointer is never found, so every drop on a window
+# falls back to "beside" whatever zone it was aimed at.
+[[sabotage]]
+name = "a drag released on a pane ignores the pane"
+file = "src/ui/main_window.cpp"
+find = "\t\tspot.target = each;"
+replace = ""
+expect = "a_drag_released_on_another_windows_pane_places_it"

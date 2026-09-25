@@ -766,6 +766,15 @@ public:
 	bool being_dragged() const { return m_being_dragged; }
 
 	/*
+	 * Lights the zone a dragged pane would land in (a
+	 * bssh_layout_manager::drop_edge_t), or clears it with -1. The drag
+	 * events do this themselves; the desktop's own session drag, which
+	 * is not a platform drag and sends none, calls it directly.
+	 */
+	void show_drop_zone(int edge);
+	int drop_zone() const { return m_drop_edge; }
+
+	/*
 	 * Whether the grip is drawn right now.
 	 *
 	 * Only under the pointer. It has to be, and two pixel tests proved

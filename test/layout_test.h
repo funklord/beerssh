@@ -235,6 +235,14 @@ private slots:
 	void a_narrow_window_shows_the_first_panes_of_the_tree();
 	void the_drop_zones_are_the_edges_and_the_middle();
 	void a_drop_on_a_pane_that_is_not_focused_places_the_pane();
+
+	/*
+	 * The end of the desktop's own session drag (X11), which is not a
+	 * platform drag because TDE's desktop accepts any platform drop and
+	 * asked for a filename rather than letting the pane tear out.
+	 */
+	void a_drag_released_outside_every_window_tears_out();
+	void a_drag_released_on_another_windows_pane_places_it();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();
 	void a_window_that_loses_its_last_session_closes();
 	void the_pane_grip_arms_a_drag();

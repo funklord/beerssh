@@ -1426,6 +1426,12 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 }
 
 
+void bssh_terminal_view::show_drop_zone(int edge) {
+	if (edge == m_drop_edge) return;
+	m_drop_edge = edge;
+	update();
+}
+
 void bssh_terminal_view::set_being_dragged(bool dragged) {
 	if (m_being_dragged == dragged) return;
 

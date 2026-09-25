@@ -676,6 +676,19 @@ public:
 	 */
 	void start_session_drag(bssh_session *session);
 
+	/*
+	 * Where a session drag that ended at `global` goes: a window's tab
+	 * row makes a tab, a pane places it by zone (drop_session_on), the
+	 * rest of a window makes a pane beside, and anywhere outside every
+	 * window of ours tears it out into its own window at that point.
+	 *
+	 * The end of the desktop's own session drag on X11, which does not
+	 * go through the platform's drag and drop (see run_own_session_drag),
+	 * and public so a test can end one: the drag itself holds a real
+	 * pointer grab that nothing headless can drive.
+	 */
+	void finish_session_drag(bssh_session *session, const QPoint &global);
+
 
 	/* The session into a window of its own; nullptr if it will not go. */
 	bssh_main_window *tear_out(bssh_session *session);
@@ -752,6 +765,24 @@ private:
 	 * drop onto, and gains a second one where there is.
 	 */
 	void start_tab_drag(int index);
+
+	/*
+	 * The session drag on X11, where the platform's drag and drop cannot
+	 * be used: it is offered to every program under the pointer, and
+	 * TDE's desktop accepts any payload -- so a pane dropped outside the
+	 * window asked for a filename instead of tearing out. This one is run
+	 * by the app and nothing outside it sees a drag.
+	 */
+	void run_own_session_drag(bssh_session *session);
+
+	/* What lies under a point on screen, for the drag above. */
+	struct drop_spot_t {
+		bssh_main_window *window = nullptr;
+		bssh_session *target = nullptr;
+		int edge = 0;
+		bool on_tab_row = false;
+	};
+	static drop_spot_t drop_spot_at(const QPoint &global);
 
 public:
 	/*

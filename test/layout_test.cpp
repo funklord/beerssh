@@ -3784,6 +3784,101 @@ void layout_test::a_drop_on_a_pane_that_is_not_focused_places_the_pane() {
 	QCOMPARE(panes->focused_session(), moving);
 }
 
+void layout_test::a_drag_released_outside_every_window_tears_out() {
+	bssh_main_window window;
+	window.resize(1000, 700);
+	window.move(0, 0);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	bssh_session *staying = registry->create(named(QStringLiteral("staying")));
+	bssh_session *leaving = registry->create(named(QStringLiteral("leaving")));
+	window.adopt_session(staying);
+	window.adopt_session(leaving);
+	QCoreApplication::processEvents();
+
+	/* Nowhere any window of ours is. */
+	const QPoint outside(window.geometry().right() + 3000, window.geometry().bottom() + 3000);
+	QVERIFY(!QApplication::topLevelAt(outside));
+
+	window.finish_session_drag(leaving, outside);
+	QCoreApplication::processEvents();
+
+	bssh_main_window *torn = nullptr;
+	for (QWidget *top : QApplication::topLevelWidgets()) {
+		bssh_main_window *each = qobject_cast<bssh_main_window *>(top);
+		if (each && each != &window && each->isVisible()) torn = each;
+	}
+	QVERIFY2(torn, "released outside every window, and no window of its own opened");
+	QVERIFY(!window.findChild<bssh_pane_container *>()->view_for(leaving));
+
+	/* Put where the pointer let go, not wherever a new window lands. */
+	QVERIFY2((torn->pos() - outside).manhattanLength() < 100,
+	          qPrintable(QStringLiteral("opened at %1,%2 for a release at %3,%4")
+	                     .arg(torn->x()).arg(torn->y()).arg(outside.x()).arg(outside.y())));
+
+	torn->close();
+	delete torn;
+}
+
+void layout_test::a_drag_released_on_another_windows_pane_places_it() {
+	/*
+	 * The target inside the screen, and the source clear of it: topLevelAt
+	 * answers only for points on a screen, and the offscreen platform's is
+	 * 800x600, so a target placed beside a full-size window is on no
+	 * screen at all.
+	 */
+	const QRect screen = QGuiApplication::primaryScreen()->geometry();
+
+	bssh_main_window from;
+	from.resize(600, 400);
+	from.move(screen.right() + 100, 0);
+	from.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&from));
+
+	bssh_main_window onto;
+	onto.resize(qMin(700, screen.width()), qMin(500, screen.height()));
+	onto.move(screen.topLeft());
+	onto.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&onto));
+
+	bssh_session_registry *registry = from.registry();
+	QVERIFY(registry);
+	const registry_left_as_found_t tidy(registry);
+
+	bssh_session *resident = registry->create(named(QStringLiteral("resident")));
+	onto.adopt_session(resident);
+	bssh_session *staying = registry->create(named(QStringLiteral("staying")));
+	bssh_session *moving = registry->create(named(QStringLiteral("moving")));
+	from.adopt_session(staying);
+	from.adopt_session(moving);
+	QCoreApplication::processEvents();
+
+	bssh_terminal_view *pane = onto.panes()->view_for(resident);
+	QVERIFY(pane);
+
+	/*
+	 * The LEFT edge of the other window's pane, because the right one
+	 * gives the same order as a drop that found no pane and fell back to
+	 * "beside" -- and a test that the fallback also passes asks nothing.
+	 */
+	const QPoint at = pane->mapToGlobal(QPoint(6, pane->height() / 2));
+	QCOMPARE(QApplication::topLevelAt(at), &onto);
+
+	from.finish_session_drag(moving, at);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(onto.panes()->views().size() == 2,
+	          "700px is MEDIUM, which holds two: the drop must have had room");
+	QCOMPARE(onto.panes()->view_at(0), onto.panes()->view_for(moving));
+	QCOMPARE(onto.panes()->view_at(1), onto.panes()->view_for(resident));
+	QVERIFY(!from.panes()->view_for(moving));
+}
+
 void layout_test::a_pane_dropped_back_changes_nothing() {
 	bssh_main_window window;
 	window.resize(1000, 700);

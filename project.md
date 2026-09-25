@@ -6555,6 +6555,31 @@ headless can drive it. **A pixmap nobody has looked at is the same kind
 of claim as a keycap nobody has looked at**, so it is rendered on its
 own rather than trusted.
 
+**On X11 the session drag is the app's own, not the platform's — [FIXED
+2026-09-25].** Reported by the holder: dragging a pane outside the window
+"wants to create a named file or something on the desktop". A `QDrag` is
+offered to every program under the pointer, and TDE's desktop accepts a
+drop of ANY data -- it asks for a filename to save it under -- so the drop
+was accepted, `exec()` returned an action rather than `IgnoreAction`, and
+`tear_out()` never ran. No payload format fixes that, since that desktop
+takes all of them; the only fix is for nothing outside the app to see a
+drag. So on xcb `start_session_drag` runs its own: a small picture beside
+the pointer while the app holds the mouse and keyboard, the zone under the
+pointer lit on whichever of our windows it is over, and on release
+`finish_session_drag()` decides -- a window's tab row makes a tab, a pane
+places by zone, the rest of a window makes a pane beside, and anywhere
+else tears out into a window of its own at the release point. Esc
+cancels, and the loop also ends if the button is found up without a
+release having arrived, so a grab lost to another program cannot leave it
+running. Other platforms keep `QDrag`; Wayland does not report where the
+pointer is outside our own surfaces, which this needs.
+**Tested at the release, not the drag**: `finish_session_drag` is driven
+at a point outside every window and at another window's pane edge
+(`own-session-drag.toml`, three edits). The loop itself holds a real
+pointer grab the offscreen suite does not have, so whether it feels right
+on TDE is the holder's to try. It carries the same `session_drag_pixmap`
+the platform drag did.
+
 
 **Dropping a pane on the tab bar missed most of the tab bar — [FIXED
 2026-09-05].** §8.3 says where a drop lands is what it means: the bar

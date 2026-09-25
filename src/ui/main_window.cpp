@@ -28,6 +28,9 @@
 #include <QPointer>
 #include <QFontMetrics>
 #include <QDrag>
+#include <QCursor>
+#include <QEventLoop>
+#include <functional>
 #include <QDragEnterEvent>
 #include <QDropEvent>
 #include <QMimeData>
@@ -121,6 +124,106 @@ bssh_layout_manager::arrangement_t chosen_arrangement() {
 	return (platform && platform->is_touch_primary()) ? bssh_layout_manager::COLUMN
 	                                                   : bssh_layout_manager::TILED;
 }
+
+/*
+ * The session drag on X11, run by this app rather than handed to the
+ * platform's drag and drop (sec 8.4).
+ *
+ * A platform drag is offered to every program under the pointer, and a
+ * desktop that accepts any payload takes it. TDE's does: dropping a pane
+ * outside the window asked for a filename to save the drag's contents
+ * under, and since the drop had been ACCEPTED the pane never tore out. No
+ * payload format prevents that, because that desktop accepts all of them,
+ * so the drag must not be offered at all. This is a small picture that
+ * follows the pointer while the app holds the mouse; nothing outside the
+ * app sees a drag, and where it ends is decided here.
+ *
+ * It stops on the button's release, on Esc, or when the button is found
+ * up without a release having arrived -- a grab lost to another program
+ * would otherwise leave the loop running with nothing to end it.
+ */
+class session_drag_ghost : public QWidget {
+public:
+	explicit session_drag_ghost(const QPixmap &picture)
+	    : QWidget(nullptr, Qt::ToolTip | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint),
+	      m_picture(picture) {
+		resize(picture.deviceIndependentSize().toSize());
+
+		m_watch.setInterval(200);
+		QObject::connect(&m_watch, &QTimer::timeout, this, [this] {
+			if (!QGuiApplication::mouseButtons().testFlag(Qt::LeftButton)) end(true);
+		});
+	}
+
+	/* Called with each new pointer position, for the drop zone. */
+	std::function<void(const QPoint &)> moved;
+
+	/*
+	 * Runs until the drag ends and says where: the release point, or
+	 * nothing when it was cancelled.
+	 */
+	bool run(QPoint *released) {
+		follow(QCursor::pos());
+		show();
+		grabMouse(Qt::ClosedHandCursor);
+		grabKeyboard();
+		m_watch.start();
+
+		m_loop.exec();
+
+		m_watch.stop();
+		releaseKeyboard();
+		releaseMouse();
+		hide();
+
+		*released = m_at;
+		return m_dropped;
+	}
+
+protected:
+	void paintEvent(QPaintEvent *) override {
+		QPainter painter(this);
+		painter.drawPixmap(0, 0, m_picture);
+	}
+
+	void mouseMoveEvent(QMouseEvent *event) override {
+		follow(event->globalPosition().toPoint());
+	}
+
+	void mouseReleaseEvent(QMouseEvent *event) override {
+		if (event->button() != Qt::LeftButton) return;
+		m_at = event->globalPosition().toPoint();
+		end(true);
+	}
+
+	void keyPressEvent(QKeyEvent *event) override {
+		if (event->key() == Qt::Key_Escape) end(false);
+	}
+
+private:
+	void follow(const QPoint &at) {
+		m_at = at;
+
+		/*
+		 * Beside the pointer, not under it, so the window under the
+		 * pointer is the one a drop would land in rather than this.
+		 */
+		move(at + QPoint(14, 14));
+		if (moved) moved(at);
+	}
+
+	void end(bool dropped) {
+		if (!m_loop.isRunning()) return;
+		m_dropped = dropped;
+		m_loop.quit();
+	}
+
+	QPixmap m_picture;
+	QEventLoop m_loop;
+	QTimer m_watch;
+	QPoint m_at;
+	bool m_dropped = false;
+};
 
 } /* namespace */
 
@@ -2794,6 +2897,11 @@ void bssh_main_window::start_session_drag(bssh_session *session) {
 	const int in_registry = m_registry->index_of(session);
 	if (in_registry < 0) return;
 
+	if (QGuiApplication::platformName() == QStringLiteral("xcb")) {
+		run_own_session_drag(session);
+		return;
+	}
+
 	QMimeData *mime = new QMimeData;
 	mime->setData(session_mime_type(), QByteArray::number(in_registry));
 
@@ -2845,6 +2953,88 @@ void bssh_main_window::start_session_drag(bssh_session *session) {
 	 * is exactly the behaviour this needs.
 	 */
 	tear_out(session);
+}
+
+void bssh_main_window::run_own_session_drag(bssh_session *session) {
+	QPointer<bssh_session> carried = session;
+
+	QPointer<bssh_terminal_view> source =
+	        m_panes ? m_panes->view_for(session) : nullptr;
+	if (source) source->set_being_dragged(true);
+
+	/* The pane whose zone is lit, so the last one is cleared as the pointer moves on. */
+	QPointer<bssh_terminal_view> lit;
+
+	session_drag_ghost ghost(session_drag_pixmap(session));
+	ghost.moved = [&lit](const QPoint &at) {
+		const drop_spot_t spot = drop_spot_at(at);
+		bssh_terminal_view *view = spot.window && spot.target
+		        ? spot.window->panes()->view_for(spot.target) : nullptr;
+
+		if (lit && lit != view) lit->show_drop_zone(-1);
+		if (view) view->show_drop_zone(spot.edge);
+		lit = view;
+	};
+
+	QPoint released;
+	const bool dropped = ghost.run(&released);
+
+	if (lit) lit->show_drop_zone(-1);
+	if (source) source->set_being_dragged(false);
+
+	if (dropped && carried) finish_session_drag(carried, released);
+}
+
+bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &global) {
+	drop_spot_t spot;
+
+	bssh_main_window *window =
+	        qobject_cast<bssh_main_window *>(QApplication::topLevelAt(global));
+	if (!window) return spot;
+	spot.window = window;
+
+	if (window->point_is_on_tab_row(window->mapFromGlobal(global))) {
+		spot.on_tab_row = true;
+		return spot;
+	}
+
+	bssh_pane_container *panes = window->panes();
+	if (!panes) return spot;
+
+	for (bssh_session *each : window->m_shown) {
+		bssh_terminal_view *view = panes->view_for(each);
+		if (!view || !view->isVisible()) continue;
+
+		const QPoint local = view->mapFromGlobal(global);
+		if (!view->rect().contains(local)) continue;
+
+		spot.target = each;
+		spot.edge = bssh_drop_edge_at(local, view->size());
+		break;
+	}
+	return spot;
+}
+
+void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &global) {
+	if (!session) return;
+
+	const drop_spot_t spot = drop_spot_at(global);
+
+	/*
+	 * Outside every window of ours: the gesture's original meaning, a
+	 * window of its own (sec 8.4), put where the pointer let go rather
+	 * than wherever a new window lands by default.
+	 */
+	if (!spot.window) {
+		if (bssh_main_window *window = tear_out(session)) {
+			window->move(global - QPoint(40, 20));
+		}
+		return;
+	}
+
+	if (spot.on_tab_row) spot.window->drop_session(session, false);
+	else if (spot.target) spot.window->drop_session_on(session, spot.target, spot.edge);
+	else spot.window->drop_session(session, true);
 }
 
 void bssh_main_window::dragEnterEvent(QDragEnterEvent *event) {
