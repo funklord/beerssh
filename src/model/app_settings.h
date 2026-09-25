@@ -143,6 +143,18 @@ public:
 	void set_arrangement(arrangement_t arrangement);
 
 	/*
+	 * Where the tab bar sits beside the panes, for the side-by-side
+	 * arrangement (sec 8.7: the holder asked for tabs on any side, each
+	 * arrangement with its own). Keyed per arrangement for that reason,
+	 * though only side by side has one: a column shows every session as
+	 * a pane, so it never shows a tab bar to place. Top, as it always
+	 * was, until chosen.
+	 */
+	enum tab_position_t { TABS_TOP, TABS_BOTTOM, TABS_LEFT, TABS_RIGHT };
+	tab_position_t tab_position() const;
+	void set_tab_position(tab_position_t position);
+
+	/*
 	 * How close to the halfway line the column's divider is pulled onto
 	 * it, in pixels (sec 8.7: "snap radius about 5-10px and
 	 * configurable"). The default is BSSH_COLUMN_SNAP_RADIUS, which is 8

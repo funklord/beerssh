@@ -17,6 +17,9 @@ class QAction;
 class QLabel;
 class QMenuBar;
 class QTabBar;
+class QBoxLayout;
+class QHBoxLayout;
+class QVBoxLayout;
 class QListWidget;
 class QStackedWidget;
 class QKeyEvent;
@@ -782,6 +785,17 @@ private:
 	 */
 	bool apply_arrangement();
 	QSize m_arranged_for;
+
+	/*
+	 * Moves the tab row to a side of the panes (a
+	 * bssh_app_settings::tab_position_t): the top and bottom of the page,
+	 * or the left and right of the row the panes are in.
+	 */
+	void apply_tab_position(int position);
+	int m_tab_position = 0;
+	QVBoxLayout *m_page_layout = nullptr;
+	QHBoxLayout *m_body = nullptr;
+	QBoxLayout *m_tab_row_layout = nullptr;
 
 	/* What lies under a point on screen, for the drag above. */
 	struct drop_spot_t {

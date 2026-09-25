@@ -355,6 +355,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_tabs->setDrawBase(false);
 
 	QHBoxLayout *tab_row = new QHBoxLayout();
+	m_tab_row_layout = tab_row;
 	tab_row->setContentsMargins(0, 0, 0, 0);
 	tab_row->setSpacing(0);
 	tab_row->addWidget(m_tabs, 0);
@@ -365,6 +366,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_tab_row->setLayout(tab_row);
 	m_tab_row->hide();
 	layout->addWidget(m_tab_row, 0);
+	m_page_layout = layout;
 
 	/*
 	 * The pane container, not a lone terminal view. Both it and the layout
@@ -391,7 +393,15 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_layout->set_arrangement(chosen_arrangement().arrangement);
 
 	m_panes = new bssh_pane_container(m_layout, m_terminal_page);
-	layout->addWidget(m_panes, 1);
+	/*
+	 * In a row of their own, so a tab bar placed on the left or the right
+	 * (sec 8.7) sits beside the panes rather than above them.
+	 */
+	m_body = new QHBoxLayout();
+	m_body->setContentsMargins(0, 0, 0, 0);
+	m_body->setSpacing(0);
+	m_body->addWidget(m_panes, 1);
+	layout->addLayout(m_body, 1);
 	layout->addWidget(m_status_label, 0);
 
 	/*
@@ -1481,6 +1491,47 @@ void bssh_main_window::on_screen_changed() {
 	update_status();
 }
 
+void bssh_main_window::apply_tab_position(int position) {
+	if (!m_tab_row || !m_page_layout || !m_body || !m_tab_row_layout) return;
+	if (position == m_tab_position) return;
+	m_tab_position = position;
+
+	const bool vertical = position == bssh_app_settings::TABS_LEFT
+	                      || position == bssh_app_settings::TABS_RIGHT;
+
+	/*
+	 * The bar's own shape, so the tabs face the panes, and the row's
+	 * direction with it -- the "+" and the stretch that makes the whole
+	 * strip a drop target run along whichever edge it is on.
+	 */
+	switch (position) {
+	case bssh_app_settings::TABS_BOTTOM: m_tabs->setShape(QTabBar::RoundedSouth); break;
+	case bssh_app_settings::TABS_LEFT:   m_tabs->setShape(QTabBar::RoundedWest); break;
+	case bssh_app_settings::TABS_RIGHT:  m_tabs->setShape(QTabBar::RoundedEast); break;
+	default:                             m_tabs->setShape(QTabBar::RoundedNorth); break;
+	}
+	m_tab_row_layout->setDirection(vertical ? QBoxLayout::TopToBottom
+	                                        : QBoxLayout::LeftToRight);
+
+	m_page_layout->removeWidget(m_tab_row);
+	m_body->removeWidget(m_tab_row);
+
+	switch (position) {
+	case bssh_app_settings::TABS_BOTTOM:
+		m_page_layout->insertWidget(m_page_layout->indexOf(m_body) + 1, m_tab_row, 0);
+		break;
+	case bssh_app_settings::TABS_LEFT:
+		m_body->insertWidget(0, m_tab_row, 0);
+		break;
+	case bssh_app_settings::TABS_RIGHT:
+		m_body->addWidget(m_tab_row, 0);
+		break;
+	default:
+		m_page_layout->insertWidget(0, m_tab_row, 0);
+		break;
+	}
+}
+
 bool bssh_main_window::apply_arrangement() {
 	if (!m_layout) return false;
 
@@ -1492,6 +1543,14 @@ bool bssh_main_window::apply_arrangement() {
 	if (changed) m_layout->set_arrangement(choice.arrangement);
 
 	if (m_panes) m_panes->set_column_visible(choice.visible);
+
+	/*
+	 * Side by side has a tab bar to place; a column shows every session
+	 * as a pane and has none, so it keeps the default, unseen.
+	 */
+	apply_tab_position(choice.arrangement == bssh_layout_manager::TILED
+	                           ? int(bssh_app_settings().tab_position())
+	                           : int(bssh_app_settings::TABS_TOP));
 
 	/*
 	 * The Move state needs a column to reorder. This was set once, at
@@ -3076,7 +3135,14 @@ void bssh_main_window::dragEnterEvent(QDragEnterEvent *event) {
 bool bssh_main_window::point_is_on_tab_row(const QPoint &at) const {
 	if (!m_tabs || !m_tabs->isVisible()) return false;
 
+	/*
+	 * Across the strip, whichever way it runs: a bar on the left or the
+	 * right is a column the whole height of the window, and aiming at it
+	 * means being in that column, however far down.
+	 */
 	const QPoint in_bar = m_tabs->mapFrom(this, at);
+	if (m_tabs->shape() == QTabBar::RoundedWest || m_tabs->shape() == QTabBar::RoundedEast)
+		return in_bar.x() >= 0 && in_bar.x() < m_tabs->width();
 	return in_bar.y() >= 0 && in_bar.y() < m_tabs->height();
 }
 
@@ -5258,7 +5324,11 @@ QSize bssh_main_window::size_for_grid(int cols, int rows) {
 		wanted.rheight() += m_menu_bar->sizeHint().height();
 	}
 	if (m_tab_row && !m_tab_row->isHidden()) {
-		wanted.rheight() += m_tab_row->sizeHint().height();
+		if (m_tab_position == bssh_app_settings::TABS_LEFT
+		    || m_tab_position == bssh_app_settings::TABS_RIGHT)
+			wanted.rwidth() += m_tab_row->sizeHint().width();
+		else
+			wanted.rheight() += m_tab_row->sizeHint().height();
 	} else if (m_tabs && !m_tabs->isHidden()) {
 		wanted.rheight() += m_tabs->sizeHint().height();
 	}

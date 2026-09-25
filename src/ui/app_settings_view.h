@@ -131,6 +131,7 @@ private:
 	QComboBox *m_theme;
 	QComboBox *m_scrollbar;
 	QComboBox *m_arrangement;
+	QComboBox *m_tab_position = nullptr;
 	QSlider *m_snap_radius;
 	QLabel *m_snap_radius_value;
 	QComboBox *m_status_line;

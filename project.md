@@ -7637,9 +7637,16 @@ construction, so a window that became a column at runtime -- through the
 setting, and now by being folded -- offered no way to reorder it.
 `apply_arrangement()` sets it with the arrangement.
 
-**[OPEN, answered but not built] The tab bar's position, per
-arrangement** -- top, bottom, left or right, each defaulting to where it
-is today. The holder chose per-arrangement over one global setting.
+**The tab bar's position -- [BUILT 2026-09-25].** Top, bottom, left or
+right, chosen per arrangement (the holder's pick over one global
+setting), default top as it always was. Only side by side has a bar to
+place -- a column shows every session as a pane -- so the setting is
+`layout/tabs_tiled`, offered on the settings page as "Tabs, side by
+side", and keyed per arrangement for the day a column has tabs. Left and
+right put the bar in the panes' own row, drawn facing them, and a drop
+aimed anywhere down that side is a drop on the bar: the hit test runs
+across the strip whichever way it lies. Guarded by
+`tool/sabotage/tab-position.toml`, three edits.
 
 ### 8.6 The command line — **[DECIDED]**
 

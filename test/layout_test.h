@@ -251,6 +251,9 @@ private slots:
 	void the_screen_decides_the_arrangement_and_the_count();
 	void turning_the_device_rearranges_the_window();
 	void a_column_shows_the_count_and_scrolls_to_the_rest();
+
+	/* The tab bar on the side it is set to, and a drop aimed at it there. */
+	void the_tab_bar_goes_where_it_is_set();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();
 	void a_window_that_loses_its_last_session_closes();
 	void the_pane_grip_arms_a_drag();

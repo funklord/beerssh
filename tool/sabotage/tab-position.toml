@@ -1,0 +1,26 @@
+# The tab bar on the side it is set to (project.md sec 8.7: the holder
+# asked for tabs top, bottom, left or right).
+
+# Set to the left, and it goes back above the panes.
+[[sabotage]]
+name = "a bar set to the left stays above the panes"
+file = "src/ui/main_window.cpp"
+find = "\t\tm_body->insertWidget(0, m_tab_row, 0);"
+replace = "\t\tm_page_layout->insertWidget(0, m_tab_row, 0);"
+expect = "the_tab_bar_goes_where_it_is_set"
+
+# Beside the panes, but still drawn facing up.
+[[sabotage]]
+name = "a bar on the left keeps its horizontal shape"
+file = "src/ui/main_window.cpp"
+find = "\tcase bssh_app_settings::TABS_LEFT:   m_tabs->setShape(QTabBar::RoundedWest); break;"
+replace = ""
+expect = "the_tab_bar_goes_where_it_is_set"
+
+# A drop aimed down the side misses a bar that is there.
+[[sabotage]]
+name = "a drop down a side bar is not on the bar"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_tabs->shape() == QTabBar::RoundedWest || m_tabs->shape() == QTabBar::RoundedEast)"
+replace = "\tif (false)"
+expect = "the_tab_bar_goes_where_it_is_set"

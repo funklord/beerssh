@@ -107,6 +107,8 @@ namespace {
 const char *const BSSH_KEYBOARD_KEYS[] = { "system", "built_in", "built_in_full" };
 const char *const BSSH_ARRANGEMENT_KEYS[] = { "auto", "tiled", "column" };
 const int BSSH_ARRANGEMENT_COUNT = 3;
+const char *const BSSH_TAB_POSITION_KEYS[] = { "top", "bottom", "left", "right" };
+const int BSSH_TAB_POSITION_COUNT = 4;
 const int BSSH_KEYBOARD_COUNT = 3;
 
 } /* namespace */
@@ -152,6 +154,19 @@ bssh_app_settings::arrangement_t bssh_app_settings::arrangement() const {
 void bssh_app_settings::set_arrangement(arrangement_t arrangement) {
 	store(QStringLiteral("layout/arrangement"),
 	       QString::fromLatin1(BSSH_ARRANGEMENT_KEYS[int(arrangement)]));
+}
+
+bssh_app_settings::tab_position_t bssh_app_settings::tab_position() const {
+	const QString text = value(QStringLiteral("layout/tabs_tiled"), QString()).toString();
+	for (int i = 0; i < BSSH_TAB_POSITION_COUNT; ++i) {
+		if (text == QLatin1String(BSSH_TAB_POSITION_KEYS[i])) return tab_position_t(i);
+	}
+	return TABS_TOP;
+}
+
+void bssh_app_settings::set_tab_position(tab_position_t position) {
+	store(QStringLiteral("layout/tabs_tiled"),
+	       QString::fromLatin1(BSSH_TAB_POSITION_KEYS[int(position)]));
 }
 
 int bssh_app_settings::column_snap_radius() const {

@@ -3997,6 +3997,62 @@ void layout_test::a_column_shows_the_count_and_scrolls_to_the_rest() {
 	QCOMPARE(scroll->widget()->minimumHeight(), 0);
 }
 
+void layout_test::the_tab_bar_goes_where_it_is_set() {
+	const bssh_app_settings::tab_position_t was = bssh_app_settings().tab_position();
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		bssh_session_registry *registry = window.registry();
+		QVERIFY(registry);
+		const registry_left_as_found_t tidy(registry);
+		window.adopt_session(registry->create(named(QStringLiteral("one"))));
+		window.adopt_session(registry->create(named(QStringLiteral("two"))));
+		QCoreApplication::processEvents();
+
+		QTabBar *bar = window.findChild<QTabBar *>();
+		QVERIFY(bar && bar->isVisible());
+		bssh_pane_container *panes = window.panes();
+		const auto global = [](QWidget *w) { return QRect(w->mapToGlobal(QPoint(0, 0)), w->size()); };
+
+		/* The control: where it has always been. */
+		QVERIFY(global(bar).bottom() <= global(panes).top());
+
+		bssh_app_settings().set_tab_position(bssh_app_settings::TABS_LEFT);
+		window.apply_device_settings();
+		QCoreApplication::processEvents();
+
+		QCOMPARE(bar->shape(), QTabBar::RoundedWest);
+		QVERIFY2(global(bar).right() <= global(panes).left(),
+		          "set to the left and not beside the panes on the left");
+
+		/*
+		 * A drop anywhere down that side is on the bar, and one above the
+		 * panes -- where the bar used to be -- is not.
+		 */
+		const QPoint low_on_the_side = window.mapFromGlobal(
+		        QPoint(global(bar).center().x(), global(panes).bottom() - 10));
+		const QPoint above_the_panes = window.mapFromGlobal(
+		        QPoint(global(panes).center().x(), global(panes).top() + 5));
+		QVERIFY(window.point_is_on_tab_row(low_on_the_side));
+		QVERIFY(!window.point_is_on_tab_row(above_the_panes));
+
+		bssh_app_settings().set_tab_position(bssh_app_settings::TABS_BOTTOM);
+		window.apply_device_settings();
+		QCoreApplication::processEvents();
+
+		QCOMPARE(bar->shape(), QTabBar::RoundedSouth);
+		QVERIFY2(global(bar).top() >= global(panes).bottom(),
+		          "set to the bottom and not below the panes");
+	}
+
+	bssh_app_settings().set_tab_position(was);
+}
+
 void layout_test::a_pane_dropped_back_changes_nothing() {
 	bssh_main_window window;
 	window.resize(1000, 700);

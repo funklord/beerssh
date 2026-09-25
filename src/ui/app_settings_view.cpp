@@ -452,11 +452,28 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		form->addRow(QStringLiteral("Terminals"), m_arrangement);
 
 	QLabel *arrangement_note = bssh_wrapped_note(
-	        QStringLiteral("Automatic stacks them on a phone and puts them side by "
-	                        "side on a desktop. Stacked holds every session and "
-	                        "scrolls."),
+	        QStringLiteral("Automatic follows the device: side by side on a desktop "
+	                        "or an unfolded screen, and stacked on a phone -- one "
+	                        "on screen held sideways, two held upright. Stacked "
+	                        "holds every session and scrolls."),
 	        this);
 	if (on_this_page(SECTION_APPEARANCE, arrangement_note)) form->addRow(arrangement_note);
+
+	/*
+	 * Which side the tab bar is on when terminals are side by side
+	 * (sec 8.7). Stacked has no tab bar -- every session is a pane there --
+	 * so this names the arrangement it applies to rather than offering a
+	 * choice that would do nothing.
+	 */
+	m_tab_position = new QComboBox(this);
+	m_tab_position->setObjectName(QStringLiteral("tab_position"));
+	m_tab_position->addItem(QStringLiteral("Top"), int(bssh_app_settings::TABS_TOP));
+	m_tab_position->addItem(QStringLiteral("Bottom"), int(bssh_app_settings::TABS_BOTTOM));
+	m_tab_position->addItem(QStringLiteral("Left"), int(bssh_app_settings::TABS_LEFT));
+	m_tab_position->addItem(QStringLiteral("Right"), int(bssh_app_settings::TABS_RIGHT));
+	bssh_fit_items(m_tab_position);
+	if (on_this_page(SECTION_APPEARANCE, m_tab_position))
+		form->addRow(QStringLiteral("Tabs, side by side"), m_tab_position);
 
 	/*
 	 * How far the stacked divider is pulled onto the halfway line (sec
@@ -1069,6 +1086,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 
 	const int arrangement_index = m_arrangement->findData(int(settings.arrangement()));
 	m_arrangement->setCurrentIndex(arrangement_index < 0 ? 0 : arrangement_index);
+	const int tabs_index = m_tab_position->findData(int(settings.tab_position()));
+	m_tab_position->setCurrentIndex(tabs_index < 0 ? 0 : tabs_index);
 	m_snap_radius->setValue(settings.column_snap_radius());
 	m_snap_radius_value->setText(QStringLiteral("%1 px").arg(settings.column_snap_radius()));
 
@@ -1136,6 +1155,12 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		commit([this](bssh_app_settings &s) {
 			s.set_arrangement(bssh_app_settings::arrangement_t(
 			        m_arrangement->currentData().toInt()));
+		});
+	});
+	connect(m_tab_position, &QComboBox::currentIndexChanged, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_tab_position(bssh_app_settings::tab_position_t(
+			        m_tab_position->currentData().toInt()));
 		});
 	});
 	connect(m_snap_radius, &QSlider::valueChanged, this, [this](int value) {
