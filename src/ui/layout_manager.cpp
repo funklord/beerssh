@@ -2,6 +2,8 @@
 
 #include <functional>
 
+#include <QStringList>
+
 namespace {
 
 void collect_leaves(const bssh_pane_node &node, QList<bssh_session *> &out) {
@@ -284,6 +286,81 @@ bool bssh_layout_manager::place(bssh_session *session, bssh_session *target,
 	collect_leaves(m_tree, m_intent);
 	emit layout_changed();
 	return true;
+}
+
+void bssh_layout_manager::set_tree(const bssh_pane_node &tree) {
+	m_tree = tree;
+	normalize(m_tree);
+
+	m_intent.clear();
+	collect_leaves(m_tree, m_intent);
+	emit layout_changed();
+}
+
+QString bssh_layout_manager::shape_text(const bssh_pane_node &node,
+                                        const std::function<QString(bssh_session *)> &name) {
+	if (node.is_leaf()) return name(node.session);
+	if (node.is_empty()) return QString();
+
+	QStringList parts;
+	for (const bssh_pane_node &child : node.children) {
+		const QString part = shape_text(child, name);
+		if (!part.isEmpty()) parts.append(part);
+	}
+	if (parts.isEmpty()) return QString();
+	if (parts.size() == 1) return parts.first();
+
+	return (node.orientation == Qt::Horizontal ? QStringLiteral("H(") : QStringLiteral("V("))
+	       + parts.join(QLatin1Char(',')) + QLatin1Char(')');
+}
+
+namespace {
+
+/*
+ * One node from `text` at `at`: a split "H(" or "V(", its children and
+ * ")", or a leaf running to the next ',' or ')'. False on anything else,
+ * and the caller then keeps nothing -- a half-read shape is not one the
+ * user made.
+ */
+bool parse_node(const QString &text, int &at, bssh_pane_node &out,
+                const std::function<bssh_session *(const QString &)> &find) {
+	if (at + 1 < text.size() && text.at(at + 1) == QLatin1Char('(')
+	    && (text.at(at) == QLatin1Char('H') || text.at(at) == QLatin1Char('V'))) {
+		out.orientation = text.at(at) == QLatin1Char('H') ? Qt::Horizontal : Qt::Vertical;
+		at += 2;
+
+		for (;;) {
+			bssh_pane_node child;
+			if (!parse_node(text, at, child, find)) return false;
+			if (!child.is_empty()) out.children.push_back(std::move(child));
+
+			if (at >= text.size()) return false;
+			if (text.at(at) == QLatin1Char(')')) { ++at; return true; }
+			if (text.at(at) != QLatin1Char(',')) return false;
+			++at;
+		}
+	}
+
+	const int start = at;
+	while (at < text.size() && text.at(at) != QLatin1Char(',') && text.at(at) != QLatin1Char(')'))
+		++at;
+	if (at == start) return false;
+
+	out.session = find(text.mid(start, at - start));
+	return true;
+}
+
+} /* namespace */
+
+bssh_pane_node bssh_layout_manager::parse_shape(
+        const QString &text, const std::function<bssh_session *(const QString &)> &find) {
+	bssh_pane_node tree;
+	int at = 0;
+	if (text.isEmpty() || !parse_node(text, at, tree, find) || at != text.size())
+		return bssh_pane_node();
+
+	normalize(tree);
+	return tree;
 }
 
 bssh_pane_node bssh_layout_manager::visible_tree() const {

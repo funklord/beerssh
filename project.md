@@ -5356,9 +5356,17 @@ edge, the nearer edge winning in a corner (`bssh_drop_edge_at`), and the one
 under the pointer is lit while a drag is over it. Guarded by
 `tool/sabotage/pane-drop-zones.toml`, seven edits.
 
-**Not persisted**: `layout.ini` still records the panes as a list, so a
-restart brings them back side by side. Restoring the shape is its own
-change.
+**The shape is saved too — [BUILT 2026-09-25].** `layout.ini` gains a
+`shape` key beside the host list, written as `shape_text()` writes it
+with profile ids for leaves -- `V(3,H(7,9))` -- and read back by
+`parse_shape()`, which resolves each id to a session of that host not
+already placed (one host can be open twice) and drops a leaf for a host
+that did not come back, the split closing around it. Text that does not
+parse whole is nothing saved rather than half a shape. A layout written
+before this has no `shape` and restores as it did, the first N side by
+side. The save is tested by closing a real window, which reaches the
+private `save_layout()` the way the app does; guarded by
+`tool/sabotage/layout-shape.toml`, three edits.
 
 Also react to **fold state** (hinge/posture) where available, and to whatever
 each platform calls a size change — `onConfigurationChanged` on Android,

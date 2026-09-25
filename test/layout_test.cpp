@@ -4053,6 +4053,153 @@ void layout_test::the_tab_bar_goes_where_it_is_set() {
 	bssh_app_settings().set_tab_position(was);
 }
 
+void layout_test::a_shape_survives_being_written_down() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")}, {c, QStringLiteral("c")}};
+
+	layout.set_intent({a, b});
+	QVERIFY(layout.place(b, a, bssh_layout_manager::EDGE_BOTTOM));
+	QVERIFY(layout.place(c, b, bssh_layout_manager::EDGE_RIGHT));
+
+	const auto name = [&names](bssh_session *session) { return names.value(session); };
+	const auto find = [&names](const QString &text) { return names.key(text, nullptr); };
+
+	const QString text = bssh_layout_manager::shape_text(layout.tree(), name);
+	QCOMPARE(text, QStringLiteral("V(a,H(b,c))"));
+	QCOMPARE(shape_of(bssh_layout_manager::parse_shape(text, find), names), text);
+
+	/* A host that did not come back is dropped, and its split closes up. */
+	QCOMPARE(shape_of(bssh_layout_manager::parse_shape(QStringLiteral("V(a,H(b,gone))"), find),
+	                  names),
+	         QStringLiteral("V(a,b)"));
+
+	/* A pane with no name to write is left out the same way. */
+	const auto without_c = [&names](bssh_session *session) {
+		return session == nullptr || names.value(session) == QStringLiteral("c")
+		               ? QString() : names.value(session);
+	};
+	QCOMPARE(bssh_layout_manager::shape_text(layout.tree(), without_c), QStringLiteral("V(a,b)"));
+
+	/* Text that does not parse is nothing saved, not half a shape. */
+	QVERIFY(bssh_layout_manager::parse_shape(QStringLiteral("V(a,H(b"), find).is_empty());
+	QVERIFY(bssh_layout_manager::parse_shape(QStringLiteral("V(a,b))"), find).is_empty());
+	QVERIFY(bssh_layout_manager::parse_shape(QString(), find).is_empty());
+}
+
+void layout_test::a_restored_window_comes_back_in_its_shape() {
+	bssh_profile_store *store = bssh_profile_store::shared();
+	QVERIFY(store && store->is_open());
+
+	bssh_profile_t top = named(QStringLiteral("shape-top"));
+	top.host = QStringLiteral("top.example");
+	bssh_profile_t left = named(QStringLiteral("shape-left"));
+	left.host = QStringLiteral("left.example");
+	bssh_profile_t right = named(QStringLiteral("shape-right"));
+	right.host = QStringLiteral("right.example");
+	const int top_id = store->save(top);
+	const int left_id = store->save(left);
+	const int right_id = store->save(right);
+	QVERIFY(top_id && left_id && right_id);
+
+	const bssh_profile_store::layout_state_t was = store->layout();
+
+	bssh_profile_store::layout_state_t saved;
+	saved.profile_ids = {top_id, left_id, right_id};
+	saved.pane_count = 3;
+	saved.shape = QStringLiteral("V(%1,H(%2,%3))").arg(top_id).arg(left_id).arg(right_id);
+	QVERIFY(store->save_layout(saved));
+
+	{
+		bssh_main_window window;
+		window.resize(1200, 800);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		const registry_left_as_found_t tidy(window.registry());
+
+		window.restore_layout();
+		QCoreApplication::processEvents();
+
+		bssh_pane_container *panes = window.panes();
+		QCOMPARE(panes->views().size(), 3);
+
+		/*
+		 * One above, two beside each other below it: the root splitter
+		 * runs vertically and holds a horizontal one.
+		 */
+		QSplitter *root = panes->findChild<QSplitter *>(QString(), Qt::FindDirectChildrenOnly);
+		QVERIFY(root);
+		QCOMPARE(root->orientation(), Qt::Vertical);
+		QSplitter *nested = root->findChild<QSplitter *>(QString(), Qt::FindDirectChildrenOnly);
+		QVERIFY2(nested && nested->orientation() == Qt::Horizontal,
+		          "the two panes that were side by side came back stacked");
+	}
+
+	store->save_layout(was);
+	store->remove(top_id);
+	store->remove(left_id);
+	store->remove(right_id);
+}
+
+void layout_test::a_closed_window_writes_down_its_shape() {
+	bssh_profile_store *store = bssh_profile_store::shared();
+	QVERIFY(store && store->is_open());
+
+	bssh_profile_t upper = named(QStringLiteral("close-upper"));
+	upper.host = QStringLiteral("upper.example");
+	bssh_profile_t lower = named(QStringLiteral("close-lower"));
+	lower.host = QStringLiteral("lower.example");
+	upper.id = store->save(upper);
+	lower.id = store->save(lower);
+	QVERIFY(upper.id && lower.id);
+
+	const bssh_profile_store::layout_state_t was = store->layout();
+
+	{
+		bssh_main_window window;
+		window.resize(1200, 800);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		/*
+		 * Two unconnected profile sessions and nothing else: a split
+		 * opens a local shell, which is live, and closing a window with a
+		 * live session asks first.
+		 */
+		bssh_session *a = registry->create(upper);
+		bssh_session *b = registry->create(lower);
+		window.adopt_session(a);
+		window.adopt_session(b);
+		QCoreApplication::processEvents();
+
+		/* a above b: a shape the old pane count could not have saved. */
+		window.drop_session_on(a, b, bssh_layout_manager::EDGE_TOP);
+		QCoreApplication::processEvents();
+		QCOMPARE(window.panes()->views().size(), 2);
+
+		/* The first close leaves the terminals for the host list; the second closes. */
+		window.close();
+		window.close();
+		QCoreApplication::processEvents();
+	}
+
+	const QString shape = store->layout().shape;
+	QVERIFY2(shape.startsWith(QStringLiteral("V(%1,%2").arg(upper.id).arg(lower.id)),
+	          qPrintable(QStringLiteral("saved shape: [%1]").arg(shape)));
+
+	store->save_layout(was);
+	store->remove(upper.id);
+	store->remove(lower.id);
+}
+
 void layout_test::a_pane_dropped_back_changes_nothing() {
 	bssh_main_window window;
 	window.resize(1000, 700);

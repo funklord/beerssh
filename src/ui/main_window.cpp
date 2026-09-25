@@ -3668,6 +3668,21 @@ void bssh_main_window::save_layout() {
 	}
 
 	layout.pane_count = qMax(1, m_layout ? m_layout->visible_panes().size() : 1);
+
+	/*
+	 * And how they were arranged -- the whole shape, not only what fits
+	 * this window now, so a window reopened wider gets back what was
+	 * built (sec 8.1). A pane with no profile behind it is left out and
+	 * the shape closes around it, the way the host list above skips it.
+	 */
+	if (m_layout && m_layout->intent().size() > 1) {
+		layout.shape = bssh_layout_manager::shape_text(m_layout->tree(),
+		        [](bssh_session *session) {
+			const int id = session->profile().id;
+			return id == 0 ? QString() : QString::number(id);
+		});
+	}
+
 	m_profile_store->save_layout(layout);
 }
 
@@ -3719,8 +3734,35 @@ void bssh_main_window::restore_layout() {
 	 * actually show: the window may have been reopened narrower, or on a
 	 * smaller screen, and sec 8.2's answer to that is tabs.
 	 */
-	const int panes = qMin(layout.pane_count, m_shown.size());
-	for (int i = 1; i < panes; ++i) split_with(m_shown.at(i));
+	/*
+	 * The saved shape first. Each leaf is a profile id, resolved to a
+	 * session of that host not already placed -- one host can be open
+	 * twice -- and a leaf for a host that did not come back is dropped.
+	 */
+	int panes = 1;
+	QList<bssh_session *> placed;
+	const bssh_pane_node shape = bssh_layout_manager::parse_shape(layout.shape,
+	        [this, &placed](const QString &name) -> bssh_session * {
+		bool ok = false;
+		const int id = name.toInt(&ok);
+		if (!ok) return nullptr;
+		for (bssh_session *session : m_shown) {
+			if (session->profile().id == id && !placed.contains(session)) {
+				placed.append(session);
+				return session;
+			}
+		}
+		return nullptr;
+	});
+
+	if (!shape.is_leaf() && !shape.is_empty()) {
+		m_layout->set_tree(shape);
+		panes = m_layout->intent().size();
+	} else {
+		/* A layout saved before panes could nest: the first N, side by side. */
+		panes = qMin(layout.pane_count, m_shown.size());
+		for (int i = 1; i < panes; ++i) split_with(m_shown.at(i));
+	}
 
 	/*
 	 * Last, so it wins the focus: every prepare_profile above showed its
@@ -3729,6 +3771,7 @@ void bssh_main_window::restore_layout() {
 	 */
 	bssh_session *active = m_shown.value(layout.active_index, m_shown.first());
 	if (active && panes <= 1) show_session(active);
+	else if (active && m_panes && m_layout->intent().contains(active)) m_panes->focus_session(active);
 
 	if (m_session_dialog && active) {
 		m_session_dialog->set_current_profile(active->profile());

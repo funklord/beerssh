@@ -254,6 +254,11 @@ private slots:
 
 	/* The tab bar on the side it is set to, and a drop aimed at it there. */
 	void the_tab_bar_goes_where_it_is_set();
+
+	/* The shape saved to layout.ini, and a window restored into it (sec 8.4). */
+	void a_shape_survives_being_written_down();
+	void a_restored_window_comes_back_in_its_shape();
+	void a_closed_window_writes_down_its_shape();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();
 	void a_window_that_loses_its_last_session_closes();
 	void the_pane_grip_arms_a_drag();

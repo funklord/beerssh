@@ -100,6 +100,14 @@ public:
 		int pane_count;          /* how many of the first N were split */
 		int active_index;
 
+		/*
+		 * How the panes were arranged, as bssh_layout_manager::shape_text
+		 * writes it with profile ids for leaves -- "H(3,V(7,9))". Empty
+		 * when there was one pane, or for a layout saved before panes
+		 * could nest; pane_count is the fallback then.
+		 */
+		QString shape;
+
 		layout_state_t() : pane_count(1), active_index(0) {}
 		bool is_empty() const { return profile_ids.isEmpty(); }
 	};

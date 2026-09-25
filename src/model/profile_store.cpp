@@ -892,6 +892,7 @@ bool bssh_profile_store::save_layout(const layout_state_t &layout) {
 	file.setValue(QStringLiteral("hosts"), ids.join(QLatin1Char(',')));
 	file.setValue(QStringLiteral("panes"), layout.pane_count);
 	file.setValue(QStringLiteral("active"), layout.active_index);
+	if (!layout.shape.isEmpty()) file.setValue(QStringLiteral("shape"), layout.shape);
 	file.endGroup();
 	file.sync();
 
@@ -915,6 +916,7 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 	                                .split(QLatin1Char(','), Qt::SkipEmptyParts);
 	const int panes = file.value(QStringLiteral("panes"), 1).toInt();
 	const int active = file.value(QStringLiteral("active"), 0).toInt();
+	state.shape = file.value(QStringLiteral("shape")).toString();
 	file.endGroup();
 
 	/*

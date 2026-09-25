@@ -5,6 +5,7 @@
 #include <QObject>
 #include <QSize>
 
+#include <functional>
 #include <vector>
 
 class bssh_session;
@@ -209,6 +210,27 @@ public:
 	 */
 	const bssh_pane_node &tree() const { return m_tree; }
 	bssh_pane_node visible_tree() const;
+
+	/*
+	 * Replaces the whole shape -- a restored one (sec 8.4's layout.ini).
+	 * Normalized, and the intent becomes its leaves in order.
+	 */
+	void set_tree(const bssh_pane_node &tree);
+
+	/*
+	 * The shape as text and back, for saving it: "H(a,V(b,c))", with each
+	 * leaf named by `name` -- a profile id when it is written to disk,
+	 * since sessions do not survive a restart and hosts do. A leaf that
+	 * `name` gives nothing for is left out, and one that `find` cannot
+	 * resolve on the way back is dropped, the shape closing around it:
+	 * a host deleted since the save does not come back as a hole.
+	 * Unparseable text reads as an empty tree, which callers treat as
+	 * "nothing saved".
+	 */
+	static QString shape_text(const bssh_pane_node &node,
+	                          const std::function<QString(bssh_session *)> &name);
+	static bssh_pane_node parse_shape(const QString &text,
+	                                  const std::function<bssh_session *(const QString &)> &find);
 
 signals:
 	/* The visible arrangement changed; the pane container rebuilds. */

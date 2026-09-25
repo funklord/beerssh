@@ -221,6 +221,7 @@ void profile_store_test::layout_round_trips() {
 		layout.profile_ids = {first, second, third};
 		layout.pane_count = 2;   /* the first two were side by side */
 		layout.active_index = 1;
+		layout.shape = QStringLiteral("V(%1,%2)").arg(first).arg(second);
 
 		QVERIFY(store.save_layout(layout));
 	}
@@ -236,6 +237,7 @@ void profile_store_test::layout_round_trips() {
 	QCOMPARE(restored.profile_ids, QList<int>({first, second, third}));
 	QCOMPARE(restored.pane_count, 2);
 	QCOMPARE(restored.active_index, 1);
+	QCOMPARE(restored.shape, QStringLiteral("V(%1,%2)").arg(first).arg(second));
 }
 
 void profile_store_test::layout_forgets_deleted_hosts() {

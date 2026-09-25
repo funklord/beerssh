@@ -1,0 +1,27 @@
+# The panes' shape saved to layout.ini and restored from it (project.md
+# sec 8.4): without it a restart brought nested panes back side by side.
+
+# Closing writes no shape: the old pane count is all that survives.
+[[sabotage]]
+name = "a closed window does not write down its shape"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_layout && m_layout->intent().size() > 1) {\n\t\tlayout.shape"
+replace = "\tif (false) {\n\t\tlayout.shape"
+expect = "a_closed_window_writes_down_its_shape"
+
+# The shape is saved and never read back.
+[[sabotage]]
+name = "a restore ignores the saved shape"
+file = "src/ui/main_window.cpp"
+find = "\tif (!shape.is_leaf() && !shape.is_empty()) {"
+replace = "\tif (false) {"
+expect = "a_restored_window_comes_back_in_its_shape"
+
+# Text with something after a whole shape is taken as that shape, so a
+# damaged file restores a guess rather than nothing.
+[[sabotage]]
+name = "a shape with trailing junk is accepted"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (text.isEmpty() || !parse_node(text, at, tree, find) || at != text.size())"
+replace = "\tif (text.isEmpty() || !parse_node(text, at, tree, find))"
+expect = "a_shape_survives_being_written_down"
