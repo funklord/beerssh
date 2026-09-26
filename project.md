@@ -13751,9 +13751,17 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   The shortlist itself is settled; this half is not, and cannot be until
   Iosevka's 42 MB ships by asset pack (§9.4, M9).
 - ~~Host groups/folders in addition to presets?~~ **DECIDED 2026-09-26 by the
-  holder: folders for organising only.** They group and collapse hosts in the
-  list; settings still come only from presets, so there is one inheritance
-  mechanism rather than two. §10.5.
+  holder: folders for organising only -- and BUILT.** They group and collapse
+  hosts in the list; settings still come only from presets, so there is one
+  inheritance mechanism rather than two. A host's `folder` is a name in
+  `hosts.ini`, set by an editable "Folder" field offering the folders that
+  exist (beside the name on the desktop, which has no height to spare).
+  `bssh_group_by_folder` orders both lists the same: unfiled hosts first,
+  then folders by name with case aside, so "Work" and "work" are one. A
+  folder is a heading row that folds and unfolds on a tap or click and opens
+  nothing -- selectable, so a tap lands on it rather than on whichever host
+  was current. Folded state lasts as long as the list. One level, no
+  nesting. Guarded by `tool/sabotage/host-folders.toml`, seven edits.
 - ~~Persist scrollback across restarts?~~ **DECIDED 2026-09-26 by the holder:
   yes, opt-in per host -- and BUILT.** Recommended against as a default
   and chosen as an option: scrollback is whatever was on screen, a password

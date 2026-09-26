@@ -26,6 +26,8 @@
 #include "term/emulator.h"
 #include "term/scrollback.h"
 #include <QCheckBox>
+#include <QSignalSpy>
+#include <QComboBox>
 #include <QFileInfo>
 #include <QDataStream>
 
@@ -259,6 +261,7 @@ void profile_store_test::a_hosts_choices_are_written_to_disk() {
 		host.font_zoom = -4;
 		host.keep_awake = true;
 		host.keep_scrollback = true;
+		host.folder = QStringLiteral("Work");
 		id = store.save(host);
 		QVERIFY(id);
 	}
@@ -268,6 +271,7 @@ void profile_store_test::a_hosts_choices_are_written_to_disk() {
 	QCOMPARE(reopened.profile(id).font_zoom, -4);
 	QVERIFY(reopened.profile(id).keep_awake);
 	QVERIFY(reopened.profile(id).keep_scrollback);
+	QCOMPARE(reopened.profile(id).folder, QStringLiteral("Work"));
 }
 
 void profile_store_test::layout_forgets_deleted_hosts() {
@@ -857,6 +861,109 @@ void profile_store_test::both_editors_carry_the_keep_scrollback_choice() {
 	QVERIFY(touch && touch->isChecked());
 	touch->setChecked(false);
 	QVERIFY(!editor.profile().keep_scrollback);
+}
+
+void profile_store_test::hosts_are_grouped_by_folder_the_same_everywhere() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	const auto add = [&store](const char *name, const char *folder) {
+		bssh_profile_t host = make_profile(QString::fromLatin1(name),
+		                                   QString::fromLatin1(name) + QStringLiteral(".example"));
+		host.folder = QString::fromLatin1(folder);
+		QVERIFY(store.save(host));
+	};
+	add("alpha", "Work");
+	add("bravo", "");
+	add("charlie", "home");
+	add("delta", "work");   /* typed differently another day: the same folder */
+	add("echo", "  ");       /* blank is no folder */
+
+	const QList<bssh_folder_group_t> groups = bssh_group_by_folder(store.profiles());
+	QCOMPARE(groups.size(), 3);
+
+	/* Unfiled first, then folders by name, case aside. */
+	QCOMPARE(groups.at(0).folder, QString());
+	QCOMPARE(groups.at(0).hosts.size(), 2);
+	QCOMPARE(groups.at(1).folder, QStringLiteral("home"));
+	QCOMPARE(groups.at(2).folder.toLower(), QStringLiteral("work"));
+	QCOMPARE(groups.at(2).hosts.size(), 2);
+
+	/* The list a folder field offers: each once, by name. */
+	QCOMPARE(store.folders().size(), 2);
+	QCOMPARE(store.folders().at(0), QStringLiteral("home"));
+}
+
+void profile_store_test::a_folder_heading_folds_its_hosts_and_opens_nothing() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+	bssh_profile_t filed = make_profile(QStringLiteral("filed"), QStringLiteral("f.example"));
+	filed.folder = QStringLiteral("Work");
+	QVERIFY(store.save(filed));
+	QVERIFY(store.save(make_profile(QStringLiteral("loose"), QStringLiteral("l.example"))));
+
+	bssh_host_list list(&store);
+	list.reload();
+	QListWidget *rows = list.findChild<QListWidget *>();
+	QVERIFY(rows);
+
+	const auto row_of = [rows](const QString &text) -> int {
+		for (int i = 0; i < rows->count(); ++i)
+			if (rows->item(i)->text().contains(text)) return i;
+		return -1;
+	};
+	const int heading = row_of(QStringLiteral("Work"));
+	QVERIFY(heading >= 0);
+	QVERIFY(row_of(QStringLiteral("filed")) > heading);
+
+	/* A tap on the heading opens nothing and folds the folder away. */
+	QSignalSpy opened(&list, &bssh_host_list::open_requested);
+	rows->setCurrentRow(row_of(QStringLiteral("loose")));
+	rows->setCurrentRow(heading);
+	emit rows->itemClicked(rows->item(heading));
+	QCOMPARE(opened.count(), 0);
+	QCOMPARE(row_of(QStringLiteral("filed")), -1);
+	QVERIFY(row_of(QStringLiteral("loose")) >= 0);
+
+	/* And again brings it back. */
+	rows->setCurrentRow(row_of(QStringLiteral("Work")));
+	emit rows->itemClicked(rows->currentItem());
+	QVERIFY(row_of(QStringLiteral("filed")) >= 0);
+	QCOMPARE(opened.count(), 0);
+}
+
+void profile_store_test::the_desktop_list_folds_and_files_hosts_too() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+	bssh_profile_t filed = make_profile(QStringLiteral("filed"), QStringLiteral("f.example"));
+	filed.folder = QStringLiteral("Work");
+	QVERIFY(store.save(filed));
+
+	bssh_session_dialog dialog(&store);
+	QListWidget *rows = dialog.findChild<QListWidget *>(QStringLiteral("session_list"));
+	QVERIFY(rows);
+
+	const auto has = [rows](const QString &text) {
+		for (int i = 0; i < rows->count(); ++i)
+			if (rows->item(i)->text().contains(text)) return true;
+		return false;
+	};
+	QVERIFY(has(QStringLiteral("Work")) && has(QStringLiteral("filed")));
+
+	int heading = -1;
+	for (int i = 0; i < rows->count(); ++i)
+		if (rows->item(i)->text().contains(QStringLiteral("Work"))) heading = i;
+	emit rows->itemClicked(rows->item(heading));
+	QCoreApplication::processEvents();
+	QVERIFY2(!has(QStringLiteral("filed")), "a folded desktop folder still lists its hosts");
+
+	/* The folder field files a host, and offers the folders that exist. */
+	QComboBox *folder = dialog.findChild<QComboBox *>(QStringLiteral("host_folder"));
+	QVERIFY(folder);
+	dialog.set_current_profile(filed);
+	QCOMPARE(folder->currentText(), QStringLiteral("Work"));
+	folder->setCurrentText(QStringLiteral("Home"));
+	QCOMPARE(dialog.current_profile().folder, QStringLiteral("Home"));
 }
 
 void profile_store_test::the_host_editor_builds_a_profile() {

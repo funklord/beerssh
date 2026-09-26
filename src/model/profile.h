@@ -126,6 +126,14 @@ struct bssh_profile_t {
 	bool keep_awake;
 
 	/*
+	 * The folder this host is listed under, or empty for none -- for
+	 * organising the host list only (sec 10.5; the holder's answer of
+	 * 2026-09-26). It carries no settings: presets are the one way a host
+	 * inherits anything, and a folder that also did would be a second.
+	 */
+	QString folder;
+
+	/*
 	 * The preset this host follows (sec 10.1), and the fields where it
 	 * disagrees. Overrides are sparse on purpose: a field absent here
 	 * takes the preset's value, which is what makes editing a preset

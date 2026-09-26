@@ -332,6 +332,7 @@ void bssh_profile_store::load_profiles() {
 		profile.keep_scrollback =
 		        file.value(QStringLiteral("keep_scrollback"), false).toBool();
 		profile.keep_awake = file.value(QStringLiteral("keep_awake"), false).toBool();
+		profile.folder = file.value(QStringLiteral("folder")).toString().trimmed();
 		profile.preset_id = id_for_slug(file.value(QStringLiteral("preset")).toString());
 
 		/*
@@ -544,6 +545,9 @@ bool bssh_profile_store::write_profiles() {
 		}
 		if (profile.keep_awake) {
 			file.setValue(QStringLiteral("keep_awake"), true);
+		}
+		if (!profile.folder.trimmed().isEmpty()) {
+			file.setValue(QStringLiteral("folder"), profile.folder.trimmed());
 		}
 		if (profile.preset_id != 0) {
 			file.setValue(QStringLiteral("preset"), m_slugs.value(profile.preset_id));
@@ -957,6 +961,59 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 	state.active_index = qBound(0, active, qMax(0, int(state.profile_ids.size()) - 1));
 
 	return state;
+}
+
+QStringList bssh_profile_store::folders() const {
+	QStringList found;
+	for (const bssh_profile_t &profile : m_profiles) {
+		const QString folder = profile.folder.trimmed();
+		if (!folder.isEmpty() && !found.contains(folder, Qt::CaseInsensitive)) found.append(folder);
+	}
+	std::sort(found.begin(), found.end(), [](const QString &a, const QString &b) {
+		return a.compare(b, Qt::CaseInsensitive) < 0;
+	});
+	return found;
+}
+
+QList<bssh_folder_group_t> bssh_group_by_folder(const QList<bssh_profile_t> &profiles) {
+	/*
+	 * Hosts in no folder first -- a list that is mostly unfiled should not
+	 * open on a folder -- then each folder by name, the hosts inside it in
+	 * the order they came, which is the store's own. Case-insensitive, so
+	 * "Work" and "work" typed on two days are one folder.
+	 */
+	QList<bssh_folder_group_t> groups;
+	bssh_folder_group_t loose;
+
+	for (const bssh_profile_t &profile : profiles) {
+		const QString folder = profile.folder.trimmed();
+		if (folder.isEmpty()) {
+			loose.hosts.append(profile);
+			continue;
+		}
+
+		bool placed = false;
+		for (bssh_folder_group_t &group : groups) {
+			if (group.folder.compare(folder, Qt::CaseInsensitive) == 0) {
+				group.hosts.append(profile);
+				placed = true;
+				break;
+			}
+		}
+		if (!placed) {
+			bssh_folder_group_t group;
+			group.folder = folder;
+			group.hosts.append(profile);
+			groups.append(group);
+		}
+	}
+
+	std::sort(groups.begin(), groups.end(),
+	          [](const bssh_folder_group_t &a, const bssh_folder_group_t &b) {
+		return a.folder.compare(b.folder, Qt::CaseInsensitive) < 0;
+	});
+	if (!loose.hosts.isEmpty()) groups.prepend(loose);
+	return groups;
 }
 
 QString bssh_saved_session_listing(const bssh_profile_store *store) {

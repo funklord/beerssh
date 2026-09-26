@@ -1,0 +1,55 @@
+# Folders for organising the host list, and only that (project.md sec
+# 10.5, the holder's answer of 2026-09-26).
+
+# "Work" and "work" typed on two days become two folders.
+[[sabotage]]
+name = "folders differing only in case stay apart"
+file = "src/model/profile_store.cpp"
+find = "\t\t\tif (group.folder.compare(folder, Qt::CaseInsensitive) == 0) {"
+replace = "\t\t\tif (group.folder.compare(folder, Qt::CaseSensitive) == 0) {"
+expect = "hosts_are_grouped_by_folder_the_same_everywhere"
+
+# The unfiled hosts sink below every folder.
+[[sabotage]]
+name = "unfiled hosts are listed last"
+file = "src/model/profile_store.cpp"
+find = "\tif (!loose.hosts.isEmpty()) groups.prepend(loose);"
+replace = "\tif (!loose.hosts.isEmpty()) groups.append(loose);"
+expect = "hosts_are_grouped_by_folder_the_same_everywhere"
+
+# A tap on a heading does nothing at all.
+[[sabotage]]
+name = "a touch folder heading does not fold"
+file = "src/ui/host_list.cpp"
+find = "\t\tif (m_collapsed.contains(folder)) m_collapsed.removeAll(folder);\n\t\telse m_collapsed.append(folder);\n\t\treload();"
+replace = "\t\treload();"
+expect = "a_folder_heading_folds_its_hosts_and_opens_nothing"
+
+# Folded, and its hosts still listed.
+[[sabotage]]
+name = "a folded touch folder still lists its hosts"
+file = "src/ui/host_list.cpp"
+find = "\t\tif (shut) continue;"
+replace = ""
+expect = "a_folder_heading_folds_its_hosts_and_opens_nothing"
+
+[[sabotage]]
+name = "a folded desktop folder still lists its hosts"
+file = "src/ui/session_dialog.cpp"
+find = "\t\tif (shut) continue;"
+replace = ""
+expect = "the_desktop_list_folds_and_files_hosts_too"
+
+[[sabotage]]
+name = "a host's folder is not saved in hosts.ini"
+file = "src/model/profile_store.cpp"
+find = "\t\t\tfile.setValue(QStringLiteral(\"folder\"), profile.folder.trimmed());"
+replace = ""
+expect = "a_hosts_choices_are_written_to_disk"
+
+[[sabotage]]
+name = "the desktop folder field is not saved"
+file = "src/ui/session_dialog.cpp"
+find = "\tprofile.folder = m_folder->currentText().trimmed();"
+replace = ""
+expect = "the_desktop_list_folds_and_files_hosts_too"

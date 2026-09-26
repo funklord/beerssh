@@ -79,6 +79,9 @@ public:
 
 	/* Where the store's files are, which is where a host's kept scrollback goes too. */
 	QString directory() const { return m_directory; }
+
+	/* Every folder a host is filed under, once each and by name (sec 10.5). */
+	QStringList folders() const;
 	QString last_error() const { return m_last_error; }
 
 	QList<bssh_profile_t> profiles() const;
@@ -270,6 +273,18 @@ void bssh_sweep_orphaned_secrets(const bssh_profile_store *store = nullptr);
  * a listing nothing can check.
  */
 QString bssh_saved_session_listing(const bssh_profile_store *store = nullptr);
+
+/*
+ * A host list's hosts in the order it shows them (sec 10.5): those in no
+ * folder first, with an empty `folder`, then one group per folder by
+ * name. Shared by both lists, the touch one and the desktop dialog's, so
+ * the two cannot order the same hosts differently.
+ */
+struct bssh_folder_group_t {
+	QString folder;
+	QList<bssh_profile_t> hosts;
+};
+QList<bssh_folder_group_t> bssh_group_by_folder(const QList<bssh_profile_t> &profiles);
 
 /*
  * "Remember this password" -- the credential and the flag that says it is

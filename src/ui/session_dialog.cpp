@@ -22,6 +22,7 @@
 
 #include "ui/wrapped_note.h"
 #include <QCheckBox>
+#include <QComboBox>
 #include <QLineEdit>
 #include <QFormLayout>
 #include <QListWidget>
@@ -375,7 +376,29 @@ QWidget *bssh_session_dialog::build_session_page() {
 	saved_layout->addWidget(new QLabel(QStringLiteral("Saved Sessions"), saved));
 	m_session_name = new QLineEdit(saved);
 	m_session_name->setAccessibleName(QStringLiteral("Saved session name"));
-	saved_layout->addWidget(m_session_name);
+
+	/*
+	 * The folder a host is listed under (sec 10.5), beside its name: they
+	 * are both how the host is FOUND rather than how it connects, and a
+	 * row of its own would take this page past the 800x600 it must fit.
+	 * Editable, offering the folders that exist, so a new one is typed
+	 * and an old one is picked.
+	 */
+	m_folder = new QComboBox(saved);
+	m_folder->setEditable(true);
+	m_folder->setObjectName(QStringLiteral("host_folder"));
+	m_folder->setAccessibleName(QStringLiteral("Folder"));
+	m_folder->setToolTip(QStringLiteral("Only for finding it in the list: a folder "
+	                                     "carries no settings. Leave empty for none."));
+	m_folder->lineEdit()->setPlaceholderText(QStringLiteral("no folder"));
+
+	/* The typing half is a widget of its own, and a reader can land on it. */
+	m_folder->lineEdit()->setAccessibleName(QStringLiteral("Folder"));
+
+	QHBoxLayout *name_row = new QHBoxLayout();
+	name_row->addWidget(m_session_name, 2);
+	name_row->addWidget(m_folder, 1);
+	saved_layout->addLayout(name_row);
 
 	QHBoxLayout *list_row = new QHBoxLayout();
 	m_sessions = new QListWidget(saved);
@@ -433,6 +456,15 @@ QWidget *bssh_session_dialog::build_session_page() {
 	connect(m_sessions, &QListWidget::itemSelectionChanged, this, [this] {
 		const int id = selected_profile_id();
 		if (id != 0) m_session_name->setText(m_store->profile(id).name);
+	});
+	connect(m_sessions, &QListWidget::itemClicked, this, [this](QListWidgetItem *item) {
+		const QString folder = item ? item->data(Qt::UserRole + 1).toString() : QString();
+		if (folder.isEmpty()) return;
+		if (m_collapsed.contains(folder)) m_collapsed.removeAll(folder);
+		else m_collapsed.append(folder);
+
+		/* Deferred: rebuilding the list deletes the item this signal is about. */
+		QMetaObject::invokeMethod(this, [this] { reload_sessions(); }, Qt::QueuedConnection);
 	});
 
 	return page;
@@ -508,11 +540,44 @@ void bssh_session_dialog::reload_sessions() {
 	m_sessions->clear();
 	if (!m_store) return;
 
-	const QList<bssh_profile_t> profiles = m_store->profiles();
-	for (const bssh_profile_t &profile : profiles) {
-		QListWidgetItem *item = new QListWidgetItem(profile.name, m_sessions);
-		item->setData(Qt::UserRole, profile.id);
-		item->setToolTip(profile.target());
+	/*
+	 * Grouped as the touch list groups them (sec 10.5), through the same
+	 * function, so one host list cannot order hosts one way and the other
+	 * another. A folder heading carries no host id, so Load and Delete on
+	 * it do nothing; a click opens or shuts it.
+	 */
+	for (const bssh_folder_group_t &group : bssh_group_by_folder(m_store->profiles())) {
+		const bool shut = !group.folder.isEmpty() && m_collapsed.contains(group.folder);
+		if (!group.folder.isEmpty()) {
+			QListWidgetItem *heading = new QListWidgetItem(
+			        (shut ? QStringLiteral("\u25b8 ") : QStringLiteral("\u25be "))
+			                + group.folder + QStringLiteral("  (%1)").arg(group.hosts.size()),
+			        m_sessions);
+			heading->setData(Qt::UserRole, 0);
+			heading->setData(Qt::UserRole + 1, group.folder);
+			QFont bold = heading->font();
+			bold.setBold(true);
+			heading->setFont(bold);
+		}
+		if (shut) continue;
+
+		for (const bssh_profile_t &profile : group.hosts) {
+			/* Indented under a heading, so which folder a host is in reads at a glance. */
+			QListWidgetItem *item = new QListWidgetItem(
+			        (group.folder.isEmpty() ? QString() : QStringLiteral("    ")) + profile.name,
+			        m_sessions);
+			item->setData(Qt::UserRole, profile.id);
+			item->setToolTip(profile.target());
+		}
+	}
+
+	/* The folder field offers what exists, and keeps what was typed. */
+	if (m_folder) {
+		const QString typed = m_folder->currentText();
+		m_folder->clear();
+		m_folder->addItem(QString());
+		m_folder->addItems(m_store->folders());
+		m_folder->setCurrentText(typed);
 	}
 }
 
@@ -536,6 +601,7 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	profile.proxy_jump = m_jump->text().trimmed();
 	profile.keep_scrollback = m_keep_scrollback->isChecked();
 	if (m_keep_awake) profile.keep_awake = m_keep_awake->isChecked();
+	profile.folder = m_folder->currentText().trimmed();
 
 	/*
 	 * An unnamed host is named after itself, as the touch editor has
@@ -580,6 +646,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 	m_jump->setText(profile.proxy_jump);
 	m_keep_scrollback->setChecked(profile.keep_scrollback);
 	if (m_keep_awake) m_keep_awake->setChecked(profile.keep_awake);
+	m_folder->setCurrentText(profile.folder);
 
 	if (m_font_picker) {
 		const QJsonObject resolved = resolved_settings(profile);

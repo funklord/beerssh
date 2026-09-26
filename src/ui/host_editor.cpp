@@ -2,6 +2,7 @@
 #include "ui/host_editor.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 
 #include <QFormLayout>
 #include <QLabel>
@@ -145,6 +146,20 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	form->addRow(QStringLiteral("User"), m_user);
 	form->addRow(QStringLiteral("Port"), m_port);
 	form->addRow(QStringLiteral("Name"), m_name);
+
+	/*
+	 * The folder it is listed under (sec 10.5), after the name because it
+	 * is the same kind of thing: how the host is found, not how it
+	 * connects. Editable, offering the folders that exist.
+	 */
+	m_folder = new QComboBox(this);
+	m_folder->setEditable(true);
+	m_folder->setObjectName(QStringLiteral("host_folder"));
+	m_folder->lineEdit()->setPlaceholderText(QStringLiteral("none"));
+	m_folder->setAccessibleName(QStringLiteral("Folder"));
+	m_folder->lineEdit()->setAccessibleName(QStringLiteral("Folder"));
+	m_folder->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+	form->addRow(QStringLiteral("Folder"), m_folder);
 	form->addRow(QStringLiteral("Key file"), m_identity);
 	form->addRow(QStringLiteral("Via"), m_jump);
 	body->addLayout(form);
@@ -324,6 +339,11 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_user->setText(profile.user);
 	m_port->setValue(profile.port);
 	m_name->setText(profile.name);
+
+	m_folder->clear();
+	m_folder->addItem(QString());
+	if (m_store) m_folder->addItems(m_store->folders());
+	m_folder->setCurrentText(profile.folder);
 	m_identity->setText(profile.identity_file);
 	m_jump->setText(profile.proxy_jump);
 	if (m_biometric) m_biometric->setChecked(profile.require_biometric);
@@ -418,6 +438,7 @@ bssh_profile_t bssh_host_editor::profile() const {
 	edited.user = m_user->text().trimmed();
 	edited.port = static_cast<quint16>(m_port->value());
 	edited.name = m_name->text().trimmed();
+	edited.folder = m_folder->currentText().trimmed();
 	edited.identity_file = m_identity->text().trimmed();
 	edited.proxy_jump = m_jump->text().trimmed();
 

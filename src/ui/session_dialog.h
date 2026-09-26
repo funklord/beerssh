@@ -2,12 +2,14 @@
 #define BSSH_SESSION_DIALOG_H
 
 #include <QJsonObject>
+#include <QStringList>
 #include <QWidget>
 
 #include "model/profile.h"
 
 class QCloseEvent;
 class QCheckBox;
+class QComboBox;
 class QLineEdit;
 class QListWidget;
 class QSpinBox;
@@ -124,6 +126,10 @@ private:
 	QCheckBox *m_keep_awake = nullptr;
 	QLineEdit *m_session_name;
 	QListWidget *m_sessions;
+
+	/* Folders folded shut in the saved list (sec 10.5), by name. */
+	QStringList m_collapsed;
+	QComboBox *m_folder = nullptr;
 	/*
 	 * The profile being edited, whole -- not just its id.
 	 *

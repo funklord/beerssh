@@ -2,6 +2,7 @@
 #define BSSH_HOST_LIST_H
 
 #include <QPoint>
+#include <QStringList>
 #include <QWidget>
 
 #include "ui/long_press.h"
@@ -74,6 +75,9 @@ private:
 
 	bssh_profile_store *m_store;
 	QListWidget *m_list;
+
+	/* Folders folded shut, by name (sec 10.5); for as long as the list lives. */
+	QStringList m_collapsed;
 	bssh_long_press *m_long_press;
 	QToolButton *m_add;
 	QToolButton *m_menu;

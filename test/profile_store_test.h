@@ -55,6 +55,11 @@ private slots:
 	void kept_scrollback_is_the_owners_alone();
 	void a_host_that_keeps_its_scrollback_gets_it_back();
 	void both_editors_carry_the_keep_scrollback_choice();
+
+	/* Folders for organising the host list only (sec 10.5, 2026-09-26). */
+	void hosts_are_grouped_by_folder_the_same_everywhere();
+	void a_folder_heading_folds_its_hosts_and_opens_nothing();
+	void the_desktop_list_folds_and_files_hosts_too();
 	void front_door_follows_the_input_device();
 	void an_identity_file_survives_the_round_trip();
 	void a_jump_host_survives_the_round_trip();

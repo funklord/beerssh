@@ -248,6 +248,9 @@ void bssh_host_list::resizeEvent(QResizeEvent *event) {
  */
 static const int BSSH_LOCAL_SHELL_ROW = -1;
 
+/* A folder heading's name, which a host row does not have (sec 10.5). */
+static const int BSSH_FOLDER_ROLE = Qt::UserRole + 1;
+
 void bssh_host_list::reload() {
 	m_list->clear();
 	if (!m_store) return;
@@ -275,19 +278,43 @@ void bssh_host_list::reload() {
 	}
 
 	const QList<bssh_profile_t> profiles = m_store->profiles();
-	for (const bssh_profile_t &profile : profiles) {
-		QListWidgetItem *item = new QListWidgetItem(m_list);
-
+	for (const bssh_folder_group_t &group : bssh_group_by_folder(profiles)) {
 		/*
-		 * Name over target, unless they are the same string -- an
-		 * unnamed host is named after itself, and printing that twice
-		 * makes the row look like a bug to the person reading it.
+		 * A folder is a heading row that folds its hosts away (sec 10.5):
+		 * tapped, it opens or shuts rather than connecting to anything.
+		 * Selectable like a host, so the tap lands on IT -- a heading that
+		 * could not be selected left the last host current, and a tap on
+		 * the heading opened that host.
 		 */
-		const QString target = profile.target();
-		item->setText(profile.name == target ? target
-		                                     : profile.name + QLatin1Char('\n') + target);
-		item->setData(Qt::UserRole, profile.id);
-		item->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		const bool shut = !group.folder.isEmpty() && m_collapsed.contains(group.folder);
+		if (!group.folder.isEmpty()) {
+			QListWidgetItem *heading = new QListWidgetItem(m_list);
+			heading->setText((shut ? QStringLiteral("\u25b8 ") : QStringLiteral("\u25be "))
+			                 + group.folder
+			                 + QStringLiteral("  (%1)").arg(group.hosts.size()));
+			heading->setData(Qt::UserRole, 0);
+			heading->setData(BSSH_FOLDER_ROLE, group.folder);
+			QFont bold = heading->font();
+			bold.setBold(true);
+			heading->setFont(bold);
+			heading->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		}
+		if (shut) continue;
+
+		for (const bssh_profile_t &profile : group.hosts) {
+			QListWidgetItem *item = new QListWidgetItem(m_list);
+
+			/*
+			 * Name over target, unless they are the same string -- an
+			 * unnamed host is named after itself, and printing that twice
+			 * makes the row look like a bug to the person reading it.
+			 */
+			const QString target = profile.target();
+			item->setText(profile.name == target ? target
+			                                     : profile.name + QLatin1Char('\n') + target);
+			item->setData(Qt::UserRole, profile.id);
+			item->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		}
 	}
 
 	if (profiles.isEmpty()) {
@@ -417,6 +444,15 @@ void bssh_host_list::on_row_menu(const QPoint &where) {
 void bssh_host_list::on_row_activated() {
 	const QListWidgetItem *item = m_list->currentItem();
 	if (!item || !m_store) return;
+
+	/* A folder heading opens or shuts its folder. */
+	const QString folder = item->data(BSSH_FOLDER_ROLE).toString();
+	if (!folder.isEmpty()) {
+		if (m_collapsed.contains(folder)) m_collapsed.removeAll(folder);
+		else m_collapsed.append(folder);
+		reload();
+		return;
+	}
 
 	const int id = item->data(Qt::UserRole).toInt();
 	if (id == 0) return;

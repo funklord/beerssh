@@ -8,6 +8,7 @@
 #include "model/profile.h"
 
 class QCheckBox;
+class QComboBox;
 
 class QLabel;
 class QLineEdit;
@@ -82,6 +83,7 @@ private:
 	QPushButton *m_font_revert;
 	QPushButton *m_save;
 	QLineEdit *m_name;
+	QComboBox *m_folder = nullptr;
 	QLineEdit *m_identity;
 	QLineEdit *m_jump;
 
