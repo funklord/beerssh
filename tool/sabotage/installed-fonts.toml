@@ -1,0 +1,49 @@
+# Installed monospace fonts, offered after the set on a desktop (project.md
+# sec 9.4, the holder's answer of 2026-09-26).
+#
+# The positive half of the catalog test skips on a machine with no
+# monospace font beyond the set -- the check-ci image may be one -- so
+# these are proved on a machine that has some, and the picker's count is
+# asserted wherever it runs.
+
+[[sabotage]]
+name = "the picker leaves the installed group empty"
+file = "src/ui/font_picker.cpp"
+find = "\t\tfor (const QString &family : installed)\n\t\t\tm_family->addItem(family, bssh_font_catalog::system_id(family));"
+replace = ""
+expect = "offers_the_set_then_what_is_installed"
+
+[[sabotage]]
+name = "a proportional font is offered as monospace"
+file = "src/term/font_catalog.cpp"
+find = "\t\tif (!QFontDatabase::isFixedPitch(family)) continue;"
+replace = ""
+expect = "an_installed_font_resolves_like_a_set_font"
+
+[[sabotage]]
+name = "an installed font never counts as available"
+file = "src/term/font_catalog.cpp"
+find = "\tif (is_system_id(id)) return family_installed(id.mid(7));"
+replace = ""
+expect = "an_installed_font_resolves_like_a_set_font"
+
+[[sabotage]]
+name = "an installed font is chosen and never drawn"
+file = "src/term/font_catalog.cpp"
+find = "\tif (is_system_id(id) && family_installed(id.mid(7))) chain.append(id.mid(7));"
+replace = ""
+expect = "an_installed_font_resolves_like_a_set_font"
+
+[[sabotage]]
+name = "a removed installed font gets the wrong note"
+file = "src/term/font_catalog.cpp"
+find = "\tif (is_system_id(id)) {\n\t\tif (is_available(id)) return QString();"
+replace = "\tif (false) {\n\t\tif (is_available(id)) return QString();"
+expect = "an_installed_font_that_is_gone_falls_back_and_says_so"
+
+[[sabotage]]
+name = "a removed installed font is called not in this build"
+file = "src/ui/font_picker.cpp"
+find = "\t\tconst QString label = bssh_font_catalog::is_system_id(wanted)"
+replace = "\t\tconst QString label = false"
+expect = "an_installed_font_that_is_gone_is_shown_not_swallowed"

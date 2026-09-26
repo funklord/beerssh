@@ -18,6 +18,13 @@ class font_catalog_test : public QObject {
 
 private slots:
 	/*
+	 * Installed monospace fonts, offered after the set on a desktop
+	 * (sec 9.4, the holder's answer of 2026-09-26).
+	 */
+	void an_installed_font_resolves_like_a_set_font();
+	void an_installed_font_that_is_gone_falls_back_and_says_so();
+
+	/*
 	 * sec 9.3's whole promise: box-drawing characters meet at the cell
 	 * edge. Measured rather than looked at -- see the test.
 	 */

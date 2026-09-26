@@ -1,5 +1,6 @@
 #include <QFontMetricsF>
 #include <QtTest>
+#include <QFontDatabase>
 #include <QDir>
 #include <QFile>
 
@@ -9,6 +10,51 @@
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/terminal_view.h"
+
+void font_catalog_test::an_installed_font_resolves_like_a_set_font() {
+	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
+	const QStringList installed = catalog.installed_monospace();
+
+	/* Whatever this machine has: fixed-pitch, not a set family, in order. */
+	for (const QString &family : installed) {
+		QVERIFY2(QFontDatabase::isFixedPitch(family), qPrintable(family));
+		for (const bssh_font_t &font : catalog.all())
+			QVERIFY2(font.family.compare(family, Qt::CaseInsensitive) != 0, qPrintable(family));
+	}
+	for (int i = 1; i < installed.size(); ++i)
+		QVERIFY(installed.at(i - 1).compare(installed.at(i), Qt::CaseInsensitive) <= 0);
+
+	if (installed.isEmpty())
+		QSKIP("no monospace font is installed here beyond the set; the half that "
+		      "resolves one cannot be asked on this machine");
+
+	const QString id = bssh_font_catalog::system_id(installed.first());
+	QVERIFY(bssh_font_catalog::is_system_id(id));
+	QVERIFY(catalog.is_available(id));
+	QCOMPARE(catalog.family_for(id), installed.first());
+	QCOMPARE(catalog.display_name(id), installed.first());
+	QVERIFY(catalog.substitution_note(id).isEmpty());
+
+	/* And the set behind it, for the glyphs an unvetted family lacks. */
+	QVERIFY(catalog.fallback_chain(id).size() > 1);
+}
+
+void font_catalog_test::an_installed_font_that_is_gone_falls_back_and_says_so() {
+	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
+	const QString id = bssh_font_catalog::system_id(QStringLiteral("No Such Family Anywhere"));
+
+	QVERIFY(bssh_font_catalog::is_system_id(id));
+	QVERIFY(!bssh_font_catalog::is_system_id(QStringLiteral("system:")));
+	QVERIFY(!catalog.is_available(id));
+
+	/* Drawn in something real, and the note says what and why. */
+	QVERIFY(!catalog.family_for(id).isEmpty());
+	QVERIFY(catalog.family_for(id) != QStringLiteral("No Such Family Anywhere"));
+	const QString note = catalog.substitution_note(id);
+	QVERIFY2(note.contains(QStringLiteral("No Such Family Anywhere"))
+	          && note.contains(QStringLiteral("not installed")), qPrintable(note));
+	QCOMPARE(catalog.display_name(id), QStringLiteral("No Such Family Anywhere"));
+}
 
 void font_catalog_test::ids_are_stable_and_unique() {
 	const bssh_font_catalog catalog;

@@ -16,29 +16,57 @@
 #include "model/preset.h"
 #include "ui/override_badge.h"
 
-void font_picker_test::offers_the_selectable_set_and_nothing_else() {
+void font_picker_test::offers_the_set_then_what_is_installed() {
 	bssh_font_picker picker;
 	const QComboBox *combo = picker.findChild<QComboBox *>();
 	QVERIFY(combo != nullptr);
 
-	const bssh_font_catalog catalog;
+	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
 	const QList<bssh_font_t> selectable = catalog.selectable();
 
-	QCOMPARE(combo->count(), selectable.size());
+	/* The set first, in order, as it always was. */
+	for (int i = 0; i < selectable.size(); ++i) {
+		QCOMPARE(combo->itemData(i).toString(), selectable.at(i).id);
+	}
 
-	for (const bssh_font_t &font : selectable) {
-		QVERIFY2(combo->findData(font.id) >= 0,
-		         qPrintable("picker is missing " + font.id));
+	/*
+	 * Then, on a desktop, a heading and the installed monospace families
+	 * (the holder's answer of 2026-09-26) -- which this suite always runs
+	 * as, "desktop/offscreen". None of them may be a set family: a vetted
+	 * family is offered under its set id or not at all.
+	 */
+	const QStringList installed = catalog.installed_monospace();
+	const int expected = selectable.size() + (installed.isEmpty() ? 0 : 2 + installed.size());
+	QCOMPARE(combo->count(), expected);
+	for (const QString &family : installed) {
+		QVERIFY2(combo->findData(bssh_font_catalog::system_id(family)) > selectable.size(),
+		          qPrintable(family + QStringLiteral(" is not in the installed group")));
 	}
 
 	/*
 	 * sec 9.2: the fallback-only families exist to stop tofu, not to be
 	 * read in. They must not be offerable even though they are loaded and
-	 * available, which is exactly the case a "list everything installed"
-	 * implementation would get wrong.
+	 * available -- under their set ids, and not by the back door of the
+	 * installed group either, which is exactly the case a "list everything
+	 * installed" implementation would get wrong.
 	 */
 	QCOMPARE(combo->findData(QStringLiteral("unifont")), -1);
 	QCOMPARE(combo->findData(QStringLiteral("noto-sans-mono")), -1);
+	for (const bssh_font_t &font : catalog.all()) {
+		QCOMPARE(combo->findData(bssh_font_catalog::system_id(font.family)), -1);
+	}
+}
+
+void font_picker_test::an_installed_font_that_is_gone_is_shown_not_swallowed() {
+	bssh_font_picker picker;
+	const QString gone = bssh_font_catalog::system_id(QStringLiteral("No Such Family Anywhere"));
+	picker.set_font_choice(gone, 12);
+
+	/* Kept, named for what it is, and not called "not in this build". */
+	QCOMPARE(picker.font_id(), gone);
+	const QComboBox *combo = picker.findChild<QComboBox *>();
+	QVERIFY(combo->currentText().startsWith(QStringLiteral("No Such Family Anywhere")));
+	QVERIFY(combo->currentText().contains(QStringLiteral("not installed")));
 }
 
 void font_picker_test::an_empty_choice_shows_the_platform_default() {

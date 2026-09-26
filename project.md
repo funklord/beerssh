@@ -13728,8 +13728,19 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   registry change. Whether TDE's own power manager honours either was not
   checked. Guarded by `tool/sabotage/keep-awake.toml`, five edits.
 - ~~Offer system-installed monospace fonts on desktop?~~ **DECIDED 2026-09-26
-  by the holder: yes, in a group of their own** after the curated set,
-  "Installed on this computer". §9.4.
+  by the holder: yes, in a group of their own -- and BUILT.** After the set,
+  a separator and a disabled "Installed on this computer" heading, then every
+  family Qt calls fixed-pitch that the set does not already name, sorted --
+  the fallback-only families (Unifont, Noto Sans Mono) stay out by that rule,
+  under their `system:` ids too. Desktop only. An installed font's id is
+  `system:<family>`, and the catalog answers for it as for a set font:
+  `is_available`, the fallback chain (the family first, the set behind it
+  for glyphs it lacks), the substitution note, and `display_name` for the
+  override badge. One that has since been uninstalled is kept and marked
+  "(not installed)", drawn in the set's default meanwhile. Not vetted the
+  way the set is (§9.2): fixed-pitch is Qt's word for it, not a promise
+  every glyph fits the cell. Guarded by `tool/sabotage/installed-fonts.toml`,
+  six edits.
 - ~~Desktop `ssh-agent` support~~ -- **the question was stale, and is
   answered in two halves.** USING the agent is built: `ssh_userauth_publickey_auto`
   tries it before the default key files (`ssh_session_libssh.cpp`, and the jump

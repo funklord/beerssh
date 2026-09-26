@@ -101,13 +101,13 @@ bssh_override_badge_t bssh_appearance_override_badge(const bssh_profile_store *s
 	 * Names what it would give as well as what it overrides: "overriding"
 	 * on its own does not tell the user what pressing revert gets back.
 	 */
-	const bssh_font_t *font = bssh_font_catalog::instance().by_id(inherited.font_id);
+	const QString font_name = bssh_font_catalog::instance().display_name(inherited.font_id);
 	const bssh_colour_scheme_t *scheme =
 	        bssh_colour_scheme_catalog::instance().by_id(inherited.scheme_id);
 
 	badge.text = QStringLiteral("<b>Overrides %1</b>, which uses %2 at %3 pt")
 	                     .arg(inherited.source,
-	                           font ? font->display_name : inherited.font_id,
+	                           font_name,
 	                           QString::number(inherited.font_size));
 
 	/*

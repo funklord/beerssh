@@ -224,6 +224,26 @@ public:
 	 */
 	QString substitution_note(const QString &id) const;
 
+	/*
+	 * Monospace fonts installed on this computer, offered after the curated
+	 * set in a group of their own -- the holder's answer of 2026-09-26 to
+	 * sec 16's "offer system fonts?". Not vetted the way the set is (sec
+	 * 9.2): a family the system calls fixed-pitch, which is Qt's word for it
+	 * rather than a promise every glyph fits the cell.
+	 *
+	 * Their ids are "system:" and the family name, so one can never collide
+	 * with a set id, and everything that takes an id -- availability, the
+	 * fallback chain, the substitution note -- answers for them as it does
+	 * for the set. Families the set already names are left out, since those
+	 * are offered under their set id; so are hidden ones (a leading dot).
+	 */
+	QStringList installed_monospace() const;
+	static QString system_id(const QString &family);
+	static bool is_system_id(const QString &id);
+
+	/* What to call a font by id in the interface, set or installed. */
+	QString display_name(const QString &id) const;
+
 private:
 	bool family_installed(const QString &family) const;
 

@@ -16,7 +16,8 @@ class font_picker_test : public QObject {
 	Q_OBJECT
 
 private slots:
-	void offers_the_selectable_set_and_nothing_else();
+	void offers_the_set_then_what_is_installed();
+	void an_installed_font_that_is_gone_is_shown_not_swallowed();
 	void an_empty_choice_shows_the_platform_default();
 	void a_font_this_build_does_not_have_is_shown_not_swallowed();
 	void choosing_a_font_reports_its_id_rather_than_its_label();

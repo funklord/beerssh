@@ -1,5 +1,7 @@
 #include "term/font_catalog.h"
 
+#include <algorithm>
+
 #include <QDir>
 #include <QFileInfo>
 #include <QFontDatabase>
@@ -255,9 +257,45 @@ bool bssh_font_catalog::family_installed(const QString &family) const {
 }
 
 bool bssh_font_catalog::is_available(const QString &id) const {
+	if (is_system_id(id)) return family_installed(id.mid(7));
+
 	const bssh_font_t *font = by_id(id);
 	if (!font) return false;
 	return family_installed(font->family);
+}
+
+QString bssh_font_catalog::system_id(const QString &family) {
+	return QStringLiteral("system:") + family;
+}
+
+bool bssh_font_catalog::is_system_id(const QString &id) {
+	return id.startsWith(QStringLiteral("system:")) && id.size() > 7;
+}
+
+QStringList bssh_font_catalog::installed_monospace() const {
+	QStringList offered;
+	for (const QString &family : QFontDatabase::families()) {
+		if (family.startsWith(QLatin1Char('.'))) continue;
+		if (!QFontDatabase::isFixedPitch(family)) continue;
+		if (m_loaded.contains(family, Qt::CaseInsensitive)) continue;
+
+		bool in_set = false;
+		for (const bssh_font_t &font : m_fonts) {
+			if (font.family.compare(family, Qt::CaseInsensitive) == 0) in_set = true;
+		}
+		if (!in_set) offered.append(family);
+	}
+
+	std::sort(offered.begin(), offered.end(), [](const QString &a, const QString &b) {
+		return a.compare(b, Qt::CaseInsensitive) < 0;
+	});
+	return offered;
+}
+
+QString bssh_font_catalog::display_name(const QString &id) const {
+	if (is_system_id(id)) return id.mid(7);
+	const bssh_font_t *font = by_id(id);
+	return font ? font->display_name : id;
 }
 
 QStringList bssh_font_catalog::fallback_chain(const QString &id) const {
@@ -267,6 +305,13 @@ QStringList bssh_font_catalog::fallback_chain(const QString &id) const {
 	if (selected && family_installed(selected->family)) {
 		chain.append(selected->family);
 	}
+
+	/*
+	 * An installed font first when it is chosen and still there, and then
+	 * the set's own chain behind it -- which is what covers the glyphs an
+	 * unvetted family does not have.
+	 */
+	if (is_system_id(id) && family_installed(id.mid(7))) chain.append(id.mid(7));
 
 	for (const char *fallback_id : BSSH_FALLBACK_CHAIN) {
 		const bssh_font_t *font = by_id(QString::fromLatin1(fallback_id));
@@ -366,6 +411,12 @@ QFont bssh_font_catalog::make_font(const QString &family, int point_size,
 QString bssh_font_catalog::substitution_note(const QString &id) const {
 	const bssh_font_t *font = by_id(id);
 	const QString served = family_for(id);
+
+	if (is_system_id(id)) {
+		if (is_available(id)) return QString();
+		return QStringLiteral("%1 is not installed on this computer any more. "
+		                      "Showing %2.").arg(id.mid(7), served);
+	}
 
 	if (!font) {
 		return QStringLiteral("\"%1\" is not one of the bundled fonts. "

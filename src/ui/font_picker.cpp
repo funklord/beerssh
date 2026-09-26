@@ -3,6 +3,7 @@
 #include "ui/font_picker.h"
 
 #include <QComboBox>
+#include <QStandardItemModel>
 #include <QPainter>
 #include <QPixmap>
 #include <QFormLayout>
@@ -238,6 +239,29 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 		m_family->addItem(label, font.id);
 	}
 
+	/*
+	 * And, on a desktop, what the computer itself has in monospace, in a
+	 * group of their own after the set (sec 9.4; the holder's answer of
+	 * 2026-09-26). A heading rather than a mark on each name: the set is
+	 * vetted and these are not, and the line between them is the one
+	 * thing a reader should see. Not on Android, where the answer was
+	 * asked about the desktop and the system's fonts are the platform's
+	 * UI fonts rather than a user's choices.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool desktop = platform && platform->name().startsWith(QStringLiteral("desktop/"));
+	const QStringList installed = desktop ? catalog.installed_monospace() : QStringList();
+	if (!installed.isEmpty()) {
+		m_family->insertSeparator(m_family->count());
+		m_family->addItem(QStringLiteral("Installed on this computer"));
+		if (QStandardItemModel *model = qobject_cast<QStandardItemModel *>(m_family->model())) {
+			QStandardItem *heading = model->item(m_family->count() - 1);
+			heading->setFlags(heading->flags() & ~(Qt::ItemIsSelectable | Qt::ItemIsEnabled));
+		}
+		for (const QString &family : installed)
+			m_family->addItem(family, bssh_font_catalog::system_id(family));
+	}
+
 	m_scheme = new QComboBox(this);
 	m_scheme->setObjectName(QStringLiteral("font-picker-scheme"));
 	m_scheme->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
@@ -312,7 +336,6 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 		emit scheme_chosen(scheme_id());
 	});
 
-	const bssh_platform *platform = bssh_platform::instance();
 	set_font_choice(QString(), 0);
 	set_touch_sized(platform && platform->is_touch_primary());
 }
@@ -342,7 +365,14 @@ void bssh_font_picker::set_font_choice(const QString &id, int point_size) {
 	 * what is actually being drawn.
 	 */
 	if (index < 0) {
-		m_family->addItem(wanted + QStringLiteral("  (not in this build)"), wanted);
+		/*
+		 * An installed font that has since been removed says so in its
+		 * own words: it was never "in this build".
+		 */
+		const QString label = bssh_font_catalog::is_system_id(wanted)
+		        ? catalog.display_name(wanted) + QStringLiteral("  (not installed)")
+		        : wanted + QStringLiteral("  (not in this build)");
+		m_family->addItem(label, wanted);
 		m_family->setCurrentIndex(m_family->count() - 1);
 	} else {
 		m_family->setCurrentIndex(index);
