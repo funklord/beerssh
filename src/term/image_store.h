@@ -1,8 +1,13 @@
 #ifndef BSSH_IMAGE_STORE_H
 #define BSSH_IMAGE_STORE_H
 
+#include <QHash>
 #include <QImage>
 #include <QList>
+
+#include <memory>
+
+class bssh_picture_spill;
 
 /*
  * bssh_image_store -- images placed on the character grid (project.md
@@ -27,7 +32,15 @@ struct bssh_image_placement_t {
 	 */
 	int id;
 
+	/*
+	 * Null once the picture has been spilled (see set_memory_budget);
+	 * bssh_image_store::image() is how a reader gets it either way.
+	 */
 	QImage image;
+
+	/* The store's own name for this placement, never reused. */
+	quint64 serial;
+
 	int row;
 	int col;
 	int cols;
@@ -39,12 +52,13 @@ struct bssh_image_placement_t {
 	 */
 	int z;
 
-	bssh_image_placement_t() : id(0), row(0), col(0), cols(0), rows(0), z(0) {}
+	bssh_image_placement_t() : id(0), serial(0), row(0), col(0), cols(0), rows(0), z(0) {}
 };
 
 class bssh_image_store {
 public:
 	bssh_image_store();
+	~bssh_image_store();
 
 	int place(const bssh_image_placement_t &placement);
 
@@ -71,16 +85,72 @@ public:
 	void scrolled(int top_row, int bottom_row, int lines);
 
 	/*
-	 * How many bytes of decoded image to keep, across the visible screen
-	 * and the scrollback together. Once over it, the images furthest back
-	 * are dropped first -- the ones the user would have to scroll longest
-	 * to reach, and the ones least likely to be looked at again.
+	 * `lines` more lines went into the scrollback: every placement wholly
+	 * above the screen moves that much further back. scrolled() leaves
+	 * those alone -- they are outside any scrolling region -- so without
+	 * this a picture stopped at the row it first left the screen from.
+	 * Called per push, BEFORE the scroll that follows it, so a picture
+	 * straddling the top edge is moved by exactly one of the two.
+	 * Returns whether anything moved.
+	 */
+	bool pushed_into_history(int lines);
+
+	/*
+	 * How many bytes of decoded image to keep IN MEMORY, across the
+	 * visible screen and the scrollback together. Once over it, the
+	 * images furthest back are spilled first -- written out, sealed, to
+	 * bssh_picture_spill and dropped from memory -- the ones the user
+	 * would have to scroll longest to reach. Scrolling to one reads it
+	 * back (image()). 0 means no limit.
 	 *
-	 * Anything still ON the live screen is never dropped, however big: a
+	 * Anything still ON the live screen is never spilled, however big: a
 	 * budget that could blank the picture currently being looked at is a
 	 * budget that has misunderstood its job.
+	 *
+	 * Where a spill cannot be made -- no cache directory, a full disk --
+	 * the picture is dropped instead, which is what this did before
+	 * there was anywhere to put it.
 	 */
 	void set_memory_budget(qint64 bytes);
+
+	/*
+	 * How many bytes of spilled pictures to keep on disk. Past it, the
+	 * spilled ones furthest back are forgotten altogether. A disk is not
+	 * a phone's memory, but it is not endless either, and a session
+	 * drawing a plot a second for a day would otherwise find its end.
+	 */
+	void set_disk_budget(qint64 bytes);
+	qint64 disk_budget() const { return m_disk_budget; }
+	qint64 disk_used() const;
+
+	/*
+	 * Where spills go; bssh_picture_spill::default_base() unless a test
+	 * says otherwise. Takes effect for the next spill only if none has
+	 * been made yet.
+	 */
+	void set_spill_base(const QString &base);
+
+	/*
+	 * The picture, whether it is in memory or was spilled. A spilled one
+	 * is read back and kept while it fits the budget beside what is
+	 * resident, the most recently drawn kept longest -- so a picture
+	 * scrolled to stays drawn while it is looked at, and scrolling on
+	 * lets it go again. Null only when a spill could not be read back.
+	 *
+	 * const, because the renderer holds the store const: what it changes
+	 * is a cache, not the placements.
+	 */
+	QImage image(const bssh_image_placement_t &placement) const;
+
+	bool is_spilled(const bssh_image_placement_t &placement) const;
+
+	/*
+	 * Forget every placement that has scrolled back past `history_lines`
+	 * lines above the screen -- the text it was drawn beside has left the
+	 * scrollback, so no scroll can reach it again. A picture is not
+	 * history the text is not.
+	 */
+	void forget_beyond(int history_lines);
 
 	/*
 	 * Drop every placement that has gone entirely above the live screen
@@ -119,12 +189,28 @@ public:
 
 private:
 	void enforce_budget();
+	void enforce_disk_budget();
+
+	/* Removes the placement at `index`, and its spill if it has one. */
+	void discard(int index);
+
+	/* Keeps restored pictures within what the budget leaves over. */
+	void trim_restored(quint64 keep) const;
+	qint64 resident_bytes() const;
 
 	/* Removes every earlier placement the one at `index` paints over. */
 	void drop_covered_by(int index);
 
 	QList<bssh_image_placement_t> m_placements;
 	qint64 m_budget;
+	qint64 m_disk_budget;
+	quint64 m_next_serial;
+	QString m_spill_base;
+	std::unique_ptr<bssh_picture_spill> m_spill;
+
+	/* Spilled pictures read back, and the order they were last drawn. */
+	mutable QHash<quint64, QImage> m_restored;
+	mutable QList<quint64> m_restored_order;
 };
 
 #endif /* BSSH_IMAGE_STORE_H */

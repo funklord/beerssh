@@ -655,8 +655,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (on_this_page(SECTION_TERMINAL, paste_note)) form->addRow(paste_note);
 
 	/*
-	 * How much picture history each terminal keeps (sec 7.1). A number the
-	 * user sets, per terminal, as the holder asked on 2026-09-26.
+	 * How much picture history each terminal keeps IN MEMORY (sec 7.1); past
+	 * it pictures are spilled to disk. A number the user sets, per
+	 * terminal, as the holder asked on 2026-09-26.
 	 */
 	m_image_history = new QSpinBox(this);
 	m_image_history->setObjectName(QStringLiteral("image_history"));
@@ -667,9 +668,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		form->addRow(QStringLiteral("Picture history"), m_image_history);
 
 	QLabel *image_note = bssh_wrapped_note(
-	        QStringLiteral("Pictures a program draws in the terminal stay in its "
-	                        "scrollback until each terminal holds this much; then "
-	                        "the oldest go. What is on screen is always kept."),
+	        QStringLiteral("Pictures a program draws stay in the terminal's scrollback. "
+	                        "Past this much memory per terminal the oldest are kept on "
+	                        "disk, encrypted, and read back when you scroll to them."),
 	        this);
 	if (on_this_page(SECTION_TERMINAL, image_note)) form->addRow(image_note);
 

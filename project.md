@@ -1045,11 +1045,10 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   that looks exactly like a network flap on wake. Treat resume as a
   network-change event (§5.3) and reconnect rather than waiting for keepalive
   timeouts to notice.
-- **Inhibit sleep? [OPEN]** — a long-running remote build is an argument for it
-  (`org.freedesktop.PowerManagement.Inhibit`/`systemd-inhibit`, per-platform).
-  Leaning **no** by default: silently keeping a laptop awake because a shell is
-  open is worse behaviour than the reconnect. Consider an explicit per-session
-  "keep awake" toggle instead.
+- **Inhibit sleep? DECIDED 2026-09-26, and BUILT** as a per-host toggle, off
+  by default -- see §16. A long-running remote build is the argument for it;
+  silently keeping a laptop awake because a shell is open is the argument
+  against a default.
 - **Desktop notifications** (via `QSystemTrayIcon`, or the platform's native
   service) carry the same events the Android notification does: reconnecting,
   reconnect failed, bell rang in an unfocused pane.
@@ -5024,9 +5023,10 @@ plausible).
 Two things images must do that are easy to miss, and both are tested:
 they **follow the text when the screen scrolls** (an image pinned to its
 original row while output moves past it looks like the terminal has come
-apart), and they are **dropped when the grid shrinks past them or the memory
-budget is reached**, because holding every image a long session ever drew is
-how a phone runs out of memory. This paragraph used to end "there is no image
+apart), and they are **dropped when the grid shrinks past them or their text
+leaves the scrollback**, while the memory budget moves them to disk rather
+than dropping them, because holding every image a long session ever drew *in
+memory* is how a phone runs out of it. This paragraph used to end "there is no image
 scrollback", and the **[DONE]** block below — which gives images a scrollback
 and a 32 MB budget — contradicted it directly a few lines later.
 
@@ -5132,6 +5132,50 @@ however big it is — a budget that can blank the picture being looked at has
 misunderstood its job. `z < 0` now renders in its own pass before the cells,
 which is what the comment beside the single over-the-text loop had claimed all
 along.
+
+**[BUILT 2026-09-26] Past the budget a picture is spilled, not dropped.** The
+holder's direction when the budget became a setting: bound what is RESIDENT,
+not what is remembered, and load a scrolled-off picture back when it is
+scrolled to. `enforce_budget` now writes the picture furthest back to a
+`bssh_picture_spill` and drops only the decoded copy; `bssh_image_store::image()`
+reads it back when the renderer asks, keeping it while it fits the budget
+beside what is resident, least recently drawn let go first -- so a picture
+scrolled to stays drawn while it is looked at. The "Picture history" setting
+keeps its number and now means memory.
+
+- **One file per picture, zlib at level 1, sealed with AES-256-GCM** under a
+  key made per terminal and held only in memory. The picture's serial is the
+  nonce and the additional data, so a file renamed onto another picture does
+  not open. That is why this is on by default where kept scrollback (§10.5)
+  had to be opt-in: a crash leaves files nobody holds the key to. PNG was
+  rejected as several times slower on the thread that is scrolling.
+- **Where** is `<cache>/pictures/terminal-XXXXXX`, made on the first spill --
+  most terminals never draw a picture -- owner-only, and removed with the
+  terminal. Each holds a `QLockFile` for its life; at start the app removes
+  the directories whose lock is provably stale and leaves alone any with no
+  lock yet, which is also what one looks like in the instant another
+  instance is making it.
+- **Bounded on disk too**: 256 MB of sealed pictures per terminal, the
+  furthest back forgotten first. A fixed number rather than a second
+  setting; plots compress well, so it is far more than 256 MB of pictures.
+- **Where it cannot spill** -- no cache directory, a full disk -- the
+  picture is dropped as it always was: the budget is a promise about memory.
+- **A picture is forgotten when its text leaves the scrollback**
+  (`forget_beyond`), which dropping had hidden: with the budget no longer
+  throwing old pictures away, one whose text was gone would have sat on
+  disk for the whole session, drawn by nothing.
+- **And a picture in the history now moves with it, which it never did.**
+  Writing the test for the item above found it: `scrolled()` moves what is
+  inside the scrolling region, and a picture wholly above the screen is not,
+  so it stopped at the row it left the screen from. Measured at row -1 after
+  a hundred more lines -- scrolling back found every old picture stacked
+  just above the screen, beside the wrong text. `push_top_line` now moves
+  the history's pictures one line per push, except during a resize, whose
+  pushes `shift_rows` already pays for.
+- Reading back is synchronous on the GUI thread; a full-screen picture is
+  tens of milliseconds. Not measured on a phone.
+
+Guarded by `tool/sabotage/picture-spill.toml`, ten edits.
 
 **And that "never drop what is on screen" rule is what let sixel animation
 run the budget over.** Sixel carries no image id, so `place()` gives every
@@ -9129,8 +9173,9 @@ double as documentation of what a preset can do.
   "proved" a session survives a death that never happened. `check-keepalive.sh`
   adds the silent case, black-holing the port under a tunnelled session. And a
   descriptor count across four tunnels catches the leak above.
-- **[OPEN]** Host groups/folders with inherited settings. Presets cover most of the
-  need; add folders only if organising many hosts proves awkward.
+- **DECIDED 2026-09-26, and BUILT:** host folders, for organising only --
+  settings still come from presets alone, so there is one inheritance
+  mechanism rather than two. See §16.
 
 ### 10.6 Storage — **[DECIDED]** plain INI files
 - **INI files**, one per kind, in the app's config directory. Same format and
@@ -13816,11 +13861,10 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   a settable static amount per terminal." BUILT as "Picture history" on the
   Terminal settings page, 0-1024 MB, default the old 32, applied to every
   session from the moment it is created and re-applied when it changes --
-  `set_memory_budget` has its caller. **Open, and the holder's direction:**
-  loading scrolled-off pictures back on demand instead of dropping them, so
-  the bound is on what is resident rather than on what is remembered. That
-  wants the decoded images spillable and re-decodable, which nothing does
-  today.
+  `set_memory_budget` has its caller. **The holder's direction, loading
+  scrolled-off pictures back on demand instead of dropping them, is BUILT
+  (2026-09-26, §7.1)**: past the budget a picture is sealed to disk and read
+  back when scrolled to, so the setting bounds what is resident.
 - ~~**Should a session's zoom PERSIST?**~~ **DECIDED 2026-09-26 by the
   holder: per host, and built** -- see §9.5. §9.5 recorded "not persisted" as a
   choice a phone might reasonably want reversed -- "a session that is always

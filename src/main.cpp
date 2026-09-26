@@ -15,6 +15,7 @@
 #include "model/font_download.h"
 #include "platform/platform.h"
 #include "term/font_catalog.h"
+#include "term/picture_spill.h"
 #include "hang_watchdog.h"
 #include "ui/main_window.h"
 #include "ui/theme.h"
@@ -216,6 +217,13 @@ int main(int argc, char *argv[]) {
 	if (platform && bssh_app_settings().honour_system_font_scale()) {
 		app.setFont(bssh_interface_font(app.font(), platform->system_font_scale()));
 	}
+
+	/*
+	 * Pictures a crashed instance spilled (sec 7.1). Sealed under a key
+	 * that died with it, so they are unreadable noise -- but they are
+	 * still disk, and nothing else will ever remove them.
+	 */
+	bssh_picture_spill::sweep_abandoned(bssh_picture_spill::default_base());
 
 	if (platform) {
 		const QString font_dir = platform->font_directory();

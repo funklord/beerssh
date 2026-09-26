@@ -104,6 +104,7 @@ SOURCES += \
     ../src/model/font_sources.cpp \
     ../src/model/font_download.cpp \
     ../src/term/zip_index.cpp \
+    ../src/term/picture_spill.cpp \
     ../src/ui/font_picker.cpp \
     ../src/ui/form_wrap.cpp \
     ../src/ui/password_prompt.cpp \
@@ -196,6 +197,7 @@ HEADERS += \
     ../src/model/font_sources.h \
     ../src/model/font_download.h \
     ../src/term/zip_index.h \
+    ../src/term/picture_spill.h \
     ../src/ui/font_picker.h \
     ../src/ui/form_wrap.h \
     ../src/ui/password_prompt.h \

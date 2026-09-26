@@ -1,0 +1,83 @@
+# A terminal's pictures spilled to disk past the memory budget and read
+# back when scrolled to (project.md sec 7.1, the holder's direction of
+# 2026-09-26: bound what is resident, not what is remembered).
+
+# Over budget, dropped as before instead of spilled.
+[[sabotage]]
+name = "a picture over the budget is dropped rather than spilled"
+file = "src/term/image_store.cpp"
+find = "\t\tif (m_spill && m_spill->write(placement.serial, placement.image)) {"
+replace = "\t\tif (false) {"
+expect = "a_picture_over_the_budget_is_spilled_and_comes_back_whole"
+
+# The renderer reads the field, so a spilled picture is a blank.
+[[sabotage]]
+name = "the renderer draws the field and never reads a spill back"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tconst QImage image = m_images->image(placement);"
+replace = "\t\tconst QImage image = placement.image;"
+expect = "a_spilled_picture_scrolled_back_to_reaches_the_screen"
+
+# Every picture sealed under one nonce, so a file opens under any name.
+[[sabotage]]
+name = "a spill is not bound to its serial"
+file = "src/term/picture_spill.cpp"
+find = "\tqToBigEndian(serial, nonce.data() + 4);"
+replace = "\tQ_UNUSED(serial);"
+expect = "a_spilled_picture_opens_only_under_its_own_name"
+
+# A closed terminal leaves its pictures on disk.
+[[sabotage]]
+name = "a spill directory outlives its terminal"
+file = "src/term/picture_spill.cpp"
+find = "\tif (!dir->isValid()) return false;"
+replace = "\tif (!dir->isValid()) return false;\n\tdir->setAutoRemove(false);"
+expect = "a_spill_directory_goes_with_its_terminal"
+
+# The sweep takes a directory another instance is still making.
+[[sabotage]]
+name = "the sweep removes a directory with no lock yet"
+file = "src/term/picture_spill.cpp"
+find = "\t\tif (!QFile::exists(lock_path)) continue;"
+replace = ""
+expect = "an_abandoned_spill_is_swept_and_a_live_one_is_not"
+
+# And one a running instance owns.
+[[sabotage]]
+name = "the sweep removes a live terminal's pictures"
+file = "src/term/picture_spill.cpp"
+find = "\t\tif (!lock.tryLock(0)) continue;\n\t\tlock.unlock();"
+replace = ""
+expect = "an_abandoned_spill_is_swept_and_a_live_one_is_not"
+
+# Past the disk budget, the NEWEST spilled picture goes.
+[[sabotage]]
+name = "the disk budget forgets the newest instead of the oldest"
+file = "src/term/image_store.cpp"
+find = "\t\t\tif (oldest < 0 || m_placements.at(i).row < m_placements.at(oldest).row) oldest = i;"
+replace = "\t\t\tif (oldest < 0 || m_placements.at(i).row > m_placements.at(oldest).row) oldest = i;"
+expect = "the_disk_budget_forgets_the_oldest_spilled_picture"
+
+# A picture outlives the text it was drawn beside.
+[[sabotage]]
+name = "a picture is kept after its text left the scrollback"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tself->images.forget_beyond(self->scrollback.count());"
+replace = ""
+expect = "a_picture_whose_text_left_the_scrollback_is_forgotten"
+
+# The history's pictures stop where they left the screen.
+[[sabotage]]
+name = "a picture in the history is not moved by the next push"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (!self->resizing && self->images.pushed_into_history(1))"
+replace = "\tif (false)"
+expect = "a_picture_deep_in_the_history_stays_beside_its_text"
+
+# A resize's pushes move the history's pictures, and shift_rows again.
+[[sabotage]]
+name = "a resize moves the history's pictures twice"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->resizing = true;\n"
+replace = ""
+expect = "a_picture_deep_in_the_history_stays_beside_its_text"

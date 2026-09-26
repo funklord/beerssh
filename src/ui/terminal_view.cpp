@@ -806,11 +806,19 @@ void bssh_terminal_view::draw_images(QPainter &painter, int offset, bool below_t
 		const int row = placement.row + offset;
 		if (row + placement.rows <= 0 || row >= m_rows) continue;
 
+		/*
+		 * Through the store rather than the field: a picture scrolled far
+		 * enough back has been spilled to disk, and asking for it is what
+		 * reads it back (sec 7.1). Null only if it could not be.
+		 */
+		const QImage image = m_images->image(placement);
+		if (image.isNull()) continue;
+
 		const QRect target(placement.col * m_cell_width,
 		                    row * m_cell_height,
 		                    placement.cols * m_cell_width,
 		                    placement.rows * m_cell_height);
-		painter.drawImage(target, placement.image);
+		painter.drawImage(target, image);
 	}
 
 	painter.restore();

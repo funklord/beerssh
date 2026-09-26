@@ -1,4 +1,5 @@
 #include "term/image_store.h"
+#include "term/picture_spill.h"
 
 /*
  * 32 MB of decoded image, which is roughly a dozen full-screen phone
@@ -14,11 +15,37 @@
  */
 static const qint64 BSSH_DEFAULT_IMAGE_BUDGET = 32 * 1024 * 1024;
 
-bssh_image_store::bssh_image_store() : m_budget(BSSH_DEFAULT_IMAGE_BUDGET) {
+/*
+ * 256 MB of sealed, compressed pictures on disk per terminal. Terminal
+ * pictures compress well -- plots are mostly flat colour -- so this is
+ * far more than 256 MB of what was drawn, and it is the ceiling a
+ * session drawing all day reaches rather than a figure anyone meets.
+ */
+static const qint64 BSSH_DEFAULT_SPILL_BUDGET = 256 * 1024 * 1024;
+
+bssh_image_store::bssh_image_store()
+    : m_budget(BSSH_DEFAULT_IMAGE_BUDGET),
+      m_disk_budget(BSSH_DEFAULT_SPILL_BUDGET),
+      m_next_serial(0),
+      m_spill_base(bssh_picture_spill::default_base()) {
 }
 
-int bssh_image_store::place(const bssh_image_placement_t &placement) {
-	if (placement.image.isNull()) return 0;
+/* Out of line, where bssh_picture_spill is a complete type. */
+bssh_image_store::~bssh_image_store() {
+}
+
+void bssh_image_store::set_spill_base(const QString &base) {
+	m_spill_base = base;
+
+	/* A spill that has written nothing yet has nothing to move. */
+	if (m_spill && m_spill->directory().isEmpty()) m_spill.reset();
+}
+
+int bssh_image_store::place(const bssh_image_placement_t &given) {
+	if (given.image.isNull()) return 0;
+
+	bssh_image_placement_t placement = given;
+	placement.serial = ++m_next_serial;
 
 	/*
 	 * An id is the REMOTE's id, and an anonymous placement stays
@@ -47,6 +74,12 @@ int bssh_image_store::place(const bssh_image_placement_t &placement) {
 		 */
 		for (int i = 0; i < m_placements.size(); ++i) {
 			if (m_placements.at(i).id == placement.id) {
+				/* The picture it replaces may have been spilled. */
+				const quint64 replaced = m_placements.at(i).serial;
+				if (m_spill) m_spill->remove(replaced);
+				m_restored.remove(replaced);
+				m_restored_order.removeAll(replaced);
+
 				m_placements[i] = placement;
 				drop_covered_by(i);
 				return placement.id;
@@ -99,7 +132,7 @@ void bssh_image_store::drop_covered_by(int index) {
 		if (under.row + under.rows > cover.row + cover.rows) continue;
 		if (under.col + under.cols > cover.col + cover.cols) continue;
 
-		m_placements.removeAt(i);
+		discard(i);
 	}
 }
 
@@ -112,12 +145,21 @@ void bssh_image_store::remove(int id) {
 	if (id == 0) return;
 
 	for (int i = m_placements.size() - 1; i >= 0; --i) {
-		if (m_placements.at(i).id == id) m_placements.removeAt(i);
+		if (m_placements.at(i).id == id) discard(i);
 	}
 }
 
 void bssh_image_store::clear() {
-	m_placements.clear();
+	for (int i = m_placements.size() - 1; i >= 0; --i) discard(i);
+}
+
+void bssh_image_store::discard(int index) {
+	const quint64 serial = m_placements.at(index).serial;
+
+	if (m_spill) m_spill->remove(serial);
+	m_restored.remove(serial);
+	m_restored_order.removeAll(serial);
+	m_placements.removeAt(index);
 }
 
 void bssh_image_store::scrolled(int top_row, int bottom_row, int lines) {
@@ -141,12 +183,35 @@ void bssh_image_store::scrolled(int top_row, int bottom_row, int lines) {
 	enforce_budget();
 }
 
+bool bssh_image_store::pushed_into_history(int lines) {
+	bool moved = false;
+
+	for (int i = 0; i < m_placements.size(); ++i) {
+		bssh_image_placement_t &placement = m_placements[i];
+		if (placement.row + placement.rows > 0) continue;
+
+		placement.row -= lines;
+		moved = true;
+	}
+
+	return moved;
+}
+
 void bssh_image_store::set_memory_budget(qint64 bytes) {
 	m_budget = qMax(qint64(0), bytes);
 	enforce_budget();
 }
 
-qint64 bssh_image_store::memory_used() const {
+void bssh_image_store::set_disk_budget(qint64 bytes) {
+	m_disk_budget = qMax(qint64(0), bytes);
+	enforce_disk_budget();
+}
+
+qint64 bssh_image_store::disk_used() const {
+	return m_spill ? m_spill->bytes() : 0;
+}
+
+qint64 bssh_image_store::resident_bytes() const {
 	qint64 total = 0;
 	for (const bssh_image_placement_t &placement : m_placements) {
 		total += placement.image.sizeInBytes();
@@ -154,18 +219,85 @@ qint64 bssh_image_store::memory_used() const {
 	return total;
 }
 
+qint64 bssh_image_store::memory_used() const {
+	qint64 total = resident_bytes();
+	for (const QImage &image : m_restored) total += image.sizeInBytes();
+	return total;
+}
+
+bool bssh_image_store::is_spilled(const bssh_image_placement_t &placement) const {
+	return placement.image.isNull() && m_spill && m_spill->contains(placement.serial);
+}
+
+QImage bssh_image_store::image(const bssh_image_placement_t &placement) const {
+	if (!placement.image.isNull()) return placement.image;
+
+	const auto found = m_restored.constFind(placement.serial);
+	if (found != m_restored.constEnd()) {
+		m_restored_order.removeAll(placement.serial);
+		m_restored_order.append(placement.serial);
+		return found.value();
+	}
+
+	if (!m_spill) return QImage();
+
+	const QImage image = m_spill->read(placement.serial);
+	if (image.isNull()) return QImage();
+
+	m_restored.insert(placement.serial, image);
+	m_restored_order.append(placement.serial);
+	trim_restored(placement.serial);
+	return image;
+}
+
+/*
+ * Least recently drawn first, and never `keep` -- the one being drawn
+ * now, which is held while it is on screen however the budget stands,
+ * for the same reason enforce_budget never spills what is visible.
+ */
+void bssh_image_store::trim_restored(quint64 keep) const {
+	if (m_budget <= 0) return;
+
+	qint64 used = memory_used();
+	int next = 0;
+
+	while (used > m_budget && next < m_restored_order.size()) {
+		const quint64 serial = m_restored_order.at(next);
+		if (serial == keep) {
+			++next;
+			continue;
+		}
+
+		used -= m_restored.value(serial).sizeInBytes();
+		m_restored.remove(serial);
+		m_restored_order.removeAt(next);
+	}
+}
+
+void bssh_image_store::forget_beyond(int history_lines) {
+	if (history_lines < 0) return;
+
+	for (int i = m_placements.size() - 1; i >= 0; --i) {
+		const bssh_image_placement_t &placement = m_placements.at(i);
+		if (placement.row + placement.rows <= -history_lines) discard(i);
+	}
+}
+
 void bssh_image_store::drop_above_the_fold() {
 	for (int i = m_placements.size() - 1; i >= 0; --i) {
 		const bssh_image_placement_t &placement = m_placements.at(i);
 		if (placement.row + placement.rows > 0) continue;
-		m_placements.removeAt(i);
+		discard(i);
 	}
 }
 
 void bssh_image_store::enforce_budget() {
 	if (m_budget <= 0) return;
 
-	while (memory_used() > m_budget) {
+	/* What was read back is on disk already, so it goes first and free. */
+	trim_restored(0);
+
+	while (resident_bytes() > m_budget) {
 		/*
 		 * The one furthest above the screen goes first: it is the oldest
 		 * and the one a user would have to scroll longest to reach.
@@ -175,6 +307,9 @@ void bssh_image_store::enforce_budget() {
 
 		for (int i = 0; i < m_placements.size(); ++i) {
 			const bssh_image_placement_t &placement = m_placements.at(i);
+
+			/* Already out of memory. */
+			if (placement.image.isNull()) continue;
 
 			/* Never the one being looked at, whatever it weighs. */
 			if (placement.row + placement.rows > 0) continue;
@@ -190,9 +325,42 @@ void bssh_image_store::enforce_budget() {
 		 * it is the honest state: dropping a visible image to satisfy a
 		 * number would be a terminal deleting what the user is reading.
 		 */
-		if (oldest < 0) return;
+		if (oldest < 0) break;
 
-		m_placements.removeAt(oldest);
+		/*
+		 * Spilled rather than dropped, so scrolling back still finds it.
+		 * Where it cannot be written, dropped as it always was: a budget
+		 * is a promise about memory, and keeping the picture resident
+		 * because the disk said no would break it.
+		 */
+		bssh_image_placement_t &placement = m_placements[oldest];
+
+		if (!m_spill && !m_spill_base.isEmpty())
+			m_spill.reset(new bssh_picture_spill(m_spill_base));
+
+		if (m_spill && m_spill->write(placement.serial, placement.image)) {
+			placement.image = QImage();
+		} else {
+			discard(oldest);
+		}
+	}
+
+	enforce_disk_budget();
+}
+
+void bssh_image_store::enforce_disk_budget() {
+	if (m_disk_budget <= 0 || !m_spill) return;
+
+	while (m_spill->bytes() > m_disk_budget) {
+		int oldest = -1;
+
+		for (int i = 0; i < m_placements.size(); ++i) {
+			if (!m_spill->contains(m_placements.at(i).serial)) continue;
+			if (oldest < 0 || m_placements.at(i).row < m_placements.at(oldest).row) oldest = i;
+		}
+
+		if (oldest < 0) return;
+		discard(oldest);
 	}
 }
 
@@ -209,6 +377,6 @@ void bssh_image_store::shift_rows(int lines) {
 
 void bssh_image_store::trim_to(int rows) {
 	for (int i = m_placements.size() - 1; i >= 0; --i) {
-		if (m_placements.at(i).row >= rows) m_placements.removeAt(i);
+		if (m_placements.at(i).row >= rows) discard(i);
 	}
 }

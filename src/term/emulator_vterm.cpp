@@ -61,6 +61,13 @@ struct bssh_emulator_private {
 
 	bssh_image_store images;
 	bssh_scrollback scrollback;
+
+	/*
+	 * Set across vterm_set_size, whose pushes are paid for by one
+	 * shift_rows over every picture afterwards -- moving the history's
+	 * pictures per push as well would move them twice.
+	 */
+	bool resizing = false;
 	bssh_graphics_transmission_t graphics;   /* chunked kitty transmissions */
 	bssh_term_features_t features;
 	QByteArray apc_buffer;        /* an APC split across reads */
@@ -329,6 +336,14 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 		self->images.scrolled(qMin(dest.start_row, src.start_row),
 		                       qMax(dest.end_row, src.end_row),
 		                       src.start_row - dest.start_row);
+
+		/*
+		 * And a picture whose text has now left the scrollback goes with
+		 * it. Here rather than in push_top_line, which runs before this
+		 * move: there the rows are one scroll stale, and the count and
+		 * the rows agree only once both have moved.
+		 */
+		self->images.forget_beyond(self->scrollback.count());
 		emit self->owner->images_changed();
 	}
 
@@ -1470,6 +1485,17 @@ void push_top_line(bssh_emulator_private *self, int cols, bool continuation) {
 	}
 
 	self->scrollback.push(line, continuation);
+
+	/*
+	 * The pictures already in the history go one line further back with
+	 * it. The move that follows this push shifts only what is inside the
+	 * scrolling region, and a picture wholly above the screen is not --
+	 * so it stayed at the row it first left the screen at, and after a
+	 * hundred more lines scrolling back found it beside the wrong text.
+	 */
+	if (!self->resizing && self->images.pushed_into_history(1))
+		emit self->owner->images_changed();
+
 	emit self->owner->scrollback_changed();
 }
 
@@ -1826,12 +1852,15 @@ void bssh_emulator::resize(int cols, int rows) {
 	const qint64 passed_before =
 	        m_private->scrollback.base() + m_private->scrollback.count();
 
+	m_private->resizing = true;
 	vterm_set_size(m_private->vt, rows, cols);
+	m_private->resizing = false;
 	m_private->screen.resize(cols, rows);
 
 	const qint64 passed_after =
 	        m_private->scrollback.base() + m_private->scrollback.count();
 	m_private->images.shift_rows(int(passed_after - passed_before));
+	m_private->images.forget_beyond(m_private->scrollback.count());
 
 	/*
 	 * Re-mirror everything: libvterm reflows on resize and does not
@@ -2150,6 +2179,12 @@ const bssh_scrollback &bssh_emulator::scrollback() const {
 
 void bssh_emulator::set_scrollback_lines(int lines) {
 	m_private->scrollback.set_max_lines(lines);
+
+	/* A shorter history reaches fewer pictures. */
+	const int pictures = m_private->images.count();
+	m_private->images.forget_beyond(m_private->scrollback.count());
+	if (m_private->images.count() != pictures) emit images_changed();
+
 	emit scrollback_changed();
 }
 

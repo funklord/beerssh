@@ -34,6 +34,14 @@ private slots:
 	void an_absurd_cell_footprint_is_refused_by_both_protocols();
 	void an_image_scrolled_off_the_top_survives_in_the_scrollback();
 	void the_memory_budget_drops_the_oldest_but_never_the_visible();
+	void a_picture_over_the_budget_is_spilled_and_comes_back_whole();
+	void a_spilled_picture_scrolled_back_to_reaches_the_screen();
+	void a_spilled_picture_opens_only_under_its_own_name();
+	void a_spill_directory_goes_with_its_terminal();
+	void an_abandoned_spill_is_swept_and_a_live_one_is_not();
+	void the_disk_budget_forgets_the_oldest_spilled_picture();
+	void a_picture_deep_in_the_history_stays_beside_its_text();
+	void a_picture_whose_text_left_the_scrollback_is_forgotten();
 	void a_background_image_is_drawn_under_the_text();
 	void an_image_that_arrived_as_bytes_reaches_the_screen();
 	void dropping_the_history_drops_the_pictures_in_it();

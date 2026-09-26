@@ -1,5 +1,12 @@
 #include <QBuffer>
+#include <QDir>
+#include <QFile>
+#include <QSysInfo>
+#include <QRandomGenerator>
+#include <QTemporaryDir>
 #include <QtTest>
+
+#include "term/picture_spill.h"
 
 #include "ui/terminal_view.h"
 #include "term/screen.h"
@@ -337,6 +344,14 @@ void graphics_test::an_image_scrolled_off_the_top_survives_in_the_scrollback() {
 
 void graphics_test::the_memory_budget_drops_the_oldest_but_never_the_visible() {
 	bssh_image_store store;
+
+	/*
+	 * With nowhere to spill to, which is what the budget did before it
+	 * could spill at all and still does when no cache directory exists:
+	 * a promise about memory is kept by dropping rather than broken by
+	 * keeping. The spilling half is the test below.
+	 */
+	store.set_spill_base(QString());
 
 	/* Two images of a known size; room for one and a half. */
 	const int bytes = QImage(100, 100, QImage::Format_RGB32).sizeInBytes();
@@ -957,4 +972,302 @@ void graphics_test::resetting_the_terminal_drops_a_half_sent_image() {
 	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"),
 	                            png_of(16, 16, qRgb(0, 255, 0))));
 	QCOMPARE(emulator.images().count(), 1);
+}
+
+/*
+ * Noise, so neither compression nor a lucky fill can make two pictures
+ * alike or one of them small: what comes back has to be this one.
+ */
+static QImage noise_image(int width, int height) {
+	QImage image(width, height, QImage::Format_RGB32);
+	for (int y = 0; y < height; ++y) {
+		quint32 *line = reinterpret_cast<quint32 *>(image.scanLine(y));
+		for (int x = 0; x < width; ++x)
+			line[x] = 0xff000000u | (QRandomGenerator::global()->generate() & 0x00ffffffu);
+	}
+	return image;
+}
+
+static bssh_image_placement_t placement_at(const QImage &image, int row) {
+	bssh_image_placement_t placement;
+	placement.image = image;
+	placement.row = row;
+	placement.rows = 2;
+	placement.cols = 4;
+	return placement;
+}
+
+void graphics_test::a_picture_over_the_budget_is_spilled_and_comes_back_whole() {
+	/*
+	 * The holder's direction of 2026-09-26: bound what is resident, not
+	 * what is remembered. The budget test above drops; with somewhere to
+	 * put it, the same picture is written out and read back instead.
+	 */
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_image_store store;
+	store.set_spill_base(base.path());
+
+	const QImage old_picture = noise_image(100, 100);
+	const qint64 bytes = old_picture.sizeInBytes();
+	store.set_memory_budget(bytes + bytes / 2);
+
+	store.place(placement_at(old_picture, 1));
+	store.scrolled(0, 24, 20);          /* into the scrollback */
+	store.place(placement_at(noise_image(100, 100), 5));
+	store.set_memory_budget(bytes + bytes / 2);
+
+	/* Both still there; the one in history out of memory. */
+	QCOMPARE(store.count(), 2);
+	const bssh_image_placement_t &spilled = store.placements().first();
+	QVERIFY(store.is_spilled(spilled));
+	QVERIFY(spilled.image.isNull());
+	QVERIFY(!store.is_spilled(store.placements().last()));
+	QVERIFY(store.memory_used() <= bytes + bytes / 2);
+	QVERIFY(store.disk_used() > 0);
+
+	/* And scrolling to it gives back exactly what was drawn. */
+	QCOMPARE(store.image(spilled), old_picture);
+}
+
+void graphics_test::a_spilled_picture_scrolled_back_to_reaches_the_screen() {
+	/*
+	 * The renderer must ask the store rather than read the field, or a
+	 * spilled picture is a blank where it used to be -- remembered by
+	 * the store and never drawn. Moved back onto the screen with
+	 * shift_rows while still spilled, which is what scrolling the view
+	 * back to it amounts to from the renderer's side.
+	 */
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_terminal_view view;
+	view.resize(200, 80);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("default"));
+	bssh_apply_appearance(&view, settings);
+
+	bssh_screen screen(view.cols(), view.rows());
+	view.attach_screen(&screen);
+
+	bssh_image_store store;
+	store.set_spill_base(base.path());
+	store.set_memory_budget(1);
+
+	QImage red(40, 20, QImage::Format_RGB32);
+	red.fill(QColor(Qt::red));
+	bssh_image_placement_t placement = placement_at(red, 0);
+	placement.rows = 1;
+	store.place(placement);
+	view.attach_images(&store);
+
+	const QPoint probe(view.cell_width() / 2, view.cell_height() / 2);
+	QCOMPARE(view.grab().toImage().pixelColor(probe), QColor(Qt::red));
+
+	store.shift_rows(10);
+	QVERIFY(store.is_spilled(store.placements().first()));
+	store.shift_rows(-10);
+	QVERIFY2(store.is_spilled(store.placements().first()),
+	          "the fixture needs the picture on screen and still out of memory");
+
+	QCOMPARE(view.grab().toImage().pixelColor(probe), QColor(Qt::red));
+}
+
+void graphics_test::a_spilled_picture_opens_only_under_its_own_name() {
+	/*
+	 * Sealed with the serial as nonce and additional data, so a file
+	 * copied onto another picture's name does not open -- it would
+	 * otherwise draw one picture where another belongs -- and a damaged
+	 * one is refused rather than drawn as garbage.
+	 */
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_picture_spill spill(base.path());
+	const QImage first = noise_image(30, 30);
+	const QImage second = noise_image(30, 30);
+	QVERIFY(spill.write(1, first));
+	QVERIFY(spill.write(2, second));
+
+	QCOMPARE(spill.read(1), first);
+	QCOMPARE(spill.read(2), second);
+
+	const QString one = spill.directory() + QStringLiteral("/1");
+	const QString two = spill.directory() + QStringLiteral("/2");
+
+	QVERIFY(QFile::remove(two));
+	QVERIFY(QFile::copy(one, two));
+	QVERIFY2(spill.read(2).isNull(), "picture 1's file opened as picture 2");
+
+	QFile file(one);
+	QVERIFY(file.open(QIODevice::ReadWrite));
+	QByteArray sealed = file.readAll();
+	sealed[sealed.size() / 2] = char(sealed.at(sealed.size() / 2) ^ 0x01);
+	file.seek(0);
+	file.write(sealed);
+	file.close();
+	QVERIFY2(spill.read(1).isNull(), "a damaged spill was read back");
+}
+
+void graphics_test::a_spill_directory_goes_with_its_terminal() {
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	QString directory;
+	{
+		bssh_picture_spill spill(base.path());
+		QVERIFY(spill.directory().isEmpty());     /* nothing until needed */
+		QVERIFY(spill.write(1, noise_image(8, 8)));
+		directory = spill.directory();
+		QVERIFY(QDir(directory).exists());
+	}
+
+	QVERIFY2(!QDir(directory).exists(), "a closed terminal left its pictures on disk");
+}
+
+void graphics_test::an_abandoned_spill_is_swept_and_a_live_one_is_not() {
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_picture_spill live(base.path());
+	QVERIFY(live.write(1, noise_image(8, 8)));
+
+	/*
+	 * A crashed instance's: a lock naming a process that cannot exist,
+	 * above any pid_max, on this host -- QLockFile's own test of stale.
+	 */
+	const QString dead = base.path() + QStringLiteral("/terminal-dead00");
+	QVERIFY(QDir().mkpath(dead));
+	QFile lock(dead + QStringLiteral("/owner.lock"));
+	QVERIFY(lock.open(QIODevice::WriteOnly));
+	lock.write(QByteArrayLiteral("999999999\n") + QCoreApplication::applicationName().toUtf8() +
+	           QByteArrayLiteral("\n") + QSysInfo::machineHostName().toUtf8() + QByteArrayLiteral("\n"));
+	lock.close();
+	QFile picture(dead + QStringLiteral("/1"));
+	QVERIFY(picture.open(QIODevice::WriteOnly));
+	picture.write("sealed");
+	picture.close();
+
+	/* And one with no lock at all: a directory another instance is making. */
+	const QString unlocked = base.path() + QStringLiteral("/terminal-new000");
+	QVERIFY(QDir().mkpath(unlocked));
+
+	QCOMPARE(bssh_picture_spill::sweep_abandoned(base.path()), 1);
+	QVERIFY(!QDir(dead).exists());
+	QVERIFY(QDir(unlocked).exists());
+	QVERIFY(QDir(live.directory()).exists());
+	QVERIFY(!live.read(1).isNull());
+}
+
+void graphics_test::the_disk_budget_forgets_the_oldest_spilled_picture() {
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_image_store store;
+	store.set_spill_base(base.path());
+	store.set_memory_budget(1);
+
+	const QImage oldest = noise_image(40, 40);
+	const QImage middle = noise_image(40, 40);
+	const QImage newest = noise_image(40, 40);
+
+	/* As the emulator scrolls: the push, then the move. */
+	auto scroll = [&store](int lines) {
+		for (int i = 0; i < lines; ++i) {
+			store.pushed_into_history(1);
+			store.scrolled(0, 24, 1);
+		}
+	};
+
+	store.place(placement_at(oldest, 1));
+	scroll(5);
+	store.place(placement_at(middle, 1));
+	scroll(5);
+	store.place(placement_at(newest, 1));
+	scroll(20);
+
+	QCOMPARE(store.count(), 3);
+	for (const bssh_image_placement_t &placement : store.placements())
+		QVERIFY(store.is_spilled(placement));
+
+	/* One byte short of all three: the one furthest back goes. */
+	store.set_disk_budget(store.disk_used() - 1);
+
+	QCOMPARE(store.count(), 2);
+	QCOMPARE(store.image(store.placements().first()), middle);
+	QCOMPARE(store.image(store.placements().last()), newest);
+}
+
+void graphics_test::a_picture_deep_in_the_history_stays_beside_its_text() {
+	/*
+	 * A picture wholly above the screen was moved by nothing: the scroll
+	 * shifts what is inside the scrolling region, and the history is
+	 * not. So it stopped at the row it left the screen from, and after
+	 * forty more lines scrolling back found it forty lines from the text
+	 * it was drawn beside. Measured: row -1 after a hundred lines.
+	 *
+	 * Asserted against the TEXT: the line above the picture, found in
+	 * the scrollback, must stay exactly one row above it however much
+	 * output follows.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.set_cell_pixels(8, 16);
+	emulator.set_scrollback_lines(1000);
+
+	emulator.feed(QByteArrayLiteral("MARKER\r\n"));
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"),
+	                            png_of(16, 16, qRgb(0, 128, 255))));
+	for (int i = 0; i < 60; ++i) emulator.feed(QByteArrayLiteral("filler\r\n"));
+
+	const bssh_scrollback &history = emulator.scrollback();
+	int marker = -1;
+	for (int i = 0; i < history.count(); ++i) {
+		const QList<bssh_cell_t> &line = history.line(i);
+		if (line.size() >= 6 && line.at(0).ch == U'M' && line.at(5).ch == U'R') marker = i;
+	}
+	QVERIFY2(marker >= 0, "the fixture's marker line is not in the history");
+
+	QCOMPARE(emulator.images().count(), 1);
+	const qint64 marker_line = history.base() + marker;
+	auto marker_row = [&history, marker_line]() {
+		return int(marker_line - history.base()) - history.count();
+	};
+	QCOMPARE(emulator.images().placements().first().row, marker_row() + 1);
+
+	/*
+	 * And through a shrink and a grow, whose pushes and pops are paid
+	 * for by one shift over every picture -- so the per-push move above
+	 * must stay out of it, or the history's pictures go twice as far as
+	 * their text.
+	 */
+	emulator.resize(40, 5);
+	QCOMPARE(emulator.images().placements().first().row, marker_row() + 1);
+	emulator.resize(40, 10);
+	QCOMPARE(emulator.images().placements().first().row, marker_row() + 1);
+}
+
+void graphics_test::a_picture_whose_text_left_the_scrollback_is_forgotten() {
+	/*
+	 * Kept only while the text it was drawn beside can still be scrolled
+	 * to. With spilling, the budget no longer throws old pictures away,
+	 * so without this one the text had left would sit on disk for the
+	 * life of the session, drawn by nothing. Asserted against a longer
+	 * history keeping the same picture, so the pair says the reach is
+	 * what decided it.
+	 */
+	for (const int history : {20, 1000}) {
+		bssh_emulator emulator(40, 10);
+		emulator.set_cell_pixels(8, 16);
+		emulator.set_scrollback_lines(history);
+
+		emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"),
+		                            png_of(16, 16, qRgb(0, 128, 255))));
+		QCOMPARE(emulator.images().count(), 1);
+
+		for (int i = 0; i < 100; ++i) emulator.feed(QByteArrayLiteral("filler\r\n"));
+
+		QCOMPARE(emulator.images().count(), history == 20 ? 0 : 1);
+	}
 }

@@ -30,26 +30,9 @@
 [[sabotage]]
 name = "an anonymous image is given a number kitty can name"
 file = "src/term/image_store.cpp"
-find = '''
-	if (placement.id != 0) {
-		/*
-		 * A protocol may re-transmit an existing id to replace the image
-		 * rather than to add a second copy of it.
-		 */
-		for (int i = 0; i < m_placements.size(); ++i) {
-			if (m_placements.at(i).id == placement.id) {
-				m_placements[i] = placement;
-				drop_covered_by(i);
-				return placement.id;
-			}
-		}
-	}
+find = "\tplacement.serial = ++m_next_serial;"
+replace = '''	placement.serial = ++m_next_serial;
 
-	m_placements.append(placement);
-	drop_covered_by(m_placements.size() - 1);
-	return placement.id;
-'''
-replace = '''
 	/*
 	 * The counter place() used to keep, kept beside the store rather than
 	 * in it so this edit stays inside one file. Restarting it whenever
@@ -60,24 +43,5 @@ replace = '''
 	 */
 	static int counter = 0;
 	if (m_placements.isEmpty()) counter = 0;
-
-	bssh_image_placement_t stored = placement;
-	if (stored.id == 0) stored.id = ++counter;
-
-	/*
-	 * A protocol may re-transmit an existing id to replace the image
-	 * rather than to add a second copy of it.
-	 */
-	for (int i = 0; i < m_placements.size(); ++i) {
-		if (m_placements.at(i).id == stored.id) {
-			m_placements[i] = stored;
-			drop_covered_by(i);
-			return stored.id;
-		}
-	}
-
-	m_placements.append(stored);
-	drop_covered_by(m_placements.size() - 1);
-	return stored.id;
-'''
+	if (placement.id == 0) placement.id = ++counter;'''
 expect = "an_image_without_an_id_does_not_answer_to_a_remote_one"

@@ -26,8 +26,8 @@ expect = "dropping_the_history_drops_the_pictures_in_it"
 [[sabotage]]
 name = "dropping the history takes the picture on screen too"
 file = "src/term/image_store.cpp"
-find = "\t\tif (placement.row + placement.rows > 0) continue;\n\t\tm_placements.removeAt(i);"
-replace = "\t\tm_placements.removeAt(i);"
+find = "\t\tif (placement.row + placement.rows > 0) continue;\n\t\tdiscard(i);"
+replace = "\t\tdiscard(i);"
 expect = "dropping_the_history_drops_the_pictures_in_it"
 
 # And the other verb on that menu: a half-sent image survives the reset.
