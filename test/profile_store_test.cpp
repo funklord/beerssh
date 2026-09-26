@@ -20,6 +20,14 @@
 #include <QJsonObject>
 #include "ui/font_picker.h"
 #include "ui/main_window.h"
+#include "model/kept_scrollback.h"
+#include "model/session.h"
+#include "model/session_registry.h"
+#include "term/emulator.h"
+#include "term/scrollback.h"
+#include <QCheckBox>
+#include <QFileInfo>
+#include <QDataStream>
 
 /*
  * A secret store that LOCKS, in memory.
@@ -627,6 +635,224 @@ void profile_store_test::an_unwritable_preset_file_is_reported_and_undone() {
 	QVERIFY(presets.open(QIODevice::ReadOnly));
 	QVERIFY2(!presets.readAll().contains("after"),
 	          "presets.ini took a rename whose hosts could not follow it");
+}
+
+static QString line_text(const bssh_scrollback &history, int index) {
+	QString text;
+	for (const bssh_cell_t &cell : history.line(index)) text += QString::fromUcs4(&cell.ch, 1);
+	return text;
+}
+
+void profile_store_test::kept_scrollback_round_trips_its_cells() {
+	bssh_scrollback history;
+
+	QList<bssh_cell_t> styled;
+	bssh_cell_t red;
+	red.ch = U'R';
+	red.fg.kind = bssh_color_t::INDEXED;
+	red.fg.index = 1;
+	red.attrs = bssh_cell_t::BOLD | bssh_cell_t::UNDERLINE;
+	styled.append(red);
+	bssh_cell_t truecolor;
+	truecolor.ch = U'å';
+	truecolor.bg.kind = bssh_color_t::RGB;
+	truecolor.bg.rgb = qRgb(10, 20, 30);
+	styled.append(truecolor);
+	bssh_cell_t wide;
+	wide.ch = U'\U0001F37A';
+	wide.width = 2;
+	styled.append(wide);
+
+	QList<bssh_cell_t> plain;
+	for (const QChar ch : QStringLiteral("continued")) {
+		bssh_cell_t cell;
+		cell.ch = ch.unicode();
+		plain.append(cell);
+	}
+
+	history.push(styled);
+	history.push(plain, true);
+	history.push(QList<bssh_cell_t>());
+
+	bssh_scrollback back;
+	QVERIFY(bssh_scrollback_decode(bssh_scrollback_encode(history), &back));
+	QCOMPARE(back.count(), 3);
+
+	const bssh_cell_t &r = back.line(0).at(0);
+	QCOMPARE(r.ch, U'R');
+	QCOMPARE(int(r.fg.kind), int(bssh_color_t::INDEXED));
+	QCOMPARE(int(r.fg.index), 1);
+	QCOMPARE(int(r.attrs), int(bssh_cell_t::BOLD | bssh_cell_t::UNDERLINE));
+	QCOMPARE(int(back.line(0).at(1).bg.kind), int(bssh_color_t::RGB));
+	QCOMPARE(back.line(0).at(1).bg.rgb, qRgb(10, 20, 30));
+	QCOMPARE(back.line(0).at(2).ch, U'\U0001F37A');
+	QCOMPARE(int(back.line(0).at(2).width), 2);
+	QCOMPARE(line_text(back, 1), QStringLiteral("continued"));
+	QVERIFY(back.is_continuation(1));
+	QVERIFY(!back.is_continuation(0));
+	QVERIFY(back.line(2).isEmpty());
+
+	/* Decoding appends: a kept history goes in front of what is already there. */
+	QVERIFY(bssh_scrollback_decode(bssh_scrollback_encode(history), &back));
+	QCOMPARE(back.count(), 6);
+}
+
+void profile_store_test::kept_scrollback_refuses_what_it_did_not_write() {
+	bssh_scrollback history;
+	QList<bssh_cell_t> line;
+	bssh_cell_t cell;
+	cell.ch = U'x';
+	line.append(cell);
+	for (int i = 0; i < 50; ++i) history.push(line);
+
+	const QByteArray good = bssh_scrollback_encode(history);
+
+	bssh_scrollback into;
+	QVERIFY(!bssh_scrollback_decode(QByteArray("not a history at all"), &into));
+	QVERIFY(!bssh_scrollback_decode(good.left(good.size() / 2), &into));
+	QVERIFY(!bssh_scrollback_decode(QByteArray(), &into));
+
+	/*
+	 * A whole header over a body that will not decompress: the case the
+	 * cut-short file above fails before reaching, since cutting it short
+	 * breaks the header first.
+	 */
+	QByteArray damaged;
+	{
+		QDataStream out(&damaged, QIODevice::WriteOnly);
+		out.setVersion(QDataStream::Qt_6_0);
+		QDataStream in(good);
+		in.setVersion(QDataStream::Qt_6_0);
+		quint32 magic = 0;
+		quint16 version = 0;
+		in >> magic >> version;
+		out << magic << version << QByteArray("\x00\x00\x00\x10not zlib data", 17);
+	}
+	QVERIFY(!bssh_scrollback_decode(damaged, &into));
+
+	/* Nothing is kept from a refusal: half a history is not a history. */
+	QCOMPARE(into.count(), 0);
+}
+
+void profile_store_test::kept_scrollback_is_the_owners_alone() {
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+
+	bssh_scrollback history;
+	QList<bssh_cell_t> line;
+	bssh_cell_t cell;
+	cell.ch = U's';
+	line.append(cell);
+	history.push(line);
+
+	QVERIFY(bssh_save_kept_scrollback(7, history, dir.path()));
+	const QString path = bssh_kept_scrollback_path(7, dir.path());
+	QVERIFY(path.startsWith(dir.path()));
+
+	const QFileDevice::Permissions perms = QFileInfo(path).permissions();
+	QVERIFY2(!(perms & (QFileDevice::ReadGroup | QFileDevice::ReadOther
+	                    | QFileDevice::WriteGroup | QFileDevice::WriteOther)),
+	          "a kept scrollback is readable by someone other than its owner");
+
+	/* And the folder they are in, so the names of the hosts are not listed to others. */
+	const QFileDevice::Permissions folder = QFileInfo(QFileInfo(path).path()).permissions();
+	QVERIFY2(!(folder & (QFileDevice::ReadGroup | QFileDevice::ReadOther
+	                     | QFileDevice::ExeGroup | QFileDevice::ExeOther)),
+	          "the kept-scrollback folder is open to others");
+
+	bssh_scrollback back;
+	QVERIFY(bssh_load_kept_scrollback(7, &back, dir.path()));
+	QCOMPARE(back.count(), 1);
+
+	bssh_erase_kept_scrollback(7, dir.path());
+	QVERIFY(!QFileInfo::exists(path));
+	QVERIFY(!bssh_load_kept_scrollback(7, &back, dir.path()));
+}
+
+void profile_store_test::a_host_that_keeps_its_scrollback_gets_it_back() {
+	bssh_profile_store *store = bssh_profile_store::shared();
+	QVERIFY(store && store->is_open());
+	bssh_session_registry *registry = bssh_session_registry::shared();
+
+	bssh_profile_t host = make_profile(QStringLiteral("keeper"), QStringLiteral("keeper.example"));
+	host.keep_scrollback = true;
+	host.id = store->save(host);
+	QVERIFY(host.id);
+	const QString path = bssh_kept_scrollback_path(host.id, store->directory());
+
+	{
+		bssh_session *session = registry->create(store->profile(host.id));
+		QByteArray output;
+		for (int i = 0; i < 40; ++i) output += QByteArray("history line ") + QByteArray::number(i) + "\r\n";
+		output += "still on screen";
+		session->emulator()->feed(output);
+		registry->close(session);
+		QCoreApplication::processEvents();
+	}
+	QVERIFY2(QFileInfo::exists(path), "a host that keeps its scrollback wrote nothing on close");
+
+	{
+		bssh_session *session = registry->create(store->profile(host.id));
+		const bssh_scrollback &history = session->emulator()->scrollback();
+
+		QString all;
+		for (int i = 0; i < history.count(); ++i) all += line_text(history, i) + QLatin1Char('\n');
+		QVERIFY2(all.contains(QStringLiteral("history line 0")), qPrintable(all.left(200)));
+
+		/* The screen at close is kept too: it had not scrolled off yet. */
+		QVERIFY2(all.contains(QStringLiteral("still on screen")),
+		          "the last screenful was lost -- it is the part most wanted");
+
+		/* And the line that says where yesterday ends. */
+		QVERIFY(line_text(history, history.count() - 1).startsWith(QStringLiteral("-- kept from ")));
+		registry->close(session);
+		QCoreApplication::processEvents();
+	}
+
+	/* Turned off, and what was kept goes with it. */
+	host = store->profile(host.id);
+	host.keep_scrollback = false;
+	QVERIFY(store->save(host));
+	QVERIFY2(!QFileInfo::exists(path), "a host that stopped keeping its scrollback still has it on disk");
+
+	/* And a host that never asked keeps nothing. */
+	{
+		bssh_session *session = registry->create(store->profile(host.id));
+		session->emulator()->feed("not kept\r\n");
+		registry->close(session);
+		QCoreApplication::processEvents();
+	}
+	QVERIFY(!QFileInfo::exists(path));
+
+	/* Deleting the host deletes its history. */
+	host.keep_scrollback = true;
+	QVERIFY(store->save(host));
+	QVERIFY(bssh_save_kept_scrollback(host.id, bssh_scrollback(), store->directory()));
+	QVERIFY(QFileInfo::exists(path));
+	QVERIFY(store->remove(host.id));
+	QVERIFY2(!QFileInfo::exists(path), "a deleted host's scrollback outlived it");
+}
+
+void profile_store_test::both_editors_carry_the_keep_scrollback_choice() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+
+	bssh_profile_t host = make_profile(QStringLiteral("choosy"), QStringLiteral("c.example"));
+	host.keep_scrollback = true;
+
+	bssh_session_dialog dialog(&store);
+	dialog.set_current_profile(host);
+	QCheckBox *desktop = dialog.findChild<QCheckBox *>(QStringLiteral("keep_scrollback"));
+	QVERIFY(desktop && desktop->isChecked());
+	desktop->setChecked(false);
+	QVERIFY(!dialog.current_profile().keep_scrollback);
+
+	bssh_host_editor editor;
+	editor.set_profile(host);
+	QCheckBox *touch = editor.findChild<QCheckBox *>(QStringLiteral("keep_scrollback"));
+	QVERIFY(touch && touch->isChecked());
+	touch->setChecked(false);
+	QVERIFY(!editor.profile().keep_scrollback);
 }
 
 void profile_store_test::the_host_editor_builds_a_profile() {

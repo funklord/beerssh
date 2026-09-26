@@ -93,6 +93,7 @@ private:
 	 * screenshot setting off the desktop page.
 	 */
 	QCheckBox *m_biometric;
+	QCheckBox *m_keep_scrollback = nullptr;
 	QLineEdit *m_host;
 	QLineEdit *m_user;
 	QSpinBox *m_port;

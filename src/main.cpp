@@ -11,6 +11,7 @@
 #include "term/term_features.h"
 #include "model/profile.h"
 #include "model/profile_store.h"
+#include "model/session_registry.h"
 #include "platform/platform.h"
 #include "term/font_catalog.h"
 #include "hang_watchdog.h"
@@ -347,6 +348,21 @@ int main(int argc, char *argv[]) {
 	 * under --self-test, which has nobody to dismiss it.
 	 */
 	window.import_launch_document();
+
+	/*
+	 * Kept scrollback is written when a session closes, and also at the
+	 * two moments one can be lost without closing: the app quitting, and
+	 * the app leaving the foreground -- on a phone the last moment it is
+	 * certain to be running, since Android may end a backgrounded app
+	 * without a word.
+	 */
+	bssh_session_registry *registry = bssh_session_registry::shared();
+	QObject::connect(&app, &QCoreApplication::aboutToQuit, registry,
+	                  &bssh_session_registry::save_kept_scrollback);
+	QObject::connect(&app, &QGuiApplication::applicationStateChanged, registry,
+	                  [registry](Qt::ApplicationState state) {
+		if (state != Qt::ApplicationActive) registry->save_kept_scrollback();
+	});
 
 	return app.exec();
 }

@@ -196,6 +196,18 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 		body->addWidget(m_biometric);
 	}
 
+	/* Per host and off unless asked for; see bssh_kept_scrollback. */
+	m_keep_scrollback = new QCheckBox(QStringLiteral("Keep this host's scrollback after closing"),
+	                                  this);
+	m_keep_scrollback->setObjectName(QStringLiteral("keep_scrollback"));
+	m_keep_scrollback->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	body->addWidget(m_keep_scrollback);
+	body->addWidget(bssh_wrapped_note(
+	        QStringLiteral("Saved unencrypted in your settings folder, readable only by "
+	                        "you -- including anything that was on screen, a password "
+	                        "typed at the wrong prompt too."),
+	        this));
+
 	/*
 	 * The same picker the desktop dialog embeds, sized for touch (sec
 	 * 9.4: one list on both platforms). It is on the host page rather
@@ -315,6 +327,7 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	m_identity->setText(profile.identity_file);
 	m_jump->setText(profile.proxy_jump);
 	if (m_biometric) m_biometric->setChecked(profile.require_biometric);
+	m_keep_scrollback->setChecked(profile.keep_scrollback);
 
 	const QJsonObject resolved = resolved_settings();
 
@@ -416,6 +429,7 @@ bssh_profile_t bssh_host_editor::profile() const {
 	 * user would learn that by finding the lock gone.
 	 */
 	if (m_biometric) edited.require_biometric = m_biometric->isChecked();
+	edited.keep_scrollback = m_keep_scrollback->isChecked();
 
 	/*
 	 * Sparse appearance overrides, computed by the same function the

@@ -54,6 +54,7 @@ SOURCES += \
     src/model/window_title.cpp \
     src/model/session.cpp \
     src/model/session_registry.cpp \
+    src/model/kept_scrollback.cpp \
     src/input/input_router.cpp \
     src/platform/platform.cpp \
     src/platform/secret_store.cpp \
@@ -117,6 +118,7 @@ HEADERS += \
     src/model/window_title.h \
     src/model/session.h \
     src/model/session_registry.h \
+    src/model/kept_scrollback.h \
     src/platform/platform.h \
     src/platform/secret_store.h \
     src/ssh/pty_session.h \

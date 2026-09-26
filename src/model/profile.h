@@ -109,6 +109,15 @@ struct bssh_profile_t {
 	int font_zoom;
 
 	/*
+	 * Whether this host's scrollback is kept across restarts
+	 * (bssh_kept_scrollback). Off unless asked for, per host -- the
+	 * holder's answer of 2026-09-26 -- because it writes whatever was on
+	 * screen to disk, and a password typed into the wrong prompt is
+	 * whatever was on screen.
+	 */
+	bool keep_scrollback;
+
+	/*
 	 * The preset this host follows (sec 10.1), and the fields where it
 	 * disagrees. Overrides are sparse on purpose: a field absent here
 	 * takes the preset's value, which is what makes editing a preset
@@ -157,7 +166,7 @@ struct bssh_profile_t {
 
 	bssh_profile_t()
 	    : id(0), port(22), has_stored_password(false), require_biometric(false),
-	      font_zoom(0), preset_id(0), local(false),
+	      font_zoom(0), keep_scrollback(false), preset_id(0), local(false),
 	      hold(false) {}
 
 	/*

@@ -5,8 +5,15 @@
 #include <QTimer>
 
 #include "model/conn_manager.h"
+#include "model/kept_scrollback.h"
+#include "model/profile_store.h"
 #include "model/session.h"
 #include "platform/platform.h"
+#include "term/emulator.h"
+#include "term/scrollback.h"
+
+#include <QDateTime>
+#include <QFileInfo>
 
 bssh_session_registry::bssh_session_registry(QObject *parent)
     : QObject(parent) {
@@ -21,9 +28,81 @@ bssh_session_registry::bssh_session_registry(QObject *parent)
 	qRegisterMetaType<bssh_session *>();
 }
 
+namespace {
+
+/* Where kept scrollback lives: beside the hosts it belongs to. */
+QString kept_directory() {
+	const bssh_profile_store *store = bssh_profile_store::shared();
+	return store ? store->directory() : QString();
+}
+
+/* One line of plain text as cells, for the marker between old and new. */
+QList<bssh_cell_t> text_line(const QString &text) {
+	QList<bssh_cell_t> line;
+	for (const QChar ch : text) {
+		bssh_cell_t cell;
+		cell.ch = char32_t(ch.unicode());
+		cell.attrs = bssh_cell_t::BOLD;
+		line.append(cell);
+	}
+	return line;
+}
+
+/*
+ * The history as it stands, and the screen below it: what is on screen
+ * when a session closes has not scrolled into the history yet, and is
+ * the part most likely to be wanted. Not the alternate screen, which is a
+ * program's display (vim's, less's) rather than output, and trailing
+ * blank rows are left where they are.
+ */
+bssh_scrollback history_with_screen(const bssh_emulator *emulator) {
+	bssh_scrollback history = emulator->scrollback();
+	if (emulator->alternate_screen()) return history;
+
+	const bssh_screen &screen = emulator->screen();
+	QList<QList<bssh_cell_t>> rows;
+	for (int row = 0; row < screen.rows(); ++row) {
+		QList<bssh_cell_t> line;
+		for (int col = 0; col < screen.cols(); ++col) line.append(screen.cell(row, col));
+		while (!line.isEmpty() && line.last().ch == U' '
+		       && line.last().bg.kind == bssh_color_t::DEFAULT)
+			line.removeLast();
+		rows.append(line);
+	}
+	while (!rows.isEmpty() && rows.last().isEmpty()) rows.removeLast();
+
+	for (const QList<bssh_cell_t> &line : rows) history.push(line);
+	return history;
+}
+
+void keep(bssh_session *session) {
+	const bssh_profile_t &profile = session->profile();
+	if (!profile.keep_scrollback || profile.id == 0 || !session->emulator()) return;
+	bssh_save_kept_scrollback(profile.id, history_with_screen(session->emulator()),
+	                          kept_directory());
+}
+
+} /* namespace */
+
 bssh_session *bssh_session_registry::create(const bssh_profile_t &profile) {
 	bssh_session *session = new bssh_session(profile, this);
 	m_sessions.append(session);
+
+	/*
+	 * A host that keeps its scrollback gets it back before anything else
+	 * can arrive, with a line saying where the old ends -- so output from
+	 * yesterday is not read as output from now.
+	 */
+	if (profile.keep_scrollback && profile.id != 0) {
+		bssh_scrollback kept(session->emulator()->scrollback().max_lines());
+		if (bssh_load_kept_scrollback(profile.id, &kept, kept_directory()) && kept.count() > 0) {
+			const QDateTime when = QFileInfo(
+			        bssh_kept_scrollback_path(profile.id, kept_directory())).lastModified();
+			kept.push(text_line(QStringLiteral("-- kept from %1 --")
+			                            .arg(when.toString(QStringLiteral("yyyy-MM-dd HH:mm")))));
+			session->emulator()->restore_history(kept);
+		}
+	}
 
 	/*
 	 * A title or state change is a registry change, because both are
@@ -145,6 +224,9 @@ void bssh_session_registry::close(bssh_session *session) {
 	 */
 	emit session_closing(session);
 
+	/* Written down before it goes, for a host that keeps its scrollback. */
+	keep(session);
+
 	m_sessions.removeAll(session);
 
 	if (bssh_conn_manager *manager = m_managers.take(session)) {
@@ -155,6 +237,10 @@ void bssh_session_registry::close(bssh_session *session) {
 	session->deleteLater();
 
 	emit changed();
+}
+
+void bssh_session_registry::save_kept_scrollback() {
+	for (bssh_session *session : m_sessions) keep(session);
 }
 
 bssh_conn_manager *bssh_session_registry::conn_manager_for(bssh_session *session) const {

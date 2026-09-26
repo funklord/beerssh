@@ -1,4 +1,5 @@
 #include "model/profile_store.h"
+#include "model/kept_scrollback.h"
 
 #include <QSet>
 
@@ -328,6 +329,8 @@ void bssh_profile_store::load_profiles() {
 		profile.require_biometric =
 		        file.value(QStringLiteral("require_biometric"), false).toBool();
 		profile.font_zoom = file.value(QStringLiteral("font_zoom"), 0).toInt();
+		profile.keep_scrollback =
+		        file.value(QStringLiteral("keep_scrollback"), false).toBool();
 		profile.preset_id = id_for_slug(file.value(QStringLiteral("preset")).toString());
 
 		/*
@@ -535,6 +538,9 @@ bool bssh_profile_store::write_profiles() {
 		if (profile.font_zoom != 0) {
 			file.setValue(QStringLiteral("font_zoom"), profile.font_zoom);
 		}
+		if (profile.keep_scrollback) {
+			file.setValue(QStringLiteral("keep_scrollback"), true);
+		}
 		if (profile.preset_id != 0) {
 			file.setValue(QStringLiteral("preset"), m_slugs.value(profile.preset_id));
 		}
@@ -632,6 +638,13 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 		return 0;
 	}
 
+	/*
+	 * A host that does not keep its scrollback has none on disk: turning
+	 * the option off is a request to stop keeping it, and what was kept
+	 * goes with it rather than lying there until the option comes back.
+	 */
+	if (!stored.keep_scrollback) bssh_erase_kept_scrollback(stored.id, m_directory);
+
 	emit changed();
 	return stored.id;
 }
@@ -688,6 +701,9 @@ bool bssh_profile_store::remove(int id) {
 		emit changed();
 		return false;
 	}
+
+	/* And its kept scrollback, which is the host's as much as its row was. */
+	bssh_erase_kept_scrollback(id, m_directory);
 
 	/*
 	 * AFTER the write, and that ordering is the point.

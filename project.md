@@ -13719,7 +13719,25 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   The shortlist itself is settled; this half is not, and cannot be until
   Iosevka's 42 MB ships by asset pack (§9.4, M9).
 - Host groups/folders in addition to presets? (§10.5.)
-- Persist scrollback across restarts?
+- ~~Persist scrollback across restarts?~~ **DECIDED 2026-09-26 by the holder:
+  yes, opt-in per host -- and BUILT.** Recommended against as a default
+  and chosen as an option: scrollback is whatever was on screen, a password
+  typed at the wrong prompt and secrets in output included, so it is off
+  until a host asks. "Keep this host's scrollback after closing" in both
+  editors (the desktop one says "stored unencrypted" in the label and the
+  rest in its tooltip, because the dialog must fit 800x600).
+  `bssh_kept_scrollback` writes one compressed file per host under
+  `<config>/scrollback/`, owner-only, folder too; cells with their colours,
+  not hyperlinks, whose ids mean nothing outside one session. The registry
+  writes it when a session closes -- with the screen as it stood, which had
+  not scrolled off yet and is the part most wanted, unless a program had
+  the alternate screen up -- and on quit and on leaving the foreground,
+  since Android may end a backgrounded app unasked. A new session of the
+  host gets it back before any output, under a line reading "-- kept from
+  <date> --". Turning the option off, or deleting the host, deletes the
+  file. A file that does not decode whole restores nothing. Guarded by
+  `tool/sabotage/kept-scrollback.toml`, nine edits; one of two permission
+  calls was removed when each proved to hide the other.
 - ~~**How long may a session keep a password it authenticated with?**~~
   **DECIDED 2026-09-26 by the holder: for the session's life**, in memory
   only, as the code already did -- see *A password outlives the connect it

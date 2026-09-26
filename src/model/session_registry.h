@@ -67,6 +67,15 @@ public:
 
 	bssh_conn_manager *conn_manager_for(bssh_session *session) const;
 
+	/*
+	 * Writes down the scrollback of every session whose host keeps it
+	 * (bssh_kept_scrollback) -- for the moments a session may be lost
+	 * without being closed: the app quitting, and on a phone the app
+	 * going to the background, after which Android may end it unasked.
+	 * A session closed through close() is written down there.
+	 */
+	void save_kept_scrollback();
+
 	bssh_session *at(int index) const;
 	int index_of(bssh_session *session) const;
 

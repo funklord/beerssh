@@ -7,6 +7,7 @@
 #include "model/profile.h"
 
 class QCloseEvent;
+class QCheckBox;
 class QLineEdit;
 class QListWidget;
 class QSpinBox;
@@ -119,6 +120,7 @@ private:
 	QLineEdit *m_user;
 	QLineEdit *m_identity;
 	QLineEdit *m_jump;
+	QCheckBox *m_keep_scrollback = nullptr;
 	QLineEdit *m_session_name;
 	QListWidget *m_sessions;
 	/*

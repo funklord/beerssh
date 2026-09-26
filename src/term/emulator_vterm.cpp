@@ -2171,6 +2171,11 @@ const bssh_image_store &bssh_emulator::images() const {
 	return m_private->images;
 }
 
+void bssh_emulator::restore_history(const bssh_scrollback &kept) {
+	for (int i = 0; i < kept.count(); ++i)
+		m_private->scrollback.push(kept.line(i), kept.is_continuation(i));
+}
+
 void bssh_emulator::set_image_budget(qint64 bytes) {
 	m_private->images.set_memory_budget(bytes);
 }

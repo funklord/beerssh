@@ -76,6 +76,9 @@ public:
 	~bssh_profile_store() override;
 
 	bool is_open() const { return m_open; }
+
+	/* Where the store's files are, which is where a host's kept scrollback goes too. */
+	QString directory() const { return m_directory; }
 	QString last_error() const { return m_last_error; }
 
 	QList<bssh_profile_t> profiles() const;

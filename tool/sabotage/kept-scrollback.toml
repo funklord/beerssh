@@ -1,0 +1,75 @@
+# A host's scrollback kept across restarts, when the host asks for it
+# (project.md sec 10.2, the holder's answer of 2026-09-26). Opt-in
+# because it puts whatever was on screen on disk; each edit is one of the
+# ways that could leak, lose history, or keep what was meant to go.
+
+[[sabotage]]
+name = "a closing session writes nothing down"
+file = "src/model/session_registry.cpp"
+find = "\tkeep(session);\n\n\tm_sessions.removeAll(session);"
+replace = "\tm_sessions.removeAll(session);"
+expect = "a_host_that_keeps_its_scrollback_gets_it_back"
+
+# Only what had scrolled off: the last screenful, the part most wanted,
+# is lost.
+[[sabotage]]
+name = "the screen at close is not kept"
+file = "src/model/session_registry.cpp"
+find = "\tfor (const QList<bssh_cell_t> &line : rows) history.push(line);"
+replace = ""
+expect = "a_host_that_keeps_its_scrollback_gets_it_back"
+
+[[sabotage]]
+name = "a kept history is never put back"
+file = "src/model/session_registry.cpp"
+find = "\t\t\tsession->emulator()->restore_history(kept);"
+replace = ""
+expect = "a_host_that_keeps_its_scrollback_gets_it_back"
+
+# The file is left readable by others. One call, before the write: the
+# rename carries the mode across, measured by removing it.
+[[sabotage]]
+name = "the file is not made owner-only while written"
+file = "src/model/kept_scrollback.cpp"
+find = "\tfile.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);"
+replace = ""
+expect = "kept_scrollback_is_the_owners_alone"
+
+# The folder is left open to others, listing which hosts keep history.
+[[sabotage]]
+name = "the kept-scrollback folder is left open"
+file = "src/model/kept_scrollback.cpp"
+find = "\tQFile::setPermissions(dir, QFileDevice::ReadOwner | QFileDevice::WriteOwner\n\t                            | QFileDevice::ExeOwner);"
+replace = ""
+expect = "kept_scrollback_is_the_owners_alone"
+
+# Turning the option off leaves the history on disk.
+[[sabotage]]
+name = "turning keep off keeps what was kept"
+file = "src/model/profile_store.cpp"
+find = "\tif (!stored.keep_scrollback) bssh_erase_kept_scrollback(stored.id, m_directory);"
+replace = ""
+expect = "a_host_that_keeps_its_scrollback_gets_it_back"
+
+[[sabotage]]
+name = "a deleted host's history outlives it"
+file = "src/model/profile_store.cpp"
+find = "\tbssh_erase_kept_scrollback(id, m_directory);"
+replace = ""
+expect = "a_host_that_keeps_its_scrollback_gets_it_back"
+
+# A file that will not decompress reads as an empty history rather than
+# as nothing.
+[[sabotage]]
+name = "a damaged file is taken as an empty history"
+file = "src/model/kept_scrollback.cpp"
+find = "\tif (raw.isEmpty() && !packed.isEmpty()) return false;"
+replace = ""
+expect = "kept_scrollback_refuses_what_it_did_not_write"
+
+[[sabotage]]
+name = "the desktop dialog does not save the choice"
+file = "src/ui/session_dialog.cpp"
+find = "\tprofile.keep_scrollback = m_keep_scrollback->isChecked();"
+replace = ""
+expect = "both_editors_carry_the_keep_scrollback_choice"

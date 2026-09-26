@@ -96,6 +96,7 @@ SOURCES += \
     ../src/model/window_title.cpp \
     ../src/model/session.cpp \
     ../src/model/session_registry.cpp \
+    ../src/model/kept_scrollback.cpp \
     ../src/ui/font_picker.cpp \
     ../src/ui/form_wrap.cpp \
     ../src/ui/password_prompt.cpp \
@@ -183,6 +184,7 @@ HEADERS += \
     ../src/model/window_title.h \
     ../src/model/session.h \
     ../src/model/session_registry.h \
+    ../src/model/kept_scrollback.h \
     ../src/ui/font_picker.h \
     ../src/ui/form_wrap.h \
     ../src/ui/password_prompt.h \

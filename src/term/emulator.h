@@ -294,6 +294,13 @@ public:
 	const bssh_scrollback &scrollback() const;
 
 	/*
+	 * Puts a kept history in front of whatever this terminal has scrolled
+	 * off so far (bssh_kept_scrollback), for a host that keeps it. Called
+	 * as the session is made, before any output.
+	 */
+	void restore_history(const bssh_scrollback &kept);
+
+	/*
 	 * Drop the history, announcing it (sec 6.4). The REMOTE can already
 	 * ask for this -- ED 3 is what `clear` sends -- and nothing local
 	 * could, so a user who wanted their scrollback gone had to hope the

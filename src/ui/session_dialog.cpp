@@ -21,6 +21,7 @@
 #include <QLabel>
 
 #include "ui/wrapped_note.h"
+#include <QCheckBox>
 #include <QLineEdit>
 #include <QFormLayout>
 #include <QListWidget>
@@ -315,6 +316,22 @@ QWidget *bssh_session_dialog::build_session_page() {
 	        page);
 	destination->addRow(keys_note);
 
+	/*
+	 * Per host and off unless asked for (bssh_kept_scrollback): the
+	 * holder's answer of 2026-09-26. The label says the one thing a user
+	 * must know before ticking it -- that it goes to disk unencrypted --
+	 * and the rest is the tooltip's: this dialog has to fit an 800x600
+	 * window, and a paragraph under the box did not.
+	 */
+	m_keep_scrollback = new QCheckBox(
+	        QStringLiteral("Keep scrollback after closing (stored unencrypted)"), page);
+	m_keep_scrollback->setObjectName(QStringLiteral("keep_scrollback"));
+	m_keep_scrollback->setToolTip(
+	        QStringLiteral("Saved in your settings folder, readable only by you -- including "
+	                        "anything that was on screen, a password typed at the wrong "
+	                        "prompt too."));
+	destination->addRow(m_keep_scrollback);
+
 	layout->addLayout(destination);
 
 	/*
@@ -497,6 +514,7 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	profile.port = static_cast<quint16>(m_port->value());
 	profile.identity_file = m_identity->text().trimmed();
 	profile.proxy_jump = m_jump->text().trimmed();
+	profile.keep_scrollback = m_keep_scrollback->isChecked();
 
 	/*
 	 * An unnamed host is named after itself, as the touch editor has
@@ -539,6 +557,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 	m_port->setValue(profile.port);
 	m_identity->setText(profile.identity_file);
 	m_jump->setText(profile.proxy_jump);
+	m_keep_scrollback->setChecked(profile.keep_scrollback);
 
 	if (m_font_picker) {
 		const QJsonObject resolved = resolved_settings(profile);
