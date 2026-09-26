@@ -156,6 +156,19 @@ void bssh_app_settings::set_arrangement(arrangement_t arrangement) {
 	       QString::fromLatin1(BSSH_ARRANGEMENT_KEYS[int(arrangement)]));
 }
 
+int bssh_app_settings::image_history_mb() const {
+	const QVariant stored = value(QStringLiteral("terminal/image_history_mb"), QVariant());
+	bool ok = false;
+	const int megabytes = stored.toInt(&ok);
+	if (!stored.isValid() || !ok) return 32;
+	return qBound(0, megabytes, BSSH_MAX_IMAGE_HISTORY_MB);
+}
+
+void bssh_app_settings::set_image_history_mb(int megabytes) {
+	store(QStringLiteral("terminal/image_history_mb"),
+	       qBound(0, megabytes, BSSH_MAX_IMAGE_HISTORY_MB));
+}
+
 bssh_app_settings::tab_position_t bssh_app_settings::tab_position() const {
 	const QString text = value(QStringLiteral("layout/tabs_tiled"), QString()).toString();
 	for (int i = 0; i < BSSH_TAB_POSITION_COUNT; ++i) {

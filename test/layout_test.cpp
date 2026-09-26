@@ -6,6 +6,7 @@
 #include <QLineEdit>
 #include <QKeySequenceEdit>
 #include <QSlider>
+#include <QSpinBox>
 #include <QAction>
 #include <QComboBox>
 #include <QFormLayout>
@@ -4198,6 +4199,89 @@ void layout_test::a_closed_window_writes_down_its_shape() {
 	store->save_layout(was);
 	store->remove(upper.id);
 	store->remove(lower.id);
+}
+
+void layout_test::the_picture_history_setting_reaches_every_terminal() {
+	const int was = bssh_app_settings().image_history_mb();
+	bssh_app_settings().set_image_history_mb(8);
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		const qint64 mb = 1024 * 1024;
+		bssh_session *open = registry->create(named(QStringLiteral("open")));
+		window.adopt_session(open);
+		QCOMPARE(open->emulator()->images().memory_budget(), 8 * mb);
+
+		/*
+		 * Through the page's own control, then applied to a terminal that
+		 * is already open -- the setting is per terminal, so it has to
+		 * reach the ones that exist, not only the next.
+		 */
+		bssh_app_settings_view *page = window.findChild<bssh_app_settings_view *>();
+		QVERIFY(page);
+		QSpinBox *control = page->findChild<QSpinBox *>(QStringLiteral("image_history"));
+		QVERIFY2(control && !control->isHidden(), "the settings page offers no picture history");
+		control->setValue(64);
+		QCOMPARE(bssh_app_settings().image_history_mb(), 64);
+
+		window.apply_device_settings();
+		QCOMPARE(open->emulator()->images().memory_budget(), 64 * mb);
+
+		/*
+		 * A terminal no window has shown -- a background tab's case --
+		 * has the setting too: pictures land in it whether or not anything
+		 * draws it, and a window re-applies settings only when it builds
+		 * a view.
+		 */
+		bssh_session *later = registry->create(named(QStringLiteral("later")));
+		QCOMPARE(later->emulator()->images().memory_budget(), 64 * mb);
+	}
+
+	bssh_app_settings().set_image_history_mb(was);
+}
+
+void layout_test::a_host_remembers_its_zoom() {
+	bssh_profile_store *store = bssh_profile_store::shared();
+	QVERIFY(store && store->is_open());
+
+	bssh_profile_t host = named(QStringLiteral("zoomed"));
+	host.host = QStringLiteral("zoomed.example");
+	host.font_zoom = 3;
+	host.id = store->save(host);
+	QVERIFY(host.id);
+
+	/* Written down and read back, as a restart would. */
+	QCOMPARE(store->profile(host.id).font_zoom, 3);
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		/* A new session of the host opens where it was left. */
+		bssh_session *session = registry->create(store->profile(host.id));
+		window.adopt_session(session);
+		QCOMPARE(session->font_zoom(), 3);
+
+		/*
+		 * Zoomed again, and the host remembers -- after the pause, not on
+		 * every step of the gesture.
+		 */
+		session->set_font_zoom(-2);
+		QCOMPARE(store->profile(host.id).font_zoom, 3);
+		QTRY_COMPARE_WITH_TIMEOUT(store->profile(host.id).font_zoom, -2, 3000);
+	}
+
+	store->remove(host.id);
 }
 
 void layout_test::a_pane_dropped_back_changes_nothing() {

@@ -14,6 +14,7 @@ class QKeySequenceEdit;
 class QLabel;
 class QPushButton;
 class QSlider;
+class QSpinBox;
 class QLineEdit;
 class QComboBox;
 
@@ -132,6 +133,7 @@ private:
 	QComboBox *m_scrollbar;
 	QComboBox *m_arrangement;
 	QComboBox *m_tab_position = nullptr;
+	QSpinBox *m_image_history = nullptr;
 	QSlider *m_snap_radius;
 	QLabel *m_snap_radius_value;
 	QComboBox *m_status_line;

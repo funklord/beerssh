@@ -240,6 +240,24 @@ void profile_store_test::layout_round_trips() {
 	QCOMPARE(restored.shape, QStringLiteral("V(%1,%2)").arg(first).arg(second));
 }
 
+void profile_store_test::a_hosts_zoom_is_written_to_disk() {
+	QTemporaryDir dir;
+	const QString path = dir.filePath(QStringLiteral("test.db"));
+
+	int id = 0;
+	{
+		bssh_profile_store store(path);
+		bssh_profile_t host = make_profile(QStringLiteral("zoomed"), QStringLiteral("z.example"));
+		host.font_zoom = -4;
+		id = store.save(host);
+		QVERIFY(id);
+	}
+
+	/* Another store on the same files is the next start (sec 9.5). */
+	bssh_profile_store reopened(path);
+	QCOMPARE(reopened.profile(id).font_zoom, -4);
+}
+
 void profile_store_test::layout_forgets_deleted_hosts() {
 	QTemporaryDir dir;
 	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));

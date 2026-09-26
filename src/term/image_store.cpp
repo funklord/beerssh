@@ -7,6 +7,10 @@
  * running all day cannot quietly become the reason the app is killed
  * (sec 5.1). It is a per-session budget: the count that matters to
  * Android is the process total, and sessions are what multiply.
+ *
+ * Only the starting value now: the user sets it per terminal on the
+ * settings page ("Picture history", the holder's answer of 2026-09-26),
+ * whose own default is this same 32.
  */
 static const qint64 BSSH_DEFAULT_IMAGE_BUDGET = 32 * 1024 * 1024;
 

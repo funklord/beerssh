@@ -327,6 +327,7 @@ void bssh_profile_store::load_profiles() {
 		        file.value(QStringLiteral("has_password"), false).toBool();
 		profile.require_biometric =
 		        file.value(QStringLiteral("require_biometric"), false).toBool();
+		profile.font_zoom = file.value(QStringLiteral("font_zoom"), 0).toInt();
 		profile.preset_id = id_for_slug(file.value(QStringLiteral("preset")).toString());
 
 		/*
@@ -530,6 +531,9 @@ bool bssh_profile_store::write_profiles() {
 		}
 		if (profile.require_biometric) {
 			file.setValue(QStringLiteral("require_biometric"), true);
+		}
+		if (profile.font_zoom != 0) {
+			file.setValue(QStringLiteral("font_zoom"), profile.font_zoom);
 		}
 		if (profile.preset_id != 0) {
 			file.setValue(QStringLiteral("preset"), m_slugs.value(profile.preset_id));

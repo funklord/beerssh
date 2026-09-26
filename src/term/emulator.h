@@ -280,6 +280,14 @@ public:
 	const bssh_image_store &images() const;
 
 	/*
+	 * How many bytes of decoded image this terminal keeps once pictures
+	 * have scrolled off (bssh_image_store::set_memory_budget). The user's,
+	 * from the settings page: "a settable static amount per terminal",
+	 * the holder's answer of 2026-09-26.
+	 */
+	void set_image_budget(qint64 bytes);
+
+	/*
 	 * Lines that have scrolled off the top (sec 7). The view reads this
 	 * to render a scrolled-back position; nothing else writes it.
 	 */

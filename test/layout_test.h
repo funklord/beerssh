@@ -259,6 +259,12 @@ private slots:
 	void a_shape_survives_being_written_down();
 	void a_restored_window_comes_back_in_its_shape();
 	void a_closed_window_writes_down_its_shape();
+
+	/* Picture history per terminal, set by hand (sec 7.1, 2026-09-26). */
+	void the_picture_history_setting_reaches_every_terminal();
+
+	/* A host remembers the zoom it was left at (sec 9.5, 2026-09-26). */
+	void a_host_remembers_its_zoom();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();
 	void a_window_that_loses_its_last_session_closes();
 	void the_pane_grip_arms_a_drag();

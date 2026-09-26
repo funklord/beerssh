@@ -34,6 +34,13 @@
  */
 const int BSSH_TEXT_BRIGHTNESS_MIN = 40;
 
+/*
+ * The most image history a terminal may be given, in MB: a gigabyte of
+ * decoded pictures per terminal is past anything useful and short of what
+ * a typo could otherwise ask for.
+ */
+const int BSSH_MAX_IMAGE_HISTORY_MB = 1024;
+
 class bssh_app_settings {
 public:
 	/*
@@ -150,6 +157,16 @@ public:
 	 * a pane, so it never shows a tab bar to place. Top, as it always
 	 * was, until chosen.
 	 */
+	/*
+	 * How much decoded image each terminal keeps after pictures scroll off
+	 * the top, in MB (sec 7.1). What is on screen is never dropped; this
+	 * bounds the history, oldest first. Per terminal and set by hand -- the
+	 * holder's answer of 2026-09-26, with loading pictures back on demand
+	 * named as the better thing later. 32 until changed, 0 keeps none.
+	 */
+	int image_history_mb() const;
+	void set_image_history_mb(int megabytes);
+
 	enum tab_position_t { TABS_TOP, TABS_BOTTOM, TABS_LEFT, TABS_RIGHT };
 	tab_position_t tab_position() const;
 	void set_tab_position(tab_position_t position);

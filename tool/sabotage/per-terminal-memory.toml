@@ -1,0 +1,43 @@
+# Two things a terminal keeps that the holder asked to be the user's
+# (2026-09-26): how much picture history it holds (sec 7.1), set by hand
+# per terminal, and the zoom its host was left at (sec 9.5).
+
+# The setting reaches only terminals opened after it changed.
+[[sabotage]]
+name = "a changed picture history misses the terminals already open"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (session->emulator()) session->emulator()->set_image_budget(images);"
+replace = ""
+expect = "the_picture_history_setting_reaches_every_terminal"
+
+# And a terminal no window has shown starts at the built-in 32.
+[[sabotage]]
+name = "a new terminal ignores the picture history setting"
+file = "src/model/session.cpp"
+find = "\tm_emulator->set_image_budget(qint64(bssh_app_settings().image_history_mb()) * 1024 * 1024);"
+replace = ""
+expect = "the_picture_history_setting_reaches_every_terminal"
+
+# A host's zoom is stored and never used.
+[[sabotage]]
+name = "a new session ignores its host's zoom"
+file = "src/model/session.cpp"
+find = "\tset_font_zoom(profile.font_zoom);"
+replace = ""
+expect = "a_host_remembers_its_zoom"
+
+# Zooming is never written back to the host.
+[[sabotage]]
+name = "a zoom is not written back"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tstored.font_zoom = session->font_zoom();"
+replace = ""
+expect = "a_host_remembers_its_zoom"
+
+# Written back, but not to disk.
+[[sabotage]]
+name = "a host's zoom is not saved in hosts.ini"
+file = "src/model/profile_store.cpp"
+find = "\t\t\tfile.setValue(QStringLiteral(\"font_zoom\"), profile.font_zoom);"
+replace = ""
+expect = "a_hosts_zoom_is_written_to_disk"

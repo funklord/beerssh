@@ -99,6 +99,16 @@ struct bssh_profile_t {
 	bool require_biometric;
 
 	/*
+	 * The zoom this host was last left at (sec 9.5), in the same steps a
+	 * session's Ctrl+wheel and pinch count. Remembered per host on the
+	 * holder's answer of 2026-09-26: "a session that is always read
+	 * outdoors is a host preference wearing a gesture's clothes". A
+	 * session starts from it and writes it back; 0 is the host's font as
+	 * resolved, and is what a host never zoomed has.
+	 */
+	int font_zoom;
+
+	/*
 	 * The preset this host follows (sec 10.1), and the fields where it
 	 * disagrees. Overrides are sparse on purpose: a field absent here
 	 * takes the preset's value, which is what makes editing a preset
@@ -147,7 +157,7 @@ struct bssh_profile_t {
 
 	bssh_profile_t()
 	    : id(0), port(22), has_stored_password(false), require_biometric(false),
-	      preset_id(0), local(false),
+	      font_zoom(0), preset_id(0), local(false),
 	      hold(false) {}
 
 	/*

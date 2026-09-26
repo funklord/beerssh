@@ -1836,8 +1836,12 @@ void bssh_main_window::apply_device_settings() {
 	 * to be open would be one they had to set again by switching tabs.
 	 */
 	const bool caps = settings.caps_as_ctrl();
+	const qint64 images = qint64(settings.image_history_mb()) * 1024 * 1024;
 	for (bssh_session *session : m_registry->sessions()) {
 		if (session->input_router()) session->input_router()->set_caps_as_ctrl(caps);
+
+		/* Picture history, per terminal (sec 7.1), for the same reason. */
+		if (session->emulator()) session->emulator()->set_image_budget(images);
 	}
 
 	/*
@@ -2645,6 +2649,31 @@ void bssh_main_window::wire_session(bssh_session *session) {
 	 */
 	if (session->input_router()) {
 		session->input_router()->set_caps_as_ctrl(bssh_app_settings().caps_as_ctrl());
+	}
+
+	/*
+	 * And the zoom goes back to the host (sec 9.5), so the next session
+	 * of it opens where this one was left. After a pause rather than on
+	 * every step: a pinch is a stream of steps, and each write is the
+	 * whole hosts file and a reload of every list that shows one.
+	 *
+	 * Read fresh from the store and only the zoom changed, because the
+	 * session's copy of its profile may be older than an edit made
+	 * since. A session with no profile behind it -- a local shell, a
+	 * command-line target -- has nowhere to keep it.
+	 */
+	if (session->profile().id != 0) {
+		QTimer *remember = new QTimer(session);
+		remember->setSingleShot(true);
+		remember->setInterval(800);
+		connect(session, &bssh_session::font_zoom_changed, remember,
+		         QOverload<>::of(&QTimer::start));
+		connect(remember, &QTimer::timeout, this, [this, session] {
+			bssh_profile_t stored = m_profile_store->profile(session->profile().id);
+			if (!stored.is_valid() || stored.font_zoom == session->font_zoom()) return;
+			stored.font_zoom = session->font_zoom();
+			m_profile_store->save(stored);
+		});
 	}
 
 	/*

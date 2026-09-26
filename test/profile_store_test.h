@@ -33,6 +33,7 @@ private slots:
 	void survives_being_reopened();
 	void schema_has_nowhere_to_put_a_secret();
 	void layout_round_trips();
+	void a_hosts_zoom_is_written_to_disk();
 	void layout_forgets_deleted_hosts();
 	void an_old_database_gains_the_layout_table();
 	void the_stored_password_flag_round_trips();

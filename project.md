@@ -8555,11 +8555,16 @@ question already settled about zooming stays settled -- the session owns
 the number, the clamp lives in `rebuild_font`, and the value is not
 persisted. **This adds an input route and decides nothing else.**
 
-**The other half of the old paragraph is untouched and still open:**
-whether the zoom should PERSIST. "Not persisted" is a choice a phone
-might reasonably want reversed -- a session that is always read outdoors
-is a host preference wearing a gesture's clothes -- and that remains the
-holder's.
+**The zoom persists per host -- [DECIDED and BUILT 2026-09-26].** The
+holder chose "remember per host" over "forget on close". Not into the
+preset or its editor, which is what the paragraph above declined: a
+host's `font_zoom` in `hosts.ini` is the zoom it was last left at, in
+the same steps the gestures count, and a new session of the host starts
+from it (`bssh_session`'s constructor). The window writes a session's
+zoom back to the host 800 ms after the last step, reading the host fresh
+from the store so a stale copy cannot undo an edit made since -- a pinch
+is a stream of steps, and each write is the whole hosts file. A local
+shell or a command-line target has no host to keep it in.
 
 **Accumulating the incremental factor rather than reading the gesture's
 total is what makes it testable, and that is not a compromise.** Reading
@@ -13387,7 +13392,8 @@ background).
    and then held for the rest of it, by the same line that holds a typed one.
    See *A password outlives the connect it was typed for* below.
 
-**A password outlives the connect it was typed for — [OPEN, and the holder's]**
+**A password outlives the connect it was typed for — [DECIDED 2026-09-26: it
+does, for the session's life]**
 
 **Measured 2026-09-21 by reading the code, not by inference.**
 `bssh_session::supply_password` assigns `m_password` (`src/model/session.cpp`),
@@ -13396,35 +13402,21 @@ and the `password_required` handler replays it. So a password-authenticated
 session reconnects without asking, for as long as the session object lives, and
 a *stored* password goes down the same road: the window hands it to
 `supply_password` too, so after the first replay it is in process memory
-exactly like a typed one.
+exactly like a typed one. Two claims in this document said otherwise, M5's and
+M10's, both struck above.
 
-**Two claims in this document say otherwise**, both struck above: M5's "consumed
-at first connect and deliberately not kept ... could only reconnect as far as
-asking again", and M10's "replayed on reconnect instead of being held in memory
-all session". The behaviour half of both is false.
+**The holder chose what the code does**: keep it until the session closes,
+in memory only and never written to disk. §5.3's reconnect after a drop is
+a core requirement, and a reconnect that stops to ask for a password at
+3am is not one. The alternative offered -- discard after connecting, and
+prompt again unless the password is in the keyring -- was declined for
+that reason. The code's own comment already argued the narrower half:
+the password is kept only once it has actually been needed.
 
-**The code is not careless about it, which is why this is a question rather
-than a bug.** Its comment argues the narrower rule deliberately: *"A reconnect
-can answer for itself if a password was given before; a first connection has to
-ask. Keeping the password only once it has actually been needed is narrower
-than keeping it always, which is what this did before keys were tried."* That
-reads like a considered change the summaries never caught up with — the shape
-§16 keeps finding.
-
-**What is genuinely open, and it is a security posture rather than a defect.**
-Seamless reconnect after a drop (§5.3's whole point) and not holding a
-credential for a session's lifetime are in direct tension, and §11 owns the
-trade. Three things would decide it: whether a reconnect may reuse a typed
-password at all; if so, for how long — the session, a bounded window, or one
-retry; and whether a `QString` is an acceptable home for it, since it is not
-wiped on destruction and Qt may have copied it.
-
-**Not resolved here on purpose.** `working-practice.md` asks that a
-document-versus-code disagreement be flagged rather than settled in either
-direction, and this is the case it describes: implementing the document would
-remove a reconnect that works, and amending the document would record an
-exposure window as intent. The third answer neither branch contains is the one
-worth having.
+**What stays open is small and is not the policy**: a `QString` is not
+wiped on destruction and Qt may have copied it, so "memory only" means
+"until the allocator reuses it". Whether that wants a zeroing container
+is §11's to decide if it ever matters.
 8. **M7 – Sessions & tabs.** `bssh_session_registry` + session/view separation,
    tab bar, OSC titles (and desktop window title), per-tab status, layout
    persistence. *(Do this before splits — the registry is the foundation.)*
@@ -13728,20 +13720,27 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   Iosevka's 42 MB ships by asset pack (§9.4, M9).
 - Host groups/folders in addition to presets? (§10.5.)
 - Persist scrollback across restarts?
-- **How long may a session keep a password it authenticated with?** The code
-  keeps it for the session's lifetime and replays it on reconnect; two
-  milestone lines said it was discarded. Opened 2026-09-21 — see *A password
-  outlives the connect it was typed for* in §14.
+- ~~**How long may a session keep a password it authenticated with?**~~
+  **DECIDED 2026-09-26 by the holder: for the session's life**, in memory
+  only, as the code already did -- see *A password outlives the connect it
+  was typed for* in §14.
 - Icon and branding direction (§0.1), which the placeholder in §12.2 is waiting
   on.
-- **Is the image budget per SESSION or per PROCESS?** §7.1 decided 32 MB of
-  decoded image per session, and `image_store.cpp` says in the same breath
-  that "the count that matters to Android is the process total, and sessions
-  are what multiply". §8.7's column then made every session a live pane on a
-  phone rather than converting most to tabs, so the multiplier grew after the
-  number was chosen. `set_memory_budget` exists and has no caller. Opened
-  2026-09-21.
-- **Should a session's zoom PERSIST?** §9.5 records "not persisted" as a
+- ~~**Is the image budget per SESSION or per PROCESS?**~~ **DECIDED
+  2026-09-26 by the holder: per terminal, and the user's to set.** Asked why
+  it is a hard limit at all -- it never removes a picture on screen, only the
+  history kept after pictures scroll off -- the holder answered: "Sounds like
+  we need the ability to dynamically load and unload these, but for now have
+  a settable static amount per terminal." BUILT as "Picture history" on the
+  Terminal settings page, 0-1024 MB, default the old 32, applied to every
+  session from the moment it is created and re-applied when it changes --
+  `set_memory_budget` has its caller. **Open, and the holder's direction:**
+  loading scrolled-off pictures back on demand instead of dropping them, so
+  the bound is on what is resident rather than on what is remembered. That
+  wants the decoded images spillable and re-decodable, which nothing does
+  today.
+- ~~**Should a session's zoom PERSIST?**~~ **DECIDED 2026-09-26 by the
+  holder: per host, and built** -- see §9.5. §9.5 recorded "not persisted" as a
   choice a phone might reasonably want reversed -- "a session that is always
   read outdoors is a host preference wearing a gesture's clothes". Pinch-to-
   zoom landed 2026-09-22 and deliberately left this half alone: it added an

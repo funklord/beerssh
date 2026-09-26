@@ -6,6 +6,7 @@
 #include <QCheckBox>
 #include <QHBoxLayout>
 #include <QSlider>
+#include <QSpinBox>
 #include <QComboBox>
 #include <QFormLayout>
 #include <QKeySequenceEdit>
@@ -653,6 +654,25 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	        this);
 	if (on_this_page(SECTION_TERMINAL, paste_note)) form->addRow(paste_note);
 
+	/*
+	 * How much picture history each terminal keeps (sec 7.1). A number the
+	 * user sets, per terminal, as the holder asked on 2026-09-26.
+	 */
+	m_image_history = new QSpinBox(this);
+	m_image_history->setObjectName(QStringLiteral("image_history"));
+	m_image_history->setRange(0, BSSH_MAX_IMAGE_HISTORY_MB);
+	m_image_history->setSingleStep(8);
+	m_image_history->setSuffix(QStringLiteral(" MB"));
+	if (on_this_page(SECTION_TERMINAL, m_image_history))
+		form->addRow(QStringLiteral("Picture history"), m_image_history);
+
+	QLabel *image_note = bssh_wrapped_note(
+	        QStringLiteral("Pictures a program draws in the terminal stay in its "
+	                        "scrollback until each terminal holds this much; then "
+	                        "the oldest go. What is on screen is always kept."),
+	        this);
+	if (on_this_page(SECTION_TERMINAL, image_note)) form->addRow(image_note);
+
 	m_caps_as_ctrl = new QCheckBox(QStringLiteral("Caps Lock sends Ctrl"), this);
 	m_caps_as_ctrl->setObjectName(QStringLiteral("caps_as_ctrl"));
 	m_caps_as_ctrl->setToolTip(
@@ -1086,6 +1106,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 
 	const int arrangement_index = m_arrangement->findData(int(settings.arrangement()));
 	m_arrangement->setCurrentIndex(arrangement_index < 0 ? 0 : arrangement_index);
+	m_image_history->setValue(settings.image_history_mb());
 	const int tabs_index = m_tab_position->findData(int(settings.tab_position()));
 	m_tab_position->setCurrentIndex(tabs_index < 0 ? 0 : tabs_index);
 	m_snap_radius->setValue(settings.column_snap_radius());
@@ -1156,6 +1177,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 			s.set_arrangement(bssh_app_settings::arrangement_t(
 			        m_arrangement->currentData().toInt()));
 		});
+	});
+	connect(m_image_history, &QSpinBox::valueChanged, this, [this](int value) {
+		commit([value](bssh_app_settings &s) { s.set_image_history_mb(value); });
 	});
 	connect(m_tab_position, &QComboBox::currentIndexChanged, this, [this] {
 		commit([this](bssh_app_settings &s) {

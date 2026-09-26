@@ -4,6 +4,7 @@
 #include "term/emulator.h"
 #include "term/term_features.h"
 #include "model/preset.h"
+#include "model/app_settings.h"
 
 bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
     : QObject(parent),
@@ -26,6 +27,23 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 	 */
 	m_emulator = new bssh_emulator(m_cols, m_rows, this);
 	m_input_router = new bssh_input_router(m_emulator, this);
+
+	/*
+	 * Where this host was last left (sec 9.5), bounded like any other
+	 * step. Before anything connects to this object, so it is a starting
+	 * value and not a change anybody is told about.
+	 */
+	set_font_zoom(profile.font_zoom);
+
+	/*
+	 * The picture history the user set per terminal (sec 7.1), from the
+	 * start and here rather than in a window: output -- pictures included
+	 * -- lands in the emulator whether or not anything shows the session,
+	 * so a terminal opened as a background tab would otherwise hold the
+	 * built-in amount until something happened to rebuild a view of it.
+	 * A window re-applies it to every session when the setting changes.
+	 */
+	m_emulator->set_image_budget(qint64(bssh_app_settings().image_history_mb()) * 1024 * 1024);
 
 	connect(m_emulator, &bssh_emulator::bell, this, [this] {
 		/*

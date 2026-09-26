@@ -2171,6 +2171,10 @@ const bssh_image_store &bssh_emulator::images() const {
 	return m_private->images;
 }
 
+void bssh_emulator::set_image_budget(qint64 bytes) {
+	m_private->images.set_memory_budget(bytes);
+}
+
 void bssh_emulator::set_features(const bssh_term_features_t &features) {
 	m_private->features = features;
 }
