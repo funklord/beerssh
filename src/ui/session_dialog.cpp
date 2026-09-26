@@ -324,13 +324,33 @@ QWidget *bssh_session_dialog::build_session_page() {
 	 * window, and a paragraph under the box did not.
 	 */
 	m_keep_scrollback = new QCheckBox(
-	        QStringLiteral("Keep scrollback after closing (stored unencrypted)"), page);
+	        QStringLiteral("Keep scrollback (stored unencrypted)"), page);
 	m_keep_scrollback->setObjectName(QStringLiteral("keep_scrollback"));
 	m_keep_scrollback->setToolTip(
-	        QStringLiteral("Saved in your settings folder, readable only by you -- including "
-	                        "anything that was on screen, a password typed at the wrong "
-	                        "prompt too."));
-	destination->addRow(m_keep_scrollback);
+	        QStringLiteral("Kept after closing, in your settings folder and readable only "
+	                        "by you -- including anything that was on screen, a password "
+	                        "typed at the wrong prompt too."));
+
+	/*
+	 * Beside it rather than under it: both are "what this host does
+	 * beyond connecting", and the dialog has width to spare and no height
+	 * -- a second row took it past 600 pixels.
+	 *
+	 * Only where the platform can do it (sec 5.5): a box that keeps nothing
+	 * awake is a promise the app cannot keep, the rule the fingerprint box
+	 * follows.
+	 */
+	QHBoxLayout *keeps = new QHBoxLayout();
+	keeps->addWidget(m_keep_scrollback);
+	if (bssh_platform::instance() && bssh_platform::instance()->can_inhibit_sleep()) {
+		m_keep_awake = new QCheckBox(QStringLiteral("Keep the computer awake"), page);
+		m_keep_awake->setObjectName(QStringLiteral("keep_awake"));
+		m_keep_awake->setToolTip(QStringLiteral(
+		        "While this host is connected, the computer does not go to sleep."));
+		keeps->addWidget(m_keep_awake);
+	}
+	keeps->addStretch(1);
+	destination->addRow(keeps);
 
 	layout->addLayout(destination);
 
@@ -515,6 +535,7 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 	profile.identity_file = m_identity->text().trimmed();
 	profile.proxy_jump = m_jump->text().trimmed();
 	profile.keep_scrollback = m_keep_scrollback->isChecked();
+	if (m_keep_awake) profile.keep_awake = m_keep_awake->isChecked();
 
 	/*
 	 * An unnamed host is named after itself, as the touch editor has
@@ -558,6 +579,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 	m_identity->setText(profile.identity_file);
 	m_jump->setText(profile.proxy_jump);
 	m_keep_scrollback->setChecked(profile.keep_scrollback);
+	if (m_keep_awake) m_keep_awake->setChecked(profile.keep_awake);
 
 	if (m_font_picker) {
 		const QJsonObject resolved = resolved_settings(profile);

@@ -3648,6 +3648,13 @@ void bssh_main_window::on_registry_changed() {
 	bssh_platform::instance()->set_session_count(live);
 	bssh_platform::instance()->set_keep_alive(live > 0);
 
+	/*
+	 * And kept awake while a host that asks for it is connected (sec 5.5).
+	 * Asked of the whole registry, not of this window: a session in another
+	 * window is still a build that a sleep would drop.
+	 */
+	bssh_platform::instance()->set_sleep_inhibited(m_registry->keeps_awake());
+
 	if (m_shown.isEmpty()) {
 		detach_session();
 		m_pages->setCurrentIndex(0);

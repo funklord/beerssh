@@ -1,0 +1,43 @@
+# A connected host that asks keeps the computer awake (project.md sec
+# 5.5, the holder's answer of 2026-09-26: a per-host toggle, off by
+# default).
+
+# Every live session keeps the computer awake, asked or not.
+[[sabotage]]
+name = "a host that did not ask keeps the computer awake"
+file = "src/model/session_registry.cpp"
+find = "\t\tif (session->profile().keep_awake && session->is_live()) return true;"
+replace = "\t\tif (session->is_live()) return true;"
+expect = "only_a_connected_keep_awake_host_keeps_the_computer_awake"
+
+# A host that asked keeps it awake whether or not anything is connected.
+[[sabotage]]
+name = "a host that is not connected keeps the computer awake"
+file = "src/model/session_registry.cpp"
+find = "\t\tif (session->profile().keep_awake && session->is_live()) return true;"
+replace = "\t\tif (session->profile().keep_awake) return true;"
+expect = "only_a_connected_keep_awake_host_keeps_the_computer_awake"
+
+# The window never asks the platform.
+[[sabotage]]
+name = "the window never asks to keep the computer awake"
+file = "src/ui/main_window.cpp"
+find = "\tbssh_platform::instance()->set_sleep_inhibited(m_registry->keeps_awake());"
+replace = ""
+expect = "a_connected_keep_awake_host_holds_off_sleep"
+
+# The platform is asked on every registry change -- every line of output
+# taking and dropping an inhibitor.
+[[sabotage]]
+name = "the platform is asked again for the same answer"
+file = "src/platform/platform.cpp"
+find = "\tif (inhibit == m_sleep_inhibited) return;"
+replace = ""
+expect = "keeping_awake_is_asked_only_on_a_change"
+
+[[sabotage]]
+name = "keep awake is not saved in hosts.ini"
+file = "src/model/profile_store.cpp"
+find = "\t\t\tfile.setValue(QStringLiteral(\"keep_awake\"), true);"
+replace = ""
+expect = "a_hosts_choices_are_written_to_disk"

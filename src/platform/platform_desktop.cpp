@@ -2,6 +2,10 @@
 
 #include <QApplication>
 #include <QDBusConnection>
+#include <QDBusMessage>
+#include <QDBusPendingCallWatcher>
+#include <QDBusPendingReply>
+#include <QDBusUnixFileDescriptor>
 #include <QDBusInterface>
 #include <QDBusReply>
 #include <QDBusVariant>
@@ -130,6 +134,89 @@ public:
 		 * says so.
 		 */
 		return false;
+	}
+
+	bool can_inhibit_sleep() const override {
+		return QDBusConnection::systemBus().isConnected()
+		       || QDBusConnection::sessionBus().isConnected();
+	}
+
+	/*
+	 * Asked two ways, because desktops listen in two places: logind's
+	 * inhibitor on the system bus, which holds for as long as the file
+	 * descriptor it hands back stays open, and the older
+	 * org.freedesktop.PowerManagement.Inhibit on the session bus, which a
+	 * power manager that is not systemd's follows and which hands back a
+	 * cookie. Both asynchronously -- a machine with no system bus must not
+	 * stall a window for a D-Bus timeout -- and a reply that arrives after
+	 * the answer changed back is let go at once.
+	 */
+	void platform_set_sleep_inhibited(bool inhibit) override {
+		m_want_awake = inhibit;
+
+		if (!inhibit) {
+			m_logind_lock = QDBusUnixFileDescriptor();
+			if (m_pm_cookie != 0) {
+				QDBusMessage release = QDBusMessage::createMethodCall(
+				        QStringLiteral("org.freedesktop.PowerManagement"),
+				        QStringLiteral("/org/freedesktop/PowerManagement/Inhibit"),
+				        QStringLiteral("org.freedesktop.PowerManagement.Inhibit"),
+				        QStringLiteral("UnInhibit"));
+				release << m_pm_cookie;
+				QDBusConnection::sessionBus().asyncCall(release);
+				m_pm_cookie = 0;
+			}
+			return;
+		}
+
+		const QString why = QStringLiteral("A connected host asks to keep the computer awake");
+
+		if (QDBusConnection::systemBus().isConnected()) {
+			QDBusMessage call = QDBusMessage::createMethodCall(
+			        QStringLiteral("org.freedesktop.login1"),
+			        QStringLiteral("/org/freedesktop/login1"),
+			        QStringLiteral("org.freedesktop.login1.Manager"),
+			        QStringLiteral("Inhibit"));
+			call << QStringLiteral("sleep:idle") << QStringLiteral("BeerSSH") << why
+			     << QStringLiteral("block");
+			auto *watcher = new QDBusPendingCallWatcher(
+			        QDBusConnection::systemBus().asyncCall(call), this);
+			connect(watcher, &QDBusPendingCallWatcher::finished, this,
+			        [this](QDBusPendingCallWatcher *done) {
+				const QDBusPendingReply<QDBusUnixFileDescriptor> reply = *done;
+				if (m_want_awake && reply.isValid()) m_logind_lock = reply.value();
+				done->deleteLater();
+			});
+		}
+
+		if (QDBusConnection::sessionBus().isConnected()) {
+			QDBusMessage call = QDBusMessage::createMethodCall(
+			        QStringLiteral("org.freedesktop.PowerManagement"),
+			        QStringLiteral("/org/freedesktop/PowerManagement/Inhibit"),
+			        QStringLiteral("org.freedesktop.PowerManagement.Inhibit"),
+			        QStringLiteral("Inhibit"));
+			call << QStringLiteral("BeerSSH") << why;
+			auto *watcher = new QDBusPendingCallWatcher(
+			        QDBusConnection::sessionBus().asyncCall(call), this);
+			connect(watcher, &QDBusPendingCallWatcher::finished, this,
+			        [this](QDBusPendingCallWatcher *done) {
+				const QDBusPendingReply<uint> reply = *done;
+				if (reply.isValid()) {
+					if (m_want_awake) {
+						m_pm_cookie = reply.value();
+					} else {
+						QDBusMessage release = QDBusMessage::createMethodCall(
+						        QStringLiteral("org.freedesktop.PowerManagement"),
+						        QStringLiteral("/org/freedesktop/PowerManagement/Inhibit"),
+						        QStringLiteral("org.freedesktop.PowerManagement.Inhibit"),
+						        QStringLiteral("UnInhibit"));
+						release << reply.value();
+						QDBusConnection::sessionBus().asyncCall(release);
+					}
+				}
+				done->deleteLater();
+			});
+		}
 	}
 
 	QSize platform_screen_size() const override {
@@ -431,6 +518,11 @@ private:
 	}
 
 	QSystemTrayIcon *m_tray;
+
+	/* The sleep inhibition, as each of the two places that grant one returns it. */
+	bool m_want_awake = false;
+	QDBusUnixFileDescriptor m_logind_lock;
+	uint m_pm_cookie = 0;
 };
 
 bssh_platform *bssh_platform::instance() {

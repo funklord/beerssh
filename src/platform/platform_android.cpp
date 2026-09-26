@@ -345,6 +345,14 @@ public:
 		});
 	}
 
+	/*
+	 * No: a phone's screen going dark does not end a session -- the
+	 * foreground service keeps the process (sec 5.1) -- and keeping the
+	 * screen on is a different request from keeping a connection up.
+	 */
+	bool can_inhibit_sleep() const override { return false; }
+	void platform_set_sleep_inhibited(bool) override {}
+
 	QSize platform_screen_size() const override {
 		/*
 		 * Qt's logical pixels are dp on Android (sec 8.1), and the

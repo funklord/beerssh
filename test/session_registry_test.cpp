@@ -102,6 +102,47 @@ void session_registry_test::closing_announces_before_destroying() {
 	QCOMPARE(closing.count(), 1);
 }
 
+void session_registry_test::only_a_connected_keep_awake_host_keeps_the_computer_awake() {
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fakes.append(fake);
+		return fake;
+	});
+
+	bssh_session_registry registry;
+
+	bssh_profile_t awake = profile_for(QStringLiteral("build"), QStringLiteral("build.example"));
+	awake.keep_awake = true;
+	bssh_session *builder = registry.create(awake);
+
+	bssh_session *plain = registry.create(profile_for(QStringLiteral("plain"),
+	                                                   QStringLiteral("plain.example")));
+
+	/* Asking is not enough: nothing is connected, so nothing is running. */
+	QVERIFY(!registry.keeps_awake());
+
+	/* A connected host that did not ask keeps nothing awake. */
+	plain->connect_to_host();
+	QCOMPARE(fakes.size(), 1);
+	fakes.at(0)->simulate_key_auth_success();
+	QVERIFY(plain->is_live());
+	QVERIFY(!registry.keeps_awake());
+
+	/* The one that asked, connected: now. */
+	builder->connect_to_host();
+	QCOMPARE(fakes.size(), 2);
+	fakes.at(1)->simulate_key_auth_success();
+	QVERIFY(builder->is_live());
+	QVERIFY(registry.keeps_awake());
+
+	/* And not once it is gone. */
+	registry.close(builder);
+	QVERIFY(!registry.keeps_awake());
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void session_registry_test::live_count_ignores_dead_sessions() {
 	bssh_session_registry registry;
 	registry.create(profile_for(QStringLiteral("a"), QStringLiteral("a.example")));

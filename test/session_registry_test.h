@@ -19,6 +19,9 @@ private slots:
 	void session_outlives_the_view_that_showed_it();
 	void closing_announces_before_destroying();
 	void live_count_ignores_dead_sessions();
+
+	/* Only a CONNECTED session of a keep-awake host asks (sec 5.5, 2026-09-26). */
+	void only_a_connected_keep_awake_host_keeps_the_computer_awake();
 	void title_falls_back_from_osc_to_profile();
 	void the_transport_reports_which_kind_of_ending_it_was();
 	void a_shell_that_ends_closes_its_session();

@@ -37,6 +37,9 @@ private slots:
 	 * hears a resume the Qt thread wedged in.
 	 */
 	void the_hang_gate_follows_the_lifecycle_not_the_last_beat();
+
+	/* The platform is asked only when keeping awake changes its answer. */
+	void keeping_awake_is_asked_only_on_a_change();
 	void close_policy_asks_only_when_something_is_live();
 	void the_window_opens_on_the_front_door();
 	void the_key_row_setting_survives_a_restart();

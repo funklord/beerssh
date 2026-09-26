@@ -239,6 +239,13 @@ void bssh_session_registry::close(bssh_session *session) {
 	emit changed();
 }
 
+bool bssh_session_registry::keeps_awake() const {
+	for (const bssh_session *session : m_sessions) {
+		if (session->profile().keep_awake && session->is_live()) return true;
+	}
+	return false;
+}
+
 void bssh_session_registry::save_kept_scrollback() {
 	for (bssh_session *session : m_sessions) keep(session);
 }

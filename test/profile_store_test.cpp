@@ -248,7 +248,7 @@ void profile_store_test::layout_round_trips() {
 	QCOMPARE(restored.shape, QStringLiteral("V(%1,%2)").arg(first).arg(second));
 }
 
-void profile_store_test::a_hosts_zoom_is_written_to_disk() {
+void profile_store_test::a_hosts_choices_are_written_to_disk() {
 	QTemporaryDir dir;
 	const QString path = dir.filePath(QStringLiteral("test.db"));
 
@@ -257,6 +257,8 @@ void profile_store_test::a_hosts_zoom_is_written_to_disk() {
 		bssh_profile_store store(path);
 		bssh_profile_t host = make_profile(QStringLiteral("zoomed"), QStringLiteral("z.example"));
 		host.font_zoom = -4;
+		host.keep_awake = true;
+		host.keep_scrollback = true;
 		id = store.save(host);
 		QVERIFY(id);
 	}
@@ -264,6 +266,8 @@ void profile_store_test::a_hosts_zoom_is_written_to_disk() {
 	/* Another store on the same files is the next start (sec 9.5). */
 	bssh_profile_store reopened(path);
 	QCOMPARE(reopened.profile(id).font_zoom, -4);
+	QVERIFY(reopened.profile(id).keep_awake);
+	QVERIFY(reopened.profile(id).keep_scrollback);
 }
 
 void profile_store_test::layout_forgets_deleted_hosts() {

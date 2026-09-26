@@ -112,6 +112,13 @@ void bssh_platform::notify(const QString &title, const QString &body) {
 	platform_notify(title, body);
 }
 
+void bssh_platform::set_sleep_inhibited(bool inhibit) {
+	if (inhibit == m_sleep_inhibited) return;
+	m_sleep_inhibited = inhibit;
+	emit sleep_inhibition_changed(inhibit);
+	platform_set_sleep_inhibited(inhibit);
+}
+
 void bssh_platform::force_biometric(int available) {
 	bssh_forced_biometric = available;
 }

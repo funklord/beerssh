@@ -10293,10 +10293,13 @@ store is a no-op rather than a silent loss.
   is API 30, where the permission does not exist; what was verified there is that
   the JNI plumbing makes both calls without throwing and that the version guard
   makes it a clean no-op.
-- **[OPEN]** Desktop `ssh-agent` support (`SSH_AUTH_SOCK`). Not v1, but it is the
-  single most-requested desktop feature for a client like this, and it fits the
-  model cleanly: the agent is just another `bssh_secret_store` implementation
-  that never yields the key material at all.
+- **Desktop `ssh-agent` support (`SSH_AUTH_SOCK`) -- USED, and was for some
+  time before this line said so.** `ssh_userauth_publickey_auto` offers the
+  agent's keys before the default identities; measured 2026-09-26 by reading
+  `ssh_session_libssh.cpp`. Adding keys TO the agent was declined for now by the
+  holder the same day (§16). What this paragraph imagined -- the agent as a
+  `bssh_secret_store` that never yields key material -- is a different thing
+  and nobody has asked for it.
 - **Host key verification**: known-hosts store with trust-on-first-use prompt and
   clear warning on key change (MITM protection). Do not silently accept.
   **Built.** An unknown or changed key **holds the connection open** rather than
@@ -13710,15 +13713,36 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
 - Foreground-service type: `connectedDevice` (built and shipped in the manifest)
   vs `specialUse` (prepared fallback). Open on Play review's opinion, not on
   ours — §5.1.
-- Inhibit sleep on desktop while a session is connected? (Leaning no; per-session
-  toggle instead — §5.5.)
-- Offer system-installed monospace fonts on desktop? (Not v1 — §9.4.)
-- Desktop `ssh-agent` support (§11) — v2, but the secret-store interface should
-  already accommodate a backend that never releases key material.
+- ~~Inhibit sleep on desktop while a session is connected?~~ **DECIDED
+  2026-09-26 by the holder: a per-host toggle, off by default -- and BUILT.**
+  "Keep the computer awake" beside "Keep scrollback" in the desktop dialog,
+  offered only where the platform can do it (not on Android, where the
+  foreground service already keeps the connection and the screen is a
+  different question). While any session of such a host is live --
+  connecting and reconnecting included, since a build waiting on a dropped
+  link is still a build -- `bssh_platform::set_sleep_inhibited` asks logind
+  for a `sleep:idle` block inhibitor on the system bus and
+  `org.freedesktop.PowerManagement.Inhibit` on the session bus, both
+  asynchronously, and lets both go when the last one closes. The platform is
+  asked only when the answer changes, since the window asks on every
+  registry change. Whether TDE's own power manager honours either was not
+  checked. Guarded by `tool/sabotage/keep-awake.toml`, five edits.
+- ~~Offer system-installed monospace fonts on desktop?~~ **DECIDED 2026-09-26
+  by the holder: yes, in a group of their own** after the curated set,
+  "Installed on this computer". §9.4.
+- ~~Desktop `ssh-agent` support~~ -- **the question was stale, and is
+  answered in two halves.** USING the agent is built: `ssh_userauth_publickey_auto`
+  tries it before the default key files (`ssh_session_libssh.cpp`, and the jump
+  tunnel likewise), which is what the connect dialog's note has said. MANAGING
+  it -- adding a key to the running agent once its passphrase is typed -- the
+  holder declined for now on 2026-09-26: `ssh-add` and the desktop keep that.
 - Which font is the **phone** default (JetBrains Mono vs condensed Iosevka).
   The shortlist itself is settled; this half is not, and cannot be until
   Iosevka's 42 MB ships by asset pack (§9.4, M9).
-- Host groups/folders in addition to presets? (§10.5.)
+- ~~Host groups/folders in addition to presets?~~ **DECIDED 2026-09-26 by the
+  holder: folders for organising only.** They group and collapse hosts in the
+  list; settings still come only from presets, so there is one inheritance
+  mechanism rather than two. §10.5.
 - ~~Persist scrollback across restarts?~~ **DECIDED 2026-09-26 by the holder:
   yes, opt-in per host -- and BUILT.** Recommended against as a default
   and chosen as an option: scrollback is whatever was on screen, a password

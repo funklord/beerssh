@@ -132,6 +132,12 @@ protected:
 	virtual QString platform_terminfo_directory() const = 0;
 	virtual bool platform_has_biometric() const = 0;
 	virtual void platform_notify(const QString &title, const QString &body) = 0;
+	virtual void platform_set_sleep_inhibited(bool inhibit) = 0;
+
+private:
+	bool m_sleep_inhibited = false;
+
+protected:
 
 public:
 
@@ -224,9 +230,28 @@ public:
 	 */
 	void notify(const QString &title, const QString &body);
 
+	/*
+	 * Keeps the computer from sleeping while `inhibit` holds (sec 5.5): for a
+	 * host whose "keep the computer awake while connected" is on, the long
+	 * remote build a lid close would otherwise drop. The holder's answer of
+	 * 2026-09-26 -- a per-host toggle, off by default.
+	 *
+	 * Split public-from-virtual as notify() is, so a test can hear the
+	 * decision without the machine acting on it, and the platform is asked
+	 * only when the answer changes. can_inhibit_sleep() says whether there is
+	 * anything to ask: false where there is no such mechanism, and the option
+	 * is then not offered.
+	 */
+	void set_sleep_inhibited(bool inhibit);
+	bool sleep_inhibited() const { return m_sleep_inhibited; }
+	virtual bool can_inhibit_sleep() const = 0;
+
 signals:
 	/* Emitted for every notify(), before the platform shows anything. */
 	void notified(const QString &title, const QString &body);
+
+	/* Emitted when set_sleep_inhibited() changes its answer. */
+	void sleep_inhibition_changed(bool inhibited);
 
 public:
 

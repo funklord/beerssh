@@ -4284,6 +4284,55 @@ void layout_test::a_host_remembers_its_zoom() {
 	store->remove(host.id);
 }
 
+void layout_test::a_connected_keep_awake_host_holds_off_sleep() {
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_platform *platform = bssh_platform::instance();
+	QVERIFY(!platform->sleep_inhibited());
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_profile_t host = named(QStringLiteral("builder"));
+		host.host = QStringLiteral("builder.example");
+		host.keep_awake = true;
+		bssh_session *session = registry->create(host);
+		window.adopt_session(session);
+
+		/* Asked for and never connected: nothing is running to lose. */
+		QCoreApplication::processEvents();
+		QVERIFY(!platform->sleep_inhibited());
+
+		/*
+		 * Connecting counts, as reconnecting will: a build waiting on the
+		 * link to come back after a drop is still a build a sleep would
+		 * lose.
+		 */
+		session->connect_to_host();
+		QVERIFY(fake);
+		fake->simulate_key_auth_success();
+		QCoreApplication::processEvents();
+		QVERIFY2(platform->sleep_inhibited(),
+		          "a connected keep-awake host did not hold off sleep");
+
+		registry->close(session);
+		QCoreApplication::processEvents();
+		QVERIFY2(!platform->sleep_inhibited(), "sleep stayed held after the host closed");
+	}
+
+	platform->set_sleep_inhibited(false);
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void layout_test::a_pane_dropped_back_changes_nothing() {
 	bssh_main_window window;
 	window.resize(1000, 700);

@@ -121,6 +121,7 @@ private:
 	QLineEdit *m_identity;
 	QLineEdit *m_jump;
 	QCheckBox *m_keep_scrollback = nullptr;
+	QCheckBox *m_keep_awake = nullptr;
 	QLineEdit *m_session_name;
 	QListWidget *m_sessions;
 	/*

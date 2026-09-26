@@ -118,6 +118,14 @@ struct bssh_profile_t {
 	bool keep_scrollback;
 
 	/*
+	 * Whether this host keeps the computer awake while it is connected
+	 * (bssh_platform::set_sleep_inhibited) -- a long remote build that a
+	 * lid close would otherwise drop. Per host, off unless asked for, on
+	 * the holder's answer of 2026-09-26.
+	 */
+	bool keep_awake;
+
+	/*
 	 * The preset this host follows (sec 10.1), and the fields where it
 	 * disagrees. Overrides are sparse on purpose: a field absent here
 	 * takes the preset's value, which is what makes editing a preset
@@ -166,7 +174,7 @@ struct bssh_profile_t {
 
 	bssh_profile_t()
 	    : id(0), port(22), has_stored_password(false), require_biometric(false),
-	      font_zoom(0), keep_scrollback(false), preset_id(0), local(false),
+	      font_zoom(0), keep_scrollback(false), keep_awake(false), preset_id(0), local(false),
 	      hold(false) {}
 
 	/*

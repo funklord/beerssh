@@ -2,6 +2,7 @@
 #include <QLabel>
 #include <QSettings>
 #include <QtTest>
+#include <QSignalSpy>
 
 #include "hang_watchdog.h"
 #include "platform/platform.h"
@@ -115,6 +116,29 @@ void platform_test::the_hang_gate_follows_the_lifecycle_not_the_last_beat() {
 	/* Beats after the resume keep it quiet. */
 	state.beat(629000);
 	QVERIFY(!state.should_dump(630000, threshold));
+}
+
+void platform_test::keeping_awake_is_asked_only_on_a_change() {
+	bssh_platform *platform = bssh_platform::instance();
+	QVERIFY(platform);
+	QVERIFY(!platform->sleep_inhibited());
+
+	QSignalSpy changed(platform, &bssh_platform::sleep_inhibition_changed);
+
+	/*
+	 * The window asks on every registry change -- a title, a bell -- so the
+	 * same answer twice must not reach the desktop twice, or every line of
+	 * output would take and drop an inhibitor.
+	 */
+	platform->set_sleep_inhibited(true);
+	platform->set_sleep_inhibited(true);
+	QCOMPARE(changed.count(), 1);
+	QVERIFY(platform->sleep_inhibited());
+
+	platform->set_sleep_inhibited(false);
+	platform->set_sleep_inhibited(false);
+	QCOMPARE(changed.count(), 2);
+	QVERIFY(!platform->sleep_inhibited());
 }
 
 void platform_test::session_count_and_notify_are_safe_without_a_tray() {
