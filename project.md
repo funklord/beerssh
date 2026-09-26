@@ -8211,10 +8211,29 @@ Bundling ~10 families × multiple weights is **tens of megabytes** — too much 
 the base download on Android. Desktop has no such pressure, which is a licence to
 diverge on *delivery* but never on *which fonts exist*.
 
-- **Android:** ship **2–3 families in the base APK** (default + condensed +
-  DejaVu fallback), and deliver the rest via **Play Asset Delivery** (on-demand
-  asset packs), downloaded when the user picks them in settings. The AAB format
-  already required (§2) makes this straightforward.
+- **Android:** ship the base families in the APK, and fetch the rest **from
+  their own pinned upstream releases** when the user picks one -- decided by
+  the holder 2026-09-26, over the Play Asset Delivery this bullet first
+  planned. That needed Google's `asset-delivery` library under the Play Core
+  SDK terms rather than an open licence, reached only Play Store installs
+  (never an `adb` or F-Droid-style one), and needed bundletool to test.
+  **BUILT.** `tool/font-sources.txt` holds the pins, read by
+  `tool/fetch-fonts.sh` for a build and embedded in the app (`resources.qrc`),
+  so the two cannot disagree; its `file|` lines pin every output on its own,
+  and the script checks each extracted file against them, so a build is also
+  a check of the pins a phone relies on. `bssh_font_download` takes a family
+  one file at a time: the archive's length, its last 64 KB for the zip
+  directory, then each wanted member by HTTP range (`term/zip_index`, stored
+  and deflated, no zip64) -- Iosevka's release is 165 MB for the four files
+  wanted, and fetching it by range took 2.8 s in a live run. Every file is
+  checked against its pin and kept only when the whole family has verified,
+  into app storage, loaded after the bundle at every start; the licence comes
+  with it, and the licences screen reads it there. The picker offers
+  "Download <font>" under the note for a font of the set that is missing,
+  never for a fallback-only one. Guarded by `tool/sabotage/font-download.toml`,
+  six edits; `BSSH_TEST_LIVE_FONTS=1` runs a real family over the network.
+  **Not yet seen on a phone**: the offer only appears for a missing font, and
+  every font is installed wherever the suite runs.
 - **Desktop:** ship the full curated set in the package — tens of megabytes is
   unremarkable for a desktop install, and it keeps the font picker free of
   download states on the platform where they'd be pure friction.
@@ -8223,10 +8242,10 @@ diverge on *delivery* but never on *which fonts exist*.
   desktop, so families are identified by a stable internal ID, and an
   unavailable font falls back down the §9.3 chain with a visible note rather
   than silently substituting.
-- **[OPEN]** Whether desktop additionally offers system-installed monospace
-  fonts. Tempting, and it's the one thing desktop users will ask for — but every
-  such font is unvetted against §9.1, so if it's offered it must run the same
-  suitability check and be clearly marked as unverified. Not in v1.
+- ~~Whether desktop additionally offers system-installed monospace fonts.~~
+  **Decided and built 2026-09-26** -- offered in a group of their own after the
+  set, marked as the computer's rather than the set's. No suitability check
+  runs on them beyond Qt's fixed-pitch flag; see §16.
 - Subset aggressively where safe: fallback fonts can be subset to the ranges they
   actually serve. **Do not** subset a selectable font so far that box-drawing
   breaks — that defeats the point. Subset only for the Android package; ship the
@@ -13748,8 +13767,10 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   it -- adding a key to the running agent once its passphrase is typed -- the
   holder declined for now on 2026-09-26: `ssh-add` and the desktop keep that.
 - Which font is the **phone** default (JetBrains Mono vs condensed Iosevka).
-  The shortlist itself is settled; this half is not, and cannot be until
-  Iosevka's 42 MB ships by asset pack (§9.4, M9).
+  The shortlist itself is settled; this half is not. **No longer blocked**:
+  Iosevka can now be downloaded on the phone from its pinned release (§9.4,
+  2026-09-26), so what is left is the choice itself -- and whether a default
+  may be one that has to be fetched first.
 - ~~Host groups/folders in addition to presets?~~ **DECIDED 2026-09-26 by the
   holder: folders for organising only -- and BUILT.** They group and collapse
   hosts in the list; settings still come only from presets, so there is one

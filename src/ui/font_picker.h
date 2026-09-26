@@ -4,9 +4,14 @@
 #include <QList>
 #include <QWidget>
 
+#include <memory>
+
 class QComboBox;
 class QFormLayout;
 class QLabel;
+class QPushButton;
+class bssh_font_download;
+class bssh_range_source;
 class QSpinBox;
 
 /*
@@ -31,6 +36,7 @@ class bssh_font_picker : public QWidget {
 
 public:
 	explicit bssh_font_picker(QWidget *parent = nullptr);
+	~bssh_font_picker() override;
 
 	/* The catalog id, never a display name -- see bssh_font_catalog. */
 	QString font_id() const;
@@ -103,6 +109,18 @@ protected:
 	QLabel *m_preview;
 	QLabel *m_swatches;
 	QLabel *m_note;
+
+	/*
+	 * Fetching a font of the set that is not on this device (sec 9.4):
+	 * offered under the note while one is chosen, and running at most one
+	 * download at a time. The source and the download live as long as it
+	 * runs.
+	 */
+	QPushButton *m_download = nullptr;
+	std::unique_ptr<bssh_range_source> m_download_source;
+	bssh_font_download *m_running = nullptr;
+	void update_download_offer();
+	void start_download();
 };
 
 #endif /* BSSH_FONT_PICKER_H */

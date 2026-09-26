@@ -1,0 +1,7 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+    <qresource prefix="/">
+        <!-- The font set's pins, which tool/fetch-fonts.sh reads too (sec 9.4). -->
+        <file alias="font-sources.txt">tool/font-sources.txt</file>
+    </qresource>
+</RCC>

@@ -1,5 +1,6 @@
 #include "ui/touch_metrics.h"
 #include "ui/licences_view.h"
+#include "model/font_download.h"
 
 #include "model/command_line.h"
 
@@ -190,7 +191,6 @@ QString bssh_licences_view::licence_text(const QString &font_id) const {
 	if (!platform) return QString();
 
 	const QString directory = platform->font_directory();
-	if (directory.isEmpty()) return QString();
 
 	/*
 	 * By name from the catalog, not by guessing from the family. The
@@ -204,10 +204,12 @@ QString bssh_licences_view::licence_text(const QString &font_id) const {
 	const bssh_font_t *font = bssh_font_catalog::instance().by_id(font_id);
 	if (!font || font->licence_file.isEmpty()) return QString();
 
-	QFile file(directory + QStringLiteral("/licences/") + font->licence_file);
-	if (!file.open(QIODevice::ReadOnly)) return QString();
-
-	return QString::fromUtf8(file.readAll());
+	/* The bundle's, or the one fetched with the font on this device (sec 9.4). */
+	for (const QString &from : {directory, bssh_downloaded_font_directory()}) {
+		QFile file(from + QStringLiteral("/licences/") + font->licence_file);
+		if (file.open(QIODevice::ReadOnly)) return QString::fromUtf8(file.readAll());
+	}
+	return QString();
 }
 
 void bssh_licences_view::load_fonts() {

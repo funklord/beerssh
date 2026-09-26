@@ -76,7 +76,8 @@ jobs:
           # not the fix. qt6-base-dev covers Qt6DBus, which the desktop build
           # needs for the XDG appearance portal (sec 6.2).
           sudo apt-get install -y qt6-base-dev libgl1-mesa-dev libssh-dev \
-                                  libsixel-dev libssl-dev libsecret-1-dev
+                                  libsixel-dev libssl-dev libsecret-1-dev \
+                                  zlib1g-dev
       - name: Build
         run: make
       - name: Headless smoke test

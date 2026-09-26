@@ -1,0 +1,50 @@
+# A font family fetched onto a phone one file at a time (project.md sec
+# 9.4, the holder's choice of 2026-09-26 over Play Asset Delivery).
+
+# A file that is not the pinned one is kept anyway.
+[[sabotage]]
+name = "a download is not checked against its pin"
+file = "src/model/font_download.cpp"
+find = "\tif (got != pin) {"
+replace = "\tif (false) {"
+expect = "a_file_that_is_not_the_pinned_one_leaves_nothing"
+
+# A failure part way leaves the files that did verify, so the catalog
+# finds half a family.
+[[sabotage]]
+name = "a failed download leaves what it had fetched"
+file = "src/model/font_download.cpp"
+find = "\tfor (const QString &output : m_written) QFile::remove(m_directory + QLatin1Char('/') + output + QStringLiteral(\".part\"));"
+replace = ""
+expect = "a_file_that_is_not_the_pinned_one_leaves_nothing"
+
+# A member whose bytes are wrong is written out as a font.
+[[sabotage]]
+name = "a member's checksum is not checked"
+file = "src/term/zip_index.cpp"
+find = "\t    || crc32(0L, reinterpret_cast<const Bytef *>(out.constData()), uInt(out.size())) != entry.crc) {"
+replace = "\t    ) {"
+expect = "a_damaged_or_foreign_zip_is_refused"
+
+[[sabotage]]
+name = "a zip64 archive is misread rather than refused"
+file = "src/term/zip_index.cpp"
+find = "\t\tif (entries == 0xffff || size == 0xffffffff || start == 0xffffffff) {"
+replace = "\t\tif (false) {"
+expect = "a_damaged_or_foreign_zip_is_refused"
+
+# The whole archive is fetched to read its index: 165 MB for four fonts.
+[[sabotage]]
+name = "the index is read by fetching the whole archive"
+file = "src/model/font_download.cpp"
+find = "\t\tconst qint64 tail = qMin(length, BSSH_ZIP_TAIL_BYTES);"
+replace = "\t\tconst qint64 tail = length;"
+expect = "a_family_downloads_file_by_file_and_is_checked"
+
+# A fallback-only family is offered, as an invitation to pick it.
+[[sabotage]]
+name = "a fallback-only font is offered for download"
+file = "src/model/font_download.cpp"
+find = "\tif (!font || !font->selectable) return false;"
+replace = "\tif (!font) return false;"
+expect = "only_a_set_font_that_is_missing_is_offered_for_download"

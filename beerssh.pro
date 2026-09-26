@@ -25,6 +25,12 @@ DEFINES += BSSH_VERSION_STRING=\\\"$$BSSH_VERSION\\\"
 
 QT += widgets network
 
+# The font set's pins, which the phone checks a download against (sec 9.4).
+RESOURCES += resources.qrc
+
+# The zip reader under font downloads (term/zip_index.cpp) inflates with zlib.
+LIBS += -lz
+
 # QtDBus is desktop-only: the XDG portal is where Linux keeps the
 # light/dark preference, and Qt does not always read it for us (sec 6.2).
 !android: QT += dbus
@@ -55,6 +61,9 @@ SOURCES += \
     src/model/session.cpp \
     src/model/session_registry.cpp \
     src/model/kept_scrollback.cpp \
+    src/model/font_sources.cpp \
+    src/model/font_download.cpp \
+    src/term/zip_index.cpp \
     src/input/input_router.cpp \
     src/platform/platform.cpp \
     src/platform/secret_store.cpp \
@@ -119,6 +128,9 @@ HEADERS += \
     src/model/session.h \
     src/model/session_registry.h \
     src/model/kept_scrollback.h \
+    src/model/font_sources.h \
+    src/model/font_download.h \
+    src/term/zip_index.h \
     src/platform/platform.h \
     src/platform/secret_store.h \
     src/ssh/pty_session.h \

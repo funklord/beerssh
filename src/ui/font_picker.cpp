@@ -3,6 +3,7 @@
 #include "ui/font_picker.h"
 
 #include <QComboBox>
+#include <QPushButton>
 #include <QStandardItemModel>
 #include <QPainter>
 #include <QPixmap>
@@ -15,6 +16,8 @@
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
+#include "model/font_download.h"
+#include "model/font_sources.h"
 #include "model/app_settings.h"
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
@@ -327,6 +330,12 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	bssh_wrap_note(m_note);
 	outer->addWidget(m_note);
 
+	m_download = new QPushButton(this);
+	m_download->setObjectName(QStringLiteral("font_download"));
+	m_download->hide();
+	outer->addWidget(m_download);
+	connect(m_download, &QPushButton::clicked, this, &bssh_font_picker::start_download);
+
 	connect(m_family, &QComboBox::currentIndexChanged,
 	         this, &bssh_font_picker::on_choice_changed);
 	connect(m_size, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -490,4 +499,71 @@ void bssh_font_picker::refresh_preview() {
 	} else {
 		m_note->setText(note);
 	}
+
+	update_download_offer();
+}
+
+bssh_font_picker::~bssh_font_picker() = default;
+
+void bssh_font_picker::update_download_offer() {
+	if (!m_download) return;
+	if (m_running) return;   /* its own text says how far it has got */
+
+	const QString id = font_id();
+	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
+	if (!bssh_font_offers_download(id, catalog.is_available(id))) {
+		m_download->hide();
+		return;
+	}
+
+	m_download->setText(QStringLiteral("Download %1").arg(catalog.display_name(id)));
+	m_download->setEnabled(true);
+	m_download->show();
+}
+
+/*
+ * Fetches the chosen family from its pinned release (sec 9.4), then loads
+ * it and redraws: the entry loses its "(not installed)", the preview
+ * becomes the font, and the terminal follows at its next resolve.
+ */
+void bssh_font_picker::start_download() {
+	if (m_running) return;
+
+	const QString id = font_id();
+	const bssh_font_archive_t *archive = bssh_font_sources::embedded().archive(id);
+	if (!archive) return;
+
+	m_download_source.reset(bssh_make_range_source());
+	m_running = new bssh_font_download(m_download_source.get(), this);
+	m_download->setEnabled(false);
+	m_download->setText(QStringLiteral("Downloading..."));
+
+	connect(m_running, &bssh_font_download::progress, this, [this](int done, int total) {
+		m_download->setText(QStringLiteral("Downloading, %1 of %2 files").arg(done).arg(total));
+	});
+	connect(m_running, &bssh_font_download::finished, this, [this, id](bool ok, const QString &error) {
+		/*
+		 * Deferred: this runs inside the download's own signal, and the
+		 * download is what is being let go of.
+		 */
+		m_running->deleteLater();
+		m_running = nullptr;
+
+		if (!ok) {
+			m_download->setText(QStringLiteral("Try downloading again"));
+			m_download->setEnabled(true);
+			m_note->setText(QStringLiteral("The download did not finish: %1").arg(error));
+			return;
+		}
+
+		bssh_font_catalog::instance().load_bundled(bssh_downloaded_font_directory());
+
+		/* The entry says what it is now, and the preview and note follow. */
+		const int index = m_family->findData(id);
+		if (index >= 0) m_family->setItemText(index, bssh_font_catalog::instance().display_name(id));
+		refresh_preview();
+		emit font_chosen(font_id(), point_size());
+	});
+
+	m_running->start(*archive, bssh_font_sources::embedded(), bssh_downloaded_font_directory());
 }

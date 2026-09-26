@@ -43,28 +43,22 @@ for arg in "$@"; do
 done
 
 # -----------------------------------------------------------------------------
-# The set. One record per family:
-#
-#   id | archive-url | sha256 | licence-url | licence-file | members...
-#
-# where each member is  path/inside/archive>OutputName.ttf , or for a bare
-# font file (no archive) the single member  .>OutputName.ttf .
+# The set, from tool/font-sources.txt -- one file the app reads as well, so
+# that a phone fetching one font and a build fetching the whole set cannot
+# disagree about what the set is. Its header gives the format.
 #
 # The output names are the ones bssh_font_catalog expects; changing one
-# here without changing it there means the font is fetched and then not
-# found, which looks exactly like a font that failed to download.
+# there without changing it in the catalog means the font is fetched and
+# then not found, which looks exactly like a font that failed to download.
 # -----------------------------------------------------------------------------
+sources="$root/tool/font-sources.txt"
 records() {
-	cat <<'EOF'
-jetbrains-mono|https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip|6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf|archive:OFL.txt|OFL-JetBrainsMono.txt|fonts/ttf/JetBrainsMono-Regular.ttf>JetBrainsMono-Regular.ttf fonts/ttf/JetBrainsMono-Bold.ttf>JetBrainsMono-Bold.ttf fonts/ttf/JetBrainsMono-Italic.ttf>JetBrainsMono-Italic.ttf fonts/ttf/JetBrainsMono-BoldItalic.ttf>JetBrainsMono-BoldItalic.ttf
-iosevka-term|https://github.com/be5invis/Iosevka/releases/download/v34.8.0/PkgTTF-IosevkaTerm-34.8.0.zip|bb58292f7f7172d272fb8d4475237469e4e047d5cdebb795ecc80db8b54e615e|https://raw.githubusercontent.com/be5invis/Iosevka/v34.8.0/LICENSE.md|OFL-Iosevka.md|IosevkaTerm-Regular.ttf>IosevkaTerm-Regular.ttf IosevkaTerm-Bold.ttf>IosevkaTerm-Bold.ttf IosevkaTerm-Italic.ttf>IosevkaTerm-Italic.ttf IosevkaTerm-BoldItalic.ttf>IosevkaTerm-BoldItalic.ttf
-dejavu-sans-mono|https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.zip|7576310b219e04159d35ff61dd4a4ec4cdba4f35c00e002a136f00e96a908b0a|archive:dejavu-fonts-ttf-2.37/LICENSE|LICENSE-DejaVu.txt|dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf>DejaVuSansMono.ttf dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-Bold.ttf>DejaVuSansMono-Bold.ttf dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-Oblique.ttf>DejaVuSansMono-Oblique.ttf dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-BoldOblique.ttf>DejaVuSansMono-BoldOblique.ttf
-hack|https://github.com/source-foundry/Hack/releases/download/v3.003/Hack-v3.003-ttf.zip|0c2604631b1f055041c68a0e09ae4801acab6c5072ba2db6a822f53c3f8290ac|https://raw.githubusercontent.com/source-foundry/Hack/v3.003/LICENSE.md|LICENSE-Hack.md|ttf/Hack-Regular.ttf>Hack-Regular.ttf ttf/Hack-Bold.ttf>Hack-Bold.ttf ttf/Hack-Italic.ttf>Hack-Italic.ttf ttf/Hack-BoldItalic.ttf>Hack-BoldItalic.ttf
-fira-code|https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip|0949915ba8eb24d89fd93d10a7ff623f42830d7c5ffc3ecbf960e4ecad3e3e79|https://raw.githubusercontent.com/tonsky/FiraCode/6.2/LICENSE|OFL-FiraCode.txt|ttf/FiraCode-Regular.ttf>FiraCode-Regular.ttf ttf/FiraCode-Bold.ttf>FiraCode-Bold.ttf
-cascadia-code-pl|https://github.com/microsoft/cascadia-code/releases/download/v2404.23/CascadiaCode-2404.23.zip|a911410626c0e09d03fa3fdda827188fda96607df50fecc3c5fee5906e33251b|https://raw.githubusercontent.com/microsoft/cascadia-code/v2404.23/LICENSE|OFL-CascadiaCode.txt|ttf/CascadiaCodePL.ttf>CascadiaCodePL.ttf ttf/CascadiaCodePLItalic.ttf>CascadiaCodePL-Italic.ttf
-noto-sans-mono|https://github.com/notofonts/notofonts.github.io/raw/noto-monthly-release-2026.08.01/fonts/NotoSansMono/hinted/ttf/NotoSansMono-Regular.ttf|65b5e2b2c4a1fba9ae8be1f026cb35b03dcb8886d9b2a4147054fde12f7e767d|https://raw.githubusercontent.com/notofonts/notofonts.github.io/noto-monthly-release-2026.08.01/fonts/LICENSE|OFL-NotoSansMono.txt|.>NotoSansMono-Regular.ttf
-unifont|https://unifoundry.com/pub/unifont/unifont-15.1.05/font-builds/unifont-15.1.05.otf|7b62b50acbb186689dc30c446ce4367b87d79489e9907b83255f9fbe0dcfb9e1|https://unifoundry.com/LICENSE.txt|LICENSE-Unifont.txt|.>unifont.otf
-EOF
+	sed -n 's/^archive|//p' "$sources"
+}
+
+# The pin for one output on its own, which the phone checks it against.
+file_pin() {
+	sed -n "s/^file|$(printf '%s' "$1" | sed 's/[.[\*^$/]/\\&/g')|//p" "$sources"
 }
 
 if [ "$list" = 1 ]; then
@@ -99,6 +93,25 @@ else
 	echo "fetch-fonts: no sha256 tool found" >&2
 	exit 1
 fi
+
+# Each output against its own pin, after the archive hash has vouched for
+# the archive. A mismatch here means font-sources.txt's file lines no longer
+# describe this archive -- and a phone would then refuse fonts a build
+# accepts, which is the drift one file was meant to prevent.
+check_pin() {
+	pin=$(file_pin "$2")
+	if [ -z "$pin" ]; then
+		echo "fetch-fonts: $1: no file| pin for $2 in $sources" >&2
+		exit 1
+	fi
+	got=$(checksum "$3")
+	if [ "$got" != "$pin" ]; then
+		echo "fetch-fonts: $1: $2 does not match its file| pin" >&2
+		echo "  expected $pin" >&2
+		echo "  got      $got" >&2
+		exit 1
+	fi
+}
 
 mkdir -p "$out" "$cache" "$licences"
 
@@ -154,12 +167,14 @@ records | while IFS='|' read -r id url sha licence_url licence_file members; do
 					exit 1
 				fi
 				mv "$out/$dst.part" "$out/$dst"
+				check_pin "$id" "$dst" "$out/$dst"
 			done
 			;;
 		*)
 			# A bare font file: the archive IS the font.
 			dst="${members##*>}"
 			cp "$archive" "$out/$dst"
+			check_pin "$id" "$dst" "$out/$dst"
 			;;
 	esac
 
@@ -171,6 +186,8 @@ records | while IFS='|' read -r id url sha licence_url licence_file members; do
 			curl -fsSL --retry 3 -o "$licences/$licence_file" "$licence_url"
 			;;
 	esac
+
+	check_pin "$id" "licences/$licence_file" "$licences/$licence_file"
 
 	fetched=$((fetched + 1))
 	echo "  $id: fetched"

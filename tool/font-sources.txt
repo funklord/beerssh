@@ -1,0 +1,60 @@
+# The curated font set, pinned (project.md sec 9.2, sec 9.4).
+#
+# One file, read by two things that must agree: tool/fetch-fonts.sh,
+# which fetches whole archives for a build and checks them by the
+# archive hash, and the app, which fetches single files on a phone
+# (bssh_font_download) by HTTP range and checks each by its own hash --
+# a 165 MB archive is not a download to make for four fonts in it.
+#
+#   archive|id|archive-url|sha256|licence-url|licence-file|members...
+#
+# where each member is  path/inside/archive>OutputName.ttf , or for a
+# bare font file the single member  .>OutputName.ttf . A licence-url of
+# "archive:<path>" is a member of the archive.
+#
+#   file|OutputName|sha256
+#
+# is the hash of each output on its own, taken from files the archive
+# hash had already verified; licences are named licences/<file>.
+# Changing an archive means re-taking these, or the phone refuses the
+# new files as not the ones pinned -- which is the point.
+
+archive|jetbrains-mono|https://github.com/JetBrains/JetBrainsMono/releases/download/v2.304/JetBrainsMono-2.304.zip|6f6376c6ed2960ea8a963cd7387ec9d76e3f629125bc33d1fdcd7eb7012f7bbf|archive:OFL.txt|OFL-JetBrainsMono.txt|fonts/ttf/JetBrainsMono-Regular.ttf>JetBrainsMono-Regular.ttf fonts/ttf/JetBrainsMono-Bold.ttf>JetBrainsMono-Bold.ttf fonts/ttf/JetBrainsMono-Italic.ttf>JetBrainsMono-Italic.ttf fonts/ttf/JetBrainsMono-BoldItalic.ttf>JetBrainsMono-BoldItalic.ttf
+archive|iosevka-term|https://github.com/be5invis/Iosevka/releases/download/v34.8.0/PkgTTF-IosevkaTerm-34.8.0.zip|bb58292f7f7172d272fb8d4475237469e4e047d5cdebb795ecc80db8b54e615e|https://raw.githubusercontent.com/be5invis/Iosevka/v34.8.0/LICENSE.md|OFL-Iosevka.md|IosevkaTerm-Regular.ttf>IosevkaTerm-Regular.ttf IosevkaTerm-Bold.ttf>IosevkaTerm-Bold.ttf IosevkaTerm-Italic.ttf>IosevkaTerm-Italic.ttf IosevkaTerm-BoldItalic.ttf>IosevkaTerm-BoldItalic.ttf
+archive|dejavu-sans-mono|https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.zip|7576310b219e04159d35ff61dd4a4ec4cdba4f35c00e002a136f00e96a908b0a|archive:dejavu-fonts-ttf-2.37/LICENSE|LICENSE-DejaVu.txt|dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono.ttf>DejaVuSansMono.ttf dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-Bold.ttf>DejaVuSansMono-Bold.ttf dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-Oblique.ttf>DejaVuSansMono-Oblique.ttf dejavu-fonts-ttf-2.37/ttf/DejaVuSansMono-BoldOblique.ttf>DejaVuSansMono-BoldOblique.ttf
+archive|hack|https://github.com/source-foundry/Hack/releases/download/v3.003/Hack-v3.003-ttf.zip|0c2604631b1f055041c68a0e09ae4801acab6c5072ba2db6a822f53c3f8290ac|https://raw.githubusercontent.com/source-foundry/Hack/v3.003/LICENSE.md|LICENSE-Hack.md|ttf/Hack-Regular.ttf>Hack-Regular.ttf ttf/Hack-Bold.ttf>Hack-Bold.ttf ttf/Hack-Italic.ttf>Hack-Italic.ttf ttf/Hack-BoldItalic.ttf>Hack-BoldItalic.ttf
+archive|fira-code|https://github.com/tonsky/FiraCode/releases/download/6.2/Fira_Code_v6.2.zip|0949915ba8eb24d89fd93d10a7ff623f42830d7c5ffc3ecbf960e4ecad3e3e79|https://raw.githubusercontent.com/tonsky/FiraCode/6.2/LICENSE|OFL-FiraCode.txt|ttf/FiraCode-Regular.ttf>FiraCode-Regular.ttf ttf/FiraCode-Bold.ttf>FiraCode-Bold.ttf
+archive|cascadia-code-pl|https://github.com/microsoft/cascadia-code/releases/download/v2404.23/CascadiaCode-2404.23.zip|a911410626c0e09d03fa3fdda827188fda96607df50fecc3c5fee5906e33251b|https://raw.githubusercontent.com/microsoft/cascadia-code/v2404.23/LICENSE|OFL-CascadiaCode.txt|ttf/CascadiaCodePL.ttf>CascadiaCodePL.ttf ttf/CascadiaCodePLItalic.ttf>CascadiaCodePL-Italic.ttf
+archive|noto-sans-mono|https://github.com/notofonts/notofonts.github.io/raw/noto-monthly-release-2026.08.01/fonts/NotoSansMono/hinted/ttf/NotoSansMono-Regular.ttf|65b5e2b2c4a1fba9ae8be1f026cb35b03dcb8886d9b2a4147054fde12f7e767d|https://raw.githubusercontent.com/notofonts/notofonts.github.io/noto-monthly-release-2026.08.01/fonts/LICENSE|OFL-NotoSansMono.txt|.>NotoSansMono-Regular.ttf
+archive|unifont|https://unifoundry.com/pub/unifont/unifont-15.1.05/font-builds/unifont-15.1.05.otf|7b62b50acbb186689dc30c446ce4367b87d79489e9907b83255f9fbe0dcfb9e1|https://unifoundry.com/LICENSE.txt|LICENSE-Unifont.txt|.>unifont.otf
+
+file|CascadiaCodePL-Italic.ttf|3a441e8831bfc60ebb7a7293775401732e179eca36fd16b07240be198800416d
+file|CascadiaCodePL.ttf|a1f3ff6bb75c09f84d00c670a8e10367c8be2c91c45bae1490f2b5e5b768ad3b
+file|DejaVuSansMono-Bold.ttf|bce60f1b4421acd9ea51ba6623d7024ecbe6817a953e3654df62a5e6bdf8f769
+file|DejaVuSansMono-BoldOblique.ttf|91713a71d550bba22c2a6b2bb2a9ad8f9a159e12e4e9f0a5b2677998ba21213e
+file|DejaVuSansMono-Oblique.ttf|742097840c541870e8d6dc5c9b37bb1ceeea6c0dedd1d475faf903ef9df734b0
+file|DejaVuSansMono.ttf|b4a6c3e4faab8773f4ff761d56451646409f29abedd68f05d38c2df667d3c582
+file|FiraCode-Bold.ttf|41f6554e845e2f5b70adad3950122334b866aac436793b7742ade600067701be
+file|FiraCode-Regular.ttf|5992ab9640e2df491b2f609467b1de60e8bc39b2c28db184342a0592d98f6117
+file|Hack-Bold.ttf|5bbf531eff7f8a0c2559c9a0656718e2828a012a9b1f60b5f54006d59a4de8d4
+file|Hack-BoldItalic.ttf|64f74a079700b7dfe128551a1e28875d5ba980971e55f5e0f0596e37bdc6a6bc
+file|Hack-Italic.ttf|096fb67a2b85f3c866e9cb3e965b27c2c10b977315f4d3d7f095674be35091c1
+file|Hack-Regular.ttf|15f55cc0c85a2988d2b4b3a8cdb5d77fdfbaf319e1bb5309d725db9818fb7125
+file|IosevkaTerm-Bold.ttf|de2b1ea5a14da59c0a39bd54e370bc8f396e5c38779aad39790e98ee07a914ea
+file|IosevkaTerm-BoldItalic.ttf|85bf23c8805e5fd614f60fdc34eca82b1af033029084df2a298f482cb1525bca
+file|IosevkaTerm-Italic.ttf|af91511780afbe3ec9e95105ef83a4fcbc6b1a6691eb0bc9bc66e9141d18efbe
+file|IosevkaTerm-Regular.ttf|5f560f828f39cd696a15734a4767d61d4bfe6e256d7de3bee3ab5c8b46f1acb3
+file|JetBrainsMono-Bold.ttf|5590990c82e097397517f275f430af4546e1c45cff408bde4255dad142479dcb
+file|JetBrainsMono-BoldItalic.ttf|4039d5ce0ed225bf9c8b2c8c6436290ae2f356b7e90d70fa666227238324aa3b
+file|JetBrainsMono-Italic.ttf|9d0a1f7a708e6af183f1193b7e81d40da294f5c67682c085d8401c60aac8ded4
+file|JetBrainsMono-Regular.ttf|a0bf60ef0f83c5ed4d7a75d45838548b1f6873372dfac88f71804491898d138f
+file|NotoSansMono-Regular.ttf|65b5e2b2c4a1fba9ae8be1f026cb35b03dcb8886d9b2a4147054fde12f7e767d
+file|licences/LICENSE-DejaVu.txt|7a083b136e64d064794c3419751e5c7dd10d2f64c108fe5ba161eae5e5958a93
+file|licences/LICENSE-Hack.md|1f61bb7c790c59b4b0ecdf304628b94e42ae4c8020094a8c3da73381ab212623
+file|licences/LICENSE-Unifont.txt|1e74cb82bf476843e97c2596297b04219b1a7e51f7238944a8c031cb9401fa87
+file|licences/OFL-CascadiaCode.txt|51882cd3cdba4e16f220f44ddb08a635c38c44ea6e0975db2574f4be6f958238
+file|licences/OFL-FiraCode.txt|1d41e10031ab125302780a05ec4c91d218e47db0c7e37cf315cce5e608cdc25c
+file|licences/OFL-Iosevka.md|4ba53c7c1cb39279aae5f8d7d22054c485c71169920e5a36ed098b115e2e3c5d
+file|licences/OFL-JetBrainsMono.txt|30f0c136e3c88e422d0791acd97238870f9054a9729bc34cf2ff0d4ed8cac4ad
+file|licences/OFL-NotoSansMono.txt|f2095b08bed08b23a6fe26112fcd679a2bee3f002eef077eb05d215ed1051bd8
+file|unifont.otf|7b62b50acbb186689dc30c446ce4367b87d79489e9907b83255f9fbe0dcfb9e1

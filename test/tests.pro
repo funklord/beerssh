@@ -15,6 +15,9 @@ TARGET = beerssh_test
 
 QT += widgets network testlib dbus
 
+RESOURCES += ../resources.qrc
+LIBS += -lz
+
 # Same define as the app's, and passed in the same way by the top-level
 # Makefile. The emulator answers XTVERSION with the program's own name and
 # version (sec 7.1), so this file has to carry it or that source will not
@@ -61,6 +64,7 @@ SOURCES += \
     pty_session_test.cpp \
     layout_test.cpp \
     font_catalog_test.cpp \
+    font_download_test.cpp \
     font_picker_test.cpp \
     preset_editor_test.cpp \
     screen_test.cpp \
@@ -97,6 +101,9 @@ SOURCES += \
     ../src/model/session.cpp \
     ../src/model/session_registry.cpp \
     ../src/model/kept_scrollback.cpp \
+    ../src/model/font_sources.cpp \
+    ../src/model/font_download.cpp \
+    ../src/term/zip_index.cpp \
     ../src/ui/font_picker.cpp \
     ../src/ui/form_wrap.cpp \
     ../src/ui/password_prompt.cpp \
@@ -154,6 +161,7 @@ HEADERS += \
     pty_session_test.h \
     layout_test.h \
     font_catalog_test.h \
+    font_download_test.h \
     font_picker_test.h \
     preset_editor_test.h \
     screen_test.h \
@@ -185,6 +193,9 @@ HEADERS += \
     ../src/model/session.h \
     ../src/model/session_registry.h \
     ../src/model/kept_scrollback.h \
+    ../src/model/font_sources.h \
+    ../src/model/font_download.h \
+    ../src/term/zip_index.h \
     ../src/ui/font_picker.h \
     ../src/ui/form_wrap.h \
     ../src/ui/password_prompt.h \

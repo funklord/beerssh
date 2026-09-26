@@ -12,6 +12,7 @@
 #include "model/profile.h"
 #include "model/profile_store.h"
 #include "model/session_registry.h"
+#include "model/font_download.h"
 #include "platform/platform.h"
 #include "term/font_catalog.h"
 #include "hang_watchdog.h"
@@ -218,7 +219,13 @@ int main(int argc, char *argv[]) {
 
 	if (platform) {
 		const QString font_dir = platform->font_directory();
-		const int faces = bssh_font_catalog::instance().load_bundled(font_dir);
+		int faces = bssh_font_catalog::instance().load_bundled(font_dir);
+
+		/*
+		 * And whatever was downloaded on this device (sec 9.4), after the
+		 * bundle so a bundled face is never shadowed by a fetched copy.
+		 */
+		faces += bssh_font_catalog::instance().load_bundled(bssh_downloaded_font_directory());
 
 		/*
 		 * One line, because "the terminal font looks wrong" and "no fonts
