@@ -5187,10 +5187,30 @@ keeps its number and now means memory.
   just above the screen, beside the wrong text. `push_top_line` now moves
   the history's pictures one line per push, except during a resize, whose
   pushes `shift_rows` already pays for.
-- Reading back is synchronous on the GUI thread; a full-screen picture is
-  tens of milliseconds. Not measured on a phone.
+- **Measured on the emulator 2026-09-28** (x86_64, API 33) with 1000x1300
+  pictures of noise, the worst case for compression: 160 ms to spill one,
+  49-55 ms to read one back, both on the GUI thread. Both came back beside
+  their own text. The spill is the slow half and it happens while output
+  is arriving; worth moving off the thread if a phone shows it. Not yet
+  measured on a phone.
 
 Guarded by `tool/sabotage/picture-spill.toml`, ten edits.
+
+**[FIXED 2026-09-28] Two faults in placing an image, found by that run.**
+A `cat` of five large kitty images placed three: the owed cursor advance
+past an image was fed to libvterm after the whole read, and when the next
+image's APC had begun in the same read, the advance's ESC landed inside the
+open string and ended it -- the rest of that chunk was lost and the image
+decoded to nothing. The same lateness hid text: whatever followed an image
+in one read was printed before the cursor moved, onto the image's rows. And
+the advance was a CUD, which stops at the bottom margin, so an image placed
+at the bottom -- where output puts nearly all of them -- kept the cursor in
+its own rows whatever the timing. `feed()` now writes in pieces ending at
+each string terminator (ST or BEL) and pays the advance between them, holds
+a trailing ESC for the read that brings the other half of its ST, and
+advances by IND, which scrolls. Every existing test fed one image per read
+with nothing after it, which is the one arrangement none of this shows in.
+Guarded by `tool/sabotage/image-in-the-read.toml`, five edits.
 
 **And that "never drop what is on screen" rule is what let sixel animation
 run the budget over.** Sixel carries no image id, so `place()` gives every

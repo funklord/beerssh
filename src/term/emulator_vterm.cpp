@@ -130,6 +130,9 @@ struct bssh_emulator_private {
 
 	void apply_graphics(const bssh_graphics_result_t &result);
 
+	/* Feeds the owed cursor-down, if there is one. */
+	void settle_cursor_advance();
+
 	/*
 	 * The single point every repaint request goes through, which is what
 	 * makes the synchronised-output hold possible at all: a hold spread
@@ -1773,14 +1776,54 @@ void bssh_emulator::feed(const QByteArray &bytes) {
 	buffer.append(bytes);
 	m_private->pending_input.clear();
 
-	const int tail = incomplete_tail_length(buffer);
+	int tail = incomplete_tail_length(buffer);
+
+	/*
+	 * A trailing ESC waits for the next read too: it may be the first half
+	 * of an ST, and the split below can only see a terminator whose two
+	 * bytes arrive together.
+	 */
+	if (tail == 0 && buffer.endsWith('\x1b')) tail = 1;
+
 	if (tail > 0) {
 		m_private->pending_input = buffer.right(tail);
 		buffer.chop(tail);
 	}
 
 	if (buffer.isEmpty()) return;
-	vterm_input_write(m_private->vt, buffer.constData(), buffer.size());
+
+	/*
+	 * Written in pieces that end at each string terminator -- ST or BEL --
+	 * so an image's owed cursor-down goes in the moment the string that
+	 * placed it has ended, and not after the whole read.
+	 *
+	 * After the whole read was too late twice over, measured with five
+	 * large kitty images in one `cat`. Text that followed an image in the
+	 * same read was printed before the cursor moved, onto the rows the
+	 * image covers, and hidden under it. And when the next image's APC
+	 * had already begun in that read, the cursor-down's ESC landed inside
+	 * it and ended it: the rest of that chunk was lost, the transmission
+	 * decoded to nothing, and the image never appeared -- two of five on
+	 * an emulator, one of five here.
+	 */
+	const char *data = buffer.constData();
+	const qsizetype size = buffer.size();
+	qsizetype at = 0;
+
+	while (at < size) {
+		qsizetype end = size;
+		for (qsizetype i = at; i < size; ++i) {
+			if (data[i] == '\x07' || (data[i] == '\\' && i > 0 && data[i - 1] == '\x1b')) {
+				end = i + 1;
+				break;
+			}
+		}
+
+		vterm_input_write(m_private->vt, data + at, size_t(end - at));
+		at = end;
+
+		if (at < size) m_private->settle_cursor_advance();
+	}
 
 	/*
 	 * Row-merged damage is owed, not delivered (see the constructor), and
@@ -1799,15 +1842,34 @@ void bssh_emulator::feed(const QByteArray &bytes) {
 	 * than re-entering the parser from inside its own callback.
 	 */
 	m_private->apply_pending_links();
+	m_private->settle_cursor_advance();
+}
 
-	if (m_private->pending_cursor_advance > 0) {
-		const QByteArray advance = QByteArrayLiteral("\x1b[")
-		                            + QByteArray::number(m_private->pending_cursor_advance)
-		                            + QByteArrayLiteral("B");
-		m_private->pending_cursor_advance = 0;
-		vterm_input_write(m_private->vt, advance.constData(), advance.size());
-		vterm_screen_flush_damage(m_private->vts);
-	}
+/*
+ * Only ever between pieces that end at a terminator, or at the end of a
+ * read -- never inside a string, where its ESC would end the string. An
+ * image is placed when its string's terminator is parsed, so an advance
+ * is owed only at exactly those points.
+ *
+ * IND, one per row, not CUD. A cursor-down stops at the bottom margin, so
+ * an image placed near the bottom -- which is where output puts every
+ * image -- left the cursor inside its own rows, and the text after it was
+ * printed there and hidden. Index scrolls at the margin, as a line feed
+ * does, and keeps the column as CUD did.
+ *
+ * Damage and links are settled first, as at the end of a read: the
+ * advance may scroll, and a link range is a row number.
+ */
+void bssh_emulator_private::settle_cursor_advance() {
+	if (pending_cursor_advance <= 0) return;
+
+	vterm_screen_flush_damage(vts);
+	apply_pending_links();
+
+	const QByteArray advance = QByteArrayLiteral("\x1b" "D").repeated(pending_cursor_advance);
+	pending_cursor_advance = 0;
+	vterm_input_write(vt, advance.constData(), advance.size());
+	vterm_screen_flush_damage(vts);
 }
 
 void bssh_emulator::resize(int cols, int rows) {

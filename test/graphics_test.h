@@ -41,6 +41,11 @@ private slots:
 	void an_abandoned_spill_is_swept_and_a_live_one_is_not();
 	void the_disk_budget_forgets_the_oldest_spilled_picture();
 	void a_picture_deep_in_the_history_stays_beside_its_text();
+	void text_after_an_image_in_the_same_read_is_not_hidden_under_it();
+	void the_next_image_begun_in_the_same_read_is_not_cut_off();
+	void an_image_whose_terminator_is_split_across_reads_still_moves_the_text();
+	void a_link_before_an_image_that_scrolls_stays_on_its_text();
+	void text_after_an_image_at_the_bottom_is_not_hidden_under_it();
 	void a_picture_whose_text_left_the_scrollback_is_forgotten();
 	void a_background_image_is_drawn_under_the_text();
 	void an_image_that_arrived_as_bytes_reaches_the_screen();

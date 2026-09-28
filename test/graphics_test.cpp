@@ -1271,3 +1271,146 @@ void graphics_test::a_picture_whose_text_left_the_scrollback_is_forgotten() {
 		QCOMPARE(emulator.images().count(), history == 20 ? 0 : 1);
 	}
 }
+
+void graphics_test::text_after_an_image_in_the_same_read_is_not_hidden_under_it() {
+	/*
+	 * The cursor owes an image its rows, and paid them after the whole
+	 * read -- so text that followed the image in the same read was
+	 * printed first, onto the rows the image covers, and drawn under it.
+	 * A `cat` of a file does exactly this; one image per read, the way
+	 * every other test here feeds, never does.
+	 */
+	bssh_emulator emulator(40, 12);
+	emulator.set_cell_pixels(8, 16);
+
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"), png_of(16, 48, qRgb(255, 0, 0)))
+	              + QByteArrayLiteral("\r\nMARKER"));
+
+	QCOMPARE(emulator.images().count(), 1);
+	const bssh_image_placement_t &image = emulator.images().placements().first();
+
+	int marker_row = -1;
+	for (int r = 0; r < emulator.screen().rows(); ++r)
+		if (emulator.screen().cell(r, 0).ch == U'M') marker_row = r;
+
+	QVERIFY2(marker_row >= 0, "the fixture's text is not on the screen");
+	QVERIFY2(marker_row >= image.row + image.rows,
+	          qPrintable(QStringLiteral("text at row %1 is under the image on rows %2-%3")
+	                             .arg(marker_row).arg(image.row).arg(image.row + image.rows - 1)));
+}
+
+void graphics_test::the_next_image_begun_in_the_same_read_is_not_cut_off() {
+	/*
+	 * The owed cursor-down was fed after the whole read, and when the next
+	 * image's APC had begun in that read, its ESC landed inside the open
+	 * string and ended it. The rest of that chunk was lost and the image
+	 * never appeared. Measured: two of five images missing from one
+	 * `cat` on an emulator.
+	 */
+	bssh_emulator emulator(40, 12);
+	emulator.set_cell_pixels(8, 16);
+
+	const QByteArray second = png_of(16, 16, qRgb(0, 0, 255)).toBase64();
+	const QByteArray first_chunk = QByteArrayLiteral("\x1b_Ga=T,f=100,m=1;")
+	                               + second.left(second.size() / 2) + QByteArrayLiteral("\x1b\\");
+	const QByteArray last_chunk = QByteArrayLiteral("\x1b_Gm=0;")
+	                              + second.mid(second.size() / 2) + QByteArrayLiteral("\x1b\\");
+
+	/* The first image whole, and the second's first chunk begun but not ended. */
+	const int split = first_chunk.size() / 2;
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"), png_of(16, 16, qRgb(255, 0, 0)))
+	              + first_chunk.left(split));
+	emulator.feed(first_chunk.mid(split) + last_chunk);
+
+	/* Against the decoded fixture: png_of's fill takes a pixel, not a QRgb. */
+	QCOMPARE(emulator.images().count(), 2);
+	QCOMPARE(emulator.images().placements().last().image.pixelColor(0, 0),
+	         QImage::fromData(png_of(16, 16, qRgb(0, 0, 255))).pixelColor(0, 0));
+	QVERIFY(emulator.images().placements().last().image.pixelColor(0, 0)
+	        != emulator.images().placements().first().image.pixelColor(0, 0));
+}
+
+void graphics_test::an_image_whose_terminator_is_split_across_reads_still_moves_the_text() {
+	/*
+	 * The ST's ESC at the end of one read and its backslash at the start
+	 * of the next. The write is split at terminators it can see whole, so
+	 * the trailing ESC is held back to arrive with its other half -- or
+	 * the image is placed partway into the second read, and the text
+	 * after it in that read lands under it.
+	 */
+	bssh_emulator emulator(40, 12);
+	emulator.set_cell_pixels(8, 16);
+
+	const QByteArray image = kitty_escape(QByteArrayLiteral("Ga=T,f=100"),
+	                                      png_of(16, 48, qRgb(255, 0, 0)));
+	emulator.feed(image.left(image.size() - 1));
+	emulator.feed(image.right(1) + QByteArrayLiteral("\r\nMARKER"));
+
+	QCOMPARE(emulator.images().count(), 1);
+	const bssh_image_placement_t &placed = emulator.images().placements().first();
+
+	int marker_row = -1;
+	for (int r = 0; r < emulator.screen().rows(); ++r)
+		if (emulator.screen().cell(r, 0).ch == U'M') marker_row = r;
+
+	QVERIFY2(marker_row >= placed.row + placed.rows,
+	          qPrintable(QStringLiteral("text at row %1 is under the image on rows %2-%3")
+	                             .arg(marker_row).arg(placed.row).arg(placed.row + placed.rows - 1)));
+}
+
+void graphics_test::a_link_before_an_image_that_scrolls_stays_on_its_text() {
+	/*
+	 * A link's cells are marked after the write, by row -- so a
+	 * cursor-down that scrolls in between would mark the row that has
+	 * moved into its place. The image's cursor-down now goes in partway
+	 * through a read, so the marks are settled before it as they are at
+	 * the end of one.
+	 */
+	bssh_emulator emulator(40, 6);
+	emulator.set_cell_pixels(8, 16);
+
+	emulator.feed(QByteArrayLiteral("\r\n\r\n\r\n\r\n\x1b]8;;https://example.com/\x1b\\LINK"
+	                                "\x1b]8;;\x1b\\\r\n")
+	              + kitty_escape(QByteArrayLiteral("Ga=T,f=100"), png_of(16, 48, qRgb(255, 0, 0)))
+	              + QByteArrayLiteral("after"));
+
+	int link_row = -1;
+	for (int r = 0; r < emulator.screen().rows(); ++r)
+		if (emulator.screen().cell(r, 0).ch == U'L') link_row = r;
+	QVERIFY2(link_row >= 0, "the fixture scrolled the link off the screen");
+
+	QVERIFY2(emulator.screen().cell(link_row, 0).link != 0, "the link's text lost its link");
+	for (int r = 0; r < emulator.screen().rows(); ++r) {
+		if (r == link_row) continue;
+		QVERIFY2(emulator.screen().cell(r, 0).link == 0,
+		          qPrintable(QStringLiteral("row %1 was marked instead of row %2").arg(r).arg(link_row)));
+	}
+}
+
+void graphics_test::text_after_an_image_at_the_bottom_is_not_hidden_under_it() {
+	/*
+	 * Where output puts nearly every image: at the bottom. The cursor's
+	 * advance past the image was a cursor-down, which stops at the bottom
+	 * margin, so it stayed inside the image's rows and the text after it
+	 * was hidden. Measured on an emulator: the lines after each tall image
+	 * in a `cat` were under the image, not below it.
+	 */
+	bssh_emulator emulator(40, 6);
+	emulator.set_cell_pixels(8, 16);
+
+	emulator.feed(QByteArrayLiteral("\r\n\r\n\r\n\r\n"));
+	emulator.feed(kitty_escape(QByteArrayLiteral("Ga=T,f=100"), png_of(16, 48, qRgb(255, 0, 0))));
+	emulator.feed(QByteArrayLiteral("MARKER"));
+
+	QCOMPARE(emulator.images().count(), 1);
+	const bssh_image_placement_t &image = emulator.images().placements().first();
+
+	int marker_row = -1;
+	for (int r = 0; r < emulator.screen().rows(); ++r)
+		if (emulator.screen().cell(r, 0).ch == U'M') marker_row = r;
+
+	QVERIFY2(marker_row >= 0, "the fixture's text is not on the screen");
+	QVERIFY2(marker_row >= image.row + image.rows,
+	          qPrintable(QStringLiteral("text at row %1 is under the image on rows %2-%3")
+	                             .arg(marker_row).arg(image.row).arg(image.row + image.rows - 1)));
+}

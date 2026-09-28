@@ -1,0 +1,45 @@
+# An image's cursor-down, owed from the moment its string ends, and paid
+# there rather than after the whole read (project.md sec 7.1).
+
+# Paid after the whole read: the next image's APC, begun in the same
+# read, is ended by the cursor-down's ESC and never decodes.
+[[sabotage]]
+name = "the write is not split at string terminators"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\t\tif (data[i] == '\\x07' || (data[i] == '\\\\' && i > 0 && data[i - 1] == '\\x1b')) {"
+replace = "\t\t\tif (false) {"
+expect = "the_next_image_begun_in_the_same_read_is_not_cut_off"
+
+# Split, but not paid between the pieces: text after the image in the
+# same read is printed onto the image's rows.
+[[sabotage]]
+name = "the cursor-down waits for the end of the read"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (at < size) m_private->settle_cursor_advance();\n"
+replace = ""
+expect = "text_after_an_image_in_the_same_read_is_not_hidden_under_it"
+
+# A terminator split across reads is not seen whole.
+[[sabotage]]
+name = "a trailing ESC is not held for its other half"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (tail == 0 && buffer.endsWith('\\x1b')) tail = 1;"
+replace = ""
+expect = "an_image_whose_terminator_is_split_across_reads_still_moves_the_text"
+
+# The cursor-down scrolls before the link's row is marked.
+[[sabotage]]
+name = "links are marked after a cursor-down that scrolled"
+file = "src/term/emulator_vterm.cpp"
+find = "\tvterm_screen_flush_damage(vts);\n\tapply_pending_links();\n\n\tconst QByteArray advance"
+replace = "\tvterm_screen_flush_damage(vts);\n\n\tconst QByteArray advance"
+expect = "a_link_before_an_image_that_scrolls_stays_on_its_text"
+
+# The advance stops at the bottom margin: an image at the bottom keeps the
+# cursor inside its rows.
+[[sabotage]]
+name = "the advance past an image is a cursor-down that cannot scroll"
+file = "src/term/emulator_vterm.cpp"
+find = "\tconst QByteArray advance = QByteArrayLiteral(\"\\x1b\" \"D\").repeated(pending_cursor_advance);"
+replace = "\tconst QByteArray advance = QByteArrayLiteral(\"\\x1b[\") + QByteArray::number(pending_cursor_advance) + QByteArrayLiteral(\"B\");"
+expect = "text_after_an_image_at_the_bottom_is_not_hidden_under_it"
