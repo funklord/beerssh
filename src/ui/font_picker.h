@@ -27,8 +27,8 @@ class QSpinBox;
  * Android -- and the touch target sizes it asks for, not what it offers.
  *
  * Fonts that are not installed are LISTED, marked, and selectable. That is
- * the whole point of sec 9.4's rule: on Android most of the set arrives in
- * an asset pack, and a picker that hides what has not been downloaded is a
+ * the whole point of sec 9.4's rule: on Android most of the set is
+ * downloaded, and a picker that hides what has not been downloaded is a
  * picker whose contents depend on the platform after all.
  */
 class bssh_font_picker : public QWidget {

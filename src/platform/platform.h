@@ -260,8 +260,8 @@ public:
 	 *
 	 * The two platforms answer this from genuinely different places -- an
 	 * installed share directory or a source checkout on desktop, the
-	 * packaged assets on Android, with the rest of the set arriving later
-	 * through an asset pack -- and sec 3 says a difference like that
+	 * packaged assets on Android, with the rest of the set downloaded
+	 * later (sec 9.4) -- and sec 3 says a difference like that
 	 * belongs behind this interface rather than in an #ifdef inside the
 	 * renderer. bssh_font_catalog asks once at startup and never learns
 	 * which kind of path it got.

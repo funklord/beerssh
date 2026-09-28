@@ -215,9 +215,11 @@ PRE_TARGETDEPS += $$BSSH_VTERM_LIB
 android {
     SOURCES += \
         src/platform/platform_android.cpp \
+        src/platform/range_source_android.cpp \
         src/platform/secret_store_file.cpp \
         src/platform/secret_store_keystore.cpp \
         src/platform/secret_store_select_android.cpp
+    HEADERS += src/platform/range_source_android.h
 
     # Cross-compiled, not system: an NDK sysroot has none of these.
     # tool/build-deps-android.sh builds them into deps/android/<abi>.

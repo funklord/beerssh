@@ -1,4 +1,5 @@
 #include "platform/platform.h"
+#include "platform/range_source_android.h"
 
 #include <QGuiApplication>
 #include <QScreen>
@@ -231,6 +232,9 @@ class bssh_platform_android : public bssh_platform {
 public:
 	bssh_platform_android() : m_keep_alive(false), m_status(QStringLiteral("Connected")) {
 		m_last_scheme = system_appearance();
+
+		/* Qt has no TLS here; see BsshHttp.java. */
+		bssh_install_android_range_source();
 		if (qApp) qApp->installEventFilter(this);
 	}
 
@@ -495,10 +499,10 @@ public:
 		 * an Android asset is not a file on disk and has no path a
 		 * QFileInfo would recognise without it.
 		 *
-		 * Only the base set is here. sec 9.4 delivers the rest through
-		 * Play asset packs, which unpack into the app's data directory
-		 * rather than into assets, so this becomes two directories the
-		 * day that lands. It is one for now because shipping a picker
+		 * Only the base set is here. sec 9.4 delivers the rest as a
+		 * download into the app's data directory, which main.cpp loads
+		 * after this one (bssh_downloaded_font_directory). It was one
+		 * directory before that landed because shipping a picker
 		 * that offers downloads before the download exists is worse than
 		 * shipping three fonts that work.
 		 */

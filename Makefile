@@ -924,10 +924,10 @@ $(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) beerssh.pro
 # The base font set that ships inside the APK (project.md sec 9.4).
 #
 # Three families, not eight: the default, the box-drawing fallback, and one
-# alternative. Everything else is an asset pack, because the full set is
-# 54 MB and Iosevka is 42 MB of that on its own -- the condensed face that
-# would otherwise be the phone default (sec 9.2) cannot ship in a base
-# download and has to arrive later.
+# alternative. Everything else is downloaded on the phone, because the
+# full set is 54 MB and Iosevka is 42 MB of that on its own -- the condensed
+# face that would otherwise be the phone default (sec 9.2) cannot ship in a
+# base download and has to arrive later.
 #
 # Noto Sans Mono is in the base set as the box-drawing and symbol fallback.
 # It was put there to stop CJK rendering as tofu, which it does not do:
@@ -942,7 +942,7 @@ $(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) beerssh.pro
 # one platform where the set is reduced. 4.9 MB covers the whole BMP,
 # which is a remarkable price for "no terminal output is ever unreadable"
 # -- and Japanese, Chinese and Korean are not scripts a phone will not
-# meet. Everything else stays an asset pack: the full set is 374 MB and
+# meet. Everything else is downloaded when chosen: the full set is 374 MB and
 # Iosevka alone is 10 MB of it.
 ANDROID_BASE_FONTS = \
 	JetBrainsMono-Regular.ttf JetBrainsMono-Bold.ttf \

@@ -220,8 +220,8 @@ void bssh_licences_view::load_fonts() {
 
 		/*
 		 * The full text where it shipped, and an honest line where it did
-		 * not: on a checkout that never ran tool/fetch-fonts.sh, or an
-		 * Android build whose asset pack has not arrived, there is
+		 * not: on a checkout that never ran tool/fetch-fonts.sh, or a
+		 * phone that has not downloaded the family, there is
 		 * nothing to show and saying so beats an empty pane.
 		 */
 		const QString body = text.isEmpty()

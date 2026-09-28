@@ -937,6 +937,21 @@ type-specific `FOREGROUND_SERVICE_*` permission, `INTERNET`,
   layer, including logic that merely glues two native calls together. If a
   design needs more Java/Kotlin than that, look harder for the C++/JNI way
   rather than accepting the convenience.
+- **The one networking exception: HTTPS for the font download (§9.4),
+  decided by the holder 2026-09-28.** Qt on Android has no TLS backend -- it
+  dlopens a libssl the platform does not offer apps, and the kit ships none
+  -- so every `QNetworkAccessManager` request to an https address fails with
+  "TLS initialization failed". Found on the emulator after the download had
+  passed every desktop test. `BsshHttp.java` does a HEAD and a ranged GET
+  with `HttpURLConnection`, which brings the system's certificate store and
+  redirects, and nothing else; `platform/range_source_android.cpp` runs it on
+  a worker thread and hands the bytes back as a `bssh_range_source`, so which
+  ranges to ask for and every check on what comes back stay in C++, under the
+  suite. Rejected: bbq-predictor's route -- shared OpenSSL in the APK, native
+  libraries extracted, Qt's TLS plugin loaded by hand -- for every native
+  library on disk twice; and an HTTPS client of our own over the static
+  OpenSSL libssh already links, for hand-written TLS verification. SSH is
+  unaffected: libssh does its own crypto.
 - Bridge via **JNI** (`QJniObject`/`QJniEnvironment`, or Qt's current Android
   patterns — **check what Qt 6 already provides before hand-rolling a service
   template**, this area has changed across Qt versions). Keep the bridge thin:
@@ -8276,8 +8291,13 @@ diverge on *delivery* but never on *which fonts exist*.
   "Download <font>" under the note for a font of the set that is missing,
   never for a fallback-only one. Guarded by `tool/sabotage/font-download.toml`,
   six edits; `BSSH_TEST_LIVE_FONTS=1` runs a real family over the network.
-  **Not yet seen on a phone**: the offer only appears for a missing font, and
-  every font is installed wherever the suite runs.
+  **It could not work on Android as first built** -- Qt there has no TLS, so
+  the download failed with "TLS initialization failed"; the Android source
+  is `BsshHttp` now, the §5.2 exception. **Seen working on the emulator
+  2026-09-28** (x86_64, API 33): the picker offered "Download Iosevka Term",
+  and four font files and the licence were in app storage within about 20
+  seconds, the preview redrawn in it. Not yet on the phone, which dropped off
+  `adb` mid-install every time that day.
 - **Desktop:** ship the full curated set in the package — tens of megabytes is
   unremarkable for a desktop install, and it keeps the font picker free of
   download states on the platform where they'd be pure friction.
@@ -10554,8 +10574,8 @@ are looking at rather than whichever tab happens to be current. See
   is not a reason to let it own the whole tree.
 - Gradle wraps the Android build into an **AAB** via `androiddeployqt`
   (`make android`).
-- **Play Asset Delivery** packs configured for the optional font families (§9.4);
-  the desktop package just installs them.
+- The optional font families are **downloaded on the phone** from their pinned
+  releases (§9.4), not packed; the desktop package just installs them.
 - Keep the platform-conditional surface in the build files as small as it is in
   the code: one `android { ... } else { ... }` scope selecting
   `platform_android.cpp` vs `platform_desktop.cpp` and the dependency source, not
@@ -13720,7 +13740,7 @@ expensive if it wasn't.
 | **Platform drift — desktop races ahead, Android bit-rots** | High (silently becomes a desktop app with a broken Android build) | Both builds in CI from M0 (§12.4); no milestone closes on one platform; platform code confined to `bssh_platform` (§3). |
 | **Platform-specific behaviour leaking into the core** | Medium/High (every fix needs doing twice) | `#ifdef` outside the platform layer is a review failure; the router, emulator and layout manager take no platform input. |
 | Desktop secret store absent (headless/minimal session) | Medium | Passphrase-derived fallback (§11), and say plainly in the UI which backend is active. |
-| APK bloat from bundled fonts | Medium | 2–3 fonts in base, rest via Play Asset Delivery; subset fallbacks (§9.4). |
+| APK bloat from bundled fonts | Medium | 2–3 fonts in base, rest downloaded from pinned releases when chosen; subset fallbacks (§9.4). |
 | APK bloat from Qt's own deployment | Medium | `androiddeployqt` scanning for itself bundles the virtual keyboard plugin and with it QtQuick, QtQml and Lottie — a QML runtime in an app §2 forbids from using QML. `ANDROID_DEPLOYMENT_DEPENDENCIES` lists what ships instead: 29.8 MB → 18.6 MB, verified running. |
 | Wide-char / CJK cell misalignment | Medium | Implement `wcwidth` rules early; test with CJK + emoji + `htop`. |
 | Multi-pane render perf (4 panes, chatty output) | Medium | Shared glyph cache; repaint throttled to refresh rate, not to data. Desktop hides this (fast CPU, big cache) — profile on a phone. |

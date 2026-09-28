@@ -176,7 +176,7 @@ QString bssh_font_catalog::default_id(bool compact) const {
 	 * as though it were their problem.
 	 *
 	 * This is not hypothetical: Iosevka is 42 MB of the set on its own,
-	 * so on Android it arrives in an asset pack rather than the base APK
+	 * so on Android it is downloaded rather than shipped in the APK
 	 * (sec 9.4) and is genuinely absent until the user fetches it, even
 	 * though it is the form factor's preferred default.
 	 */
@@ -427,8 +427,8 @@ QString bssh_font_catalog::substitution_note(const QString &id) const {
 
 	/*
 	 * Phrased as "not installed yet" rather than "missing" because on
-	 * Android that is literally true: the family is in the set and an
-	 * asset pack away (sec 9.4). Saying "missing" would suggest the
+	 * Android that is literally true: the family is in the set and a
+	 * download away (sec 9.4). Saying "missing" would suggest the
 	 * choice was invalid, which it was not.
 	 */
 	return QStringLiteral("%1 is not installed on this device yet. "
