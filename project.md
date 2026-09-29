@@ -5201,9 +5201,15 @@ keeps its number and now means memory.
   and drawable until it lands, and counts as gone meanwhile, or the next
   scroll would spill a second picture for the same bytes. One that has
   scrolled back onto the screen by then stays and nothing is written.
-  Reading back is still on the GUI thread: it happens once, on the scroll
-  that reaches the picture, where a spill happened on every scroll of
-  output.
+- **[BUILT 2026-09-29] And read back on a worker**, the holder's next pick:
+  49-55 ms was a dropped frame per picture reached. The first `image()` for
+  a spilled picture starts the read on a worker of its own -- not the
+  spill's, so a scroll back does not wait behind seals going the other way
+  -- and returns null, which the renderer already skips; the picture's
+  cells are blank for the frame or two it takes. When it lands the store
+  calls back, the emulator turns that into `images_changed`, and the view
+  repaints. A file that does not open or verify is remembered, so a damaged
+  spill is read once rather than on every paint that asks for it.
 
 Guarded by `tool/sabotage/picture-spill.toml`, ten edits.
 

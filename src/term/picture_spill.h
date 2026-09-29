@@ -55,6 +55,14 @@ public:
 	/* A null image when the file is gone or does not verify. */
 	QImage read(quint64 serial) const;
 
+	/*
+	 * read() as a job for another thread: reads, opens and unpacks a copy
+	 * of what it needs, so it touches nothing of this object's. Null when
+	 * this holds no such picture. A file removed before the job runs
+	 * gives a null image, as read() would.
+	 */
+	std::function<QImage()> load(quint64 serial) const;
+
 	void remove(quint64 serial);
 
 	/* Bytes on disk, summed over what this holds. */

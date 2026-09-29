@@ -86,8 +86,8 @@ expect = "a_picture_deep_in_the_history_stays_beside_its_text"
 [[sabotage]]
 name = "a spill is sealed on the calling thread"
 file = "src/term/image_store.cpp"
-find = "\tif (!QCoreApplication::instance()) {"
-replace = "\tif (true) {"
+find = "\tif (!QCoreApplication::instance()) {\n\t\tfinish_spill(serial, job());"
+replace = "\tif (true) {\n\t\tfinish_spill(serial, job());"
 expect = "a_spill_is_sealed_off_the_thread_and_the_picture_stays_meanwhile"
 
 # The seal lands on a picture scrolled back onto the screen, and takes it
@@ -106,3 +106,33 @@ file = "src/term/image_store.cpp"
 find = "\t\tif (!m_spilling.contains(placement.serial)) staying += placement.image.sizeInBytes();"
 replace = "\t\tstaying += placement.image.sizeInBytes();"
 expect = "a_spill_in_flight_is_not_paid_for_twice"
+
+# Read back on the thread that is scrolling, as it first was: 49-55 ms a
+# picture reached.
+[[sabotage]]
+name = "a spilled picture is read back on the calling thread"
+file = "src/term/image_store.cpp"
+find = "\tif (!QCoreApplication::instance()) {\n\t\tfinish_restore(serial, job());"
+replace = "\tif (true) {\n\t\tfinish_restore(serial, job());"
+expect = "a_spilled_picture_is_read_back_off_the_thread"
+
+# Read back and never announced: the view has no reason to paint again,
+# so the picture stays blank until something else repaints.
+[[sabotage]]
+name = "a picture read back is never announced"
+file = "src/term/image_store.cpp"
+find = "\tif (m_on_restored) m_on_restored();"
+replace = ""
+expect = "a_spilled_picture_is_read_back_off_the_thread"
+
+# A file that does not verify is read again on every paint that asks.
+#
+# Not covered: the emulator turning the announcement into images_changed,
+# which the view repaints on. A test of it needs an emulator spilling into
+# the default cache directory, which is the user's.
+[[sabotage]]
+name = "an unreadable spill is asked for again"
+file = "src/term/image_store.cpp"
+find = "\t\tm_unreadable.insert(serial);\n"
+replace = ""
+expect = "a_spilled_picture_is_read_back_off_the_thread"

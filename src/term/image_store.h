@@ -6,6 +6,7 @@
 #include <QList>
 #include <QSet>
 
+#include <functional>
 #include <memory>
 
 class bssh_picture_spill;
@@ -144,6 +145,14 @@ public:
 	 */
 	QImage image(const bssh_image_placement_t &placement) const;
 
+	/*
+	 * Called when a picture image() had to fetch has been read back, so
+	 * whoever draws can draw it: the first image() for a spilled picture
+	 * starts the read on a worker and returns null, and the renderer skips
+	 * a null picture for the frame or two it takes.
+	 */
+	void set_restored_callback(std::function<void()> callback) { m_on_restored = std::move(callback); }
+
 	bool is_spilled(const bssh_image_placement_t &placement) const;
 
 	/*
@@ -207,6 +216,9 @@ private:
 	void begin_spill(int index);
 	void finish_spill(quint64 serial, const QByteArray &sealed);
 
+	/* The read-back's half of the same arrangement. */
+	void finish_restore(quint64 serial, const QImage &image) const;
+
 	/* Removes the placement at `index`, and its spill if it has one. */
 	void discard(int index);
 
@@ -226,6 +238,14 @@ private:
 
 	/* Serials being sealed on the worker; still resident meanwhile. */
 	QSet<quint64> m_spilling;
+
+	/*
+	 * Serials being read back, and those whose file did not open or
+	 * verify -- not asked for again on every repaint.
+	 */
+	mutable QSet<quint64> m_loading;
+	mutable QSet<quint64> m_unreadable;
+	std::function<void()> m_on_restored;
 
 	/*
 	 * Lives exactly as long as this store, so a seal finishing after the

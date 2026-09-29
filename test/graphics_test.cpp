@@ -988,6 +988,20 @@ static QImage noise_image(int width, int height) {
 	return image;
 }
 
+/*
+ * A spilled picture comes back from a worker: the first image() starts
+ * the read and gives null. Asked again until it arrives, for at most five
+ * seconds -- a read that never lands is a failure, not a hang.
+ */
+static QImage read_back(const bssh_image_store &store, int index) {
+	QImage image = store.image(store.placements().at(index));
+	for (int i = 0; i < 500 && image.isNull(); ++i) {
+		QTest::qWait(10);
+		image = store.image(store.placements().at(index));
+	}
+	return image;
+}
+
 static bssh_image_placement_t placement_at(const QImage &image, int row) {
 	bssh_image_placement_t placement;
 	placement.image = image;
@@ -1029,7 +1043,7 @@ void graphics_test::a_picture_over_the_budget_is_spilled_and_comes_back_whole() 
 	QVERIFY(store.disk_used() > 0);
 
 	/* And scrolling to it gives back exactly what was drawn. */
-	QCOMPARE(store.image(spilled), old_picture);
+	QCOMPARE(read_back(store, 0), old_picture);
 }
 
 void graphics_test::a_spilled_picture_scrolled_back_to_reaches_the_screen() {
@@ -1074,7 +1088,8 @@ void graphics_test::a_spilled_picture_scrolled_back_to_reaches_the_screen() {
 	QVERIFY2(store.is_spilled(store.placements().first()),
 	          "the fixture needs the picture on screen and still out of memory");
 
-	QCOMPARE(view.grab().toImage().pixelColor(probe), QColor(Qt::red));
+	/* Read back on a worker, so it is drawn on a paint after it lands. */
+	QTRY_COMPARE(view.grab().toImage().pixelColor(probe), QColor(Qt::red));
 }
 
 void graphics_test::a_spilled_picture_opens_only_under_its_own_name() {
@@ -1199,8 +1214,8 @@ void graphics_test::the_disk_budget_forgets_the_oldest_spilled_picture() {
 	store.set_disk_budget(store.disk_used() - 1);
 
 	QCOMPARE(store.count(), 2);
-	QCOMPARE(store.image(store.placements().first()), middle);
-	QCOMPARE(store.image(store.placements().last()), newest);
+	QCOMPARE(read_back(store, 0), middle);
+	QCOMPARE(read_back(store, 1), newest);
 }
 
 void graphics_test::a_picture_deep_in_the_history_stays_beside_its_text() {
@@ -1442,7 +1457,7 @@ void graphics_test::a_spill_is_sealed_off_the_thread_and_the_picture_stays_meanw
 
 	QTRY_VERIFY(!store.spills_pending());
 	QVERIFY(store.is_spilled(store.placements().first()));
-	QCOMPARE(store.image(store.placements().first()), picture);
+	QCOMPARE(read_back(store, 0), picture);
 }
 
 void graphics_test::a_picture_back_on_screen_before_its_spill_lands_stays_in_memory() {
@@ -1496,4 +1511,69 @@ void graphics_test::a_spill_in_flight_is_not_paid_for_twice() {
 	for (const bssh_image_placement_t &placement : store.placements())
 		if (store.is_spilled(placement)) ++spilled;
 	QCOMPARE(spilled, 1);
+}
+
+void graphics_test::a_spilled_picture_is_read_back_off_the_thread() {
+	/*
+	 * Reading a spilled picture back was 49-55 ms on the emulator, on the
+	 * thread that was scrolling. It is read on a worker now: the first
+	 * image() starts it and returns null, which the renderer skips, and
+	 * the store says when it has landed so the view can draw it.
+	 */
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_image_store store;
+	store.set_spill_base(base.path());
+	int restored = 0;
+	store.set_restored_callback([&restored] { ++restored; });
+
+	const QImage picture = noise_image(100, 100);
+	store.place(placement_at(picture, 1));
+	store.scrolled(0, 24, 20);
+	store.set_memory_budget(1);
+	QTRY_VERIFY(!store.spills_pending());
+	QVERIFY(store.is_spilled(store.placements().first()));
+
+	QVERIFY2(store.image(store.placements().first()).isNull(),
+	          "the read-back ran on the calling thread");
+	QTRY_COMPARE(restored, 1);
+	QCOMPARE(store.image(store.placements().first()), picture);
+
+	/*
+	 * And a file that does not verify is read once, not on every paint
+	 * that asks for it: the second damaged request starts nothing.
+	 */
+	store.place(placement_at(noise_image(100, 100), 1));
+	store.scrolled(0, 24, 20);
+	QTRY_VERIFY(!store.spills_pending());
+
+	const QStringList files = QDir(base.path()).entryList(QDir::Dirs | QDir::NoDotAndDotDot);
+	QCOMPARE(files.size(), 1);
+	const QString dir = base.path() + QLatin1Char('/') + files.first();
+	const QString damaged = dir + QLatin1Char('/') + QString::number(store.placements().last().serial);
+	QFile file(damaged);
+	QVERIFY(file.open(QIODevice::ReadWrite));
+	const QByteArray good = file.readAll();
+	QByteArray broken = good;
+	broken[broken.size() / 2] = char(broken.at(broken.size() / 2) ^ 0x01);
+	file.seek(0);
+	file.write(broken);
+	file.close();
+
+	QVERIFY(store.image(store.placements().last()).isNull());
+	QTest::qWait(300);
+
+	/*
+	 * The good bytes back: a store that asked again would now succeed,
+	 * so still null is what says it did not ask.
+	 */
+	QVERIFY(file.open(QIODevice::WriteOnly));
+	file.write(good);
+	file.close();
+
+	QVERIFY(store.image(store.placements().last()).isNull());
+	QTest::qWait(300);
+	QVERIFY(store.image(store.placements().last()).isNull());
+	QCOMPARE(restored, 1);
 }

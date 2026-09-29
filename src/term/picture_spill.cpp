@@ -290,12 +290,20 @@ bool bssh_picture_spill::store(quint64 serial, const QByteArray &sealed) {
 }
 
 QImage bssh_picture_spill::read(quint64 serial) const {
-	if (!m_dir || !m_sizes.contains(serial)) return QImage();
+	const std::function<QImage()> job = load(serial);
+	return job ? job() : QImage();
+}
 
-	QFile file(path_of(serial));
-	if (!file.open(QIODevice::ReadOnly)) return QImage();
+std::function<QImage()> bssh_picture_spill::load(quint64 serial) const {
+	if (!m_dir || !m_sizes.contains(serial)) return nullptr;
 
-	return unpack(open_sealed(file.readAll(), m_key, serial));
+	const QString path = path_of(serial);
+	const QByteArray key = m_key;
+	return [path, key, serial]() {
+		QFile file(path);
+		if (!file.open(QIODevice::ReadOnly)) return QImage();
+		return unpack(open_sealed(file.readAll(), key, serial));
+	};
 }
 
 void bssh_picture_spill::remove(quint64 serial) {

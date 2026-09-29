@@ -84,6 +84,8 @@ int bssh_image_store::place(const bssh_image_placement_t &given) {
 				const quint64 replaced = m_placements.at(i).serial;
 				if (m_spill) m_spill->remove(replaced);
 				m_spilling.remove(replaced);
+				m_loading.remove(replaced);
+				m_unreadable.remove(replaced);
 				m_restored.remove(replaced);
 				m_restored_order.removeAll(replaced);
 
@@ -165,6 +167,8 @@ void bssh_image_store::discard(int index) {
 
 	if (m_spill) m_spill->remove(serial);
 	m_spilling.remove(serial);
+	m_loading.remove(serial);
+	m_unreadable.remove(serial);
 	m_restored.remove(serial);
 	m_restored_order.removeAll(serial);
 	m_placements.removeAt(index);
@@ -247,15 +251,68 @@ QImage bssh_image_store::image(const bssh_image_placement_t &placement) const {
 		return found.value();
 	}
 
-	if (!m_spill) return QImage();
+	const quint64 serial = placement.serial;
+	if (!m_spill || m_loading.contains(serial) || m_unreadable.contains(serial)) return QImage();
 
-	const QImage image = m_spill->read(placement.serial);
-	if (image.isNull()) return QImage();
+	const std::function<QImage()> job = m_spill->load(serial);
+	if (!job) return QImage();
 
-	m_restored.insert(placement.serial, image);
-	m_restored_order.append(placement.serial);
-	trim_restored(placement.serial);
-	return image;
+	m_loading.insert(serial);
+
+	/* No event loop to come back on: read it here. */
+	if (!QCoreApplication::instance()) {
+		finish_restore(serial, job());
+		return m_restored.value(serial);
+	}
+
+	/*
+	 * Read on a worker of its own, not the spill's: a scroll back should
+	 * not wait behind 160 ms seals of pictures going the other way. It
+	 * was 49-55 ms on the emulator, on the thread that was scrolling --
+	 * a dropped frame per picture reached.
+	 */
+	static QThreadPool *pool = [] {
+		QThreadPool *made = new QThreadPool();
+		made->setMaxThreadCount(1);
+		return made;
+	}();
+
+	const QPointer<QObject> alive(m_alive.get());
+	const bssh_image_store *store = this;
+	pool->start([job, serial, alive, store]() {
+		const QImage image = job();
+
+		QCoreApplication *app = QCoreApplication::instance();
+		if (!app) return;
+
+		QMetaObject::invokeMethod(app, [alive, store, serial, image]() {
+			if (alive) store->finish_restore(serial, image);
+		}, Qt::QueuedConnection);
+	});
+
+	return QImage();
+}
+
+void bssh_image_store::finish_restore(quint64 serial, const QImage &image) const {
+	/* Dropped, replaced or cleared while it was being read. */
+	if (!m_loading.remove(serial)) return;
+
+	bool still_spilled = false;
+	for (const bssh_image_placement_t &placement : m_placements) {
+		if (placement.serial == serial && placement.image.isNull()) still_spilled = true;
+	}
+	if (!still_spilled) return;
+
+	if (image.isNull()) {
+		m_unreadable.insert(serial);
+		return;
+	}
+
+	m_restored.insert(serial, image);
+	m_restored_order.append(serial);
+	trim_restored(serial);
+
+	if (m_on_restored) m_on_restored();
 }
 
 /*

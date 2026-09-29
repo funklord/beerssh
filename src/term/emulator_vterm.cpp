@@ -1705,6 +1705,9 @@ void bssh_emulator_private::copy_rect(const VTermRect &rect) {
 bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
     : QObject(parent),
       m_private(new bssh_emulator_private(cols, rows, this)) {
+	/* A picture read back from its spill is drawable now (sec 7.1). */
+	m_private->images.set_restored_callback([this] { emit images_changed(); });
+
 	m_private->vt = vterm_new(qMax(1, rows), qMax(1, cols));
 	vterm_set_utf8(m_private->vt, 1);
 
