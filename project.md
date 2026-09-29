@@ -1629,9 +1629,17 @@ up, a strip of modifiers has nothing to modify.
   `colour_scheme` (§10.2) describes what the remote's output should look like,
   and a dark terminal in a light window is a common and deliberate choice. Making
   it follow the desktop would silently overrule a per-host decision the user has
-  already made. **[OPEN]** whether the *default* scheme alone should follow —
-  there is currently one light scheme in the set (§10.2), so a light default
-  would need one designing first.
+  already made. **[DECIDED 2026-09-29 by the holder, and BUILT] The default
+  alone follows the app.** A host that never chose a scheme is white on black
+  while the app is dark and black on white while it is light, and flips live
+  when the app does; one that chose, even `default` by name, keeps it. It
+  follows the app's APPLIED appearance, not the desktop's, so a light desktop
+  with the app set to Dark gives a dark terminal. No new scheme: the existing
+  `black-on-white` is the light one the rules allow (§10.2). The theme sets
+  the catalog's default before the palette and emits `appearance_applied`,
+  which each view hears -- the palette-change event was tried first and did
+  not reach a view that was not shown. Guarded by
+  `tool/sabotage/scheme-follows-app.toml`, five edits.
 - Keeping it buildable on desktop is also what makes it *testable* — a synthetic
   key row press is the cheapest way to exercise the router's sticky-modifier
   logic in a unit test.
@@ -8146,16 +8154,20 @@ is the one colour the remote never sets. Hence the set:
 
 | id | background | ordinary text | for |
 |---|---|---|---|
-| `default` | `#000000` | `#ffffff` | the default |
+| `default` | `#000000` | `#ffffff` | the default while the app is dark |
 | `green-on-black` | `#000000` | `#00ff00` | the green phosphor |
 | `yellow-on-black` | `#000000` | `#ffff00` | the amber phosphor |
-| `black-on-white` | `#ffffff` | `#000000` | e-paper |
+| `black-on-white` | `#ffffff` | `#000000` | e-paper, and the default while the app is light |
 | `custom` | from settings | from settings | the escape hatch |
 
-Three phosphors and an inverse. The inverse is named for **who it is for**
-rather than called "light mode": an e-paper panel holds a light background for
-free and pays for a dark one, which is the reverse of every other display, so
-it is what that hardware wants rather than a taste.
+Three phosphors and an inverse. The inverse was named for **who it is for**,
+"(e-paper)", rather than called "light mode": an e-paper panel holds a light
+background for free and pays for a dark one, the reverse of every other
+display. **Since 2026-09-29 it is also the light default** (§6.2), and the
+label is plain "Black on white": under the two rules here -- a pure ground, one
+shared palette -- it is the only light scheme there can be, so a second one for
+comfort on an LCD was declined rather than drawn. The id `default` stays white
+on black, because a profile can store it by name and that profile chose it.
 
 Backgrounds are **pure** black or pure white. `#1c1c1c` was what this shipped
 with, and a near-black is the worst of both — it costs an OLED its
@@ -13946,9 +13958,9 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   was typed for* in §14.
 - Icon and branding direction (§0.1), which the placeholder in §12.2 is waiting
   on.
-- Should the **default** colour scheme alone follow a light desktop? (§6,
-  where it is marked [OPEN].) There is one light scheme in the set, so a yes
-  wants one designed first. Missing from this list until 2026-09-29.
+- ~~Should the **default** colour scheme alone follow a light desktop?~~
+  **DECIDED 2026-09-29 by the holder: yes, to the existing `black-on-white` --
+  and BUILT** (§6.2, §10.2).
 - A **user-supplied font file**, the last of the four catalogs without the
   reserved-entry answer the scheme and key row share (§6.2 -- the keyboard
   layout took it too). Missing from this list until 2026-09-29.

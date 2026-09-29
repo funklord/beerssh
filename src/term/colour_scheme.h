@@ -143,7 +143,18 @@ public:
 	 */
 	QString effective_id(const QString &stored) const;
 
+	/*
+	 * White on black, or black on white while the app is light (the
+	 * holder, 2026-09-29, sec 6.2): a host that never chose a scheme
+	 * follows the app's appearance, and one that chose keeps its choice.
+	 */
 	QString default_id() const;
+
+	/*
+	 * Set by the theme as it applies an appearance, before the palette
+	 * change that tells views to look again.
+	 */
+	void set_light_default(bool light) { m_light_default = light; }
 
 	/*
 	 * Replaces the "custom" entry with the user's own palette.
@@ -158,6 +169,7 @@ public:
 
 private:
 	QList<bssh_colour_scheme_t> m_schemes;
+	bool m_light_default = false;
 };
 
 #endif /* BSSH_COLOUR_SCHEME_H */

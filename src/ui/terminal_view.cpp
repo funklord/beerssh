@@ -3,6 +3,7 @@
 #include <QScrollPrepareEvent>
 #include "ui/touch_metrics.h"
 #include "ui/terminal_view.h"
+#include "ui/theme.h"
 #include "ui/layout_manager.h"
 
 #include <QDragEnterEvent>
@@ -139,6 +140,20 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 	 * so this is safe before any font has been fetched or bundled.
 	 */
 	set_colour_scheme(QString());
+
+	/*
+	 * A host that never chose a scheme follows the app's appearance (sec
+	 * 6.2): white on black while it is dark, black on white while light.
+	 */
+	connect(bssh_theme::instance(), &bssh_theme::appearance_applied, this, [this] {
+		if (!m_scheme_follows_default) return;
+
+		const QString now = bssh_colour_scheme_catalog::instance().default_id();
+		if (now == m_scheme_id) return;
+
+		m_scheme_id = now;
+		reload_colour_scheme();
+	});
 
 	/*
 	 * The scrollbar, built now and shown when asked for (sec 8.3). A
@@ -341,6 +356,7 @@ void bssh_terminal_view::remeasure_cell() {
 }
 
 void bssh_terminal_view::set_colour_scheme(const QString &id) {
+	m_scheme_follows_default = id.isEmpty();
 	const QString wanted = bssh_colour_scheme_catalog::instance().effective_id(id);
 	if (wanted == m_scheme_id) return;
 
@@ -635,9 +651,8 @@ bool bssh_terminal_view::event(QEvent *event) {
 	 * It emits the SAME signal Ctrl+wheel and the Text Size menu emit,
 	 * so every question already settled about zooming stays settled: the
 	 * session owns the number, the clamp lives in rebuild_font, and the
-	 * value is not persisted. This adds an input route and decides
-	 * nothing else -- whether the zoom should outlive the session is the
-	 * open question sec 9.5 records, and it is untouched.
+	 * host keeps it (sec 9.5). This adds an input route and decides
+	 * nothing else.
 	 */
 	if (event->type() == QEvent::Gesture) {
 		QGestureEvent *gestures = static_cast<QGestureEvent *>(event);

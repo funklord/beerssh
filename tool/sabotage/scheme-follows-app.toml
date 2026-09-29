@@ -1,0 +1,41 @@
+# A terminal that never chose a colour scheme follows the app's
+# appearance, and one that chose keeps it (project.md sec 6.2, the
+# holder's answer of 2026-09-29).
+
+[[sabotage]]
+name = "the default is white on black whatever the app looks like"
+file = "src/term/colour_scheme.cpp"
+find = "\treturn m_light_default ? QStringLiteral(\"black-on-white\") : QStringLiteral(\"default\");"
+replace = "\treturn QStringLiteral(\"default\");"
+expect = "an_unchosen_scheme_follows_the_app_and_a_chosen_one_stays"
+
+[[sabotage]]
+name = "the theme applies an appearance and leaves the terminal default alone"
+file = "src/ui/theme.cpp"
+find = "\tbssh_colour_scheme_catalog::instance().set_light_default(appearance == BSSH_APPEARANCE_LIGHT);\n"
+replace = ""
+expect = "an_unchosen_scheme_follows_the_app_and_a_chosen_one_stays"
+
+# The default moves and no view hears of it until something else
+# reloads the scheme.
+[[sabotage]]
+name = "an applied appearance is announced to nobody"
+file = "src/ui/theme.cpp"
+find = "\temit bssh_theme::instance()->appearance_applied();\n"
+replace = ""
+expect = "an_unchosen_scheme_follows_the_app_and_a_chosen_one_stays"
+
+# A host that chose white on black by name is overruled by the desktop.
+[[sabotage]]
+name = "a chosen scheme follows the app too"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tif (!m_scheme_follows_default) return;\n"
+replace = ""
+expect = "an_unchosen_scheme_follows_the_app_and_a_chosen_one_stays"
+
+[[sabotage]]
+name = "every view counts as having left its scheme unset"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_scheme_follows_default = id.isEmpty();"
+replace = "\tm_scheme_follows_default = true;"
+expect = "an_unchosen_scheme_follows_the_app_and_a_chosen_one_stays"

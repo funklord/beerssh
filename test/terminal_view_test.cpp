@@ -20,6 +20,7 @@
 #include <QHash>
 #include <QSet>
 #include "term/colour_scheme.h"
+#include "ui/theme.h"
 #include <QContextMenuEvent>
 #include <QMenu>
 #include "ui/main_window.h"
@@ -4658,4 +4659,37 @@ void terminal_view_test::the_arrangement_verbs_on_that_menu_act_too() {
 
 	delete menu;
 	delete after;
+}
+
+void terminal_view_test::an_unchosen_scheme_follows_the_app_and_a_chosen_one_stays() {
+	/*
+	 * sec 6.2, the holder's answer of 2026-09-29: a host that never chose
+	 * a colour scheme follows the app's appearance -- white on black when
+	 * it is dark, black on white when it is light -- and one that chose,
+	 * even the dark "default" by name, keeps it. Driven through the theme,
+	 * which is the route the desktop flipping takes.
+	 */
+	const bool was_light = bssh_colour_scheme_catalog::instance().default_id()
+	                       == QStringLiteral("black-on-white");
+
+	bssh_terminal_view follows;
+	follows.set_colour_scheme(QString());
+	bssh_terminal_view chose;
+	chose.set_colour_scheme(QStringLiteral("default"));
+
+	bssh_theme::apply(bssh_theme::MODE_DARK);
+	QCOMPARE(follows.colour_scheme(), QStringLiteral("default"));
+	QVERIFY(follows.terminal_background().lightness() < 128);
+
+	bssh_theme::apply(bssh_theme::MODE_LIGHT);
+	QCOMPARE(follows.colour_scheme(), QStringLiteral("black-on-white"));
+	QVERIFY2(follows.terminal_background().lightness() >= 128,
+	          "the id moved and the pane is still painted dark");
+	QCOMPARE(chose.colour_scheme(), QStringLiteral("default"));
+	QVERIFY(chose.terminal_background().lightness() < 128);
+
+	bssh_theme::apply(bssh_theme::MODE_DARK);
+	QCOMPARE(follows.colour_scheme(), QStringLiteral("default"));
+
+	bssh_theme::apply(was_light ? bssh_theme::MODE_LIGHT : bssh_theme::MODE_DARK);
 }

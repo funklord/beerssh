@@ -16,6 +16,7 @@ class terminal_view_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void an_unchosen_scheme_follows_the_app_and_a_chosen_one_stays();
 	void the_cursor_style_reaches_the_pixels();
 	void a_reattached_screen_is_not_read_from_the_old_one();
 	void an_unfocused_cursor_is_hollow();

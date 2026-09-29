@@ -1,4 +1,5 @@
 #include "ui/theme.h"
+#include "term/colour_scheme.h"
 
 #include <QApplication>
 #include <QStyleHints>
@@ -103,7 +104,15 @@ void repaint_everything(bssh_appearance_t appearance) {
 	if (appearance == g_applied) return;
 	g_applied = appearance;
 
+	/*
+	 * The terminal default follows the app (sec 6.2). The views are told
+	 * by appearance_applied rather than by the palette change, which was
+	 * tried first and did not reach a terminal view that was not shown.
+	 */
+	bssh_colour_scheme_catalog::instance().set_light_default(appearance == BSSH_APPEARANCE_LIGHT);
+
 	QApplication::setPalette(bssh_theme::palette_for(appearance));
+	emit bssh_theme::instance()->appearance_applied();
 
 	/*
 	 * Qt is told as well, so anything that asks IT rather than us gets
@@ -121,6 +130,11 @@ void repaint_everything(bssh_appearance_t appearance) {
 }
 
 } /* namespace */
+
+bssh_theme *bssh_theme::instance() {
+	static bssh_theme *theme = new bssh_theme();
+	return theme;
+}
 
 bssh_appearance_t bssh_theme::resolved_system_appearance() {
 	const bssh_platform *platform = bssh_platform::instance();

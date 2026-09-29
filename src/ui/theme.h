@@ -21,11 +21,13 @@
  * change. A setting that silently does nothing is worse than one that is
  * missing, so the app paints its own.
  *
- * What this does NOT touch is the terminal's colour scheme. That is a
- * per-host setting (sec 10.2) describing what the remote's output should
- * look like, and a dark terminal in a light window is a deliberate and
- * extremely common choice -- following the desktop there would override
- * a decision the user has already made per host.
+ * What this does NOT touch is a terminal colour scheme somebody chose.
+ * That is a per-host setting (sec 10.2) describing what the remote's
+ * output should look like, and a dark terminal in a light window is a
+ * deliberate and extremely common choice. It moves only the DEFAULT, for
+ * the hosts that never chose (the holder, 2026-09-29): the catalog's
+ * default follows the appearance applied here, and appearance_applied()
+ * tells the terminal views to look again.
  */
 class bssh_theme : public QObject {
 	Q_OBJECT
@@ -53,6 +55,13 @@ public:
 
 	static QString to_text(mode_t mode);
 	static mode_t from_text(const QString &text);
+
+	/* What appearance_applied() is emitted from. */
+	static bssh_theme *instance();
+
+signals:
+	/* An appearance was applied, and the terminal default with it. */
+	void appearance_applied();
 };
 
 #endif /* BSSH_THEME_H */

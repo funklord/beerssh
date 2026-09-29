@@ -70,12 +70,13 @@ const entry_t BSSH_SCHEMES[] = {
 		0x000000, 0xffff00, 0xffff00 },
 
 	/*
-	 * Inverse, and named for who it is for. An e-paper display holds a
-	 * light background for free and pays for a dark one, which is the
-	 * reverse of every other panel -- so this is not "light mode", it is
-	 * the mode that hardware wants.
+	 * Inverse. It was named for e-paper, which holds a light background
+	 * for free and pays for a dark one, and it is also the light default
+	 * now (sec 6.2) -- the one light scheme the rules above allow, pure
+	 * ground and the shared palette, with the renderer's contrast clamp
+	 * keeping bright yellow readable on it.
 	 */
-	{ "black-on-white", "Black on white (e-paper)", "Classic ANSI", false,
+	{ "black-on-white", "Black on white", "Classic ANSI", false,
 		0xffffff, 0x000000, 0x000000 },
 
 	/*
@@ -146,7 +147,12 @@ QString bssh_colour_scheme_catalog::effective_id(const QString &stored) const {
 }
 
 QString bssh_colour_scheme_catalog::default_id() const {
-	return QStringLiteral("default");
+	/*
+	 * The id "default" stays the dark one whatever the app looks like: it
+	 * is also a name a profile can store, and a profile that says
+	 * "default" chose white on black.
+	 */
+	return m_light_default ? QStringLiteral("black-on-white") : QStringLiteral("default");
 }
 
 void bssh_colour_scheme_catalog::set_custom(const bssh_colour_scheme_t &scheme) {

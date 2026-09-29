@@ -1095,6 +1095,9 @@ private:
 	QString m_scheme_id;
 	bssh_colour_scheme_t m_scheme;
 
+	/* The host left the scheme unset, so it follows the app (sec 6.2). */
+	bool m_scheme_follows_default = true;
+
 	QString m_cursor_style;
 	bool m_cursor_on;
 	bool m_cursor_blink_wanted;
