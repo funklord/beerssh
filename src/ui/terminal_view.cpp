@@ -208,10 +208,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 		emit context_menu_requested(at);
 	});
 
-	const bssh_platform *platform = bssh_platform::instance();
-	const bool compact = platform && platform->is_touch_primary();
-
-	m_font_id = bssh_font_catalog::instance().default_id(compact);
+	m_font_id = bssh_font_catalog::instance().default_id();
 	m_font = bssh_font_catalog::make_font(
 	        bssh_font_catalog::instance().family_for(m_font_id), font_point_size(),
 	        default_font_ligatures());
@@ -267,12 +264,11 @@ void bssh_terminal_view::set_font_id(const QString &id, int point_size) {
 	/*
 	 * Through effective_id, so this agrees with the picker and with
 	 * whatever decides to record an override. An empty value means "the
-	 * platform's default", not "no font": every shipped preset leaves the
-	 * font unset (sec 10.4), and treating that as a request would drop
-	 * into the fallback chain and render every default host in DejaVu.
+	 * default", not "no font": every shipped preset leaves the font unset
+	 * (sec 10.4), and treating that as a request would drop into the
+	 * fallback chain and render every default host in DejaVu.
 	 */
-	const bssh_platform *platform = bssh_platform::instance();
-	m_font_id = catalog.effective_id(id, platform && platform->is_touch_primary());
+	m_font_id = catalog.effective_id(id);
 
 	m_font_size = point_size > 0 ? point_size : BSSH_DEFAULT_POINT_SIZE;
 

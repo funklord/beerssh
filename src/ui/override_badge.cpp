@@ -3,7 +3,6 @@
 #include "model/preset.h"
 #include "model/profile_store.h"
 #include "model/settings_resolver.h"
-#include "platform/platform.h"
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 
@@ -48,11 +47,8 @@ inherited_t inherited_appearance(const bssh_profile_store *store,
 	        profile.preset_id == 0 ? bssh_settings_resolver::app_defaults()
 	                               : bssh_settings_resolver::resolve(out.preset, without);
 
-	const bssh_platform *platform = bssh_platform::instance();
-	const bool compact = platform && platform->is_touch_primary();
-
 	out.font_id = bssh_font_catalog::instance().effective_id(
-	        followed.value(QStringLiteral("font_family")).toString(), compact);
+	        followed.value(QStringLiteral("font_family")).toString());
 	out.font_size = followed.value(QStringLiteral("font_size")).toInt();
 	out.scheme_id = bssh_colour_scheme_catalog::instance().effective_id(
 	        followed.value(QStringLiteral("colour_scheme")).toString());

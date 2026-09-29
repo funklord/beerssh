@@ -360,9 +360,7 @@ int bssh_font_picker::point_size() const {
 void bssh_font_picker::set_font_choice(const QString &id, int point_size) {
 	bssh_font_catalog &catalog = bssh_font_catalog::instance();
 
-	const bssh_platform *platform = bssh_platform::instance();
-	const QString wanted =
-	        catalog.effective_id(id, platform && platform->is_touch_primary());
+	const QString wanted = catalog.effective_id(id);
 
 	const int index = m_family->findData(wanted);
 

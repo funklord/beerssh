@@ -32,7 +32,7 @@ private slots:
 
 	void ids_are_stable_and_unique();
 	void the_picker_never_offers_fallback_only_families();
-	void defaults_differ_by_form_factor_but_come_from_one_set();
+	void a_downloaded_font_does_not_become_the_default();
 	void names_resolve_to_ids_and_unknown_names_survive();
 	void the_chain_always_ends_somewhere_drawable();
 	void an_unavailable_font_is_reported_rather_than_swapped_silently();

@@ -1,0 +1,11 @@
+# The out-of-the-box font (project.md sec 9.2, sec 16: JetBrains Mono on
+# every form factor, the holder's answer of 2026-09-29).
+
+# The condensed face becomes the default once it is installed, so a font
+# downloaded for one host changes every host that never chose one.
+[[sabotage]]
+name = "a downloaded font becomes the default"
+file = "src/term/font_catalog.cpp"
+find = "\tconst QString preferred = QStringLiteral(\"jetbrains-mono\");"
+replace = "\tconst QString preferred = QStringLiteral(\"iosevka-term\");"
+expect = "a_downloaded_font_does_not_become_the_default"

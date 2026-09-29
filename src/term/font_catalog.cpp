@@ -158,14 +158,20 @@ QString bssh_font_catalog::canonical_id(const QString &name) const {
 	return name;
 }
 
-QString bssh_font_catalog::effective_id(const QString &stored, bool compact) const {
-	if (stored.isEmpty()) return default_id(compact);
+QString bssh_font_catalog::effective_id(const QString &stored) const {
+	if (stored.isEmpty()) return default_id();
 	return canonical_id(stored);
 }
 
-QString bssh_font_catalog::default_id(bool compact) const {
-	const QString preferred = compact ? QStringLiteral("iosevka-term")
-	                                  : QStringLiteral("jetbrains-mono");
+QString bssh_font_catalog::default_id() const {
+	/*
+	 * JetBrains Mono on every form factor, the holder's answer of
+	 * 2026-09-29. The phone was to get condensed Iosevka once it was
+	 * installed, and with the download built that became a trap: fetching
+	 * it for one host changed the font of every host that had never
+	 * chosen one. Iosevka is one pick and a download away instead.
+	 */
+	const QString preferred = QStringLiteral("jetbrains-mono");
 	if (is_available(preferred)) return preferred;
 
 	/*
@@ -174,15 +180,7 @@ QString bssh_font_catalog::default_id(bool compact) const {
 	 * font the USER picked -- telling someone their font is unavailable
 	 * when they never picked one is reporting our own packaging decision
 	 * as though it were their problem.
-	 *
-	 * This is not hypothetical: Iosevka is 42 MB of the set on its own,
-	 * so on Android it is downloaded rather than shipped in the APK
-	 * (sec 9.4) and is genuinely absent until the user fetches it, even
-	 * though it is the form factor's preferred default.
 	 */
-	const QString standard = QStringLiteral("jetbrains-mono");
-	if (is_available(standard)) return standard;
-
 	for (const bssh_font_t &font : m_fonts) {
 		if (font.selectable && family_installed(font.family)) return font.id;
 	}

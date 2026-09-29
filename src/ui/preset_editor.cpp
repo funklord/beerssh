@@ -508,19 +508,15 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 	/*
 	 * An untouched font stays UNSET rather than becoming whatever the
 	 * picker resolved it to. The picker cannot show "unset" -- an empty
-	 * value means "the default for this form factor" (sec 9.2), so it
-	 * displays that default -- and writing the resolved value back would
-	 * pin it: a preset exported from a desktop would then carry
-	 * jetbrains-mono, and importing it on a phone would quietly override
-	 * the condensed default that form factor is supposed to get.
+	 * value means "the default" (sec 9.2), so it displays that default --
+	 * and writing the resolved value back would pin it: the preset would
+	 * then carry jetbrains-mono as a choice, and stop following the
+	 * default if the default ever moved.
 	 *
 	 * Same rule as a host override: do not record a value that only
 	 * agrees with what it would have resolved to anyway.
 	 */
-	const bssh_platform *platform = bssh_platform::instance();
-	const bool compact = platform && platform->is_touch_primary();
-	const QString resolved = bssh_font_catalog::instance()
-	                                 .effective_id(m_current.font_family, compact);
+	const QString resolved = bssh_font_catalog::instance().effective_id(m_current.font_family);
 
 	if (m_font->font_id() != resolved) preset.font_family = m_font->font_id();
 	preset.font_size = m_font->point_size();

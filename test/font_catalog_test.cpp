@@ -115,36 +115,24 @@ void font_catalog_test::the_picker_never_offers_fallback_only_families() {
 	QVERIFY(has_condensed);
 }
 
-void font_catalog_test::defaults_differ_by_form_factor_but_come_from_one_set() {
+void font_catalog_test::a_downloaded_font_does_not_become_the_default() {
 	const bssh_font_catalog catalog;
 
-	const QString compact = catalog.default_id(true);
-	const QString roomy = catalog.default_id(false);
-
 	/*
-	 * The two defaults differ only when both are actually installed. A
-	 * default that names an absent font is a bug, not a preference: on
-	 * Android the condensed face arrives in an asset pack, and until it
-	 * does the compact default has to be something the device can draw.
+	 * The phone's default was condensed Iosevka whenever it was installed.
+	 * With the download built, fetching it for one host then changed the
+	 * font of every host that never chose one -- so the default is
+	 * JetBrains Mono on every form factor (the holder, 2026-09-29), and
+	 * Iosevka being present must not move it. Asserted where Iosevka is
+	 * installed, which is the case the old rule changed.
 	 */
-	if (catalog.is_available(QStringLiteral("iosevka-term")) &&
-	    catalog.is_available(QStringLiteral("jetbrains-mono"))) {
-		QVERIFY(compact != roomy);
-		QVERIFY(catalog.by_id(compact)->condensed);
-	}
+	if (!catalog.is_available(QStringLiteral("iosevka-term")))
+		QSKIP("Iosevka is not installed here, so there is nothing to move the default");
 
-	/*
-	 * The point of sec 9.2's rule: the DEFAULT may differ by form factor,
-	 * the SET may not. Both defaults have to be members a profile can name
-	 * and have resolve identically on the other platform.
-	 */
-	const bssh_font_t *compact_font = catalog.by_id(compact);
-	const bssh_font_t *roomy_font = catalog.by_id(roomy);
-
-	QVERIFY(compact_font != nullptr);
-	QVERIFY(roomy_font != nullptr);
-	QVERIFY(compact_font->selectable);
-	QVERIFY(roomy_font->selectable);
+	QVERIFY(catalog.is_available(QStringLiteral("jetbrains-mono")));
+	QCOMPARE(catalog.default_id(), QStringLiteral("jetbrains-mono"));
+	QVERIFY(!catalog.by_id(catalog.default_id())->condensed);
+	QVERIFY(catalog.by_id(catalog.default_id())->selectable);
 }
 
 void font_catalog_test::names_resolve_to_ids_and_unknown_names_survive() {

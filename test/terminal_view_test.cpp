@@ -1117,7 +1117,7 @@ void terminal_view_test::an_unset_font_means_the_default_not_the_fallback_chain(
 	bssh_apply_appearance(&view, settings);
 
 	const bssh_font_catalog catalog;
-	QCOMPARE(view.font_id(), catalog.default_id(false));
+	QCOMPARE(view.font_id(), catalog.default_id());
 	QVERIFY(catalog.by_id(view.font_id()) != nullptr);
 }
 

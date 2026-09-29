@@ -145,23 +145,22 @@ public:
 	 * preset whose font was unset, detaching that host from its preset
 	 * for good.
 	 *
-	 *   empty        -> the default for this form factor
+	 *   empty        -> the default
 	 *   a display name -> its id
 	 *   anything else  -> itself, so an unknown font stays visible
 	 */
-	QString effective_id(const QString &stored, bool compact) const;
+	QString effective_id(const QString &stored) const;
 
 	/*
-	 * The out-of-the-box choice. Same set both ways (sec 9.2): compact
-	 * form factors get the condensed default, everything else the
-	 * legibility-first one.
+	 * The out-of-the-box choice: JetBrains Mono on every form factor
+	 * (sec 9.2), or the first of the set that is installed.
 	 */
-	QString default_id(bool compact) const;
+	QString default_id() const;
 
 	/*
 	 * Loads whatever the bundle actually contains. Missing files are not
-	 * an error: on Android most of the set arrives later through an asset
-	 * pack, and on a developer's machine the fetch script may not have
+	 * an error: on Android most of the set is downloaded later, if at
+	 * all, and on a developer's machine the fetch script may not have
 	 * been run at all. Returns how many families were registered.
 	 */
 	int load_bundled(const QString &directory);

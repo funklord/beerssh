@@ -8015,7 +8015,7 @@ in a character-cell grid confuse column alignment for many users).
 |---|---|---|
 | **JetBrains Mono** | OFL 1.1 | **Default.** Tall x-height, excellent legibility at small sizes — ideal for phones. Ligatures present; ship them **disabled by default**. |
 | **DejaVu Sans Mono** | DejaVu / Bitstream Vera (permissive) | The box-drawing and broad-Unicode workhorse. Also the **fallback** in the chain (§9.3). |
-| **Iosevka** (narrow/term variant) | OFL 1.1 | **Condensed** — fits noticeably more columns on a phone screen. Genuinely valuable on mobile; strong candidate for the phone default. |
+| **Iosevka** (narrow/term variant) | OFL 1.1 | **Condensed** — fits noticeably more columns on a phone screen. Genuinely valuable on mobile; offered on the phone as a download, not the default (§16). |
 | **Hack** | MIT-derived (Hack Open Font Licence) | Classic, workmanlike terminal font with deliberate disambiguation. |
 | **Fira Mono / Fira Code** | OFL 1.1 | Popular; Code variant for users who want ligatures. |
 | **Source Code Pro** | OFL 1.1 | Widely liked, very clean. |
@@ -8045,7 +8045,9 @@ comes from without bundling Nerd Font patched derivatives.
 that wins on a 5-inch screen is not the obvious choice on a 27-inch monitor, so
 picking a different out-of-the-box default per platform is reasonable — but it
 must be a member of the same shared set (§9.4), so that a profile carrying an
-explicit font choice resolves identically everywhere.
+explicit font choice resolves identically everywhere. **As built, it does not
+differ** (the holder, 2026-09-29, §16): JetBrains Mono everywhere, because a
+default that changed when a font was downloaded changed hosts nobody touched.
 
 **Explicitly excluded:** proprietary/non-redistributable fonts (Menlo, SF Mono,
 Consolas, Operator Mono), and any proportional font regardless of popularity.
@@ -13590,10 +13592,9 @@ is §11's to decide if it ever matters.
     and it is why a summary must point at where a thing was measured instead
     of repeating the reasoning: a copied justification cannot be corrected
     when the measurement that replaces it lands somewhere else.
-    Still open: Play asset-pack delivery and subsetting
-    for the rest
-    (Iosevka alone is 42 MB, so the condensed face cannot be the compact
-    default until it ships), and the fractional-scaling and multi-monitor
+    Still open then: delivery and subsetting for the rest (since built as a
+    download, §9.4; the phone default settled as JetBrains Mono, §16), and
+    the fractional-scaling and multi-monitor
     DPI checks — **the fractional-scaling half is done**: the cell now snaps
     to whole *device* pixels rather than whole logical ones, because at 150%
     a 9-pixel cell is 13.5 device pixels and box-drawing characters stop
@@ -13862,11 +13863,16 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   tunnel likewise), which is what the connect dialog's note has said. MANAGING
   it -- adding a key to the running agent once its passphrase is typed -- the
   holder declined for now on 2026-09-26: `ssh-add` and the desktop keep that.
-- Which font is the **phone** default (JetBrains Mono vs condensed Iosevka).
-  The shortlist itself is settled; this half is not. **No longer blocked**:
-  Iosevka can now be downloaded on the phone from its pinned release (§9.4,
-  2026-09-26), so what is left is the choice itself -- and whether a default
-  may be one that has to be fetched first.
+- ~~Which font is the **phone** default (JetBrains Mono vs condensed
+  Iosevka)?~~ **DECIDED 2026-09-29 by the holder: JetBrains Mono on every
+  form factor -- and BUILT.** The code already preferred condensed Iosevka on
+  a touch-primary device whenever it was installed, and with the download
+  built (§9.4) that turned into a trap: fetching Iosevka for one host
+  changed the font of every host that had never chosen one. Rejected with
+  it: fetching Iosevka unasked at first launch (~43 MB of network before the
+  first terminal). `default_id()` lost its form-factor argument, and
+  `a_downloaded_font_does_not_become_the_default` holds it where Iosevka is
+  installed. Iosevka stays one pick and a download away.
 - ~~Host groups/folders in addition to presets?~~ **DECIDED 2026-09-26 by the
   holder: folders for organising only -- and BUILT.** They group and collapse
   hosts in the list; settings still come only from presets, so there is one
