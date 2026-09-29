@@ -11,6 +11,11 @@
  */
 
 bssh_platform::bssh_platform(QObject *parent) : QObject(parent) {
+	if (QGuiApplication *app = qobject_cast<QGuiApplication *>(QCoreApplication::instance())) {
+		connect(app, &QGuiApplication::applicationStateChanged, this,
+		        [this](Qt::ApplicationState) { emit application_active_changed(); });
+	}
+
 	/*
 	 * Captured now, before anything has applied a palette of its own;
 	 * see startup_palette().
@@ -80,6 +85,19 @@ QSize bssh_platform::screen_size() const {
 
 void bssh_platform::force_screen_size(const QSize &size_dp) {
 	bssh_forced_screen = size_dp;
+}
+
+/* -1 until something says otherwise, as bssh_forced_touch is. */
+static int bssh_forced_active = -1;
+
+bool bssh_platform::is_application_active() const {
+	if (bssh_forced_active >= 0) return bssh_forced_active != 0;
+	return QGuiApplication::applicationState() == Qt::ApplicationActive;
+}
+
+void bssh_platform::force_application_active(int active) {
+	bssh_forced_active = active;
+	if (bssh_platform *platform = instance()) emit platform->application_active_changed();
 }
 
 /*

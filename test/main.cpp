@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 
+#include "platform/platform.h"
 #include "command_line_test.h"
 #include "conn_manager_test.h"
 #include "emulator_bench.h"
@@ -256,6 +257,14 @@ int main(int argc, char *argv[]) {
 	}
 
 	QApplication app(argc, argv);
+
+	/*
+	 * In front, as an app being used is: the offscreen platform never
+	 * activates anything, and with "behind another program" counting as
+	 * away (sec 8.3) every pane would otherwise be away for the whole run.
+	 * The one test about that answer changes it and puts it back.
+	 */
+	bssh_platform::force_application_active(1);
 
 	/*
 	 * Before any test runs and after QApplication, which is the only

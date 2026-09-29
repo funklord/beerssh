@@ -19,6 +19,7 @@ private slots:
 	void shrinking_collapses_panes_to_tabs_without_closing_them();
 	void widening_restores_the_arrangement();
 	void layout_only_changes_on_a_class_boundary();
+	void a_window_behind_another_program_is_away();
 	void panes_get_their_own_geometry();
 	void focus_is_visible_only_when_there_is_a_choice();
 	void pane_focus_moves_with_the_keyboard();

@@ -225,6 +225,34 @@ void layout_test::layout_only_changes_on_a_class_boundary() {
 	QCOMPARE(spy.count(), 2);
 }
 
+void layout_test::a_window_behind_another_program_is_away() {
+	/*
+	 * sec 8.3's away rule, settled by the holder on 2026-09-29: a pane in
+	 * a window that can be seen behind a browser is not being watched, so
+	 * a bell there raises the dot and the notification. Coming back
+	 * counts as having seen it.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(1200, 400);
+	layout.set_intent({a});
+	container.rebuild();
+
+	QVERIFY(a->is_on_screen());
+
+	bssh_platform::force_application_active(0);
+	QVERIFY2(!a->is_on_screen(), "a pane behind another program still counts as watched");
+
+	bssh_platform::force_application_active(1);
+	QVERIFY(a->is_on_screen());
+}
+
 void layout_test::panes_get_their_own_geometry() {
 	bssh_session_registry registry;
 	bssh_layout_manager layout;

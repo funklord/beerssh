@@ -5587,11 +5587,20 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   they most want to know about, raised nothing at all. `isVisible()` answers
   for the widget and every ancestor, which is exactly the question, and coming
   back counts as having seen it.
-  **[OPEN]** Whether a window that is *visible but not focused* — another app
-  in front on a desktop — should count as away as well. Arguably yes by the
-  same reading; equally, a dot that appears whenever you glance at a browser is
-  one people learn to ignore, which costs the state its whole value. Left as
-  the narrow rule (gone, not merely behind) until someone decides.
+  **[DECIDED 2026-09-29 by the holder, and BUILT] A window behind another
+  program counts as away too.** The worry recorded here -- a dot on every
+  glance at a browser -- weighed less once it was clear which dot this is:
+  the *bell*-while-away state, raised only when a program rings, not on
+  output. So the pane container asks `bssh_platform::is_application_active()`
+  beside `isVisible()`, and asks again on `application_active_changed`.
+  Application-wide on purpose: a BeerSSH dialog in front of the terminal,
+  or a second BeerSSH window, is not "another program". The same flag gates
+  §5.5's desktop notifications, so a bell in a window behind a browser now
+  raises one, which is what that section's own list said ("a bell in an
+  unfocused pane"). The suite forces the answer in front, since the
+  offscreen platform never activates anything; `layout_test` flips it.
+  Guarded by `tool/sabotage/away-behind.toml`, two edits; the platform's
+  forwarding of the real state is not reachable offscreen and says so.
 - **The OSC title chain was built, tested and correct** — OSC title, then the
   profile name, then `user@host:port`, never blank. One edge now pinned that
   was not: a remote *clearing* its title with an empty `OSC 0`, which tmux and

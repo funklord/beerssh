@@ -1,0 +1,23 @@
+# sec 8.3's away rule: a pane counts as watched only while its window is
+# up AND the application is the one in front (the holder, 2026-09-29).
+#
+# Not covered: the platform's forwarding of the real application state,
+# which the offscreen platform the suite runs on never changes. The test
+# drives the forced answer, which reaches the container by the same
+# signal.
+
+# Visible is enough again: a window behind a browser counts as watched.
+[[sabotage]]
+name = "a window behind another program counts as watched"
+file = "src/ui/pane_container.cpp"
+find = "\tconst bool showing = isVisible() && (!platform || platform->is_application_active());"
+replace = "\tconst bool showing = isVisible();"
+expect = "a_window_behind_another_program_is_away"
+
+# The rule is right and nobody asks it again when the answer changes.
+[[sabotage]]
+name = "going behind another program is never noticed"
+file = "src/ui/pane_container.cpp"
+find = "\t\tconnect(platform, &bssh_platform::application_active_changed,\n\t\t        this, &bssh_pane_container::update_on_screen);"
+replace = "\t\t(void)platform;"
+expect = "a_window_behind_another_program_is_away"

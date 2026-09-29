@@ -100,6 +100,21 @@ public:
 	static void force_screen_size(const QSize &size_dp);
 
 	/*
+	 * Whether this application is the one in front -- one of its windows
+	 * has the focus, rather than a browser or another program. What sec
+	 * 8.3's "away" rule reads beside visibility: a window that can be seen
+	 * behind another program is not being watched (the holder,
+	 * 2026-09-29). An application-wide answer on purpose, so a BeerSSH
+	 * dialog in front of the terminal does not count as away.
+	 *
+	 * Forced the same way as force_touch_primary(), because the offscreen
+	 * platform the suite runs on never activates anything. Forcing it
+	 * emits application_active_changed, as a real change does.
+	 */
+	bool is_application_active() const;
+	static void force_application_active(int active);
+
+	/*
 	 * Whether this platform can ask the user to prove it is them --
 	 * BiometricPrompt on Android, and nothing on the desktops this
 	 * targets. sec 11 asks for the platform equivalent where one exists
@@ -436,6 +451,9 @@ signals:
 	 * not anything is listening yet.
 	 */
 	void network_changed();
+
+	/* is_application_active() may have a new answer. */
+	void application_active_changed();
 };
 
 

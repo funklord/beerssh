@@ -34,6 +34,11 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
       m_focused(nullptr) {
 	qRegisterMetaType<bssh_session *>();
 
+	if (bssh_platform *platform = bssh_platform::instance()) {
+		connect(platform, &bssh_platform::application_active_changed,
+		        this, &bssh_pane_container::update_on_screen);
+	}
+
 	m_outer = new QVBoxLayout(this);
 	m_outer->setContentsMargins(0, 0, 0, 0);
 	m_outer->setSpacing(0);
@@ -751,8 +756,14 @@ void bssh_pane_container::update_on_screen() {
 	 * while the user was in another program, which is the one they most
 	 * want to know about, raised nothing at all. isVisible() answers for
 	 * this widget and every ancestor, which is exactly the question.
+	 *
+	 * And the application has to be the one in front: a window that can
+	 * be seen behind a browser is not being watched, which the holder
+	 * settled on 2026-09-29 (sec 8.3). Coming back counts as having
+	 * seen it, the same as coming back from the tray.
 	 */
-	const bool showing = isVisible();
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool showing = isVisible() && (!platform || platform->is_application_active());
 	for (bssh_session *session : m_sessions) session->set_on_screen(showing);
 }
 
