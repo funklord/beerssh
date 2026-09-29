@@ -9,6 +9,8 @@
 #include "font_catalog_test.h"
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
+#include "model/custom_font.h"
+#include <QTemporaryDir>
 #include "ui/terminal_view.h"
 
 void font_catalog_test::an_installed_font_resolves_like_a_set_font() {
@@ -628,4 +630,88 @@ void font_catalog_test::every_bundled_face_draws_a_box_the_width_of_its_cell() {
 			}
 		}
 	}
+}
+
+void font_catalog_test::a_monospace_font_file_becomes_the_custom_entry() {
+	/*
+	 * sec 9.4's reserved entry: a font file of the user's own, copied into
+	 * app storage, registered, and named by the "custom" id -- available,
+	 * named for its family, first in its own fallback chain, and back
+	 * after a restart from the copy rather than the original.
+	 */
+	const QString source = QStringLiteral(BSSH_TEST_FONT_DIR) + QStringLiteral("/Hack-Regular.ttf");
+	if (!QFile::exists(source)) QSKIP("the fonts have not been fetched here (tool/fetch-fonts.sh)");
+
+	QTemporaryDir storage;
+	QVERIFY(storage.isValid());
+	bssh_set_custom_font_directory(storage.path());
+
+	bssh_font_catalog &catalog = bssh_font_catalog::instance();
+	const QString before = catalog.custom_family();
+
+	QString family;
+	QString why;
+	QVERIFY2(bssh_import_custom_font(source, &family, &why), qPrintable(why));
+	QCOMPARE(family, QStringLiteral("Hack"));
+
+	const QString id = bssh_font_catalog::custom_id();
+	QVERIFY(catalog.is_available(id));
+	QCOMPARE(catalog.display_name(id), QStringLiteral("Your font: Hack"));
+	QCOMPARE(catalog.fallback_chain(id).first(), QStringLiteral("Hack"));
+	QVERIFY(QFile::exists(storage.path() + QStringLiteral("/custom-font")));
+
+	/* A restart: nothing in the catalog, then the copy loaded again. */
+	catalog.set_custom_family(QString());
+	QVERIFY(!catalog.is_available(id));
+	QCOMPARE(bssh_load_custom_font(), QStringLiteral("Hack"));
+	QVERIFY(catalog.is_available(id));
+
+	catalog.set_custom_family(before);
+	bssh_set_custom_font_directory(QString());
+}
+
+void font_catalog_test::a_font_that_is_not_monospace_is_refused_and_changes_nothing() {
+	/*
+	 * sec 9.1 excludes proportional fonts because a grid cannot hold one,
+	 * and the check is a measurement, not the font's own flag. A refusal
+	 * leaves the font that was there before in place -- in the catalog
+	 * and on disk.
+	 */
+	const QString mono = QStringLiteral(BSSH_TEST_FONT_DIR) + QStringLiteral("/Hack-Regular.ttf");
+	const QString proportional = QStringLiteral("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf");
+	if (!QFile::exists(mono)) QSKIP("the fonts have not been fetched here (tool/fetch-fonts.sh)");
+	if (!QFile::exists(proportional)) QSKIP("no proportional DejaVu Sans on this machine to refuse");
+
+	QTemporaryDir storage;
+	QVERIFY(storage.isValid());
+	bssh_set_custom_font_directory(storage.path());
+
+	bssh_font_catalog &catalog = bssh_font_catalog::instance();
+	const QString before = catalog.custom_family();
+
+	QString family;
+	QString why;
+	QVERIFY2(bssh_import_custom_font(mono, &family, &why), qPrintable(why));
+	QFile kept(storage.path() + QStringLiteral("/custom-font"));
+	QVERIFY(kept.open(QIODevice::ReadOnly));
+	const QByteArray bytes = kept.readAll();
+	kept.close();
+
+	QVERIFY(!bssh_import_custom_font(proportional, &family, &why));
+	QVERIFY2(why.contains(QStringLiteral("not monospace")), qPrintable(why));
+	QCOMPARE(catalog.custom_family(), QStringLiteral("Hack"));
+	QVERIFY(kept.open(QIODevice::ReadOnly));
+	QCOMPARE(kept.readAll(), bytes);
+	kept.close();
+
+	/* And something that is not a font at all. */
+	QFile text(storage.path() + QStringLiteral("/not-a-font.txt"));
+	QVERIFY(text.open(QIODevice::WriteOnly));
+	text.write("hello, I am not a font\n");
+	text.close();
+	QVERIFY(!bssh_import_custom_font(text.fileName(), &family, &why));
+	QCOMPARE(catalog.custom_family(), QStringLiteral("Hack"));
+
+	catalog.set_custom_family(before);
+	bssh_set_custom_font_directory(QString());
 }

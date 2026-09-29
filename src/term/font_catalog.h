@@ -243,6 +243,20 @@ public:
 	/* What to call a font by id in the interface, set or installed. */
 	QString display_name(const QString &id) const;
 
+	/*
+	 * The user's own font file, the reserved entry the colour scheme and
+	 * the keyboard layout already have (sec 6.2, the holder's answer of
+	 * 2026-09-29). Its id is "custom" and it names whatever family the
+	 * imported file registered; model/custom_font does the importing and
+	 * tells the catalog here. Empty until something has been imported.
+	 *
+	 * A profile naming "custom" on a machine without one resolves as any
+	 * absent font does: marked in the picker, drawn by the chain.
+	 */
+	static QString custom_id();
+	void set_custom_family(const QString &family) { m_custom_family = family; }
+	QString custom_family() const { return m_custom_family; }
+
 private:
 	bool family_installed(const QString &family) const;
 
@@ -250,6 +264,8 @@ private:
 
 	/* Families successfully registered from bundled files. */
 	QStringList m_loaded;
+
+	QString m_custom_family;
 
 	mutable QHash<QString, QHash<char32_t, QString>> m_glyph_cache;
 };

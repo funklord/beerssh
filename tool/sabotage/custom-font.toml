@@ -1,0 +1,41 @@
+# The user's own font file, the reserved "custom" entry (project.md sec
+# 9.4, the holder's answer of 2026-09-29).
+
+# A proportional face is taken, and the grid cannot hold it (sec 9.1).
+[[sabotage]]
+name = "a proportional font is taken"
+file = "src/model/custom_font.cpp"
+find = "\tif (!bssh_family_is_monospace(registered)) {"
+replace = "\tif (false) {"
+expect = "a_font_that_is_not_monospace_is_refused_and_changes_nothing"
+
+# Imported, and gone after a restart: the copy is never loaded again.
+[[sabotage]]
+name = "the imported font is not loaded at start"
+file = "src/model/custom_font.cpp"
+find = "\tadopt(id, families.first());\n\treturn families.first();"
+replace = "\treturn families.first();"
+expect = "a_monospace_font_file_becomes_the_custom_entry"
+
+[[sabotage]]
+name = "the custom id is never available"
+file = "src/term/font_catalog.cpp"
+find = "\tif (id == custom_id()) return !m_custom_family.isEmpty() && family_installed(m_custom_family);\n"
+replace = ""
+expect = "a_monospace_font_file_becomes_the_custom_entry"
+
+# Chosen, and drawn in the set's fallback rather than the user's font.
+[[sabotage]]
+name = "the custom font is not in its own fallback chain"
+file = "src/term/font_catalog.cpp"
+find = "\tif (id == custom_id() && is_available(id)) chain.append(m_custom_family);\n"
+replace = ""
+expect = "a_monospace_font_file_becomes_the_custom_entry"
+
+# Imported, and the picker does not list it.
+[[sabotage]]
+name = "an imported font is not offered"
+file = "src/ui/font_picker.cpp"
+find = "\tif (!catalog.custom_family().isEmpty()) custom_row();\n"
+replace = ""
+expect = "every_custom_entry_reaches_the_control_that_offers_it"

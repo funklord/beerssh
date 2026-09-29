@@ -117,6 +117,13 @@ protected:
 	 * runs.
 	 */
 	QPushButton *m_download = nullptr;
+	QPushButton *m_import = nullptr;
+
+	/* Picks a font file and makes it the custom entry (sec 9.4). */
+	void import_font();
+
+	/* The custom entry's row, added or relabelled; its index. */
+	int custom_row();
 	std::unique_ptr<bssh_range_source> m_download_source;
 	bssh_font_download *m_running = nullptr;
 	void update_download_offer();

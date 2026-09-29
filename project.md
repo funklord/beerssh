@@ -8331,6 +8331,29 @@ mislabelled or an argument with its author; the same result is available from on
 setting that works on everything.
 
 ### 9.4 Packaging and size
+
+**[BUILT 2026-09-29] A font of the user's own, the reserved "custom" entry**
+the colour scheme, key row and keyboard layout already have -- the last of
+the four catalogs to get one, taken by the holder from §16. "Use a font
+file..." under the picker, on both platforms, takes a `.ttf`, `.otf` or `.ttc`
+(on Android through the same wildcard picker the preset import uses),
+copies it into app storage as `fonts/custom/custom-font` -- one fixed name,
+so replacing it deletes a named file -- registers it, and lists it as
+"Your font: <family>". It loads after the set at every start, from the copy,
+so the original may move or go. One at a time, as the others are.
+- **Monospace by measurement, not by its flag.** §9.1 excludes proportional
+  faces because a grid cannot hold one, and a font's fixed-pitch bit is its
+  author's claim: `i W l m . 0 _ M` must share one advance within 2 %, and a
+  font that fails is unregistered and refused with the reason. So is a file
+  that is not a font, or one over 64 MB. A refusal leaves the previous
+  custom font in place, in the catalog and on disk.
+- **The id is `custom`**, and a profile naming it on a machine with none
+  resolves as any absent font does: "Your font (none imported here)" in the
+  picker, drawn by the chain meanwhile.
+- Its licence is the user's; it is their file, and it is not listed on the
+  licences screen, which lists what BeerSSH ships.
+- Guarded by `tool/sabotage/custom-font.toml`, five edits. The import dialog
+  itself is not driven by a test; the import behind it is.
 Bundling ~10 families × multiple weights is **tens of megabytes** — too much for
 the base download on Android. Desktop has no such pressure, which is a licence to
 diverge on *delivery* but never on *which fonts exist*.
@@ -13961,9 +13984,8 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
 - ~~Should the **default** colour scheme alone follow a light desktop?~~
   **DECIDED 2026-09-29 by the holder: yes, to the existing `black-on-white` --
   and BUILT** (§6.2, §10.2).
-- A **user-supplied font file**, the last of the four catalogs without the
-  reserved-entry answer the scheme and key row share (§6.2 -- the keyboard
-  layout took it too). Missing from this list until 2026-09-29.
+- ~~A **user-supplied font file**~~ **DECIDED 2026-09-29 by the holder, and
+  BUILT** (§9.4): the reserved entry the other three catalogs have.
 - ~~**Is the image budget per SESSION or per PROCESS?**~~ **DECIDED
   2026-09-26 by the holder: per terminal, and the user's to set.** Asked why
   it is a hard limit at all -- it never removes a picture on screen, only the

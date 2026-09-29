@@ -65,6 +65,7 @@ SOURCES += \
     src/model/font_download.cpp \
     src/term/zip_index.cpp \
     src/term/picture_spill.cpp \
+    src/model/custom_font.cpp \
     src/input/input_router.cpp \
     src/platform/platform.cpp \
     src/platform/secret_store.cpp \
@@ -133,6 +134,7 @@ HEADERS += \
     src/model/font_download.h \
     src/term/zip_index.h \
     src/term/picture_spill.h \
+    src/model/custom_font.h \
     src/platform/platform.h \
     src/platform/secret_store.h \
     src/ssh/pty_session.h \

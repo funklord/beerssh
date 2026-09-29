@@ -1,6 +1,9 @@
 #include "ui/touch_metrics.h"
 #include "model/preset.h"
 #include "ui/font_picker.h"
+#include "model/custom_font.h"
+#include <QMessageBox>
+#include <QFileDialog>
 
 #include <QComboBox>
 #include <QPushButton>
@@ -214,6 +217,7 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	m_form = form;
 
 	m_family = new QComboBox(this);
+	m_family->setObjectName(QStringLiteral("font-picker-family"));
 
 	/*
 	 * Expanding, or QFormLayout::ExpandingFieldsGrow leaves it at its
@@ -264,6 +268,9 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 		for (const QString &family : installed)
 			m_family->addItem(family, bssh_font_catalog::system_id(family));
 	}
+
+	/* The user's own file, once there is one (sec 9.4). */
+	if (!catalog.custom_family().isEmpty()) custom_row();
 
 	m_scheme = new QComboBox(this);
 	m_scheme->setObjectName(QStringLiteral("font-picker-scheme"));
@@ -336,6 +343,11 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	outer->addWidget(m_download);
 	connect(m_download, &QPushButton::clicked, this, &bssh_font_picker::start_download);
 
+	m_import = new QPushButton(QStringLiteral("Use a font file..."), this);
+	m_import->setObjectName(QStringLiteral("font_import"));
+	outer->addWidget(m_import);
+	connect(m_import, &QPushButton::clicked, this, &bssh_font_picker::import_font);
+
 	connect(m_family, &QComboBox::currentIndexChanged,
 	         this, &bssh_font_picker::on_choice_changed);
 	connect(m_size, QOverload<int>::of(&QSpinBox::valueChanged),
@@ -378,6 +390,8 @@ void bssh_font_picker::set_font_choice(const QString &id, int point_size) {
 		 */
 		const QString label = bssh_font_catalog::is_system_id(wanted)
 		        ? catalog.display_name(wanted) + QStringLiteral("  (not installed)")
+		        : wanted == bssh_font_catalog::custom_id()
+		        ? catalog.display_name(wanted) + QStringLiteral("  (none imported here)")
 		        : wanted + QStringLiteral("  (not in this build)");
 		m_family->addItem(label, wanted);
 		m_family->setCurrentIndex(m_family->count() - 1);
@@ -564,4 +578,63 @@ void bssh_font_picker::start_download() {
 	});
 
 	m_running->start(*archive, bssh_font_sources::embedded(), bssh_downloaded_font_directory());
+}
+
+int bssh_font_picker::custom_row() {
+	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
+	const QString id = bssh_font_catalog::custom_id();
+	const QString label = catalog.is_available(id)
+	        ? catalog.display_name(id)
+	        : catalog.display_name(id) + QStringLiteral("  (none imported here)");
+
+	int index = m_family->findData(id);
+	if (index < 0) {
+		m_family->addItem(label, id);
+		index = m_family->count() - 1;
+	} else {
+		m_family->setItemText(index, label);
+	}
+	return index;
+}
+
+void bssh_font_picker::import_font() {
+	/*
+	 * The same picker the preset import uses, and for the same reason on
+	 * Android: a font has no MIME type the system lists it under, so a
+	 * wildcard, and the import checks the content itself.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool touch = platform && platform->is_touch_primary();
+
+	QFileDialog dialog(this, QStringLiteral("Use a font file"));
+	dialog.setAcceptMode(QFileDialog::AcceptOpen);
+	dialog.setFileMode(QFileDialog::ExistingFile);
+	if (touch) {
+		dialog.setMimeTypeFilters({ QStringLiteral("*/*") });
+	} else {
+		dialog.setNameFilter(QStringLiteral("Fonts (*.ttf *.otf *.ttc)"));
+	}
+	if (dialog.exec() != QDialog::Accepted || dialog.selectedUrls().isEmpty()) return;
+
+	const QUrl url = dialog.selectedUrls().first();
+	const QString source = url.isLocalFile() ? url.toLocalFile() : url.toString();
+
+	QString family;
+	QString why;
+	if (!bssh_import_custom_font(source, &family, &why)) {
+		QMessageBox::warning(this, QStringLiteral("Font not used"), why);
+		return;
+	}
+
+	/*
+	 * Selecting the row reports the choice; re-importing while it is
+	 * already selected changes nothing the combo can see, so that case
+	 * refreshes and reports by hand.
+	 */
+	const int row = custom_row();
+	if (m_family->currentIndex() == row) {
+		on_choice_changed();
+	} else {
+		m_family->setCurrentIndex(row);
+	}
 }

@@ -15,6 +15,7 @@
 #include "model/font_download.h"
 #include "platform/platform.h"
 #include "term/font_catalog.h"
+#include "model/custom_font.h"
 #include "term/picture_spill.h"
 #include "hang_watchdog.h"
 #include "ui/main_window.h"
@@ -234,6 +235,9 @@ int main(int argc, char *argv[]) {
 		 * bundle so a bundled face is never shadowed by a fetched copy.
 		 */
 		faces += bssh_font_catalog::instance().load_bundled(bssh_downloaded_font_directory());
+
+		/* And the user's own file, if one was imported (sec 9.4). */
+		bssh_load_custom_font();
 
 		/*
 		 * One line, because "the terminal font looks wrong" and "no fonts

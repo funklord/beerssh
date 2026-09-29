@@ -256,6 +256,7 @@ bool bssh_font_catalog::family_installed(const QString &family) const {
 
 bool bssh_font_catalog::is_available(const QString &id) const {
 	if (is_system_id(id)) return family_installed(id.mid(7));
+	if (id == custom_id()) return !m_custom_family.isEmpty() && family_installed(m_custom_family);
 
 	const bssh_font_t *font = by_id(id);
 	if (!font) return false;
@@ -270,12 +271,17 @@ bool bssh_font_catalog::is_system_id(const QString &id) {
 	return id.startsWith(QStringLiteral("system:")) && id.size() > 7;
 }
 
+QString bssh_font_catalog::custom_id() {
+	return QStringLiteral("custom");
+}
+
 QStringList bssh_font_catalog::installed_monospace() const {
 	QStringList offered;
 	for (const QString &family : QFontDatabase::families()) {
 		if (family.startsWith(QLatin1Char('.'))) continue;
 		if (!QFontDatabase::isFixedPitch(family)) continue;
 		if (m_loaded.contains(family, Qt::CaseInsensitive)) continue;
+		if (family.compare(m_custom_family, Qt::CaseInsensitive) == 0) continue;
 
 		bool in_set = false;
 		for (const bssh_font_t &font : m_fonts) {
@@ -292,6 +298,10 @@ QStringList bssh_font_catalog::installed_monospace() const {
 
 QString bssh_font_catalog::display_name(const QString &id) const {
 	if (is_system_id(id)) return id.mid(7);
+	if (id == custom_id()) {
+		return m_custom_family.isEmpty() ? QStringLiteral("Your font")
+		                                 : QStringLiteral("Your font: ") + m_custom_family;
+	}
 	const bssh_font_t *font = by_id(id);
 	return font ? font->display_name : id;
 }
@@ -310,6 +320,7 @@ QStringList bssh_font_catalog::fallback_chain(const QString &id) const {
 	 * unvetted family does not have.
 	 */
 	if (is_system_id(id) && family_installed(id.mid(7))) chain.append(id.mid(7));
+	if (id == custom_id() && is_available(id)) chain.append(m_custom_family);
 
 	for (const char *fallback_id : BSSH_FALLBACK_CHAIN) {
 		const bssh_font_t *font = by_id(QString::fromLatin1(fallback_id));

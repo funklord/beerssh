@@ -38,6 +38,9 @@
 #include "model/command_line.h"
 #include "model/profile.h"
 #include "platform/platform.h"
+#include <QFile>
+#include "term/font_catalog.h"
+#include "model/custom_font.h"
 #include <QTemporaryDir>
 #include "model/profile_store.h"
 #include "keyboard/key_cap.h"
@@ -9858,6 +9861,44 @@ void layout_test::every_custom_entry_reaches_the_control_that_offers_it() {
 		QVERIFY2(schemes, "the font picker has no scheme chooser");
 		QVERIFY2(schemes->findData(QStringLiteral("custom")) >= 0,
 		          "a user can edit the custom palette and not choose it");
+	}
+
+	/*
+	 * And the font's, added 2026-09-29. Unlike the other three it does
+	 * not exist until a file is imported, so the picker offers the way
+	 * to import one always, and lists the entry once there is one.
+	 */
+	{
+		bssh_font_picker before;
+		QVERIFY2(before.findChild<QPushButton *>(QStringLiteral("font_import")),
+		          "a user can have their own font and no way to give it");
+
+		const QString source = QStringLiteral(BSSH_TEST_FONT_DIR) + QStringLiteral("/Hack-Regular.ttf");
+		if (QFile::exists(source)) {
+			QTemporaryDir storage;
+			bssh_set_custom_font_directory(storage.path());
+			bssh_font_catalog &catalog = bssh_font_catalog::instance();
+			const QString was = catalog.custom_family();
+
+			QString family;
+			QString why;
+			QVERIFY2(bssh_import_custom_font(source, &family, &why), qPrintable(why));
+
+			/*
+			 * The FONT list by name: the scheme chooser beside it has a
+			 * "custom" entry of its own, and a search of every combo box
+			 * found that one and passed with the font row removed.
+			 */
+			bssh_font_picker after;
+			QComboBox *fonts =
+			        after.findChild<QComboBox *>(QStringLiteral("font-picker-family"));
+			QVERIFY2(fonts, "the font picker has no font chooser");
+			QVERIFY2(fonts->findData(bssh_font_catalog::custom_id()) >= 0,
+			          "an imported font is not in the picker");
+
+			catalog.set_custom_family(was);
+			bssh_set_custom_font_directory(QString());
+		}
 	}
 }
 
