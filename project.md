@@ -2667,10 +2667,12 @@ decision.**
   all four, and **two of them have now answered it the same way**: the
   colour scheme first (a reserved `custom` entry, written by a push from
   the settings layer) and the key row after it, deliberately copying that
-  mechanism rather than inventing a second. What is still open is the
-  other two — a user-supplied font and a user-supplied keyboard layout —
-  and the answer for them is expected to be the same shape, which is the
-  point of having written it twice before anybody generalises it. A
+  mechanism rather than inventing a second. ~~What is still open is the
+  other two — a user-supplied font and a user-supplied keyboard layout.~~
+  **The keyboard layout has answered it the same way since** (re-derived
+  2026-09-29: `keyboard_custom_layout` in `app.ini`, one reserved entry);
+  a user-supplied font FILE is the one still open, listed in §16. Desktop
+  offers installed families (§9.4), which is not the same question. A
   layout differs from a row in one way that matters: a row is refused
   unless it carries Escape and a modifier, and the layout's equivalent is
   `both_keyboards_reach_every_printable_character` — a heavier contract,
@@ -7094,8 +7096,9 @@ same question:
 **"Desktop" names the idiom and nothing else**, which is why the
 arrangement values are geometric. `tiled` is today's `pane_container`,
 `column` is the portrait scrollable one, `row` its landscape mirror --
-wanted or not is still open, since a 700x390 cover screen in landscape
-is wide and short, where a column gives two useless 195dp terminals.
+**not built, and answered as not wanted** (re-derived 2026-09-29): the
+holder's 2026-09-25 rule below gives the cover screen sideways one
+terminal in the column, which is the case a `row` was for.
 
 **The idiom picks the arrangement's default and then lets go.** Mobile
 defaults to `column` and desktop to `tiled`, and either can be set to
@@ -7335,9 +7338,11 @@ existing split machinery put in the intent and tabs still converted. That
 is the "holds every session" evolution, and it landed 2026-09-18 (the
 BUILT note under the off-by-one below): the column now holds the whole
 shown list and scrolls, so this paragraph's first gap is closed and the
-scroll area exists. What is still open is the scroll's FEEL and the two
-column-level selector states -- `scroll terminals` and `move terminals`,
-the second of which is the touch reordering that dissolved with the tabs.
+scroll area exists. ~~What is still open is the scroll's FEEL and the two
+column-level selector states -- `scroll terminals` and `move terminals`.~~
+**Both states are built** (re-derived 2026-09-29): the input selector's
+**Pan** scrolls the column and **Move** reorders a pane in it
+(`BSSH_INPUT_COLUMN_SCROLL`, `BSSH_INPUT_MOVE`). The FEEL is what remains.
 The snap radius is the user's since
 2026-09-22 (see below). And the resize/snap FEEL owes the same device
 pass every touch surface here does: the model is tested, the thumb is
@@ -9402,11 +9407,13 @@ careful version of a thing is the cheapest place to notice the careless
 one** — the same search `working-practice.md` names for decisions, applied
 to error handling.
 
-Still open and deliberately not bundled here: `do_send` and `do_resize`
-discard their results too. Losing keystrokes silently and letting the
-remote keep a stale window size are real, and they are a different fault
-from a bypassed bastion; putting them in one commit would file both under
-whichever subject the message chose.
+~~Still open and deliberately not bundled here: `do_send` and `do_resize`
+discard their results too.~~ **Both fixed since, and this line was stale
+(re-derived 2026-09-29 by reading them):** `do_resize` fails the session
+when `ssh_channel_change_pty_size` does not return `SSH_OK`, and `do_send`
+queues and writes at most the channel window, so input is neither lost nor
+able to block the worker. Fixed apart from the bastion, as this line asked:
+`749934e` for both results, `d020720` for the window.
 
 **And libssh has six authentication results, of which exactly one means
 the credential was wrong.** `do_authenticate_password` tested for
@@ -13832,6 +13839,16 @@ is the thing they do only when they already doubt the entry.
 One in eleven, **34 days** after the last correction (`bf5b1a1`, 2026-08-06)
 — so re-derive rather than read, and record the date when you do.
 
+**Re-derived 2026-09-29**, the same way, over the whole document's "still
+open" markers rather than this list alone. Four were stale, every one
+outside this section: `do_send`/`do_resize` discarding results (fixed), a
+user-supplied keyboard layout (built), the `row` arrangement (answered by
+the cover-screen rule), and the column's two selector states (built as Pan
+and Move). And the list itself was short by two open questions that lived
+only in their sections -- the default scheme following the desktop, and a
+user font file -- so it now carries them. **A register that only records
+what reaches it cannot be complete**; the sweep has to go looking.
+
 **Stale again on 2026-09-19, one day after the fact.** `8b4590b` settled the
 system font-scale question — honour it for the interface, never for the
 terminal grid, with an explicit setting — and §9.5 records it in those words.
@@ -13929,6 +13946,12 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   was typed for* in §14.
 - Icon and branding direction (§0.1), which the placeholder in §12.2 is waiting
   on.
+- Should the **default** colour scheme alone follow a light desktop? (§6,
+  where it is marked [OPEN].) There is one light scheme in the set, so a yes
+  wants one designed first. Missing from this list until 2026-09-29.
+- A **user-supplied font file**, the last of the four catalogs without the
+  reserved-entry answer the scheme and key row share (§6.2 -- the keyboard
+  layout took it too). Missing from this list until 2026-09-29.
 - ~~**Is the image budget per SESSION or per PROCESS?**~~ **DECIDED
   2026-09-26 by the holder: per terminal, and the user's to set.** Asked why
   it is a hard limit at all -- it never removes a picture on screen, only the
