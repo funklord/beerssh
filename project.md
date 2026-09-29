@@ -5190,9 +5190,20 @@ keeps its number and now means memory.
 - **Measured on the emulator 2026-09-28** (x86_64, API 33) with 1000x1300
   pictures of noise, the worst case for compression: 160 ms to spill one,
   49-55 ms to read one back, both on the GUI thread. Both came back beside
-  their own text. The spill is the slow half and it happens while output
-  is arriving; worth moving off the thread if a phone shows it. Not yet
-  measured on a phone.
+  their own text. Not yet measured on a phone.
+- **[BUILT 2026-09-29] The spill is sealed on a worker**, the holder's pick
+  after that measurement: it is the slow half and it ran while output was
+  arriving. `bssh_picture_spill::prepare` hands back a job that compresses
+  and seals -- a pure function of copies of the picture and the key -- and
+  one worker thread shared by every terminal runs them in turn, so a burst
+  of pictures queues rather than taking every core; `store` writes the
+  result on the GUI thread, which is quick. The picture stays in memory
+  and drawable until it lands, and counts as gone meanwhile, or the next
+  scroll would spill a second picture for the same bytes. One that has
+  scrolled back onto the screen by then stays and nothing is written.
+  Reading back is still on the GUI thread: it happens once, on the scroll
+  that reaches the picture, where a spill happened on every scroll of
+  output.
 
 Guarded by `tool/sabotage/picture-spill.toml`, ten edits.
 

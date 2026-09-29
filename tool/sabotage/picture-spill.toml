@@ -6,8 +6,8 @@
 [[sabotage]]
 name = "a picture over the budget is dropped rather than spilled"
 file = "src/term/image_store.cpp"
-find = "\t\tif (m_spill && m_spill->write(placement.serial, placement.image)) {"
-replace = "\t\tif (false) {"
+find = "\tif (m_spill && m_spill->store(serial, sealed)) {"
+replace = "\tif (false) {"
 expect = "a_picture_over_the_budget_is_spilled_and_comes_back_whole"
 
 # The renderer reads the field, so a spilled picture is a blank.
@@ -81,3 +81,28 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tm_private->resizing = true;\n"
 replace = ""
 expect = "a_picture_deep_in_the_history_stays_beside_its_text"
+
+# Sealed on the thread that is scrolling, as it first was: 160 ms a picture.
+[[sabotage]]
+name = "a spill is sealed on the calling thread"
+file = "src/term/image_store.cpp"
+find = "\tif (!QCoreApplication::instance()) {"
+replace = "\tif (true) {"
+expect = "a_spill_is_sealed_off_the_thread_and_the_picture_stays_meanwhile"
+
+# The seal lands on a picture scrolled back onto the screen, and takes it
+# out of memory.
+[[sabotage]]
+name = "a spill lands on a picture that is back on screen"
+file = "src/term/image_store.cpp"
+find = "\tif (placement.row + placement.rows > 0) return;\n\n\tif (m_spill && m_spill->store(serial, sealed)) {"
+replace = "\tif (m_spill && m_spill->store(serial, sealed)) {"
+expect = "a_picture_back_on_screen_before_its_spill_lands_stays_in_memory"
+
+# A picture in flight is counted as staying, so the next is spilled too.
+[[sabotage]]
+name = "a spill in flight is paid for twice"
+file = "src/term/image_store.cpp"
+find = "\t\tif (!m_spilling.contains(placement.serial)) staying += placement.image.sizeInBytes();"
+replace = "\t\tstaying += placement.image.sizeInBytes();"
+expect = "a_spill_in_flight_is_not_paid_for_twice"

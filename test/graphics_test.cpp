@@ -1017,6 +1017,7 @@ void graphics_test::a_picture_over_the_budget_is_spilled_and_comes_back_whole() 
 	store.scrolled(0, 24, 20);          /* into the scrollback */
 	store.place(placement_at(noise_image(100, 100), 5));
 	store.set_memory_budget(bytes + bytes / 2);
+	QTRY_VERIFY(!store.spills_pending());
 
 	/* Both still there; the one in history out of memory. */
 	QCOMPARE(store.count(), 2);
@@ -1067,6 +1068,7 @@ void graphics_test::a_spilled_picture_scrolled_back_to_reaches_the_screen() {
 	QCOMPARE(view.grab().toImage().pixelColor(probe), QColor(Qt::red));
 
 	store.shift_rows(10);
+	QTRY_VERIFY(!store.spills_pending());
 	QVERIFY(store.is_spilled(store.placements().first()));
 	store.shift_rows(-10);
 	QVERIFY2(store.is_spilled(store.placements().first()),
@@ -1187,6 +1189,7 @@ void graphics_test::the_disk_budget_forgets_the_oldest_spilled_picture() {
 	scroll(5);
 	store.place(placement_at(newest, 1));
 	scroll(20);
+	QTRY_VERIFY(!store.spills_pending());
 
 	QCOMPARE(store.count(), 3);
 	for (const bssh_image_placement_t &placement : store.placements())
@@ -1413,4 +1416,84 @@ void graphics_test::text_after_an_image_at_the_bottom_is_not_hidden_under_it() {
 	QVERIFY2(marker_row >= image.row + image.rows,
 	          qPrintable(QStringLiteral("text at row %1 is under the image on rows %2-%3")
 	                             .arg(marker_row).arg(image.row).arg(image.row + image.rows - 1)));
+}
+
+void graphics_test::a_spill_is_sealed_off_the_thread_and_the_picture_stays_meanwhile() {
+	/*
+	 * Sealing a large picture took 160 ms on the emulator, on the thread
+	 * the output arrives on. It is sealed on a worker now: when the budget
+	 * is applied the spill has only begun, the picture is still in memory
+	 * and still drawable, and it leaves memory when the seal comes back.
+	 */
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_image_store store;
+	store.set_spill_base(base.path());
+
+	const QImage picture = noise_image(100, 100);
+	store.place(placement_at(picture, 1));
+	store.scrolled(0, 24, 20);
+	store.set_memory_budget(1);
+
+	QVERIFY2(store.spills_pending(), "the spill was sealed on the calling thread");
+	QVERIFY(!store.is_spilled(store.placements().first()));
+	QCOMPARE(store.image(store.placements().first()), picture);
+
+	QTRY_VERIFY(!store.spills_pending());
+	QVERIFY(store.is_spilled(store.placements().first()));
+	QCOMPARE(store.image(store.placements().first()), picture);
+}
+
+void graphics_test::a_picture_back_on_screen_before_its_spill_lands_stays_in_memory() {
+	/*
+	 * The picture was chosen because it was above the screen; if it is
+	 * back on screen when its seal returns, spilling it now would take
+	 * what is being looked at out of memory -- the one thing the budget
+	 * refuses. It stays, and nothing is written.
+	 */
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_image_store store;
+	store.set_spill_base(base.path());
+	store.set_memory_budget(1);
+
+	store.place(placement_at(noise_image(100, 100), 1));
+	store.shift_rows(10);
+	QVERIFY(store.spills_pending());
+	store.shift_rows(-10);
+
+	QTRY_VERIFY(!store.spills_pending());
+	QVERIFY(!store.is_spilled(store.placements().first()));
+	QVERIFY(!store.placements().first().image.isNull());
+	QCOMPARE(store.disk_used(), qint64(0));
+}
+
+void graphics_test::a_spill_in_flight_is_not_paid_for_twice() {
+	/*
+	 * A picture being sealed is still in memory until it lands, and every
+	 * scroll applies the budget again. Counting it as staying would spill
+	 * the next picture for bytes that are already on their way out.
+	 */
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_image_store store;
+	store.set_spill_base(base.path());
+
+	const qint64 bytes = noise_image(100, 100).sizeInBytes();
+	store.set_memory_budget(bytes + bytes / 2);
+
+	store.place(placement_at(noise_image(100, 100), 1));
+	store.place(placement_at(noise_image(100, 100), 4));
+	store.scrolled(0, 24, 20);          /* both above the screen; room for one */
+	QVERIFY(store.spills_pending());
+	store.scrolled(0, 24, 1);           /* the budget again, before it lands */
+
+	QTRY_VERIFY(!store.spills_pending());
+	int spilled = 0;
+	for (const bssh_image_placement_t &placement : store.placements())
+		if (store.is_spilled(placement)) ++spilled;
+	QCOMPARE(spilled, 1);
 }

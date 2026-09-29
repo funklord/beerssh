@@ -36,6 +36,9 @@ private slots:
 	void the_memory_budget_drops_the_oldest_but_never_the_visible();
 	void a_picture_over_the_budget_is_spilled_and_comes_back_whole();
 	void a_spilled_picture_scrolled_back_to_reaches_the_screen();
+	void a_spill_is_sealed_off_the_thread_and_the_picture_stays_meanwhile();
+	void a_picture_back_on_screen_before_its_spill_lands_stays_in_memory();
+	void a_spill_in_flight_is_not_paid_for_twice();
 	void a_spilled_picture_opens_only_under_its_own_name();
 	void a_spill_directory_goes_with_its_terminal();
 	void an_abandoned_spill_is_swept_and_a_live_one_is_not();

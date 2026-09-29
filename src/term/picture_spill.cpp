@@ -219,17 +219,20 @@ QString bssh_picture_spill::path_of(quint64 serial) const {
 	return m_dir->path() + QLatin1Char('/') + QString::number(serial);
 }
 
+bool bssh_picture_spill::ensure_key() {
+	if (!m_key.isEmpty()) return true;
+
+	m_key.resize(BSSH_SPILL_KEY_BYTES);
+	if (RAND_bytes(reinterpret_cast<unsigned char *>(m_key.data()), BSSH_SPILL_KEY_BYTES) != 1) {
+		m_key.clear();
+		return false;
+	}
+	return true;
+}
+
 bool bssh_picture_spill::ensure_directory() {
 	if (m_dir) return true;
-	if (m_base.isEmpty()) return false;
-
-	if (m_key.isEmpty()) {
-		m_key.resize(BSSH_SPILL_KEY_BYTES);
-		if (RAND_bytes(reinterpret_cast<unsigned char *>(m_key.data()), BSSH_SPILL_KEY_BYTES) != 1) {
-			m_key.clear();
-			return false;
-		}
-	}
+	if (m_base.isEmpty() || !ensure_key()) return false;
 
 	if (!QDir().mkpath(m_base)) return false;
 	QFile::setPermissions(m_base, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
@@ -248,11 +251,25 @@ bool bssh_picture_spill::ensure_directory() {
 	return true;
 }
 
-bool bssh_picture_spill::write(quint64 serial, const QImage &image) {
-	if (image.isNull() || !ensure_directory()) return false;
+std::function<QByteArray()> bssh_picture_spill::prepare(quint64 serial, const QImage &image) {
+	if (image.isNull() || m_base.isEmpty() || !ensure_key()) return nullptr;
 
-	const QByteArray sealed = seal(pack(image), m_key, serial);
-	if (sealed.isEmpty()) return false;
+	/*
+	 * Copies of both, which is what makes it safe on another thread: a
+	 * QImage and a QByteArray share their data by an atomic count and are
+	 * only read here, and the key is never changed once made.
+	 */
+	const QByteArray key = m_key;
+	return [key, serial, image]() { return seal(pack(image), key, serial); };
+}
+
+bool bssh_picture_spill::write(quint64 serial, const QImage &image) {
+	const std::function<QByteArray()> job = prepare(serial, image);
+	return job && store(serial, job());
+}
+
+bool bssh_picture_spill::store(quint64 serial, const QByteArray &sealed) {
+	if (sealed.isEmpty() || !ensure_directory()) return false;
 
 	QFile file(path_of(serial));
 	if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate,

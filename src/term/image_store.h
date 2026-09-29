@@ -4,10 +4,12 @@
 #include <QHash>
 #include <QImage>
 #include <QList>
+#include <QSet>
 
 #include <memory>
 
 class bssh_picture_spill;
+class QObject;
 
 /*
  * bssh_image_store -- images placed on the character grid (project.md
@@ -145,6 +147,13 @@ public:
 	bool is_spilled(const bssh_image_placement_t &placement) const;
 
 	/*
+	 * Whether a spill is still being sealed on the worker. The picture
+	 * stays in memory, and drawable, until it lands; a test waits on this
+	 * rather than on time.
+	 */
+	bool spills_pending() const { return !m_spilling.isEmpty(); }
+
+	/*
 	 * Forget every placement that has scrolled back past `history_lines`
 	 * lines above the screen -- the text it was drawn beside has left the
 	 * scrollback, so no scroll can reach it again. A picture is not
@@ -191,6 +200,13 @@ private:
 	void enforce_budget();
 	void enforce_disk_budget();
 
+	/*
+	 * Sends the picture at `index` to be sealed off the thread, or drops
+	 * it where nothing can be spilled; finish_spill takes the result back.
+	 */
+	void begin_spill(int index);
+	void finish_spill(quint64 serial, const QByteArray &sealed);
+
 	/* Removes the placement at `index`, and its spill if it has one. */
 	void discard(int index);
 
@@ -207,6 +223,15 @@ private:
 	quint64 m_next_serial;
 	QString m_spill_base;
 	std::unique_ptr<bssh_picture_spill> m_spill;
+
+	/* Serials being sealed on the worker; still resident meanwhile. */
+	QSet<quint64> m_spilling;
+
+	/*
+	 * Lives exactly as long as this store, so a seal finishing after the
+	 * terminal has closed finds it gone and delivers nothing.
+	 */
+	std::unique_ptr<QObject> m_alive;
 
 	/* Spilled pictures read back, and the order they were last drawn. */
 	mutable QHash<quint64, QImage> m_restored;

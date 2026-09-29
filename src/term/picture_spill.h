@@ -6,6 +6,7 @@
 #include <QImage>
 #include <QString>
 
+#include <functional>
 #include <memory>
 
 class QLockFile;
@@ -41,6 +42,16 @@ public:
 
 	bool write(quint64 serial, const QImage &image);
 
+	/*
+	 * write() in two halves, so the slow one can leave the thread that is
+	 * scrolling: prepare() gives back a job that compresses and seals the
+	 * picture -- a pure function of copies, safe to run on any thread --
+	 * and store() writes what it produced, on this object's thread. Null
+	 * when nothing could be spilled at all.
+	 */
+	std::function<QByteArray()> prepare(quint64 serial, const QImage &image);
+	bool store(quint64 serial, const QByteArray &sealed);
+
 	/* A null image when the file is gone or does not verify. */
 	QImage read(quint64 serial) const;
 
@@ -65,6 +76,7 @@ public:
 	static QString default_base();
 
 private:
+	bool ensure_key();
 	bool ensure_directory();
 	QString path_of(quint64 serial) const;
 

@@ -1,6 +1,11 @@
 #include "term/image_store.h"
 #include "term/picture_spill.h"
 
+#include <QCoreApplication>
+#include <QObject>
+#include <QPointer>
+#include <QThreadPool>
+
 /*
  * 32 MB of decoded image, which is roughly a dozen full-screen phone
  * screenshots or a very great many plots. Chosen to be generous enough
@@ -27,7 +32,8 @@ bssh_image_store::bssh_image_store()
     : m_budget(BSSH_DEFAULT_IMAGE_BUDGET),
       m_disk_budget(BSSH_DEFAULT_SPILL_BUDGET),
       m_next_serial(0),
-      m_spill_base(bssh_picture_spill::default_base()) {
+      m_spill_base(bssh_picture_spill::default_base()),
+      m_alive(new QObject()) {
 }
 
 /* Out of line, where bssh_picture_spill is a complete type. */
@@ -77,6 +83,7 @@ int bssh_image_store::place(const bssh_image_placement_t &given) {
 				/* The picture it replaces may have been spilled. */
 				const quint64 replaced = m_placements.at(i).serial;
 				if (m_spill) m_spill->remove(replaced);
+				m_spilling.remove(replaced);
 				m_restored.remove(replaced);
 				m_restored_order.removeAll(replaced);
 
@@ -157,6 +164,7 @@ void bssh_image_store::discard(int index) {
 	const quint64 serial = m_placements.at(index).serial;
 
 	if (m_spill) m_spill->remove(serial);
+	m_spilling.remove(serial);
 	m_restored.remove(serial);
 	m_restored_order.removeAll(serial);
 	m_placements.removeAt(index);
@@ -297,7 +305,17 @@ void bssh_image_store::enforce_budget() {
 	/* What was read back is on disk already, so it goes first and free. */
 	trim_restored(0);
 
-	while (resident_bytes() > m_budget) {
+	/*
+	 * What is being sealed already counts as gone: it will be, and
+	 * counting it again would send the next picture after it for the same
+	 * bytes.
+	 */
+	qint64 staying = 0;
+	for (const bssh_image_placement_t &placement : m_placements) {
+		if (!m_spilling.contains(placement.serial)) staying += placement.image.sizeInBytes();
+	}
+
+	while (staying > m_budget) {
 		/*
 		 * The one furthest above the screen goes first: it is the oldest
 		 * and the one a user would have to scroll longest to reach.
@@ -308,8 +326,8 @@ void bssh_image_store::enforce_budget() {
 		for (int i = 0; i < m_placements.size(); ++i) {
 			const bssh_image_placement_t &placement = m_placements.at(i);
 
-			/* Already out of memory. */
-			if (placement.image.isNull()) continue;
+			/* Already out of memory, or on its way. */
+			if (placement.image.isNull() || m_spilling.contains(placement.serial)) continue;
 
 			/* Never the one being looked at, whatever it weighs. */
 			if (placement.row + placement.rows > 0) continue;
@@ -327,22 +345,94 @@ void bssh_image_store::enforce_budget() {
 		 */
 		if (oldest < 0) break;
 
-		/*
-		 * Spilled rather than dropped, so scrolling back still finds it.
-		 * Where it cannot be written, dropped as it always was: a budget
-		 * is a promise about memory, and keeping the picture resident
-		 * because the disk said no would break it.
-		 */
-		bssh_image_placement_t &placement = m_placements[oldest];
+		staying -= m_placements.at(oldest).image.sizeInBytes();
+		begin_spill(oldest);
+	}
 
-		if (!m_spill && !m_spill_base.isEmpty())
-			m_spill.reset(new bssh_picture_spill(m_spill_base));
+	enforce_disk_budget();
+}
 
-		if (m_spill && m_spill->write(placement.serial, placement.image)) {
-			placement.image = QImage();
-		} else {
-			discard(oldest);
-		}
+/*
+ * Spilled rather than dropped, so scrolling back still finds it -- and
+ * sealed on a worker, because compressing and encrypting a large picture
+ * took 160 ms on the emulator, on the thread the output arrives on. The
+ * file is written back on this thread (store() is quick); only the pure
+ * half leaves it.
+ *
+ * Where it cannot be spilled, dropped as it always was: a budget is a
+ * promise about memory, and keeping the picture because the disk said no
+ * would break it.
+ */
+void bssh_image_store::begin_spill(int index) {
+	const bssh_image_placement_t &placement = m_placements.at(index);
+	const quint64 serial = placement.serial;
+
+	if (!m_spill && !m_spill_base.isEmpty())
+		m_spill.reset(new bssh_picture_spill(m_spill_base));
+
+	const std::function<QByteArray()> job =
+	        m_spill ? m_spill->prepare(serial, placement.image) : nullptr;
+	if (!job) {
+		discard(index);
+		return;
+	}
+
+	m_spilling.insert(serial);
+
+	/* No event loop to come back on: seal it here. */
+	if (!QCoreApplication::instance()) {
+		finish_spill(serial, job());
+		return;
+	}
+
+	/*
+	 * One worker for every terminal's spills, so they queue rather than
+	 * take every core while output is arriving -- and each queued one is a
+	 * picture that is still resident, so the queue is bounded by the same
+	 * memory it is freeing.
+	 */
+	static QThreadPool *pool = [] {
+		QThreadPool *made = new QThreadPool();
+		made->setMaxThreadCount(1);
+		return made;
+	}();
+
+	const QPointer<QObject> alive(m_alive.get());
+	bssh_image_store *store = this;
+	pool->start([job, serial, alive, store]() {
+		const QByteArray sealed = job();
+
+		/* Gone at exit, with a seal still queued: nothing to deliver to. */
+		QCoreApplication *app = QCoreApplication::instance();
+		if (!app) return;
+
+		QMetaObject::invokeMethod(app, [alive, store, serial, sealed]() {
+			if (alive) store->finish_spill(serial, sealed);
+		}, Qt::QueuedConnection);
+	});
+}
+
+void bssh_image_store::finish_spill(quint64 serial, const QByteArray &sealed) {
+	/* Dropped, replaced or cleared while it was being sealed. */
+	if (!m_spilling.remove(serial)) return;
+
+	int index = -1;
+	for (int i = 0; i < m_placements.size(); ++i) {
+		if (m_placements.at(i).serial == serial) index = i;
+	}
+	if (index < 0) return;
+
+	/*
+	 * Scrolled back onto the screen while it was away: it stays, by the
+	 * rule enforce_budget chose it under, and is chosen again if it goes.
+	 */
+	bssh_image_placement_t &placement = m_placements[index];
+	if (placement.row + placement.rows > 0) return;
+
+	if (m_spill && m_spill->store(serial, sealed)) {
+		placement.image = QImage();
+	} else {
+		discard(index);
 	}
 
 	enforce_disk_budget();
