@@ -9112,12 +9112,16 @@ double as documentation of what a preset can do.
     launch intent's URI is read and imported. Verified on a device with a real
     SAF-granted `content://` URI: opened, parsed, imported, and name-collided
     into "BSD (imported)" rather than overwriting.
-  - **[OPEN]** The in-app picker still cannot *select* a file on Android
-    (`ACTION_OPEN_DOCUMENT` lists preset files greyed out, and a `.txt` behaves
-    the same as an `.ini`, so it is not about filters). It is left in place
-    because it costs nothing and may be an emulator-image quirk; the hand-over
-    route above is the one that works and is the more Android-shaped gesture
-    regardless.
+  - **The in-app picker imports on Android too -- measured 2026-09-29.** It
+    was recorded here as unable to *select* a file: on the Android 11
+    emulator image `ACTION_OPEN_DOCUMENT` listed preset files greyed out,
+    whatever the filter. On the API 33 image with Qt 6.12 the same intent
+    (`typ=*/*`, `OPENABLE`, DocumentsUI's `acceptMimes=[*/*]`) lists a
+    `picker-test.ini` from Downloads as choosable, and choosing it imported
+    "Picker test" with its TERM. Nothing in the code changed; Android 11 was
+    not run again, so whether the image or the Qt of the time was at fault
+    is not known, and the entry says so rather than guessing. The hand-over
+    route above works as well.
   - Deliberately **not** claimed: `ACTION_VIEW` on arbitrary `content://`
     documents. Matching those needs a filter on `application/octet-stream` with
     no path pattern, which would put BeerSSH in the "open with" list of every

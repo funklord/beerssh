@@ -713,24 +713,16 @@ void bssh_preset_editor::on_import() {
 
 	if (touch) {
 		/*
-		 * KNOWN LIMITATION, and deliberately not papered over: on the
-		 * Android 11 emulator image this picker lists preset files but
-		 * will not let one be chosen. The intent Qt sends is
-		 * ACTION_OPEN_DOCUMENT with a wildcard type and category
-		 * OPENABLE, which looks correct, and neither a suffix filter,
-		 * no filter, an
-		 * "All files" filter, nor explicit MIME filters (octet-stream,
-		 * text-plain, wildcard) changed it -- a .txt file is refused
-		 * just as an .ini is. EXPORT works on the same device, so the
-		 * content:// plumbing underneath is fine; it is specific to
-		 * choosing an existing document.
+		 * A wildcard, because a preset has no MIME type Android knows --
+		 * the picker calls an .ini a "BIN file" -- and read_ini checks the
+		 * content anyway. Qt sends ACTION_OPEN_DOCUMENT with the wildcard
+		 * type and category OPENABLE.
 		 *
-		 * Left as the plain wildcard rather than as a cleverer guess,
-		 * because four guesses have already been wrong and the next
-		 * person deserves the simple version to debug rather than mine.
-		 * sec 10.5 records it as open; the likely route is an
-		 * intent-filter so a preset is opened from a file manager INTO
-		 * BeerSSH, which is the more Android-shaped answer anyway.
+		 * On the Android 11 emulator image this listed preset files and
+		 * would not let one be chosen, whatever the filter. On the API 33
+		 * image with Qt 6.12, 2026-09-29, the same intent lists the file
+		 * as choosable and imports it (sec 10.5). Android 11 was not run
+		 * again, so which of the two changed is not known.
 		 */
 		dialog.setMimeTypeFilters({ QStringLiteral("*/*") });
 	} else {
