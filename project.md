@@ -963,7 +963,51 @@ the justification. Candidates for a persistent network/SSH connection:
   Requires a manifest `PROPERTY_SPECIAL_USE_FGS_SUBTYPE` explanation and a
   written justification during Play submission; approval is case-by-case.
 
-**Plan:** prototype with `connectedDevice` (no time limit, lowest friction), and
+**Costed against the current texts, 2026-09-30, for the holder to decide.**
+Fetched, not recalled:
+
+- **Android's definitions** (developer.android.com, *Foreground service
+  types*): `connectedDevice` is "Interactions with external devices that
+  require a Bluetooth, NFC, IR, USB, or network connection", and qualifies on a
+  declared `CHANGE_NETWORK_STATE`, which this manifest already has.
+  `specialUse` "Covers any valid foreground service use cases that aren't
+  covered by the other foreground service types" and wants a `<property>` in
+  the manifest naming the use. `remoteMessaging` is "Transfer text messages from
+  one device to another". None of the three has a time limit.
+- **Only `dataSync` and `mediaProcessing` time out** (*Foreground service
+  timeouts*): 6 hours in 24 for apps targeting Android 15, then `onTimeout`,
+  and a crash if the service does not stop. That confirms avoiding `dataSync`.
+- **Play's declaration** (Play Console Help 13392821): per type, a description,
+  the user impact if the task is deferred or interrupted, a video of the user
+  triggering it, and a use case picked from a preset list. Its example list for
+  `connectedDevice` is "wearable, baby monitor, headset, car" -- external
+  hardware; a server reached over the internet is not among them, which is the
+  "slight stretch" above made concrete. `specialUse` is allowed where "your use
+  case meets the other characteristics required for foreground service usage".
+- **Precedent:** ConnectBot, an SSH client on Play, declares
+  `remoteMessaging` on its main branch (manifest fetched today). Whether that
+  build has been through Play review was not established.
+
+So the three live routes:
+
+1. **`connectedDevice`, as built.** No time limit, no manifest change; the
+   risk is a reviewer holding it to the preset list's external-hardware
+   examples.
+2. **`specialUse`**, with a subtype property ("interactive remote shell kept
+   connected while the user switches apps"). The most accurate description, at
+   the cost of a free-text case reviewed individually. A manifest property and
+   a permission change.
+3. **`remoteMessaging`**, ConnectBot's choice. A terminal session is text to and
+   from another device, which fits the definition's words better than the
+   "continuity of messaging" framing Play's list may assume. Same size of
+   change as 2.
+
+Whichever is chosen, the adjudication §5.1 names is now runnable: this machine
+has an Android emulator working again (API 33, installed 2026-09-28), and an API
+34 or later image is one `sdkmanager` install away -- which is where the
+type is first enforced. Play's opinion stays unknowable before submission.
+
+**Plan (as first written):** prototype with `connectedDevice` (no time limit, lowest friction), and
 prepare a `specialUse` justification as the fallback if Play pushes back. Avoid
 `dataSync` as the primary type because of the Android 15 time limit. **Verify the
 exact current Play policy at implementation time** — these rules change.
@@ -13964,7 +14008,8 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   routes, and the holder's.
 - Foreground-service type: `connectedDevice` (built and shipped in the manifest)
   vs `specialUse` (prepared fallback). Open on Play review's opinion, not on
-  ours — §5.1.
+  ours — §5.1. **Costed 2026-09-30** against Android's and Play's current
+  texts, with a third route found: `remoteMessaging`, which ConnectBot uses.
 - ~~Inhibit sleep on desktop while a session is connected?~~ **DECIDED
   2026-09-26 by the holder: a per-host toggle, off by default -- and BUILT.**
   "Keep the computer awake" beside "Keep scrollback" in the desktop dialog,
