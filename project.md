@@ -4397,8 +4397,42 @@ best one it can:
   `BSSH_KITTY_SUPPORTED_FLAGS` (1) as they arrive: pushing 31 reads back as 1,
   and pushing only an unimplemented one reads back as 0, leaving Escape the
   legacy byte. Two tests had asserted the echo and were corrected with it.
-  The four flags above disambiguate stay unbuilt; they want key releases
-  carried from Qt through the input router, which is a feature, not this fix.
+  **[BUILT 2026-09-30] And the four flags above it**, which the holder took
+  next, from the specification's own text (fetched, sw.kovidgoyal.net):
+  event types (2), alternate keys (4), every key as an escape code (8) and
+  associated text (16), so the mask is 31 now and means "all five".
+  - **The emulator takes a whole event** (`send_key_event`: the functional
+    key or the unshifted key, what Shift made of it, the text, modifiers,
+    press/repeat/release, or a modifier alone) and encodes it under the
+    modes in force; it says when a press is legacy's to send, and the router
+    then sends it exactly as before. The router uses this path only while a
+    mode above disambiguate is on, so disambiguate alone and no protocol at
+    all are untouched.
+  - **The specification's exceptions are kept**: Enter, Tab and Backspace
+    keep their legacy bytes and have no releases unless every key is an
+    escape; a key that types text stays text with no events unless every key
+    is an escape (or Ctrl/Alt makes disambiguate apply); text never carries a
+    control code; a modifier's own bit is set on its press and reset on its
+    release; F3 is `13~` and F6 `17~`, the table's own gaps.
+  - **Releases are new**: the view forwards `keyReleaseEvent`, X11's
+    autorepeat releases are ignored (the next press says repeat), and a
+    release is sent only for a key whose press went this way, carrying the
+    press's modifiers -- so a spent sticky Ctrl still owns the release, and
+    a chord the app kept never leaks one.
+  - **Per-screen stacks and the pop rule**, both from the same specification
+    and both missing: "the main and alternate screens ... must maintain their
+    own, independent, keyboard mode stacks", and a pop that empties the stack
+    resets the flags -- including a base entry set with `CSI = u`.
+  - **Limits, stated rather than hidden**: Qt gives no physical key for a
+    shifted symbol, so Shift+1 reports `!` with Shift spent rather than the 1
+    key with Shift held; the base-layout alternate key is not sent; modifiers
+    are reported as the LEFT keys, since Qt does not say which side; keypad
+    keys are not told from the main block; and Super is reported as a key
+    but not as a modifier bit. An input method says nothing of keys, so under
+    every-key-as-escape each committed character is its own press with a
+    release straight after -- which is also all Android's soft keyboard can
+    give.
+  - Guarded by `tool/sabotage/kitty-keyboard.toml`, ten edits.
 - **xterm `modifyOtherKeys`** (`CSI > 4 ; 2 m`, queried with `CSI ? 4 m`).
   The middle tier, and what a terminal that predates kitty's protocol
   offers. **Implemented at level 2.** Level 3 is deliberately not offered:

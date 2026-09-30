@@ -404,6 +404,22 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 		}
 	}
 
+	/*
+	 * The kitty modes above disambiguate want the whole event -- repeat
+	 * or press, the unshifted key, the text -- so it goes to the emulator
+	 * whole, and anything it leaves to legacy falls through below.
+	 */
+	if (m_emulator->wants_key_events()) {
+		bssh_emulator::key_event_t kitty;
+		if (kitty_event_for(event, kitty)) {
+			if (m_emulator->send_key_event(kitty)) {
+				m_kitty_pressed.insert(event->key(), kitty);
+				spend_sticky_modifiers();
+				return true;
+			}
+		}
+	}
+
 	const quint8 modifiers = modifiers_for(event);
 	const int key = emulator_key_for(event->key());
 
@@ -542,8 +558,153 @@ bool bssh_input_router::steal_char_chord(char32_t ch) {
 	return false;
 }
 
+bool bssh_input_router::kitty_event_for(QKeyEvent *event,
+                                        bssh_emulator::key_event_t &out) const {
+	out = bssh_emulator::key_event_t();
+	out.type = event->isAutoRepeat() ? bssh_emulator::EVENT_REPEAT : bssh_emulator::EVENT_PRESS;
+	out.modifiers = modifiers_for(event);
+
+	/*
+	 * A modifier on its own. Its own bit is SET on the press, as the
+	 * protocol requires -- Qt reports the state from before the key on
+	 * some platforms and after it on others, so it is set here rather
+	 * than trusted. Left keys only: Qt does not say which side.
+	 */
+	switch (event->key()) {
+	case Qt::Key_Shift:
+		out.modifier_key = bssh_emulator::KITTY_LEFT_SHIFT;
+		out.modifiers |= bssh_emulator::MOD_SHIFT;
+		return true;
+	case Qt::Key_Control:
+		out.modifier_key = bssh_emulator::KITTY_LEFT_CONTROL;
+		out.modifiers |= bssh_emulator::MOD_CTRL;
+		return true;
+	case Qt::Key_Alt:
+		out.modifier_key = bssh_emulator::KITTY_LEFT_ALT;
+		out.modifiers |= bssh_emulator::MOD_ALT;
+		return true;
+	case Qt::Key_Meta:
+		out.modifier_key = bssh_emulator::KITTY_LEFT_SUPER;
+		return true;
+	default:
+		break;
+	}
+
+	out.key = emulator_key_for(event->key());
+	if (out.key != bssh_emulator::KEY_NONE) return true;
+
+	/*
+	 * A text key: the UNSHIFTED key is what the protocol numbers it by.
+	 * For a letter that is its lower case whatever Shift did, and the
+	 * shifted key is the upper case. For anything else Qt gives only the
+	 * character Shift already made -- '!' rather than the 1 key under it
+	 * -- so that is reported as the key and Shift is dropped, since it has
+	 * been spent: the one place this falls short of kitty, which knows
+	 * the physical key.
+	 */
+	for (uint c : event->text().toUcs4()) out.text.append(c);
+
+	const int qt_key = event->key();
+	if (qt_key >= Qt::Key_A && qt_key <= Qt::Key_Z) {
+		out.code = char32_t(qt_key - Qt::Key_A + 'a');
+		if (out.modifiers & bssh_emulator::MOD_SHIFT) out.shifted = char32_t(qt_key - Qt::Key_A + 'A');
+		return true;
+	}
+
+	char32_t produced = 0;
+	for (uint c : out.text) {
+		if (c >= 0x20 && c != 0x7f) {
+			produced = char32_t(c);
+			break;
+		}
+	}
+	if (!produced && qt_key >= 0x20 && qt_key < 0x7f) produced = char32_t(qt_key);
+	if (!produced) return false;
+
+	const QString as_string = QString::fromUcs4(&produced, 1);
+	const QString lower = as_string.toLower();
+	out.code = lower.toUcs4().value(0, produced);
+	if (out.code != produced) {
+		out.shifted = produced;
+	} else {
+		out.modifiers &= quint8(~bssh_emulator::MOD_SHIFT);
+	}
+	return true;
+}
+
+bool bssh_input_router::handle_key_release(QKeyEvent *event) {
+	if (!m_emulator) return false;
+
+	/*
+	 * An autorepeat release is half of a repeat, not the key coming up:
+	 * X11 sends a release before each repeated press. The press that
+	 * follows is marked repeat, and the real release comes once.
+	 */
+	if (event->isAutoRepeat()) return false;
+
+	const auto found = m_kitty_pressed.constFind(event->key());
+	if (found == m_kitty_pressed.constEnd()) return false;
+
+	bssh_emulator::key_event_t release = found.value();
+	m_kitty_pressed.erase(found);
+
+	release.type = bssh_emulator::EVENT_RELEASE;
+	release.text.clear();
+
+	/* A modifier's own bit is RESET on its release, as its press set it. */
+	if (release.modifier_key == bssh_emulator::KITTY_LEFT_SHIFT)
+		release.modifiers &= quint8(~bssh_emulator::MOD_SHIFT);
+	if (release.modifier_key == bssh_emulator::KITTY_LEFT_CONTROL)
+		release.modifiers &= quint8(~bssh_emulator::MOD_CTRL);
+	if (release.modifier_key == bssh_emulator::KITTY_LEFT_ALT)
+		release.modifiers &= quint8(~bssh_emulator::MOD_ALT);
+
+	return m_emulator->send_key_event(release);
+}
+
 void bssh_input_router::send_text(const QString &text) {
 	if (!m_emulator || text.isEmpty()) return;
+
+	/*
+	 * Under every-key-as-escape the text has to arrive as key events too,
+	 * or it is the one thing typed that the program cannot see. An input
+	 * method says nothing of keys, so each character is its own key: the
+	 * lower case as the key and Shift for an upper-case letter, which is
+	 * what a keyboard would have said -- and a release straight after it
+	 * when releases are wanted, since no real one is coming.
+	 */
+	if (m_emulator->wants_key_events()) {
+		const QList<uint> codepoints = text.toUcs4();
+		bool all_sent = true;
+		for (uint codepoint : codepoints) {
+			const char32_t produced = char32_t(codepoint);
+			bssh_emulator::key_event_t press;
+			press.modifiers = quint8(effective_modifiers() & ~MOD_ALTGR);
+			press.text.append(codepoint);
+
+			const QString lower = QString::fromUcs4(&produced, 1).toLower();
+			press.code = lower.toUcs4().value(0, produced);
+			if (press.code != produced) {
+				press.shifted = produced;
+				press.modifiers |= bssh_emulator::MOD_SHIFT;
+			} else {
+				press.modifiers &= quint8(~bssh_emulator::MOD_SHIFT);
+			}
+
+			if (!m_emulator->send_key_event(press)) {
+				all_sent = false;
+				break;
+			}
+			bssh_emulator::key_event_t release = press;
+			release.type = bssh_emulator::EVENT_RELEASE;
+			release.text.clear();
+			m_emulator->send_key_event(release);
+		}
+		if (all_sent) {
+			spend_sticky_modifiers();
+			return;
+		}
+	}
 
 	/*
 	 * SHIFT is masked off, for the reason handle_key states thirty lines

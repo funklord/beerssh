@@ -1,0 +1,80 @@
+# The kitty keyboard protocol above disambiguate (project.md sec 7.1, tier
+# 2): event types, alternate keys, every key as an escape code, associated
+# text -- and the stack rules the specification puts beside them.
+
+[[sabotage]]
+name = "releases are reported whether or not event types were asked for"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (!types) {\n\t\tif (type == EVENT_RELEASE) return true;"
+replace = "\tif (false) {\n\t\tif (type == EVENT_RELEASE) return true;"
+expect = "kitty_all_keys_as_escapes_with_text_and_alternates"
+
+# Enter becomes CSI 13 u under event types alone, and `reset` can no longer
+# be typed at a shell a program left in that mode.
+[[sabotage]]
+name = "Enter loses its legacy byte without report-all-keys"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (trio && !all) return type == EVENT_RELEASE;\n"
+replace = ""
+expect = "kitty_event_types_report_repeats_and_releases"
+
+[[sabotage]]
+name = "the shifted key is never reported"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\talternate = ':' + QByteArray::number(uint(event.shifted));"
+replace = "\t\talternate = QByteArray();"
+expect = "kitty_all_keys_as_escapes_with_text_and_alternates"
+
+# The protocol forbids control codes in the associated text; Ctrl+A's
+# text is 0x01.
+[[sabotage]]
+name = "a control code goes into the associated text"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\t\tif (c < 0x20 || (c >= 0x7f && c < 0xa0)) continue;\n"
+replace = ""
+expect = "kitty_all_keys_as_escapes_with_text_and_alternates"
+
+[[sabotage]]
+name = "a modifier's release keeps its own bit set"
+file = "src/input/input_router.cpp"
+find = "\tif (release.modifier_key == bssh_emulator::KITTY_LEFT_SHIFT)\n\t\trelease.modifiers &= quint8(~bssh_emulator::MOD_SHIFT);\n"
+replace = ""
+expect = "kitty_all_keys_as_escapes_with_text_and_alternates"
+
+# Presses are never remembered, so no release is ever sent.
+[[sabotage]]
+name = "a press is not remembered for its release"
+file = "src/input/input_router.cpp"
+find = "\t\t\t\tm_kitty_pressed.insert(event->key(), kitty);\n"
+replace = ""
+expect = "kitty_release_answers_its_own_press"
+
+# X11's repeat pairs read as the key coming up.
+[[sabotage]]
+name = "an autorepeat release is sent as the release"
+file = "src/input/input_router.cpp"
+find = "\tif (event->isAutoRepeat()) return false;\n\n\tconst auto found = m_kitty_pressed.constFind(event->key());"
+replace = "\tconst auto found = m_kitty_pressed.constFind(event->key());"
+expect = "kitty_event_types_report_repeats_and_releases"
+
+[[sabotage]]
+name = "input-method text sends a press with no release"
+file = "src/input/input_router.cpp"
+find = "\t\t\tm_emulator->send_key_event(release);\n\t\t}"
+replace = "\t\t}"
+expect = "kitty_release_answers_its_own_press"
+
+# One stack for both screens: an editor's modes leak into the shell's.
+[[sabotage]]
+name = "the screens share one keyboard mode stack"
+file = "src/term/emulator_vterm.cpp"
+find = "\tQList<int> &kitty_stack_ref() { return kitty_stacks[alt_screen ? 1 : 0]; }"
+replace = "\tQList<int> &kitty_stack_ref() { return kitty_stacks[0]; }"
+expect = "kitty_modes_are_per_screen_and_an_emptied_stack_resets"
+
+[[sabotage]]
+name = "a pop that empties the stack keeps the flags"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\t\t\t\tstack.last() = 0;\n"
+replace = ""
+expect = "kitty_modes_are_per_screen_and_an_emptied_stack_resets"

@@ -14,7 +14,7 @@
 [[sabotage]]
 name = "the kitty flags stack grows without limit"
 file = "src/term/emulator_vterm.cpp"
-find = "\t\t\tif (self->kitty_stack.size() >= BSSH_MAX_KITTY_STACK) {\n\t\t\t\tself->kitty_stack.removeAt(1);\n\t\t\t}\n\n"
+find = "\t\t\tif (self->kitty_stack_ref().size() >= BSSH_MAX_KITTY_STACK) {\n\t\t\t\tself->kitty_stack_ref().removeAt(1);\n\t\t\t}\n\n"
 replace = ""
 expect = "the_kitty_flags_stack_is_bounded"
 

@@ -33,8 +33,17 @@ struct bssh_emulator_private {
 	 * as push/pop precisely so a full-screen program can enable what it
 	 * needs and restore whatever the shell had without knowing what that
 	 * was. Bottom entry is 0 -- legacy -- and is never popped.
+	 *
+	 * TWO, one per screen, because the specification requires it: "the
+	 * main and alternate screens in the terminal emulator must maintain
+	 * their own, independent, keyboard mode stacks". An editor that
+	 * pushes its modes on the alternate screen and exits without popping
+	 * would otherwise leave them on the shell's screen -- where Ctrl+C
+	 * then arrives as CSI 99;5u instead of an interrupt.
 	 */
-	QList<int> kitty_stack;
+	QList<int> kitty_stacks[2];
+	QList<int> &kitty_stack_ref() { return kitty_stacks[alt_screen ? 1 : 0]; }
+	const QList<int> &kitty_stack_ref() const { return kitty_stacks[alt_screen ? 1 : 0]; }
 	bssh_emulator *owner;
 	int modify_other_keys;
 	bool mouse_reporting;
@@ -174,10 +183,11 @@ struct bssh_emulator_private {
 		};
 		for (int i = 0; i < 16; ++i) ansi[i] = xterm_ansi[i];
 
-		kitty_stack.append(0);
+		kitty_stacks[0].append(0);
+		kitty_stacks[1].append(0);
 	}
 
-	int kitty_flags() const { return kitty_stack.last(); }
+	int kitty_flags() const { return kitty_stack_ref().last(); }
 	bool encode_modern_key(char32_t ch, quint8 modifiers);
 	void reply(const QByteArray &bytes);
 
@@ -492,8 +502,10 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		 * lands on the shell's command line instead.
 		 */
 		self->modify_other_keys = 0;
-		self->kitty_stack.clear();
-		self->kitty_stack.append(0);
+		for (QList<int> &stack : self->kitty_stacks) {
+			stack.clear();
+			stack.append(0);
+		}
 
 		/*
 		 * The hyperlinks too, which are ours in exactly the sense this
@@ -695,24 +707,36 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 			 * keeps the entries a program is actually using, which
 			 * are the ones nearest the top.
 			 */
-			if (self->kitty_stack.size() >= BSSH_MAX_KITTY_STACK) {
-				self->kitty_stack.removeAt(1);
+			if (self->kitty_stack_ref().size() >= BSSH_MAX_KITTY_STACK) {
+				self->kitty_stack_ref().removeAt(1);
 			}
 
-			self->kitty_stack.append(flags);
+			self->kitty_stack_ref().append(flags);
 			return 1;
 		}
 		if (lead == "<") {
 			const int count = argcount > 0 && args[0] > 0 ? int(args[0]) : 1;
-			for (int i = 0; i < count && self->kitty_stack.size() > 1; ++i) {
-				self->kitty_stack.removeLast();
+			/*
+			 * A pop that would empty the stack resets the flags, which
+			 * is the specification's rule and not the same thing as
+			 * stopping at the bottom: the bottom entry can have been SET
+			 * with CSI = u, and "empties the stack" means back to none.
+			 */
+			QList<int> &stack = self->kitty_stack_ref();
+			for (int i = 0; i < count; ++i) {
+				if (stack.size() > 1) {
+					stack.removeLast();
+				} else {
+					stack.last() = 0;
+					break;
+				}
 			}
 			return 1;
 		}
 		if (lead == "=") {
 			const int flags = (argcount > 0 ? int(args[0]) : 0) & BSSH_KITTY_SUPPORTED_FLAGS;
 			const int mode = argcount > 1 ? int(args[1]) : 1;
-			int current = self->kitty_stack.last();
+			int current = self->kitty_stack_ref().last();
 			if (mode == 2) {
 				current |= flags;
 			} else if (mode == 3) {
@@ -720,7 +744,7 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 			} else {
 				current = flags;
 			}
-			self->kitty_stack.last() = current;
+			self->kitty_stack_ref().last() = current;
 			return 1;
 		}
 		if (lead == "?") {
@@ -2392,7 +2416,7 @@ int bssh_emulator::link_count() const {
 }
 
 int bssh_emulator::kitty_stack_depth() const {
-	return m_private->kitty_stack.size();
+	return m_private->kitty_stack_ref().size();
 }
 
 int bssh_emulator::kitty_keyboard_flags() const {
@@ -2448,6 +2472,167 @@ void bssh_emulator::send_key(int key, quint8 modifiers) {
 
 	if (key <= KEY_NONE || key >= int(sizeof(mapping) / sizeof(mapping[0]))) return;
 	vterm_keyboard_key(m_private->vt, mapping[key], mod);
+}
+
+namespace {
+
+/*
+ * A functional key's number and final byte, from the protocol's
+ * "Functional key definitions" table (sec 7.1). F3 is 13~ where F1, F2
+ * and F4 take the letter form, and F6 is 17~ after F5's 15~: the table's
+ * own gaps, kept rather than tidied.
+ */
+bool kitty_functional(int key, int &number, char &final) {
+	switch (key) {
+	case bssh_emulator::KEY_ESCAPE:    number = 27;  final = 'u'; return true;
+	case bssh_emulator::KEY_ENTER:     number = 13;  final = 'u'; return true;
+	case bssh_emulator::KEY_TAB:       number = 9;   final = 'u'; return true;
+	case bssh_emulator::KEY_BACKSPACE: number = 127; final = 'u'; return true;
+	case bssh_emulator::KEY_INSERT:    number = 2;   final = '~'; return true;
+	case bssh_emulator::KEY_DELETE:    number = 3;   final = '~'; return true;
+	case bssh_emulator::KEY_PAGE_UP:   number = 5;   final = '~'; return true;
+	case bssh_emulator::KEY_PAGE_DOWN: number = 6;   final = '~'; return true;
+	case bssh_emulator::KEY_UP:        number = 1;   final = 'A'; return true;
+	case bssh_emulator::KEY_DOWN:      number = 1;   final = 'B'; return true;
+	case bssh_emulator::KEY_RIGHT:     number = 1;   final = 'C'; return true;
+	case bssh_emulator::KEY_LEFT:      number = 1;   final = 'D'; return true;
+	case bssh_emulator::KEY_HOME:      number = 1;   final = 'H'; return true;
+	case bssh_emulator::KEY_END:       number = 1;   final = 'F'; return true;
+	default: break;
+	}
+
+	const int f = key - bssh_emulator::KEY_FUNCTION_BASE;
+	static const struct { int number; char final; } low[] = {
+		{ 1, 'P' }, { 1, 'Q' }, { 13, '~' }, { 1, 'S' }, { 15, '~' }, { 17, '~' },
+		{ 18, '~' }, { 19, '~' }, { 20, '~' }, { 21, '~' }, { 23, '~' }, { 24, '~' }
+	};
+	if (f >= 1 && f <= 12) {
+		number = low[f - 1].number;
+		final = low[f - 1].final;
+		return true;
+	}
+	if (f >= 13 && f <= 35) {
+		number = 57376 + (f - 13);
+		final = 'u';
+		return true;
+	}
+	return false;
+}
+
+/*
+ * CSI number[:alternates] ; modifiers[:type] ; text final -- leaving out
+ * what the protocol lets go: the second field when there are no
+ * modifiers and it is a press and no text follows, and for the letter
+ * forms the "1;" as well, so an unmodified Up is CSI A as it always was.
+ * With text but default modifiers the second field is present and empty,
+ * which is the protocol's own "CSI 0 ; ; 229 u".
+ */
+QByteArray kitty_sequence(int number, char final, const QByteArray &alternates,
+                          quint8 modifiers, int type, const QByteArray &text) {
+	const int encoded = 1 + int(modifiers);
+	const bool second = encoded != 1 || type != bssh_emulator::EVENT_PRESS || !text.isEmpty();
+
+	QByteArray out = QByteArrayLiteral("\x1b[");
+	if (final != 'u' && final != '~' && !second) return out + final;
+
+	out += QByteArray::number(number) + alternates;
+	if (second) {
+		out += ';';
+		if (encoded != 1 || type != bssh_emulator::EVENT_PRESS) {
+			out += QByteArray::number(encoded);
+			if (type != bssh_emulator::EVENT_PRESS) out += ':' + QByteArray::number(type);
+		}
+	}
+	if (!text.isEmpty()) out += ';' + text;
+	return out + final;
+}
+
+} /* namespace */
+
+bool bssh_emulator::wants_key_events() const {
+	return (m_private->kitty_flags() & ~1) != 0;
+}
+
+bool bssh_emulator::send_key_event(const key_event_t &event) {
+	const int flags = m_private->kitty_flags();
+	if (flags == 0) return false;
+
+	const bool types = flags & 2;
+	const bool alternates = flags & 4;
+	const bool all = flags & 8;
+	const bool with_text = (flags & 16) && all;
+
+	/*
+	 * Without event types only presses exist: a repeat is another press,
+	 * as it always was, and a release is simply not reported.
+	 */
+	int type = event.type;
+	if (!types) {
+		if (type == EVENT_RELEASE) return true;
+		type = EVENT_PRESS;
+	}
+
+	/* A modifier on its own is a key only in report-all-keys mode. */
+	if (event.modifier_key) {
+		if (!all) return true;
+		m_private->reply(kitty_sequence(event.modifier_key, 'u', QByteArray(),
+		                                event.modifiers, type, QByteArray()));
+		return true;
+	}
+
+	if (event.key != KEY_NONE) {
+		int number = 0;
+		char final = 0;
+		if (!kitty_functional(event.key, number, final)) return false;
+
+		/*
+		 * Enter, Tab and Backspace keep their legacy bytes and have no
+		 * releases unless every key is an escape code -- the protocol's
+		 * rule, so that `reset` can still be typed at a shell a program
+		 * left in these modes.
+		 */
+		const bool trio = event.key == KEY_ENTER || event.key == KEY_TAB
+		                  || event.key == KEY_BACKSPACE;
+		if (trio && !all) return type == EVENT_RELEASE;
+
+		/*
+		 * With neither event types nor all keys, a press encodes the same
+		 * as legacy for every functional key but Escape, and legacy is
+		 * libvterm's, which also knows the cursor-key mode.
+		 */
+		if (!types && !all && event.key != KEY_ESCAPE) return false;
+
+		m_private->reply(kitty_sequence(number, final, QByteArray(),
+		                                event.modifiers, type, QByteArray()));
+		return true;
+	}
+
+	if (event.code == 0 && event.text.isEmpty()) return false;
+
+	/*
+	 * A key that produces text stays plain text, with no events, unless
+	 * every key is an escape code -- or disambiguate applies, which is
+	 * Ctrl or Alt held.
+	 */
+	const bool ctrl_or_alt = event.modifiers & (MOD_CTRL | MOD_ALT);
+	if (!all && !((flags & 1) && ctrl_or_alt)) return type == EVENT_RELEASE;
+
+	QByteArray alternate;
+	if (alternates && (event.modifiers & MOD_SHIFT) && event.shifted && event.shifted != event.code)
+		alternate = ':' + QByteArray::number(uint(event.shifted));
+
+	/* Only what a press or repeat produced, and never a control code. */
+	QByteArray text;
+	if (with_text && type != EVENT_RELEASE) {
+		for (uint c : event.text) {
+			if (c < 0x20 || (c >= 0x7f && c < 0xa0)) continue;
+			if (!text.isEmpty()) text += ':';
+			text += QByteArray::number(c);
+		}
+	}
+
+	m_private->reply(kitty_sequence(int(event.code), 'u', alternate, event.modifiers, type, text));
+	return true;
 }
 
 void bssh_emulator::send_char(char32_t ch, quint8 modifiers) {

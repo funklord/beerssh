@@ -78,7 +78,7 @@ const int BSSH_MAX_KITTY_STACK = 64;
  * five and read them back was told it had event types it would never be
  * sent.
  */
-const int BSSH_KITTY_SUPPORTED_FLAGS = 1;
+const int BSSH_KITTY_SUPPORTED_FLAGS = 31;
 
 /*
  * How much hyperlink text this terminal will hold at once, across all of
@@ -218,6 +218,46 @@ public:
 
 	void send_key(int key, quint8 modifiers);
 	void send_char(char32_t ch, quint8 modifiers);
+
+	/*
+	 * One key event carried whole, for the kitty keyboard protocol's modes
+	 * above disambiguate (sec 7.1, tier 2): event types, alternate keys,
+	 * every key as an escape code, and the text a key produced. send_key
+	 * and send_char cannot express those -- a release, a repeat, a
+	 * modifier key pressed on its own, the unshifted key behind a shifted
+	 * character.
+	 */
+	enum event_type_t { EVENT_PRESS = 1, EVENT_REPEAT = 2, EVENT_RELEASE = 3 };
+
+	/* The protocol's own numbers for the modifier keys themselves. */
+	enum { KITTY_LEFT_SHIFT = 57441, KITTY_LEFT_CONTROL = 57442,
+	       KITTY_LEFT_ALT = 57443, KITTY_LEFT_SUPER = 57444 };
+
+	struct key_event_t {
+		int key = KEY_NONE;             /* a functional key, or KEY_NONE */
+		char32_t code = 0;              /* the UNSHIFTED key, for a text key */
+		char32_t shifted = 0;           /* what shift made of it, when held */
+		QList<uint> text;               /* the text the key produced */
+		quint8 modifiers = 0;
+		int type = EVENT_PRESS;
+		int modifier_key = 0;           /* KITTY_LEFT_*, for a modifier alone */
+	};
+
+	/*
+	 * Encodes the event under the kitty modes in force. True when it was
+	 * sent, or deliberately not reported (a release nobody asked for);
+	 * false leaves a press to send_key/send_char's legacy encoding, which
+	 * is byte for byte what these modes keep for the keys they leave
+	 * alone.
+	 */
+	bool send_key_event(const key_event_t &event);
+
+	/*
+	 * Whether a mode beyond disambiguate is in force, so the caller has to
+	 * build whole events and send releases. With disambiguate alone, or
+	 * nothing, send_key and send_char are the whole of it.
+	 */
+	bool wants_key_events() const;
 
 	/*
 	 * Wraps a paste in the bracketed-paste markers when the remote has

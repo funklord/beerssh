@@ -1402,6 +1402,19 @@ void bssh_terminal_view::keyPressEvent(QKeyEvent *event) {
 	QWidget::keyPressEvent(event);
 }
 
+void bssh_terminal_view::keyReleaseEvent(QKeyEvent *event) {
+	/*
+	 * Releases matter only to the kitty protocol's event types (sec 7.1),
+	 * and the router answers only for a key whose press it sent that way.
+	 */
+	if (m_input_router && m_input_router->handle_key_release(event)) {
+		event->accept();
+		return;
+	}
+
+	QWidget::keyReleaseEvent(event);
+}
+
 void bssh_terminal_view::inputMethodEvent(QInputMethodEvent *event) {
 	/*
 	 * The second delivery path sec 6.1 warns about. On Android some keys

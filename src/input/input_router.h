@@ -3,11 +3,12 @@
 
 #include <QObject>
 #include <QHash>
+
+#include "term/emulator.h"
 #include <QList>
 #include <QString>
 
 class QKeyEvent;
-class bssh_emulator;
 
 /*
  * bssh_input_router -- every keystroke becomes bytes here and nowhere else
@@ -41,6 +42,15 @@ public:
 	 * it propagate.
 	 */
 	bool handle_key(QKeyEvent *event);
+
+	/*
+	 * A key coming up, for the kitty protocol's event types (sec 7.1).
+	 * Sent only for a key whose press went to the emulator by that path,
+	 * with the modifiers the press carried: a sticky Ctrl spent on the
+	 * press is still what the release belongs to, and a chord the app
+	 * stole never had a press for a release to answer.
+	 */
+	bool handle_key_release(QKeyEvent *event);
 
 	/*
 	 * Committed text from an input method, which is NOT the same path as
@@ -341,6 +351,15 @@ private:
 
 	/* Applied to the next key and then gone; see modifier_state_t. */
 	void spend_sticky_modifiers();
+
+	/*
+	 * The whole event for the kitty modes above disambiguate, or false
+	 * when this key is not one they describe.
+	 */
+	bool kitty_event_for(QKeyEvent *event, bssh_emulator::key_event_t &out) const;
+
+	/* Presses sent as whole events, by Qt key, awaiting their release. */
+	QHash<int, bssh_emulator::key_event_t> m_kitty_pressed;
 
 	bssh_emulator *m_emulator;
 	bool m_caps_as_ctrl;

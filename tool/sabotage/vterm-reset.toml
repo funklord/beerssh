@@ -41,5 +41,5 @@ expect = "a_reset_from_the_remote_clears_the_modes_it_did_not_set"
 [[sabotage]]
 name = "the announcement reaches nothing"
 file = "src/term/emulator_vterm.cpp"
-find = "\t\tself->kitty_stack.clear();\n\t\tself->kitty_stack.append(0);"
+find = "\t\tfor (QList<int> &stack : self->kitty_stacks) {\n\t\t\tstack.clear();\n\t\t\tstack.append(0);\n\t\t}"
 expect = "a_reset_gives_ctrl_c_back_after_a_program_dies_holding_it"

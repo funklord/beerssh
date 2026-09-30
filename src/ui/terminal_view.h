@@ -821,6 +821,8 @@ protected:
 	void contextMenuEvent(QContextMenuEvent *event) override;
 
 	void keyPressEvent(QKeyEvent *event) override;
+
+	void keyReleaseEvent(QKeyEvent *event) override;
 	void wheelEvent(QWheelEvent *event) override;
 
 	/*

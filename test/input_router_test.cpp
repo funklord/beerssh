@@ -30,6 +30,23 @@ static QByteArray press(bssh_input_router &router, bssh_emulator &emulator,
 	return emulator.take_output();
 }
 
+/* The same, for a key coming up -- or, with autorepeat, a repeat's pair. */
+static QByteArray lift(bssh_input_router &router, bssh_emulator &emulator,
+                        int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier,
+                        const QString &text = QString(), bool autorepeat = false) {
+	QKeyEvent event(QEvent::KeyRelease, key, modifiers, text, autorepeat);
+	router.handle_key_release(&event);
+	return emulator.take_output();
+}
+
+static QByteArray hold(bssh_input_router &router, bssh_emulator &emulator,
+                        int key, Qt::KeyboardModifiers modifiers = Qt::NoModifier,
+                        const QString &text = QString()) {
+	QKeyEvent event(QEvent::KeyPress, key, modifiers, text, true);
+	router.handle_key(&event);
+	return emulator.take_output();
+}
+
 static QString seq_text(Qt::KeyboardModifiers mods, Qt::Key key) {
 	return QKeySequence(QKeyCombination(mods, key)).toString(QKeySequence::PortableText);
 }
@@ -384,14 +401,10 @@ void input_router_test::kitty_protocol_answers_a_query() {
 	emulator.feed(QByteArrayLiteral("\x1b[?u"));
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?0u"));
 
-	/*
-	 * 5 asked for, 1 reported: only disambiguate is implemented, and the
-	 * reply is what is in force. This expected 5 until 2026-09-30, which
-	 * was the query echoing a request back as though it were granted.
-	 */
+	/* Both flags are implemented, so both are reported. */
 	emulator.feed(QByteArrayLiteral("\x1b[>5u"));
 	emulator.feed(QByteArrayLiteral("\x1b[?u"));
-	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1u"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?5u"));
 }
 
 void input_router_test::modify_other_keys_encodes_and_reports_its_level() {
@@ -1454,4 +1467,144 @@ void input_router_test::ctrl_punctuation_reaches_a_legacy_shell_as_a_vt100_would
 	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::ControlModifier,
 	                QStringLiteral("\x03")),
 	          QByteArrayLiteral("\x03"));
+}
+
+void input_router_test::kitty_event_types_report_repeats_and_releases() {
+	/*
+	 * Flag 2 (sec 7.1, tier 2): repeat and release as the modifiers
+	 * field's second sub-field, the forms the protocol's own table gives.
+	 */
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	emulator.feed(QByteArrayLiteral("\x1b[>3u"));
+
+	QCOMPARE(press(router, emulator, Qt::Key_Up), QByteArrayLiteral("\x1b[A"));
+	QCOMPARE(hold(router, emulator, Qt::Key_Up), QByteArrayLiteral("\x1b[1;1:2A"));
+
+	/* X11 pairs each repeated press with a release; that one is not the key coming up. */
+	QCOMPARE(lift(router, emulator, Qt::Key_Up, Qt::NoModifier, QString(), true), QByteArray());
+	QCOMPARE(lift(router, emulator, Qt::Key_Up), QByteArrayLiteral("\x1b[1;1:3A"));
+
+	QCOMPARE(press(router, emulator, Qt::Key_F5), QByteArrayLiteral("\x1b[15~"));
+	QCOMPARE(lift(router, emulator, Qt::Key_F5), QByteArrayLiteral("\x1b[15;1:3~"));
+	QCOMPARE(press(router, emulator, Qt::Key_Escape), QByteArrayLiteral("\x1b[27u"));
+	QCOMPARE(lift(router, emulator, Qt::Key_Escape), QByteArrayLiteral("\x1b[27;1:3u"));
+
+	/*
+	 * Enter keeps its legacy byte and has no release without flag 8, so
+	 * `reset` can still be typed at a shell a program left in this mode;
+	 * and a key that types text stays text, with no events at all.
+	 */
+	QCOMPARE(press(router, emulator, Qt::Key_Return), QByteArrayLiteral("\r"));
+	QCOMPARE(lift(router, emulator, Qt::Key_Return), QByteArray());
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("a"));
+	QCOMPARE(lift(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")), QByteArray());
+}
+
+void input_router_test::kitty_all_keys_as_escapes_with_text_and_alternates() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/* Flag 8: every key, text and modifiers alone included, and Enter too. */
+	emulator.feed(QByteArrayLiteral("\x1b[=9u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::ShiftModifier, QStringLiteral("A")),
+	          QByteArrayLiteral("\x1b[97;2u"));
+	QCOMPARE(press(router, emulator, Qt::Key_Return), QByteArrayLiteral("\x1b[13u"));
+	QCOMPARE(press(router, emulator, Qt::Key_Shift, Qt::ShiftModifier),
+	          QByteArrayLiteral("\x1b[57441;2u"));
+
+	/*
+	 * Without flag 2 there are only presses: a repeat is another press,
+	 * and a release is not reported at all -- every key an escape code
+	 * does not by itself ask for the key coming up.
+	 */
+	QCOMPARE(hold(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97u"));
+	QCOMPARE(lift(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")), QByteArray());
+
+	/* Flag 16: the text as codepoints -- never a control code. */
+	emulator.feed(QByteArrayLiteral("\x1b[=25u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97;;97u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::ShiftModifier, QStringLiteral("A")),
+	          QByteArrayLiteral("\x1b[97;2;65u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::ControlModifier, QStringLiteral("\x01")),
+	          QByteArrayLiteral("\x1b[97;5u"));
+
+	/* Flag 4: the shifted key after a colon, only while Shift is held. */
+	emulator.feed(QByteArrayLiteral("\x1b[=13u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::ShiftModifier, QStringLiteral("A")),
+	          QByteArrayLiteral("\x1b[97:65;2u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97u"));
+
+	/* With event types, a text key's release, and no text on it. */
+	emulator.feed(QByteArrayLiteral("\x1b[=27u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97;;97u"));
+	QCOMPARE(lift(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97;1:3u"));
+
+	/* A modifier's own bit is set on its press and reset on its release. */
+	QCOMPARE(press(router, emulator, Qt::Key_Shift, Qt::ShiftModifier),
+	          QByteArrayLiteral("\x1b[57441;2u"));
+	QCOMPARE(lift(router, emulator, Qt::Key_Shift, Qt::NoModifier),
+	          QByteArrayLiteral("\x1b[57441;1:3u"));
+}
+
+void input_router_test::kitty_release_answers_its_own_press() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	emulator.feed(QByteArrayLiteral("\x1b[>11u"));
+
+	/*
+	 * A sticky Ctrl is spent on the press; the release still belongs to
+	 * Ctrl+A, not to a bare A the program never saw go down.
+	 */
+	router.set_sticky_modifiers(bssh_emulator::MOD_CTRL);
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97;5u"));
+	QCOMPARE(lift(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97;5:3u"));
+
+	/* A chord the app kept had no press on the wire, so no release follows it. */
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier,
+	               QStringLiteral("C")),
+	          QByteArray());
+	QCOMPARE(lift(router, emulator, Qt::Key_C, Qt::ControlModifier | Qt::ShiftModifier,
+	              QStringLiteral("C")),
+	          QByteArray());
+
+	/*
+	 * An input method says nothing of keys, so under every-key-as-escape
+	 * each character is its own press, and its own release straight after.
+	 */
+	router.send_text(QStringLiteral("A"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[97;2u\x1b[97;2:3u"));
+}
+
+void input_router_test::kitty_modes_are_per_screen_and_an_emptied_stack_resets() {
+	/*
+	 * "The main and alternate screens in the terminal emulator must
+	 * maintain their own, independent, keyboard mode stacks": an editor's
+	 * modes stay in the editor's screen.
+	 */
+	bssh_emulator emulator(80, 24);
+	emulator.feed(QByteArrayLiteral("\x1b[>3u"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
+	emulator.feed(QByteArrayLiteral("\x1b[>11u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 11);
+	emulator.feed(QByteArrayLiteral("\x1b[?1049l"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 3);
+
+	/* A pop that empties the stack resets, even a base set with CSI = u. */
+	emulator.feed(QByteArrayLiteral("\x1b[<9u"));
+	emulator.feed(QByteArrayLiteral("\x1b[=1u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 1);
+	emulator.feed(QByteArrayLiteral("\x1b[<u"));
+	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
 }

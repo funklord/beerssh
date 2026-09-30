@@ -2081,30 +2081,30 @@ void emulator_test::a_switched_off_image_protocol_costs_no_memory() {
 
 void emulator_test::the_kitty_query_reports_only_the_flags_in_force() {
 	/*
-	 * Only "disambiguate" (1) is implemented. The query answered with
-	 * whatever had been pushed, so a program that asked for all five and
-	 * read them back believed it had key-release events and every key as
-	 * an escape code -- and then received neither. What is reported is
-	 * what is in force.
+	 * The query answered with whatever had been pushed, so a program that
+	 * asked for flags this terminal did not have was told it had them.
+	 * What is reported is what is in force: the five the protocol defines
+	 * (all implemented since 2026-09-30), and nothing above them.
 	 */
 	bssh_emulator emulator(40, 5);
 	emulator.set_features(bssh_term_features_t());
 
-	emulator.feed(QByteArrayLiteral("\x1b[>31u"));
+	emulator.feed(QByteArrayLiteral("\x1b[>127u"));
 	emulator.take_output();
 	emulator.feed(QByteArrayLiteral("\x1b[?u"));
-	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1u"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?31u"));
 
-	/* Set, and add with mode 2: an unsupported bit stays out. */
-	emulator.feed(QByteArrayLiteral("\x1b[=8;2u"));
+	/* Set, and add with mode 2: an undefined bit stays out. */
+	emulator.feed(QByteArrayLiteral("\x1b[=1u"));
+	emulator.feed(QByteArrayLiteral("\x1b[=64;2u"));
 	QCOMPARE(emulator.kitty_keyboard_flags(), 1);
 
 	/*
-	 * A push of an unsupported flag alone leaves nothing in force, so
+	 * A push of an undefined flag alone leaves nothing in force, so
 	 * Escape stays the legacy byte rather than a CSI u the program was
 	 * never promised.
 	 */
-	emulator.feed(QByteArrayLiteral("\x1b[>2u"));
+	emulator.feed(QByteArrayLiteral("\x1b[>64u"));
 	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
 	emulator.take_output();
 	emulator.send_key(bssh_emulator::KEY_ESCAPE, 0);

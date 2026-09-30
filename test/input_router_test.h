@@ -20,6 +20,10 @@ class input_router_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void kitty_event_types_report_repeats_and_releases();
+	void kitty_all_keys_as_escapes_with_text_and_alternates();
+	void kitty_release_answers_its_own_press();
+	void kitty_modes_are_per_screen_and_an_emptied_stack_resets();
 	void a_paste_cannot_close_its_own_bracket();
 	/* sec 6.1: the stolen set is the user's to change, and to refuse. */
 	void a_rebound_chord_is_the_one_that_is_stolen();
