@@ -8,6 +8,10 @@
 #include "term/emulator.h"
 #include "platform/platform.h"
 #include "ssh/pty_session.h"
+#include "input/input_router.h"
+
+#include <QKeyEvent>
+#include <QRegularExpression>
 #include "pty_session_test.h"
 
 namespace {
@@ -509,6 +513,84 @@ void pty_session_test::backspace_crosses_a_wrapped_line() {
 	          qPrintable(QStringLiteral("%1 characters still on screen after deleting 55 of "
 	                                     "60 -- the erase stopped at the wrap")
 	                             .arg(left)));
+
+	session.disconnect_from_host();
+}
+
+void pty_session_test::kitty_itself_decodes_what_the_router_sends() {
+	/*
+	 * A second witness for the kitty keyboard protocol (sec 7.1, tier 2).
+	 * The router's tests compare against sequences written from the
+	 * specification; a misreading of the specification would be in both
+	 * halves and pass. So the keys go through the real router and emulator
+	 * into kitty's own `kitten show-key`, on a pty, and what kitty's
+	 * decoder says it received is the assertion. Where kitty is not
+	 * installed there is no second witness to ask, and it says so.
+	 */
+	const QString kitten = QStandardPaths::findExecutable(QStringLiteral("kitten"));
+	if (kitten.isEmpty()) QSKIP("kitty's kitten is not installed here, so it cannot be asked");
+
+	bssh_emulator emulator(120, 40);
+	bssh_input_router router(&emulator);
+	bssh_pty_session session;
+	session.set_command({ kitten, QStringLiteral("show-key"), QStringLiteral("-m"),
+	                      QStringLiteral("kitty") });
+
+	QByteArray seen;
+	QObject::connect(&session, &bssh_ssh_session::bytes_received, &emulator,
+	                 [&](const QByteArray &bytes) {
+		seen.append(bytes);
+		emulator.feed(bytes);
+	});
+	QObject::connect(&emulator, &bssh_emulator::output_ready, &session,
+	                 [&] { session.send(emulator.take_output()); });
+
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(120, 40);
+
+	/* show-key pushes all five flags before it reads a key. */
+	QElapsedTimer timer;
+	timer.start();
+	while (emulator.kitty_keyboard_flags() != 31 && timer.elapsed() < 10000)
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+	QCOMPARE(emulator.kitty_keyboard_flags(), 31);
+
+	/* Its report, formatting stripped, as a person would read it. */
+	auto decoded = [&](const QString &wanted) {
+		QElapsedTimer wait;
+		wait.start();
+		while (wait.elapsed() < 5000) {
+			QString text = QString::fromUtf8(seen);
+			text.remove(QRegularExpression(QStringLiteral("\x1b\\[[0-9;?]*[A-Za-z]")));
+			text.replace(QRegularExpression(QStringLiteral("\\s+")), QStringLiteral(" "));
+			if (text.contains(wanted)) return true;
+			QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+		}
+		return false;
+	};
+	auto key = [&](QEvent::Type type, int code, Qt::KeyboardModifiers modifiers, const QString &text) {
+		QKeyEvent event(type, code, modifiers, text);
+		if (type == QEvent::KeyPress) router.handle_key(&event);
+		else router.handle_key_release(&event);
+	};
+
+	key(QEvent::KeyPress, Qt::Key_A, Qt::ShiftModifier, QStringLiteral("A"));
+	QVERIFY2(decoded(QStringLiteral("shift+a PRESS A")), seen.right(400).constData());
+	key(QEvent::KeyRelease, Qt::Key_A, Qt::ShiftModifier, QStringLiteral("A"));
+	QVERIFY2(decoded(QStringLiteral("shift+a RELEASE")), seen.right(400).constData());
+
+	key(QEvent::KeyPress, Qt::Key_Up, Qt::NoModifier, QString());
+	key(QEvent::KeyRelease, Qt::Key_Up, Qt::NoModifier, QString());
+	QVERIFY2(decoded(QStringLiteral("UP RELEASE")), seen.right(400).constData());
+
+	key(QEvent::KeyPress, Qt::Key_A, Qt::MetaModifier, QStringLiteral("a"));
+	QVERIFY2(decoded(QStringLiteral("super+a PRESS")), seen.right(400).constData());
+
+	key(QEvent::KeyPress, Qt::Key_Enter, Qt::KeypadModifier, QString());
+	QVERIFY2(decoded(QStringLiteral("KP_ENTER PRESS")), seen.right(400).constData());
+
+	key(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier, QStringLiteral("\r"));
+	QVERIFY2(decoded(QStringLiteral("ENTER PRESS")), seen.right(400).constData());
 
 	session.disconnect_from_host();
 }

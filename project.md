@@ -4440,6 +4440,18 @@ best one it can:
     release straight after -- which is also all Android's soft keyboard can
     give.
   - Guarded by `tool/sabotage/kitty-keyboard.toml`, fourteen edits.
+  - **And checked by kitty itself, 2026-10-01**, because the router's tests
+    compare against sequences written from the specification, and a
+    misreading would be in both halves and pass. `pty_session_test::
+    kitty_itself_decodes_what_the_router_sends` runs `kitten show-key -m
+    kitty` on a pty, wired both ways to a real emulator and router, waits
+    for its `CSI > 31 u`, presses keys through the router and asserts what
+    kitty's decoder printed: shifted A's press and release, Up's release,
+    Super+A, keypad Enter, Enter. It skips where kitty is not installed --
+    the CI image among them -- so it is a local witness, and for the same
+    reason it is not a sabotage target (a spec expecting it would read as a
+    miss wherever kitty is absent). Its one control was run by hand: the
+    supported flags cut back to 1, and it failed on the `31`.
 - **xterm `modifyOtherKeys`** (`CSI > 4 ; 2 m`, queried with `CSI ? 4 m`).
   The middle tier, and what a terminal that predates kitty's protocol
   offers. **Implemented at level 2.** Level 3 is deliberately not offered:

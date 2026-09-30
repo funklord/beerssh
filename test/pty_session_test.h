@@ -15,6 +15,7 @@ class pty_session_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void kitty_itself_decodes_what_the_router_sends();
 	void a_shell_starts_and_echoes_what_it_is_given();
 	void exiting_the_shell_is_not_a_dropped_connection();
 	void a_resize_reaches_the_shell();
