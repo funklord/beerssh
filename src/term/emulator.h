@@ -70,6 +70,17 @@ const int BSSH_URI_MENU_CHARS = 48;
 const int BSSH_MAX_KITTY_STACK = 64;
 
 /*
+ * The kitty keyboard flags this terminal implements: 1, "disambiguate
+ * escape codes", and none of the four above it (event types, alternate
+ * keys, all keys as escapes, associated text). A program's flags are
+ * masked to this as they are pushed or set, so the query reports what is
+ * in force rather than what was asked for -- a program that pushed all
+ * five and read them back was told it had event types it would never be
+ * sent.
+ */
+const int BSSH_KITTY_SUPPORTED_FLAGS = 1;
+
+/*
  * How much hyperlink text this terminal will hold at once, across all of
  * them.
  *

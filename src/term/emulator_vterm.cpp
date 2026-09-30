@@ -684,7 +684,7 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 		if (!self->features.enabled(bssh_term_features_t::KITTY_KEYBOARD)) return 0;
 
 		if (lead == ">") {
-			const int flags = argcount > 0 ? int(args[0]) : 0;
+			const int flags = (argcount > 0 ? int(args[0]) : 0) & BSSH_KITTY_SUPPORTED_FLAGS;
 
 			/*
 			 * At the cap the entry ABOVE the base goes, not the base
@@ -710,7 +710,7 @@ int on_unrecognised_csi(const char *leader, const long args[], int argcount,
 			return 1;
 		}
 		if (lead == "=") {
-			const int flags = argcount > 0 ? int(args[0]) : 0;
+			const int flags = (argcount > 0 ? int(args[0]) : 0) & BSSH_KITTY_SUPPORTED_FLAGS;
 			const int mode = argcount > 1 ? int(args[1]) : 1;
 			int current = self->kitty_stack.last();
 			if (mode == 2) {

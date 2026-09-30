@@ -67,3 +67,21 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tif (command == 'q' && lead == \">\") {"
 replace = "\tif (false) {"
 expect = "the_terminal_answers_for_itself_not_for_libvterm"
+
+# The opposite direction: a feature this terminal LACKS reported as in
+# force. The kitty keyboard query echoed whatever flags had been pushed,
+# so a program that asked for all five was told it had key-release
+# events and every key as an escape code.
+[[sabotage]]
+name = "a kitty push keeps flags this terminal does not implement"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\t\tconst int flags = (argcount > 0 ? int(args[0]) : 0) & BSSH_KITTY_SUPPORTED_FLAGS;\n\n\t\t\t/*"
+replace = "\t\t\tconst int flags = argcount > 0 ? int(args[0]) : 0;\n\n\t\t\t/*"
+expect = "the_kitty_query_reports_only_the_flags_in_force"
+
+[[sabotage]]
+name = "a kitty set keeps flags this terminal does not implement"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\t\tconst int flags = (argcount > 0 ? int(args[0]) : 0) & BSSH_KITTY_SUPPORTED_FLAGS;\n\t\t\tconst int mode"
+replace = "\t\t\tconst int flags = argcount > 0 ? int(args[0]) : 0;\n\t\t\tconst int mode"
+expect = "the_kitty_query_reports_only_the_flags_in_force"

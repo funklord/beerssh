@@ -384,9 +384,14 @@ void input_router_test::kitty_protocol_answers_a_query() {
 	emulator.feed(QByteArrayLiteral("\x1b[?u"));
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?0u"));
 
+	/*
+	 * 5 asked for, 1 reported: only disambiguate is implemented, and the
+	 * reply is what is in force. This expected 5 until 2026-09-30, which
+	 * was the query echoing a request back as though it were granted.
+	 */
 	emulator.feed(QByteArrayLiteral("\x1b[>5u"));
 	emulator.feed(QByteArrayLiteral("\x1b[?u"));
-	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?5u"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[?1u"));
 }
 
 void input_router_test::modify_other_keys_encodes_and_reports_its_level() {

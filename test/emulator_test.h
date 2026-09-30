@@ -16,6 +16,7 @@ class emulator_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void the_kitty_query_reports_only_the_flags_in_force();
 	void a_remote_cannot_grow_the_title_without_limit();
 	void a_switched_off_image_protocol_costs_no_memory();
 	void the_kitty_graphics_query_is_answered();

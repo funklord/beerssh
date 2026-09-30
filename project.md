@@ -1673,9 +1673,10 @@ up, a strip of modifiers has nothing to modify.
   which is the truth. **Do not read the scheme name**: this machine's
   `colorScheme=DarkBlue.kcsrc` contains "Dark" by luck, and a name is not a
   predicate. **Abstain when the file will not parse**, rather than guessing.
-  Not implemented here yet — the measurement is recorded so the next session
-  does not re-take it, and hydra has tiers 1-3 plus this one, so its function
-  is the thing to copy rather than a fourth implementation to write.
+  ~~Not implemented here yet.~~ **Implemented since, and this line was stale**
+  (re-derived 2026-09-30): `bssh_appearance_from_scheme_files` in
+  `platform_desktop.cpp` reads the kdeglobals paths and LXQt's `lxqt.conf`,
+  with its cases in `platform_test`.
   **beerssh's existing final tier already obeys the safety half of that rule**
   without saying so: it does not abstain, it answers *light*, which is the
   direction that survives being wrong. In a terminal a wrong dark guess is
@@ -4388,6 +4389,16 @@ best one it can:
   `CSI ? u` to query). Progressive enhancement flags; the first,
   "disambiguate escape codes", is the one that matters. **Implemented** —
   the disambiguate tier, plus the push/pop/query/set controls.
+  **[FIXED 2026-09-30] And the query now reports only that.** Push and set
+  stored whatever flags a program asked for, and the query echoed them, so a
+  program that pushed all five (`CSI > 31 u`) and read them back was told it
+  had key-release events, alternate keys and every key as an escape code --
+  and was sent none of them. Flags are masked to
+  `BSSH_KITTY_SUPPORTED_FLAGS` (1) as they arrive: pushing 31 reads back as 1,
+  and pushing only an unimplemented one reads back as 0, leaving Escape the
+  legacy byte. Two tests had asserted the echo and were corrected with it.
+  The four flags above disambiguate stay unbuilt; they want key releases
+  carried from Qt through the input router, which is a feature, not this fix.
 - **xterm `modifyOtherKeys`** (`CSI > 4 ; 2 m`, queried with `CSI ? 4 m`).
   The middle tier, and what a terminal that predates kitty's protocol
   offers. **Implemented at level 2.** Level 3 is deliberately not offered:
