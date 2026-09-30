@@ -938,13 +938,18 @@ reader looking for a decision that `46e197c` had already taken with reasons.
 The manifest declares `android:foregroundServiceType="connectedDevice"`, with
 `FOREGROUND_SERVICE_CONNECTED_DEVICE` and the qualifying `CHANGE_NETWORK_STATE`
 this section names as its requirement.
-**What remains open is narrower and is validation rather than design.** The
-type has never been adjudicated by a system that enforces it: `46e197c` verified
-the service on an API 30 emulator, where the Android 14 rules do not apply, and
-the emulator images on this machine are **API 33** — the rules bite at 34. So
-the experiment that would settle it is named and cannot be run here: install on
-API 34 or later and observe whether the service starts at all. Play's review of
-the justification is the second half, and no local test answers it.
+**What remains open is narrower and is validation rather than design.** ~~The
+type has never been adjudicated by a system that enforces it.~~ **Adjudicated
+on Android 14, 2026-09-30:** an API 34 emulator image (`bssh_api34`), the app at
+its targetSdk 35. Opening the local shell started the service foreground --
+`isForeground=true`, `types=00000010`, which is
+`FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE` -- with its notification, and the
+system logged `Background started FGS: Allowed ... targetSdkVersion:35`, no
+exception. Ninety seconds on the home screen later it was still foreground and
+the process alive; `exit` in the shell removed both service and notification.
+So Android itself accepts `connectedDevice` as declared, with
+`CHANGE_NETWORK_STATE` qualifying it. **Play's review of the justification is
+what remains**, and no local test answers it.
 Whether to keep `connectedDevice` or move to `specialUse` stays the copyright
 holder's call. The candidates below are kept because that decision may still be
 made, not because it has not been.
@@ -1002,10 +1007,11 @@ So the three live routes:
    "continuity of messaging" framing Play's list may assume. Same size of
    change as 2.
 
-Whichever is chosen, the adjudication §5.1 names is now runnable: this machine
-has an Android emulator working again (API 33, installed 2026-09-28), and an API
-34 or later image is one `sdkmanager` install away -- which is where the
-type is first enforced. Play's opinion stays unknowable before submission.
+The adjudication this section names has since been run for the type as built
+(above, 2026-09-30): Android 14 accepts `connectedDevice`. A switch to
+`specialUse` or `remoteMessaging` would want the same run on `bssh_api34`,
+which is now one emulator start away. Play's opinion stays unknowable before
+submission.
 
 **Plan (as first written):** prototype with `connectedDevice` (no time limit, lowest friction), and
 prepare a `specialUse` justification as the fallback if Play pushes back. Avoid
@@ -14010,6 +14016,8 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   vs `specialUse` (prepared fallback). Open on Play review's opinion, not on
   ours — §5.1. **Costed 2026-09-30** against Android's and Play's current
   texts, with a third route found: `remoteMessaging`, which ConnectBot uses.
+  **And Android 14 accepts `connectedDevice` as built** (API 34 emulator,
+  2026-09-30), so what is open is Play's review alone.
 - ~~Inhibit sleep on desktop while a session is connected?~~ **DECIDED
   2026-09-26 by the holder: a per-host toggle, off by default -- and BUILT.**
   "Keep the computer awake" beside "Keep scrollback" in the desktop dialog,
