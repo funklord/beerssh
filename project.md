@@ -365,6 +365,62 @@ distro's shared `libssh` and the obligation is already satisfied. **Android is
 where it bites**, since an AAB wants everything statically linked — so decide the
 question on the Android build's terms, not the desktop one's.
 
+**What each route costs -- measured 2026-09-30, for the holder to decide.**
+Asked for as a write-up rather than a change. Versions measured: libssh 0.11.5
+(this tree's, static on Android from `tool/build-deps-android.sh`, the system's
+shared library on desktop) and libssh2 1.11.1 (Debian's, headers and library on
+this machine).
+
+- **Algorithms: parity, and this table's older rows undersold libssh2.** Asked
+  of each library, not recalled: libssh2 lists curve25519 key exchange, ed25519
+  and certificate host keys, chacha20-poly1305 and AES-GCM, the ETM MACs and
+  strict key exchange (`libssh2_session_supported_algs`); libssh's library
+  carries the same names (read from its strings, with `aes256-ctr` as the
+  control both must contain). **Neither** has post-quantum key exchange
+  (`sntrup761x25519`, `mlkem768x25519`); servers still offer curve25519.
+- **Every capability this tree uses has a libssh2 counterpart** (it calls 39
+  libssh functions and sets 9 options). Checked in `libssh2.h` for the ones
+  that could have been missing -- agent (`libssh2_agent_*`), key files
+  (`libssh2_userauth_publickey_fromfile_ex`), known hosts
+  (`libssh2_knownhost_checkp`), SHA-256 fingerprints
+  (`LIBSSH2_HOSTKEY_HASH_SHA256`), direct-tcpip for the jump host
+  (`libssh2_channel_direct_tcpip_ex`); the rest are ordinary channel calls
+  (pty, window change, exit status, windows). Two do more work by hand: `ssh_userauth_publickey_auto` (agent, then the default keys) becomes a
+  loop over the agent's identities and then over key files; and libssh2 is
+  non-blocking throughout, where the worker here is blocking-and-polled.
+- **Keepalive is libssh2's one technical gain, and smaller than §4 said.**
+  `libssh2_keepalive_send` asks the server for a reply, a real round trip,
+  where `ssh_send_ignore` proves only that the kernel took the bytes. But
+  libssh 0.11 does export `ssh_send_keepalive` -- declared in `server.h`, so
+  the "not exposed" above is half right; whether it works on a client session
+  is **untested**. That is the cheaper thing to try first if keepalive ever
+  matters.
+- **Size is not a factor**: `ssh_`-named symbols are about 145 KB of the
+  Android library's ~4.8 MB of sized symbols (a name-based estimate).
+- **What switching costs**: `ssh_session_libssh.cpp`/`.h` and
+  `jump_tunnel.cpp`/`.h`, about 2,160 lines, rewritten against a different
+  threading model, plus `tool/build-deps-android.sh`, `debian/control`, the CI
+  image, and the live-SSH tests re-proved. The `bssh_ssh_session` interface
+  keeps it out of everything else, as §4 intended, and the fake session the
+  emulator tests use is unaffected.
+
+**So the choice is about the licence and nothing else**, and there are three
+routes, not two:
+
+1. **libssh, static (today).** LGPL-2.1 §6 then asks that a user be able to
+   relink the app against a changed libssh -- in practice the app's object
+   files, or its source, made available.
+2. **libssh, as a shared library inside the APK.** `BUILD_SHARED_LIBS=ON`, and
+   `libssh.so` ships beside the app's own library; the build change is small.
+   It is the arrangement LGPL is written around, though whether a library a
+   user cannot swap without re-signing the APK satisfies §6 is debated, and not
+   for this document to settle.
+3. **libssh2 (BSD-3).** No relinking obligation, at the cost above.
+
+How much 1 and 2 cost depends on the terms BeerSSH itself ships under, which
+is the copyright holder's to settle, not this section's. The technical
+position is only that nothing but the licence favours switching.
+
 **Crypto backend: [DECIDED] OpenSSL** — best-tested with libssh; mbedTLS and
 wolfSSL are lighter but add integration risk. Settled at build setup, which is
 where this said it would be: desktop links the system OpenSSL, and
@@ -13896,7 +13952,10 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
 **Still open:**
 
 - libssh (LGPL, dynamic link) vs libssh2 (BSD) — licensing may decide it, and it
-  is the Android build that decides it (§4).
+  is the Android build that decides it (§4). **Costed 2026-09-30** (§4, *What
+  each route costs*): algorithm parity, an equivalent for every call, about
+  2,160 lines to rewrite -- so it is a licensing decision alone, with three
+  routes, and the holder's.
 - Foreground-service type: `connectedDevice` (built and shipped in the manifest)
   vs `specialUse` (prepared fallback). Open on Play review's opinion, not on
   ours — §5.1.
