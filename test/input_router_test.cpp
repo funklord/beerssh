@@ -1608,3 +1608,58 @@ void input_router_test::kitty_modes_are_per_screen_and_an_emptied_stack_resets()
 	emulator.feed(QByteArrayLiteral("\x1b[<u"));
 	QCOMPARE(emulator.kitty_keyboard_flags(), 0);
 }
+
+void input_router_test::super_is_a_kitty_modifier_and_nothing_else_hears_it() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/*
+	 * No protocol has a Super bit but kitty's, so legacy never hears it:
+	 * Super+A types a, and Super+Up is the plain Up -- not the 1;17
+	 * libvterm would make of an unknown bit.
+	 */
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::MetaModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("a"));
+	QCOMPARE(press(router, emulator, Qt::Key_Up, Qt::MetaModifier), QByteArrayLiteral("\x1b[A"));
+
+	/* kitty's is 8, so Super alone encodes as 1 + 8 = 9. */
+	emulator.feed(QByteArrayLiteral("\x1b[=9u"));
+	QCOMPARE(press(router, emulator, Qt::Key_A, Qt::MetaModifier, QStringLiteral("a")),
+	          QByteArrayLiteral("\x1b[97;9u"));
+
+	/* The Super key itself: its bit set on the press and reset on the release. */
+	emulator.feed(QByteArrayLiteral("\x1b[=11u"));
+	QCOMPARE(press(router, emulator, Qt::Key_Meta, Qt::MetaModifier),
+	          QByteArrayLiteral("\x1b[57444;9u"));
+	QCOMPARE(lift(router, emulator, Qt::Key_Meta), QByteArrayLiteral("\x1b[57444;1:3u"));
+}
+
+void input_router_test::the_keypad_is_its_own_keys_under_the_kitty_protocol() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/* No protocol: the keypad is the keys it looks like. */
+	QCOMPARE(press(router, emulator, Qt::Key_Enter, Qt::KeypadModifier), QByteArrayLiteral("\r"));
+	QCOMPARE(press(router, emulator, Qt::Key_5, Qt::KeypadModifier, QStringLiteral("5")),
+	          QByteArrayLiteral("5"));
+
+	/*
+	 * Disambiguate alone: "all non text keypad keys will be reported as
+	 * separate keys". Keypad Enter is KP_ENTER, and a digit still types.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[>1u"));
+	QCOMPARE(press(router, emulator, Qt::Key_Enter, Qt::KeypadModifier),
+	          QByteArrayLiteral("\x1b[57414u"));
+	QCOMPARE(press(router, emulator, Qt::Key_Left, Qt::KeypadModifier),
+	          QByteArrayLiteral("\x1b[57417u"));
+	QCOMPARE(press(router, emulator, Qt::Key_5, Qt::KeypadModifier, QStringLiteral("5")),
+	          QByteArrayLiteral("5"));
+
+	/* Every key an escape: the digit is KP_5, with its text when asked. */
+	emulator.feed(QByteArrayLiteral("\x1b[=9u"));
+	QCOMPARE(press(router, emulator, Qt::Key_5, Qt::KeypadModifier, QStringLiteral("5")),
+	          QByteArrayLiteral("\x1b[57404u"));
+	emulator.feed(QByteArrayLiteral("\x1b[=25u"));
+	QCOMPARE(press(router, emulator, Qt::Key_5, Qt::KeypadModifier, QStringLiteral("5")),
+	          QByteArrayLiteral("\x1b[57404;;53u"));
+}

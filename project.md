@@ -4425,14 +4425,21 @@ best one it can:
     resets the flags -- including a base entry set with `CSI = u`.
   - **Limits, stated rather than hidden**: Qt gives no physical key for a
     shifted symbol, so Shift+1 reports `!` with Shift spent rather than the 1
-    key with Shift held; the base-layout alternate key is not sent; modifiers
-    are reported as the LEFT keys, since Qt does not say which side; keypad
-    keys are not told from the main block; and Super is reported as a key
-    but not as a modifier bit. An input method says nothing of keys, so under
+    key with Shift held; the base-layout alternate key is not sent; and
+    modifiers are reported as the LEFT keys, since Qt does not say which
+    side. ~~Keypad keys are not told from the main block; Super is a key but
+    not a modifier bit.~~ **Both closed 2026-10-01.** Super is our
+    `MOD_SUPER` (0x10, since the router keeps AltGr at 0x08) and the
+    protocol's 8, translated in every kitty encoder and masked off before
+    libvterm or modifyOtherKeys, which have no Super and would misread the
+    bit. The keypad, told by Qt's `KeypadModifier`, is its own keys (KP_0
+    57399 ... KP_BEGIN 57427): Enter and the Num-Lock-off navigation keys
+    under any kitty mode, as disambiguate requires, and the digits and
+    operators -- which type text -- only once every key is an escape. An input method says nothing of keys, so under
     every-key-as-escape each committed character is its own press with a
     release straight after -- which is also all Android's soft keyboard can
     give.
-  - Guarded by `tool/sabotage/kitty-keyboard.toml`, ten edits.
+  - Guarded by `tool/sabotage/kitty-keyboard.toml`, fourteen edits.
 - **xterm `modifyOtherKeys`** (`CSI > 4 ; 2 m`, queried with `CSI ? 4 m`).
   The middle tier, and what a terminal that predates kitty's protocol
   offers. **Implemented at level 2.** Level 3 is deliberately not offered:

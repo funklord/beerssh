@@ -78,3 +78,37 @@ file = "src/term/emulator_vterm.cpp"
 find = "\t\t\t\t\tstack.last() = 0;\n"
 replace = ""
 expect = "kitty_modes_are_per_screen_and_an_emptied_stack_resets"
+
+# Super reaches libvterm, which reads the unknown bit as a modifier and
+# sends Super+Up as CSI 1;17A to a program that asked for nothing.
+[[sabotage]]
+name = "libvterm is handed the Super bit"
+file = "src/term/emulator_vterm.cpp"
+find = "\tconst VTermModifier mod = static_cast<VTermModifier>(modifiers & 0x07);"
+replace = "\tconst VTermModifier mod = static_cast<VTermModifier>(modifiers);"
+expect = "super_is_a_kitty_modifier_and_nothing_else_hears_it"
+
+# Our 0x10 sent as it is, so Super reads as kitty's hyper.
+[[sabotage]]
+name = "Super is not translated to the protocol's bit"
+file = "src/term/emulator_vterm.cpp"
+find = "\treturn (modifiers & 0x07) | ((modifiers & bssh_emulator::MOD_SUPER) ? 0x08 : 0);"
+replace = "\treturn modifiers;"
+expect = "super_is_a_kitty_modifier_and_nothing_else_hears_it"
+
+# Disambiguate alone leaves keypad Enter as a carriage return.
+[[sabotage]]
+name = "the keypad is left to legacy under disambiguate alone"
+file = "src/input/input_router.cpp"
+find = "\tif (m_emulator->wants_key_events() || keypad_kitty) {"
+replace = "\tif (m_emulator->wants_key_events()) {\n\t\t(void)keypad_kitty;"
+expect = "the_keypad_is_its_own_keys_under_the_kitty_protocol"
+
+# A keypad digit treated as a non-text key: it stops typing under
+# disambiguate.
+[[sabotage]]
+name = "a keypad digit is taken for a key that types nothing"
+file = "src/input/input_router.cpp"
+find = "\t\t\tout.keypad_text = typed;"
+replace = "\t\t\tout.keypad_text = false;"
+expect = "the_keypad_is_its_own_keys_under_the_kitty_protocol"

@@ -149,6 +149,12 @@ quint8 bssh_input_router::modifiers_for(QKeyEvent *event) const {
 	if (event->modifiers() & Qt::ControlModifier) modifiers |= bssh_emulator::MOD_CTRL;
 	if (event->modifiers() & Qt::AltModifier) modifiers |= bssh_emulator::MOD_ALT;
 
+	/*
+	 * Super, which only the kitty protocol can say; everything else masks
+	 * it off (see MOD_SUPER).
+	 */
+	if (event->modifiers() & Qt::MetaModifier) modifiers |= bssh_emulator::MOD_SUPER;
+
 	return modifiers;
 }
 
@@ -409,7 +415,13 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 	 * or press, the unshifted key, the text -- so it goes to the emulator
 	 * whole, and anything it leaves to legacy falls through below.
 	 */
-	if (m_emulator->wants_key_events()) {
+	/*
+	 * And the keypad under any kitty mode at all: disambiguate alone
+	 * already reports its non-text keys as keys of their own.
+	 */
+	const bool keypad_kitty = (event->modifiers() & Qt::KeypadModifier)
+	                          && m_emulator->kitty_keyboard_flags() != 0;
+	if (m_emulator->wants_key_events() || keypad_kitty) {
 		bssh_emulator::key_event_t kitty;
 		if (kitty_event_for(event, kitty)) {
 			if (m_emulator->send_key_event(kitty)) {
@@ -585,9 +597,60 @@ bool bssh_input_router::kitty_event_for(QKeyEvent *event,
 		return true;
 	case Qt::Key_Meta:
 		out.modifier_key = bssh_emulator::KITTY_LEFT_SUPER;
+		out.modifiers |= bssh_emulator::MOD_SUPER;
 		return true;
 	default:
 		break;
+	}
+
+	/*
+	 * The keypad, told from the main block by Qt's KeypadModifier -- which
+	 * is also why it is not a modifier the remote hears about. Digits and
+	 * operators type text; Enter and, with Num Lock off, the navigation
+	 * keys do not. Numbers from the protocol's table: KP_0 is 57399 and
+	 * KP_BEGIN 57427.
+	 */
+	if (event->modifiers() & Qt::KeypadModifier) {
+		const int qt_key = event->key();
+		int keypad = 0;
+		bool typed = false;
+		if (qt_key >= Qt::Key_0 && qt_key <= Qt::Key_9) {
+			keypad = 57399 + (qt_key - Qt::Key_0);
+			typed = true;
+		} else {
+			switch (qt_key) {
+			case Qt::Key_Period:   keypad = 57409; typed = true; break;
+			case Qt::Key_Comma:    keypad = 57416; typed = true; break;
+			case Qt::Key_Slash:    keypad = 57410; typed = true; break;
+			case Qt::Key_Asterisk: keypad = 57411; typed = true; break;
+			case Qt::Key_Minus:    keypad = 57412; typed = true; break;
+			case Qt::Key_Plus:     keypad = 57413; typed = true; break;
+			case Qt::Key_Equal:    keypad = 57415; typed = true; break;
+			case Qt::Key_Enter:    keypad = 57414; break;
+			case Qt::Key_Left:     keypad = 57417; break;
+			case Qt::Key_Right:    keypad = 57418; break;
+			case Qt::Key_Up:       keypad = 57419; break;
+			case Qt::Key_Down:     keypad = 57420; break;
+			case Qt::Key_PageUp:   keypad = 57421; break;
+			case Qt::Key_PageDown: keypad = 57422; break;
+			case Qt::Key_Home:     keypad = 57423; break;
+			case Qt::Key_End:      keypad = 57424; break;
+			case Qt::Key_Insert:   keypad = 57425; break;
+			case Qt::Key_Delete:   keypad = 57426; break;
+			case Qt::Key_Clear:    keypad = 57427; break;
+			default: break;
+			}
+		}
+
+		if (keypad) {
+			out.keypad = keypad;
+			out.keypad_text = typed;
+			if (typed) {
+				for (uint c : event->text().toUcs4()) out.text.append(c);
+				out.modifiers &= quint8(~bssh_emulator::MOD_SHIFT);
+			}
+			return true;
+		}
 	}
 
 	out.key = emulator_key_for(event->key());
@@ -658,6 +721,8 @@ bool bssh_input_router::handle_key_release(QKeyEvent *event) {
 		release.modifiers &= quint8(~bssh_emulator::MOD_CTRL);
 	if (release.modifier_key == bssh_emulator::KITTY_LEFT_ALT)
 		release.modifiers &= quint8(~bssh_emulator::MOD_ALT);
+	if (release.modifier_key == bssh_emulator::KITTY_LEFT_SUPER)
+		release.modifiers &= quint8(~bssh_emulator::MOD_SUPER);
 
 	return m_emulator->send_key_event(release);
 }

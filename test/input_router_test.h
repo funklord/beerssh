@@ -24,6 +24,8 @@ private slots:
 	void kitty_all_keys_as_escapes_with_text_and_alternates();
 	void kitty_release_answers_its_own_press();
 	void kitty_modes_are_per_screen_and_an_emptied_stack_resets();
+	void super_is_a_kitty_modifier_and_nothing_else_hears_it();
+	void the_keypad_is_its_own_keys_under_the_kitty_protocol();
 	void a_paste_cannot_close_its_own_bracket();
 	/* sec 6.1: the stolen set is the user's to change, and to refuse. */
 	void a_rebound_chord_is_the_one_that_is_stolen();

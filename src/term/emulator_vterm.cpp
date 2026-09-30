@@ -8,6 +8,18 @@
 
 #include "term/graphics_internal.h"
 
+namespace {
+
+/*
+ * The kitty protocol's modifier bits from ours: shift, alt and ctrl are
+ * the same, and Super is our 0x10 and its 8 (see MOD_SUPER).
+ */
+int kitty_modifier_bits(quint8 modifiers) {
+	return (modifiers & 0x07) | ((modifiers & bssh_emulator::MOD_SUPER) ? 0x08 : 0);
+}
+
+} /* namespace */
+
 /*
  * The libvterm binding. This file is the only one in the tree that
  * includes vterm.h.
@@ -1993,8 +2005,11 @@ bool bssh_emulator_private::encode_modern_key(char32_t ch, quint8 modifiers) {
 	const bool interesting = modifiers & (bssh_emulator::MOD_CTRL | bssh_emulator::MOD_ALT);
 	if (!interesting) return false;
 
-	/* Both protocols number modifiers the same way: 1 + the bitmask. */
-	const int encoded_mod = 1 + int(modifiers);
+	/*
+	 * Both protocols number modifiers the same way, 1 + the bitmask, but
+	 * only kitty's has a Super bit; modifyOtherKeys gets the three.
+	 */
+	const int encoded_mod = kitty ? 1 + kitty_modifier_bits(modifiers) : 1 + int(modifiers & 0x07);
 
 	if (kitty) {
 		reply(QByteArrayLiteral("\x1b[")
@@ -2428,7 +2443,8 @@ int bssh_emulator::modify_other_keys_level() const {
 }
 
 void bssh_emulator::send_key(int key, quint8 modifiers) {
-	const VTermModifier mod = static_cast<VTermModifier>(modifiers);
+	/* libvterm knows shift, alt and ctrl; a Super bit would be misread. */
+	const VTermModifier mod = static_cast<VTermModifier>(modifiers & 0x07);
 
 	if (key >= KEY_FUNCTION_BASE) {
 		/* The macro yields an int; C++ will not narrow that to the enum. */
@@ -2446,7 +2462,7 @@ void bssh_emulator::send_key(int key, quint8 modifiers) {
 	 */
 	if (key == KEY_ESCAPE && m_private->kitty_flags() != 0) {
 		m_private->reply(QByteArrayLiteral("\x1b[27")
-		                  + (modifiers ? QByteArrayLiteral(";") + QByteArray::number(1 + int(modifiers))
+		                  + (modifiers ? QByteArrayLiteral(";") + QByteArray::number(1 + kitty_modifier_bits(modifiers))
 		                               : QByteArray())
 		                  + QByteArrayLiteral("u"));
 		return;
@@ -2529,7 +2545,7 @@ bool kitty_functional(int key, int &number, char &final) {
  */
 QByteArray kitty_sequence(int number, char final, const QByteArray &alternates,
                           quint8 modifiers, int type, const QByteArray &text) {
-	const int encoded = 1 + int(modifiers);
+	const int encoded = 1 + kitty_modifier_bits(modifiers);
 	const bool second = encoded != 1 || type != bssh_emulator::EVENT_PRESS || !text.isEmpty();
 
 	QByteArray out = QByteArrayLiteral("\x1b[");
@@ -2580,6 +2596,19 @@ bool bssh_emulator::send_key_event(const key_event_t &event) {
 		return true;
 	}
 
+	/*
+	 * The keypad. A key that types nothing is its own key under any mode
+	 * -- disambiguate's "all non text keypad keys will be reported as
+	 * separate keys" -- and one that types a digit or an operator is a
+	 * text key numbered as the keypad's, below with the rest.
+	 */
+	if (event.keypad && !event.keypad_text) {
+		const bool begin = event.keypad == 57427;
+		m_private->reply(kitty_sequence(begin ? 1 : event.keypad, begin ? 'E' : 'u', QByteArray(),
+		                                event.modifiers, type, QByteArray()));
+		return true;
+	}
+
 	if (event.key != KEY_NONE) {
 		int number = 0;
 		char final = 0;
@@ -2607,7 +2636,7 @@ bool bssh_emulator::send_key_event(const key_event_t &event) {
 		return true;
 	}
 
-	if (event.code == 0 && event.text.isEmpty()) return false;
+	if (event.code == 0 && event.text.isEmpty() && !event.keypad) return false;
 
 	/*
 	 * A key that produces text stays plain text, with no events, unless
@@ -2631,7 +2660,8 @@ bool bssh_emulator::send_key_event(const key_event_t &event) {
 		}
 	}
 
-	m_private->reply(kitty_sequence(int(event.code), 'u', alternate, event.modifiers, type, text));
+	const int number = event.keypad ? event.keypad : int(event.code);
+	m_private->reply(kitty_sequence(number, 'u', alternate, event.modifiers, type, text));
 	return true;
 }
 
@@ -2677,6 +2707,7 @@ void bssh_emulator::send_char(char32_t ch, quint8 modifiers) {
 	 * DEL. Those are a keyboard's historical wiring rather than this
 	 * rule, and adding them is a decision rather than a fix.
 	 */
+	modifiers &= 0x07;
 	if (modifiers & MOD_CTRL) {
 		const quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);
 		vterm_keyboard_unichar(m_private->vt, ch,

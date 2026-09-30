@@ -168,7 +168,15 @@ public:
 		MOD_NONE  = 0x00,
 		MOD_SHIFT = 0x01,
 		MOD_ALT   = 0x02,
-		MOD_CTRL  = 0x04
+		MOD_CTRL  = 0x04,
+
+		/*
+		 * 0x10, not the kitty protocol's 8: the input router already
+		 * keeps AltGr at 0x08 in the same byte. The kitty encoders
+		 * translate it; everything else -- libvterm, modifyOtherKeys --
+		 * never sees it, since neither has a Super.
+		 */
+		MOD_SUPER = 0x10
 	};
 
 	/*
@@ -241,6 +249,15 @@ public:
 		quint8 modifiers = 0;
 		int type = EVENT_PRESS;
 		int modifier_key = 0;           /* KITTY_LEFT_*, for a modifier alone */
+
+		/*
+		 * A keypad key's own kitty number (KP_0 57399 ... KP_BEGIN 57427),
+		 * and whether it typed text. The protocol tells the keypad from
+		 * the main block: its non-text keys are their own keys under any
+		 * mode, its text keys only once every key is an escape.
+		 */
+		int keypad = 0;
+		bool keypad_text = false;
 	};
 
 	/*
