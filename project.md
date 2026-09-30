@@ -14497,3 +14497,42 @@ be proved independently of the tool that performed the retab — survives
 being broken with the suite green. Signalled rather than fixed here: the
 suite is spread from `~/.claude/tool/`, and a fix made in one copy is how
 sixteen copies stop agreeing.
+
+## From fmake: `--eject` needs one define the README's fmake line does not
+
+**Taken, both lines** -- `d4994f7` put `BSSH_TEST_FONT_DIR` and the
+`test-env` line into `fmake.toml`, with the reasons beside them. Kept
+below as fmake's session wrote it. The same file's `exclude` list gained
+`src/platform/range_source_android.cpp` on 2026-10-01: an Android-only
+unit added after the list was written, which reaches for `QJniEnvironment`
+a desktop Qt does not declare.
+
+Measured by fmake's session on 2026-09-18 in a copy of this tree's
+tracked files at `HEAD`, with fmake at its section 257. The finding is
+fmake's; the line below is this tree's to take or not.
+
+`python3 ~/src/fmake/fmake` builds `./beerssh` as the README says.
+`fmake --eject make`, which also compiles the test program to write its
+rules, stops in `test/font_catalog_test.cpp` with `expected
+primary-expression before '(' token` inside Qt's `qstringliteral.h` --
+`QStringLiteral(BSSH_TEST_FONT_DIR)` with the macro undefined, the same
+shape `BSSH_VERSION_STRING` had before `fmake.toml` carried it.
+`test/tests.pro:36` defines it as `$$PWD/../fonts`.
+
+The test program is one binary rooted by `test/main.cpp`, so a
+per-target define would reach only that root; the define belongs beside
+the version's, project-wide:
+
+    defines = ['BSSH_VERSION_STRING="$file(VERSION)"',
+               'BSSH_TEST_FONT_DIR="$root/fonts"']
+
+With that the copy ejects cleanly and `make -n` on the result runs
+through.
+
+`fmake test` then builds the test program and it aborts for want of a
+display, as `make test` would without the `QT_QPA_PLATFORM=offscreen`
+the Makefile sets; fmake's `fmake.toml` has no `test-env`, so the
+variable never reaches it, and fmake now says so under the failure
+(its section 258). The line is `test-env = ["QT_QPA_PLATFORM=offscreen"]`
+under `[project]`, and whether `fmake test` is a thing this tree wants
+to claim is its own.

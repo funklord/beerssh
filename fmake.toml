@@ -28,6 +28,8 @@ include-dirs = ["vterm/include"]
 exclude = [
   "src/platform/secret_store_keystore.cpp",
   "src/platform/platform_android.cpp",
+  # Android's own HTTPS for font downloads, over JNI (project.md sec 5.2).
+  "src/platform/range_source_android.cpp",
   # The Android dependency trees: two prebuilt libcrypto.a for the same
   # ABI, plus OpenSSL's own source and test programs beside them. Nothing
   # tracked lives under either, and on a desktop build they are two
