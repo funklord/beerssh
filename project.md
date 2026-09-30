@@ -388,13 +388,19 @@ this machine).
   (pty, window change, exit status, windows). Two do more work by hand: `ssh_userauth_publickey_auto` (agent, then the default keys) becomes a
   loop over the agent's identities and then over key files; and libssh2 is
   non-blocking throughout, where the worker here is blocking-and-polled.
-- **Keepalive is libssh2's one technical gain, and smaller than §4 said.**
-  `libssh2_keepalive_send` asks the server for a reply, a real round trip,
-  where `ssh_send_ignore` proves only that the kernel took the bytes. But
-  libssh 0.11 does export `ssh_send_keepalive` -- declared in `server.h`, so
-  the "not exposed" above is half right; whether it works on a client session
-  is **untested**. That is the cheaper thing to try first if keepalive ever
-  matters.
+- **Keepalive gives neither library an edge -- measured and read 2026-09-30.**
+  §4's table credited libssh2 with a keepalive libssh lacks, and it was read as
+  a real round trip. `libssh2_keepalive_send` returns 0 or a socket error, by
+  its own header, and nothing about whether a reply came -- so like
+  `ssh_send_ignore` it proves only that bytes left. libssh 0.11 does export
+  `ssh_send_keepalive` (declared in `server.h`), and against a throwaway
+  loopback sshd it sent `keepalive@openssh.com` with want_reply and waited for
+  the answer (2.5 ms, then 0.2 ms; the server logged it) -- but with the
+  server's session process stopped it **blocked the caller for 5.0 s, the
+  session timeout, and then returned `SSH_OK`**, still connected. Its result
+  cannot tell a live peer from a dead one either, and it would block the
+  worker `do_send` was rebuilt never to block. In both, dead-peer detection is
+  TCP's, as §4 already says; `ssh_send_ignore` plus TCP keepalive stays.
 - **Size is not a factor**: `ssh_`-named symbols are about 145 KB of the
   Android library's ~4.8 MB of sized symbols (a name-based estimate).
 - **What switching costs**: `ssh_session_libssh.cpp`/`.h` and
