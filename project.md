@@ -5500,7 +5500,7 @@ time by the top-level Makefile — **not** committed into the submodule
 itself, because a submodule pinned to a commit that exists only on this
 machine is one nobody else can clone. An upstream update that conflicts
 fails loudly at the patch step rather than silently dropping the fix, and
-`make veryclean` hands the submodule back pristine. All five patches are
+`make veryclean` hands the submodule back pristine. Every patch there is
 worth sending upstream.
 
 **So ` M vterm` in `git status` after a build is normal, and must not be
@@ -5509,7 +5509,7 @@ the pinned commit with no `+` -- and the dirty files inside it
 (`include/vterm.h`, `src/screen.c`, `src/state.c`) are exactly the ones
 `vterm-patch/` touches. fuzzypickles' session once took it for a stray
 edit. `git submodule update --force` or a checkout inside the submodule
-silently reverts all five patches; `make veryclean` is the one sanctioned
+silently reverts every patch; `make veryclean` is the one sanctioned
 way back to pristine (checked by the guidelines session, 2026-08-27).
 
 **`vterm-patch/0005` is the fourth kind: a reset that clears state without
@@ -8714,6 +8714,31 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   Further gains here would need a vendored libvterm patch exposing bulk cell
   access, which is a change to a dependency for a cost that is now spread thinly
   across three unavoidable steps. Not worth it at this size.
+- **libvterm still converted every row that scrolled away, for nobody.**
+  `push_top_line` reads the departing row from the mirror (above), but
+  `sb_pushline_from_row()` had already built `cells[]` with a
+  `vterm_screen_get_cell()` per column before calling it -- **12.6% of plain
+  scrolling at 200×50**, by callgrind, thrown away unread. `vterm-patch/0007`
+  adds an opt-in in the shape of `has_pushline4`; with it the row is not
+  converted and the callbacks get **NULL**, not the stale buffer, so a later
+  callback that starts reading `cells` faults on the first scroll of any test
+  rather than copying the previous row into the scrollback. Beside it, the
+  image store's budget pass ran on every scrolled line with no pictures at all
+  (1.1%); `scrolled()` returns at once when there are no placements, which is
+  sound because the read-back and spilled copies belong to placements and go
+  with them. **Measured by callgrind, which load does not move: 34.1G → 29.0G
+  instructions (−15%)** for `--bench plain_scrolling_output`; interleaved
+  timings at load 14 agreed in all three rounds (200×50 1.25/1.38/1.14 →
+  1.51/1.50/1.28 MB/s, 80×24 about +18%).
+  **What is left is libvterm's own buffer move, and it is the large one: 32%
+  of the run before this change.** libvterm keeps the screen as one flat
+  array, so every scrolled line `memmove`s the whole screen up a row -- about
+  10,000 cells at 200×50 against 1,900 at 80×24, which is the 3× gap between
+  those two figures. Removing it means making libvterm's screen a ring, a
+  change to its core data structure carried as a patch against somebody
+  else's code. **[OPEN]** whether that is
+  worth it: 1.5 MB/s is some 25,000 lines a second, ample for interactive use,
+  and it matters only for a large `cat` over a fast link.
 - **Throughput, measured separately from painting** — by `make bench`
   (`test/emulator_bench.cpp`, §12.3), which is where every MB/s figure below
   comes from and how to re-derive it. They are timings on a particular machine,

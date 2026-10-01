@@ -1761,6 +1761,14 @@ bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
 	vterm_screen_callbacks_has_pushline4(m_private->vts);
 
 	/*
+	 * And spare libvterm converting the departing row for us: push_top_line
+	 * takes it from the mirror, so the cells libvterm built were thrown
+	 * away -- 12.6% of plain scrolling at 200x50 (vterm-patch/0007). The
+	 * callbacks get NULL for them now, which both already ignore.
+	 */
+	vterm_screen_callbacks_pushline_without_cells(m_private->vts);
+
+	/*
 	 * Damage merged per row rather than per cell (sec 9.5).
 	 *
 	 * libvterm's default is VTERM_DAMAGE_CELL, which reports every printed

@@ -1,0 +1,98 @@
+Let a pushline consumer skip the cell conversion it does not read
+
+sb_pushline_from_row() converts every cell of the departing row with
+vterm_screen_get_cell() before handing the row to sb_pushline or
+sb_pushline4. That is the right default -- the callback is told what
+scrolled away -- and it is a full pass over the row for a consumer that
+already keeps its own copy of the grid and takes the departing line from
+that copy instead.
+
+Such a consumer pays it on every line of output once the screen is full.
+Measured with callgrind on 20,000 lines of plain text through a 200x50
+grid: the conversion was 12.6% of the whole run, for cells the callback
+never looked at.
+
+Add vterm_screen_callbacks_pushline_without_cells(), an opt-in in the
+shape of vterm_screen_callbacks_has_pushline4(). With it set the row is
+not converted and the callbacks receive NULL for cells. NULL rather than
+the untouched sb_buffer, so that a callback which reads anyway faults at
+once instead of quietly copying whichever row was converted last.
+
+Without the opt-in nothing changes.
+
+diff --git a/include/vterm.h b/include/vterm.h
+index 82b75e3..378441e 100644
+--- a/include/vterm.h
++++ b/include/vterm.h
+@@ -557,6 +557,10 @@ void *vterm_screen_get_cbdata(VTermScreen *screen);
+ 
+ void vterm_screen_callbacks_has_pushline4(VTermScreen *screen);
+ 
++/* The pushline callbacks never read their cells: they are passed NULL,
++ * and the row is not converted to build them. */
++void vterm_screen_callbacks_pushline_without_cells(VTermScreen *screen);
++
+ void  vterm_screen_set_unrecognised_fallbacks(VTermScreen *screen, const VTermStateFallbacks *fallbacks, void *user);
+ void *vterm_screen_get_unrecognised_fbdata(VTermScreen *screen);
+ 
+diff --git a/src/screen.c b/src/screen.c
+index 3c4cb33..55e4987 100644
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -49,6 +49,7 @@ struct VTermScreen
+   const VTermScreenCallbacks *callbacks;
+   void *cbdata;
+   bool callbacks_has_pushline4;
++  bool pushline_without_cells;
+ 
+   VTermDamageSize damage_merge;
+   /* start_row == -1 => no damage */
+@@ -208,14 +209,23 @@ static int putglyph(VTermGlyphInfo *info, VTermPos pos, void *user)
+ 
+ static void sb_pushline_from_row(VTermScreen *screen, int row, bool continuation)
+ {
+-  VTermPos pos = { .row = row };
+-  for(pos.col = 0; pos.col < screen->cols; pos.col++)
+-    vterm_screen_get_cell(screen, pos, screen->sb_buffer + pos.col);
++  VTermScreenCell *cells = NULL;
++
++  /* A consumer that keeps its own copy of the grid takes the departing
++   * row from that copy, and converting it here is a full pass over the
++   * row for nothing. NULL rather than a stale buffer, so a callback that
++   * reads anyway fails at once instead of copying the previous row. */
++  if(!screen->pushline_without_cells) {
++    VTermPos pos = { .row = row };
++    for(pos.col = 0; pos.col < screen->cols; pos.col++)
++      vterm_screen_get_cell(screen, pos, screen->sb_buffer + pos.col);
++    cells = screen->sb_buffer;
++  }
+ 
+   if(screen->callbacks_has_pushline4 && screen->callbacks->sb_pushline4)
+-    (screen->callbacks->sb_pushline4)(screen->cols, screen->sb_buffer, continuation, screen->cbdata);
++    (screen->callbacks->sb_pushline4)(screen->cols, cells, continuation, screen->cbdata);
+   else
+-    (screen->callbacks->sb_pushline)(screen->cols, screen->sb_buffer, screen->cbdata);
++    (screen->callbacks->sb_pushline)(screen->cols, cells, screen->cbdata);
+ }
+ 
+ static int premove(VTermRect rect, void *user)
+@@ -897,6 +907,7 @@ static VTermScreen *screen_new(VTerm *vt)
+   screen->callbacks = NULL;
+   screen->cbdata    = NULL;
+   screen->callbacks_has_pushline4 = false;
++  screen->pushline_without_cells = false;
+ 
+   screen->buffers[BUFIDX_PRIMARY] = alloc_buffer(screen, rows, cols);
+ 
+@@ -1088,6 +1099,11 @@ void vterm_screen_callbacks_has_pushline4(VTermScreen *screen)
+   screen->callbacks_has_pushline4 = true;
+ }
+ 
++void vterm_screen_callbacks_pushline_without_cells(VTermScreen *screen)
++{
++  screen->pushline_without_cells = true;
++}
++
+ void vterm_screen_set_unrecognised_fallbacks(VTermScreen *screen, const VTermStateFallbacks *fallbacks, void *user)
+ {
+   vterm_state_set_unrecognised_fallbacks(screen->state, fallbacks, user);

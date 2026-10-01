@@ -264,12 +264,13 @@ VTERM_ANDROID_STAMP = $(VTERM_ANDROID_DIR)/.patched
 # considered: one grep per patched file for a token only the patches put
 # there (XTQMODKEYS arrives in state.c with the same edit whose
 # four-wide leader check is the `0xfc` mask in the compiled object;
-# "pre-scroll rectangle" is 0003's comment in screen.c). Per file rather
+# "pre-scroll rectangle" is 0003's comment in screen.c, and
+# pushline_without_cells is 0007's declaration in vterm.h). Per file rather
 # than one marker for both, so a partial restore cannot hide behind the
 # file that kept its patch. A marker missing while any stamp exists
 # means the sources were restored out of band: every stamp goes -- all
 # ABIs, since all are equally stale -- and the stamp rules re-patch
-# before anything compiles. Two processes, spawned only when a stamp
+# before anything compiles. Three processes, spawned only when a stamp
 # exists to check; a clean tree pays one `ls`.
 BSSH_VTERM_WITNESS := $(shell \
 	stamps=$$(ls $(VTERM_BUILD_DIR)/.patched \
@@ -277,6 +278,8 @@ BSSH_VTERM_WITNESS := $(shell \
 	if [ -n "$$stamps" ] \
 	   && ! { grep -q XTQMODKEYS $(VTERM_DIR)/src/state.c 2>/dev/null \
 	          && grep -q 'pre-scroll rectangle' $(VTERM_DIR)/src/screen.c \
+	             2>/dev/null \
+	          && grep -q pushline_without_cells $(VTERM_DIR)/include/vterm.h \
 	             2>/dev/null; }; then \
 		echo "make: vterm sources were restored under their patch stamps;" >&2; \
 		echo "make:   discarding the stamps so the patches re-apply." >&2; \
