@@ -175,7 +175,13 @@ void bssh_image_store::discard(int index) {
 }
 
 void bssh_image_store::scrolled(int top_row, int bottom_row, int lines) {
-	if (lines == 0) return;
+	/*
+	 * With no pictures there is nothing to move and nothing to budget --
+	 * what was read back and what was spilled both belong to placements,
+	 * and discard() takes them with it. Every line of plain output comes
+	 * through here, and the budget pass cost 0.9% of scrolling text.
+	 */
+	if (lines == 0 || m_placements.isEmpty()) return;
 
 	for (int i = m_placements.size() - 1; i >= 0; --i) {
 		bssh_image_placement_t &placement = m_placements[i];
