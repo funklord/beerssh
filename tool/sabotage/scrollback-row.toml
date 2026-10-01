@@ -1,0 +1,15 @@
+# The departing row taken in one copy (project.md sec 9.5). push_top_line
+# reads the mirror's top row through bssh_screen::row_data(), and the
+# mirror is a ring: logical row 0 is wherever the last scroll left it.
+
+# The row pointer forgets the ring and indexes the storage directly.
+#
+# Right until the first full-screen scroll and wrong after every one, so
+# a test that never scrolls -- or one that only reads through cell(),
+# which still maps the row -- passes either way.
+[[sabotage]]
+name = "a row is read from storage without the ring's offset"
+file = "src/term/screen.cpp"
+find = "\treturn m_cells.constData() + physical(row) * m_cols;"
+replace = "\treturn m_cells.constData() + row * m_cols;"
+expect = "a_row_is_whole_wherever_the_ring_has_turned"

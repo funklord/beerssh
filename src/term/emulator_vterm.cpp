@@ -1512,16 +1512,13 @@ void push_top_line(bssh_emulator_private *self, int cols, bool continuation) {
 	 */
 	vterm_screen_flush_damage(self->vts);
 
-	const int width_limit = qMin(cols, self->screen.cols());
+	const bssh_cell_t *row = self->screen.row_data(0);
+	int width = row ? qMin(cols, self->screen.cols()) : 0;
+	while (width > 0 && is_invisible_cell(row[width - 1])) --width;
 
-	int width = width_limit;
-	while (width > 0 && is_invisible_cell(self->screen.cell(0, width - 1))) --width;
-
-	QList<bssh_cell_t> line;
-	line.reserve(width);
-	for (int col = 0; col < width; ++col) {
-		line.append(self->screen.cell(0, col));
-	}
+	/* One copy of the row, not a cell() and an append per column (sec 9.5). */
+	const QList<bssh_cell_t> line = width > 0 ? QList<bssh_cell_t>(row, row + width)
+	                                          : QList<bssh_cell_t>();
 
 	self->scrollback.push(line, continuation);
 

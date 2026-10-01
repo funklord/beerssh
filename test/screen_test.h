@@ -16,6 +16,7 @@ private slots:
 	void resize_preserves_the_top_left();
 	void resize_keeps_the_cursor_on_the_grid();
 	void out_of_bounds_access_is_harmless();
+	void a_row_is_whole_wherever_the_ring_has_turned();
 	void to_text_trims_trailing_blanks();
 	void to_text_skips_double_width_continuations();
 };

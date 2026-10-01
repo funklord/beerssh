@@ -8730,6 +8730,14 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   instructions (−15%)** for `--bench plain_scrolling_output`; interleaved
   timings at load 14 agreed in all three rounds (200×50 1.25/1.38/1.14 →
   1.51/1.50/1.28 MB/s, 80×24 about +18%).
+  **Then the copy on our side of the same callback.** `push_top_line` built
+  the line with a bounds-checked `cell()` and an `append` per column, 7.1% of
+  the run between them. The mirror's ring rotates whole rows, so a row is
+  always contiguous: `bssh_screen::row_data()` hands it out as a pointer and
+  the line is built in one copy. **29.0G → 27.3G instructions (−5.6%)**, and
+  `tool/sabotage/scrollback-row.toml` holds the one way it can go wrong -- a
+  pointer that forgets the ring's offset, right until the first full-screen
+  scroll.
   **What is left is libvterm's own buffer move, and it is the large one: 32%
   of the run before this change.** libvterm keeps the screen as one flat
   array, so every scrolled line `memmove`s the whole screen up a row -- about

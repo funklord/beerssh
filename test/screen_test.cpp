@@ -66,6 +66,33 @@ void screen_test::out_of_bounds_access_is_harmless() {
 	QCOMPARE(screen.cols(), 10);
 }
 
+void screen_test::a_row_is_whole_wherever_the_ring_has_turned() {
+	bssh_screen screen(6, 4);
+	for (int row = 0; row < 4; ++row) {
+		write_text(screen, row, 0, QStringLiteral("row%1ab").arg(row));
+	}
+
+	/*
+	 * Scroll up a line at a time, past a full turn of the ring, so the
+	 * logical top lands on every physical row -- including the one where
+	 * a row split across the end of the storage would show.
+	 */
+	for (int scroll = 0; scroll < 6; ++scroll) {
+		screen.move_rect(0, 0, 1, 0, 3, 6);
+		write_text(screen, 3, 0, QStringLiteral("new%1cd").arg(scroll));
+
+		for (int row = 0; row < 4; ++row) {
+			const bssh_cell_t *data = screen.row_data(row);
+			QVERIFY(data);
+			for (int col = 0; col < 6; ++col) QCOMPARE(data[col].ch, screen.cell(row, col).ch);
+		}
+	}
+	QCOMPARE(screen.to_text(), QStringLiteral("new2cd\nnew3cd\nnew4cd\nnew5cd"));
+
+	QVERIFY(!screen.row_data(-1));
+	QVERIFY(!screen.row_data(4));
+}
+
 void screen_test::to_text_trims_trailing_blanks() {
 	bssh_screen screen(20, 2);
 	write_text(screen, 0, 0, QStringLiteral("hello"));

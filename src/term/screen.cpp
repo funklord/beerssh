@@ -31,6 +31,11 @@ const bssh_cell_t &bssh_screen::cell(int row, int col) const {
 	return m_cells.at(physical(row) * m_cols + col);
 }
 
+const bssh_cell_t *bssh_screen::row_data(int row) const {
+	if (!in_bounds(row, 0)) return nullptr;
+	return m_cells.constData() + physical(row) * m_cols;
+}
+
 void bssh_screen::set_cell(int row, int col, const bssh_cell_t &cell) {
 	if (!in_bounds(row, col)) return;
 	m_cells[physical(row) * m_cols + col] = cell;

@@ -103,6 +103,14 @@ public:
 	const bssh_cell_t &cell(int row, int col) const;
 	void set_cell(int row, int col, const bssh_cell_t &cell);
 
+	/*
+	 * A whole row, cols() cells long, or nullptr outside the grid. The
+	 * ring rotates whole rows, so a row's cells are always contiguous --
+	 * which is what lets the scrollback take a departing row in one copy
+	 * rather than a bounds-checked cell() per column.
+	 */
+	const bssh_cell_t *row_data(int row) const;
+
 	void clear();
 	void clear_row(int row);
 
