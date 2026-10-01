@@ -14524,7 +14524,10 @@ sixteen copies stop agreeing.
 below as fmake's session wrote it. The same file's `exclude` list gained
 `src/platform/range_source_android.cpp` on 2026-10-01: an Android-only
 unit added after the list was written, which reaches for `QJniEnvironment`
-a desktop Qt does not declare.
+a desktop Qt does not declare. Built with fmake the same day, from a
+`git archive` copy of `50d5a3d` plus `vterm`: no errors, and the program
+answered `--version` with `beerssh 1.0` (fmake names it after the
+directory, so the copy's binary was not called `beerssh`).
 
 Measured by fmake's session on 2026-09-18 in a copy of this tree's
 tracked files at `HEAD`, with fmake at its section 257. The finding is

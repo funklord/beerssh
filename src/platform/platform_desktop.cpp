@@ -465,10 +465,11 @@ public:
 	bool platform_is_touch_primary() const override {
 		/*
 		 * False for now, not forever. A convertible in tablet mode is a
-		 * real desktop case for the on-screen key row, so this becomes a
-		 * query of the available input devices (and of the user's
-		 * three-state auto/always/never setting) at M3, when the key row
-		 * itself exists.
+		 * real desktop case for touch sizing and the on-screen key row,
+		 * and the answer for it is sec 8.7's `metrics` dimension (auto,
+		 * on, off) -- which that section holds back until a feature needs
+		 * it rather than building it as a refactor. The key row this used
+		 * to wait for exists; the setting is what remains.
 		 */
 		return false;
 	}

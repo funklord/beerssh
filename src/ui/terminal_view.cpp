@@ -1383,10 +1383,8 @@ void bssh_terminal_view::contextMenuEvent(QContextMenuEvent *event) {
 void bssh_terminal_view::keyPressEvent(QKeyEvent *event) {
 	/*
 	 * Both paths matter, and this is only one of them. Android delivers
-	 * some keys as IME commit text rather than key events (sec 6.1), so
-	 * inputMethodEvent needs the same forwarding before the Android build
-	 * is usable with a soft keyboard. Noted rather than stubbed, because
-	 * a stub here would look done.
+	 * some keys as IME commit text rather than key events (sec 6.1); that
+	 * path is inputMethodEvent below, which forwards to the same router.
 	 */
 	/*
 	 * Typing returns to the live screen. Anything else means a keystroke

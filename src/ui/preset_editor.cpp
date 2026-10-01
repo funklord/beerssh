@@ -381,9 +381,10 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 
 	if (m_touch) {
 		/*
-		 * A page with no way out is the one bug a phone punishes hardest:
-		 * the system back gesture is not wired to this stack, so without
-		 * this the only exit from the preset editor is killing the app.
+		 * A page with no way out is the one bug a phone punishes hardest.
+		 * The system Back leaves this page too (bssh_main_window::go_back),
+		 * but a gesture is not something a person can see, and this is the
+		 * way out that is on the screen.
 		 */
 		QPushButton *back = new QPushButton(QStringLiteral("Back to hosts"), this);
 		back->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
