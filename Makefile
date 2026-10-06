@@ -10,6 +10,7 @@
 #
 # TARGETS
 #   make              -- build the desktop app (optimized, no sanitizers)
+#                        and beersshd, the SFTP-only server (sec 19)
 #   make DEBUG=1      -- unoptimized, symbol-rich build. Checked for being
 #                        SET, not for a value -- see BUILD FLAGS.
 #   make SANITIZE=1   -- add ASan+UBSan, independent of DEBUG
@@ -306,7 +307,7 @@ endif
 # is what it is for -- and it can only promise that if it removes
 # everything the default build produces. Adding a product to `all` now
 # makes clean remove it, without anybody remembering to.
-ARTIFACTS = $(TARGET) $(MAN_PAGE) $(COMPLETION)
+ARTIFACTS = $(TARGET) $(MAN_PAGE) $(COMPLETION) $(SSHD_TARGET)
 
 all: $(ARTIFACTS)
 
@@ -481,6 +482,24 @@ $(TARGET): $(VTERM_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
 
 run: $(TARGET)
 	./$(TARGET)
+
+# beersshd, the SFTP-only server (project.md sec 19): its own program from
+# its own .pro, sharing the libssh build and none of the terminal. In the
+# default build so check-ci compiles it against the runner's older Qt and
+# libssh, which is where an API it leans on would first be missing.
+SSHD_TARGET    = beersshd
+SSHD_BUILD_DIR = build-sshd
+SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.h)
+
+$(SSHD_BUILD_DIR)/Makefile: beersshd.pro \
+                            $(if $(call bssh_qmake_orphaned,$(SSHD_BUILD_DIR)),FORCE)
+	mkdir -p $(SSHD_BUILD_DIR)
+	cd $(SSHD_BUILD_DIR) && $(QMAKE) ../beersshd.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
+	        BSSH_VERSION=$(VERSION)
+
+$(SSHD_TARGET): $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
+	$(MAKE) -C $(SSHD_BUILD_DIR)
+	cp $(SSHD_BUILD_DIR)/$(SSHD_TARGET) $(SSHD_TARGET)
 
 # Built in its own directory from its own .pro: the test binary needs the
 # app's sources but not src/main.cpp, or it would have two main()s.
@@ -1382,6 +1401,7 @@ clean:
 	rm -f $(ARTIFACTS)
 	$(call bssh_qmake_clean,$(BUILD_DIR))
 	$(call bssh_qmake_clean,$(TEST_BUILD_DIR))
+	$(call bssh_qmake_clean,$(SSHD_BUILD_DIR))
 	$(call bssh_qmake_clean,$(ANDROID_BUILD_DIR))
 
 # qmake's own clean, in a tree that has one -- skipped, and said so, when
@@ -1429,7 +1449,8 @@ endef
 # this build's own. Each expansion still goes through the checks above.
 veryclean: clean
 	$(call bssh_remove_tree,$(BUILD_DIR) $(ANDROID_BUILD_DIR) build-android-* \
-	        $(TEST_BUILD_DIR) $(VTERM_BUILD_DIR) $(VTERM_ANDROID_BASE) $(SHOT_DIR))
+	        $(TEST_BUILD_DIR) $(SSHD_BUILD_DIR) $(VTERM_BUILD_DIR) $(VTERM_ANDROID_BASE) \
+	        $(SHOT_DIR))
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
 	fi

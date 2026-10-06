@@ -32,6 +32,7 @@ android/assets/terminfo/
 
 # The built binary, copied out of build/ by `make`
 /beerssh
+/beersshd
 
 # Python bytecode from tool/
 __pycache__/

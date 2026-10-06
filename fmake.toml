@@ -43,3 +43,9 @@ exclude = [
   # builds for a new target. Nothing tracked lives under any of them.
   "build-*",
 ]
+
+# beersshd's main() lives in src/sshd/, and a program rooted at main.cpp
+# is named after its directory -- which would install a second `sshd`
+# beside OpenSSH's. The name the Makefile and the package use instead.
+[target.sshd]
+name = "beersshd"

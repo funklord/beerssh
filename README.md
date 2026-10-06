@@ -212,6 +212,26 @@ scrollback and selection included.
 
 See `project.md` §14 for the milestone plan.
 
+## beersshd
+
+A second, separate program from this tree: an SFTP server and nothing else.
+It serves one folder to the keys in one authorized-keys file — no shell, no
+commands, no passwords — and is meant for an Android phone, where it will
+be its own app so that the permission to reach shared storage belongs to a
+file server rather than to the terminal. The desktop build is a command line,
+for now the only way to run it:
+
+```sh
+./beersshd --root ~/Public --port 8022
+sftp -P 8022 phone-or-host          # or: scp -P 8022 file host:
+```
+
+The host key is generated on first start under `~/.config/beersshd/`, and
+keys are read from `~/.config/beersshd/authorized_keys` at every login.
+Modern `scp` works, since it speaks SFTP; `scp -O` does not. A path that
+leaves the folder — by `..` or through a symlink — is refused. See
+`project.md` §19.
+
 ## Presets
 
 A preset is a reusable set of terminal settings — `TERM`, scrollback,
@@ -290,7 +310,7 @@ them. See `project.md` §7.1 for what they fix and why they are not
 committed into the submodule.
 
 ```sh
-make          # build ./beerssh
+make          # build ./beerssh and ./beersshd
 make run      # build and run it
 make test     # smoke test + unit tests (offscreen QPA, no server needed)
 make check    # the umbrella: everything that must pass before committing
@@ -418,6 +438,7 @@ and steps 2 and 3 of the rotation test.
 
 ```
 beerssh.pro          qmake project — the app, both platforms
+beersshd.pro         qmake project — beersshd, the SFTP-only server (§19)
 Makefile             top-level: wraps qmake, plus everything non-Qt
 src/main.cpp         entry point (--self-test is what CI runs)
 src/ui/              widgets: main window, terminal grid
@@ -427,6 +448,7 @@ src/input/           bssh_input_router -- every keystroke becomes bytes here
 vterm/               vendored libvterm (submodule, MIT, upstream untouched)
 src/platform/        bssh_platform + one implementation per platform
 src/model/           the session registry, host/preset stores, reconnection
+src/sshd/            beersshd: the server, its SFTP handlers, its root
 test/               host unit tests + the fake SSH session they drive
 android/             AndroidManifest.xml and the service shim
 debian/              debhelper packaging; VERSION at the root is the source

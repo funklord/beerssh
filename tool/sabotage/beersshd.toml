@@ -1,0 +1,49 @@
+# beersshd's protections (project.md sec 19), each broken the way it
+# would plausibly break, and each caught by a test that drives the
+# server with OpenSSH's own clients or asks the root directly.
+
+# The containment check accepts everything: what is left is the lexical
+# clamp, which "/../.." cannot get past and a symlink walks straight
+# through.
+[[sabotage]]
+name = "a resolved path outside the root is accepted"
+file = "src/sshd/root_path.cpp"
+find = "\treturn real == m_root || real.startsWith(m_root + '/');"
+replace = "\treturn true;"
+expect = "nothing_outside_the_root_is_reachable_over_the_wire"
+
+# A leaf that is a symlink is not followed to see where it lands, so
+# creating at a dangling link would make a file wherever it points.
+[[sabotage]]
+name = "a symlink leaf is used without checking its target"
+file = "src/sshd/root_path.cpp"
+find = "\t\tif (target.isEmpty() || !contains(target)) {"
+replace = "\t\tif (false) {"
+expect = "a_symlink_out_of_the_root_is_not_followed"
+
+# Any key that signs logs in -- the list is never consulted.
+[[sabotage]]
+name = "a key is accepted without looking it up"
+file = "src/sshd/sshd.cpp"
+find = "\tif (!authorized(connection->owner->config().authorized_keys_path, key)) return SSH_AUTH_DENIED;"
+replace = ""
+expect = "only_a_listed_key_logs_in"
+
+# The subsystem ends with no exit status. scp counts a session that ends
+# without one as a failed remote side, and exits 1 after delivering the
+# file intact.
+[[sabotage]]
+name = "a finished subsystem sends no exit status"
+file = "src/sshd/sshd.cpp"
+find = "\t\t\tssh_channel_request_send_exit_status(connection->channel, 0);"
+replace = ""
+expect = "scp_finishes_with_a_clean_exit"
+
+# The connection is dropped the moment the channel ends, before the
+# client can hang up itself.
+[[sabotage]]
+name = "a finished connection disconnects without waiting for the client"
+file = "src/sshd/sshd.cpp"
+find = "\t\tconst auto deadline = std::chrono::steady_clock::now() + HANGUP_GRACE;"
+replace = "\t\tconst auto deadline = std::chrono::steady_clock::now();"
+expect = "scp_finishes_with_a_clean_exit"

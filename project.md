@@ -148,6 +148,12 @@ run.
 ### Non-goals (v1, revisit later)
 - SFTP file browser / port forwarding / SSH tunneling (design so they can be
   added; don't build yet).
+- **An sshd built into BeerSSH — not done, and replaced by a separate
+  program.** Deferred on 2026-10-05 because what an in-app server could
+  serve on Android is only its own sandbox; the holder then decided on
+  2026-10-06 that it is **beersshd, a separate package with no other
+  features** (§19), which can ask for all-files access as its whole purpose
+  without the terminal carrying that permission.
 - Mosh protocol (note as a future resilience option in §5).
 - ~~Local terminal / on-device shell~~ — **this non-goal was reversed
   deliberately.** It read: "this is an SSH client, not Termux and not a desktop
@@ -14549,6 +14555,133 @@ be proved independently of the tool that performed the retab — survives
 being broken with the suite green. Signalled rather than fixed here: the
 suite is spread from `~/.claude/tool/`, and a fix made in one copy is how
 sixteen copies stop agreeing.
+
+## 19. beersshd — the SFTP-only server **[DECIDED 2026-10-06]**
+
+**A separate program, built from this tree, that serves files over SFTP and
+does nothing else.** Decided by the holder 2026-10-06, after an in-app
+server was costed and deferred (§ Non-goals): on Android an app reaches
+other apps' *shared* files only through the "All files access" permission
+(`MANAGE_EXTERNAL_STORAGE`) or a folder the user picks, and Play grants the
+first only to apps whose core purpose needs it. A file server's core purpose
+does; a terminal's does not. So the server is its own package and the
+terminal never asks for the permission. Another app's *private* directory
+is reachable by neither route, nor by anything short of root.
+
+- **Same repository, second program — [DECIDED].** `beersshd.pro` beside
+  `beerssh.pro`, sources in `src/sshd/`, built by plain `make` (so check-ci
+  compiles it against the runner's Qt 6.4 and libssh 0.10) and by fmake
+  (`fmake.toml` names the target, which would otherwise be `sshd` after its
+  directory). It links Qt Core and libssh and **nothing of the terminal**.
+- **Storage: all-files access — [DECIDED].** The served root is a path;
+  libssh's own handlers are not used (below), but ours are plain POSIX
+  calls on paths, which is what all-files access makes work on shared
+  storage. A user-picked folder would mean SFTP handlers over the Storage
+  Access Framework instead, and is not planned.
+
+### 19.1 What the server is
+
+SFTP and nothing else, inside one directory, to the keys in one file.
+
+- **Keys only.** `ssh_set_auth_methods(PUBLICKEY)`; no password, no
+  keyboard-interactive. The authorized-keys file is OpenSSH's format and is
+  **re-read at every login**, so an edit applies to the next connection.
+  **A line with options is skipped, not honoured without them**: `from=`,
+  `command=`, `restrict` each narrow what a key may do, this server enforces
+  none of them, and using the key anyway would grant more than the line says.
+- **One session channel, one subsystem: `sftp`.** Shell, exec, pty and
+  forwarding requests have no callback and libssh refuses them. **Modern
+  `scp` works** — OpenSSH 9+ runs it over SFTP — and **`scp -O` does not**,
+  the legacy protocol being an exec of `scp -t` on the server.
+- **The host key is ed25519, generated on first start** and written under a
+  `umask(077)` rather than chmod'ed afterwards, so it is never readable in
+  between. The bind is given the key by path (`SSH_BIND_OPTIONS_HOSTKEY`):
+  `SSH_BIND_OPTIONS_IMPORT_KEY` takes ownership of the `ssh_key` it is
+  handed, read in libssh 0.11.5's `options.c`.
+- **Bounded:** four connections by default (one more is closed before key
+  exchange), 60 s to log in and ask for SFTP, twenty keys offered before the
+  connection is dropped. A thread per connection, because the SFTP loop
+  reads its channel blocking; the cap is what bounds the threads.
+  `stop()` shuts each connection's socket down, which is what returns its
+  blocked read — measured at 9 ms with an idle client attached.
+
+### 19.2 The root, and why libssh's SFTP server is not used
+
+**libssh's default SFTP handlers serve whatever path the client sends.**
+Read in 0.11.5's `sftpserver.c`: `process_open` passes the filename straight
+to `open(2)`, there is a `process_symlink`, and `rename` is
+`process_unsupposed`. On a phone that means the client could read the app's
+private directory — where the host key lives — and make a link to anywhere.
+So `bssh_sftp_handler` answers every request itself over libssh's message
+API (`sftp_get_client_message` / `sftp_reply_*`), and every path goes
+through `bssh_root_path`:
+
+- **Confinement is checked on the RESOLVED path.** The client's path is
+  cleaned lexically first (`..` never climbs above `/`), then `realpath`ed,
+  and refused with `EACCES` unless it is the root or below it. The lexical
+  step alone would stop `/../..` and walk straight through a symlink.
+- **An acted-on leaf is resolved by its parent.** Removing or renaming a
+  link acts on the link; creating at a link that points outside — or at a
+  dangling one, whose target has nothing yet to check — is refused.
+- **Links are neither made nor read.** `SYMLINK`, `READLINK` and
+  `hardlink@openssh.com` answer "unsupported"; a directory listing shows a
+  link as a link (`lstat`), and following it is a separate, checked request.
+  `STAT` and `LSTAT` both answer for the resolved path.
+- **Rename works**, both plain (refusing an existing target) and
+  `posix-rename@openssh.com` (replacing it), because uploading to a
+  temporary name and renaming into place is the common case.
+- **Permissions are applied where the filesystem has them and a refusal is
+  ignored.** Android's shared storage is FUSE with no modes; failing the
+  `setstat` that `put -p` sends after the data would report a failed
+  transfer of a file that arrived intact. Size and times are not ignored.
+- **libssh's version reply advertises `hardlink@` and `statvfs@`** and there
+  is no public way to send another; both are refused when asked.
+- **Known gap: resolve-then-open is two steps.** A path is checked and then
+  opened, so a directory swapped for a link in between would be followed.
+  The client cannot make links through this server, so that needs a link
+  already in the tree and a race the client runs against itself; `openat2`
+  with `RESOLVE_BENEATH` closes it on Linux 5.6+, which not every phone's
+  kernel is.
+
+### 19.3 Measured while building it
+
+- **An SFTP subsystem has to end with an exit status**, or `scp` exits 1
+  after delivering the file intact: it reads the silence as a failed remote
+  side. Found with OpenSSH 10's `scp` against the first version.
+- **And the client has to hang up first.** Disconnecting as soon as the
+  channel closed made every OpenSSH client print "Connection to … closed by
+  remote host", 3 runs in 3, for a session that ended normally; waiting up
+  to 5 s for the client's own disconnect removed it, 3 in 3. The two were
+  first credited to one change; sabotaging each separately is what showed
+  the exit status fixed the code and the wait fixed the message.
+- **`sftp_server_init` is deprecated** in favour of the callback server
+  whose handlers are the unconfined defaults; it is the one public way to
+  answer INIT before driving the message loop, so it is called under a
+  local `-Wdeprecated-declarations` suppression.
+
+### 19.4 Tests
+
+`test/sshd_test.cpp` drives the server with **OpenSSH's own `sftp`, `scp`
+and `ssh`**, a second witness a client written here could not be: a round
+trip of 300 KB through many READ/WRITE requests and the 64 KB read limit;
+reads, writes, removes and renames out of the root by `..` and by a link,
+each refused with the outside untouched; an unlisted key refused, then
+accepted once listed without a restart; an options line not honoured; an
+exec request refused; `scp` exiting 0 with no "closed by remote host". The
+live tests skip without the OpenSSH client, so CI's package list carries
+`openssh-client`. `tool/sabotage/beersshd.toml` breaks containment, the
+symlink-leaf check, the key lookup, the exit status and the hangup wait,
+and all five are caught.
+
+### 19.5 What is next — **[OPEN]**
+
+The desktop program is the first slice. The Android app is the second:
+its own app id and APK, a foreground service while it listens (which
+needs §5.1's service type — `dataSync` caps near 6 h/24 h on Android 15),
+the all-files permission requested from a screen that says why, a port
+above 1024, listening on the Wi-Fi address, an editor for the authorized
+keys, and the host key's fingerprint shown for checking on first connect.
+A Debian package for the desktop program is undecided.
 
 ## From fmake: `--eject` needs one define the README's fmake line does not
 

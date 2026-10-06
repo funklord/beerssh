@@ -74,10 +74,13 @@ jobs:
           # build that depends on a package nobody declared fails one image
           # update later, with a pkg-config error that names the library and
           # not the fix. qt6-base-dev covers Qt6DBus, which the desktop build
-          # needs for the XDG appearance portal (sec 6.2).
+          # needs for the XDG appearance portal (sec 6.2). openssh-client is
+          # not built against: it is the witness the beersshd tests drive
+          # (sec 19), and without it they skip -- a green run that tested
+          # nothing about the server.
           sudo apt-get install -y qt6-base-dev libgl1-mesa-dev libssh-dev \
                                   libsixel-dev libssl-dev libsecret-1-dev \
-                                  zlib1g-dev
+                                  zlib1g-dev openssh-client
       - name: Build
         run: make
       - name: Headless smoke test

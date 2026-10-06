@@ -69,6 +69,7 @@ SOURCES += \
     preset_editor_test.cpp \
     screen_test.cpp \
     ssh_config_test.cpp \
+    sshd_test.cpp \
     terminal_view_test.cpp \
     fake_ssh_session.cpp \
     ../src/hang_watchdog.cpp \
@@ -77,6 +78,9 @@ SOURCES += \
     ../src/ssh/ssh_session.cpp \
     ../src/ssh/jump_tunnel.cpp \
     ../src/ssh/ssh_session_libssh.cpp \
+    ../src/sshd/root_path.cpp \
+    ../src/sshd/sftp_handler.cpp \
+    ../src/sshd/sshd.cpp \
     ../src/term/emulator_vterm.cpp \
     ../src/term/colour_scheme.cpp \
     ../src/term/font_catalog.cpp \
@@ -168,6 +172,7 @@ HEADERS += \
     preset_editor_test.h \
     screen_test.h \
     ssh_config_test.h \
+    sshd_test.h \
     terminal_view_test.h \
     ../src/hang_watchdog.h \
     ../src/input/input_router.h \
@@ -175,6 +180,9 @@ HEADERS += \
     ../src/ssh/ssh_session.h \
     ../src/ssh/jump_tunnel.h \
     ../src/ssh/ssh_session_libssh.h \
+    ../src/sshd/root_path.h \
+    ../src/sshd/sftp_handler.h \
+    ../src/sshd/sshd.h \
     ../src/term/emulator.h \
     ../src/term/graphics_internal.h \
     ../src/term/image_store.h \
