@@ -19,6 +19,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QGuiApplication>
+#include <QInputMethod>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
@@ -238,7 +239,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_device_settings(nullptr),
       m_settings_sections(nullptr),
       m_pages(new QStackedWidget(this)),
-      m_back_target(nullptr),
       m_front_door_up(false),
       m_menu_bar(nullptr),
       m_tab_row(nullptr),
@@ -1952,9 +1952,30 @@ void bssh_main_window::apply_keyboard_choice() {
 	 * without an IME, which on Android is where some physical keys arrive
 	 * (sec 6.1) -- so this turns the panel off and not the path.
 	 */
+	/*
+	 * EVERY pane's view, not only the focused one. Each view is built able
+	 * to raise the system keyboard, and on the Fold, 2026-10-07, the panes
+	 * beside the focused one kept that: opening a second and a third
+	 * session brought Samsung's keyboard up under the built-in one, where
+	 * it stayed. Focus passes through those views while the panes are
+	 * rebuilt, and that was enough.
+	 */
+	if (m_panes) {
+		for (bssh_terminal_view *view : m_panes->views()) {
+			view->setAttribute(Qt::WA_InputMethodEnabled, !built_in);
+		}
+	}
 	if (m_terminal_view) {
 		m_terminal_view->setAttribute(Qt::WA_InputMethodEnabled, !built_in);
 	}
+
+	/*
+	 * And one already up is put away. Clearing the attribute stops a view
+	 * asking for the panel; it does not take down a panel that one asked
+	 * for a moment ago, which is the state the Fold was left in. The
+	 * desktop has nothing to hide, and the call is harmless there.
+	 */
+	if (built_in) QGuiApplication::inputMethod()->hide();
 }
 
 /*
@@ -3466,12 +3487,22 @@ bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
  * opened from, which is right from the front door and wrong from a
  * session: reaching the settings from a live shell's keyboard and
  * pressing Back put the shell out of sight. The page it was opened from
- * is the only answer that is right from both doors.
+ * is the only answer that is right from both doors -- at every level, so
+ * the pages are remembered as a trail rather than as the last one.
  */
 void bssh_main_window::show_page(QWidget *page) {
 	if (!m_pages || !page) return;
 
-	m_back_target = m_pages->currentWidget();
+	QWidget *here = m_pages->currentWidget();
+	if (here == page) return;
+
+	/*
+	 * A root page starts the trail afresh. Pages are also left by routes
+	 * that are not Back -- a session opening, say -- and without this the
+	 * trail would keep what they skipped for as long as the app runs.
+	 */
+	if (here == m_terminal_page || here == m_host_list) m_back_stack.clear();
+	m_back_stack.append(here);
 	m_pages->setCurrentWidget(page);
 }
 
@@ -3489,9 +3520,12 @@ bool bssh_main_window::go_back() {
 	QWidget *here = m_pages->currentWidget();
 	if (here == m_terminal_page || here == m_host_list) return false;
 
-	QWidget *to = m_back_target;
-	if (!to || to == here) to = m_host_list;
-	m_back_target = nullptr;
+	QWidget *to = nullptr;
+	while (!to && !m_back_stack.isEmpty()) {
+		QWidget *candidate = m_back_stack.takeLast();
+		if (candidate && candidate != here) to = candidate;
+	}
+	if (!to) to = m_host_list;
 
 	if (!to) return false;
 	m_pages->setCurrentWidget(to);

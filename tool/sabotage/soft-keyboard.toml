@@ -98,3 +98,23 @@ find = "\tQAbstractButton *button = make_button(label);\n\tbssh_set_key_repeat(b
 replace = "\tQAbstractButton *button = make_button(label);\n\tconnect(button, &QAbstractButton::clicked, this, [this, key] {"
 expect = "every_key_that_sends_something_repeats"
 
+
+# The built-in keyboard's choice reaches the focused pane only -- the Fold,
+# 2026-10-07, where the panes beside it kept the system keyboard and
+# Samsung's came up under the built-in one on opening a session.
+[[sabotage]]
+name = "only the focused pane declines the system keyboard"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tview->setAttribute(Qt::WA_InputMethodEnabled, !built_in);"
+replace = ""
+expect = "the_built_in_keyboard_declines_the_system_one_in_every_pane"
+
+# Back remembers one page, not a trail: the Fold, 2026-10-07, where a
+# section opened from the settings index made the second Back land on
+# the host list instead of the session the settings were opened from.
+[[sabotage]]
+name = "Back remembers only the last page"
+file = "src/ui/main_window.cpp"
+find = "\tif (here == m_terminal_page || here == m_host_list) m_back_stack.clear();"
+replace = "\tm_back_stack.clear();"
+expect = "the_back_key_leaves_the_page_not_the_app"

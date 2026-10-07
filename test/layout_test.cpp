@@ -4907,6 +4907,50 @@ void layout_test::the_keyboard_config_key_opens_the_settings_page() {
 }
 
 /*
+ * The built-in keyboard declines the system one in EVERY pane, not only the
+ * focused one (sec 6.2).
+ *
+ * Found on the Fold, 2026-10-07: with the built-in keyboard chosen,
+ * Samsung's keyboard came up under it on opening a second and a third
+ * session, and stayed up over the terminal. The choice was applied only to
+ * the focused view, and every view is built able to raise the system
+ * keyboard -- so the panes beside it kept that, and focus passing through
+ * one while the panes were rebuilt was enough.
+ */
+void layout_test::the_built_in_keyboard_declines_the_system_one_in_every_pane() {
+	const forced_touch_t arrangement(1);
+
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN_FULL);
+
+	bssh_main_window window;
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	const registry_left_as_found_t tidy(registry);
+
+	window.adopt_session(registry->create(named(QStringLiteral("first"))));
+	window.adopt_session(registry->create(named(QStringLiteral("second"))));
+	window.split_beside_current();
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QVERIFY2(panes->views().size() >= 2, "two sessions must be on screen for this to ask anything");
+
+	for (bssh_terminal_view *view : panes->views()) {
+		QVERIFY2(!view->testAttribute(Qt::WA_InputMethodEnabled),
+		         view == panes->focused_view() ? "the focused pane may raise the system keyboard"
+		                                       : "a pane beside the focused one may raise the system keyboard");
+	}
+
+	settings.set_keyboard(before);
+}
+
+/*
  * Android's Back leaves the PAGE, not the app (sec 8.5).
  *
  * Reported from a phone: open the settings from a session's keyboard,
@@ -4959,6 +5003,22 @@ void layout_test::the_back_key_leaves_the_page_not_the_app() {
 	        QStringLiteral("keyboard-settings"));
 	QVERIFY2(config, "the keyboard must carry a configuration key");
 	config->click();
+	QCOMPARE(pages->currentWidget(), device);
+
+	/*
+	 * One level further, into a section, and back out of it. On the Fold
+	 * the page remembered was a single slot: the section replaced "the
+	 * session" with "the index", so the second Back went to the host
+	 * list, and the only way to a terminal from there was a new session.
+	 */
+	QListWidget *sections = device->findChild<QListWidget *>();
+	QVERIFY2(sections && sections->count() > 1, "the settings index must list its sections");
+	emit sections->itemClicked(sections->item(1));
+	QVERIFY2(pages->currentWidget() != device, "a section did not open from the index");
+
+	QKeyEvent out_of_section(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
+	QApplication::sendEvent(&window, &out_of_section);
+	QVERIFY2(out_of_section.isAccepted(), "Back on a settings section was not handled");
 	QCOMPARE(pages->currentWidget(), device);
 
 	/*

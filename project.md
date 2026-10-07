@@ -1758,7 +1758,11 @@ up, a strip of modifiers has nothing to modify.
   the catalog's default before the palette and emits `appearance_applied`,
   which each view hears -- the palette-change event was tried first and did
   not reach a view that was not shown. Guarded by
-  `tool/sabotage/scheme-follows-app.toml`, five edits.
+  `tool/sabotage/scheme-follows-app.toml`, five edits. **On the Fold,
+  2026-10-07:** a local shell opened with the app Light came up black on
+  white; switching the app to Dark from Settings, with that session hidden
+  behind the settings page, left it white on black when it was next seen --
+  the not-shown case the signal exists for.
 - Keeping it buildable on desktop is also what makes it *testable* — a synthetic
   key row press is the cheapest way to exercise the router's sticky-modifier
   logic in a unit test.
@@ -1851,6 +1855,22 @@ up, a strip of modifiers has nothing to modify.
   observed. A test that cannot fail is worse than no test, because it reads as
   cover; this one had gone green in two full suite runs before sabotage was
   pointed at it.
+  **A second defect DID survive its test -- found on the Fold, 2026-10-07.**
+  With the built-in keyboard chosen, opening a second and then a third
+  session brought Samsung's own keyboard up under the built-in one, and on
+  the third it stayed up when the terminal was tapped. The first session
+  did not do it. The choice was applied to `m_terminal_view` -- the FOCUSED
+  pane -- and every view is constructed able to raise the panel, so the
+  panes beside it kept that; focus passing through one while the panes
+  were rebuilt was enough. `apply_keyboard_choice` now applies to every
+  view in the pane container, and when the built-in keyboard is chosen it
+  also hides a panel that is already up, since clearing the attribute
+  stops a view asking and does not take down what one asked for a moment
+  ago. `layout_test::the_built_in_keyboard_declines_the_system_one_in_every_pane`
+  stacks two sessions on a phone-sized window and asserts every view; it
+  failed on the old code naming the pane beside the focused one, and a
+  sabotage dropping the loop is caught. The `hide()` half is not
+  observable offscreen and is **unverified on the device**.
 
 - **The caret was answerable and never announced. [FIXED]** The accessible
   text interface implements `cursorPosition()`, so a screen reader asking
@@ -7018,7 +7038,16 @@ opened it — right from the front door and wrong from a session, since
 reaching the settings from a live shell's keyboard and pressing Back put
 the shell out of sight. Entry goes through `show_page()`, which records
 the current page; `go_back()` returns to it and falls back to the host
-list.
+list. **It recorded one page, and that was a third fault, found on the
+Fold 2026-10-07:** settings opened from a session, a section opened from
+the index, and two Backs landed on the host list -- the section had
+replaced "the session" with "the index". From the host list the only way
+to a terminal was to tap a host, which opens another session, so the run
+ended with three local shells. The pages are a trail now
+(`m_back_stack`), restarted whenever a page is shown from a root -- the
+terminals or the host list -- so routes that leave a page other than by
+Back cannot leave it growing. The test goes into a section and out again;
+a sabotage that restores the single slot is caught.
 
 **The test asserts the EVENT, not only the page.** At the bottom of the
 stack "the page did not change" is true whether Back was handled or
@@ -7419,7 +7448,11 @@ rather than widgets, so `bssh_apply_touch_heights` cannot reach them and
 no headless assertion sees their height -- they came up 23dp on a Note 9
 once, against sec 6.2's 48dp floor. `bssh_apply_touch_menu` exists for
 exactly that and this change did not touch it, but the menu has one
-fewer entry now and nobody has looked at it on a phone.
+fewer entry now and nobody has looked at it on a phone. **Looked at on the
+Fold, 2026-10-07:** the host list's menu (Import from SSH config,
+Settings) had rows about 166 px tall at density 420 -- some 63 dp, over
+the floor. One screen, one menu; the Note 9's 23 dp is not explained by
+it.
 
 **The index maps rows to pages BY POSITION, in two separate loops, and
 this change prepends a row to both.** That is the tab bar's off-by-one
@@ -8534,8 +8567,21 @@ so the original may move or go. One at a time, as the others are.
   picker, drawn by the chain meanwhile.
 - Its licence is the user's; it is their file, and it is not listed on the
   licences screen, which lists what BeerSSH ships.
-- Guarded by `tool/sabotage/custom-font.toml`, five edits. The import dialog
+- Guarded by `tool/sabotage/custom-font.toml`, six edits. The import dialog
   itself is not driven by a test; the import behind it is.
+- **On the phone, 2026-10-07** (the Fold, Android 15): "Use a font file..."
+  opened Android's picker, which let `.ttf` through; a monospace face
+  (Agave) became "Your font: Agave", its copy in `files/fonts/custom/`
+  byte-identical to the file, and it was still listed after a force-stop
+  with the original deleted. DejaVu Sans was refused -- "is not monospace:
+  its letters are different widths, and a terminal's grid needs one width"
+  -- and a text file named `.ttf` with "That is not a font file this can
+  read", Agave staying through both. **One fault, fixed:** the note under
+  the preview said '"custom" is not one of the bundled fonts. Showing
+  Agave.' about the imported font it was drawing in. `substitution_note`
+  checked for the unknown id before the reserved one; it answers for
+  `custom` first now, and the import test asserts the note is empty while
+  the font is in, which a sabotage removing that branch fails.
 Bundling ~10 families × multiple weights is **tens of megabytes** — too much for
 the base download on Android. Desktop has no such pressure, which is a licence to
 diverge on *delivery* but never on *which fonts exist*.
@@ -8566,8 +8612,13 @@ diverge on *delivery* but never on *which fonts exist*.
   is `BsshHttp` now, the §5.2 exception. **Seen working on the emulator
   2026-09-28** (x86_64, API 33): the picker offered "Download Iosevka Term",
   and four font files and the licence were in app storage within about 20
-  seconds, the preview redrawn in it. Not yet on the phone, which dropped off
-  `adb` mid-install every time that day.
+  seconds, the preview redrawn in it. **And on the phone, 2026-10-07** (the
+  Fold, Android 15, cover screen): the list marked Iosevka Term, Fira Code
+  and Cascadia Code PL "(not installed)"; picking Iosevka offered "Download
+  Iosevka Term" with the preview in DejaVu Sans Mono meanwhile; the four
+  faces (44 MB) and the licence were in `files/fonts/` within five seconds,
+  the preview redrew in Iosevka, the marker went from the list, and nothing
+  in the log mentioned TLS.
 - **Desktop:** ship the full curated set in the package — tens of megabytes is
   unremarkable for a desktop install, and it keeps the font picker free of
   download states on the platform where they'd be pure friction.
@@ -10685,7 +10736,12 @@ store is a no-op rather than a silent loss.
   §5.2 spends a paragraph avoiding. **Untested on a device:** the emulator here
   is API 30, where the permission does not exist; what was verified there is that
   the JNI plumbing makes both calls without throwing and that the version guard
-  makes it a clean no-op.
+  makes it a clean no-op. **Seen on the Fold, 2026-10-07** (Android 15): the
+  request appeared the moment the first session -- the local shell -- went
+  live, and was granted. One thing not explained: `dumpsys notification`
+  then counted no notification from the app while the service was
+  foreground with type `0x10`; whether it was posted before the grant and
+  not reposted was not established.
 - **Desktop `ssh-agent` support (`SSH_AUTH_SOCK`) -- USED, and was for some
   time before this line said so.** `ssh_userauth_publickey_auto` offers the
   agent's keys before the default identities; measured 2026-09-26 by reading

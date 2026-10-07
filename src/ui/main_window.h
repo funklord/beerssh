@@ -878,8 +878,13 @@ private:
 	 * keyboard and pressing Back put the session out of sight -- the
 	 * page it came from is the only answer that is right from both
 	 * doors.
+	 *
+	 * A STACK, not one page: with one, opening a section from the
+	 * settings index replaced "the terminal" with "the index", and the
+	 * second Back fell through to the host list -- on the Fold, where
+	 * the only way back from there was to open another session.
 	 */
-	QWidget *m_back_target;
+	QList<QPointer<QWidget>> m_back_stack;
 
 	/* Show a sub-page, remembering what to return to. */
 	void show_page(QWidget *page);
