@@ -97,10 +97,6 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	m_keys->setObjectName(QStringLiteral("sshd-keys"));
 	m_keys->setLineWrapMode(QPlainTextEdit::NoWrap);
 	m_keys->setMinimumHeight(fontMetrics().lineSpacing() * 5);
-	{
-		QFile file(authorized_keys_path());
-		if (file.open(QIODevice::ReadOnly)) m_keys->setPlainText(QString::fromUtf8(file.readAll()));
-	}
 	layout->addWidget(m_keys);
 
 	auto *save = new QPushButton(tr("Save keys"));
@@ -137,9 +133,15 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 		       "Start it again to go on."));
 	});
 
-	/* Coming back from Settings is how access arrives, so look again then. */
+	/*
+	 * Coming back from Settings is how access arrives, so look again then
+	 * -- and at the keys, which may have been changed from outside: they
+	 * are a file, and the box only shows it.
+	 */
 	connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
-		if (state == Qt::ApplicationActive) refresh();
+		if (state != Qt::ApplicationActive) return;
+		reload_keys();
+		refresh();
 	});
 
 	m_address_timer = new QTimer(this);
@@ -147,9 +149,22 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	connect(m_address_timer, &QTimer::timeout, this, &bssh_sshd_window::follow_address);
 	m_address_timer->start();
 
-	m_key_count->setText(tr("%n usable key(s).", nullptr,
-	                        bssh_sshd::usable_keys(m_keys->toPlainText().toUtf8())));
+	reload_keys();
 	refresh();
+}
+
+void bssh_sshd_window::reload_keys() {
+	/*
+	 * Not over edits the user has not saved: those are theirs, and the
+	 * file is only what was there before them.
+	 */
+	if (m_keys->document()->isModified()) return;
+
+	QFile file(authorized_keys_path());
+	const QByteArray text = file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray();
+	if (QString::fromUtf8(text) != m_keys->toPlainText()) m_keys->setPlainText(QString::fromUtf8(text));
+	m_keys->document()->setModified(false);
+	m_key_count->setText(tr("%n usable key(s).", nullptr, bssh_sshd::usable_keys(text)));
 }
 
 bssh_sshd_window::~bssh_sshd_window() {
@@ -217,6 +232,7 @@ void bssh_sshd_window::start() {
 
 	m_bound = address;
 	m_port->setEnabled(false);
+	m_platform->request_notifications();
 	m_fingerprint->setText(tr("Host key %1").arg(m_server.host_key_fingerprint()));
 	log(tr("Listening on %1:%2").arg(address.toString()).arg(m_server.port()));
 	update_status();
@@ -263,6 +279,7 @@ void bssh_sshd_window::save_keys() {
 		return;
 	}
 
+	m_keys->document()->setModified(false);
 	const int usable = bssh_sshd::usable_keys(text);
 	m_key_count->setText(tr("%n usable key(s).", nullptr, usable));
 	log(tr("Saved %n usable key(s); the next login reads them.", nullptr, usable));

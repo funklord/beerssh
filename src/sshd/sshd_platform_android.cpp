@@ -72,6 +72,14 @@ public:
 		return QHostAddress();
 	}
 
+	void request_notifications() override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+		QJniObject::callStaticMethod<void>(SERVICE_CLASS, "askToNotify",
+		                                   "(Landroid/content/Context;)V", context.object());
+		QJniEnvironment().checkAndClearExceptions();
+	}
+
 	void set_serving(bool serving, const QString &status) override {
 		const QJniObject context = android_context();
 		if (!context.isValid()) return;

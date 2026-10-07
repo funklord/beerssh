@@ -75,3 +75,20 @@ file = "src/sshd/sshd_window.cpp"
 find = "\t\tif (!serving()) return;\n\t\tstop();"
 replace = "\t\tif (!serving()) return;"
 expect = "the_time_limit_stops_the_server_and_says_why"
+
+# Start no longer asks to show the notification, so on Android 13+ the
+# one sign that the phone is serving files stays hidden.
+[[sabotage]]
+name = "Start does not ask to show the notification"
+file = "src/sshd/sshd_window.cpp"
+find = "\tm_platform->request_notifications();"
+replace = ""
+expect = "it_serves_the_platform_root_on_the_platform_address"
+
+# The file overwrites keys the user has typed and not saved.
+[[sabotage]]
+name = "reloading the keys discards unsaved edits"
+file = "src/sshd/sshd_window.cpp"
+find = "\tif (m_keys->document()->isModified()) return;"
+replace = ""
+expect = "the_keys_box_follows_the_file_but_not_over_edits"

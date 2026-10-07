@@ -18,6 +18,7 @@ private slots:
 	void the_time_limit_stops_the_server_and_says_why();
 	void losing_wifi_stops_and_a_new_address_restarts();
 	void saved_keys_are_counted_by_the_login_parse();
+	void the_keys_box_follows_the_file_but_not_over_edits();
 };
 
 #endif /* BSSH_SSHD_WINDOW_TEST_H */

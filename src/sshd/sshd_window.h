@@ -49,6 +49,9 @@ public slots:
 	 */
 	void follow_address();
 
+	/* Shows the authorized-keys file again, unless the box has unsaved edits. */
+	void reload_keys();
+
 private:
 	void save_keys();
 	void log(const QString &line);

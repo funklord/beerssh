@@ -43,6 +43,12 @@ public:
 	 */
 	virtual void set_serving(bool serving, const QString &status) = 0;
 
+	/*
+	 * Asks, where the platform makes it a question, to show the "serving"
+	 * notification. Called at Start; does nothing where nothing is asked.
+	 */
+	virtual void request_notifications() {}
+
 	/* Where the host key and the authorized keys live: never inside the root. */
 	virtual QString data_directory() const;
 

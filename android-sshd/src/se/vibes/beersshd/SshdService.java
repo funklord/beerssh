@@ -1,5 +1,7 @@
 package se.vibes.beersshd;
 
+import android.Manifest;
+import android.app.Activity;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -7,6 +9,8 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.IBinder;
 
 /*
@@ -39,6 +43,28 @@ public class SshdService extends Service {
 	public static void start(Context context, String status) {
 		s_status = status;
 		context.startForegroundService(new Intent(context, SshdService.class));
+	}
+
+	/*
+	 * Asks to show the notification, once it would matter: at the first
+	 * Start. Android 13 hides a foreground service's notification until
+	 * this is granted, and the notification is the user's only sign the
+	 * phone is serving files. Below 13 there is nothing to ask.
+	 *
+	 * On the activity's own thread, because a request from any other has
+	 * been seen to be dropped (BeerSSH, project.md sec 5.1).
+	 */
+	public static void askToNotify(Context context) {
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !(context instanceof Activity)) {
+			return;
+		}
+		final Activity activity = (Activity) context;
+		if (activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+				== PackageManager.PERMISSION_GRANTED) {
+			return;
+		}
+		activity.runOnUiThread(() -> activity.requestPermissions(
+			new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1));
 	}
 
 	public static void stop(Context context) {

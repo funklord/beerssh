@@ -28,6 +28,8 @@ public:
 	QHostAddress listen_address() const override { return address; }
 	QString data_directory() const override { return m_data; }
 
+	void request_notifications() override { ++notification_requests; }
+
 	void set_serving(bool now, const QString &status) override {
 		serving = now;
 		last_status = status;
@@ -38,6 +40,7 @@ public:
 	bool access = true;
 	QHostAddress address = QHostAddress(QHostAddress::LocalHost);
 	int requests = 0;
+	int notification_requests = 0;
 	bool serving = false;
 	QString last_status;
 
@@ -103,6 +106,9 @@ void sshd_window_test::it_serves_the_platform_root_on_the_platform_address() {
 
 	QVERIFY(platform.serving);
 	QVERIFY(platform.last_status.contains(QStringLiteral("127.0.0.1")));
+
+	/* Asked at Start, which is when the notification first has something to say. */
+	QCOMPARE(platform.notification_requests, 1);
 	QVERIFY(!child<QSpinBox>(window, "sshd-port")->isEnabled());
 	QVERIFY(child<QLabel>(window, "sshd-fingerprint")->text().contains(QStringLiteral("SHA256:")));
 
@@ -176,4 +182,30 @@ void sshd_window_test::saved_keys_are_counted_by_the_login_parse() {
 	QCOMPARE(bssh_sshd::usable_keys(text), 1);
 	QVERIFY2(child<QLabel>(window, "sshd-key-count")->text().startsWith(QStringLiteral("1 ")),
 	         qPrintable(child<QLabel>(window, "sshd-key-count")->text()));
+}
+
+void sshd_window_test::the_keys_box_follows_the_file_but_not_over_edits() {
+	QTemporaryDir dir;
+	fake_platform platform(dir.path());
+	bssh_sshd_window window(&platform);
+	auto *keys = child<QPlainTextEdit>(window, "sshd-keys");
+
+	/* Changed from outside -- adb, a file manager, another copy of the app. */
+	const QByteArray key =
+	        "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHbnA/tFqV7FQBuhHUrneXu68d4fql+jwb1LshPNYTyw test\n";
+	QDir().mkpath(platform.data_directory());
+	{
+		QFile file(window.authorized_keys_path());
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(key);
+	}
+	window.reload_keys();
+	QCOMPARE(keys->toPlainText(), QString::fromUtf8(key));
+	QVERIFY(child<QLabel>(window, "sshd-key-count")->text().startsWith(QStringLiteral("1 ")));
+
+	/* An unsaved edit is the user's, and the file does not replace it. */
+	keys->setPlainText(QStringLiteral("half-typed"));
+	keys->document()->setModified(true);
+	window.reload_keys();
+	QCOMPARE(keys->toPlainText(), QStringLiteral("half-typed"));
 }

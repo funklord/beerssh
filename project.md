@@ -14733,21 +14733,33 @@ time limit, Wi-Fi lost and changed, the key count — and three more entries
 in `tool/sabotage/beersshd.toml` break the access check, the Wi-Fi follow and
 the time-limit stop, all caught.
 
+- **The notification is asked for at Start**, which is when it first has
+  something to say: Android 13 hides a foreground service's notification
+  until `POST_NOTIFICATIONS` is granted, and it is the user's only sign the
+  phone is serving files. Verified on the API 34 emulator 2026-10-07: the
+  dialog at the first Start, the notification posted on Allow, and no
+  second dialog on the next Start.
+- **The keys box follows the file**, re-read whenever the app becomes
+  active, except over unsaved edits, which are the user's. Found by the
+  emulator test above, where a key written with `run-as` was used at login
+  while the box still showed nothing.
+- **Testing note: an app-op grant can be lost by killing the emulator.**
+  All files access granted (by its toggle, and by `appops set`) read
+  `default` after the emulator was killed and booted a few minutes later,
+  while the runtime notification permission survived. App-op state is
+  written to disk lazily, so this is a property of killing a device, not
+  of the app -- which, correctly, asked again.
+
 ### 19.6 Still open — **[OPEN]**
 
 - **A real phone.** Everything above is the emulator; the shared phones were
   not connected (sec 17).
 - **The time limit itself** has not fired: it exists on Android 15 and the
   emulator image is 14.
-- **`POST_NOTIFICATIONS` is not requested**, so on Android 13+ the service's
-  notification may be hidden until the user allows it. BeerSSH asks at its
-  first connection; beersshd should ask at its first Start.
 - **The icon** is Android's default, with BeerSSH's (sec 0.1) undecided.
 - **Release:** a keystore, and Play's declarations for
   `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.
 - **A Debian package** for the desktop program is undecided.
-- **The keys editor shows the file as it was when the window opened**; a
-  file changed underneath (by `run-as` in the test above) is not re-read.
 
 ## From fmake: `--eject` needs one define the README's fmake line does not
 
