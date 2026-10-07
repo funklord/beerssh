@@ -5402,7 +5402,22 @@ keeps its number and now means memory.
 - **Measured on the emulator 2026-09-28** (x86_64, API 33) with 1000x1300
   pictures of noise, the worst case for compression: 160 ms to spill one,
   49-55 ms to read one back, both on the GUI thread. Both came back beside
-  their own text. Not yet measured on a phone.
+  their own text. **On the phone, 2026-10-07** (the Fold, Android 15, both
+  halves on workers by then): 24 such pictures against the default 32 MB
+  spilled 24 files into `cache/pictures/<terminal>/`, about 4.3 MB each
+  sealed, within five seconds and with no restart of the process; a
+  spilled picture scrolled back to came back beside its own text. **And
+  one fault the emulator never showed, fixed:** with two spilled pictures
+  on one screen the lower stayed blank for as long as anybody waited. What
+  the budget left after the resident pictures held ONE read-back picture,
+  and `trim_restored` kept only the one just read: reading the lower back
+  put the upper away, whose redraw read it back and put the lower away.
+  The view now starts a frame per paint (`begin_frame`), the store notes
+  the frame each spilled picture was drawn in, and nothing drawn in the
+  current frame is put away -- over budget by a screenful, as the rule for
+  resident pictures already allows. `graphics_test::two_spilled_pictures_on_screen_are_both_drawn`
+  failed on the old code; two sabotages, in the store and in the view, are
+  caught.
 - **[BUILT 2026-09-29] The spill is sealed on a worker**, the holder's pick
   after that measurement: it is the slow half and it ran while output was
   arriving. `bssh_picture_spill::prepare` hands back a job that compresses
@@ -5439,7 +5454,10 @@ each string terminator (ST or BEL) and pays the advance between them, holds
 a trailing ESC for the read that brings the other half of its ST, and
 advances by IND, which scrolls. Every existing test fed one image per read
 with nothing after it, which is the one arrangement none of this shows in.
-Guarded by `tool/sabotage/image-in-the-read.toml`, five edits.
+Guarded by `tool/sabotage/image-in-the-read.toml`, five edits. **Seen on
+the phone, 2026-10-07:** `cat` of five pictures in one file on the Fold
+placed all five, each with its own line of text below it rather than on
+it, and they went back into the scrollback with that text.
 
 **And that "never drop what is on screen" rule is what let sixel animation
 run the budget over.** Sixel carries no image id, so `place()` gives every

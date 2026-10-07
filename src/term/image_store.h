@@ -146,6 +146,14 @@ public:
 	QImage image(const bssh_image_placement_t &placement) const;
 
 	/*
+	 * Called by whoever draws, once per frame before asking for pictures.
+	 * A picture read back from disk and drawn in the current frame is not
+	 * put away to make room for another, so two spilled pictures on one
+	 * screen are both drawn rather than taking turns (sec 7.1).
+	 */
+	void begin_frame() const { ++m_frame; }
+
+	/*
 	 * Called when a picture image() had to fetch has been read back, so
 	 * whoever draws can draw it: the first image() for a spilled picture
 	 * starts the read on a worker and returns null, and the renderer skips
@@ -256,6 +264,10 @@ private:
 	/* Spilled pictures read back, and the order they were last drawn. */
 	mutable QHash<quint64, QImage> m_restored;
 	mutable QList<quint64> m_restored_order;
+
+	/* The frame each spilled picture was last asked for in; see begin_frame. */
+	mutable quint64 m_frame = 0;
+	mutable QHash<quint64, quint64> m_drawn_in;
 };
 
 #endif /* BSSH_IMAGE_STORE_H */

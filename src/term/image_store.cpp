@@ -171,6 +171,7 @@ void bssh_image_store::discard(int index) {
 	m_unreadable.remove(serial);
 	m_restored.remove(serial);
 	m_restored_order.removeAll(serial);
+	m_drawn_in.remove(serial);
 	m_placements.removeAt(index);
 }
 
@@ -250,6 +251,8 @@ bool bssh_image_store::is_spilled(const bssh_image_placement_t &placement) const
 QImage bssh_image_store::image(const bssh_image_placement_t &placement) const {
 	if (!placement.image.isNull()) return placement.image;
 
+	m_drawn_in.insert(placement.serial, m_frame);
+
 	const auto found = m_restored.constFind(placement.serial);
 	if (found != m_restored.constEnd()) {
 		m_restored_order.removeAll(placement.serial);
@@ -325,6 +328,13 @@ void bssh_image_store::finish_restore(quint64 serial, const QImage &image) const
  * Least recently drawn first, and never `keep` -- the one being drawn
  * now, which is held while it is on screen however the budget stands,
  * for the same reason enforce_budget never spills what is visible.
+ *
+ * Nor anything else drawn in the current frame. `keep` alone protected
+ * one picture, and on the Fold two spilled pictures on one screen took
+ * turns: reading the lower back put the upper away, whose redraw read it
+ * back and put the lower away, and the lower stayed blank. Over budget by
+ * a screenful of pictures is the honest state, as it is for what is
+ * resident.
  */
 void bssh_image_store::trim_restored(quint64 keep) const {
 	if (m_budget <= 0) return;
@@ -334,7 +344,10 @@ void bssh_image_store::trim_restored(quint64 keep) const {
 
 	while (used > m_budget && next < m_restored_order.size()) {
 		const quint64 serial = m_restored_order.at(next);
-		if (serial == keep) {
+
+		/* Only once frames are counted: a store nobody draws through has none. */
+		const bool on_screen = m_frame > 0 && m_drawn_in.value(serial, 0) == m_frame;
+		if (serial == keep || on_screen) {
 			++next;
 			continue;
 		}

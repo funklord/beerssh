@@ -1092,6 +1092,64 @@ void graphics_test::a_spilled_picture_scrolled_back_to_reaches_the_screen() {
 	QTRY_COMPARE(view.grab().toImage().pixelColor(probe), QColor(Qt::red));
 }
 
+void graphics_test::two_spilled_pictures_on_screen_are_both_drawn() {
+	/*
+	 * Found on the Fold, 2026-10-07: 24 pictures of 1000x1300 against the
+	 * default 32 MB, scrolled back to two spilled ones on one screen -- the
+	 * upper was read back and drawn, the lower stayed blank for as long as
+	 * anybody waited. The memory left over after the resident pictures
+	 * held one read-back picture, not two.
+	 *
+	 * So the budget here is too small for even one: both pictures on
+	 * screen are read back, and both must end up drawn.
+	 */
+	QTemporaryDir base;
+	QVERIFY(base.isValid());
+
+	bssh_terminal_view view;
+	view.resize(200, 80);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("colour_scheme"), QStringLiteral("default"));
+	bssh_apply_appearance(&view, settings);
+
+	bssh_screen screen(view.cols(), view.rows());
+	view.attach_screen(&screen);
+
+	bssh_image_store store;
+	store.set_spill_base(base.path());
+	store.set_memory_budget(1);
+
+	QImage red(40, 20, QImage::Format_RGB32);
+	red.fill(QColor(Qt::red));
+	QImage blue(40, 20, QImage::Format_RGB32);
+	blue.fill(QColor(Qt::blue));
+
+	bssh_image_placement_t upper = placement_at(red, 0);
+	upper.rows = 1;
+	bssh_image_placement_t lower = placement_at(blue, 2);
+	lower.rows = 1;
+	store.place(upper);
+	store.place(lower);
+	view.attach_images(&store);
+
+	store.shift_rows(10);
+	QTRY_VERIFY(!store.spills_pending());
+	QVERIFY(store.is_spilled(store.placements().at(0)));
+	QVERIFY(store.is_spilled(store.placements().at(1)));
+	store.shift_rows(-10);
+
+	const QPoint upper_probe(view.cell_width() / 2, view.cell_height() / 2);
+	const QPoint lower_probe(view.cell_width() / 2, view.cell_height() * 2 + view.cell_height() / 2);
+
+	/* Both, in the same frame -- not one at a time, taking turns. */
+	QTRY_VERIFY2_WITH_TIMEOUT([&] {
+		const QImage frame = view.grab().toImage();
+		return frame.pixelColor(upper_probe) == QColor(Qt::red)
+		       && frame.pixelColor(lower_probe) == QColor(Qt::blue);
+	}(), "two spilled pictures on screen were not both drawn", 5000);
+}
+
 void graphics_test::a_spilled_picture_opens_only_under_its_own_name() {
 	/*
 	 * Sealed with the serial as nonce and additional data, so a file

@@ -136,3 +136,21 @@ file = "src/term/image_store.cpp"
 find = "\t\tm_unreadable.insert(serial);\n"
 replace = ""
 expect = "a_spilled_picture_is_read_back_off_the_thread"
+
+# Only the picture just read back is kept, not everything on screen: the
+# Fold, 2026-10-07, where two spilled pictures on one screen took turns
+# and the lower one stayed blank.
+[[sabotage]]
+name = "a read-back picture on screen is put away for another"
+file = "src/term/image_store.cpp"
+find = "\t\tconst bool on_screen = m_frame > 0 && m_drawn_in.value(serial, 0) == m_frame;"
+replace = "\t\tconst bool on_screen = false;"
+expect = "two_spilled_pictures_on_screen_are_both_drawn"
+
+# Nobody starts a frame, so nothing is ever counted as on screen.
+[[sabotage]]
+name = "the view never starts a frame"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_images) m_images->begin_frame();"
+replace = ""
+expect = "two_spilled_pictures_on_screen_are_both_drawn"

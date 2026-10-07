@@ -1536,7 +1536,11 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	 * loop that drew everything over the text -- a comment describing an
 	 * intention rather than the code beneath it, which is worse than no
 	 * comment at all because it stops the reader looking.
+	 *
+	 * One frame for both passes: a picture read back from disk and drawn
+	 * in this frame is kept while another is read back (sec 7.1).
 	 */
+	if (m_images) m_images->begin_frame();
 	draw_images(painter, offset, true);
 
 	/*
