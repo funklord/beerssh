@@ -145,8 +145,14 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	connect(m_platform, &bssh_sshd_platform::time_limit_reached, this, [this] {
 		if (m_bound.isNull()) return;
 		stop();
-		log(tr("Stopped: Android allows a file-transfer service six hours in any "
-		       "24, and that time is used up. It can be started again once it renews."));
+		/*
+		 * What happened, and no promise about when Start works again: the
+		 * Fold started fine an hour after a timeout, and whether opening
+		 * the app renewed the allowance or the test's own reset of the
+		 * limit did was not separated (project.md sec 19.6).
+		 */
+		log(tr("Stopped: Android ended the file-transfer service. It allows one "
+		       "six hours in any 24 while the app is in the background."));
 	});
 
 	/*

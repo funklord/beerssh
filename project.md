@@ -14786,28 +14786,34 @@ caught.
 
 ### 19.6 Still open — **[OPEN]**
 
-- **The time limit fired, and the server did not stop -- fixed, and the
-  fix not yet seen on the phone.** On the Fold, 2026-10-07, with the limit
-  shortened (`device_config put activity_manager
+- **The time limit: fixed, and seen fixed on the phone.** On the Fold,
+  2026-10-07, with the limit shortened (`device_config put activity_manager
   data_sync_fgs_timeout_duration 60000`; `device_config delete` restores
-  21600000): in the foreground nothing happened for 92 seconds, since the
-  timer counts background time; sent home, the system logged `FGS (dataSync)
-  timed out` exactly 60 s later and stopped the service, with no crash. But
-  the socket stayed in LISTEN, and a connection from the LAN hung rather
-  than being refused. `onTimeout` had only queued the stop to Qt's thread,
-  that thread did not run it in the background, and Android then froze the
-  process -- and Android 15 cuts a frozen app's network, which is why the
-  connection hung rather than reached anything. Nothing leaked; the app
-  simply claimed a server that was not there. The platform now stops the
-  server on the thread the news arrives on, through a stop hook the window
-  sets, before the service lets go; the queued signal only brings the screen
-  up to date. `bssh_sshd`'s start and stop are locked against each other for
-  it. The window test fires the hook from another thread and finds the port
-  closed before Qt has run anything; a sabotage that leaves only the queued
-  stop is caught.
-- **Start once the day's budget is spent** is still unseen. Android 15 makes
-  `startForeground()` throw then; `onStartCommand` catches it and reports it
-  as the time limit, written from the documentation.
+  21600000). In the foreground nothing happened for 92 seconds -- the timer
+  counts background time. Sent home, the system logged `FGS (dataSync) timed
+  out` exactly 60 s later and stopped the service, with no crash, **but the
+  socket stayed in LISTEN** and a connection from the LAN hung: `onTimeout`
+  had only queued the stop to Qt's thread, which did not run it in the
+  background, and Android then froze the process (Android 15 also cuts a
+  frozen app's network, hence the hang). The platform now stops the server
+  on the thread the news arrives on, through a stop hook the window sets,
+  and the queued signal only brings the screen up to date; `bssh_sshd`'s
+  start and stop are locked against each other for it. **Re-run with the
+  fix, an hour later:** timed out 60 s after Home, port 8022 gone from the
+  listeners (seven others still there), a connection from the LAN refused
+  rather than hung, the process alive, and on reopening the screen showed
+  the stop and its reason. The window test fires the hook from another
+  thread and finds the port closed before Qt has run anything; a sabotage
+  leaving only the queued stop is caught.
+- **When Start works again after a timeout is not established.** Start
+  succeeded an hour after the first timeout, which the documentation
+  explains -- bringing the app to the foreground renews the allowance --
+  but the shortened limit had been deleted and set again in between, and
+  the two were not separated. So the log says what happened and promises
+  nothing. Android 15 makes `startForeground()` throw when the allowance is
+  spent; `onStartCommand` catches it and reports it as the time limit, still
+  unseen on a device. The second run's Start after reopening was cut short
+  when the phone was taken up, and its result is unknown.
 - **The icon** is Android's default, with BeerSSH's (sec 0.1) undecided.
 - **Release:** a keystore, and Play's declarations for
   `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.
