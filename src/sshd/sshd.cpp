@@ -196,6 +196,7 @@ bssh_sshd::~bssh_sshd() {
 }
 
 bool bssh_sshd::start(const bssh_sshd_config_t &config, QString *error) {
+	std::lock_guard<std::mutex> lifecycle(m_lifecycle);
 	QString ignored;
 	if (!error) error = &ignored;
 	if (running()) {
@@ -244,11 +245,14 @@ bool bssh_sshd::start(const bssh_sshd_config_t &config, QString *error) {
 	m_bind = bind;
 	m_stopping = false;
 	m_accepting = std::thread([this] { accept_loop(); });
+	m_running = true;
 	return true;
 }
 
 void bssh_sshd::stop() {
+	std::lock_guard<std::mutex> lifecycle(m_lifecycle);
 	if (!running()) return;
+	m_running = false;
 
 	m_stopping = true;
 	const char byte = 0;

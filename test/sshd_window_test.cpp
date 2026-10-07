@@ -9,8 +9,11 @@
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTcpServer>
+#include <QTcpSocket>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <thread>
 
 #include "sshd/sshd_platform.h"
 #include "sshd/sshd_window.h"
@@ -37,7 +40,12 @@ public:
 		last_status = status;
 	}
 
-	void time_out() { emit time_limit_reached(); }
+	/* As Android does it: the hook on its own thread, the signal queued to Qt's. */
+	void time_out_from(std::thread &thread) {
+		thread = std::thread([this] { run_stop_hook(); });
+		thread.join();
+		QMetaObject::invokeMethod(this, [this] { emit time_limit_reached(); }, Qt::QueuedConnection);
+	}
 
 	bool access = true;
 	QHostAddress address = QHostAddress(QHostAddress::LocalHost);
@@ -140,8 +148,22 @@ void sshd_window_test::the_time_limit_stops_the_server_and_says_why() {
 	window.start();
 	QVERIFY(window.serving());
 
-	platform.time_out();
+	/*
+	 * Stopped by the hook alone, before Qt's thread has run anything: on a
+	 * phone that thread may not run again until the app is reopened, and
+	 * Android freezes the process in the meantime.
+	 */
+	std::thread android_thread;
+	platform.time_out_from(android_thread);
 	QVERIFY(!window.serving());
+	QTcpSocket probe;
+	probe.connectToHost(QHostAddress::LocalHost, quint16(window.server().port()));
+	QVERIFY(!probe.waitForConnected(2000));
+
+	/* The screen catches up when Qt does. */
+	QVERIFY(platform.serving);
+	QTRY_VERIFY(!platform.serving);
+	QVERIFY(child<QSpinBox>(window, "sshd-port")->isEnabled());
 	QVERIFY(child<QPlainTextEdit>(window, "sshd-log")->toPlainText().contains(QStringLiteral("six hours")));
 }
 

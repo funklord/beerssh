@@ -102,6 +102,8 @@ public:
 		QJniEnvironment().checkAndClearExceptions();
 	}
 
+	void stop_now() { run_stop_hook(); }
+
 	void report_timeout() {
 		/* The service has already stopped itself; this only has to agree. */
 		m_serving = false;
@@ -113,6 +115,9 @@ private:
 };
 
 void timed_out(JNIEnv *, jclass) {
+	/* Here and now, on Android's thread: see set_stop_hook. */
+	if (g_platform) g_platform->stop_now();
+
 	QMetaObject::invokeMethod(qApp, [] {
 		if (g_platform) g_platform->report_timeout();
 	}, Qt::QueuedConnection);

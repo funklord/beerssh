@@ -136,8 +136,14 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	connect(&m_server, &bssh_sshd::logged, this, &bssh_sshd_window::log);
 	connect(&m_server, &bssh_sshd::connections_changed, this, &bssh_sshd_window::update_status);
 
+	/*
+	 * The server only: the screen is Qt's, and is brought up to date by
+	 * time_limit_reached below once Qt's thread runs again.
+	 */
+	m_platform->set_stop_hook([this] { m_server.stop(); });
+
 	connect(m_platform, &bssh_sshd_platform::time_limit_reached, this, [this] {
-		if (!serving()) return;
+		if (m_bound.isNull()) return;
 		stop();
 		log(tr("Stopped: Android allows a file-transfer service six hours in any "
 		       "24, and that time is used up. It can be started again once it renews."));
@@ -178,6 +184,7 @@ void bssh_sshd_window::reload_keys() {
 }
 
 bssh_sshd_window::~bssh_sshd_window() {
+	m_platform->set_stop_hook(nullptr);
 	stop();
 }
 
@@ -251,7 +258,12 @@ void bssh_sshd_window::start() {
 }
 
 void bssh_sshd_window::stop() {
-	if (!serving()) return;
+	/*
+	 * By the bound address rather than serving(): the platform's stop hook
+	 * may already have stopped the server, and the rest of this is still
+	 * owed -- the port unlocked, the notification gone, the log told.
+	 */
+	if (m_bound.isNull()) return;
 	m_server.stop();
 	m_bound = QHostAddress();
 	m_port->setEnabled(true);

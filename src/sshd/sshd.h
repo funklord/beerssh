@@ -52,10 +52,15 @@ public:
 	/* Listens. On failure nothing is left running and `error` says why. */
 	bool start(const bssh_sshd_config_t &config, QString *error);
 
-	/* Stops listening and drops every connection; returns once all have ended. */
+	/*
+	 * Stops listening and drops every connection; returns once all have
+	 * ended. Safe from any thread, and against a start() on another: on
+	 * Android the time limit arrives on the platform's main thread, which
+	 * is not Qt's, and has to stop the server there and then (sec 19.5).
+	 */
 	void stop();
 
-	bool running() const { return m_accepting.joinable(); }
+	bool running() const { return m_running.load(); }
 	int port() const { return m_port; }
 	int connections() const { return m_live.load(); }
 
@@ -93,6 +98,8 @@ private:
 	int m_wake[2] = {-1, -1};
 	std::atomic<bool> m_stopping{false};
 	std::thread m_accepting;
+	std::atomic<bool> m_running{false};
+	std::mutex m_lifecycle;   /* start() and stop() against each other */
 
 	std::mutex m_mutex;
 	std::list<std::unique_ptr<connection_t>> m_connections;

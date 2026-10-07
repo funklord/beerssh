@@ -14367,10 +14367,17 @@ something:
   2026-10-07 the shade was pulled down over beersshd on the Fold and
   `topResumedActivity` went on naming beersshd, so a guarded tap went
   into the shade -- the holder's notifications -- rather than the app.
-  The guard needs a second check for something drawn over the activity;
-  `dumpsys window`'s focused window naming `NotificationShade` is the
-  likely witness, and is not yet measured. Until it is, take a
-  screenshot before a tap that matters.
+  The second check is the shade window's own visibility, measured the
+  same day by opening and closing it with `cmd statusbar
+  expand-notifications` / `collapse`: `isVisible=false` closed, `true`
+  open, while `topResumedActivity` named beersshd throughout:
+
+      adb shell dumpsys window windows | awk \
+        '/Window\{.*NotificationShade\}:/{f=1} f && /isVisible=/{print; exit}'
+
+  `mCurrentFocus` is no substitute -- it read null with beersshd plainly
+  on screen. And a call arriving shows as `InCallActivity` in
+  `topResumedActivity`, which the first check already refuses.
 - **`BACK` at the terminal leaves the app**, so the next tap lands on the
   home screen; and when beerssh crashes mid-`input text`, the rest of the
   typing goes to the launcher.
@@ -14779,15 +14786,28 @@ caught.
 
 ### 19.6 Still open — **[OPEN]**
 
-- **The time limit has not been seen to fire.** The Fold is Android 15 and
-  enforces it; `device_config put activity_manager
-  data_sync_fgs_timeout_duration 60000` shortens it (restore with `device_config
-  delete`, which returns it to 21600000). The run was abandoned, not
-  failed: the Start tap landed on the notification shade (sec 17) and the
-  service never started. Two things to see when it is run: `onTimeout`
-  stopping the server with the reason in the log, and **pressing Start
-  again once the day's budget is spent**, where Android 15 makes
-  `startForeground()` throw -- not yet handled, and possibly a crash.
+- **The time limit fired, and the server did not stop -- fixed, and the
+  fix not yet seen on the phone.** On the Fold, 2026-10-07, with the limit
+  shortened (`device_config put activity_manager
+  data_sync_fgs_timeout_duration 60000`; `device_config delete` restores
+  21600000): in the foreground nothing happened for 92 seconds, since the
+  timer counts background time; sent home, the system logged `FGS (dataSync)
+  timed out` exactly 60 s later and stopped the service, with no crash. But
+  the socket stayed in LISTEN, and a connection from the LAN hung rather
+  than being refused. `onTimeout` had only queued the stop to Qt's thread,
+  that thread did not run it in the background, and Android then froze the
+  process -- and Android 15 cuts a frozen app's network, which is why the
+  connection hung rather than reached anything. Nothing leaked; the app
+  simply claimed a server that was not there. The platform now stops the
+  server on the thread the news arrives on, through a stop hook the window
+  sets, before the service lets go; the queued signal only brings the screen
+  up to date. `bssh_sshd`'s start and stop are locked against each other for
+  it. The window test fires the hook from another thread and finds the port
+  closed before Qt has run anything; a sabotage that leaves only the queued
+  stop is caught.
+- **Start once the day's budget is spent** is still unseen. Android 15 makes
+  `startForeground()` throw then; `onStartCommand` catches it and reports it
+  as the time limit, written from the documentation.
 - **The icon** is Android's default, with BeerSSH's (sec 0.1) undecided.
 - **Release:** a keystore, and Play's declarations for
   `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.

@@ -5,6 +5,8 @@
 #include <QObject>
 #include <QString>
 
+#include <functional>
+
 /*
  * What beersshd's window needs from the platform (project.md sec 19), and
  * nothing more: where shared storage is, whether the app may reach it,
@@ -51,6 +53,28 @@ public:
 
 	/* Where the host key and the authorized keys live: never inside the root. */
 	virtual QString data_directory() const;
+
+	/*
+	 * What the platform calls, on whatever thread it is on, when it will
+	 * no longer keep the server alive -- before time_limit_reached, which
+	 * is only queued to Qt's thread.
+	 *
+	 * Both, because the queued signal alone was measured not to be enough:
+	 * on the Fold the dataSync limit fired with the app in the background,
+	 * Qt's thread did not run the queued stop, Android then froze the
+	 * process, and the socket stayed in LISTEN with nothing behind it.
+	 * The hook stops the server on the thread the news arrives on, before
+	 * the service lets go; the signal tidies the screen whenever Qt runs.
+	 */
+	void set_stop_hook(std::function<void()> hook) { m_stop_hook = std::move(hook); }
+
+protected:
+	void run_stop_hook() {
+		if (m_stop_hook) m_stop_hook();
+	}
+
+private:
+	std::function<void()> m_stop_hook;
 
 signals:
 	/*

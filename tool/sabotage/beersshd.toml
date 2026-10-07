@@ -72,8 +72,8 @@ expect = "losing_wifi_stops_and_a_new_address_restarts"
 [[sabotage]]
 name = "the time limit is ignored"
 file = "src/sshd/sshd_window.cpp"
-find = "\t\tif (!serving()) return;\n\t\tstop();"
-replace = "\t\tif (!serving()) return;"
+find = "\t\tif (m_bound.isNull()) return;\n\t\tstop();"
+replace = "\t\tif (m_bound.isNull()) return;"
 expect = "the_time_limit_stops_the_server_and_says_why"
 
 # Start no longer asks to show the notification, so on Android 13+ the
@@ -101,3 +101,13 @@ file = "src/sshd/sshd_window.cpp"
 find = "\tm_fingerprint->setCursorPosition(0);"
 replace = "\tm_fingerprint->setMinimumWidth(m_fingerprint->fontMetrics().horizontalAdvance(m_fingerprint->text()) + 40);"
 expect = "it_serves_the_platform_root_on_the_platform_address"
+
+# The time limit only queues the stop to Qt's thread -- the measured
+# failure on the Fold, where that thread did not run it and the frozen
+# process kept its socket in LISTEN.
+[[sabotage]]
+name = "the time limit stops the server only when Qt next runs"
+file = "src/sshd/sshd_window.cpp"
+find = "\tm_platform->set_stop_hook([this] { m_server.stop(); });"
+replace = "\tm_platform->set_stop_hook([] {});"
+expect = "the_time_limit_stops_the_server_and_says_why"
