@@ -30,6 +30,10 @@ exclude = [
   "src/platform/platform_android.cpp",
   # Android's own HTTPS for font downloads, over JNI (project.md sec 5.2).
   "src/platform/range_source_android.cpp",
+  # beersshd's Android half (sec 19): its JNI platform, and the main()
+  # that opens its window -- on the desktop beersshd is src/sshd/main.cpp.
+  "src/sshd/sshd_platform_android.cpp",
+  "src/sshd/main_android.cpp",
   # The Android dependency trees: two prebuilt libcrypto.a for the same
   # ABI, plus OpenSSL's own source and test programs beside them. Nothing
   # tracked lives under either, and on a desktop build they are two

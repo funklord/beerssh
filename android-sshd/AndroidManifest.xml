@@ -1,0 +1,97 @@
+<?xml version="1.0"?>
+<!--
+	AndroidManifest.xml for beersshd (project.md sec 19)
+
+	A separate app from BeerSSH, with its own id, so that the permission
+	to reach shared storage belongs to the program whose whole purpose is
+	serving it. Shaped like android/AndroidManifest.xml, which says why
+	each part of Qt's template is kept; this one keeps the same parts and
+	says only where it differs.
+
+	XML forbids a double hyphen inside a comment, so nothing here uses
+	one as a dash.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+          package="se.vibes.beersshd"
+          android:installLocation="auto"
+          android:versionCode="-- %%INSERT_VERSION_CODE%% --"
+          android:versionName="-- %%INSERT_VERSION_NAME%% --">
+
+	<!--
+		%%INSERT_PERMISSIONS is absent for BeerSSH's reason: the permission
+		list is this file's to own. Qt6Core would add READ and
+		WRITE_EXTERNAL_STORAGE, which do nothing on the Android versions
+		this runs on (minSdk 30); MANAGE_EXTERNAL_STORAGE below is what
+		reaches shared storage there.
+	-->
+	<!-- %%INSERT_FEATURES -->
+
+	<uses-permission android:name="android.permission.INTERNET"/>
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
+	<!--
+		"All files access": shared storage, which is what this app serves.
+		Not a runtime prompt; the user turns it on in Settings, from a
+		screen the app opens and explains. Play allows it to apps whose
+		core purpose needs it, and a file server's does (sec 19).
+	-->
+	<uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
+
+	<!--
+		The foreground service while the server listens. dataSync, the type
+		whose definition is file transfer; its Android 15 limit of six hours
+		in twenty-four is met by stopping the server and saying so (sec 19).
+	-->
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+	<uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
+	<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
+	<supports-screens
+	        android:anyDensity="true"
+	        android:largeScreens="true"
+	        android:normalScreens="true"
+	        android:smallScreens="true" />
+
+	<!--
+		allowBackup false: the app's own directory holds the host key, and
+		a backup would copy a private key to the user's cloud account.
+	-->
+	<application android:name="org.qtproject.qt.android.bindings.QtApplication"
+	             android:label="beersshd"
+	             android:hardwareAccelerated="true"
+	             android:enableOnBackInvokedCallback="false"
+	             android:allowBackup="false"
+	             android:fullBackupOnly="false">
+
+		<activity android:name="org.qtproject.qt.android.bindings.QtActivity"
+		          android:label="beersshd"
+		          android:exported="true"
+		          android:launchMode="singleTop"
+		          android:screenOrientation="unspecified"
+		          android:windowSoftInputMode="adjustResize"
+		          android:configChanges="orientation|uiMode|screenLayout|screenSize|smallestScreenSize|layoutDirection|locale|fontScale|keyboard|keyboardHidden|navigation|mcc|mnc|density">
+
+			<intent-filter>
+				<action android:name="android.intent.action.MAIN"/>
+				<category android:name="android.intent.category.LAUNCHER"/>
+			</intent-filter>
+
+			<meta-data android:name="android.app.lib_name"
+			           android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
+			<meta-data android:name="android.app.arguments"
+			           android:value="-- %%INSERT_APP_ARGUMENTS%% --"/>
+		</activity>
+
+		<service android:name="se.vibes.beersshd.SshdService"
+		         android:exported="false"
+		         android:foregroundServiceType="dataSync"/>
+
+		<provider android:name="androidx.core.content.FileProvider"
+		          android:authorities="${applicationId}.qtprovider"
+		          android:exported="false"
+		          android:grantUriPermissions="true">
+			<meta-data android:name="android.support.FILE_PROVIDER_PATHS"
+			           android:resource="@xml/qtprovider_paths"/>
+		</provider>
+	</application>
+</manifest>

@@ -47,3 +47,31 @@ file = "src/sshd/sshd.cpp"
 find = "\t\tconst auto deadline = std::chrono::steady_clock::now() + HANGUP_GRACE;"
 replace = "\t\tconst auto deadline = std::chrono::steady_clock::now();"
 expect = "scp_finishes_with_a_clean_exit"
+
+# The Android window (sec 19), over the platform the test controls.
+
+# Start no longer asks whether storage may be reached; a disabled
+# button is not the only way in.
+[[sabotage]]
+name = "the window starts without storage access"
+file = "src/sshd/sshd_window.cpp"
+find = "\tif (!m_platform->has_storage_access() || address.isNull()) {"
+replace = "\tif (address.isNull()) {"
+expect = "without_access_it_asks_and_does_not_start"
+
+# Losing Wi-Fi is treated as nothing changing, so the server goes on
+# listening on an address the phone no longer has.
+[[sabotage]]
+name = "losing Wi-Fi leaves the server listening"
+file = "src/sshd/sshd_window.cpp"
+find = "\tif (now == m_bound) return;"
+replace = "\tif (now == m_bound || now.isNull()) return;"
+expect = "losing_wifi_stops_and_a_new_address_restarts"
+
+# Android's time limit arrives and nothing stops.
+[[sabotage]]
+name = "the time limit is ignored"
+file = "src/sshd/sshd_window.cpp"
+find = "\t\tif (!serving()) return;\n\t\tstop();"
+replace = "\t\tif (!serving()) return;"
+expect = "the_time_limit_stops_the_server_and_says_why"

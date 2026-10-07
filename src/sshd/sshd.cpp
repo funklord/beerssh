@@ -78,22 +78,28 @@ QString fingerprint_of(ssh_key key) {
  * key may do, and this server enforces none of them, so using the key
  * anyway would grant more than the line says.
  */
+ssh_key key_from_line(const QByteArray &raw) {
+	const QByteArray line = raw.trimmed();
+	if (line.isEmpty() || line.startsWith('#')) return nullptr;
+
+	const QList<QByteArray> fields = line.simplified().split(' ');
+	if (fields.size() < 2) return nullptr;
+
+	const enum ssh_keytypes_e type = ssh_key_type_from_name(fields.at(0).constData());
+	if (type == SSH_KEYTYPE_UNKNOWN) return nullptr;
+
+	ssh_key key = nullptr;
+	if (ssh_pki_import_pubkey_base64(fields.at(1).constData(), type, &key) != SSH_OK) return nullptr;
+	return key;
+}
+
 bool authorized(const QString &path, ssh_key offered) {
 	QFile file(path);
 	if (!file.open(QIODevice::ReadOnly)) return false;
 
 	while (!file.atEnd()) {
-		const QByteArray line = file.readLine(64 * 1024).trimmed();
-		if (line.isEmpty() || line.startsWith('#')) continue;
-
-		const QList<QByteArray> fields = line.simplified().split(' ');
-		if (fields.size() < 2) continue;
-
-		const enum ssh_keytypes_e type = ssh_key_type_from_name(fields.at(0).constData());
-		if (type == SSH_KEYTYPE_UNKNOWN) continue;
-
-		ssh_key listed = nullptr;
-		if (ssh_pki_import_pubkey_base64(fields.at(1).constData(), type, &listed) != SSH_OK) continue;
+		ssh_key listed = key_from_line(file.readLine(64 * 1024));
+		if (!listed) continue;
 		const bool same = ssh_key_cmp(listed, offered, SSH_KEY_CMP_PUBLIC) == 0;
 		ssh_key_free(listed);
 		if (same) return true;
@@ -172,6 +178,17 @@ int on_subsystem(ssh_session, ssh_channel channel, const char *subsystem, void *
 } /* namespace */
 
 bssh_sshd::bssh_sshd(QObject *parent) : QObject(parent) {
+}
+
+int bssh_sshd::usable_keys(const QByteArray &text) {
+	int count = 0;
+	for (const QByteArray &line : text.split('\n')) {
+		ssh_key key = key_from_line(line);
+		if (!key) continue;
+		ssh_key_free(key);
+		++count;
+	}
+	return count;
 }
 
 bssh_sshd::~bssh_sshd() {

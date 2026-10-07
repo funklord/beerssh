@@ -64,6 +64,13 @@ public:
 
 	const bssh_sshd_config_t &config() const { return m_config; }
 
+	/*
+	 * How many lines of an authorized-keys file would let a key in, by
+	 * the same parse a login uses -- so a line with options, which a
+	 * login skips, is not counted either.
+	 */
+	static int usable_keys(const QByteArray &text);
+
 	/* Opaque; named here only so libssh's C callbacks can reach it. */
 	struct connection_t;
 

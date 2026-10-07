@@ -143,7 +143,18 @@ fi
 # Static, which sidesteps sec 4's LGPL relinking question only if the app
 # also ships the object files needed to relink -- see sec 4 before shipping
 # an AAB built this way.
-if [ ! -f "$prefix/lib/libssh.a" ]; then
+#
+# Built WITH the server half since beersshd (sec 19), which is ssh_bind
+# and the SFTP server messages. BeerSSH links the same archive and the
+# linker leaves out what it does not call.
+#
+# The options are written beside the archive and compared on every run.
+# "Skip when libssh.a exists" alone would keep an archive built WITHOUT
+# the server for ever -- the flag below changes and nothing rebuilds, and
+# the failure arrives later as undefined ssh_bind_* in beersshd's link.
+libssh_config="version=$libssh_version server=on"
+if [ ! -f "$prefix/lib/libssh.a" ] ||
+   [ "$(cat "$prefix/lib/libssh.config" 2>/dev/null)" != "$libssh_config" ]; then
 	echo "==> libssh $libssh_version for $abi"
 
 	[ -f "libssh-$libssh_version.tar.xz" ] ||
@@ -176,11 +187,12 @@ if [ ! -f "$prefix/lib/libssh.a" ]; then
 		-DCMAKE_FIND_ROOT_PATH="$prefix" \
 		-DBUILD_SHARED_LIBS=OFF \
 		-DWITH_EXAMPLES=OFF \
-		-DWITH_SERVER=OFF \
+		-DWITH_SERVER=ON \
 		-DUNIT_TESTING=OFF \
 		-DCMAKE_BUILD_TYPE=Release
 	cmake --build libssh-build -j "$(nproc)"
 	cmake --install libssh-build
+	echo "$libssh_config" > "$prefix/lib/libssh.config"
 fi
 
 echo

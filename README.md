@@ -218,13 +218,18 @@ A second, separate program from this tree: an SFTP server and nothing else.
 It serves one folder to the keys in one authorized-keys file — no shell, no
 commands, no passwords — and is meant for an Android phone, where it will
 be its own app so that the permission to reach shared storage belongs to a
-file server rather than to the terminal. The desktop build is a command line,
-for now the only way to run it:
+file server rather than to the terminal. On the desktop it is a command
+line:
 
 ```sh
 ./beersshd --root ~/Public --port 8022
 sftp -P 8022 phone-or-host          # or: scp -P 8022 file host:
 ```
+
+On Android it is its own app, `se.vibes.beersshd`, built with
+`make android-sshd` (and `android-sshd-install`): it asks for All files
+access, serves shared storage on the phone's Wi-Fi address, and takes its
+authorized keys from a box on its one screen.
 
 The host key is generated on first start under `~/.config/beersshd/`, and
 keys are read from `~/.config/beersshd/authorized_keys` at every login.
@@ -439,6 +444,7 @@ and steps 2 and 3 of the rotation test.
 ```
 beerssh.pro          qmake project — the app, both platforms
 beersshd.pro         qmake project — beersshd, the SFTP-only server (§19)
+android-sshd/        beersshd's AndroidManifest.xml and its service shim
 Makefile             top-level: wraps qmake, plus everything non-Qt
 src/main.cpp         entry point (--self-test is what CI runs)
 src/ui/              widgets: main window, terminal grid

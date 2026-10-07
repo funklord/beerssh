@@ -863,7 +863,8 @@ check-fonts:
 # lack it, and one that skips quietly there is a green light nobody
 # earned -- so an absent SDK is an error with the reason named, and
 # whoever has no SDK simply does not run this target.
-ANDROID_JAVA_SRC = $(wildcard android/src/se/vibes/beerssh/*.java)
+ANDROID_JAVA_SRC = $(wildcard android/src/se/vibes/beerssh/*.java \
+                              android-sshd/src/se/vibes/beersshd/*.java)
 
 check-java:
 	@test -n "$(ANDROID_JAVA_SRC)" || { \
@@ -935,12 +936,24 @@ android-check-beerssh:
 		echo "android:   run: tool/build-deps-android.sh $(ANDROID_ABI)" >&2; \
 		exit 1; \
 	fi
+	@# An archive built before beersshd has no server half, and that
+	@# surfaces as undefined ssh_bind_* at its link rather than here.
+	@if ! grep -q 'server=on' deps/android/$(ANDROID_ABI)/lib/libssh.config 2>/dev/null; then \
+		echo "android: deps/android/$(ANDROID_ABI) has libssh without its server half." >&2; \
+		echo "android:   run: tool/build-deps-android.sh $(ANDROID_ABI), which rebuilds it" >&2; \
+		exit 1; \
+	fi
 
 .PHONY: android-check-beerssh
 
-$(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) beerssh.pro
+# Which project an Android build is of, and what it bundles beside its
+# code. BeerSSH's by default; android-sshd below names beersshd's.
+ANDROID_PRO    ?= beerssh.pro
+ANDROID_ASSETS ?= android-fonts android-terminfo
+
+$(ANDROID_BUILD_DIR)/Makefile: android-check $(VTERM_ANDROID_LIB) $(ANDROID_PRO)
 	mkdir -p $(ANDROID_BUILD_DIR)
-	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../beerssh.pro $(QMAKE_CONFIG) \
+	cd $(ANDROID_BUILD_DIR) && $(QT_ANDROID_ROOT)/bin/qmake ../$(ANDROID_PRO) $(QMAKE_CONFIG) \
 	        BSSH_VERSION=$(VERSION) BSSH_VERSION_CODE=$(ANDROID_VERSION_CODE)
 
 # The base font set that ships inside the APK (project.md sec 9.4).
@@ -1111,9 +1124,10 @@ android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts android-terminfo
 # <program>-<version>-<abi>.apk, in the android build directory. One
 # variable rather than an APK_NAME plus the directory it lands in -- two
 # halves recombined per recipe is how a name and a path drift apart.
-ANDROID_ARTIFACT = $(ANDROID_BUILD_DIR)/$(TARGET)-$(VERSION)-$(ANDROID_ABI).apk
+ANDROID_PROGRAM ?= $(TARGET)
+ANDROID_ARTIFACT = $(ANDROID_BUILD_DIR)/$(ANDROID_PROGRAM)-$(VERSION)-$(ANDROID_ABI).apk
 
-android: $(ANDROID_BUILD_DIR)/Makefile android-fonts android-terminfo
+android: $(ANDROID_BUILD_DIR)/Makefile $(ANDROID_ASSETS)
 ifneq ($(ANDROID_KEYSTORE),)
 	@# The flags go to androiddeployqt itself, because Qt's generated
 	@# Makefile hardcodes its command line and accepts nothing from here.
@@ -1190,6 +1204,27 @@ endif
 	@# failure, re-armed by a tool update and invisible because an
 	@# unreadable signature read as a pass.
 	$(call android_verify_signature,$(ANDROID_ARTIFACT))
+
+# beersshd's APK (sec 19), by the rules above rather than a copy of them:
+# the same Makefile again, told the other program's name, id, project and
+# build directory. So the signature, the ABI and the artifact name are
+# checked for it by the code that checks them for BeerSSH, and a fix to
+# either is a fix to both. It bundles no fonts and no terminfo.
+#
+# ANDROID_PROGRAM and not TARGET. A variable set on make's command line
+# is passed to every sub-make, and the `make -C` into qmake's generated
+# Makefile is one: TARGET=beersshd replaced the TARGET qmake had written
+# there, and the library was linked as `beersshd` while the install step
+# went looking for libbeersshd_x86_64.so. So every name passed below is
+# one no generated Makefile uses.
+SSHD_APP_ID = se.vibes.beersshd
+SSHD_ANDROID = ANDROID_PROGRAM=$(SSHD_TARGET) APP_ID=$(SSHD_APP_ID) ANDROID_PRO=beersshd.pro \
+               ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS=
+
+android-sshd android-sshd-install android-sshd-run android-sshd-log android-sshd-uninstall:
+	$(MAKE) --no-print-directory $(patsubst android-sshd%,android%,$@) $(SSHD_ANDROID)
+
+.PHONY: android-sshd android-sshd-install android-sshd-run android-sshd-log android-sshd-uninstall
 
 # sec 12.2's other half for Android: is it signed by who you think, and
 # does the artifact install and run?
@@ -1448,7 +1483,7 @@ endef
 # unknowable-names case -- the same shape .gitignore already declares as
 # this build's own. Each expansion still goes through the checks above.
 veryclean: clean
-	$(call bssh_remove_tree,$(BUILD_DIR) $(ANDROID_BUILD_DIR) build-android-* \
+	$(call bssh_remove_tree,$(BUILD_DIR) $(ANDROID_BUILD_DIR) build-android-* build-sshd-android-* \
 	        $(TEST_BUILD_DIR) $(SSHD_BUILD_DIR) $(VTERM_BUILD_DIR) $(VTERM_ANDROID_BASE) \
 	        $(SHOT_DIR))
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \

@@ -14673,15 +14673,81 @@ live tests skip without the OpenSSH client, so CI's package list carries
 symlink-leaf check, the key lookup, the exit status and the hangup wait,
 and all five are caught.
 
-### 19.5 What is next — **[OPEN]**
+### 19.5 The Android app
 
-The desktop program is the first slice. The Android app is the second:
-its own app id and APK, a foreground service while it listens (which
-needs §5.1's service type — `dataSync` caps near 6 h/24 h on Android 15),
-the all-files permission requested from a screen that says why, a port
-above 1024, listening on the Wi-Fi address, an editor for the authorized
-keys, and the host key's fingerprint shown for checking on first connect.
-A Debian package for the desktop program is undecided.
+**`se.vibes.beersshd`, its own APK, built by `make android-sshd`** (and
+`-install`, `-run`, `-log`, `-uninstall`). Those re-enter the same Makefile
+with beersshd's program name, id, `.pro` and build directory, so its APK is
+signature-, ABI- and name-checked by the code that checks BeerSSH's. The
+package sources are `android-sshd/`; the C++ is the same server under
+`bssh_sshd_window` (`src/sshd/sshd_window.*`), a Qt Widgets screen over
+`bssh_sshd_platform`, whose Android half is JNI to `SshdService` and
+`SshdStorage`.
+
+- **The variable passed is `ANDROID_PROGRAM`, not `TARGET`.** A variable
+  set on make's command line goes to every sub-make, and `make -C` into
+  qmake's generated Makefile is one: `TARGET=beersshd` replaced qmake's
+  own `TARGET`, the library was linked as `beersshd`, and the install step
+  failed looking for `libbeersshd_x86_64.so`. Found on the first build.
+- **minSdk 30**, not BeerSSH's 26: "All files access" is an Android 11
+  permission, and below it shared storage is a different permission model.
+- **The root is `Environment.getExternalStorageDirectory()`** —
+  `/storage/emulated/0` — and the host key and authorized keys live in the
+  app's own files directory, which is not under it.
+- **Foreground service type `dataSync` — chosen 2026-10-07, the holder's to
+  overturn.** It is the type whose definition is file transfer, so Play's
+  declaration needs no stretching; its cost is Android 15's six hours in
+  twenty-four. `SshdService.onTimeout` tells the native side, which stops the
+  server and logs why, before stopping the service as Android requires.
+  `specialUse` has no limit and needs a written justification instead.
+- **Wi-Fi only.** It listens on `wlan*`'s IPv4 address, polls every five
+  seconds, restarts on a new address and stops when there is none. Mobile
+  data is behind the carrier's NAT, and a hotspot the phone provides is a
+  different interface and deliberately not matched.
+- **The access screen explains before it sends.** Settings says only
+  "Allow access to manage all files"; the app says what is served and to
+  whom first, then opens the per-app toggle (`ACTION_MANAGE_APP_ALL_FILES_
+  ACCESS_PERMISSION`, the list as a fallback), and looks again when it
+  becomes active.
+- **libssh is built with its server for both apps.**
+  `tool/build-deps-android.sh` writes the options beside the archive
+  (`libssh.config`) and rebuilds on a mismatch, because "skip when
+  `libssh.a` exists" would keep the old server-less archive for ever; the
+  Android preflight refuses an archive without `server=on`.
+
+**Verified on the API 34 emulator, 2026-10-07:** the window drew; without
+access Start was disabled and "Open Settings" landed on the app's own
+toggle; turning it on and pressing back enabled Start; Start brought up the
+service foreground with `types=00000001` (`dataSync`) and a socket on
+`10.0.2.16:8022`, the `wlan0` address and only that. Over a relay inside the
+emulator — the emulator routes the host to `eth0`, where the server
+correctly is not — OpenSSH's `sftp` listed shared storage, an 8 MB file made
+the round trip byte-identical, `scp` exited 0, every path at the private host
+key and `/proc` was refused, and `ssh-keyscan` printed the fingerprint the
+screen showed. Stop removed the service and the listener (`/proc/net/tcp`,
+controlled by the four listeners it did show).
+
+`test/sshd_window_test.cpp` drives the same window on the desktop over a
+platform the test controls — no access, the served root and address, the
+time limit, Wi-Fi lost and changed, the key count — and three more entries
+in `tool/sabotage/beersshd.toml` break the access check, the Wi-Fi follow and
+the time-limit stop, all caught.
+
+### 19.6 Still open — **[OPEN]**
+
+- **A real phone.** Everything above is the emulator; the shared phones were
+  not connected (sec 17).
+- **The time limit itself** has not fired: it exists on Android 15 and the
+  emulator image is 14.
+- **`POST_NOTIFICATIONS` is not requested**, so on Android 13+ the service's
+  notification may be hidden until the user allows it. BeerSSH asks at its
+  first connection; beersshd should ask at its first Start.
+- **The icon** is Android's default, with BeerSSH's (sec 0.1) undecided.
+- **Release:** a keystore, and Play's declarations for
+  `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.
+- **A Debian package** for the desktop program is undecided.
+- **The keys editor shows the file as it was when the window opened**; a
+  file changed underneath (by `run-as` in the test above) is not re-read.
 
 ## From fmake: `--eject` needs one define the README's fmake line does not
 

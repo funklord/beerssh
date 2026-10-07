@@ -37,6 +37,7 @@
 #include "screen_test.h"
 #include "ssh_config_test.h"
 #include "sshd_test.h"
+#include "sshd_window_test.h"
 #include "terminal_view_test.h"
 
 /*
@@ -344,6 +345,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<screen_test>(argc, argv);
 	failures += run_test<ssh_config_test>(argc, argv);
 	failures += run_test<sshd_test>(argc, argv);
+	failures += run_test<sshd_window_test>(argc, argv);
 	failures += run_test<command_line_test>(argc, argv);
 	failures += run_test<conn_manager_test>(argc, argv);
 	failures += run_test<emulator_test>(argc, argv);
