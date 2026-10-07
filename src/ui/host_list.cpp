@@ -11,6 +11,7 @@
 #include <QEvent>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPushButton>
 #include <QToolButton>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
@@ -137,6 +138,19 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 	heading_row->addWidget(m_menu, 0);
 
 	layout->addWidget(heading);
+
+	/*
+	 * The way back to open sessions, hidden while there are none. A
+	 * button rather than a list row: it is not a host, and a row would
+	 * be edited, deleted and folded with the hosts by every gesture the
+	 * list carries.
+	 */
+	m_sessions = new QPushButton(this);
+	m_sessions->setObjectName(QStringLiteral("host-list-sessions"));
+	m_sessions->setMinimumHeight(48);
+	m_sessions->hide();
+	connect(m_sessions, &QPushButton::clicked, this, &bssh_host_list::sessions_requested);
+	layout->addWidget(m_sessions);
 
 	m_list = new QListWidget(this);
 
@@ -463,4 +477,11 @@ void bssh_host_list::on_row_activated() {
 	}
 
 	emit open_requested(m_store->profile(id));
+}
+
+void bssh_host_list::set_open_sessions(int count) {
+	if (!m_sessions) return;
+	m_sessions->setText(count == 1 ? QStringLiteral("1 session open -- back to it")
+	                               : QStringLiteral("%1 sessions open -- back to them").arg(count));
+	m_sessions->setVisible(count > 0);
 }

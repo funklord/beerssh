@@ -463,6 +463,26 @@ void emulator_test::resize_keeps_existing_text() {
 	QCOMPARE(row(emulator, 0), QStringLiteral("stays"));
 }
 
+/*
+ * The Fold's cover screen turned to landscape with the full built-in
+ * keyboard up: the grid went from 49x40 to 120x2 and back, and afterwards
+ * the shell's prompt was gone, neither on screen nor in the scrollback.
+ * This asks the emulator's half of that: a prompt on the top row with the
+ * cursor after it must survive the round trip, so that what is left to
+ * explain is what the shell did on SIGWINCH.
+ */
+void emulator_test::a_rotation_and_back_keeps_the_prompt() {
+	bssh_emulator emulator(49, 40);
+	emulator.feed(QByteArrayLiteral(":/data/data/se.vibes.beerssh/files $ "));
+
+	emulator.resize(120, 2);
+	QCOMPARE(row(emulator, 0), QStringLiteral(":/data/data/se.vibes.beerssh/files $"));
+
+	emulator.resize(49, 40);
+	QCOMPARE(row(emulator, 0), QStringLiteral(":/data/data/se.vibes.beerssh/files $"));
+	QCOMPARE(emulator.screen().cursor_row(), 0);
+}
+
 void emulator_test::scrolled_lines_enter_the_scrollback() {
 	bssh_emulator emulator(20, 3);
 	QSignalSpy spy(&emulator, &bssh_emulator::scrollback_changed);

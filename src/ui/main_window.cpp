@@ -984,6 +984,16 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		connect(m_host_list, &bssh_host_list::settings_requested, this, [this, index] {
 			show_page(index);
 		});
+
+		/*
+		 * Back to the open sessions, the way up from a terminal reversed
+		 * (decided 2026-10-07, sec 8.5).
+		 */
+		connect(m_host_list, &bssh_host_list::sessions_requested, this, [this] {
+			if (m_shown.isEmpty()) return;
+			m_pages->setCurrentWidget(m_terminal_page);
+			if (m_terminal_view) m_terminal_view->setFocus();
+		});
 	} else {
 		m_session_dialog = new bssh_session_dialog(m_profile_store, this);
 		connect(m_session_dialog, &bssh_session_dialog::open_requested,
@@ -3678,6 +3688,9 @@ void bssh_main_window::on_registry_changed() {
 	sync_column_intent();
 
 	refresh_tab_bar();
+
+	/* The host list's way back to them, counted from the same list. */
+	if (m_host_list) m_host_list->set_open_sessions(m_shown.size());
 
 	/* Detach needs more than one tab, and this is where that changed. */
 	refresh_menu_bar();

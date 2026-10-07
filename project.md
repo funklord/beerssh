@@ -907,9 +907,12 @@ minutes and dumped before its first beat. Tested as a state object
 (`the_hang_gate_follows_the_lifecycle_not_the_last_beat`) with three
 sabotage edits in `tool/sabotage/hang-gate.toml`.
 
-**Not proven on a device -- no phone was attached.** The wiring is
-Android-only and no desktop test reaches it. What to look for once one
-is: background the app for a minute and bring it back, and `adb logcat
+**~~Not proven on a device -- no phone was attached.~~ Seen on the Fold,
+2026-10-07:** the app in the background for 5 h 47 min with three live
+local shells, brought back as the same process, and `adb logcat -d` held
+no `Signal Catcher` dump from `se.vibes.beerssh`. The wiring is
+Android-only and no desktop test reaches it. What was asked for:
+background the app for a minute and bring it back, and `adb logcat
 -d` must show no `Signal Catcher` stack dump from `se.vibes.beerssh`. The
 build installed on the Fold since 2026-09-18 carries the old gate, so
 its log from that period should show exactly such dumps -- which is the
@@ -5765,6 +5768,18 @@ above, and §7's resize, hold on the platform where the activity is torn down
 and rebuilt underneath them. Nothing on a desktop can show this: there is no
 activity recreation to survive.
 
+**Rotation on the Fold's cover screen, 2026-10-08** (one session, the full
+built-in keyboard, rotation set by `settings put system user_rotation`):
+landscape gave the full keyboard nearly the whole height and the terminal
+about one usable row -- the keyboard falls back to compact on a NARROW
+screen (`a_narrow_screen_falls_back_to_the_compact_keyboard`) and has no
+such fallback on a SHORT one; **[OPEN]** whether it should. Back to
+portrait, the shell's prompt was gone, on screen and in scrollback, and the
+next key typed landed at column 0. `emulator_test::a_rotation_and_back_keeps_the_prompt`
+takes the same 49x40 to 120x2 and back and keeps the line, so the
+emulator is not what lost it; Android's shell, told of two size changes,
+did not redraw its prompt. Recorded as the shell's, cause unconfirmed.
+
 **Steps 2 and 3 are still unverified on a device** — panes converting to tabs
 on rotate-to-portrait, and the remembered intent restoring the split on
 rotate-back. Both are unit-tested against `bssh_layout_manager` and neither has
@@ -7077,7 +7092,16 @@ session, the tab bar or a split -- except a slip in the settings' own
 Back, fixed the same day. The key now goes up where a host list exists;
 `backing_out_of_a_session_reaches_the_host_list` sends the real key to
 the focused terminal view, and a sabotage leaving it to Android is
-caught.
+caught. **And the way back down -- decided by the holder the same day.**
+Going up made the host list the page a user is left on, and it had no way
+back to running sessions: tapping a host opens another, and reopening the
+app shows the page it was left on. While this window has sessions open,
+the list carries a row above the hosts -- "1 session open -- back to it"
+-- that shows the terminals. A button rather than a list row, because it
+is not a host and every gesture on the list (edit, delete, fold) would
+reach it. `the_host_list_leads_back_to_open_sessions` goes up by the key
+and down by the row, to the same session; a sabotage that never tells the
+list the count is caught.
 
 **And Back returns to the page it came FROM, which was a second fault in
 the same place.** Every sub-page returned to the host list whatever
@@ -8943,11 +8967,16 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   `make_font` sets an explicit point size, which
   `the_terminal_grid_ignores_the_application_font` now pins as a
   regression. Guarded by `tool/sabotage/interface-scale.toml`.
-  **The Android value itself is unverified on hardware** -- the desktop
-  half, the setting, the scaling arithmetic and the grid's insulation are
-  all tested headlessly, but that a real device reports the fontScale the
-  user set is the one part only the phone can show, like every other
-  Android reading here.
+  **~~The Android value itself is unverified on hardware~~ -- seen on the
+  Fold, 2026-10-08:** the system font size moved from 0.8 to 1.3 by `settings
+  put system font_scale` (Android applied it: `mGlobalConfiguration={1.3
+  ...}`), and BeerSSH restarted under it drew its host list visibly larger;
+  set back to 0.8 afterwards. **What it does not do is follow a change while
+  running** -- under 1.3 the open app was unchanged until it was restarted.
+  That is what was built (`main()` sets the font once, before any widget),
+  and the manifest lists `fontScale` among the handled configuration
+  changes, so Android does not recreate the activity to deliver it either.
+  Whether it should follow live is the holder's question, not a defect.
   **What was measured before building, and it still holds.** *Nothing in this
   tree read the system font scale* before this — no reference to `fontScale`
   anywhere in `src/`, until the Android backend added one. The grid builds its own `QFont`
@@ -10787,8 +10816,9 @@ store is a no-op rather than a silent loss.
   request appeared the moment the first session -- the local shell -- went
   live, and was granted. One thing not explained: `dumpsys notification`
   then counted no notification from the app while the service was
-  foreground with type `0x10`; whether it was posted before the grant and
-  not reposted was not established.
+  foreground with type `0x10`. Hours later, with the sessions still live,
+  it counted two, so the notification is there once allowed; what the
+  first reading caught was not established.
 - **Desktop `ssh-agent` support (`SSH_AUTH_SOCK`) -- USED, and was for some
   time before this line said so.** `ssh_userauth_publickey_auto` offers the
   agent's keys before the default identities; measured 2026-09-26 by reading

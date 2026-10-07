@@ -10,6 +10,7 @@
 #include "model/profile.h"
 
 class QListWidget;
+class QPushButton;
 class QEvent;
 class QResizeEvent;
 class QToolButton;
@@ -40,6 +41,15 @@ public:
 
 	void reload();
 
+	/*
+	 * How many sessions this window has open. Above zero, a row at the top
+	 * of the list says so and leads back to them -- the way back from the
+	 * host list, which Back now goes UP to from a terminal (sec 8.5).
+	 * Without it a user who went up could only reach their sessions by
+	 * opening another.
+	 */
+	void set_open_sessions(int count);
+
 protected:
 	void resizeEvent(QResizeEvent *event) override;
 	void changeEvent(QEvent *event) override;
@@ -65,6 +75,9 @@ signals:
 	 */
 	void settings_requested();
 
+	/* The sessions row was tapped: show the terminals. */
+	void sessions_requested();
+
 private slots:
 	void on_row_activated();
 	void on_row_menu(const QPoint &where);
@@ -75,6 +88,7 @@ private:
 
 	bssh_profile_store *m_store;
 	QListWidget *m_list;
+	QPushButton *m_sessions = nullptr;
 
 	/* Folders folded shut, by name (sec 10.5); for as long as the list lives. */
 	QStringList m_collapsed;

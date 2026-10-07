@@ -48,6 +48,7 @@ private slots:
 	void title_is_reported_from_osc();
 	void the_last_column_survives_the_canonical_erase();
 	void resize_keeps_existing_text();
+	void a_rotation_and_back_keeps_the_prompt();
 	void osc8_marks_cells_with_a_link();
 	void osc8_survives_a_wrap_and_ends_where_told();
 	void an_enormous_link_is_dropped_whole_and_shown_short();

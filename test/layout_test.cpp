@@ -4951,6 +4951,46 @@ void layout_test::the_built_in_keyboard_declines_the_system_one_in_every_pane() 
 }
 
 /*
+ * The way back from the host list to the open sessions (sec 8.5, decided
+ * 2026-10-07). Back at a terminal goes up to the list; without a way back
+ * down, the Fold showed what that costs -- the only route to a running
+ * session was to open another one.
+ */
+void layout_test::the_host_list_leads_back_to_open_sessions() {
+	const forced_touch_t arrangement(1);
+
+	bssh_main_window window;
+	window.resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session_registry *registry = window.registry();
+	const registry_left_as_found_t tidy(registry);
+
+	QPushButton *sessions = window.findChild<QPushButton *>(QStringLiteral("host-list-sessions"));
+	QVERIFY2(sessions, "the host list must carry a way back to open sessions");
+	QVERIFY2(sessions->isHidden(), "with nothing open there is nothing to go back to");
+
+	window.adopt_session(registry->create(named(QStringLiteral("first"))));
+	QCoreApplication::processEvents();
+	QVERIFY(!window.showing_front_door());
+
+	/* Up, by the key Android sends. */
+	QKeyEvent back(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
+	QApplication::sendEvent(&window, &back);
+	QVERIFY(window.showing_front_door());
+
+	QVERIFY2(!sessions->isHidden(), "the host list shows no way back to the open session");
+	QVERIFY2(sessions->text().startsWith(QStringLiteral("1 session")), qPrintable(sessions->text()));
+
+	/* And down again, to the same session rather than a new one. */
+	const int before = registry->count();
+	sessions->click();
+	QVERIFY(!window.showing_front_door());
+	QCOMPARE(registry->count(), before);
+}
+
+/*
  * Android's Back leaves the PAGE, not the app (sec 8.5).
  *
  * Reported from a phone: open the settings from a session's keyboard,
