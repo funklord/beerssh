@@ -3542,12 +3542,30 @@ bool bssh_main_window::go_back() {
  * lets Qt close the window -- so the app went away while the page it
  * should have left stayed exactly where it was.
  *
- * Only accepted when there was something to leave. Back at the terminal
- * or at the host list is a request to leave the APP, and swallowing it
- * there would strand a user pressing a key that does nothing.
+ * Only accepted when there was something to leave. Back at the host list
+ * is a request to leave the APP, and swallowing it there would strand a
+ * user pressing a key that does nothing. Back at a terminal is not: on
+ * touch the host list is the root (sec 8.5), and Back goes up to it.
  */
 void bssh_main_window::keyPressEvent(QKeyEvent *event) {
 	if (event->key() == Qt::Key_Back && go_back()) {
+		event->accept();
+		return;
+	}
+
+	/*
+	 * And Back at a terminal goes UP to the host list, as closeEvent says
+	 * it does. closeEvent never saw it on the Fold, 2026-10-07: Qt 6
+	 * delivers Android's Back as this KEY, and left unaccepted at the
+	 * terminal it put the app in the background -- so with a live session
+	 * the host list, and with it a second session, could only be reached
+	 * by a slip in the settings' own Back, which is fixed. Only where
+	 * there IS a host list: the desktop has none, and Back means nothing
+	 * there.
+	 */
+	if (event->key() == Qt::Key_Back && m_host_list && m_pages
+	    && m_pages->currentWidget() == m_terminal_page) {
+		m_pages->setCurrentWidget(m_host_list);
 		event->accept();
 		return;
 	}

@@ -5031,12 +5031,21 @@ void layout_test::the_back_key_leaves_the_page_not_the_app() {
 	QVERIFY2(leaving.isAccepted(), "Back on the settings page was not handled");
 	QCOMPARE(pages->currentWidget(), came_from);
 
-	/* At the bottom of the stack it must be left alone. */
+	/*
+	 * From the terminal Back goes up to the host list (decided by the
+	 * holder 2026-10-07: the terminal is not the root on touch, sec 8.5),
+	 * and only there, at the bottom of the stack, is it left alone.
+	 */
+	QKeyEvent at_terminal(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
+	QApplication::sendEvent(&window, &at_terminal);
+	QVERIFY2(at_terminal.isAccepted(), "Back at the terminal did not go up to the host list");
+	QVERIFY(window.showing_front_door());
+
 	QKeyEvent at_root(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
 	QApplication::sendEvent(&window, &at_root);
 	QVERIFY2(!at_root.isAccepted(),
 	          "Back was swallowed with no page to leave, so nothing can background the app");
-	QCOMPARE(pages->currentWidget(), came_from);
+	QVERIFY(window.showing_front_door());
 
 	settings.set_keyboard(before);
 	bssh_ssh_session::set_factory(nullptr);
@@ -5538,6 +5547,31 @@ void layout_test::backing_out_of_a_session_reaches_the_host_list() {
 	 * from quitting for everything downstream of the event.
 	 */
 	QVERIFY2(!back.isAccepted(), "going up must not also close the window");
+
+	/*
+	 * And by the KEY, sent where Android sends it: to whatever has focus,
+	 * which at a terminal is the terminal. The close event above is what
+	 * the comment said Back was; on the Fold, Qt 6 delivered Back as
+	 * Qt::Key_Back, and unaccepted at the terminal it backgrounded the app
+	 * and never closed anything -- the host list was unreachable from a
+	 * live session.
+	 */
+	QStackedWidget *pages = window.findChild<QStackedWidget *>();
+	QVERIFY(pages);
+	QWidget *terminal_page = nullptr;
+	for (int i = 0; i < pages->count(); ++i) {
+		if (pages->widget(i)->findChild<bssh_terminal_view *>()) terminal_page = pages->widget(i);
+	}
+	QVERIFY2(terminal_page, "the window must have a page holding the terminals");
+	pages->setCurrentWidget(terminal_page);
+	QVERIFY(!window.showing_front_door());
+
+	bssh_terminal_view *view = terminal_page->findChild<bssh_terminal_view *>();
+	QVERIFY(view);
+	QKeyEvent key_back(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
+	QApplication::sendEvent(view, &key_back);
+	QVERIFY2(window.showing_front_door(), "Back at a terminal must go up to the host list");
+	QVERIFY2(key_back.isAccepted(), "Back at a terminal was left for Android, which backgrounds the app");
 
 	bssh_ssh_session::set_factory(nullptr);
 }

@@ -7026,11 +7026,22 @@ not handle it lets Qt close the window — so the app left while the page
 it should have left stayed exactly where it was. The only way out was
 the page's own on-screen Back button.
 
-**It must not be swallowed at the bottom of the stack.** Back at the
-terminal or the host list is a request to leave the APP, and Android
-backgrounds on an unhandled Back, so `go_back()` returns false there and
-the event is left ignored. Eating it would strand a user pressing a key
-that does nothing, which is the opposite failure and just as bad.
+**It must not be swallowed at the bottom of the stack -- which is the
+host list, not the terminal.** Back at the host list is a request to
+leave the APP, and Android backgrounds on an unhandled Back, so it is left
+ignored there; eating it would strand a user pressing a key that does
+nothing. **Back at a terminal goes up to the host list -- decided by the
+holder 2026-10-07**, after this paragraph and §8.3's "Touch has Back" had
+said opposite things for a month. The code had followed this paragraph by
+accident: `closeEvent` sends a terminal up, but Qt 6 delivers Android's
+Back as `Qt::Key_Back`, which was left unaccepted at the terminal and
+backgrounded the app, so `closeEvent` never ran. On the Fold that meant
+no way from a live session to the host list -- and so to a second
+session, the tab bar or a split -- except a slip in the settings' own
+Back, fixed the same day. The key now goes up where a host list exists;
+`backing_out_of_a_session_reaches_the_host_list` sends the real key to
+the focused terminal view, and a sabotage leaving it to Android is
+caught.
 
 **And Back returns to the page it came FROM, which was a second fault in
 the same place.** Every sub-page returned to the host list whatever

@@ -118,3 +118,13 @@ file = "src/ui/main_window.cpp"
 find = "\tif (here == m_terminal_page || here == m_host_list) m_back_stack.clear();"
 replace = "\tm_back_stack.clear();"
 expect = "the_back_key_leaves_the_page_not_the_app"
+
+# Back at a terminal is left for Android, which backgrounds the app -- the
+# Fold, 2026-10-07, where the host list could not be reached from a live
+# session at all.
+[[sabotage]]
+name = "Back at a terminal is left for Android"
+file = "src/ui/main_window.cpp"
+find = "\tif (event->key() == Qt::Key_Back && m_host_list && m_pages\n\t    && m_pages->currentWidget() == m_terminal_page) {"
+replace = "\tif (false) {"
+expect = "backing_out_of_a_session_reaches_the_host_list"
