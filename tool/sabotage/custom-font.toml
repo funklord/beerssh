@@ -39,3 +39,12 @@ file = "src/ui/font_picker.cpp"
 find = "\tif (!catalog.custom_family().isEmpty()) custom_row();\n"
 replace = ""
 expect = "every_custom_entry_reaches_the_control_that_offers_it"
+
+# The reserved "custom" id is explained as an unknown font -- what the
+# Fold's picker said about an imported font it was drawing in.
+[[sabotage]]
+name = "the custom entry is explained as an unknown font"
+file = "src/term/font_catalog.cpp"
+find = "\tif (id == custom_id()) {\n\t\tif (is_available(id)) return QString();"
+replace = "\tif (false) {\n\t\tif (is_available(id)) return QString();"
+expect = "a_monospace_font_file_becomes_the_custom_entry"

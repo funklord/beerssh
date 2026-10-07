@@ -427,6 +427,18 @@ QString bssh_font_catalog::substitution_note(const QString &id) const {
 		                      "Showing %2.").arg(id.mid(7), served);
 	}
 
+	/*
+	 * Before the unknown-id case, which it otherwise falls into: "custom"
+	 * is reserved rather than bundled, so the table has no entry for it,
+	 * and the phone said '"custom" is not one of the bundled fonts.
+	 * Showing Agave.' about a font that was imported and being shown.
+	 */
+	if (id == custom_id()) {
+		if (is_available(id)) return QString();
+		return QStringLiteral("No font of your own has been added on this device. "
+		                      "Showing %1.").arg(served);
+	}
+
 	if (!font) {
 		return QStringLiteral("\"%1\" is not one of the bundled fonts. "
 		                      "Showing %2.").arg(id, served);

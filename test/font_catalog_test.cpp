@@ -660,9 +660,17 @@ void font_catalog_test::a_monospace_font_file_becomes_the_custom_entry() {
 	QCOMPARE(catalog.fallback_chain(id).first(), QStringLiteral("Hack"));
 	QVERIFY(QFile::exists(storage.path() + QStringLiteral("/custom-font")));
 
+	/*
+	 * Shown, so nothing to explain. The phone's picker said '"custom" is
+	 * not one of the bundled fonts' here, about the imported font it was
+	 * drawing in.
+	 */
+	QCOMPARE(catalog.substitution_note(id), QString());
+
 	/* A restart: nothing in the catalog, then the copy loaded again. */
 	catalog.set_custom_family(QString());
 	QVERIFY(!catalog.is_available(id));
+	QVERIFY(catalog.substitution_note(id).startsWith(QStringLiteral("No font of your own")));
 	QCOMPARE(bssh_load_custom_font(), QStringLiteral("Hack"));
 	QVERIFY(catalog.is_available(id));
 
