@@ -14363,6 +14363,14 @@ something:
   transitions, so a guard on it refuses forever. When the foreground keeps
   moving, stop and ask whether to drive the phone or only watch. Coordinate
   with hydra's session before using the phone at all.
+- **`topResumedActivity` does not see the notification shade.** On
+  2026-10-07 the shade was pulled down over beersshd on the Fold and
+  `topResumedActivity` went on naming beersshd, so a guarded tap went
+  into the shade -- the holder's notifications -- rather than the app.
+  The guard needs a second check for something drawn over the activity;
+  `dumpsys window`'s focused window naming `NotificationShade` is the
+  likely witness, and is not yet measured. Until it is, take a
+  screenshot before a tap that matters.
 - **`BACK` at the terminal leaves the app**, so the next tap lands on the
   home screen; and when beerssh crashes mid-`input text`, the rest of the
   typing goes to the launcher.
@@ -14750,12 +14758,36 @@ the time-limit stop, all caught.
   written to disk lazily, so this is a property of killing a device, not
   of the app -- which, correctly, asked again.
 
+**On a phone, 2026-10-07** -- the Fold (SM-F926B, Android 15), cover
+screen, over the real Wi-Fi rather than a relay: Samsung's Settings opened
+on the app's own page, access was noticed on return, Start brought the
+`dataSync` service up with the notification dialog in front of it and the
+notification posted on Allow. From this machine on the same LAN, `sftp`
+listed shared storage, a 32 MB file went up at about 29 MB/s and came back
+at 28 MB/s byte-identical, `scp` exited 0, the private host key and
+`/proc` were refused, `/Android/data` was refused by Android itself
+(scoped storage), and `ssh-keyscan` printed the fingerprint the screen
+showed.
+
+**The phone found a layout fault the emulator could not:** once serving,
+the page was wider than the cover screen and the Stop button ran off its
+edge. The fingerprint is one fifty-character word, and as a word-wrapped
+label it still set the page's minimum width. It is a read-only line now,
+which scrolls and copies whole; the window test asserts the page fits 360
+dp once serving, and a sabotage that gives the line its full width again is
+caught.
+
 ### 19.6 Still open — **[OPEN]**
 
-- **A real phone.** Everything above is the emulator; the shared phones were
-  not connected (sec 17).
-- **The time limit itself** has not fired: it exists on Android 15 and the
-  emulator image is 14.
+- **The time limit has not been seen to fire.** The Fold is Android 15 and
+  enforces it; `device_config put activity_manager
+  data_sync_fgs_timeout_duration 60000` shortens it (restore with `device_config
+  delete`, which returns it to 21600000). The run was abandoned, not
+  failed: the Start tap landed on the notification shade (sec 17) and the
+  service never started. Two things to see when it is run: `onTimeout`
+  stopping the server with the reason in the log, and **pressing Start
+  again once the day's budget is spent**, where Android 15 makes
+  `startForeground()` throw -- not yet handled, and possibly a crash.
 - **The icon** is Android's default, with BeerSSH's (sec 0.1) undecided.
 - **Release:** a keystore, and Play's declarations for
   `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.

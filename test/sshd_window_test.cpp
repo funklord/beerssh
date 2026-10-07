@@ -3,6 +3,8 @@
 #include <QDir>
 #include <QFile>
 #include <QLabel>
+#include <QLineEdit>
+#include <QScrollArea>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
@@ -110,7 +112,19 @@ void sshd_window_test::it_serves_the_platform_root_on_the_platform_address() {
 	/* Asked at Start, which is when the notification first has something to say. */
 	QCOMPARE(platform.notification_requests, 1);
 	QVERIFY(!child<QSpinBox>(window, "sshd-port")->isEnabled());
-	QVERIFY(child<QLabel>(window, "sshd-fingerprint")->text().contains(QStringLiteral("SHA256:")));
+	QCOMPARE(child<QLineEdit>(window, "sshd-fingerprint")->text(), window.server().host_key_fingerprint());
+	QVERIFY(window.server().host_key_fingerprint().startsWith(QStringLiteral("SHA256:")));
+
+	/*
+	 * And the page still fits a phone. The fingerprint as a label set the
+	 * minimum width of everything under the scroll area, and on a Fold's
+	 * cover screen the Stop button went past the edge. 360 is the narrow
+	 * end of phone widths in dp, which is what Qt's pixels are there.
+	 */
+	auto *scroll = window.findChild<QScrollArea *>();
+	QVERIFY(scroll && scroll->widget());
+	QVERIFY2(scroll->widget()->minimumSizeHint().width() <= 360,
+	         qPrintable(QString::number(scroll->widget()->minimumSizeHint().width())));
 
 	child<QPushButton>(window, "sshd-toggle")->click();
 	QVERIFY(!window.serving());

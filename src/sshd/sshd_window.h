@@ -7,6 +7,7 @@
 #include "sshd/sshd.h"
 
 class QLabel;
+class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
@@ -63,7 +64,7 @@ private:
 	QHostAddress m_bound;
 
 	QLabel *m_status = nullptr;
-	QLabel *m_fingerprint = nullptr;
+	QLineEdit *m_fingerprint = nullptr;
 	QPushButton *m_toggle = nullptr;
 	QWidget *m_access = nullptr;
 	QSpinBox *m_port = nullptr;

@@ -85,7 +85,25 @@ public class SshdService extends Service {
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
 		createChannel();
-		startForeground(NOTIFICATION_ID, buildNotification(this, s_status));
+
+		/*
+		 * Refused once the day's dataSync time is spent: Android 15 throws
+		 * ForegroundServiceStartNotAllowedException from startForeground()
+		 * for the rest of the 24 hours. Uncaught, that is a crash on Start
+		 * -- and on Stop, which comes through here too. Caught, the server
+		 * is told the same thing onTimeout tells it, since it is the same
+		 * limit. Written from the documentation; not yet seen on a device
+		 * (project.md sec 19.6).
+		 */
+		try {
+			startForeground(NOTIFICATION_ID, buildNotification(this, s_status));
+		} catch (IllegalStateException refused) {
+			if (intent != null && !ACTION_STOP.equals(intent.getAction())) {
+				tellNativeTimedOut();
+			}
+			stopSelf();
+			return START_NOT_STICKY;
+		}
 
 		if (intent == null || ACTION_STOP.equals(intent.getAction())) {
 			stopForeground(STOP_FOREGROUND_REMOVE);
@@ -96,13 +114,17 @@ public class SshdService extends Service {
 
 	@Override
 	public void onTimeout(int startId, int fgsType) {
+		tellNativeTimedOut();
+		stopForeground(STOP_FOREGROUND_REMOVE);
+		stopSelf();
+	}
+
+	private static void tellNativeTimedOut() {
 		try {
 			nativeTimedOut();
 		} catch (UnsatisfiedLinkError error) {
 			/* No native side to tell: stopping is still owed to Android. */
 		}
-		stopForeground(STOP_FOREGROUND_REMOVE);
-		stopSelf();
 	}
 
 	@Override

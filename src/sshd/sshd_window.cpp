@@ -5,6 +5,7 @@
 #include <QFormLayout>
 #include <QGuiApplication>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSaveFile>
@@ -47,9 +48,18 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	m_status->setTextInteractionFlags(Qt::TextSelectableByMouse);
 	layout->addWidget(m_status);
 
-	m_fingerprint = wrapped_label();
+	/*
+	 * A read-only line rather than a label. The fingerprint is one word of
+	 * fifty characters with nowhere to wrap, and as a label it set the
+	 * page's minimum width: on a Fold's cover screen the whole page grew
+	 * past the right edge and took the Stop button with it. A line scrolls
+	 * instead, and copies whole -- which a client's first connection needs.
+	 */
+	m_fingerprint = new QLineEdit;
 	m_fingerprint->setObjectName(QStringLiteral("sshd-fingerprint"));
-	m_fingerprint->setTextInteractionFlags(Qt::TextSelectableByMouse);
+	m_fingerprint->setReadOnly(true);
+	m_fingerprint->setFrame(false);
+	m_fingerprint->setPlaceholderText(tr("Host key: shown once started"));
 	layout->addWidget(m_fingerprint);
 
 	m_toggle = new QPushButton(tr("Start"));
@@ -129,8 +139,8 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	connect(m_platform, &bssh_sshd_platform::time_limit_reached, this, [this] {
 		if (!serving()) return;
 		stop();
-		log(tr("Stopped: Android allows a file-transfer service six hours a day. "
-		       "Start it again to go on."));
+		log(tr("Stopped: Android allows a file-transfer service six hours in any "
+		       "24, and that time is used up. It can be started again once it renews."));
 	});
 
 	/*
@@ -233,7 +243,8 @@ void bssh_sshd_window::start() {
 	m_bound = address;
 	m_port->setEnabled(false);
 	m_platform->request_notifications();
-	m_fingerprint->setText(tr("Host key %1").arg(m_server.host_key_fingerprint()));
+	m_fingerprint->setText(m_server.host_key_fingerprint());
+	m_fingerprint->setCursorPosition(0);
 	log(tr("Listening on %1:%2").arg(address.toString()).arg(m_server.port()));
 	update_status();
 	refresh();

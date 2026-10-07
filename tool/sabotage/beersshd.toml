@@ -92,3 +92,12 @@ file = "src/sshd/sshd_window.cpp"
 find = "\tif (m_keys->document()->isModified()) return;"
 replace = ""
 expect = "the_keys_box_follows_the_file_but_not_over_edits"
+
+# The fingerprint sets the page's minimum width again, as the label did:
+# on a Fold's cover screen that pushed the Stop button past the edge.
+[[sabotage]]
+name = "the fingerprint demands its full width again"
+file = "src/sshd/sshd_window.cpp"
+find = "\tm_fingerprint->setCursorPosition(0);"
+replace = "\tm_fingerprint->setMinimumWidth(m_fingerprint->fontMetrics().horizontalAdvance(m_fingerprint->text()) + 40);"
+expect = "it_serves_the_platform_root_on_the_platform_address"
