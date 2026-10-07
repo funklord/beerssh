@@ -4465,7 +4465,7 @@ best one it can:
     every-key-as-escape each committed character is its own press with a
     release straight after -- which is also all Android's soft keyboard can
     give.
-  - Guarded by `tool/sabotage/kitty-keyboard.toml`, fourteen edits.
+  - Guarded by `tool/sabotage/kitty-keyboard.toml`, sixteen edits.
   - **And checked by kitty itself, 2026-10-01**, because the router's tests
     compare against sequences written from the specification, and a
     misreading would be in both halves and pass. `pty_session_test::
@@ -4478,6 +4478,24 @@ best one it can:
     reason it is not a sabotage target (a spec expecting it would read as a
     miss wherever kitty is absent). Its one control was run by hand: the
     supported flags cut back to 1, and it failed on the `31`.
+  - **On the phone, 2026-10-07** (the Fold, the built-in keyboard, the
+    local shell under `CSI > 31 u`, what arrived read with `cat` into a
+    file): a letter was `CSI 113;;113u` then `CSI 113;1:3u`, as it should
+    be. **Two faults, both in the on-screen keyboard's own entry points**,
+    which kitten's test could not reach because it drives `handle_key`:
+    its Enter, Tab and Backspace arrived as the legacy `0d 09 7f`, because
+    `send_key` went straight to libvterm -- the spec keeps those bytes only
+    for disambiguate, and says report-all-keys reports *all* keys, those
+    three included, with releases; and its sticky Ctrl then `c` carried `c`
+    as associated text, where a Ctrl chord types nothing and kitty sends
+    none -- a hardware Ctrl+C carries `0x03`, which the encoder drops, and
+    `send_text` carried the plain letter. Both fixed in the router;
+    `input_router_test::kitty_reaches_the_on_screen_keyboard_too` failed on
+    the old code, and two sabotages are caught. **The harness itself went
+    wrong first**, and is recorded because it is `running-code.md`'s hazard
+    met in person: `timeout 25 cat` under toybox left `cat` STOPPED (state
+    T) reading the tty, so the timeout never ended it; the working form is
+    `stty raw -echo min 0 time 100; cat`, which the tty itself ends.
 - **xterm `modifyOtherKeys`** (`CSI > 4 ; 2 m`, queried with `CSI ? 4 m`).
   The middle tier, and what a terminal that predates kitty's protocol
   offers. **Implemented at level 2.** Level 3 is deliberately not offered:

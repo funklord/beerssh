@@ -503,6 +503,26 @@ void bssh_input_router::send_key(int key, quint8 modifiers) {
 	 */
 	if (steal_chord(key, sending)) return;
 
+	/*
+	 * Under the kitty protocol's key events this is a key like any other,
+	 * press and release, as handle_key makes it for a physical one. It
+	 * went straight to libvterm, so on the Fold the keyboard's Enter, Tab
+	 * and Backspace arrived as the legacy 0d, 09 and 7f to a program that
+	 * had asked for every key as an escape code.
+	 */
+	if (m_emulator->wants_key_events()) {
+		bssh_emulator::key_event_t press;
+		press.key = key;
+		press.modifiers = sending;
+		if (m_emulator->send_key_event(press)) {
+			bssh_emulator::key_event_t release = press;
+			release.type = bssh_emulator::EVENT_RELEASE;
+			m_emulator->send_key_event(release);
+			spend_sticky_modifiers();
+			return;
+		}
+	}
+
 	m_emulator->send_key(key, sending);
 	spend_sticky_modifiers();
 }
@@ -745,7 +765,15 @@ void bssh_input_router::send_text(const QString &text) {
 			const char32_t produced = char32_t(codepoint);
 			bssh_emulator::key_event_t press;
 			press.modifiers = quint8(effective_modifiers() & ~MOD_ALTGR);
-			press.text.append(codepoint);
+
+			/*
+			 * No text under Ctrl: a Ctrl chord types nothing, and the
+			 * spec's associated text is what a key typed. A hardware
+			 * Ctrl+C says so by carrying 0x03, which is dropped; this
+			 * path carried the plain letter, and the Fold sent "c" with
+			 * Ctrl+C.
+			 */
+			if (!(press.modifiers & bssh_emulator::MOD_CTRL)) press.text.append(codepoint);
 
 			const QString lower = QString::fromUcs4(&produced, 1).toLower();
 			press.code = lower.toUcs4().value(0, produced);

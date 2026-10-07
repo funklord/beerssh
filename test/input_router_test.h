@@ -22,6 +22,7 @@ class input_router_test : public QObject {
 private slots:
 	void kitty_event_types_report_repeats_and_releases();
 	void kitty_all_keys_as_escapes_with_text_and_alternates();
+	void kitty_reaches_the_on_screen_keyboard_too();
 	void kitty_release_answers_its_own_press();
 	void kitty_modes_are_per_screen_and_an_emptied_stack_resets();
 	void super_is_a_kitty_modifier_and_nothing_else_hears_it();

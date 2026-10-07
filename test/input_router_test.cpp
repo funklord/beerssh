@@ -1502,6 +1502,46 @@ void input_router_test::kitty_event_types_report_repeats_and_releases() {
 	QCOMPARE(lift(router, emulator, Qt::Key_A, Qt::NoModifier, QStringLiteral("a")), QByteArray());
 }
 
+/*
+ * The on-screen keyboard reaches the emulator by send_key and send_text,
+ * not by a QKeyEvent, and those two entry points have to speak the kitty
+ * protocol as handle_key does (sec 7.1).
+ *
+ * Found on the Fold, 2026-10-07, under CSI > 31 u: a letter arrived as
+ * press and release, but the keyboard's Enter, Tab and Backspace arrived
+ * as the legacy 0d, 09 and 7f -- send_key went straight to libvterm --
+ * and Ctrl then c carried "c" as its associated text, where the spec
+ * says a Ctrl chord produces none: a hardware Ctrl+C's text is 0x03,
+ * which is dropped, and the keyboard's was a plain c.
+ */
+void input_router_test::kitty_reaches_the_on_screen_keyboard_too() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	emulator.feed(QByteArrayLiteral("\x1b[>31u"));
+	emulator.take_output();
+
+	/* Under report-all-keys these three are escape codes too, with releases. */
+	router.send_key(bssh_emulator::KEY_ENTER, bssh_emulator::MOD_NONE);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[13u\x1b[13;1:3u"));
+	router.send_key(bssh_emulator::KEY_TAB, bssh_emulator::MOD_NONE);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[9u\x1b[9;1:3u"));
+	router.send_key(bssh_emulator::KEY_BACKSPACE, bssh_emulator::MOD_NONE);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[127u\x1b[127;1:3u"));
+
+	/* A letter keeps its text; under Ctrl it has none. */
+	router.send_text(QStringLiteral("q"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[113;;113u\x1b[113;1:3u"));
+	router.set_sticky_modifiers(bssh_emulator::MOD_CTRL);
+	router.send_text(QStringLiteral("c"));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[99;5u\x1b[99;5:3u"));
+
+	/* And with the protocol off again, the legacy bytes. */
+	emulator.feed(QByteArrayLiteral("\x1b[<u"));
+	emulator.take_output();
+	router.send_key(bssh_emulator::KEY_ENTER, bssh_emulator::MOD_NONE);
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\r"));
+}
+
 void input_router_test::kitty_all_keys_as_escapes_with_text_and_alternates() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);

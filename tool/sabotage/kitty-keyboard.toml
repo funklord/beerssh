@@ -112,3 +112,21 @@ file = "src/input/input_router.cpp"
 find = "\t\t\tout.keypad_text = typed;"
 replace = "\t\t\tout.keypad_text = false;"
 expect = "the_keypad_is_its_own_keys_under_the_kitty_protocol"
+
+# The on-screen keyboard's keys go straight to libvterm: Enter, Tab and
+# Backspace arrive as legacy bytes under report-all-keys, as they did on
+# the Fold, 2026-10-07.
+[[sabotage]]
+name = "the on-screen keyboard's keys skip the kitty protocol"
+file = "src/input/input_router.cpp"
+find = "\tif (m_emulator->wants_key_events()) {\n\t\tbssh_emulator::key_event_t press;\n\t\tpress.key = key;"
+replace = "\tif (false) {\n\t\tbssh_emulator::key_event_t press;\n\t\tpress.key = key;"
+expect = "kitty_reaches_the_on_screen_keyboard_too"
+
+# A Ctrl chord from the on-screen keyboard carries its letter as text.
+[[sabotage]]
+name = "a soft-keyboard Ctrl chord carries text"
+file = "src/input/input_router.cpp"
+find = "\t\t\tif (!(press.modifiers & bssh_emulator::MOD_CTRL)) press.text.append(codepoint);"
+replace = "\t\t\tpress.text.append(codepoint);"
+expect = "kitty_reaches_the_on_screen_keyboard_too"
