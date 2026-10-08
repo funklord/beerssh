@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 
+#include "platform/headless.h"
 #include "platform/platform.h"
 #include "command_line_test.h"
 #include "conn_manager_test.h"
@@ -258,6 +259,7 @@ int main(int argc, char *argv[]) {
 		qputenv("XDG_DATA_HOME", (sandbox.path() + QStringLiteral("/data")).toUtf8());
 	}
 
+	bssh_drop_theme_when_offscreen();
 	QApplication app(argc, argv);
 
 	/*

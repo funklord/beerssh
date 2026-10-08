@@ -164,6 +164,7 @@ HEADERS += \
     src/ui/input_selector.h \
     src/ui/input_mode.h \
     src/ui/interface_scale.h \
+    src/platform/headless.h \
     keyboard/key_cap.h \
     keyboard/touch_chords.h \
     keyboard/resize_grip.h \

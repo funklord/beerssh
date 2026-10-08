@@ -8304,6 +8304,20 @@ environment variables, and `QT_QPA_PLATFORM` is what `make test` and
 result lives afterwards, because `QCoreApplication::arguments()` now holds only
 `argv[0]` and the desktop platform still has to answer `launch_document()`.
 
+**An offscreen run drops `QT_QPA_PLATFORMTHEME` — [FIXED 2026-10-08].** The
+theme plugin opens a display of its own whatever the platform is, so with
+`QT_QPA_PLATFORMTHEME=gtk3` exported (a GNOME or XFCE desktop's default) and
+no display, the suite died on `Gtk-WARNING: cannot open display` before a
+single test -- a message naming GTK rather than the environment. Reported by
+the other account's guidelines session from hembygd, and **measured here**
+before acting: both plugins are installed (gtk3, lxqt), the test binary with
+`gtk3` and no display exited without running anything, and with the variable
+unset the same test passed. Latent on this desktop, which exports neither.
+`bssh_drop_theme_when_offscreen()` (`src/platform/headless.h`) unsets it when
+`QT_QPA_PLATFORM` is `offscreen`, called before the `QApplication` in both
+`main()`s -- in the program rather than the Makefile, because somebody chasing
+a failure runs the binary directly.
+
 **A shell that ends closes its pane, unless `--hold`.** Nothing did this before:
 the pane stayed with "session ended" written under it, which is xterm's `-hold`
 applied to everybody whether they asked for it or not — so `beerssh -e ls`

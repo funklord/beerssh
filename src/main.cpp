@@ -5,6 +5,7 @@
 #include <QTextStream>
 #include <QTimer>
 
+#include "platform/headless.h"
 #include "model/app_settings.h"
 #include "ui/interface_scale.h"
 #include "model/command_line.h"
@@ -164,6 +165,7 @@ int main(int argc, char *argv[]) {
 
 	int qt_argc = 1;
 	char *qt_argv[] = { argv[0], nullptr };
+	bssh_drop_theme_when_offscreen();
 	QApplication app(qt_argc, qt_argv);
 
 	QCoreApplication::setOrganizationDomain(QStringLiteral("vibes.se"));
