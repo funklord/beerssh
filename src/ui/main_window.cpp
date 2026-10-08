@@ -1132,7 +1132,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	static_assert(SK_TOUCH_TARGET_DP == BSSH_TOUCH_TARGET_DP,
 	              "softkeys' touch target and this app's disagree");
 
-	m_key_row = new bssh_key_row(nullptr, this);
+	m_key_row = new sk_key_row(nullptr, this);
 
 	/* AUTO follows this app's own answer, which its tests can force. */
 	m_key_row->set_touch_primary([] {
@@ -1151,7 +1151,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * tested only on Android, and this one is laid out to a phone's width
 	 * by a test that runs on the desktop.
 	 */
-	m_keyboard = new bssh_soft_keyboard(nullptr, this);
+	m_keyboard = new sk_keyboard(nullptr, this);
 	layout->insertWidget(3, m_keyboard);
 	m_keyboard->hide();
 
@@ -1171,7 +1171,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * only called hide() would come back on the next one, which from the
 	 * user's side is a key that does not work.
 	 */
-	connect(m_keyboard, &bssh_soft_keyboard::hide_requested, this, [this] {
+	connect(m_keyboard, &sk_keyboard::hide_requested, this, [this] {
 		m_keyboard_hidden_by_user = true;
 		m_keyboard->hide();
 	});
@@ -1189,18 +1189,18 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * A resize bar let go: the size is kept for next time, per keyboard
 	 * (sec 6.2), so a shrunk compact keyboard does not shrink the full one.
 	 */
-	connect(m_keyboard, &bssh_soft_keyboard::size_chosen,
-	         this, [](bssh_soft_keyboard_catalog::style_t style, int size_dp) {
+	connect(m_keyboard, &sk_keyboard::size_chosen,
+	         this, [](sk_catalog::style_t style, int size_dp) {
 		bssh_app_settings settings;
-		if (style == bssh_soft_keyboard_catalog::STYLE_SPLIT) {
+		if (style == sk_catalog::STYLE_SPLIT) {
 			settings.set_keyboard_split_width(size_dp);
 		} else {
-			settings.set_keyboard_height(style == bssh_soft_keyboard_catalog::STYLE_FULL,
+			settings.set_keyboard_height(style == sk_catalog::STYLE_FULL,
 			                             size_dp);
 		}
 	});
 
-	connect(m_keyboard, &bssh_soft_keyboard::settings_requested, this, [this] {
+	connect(m_keyboard, &sk_keyboard::settings_requested, this, [this] {
 		if (m_pages && m_device_settings) show_page(m_device_settings);
 	});
 
@@ -1645,7 +1645,7 @@ void bssh_main_window::place_input_selector() {
 	if (!m_input_selector || !m_status_row || !m_selector_row) return;
 
 	const bool wide = width() > height()
-	                  || width() >= BSSH_FULL_KEYBOARD_MIN_DP;
+	                  || width() >= SK_FULL_KEYBOARD_MIN_DP;
 	QHBoxLayout *target = wide ? m_status_row : m_selector_row;
 
 	/*
@@ -1786,7 +1786,7 @@ void bssh_main_window::apply_device_settings() {
 	 */
 	const QString row_spec = settings.custom_key_row();
 	if (!row_spec.isEmpty()) {
-		bssh_key_row_catalog::instance().set_custom(bssh_parse_key_row(row_spec));
+		sk_key_row_catalog::instance().set_custom(sk_parse_key_row(row_spec));
 	}
 
 	/*
@@ -1802,8 +1802,8 @@ void bssh_main_window::apply_device_settings() {
 	const QMap<QString, QString> layout_rows = settings.custom_keyboard_layout();
 	if (!layout_rows.isEmpty()) {
 		QString why;
-		if (!bssh_set_custom_layout(settings.custom_keyboard_layout_name(),
-		                             bssh_parse_layout_slots(layout_rows), &why)) {
+		if (!sk_set_custom_layout(settings.custom_keyboard_layout_name(),
+		                             sk_parse_layout_slots(layout_rows), &why)) {
 			m_error = QStringLiteral("custom keyboard layout refused: %1").arg(why);
 			update_status();
 		}
@@ -2001,13 +2001,13 @@ void bssh_main_window::apply_key_row_visibility() {
 
 	switch (settings.key_row_visibility()) {
 	case bssh_app_settings::KEY_ROW_ALWAYS:
-		m_key_row->set_visibility_mode(bssh_key_row::ALWAYS);
+		m_key_row->set_visibility_mode(sk_key_row::ALWAYS);
 		break;
 	case bssh_app_settings::KEY_ROW_NEVER:
-		m_key_row->set_visibility_mode(bssh_key_row::NEVER);
+		m_key_row->set_visibility_mode(sk_key_row::NEVER);
 		break;
 	case bssh_app_settings::KEY_ROW_AUTO:
-		m_key_row->set_visibility_mode(bssh_key_row::AUTO);
+		m_key_row->set_visibility_mode(sk_key_row::AUTO);
 		break;
 	}
 
@@ -2110,15 +2110,15 @@ void bssh_main_window::apply_keyboard_style() {
 	 * newer version, or by hand, should not quietly become a keyboard
 	 * whose letters are somewhere else.
 	 */
-	if (bssh_set_keyboard_layout(settings.keyboard_layout())) {
+	if (sk_set_keyboard_layout(settings.keyboard_layout())) {
 		m_keyboard->rebuild_keys();
 	}
 
-	bssh_soft_keyboard_catalog::style_t wanted = bssh_soft_keyboard_catalog::STYLE_COMPACT;
+	sk_catalog::style_t wanted = sk_catalog::STYLE_COMPACT;
 	if (settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_FULL) {
-		wanted = bssh_soft_keyboard_catalog::STYLE_FULL;
+		wanted = sk_catalog::STYLE_FULL;
 	} else if (settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_SPLIT) {
-		wanted = bssh_soft_keyboard_catalog::STYLE_SPLIT;
+		wanted = sk_catalog::STYLE_SPLIT;
 	}
 
 	/*
@@ -2134,11 +2134,11 @@ void bssh_main_window::apply_keyboard_style() {
 	                                            : qBound(140, width() * 22 / 100, 260));
 	m_keyboard->set_grips_shown(settings.keyboard_grips());
 
-	const bssh_soft_keyboard_catalog::style_t drawn =
-	        bssh_keyboard_style_for(wanted, width(), height());
+	const sk_catalog::style_t drawn =
+	        sk_keyboard_style_for(wanted, width(), height());
 	m_keyboard->set_style(drawn);
 	m_keyboard->set_bottom_height(
-	        settings.keyboard_height(drawn == bssh_soft_keyboard_catalog::STYLE_FULL));
+	        settings.keyboard_height(drawn == sk_catalog::STYLE_FULL));
 }
 
 void bssh_main_window::on_pane_focus_changed(bssh_session *session) {

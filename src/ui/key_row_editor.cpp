@@ -101,10 +101,10 @@ bssh_key_row_editor::bssh_key_row_editor(const QString &spec, QWidget *parent)
 	 */
 	connect(m_buttons->button(QDialogButtonBox::RestoreDefaults),
 	        &QPushButton::clicked, this, [this] {
-		const bssh_key_row_catalog catalog;
-		if (const bssh_key_row_layout_t *fallback =
+		const sk_key_row_catalog catalog;
+		if (const sk_key_row_layout_t *fallback =
 		            catalog.by_id(catalog.default_id())) {
-			m_spec->setText(bssh_key_row_spec(fallback->keys));
+			m_spec->setText(sk_key_row_spec(fallback->keys));
 		}
 	});
 
@@ -119,17 +119,17 @@ QString bssh_key_row_editor::spec() const {
 }
 
 void bssh_key_row_editor::refresh() {
-	const QList<bssh_key_t> keys = bssh_parse_key_row(m_spec->text());
+	const QList<sk_key_t> keys = sk_parse_key_row(m_spec->text());
 
 	QStringList labels;
-	for (const bssh_key_t &key : keys) {
-		labels.append(key.kind == bssh_key_t::SPACER ? QStringLiteral("[ ]")
+	for (const sk_key_t &key : keys) {
+		labels.append(key.kind == sk_key_t::SPACER ? QStringLiteral("[ ]")
 		                                             : key.label);
 	}
 	m_preview->setText(labels.isEmpty() ? QStringLiteral("nothing yet")
 	                                    : labels.join(QStringLiteral("  ")));
 
-	const bool usable = bssh_key_row_usable(keys);
+	const bool usable = sk_key_row_usable(keys);
 
 	/*
 	 * Say which half is missing, not merely that something is. "Add an
@@ -142,12 +142,12 @@ void bssh_key_row_editor::refresh() {
 		QStringList missing;
 		bool has_escape = false;
 		bool has_modifier = false;
-		for (const bssh_key_t &key : keys) {
-			if (key.kind == bssh_key_t::KEY
+		for (const sk_key_t &key : keys) {
+			if (key.kind == sk_key_t::KEY
 			    && key.value == bssh_emulator::KEY_ESCAPE) {
 				has_escape = true;
 			}
-			if (key.kind == bssh_key_t::MODIFIER) has_modifier = true;
+			if (key.kind == sk_key_t::MODIFIER) has_modifier = true;
 		}
 		if (!has_escape) missing.append(QStringLiteral("esc"));
 		if (!has_modifier) {

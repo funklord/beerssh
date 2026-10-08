@@ -28,7 +28,7 @@ namespace {
  * and it can be transcribed from that layout's own xkb definition rather
  * than recalled, which is how this one was made.
  */
-struct bssh_layout_slot_t {
+struct sk_layout_slot_t {
 	const char *slot;
 
 	/*
@@ -37,7 +37,7 @@ struct bssh_layout_slot_t {
 	 *
 	 * Level 2 is empty on every letter, deliberately. Shift on a letter
 	 * is a CASE MAPPING and not a second legend, so it is computed
-	 * (bssh_shifted_char falls back to toUpper) rather than listed; a
+	 * (sk_shifted_char falls back to toUpper) rather than listed; a
 	 * layout in another script then gets its capitals right without
 	 * spelling out twenty-six of them, and a layout that genuinely
 	 * prints something else on the top half of a letter key can still
@@ -73,7 +73,7 @@ struct bssh_layout_slot_t {
  * of that same deadening, on `, \', g, h, v and b -- the level is left
  * empty rather than carrying a character AltGr would send twice.
  */
-const bssh_layout_slot_t BSSH_LAYOUT_US_INTL[] = {
+const sk_layout_slot_t SK_LAYOUT_US_INTL[] = {
 	{ "TLDE", { "`", "~", "", "" } },
 	{ "AE01", { "1", "!", "\u00a1", "\u00b9" } },
 	{ "AE02", { "2", "@", "\u00b2", "\u02dd" } },
@@ -158,7 +158,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_US_INTL[] = {
  * column of the left Shift on it -- 1.25u and 1u, which is what an ISO
  * keyboard does with that space.
  */
-const bssh_layout_slot_t BSSH_LAYOUT_SE[] = {
+const sk_layout_slot_t SK_LAYOUT_SE[] = {
 	{ "TLDE", { "\u00a7", "\u00bd", "\u00b6", "\u00be" } },
 	{ "AE01", { "1", "!", "\u00a1", "\u00b9" } },
 	{ "AE02", { "2", "\"", "@", "\u00b2" } },
@@ -222,7 +222,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_SE[] = {
  * Names are the corpus's own, from `rules/base.lst`, so nobody here
  * decides what a layout is called.
  */
-const bssh_layout_slot_t BSSH_LAYOUT_NO[] = {
+const sk_layout_slot_t SK_LAYOUT_NO[] = {
 	{ "TLDE", { "|", "\u00a7", "\u00a6", "\u00b6" } },
 	{ "AE01", { "1", "!", "\u00a1", "\u00b9" } },
 	{ "AE02", { "2", "\"", "@", "\u00b2" } },
@@ -273,7 +273,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_NO[] = {
 	{ "LSGT", { "<", ">", "\u00bd", "\u00be" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_DK[] = {
+const sk_layout_slot_t SK_LAYOUT_DK[] = {
 	{ "TLDE", { "\u00bd", "\u00a7", "\u00be", "\u00b6" } },
 	{ "AE01", { "1", "!", "\u00a1", "\u00b9" } },
 	{ "AE02", { "2", "\"", "@", "\u00b2" } },
@@ -324,7 +324,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_DK[] = {
 	{ "LSGT", { "<", ">", "\\", "\u00ac" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_FI[] = {
+const sk_layout_slot_t SK_LAYOUT_FI[] = {
 	{ "TLDE", { "\u00a7", "\u00bd", "/", "" } },
 	{ "AE01", { "1", "!", "", "\u00a1" } },
 	{ "AE02", { "2", "\"", "@", "\u201d" } },
@@ -375,7 +375,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_FI[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_GB[] = {
+const sk_layout_slot_t SK_LAYOUT_GB[] = {
 	{ "TLDE", { "`", "\u00ac", "|", "|" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "\"", "\u00b2", "\u215b" } },
@@ -426,7 +426,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_GB[] = {
 	{ "LSGT", { "\\", "|", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_NL[] = {
+const sk_layout_slot_t SK_LAYOUT_NL[] = {
 	{ "TLDE", { "@", "\u00a7", "\u00ac", "\u00ac" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "\"", "\u00b2", "\u215b" } },
@@ -477,7 +477,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_NL[] = {
 	{ "LSGT", { "]", "[", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_ES[] = {
+const sk_layout_slot_t SK_LAYOUT_ES[] = {
 	{ "TLDE", { "\u00ba", "\u00aa", "\\", "\\" } },
 	{ "AE01", { "1", "!", "|", "\u00a1" } },
 	{ "AE02", { "2", "\"", "@", "\u215b" } },
@@ -528,7 +528,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_ES[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_PT[] = {
+const sk_layout_slot_t SK_LAYOUT_PT[] = {
 	{ "TLDE", { "\\", "|", "\u00ac", "\u00ac" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "\"", "@", "\u215b" } },
@@ -579,7 +579,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_PT[] = {
 	{ "LSGT", { "<", ">", "\\", "\\" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_CH[] = {
+const sk_layout_slot_t SK_LAYOUT_CH[] = {
 	{ "TLDE", { "\u00a7", "\u00b0", "\u00ac", "\u00ac" } },
 	{ "AE01", { "1", "+", "|", "\u00a1" } },
 	{ "AE02", { "2", "\"", "@", "\u215b" } },
@@ -630,7 +630,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_CH[] = {
 	{ "LSGT", { "<", ">", "\\", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_PL[] = {
+const sk_layout_slot_t SK_LAYOUT_PL[] = {
 	{ "TLDE", { "`", "~", "\u00ac", "\u2228" } },
 	{ "AE01", { "1", "!", "\u2260", "\u00a1" } },
 	{ "AE02", { "2", "@", "\u00b2", "\u00bf" } },
@@ -681,7 +681,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_PL[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_LV[] = {
+const sk_layout_slot_t SK_LAYOUT_LV[] = {
 	{ "TLDE", { "`", "~", "\u00b4", "~" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "@", "\u00b2", "\u215b" } },
@@ -732,7 +732,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_LV[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_RO[] = {
+const sk_layout_slot_t SK_LAYOUT_RO[] = {
 	{ "TLDE", { "`", "~", "", "" } },
 	{ "AE01", { "1", "!", "~", "" } },
 	{ "AE02", { "2", "@", "\u02c7", "" } },
@@ -792,7 +792,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_RO[] = {
  * xkbcomp, and neither exists on Android -- so what ships is the table
  * and not the machinery that made it.
  */
-const bssh_layout_slot_t BSSH_LAYOUT_DE[] = {
+const sk_layout_slot_t SK_LAYOUT_DE[] = {
 	{ "TLDE", { "^", "\u00b0", "\u2032", "\u2033" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "\"", "\u00b2", "\u215b" } },
@@ -843,7 +843,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_DE[] = {
 	{ "LSGT", { "<", ">", "|", "" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_FR[] = {
+const sk_layout_slot_t SK_LAYOUT_FR[] = {
 	{ "TLDE", { "\u00b2", "~", "\u00ac", "\u00ac" } },
 	{ "AE01", { "&", "1", "\u00b9", "\u00a1" } },
 	{ "AE02", { "\u00e9", "2", "~", "\u215b" } },
@@ -894,7 +894,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_FR[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_CZ[] = {
+const sk_layout_slot_t SK_LAYOUT_CZ[] = {
 	{ "TLDE", { ";", "\u00b0", "`", "~" } },
 	{ "AE01", { "+", "1", "!", "~" } },
 	{ "AE02", { "\u011b", "2", "@", "\u02c7" } },
@@ -945,7 +945,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_CZ[] = {
 	{ "LSGT", { "\\", "|", "/", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_SK[] = {
+const sk_layout_slot_t SK_LAYOUT_SK[] = {
 	{ "TLDE", { ";", "\u00b0", "`", "~" } },
 	{ "AE01", { "+", "1", "!", "~" } },
 	{ "AE02", { "\u013e", "2", "@", "\u02c7" } },
@@ -996,7 +996,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_SK[] = {
 	{ "LSGT", { "\\", "|", "/", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_HU[] = {
+const sk_layout_slot_t SK_LAYOUT_HU[] = {
 	{ "TLDE", { "0", "\u00a7", "\u00ac", "\u00ac" } },
 	{ "AE01", { "1", "'", "~", "~" } },
 	{ "AE02", { "2", "\"", "\u02c7", "\u02c7" } },
@@ -1047,7 +1047,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_HU[] = {
 	{ "LSGT", { "\u00ed", "", "<", ">" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_LT[] = {
+const sk_layout_slot_t SK_LAYOUT_LT[] = {
 	{ "TLDE", { "`", "~", "\u00b4", "\u00ac" } },
 	{ "AE01", { "\u0105", "", "1", "!" } },
 	{ "AE02", { "\u010d", "", "2", "@" } },
@@ -1098,7 +1098,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_LT[] = {
 	{ "LSGT", { "\u2013", "\u20ac", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_IT[] = {
+const sk_layout_slot_t SK_LAYOUT_IT[] = {
 	{ "TLDE", { "\\", "|", "\u00ac", "\u00a6" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "\"", "\u00b2", "\u02dd" } },
@@ -1149,7 +1149,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_IT[] = {
 	{ "LSGT", { "<", ">", "\u00ab", "\u00bb" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_BE[] = {
+const sk_layout_slot_t SK_LAYOUT_BE[] = {
 	{ "TLDE", { "\u00b2", "\u00b3", "\u00ac", "\u00ac" } },
 	{ "AE01", { "&", "1", "|", "\u00a1" } },
 	{ "AE02", { "\u00e9", "2", "@", "\u215b" } },
@@ -1200,7 +1200,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_BE[] = {
 	{ "LSGT", { "<", ">", "\\", "\\" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_SI[] = {
+const sk_layout_slot_t SK_LAYOUT_SI[] = {
 	{ "TLDE", { "\u00b8", "\u00a8", "", "" } },
 	{ "AE01", { "1", "!", "~", "~" } },
 	{ "AE02", { "2", "\"", "\u02c7", "\u02c7" } },
@@ -1251,7 +1251,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_SI[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_HR[] = {
+const sk_layout_slot_t SK_LAYOUT_HR[] = {
 	{ "TLDE", { "`", "~", "\u00ac", "\u00ac" } },
 	{ "AE01", { "1", "!", "~", "~" } },
 	{ "AE02", { "2", "\"", "\u02c7", "\u02c7" } },
@@ -1302,7 +1302,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_HR[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_EE[] = {
+const sk_layout_slot_t SK_LAYOUT_EE[] = {
 	{ "TLDE", { "\u02c7", "~", "\u2022", "\u00b7" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "\"", "@", "\u215b" } },
@@ -1353,7 +1353,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_EE[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_IS[] = {
+const sk_layout_slot_t SK_LAYOUT_IS[] = {
 	{ "TLDE", { "\u00b0", "\"", "\u00ac", "\u00ad" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "\"", "\u00b2", "\u215b" } },
@@ -1404,7 +1404,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_IS[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_TR[] = {
+const sk_layout_slot_t SK_LAYOUT_TR[] = {
 	{ "TLDE", { "\"", "\u00e9", "<", "\u00b0" } },
 	{ "AE01", { "1", "!", ">", "\u00a1" } },
 	{ "AE02", { "2", "'", "\u00a3", "\u00b2" } },
@@ -1455,7 +1455,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_TR[] = {
 	{ "LSGT", { "<", ">", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_MT[] = {
+const sk_layout_slot_t SK_LAYOUT_MT[] = {
 	{ "TLDE", { "\u010b", "", "`", "\u00ac" } },
 	{ "AE01", { "1", "!", "\u00b9", "\u00a1" } },
 	{ "AE02", { "2", "\"", "\u00b2", "\u215b" } },
@@ -1506,7 +1506,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_MT[] = {
 	{ "LSGT", { "\u017c", "", "\\", "|" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_RU[] = {
+const sk_layout_slot_t SK_LAYOUT_RU[] = {
 	{ "TLDE", { "\u0451", "", "", "" } },
 	{ "AE01", { "1", "!", "", "" } },
 	{ "AE02", { "2", "\"", "", "" } },
@@ -1557,7 +1557,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_RU[] = {
 	{ "LSGT", { "/", "|", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_GR[] = {
+const sk_layout_slot_t SK_LAYOUT_GR[] = {
 	{ "TLDE", { "`", "~", "\u2015", "" } },
 	{ "AE01", { "1", "!", "\u2022", "\u00b9" } },
 	{ "AE02", { "2", "@", "\u00bd", "\u00b2" } },
@@ -1608,7 +1608,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_GR[] = {
 	{ "LSGT", { "\u00ab", "\u00bb", "|", "\u00a6" } },
 };
 
-const bssh_layout_slot_t BSSH_LAYOUT_UA[] = {
+const sk_layout_slot_t SK_LAYOUT_UA[] = {
 	{ "TLDE", { "'", "\u02bc", "\u0301", "~" } },
 	{ "AE01", { "1", "!", "\u00b9", "" } },
 	{ "AE02", { "2", "\"", "\u00b2", "\u2019" } },
@@ -1659,7 +1659,7 @@ const bssh_layout_slot_t BSSH_LAYOUT_UA[] = {
 	{ "LSGT", { "/", "|", "|", "\u00a6" } },
 };
 
-struct bssh_layout_t {
+struct sk_layout_t {
 	const char *id;
 	const char *display_name;
 
@@ -1671,71 +1671,71 @@ struct bssh_layout_t {
 	 * are macros in every translation unit that includes a Qt header,
 	 * which is all of them here.
 	 */
-	const bssh_layout_slot_t *entries;
+	const sk_layout_slot_t *entries;
 	int count;
 };
 
-const bssh_layout_t BSSH_LAYOUTS[] = {
+const sk_layout_t SK_LAYOUTS[] = {
 	{ "us-intl", "US International",
-	   BSSH_LAYOUT_US_INTL, int(sizeof BSSH_LAYOUT_US_INTL / sizeof *BSSH_LAYOUT_US_INTL) },
+	   SK_LAYOUT_US_INTL, int(sizeof SK_LAYOUT_US_INTL / sizeof *SK_LAYOUT_US_INTL) },
 	{ "se", "Swedish",
-	   BSSH_LAYOUT_SE, int(sizeof BSSH_LAYOUT_SE / sizeof *BSSH_LAYOUT_SE) },
+	   SK_LAYOUT_SE, int(sizeof SK_LAYOUT_SE / sizeof *SK_LAYOUT_SE) },
 	{ "no", "Norwegian",
-	   BSSH_LAYOUT_NO, int(sizeof BSSH_LAYOUT_NO / sizeof *BSSH_LAYOUT_NO) },
+	   SK_LAYOUT_NO, int(sizeof SK_LAYOUT_NO / sizeof *SK_LAYOUT_NO) },
 	{ "dk", "Danish",
-	   BSSH_LAYOUT_DK, int(sizeof BSSH_LAYOUT_DK / sizeof *BSSH_LAYOUT_DK) },
+	   SK_LAYOUT_DK, int(sizeof SK_LAYOUT_DK / sizeof *SK_LAYOUT_DK) },
 	{ "fi", "Finnish",
-	   BSSH_LAYOUT_FI, int(sizeof BSSH_LAYOUT_FI / sizeof *BSSH_LAYOUT_FI) },
+	   SK_LAYOUT_FI, int(sizeof SK_LAYOUT_FI / sizeof *SK_LAYOUT_FI) },
 	{ "gb", "English (UK)",
-	   BSSH_LAYOUT_GB, int(sizeof BSSH_LAYOUT_GB / sizeof *BSSH_LAYOUT_GB) },
+	   SK_LAYOUT_GB, int(sizeof SK_LAYOUT_GB / sizeof *SK_LAYOUT_GB) },
 	{ "nl", "Dutch",
-	   BSSH_LAYOUT_NL, int(sizeof BSSH_LAYOUT_NL / sizeof *BSSH_LAYOUT_NL) },
+	   SK_LAYOUT_NL, int(sizeof SK_LAYOUT_NL / sizeof *SK_LAYOUT_NL) },
 	{ "es", "Spanish",
-	   BSSH_LAYOUT_ES, int(sizeof BSSH_LAYOUT_ES / sizeof *BSSH_LAYOUT_ES) },
+	   SK_LAYOUT_ES, int(sizeof SK_LAYOUT_ES / sizeof *SK_LAYOUT_ES) },
 	{ "pt", "Portuguese",
-	   BSSH_LAYOUT_PT, int(sizeof BSSH_LAYOUT_PT / sizeof *BSSH_LAYOUT_PT) },
+	   SK_LAYOUT_PT, int(sizeof SK_LAYOUT_PT / sizeof *SK_LAYOUT_PT) },
 	{ "ch", "German (Switzerland)",
-	   BSSH_LAYOUT_CH, int(sizeof BSSH_LAYOUT_CH / sizeof *BSSH_LAYOUT_CH) },
+	   SK_LAYOUT_CH, int(sizeof SK_LAYOUT_CH / sizeof *SK_LAYOUT_CH) },
 	{ "pl", "Polish",
-	   BSSH_LAYOUT_PL, int(sizeof BSSH_LAYOUT_PL / sizeof *BSSH_LAYOUT_PL) },
+	   SK_LAYOUT_PL, int(sizeof SK_LAYOUT_PL / sizeof *SK_LAYOUT_PL) },
 	{ "lv", "Latvian",
-	   BSSH_LAYOUT_LV, int(sizeof BSSH_LAYOUT_LV / sizeof *BSSH_LAYOUT_LV) },
+	   SK_LAYOUT_LV, int(sizeof SK_LAYOUT_LV / sizeof *SK_LAYOUT_LV) },
 	{ "ro", "Romanian",
-	   BSSH_LAYOUT_RO, int(sizeof BSSH_LAYOUT_RO / sizeof *BSSH_LAYOUT_RO) },
+	   SK_LAYOUT_RO, int(sizeof SK_LAYOUT_RO / sizeof *SK_LAYOUT_RO) },
 	{ "de", "German",
-	   BSSH_LAYOUT_DE, int(sizeof BSSH_LAYOUT_DE / sizeof *BSSH_LAYOUT_DE) },
+	   SK_LAYOUT_DE, int(sizeof SK_LAYOUT_DE / sizeof *SK_LAYOUT_DE) },
 	{ "fr", "French",
-	   BSSH_LAYOUT_FR, int(sizeof BSSH_LAYOUT_FR / sizeof *BSSH_LAYOUT_FR) },
+	   SK_LAYOUT_FR, int(sizeof SK_LAYOUT_FR / sizeof *SK_LAYOUT_FR) },
 	{ "cz", "Czech",
-	   BSSH_LAYOUT_CZ, int(sizeof BSSH_LAYOUT_CZ / sizeof *BSSH_LAYOUT_CZ) },
+	   SK_LAYOUT_CZ, int(sizeof SK_LAYOUT_CZ / sizeof *SK_LAYOUT_CZ) },
 	{ "sk", "Slovak",
-	   BSSH_LAYOUT_SK, int(sizeof BSSH_LAYOUT_SK / sizeof *BSSH_LAYOUT_SK) },
+	   SK_LAYOUT_SK, int(sizeof SK_LAYOUT_SK / sizeof *SK_LAYOUT_SK) },
 	{ "hu", "Hungarian",
-	   BSSH_LAYOUT_HU, int(sizeof BSSH_LAYOUT_HU / sizeof *BSSH_LAYOUT_HU) },
+	   SK_LAYOUT_HU, int(sizeof SK_LAYOUT_HU / sizeof *SK_LAYOUT_HU) },
 	{ "lt", "Lithuanian",
-	   BSSH_LAYOUT_LT, int(sizeof BSSH_LAYOUT_LT / sizeof *BSSH_LAYOUT_LT) },
+	   SK_LAYOUT_LT, int(sizeof SK_LAYOUT_LT / sizeof *SK_LAYOUT_LT) },
 	{ "it", "Italian",
-	   BSSH_LAYOUT_IT, int(sizeof BSSH_LAYOUT_IT / sizeof *BSSH_LAYOUT_IT) },
+	   SK_LAYOUT_IT, int(sizeof SK_LAYOUT_IT / sizeof *SK_LAYOUT_IT) },
 	{ "be", "Belgian",
-	   BSSH_LAYOUT_BE, int(sizeof BSSH_LAYOUT_BE / sizeof *BSSH_LAYOUT_BE) },
+	   SK_LAYOUT_BE, int(sizeof SK_LAYOUT_BE / sizeof *SK_LAYOUT_BE) },
 	{ "si", "Slovenian",
-	   BSSH_LAYOUT_SI, int(sizeof BSSH_LAYOUT_SI / sizeof *BSSH_LAYOUT_SI) },
+	   SK_LAYOUT_SI, int(sizeof SK_LAYOUT_SI / sizeof *SK_LAYOUT_SI) },
 	{ "hr", "Croatian",
-	   BSSH_LAYOUT_HR, int(sizeof BSSH_LAYOUT_HR / sizeof *BSSH_LAYOUT_HR) },
+	   SK_LAYOUT_HR, int(sizeof SK_LAYOUT_HR / sizeof *SK_LAYOUT_HR) },
 	{ "ee", "Estonian",
-	   BSSH_LAYOUT_EE, int(sizeof BSSH_LAYOUT_EE / sizeof *BSSH_LAYOUT_EE) },
+	   SK_LAYOUT_EE, int(sizeof SK_LAYOUT_EE / sizeof *SK_LAYOUT_EE) },
 	{ "is", "Icelandic",
-	   BSSH_LAYOUT_IS, int(sizeof BSSH_LAYOUT_IS / sizeof *BSSH_LAYOUT_IS) },
+	   SK_LAYOUT_IS, int(sizeof SK_LAYOUT_IS / sizeof *SK_LAYOUT_IS) },
 	{ "tr", "Turkish",
-	   BSSH_LAYOUT_TR, int(sizeof BSSH_LAYOUT_TR / sizeof *BSSH_LAYOUT_TR) },
+	   SK_LAYOUT_TR, int(sizeof SK_LAYOUT_TR / sizeof *SK_LAYOUT_TR) },
 	{ "mt", "Maltese",
-	   BSSH_LAYOUT_MT, int(sizeof BSSH_LAYOUT_MT / sizeof *BSSH_LAYOUT_MT) },
+	   SK_LAYOUT_MT, int(sizeof SK_LAYOUT_MT / sizeof *SK_LAYOUT_MT) },
 	{ "ru", "Russian",
-	   BSSH_LAYOUT_RU, int(sizeof BSSH_LAYOUT_RU / sizeof *BSSH_LAYOUT_RU) },
+	   SK_LAYOUT_RU, int(sizeof SK_LAYOUT_RU / sizeof *SK_LAYOUT_RU) },
 	{ "gr", "Greek",
-	   BSSH_LAYOUT_GR, int(sizeof BSSH_LAYOUT_GR / sizeof *BSSH_LAYOUT_GR) },
+	   SK_LAYOUT_GR, int(sizeof SK_LAYOUT_GR / sizeof *SK_LAYOUT_GR) },
 	{ "ua", "Ukrainian",
-	   BSSH_LAYOUT_UA, int(sizeof BSSH_LAYOUT_UA / sizeof *BSSH_LAYOUT_UA) },
+	   SK_LAYOUT_UA, int(sizeof SK_LAYOUT_UA / sizeof *SK_LAYOUT_UA) },
 };
 
 /*
@@ -1747,7 +1747,7 @@ const bssh_layout_t BSSH_LAYOUTS[] = {
  * set before the groups are built and never read from anywhere but
  * layout_slot().
  */
-const bssh_layout_t *g_layout = &BSSH_LAYOUTS[0];
+const sk_layout_t *g_layout = &SK_LAYOUTS[0];
 
 /*
  * Whether a non-Latin layout is currently showing Latin instead.
@@ -1775,7 +1775,7 @@ bool g_latin_mode = true;
  * on the digit row is not an alphabet. Only the plain level is read: a
  * Latin letter reachable through AltGr is a curiosity, not a keyboard.
  */
-bool layout_has_latin(const bssh_layout_t *table) {
+bool layout_has_latin(const sk_layout_t *table) {
 	for (int i = 0; i < table->count; ++i) {
 		const char *slot = table->entries[i].slot;
 		if (qstrncmp(slot, "AD", 2) != 0 && qstrncmp(slot, "AC", 2) != 0
@@ -1793,7 +1793,7 @@ bool layout_has_latin(const bssh_layout_t *table) {
 }
 
 /* The slot with this id in the current layout, or nullptr. */
-const bssh_layout_slot_t *layout_slot(const char *id) {
+const sk_layout_slot_t *layout_slot(const char *id) {
 	for (int i = 0; i < g_layout->count; ++i) {
 		if (qstrcmp(g_layout->entries[i].slot, id) == 0) return &g_layout->entries[i];
 	}
@@ -1811,7 +1811,7 @@ const bssh_layout_slot_t *layout_slot(const char *id) {
  * the ? on the compact symbol page, simply has none, which is what it
  * had before.
  */
-const bssh_layout_slot_t *layout_slot_for(char32_t plain) {
+const sk_layout_slot_t *layout_slot_for(char32_t plain) {
 	/*
 	 * ALWAYS the US table, whatever layout is current, and that is the
 	 * point rather than an oversight. Its callers are the compact
@@ -1820,7 +1820,7 @@ const bssh_layout_slot_t *layout_slot_for(char32_t plain) {
 	 * block becomes Swedish or Greek. A shell needs its punctuation in
 	 * every language.
 	 */
-	for (const bssh_layout_slot_t &entry : BSSH_LAYOUT_US_INTL) {
+	for (const sk_layout_slot_t &entry : SK_LAYOUT_US_INTL) {
 		const QString level = QString::fromUtf8(entry.level[0]);
 		if (!level.isEmpty() && char32_t(level.at(0).unicode()) == plain) return &entry;
 	}
@@ -1828,7 +1828,7 @@ const bssh_layout_slot_t *layout_slot_for(char32_t plain) {
 }
 
 /* Fills levels 2 to 4 from a slot. Level 1 is already the key's value. */
-void apply_levels(bssh_key_t &key, const bssh_layout_slot_t *entry) {
+void apply_levels(sk_key_t &key, const sk_layout_slot_t *entry) {
 	if (!entry) return;
 
 	int *fields[3] = { &key.shifted_value, &key.altgr_value, &key.shift_altgr_value };
@@ -1838,9 +1838,9 @@ void apply_levels(bssh_key_t &key, const bssh_layout_slot_t *entry) {
 	}
 }
 
-bssh_key_t text_key(const QString &label, char32_t ch, int span = 2) {
-	bssh_key_t key;
-	key.kind = bssh_key_t::TEXT;
+sk_key_t text_key(const QString &label, char32_t ch, int span = 2) {
+	sk_key_t key;
+	key.kind = sk_key_t::TEXT;
 	key.label = label;
 	key.value = int(ch);
 	key.span = span;
@@ -1848,8 +1848,8 @@ bssh_key_t text_key(const QString &label, char32_t ch, int span = 2) {
 }
 
 /* A character whose label IS what it sends, and its other legends. */
-bssh_key_t literal(char ch, int span = 2) {
-	bssh_key_t key = text_key(QString(QLatin1Char(ch)), char32_t(ch), span);
+sk_key_t literal(char ch, int span = 2) {
+	sk_key_t key = text_key(QString(QLatin1Char(ch)), char32_t(ch), span);
 	apply_levels(key, layout_slot_for(char32_t(ch)));
 	return key;
 }
@@ -1863,12 +1863,12 @@ bssh_key_t literal(char ch, int span = 2) {
  * keyboard and catchable by a test asserting no key sends zero -- rather
  * than silently drawing a blank where a letter should be.
  */
-bssh_key_t slot_key(const char *id, int span) {
-	const bssh_layout_slot_t *entry = layout_slot(id);
+sk_key_t slot_key(const char *id, int span) {
+	const sk_layout_slot_t *entry = layout_slot(id);
 	if (!entry) return text_key(QString::fromUtf8(id), 0, span);
 
 	const QString plain = QString::fromUtf8(entry->level[0]);
-	bssh_key_t key = text_key(plain, char32_t(plain.at(0).unicode()), span);
+	sk_key_t key = text_key(plain, char32_t(plain.at(0).unicode()), span);
 	apply_levels(key, entry);
 	return key;
 }
@@ -1883,8 +1883,8 @@ bssh_key_t slot_key(const char *id, int span) {
  * actually means -- ten keys along the QWERTY row -- instead of naming
  * the letters that happen to be on them today.
  */
-QList<bssh_key_t> slot_run(const char *row, int first, int count, int span) {
-	QList<bssh_key_t> keys;
+QList<sk_key_t> slot_run(const char *row, int first, int count, int span) {
+	QList<sk_key_t> keys;
 	for (int i = 0; i < count; ++i) {
 		const QByteArray id = QByteArray(row)
 		        + QByteArray::number(first + i).rightJustified(2, '0');
@@ -1893,18 +1893,18 @@ QList<bssh_key_t> slot_run(const char *row, int first, int count, int span) {
 	return keys;
 }
 
-bssh_key_t named_key(const QString &label, int code, int span = 2) {
-	bssh_key_t key;
-	key.kind = bssh_key_t::KEY;
+sk_key_t named_key(const QString &label, int code, int span = 2) {
+	sk_key_t key;
+	key.kind = sk_key_t::KEY;
 	key.label = label;
 	key.value = code;
 	key.span = span;
 	return key;
 }
 
-bssh_key_t modifier_key(const QString &label, quint8 modifier, int span = 2) {
-	bssh_key_t key;
-	key.kind = bssh_key_t::MODIFIER;
+sk_key_t modifier_key(const QString &label, quint8 modifier, int span = 2) {
+	sk_key_t key;
+	key.kind = sk_key_t::MODIFIER;
 	key.label = label;
 	key.modifier = modifier;
 	key.span = span;
@@ -1920,8 +1920,8 @@ bssh_key_t modifier_key(const QString &label, quint8 modifier, int span = 2) {
  * you went looking for and nothing else. Building it in one function is
  * what keeps the three copies identical.
  */
-QList<bssh_key_t> common_bottom_row() {
-	QList<bssh_key_t> row;
+QList<sk_key_t> common_bottom_row() {
+	QList<sk_key_t> row;
 	row.append(modifier_key(QStringLiteral("Ctrl"), SK_MOD_CTRL, 3));
 	row.append(modifier_key(QStringLiteral("Alt"), SK_MOD_ALT, 3));
 	row.append(named_key(QStringLiteral("Esc"), Qt::Key_Escape, 3));
@@ -1953,8 +1953,8 @@ QList<bssh_key_t> common_bottom_row() {
 	return row;
 }
 
-QList<bssh_key_t> literal_row(const char *characters) {
-	QList<bssh_key_t> row;
+QList<sk_key_t> literal_row(const char *characters) {
+	QList<sk_key_t> row;
 	for (const char *c = characters; *c; ++c) row.append(literal(*c));
 	return row;
 }
@@ -1978,7 +1978,7 @@ QList<bssh_key_t> literal_row(const char *characters) {
  * palette row means Shift on a digit means one thing on every page and in
  * every layout.
  */
-QList<bssh_key_t> digit_row() {
+QList<sk_key_t> digit_row() {
 	return literal_row("1234567890-");
 }
 
@@ -1997,18 +1997,18 @@ QList<bssh_key_t> digit_row() {
  */
 
 
-const int BSSH_FULL_UNIT = 4;                /* one key, in quarter columns */
-const int BSSH_FULL_COLUMNS = 15 * BSSH_FULL_UNIT;
+const int SK_FULL_UNIT = 4;                /* one key, in quarter columns */
+const int SK_FULL_COLUMNS = 15 * SK_FULL_UNIT;
 
-bssh_key_t spacer(int span) {
-	bssh_key_t key;
-	key.kind = bssh_key_t::SPACER;
+sk_key_t spacer(int span) {
+	sk_key_t key;
+	key.kind = sk_key_t::SPACER;
 	key.span = span;
 	return key;
 }
 
-void append_all(QList<bssh_key_t> &row, const QList<bssh_key_t> &more) {
-	for (const bssh_key_t &key : more) row.append(key);
+void append_all(QList<sk_key_t> &row, const QList<sk_key_t> &more) {
+	for (const sk_key_t &key : more) row.append(key);
 }
 
 /*
@@ -2027,9 +2027,9 @@ void append_all(QList<bssh_key_t> &row, const QList<bssh_key_t> &more) {
  * -- space where you are typing, Esc where you are navigating -- and
  * that is the one deliberate difference between them.
  */
-QList<bssh_key_t> full_bottom_row(bool keypad_page) {
+QList<sk_key_t> full_bottom_row(bool keypad_page) {
 	const int mod = 5;   /* 1.25u */
-	QList<bssh_key_t> row;
+	QList<sk_key_t> row;
 	row.append(modifier_key(QStringLiteral("Ctrl"), SK_MOD_CTRL, mod));
 	row.append(spacer(mod));
 	row.append(modifier_key(QStringLiteral("Alt"), SK_MOD_ALT, mod));
@@ -2052,12 +2052,12 @@ QList<bssh_key_t> full_bottom_row(bool keypad_page) {
 	return row;
 }
 
-bssh_soft_key_group_t full_main_group() {
-	bssh_soft_key_group_t group;
+sk_group_t full_main_group() {
+	sk_group_t group;
 	group.id = QStringLiteral("full-main");
 	group.button_label = QStringLiteral("123");
 	group.display_name = QStringLiteral("Main block");
-	group.columns = BSSH_FULL_COLUMNS;
+	group.columns = SK_FULL_COLUMNS;
 
 	/*
 	 * The function row, with the gaps a real board has between its banks
@@ -2065,7 +2065,7 @@ bssh_soft_key_group_t full_main_group() {
 	 * because the eye finds F7 by counting from a gap and not from the
 	 * left edge.
 	 */
-	QList<bssh_key_t> fn;
+	QList<sk_key_t> fn;
 	fn.append(named_key(QStringLiteral("Esc"), Qt::Key_Escape, 4));
 	fn.append(spacer(2));
 	for (int i = 1; i <= 12; ++i) {
@@ -2076,15 +2076,15 @@ bssh_soft_key_group_t full_main_group() {
 	fn.append(spacer(4));
 	group.rows.append(fn);
 
-	QList<bssh_key_t> digits;
-	digits.append(slot_key("TLDE", BSSH_FULL_UNIT));
-	append_all(digits, slot_run("AE", 1, 12, BSSH_FULL_UNIT));
+	QList<sk_key_t> digits;
+	digits.append(slot_key("TLDE", SK_FULL_UNIT));
+	append_all(digits, slot_run("AE", 1, 12, SK_FULL_UNIT));
 	digits.append(named_key(QStringLiteral("Bksp"), Qt::Key_Backspace, 8));
 	group.rows.append(digits);
 
-	QList<bssh_key_t> tab;
+	QList<sk_key_t> tab;
 	tab.append(named_key(QStringLiteral("Tab"), Qt::Key_Tab, 6));
-	append_all(tab, slot_run("AD", 1, 12, BSSH_FULL_UNIT));
+	append_all(tab, slot_run("AD", 1, 12, SK_FULL_UNIT));
 	tab.append(slot_key("BKSL", 6));
 	group.rows.append(tab);
 
@@ -2094,9 +2094,9 @@ bssh_soft_key_group_t full_main_group() {
 	 * sticky modifier on the row below. Reserved rather than drawn, for
 	 * the reason SPACER carries.
 	 */
-	QList<bssh_key_t> home;
+	QList<sk_key_t> home;
 	home.append(spacer(7));
-	append_all(home, slot_run("AC", 1, 11, BSSH_FULL_UNIT));
+	append_all(home, slot_run("AC", 1, 11, SK_FULL_UNIT));
 	home.append(named_key(QStringLiteral("Enter"), Qt::Key_Return, 9));
 	group.rows.append(home);
 
@@ -2106,12 +2106,12 @@ bssh_soft_key_group_t full_main_group() {
 	 * layout carries LSGT and an ANSI one does not -- so the geometry
 	 * asks rather than being told, and the row comes to 60 either way.
 	 */
-	QList<bssh_key_t> shift;
+	QList<sk_key_t> shift;
 	const bool iso = layout_slot("LSGT") != nullptr;
 	shift.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT,
 	                           iso ? 5 : 9));
-	if (iso) shift.append(slot_key("LSGT", BSSH_FULL_UNIT));
-	append_all(shift, slot_run("AB", 1, 10, BSSH_FULL_UNIT));
+	if (iso) shift.append(slot_key("LSGT", SK_FULL_UNIT));
+	append_all(shift, slot_run("AB", 1, 10, SK_FULL_UNIT));
 	shift.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 11));
 	group.rows.append(shift);
 
@@ -2156,16 +2156,16 @@ bssh_soft_key_group_t full_main_group() {
  * test written for something else, which is the argument for reading a
  * failure before assuming the test is at fault.
  */
-bssh_key_t keypad_key(const QString &label, char32_t ch, int span = BSSH_FULL_UNIT) {
+sk_key_t keypad_key(const QString &label, char32_t ch, int span = SK_FULL_UNIT) {
 	return text_key(label, ch, span);
 }
 
-bssh_soft_key_group_t full_keypad_group() {
-	bssh_soft_key_group_t group;
+sk_group_t full_keypad_group() {
+	sk_group_t group;
 	group.id = QStringLiteral("full-keypad");
 	group.button_label = QStringLiteral("abc");
 	group.display_name = QStringLiteral("Navigation and keypad");
-	group.columns = BSSH_FULL_COLUMNS;
+	group.columns = SK_FULL_COLUMNS;
 
 	/*
 	 * The geometry, named once and then built from, because the first
@@ -2177,27 +2177,27 @@ bssh_soft_key_group_t full_keypad_group() {
 	 * then the keypad four keys wide. Those are the numbers; the rest of
 	 * the row is the space to the right of the keypad.
 	 */
-	const int nav = 3 * BSSH_FULL_UNIT;
-	const int pad = 4 * BSSH_FULL_UNIT;
-	const int gap = 5 * BSSH_FULL_UNIT;
-	const int trailing = BSSH_FULL_COLUMNS - nav - gap - pad;
+	const int nav = 3 * SK_FULL_UNIT;
+	const int pad = 4 * SK_FULL_UNIT;
+	const int gap = 5 * SK_FULL_UNIT;
+	const int trailing = SK_FULL_COLUMNS - nav - gap - pad;
 
 	/* PrtSc, ScrLk, Pause and NumLock: states and host keys, not wire
 	 * keys, so they hold their places and send nothing. */
-	QList<bssh_key_t> top;
+	QList<sk_key_t> top;
 	top.append(spacer(nav));
 	top.append(spacer(gap));
-	top.append(spacer(BSSH_FULL_UNIT));
+	top.append(spacer(SK_FULL_UNIT));
 	top.append(keypad_key(QStringLiteral("/"), U'/'));
 	top.append(keypad_key(QStringLiteral("*"), U'*'));
 	top.append(keypad_key(QStringLiteral("-"), U'-'));
 	top.append(spacer(trailing));
 	group.rows.append(top);
 
-	QList<bssh_key_t> r1;
-	r1.append(named_key(QStringLiteral("Ins"), Qt::Key_Insert, BSSH_FULL_UNIT));
-	r1.append(named_key(QStringLiteral("Home"), Qt::Key_Home, BSSH_FULL_UNIT));
-	r1.append(named_key(QStringLiteral("PgUp"), Qt::Key_PageUp, BSSH_FULL_UNIT));
+	QList<sk_key_t> r1;
+	r1.append(named_key(QStringLiteral("Ins"), Qt::Key_Insert, SK_FULL_UNIT));
+	r1.append(named_key(QStringLiteral("Home"), Qt::Key_Home, SK_FULL_UNIT));
+	r1.append(named_key(QStringLiteral("PgUp"), Qt::Key_PageUp, SK_FULL_UNIT));
 	r1.append(spacer(gap));
 	r1.append(keypad_key(QStringLiteral("7"), U'7'));
 	r1.append(keypad_key(QStringLiteral("8"), U'8'));
@@ -2206,38 +2206,38 @@ bssh_soft_key_group_t full_keypad_group() {
 	r1.append(spacer(trailing));
 	group.rows.append(r1);
 
-	QList<bssh_key_t> r2;
-	r2.append(named_key(QStringLiteral("Del"), Qt::Key_Delete, BSSH_FULL_UNIT));
-	r2.append(named_key(QStringLiteral("End"), Qt::Key_End, BSSH_FULL_UNIT));
-	r2.append(named_key(QStringLiteral("PgDn"), Qt::Key_PageDown, BSSH_FULL_UNIT));
+	QList<sk_key_t> r2;
+	r2.append(named_key(QStringLiteral("Del"), Qt::Key_Delete, SK_FULL_UNIT));
+	r2.append(named_key(QStringLiteral("End"), Qt::Key_End, SK_FULL_UNIT));
+	r2.append(named_key(QStringLiteral("PgDn"), Qt::Key_PageDown, SK_FULL_UNIT));
 	r2.append(spacer(gap));
 	r2.append(keypad_key(QStringLiteral("4"), U'4'));
 	r2.append(keypad_key(QStringLiteral("5"), U'5'));
 	r2.append(keypad_key(QStringLiteral("6"), U'6'));
-	r2.append(spacer(BSSH_FULL_UNIT));
+	r2.append(spacer(SK_FULL_UNIT));
 	r2.append(spacer(trailing));
 	group.rows.append(r2);
 
-	QList<bssh_key_t> r3;
-	r3.append(spacer(BSSH_FULL_UNIT));
-	r3.append(named_key(QStringLiteral("Up"), Qt::Key_Up, BSSH_FULL_UNIT));
-	r3.append(spacer(BSSH_FULL_UNIT));
+	QList<sk_key_t> r3;
+	r3.append(spacer(SK_FULL_UNIT));
+	r3.append(named_key(QStringLiteral("Up"), Qt::Key_Up, SK_FULL_UNIT));
+	r3.append(spacer(SK_FULL_UNIT));
 	r3.append(spacer(gap));
 	r3.append(keypad_key(QStringLiteral("1"), U'1'));
 	r3.append(keypad_key(QStringLiteral("2"), U'2'));
 	r3.append(keypad_key(QStringLiteral("3"), U'3'));
-	r3.append(named_key(QStringLiteral("Ent"), Qt::Key_Return, BSSH_FULL_UNIT));
+	r3.append(named_key(QStringLiteral("Ent"), Qt::Key_Return, SK_FULL_UNIT));
 	r3.append(spacer(trailing));
 	group.rows.append(r3);
 
-	QList<bssh_key_t> r4;
-	r4.append(named_key(QStringLiteral("Left"), Qt::Key_Left, BSSH_FULL_UNIT));
-	r4.append(named_key(QStringLiteral("Down"), Qt::Key_Down, BSSH_FULL_UNIT));
-	r4.append(named_key(QStringLiteral("Right"), Qt::Key_Right, BSSH_FULL_UNIT));
+	QList<sk_key_t> r4;
+	r4.append(named_key(QStringLiteral("Left"), Qt::Key_Left, SK_FULL_UNIT));
+	r4.append(named_key(QStringLiteral("Down"), Qt::Key_Down, SK_FULL_UNIT));
+	r4.append(named_key(QStringLiteral("Right"), Qt::Key_Right, SK_FULL_UNIT));
 	r4.append(spacer(gap));
-	r4.append(keypad_key(QStringLiteral("0"), U'0', 2 * BSSH_FULL_UNIT));
+	r4.append(keypad_key(QStringLiteral("0"), U'0', 2 * SK_FULL_UNIT));
 	r4.append(keypad_key(QStringLiteral("."), U'.'));
-	r4.append(spacer(BSSH_FULL_UNIT));
+	r4.append(spacer(SK_FULL_UNIT));
 	r4.append(spacer(trailing));
 	group.rows.append(r4);
 
@@ -2252,8 +2252,8 @@ bssh_soft_key_group_t full_keypad_group() {
 	return group;
 }
 
-bssh_soft_key_group_t letters_group() {
-	bssh_soft_key_group_t group;
+sk_group_t letters_group() {
+	sk_group_t group;
 	group.id = QStringLiteral("letters");
 	group.button_label = QStringLiteral("abc");
 	group.display_name = QStringLiteral("Letters");
@@ -2271,7 +2271,7 @@ bssh_soft_key_group_t letters_group() {
 	 */
 	group.rows.append(slot_run("AC", 1, 11, 2));
 
-	QList<bssh_key_t> row;
+	QList<sk_key_t> row;
 	row.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 4));
 	row.append(slot_run("AB", 1, 7, 2));
 	row.append(named_key(QStringLiteral("Bksp"), Qt::Key_Backspace, 4));
@@ -2291,8 +2291,8 @@ bssh_soft_key_group_t letters_group() {
  * would be better for entering long numbers and worse for everything else
  * a terminal does.
  */
-bssh_soft_key_group_t numbers_group() {
-	bssh_soft_key_group_t group;
+sk_group_t numbers_group() {
+	sk_group_t group;
 	group.id = QStringLiteral("numbers");
 	group.button_label = QStringLiteral("123");
 	group.display_name = QStringLiteral("Numbers and symbols");
@@ -2350,7 +2350,7 @@ bssh_soft_key_group_t numbers_group() {
 	 * keyboard of our own that buried them again would have missed the
 	 * point of being written.
 	 */
-	QList<bssh_key_t> row;
+	QList<sk_key_t> row;
 	row.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 4));
 	/*
 	 * The second symbol row, chosen for what a SHELL cannot do without
@@ -2389,8 +2389,8 @@ bssh_soft_key_group_t numbers_group() {
  * then switches the built-in keyboard on must not find the arrows gone.
  * The arrow glyphs are the row's own labels, for the same reason.
  */
-bssh_soft_key_group_t terminal_group() {
-	bssh_soft_key_group_t group;
+sk_group_t terminal_group() {
+	sk_group_t group;
 	group.id = QStringLiteral("terminal");
 	group.button_label = QStringLiteral("Fn");
 	group.display_name = QStringLiteral("Terminal and function keys");
@@ -2398,7 +2398,7 @@ bssh_soft_key_group_t terminal_group() {
 	group.rows.append(digit_row());
 	group.digit_row_first = true;
 
-	QList<bssh_key_t> row;
+	QList<sk_key_t> row;
 	for (int n = 1; n <= 11; ++n) {
 		row.append(named_key(QStringLiteral("F%1").arg(n),
 		                      Qt::Key_F1 + n - 1));
@@ -2478,7 +2478,7 @@ bssh_soft_key_group_t terminal_group() {
  * not make: a slot-run digit row buys the layout's letters by losing the
  * palette's punctuation, and a terminal needs both.
  */
-const char *const BSSH_OUTER_TOP[] = {
+const char *const SK_OUTER_TOP[] = {
 	"AE01", "AE02", "AE03", "AE04", "AE05", "AE06",
 	"AE07", "AE08", "AE09", "AE10", "AE11"
 };
@@ -2493,11 +2493,11 @@ const char *const BSSH_OUTER_TOP[] = {
  * contract test is the guard that the enumeration is complete, and it
  * has already done that job once.
  */
-const char *const BSSH_OUTER_MIDDLE[] = {
+const char *const SK_OUTER_MIDDLE[] = {
 	"AE12", "TLDE", "AD12", "BKSL", "LSGT"
 };
 
-const char *const BSSH_OUTER_BOTTOM[] = {
+const char *const SK_OUTER_BOTTOM[] = {
 	"AB08", "AB09", "AB10"
 };
 
@@ -2513,16 +2513,16 @@ const char *const BSSH_OUTER_BOTTOM[] = {
  * The width is then divided among whatever is left, remainder to the
  * leftmost keys, so the row fills its columns exactly whether a layout
  * brought five slots or three. A row that does not sum to
- * BSSH_KEYBOARD_COLUMNS is a row the grid stretches, and the keyboard is
+ * SK_KEYBOARD_COLUMNS is a row the grid stretches, and the keyboard is
  * checked for that.
  */
-QList<bssh_key_t> spread_slots(const char *const *ids, int count, int width) {
+QList<sk_key_t> spread_slots(const char *const *ids, int count, int width) {
 	QList<const char *> present;
 	for (int i = 0; i < count; ++i) {
 		if (layout_slot(ids[i])) present.append(ids[i]);
 	}
 
-	QList<bssh_key_t> keys;
+	QList<sk_key_t> keys;
 	if (present.isEmpty()) {
 		keys.append(spacer(width));
 		return keys;
@@ -2551,26 +2551,26 @@ QList<bssh_key_t> spread_slots(const char *const *ids, int count, int width) {
  * shape the others have rather than to the amount of content it happens
  * to carry, and the middle row's keys are simply wider.
  */
-bssh_soft_key_group_t outer_slots_group() {
-	bssh_soft_key_group_t group;
+sk_group_t outer_slots_group() {
+	sk_group_t group;
 	group.id = QStringLiteral("outer");
 	group.display_name = QStringLiteral("Layout row");
 
 	group.rows.append(digit_row());
 	group.digit_row_first = true;
 
-	group.rows.append(spread_slots(BSSH_OUTER_TOP,
-	                                int(sizeof BSSH_OUTER_TOP / sizeof *BSSH_OUTER_TOP),
-	                                BSSH_KEYBOARD_COLUMNS));
+	group.rows.append(spread_slots(SK_OUTER_TOP,
+	                                int(sizeof SK_OUTER_TOP / sizeof *SK_OUTER_TOP),
+	                                SK_KEYBOARD_COLUMNS));
 
-	group.rows.append(spread_slots(BSSH_OUTER_MIDDLE,
-	                                int(sizeof BSSH_OUTER_MIDDLE / sizeof *BSSH_OUTER_MIDDLE),
-	                                BSSH_KEYBOARD_COLUMNS));
+	group.rows.append(spread_slots(SK_OUTER_MIDDLE,
+	                                int(sizeof SK_OUTER_MIDDLE / sizeof *SK_OUTER_MIDDLE),
+	                                SK_KEYBOARD_COLUMNS));
 
-	QList<bssh_key_t> row;
+	QList<sk_key_t> row;
 	row.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 4));
-	row.append(spread_slots(BSSH_OUTER_BOTTOM,
-	                         int(sizeof BSSH_OUTER_BOTTOM / sizeof *BSSH_OUTER_BOTTOM), 12));
+	row.append(spread_slots(SK_OUTER_BOTTOM,
+	                         int(sizeof SK_OUTER_BOTTOM / sizeof *SK_OUTER_BOTTOM), 12));
 	row.append(named_key(QStringLiteral("Bksp"), Qt::Key_Backspace, 6));
 	group.rows.append(row);
 
@@ -2579,14 +2579,14 @@ bssh_soft_key_group_t outer_slots_group() {
 }
 
 /* Every character a set of groups can send, at all four levels. */
-QSet<uint> characters_of(const QList<bssh_soft_key_group_t> &groups) {
+QSet<uint> characters_of(const QList<sk_group_t> &groups) {
 	QSet<uint> sent;
-	for (const bssh_soft_key_group_t &group : groups) {
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind != bssh_key_t::TEXT) continue;
+	for (const sk_group_t &group : groups) {
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind != sk_key_t::TEXT) continue;
 				for (int modifiers = 0; modifiers < 4; ++modifiers) {
-					const QChar character = bssh_keyboard_char(
+					const QChar character = sk_keyboard_char(
 					        key, modifiers & 1, modifiers & 2);
 					if (!character.isNull() && character.unicode()) {
 						sent.insert(character.unicode());
@@ -2612,10 +2612,10 @@ QSet<uint> characters_of(const QList<bssh_soft_key_group_t> &groups) {
  * already has, and admitting it on that basis would give every layout a
  * fourth page for a section sign.
  */
-QString letters_this_page_adds(const QList<bssh_soft_key_group_t> &already,
-                                const bssh_soft_key_group_t &page) {
+QString letters_this_page_adds(const QList<sk_group_t> &already,
+                                const sk_group_t &page) {
 	const QSet<uint> reachable = characters_of(already);
-	QList<bssh_soft_key_group_t> alone;
+	QList<sk_group_t> alone;
 	alone.append(page);
 
 	QString added;
@@ -2642,11 +2642,11 @@ QString letters_this_page_adds(const QList<bssh_soft_key_group_t> &already,
 
 } /* namespace */
 
-bssh_soft_keyboard_catalog::bssh_soft_keyboard_catalog() {
+sk_catalog::sk_catalog() {
 	rebuild();
 }
 
-void bssh_soft_keyboard_catalog::rebuild() {
+void sk_catalog::rebuild() {
 	m_groups.clear();
 	m_full.clear();
 
@@ -2661,8 +2661,8 @@ void bssh_soft_keyboard_catalog::rebuild() {
 	 * go stale. The pointer is restored before returning, and nothing
 	 * reads it in between except the builders.
 	 */
-	const bssh_layout_t *chosen = g_layout;
-	if (g_latin_mode && !layout_has_latin(chosen)) g_layout = &BSSH_LAYOUTS[0];
+	const sk_layout_t *chosen = g_layout;
+	if (g_latin_mode && !layout_has_latin(chosen)) g_layout = &SK_LAYOUTS[0];
 
 	m_groups.append(letters_group());
 	m_groups.append(numbers_group());
@@ -2681,7 +2681,7 @@ void bssh_soft_keyboard_catalog::rebuild() {
 	 * one, so "abc" and "123" have no sibling that is true everywhere.
 	 * German shows eszett, French shows two of its four.
 	 */
-	bssh_soft_key_group_t outer = outer_slots_group();
+	sk_group_t outer = outer_slots_group();
 	const QString adds = letters_this_page_adds(m_groups, outer);
 	if (!adds.isEmpty()) {
 		outer.button_label = adds.left(2);
@@ -2699,17 +2699,17 @@ namespace {
 /*
  * The custom layout's own storage.
  *
- * `bssh_layout_slot_t` holds `const char *`, which for the shipped
+ * `sk_layout_slot_t` holds `const char *`, which for the shipped
  * tables are literals that outlive everything. A user's legends arrive
  * as QStrings at run time, so the UTF-8 has to be kept alive for exactly
  * as long as the table pointing into it -- these two statics are that
  * lifetime, and nothing else may point into them.
  */
 QList<QByteArray> g_custom_bytes;
-QVector<bssh_layout_slot_t> g_custom_entries;
+QVector<sk_layout_slot_t> g_custom_entries;
 QByteArray g_custom_name;
 
-bssh_layout_t g_custom_layout = { "custom", "Custom", nullptr, 0 };
+sk_layout_t g_custom_layout = { "custom", "Custom", nullptr, 0 };
 
 bool custom_layout_ready() {
 	return g_custom_layout.entries != nullptr && g_custom_layout.count > 0;
@@ -2722,13 +2722,13 @@ bool custom_layout_ready() {
  * now write a layout that fails it and a check that lives in the suite
  * cannot refuse one.
  */
-QString unreachable_printables(bssh_soft_keyboard_catalog::style_t style) {
+QString unreachable_printables(sk_catalog::style_t style) {
 	QSet<uint> reachable;
-	for (const bssh_soft_key_group_t &group :
-	     bssh_soft_keyboard_catalog::instance().all(style)) {
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind != bssh_key_t::TEXT) continue;
+	for (const sk_group_t &group :
+	     sk_catalog::instance().all(style)) {
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind != sk_key_t::TEXT) continue;
 
 				const int levels[4] = { key.value, key.shifted_value,
 				                         key.altgr_value, key.shift_altgr_value };
@@ -2751,16 +2751,16 @@ QString unreachable_printables(bssh_soft_keyboard_catalog::style_t style) {
 
 /* A level shown with no modifier offering it is a legend nobody can
  * reach, which is the other half of sec 6.3's contract. */
-bool levels_are_reachable(bssh_soft_keyboard_catalog::style_t style) {
+bool levels_are_reachable(sk_catalog::style_t style) {
 	quint8 offered = 0;
 	quint8 advertised = 0;
 
-	for (const bssh_soft_key_group_t &group :
-	     bssh_soft_keyboard_catalog::instance().all(style)) {
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind == bssh_key_t::MODIFIER) offered |= key.modifier;
-				if (key.kind != bssh_key_t::TEXT) continue;
+	for (const sk_group_t &group :
+	     sk_catalog::instance().all(style)) {
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind == sk_key_t::MODIFIER) offered |= key.modifier;
+				if (key.kind != sk_key_t::TEXT) continue;
 
 				if (key.shifted_value != 0 || QChar::isLetter(uint(key.value))) {
 					advertised |= quint8(SK_MOD_SHIFT);
@@ -2777,8 +2777,8 @@ bool levels_are_reachable(bssh_soft_keyboard_catalog::style_t style) {
 
 } /* namespace */
 
-QList<bssh_custom_slot_t> bssh_parse_layout_slots(const QMap<QString, QString> &rows) {
-	QList<bssh_custom_slot_t> parsed;
+QList<sk_custom_slot_t> sk_parse_layout_slots(const QMap<QString, QString> &rows) {
+	QList<sk_custom_slot_t> parsed;
 
 	for (QMap<QString, QString>::const_iterator it = rows.cbegin();
 	     it != rows.cend(); ++it) {
@@ -2827,7 +2827,7 @@ QList<bssh_custom_slot_t> bssh_parse_layout_slots(const QMap<QString, QString> &
 		 * rest of the layout stands. */
 		if (levels.size() != 4) continue;
 
-		bssh_custom_slot_t entry;
+		sk_custom_slot_t entry;
 		entry.slot = slot;
 		for (int i = 0; i < 4; ++i) entry.level[i] = levels.at(i);
 		parsed.append(entry);
@@ -2836,14 +2836,14 @@ QList<bssh_custom_slot_t> bssh_parse_layout_slots(const QMap<QString, QString> &
 	return parsed;
 }
 
-QList<bssh_custom_slot_t> bssh_shipped_layout_slots(const QString &id) {
-	QList<bssh_custom_slot_t> out;
+QList<sk_custom_slot_t> sk_shipped_layout_slots(const QString &id) {
+	QList<sk_custom_slot_t> out;
 
-	for (const bssh_layout_t &entry : BSSH_LAYOUTS) {
+	for (const sk_layout_t &entry : SK_LAYOUTS) {
 		if (id != QLatin1String(entry.id)) continue;
 
 		for (int i = 0; i < entry.count; ++i) {
-			bssh_custom_slot_t row;
+			sk_custom_slot_t row;
 			row.slot = QString::fromUtf8(entry.entries[i].slot);
 			for (int level = 0; level < 4; ++level) {
 				row.level[level] = QString::fromUtf8(entry.entries[i].level[level]);
@@ -2856,7 +2856,7 @@ QList<bssh_custom_slot_t> bssh_shipped_layout_slots(const QString &id) {
 	return out;
 }
 
-QString bssh_layout_slot_spec(const bssh_custom_slot_t &row) {
+QString sk_layout_slot_spec(const sk_custom_slot_t &row) {
 	QStringList levels;
 
 	for (int i = 0; i < 4; ++i) {
@@ -2869,8 +2869,8 @@ QString bssh_layout_slot_spec(const bssh_custom_slot_t &row) {
 	return levels.join(QLatin1Char('|'));
 }
 
-bool bssh_set_custom_layout(const QString &display_name,
-                             const QList<bssh_custom_slot_t> &rows,
+bool sk_set_custom_layout(const QString &display_name,
+                             const QList<sk_custom_slot_t> &rows,
                              QString *why) {
 	const auto fail = [why](const QString &reason) {
 		if (why) *why = reason;
@@ -2886,17 +2886,17 @@ bool bssh_set_custom_layout(const QString &display_name,
 	 * way back to the settings that would fix it.
 	 */
 	QList<QByteArray> bytes;
-	QVector<bssh_layout_slot_t> entries;
+	QVector<sk_layout_slot_t> entries;
 	bytes.reserve(rows.size() * 5);
 	entries.reserve(rows.size());
 
-	for (const bssh_custom_slot_t &row : rows) {
+	for (const sk_custom_slot_t &row : rows) {
 		bytes.append(row.slot.toUtf8());
 		for (int i = 0; i < 4; ++i) bytes.append(row.level[i].toUtf8());
 	}
 
 	for (int i = 0; i < rows.size(); ++i) {
-		bssh_layout_slot_t entry;
+		sk_layout_slot_t entry;
 		entry.slot = bytes.at(i * 5).constData();
 		for (int level = 0; level < 4; ++level) {
 			entry.level[level] = bytes.at(i * 5 + 1 + level).constData();
@@ -2905,9 +2905,9 @@ bool bssh_set_custom_layout(const QString &display_name,
 	}
 
 	/* Keep what is current so a refusal can put it back. */
-	const bssh_layout_t *before = g_layout;
+	const sk_layout_t *before = g_layout;
 	QList<QByteArray> kept_bytes = g_custom_bytes;
-	QVector<bssh_layout_slot_t> kept_entries = g_custom_entries;
+	QVector<sk_layout_slot_t> kept_entries = g_custom_entries;
 	QByteArray kept_name = g_custom_name;
 
 	g_custom_bytes = bytes;
@@ -2919,19 +2919,19 @@ bool bssh_set_custom_layout(const QString &display_name,
 	g_custom_layout.count = g_custom_entries.size();
 
 	g_layout = &g_custom_layout;
-	bssh_soft_keyboard_catalog::instance().rebuild();
+	sk_catalog::instance().rebuild();
 
 	QString reason;
 	const QString missing_compact =
-	        unreachable_printables(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	        unreachable_printables(sk_catalog::STYLE_COMPACT);
 	const QString missing_full =
-	        unreachable_printables(bssh_soft_keyboard_catalog::STYLE_FULL);
+	        unreachable_printables(sk_catalog::STYLE_FULL);
 
 	if (!missing_compact.isEmpty() || !missing_full.isEmpty()) {
 		reason = QStringLiteral("cannot type: %1")
 		                 .arg(missing_compact.isEmpty() ? missing_full : missing_compact);
-	} else if (!levels_are_reachable(bssh_soft_keyboard_catalog::STYLE_COMPACT)
-	            || !levels_are_reachable(bssh_soft_keyboard_catalog::STYLE_FULL)) {
+	} else if (!levels_are_reachable(sk_catalog::STYLE_COMPACT)
+	            || !levels_are_reachable(sk_catalog::STYLE_FULL)) {
 		reason = QStringLiteral("shows a level no modifier on it can reach");
 	}
 
@@ -2946,17 +2946,17 @@ bool bssh_set_custom_layout(const QString &display_name,
 		        g_custom_name.isEmpty() ? "Custom" : g_custom_name.constData();
 
 		g_layout = before;
-		bssh_soft_keyboard_catalog::instance().rebuild();
+		sk_catalog::instance().rebuild();
 		return fail(reason);
 	}
 
 	return true;
 }
 
-QList<bssh_keyboard_layout_t> bssh_keyboard_layouts() {
-	QList<bssh_keyboard_layout_t> layouts;
-	for (const bssh_layout_t &entry : BSSH_LAYOUTS) {
-		bssh_keyboard_layout_t described;
+QList<sk_keyboard_layout_t> sk_keyboard_layouts() {
+	QList<sk_keyboard_layout_t> layouts;
+	for (const sk_layout_t &entry : SK_LAYOUTS) {
+		sk_keyboard_layout_t described;
 		described.id = QString::fromUtf8(entry.id);
 		described.display_name = QString::fromUtf8(entry.display_name);
 		layouts.append(described);
@@ -2968,7 +2968,7 @@ QList<bssh_keyboard_layout_t> bssh_keyboard_layouts() {
 	 * selects an empty keyboard.
 	 */
 	if (custom_layout_ready()) {
-		bssh_keyboard_layout_t described;
+		sk_keyboard_layout_t described;
 		described.id = QString::fromUtf8(g_custom_layout.id);
 		described.display_name = QString::fromUtf8(g_custom_layout.display_name);
 		layouts.append(described);
@@ -2977,27 +2977,27 @@ QList<bssh_keyboard_layout_t> bssh_keyboard_layouts() {
 	return layouts;
 }
 
-bool bssh_layout_has_latin() {
+bool sk_layout_has_latin() {
 	return layout_has_latin(g_layout);
 }
 
-bool bssh_latin_mode() {
+bool sk_latin_mode() {
 	return g_latin_mode;
 }
 
-void bssh_set_latin_mode(bool on) {
+void sk_set_latin_mode(bool on) {
 	if (g_latin_mode == on) return;
 	g_latin_mode = on;
-	bssh_soft_keyboard_catalog::instance().rebuild();
+	sk_catalog::instance().rebuild();
 }
 
-QString bssh_keyboard_layout() {
+QString sk_keyboard_layout() {
 	return QString::fromUtf8(g_layout->id);
 }
 
-bool bssh_set_keyboard_layout(const QString &id) {
+bool sk_set_keyboard_layout(const QString &id) {
 	/*
-	 * The user's own is not in BSSH_LAYOUTS -- that array is const and
+	 * The user's own is not in SK_LAYOUTS -- that array is const and
 	 * built at compile time -- so it is matched first and separately.
 	 * Only once it exists: selecting `custom' before anything has been
 	 * written into it would point the builders at an empty table.
@@ -3006,12 +3006,12 @@ bool bssh_set_keyboard_layout(const QString &id) {
 		if (g_layout == &g_custom_layout) return true;
 
 		g_layout = &g_custom_layout;
-		bssh_set_latin_mode(true);
-		bssh_soft_keyboard_catalog::instance().rebuild();
+		sk_set_latin_mode(true);
+		sk_catalog::instance().rebuild();
 		return true;
 	}
 
-	for (const bssh_layout_t &entry : BSSH_LAYOUTS) {
+	for (const sk_layout_t &entry : SK_LAYOUTS) {
 		if (id != QLatin1String(entry.id)) continue;
 		if (g_layout == &entry) return true;
 
@@ -3033,51 +3033,51 @@ bool bssh_set_keyboard_layout(const QString &id) {
 		 */
 		g_latin_mode = true;
 
-		bssh_soft_keyboard_catalog::instance().rebuild();
+		sk_catalog::instance().rebuild();
 		return true;
 	}
 	return false;
 }
 
-bssh_soft_keyboard_catalog &bssh_soft_keyboard_catalog::instance() {
-	static bssh_soft_keyboard_catalog catalog;
+sk_catalog &sk_catalog::instance() {
+	static sk_catalog catalog;
 	return catalog;
 }
 
-int bssh_soft_keyboard_catalog::next_index(int index, style_t style) const {
-	const QList<bssh_soft_key_group_t> &groups = all(style);
+int sk_catalog::next_index(int index, style_t style) const {
+	const QList<sk_group_t> &groups = all(style);
 	if (groups.isEmpty()) return 0;
 	return (index + 1) % groups.size();
 }
 
-int bssh_soft_keyboard_catalog::index_of(const QString &id, style_t style) const {
-	const QList<bssh_soft_key_group_t> &groups = all(style);
+int sk_catalog::index_of(const QString &id, style_t style) const {
+	const QList<sk_group_t> &groups = all(style);
 	for (int i = 0; i < groups.size(); ++i) {
 		if (groups.at(i).id == id) return i;
 	}
 	return 0;
 }
 
-bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
-        bssh_soft_keyboard_catalog::style_t wanted, int width_dp, int height_dp) {
-	if (wanted == bssh_soft_keyboard_catalog::STYLE_SPLIT) return wanted;
-	if (width_dp > height_dp && height_dp < BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP) {
-		return bssh_soft_keyboard_catalog::STYLE_SPLIT;
+sk_catalog::style_t sk_keyboard_style_for(
+        sk_catalog::style_t wanted, int width_dp, int height_dp) {
+	if (wanted == sk_catalog::STYLE_SPLIT) return wanted;
+	if (width_dp > height_dp && height_dp < SK_SPLIT_KEYBOARD_MAX_HEIGHT_DP) {
+		return sk_catalog::STYLE_SPLIT;
 	}
-	if (wanted != bssh_soft_keyboard_catalog::STYLE_FULL) return wanted;
-	if (width_dp < BSSH_FULL_KEYBOARD_MIN_DP) {
-		return bssh_soft_keyboard_catalog::STYLE_COMPACT;
+	if (wanted != sk_catalog::STYLE_FULL) return wanted;
+	if (width_dp < SK_FULL_KEYBOARD_MIN_DP) {
+		return sk_catalog::STYLE_COMPACT;
 	}
 	return wanted;
 }
 
-QChar bssh_shifted_char(char32_t plain, char32_t twin, bool shifted) {
+QChar sk_shifted_char(char32_t plain, char32_t twin, bool shifted) {
 	if (!shifted) return QChar(uint(plain));
 	if (twin != 0) return QChar(uint(twin));
 	return QChar(uint(plain)).toUpper();
 }
 
-QChar bssh_keyboard_char(const bssh_key_t &key, bool shifted, bool altgr) {
+QChar sk_keyboard_char(const sk_key_t &key, bool shifted, bool altgr) {
 	const char32_t plain = char32_t(key.value);
 
 	if (altgr) {
@@ -3088,5 +3088,5 @@ QChar bssh_keyboard_char(const bssh_key_t &key, bool shifted, bool altgr) {
 		/* No third legend: AltGr does nothing, which is a real
 		 * keyboard's behaviour too. Fall through to Shift. */
 	}
-	return bssh_shifted_char(plain, char32_t(key.shifted_value), shifted);
+	return sk_shifted_char(plain, char32_t(key.shifted_value), shifted);
 }

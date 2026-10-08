@@ -7,7 +7,7 @@
 [[sabotage]]
 name = "a short wide screen does not split the keyboard"
 file = "keyboard/soft_keyboard_layout.cpp"
-find = "\tif (width_dp > height_dp && height_dp < BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP) {"
+find = "\tif (width_dp > height_dp && height_dp < SK_SPLIT_KEYBOARD_MAX_HEIGHT_DP) {"
 replace = "\tif (false) {"
 expect = "a_short_wide_screen_gets_the_split_keyboard"
 
@@ -101,7 +101,7 @@ expect = "the_split_keyboard_holds_every_key_once"
 name = "the split halves have different key widths"
 file = "keyboard/soft_keyboard.cpp"
 find = "\t\t\t\tleft[r].append({ p.key, end_of(left[r]) });"
-replace = "\t\t\t\tbssh_key_t narrow = p.key;\n\t\t\t\tnarrow.span = 1;\n\t\t\t\tleft[r].append({ narrow, end_of(left[r]) });"
+replace = "\t\t\t\tsk_key_t narrow = p.key;\n\t\t\t\tnarrow.span = 1;\n\t\t\t\tleft[r].append({ narrow, end_of(left[r]) });"
 expect = "the_split_keyboard_holds_every_key_once"
 
 # The split keeps the digit row: five rows of 48dp keys do not fit the

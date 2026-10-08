@@ -1,5 +1,5 @@
-#ifndef BSSH_KEY_CAP_H
-#define BSSH_KEY_CAP_H
+#ifndef SK_KEY_CAP_H
+#define SK_KEY_CAP_H
 
 #include <QFont>
 #include <QString>
@@ -58,22 +58,22 @@
  * speed.
  *
  * A free function rather than a method, because the key row builds plain
- * QToolButtons and this board builds bssh_key_caps: one rule, one place,
+ * QToolButtons and this board builds sk_key_caps: one rule, one place,
  * and the two boards cannot drift apart about what repeats.
  */
-void bssh_set_key_repeat(QAbstractButton *button);
+void sk_set_key_repeat(QAbstractButton *button);
 
-class bssh_key_cap : public QToolButton {
+class sk_key_cap : public QToolButton {
 	/*
 	 * Q_OBJECT for the metaobject rather than for signals: this class
-	 * declares none. findChildren<bssh_key_cap *> is what needs it --
+	 * declares none. findChildren<sk_key_cap *> is what needs it --
 	 * a test asking for the keycaps, and not for every QToolButton on a
 	 * keyboard that also has three side buttons.
 	 */
 	Q_OBJECT
 
 public:
-	explicit bssh_key_cap(QWidget *parent = nullptr);
+	explicit sk_key_cap(QWidget *parent = nullptr);
 
 	/*
 	 * The subordinate legend, or empty for none.
@@ -133,4 +133,4 @@ private:
 	QString m_hint;
 };
 
-#endif /* BSSH_KEY_CAP_H */
+#endif /* SK_KEY_CAP_H */

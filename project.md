@@ -236,7 +236,7 @@ file sits in.
 │  │   └ bssh_pane_container           │   │  (survives view teardown)   │ │
 │  │       └ bssh_terminal_view[]      │◀─▶│   └ bssh_emulator (VT)      │ │
 │  │ bssh_input_router (focused pane)  │──▶│     bssh_screen + scrollback│ │
-│  │ bssh_key_row (touch only)         │   │   └ bssh_ssh_session        │ │
+│  │ sk_key_row (touch only)         │   │   └ bssh_ssh_session        │ │
 │  │ bssh_session_dialog (desktop)     │   │ bssh_conn_manager (FSM)     │ │
 │  │ bssh_host_list (touch)            │   │ bssh_profile_store          │ │
 │  │ bssh_host_editor, bssh_font_picker│   │  hosts, presets and layout  │ │
@@ -1518,7 +1518,7 @@ up, a strip of modifiers has nothing to modify.
   compiled in. Once a user can add one, a rule that lives in the test can
   only report the breach after it has happened — and it reports it
   against the five rows that are correct, because the assertion walks
-  `all()`. `bssh_key_row_usable()` is the predicate now: `set_custom()`
+  `all()`. `sk_key_row_usable()` is the predicate now: `set_custom()`
   refuses at the door and the contract test calls the same function, which
   is §6.3's *"they become the contract every layout must satisfy rather
   than tests about the two boards we happen to have"* arriving a milestone
@@ -1978,11 +1978,11 @@ up, a strip of modifiers has nothing to modify.
   modifier is toggled or not"*. Armed was the style's checked look and locked
   the same plus a bold label; whether a checked button reads as pressed is the
   platform style's choice, and bold on `Ctrl` is a difference you must already
-  know to look for. `bssh_key_cap::paint_modifier` now draws differences of
+  know to look for. `sk_key_cap::paint_modifier` now draws differences of
   kind: **armed** is a ring in the highlight colour with one short bar (one
   bar, one key); **locked** fills the cap with the highlight colour, white
   label and a long bar, like a Caps Lock light; **held** is the ring on the
-  pressed cap. The key row builds `bssh_key_cap`s too, so both boards agree.
+  pressed cap. The key row builds `sk_key_cap`s too, so both boards agree.
   `armed_locked_and_off_draw_differently` renders the three and asserts they
   differ pairwise, and that locked is mostly fill — a relationship, so a
   restyle may change the look and may not merge two states. **[OPEN]**
@@ -2036,7 +2036,7 @@ up, a strip of modifiers has nothing to modify.
   cannot spare (one row on the Fold's cover screen in landscape), while
   halves at the side take width, which there is plenty of. And **automatic**:
   compact or full turns split when the window is wider than tall and under
-  `BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP` (600, §8.1's MEDIUM boundary again),
+  `SK_SPLIT_KEYBOARD_MAX_HEIGHT_DP` (600, §8.1's MEDIUM boundary again),
   and back when rotated; "BeerSSH's own, split" asks for it everywhere. The
   stored choice is never rewritten.
   *One keyboard, cut at draw time.* `STYLE_SPLIT` reads the **compact
@@ -2048,7 +2048,7 @@ up, a strip of modifiers has nothing to modify.
   the keyboard that the main window places at the outer ends of the panes'
   row (tabs placed left or right now go inside them); the keyboard widget
   stays the one the window shows and hides, and the halves follow it.
-  One `bssh_touch_chords` watches the keyboard and both halves, so a chord
+  One `sk_touch_chords` watches the keyboard and both halves, so a chord
   can span them — Ctrl under the left thumb, P under the right.
   Tests: `a_short_wide_screen_gets_the_split_keyboard` (the rule),
   `the_split_keyboard_holds_every_key_once` (each group's keys equal the
@@ -2064,7 +2064,7 @@ up, a strip of modifiers has nothing to modify.
 
 - **Resize bars on the built-in keyboard — [BUILT 2026-10-08].** Asked for
   with the 22%: a very thin bar to resize each keyboard, a setting to turn
-  the bars off, and the size saved. `bssh_resize_grip` is a 12dp strip
+  the bars off, and the size saved. `sk_resize_grip` is a 12dp strip
   drawing a line a third as thick, on the edge that **faces the terminal**:
   the top of a keyboard underneath, the inner edge of each split half. Not
   the screen's own edges, where Android's back gesture lives — the holder
@@ -2117,7 +2117,7 @@ up, a strip of modifiers has nothing to modify.
   did, and a sabotage making them 39 and 30 pixels stayed green. It now
   shows the keyboard as well and asserts the halves are visible first.
   *The split leaves the digit row out*
-  (`bssh_soft_key_group_t::digit_row_first`): with it, five rows of 48dp
+  (`sk_group_t::digit_row_first`): with it, five rows of 48dp
   keys did not fit the Fold's landscape height and the status line and
   mode buttons went off the bottom of the screen. Asked for in portrait,
   so landscape keeps four rows rather than keys below the touch floor.
@@ -2157,6 +2157,17 @@ up, a strip of modifiers has nothing to modify.
   612px; it measures the keys now. And a claim that no test compared key
   values against terminal codes was wrong, the search missing
   `int(bssh_emulator::KEY_ESCAPE)` -- one did, caught by the suite.
+  **Step 2, the rename:** every identifier `keyboard/` defines took
+  softkeys' prefix -- the widget `sk_keyboard`, its catalogue `sk_catalog`,
+  pages `sk_group_t` (the code's one word for them), `sk_key_row`,
+  `sk_key_t`, the layout tables `SK_LAYOUT_*` -- from a written table, with
+  every new name checked absent from the tree first. Its proof: the full
+  suite and every sabotage anchor. Two things the table's own check caught
+  on the way: the pattern for the layout tables also took BeerSSH's
+  `BSSH_LAYOUT_MANAGER_H` and `BSSH_LAYOUT_TEST_H` guards (put back), and a
+  word boundary does not exist after a TOML `\t` escape, so six spec
+  strings kept old names -- one of them a REPLACEMENT that would have
+  failed to compile and could have scored as a catch.
 
 - **An editor for the built-in keyboard's keys — [DEFERRED by the holder,
   2026-10-08]:** "do that after the default is perfected". The key row has
@@ -2179,7 +2190,7 @@ comment**: *"A digit or a bracket has no capital to become, and
 `QChar::toUpper` would leave it alone anyway."* True of `toUpper` and
 false of a keyboard. Shift does not uppercase anything — it picks **the
 other legend printed on the keycap**, and which character that is was
-settled by a layout standard rather than by arithmetic. So `bssh_key_t`
+settled by a layout standard rather than by arithmetic. So `sk_key_t`
 carries a second value and the full keyboard's number row and punctuation
 are given their ANSI twins from a table. Letters keep `toUpper`, because
 for letters that genuinely IS the rule.
@@ -2190,7 +2201,7 @@ has a real number row, which is what exposed it. A defect present in both
 was only reachable through the surface built second.
 
 **The label and the character come from one function**
-(`bssh_shifted_char`), because a keycap that disagrees with its output is
+(`sk_shifted_char`), because a keycap that disagrees with its output is
 worse than one that never relabels: the user learns the wrong thing and
 keeps using it. And every key that CHANGES under Shift now relabels, where
 before only letters did — which is precisely why nobody noticed the digits
@@ -2208,7 +2219,7 @@ which is also what a user means by "can I type it".
 full-size keyboard on a folded phone did nothing visible, and was reported
 as *"the choice doesn't work on a small screen"*, which from where the
 user stood is what it was. The setting page now says so when the two
-differ, asking `bssh_keyboard_style_for()` rather than repeating the
+differ, asking `sk_keyboard_style_for()` rather than repeating the
 threshold, and re-asking on resize so that unfolding does not leave a
 stale *"too narrow"* beside a keyboard that is no longer falling back.
 **A setting that is quietly overruled is worse than one that is refused,
@@ -2251,7 +2262,7 @@ views are destroyed and rebuilt whenever the panes change and the window
 would be wiring itself to objects that stop existing.
 
 **Every part of that is a connection, which is why both tests drive the
-WINDOW and not the widget.** A test of `bssh_soft_keyboard` alone passes
+WINDOW and not the widget.** A test of `sk_keyboard` alone passes
 with none of it wired — the same shape as the `set_group` defect earlier
 the same day, where correct-looking code had never been exercised.
 `the_hide_key_is_remembered_and_a_tap_undoes_it` clicks the real key,
@@ -2315,7 +2326,7 @@ Menu, PrtSc, ScrLk, Pause, NumLock and Caps Lock have no encoding in
 libvterm and no meaning on the wire. The geometry has to keep their places
 or every key after them shifts; drawing a button that does nothing is the
 *absent, not faked* rule §11 applies to capabilities, arriving in a
-keyboard. `bssh_key_t::SPACER` is that, and the widget's switch over kinds
+keyboard. `sk_key_t::SPACER` is that, and the widget's switch over kinds
 is exhaustive so a new kind fails to compile rather than drawing a dead
 button.
 
@@ -2374,7 +2385,7 @@ part of the population reads exactly like a check over all of it.**
 
 **Cfg and Hide are icons, drawn rather than typed — [DONE 2026-09-05].**
 Asked for by the copyright holder. The two are painted from primitives
-in `bssh_soft_keyboard`: a cog for settings, a chevron coming down to a
+in `sk_keyboard`: a cog for settings, a chevron coming down to a
 bar for hide, which is what every platform's dismiss control draws.
 
 **The settings icon was three sliders first, and the reasoning for them
@@ -2436,7 +2447,7 @@ they follow the light and dark schemes without a second asset.
 
 **They carry their colour rather than taking it when drawn**, an icon
 being pixels, so `changeEvent` repaints them on a palette change — the
-failure `bssh_key_cap` avoids with alpha and this one cannot.
+failure `sk_key_cap` avoids with alpha and this one cannot.
 
 **And the word did not disappear with the label.** A button whose text
 becomes a picture loses what a screen reader was reading, so "Settings"
@@ -2448,7 +2459,7 @@ the first check while leaving nothing to press.
 **åäö, and the layout question underneath it — [BUILT 2026-09-04].** The
 holder asked for the Swedish vowels and named the better answer in the
 same breath: US International with AltGr, annotated on the keyboard,
-because it is unfamiliar to many. So `bssh_key_t` carries four levels
+because it is unfamiliar to many. So `sk_key_t` carries four levels
 rather than two, the right Alt is AltGr — which is what it is on every
 board that has one, no new key and no change to the row's arithmetic —
 and `MOD_ALTGR` is tracked by the router and masked out of everything it
@@ -2473,7 +2484,7 @@ was the right size, it was in the right cell, and every test about the
 catalogue passed — because the catalogue was right. What was wrong was
 the *drawing*, and only a photograph of the phone showed it.
 
-`bssh_key_cap` already draws its own text when there is a hint, and
+`sk_key_cap` already draws its own text when there is a hint, and
 `QPainter::drawText` does no mnemonic interpretation, so the fix is to
 take that path for an ampersand too. The two alternatives are worse:
 escaping to `&&` makes `text()` lie, and `text()` is what a screen
@@ -2481,7 +2492,7 @@ reader reads; and drawing *every* cap here would lose the style's
 eliding, which the full board's narrow keys already depend on.
 
 Pinned through the predicate rather than through pixels —
-`bssh_key_cap::needs_own_paint` — because pixels are what `make shots`
+`sk_key_cap::needs_own_paint` — because pixels are what `make shots`
 is for, and a unit test that rasterises a button is a test of Qt. What
 the test holds is the decision, plus the fact that the keyboard really
 does carry such a cap, or it would be a rule about nothing.
@@ -2510,7 +2521,7 @@ and `|` on Shift — so four keys bought seven characters and the palette
 did not have to learn anything about them.
 
 `both_keyboards_reach_every_printable_character` is the guard. Capitals
-are excluded because they are not a level: `bssh_shifted_char` falls
+are excluded because they are not a level: `sk_shifted_char` falls
 back to `toUpper`, so a letter key covers its capital without storing
 one, and a layout in a caseless script gets the right answer by not
 having one to store.
@@ -2571,7 +2582,7 @@ wants after AltGr is their own letters.
 Positions are named the way XKB names them — `AE01` leftmost on the digit
 row, `AD01` on QWERTY, `AC01` on home, `AB01` on the bottom, plus `TLDE`
 and `BKSL` — because that is the vocabulary every layout in the world is
-already written in. Geometry says `slot_run("AD", 1, 12, BSSH_FULL_UNIT)`;
+already written in. Geometry says `slot_run("AD", 1, 12, SK_FULL_UNIT)`;
 one table of 47 rows says what those positions carry. A Swedish layout is
 a second such table and *no change to any geometry at all*.
 
@@ -2645,7 +2656,7 @@ active character while a modifier is held, or to show every legend and
 move the emphasis. The answer is a middle one and it is a *paint*, not a
 string: `QToolButton` renders one font in one colour and neither it nor
 `QAbstractButton` renders markup, so two legends of different weight in
-one cap needs `bssh_key_cap::paintEvent`. The cap reads `q` at full
+one cap needs `sk_key_cap::paintEvent`. The cap reads `q` at full
 weight with `ä` small and dimmed in the corner a printed keycap puts it;
 arm AltGr and it reads `ä` at full weight with no hint at all.
 
@@ -2814,7 +2825,7 @@ ellipsis at §8.1's narrowest phone, where `Ins`, `Del`, `End`, `PgU` and
 is an ellipsis, which on a keyboard is the worst of both — the key still
 takes the room and no longer says what it does.
 
-`bssh_key_cap::fitted_font` walks the font down in 6 per cent steps to a
+`sk_key_cap::fitted_font` walks the font down in 6 per cent steps to a
 floor of 70 per cent and the cap draws at whatever fits. **Below the
 floor it elides after all**, deliberately: a three-letter label smaller
 than the AltGr hint beside it reads as a mistake rather than as a
@@ -2969,7 +2980,7 @@ change resets the mode, since carrying it across would mean choosing
 Greek and getting whichever script the last layout was left showing.
 
 **The button is in the side column and only exists where it does
-something.** `bssh_layout_has_latin()` reads the plain level of the AD,
+something.** `sk_layout_has_latin()` reads the plain level of the AD,
 AC and AB slots — the letter block, because a stray Latin character on
 the digit row is not an alphabet — and is false for exactly these three.
 A Latin layout has no second script to reach, and an always-present
@@ -3035,8 +3046,8 @@ decision.**
   expressed.** The other
   three of §6.3's four are values a user picks or composes; a layout is
   the one with no representation to fill in, because today it is code:
-  `bssh_keyboard_layout_t` carries `{id, display_name}` and the layout
-  itself is a `bssh_layout_t` table the key builders read through
+  `sk_keyboard_layout_t` carries `{id, display_name}` and the layout
+  itself is a `sk_layout_t` table the key builders read through
   `g_layout`. There is nothing for a user to write into.
 
   **The shape is already decided and the code says so**, which is what
@@ -3102,7 +3113,7 @@ decision.**
   The cause was structural rather than a slip: there was **no writer**.
   The parser existed alone and the test joined the four levels by hand,
   which is exactly how the escaping got forgotten.
-  `bssh_layout_slot_spec()` owns it now, beside the parser the way the
+  `sk_layout_slot_spec()` owns it now, beside the parser the way the
   key row pairs its two, so the round trip is a property of the code
   rather than of whoever calls it.
   **All three of the built answers are now asserted at their controls**,
@@ -3117,7 +3128,7 @@ decision.**
   hop was assertable and two were not.
 
   **And the last hop is asserted on the CONTROL, not the catalogue.**
-  `bssh_keyboard_layouts()` can be perfectly right while the chooser was
+  `sk_keyboard_layouts()` can be perfectly right while the chooser was
   built from something else, and every assertion about the catalogue
   would still pass -- which is this tree's most repeated defect, the one
   `notify()`, the palette push and the selection handles all are. The
@@ -3193,14 +3204,14 @@ and with the ASCII palette it is not.
 
 **The order of work.**
 
-1. **The table and its generator.** `bssh_layout_t` — id, display name,
+1. **The table and its generator.** `sk_layout_t` — id, display name,
    slot table — and a catalogue beside the colour scheme and key row ones.
    `tool/gen-layout.py` runs the xkb pipeline and emits the table, so
    adding a layout is a command rather than a transcription. The US table
    is regenerated by it and must come out byte-identical, which is the
    proof that the tool reproduces what is already shipped.
 2. **Selection and wiring.** A setting, a control on the settings page,
-   and `bssh_soft_keyboard` asking the catalogue. The reachability
+   and `sk_keyboard` asking the catalogue. The reachability
    invariant runs over *every* layout in the catalogue, so a layout that
    would make a shell untypeable cannot be added.
 3. **Dead keys.** A compose step: a dead key arms, the next key composes,
@@ -3245,9 +3256,9 @@ already holding down. The interval is Qt's 50ms rather than X11's 40ms,
 because each repeat is a round trip through the router into the emulator
 and out to the remote.
 
-One helper, `bssh_set_key_repeat()` in `keyboard/key_cap.h`, because the
+One helper, `sk_set_key_repeat()` in `keyboard/key_cap.h`, because the
 key row builds plain `QToolButton`s and the built-in board builds
-`bssh_key_cap`s: two boards, one rule, and the way it would drift is a key
+`sk_key_cap`s: two boards, one rule, and the way it would drift is a key
 added to one of them without the call.
 
 **What the end-to-end test cannot reach, recorded rather than left
@@ -3267,7 +3278,7 @@ and `Bksp` and `Del` live there.
 
 The test is a **partition**, not a list of keys — a keycap repeats if and
 only if it is not checkable, and nothing outside the key grid repeats at
-all — so a kind added to `bssh_key_t` without a repeat call lands in the
+all — so a kind added to `sk_key_t` without a repeat call lands in the
 wrong half and fails, where a list could not fail about a key it does not
 name. Both halves were seen to fail through their own assertion:
 `Bksp` on the letters group with the call removed, and

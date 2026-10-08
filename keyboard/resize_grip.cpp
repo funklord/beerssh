@@ -3,7 +3,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 
-bssh_resize_grip::bssh_resize_grip(Qt::Orientation drags, QWidget *parent)
+sk_resize_grip::sk_resize_grip(Qt::Orientation drags, QWidget *parent)
     : QWidget(parent),
       m_drags(drags) {
 	setObjectName(QStringLiteral("keyboard-grip"));
@@ -20,17 +20,17 @@ bssh_resize_grip::bssh_resize_grip(Qt::Orientation drags, QWidget *parent)
 	}
 }
 
-QSize bssh_resize_grip::sizeHint() const {
+QSize sk_resize_grip::sizeHint() const {
 	return QSize(THICKNESS_DP, THICKNESS_DP);
 }
 
-void bssh_resize_grip::set_lit(bool lit) {
+void sk_resize_grip::set_lit(bool lit) {
 	if (lit == m_lit) return;
 	m_lit = lit;
 	update();
 }
 
-int bssh_resize_grip::along(const QPointF &global) const {
+int sk_resize_grip::along(const QPointF &global) const {
 	return int(m_drags == Qt::Horizontal ? global.x() : global.y());
 }
 
@@ -40,7 +40,7 @@ int bssh_resize_grip::along(const QPointF &global) const {
  * keyboard that is already all edges. Brighter while held, so the finger
  * knows it has the bar rather than the key beside it.
  */
-void bssh_resize_grip::paintEvent(QPaintEvent *) {
+void sk_resize_grip::paintEvent(QPaintEvent *) {
 	QPainter painter(this);
 	QColor ink = palette().color(QPalette::WindowText);
 	ink.setAlphaF(m_down || m_lit ? 0.8 : 0.35);
@@ -58,7 +58,7 @@ void bssh_resize_grip::paintEvent(QPaintEvent *) {
 	painter.drawRoundedRect(bar, line / 2.0, line / 2.0);
 }
 
-void bssh_resize_grip::mousePressEvent(QMouseEvent *event) {
+void sk_resize_grip::mousePressEvent(QMouseEvent *event) {
 	if (event->button() != Qt::LeftButton) return;
 	m_down = true;
 	m_from = along(event->globalPosition());
@@ -66,12 +66,12 @@ void bssh_resize_grip::mousePressEvent(QMouseEvent *event) {
 	emit pressed();
 }
 
-void bssh_resize_grip::mouseMoveEvent(QMouseEvent *event) {
+void sk_resize_grip::mouseMoveEvent(QMouseEvent *event) {
 	if (!m_down) return;
 	emit dragged(along(event->globalPosition()) - m_from);
 }
 
-void bssh_resize_grip::mouseReleaseEvent(QMouseEvent *event) {
+void sk_resize_grip::mouseReleaseEvent(QMouseEvent *event) {
 	if (!m_down || event->button() != Qt::LeftButton) return;
 	m_down = false;
 	update();

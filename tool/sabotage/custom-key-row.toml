@@ -20,7 +20,7 @@
 [[sabotage]]
 name = "an unusable custom row is accepted"
 file = "keyboard/key_row_layout.cpp"
-find = "\tif (!bssh_key_row_usable(keys)) return false;"
+find = "\tif (!sk_key_row_usable(keys)) return false;"
 replace = "\t(void)0;"
 expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
 
@@ -38,8 +38,8 @@ expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
 [[sabotage]]
 name = "a refused row is written before it is judged"
 file = "keyboard/key_row_layout.cpp"
-find = "bool bssh_key_row_catalog::set_custom(const QList<bssh_key_t> &keys) {\n\tif (!bssh_key_row_usable(keys)) return false;"
-replace = "bool bssh_key_row_catalog::set_custom(const QList<bssh_key_t> &keys) {\n\tfor (bssh_key_row_layout_t &early : m_layouts) {\n\t\tif (early.id == QStringLiteral(\"custom\")) early.keys = keys;\n\t}\n\tif (!bssh_key_row_usable(keys)) return false;"
+find = "bool sk_key_row_catalog::set_custom(const QList<sk_key_t> &keys) {\n\tif (!sk_key_row_usable(keys)) return false;"
+replace = "bool sk_key_row_catalog::set_custom(const QList<sk_key_t> &keys) {\n\tfor (sk_key_row_layout_t &early : m_layouts) {\n\t\tif (early.id == QStringLiteral(\"custom\")) early.keys = keys;\n\t}\n\tif (!sk_key_row_usable(keys)) return false;"
 expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
 
 # The catalogue owns the name. set_custom takes the keys and nothing
@@ -78,6 +78,6 @@ expect = "the_custom_row_note_names_only_words_that_parse"
 [[sabotage]]
 name = "the stored row never reaches the catalogue"
 file = "src/ui/main_window.cpp"
-find = "\t\tbssh_key_row_catalog::instance().set_custom(bssh_parse_key_row(row_spec));"
+find = "\t\tsk_key_row_catalog::instance().set_custom(sk_parse_key_row(row_spec));"
 replace = "\t\t(void)row_spec;"
 expect = "the_custom_row_reaches_the_catalogue_at_startup"

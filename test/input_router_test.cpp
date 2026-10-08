@@ -103,7 +103,7 @@ void input_router_test::a_key_remap_reaches_the_on_screen_keyboards() {
 	QCOMPARE(emulator.take_output(), escape);
 
 	/* A letter on the built-in keyboard, which goes as text otherwise. */
-	bssh_soft_keyboard keyboard(&router);
+	sk_keyboard keyboard(&router);
 	QAbstractButton *q = button_labelled(keyboard, QStringLiteral("q"));
 	QAbstractButton *w = button_labelled(keyboard, QStringLiteral("w"));
 	QVERIFY(q != nullptr);
@@ -570,7 +570,7 @@ QPoint centre_in(const QWidget &window, const QAbstractButton *button) {
 void input_router_test::two_fingers_chord_on_the_key_row() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 
 	/* Wide enough that Ctrl and the arrows are on screen together. */
 	row.resize(1200, 64);
@@ -628,7 +628,7 @@ void input_router_test::two_fingers_chord_on_the_key_row() {
 void input_router_test::two_fingers_chord_on_the_built_in_keyboard() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_soft_keyboard keyboard(&router);
+	sk_keyboard keyboard(&router);
 	keyboard.resize(1000, 400);
 	keyboard.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&keyboard));
@@ -664,9 +664,9 @@ void input_router_test::a_chord_spans_the_split_keyboards_halves() {
 	 */
 	QWidget host;
 	QHBoxLayout *row = new QHBoxLayout(&host);
-	bssh_soft_keyboard *board = new bssh_soft_keyboard(&router);
-	bssh_soft_keyboard &keyboard = *board;
-	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_SPLIT);
+	sk_keyboard *board = new sk_keyboard(&router);
+	sk_keyboard &keyboard = *board;
+	keyboard.set_style(sk_catalog::STYLE_SPLIT);
 	row->addWidget(keyboard.half(0));
 	row->addWidget(new QWidget(&host), 1);
 	row->addWidget(keyboard.half(1));
@@ -702,7 +702,7 @@ void input_router_test::a_chord_spans_the_split_keyboards_halves() {
 void input_router_test::armed_locked_and_off_draw_differently() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 	row.resize(1200, 64);
 	row.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&row));
@@ -744,7 +744,7 @@ void input_router_test::armed_locked_and_off_draw_differently() {
 void input_router_test::a_modifier_button_stops_claiming_a_session_that_has_gone() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 
 	QAbstractButton *ctrl = button_labelled(row, QStringLiteral("Ctrl"));
 	QVERIFY(ctrl != nullptr);
@@ -822,7 +822,7 @@ void input_router_test::the_on_screen_keyboard_reaches_stolen_chords() {
 	/*
 	 * The on-screen keyboard arms a sticky Shift and then presses its own
 	 * PgUp key, which reaches the router as send_key(KEY_PAGE_UP, NONE)
-	 * carrying the armed modifier -- exactly the path bssh_soft_keyboard
+	 * carrying the armed modifier -- exactly the path sk_keyboard
 	 * drives (sec 6.2). Before this it walked past the chord table and
 	 * paged the remote; it must steal the scroll chord like a hardware
 	 * Shift+PageUp does.
@@ -849,7 +849,7 @@ void input_router_test::the_on_screen_keyboard_reaches_stolen_chords() {
 void input_router_test::key_row_goes_through_the_router() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 
 	/*
 	 * Every button must produce bytes via the router, not by writing to
@@ -886,7 +886,7 @@ void input_router_test::key_row_goes_through_the_router() {
 void input_router_test::a_held_key_repeats() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 
 	/*
 	 * A PHONE width, so the strip genuinely scrolls -- the default key
@@ -1043,7 +1043,7 @@ void input_router_test::a_held_key_repeats() {
 void input_router_test::key_row_visibility_follows_the_input_device() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 
 	/*
 	 * BeerSSH's own answer to "is this a touch device", as the main window
@@ -1056,22 +1056,22 @@ void input_router_test::key_row_visibility_follows_the_input_device() {
 	});
 
 	/* Tests run on the desktop platform, which is not touch-primary. */
-	QCOMPARE(row.visibility_mode(), bssh_key_row::AUTO);
+	QCOMPARE(row.visibility_mode(), sk_key_row::AUTO);
 	QVERIFY(!row.should_be_visible());
 
-	row.set_visibility_mode(bssh_key_row::ALWAYS);
+	row.set_visibility_mode(sk_key_row::ALWAYS);
 	QVERIFY(row.should_be_visible());
 
-	row.set_visibility_mode(bssh_key_row::NEVER);
+	row.set_visibility_mode(sk_key_row::NEVER);
 	QVERIFY(!row.should_be_visible());
 }
 
 void input_router_test::a_key_row_layout_changes_which_keys_exist() {
-	const bssh_key_row_catalog catalog;
+	const sk_key_row_catalog catalog;
 
 	/* Every layout has to be usable: a row without Escape or a modifier
 	 * is a row that cannot drive a terminal at all. */
-	for (const bssh_key_row_layout_t &layout : catalog.all()) {
+	for (const sk_key_row_layout_t &layout : catalog.all()) {
 		QVERIFY(!layout.id.isEmpty());
 		QVERIFY(!layout.display_name.isEmpty());
 		QVERIFY2(!layout.description.isEmpty(),
@@ -1085,13 +1085,13 @@ void input_router_test::a_key_row_layout_changes_which_keys_exist() {
 		 * in the test can only report the breach after it has happened,
 		 * and it would report it against the five rows that are correct.
 		 */
-		QVERIFY2(bssh_key_row_usable(layout.keys),
+		QVERIFY2(sk_key_row_usable(layout.keys),
 		         qPrintable("no Escape or no modifier in " + layout.id));
 	}
 
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 
 	row.set_layout(QStringLiteral("tmux"));
 	QCOMPARE(row.layout_id(), QStringLiteral("tmux"));
@@ -1111,7 +1111,7 @@ void input_router_test::a_key_row_layout_changes_which_keys_exist() {
 	 * that reports twelve keys and displays none is worse than one that
 	 * fails outright.
 	 */
-	row.set_visibility_mode(bssh_key_row::ALWAYS);
+	row.set_visibility_mode(sk_key_row::ALWAYS);
 	for (const QAbstractButton *button : tmux_keys) {
 		QVERIFY2(!button->isHidden(),
 		         qPrintable("key not shown: " + button->text()));
@@ -1135,7 +1135,7 @@ void input_router_test::a_key_row_layout_changes_which_keys_exist() {
 void input_router_test::a_chord_key_sends_one_press_not_a_sticky_modifier() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 
 	row.set_layout(QStringLiteral("tmux"));
 
@@ -1307,7 +1307,7 @@ void input_router_test::the_fn_key_reaches_the_function_keys() {
 	 */
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 	row.set_layout(QString());
 
 	QList<QAbstractButton *> buttons = row.findChildren<QAbstractButton *>();
@@ -1612,41 +1612,41 @@ void input_router_test::a_paste_cannot_close_its_own_bracket() {
  * three cover the same answer applied to the row.
  */
 void input_router_test::a_custom_key_row_is_composed_from_words() {
-	const QList<bssh_key_t> keys =
-	        bssh_parse_key_row(QStringLiteral("esc tab ctrl alt left down up right | ctrl-b gap"));
+	const QList<sk_key_t> keys =
+	        sk_parse_key_row(QStringLiteral("esc tab ctrl alt left down up right | ctrl-b gap"));
 
 	QCOMPARE(keys.size(), 11);
-	QCOMPARE(keys.at(0).kind, bssh_key_t::KEY);
+	QCOMPARE(keys.at(0).kind, sk_key_t::KEY);
 	QCOMPARE(keys.at(0).value, int(Qt::Key_Escape));
-	QCOMPARE(keys.at(2).kind, bssh_key_t::MODIFIER);
+	QCOMPARE(keys.at(2).kind, sk_key_t::MODIFIER);
 	QCOMPARE(keys.at(2).modifier, quint8(bssh_emulator::MOD_CTRL));
 
 	/* A bare character is itself, which is how the punctuation a soft
 	 * keyboard buries gets onto the row at all. */
-	QCOMPARE(keys.at(8).kind, bssh_key_t::TEXT);
+	QCOMPARE(keys.at(8).kind, sk_key_t::TEXT);
 	QCOMPARE(keys.at(8).value, int('|'));
 
 	/* One press sending what two would (sec 6.2's tmux case). */
-	QCOMPARE(keys.at(9).kind, bssh_key_t::CHORD);
+	QCOMPARE(keys.at(9).kind, sk_key_t::CHORD);
 	QCOMPARE(keys.at(9).value, int('b'));
 	QCOMPARE(keys.at(9).modifier, quint8(bssh_emulator::MOD_CTRL));
 
-	QCOMPARE(keys.at(10).kind, bssh_key_t::SPACER);
+	QCOMPARE(keys.at(10).kind, sk_key_t::SPACER);
 
 	/*
 	 * Round-trip, because app.ini is what stores this and a spec that
 	 * does not survive being read back is one that rewrites the user's
 	 * row every time the app starts.
 	 */
-	const QString spec = bssh_key_row_spec(keys);
-	QCOMPARE(bssh_key_row_spec(bssh_parse_key_row(spec)), spec);
-	QCOMPARE(bssh_parse_key_row(spec).size(), keys.size());
+	const QString spec = sk_key_row_spec(keys);
+	QCOMPARE(sk_key_row_spec(sk_parse_key_row(spec)), spec);
+	QCOMPARE(sk_parse_key_row(spec).size(), keys.size());
 
 	/* And it reaches the catalogue under the reserved id, keys only. */
-	bssh_key_row_catalog catalog;
+	sk_key_row_catalog catalog;
 	QVERIFY(catalog.set_custom(keys));
 
-	const bssh_key_row_layout_t *custom = catalog.by_id(QStringLiteral("custom"));
+	const sk_key_row_layout_t *custom = catalog.by_id(QStringLiteral("custom"));
 	QVERIFY(custom != nullptr);
 	QCOMPARE(custom->keys.size(), keys.size());
 	QCOMPARE(custom->display_name, QStringLiteral("Custom"));
@@ -1654,25 +1654,25 @@ void input_router_test::a_custom_key_row_is_composed_from_words() {
 }
 
 void input_router_test::a_custom_row_that_cannot_drive_a_terminal_is_refused() {
-	bssh_key_row_catalog catalog;
+	sk_key_row_catalog catalog;
 
-	const bssh_key_row_layout_t *before = catalog.by_id(QStringLiteral("custom"));
+	const sk_key_row_layout_t *before = catalog.by_id(QStringLiteral("custom"));
 	QVERIFY(before != nullptr);
-	const QList<bssh_key_t> kept = before->keys;
+	const QList<sk_key_t> kept = before->keys;
 
 	/* The entry starts as a copy of the default, so it satisfies the
 	 * contract before anybody has written to it. */
-	QVERIFY(bssh_key_row_usable(kept));
+	QVERIFY(sk_key_row_usable(kept));
 
 	/* No Escape: arrows and a modifier are not a row you can get out of
 	 * anything with. */
-	QVERIFY(!catalog.set_custom(bssh_parse_key_row(QStringLiteral("ctrl left right"))));
+	QVERIFY(!catalog.set_custom(sk_parse_key_row(QStringLiteral("ctrl left right"))));
 
 	/* No modifier: sticky Ctrl is the thing the row exists to provide. */
-	QVERIFY(!catalog.set_custom(bssh_parse_key_row(QStringLiteral("esc tab left right"))));
+	QVERIFY(!catalog.set_custom(sk_parse_key_row(QStringLiteral("esc tab left right"))));
 
 	/* Nothing at all, which is what an emptied settings line parses to. */
-	QVERIFY(!catalog.set_custom(bssh_parse_key_row(QString())));
+	QVERIFY(!catalog.set_custom(sk_parse_key_row(QString())));
 
 	/*
 	 * And each refusal left the last good row alone. A refusal that
@@ -1680,7 +1680,7 @@ void input_router_test::a_custom_row_that_cannot_drive_a_terminal_is_refused() {
 	 * back to a working one except the file this is meant to save them
 	 * from opening.
 	 */
-	const bssh_key_row_layout_t *after = catalog.by_id(QStringLiteral("custom"));
+	const sk_key_row_layout_t *after = catalog.by_id(QStringLiteral("custom"));
 	QVERIFY(after != nullptr);
 	QCOMPARE(after->keys.size(), kept.size());
 }
@@ -1696,7 +1696,7 @@ void input_router_test::the_custom_row_note_names_only_words_that_parse() {
 	QVERIFY(!words.isEmpty());
 
 	for (const QString &word : words) {
-		const QList<bssh_key_t> parsed = bssh_parse_key_row(word);
+		const QList<sk_key_t> parsed = sk_parse_key_row(word);
 		QVERIFY2(parsed.size() == 1,
 		         qPrintable(QStringLiteral("the note names '%1', which does not parse")
 		                            .arg(word)));

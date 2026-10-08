@@ -236,7 +236,7 @@ public:
 	void set_custom_scheme(const bssh_colour_scheme_t &scheme);
 
 	/*
-	 * The custom key row, as the words bssh_parse_key_row reads (sec 6.2).
+	 * The custom key row, as the words sk_parse_key_row reads (sec 6.2).
 	 *
 	 * A string rather than a parsed row, because this is the layer that
 	 * talks to app.ini and the keyboard/ catalogue is the layer that knows

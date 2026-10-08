@@ -35,8 +35,8 @@ class bssh_layout_manager;
 class bssh_pane_container;
 class bssh_input_selector;
 class bssh_find_bar;
-class bssh_key_row;
-class bssh_soft_keyboard;
+class sk_key_row;
+class sk_keyboard;
 class bssh_profile_store;
 class bssh_session_dialog;
 class bssh_session;
@@ -979,8 +979,8 @@ private:
 	bssh_session *m_current;
 	QTabBar *m_tabs;
 	bssh_long_press *m_tab_long_press;
-	bssh_key_row *m_key_row;
-	bssh_soft_keyboard *m_keyboard;
+	sk_key_row *m_key_row;
+	sk_keyboard *m_keyboard;
 	QString m_error;
 
 	/*

@@ -48,7 +48,7 @@ public:
 	 * Every word the note on this dialog names.
 	 *
 	 * Exposed so the suite can assert that each one parses, which is what
-	 * keeps the explanation and bssh_parse_key_row from drifting apart --
+	 * keeps the explanation and sk_parse_key_row from drifting apart --
 	 * a note promising a key this build does not know is a promise the
 	 * row cannot keep, and nothing else would catch it.
 	 */

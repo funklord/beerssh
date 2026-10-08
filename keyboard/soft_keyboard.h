@@ -1,5 +1,5 @@
-#ifndef BSSH_SOFT_KEYBOARD_H
-#define BSSH_SOFT_KEYBOARD_H
+#ifndef SK_KEYBOARD_H
+#define SK_KEYBOARD_H
 
 #include <QList>
 #include <QString>
@@ -7,18 +7,18 @@
 
 #include "keyboard/key_row_layout.h"
 
-class bssh_key_cap;
+class sk_key_cap;
 #include "keyboard/soft_keyboard_layout.h"
 
 class QAbstractButton;
 class QGridLayout;
 class sk_target;
-class bssh_touch_chords;
+class sk_touch_chords;
 class QHBoxLayout;
-class bssh_resize_grip;
+class sk_resize_grip;
 
 /*
- * bssh_soft_keyboard -- the keyboard this app draws itself (project.md
+ * sk_keyboard -- the keyboard this app draws itself (project.md
  * sec 6.2).
  *
  * Sec 6.2 planned a key ROW: a strip of Ctrl, Esc, Tab and arrows above
@@ -37,11 +37,11 @@ class bssh_resize_grip;
  * translation path for physical keys, both on-screen keyboards and paste
  * (sec 6.3), or they drift apart.
  */
-class bssh_soft_keyboard : public QWidget {
+class sk_keyboard : public QWidget {
 	Q_OBJECT
 
 public:
-	explicit bssh_soft_keyboard(sk_target *target, QWidget *parent = nullptr);
+	explicit sk_keyboard(sk_target *target, QWidget *parent = nullptr);
 
 	/* Retargeted when the shown session changes (sec 3, principle 2). */
 	void set_target(sk_target *target);
@@ -58,7 +58,7 @@ public:
 	 * grid -- and resets to the first group, since group indices are per
 	 * style and a "terminal" index in a two-group catalog is off the end.
 	 */
-	void set_style(bssh_soft_keyboard_catalog::style_t style);
+	void set_style(sk_catalog::style_t style);
 	int group() const { return m_group; }
 	QString group_id() const;
 
@@ -75,7 +75,7 @@ public:
 	 */
 	void rebuild_keys() { rebuild(); }
 
-	bssh_soft_keyboard_catalog::style_t style() const { return m_style; }
+	sk_catalog::style_t style() const { return m_style; }
 
 	/*
 	 * The split keyboard's halves (sec 6.2), 0 for the left and 1 for the
@@ -109,7 +109,7 @@ signals:
 	 * STYLE_SPLIT, and the keys' height for the others. The window keeps
 	 * it; this widget keeps nothing between runs.
 	 */
-	void size_chosen(bssh_soft_keyboard_catalog::style_t style, int size_dp);
+	void size_chosen(sk_catalog::style_t style, int size_dp);
 
 	/*
 	 * The configuration key: show the settings the user would otherwise
@@ -136,10 +136,10 @@ private:
 	void rebuild();
 	void refresh_side_icons();
 	void refresh_script_button();
-	bssh_key_cap *make_button(const QString &label, QWidget *parent);
+	sk_key_cap *make_button(const QString &label, QWidget *parent);
 	bool altgr_armed() const;
-	void add_key(const bssh_key_t &key, QGridLayout *grid, int row, int column);
-	void lay_out_split(const bssh_soft_key_group_t &group);
+	void add_key(const sk_key_t &key, QGridLayout *grid, int row, int column);
+	void lay_out_split(const sk_group_t &group);
 	void update_halves();
 	void apply_bottom_height();
 	int row_count() const;
@@ -157,14 +157,14 @@ private:
 	void refresh_letter_labels();
 
 	sk_target *m_target;
-	bssh_touch_chords *m_touch = nullptr;
+	sk_touch_chords *m_touch = nullptr;
 
 	QWidget *m_keys;
 	QGridLayout *m_grid;
 
 	QHBoxLayout *m_outer = nullptr;
-	bssh_resize_grip *m_top_grip = nullptr;
-	bssh_resize_grip *m_half_grips[2] = { nullptr, nullptr };
+	sk_resize_grip *m_top_grip = nullptr;
+	sk_resize_grip *m_half_grips[2] = { nullptr, nullptr };
 	bool m_grips_shown = true;
 	int m_half_width = 0;
 	int m_bottom_height = 0;
@@ -196,7 +196,7 @@ private:
 	QAbstractButton *m_script_button;
 
 	int m_group;
-	bssh_soft_keyboard_catalog::style_t m_style;
+	sk_catalog::style_t m_style;
 
 	QList<QAbstractButton *> m_modifier_buttons;
 	QList<quint8> m_modifier_values;
@@ -206,10 +206,10 @@ private:
 	 * The keys that CHANGE under Shift, and what each becomes. Parallel
 	 * lists rather than a struct because they are filled and read in one
 	 * place each; the second legend is zero for a letter, which takes its
-	 * capital instead (bssh_shifted_char).
+	 * capital instead (sk_shifted_char).
 	 */
-	QList<bssh_key_cap *> m_letter_buttons;
-	QList<bssh_key_t> m_letter_keys;
+	QList<sk_key_cap *> m_letter_buttons;
+	QList<sk_key_t> m_letter_keys;
 };
 
-#endif /* BSSH_SOFT_KEYBOARD_H */
+#endif /* SK_KEYBOARD_H */

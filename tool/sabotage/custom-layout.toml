@@ -1,7 +1,7 @@
 # sec 6.3's fourth answer: a user's own keyboard layout.
 #
 # The other three are values a user picks or composes. A layout had
-# nowhere to live at all -- bssh_keyboard_layout_t is {id, display_name}
+# nowhere to live at all -- sk_keyboard_layout_t is {id, display_name}
 # and the layout itself is a C table the key builders read through
 # g_layout -- so this is the one that needed a representation before it
 # needed code.
@@ -28,8 +28,8 @@ expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
 [[sabotage]]
 name = "a refused layout is offered in the chooser"
 file = "keyboard/soft_keyboard_layout.cpp"
-find = "\tif (custom_layout_ready()) {\n\t\tbssh_keyboard_layout_t described;"
-replace = "\tif (true) {\n\t\tbssh_keyboard_layout_t described;"
+find = "\tif (custom_layout_ready()) {\n\t\tsk_keyboard_layout_t described;"
+replace = "\tif (true) {\n\t\tsk_keyboard_layout_t described;"
 expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
 
 # The pipe escape. A pipe is a real legend on BKSL, so a split that ate
@@ -64,7 +64,7 @@ replace = "\t\twhile (levels.size() < 4) levels.append(QString());"
 expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
 
 # The last hop, from the catalogue to the control a person looks at.
-# bssh_keyboard_layouts() can be perfectly right while the combo was
+# sk_keyboard_layouts() can be perfectly right while the combo was
 # built from something else, and every assertion about the catalogue
 # would still pass -- which is this tree's most repeated defect, and the
 # reason the test asks the QComboBox rather than the catalogue twice.

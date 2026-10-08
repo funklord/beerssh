@@ -33,8 +33,8 @@ expect = "a_fourth_page_appears_only_where_a_letter_needs_it"
 [[sabotage]]
 name = "the full keyboard drops the ISO key an ISO layout needs"
 file = "keyboard/soft_keyboard_layout.cpp"
-find = "\tif (iso) shift.append(slot_key(\"LSGT\", BSSH_FULL_UNIT));"
-replace = "\tif (false) shift.append(slot_key(\"LSGT\", BSSH_FULL_UNIT));"
+find = "\tif (iso) shift.append(slot_key(\"LSGT\", SK_FULL_UNIT));"
+replace = "\tif (false) shift.append(slot_key(\"LSGT\", SK_FULL_UNIT));"
 expect = "both_keyboards_reach_every_printable_character"
 
 # 3. An unknown layout is accepted rather than refused.

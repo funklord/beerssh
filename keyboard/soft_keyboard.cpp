@@ -44,7 +44,7 @@ namespace {
  * with the button, and take their colour from the palette -- so they
  * follow the light and dark schemes without a second asset.
  */
-QIcon bssh_painted_icon(const QColor &ink, int size, bool settings) {
+QIcon sk_painted_icon(const QColor &ink, int size, bool settings) {
 	QPixmap canvas(size, size);
 	canvas.fill(Qt::transparent);
 
@@ -181,11 +181,11 @@ QIcon bssh_painted_icon(const QColor &ink, int size, bool settings) {
  * the defect sec 6.2 records the key row shipping with, where Ctrl drew
  * as "Ctr" and the row read as merely cramped.
  */
-const int BSSH_KEY_MIN_WIDTH_DP = 12;
+const int SK_KEY_MIN_WIDTH_DP = 12;
 
 } /* namespace */
 
-bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
+sk_keyboard::sk_keyboard(sk_target *target, QWidget *parent)
     : QWidget(parent),
       m_target(target),
       m_keys(nullptr),
@@ -195,7 +195,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
       m_hide_button(nullptr),
       m_script_button(nullptr),
       m_group(0),
-      m_style(bssh_soft_keyboard_catalog::STYLE_COMPACT) {
+      m_style(sk_catalog::STYLE_COMPACT) {
 	/*
 	 * The resize bar on top, the keys below it: the top is the edge that
 	 * faces the terminal when this keyboard sits underneath (sec 6.2).
@@ -203,7 +203,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
 	QVBoxLayout *column = new QVBoxLayout(this);
 	column->setContentsMargins(0, 0, 0, 0);
 	column->setSpacing(0);
-	m_top_grip = new bssh_resize_grip(Qt::Vertical, this);
+	m_top_grip = new sk_resize_grip(Qt::Vertical, this);
 	column->addWidget(m_top_grip, 0);
 
 	QHBoxLayout *outer = new QHBoxLayout;
@@ -212,10 +212,10 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
 	column->addLayout(outer, 1);
 	m_outer = outer;
 
-	connect(m_top_grip, &bssh_resize_grip::pressed, this, [this] {
+	connect(m_top_grip, &sk_resize_grip::pressed, this, [this] {
 		m_drag_from = m_keys->height();
 	});
-	connect(m_top_grip, &bssh_resize_grip::dragged, this, [this](int distance) {
+	connect(m_top_grip, &sk_resize_grip::dragged, this, [this](int distance) {
 		/*
 		 * Up is taller: the bar is on top. Never below 1, which the
 		 * floor then raises to the smallest keys: 0 means "not chosen"
@@ -224,7 +224,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
 		 */
 		set_bottom_height(qMax(1, m_drag_from - distance));
 	});
-	connect(m_top_grip, &bssh_resize_grip::released, this, [this] {
+	connect(m_top_grip, &sk_resize_grip::released, this, [this] {
 		emit size_chosen(m_style, m_bottom_height);
 	});
 
@@ -252,22 +252,22 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
 		 * edge and the right half's left. Dragging toward the terminal
 		 * widens the half, so the sign flips between them.
 		 */
-		m_half_grips[side] = new bssh_resize_grip(Qt::Horizontal, m_halves[side]);
+		m_half_grips[side] = new sk_resize_grip(Qt::Horizontal, m_halves[side]);
 		if (side) row->insertWidget(0, m_half_grips[side], 0);
 		else row->addWidget(m_half_grips[side], 0);
 
-		connect(m_half_grips[side], &bssh_resize_grip::pressed, this, [this] {
+		connect(m_half_grips[side], &sk_resize_grip::pressed, this, [this] {
 			m_drag_from = m_half_keys[0]->width();
-			for (bssh_resize_grip *grip : m_half_grips) grip->set_lit(true);
+			for (sk_resize_grip *grip : m_half_grips) grip->set_lit(true);
 		});
-		connect(m_half_grips[side], &bssh_resize_grip::dragged, this, [this, side](int distance) {
+		connect(m_half_grips[side], &sk_resize_grip::dragged, this, [this, side](int distance) {
 			const int wanted = side ? m_drag_from - distance : m_drag_from + distance;
 			const int widest = qMax(120, window()->width() * 2 / 5);
 			set_half_width(qBound(120, wanted, widest));
 		});
-		connect(m_half_grips[side], &bssh_resize_grip::released, this, [this] {
-			for (bssh_resize_grip *grip : m_half_grips) grip->set_lit(false);
-			emit size_chosen(bssh_soft_keyboard_catalog::STYLE_SPLIT, m_half_width);
+		connect(m_half_grips[side], &sk_resize_grip::released, this, [this] {
+			for (sk_resize_grip *grip : m_half_grips) grip->set_lit(false);
+			emit size_chosen(sk_catalog::STYLE_SPLIT, m_half_width);
 		});
 
 		m_halves[side]->hide();
@@ -349,7 +349,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
 	side->addWidget(m_script_button, 0);
 
 	connect(m_script_button, &QAbstractButton::clicked, this, [this] {
-		bssh_set_latin_mode(!bssh_latin_mode());
+		sk_set_latin_mode(!sk_latin_mode());
 		rebuild_keys();
 	});
 
@@ -374,19 +374,19 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
 	outer->addWidget(m_side, 0);
 
 	connect(m_group_button, &QAbstractButton::clicked, this, [this] {
-		set_group(bssh_soft_keyboard_catalog::instance().next_index(m_group, m_style));
+		set_group(sk_catalog::instance().next_index(m_group, m_style));
 	});
 	connect(m_settings_button, &QAbstractButton::clicked,
-	         this, &bssh_soft_keyboard::settings_requested);
+	         this, &sk_keyboard::settings_requested);
 	connect(m_hide_button, &QAbstractButton::clicked,
-	         this, &bssh_soft_keyboard::hide_requested);
+	         this, &sk_keyboard::hide_requested);
 
 	/*
 	 * One handler for the whole keyboard, halves included: a chord can
 	 * span them -- Ctrl under the left thumb, C under the right -- and
 	 * a handler per half would not know the other's finger was down.
 	 */
-	m_touch = new bssh_touch_chords(this);
+	m_touch = new sk_touch_chords(this);
 	m_touch->watch(m_halves[0]);
 	m_touch->watch(m_halves[1]);
 
@@ -395,11 +395,11 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
 	 * the router, and lifting it with nothing pressed in between is a tap
 	 * -- the same cycle a click on the button gives.
 	 */
-	connect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {
+	connect(m_touch, &sk_touch_chords::modifier_held, this, [this](quint8 modifier) {
 		if (m_target) m_target->modifiers().hold(modifier);
 		refresh_modifiers();
 	});
-	connect(m_touch, &bssh_touch_chords::modifier_released,
+	connect(m_touch, &sk_touch_chords::modifier_released,
 	         this, [this](quint8 modifier, bool cancelled) {
 		if (m_target && m_target->modifiers().release(modifier) && !cancelled) {
 			m_target->modifiers().cycle(modifier);
@@ -419,14 +419,14 @@ bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
 	rebuild();
 }
 
-QString bssh_soft_keyboard::group_id() const {
-	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all(m_style);
+QString sk_keyboard::group_id() const {
+	const QList<sk_group_t> &groups =
+	        sk_catalog::instance().all(m_style);
 	if (m_group < 0 || m_group >= groups.size()) return QString();
 	return groups.at(m_group).id;
 }
 
-void bssh_soft_keyboard::set_style(bssh_soft_keyboard_catalog::style_t style) {
+void sk_keyboard::set_style(sk_catalog::style_t style) {
 	if (style == m_style) return;
 
 	m_style = style;
@@ -434,9 +434,9 @@ void bssh_soft_keyboard::set_style(bssh_soft_keyboard_catalog::style_t style) {
 	rebuild();
 }
 
-void bssh_soft_keyboard::set_group(int index) {
-	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all(m_style);
+void sk_keyboard::set_group(int index) {
+	const QList<sk_group_t> &groups =
+	        sk_catalog::instance().all(m_style);
 	if (groups.isEmpty()) return;
 
 	const int wanted = (index % groups.size() + groups.size()) % groups.size();
@@ -446,8 +446,8 @@ void bssh_soft_keyboard::set_group(int index) {
 	rebuild();
 }
 
-bssh_key_cap *bssh_soft_keyboard::make_button(const QString &label, QWidget *parent) {
-	bssh_key_cap *button = new bssh_key_cap(parent);
+sk_key_cap *sk_keyboard::make_button(const QString &label, QWidget *parent) {
+	sk_key_cap *button = new sk_key_cap(parent);
 	button->setText(label);
 
 	/*
@@ -458,13 +458,13 @@ bssh_key_cap *bssh_soft_keyboard::make_button(const QString &label, QWidget *par
 	button->setFocusPolicy(Qt::NoFocus);
 
 	button->setMinimumHeight(SK_TOUCH_TARGET_DP);
-	button->setMinimumWidth(BSSH_KEY_MIN_WIDTH_DP);
+	button->setMinimumWidth(SK_KEY_MIN_WIDTH_DP);
 	button->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
 	return button;
 }
 
-void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int row,
+void sk_keyboard::add_key(const sk_key_t &key, QGridLayout *grid, int row,
                                  int column) {
 	/*
 	 * A spacer holds its columns and draws nothing: the gap between the
@@ -472,28 +472,28 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 	 * made, because a button that does nothing is worse than a gap -- it
 	 * invites a press and answers with silence.
 	 */
-	if (key.kind == bssh_key_t::SPACER) return;
+	if (key.kind == sk_key_t::SPACER) return;
 
-	bssh_key_cap *button = make_button(key.label, grid->parentWidget());
+	sk_key_cap *button = make_button(key.label, grid->parentWidget());
 	grid->addWidget(button, row, column, 1, key.span);
 
 	switch (key.kind) {
-	case bssh_key_t::SPACER:
+	case sk_key_t::SPACER:
 		/* Returned above; named so the switch stays exhaustive. */
 		break;
 
-	case bssh_key_t::KEY: {
+	case sk_key_t::KEY: {
 		const int code = key.value;
-		bssh_set_key_repeat(button);
+		sk_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, code] {
 			if (m_target) m_target->key(code, SK_MOD_NONE);
 		});
 		break;
 	}
-	case bssh_key_t::MODIFIER: {
+	case sk_key_t::MODIFIER: {
 		const quint8 modifier = key.modifier;
 		button->setCheckable(true);
-		button->setProperty("bssh_hold_modifier", uint(modifier));
+		button->setProperty("sk_hold_modifier", uint(modifier));
 		m_modifier_buttons.append(button);
 		m_modifier_values.append(modifier);
 		connect(button, &QAbstractButton::clicked, this, [this, modifier] {
@@ -509,7 +509,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 		});
 		break;
 	}
-	case bssh_key_t::TEXT: {
+	case sk_key_t::TEXT: {
 		const char32_t ch = char32_t(key.value);
 
 		/*
@@ -528,7 +528,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 			m_letter_keys.append(key);
 		}
 
-		bssh_set_key_repeat(button);
+		sk_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, key] {
 			if (!m_target) return;
 
@@ -543,7 +543,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 			        m_target->modifiers().state(SK_MOD_SHIFT)
 			                != sk_modifiers::OFF;
 
-			const QChar sent = bssh_keyboard_char(key, shifted, altgr_armed());
+			const QChar sent = sk_keyboard_char(key, shifted, altgr_armed());
 
 			/*
 			 * Offered to the application before it is typed, exactly as a
@@ -562,29 +562,29 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 		});
 		break;
 	}
-	case bssh_key_t::CHORD: {
+	case sk_key_t::CHORD: {
 		const int code = key.value;
 		const quint8 modifier = key.modifier;
-		bssh_set_key_repeat(button);
+		sk_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, code, modifier] {
 			if (m_target) m_target->key(code, modifier);
 		});
 		break;
 	}
-	case bssh_key_t::FUNCTION_TOGGLE:
+	case sk_key_t::FUNCTION_TOGGLE:
 		/*
 		 * A row swaps itself for F1..F12 because it has one strip to
 		 * spend (sec 6.2). This keyboard has a group for them and the
 		 * side button to reach it, so the toggle has nothing to do here
 		 * and no layout uses it. Named rather than defaulted, so adding
-		 * a kind to bssh_key_t fails to compile here rather than
+		 * a kind to sk_key_t fails to compile here rather than
 		 * silently drawing a dead button.
 		 */
 		break;
 	}
 }
 
-void bssh_soft_keyboard::rebuild() {
+void sk_keyboard::rebuild() {
 	refresh_script_button();
 
 	m_modifier_buttons.clear();
@@ -621,18 +621,18 @@ void bssh_soft_keyboard::rebuild() {
 		QTimer::singleShot(0, [retired] { qDeleteAll(retired); });
 	}
 
-	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all(m_style);
+	const QList<sk_group_t> &groups =
+	        sk_catalog::instance().all(m_style);
 	if (m_group < 0 || m_group >= groups.size()) return;
 
-	const bssh_soft_key_group_t &group = groups.at(m_group);
+	const sk_group_t &group = groups.at(m_group);
 
-	if (m_style == bssh_soft_keyboard_catalog::STYLE_SPLIT) {
+	if (m_style == sk_catalog::STYLE_SPLIT) {
 		lay_out_split(group);
 	} else {
 		for (int r = 0; r < group.rows.size(); ++r) {
 			int column = 0;
-			for (const bssh_key_t &key : group.rows.at(r)) {
+			for (const sk_key_t &key : group.rows.at(r)) {
 				add_key(key, m_grid, r, column);
 				column += key.span;
 			}
@@ -651,7 +651,7 @@ void bssh_soft_keyboard::rebuild() {
 	 * narrower group keeps stretch on columns nothing occupies and comes
 	 * out squeezed into the left of the widget.
 	 */
-	for (int c = group.columns; c < BSSH_KEYBOARD_MAX_COLUMNS; ++c) {
+	for (int c = group.columns; c < SK_KEYBOARD_MAX_COLUMNS; ++c) {
 		m_grid->setColumnStretch(c, 0);
 	}
 
@@ -662,7 +662,7 @@ void bssh_soft_keyboard::rebuild() {
 	 * The side button names the group it goes TO, not the one on screen.
 	 * A button labelled with where you already are is one nobody presses.
 	 */
-	const int next = bssh_soft_keyboard_catalog::instance().next_index(m_group, m_style);
+	const int next = sk_catalog::instance().next_index(m_group, m_style);
 	if (next >= 0 && next < groups.size()) {
 		m_group_button->setText(groups.at(next).button_label);
 	}
@@ -670,7 +670,7 @@ void bssh_soft_keyboard::rebuild() {
 	refresh_modifiers();
 }
 
-void bssh_soft_keyboard::refresh_modifiers() {
+void sk_keyboard::refresh_modifiers() {
 	/* No router means no session, so nothing is armed; see the key row. */
 	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
 		QAbstractButton *button = m_modifier_buttons.at(i);
@@ -679,7 +679,7 @@ void bssh_soft_keyboard::refresh_modifiers() {
 		                 : sk_modifiers::OFF;
 
 		button->setChecked(state != sk_modifiers::OFF);
-		button->setProperty("bssh_modifier_state", int(state));
+		button->setProperty("sk_modifier_state", int(state));
 		button->update();
 
 		QFont font = button->font();
@@ -694,7 +694,7 @@ void bssh_soft_keyboard::refresh_modifiers() {
 
 /*
  * One group into two grids, each key in the half its middle falls in
- * (bssh_soft_keyboard_catalog::in_left_half). Rows keep their stagger: the
+ * (sk_catalog::in_left_half). Rows keep their stagger: the
  * left half keeps each key's column, and the right half measures from the
  * leftmost column any right-hand key starts at, so the two halves are the
  * one keyboard pulled apart rather than two keyboards.
@@ -720,13 +720,13 @@ void bssh_soft_keyboard::refresh_modifiers() {
  * space above them empty: a half is as tall as the terminal, and a thumb
  * holding a phone sideways reaches the lower corners, not the middle.
  */
-void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
+void sk_keyboard::lay_out_split(const sk_group_t &group) {
 	struct placed_t {
-		bssh_key_t key;
+		sk_key_t key;
 		int column;
 	};
 	/*
-	 * Without the compact pages' digit row (bssh_soft_key_group_t::
+	 * Without the compact pages' digit row (sk_group_t::
 	 * digit_row_first): it was asked for in portrait, and five rows of
 	 * 48dp keys did not fit a landscape phone.
 	 */
@@ -736,8 +736,8 @@ void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
 
 	for (int r = 0; r < rows; ++r) {
 		int column = 0;
-		for (const bssh_key_t &key : group.rows.at(skip + r)) {
-			if (bssh_soft_keyboard_catalog::in_left_half(column, key.span, group.columns)) {
+		for (const sk_key_t &key : group.rows.at(skip + r)) {
+			if (sk_catalog::in_left_half(column, key.span, group.columns)) {
 				left[r].append({ key, column });
 			} else {
 				right[r].append({ key, column });
@@ -746,11 +746,11 @@ void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
 		}
 	}
 
-	const auto is_space = [](const bssh_key_t &key) {
-		return key.kind == bssh_key_t::TEXT && key.value == int(U' ');
+	const auto is_space = [](const sk_key_t &key) {
+		return key.kind == sk_key_t::TEXT && key.value == int(U' ');
 	};
-	const auto is_shift = [](const bssh_key_t &key) {
-		return key.kind == bssh_key_t::MODIFIER && key.modifier == SK_MOD_SHIFT;
+	const auto is_shift = [](const sk_key_t &key) {
+		return key.kind == sk_key_t::MODIFIER && key.modifier == SK_MOD_SHIFT;
 	};
 	const auto end_of = [](const QList<placed_t> &row) {
 		return row.isEmpty() ? 0 : row.last().column + row.last().key.span;
@@ -771,7 +771,7 @@ void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
 		const bool right_shift = std::any_of(right[r].cbegin(), right[r].cend(),
 		                                     [&](const placed_t &p) { return is_shift(p.key); });
 		if (left_shift && !right_shift && !right[r].isEmpty() && right[r].last().key.span >= 4) {
-			bssh_key_t shift;
+			sk_key_t shift;
 			for (const placed_t &p : left[r]) {
 				if (is_shift(p.key)) shift = p.key;
 			}
@@ -801,7 +801,7 @@ void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
 
 	for (QGridLayout *grid : m_half_grids) {
 		const int used = grid == m_half_grids[0] ? left_columns : right_columns;
-		for (int c = 0; c < BSSH_KEYBOARD_MAX_COLUMNS; ++c) {
+		for (int c = 0; c < SK_KEYBOARD_MAX_COLUMNS; ++c) {
 			grid->setColumnStretch(c, c < used ? 1 : 0);
 		}
 		grid->setRowStretch(0, 1);
@@ -814,8 +814,8 @@ void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
  * side buttons on the right half's outer edge, where the bottom keyboard
  * has them; otherwise they go back beside the bottom grid.
  */
-void bssh_soft_keyboard::update_halves() {
-	const bool split = m_style == bssh_soft_keyboard_catalog::STYLE_SPLIT;
+void sk_keyboard::update_halves() {
+	const bool split = m_style == sk_catalog::STYLE_SPLIT;
 
 	QBoxLayout *right_row = qobject_cast<QBoxLayout *>(m_halves[1]->layout());
 	if (split && m_side->parentWidget() != m_halves[1]) {
@@ -832,25 +832,25 @@ void bssh_soft_keyboard::update_halves() {
 	for (QWidget *grip : m_half_grips) grip->setVisible(m_grips_shown);
 }
 
-void bssh_soft_keyboard::set_half_width(int width_dp) {
+void sk_keyboard::set_half_width(int width_dp) {
 	m_half_width = width_dp;
 	for (QWidget *keys : m_half_keys) keys->setFixedWidth(width_dp);
 }
 
-void bssh_soft_keyboard::set_grips_shown(bool shown) {
+void sk_keyboard::set_grips_shown(bool shown) {
 	if (shown == m_grips_shown) return;
 	m_grips_shown = shown;
 	update_halves();
 }
 
-int bssh_soft_keyboard::row_count() const {
-	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all(m_style);
+int sk_keyboard::row_count() const {
+	const QList<sk_group_t> &groups =
+	        sk_catalog::instance().all(m_style);
 	if (m_group < 0 || m_group >= groups.size()) return 1;
 	return qMax(1, int(groups.at(m_group).rows.size()));
 }
 
-void bssh_soft_keyboard::set_bottom_height(int height_dp) {
+void sk_keyboard::set_bottom_height(int height_dp) {
 	if (height_dp > 0) {
 		/*
 		 * Between the smallest keys anybody may drag to and three fifths
@@ -873,9 +873,9 @@ void bssh_soft_keyboard::set_bottom_height(int height_dp) {
  * keys' own size. Applied again after every rebuild, since a rebuild makes
  * new keys at the default.
  */
-void bssh_soft_keyboard::apply_bottom_height() {
+void sk_keyboard::apply_bottom_height() {
 	const bool chosen = m_bottom_height > 0
-	                    && m_style != bssh_soft_keyboard_catalog::STYLE_SPLIT;
+	                    && m_style != sk_catalog::STYLE_SPLIT;
 	int key = SK_TOUCH_TARGET_DP;
 	if (chosen) {
 		const int rows = row_count();
@@ -886,22 +886,22 @@ void bssh_soft_keyboard::apply_bottom_height() {
 		m_keys->setMinimumHeight(0);
 		m_keys->setMaximumHeight(QWIDGETSIZE_MAX);
 	}
-	for (bssh_key_cap *cap : m_keys->findChildren<bssh_key_cap *>()) {
+	for (sk_key_cap *cap : m_keys->findChildren<sk_key_cap *>()) {
 		cap->setMinimumHeight(key);
 	}
 }
 
-void bssh_soft_keyboard::showEvent(QShowEvent *event) {
+void sk_keyboard::showEvent(QShowEvent *event) {
 	QWidget::showEvent(event);
 	update_halves();
 }
 
-void bssh_soft_keyboard::hideEvent(QHideEvent *event) {
+void sk_keyboard::hideEvent(QHideEvent *event) {
 	QWidget::hideEvent(event);
 	update_halves();
 }
 
-bool bssh_soft_keyboard::altgr_armed() const {
+bool sk_keyboard::altgr_armed() const {
 	return m_target
 	        && m_target->modifiers().state(SK_MOD_ALTGR)
 	                != sk_modifiers::OFF;
@@ -913,7 +913,7 @@ bool bssh_soft_keyboard::altgr_armed() const {
  * Called again on a palette change, because the icons carry their colour
  * rather than taking it from the widget when drawn: a theme switch would
  * otherwise leave a dark glyph on a dark button, which is the failure
- * bssh_key_cap avoids by using alpha and this cannot, an icon being
+ * sk_key_cap avoids by using alpha and this cannot, an icon being
  * pixels.
  */
 /*
@@ -930,21 +930,21 @@ bool bssh_soft_keyboard::altgr_armed() const {
  * and a final sigma. A two-letter id is short, fits the column, and is
  * the same string the setting uses.
  */
-void bssh_soft_keyboard::refresh_script_button() {
+void sk_keyboard::refresh_script_button() {
 	if (!m_script_button) return;
 
-	const bool offered = !bssh_layout_has_latin();
+	const bool offered = !sk_layout_has_latin();
 	m_script_button->setVisible(offered);
 	if (!offered) return;
 
-	const QString id = bssh_keyboard_layout();
+	const QString id = sk_keyboard_layout();
 
 	QString named = id;
-	for (const bssh_keyboard_layout_t &known : bssh_keyboard_layouts()) {
+	for (const sk_keyboard_layout_t &known : sk_keyboard_layouts()) {
 		if (known.id == id) named = known.display_name;
 	}
 
-	const bool latin = bssh_latin_mode();
+	const bool latin = sk_latin_mode();
 	m_script_button->setText(latin ? id.toUpper() : QStringLiteral("abc"));
 
 	const QString says = latin
@@ -954,25 +954,25 @@ void bssh_soft_keyboard::refresh_script_button() {
 	m_script_button->setToolTip(says);
 }
 
-void bssh_soft_keyboard::refresh_side_icons() {
+void sk_keyboard::refresh_side_icons() {
 	if (!m_settings_button || !m_hide_button) return;
 
 	const QColor ink = palette().color(QPalette::ButtonText);
 	const int size = qMax(16, int(SK_TOUCH_TARGET_DP * 0.55));
 
-	m_settings_button->setIcon(bssh_painted_icon(ink, size * 2, true));
+	m_settings_button->setIcon(sk_painted_icon(ink, size * 2, true));
 	m_settings_button->setIconSize(QSize(size, size));
 
-	m_hide_button->setIcon(bssh_painted_icon(ink, size * 2, false));
+	m_hide_button->setIcon(sk_painted_icon(ink, size * 2, false));
 	m_hide_button->setIconSize(QSize(size, size));
 }
 
-void bssh_soft_keyboard::changeEvent(QEvent *event) {
+void sk_keyboard::changeEvent(QEvent *event) {
 	QWidget::changeEvent(event);
 	if (event->type() == QEvent::PaletteChange) refresh_side_icons();
 }
 
-void bssh_soft_keyboard::refresh_letter_labels() {
+void sk_keyboard::refresh_letter_labels() {
 	/*
 	 * Same rule as the modifiers: with no session there is no Shift, so
 	 * the letters read lowercase. Returning early left a keyboard drawn
@@ -985,8 +985,8 @@ void bssh_soft_keyboard::refresh_letter_labels() {
 	const bool altgr = altgr_armed();
 
 	for (int i = 0; i < m_letter_buttons.size(); ++i) {
-		const bssh_key_t &key = m_letter_keys.at(i);
-		const QChar active = bssh_keyboard_char(key, shifted, altgr);
+		const sk_key_t &key = m_letter_keys.at(i);
+		const QChar active = sk_keyboard_char(key, shifted, altgr);
 
 		/*
 		 * ANNOTATED while AltGr is idle, because US International is
@@ -1000,7 +1000,7 @@ void bssh_soft_keyboard::refresh_letter_labels() {
 		 * keycap -- and goes away when AltGr arms it, because a hint
 		 * repeating what the user has just done is forty caps' worth of
 		 * reading at the moment they are hunting for a character.
-		 * bssh_key_cap draws it; see there for why it is a paint rather
+		 * sk_key_cap draws it; see there for why it is a paint rather
 		 * than a longer string.
 		 */
 		m_letter_buttons.at(i)->setText(QString(active));
@@ -1011,7 +1011,7 @@ void bssh_soft_keyboard::refresh_letter_labels() {
 	}
 }
 
-void bssh_soft_keyboard::set_target(sk_target *target) {
+void sk_keyboard::set_target(sk_target *target) {
 	if (m_target == target) return;
 
 	/* A finger still down belongs to the old session; let it go there. */

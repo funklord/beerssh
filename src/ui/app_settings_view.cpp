@@ -212,10 +212,10 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		 */
 		QString seed = stored.custom_key_row();
 		if (seed.isEmpty()) {
-			const bssh_key_row_catalog catalog;
-			if (const bssh_key_row_layout_t *fallback =
+			const sk_key_row_catalog catalog;
+			if (const sk_key_row_layout_t *fallback =
 			            catalog.by_id(catalog.default_id())) {
-				seed = bssh_key_row_spec(fallback->keys);
+				seed = sk_key_row_spec(fallback->keys);
 			}
 		}
 
@@ -229,8 +229,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		 * has not changed, so nothing else would prompt a re-read and
 		 * every open row would keep the keys it copied.
 		 */
-		bssh_key_row_catalog::instance().set_custom(
-		        bssh_parse_key_row(editor.spec()));
+		sk_key_row_catalog::instance().set_custom(
+		        sk_parse_key_row(editor.spec()));
 		emit changed();
 	});
 
@@ -313,7 +313,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 */
 	m_keyboard_layout = new QComboBox(this);
 	m_keyboard_layout->setObjectName(QStringLiteral("keyboard-layout"));
-	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+	for (const sk_keyboard_layout_t &layout : sk_keyboard_layouts()) {
 		m_keyboard_layout->addItem(layout.display_name, layout.id);
 	}
 	bssh_fit_items(m_keyboard_layout);
@@ -1337,7 +1337,7 @@ void bssh_app_settings_view::save_key_remaps() {
 /*
  * The fallback note, kept in step with the choice and with the width.
  *
- * Asks bssh_keyboard_style_for() rather than repeating its threshold: a
+ * Asks sk_keyboard_style_for() rather than repeating its threshold: a
  * second copy of that number would be a second thing to be wrong, and the
  * one that decides what is DRAWN is the one that must be reported.
  */
@@ -1365,11 +1365,11 @@ void bssh_app_settings_view::refresh_keyboard_fallback() {
 
 	const bssh_app_settings::keyboard_t chosen =
 	        bssh_app_settings::keyboard_t(m_keyboard->currentData().toInt());
-	bssh_soft_keyboard_catalog::style_t wanted;
+	sk_catalog::style_t wanted;
 	if (chosen == bssh_app_settings::KEYBOARD_BUILT_IN) {
-		wanted = bssh_soft_keyboard_catalog::STYLE_COMPACT;
+		wanted = sk_catalog::STYLE_COMPACT;
 	} else if (chosen == bssh_app_settings::KEYBOARD_BUILT_IN_FULL) {
-		wanted = bssh_soft_keyboard_catalog::STYLE_FULL;
+		wanted = sk_catalog::STYLE_FULL;
 	} else {
 		m_keyboard_fallback->hide();
 		return;
@@ -1381,14 +1381,14 @@ void bssh_app_settings_view::refresh_keyboard_fallback() {
 	 * height is the window's less whatever sits above it.
 	 */
 	const QWidget *frame = window();
-	const bssh_soft_keyboard_catalog::style_t drawn =
-	        bssh_keyboard_style_for(wanted, frame->width(), frame->height());
+	const sk_catalog::style_t drawn =
+	        sk_keyboard_style_for(wanted, frame->width(), frame->height());
 	if (drawn == wanted) {
 		m_keyboard_fallback->hide();
 		return;
 	}
 
-	if (drawn == bssh_soft_keyboard_catalog::STYLE_SPLIT) {
+	if (drawn == sk_catalog::STYLE_SPLIT) {
 		m_keyboard_fallback->setText(QStringLiteral(
 		        "This screen is short and wide, so the keyboard is split either "
 		        "side of the terminal. Rotate back and the keyboard you chose "

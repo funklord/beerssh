@@ -54,7 +54,7 @@ expect = "a_dragged_keyboard_size_is_kept"
 [[sabotage]]
 name = "holding one split bar leaves the other dim"
 file = "keyboard/soft_keyboard.cpp"
-find = "\t\t\tm_drag_from = m_half_keys[0]->width();\n\t\t\tfor (bssh_resize_grip *grip : m_half_grips) grip->set_lit(true);"
+find = "\t\t\tm_drag_from = m_half_keys[0]->width();\n\t\t\tfor (sk_resize_grip *grip : m_half_grips) grip->set_lit(true);"
 replace = "\t\t\tm_drag_from = m_half_keys[0]->width();"
 expect = "dragging_a_bar_resizes_the_keyboard"
 
@@ -62,7 +62,7 @@ expect = "dragging_a_bar_resizes_the_keyboard"
 [[sabotage]]
 name = "the input selector keeps its own row when wide"
 file = "src/ui/main_window.cpp"
-find = "\tconst bool wide = width() > height()\n\t                  || width() >= BSSH_FULL_KEYBOARD_MIN_DP;"
+find = "\tconst bool wide = width() > height()\n\t                  || width() >= SK_FULL_KEYBOARD_MIN_DP;"
 replace = "\tconst bool wide = false;"
 expect = "the_input_selector_joins_the_status_line_when_wide"
 

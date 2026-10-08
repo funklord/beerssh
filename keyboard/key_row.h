@@ -1,5 +1,5 @@
-#ifndef BSSH_KEY_ROW_H
-#define BSSH_KEY_ROW_H
+#ifndef SK_KEY_ROW_H
+#define SK_KEY_ROW_H
 
 #include <QWidget>
 
@@ -8,10 +8,10 @@
 class QAbstractButton;
 class QScrollArea;
 class sk_target;
-class bssh_touch_chords;
+class sk_touch_chords;
 
 /*
- * bssh_key_row -- the strip of keys a soft keyboard does not have
+ * sk_key_row -- the strip of keys a soft keyboard does not have
  * (project.md sec 6.2).
  *
  * Android soft keyboards expose no Ctrl, Esc, Tab, arrows or function
@@ -28,7 +28,7 @@ class bssh_touch_chords;
  * because a convertible laptop in tablet mode wants it and because a
  * widget compiled only on Android is a widget only tested on Android.
  */
-class bssh_key_row : public QWidget {
+class sk_key_row : public QWidget {
 	Q_OBJECT
 
 public:
@@ -44,7 +44,7 @@ public:
 		NEVER
 	};
 
-	explicit bssh_key_row(sk_target *target, QWidget *parent = nullptr);
+	explicit sk_key_row(sk_target *target, QWidget *parent = nullptr);
 
 	/* Retargeted when the shown session changes (sec 3, principle 2). */
 	void set_target(sk_target *target);
@@ -87,7 +87,7 @@ private:
 
 	sk_target *m_target;
 	std::function<bool()> m_touch_primary;
-	bssh_touch_chords *m_touch = nullptr;
+	sk_touch_chords *m_touch = nullptr;
 	visibility_t m_mode;
 	/*
 	 * The keys scroll horizontally: sec 6.2's own key list at sec 6.2's own
@@ -107,4 +107,4 @@ private:
 	QList<quint8> m_modifier_values;
 };
 
-#endif /* BSSH_KEY_ROW_H */
+#endif /* SK_KEY_ROW_H */

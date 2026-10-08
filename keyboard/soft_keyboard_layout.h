@@ -1,5 +1,5 @@
-#ifndef BSSH_SOFT_KEYBOARD_LAYOUT_H
-#define BSSH_SOFT_KEYBOARD_LAYOUT_H
+#ifndef SK_KEYBOARD_LAYOUT_H
+#define SK_KEYBOARD_LAYOUT_H
 
 #include <QList>
 #include <QMap>
@@ -8,7 +8,7 @@
 #include "keyboard/key_row_layout.h"
 
 /*
- * bssh_soft_keyboard_layout -- what the built-in keyboard holds
+ * soft_keyboard_layout -- what the built-in keyboard holds
  * (project.md sec 6.2).
  *
  * sec 6.2 asked whether to ship a keyboard of our own and answered
@@ -19,7 +19,7 @@
  * keyboard that is not there, which is a terminal you cannot type into at
  * all.
  *
- * The KEYS are bssh_key_t, deliberately, and not a second struct with the
+ * The KEYS are sk_key_t, deliberately, and not a second struct with the
  * same fields. Both on-screen surfaces are answering one question -- what
  * does this button do when a thumb lands on it -- and a terminal that
  * grew two vocabularies for that would get two answers to "what does Ctrl
@@ -49,7 +49,7 @@
  * is for: a key in the same place from one row to the next. Ten letters
  * at span 2 fill it, and so do six wider keys at 3, 3, 3, 5, 3, 3.
  */
-const int BSSH_KEYBOARD_COLUMNS = 22;
+const int SK_KEYBOARD_COLUMNS = 22;
 
 /*
  * The widest any group is, and the only thing that needs to know both
@@ -57,9 +57,9 @@ const int BSSH_KEYBOARD_COLUMNS = 22;
  * has to walk past its own width. Asserted against the catalog, so a
  * group wider than this fails a test rather than being drawn clipped.
  */
-const int BSSH_KEYBOARD_MAX_COLUMNS = 60;
+const int SK_KEYBOARD_MAX_COLUMNS = 60;
 
-struct bssh_soft_key_group_t {
+struct sk_group_t {
 	QString id;
 
 	/*
@@ -96,7 +96,7 @@ struct bssh_soft_key_group_t {
 	 * reflow of whatever the remote is drawing, on every tap of a button
 	 * whose whole job is to show different keys.
 	 */
-	QList<QList<bssh_key_t> > rows;
+	QList<QList<sk_key_t> > rows;
 
 	/*
 	 * Whether rows[0] is the digit row every compact page carries (sec
@@ -106,7 +106,7 @@ struct bssh_soft_key_group_t {
 	 */
 	bool digit_row_first = false;
 
-	bssh_soft_key_group_t() : columns(BSSH_KEYBOARD_COLUMNS) {}
+	sk_group_t() : columns(SK_KEYBOARD_COLUMNS) {}
 };
 
 /*
@@ -134,7 +134,7 @@ struct bssh_soft_key_group_t {
  * it: a physical key arrives as a QKeyEvent with the OS layout already
  * applied, so translating again would translate twice.
  */
-struct bssh_keyboard_layout_t {
+struct sk_keyboard_layout_t {
 	QString id;
 	QString display_name;
 };
@@ -143,7 +143,7 @@ struct bssh_keyboard_layout_t {
  * Every layout, in the order a chooser should list them. The first is
  * the default, and is US International.
  */
-QList<bssh_keyboard_layout_t> bssh_keyboard_layouts();
+QList<sk_keyboard_layout_t> sk_keyboard_layouts();
 
 /*
  * A user's own layout (sec 6.3), as rows of an XKB slot and its four
@@ -152,11 +152,11 @@ QList<bssh_keyboard_layout_t> bssh_keyboard_layouts();
  *
  * The shipped tables are `const char *` literals with static lifetime;
  * a user's is text that arrives at run time, so it needs owning. This
- * carries the owned copy and `bssh_set_custom_layout` builds the C table
+ * carries the owned copy and `sk_set_custom_layout` builds the C table
  * the existing slot lookup already reads, rather than teaching that
  * lookup about a second kind of layout.
  */
-struct bssh_custom_slot_t {
+struct sk_custom_slot_t {
 	QString slot;
 	QString level[4];
 };
@@ -169,7 +169,7 @@ struct bssh_custom_slot_t {
  * forty-six, and what decides whether the remainder is usable is the
  * contract below rather than the parse.
  */
-QList<bssh_custom_slot_t> bssh_parse_layout_slots(const QMap<QString, QString> &rows);
+QList<sk_custom_slot_t> sk_parse_layout_slots(const QMap<QString, QString> &rows);
 
 /*
  * A shipped layout's slots, as the same rows a user would write.
@@ -178,7 +178,7 @@ QList<bssh_custom_slot_t> bssh_parse_layout_slots(const QMap<QString, QString> &
  * starting from a table that already satisfies the contract is the only
  * starting point that does. Empty for an id the catalogue does not hold.
  */
-QList<bssh_custom_slot_t> bssh_shipped_layout_slots(const QString &id);
+QList<sk_custom_slot_t> sk_shipped_layout_slots(const QString &id);
 
 /*
  * One slot as the text app.ini holds, escaped so it parses back.
@@ -192,7 +192,7 @@ QList<bssh_custom_slot_t> bssh_shipped_layout_slots(const QString &id);
  * immediately before the separator and the parser reads the pair as an
  * escaped pipe.
  */
-QString bssh_layout_slot_spec(const bssh_custom_slot_t &row);
+QString sk_layout_slot_spec(const sk_custom_slot_t &row);
 
 /*
  * Install those as the reserved `custom' entry, or refuse and say why.
@@ -206,8 +206,8 @@ QString bssh_layout_slot_spec(const bssh_custom_slot_t &row);
  * shown that no modifier offers -- and a layout failing either is not
  * installed.
  */
-bool bssh_set_custom_layout(const QString &display_name,
-                             const QList<bssh_custom_slot_t> &rows,
+bool sk_set_custom_layout(const QString &display_name,
+                             const QList<sk_custom_slot_t> &rows,
                              QString *why);
 
 /*
@@ -219,17 +219,17 @@ bool bssh_set_custom_layout(const QString &display_name,
  * setting written by a newer version, or by hand, should not quietly
  * become something else.
  *
- * The catalog is rebuilt, so any bssh_soft_keyboard on screen has to be
+ * The catalog is rebuilt, so any sk_keyboard on screen has to be
  * rebuilt too; bssh_main_window does that where it applies the setting.
  */
-bool bssh_set_keyboard_layout(const QString &id);
+bool sk_set_keyboard_layout(const QString &id);
 
-QString bssh_keyboard_layout();
+QString sk_keyboard_layout();
 
 /*
  * The Latin toggle, for a layout whose letter block is not Latin.
  *
- * bssh_layout_has_latin() is false for Russian, Greek and Ukrainian and
+ * sk_layout_has_latin() is false for Russian, Greek and Ukrainian and
  * true for every Latin layout, so it is also the test for whether the
  * toggle should be offered at all -- a Swedish keyboard has no second
  * script to reach and must not be given a button that does nothing.
@@ -238,11 +238,11 @@ QString bssh_keyboard_layout();
  * changes: a terminal is written in Latin, so that is what a non-Latin
  * layout opens in, and its own script is one tap away.
  */
-bool bssh_layout_has_latin();
-bool bssh_latin_mode();
-void bssh_set_latin_mode(bool on);
+bool sk_layout_has_latin();
+bool sk_latin_mode();
+void sk_set_latin_mode(bool on);
 
-class bssh_soft_keyboard_catalog {
+class sk_catalog {
 public:
 	/*
 	 * Two keyboards, not two settings.
@@ -273,7 +273,7 @@ public:
 	 * Every lookup takes the style, and NONE of them defaults it.
 	 *
 	 * They defaulted to STYLE_COMPACT for about an hour, and in that hour
-	 * two callers in bssh_soft_keyboard silently asked the wrong
+	 * two callers in sk_keyboard silently asked the wrong
 	 * catalogue: group_id() named a compact group while the full keyboard
 	 * was on screen, and set_group() clamped an index against the compact
 	 * list's three groups when the full one has two -- so set_group(2)
@@ -287,11 +287,11 @@ public:
 	 * failed.
 	 */
 
-	static bssh_soft_keyboard_catalog &instance();
+	static sk_catalog &instance();
 
-	bssh_soft_keyboard_catalog();
+	sk_catalog();
 
-	const QList<bssh_soft_key_group_t> &all(style_t style) const {
+	const QList<sk_group_t> &all(style_t style) const {
 		return style == STYLE_FULL ? m_full : m_groups;
 	}
 
@@ -325,8 +325,8 @@ public:
 	void rebuild();
 
 private:
-	QList<bssh_soft_key_group_t> m_groups;
-	QList<bssh_soft_key_group_t> m_full;
+	QList<sk_group_t> m_groups;
+	QList<sk_group_t> m_full;
 };
 
 /*
@@ -352,7 +352,7 @@ private:
  * the price of keys a little under target, and the alternative was to
  * refuse the full keyboard on the hardware it exists for.
  */
-const int BSSH_FULL_KEYBOARD_MIN_DP = 600;
+const int SK_FULL_KEYBOARD_MIN_DP = 600;
 
 /*
  * Which keyboard to DRAW, given which one was chosen and how much room
@@ -375,7 +375,7 @@ const int BSSH_FULL_KEYBOARD_MIN_DP = 600;
  * `twin` is the key's second legend, zero where it has none. Unshifted, or
  * with no twin and no capital, a key sends what it shows.
  */
-QChar bssh_shifted_char(char32_t plain, char32_t twin, bool shifted);
+QChar sk_shifted_char(char32_t plain, char32_t twin, bool shifted);
 
 /*
  * The same question over four levels: what does this key send, given
@@ -387,16 +387,16 @@ QChar bssh_shifted_char(char32_t plain, char32_t twin, bool shifted);
  * what keeps AltGr harmless on the 21 keys of a US board that have no
  * third legend.
  */
-QChar bssh_keyboard_char(const bssh_key_t &key, bool shifted, bool altgr);
+QChar sk_keyboard_char(const sk_key_t &key, bool shifted, bool altgr);
 
 /*
  * The tallest a window may be and still get the split keyboard on its
- * own, in dp: sec 8.1's MEDIUM boundary again, as BSSH_FULL_KEYBOARD_MIN_DP
+ * own, in dp: sec 8.1's MEDIUM boundary again, as SK_FULL_KEYBOARD_MIN_DP
  * is. Below it a keyboard under the terminal takes most of the height --
  * measured on the Fold's cover screen in landscape, where the full board
  * left one usable row -- and above it there is room for both.
  */
-const int BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP = 600;
+const int SK_SPLIT_KEYBOARD_MAX_HEIGHT_DP = 600;
 
 /*
  * Height as well as width, and required: a landscape phone is the case a
@@ -406,7 +406,7 @@ const int BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP = 600;
  * since both fail there the same way. The stored choice is never
  * rewritten; rotating back gives back what was chosen.
  */
-bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
-        bssh_soft_keyboard_catalog::style_t wanted, int width_dp, int height_dp);
+sk_catalog::style_t sk_keyboard_style_for(
+        sk_catalog::style_t wanted, int width_dp, int height_dp);
 
-#endif /* BSSH_SOFT_KEYBOARD_LAYOUT_H */
+#endif /* SK_KEYBOARD_LAYOUT_H */

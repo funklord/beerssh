@@ -7,7 +7,7 @@
 
 #include "keyboard/sk_modifiers.h"
 
-bssh_key_cap::bssh_key_cap(QWidget *parent) : QToolButton(parent) {}
+sk_key_cap::sk_key_cap(QWidget *parent) : QToolButton(parent) {}
 
 /*
  * 500ms before the first repeat, then twenty a second.
@@ -24,17 +24,17 @@ bssh_key_cap::bssh_key_cap(QWidget *parent) : QToolButton(parent) {}
  * out to the remote, and a rate that outruns the connection just queues
  * deletions the user cannot see happening.
  */
-void bssh_set_key_repeat(QAbstractButton *button) {
+void sk_set_key_repeat(QAbstractButton *button) {
 	button->setAutoRepeat(true);
 	button->setAutoRepeatDelay(500);
 	button->setAutoRepeatInterval(50);
 }
 
-bool bssh_key_cap::needs_own_paint(const QString &text, const QString &hint) {
+bool sk_key_cap::needs_own_paint(const QString &text, const QString &hint) {
 	return !hint.isEmpty() || text.contains(QLatin1Char('&'));
 }
 
-void bssh_key_cap::set_hint(const QString &hint) {
+void sk_key_cap::set_hint(const QString &hint) {
 	if (m_hint == hint) return;
 
 	m_hint = hint;
@@ -52,7 +52,7 @@ void bssh_key_cap::set_hint(const QString &hint) {
 	update();
 }
 
-QFont bssh_key_cap::fitted_font(const QFont &base, const QString &text, int width) {
+QFont sk_key_cap::fitted_font(const QFont &base, const QString &text, int width) {
 	QFont chosen = base;
 	if (text.isEmpty() || width <= 0) return chosen;
 
@@ -100,7 +100,7 @@ QFont bssh_key_cap::fitted_font(const QFont &base, const QString &text, int widt
  * Highlight and HighlightedText are a pair the theme sets together, so
  * the locked label is readable on its fill in either scheme.
  */
-void bssh_key_cap::paint_modifier(int state) {
+void sk_key_cap::paint_modifier(int state) {
 	QStylePainter painter(this);
 	QStyleOptionToolButton option;
 	initStyleOption(&option);
@@ -145,8 +145,8 @@ void bssh_key_cap::paint_modifier(int state) {
 	painter.drawText(box, Qt::AlignCenter, label);
 }
 
-void bssh_key_cap::paintEvent(QPaintEvent *event) {
-	const int state = property("bssh_modifier_state").toInt();
+void sk_key_cap::paintEvent(QPaintEvent *event) {
+	const int state = property("sk_modifier_state").toInt();
 	if (state != sk_modifiers::OFF) {
 		paint_modifier(state);
 		return;

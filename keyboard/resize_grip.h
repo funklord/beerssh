@@ -1,5 +1,5 @@
-#ifndef BSSH_RESIZE_GRIP_H
-#define BSSH_RESIZE_GRIP_H
+#ifndef SK_RESIZE_GRIP_H
+#define SK_RESIZE_GRIP_H
 
 #include <QWidget>
 
@@ -15,7 +15,7 @@
  * along its axis since it came down -- and the keyboard decides what that
  * means, since only it knows which side of the bar it is on.
  */
-class bssh_resize_grip : public QWidget {
+class sk_resize_grip : public QWidget {
 	Q_OBJECT
 
 public:
@@ -24,7 +24,7 @@ public:
 	 * standing upright at a split half's edge, Qt::Vertical for one lying
 	 * along the top of the keyboard.
 	 */
-	explicit bssh_resize_grip(Qt::Orientation drags, QWidget *parent = nullptr);
+	explicit sk_resize_grip(Qt::Orientation drags, QWidget *parent = nullptr);
 
 	/*
 	 * Thick enough for a finger to find, thin enough to be no more than an
@@ -68,4 +68,4 @@ private:
 	bool m_lit = false;
 };
 
-#endif /* BSSH_RESIZE_GRIP_H */
+#endif /* SK_RESIZE_GRIP_H */

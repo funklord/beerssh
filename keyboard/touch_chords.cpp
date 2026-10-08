@@ -23,18 +23,18 @@ void send_mouse(QAbstractButton *button, QEvent::Type type, const QPointF &globa
 
 } /* namespace */
 
-bssh_touch_chords::bssh_touch_chords(QWidget *board)
+sk_touch_chords::sk_touch_chords(QWidget *board)
     : QObject(board) {
 	watch(board);
 }
 
-void bssh_touch_chords::watch(QWidget *board) {
+void sk_touch_chords::watch(QWidget *board) {
 	board->setAttribute(Qt::WA_AcceptTouchEvents);
 	board->installEventFilter(this);
 	m_boards.append(board);
 }
 
-bool bssh_touch_chords::eventFilter(QObject *watched, QEvent *event) {
+bool sk_touch_chords::eventFilter(QObject *watched, QEvent *event) {
 	bool ours = false;
 	for (const QPointer<QWidget> &board : m_boards) {
 		if (board == watched) ours = true;
@@ -52,7 +52,7 @@ bool bssh_touch_chords::eventFilter(QObject *watched, QEvent *event) {
 	}
 }
 
-bool bssh_touch_chords::touch(QTouchEvent *event) {
+bool sk_touch_chords::touch(QTouchEvent *event) {
 	if (event->type() == QEvent::TouchCancel) {
 		cancel();
 		event->accept();
@@ -118,7 +118,7 @@ bool bssh_touch_chords::touch(QTouchEvent *event) {
 	return true;
 }
 
-void bssh_touch_chords::cancel() {
+void sk_touch_chords::cancel() {
 	/* Taken first: a release can rebuild the board and call back in. */
 	const QHash<int, finger_t> fingers = m_fingers;
 	m_fingers.clear();
@@ -135,7 +135,7 @@ void bssh_touch_chords::cancel() {
 	}
 }
 
-void bssh_touch_chords::release(finger_t &finger, const QPointF &global, bool cancelled) {
+void sk_touch_chords::release(finger_t &finger, const QPointF &global, bool cancelled) {
 	if (finger.modifier != 0) {
 		if (finger.button) finger.button->setDown(false);
 		emit modifier_released(finger.modifier, cancelled);
@@ -152,7 +152,7 @@ void bssh_touch_chords::release(finger_t &finger, const QPointF &global, bool ca
  * board may be placed anywhere -- the split halves are not even in the
  * same parent once the window has put them beside the terminal.
  */
-QAbstractButton *bssh_touch_chords::button_at(const QPointF &global) const {
+QAbstractButton *sk_touch_chords::button_at(const QPointF &global) const {
 	for (const QPointer<QWidget> &board : m_boards) {
 		if (!board || !board->isVisible()) continue;
 		const QPoint local = board->mapFromGlobal(global).toPoint();
@@ -169,7 +169,7 @@ QAbstractButton *bssh_touch_chords::button_at(const QPointF &global) const {
 	return nullptr;
 }
 
-quint8 bssh_touch_chords::modifier_of(const QAbstractButton *button) const {
+quint8 sk_touch_chords::modifier_of(const QAbstractButton *button) const {
 	if (!button) return 0;
-	return quint8(button->property("bssh_hold_modifier").toUInt());
+	return quint8(button->property("sk_hold_modifier").toUInt());
 }

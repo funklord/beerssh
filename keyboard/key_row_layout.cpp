@@ -6,48 +6,48 @@
 
 namespace {
 
-bssh_key_t named(const QString &label, int key) {
-	bssh_key_t entry;
+sk_key_t named(const QString &label, int key) {
+	sk_key_t entry;
 	entry.label = label;
-	entry.kind = bssh_key_t::KEY;
+	entry.kind = sk_key_t::KEY;
 	entry.value = key;
 	return entry;
 }
 
-bssh_key_t modifier(const QString &label, quint8 mask) {
-	bssh_key_t entry;
+sk_key_t modifier(const QString &label, quint8 mask) {
+	sk_key_t entry;
 	entry.label = label;
-	entry.kind = bssh_key_t::MODIFIER;
+	entry.kind = sk_key_t::MODIFIER;
 	entry.modifier = mask;
 	return entry;
 }
 
-bssh_key_t text(const QString &label, char32_t ch) {
-	bssh_key_t entry;
+sk_key_t text(const QString &label, char32_t ch) {
+	sk_key_t entry;
 	entry.label = label;
-	entry.kind = bssh_key_t::TEXT;
+	entry.kind = sk_key_t::TEXT;
 	entry.value = int(ch);
 	return entry;
 }
 
-bssh_key_t chord(const QString &label, char32_t ch, quint8 mask) {
-	bssh_key_t entry;
+sk_key_t chord(const QString &label, char32_t ch, quint8 mask) {
+	sk_key_t entry;
 	entry.label = label;
-	entry.kind = bssh_key_t::CHORD;
+	entry.kind = sk_key_t::CHORD;
 	entry.value = int(ch);
 	entry.modifier = mask;
 	return entry;
 }
 
 /* The arrows, which every layout wants and none wants to spell out. */
-bssh_key_t function_toggle() {
-	bssh_key_t key;
+sk_key_t function_toggle() {
+	sk_key_t key;
 	key.label = QStringLiteral("Fn");
-	key.kind = bssh_key_t::FUNCTION_TOGGLE;
+	key.kind = sk_key_t::FUNCTION_TOGGLE;
 	return key;
 }
 
-QList<bssh_key_t> arrows() {
+QList<sk_key_t> arrows() {
 	return {
 		named(QStringLiteral("←"), Qt::Key_Left),
 		named(QStringLiteral("↓"), Qt::Key_Down),
@@ -65,40 +65,40 @@ QList<bssh_key_t> arrows() {
  */
 struct token_t {
 	const char *word;
-	bssh_key_t::kind_t kind;
+	sk_key_t::kind_t kind;
 	int value;
 	quint8 modifier;
 	const char *label;
 };
 
-const token_t BSSH_KEY_WORDS[] = {
-	{ "esc",   bssh_key_t::KEY, Qt::Key_Escape,    0, "Esc" },
-	{ "tab",   bssh_key_t::KEY, Qt::Key_Tab,       0, "Tab" },
-	{ "enter", bssh_key_t::KEY, Qt::Key_Return,     0, "Enter" },
-	{ "bksp",  bssh_key_t::KEY, Qt::Key_Backspace, 0, "Bksp" },
-	{ "ins",   bssh_key_t::KEY, Qt::Key_Insert,    0, "Ins" },
-	{ "del",   bssh_key_t::KEY, Qt::Key_Delete,    0, "Del" },
-	{ "home",  bssh_key_t::KEY, Qt::Key_Home,      0, "Home" },
-	{ "end",   bssh_key_t::KEY, Qt::Key_End,       0, "End" },
-	{ "pgup",  bssh_key_t::KEY, Qt::Key_PageUp,   0, "PgUp" },
-	{ "pgdn",  bssh_key_t::KEY, Qt::Key_PageDown, 0, "PgDn" },
+const token_t SK_KEY_WORDS[] = {
+	{ "esc",   sk_key_t::KEY, Qt::Key_Escape,    0, "Esc" },
+	{ "tab",   sk_key_t::KEY, Qt::Key_Tab,       0, "Tab" },
+	{ "enter", sk_key_t::KEY, Qt::Key_Return,     0, "Enter" },
+	{ "bksp",  sk_key_t::KEY, Qt::Key_Backspace, 0, "Bksp" },
+	{ "ins",   sk_key_t::KEY, Qt::Key_Insert,    0, "Ins" },
+	{ "del",   sk_key_t::KEY, Qt::Key_Delete,    0, "Del" },
+	{ "home",  sk_key_t::KEY, Qt::Key_Home,      0, "Home" },
+	{ "end",   sk_key_t::KEY, Qt::Key_End,       0, "End" },
+	{ "pgup",  sk_key_t::KEY, Qt::Key_PageUp,   0, "PgUp" },
+	{ "pgdn",  sk_key_t::KEY, Qt::Key_PageDown, 0, "PgDn" },
 	/* The arrows carry the glyphs the curated rows use, so a custom row
 	 * sits beside them without looking like a different widget. */
-	{ "left",  bssh_key_t::KEY, Qt::Key_Left,  0, "\xe2\x86\x90" },
-	{ "down",  bssh_key_t::KEY, Qt::Key_Down,  0, "\xe2\x86\x93" },
-	{ "up",    bssh_key_t::KEY, Qt::Key_Up,    0, "\xe2\x86\x91" },
-	{ "right", bssh_key_t::KEY, Qt::Key_Right, 0, "\xe2\x86\x92" },
+	{ "left",  sk_key_t::KEY, Qt::Key_Left,  0, "\xe2\x86\x90" },
+	{ "down",  sk_key_t::KEY, Qt::Key_Down,  0, "\xe2\x86\x93" },
+	{ "up",    sk_key_t::KEY, Qt::Key_Up,    0, "\xe2\x86\x91" },
+	{ "right", sk_key_t::KEY, Qt::Key_Right, 0, "\xe2\x86\x92" },
 
-	{ "ctrl",  bssh_key_t::MODIFIER, 0, SK_MOD_CTRL,  "Ctrl" },
-	{ "alt",   bssh_key_t::MODIFIER, 0, SK_MOD_ALT,   "Alt" },
-	{ "shift", bssh_key_t::MODIFIER, 0, SK_MOD_SHIFT, "Shift" },
+	{ "ctrl",  sk_key_t::MODIFIER, 0, SK_MOD_CTRL,  "Ctrl" },
+	{ "alt",   sk_key_t::MODIFIER, 0, SK_MOD_ALT,   "Alt" },
+	{ "shift", sk_key_t::MODIFIER, 0, SK_MOD_SHIFT, "Shift" },
 
-	{ "fn",    bssh_key_t::FUNCTION_TOGGLE, 0, 0, "Fn" },
-	{ "gap",   bssh_key_t::SPACER,          0, 0, "" }
+	{ "fn",    sk_key_t::FUNCTION_TOGGLE, 0, 0, "Fn" },
+	{ "gap",   sk_key_t::SPACER,          0, 0, "" }
 };
 
 const token_t *word_for(const QString &word) {
-	for (const token_t &entry : BSSH_KEY_WORDS) {
+	for (const token_t &entry : SK_KEY_WORDS) {
 		if (word.compare(QLatin1String(entry.word), Qt::CaseInsensitive) == 0) {
 			return &entry;
 		}
@@ -107,12 +107,12 @@ const token_t *word_for(const QString &word) {
 }
 
 /* `ctrl-b' and `alt-x': the modifier's word, a hyphen, one character. */
-bool parse_chord(const QString &word, bssh_key_t *out) {
+bool parse_chord(const QString &word, sk_key_t *out) {
 	const int dash = word.indexOf(QLatin1Char('-'));
 	if (dash <= 0 || dash + 2 != word.size()) return false;
 
 	const token_t *mod = word_for(word.left(dash));
-	if (!mod || mod->kind != bssh_key_t::MODIFIER) return false;
+	if (!mod || mod->kind != sk_key_t::MODIFIER) return false;
 
 	const QChar ch = word.at(dash + 1);
 	*out = chord(QStringLiteral("%1-%2")
@@ -124,8 +124,8 @@ bool parse_chord(const QString &word, bssh_key_t *out) {
 
 } /* namespace */
 
-QList<bssh_key_t> bssh_function_keys() {
-	QList<bssh_key_t> keys;
+QList<sk_key_t> sk_function_keys() {
+	QList<sk_key_t> keys;
 	for (int n = 1; n <= 12; ++n) {
 		keys.append(named(QStringLiteral("F%1").arg(n),
 		                   Qt::Key_F1 + n - 1));
@@ -133,18 +133,18 @@ QList<bssh_key_t> bssh_function_keys() {
 	return keys;
 }
 
-bssh_key_row_catalog &bssh_key_row_catalog::instance() {
-	static bssh_key_row_catalog catalog;
+sk_key_row_catalog &sk_key_row_catalog::instance() {
+	static sk_key_row_catalog catalog;
 	return catalog;
 }
 
-bssh_key_row_catalog::bssh_key_row_catalog() {
+sk_key_row_catalog::sk_key_row_catalog() {
 	/*
 	 * The default: what the row held before layouts existed, so nobody's
 	 * key row changed the day this landed.
 	 */
 	{
-		bssh_key_row_layout_t layout;
+		sk_key_row_layout_t layout;
 		layout.id = QStringLiteral("default");
 		layout.display_name = QStringLiteral("Default");
 		layout.description = QStringLiteral(
@@ -158,7 +158,7 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 			modifier(QStringLiteral("Alt"), SK_MOD_ALT)
 		};
 		layout.keys += arrows();
-		layout.keys += QList<bssh_key_t>{
+		layout.keys += QList<sk_key_t>{
 			function_toggle(),
 			text(QStringLiteral("-"), U'-'),
 			text(QStringLiteral("/"), U'/'),
@@ -177,7 +177,7 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 	 * readable.
 	 */
 	{
-		bssh_key_row_layout_t layout;
+		sk_key_row_layout_t layout;
 		layout.id = QStringLiteral("network-switch");
 		layout.display_name = QStringLiteral("Network switch");
 		layout.description = QStringLiteral(
@@ -192,7 +192,7 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 			text(QStringLiteral("|"), U'|')
 		};
 		layout.keys += arrows();
-		layout.keys += QList<bssh_key_t>{
+		layout.keys += QList<sk_key_t>{
 			text(QStringLiteral("-"), U'-'),
 			text(QStringLiteral("."), U'.'),
 			text(QStringLiteral("/"), U'/')
@@ -209,7 +209,7 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 	 * are what a prefix is usually followed by.
 	 */
 	{
-		bssh_key_row_layout_t layout;
+		sk_key_row_layout_t layout;
 		layout.id = QStringLiteral("tmux");
 		layout.display_name = QStringLiteral("tmux");
 		layout.description = QStringLiteral(
@@ -236,7 +236,7 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 	 * does not use it and the space is worth more elsewhere.
 	 */
 	{
-		bssh_key_row_layout_t layout;
+		sk_key_row_layout_t layout;
 		layout.id = QStringLiteral("vi");
 		layout.display_name = QStringLiteral("vi / vim");
 		layout.description = QStringLiteral(
@@ -264,7 +264,7 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 	 * and nothing else.
 	 */
 	{
-		bssh_key_row_layout_t layout;
+		sk_key_row_layout_t layout;
 		layout.id = QStringLiteral("minimal");
 		layout.display_name = QStringLiteral("Minimal");
 		layout.description = QStringLiteral(
@@ -290,7 +290,7 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 	 * exists rather than from the first time it is written.
 	 */
 	{
-		bssh_key_row_layout_t layout = m_layouts.first();
+		sk_key_row_layout_t layout = m_layouts.first();
 		layout.id = QStringLiteral("custom");
 		layout.display_name = QStringLiteral("Custom");
 		layout.description = QStringLiteral(
@@ -299,49 +299,49 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 	}
 }
 
-const bssh_key_row_layout_t *bssh_key_row_catalog::by_id(const QString &id) const {
-	for (const bssh_key_row_layout_t &layout : m_layouts) {
+const sk_key_row_layout_t *sk_key_row_catalog::by_id(const QString &id) const {
+	for (const sk_key_row_layout_t &layout : m_layouts) {
 		if (layout.id == id) return &layout;
 	}
 	return nullptr;
 }
 
-QString bssh_key_row_catalog::effective_id(const QString &stored) const {
+QString sk_key_row_catalog::effective_id(const QString &stored) const {
 	if (stored.isEmpty()) return default_id();
 	if (by_id(stored)) return stored;
 
-	for (const bssh_key_row_layout_t &layout : m_layouts) {
+	for (const sk_key_row_layout_t &layout : m_layouts) {
 		if (layout.display_name.compare(stored, Qt::CaseInsensitive) == 0) return layout.id;
 	}
 
 	return stored;
 }
 
-QString bssh_key_row_catalog::default_id() const {
+QString sk_key_row_catalog::default_id() const {
 	return QStringLiteral("default");
 }
 
-bool bssh_key_row_usable(const QList<bssh_key_t> &keys) {
+bool sk_key_row_usable(const QList<sk_key_t> &keys) {
 	bool has_escape = false;
 	bool has_modifier = false;
 
-	for (const bssh_key_t &key : keys) {
-		if (key.kind == bssh_key_t::KEY && key.value == Qt::Key_Escape) {
+	for (const sk_key_t &key : keys) {
+		if (key.kind == sk_key_t::KEY && key.value == Qt::Key_Escape) {
 			has_escape = true;
 		}
-		if (key.kind == bssh_key_t::MODIFIER) has_modifier = true;
+		if (key.kind == sk_key_t::MODIFIER) has_modifier = true;
 	}
 
 	return has_escape && has_modifier;
 }
 
-QList<bssh_key_t> bssh_parse_key_row(const QString &spec) {
-	QList<bssh_key_t> keys;
+QList<sk_key_t> sk_parse_key_row(const QString &spec) {
+	QList<sk_key_t> keys;
 
 	const QStringList words = spec.split(QLatin1Char(' '), Qt::SkipEmptyParts);
 	for (const QString &word : words) {
 		if (const token_t *entry = word_for(word)) {
-			bssh_key_t key;
+			sk_key_t key;
 			key.label = QString::fromUtf8(entry->label);
 			key.kind = entry->kind;
 			key.value = entry->value;
@@ -350,7 +350,7 @@ QList<bssh_key_t> bssh_parse_key_row(const QString &spec) {
 			continue;
 		}
 
-		bssh_key_t as_chord;
+		sk_key_t as_chord;
 		if (parse_chord(word, &as_chord)) {
 			keys.append(as_chord);
 			continue;
@@ -370,18 +370,18 @@ QList<bssh_key_t> bssh_parse_key_row(const QString &spec) {
 	return keys;
 }
 
-QString bssh_key_row_spec(const QList<bssh_key_t> &keys) {
+QString sk_key_row_spec(const QList<sk_key_t> &keys) {
 	QStringList words;
 
-	for (const bssh_key_t &key : keys) {
-		if (key.kind == bssh_key_t::TEXT) {
+	for (const sk_key_t &key : keys) {
+		if (key.kind == sk_key_t::TEXT) {
 			words.append(QString(QChar(char16_t(key.value))));
 			continue;
 		}
 
-		if (key.kind == bssh_key_t::CHORD) {
-			for (const token_t &entry : BSSH_KEY_WORDS) {
-				if (entry.kind != bssh_key_t::MODIFIER) continue;
+		if (key.kind == sk_key_t::CHORD) {
+			for (const token_t &entry : SK_KEY_WORDS) {
+				if (entry.kind != sk_key_t::MODIFIER) continue;
 				if (entry.modifier != key.modifier) continue;
 
 				words.append(QStringLiteral("%1-%2")
@@ -392,9 +392,9 @@ QString bssh_key_row_spec(const QList<bssh_key_t> &keys) {
 			continue;
 		}
 
-		for (const token_t &entry : BSSH_KEY_WORDS) {
+		for (const token_t &entry : SK_KEY_WORDS) {
 			if (entry.kind != key.kind) continue;
-			if (entry.kind == bssh_key_t::MODIFIER
+			if (entry.kind == sk_key_t::MODIFIER
 			    ? entry.modifier != key.modifier
 			    : entry.value != key.value) {
 				continue;
@@ -408,10 +408,10 @@ QString bssh_key_row_spec(const QList<bssh_key_t> &keys) {
 	return words.join(QLatin1Char(' '));
 }
 
-bool bssh_key_row_catalog::set_custom(const QList<bssh_key_t> &keys) {
-	if (!bssh_key_row_usable(keys)) return false;
+bool sk_key_row_catalog::set_custom(const QList<sk_key_t> &keys) {
+	if (!sk_key_row_usable(keys)) return false;
 
-	for (bssh_key_row_layout_t &layout : m_layouts) {
+	for (sk_key_row_layout_t &layout : m_layouts) {
 		if (layout.id != QStringLiteral("custom")) continue;
 
 		layout.keys = keys;

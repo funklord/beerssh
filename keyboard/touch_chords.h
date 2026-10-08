@@ -1,5 +1,5 @@
-#ifndef BSSH_TOUCH_CHORDS_H
-#define BSSH_TOUCH_CHORDS_H
+#ifndef SK_TOUCH_CHORDS_H
+#define SK_TOUCH_CHORDS_H
 
 #include <QHash>
 #include <QList>
@@ -31,13 +31,13 @@ class QWidget;
  * sends on release, and sends nothing when the finger slides off. A
  * finger on a modifier is reported instead, and the board turns that
  * into a hold on the router; a modifier button is one whose
- * "bssh_hold_modifier" property is set to the modifier it stands for.
+ * "sk_hold_modifier" property is set to the modifier it stands for.
  */
-class bssh_touch_chords : public QObject {
+class sk_touch_chords : public QObject {
 	Q_OBJECT
 
 public:
-	explicit bssh_touch_chords(QWidget *board);
+	explicit sk_touch_chords(QWidget *board);
 
 	/*
 	 * A further board sharing these fingers: the split keyboard's halves
@@ -80,4 +80,4 @@ private:
 	QHash<int, finger_t> m_fingers;
 };
 
-#endif /* BSSH_TOUCH_CHORDS_H */
+#endif /* SK_TOUCH_CHORDS_H */

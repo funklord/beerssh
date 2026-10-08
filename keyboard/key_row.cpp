@@ -17,7 +17,7 @@
 #include "keyboard/sk_modifiers.h"
 #include "keyboard/key_row_layout.h"
 
-bssh_key_row::bssh_key_row(sk_target *target, QWidget *parent)
+sk_key_row::sk_key_row(sk_target *target, QWidget *parent)
     : QWidget(parent),
       m_target(target),
       m_mode(AUTO),
@@ -56,18 +56,18 @@ bssh_key_row::bssh_key_row(sk_target *target, QWidget *parent)
 	m_keys = new QWidget(m_scroll);
 	m_scroll->setWidget(m_keys);
 
-	m_touch = new bssh_touch_chords(m_keys);
+	m_touch = new sk_touch_chords(m_keys);
 
 	/*
 	 * Two thumbs (sec 6.2): a finger resting on a modifier holds it on
 	 * the router, and lifting it with nothing pressed in between is a tap
 	 * -- the same cycle a click on the button gives.
 	 */
-	connect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {
+	connect(m_touch, &sk_touch_chords::modifier_held, this, [this](quint8 modifier) {
 		if (m_target) m_target->modifiers().hold(modifier);
 		refresh_modifier_buttons();
 	});
-	connect(m_touch, &bssh_touch_chords::modifier_released,
+	connect(m_touch, &sk_touch_chords::modifier_released,
 	         this, [this](quint8 modifier, bool cancelled) {
 		if (m_target && m_target->modifiers().release(modifier) && !cancelled) {
 			m_target->modifiers().cycle(modifier);
@@ -114,8 +114,8 @@ bssh_key_row::bssh_key_row(sk_target *target, QWidget *parent)
 	setVisible(should_be_visible());
 }
 
-void bssh_key_row::set_layout(const QString &id) {
-	const bssh_key_row_catalog &catalog = bssh_key_row_catalog::instance();
+void sk_key_row::set_layout(const QString &id) {
+	const sk_key_row_catalog &catalog = sk_key_row_catalog::instance();
 
 	const QString wanted = catalog.effective_id(id);
 	if (wanted == m_layout_id && !m_buttons.isEmpty()) return;
@@ -127,7 +127,7 @@ void bssh_key_row::set_layout(const QString &id) {
 	 * strip. A row with no keys on a phone is a session that cannot send
 	 * Ctrl-C, which is a far worse outcome than the wrong keys.
 	 */
-	const bssh_key_row_layout_t *layout = catalog.by_id(wanted);
+	const sk_key_row_layout_t *layout = catalog.by_id(wanted);
 	if (!layout) layout = catalog.by_id(catalog.default_id());
 	if (!layout) return;
 
@@ -147,32 +147,32 @@ void bssh_key_row::set_layout(const QString &id) {
 	 * held down -- and Fn itself stays on the row in both, or there
 	 * would be no way back.
 	 */
-	QList<bssh_key_t> keys = m_function_mode ? bssh_function_keys() : layout->keys;
+	QList<sk_key_t> keys = m_function_mode ? sk_function_keys() : layout->keys;
 	if (m_function_mode) {
-		bssh_key_t back;
+		sk_key_t back;
 		back.label = QStringLiteral("Fn");
-		back.kind = bssh_key_t::FUNCTION_TOGGLE;
+		back.kind = sk_key_t::FUNCTION_TOGGLE;
 		keys.prepend(back);
 	}
 
-	for (const bssh_key_t &key : keys) {
+	for (const sk_key_t &key : keys) {
 		switch (key.kind) {
-		case bssh_key_t::KEY:
+		case sk_key_t::KEY:
 			add_key(key.label, key.value);
 			break;
-		case bssh_key_t::MODIFIER:
+		case sk_key_t::MODIFIER:
 			add_modifier(key.label, key.modifier);
 			break;
-		case bssh_key_t::TEXT:
+		case sk_key_t::TEXT:
 			add_text(key.label, char32_t(key.value));
 			break;
-		case bssh_key_t::CHORD:
+		case sk_key_t::CHORD:
 			add_chord(key.label, char32_t(key.value), key.modifier);
 			break;
-		case bssh_key_t::FUNCTION_TOGGLE:
+		case sk_key_t::FUNCTION_TOGGLE:
 			add_function_toggle(key.label);
 			break;
-		case bssh_key_t::SPACER:
+		case sk_key_t::SPACER:
 			add_spacer();
 			break;
 		}
@@ -182,7 +182,7 @@ void bssh_key_row::set_layout(const QString &id) {
 	refresh_modifier_buttons();
 }
 
-void bssh_key_row::add_spacer() {
+void sk_key_row::add_spacer() {
 	/*
 	 * `gap` is one of the words a custom row may be written with
 	 * (sec 6.2), and it did nothing at all: this switch had no case for
@@ -215,7 +215,7 @@ void bssh_key_row::add_spacer() {
 	gap->show();
 }
 
-void bssh_key_row::add_function_toggle(const QString &label) {
+void sk_key_row::add_function_toggle(const QString &label) {
 	QAbstractButton *button = make_button(label);
 	button->setCheckable(true);
 	button->setChecked(m_function_mode);
@@ -235,9 +235,9 @@ void bssh_key_row::add_function_toggle(const QString &label) {
 	});
 }
 
-void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier) {
+void sk_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier) {
 	QAbstractButton *button = make_button(label);
-	bssh_set_key_repeat(button);
+	sk_set_key_repeat(button);
 
 	connect(button, &QAbstractButton::clicked, this, [this, ch, modifier] {
 		if (!m_target) return;
@@ -261,12 +261,12 @@ void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier)
 	});
 }
 
-QAbstractButton *bssh_key_row::make_button(const QString &label) {
+QAbstractButton *sk_key_row::make_button(const QString &label) {
 	/*
 	 * A key cap rather than a plain button, so a modifier on this row
 	 * draws its state the way the built-in keyboard's does (sec 6.2).
 	 */
-	QToolButton *button = new bssh_key_cap(m_keys);
+	QToolButton *button = new sk_key_cap(m_keys);
 	button->setText(label);
 	m_buttons.append(button);
 	button->setMinimumSize(SK_TOUCH_TARGET_DP, SK_TOUCH_TARGET_DP);
@@ -295,17 +295,17 @@ QAbstractButton *bssh_key_row::make_button(const QString &label) {
 	return button;
 }
 
-void bssh_key_row::add_key(const QString &label, int key) {
+void sk_key_row::add_key(const QString &label, int key) {
 	QAbstractButton *button = make_button(label);
-	bssh_set_key_repeat(button);
+	sk_set_key_repeat(button);
 	connect(button, &QAbstractButton::clicked, this, [this, key] {
 		if (m_target) m_target->key(key, SK_MOD_NONE);
 	});
 }
 
-void bssh_key_row::add_text(const QString &label, char32_t ch) {
+void sk_key_row::add_text(const QString &label, char32_t ch) {
 	QAbstractButton *button = make_button(label);
-	bssh_set_key_repeat(button);
+	sk_set_key_repeat(button);
 	connect(button, &QAbstractButton::clicked, this, [this, ch] {
 		if (!m_target) return;
 		/* Through the target, so an armed Ctrl applies to these too. */
@@ -313,10 +313,10 @@ void bssh_key_row::add_text(const QString &label, char32_t ch) {
 	});
 }
 
-void bssh_key_row::add_modifier(const QString &label, quint8 modifier) {
+void sk_key_row::add_modifier(const QString &label, quint8 modifier) {
 	QAbstractButton *button = make_button(label);
 	button->setCheckable(true);
-	button->setProperty("bssh_hold_modifier", uint(modifier));
+	button->setProperty("sk_hold_modifier", uint(modifier));
 
 	m_modifier_buttons.append(button);
 	m_modifier_values.append(modifier);
@@ -340,7 +340,7 @@ void bssh_key_row::add_modifier(const QString &label, quint8 modifier) {
 	});
 }
 
-void bssh_key_row::refresh_modifier_buttons() {
+void sk_key_row::refresh_modifier_buttons() {
 	/*
 	 * No router means no session, which means nothing is armed -- so the
 	 * buttons are drawn OFF rather than left as they were.
@@ -378,7 +378,7 @@ void bssh_key_row::refresh_modifier_buttons() {
 		 * three it is. setChecked cannot answer that -- two of the
 		 * states share it, which is the whole difficulty.
 		 */
-		button->setProperty("bssh_modifier_state", int(state));
+		button->setProperty("sk_modifier_state", int(state));
 		button->update();
 
 		QFont font = button->font();
@@ -389,7 +389,7 @@ void bssh_key_row::refresh_modifier_buttons() {
 	}
 }
 
-bool bssh_key_row::should_be_visible() const {
+bool sk_key_row::should_be_visible() const {
 	if (m_mode == ALWAYS) return true;
 	if (m_mode == NEVER) return false;
 	if (m_touch_primary) return m_touch_primary();
@@ -399,7 +399,7 @@ bool bssh_key_row::should_be_visible() const {
 	return false;
 }
 
-void bssh_key_row::set_target(sk_target *target) {
+void sk_key_row::set_target(sk_target *target) {
 	if (m_target == target) return;
 
 	/* A finger still down belongs to the old session; let it go there. */
@@ -426,7 +426,7 @@ void bssh_key_row::set_target(sk_target *target) {
 	refresh_modifier_buttons();
 }
 
-void bssh_key_row::set_visibility_mode(visibility_t mode) {
+void sk_key_row::set_visibility_mode(visibility_t mode) {
 	m_mode = mode;
 	setVisible(should_be_visible());
 }

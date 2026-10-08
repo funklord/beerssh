@@ -1,11 +1,11 @@
-#ifndef BSSH_KEY_ROW_LAYOUT_H
-#define BSSH_KEY_ROW_LAYOUT_H
+#ifndef SK_KEY_ROW_LAYOUT_H
+#define SK_KEY_ROW_LAYOUT_H
 
 #include <QList>
 #include <QString>
 
 /*
- * bssh_key_row_layout -- what the on-screen key row holds (project.md
+ * key_row_layout -- what the on-screen key row holds (project.md
  * sec 6.2, sec 10.2).
  *
  * sec 6.2 says the row's layout is a preset-owned setting "so different
@@ -25,7 +25,7 @@
  * platforms so a preset means the same thing wherever it is opened.
  */
 
-struct bssh_key_t {
+struct sk_key_t {
 	enum kind_t {
 		/* A named key: Esc, Tab, an arrow. Goes through the router so a
 		 * sticky modifier applies to it. */
@@ -132,19 +132,19 @@ struct bssh_key_t {
 	 */
 	int span;
 
-	bssh_key_t()
+	sk_key_t()
 	    : kind(KEY), value(0), shifted_value(0), altgr_value(0),
 	      shift_altgr_value(0), modifier(0), span(1) {}
 };
 
-struct bssh_key_row_layout_t {
+struct sk_key_row_layout_t {
 	QString id;
 	QString display_name;
 
 	/* Shown under the picker: which end of a connection this suits. */
 	QString description;
 
-	QList<bssh_key_t> keys;
+	QList<sk_key_t> keys;
 };
 
 /*
@@ -156,7 +156,7 @@ struct bssh_key_row_layout_t {
  * has and what the programs asking for them expect -- htop labels F1
  * through F10, mc the same, and vim's help is F1.
  */
-QList<bssh_key_t> bssh_function_keys();
+QList<sk_key_t> sk_function_keys();
 
 /*
  * Whether a row can drive a terminal at all: it needs Escape and at least
@@ -172,7 +172,7 @@ QList<bssh_key_t> bssh_function_keys();
  * "they become the contract every layout must satisfy rather than tests
  * about the two boards we happen to have".
  */
-bool bssh_key_row_usable(const QList<bssh_key_t> &keys);
+bool sk_key_row_usable(const QList<sk_key_t> &keys);
 
 /*
  * A row as words, because app.ini is meant to be opened and edited
@@ -186,22 +186,22 @@ bool bssh_key_row_usable(const QList<bssh_key_t> &keys);
  * character is itself -- `|`, `/`, `~` -- which is why every reserved
  * word is at least two characters and none of them can collide with one.
  *
- * bssh_parse_key_row skips a token it does not know rather than refusing
+ * sk_parse_key_row skips a token it does not know rather than refusing
  * the row: a spec typed by hand with one word wrong should lose that key
- * and not the other eleven, and bssh_key_row_usable is what decides
+ * and not the other eleven, and sk_key_row_usable is what decides
  * whether what survived is still a row.
  */
-QList<bssh_key_t> bssh_parse_key_row(const QString &spec);
-QString bssh_key_row_spec(const QList<bssh_key_t> &keys);
+QList<sk_key_t> sk_parse_key_row(const QString &spec);
+QString sk_key_row_spec(const QList<sk_key_t> &keys);
 
-class bssh_key_row_catalog {
+class sk_key_row_catalog {
 public:
-	static bssh_key_row_catalog &instance();
+	static sk_key_row_catalog &instance();
 
-	bssh_key_row_catalog();
+	sk_key_row_catalog();
 
-	const QList<bssh_key_row_layout_t> &all() const { return m_layouts; }
-	const bssh_key_row_layout_t *by_id(const QString &id) const;
+	const QList<sk_key_row_layout_t> &all() const { return m_layouts; }
+	const sk_key_row_layout_t *by_id(const QString &id) const;
 
 	/* Empty means the default; an unknown id passes through unchanged, so
 	 * a preset from a newer build still shows what it asked for. */
@@ -223,10 +223,10 @@ public:
 	 * terminal, so a spec that has been edited into uselessness leaves
 	 * the last good one in place rather than emptying the strip.
 	 */
-	bool set_custom(const QList<bssh_key_t> &keys);
+	bool set_custom(const QList<sk_key_t> &keys);
 
 private:
-	QList<bssh_key_row_layout_t> m_layouts;
+	QList<sk_key_row_layout_t> m_layouts;
 };
 
-#endif /* BSSH_KEY_ROW_LAYOUT_H */
+#endif /* SK_KEY_ROW_LAYOUT_H */

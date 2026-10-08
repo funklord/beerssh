@@ -2149,9 +2149,9 @@ namespace {
  * for. Called once per style rather than wrapped in a loop, so the body
  * keeps its indentation and the failure message names which keyboard.
  */
-void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
-	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all(style);
+void check_keyboard_shape(sk_catalog::style_t style) {
+	const QList<sk_group_t> &groups =
+	        sk_catalog::instance().all(style);
 
 	QVERIFY2(groups.size() >= 2,
 	          "a side button that walks one group is a button with nothing to do");
@@ -2159,7 +2159,7 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
 	const int rows = groups.first().rows.size();
 	QVERIFY2(rows > 0, "a group with no rows is a keyboard with no keys");
 
-	for (const bssh_soft_key_group_t &group : groups) {
+	for (const sk_group_t &group : groups) {
 		/*
 		 * Same number of ROWS in every group.
 		 *
@@ -2179,7 +2179,7 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
 
 		for (int r = 0; r < group.rows.size(); ++r) {
 			int columns = 0;
-			for (const bssh_key_t &key : group.rows.at(r)) {
+			for (const sk_key_t &key : group.rows.at(r)) {
 				QVERIFY2(key.span > 0, "a key of no width cannot be pressed");
 				columns += key.span;
 			}
@@ -2204,8 +2204,8 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
 		 * stretch for, or switching to a narrower one leaves stretch on
 		 * columns nothing occupies.
 		 */
-		QVERIFY2(group.columns <= BSSH_KEYBOARD_MAX_COLUMNS,
-		          "a group wider than BSSH_KEYBOARD_MAX_COLUMNS is drawn clipped");
+		QVERIFY2(group.columns <= SK_KEYBOARD_MAX_COLUMNS,
+		          "a group wider than SK_KEYBOARD_MAX_COLUMNS is drawn clipped");
 	}
 }
 
@@ -2214,7 +2214,7 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
 /*
  * The full keyboard answers about ITSELF, which for an hour it did not.
  *
- * bssh_soft_keyboard's catalogue lookups took a style that defaulted to
+ * sk_keyboard's catalogue lookups took a style that defaulted to
  * COMPACT, so with the full board on screen group_id() named a compact
  * group and set_group() clamped indices against the compact list's three
  * when the full one has two. set_group(2) was therefore accepted, rebuild()
@@ -2263,8 +2263,8 @@ void check_keyboard_shape(bssh_soft_keyboard_catalog::style_t style) {
 void layout_test::a_soft_keyboard_letter_chord_is_kept_by_the_app() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_soft_keyboard keyboard(&router);
-	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_FULL);
+	sk_keyboard keyboard(&router);
+	keyboard.set_style(sk_catalog::STYLE_FULL);
 
 	/*
 	 * The 'c' key, found by its label before any Shift relabels it. Its
@@ -2496,14 +2496,14 @@ void layout_test::every_config_page_sits_on_the_one_index() {
 }
 
 void layout_test::both_keyboards_read_one_layout() {
-	bssh_soft_keyboard_catalog &catalog = bssh_soft_keyboard_catalog::instance();
+	sk_catalog &catalog = sk_catalog::instance();
 
-	QHash<int, bssh_key_t> compact;
-	for (const bssh_soft_key_group_t &group :
-	     catalog.all(bssh_soft_keyboard_catalog::STYLE_COMPACT)) {
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind == bssh_key_t::TEXT && !compact.contains(key.value)) {
+	QHash<int, sk_key_t> compact;
+	for (const sk_group_t &group :
+	     catalog.all(sk_catalog::STYLE_COMPACT)) {
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind == sk_key_t::TEXT && !compact.contains(key.value)) {
 					compact.insert(key.value, key);
 				}
 			}
@@ -2519,16 +2519,16 @@ void layout_test::both_keyboards_read_one_layout() {
 	 * only one of them has ) on its top half.
 	 */
 	int compared = 0;
-	for (const bssh_soft_key_group_t &group :
-	     catalog.all(bssh_soft_keyboard_catalog::STYLE_FULL)) {
+	for (const sk_group_t &group :
+	     catalog.all(sk_catalog::STYLE_FULL)) {
 		if (!group.id.contains(QStringLiteral("main"))) continue;
 
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind != bssh_key_t::TEXT) continue;
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind != sk_key_t::TEXT) continue;
 				if (!compact.contains(key.value)) continue;
 
-				const bssh_key_t &twin = compact.value(key.value);
+				const sk_key_t &twin = compact.value(key.value);
 				QCOMPARE(twin.shifted_value, key.shifted_value);
 				QCOMPARE(twin.altgr_value, key.altgr_value);
 				QCOMPARE(twin.shift_altgr_value, key.shift_altgr_value);
@@ -2561,8 +2561,8 @@ void layout_test::both_keyboards_read_one_layout() {
  * label contains an ampersand must not be left to the style.
  */
 void layout_test::an_ampersand_cap_is_not_left_to_the_style() {
-	QVERIFY(bssh_key_cap::needs_own_paint(QStringLiteral("&"), QString()));
-	QVERIFY(bssh_key_cap::needs_own_paint(QStringLiteral("q"),
+	QVERIFY(sk_key_cap::needs_own_paint(QStringLiteral("&"), QString()));
+	QVERIFY(sk_key_cap::needs_own_paint(QStringLiteral("q"),
 	                                       QString(QChar(0x00e4))));
 
 	/*
@@ -2570,19 +2570,19 @@ void layout_test::an_ampersand_cap_is_not_left_to_the_style() {
 	 * that keeps a keyboard looking like its own buttons -- and keeps
 	 * the eliding the full board's narrow keys rely on.
 	 */
-	QVERIFY(!bssh_key_cap::needs_own_paint(QStringLiteral("Enter"), QString()));
-	QVERIFY(!bssh_key_cap::needs_own_paint(QStringLiteral("g"), QString()));
+	QVERIFY(!sk_key_cap::needs_own_paint(QStringLiteral("Enter"), QString()));
+	QVERIFY(!sk_key_cap::needs_own_paint(QStringLiteral("g"), QString()));
 
 	/*
 	 * And the keyboard really does carry one, or the two lines above are
 	 * a rule about nothing.
 	 */
 	bool found = false;
-	for (const bssh_soft_key_group_t &group :
-	     bssh_soft_keyboard_catalog::instance().all(
-	             bssh_soft_keyboard_catalog::STYLE_COMPACT)) {
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
+	for (const sk_group_t &group :
+	     sk_catalog::instance().all(
+	             sk_catalog::STYLE_COMPACT)) {
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
 				if (key.label == QStringLiteral("&")) found = true;
 			}
 		}
@@ -2605,29 +2605,29 @@ namespace {
 struct layout_left_as_found_t {
 	QString id;
 
-	layout_left_as_found_t() : id(bssh_keyboard_layout()) {}
-	~layout_left_as_found_t() { bssh_set_keyboard_layout(id); }
+	layout_left_as_found_t() : id(sk_keyboard_layout()) {}
+	~layout_left_as_found_t() { sk_set_keyboard_layout(id); }
 };
 
 /*
  * Every character a style can send, over every modifier combination.
  *
- * Through bssh_keyboard_char rather than by reading the stored levels,
+ * Through sk_keyboard_char rather than by reading the stored levels,
  * which is the difference between what a key SENDS and what it holds: a
  * capital comes from toUpper at send time, so a probe reading levels
  * reports every capital as unreachable. One did, during this work, and
  * the false gap looked exactly like a real one.
  */
-QSet<uint> every_character(bssh_soft_keyboard_catalog::style_t style) {
+QSet<uint> every_character(sk_catalog::style_t style) {
 	QSet<uint> sent;
-	for (const bssh_soft_key_group_t &group :
-	     bssh_soft_keyboard_catalog::instance().all(style)) {
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind != bssh_key_t::TEXT) continue;
+	for (const sk_group_t &group :
+	     sk_catalog::instance().all(style)) {
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind != sk_key_t::TEXT) continue;
 
 				for (int modifiers = 0; modifiers < 4; ++modifiers) {
-					const QChar character = bssh_keyboard_char(
+					const QChar character = sk_keyboard_char(
 					        key, modifiers & 1, modifiers & 2);
 					if (!character.isNull() && character.unicode()) {
 						sent.insert(character.unicode());
@@ -2641,12 +2641,12 @@ QSet<uint> every_character(bssh_soft_keyboard_catalog::style_t style) {
 
 /* The character a TEXT key sends, for a key that sends this one. */
 QChar slot_character(char32_t wanted) {
-	for (const bssh_soft_key_group_t &group :
-	     bssh_soft_keyboard_catalog::instance().all(
-	             bssh_soft_keyboard_catalog::STYLE_FULL)) {
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind == bssh_key_t::TEXT
+	for (const sk_group_t &group :
+	     sk_catalog::instance().all(
+	             sk_catalog::STYLE_FULL)) {
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind == sk_key_t::TEXT
 				     && char32_t(key.value) == wanted) {
 					return QChar(uint(key.value));
 				}
@@ -2671,7 +2671,7 @@ void check_every_printable_character(const QString &layout_id);
  * cap showed. A keyboard is not a set of correct keys, it is a claim
  * that you can type, and only asking what it CANNOT reach can check it.
  *
- * Capitals are excluded because they are not a level: bssh_shifted_char
+ * Capitals are excluded because they are not a level: sk_shifted_char
  * falls back to toUpper, so a letter key covers its capital without
  * storing one, and a layout in a caseless script gets the right answer
  * by not having one to store.
@@ -2694,8 +2694,8 @@ void layout_test::both_keyboards_reach_every_printable_character() {
 	 */
 	const layout_left_as_found_t restore;
 
-	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
-		QVERIFY2(bssh_set_keyboard_layout(layout.id),
+	for (const sk_keyboard_layout_t &layout : sk_keyboard_layouts()) {
+		QVERIFY2(sk_set_keyboard_layout(layout.id),
 		          qPrintable(QStringLiteral("the catalog lists %1 and will not "
 		                                     "select it").arg(layout.id)));
 		check_every_printable_character(layout.id);
@@ -2758,7 +2758,7 @@ void layout_test::the_layout_setting_reaches_the_keyboard() {
 	 * because that is what the setting is supposed to move; the widget
 	 * rebuilding from it is covered by rebuild_keys() having a caller.
 	 */
-	QVERIFY(bssh_set_keyboard_layout(bssh_app_settings().keyboard_layout()));
+	QVERIFY(sk_set_keyboard_layout(bssh_app_settings().keyboard_layout()));
 	QCOMPARE(slot_character(0x00e5), QChar(0x00e5));
 
 	settings.set_keyboard_layout(before);
@@ -2792,13 +2792,13 @@ void layout_test::the_layout_setting_reaches_the_keyboard() {
 void layout_test::a_small_screen_loses_no_letter() {
 	const layout_left_as_found_t restore;
 
-	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
-		QVERIFY(bssh_set_keyboard_layout(layout.id));
+	for (const sk_keyboard_layout_t &layout : sk_keyboard_layouts()) {
+		QVERIFY(sk_set_keyboard_layout(layout.id));
 
 		const QSet<uint> full =
-		        every_character(bssh_soft_keyboard_catalog::STYLE_FULL);
+		        every_character(sk_catalog::STYLE_FULL);
 		const QSet<uint> compact =
-		        every_character(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+		        every_character(sk_catalog::STYLE_COMPACT);
 
 		QString lost;
 		for (uint code : full) {
@@ -2839,23 +2839,23 @@ void layout_test::a_small_screen_loses_no_letter() {
 void layout_test::a_fourth_page_appears_only_where_a_letter_needs_it() {
 	const layout_left_as_found_t restore;
 
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("us-intl")));
-	QCOMPARE(int(bssh_soft_keyboard_catalog::instance()
-	                     .all(bssh_soft_keyboard_catalog::STYLE_COMPACT).size()), 3);
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("us-intl")));
+	QCOMPARE(int(sk_catalog::instance()
+	                     .all(sk_catalog::STYLE_COMPACT).size()), 3);
 
 	/*
 	 * Swedish is the sharper half of the control: it has letters the
 	 * ASCII palette does not carry, and they are on AD11 and AC11 where
 	 * the letters page already reaches them.
 	 */
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("se")));
-	QCOMPARE(int(bssh_soft_keyboard_catalog::instance()
-	                     .all(bssh_soft_keyboard_catalog::STYLE_COMPACT).size()), 3);
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("se")));
+	QCOMPARE(int(sk_catalog::instance()
+	                     .all(sk_catalog::STYLE_COMPACT).size()), 3);
 
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("de")));
-	const QList<bssh_soft_key_group_t> german =
-	        bssh_soft_keyboard_catalog::instance().all(
-	                bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("de")));
+	const QList<sk_group_t> german =
+	        sk_catalog::instance().all(
+	                sk_catalog::STYLE_COMPACT);
 	QCOMPARE(int(german.size()), 4);
 
 	/*
@@ -2865,11 +2865,11 @@ void layout_test::a_fourth_page_appears_only_where_a_letter_needs_it() {
 	QCOMPARE(german.last().button_label, QString(QChar(0x00df)));
 
 	bool eszett = false;
-	for (const QList<bssh_key_t> &row : german.last().rows) {
-		for (const bssh_key_t &key : row) {
-			if (key.kind != bssh_key_t::TEXT) continue;
+	for (const QList<sk_key_t> &row : german.last().rows) {
+		for (const sk_key_t &key : row) {
+			if (key.kind != sk_key_t::TEXT) continue;
 			for (int modifiers = 0; modifiers < 4; ++modifiers) {
-				if (bssh_keyboard_char(key, modifiers & 1, modifiers & 2)
+				if (sk_keyboard_char(key, modifiers & 1, modifiers & 2)
 				     == QChar(0x00df)) {
 					eszett = true;
 				}
@@ -2895,10 +2895,10 @@ void layout_test::a_fourth_page_appears_only_where_a_letter_needs_it() {
 	 * takes the first two. This was read off a phone as a suspected
 	 * defect before it was understood as the rule working.
 	 */
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("fr")));
-	const QList<bssh_soft_key_group_t> french =
-	        bssh_soft_keyboard_catalog::instance().all(
-	                bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("fr")));
+	const QList<sk_group_t> french =
+	        sk_catalog::instance().all(
+	                sk_catalog::STYLE_COMPACT);
 	QCOMPARE(int(french.size()), 4);
 	QCOMPARE(french.last().button_label,
 	          QString(QChar(0x00e0)) + QChar(0x00e8));
@@ -2921,12 +2921,12 @@ void layout_test::a_fourth_page_appears_only_where_a_letter_needs_it() {
 void layout_test::a_non_latin_layout_opens_in_latin_and_reaches_its_script() {
 	const layout_left_as_found_t restore;
 
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("ru")));
-	QVERIFY2(!bssh_layout_has_latin(), "Russian is being read as a Latin layout");
-	QVERIFY2(bssh_latin_mode(), "a non-Latin layout did not open in Latin");
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("ru")));
+	QVERIFY2(!sk_layout_has_latin(), "Russian is being read as a Latin layout");
+	QVERIFY2(sk_latin_mode(), "a non-Latin layout did not open in Latin");
 
 	const QSet<uint> opened =
-	        every_character(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	        every_character(sk_catalog::STYLE_COMPACT);
 	for (char letter = 'a'; letter <= 'z'; ++letter) {
 		QVERIFY2(opened.contains(uint(letter)),
 		          qPrintable(QStringLiteral("Russian opens without %1")
@@ -2934,16 +2934,16 @@ void layout_test::a_non_latin_layout_opens_in_latin_and_reaches_its_script() {
 	}
 
 	/* And the script it was chosen for is one tap away. */
-	bssh_set_latin_mode(false);
+	sk_set_latin_mode(false);
 	const QSet<uint> script =
-	        every_character(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	        every_character(sk_catalog::STYLE_COMPACT);
 	QVERIFY2(script.contains(0x0439),
 	          "Russian cannot type short-i with Latin mode off");
 	QVERIFY2(!script.contains(uint('q')),
 	          "Latin mode off still draws a Latin letter block");
 
-	bssh_set_latin_mode(true);
-	QVERIFY(every_character(bssh_soft_keyboard_catalog::STYLE_COMPACT)
+	sk_set_latin_mode(true);
+	QVERIFY(every_character(sk_catalog::STYLE_COMPACT)
 	                .contains(uint('q')));
 
 	/*
@@ -2951,9 +2951,9 @@ void layout_test::a_non_latin_layout_opens_in_latin_and_reaches_its_script() {
 	 * choosing Greek and getting whichever script the last layout was
 	 * left showing.
 	 */
-	bssh_set_latin_mode(false);
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("gr")));
-	QVERIFY2(bssh_latin_mode(), "the toggle survived a layout change");
+	sk_set_latin_mode(false);
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("gr")));
+	QVERIFY2(sk_latin_mode(), "the toggle survived a layout change");
 }
 
 /*
@@ -2969,20 +2969,20 @@ void layout_test::the_script_toggle_is_offered_only_where_it_does_something() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("se")));
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("se")));
 	{
-		bssh_soft_keyboard keyboard(&router);
-		keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+		sk_keyboard keyboard(&router);
+		keyboard.set_style(sk_catalog::STYLE_COMPACT);
 		QToolButton *toggle =
 		        keyboard.findChild<QToolButton *>(QStringLiteral("keyboard-script"));
 		QVERIFY2(toggle, "the toggle was never built");
 		QVERIFY2(toggle->isHidden(), "Swedish is offered a script toggle");
 	}
 
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("ru")));
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("ru")));
 	{
-		bssh_soft_keyboard keyboard(&router);
-		keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+		sk_keyboard keyboard(&router);
+		keyboard.set_style(sk_catalog::STYLE_COMPACT);
 		QToolButton *toggle =
 		        keyboard.findChild<QToolButton *>(QStringLiteral("keyboard-script"));
 		QVERIFY2(toggle, "the toggle was never built");
@@ -2995,7 +2995,7 @@ void layout_test::the_script_toggle_is_offered_only_where_it_does_something() {
 
 		toggle->click();
 		QCOMPARE(toggle->text(), QStringLiteral("abc"));
-		QVERIFY2(!bssh_latin_mode(), "pressing the toggle changed nothing");
+		QVERIFY2(!sk_latin_mode(), "pressing the toggle changed nothing");
 	}
 }
 
@@ -3383,8 +3383,8 @@ void layout_test::the_keyboard_side_icons_are_still_named() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 
-	bssh_soft_keyboard keyboard(&router);
-	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_COMPACT);
+	sk_keyboard keyboard(&router);
+	keyboard.set_style(sk_catalog::STYLE_COMPACT);
 
 	const char *names[] = { "keyboard-settings", "keyboard-hide" };
 	for (const char *name : names) {
@@ -4450,9 +4450,9 @@ void layout_test::the_pane_grip_arms_a_drag() {
 void layout_test::an_unknown_layout_is_refused_and_changes_nothing() {
 	const layout_left_as_found_t restore;
 
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("us-intl")));
-	QVERIFY(!bssh_set_keyboard_layout(QStringLiteral("klingon")));
-	QCOMPARE(bssh_keyboard_layout(), QStringLiteral("us-intl"));
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("us-intl")));
+	QVERIFY(!sk_set_keyboard_layout(QStringLiteral("klingon")));
+	QCOMPARE(sk_keyboard_layout(), QStringLiteral("us-intl"));
 
 	/* And the keyboard it left behind is still the one that was asked for. */
 	QCOMPARE(slot_character(U'q'), QChar(U'q'));
@@ -4469,10 +4469,10 @@ void layout_test::an_unknown_layout_is_refused_and_changes_nothing() {
 void layout_test::choosing_a_layout_changes_what_the_keys_send() {
 	const layout_left_as_found_t restore;
 
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("us-intl")));
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("us-intl")));
 	QCOMPARE(slot_character(U'['), QChar(U'['));
 
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("se")));
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("se")));
 	QCOMPARE(slot_character(0x00e5), QChar(0x00e5));   /* a-ring, AD11 */
 	QCOMPARE(slot_character(0x00f6), QChar(0x00f6));   /* o-diaeresis, AC10 */
 	QCOMPARE(slot_character(0x00e4), QChar(0x00e4));   /* a-diaeresis, AC11 */
@@ -4481,28 +4481,28 @@ void layout_test::choosing_a_layout_changes_what_the_keys_send() {
 	 * And the geometry did not move. Same groups, same rows, same
 	 * columns -- which is the whole claim the slot split makes.
 	 */
-	const QList<bssh_soft_key_group_t> &swedish =
-	        bssh_soft_keyboard_catalog::instance().all(
-	                bssh_soft_keyboard_catalog::STYLE_FULL);
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("us-intl")));
-	const QList<bssh_soft_key_group_t> &american =
-	        bssh_soft_keyboard_catalog::instance().all(
-	                bssh_soft_keyboard_catalog::STYLE_FULL);
+	const QList<sk_group_t> &swedish =
+	        sk_catalog::instance().all(
+	                sk_catalog::STYLE_FULL);
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("us-intl")));
+	const QList<sk_group_t> &american =
+	        sk_catalog::instance().all(
+	                sk_catalog::STYLE_FULL);
 	QCOMPARE(swedish.size(), american.size());
 }
 
 namespace {
 
 void check_every_printable_character(const QString &layout_id) {
-	for (bssh_soft_keyboard_catalog::style_t style :
-	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
-	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
+	for (sk_catalog::style_t style :
+	     { sk_catalog::STYLE_COMPACT,
+	       sk_catalog::STYLE_FULL }) {
 		QSet<uint> reachable;
-		for (const bssh_soft_key_group_t &group :
-		     bssh_soft_keyboard_catalog::instance().all(style)) {
-			for (const QList<bssh_key_t> &row : group.rows) {
-				for (const bssh_key_t &key : row) {
-					if (key.kind != bssh_key_t::TEXT) continue;
+		for (const sk_group_t &group :
+		     sk_catalog::instance().all(style)) {
+			for (const QList<sk_key_t> &row : group.rows) {
+				for (const sk_key_t &key : row) {
+					if (key.kind != sk_key_t::TEXT) continue;
 
 					const int levels[4] = { key.value, key.shifted_value,
 					                         key.altgr_value, key.shift_altgr_value };
@@ -4548,19 +4548,19 @@ void check_every_printable_character(const QString &layout_id) {
  * puts its third level somewhere else.
  */
 void layout_test::a_keyboard_can_reach_every_level_it_shows() {
-	for (bssh_soft_keyboard_catalog::style_t style :
-	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
-	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
-		const QList<bssh_soft_key_group_t> &groups =
-		        bssh_soft_keyboard_catalog::instance().all(style);
+	for (sk_catalog::style_t style :
+	     { sk_catalog::STYLE_COMPACT,
+	       sk_catalog::STYLE_FULL }) {
+		const QList<sk_group_t> &groups =
+		        sk_catalog::instance().all(style);
 
 		quint8 offered = 0;
 		quint8 advertised = 0;
-		for (const bssh_soft_key_group_t &group : groups) {
-			for (const QList<bssh_key_t> &row : group.rows) {
-				for (const bssh_key_t &key : row) {
-					if (key.kind == bssh_key_t::MODIFIER) offered |= key.modifier;
-					if (key.kind != bssh_key_t::TEXT) continue;
+		for (const sk_group_t &group : groups) {
+			for (const QList<sk_key_t> &row : group.rows) {
+				for (const sk_key_t &key : row) {
+					if (key.kind == sk_key_t::MODIFIER) offered |= key.modifier;
+					if (key.kind != sk_key_t::TEXT) continue;
 
 					if (key.shifted_value != 0 || QChar::isLetter(uint(key.value))) {
 						advertised |= quint8(bssh_emulator::MOD_SHIFT);
@@ -4595,14 +4595,14 @@ void layout_test::a_keyboard_can_reach_every_level_it_shows() {
 void layout_test::a_keypad_key_sends_only_its_digit() {
 	int checked = 0;
 
-	for (const bssh_soft_key_group_t &group :
-	     bssh_soft_keyboard_catalog::instance().all(
-	             bssh_soft_keyboard_catalog::STYLE_FULL)) {
+	for (const sk_group_t &group :
+	     sk_catalog::instance().all(
+	             sk_catalog::STYLE_FULL)) {
 		if (!group.id.contains(QStringLiteral("keypad"))) continue;
 
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind != bssh_key_t::TEXT) continue;
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind != sk_key_t::TEXT) continue;
 
 				const QString where = QStringLiteral("keypad %1").arg(key.label);
 				QVERIFY2(key.shifted_value == 0, qPrintable(where));
@@ -4630,15 +4630,15 @@ void layout_test::a_keypad_key_sends_only_its_digit() {
  * over a green catalogue would otherwise miss.
  */
 void layout_test::every_slot_the_geometry_names_exists() {
-	bssh_soft_keyboard_catalog &catalog = bssh_soft_keyboard_catalog::instance();
+	sk_catalog &catalog = sk_catalog::instance();
 
-	for (bssh_soft_keyboard_catalog::style_t style :
-	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
-	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
-		for (const bssh_soft_key_group_t &group : catalog.all(style)) {
-			for (const QList<bssh_key_t> &row : group.rows) {
-				for (const bssh_key_t &key : row) {
-					if (key.kind != bssh_key_t::TEXT) continue;
+	for (sk_catalog::style_t style :
+	     { sk_catalog::STYLE_COMPACT,
+	       sk_catalog::STYLE_FULL }) {
+		for (const sk_group_t &group : catalog.all(style)) {
+			for (const QList<sk_key_t> &row : group.rows) {
+				for (const sk_key_t &key : row) {
+					if (key.kind != sk_key_t::TEXT) continue;
 					QVERIFY2(key.value != 0,
 					          qPrintable(QStringLiteral("%1 has a key sending nothing, labelled %2")
 					                             .arg(group.id, key.label)));
@@ -4666,17 +4666,17 @@ void layout_test::altgr_reaches_the_us_international_level() {
 	QSet<char32_t> with_altgr;
 	QSet<char32_t> with_shift_altgr;
 
-	for (bssh_soft_keyboard_catalog::style_t style :
-	     { bssh_soft_keyboard_catalog::STYLE_COMPACT,
-	       bssh_soft_keyboard_catalog::STYLE_FULL }) {
-		for (const bssh_soft_key_group_t &group :
-		     bssh_soft_keyboard_catalog::instance().all(style)) {
-			for (const QList<bssh_key_t> &row : group.rows) {
-				for (const bssh_key_t &key : row) {
-					if (key.kind != bssh_key_t::TEXT) continue;
-					plain_only.insert(bssh_keyboard_char(key, false, false).unicode());
-					with_altgr.insert(bssh_keyboard_char(key, false, true).unicode());
-					with_shift_altgr.insert(bssh_keyboard_char(key, true, true).unicode());
+	for (sk_catalog::style_t style :
+	     { sk_catalog::STYLE_COMPACT,
+	       sk_catalog::STYLE_FULL }) {
+		for (const sk_group_t &group :
+		     sk_catalog::instance().all(style)) {
+			for (const QList<sk_key_t> &row : group.rows) {
+				for (const sk_key_t &key : row) {
+					if (key.kind != sk_key_t::TEXT) continue;
+					plain_only.insert(sk_keyboard_char(key, false, false).unicode());
+					with_altgr.insert(sk_keyboard_char(key, false, true).unicode());
+					with_shift_altgr.insert(sk_keyboard_char(key, true, true).unicode());
 				}
 			}
 		}
@@ -4751,14 +4751,14 @@ void layout_test::shift_reaches_every_character_a_real_keyboard_has() {
 	 * produce this", which is also what a user means by "can I type it".
 	 */
 	QSet<char32_t> producible;
-	const QList<bssh_soft_key_group_t> &full =
-	        bssh_soft_keyboard_catalog::instance().all(
-	                bssh_soft_keyboard_catalog::STYLE_FULL);
-	for (const bssh_soft_key_group_t &group : full) {
-		for (const QList<bssh_key_t> &row : group.rows) {
-			for (const bssh_key_t &key : row) {
-				if (key.kind != bssh_key_t::TEXT) continue;
-				producible.insert(bssh_shifted_char(char32_t(key.value),
+	const QList<sk_group_t> &full =
+	        sk_catalog::instance().all(
+	                sk_catalog::STYLE_FULL);
+	for (const sk_group_t &group : full) {
+		for (const QList<sk_key_t> &row : group.rows) {
+			for (const sk_key_t &key : row) {
+				if (key.kind != sk_key_t::TEXT) continue;
+				producible.insert(sk_shifted_char(char32_t(key.value),
 				                                     char32_t(key.shifted_value),
 				                                     true).unicode());
 			}
@@ -4776,16 +4776,16 @@ void layout_test::shift_reaches_every_character_a_real_keyboard_has() {
 	          qPrintable(QStringLiteral("unreachable: %1").arg(unreachable.join(QStringLiteral(", ")))));
 
 	/* And a letter still takes its capital, which IS the rule for letters. */
-	QCOMPARE(bssh_shifted_char(U'a', 0, true), QChar('A'));
-	QCOMPARE(bssh_shifted_char(U'a', 0, false), QChar('a'));
+	QCOMPARE(sk_shifted_char(U'a', 0, true), QChar('A'));
+	QCOMPARE(sk_shifted_char(U'a', 0, false), QChar('a'));
 
 	/*
 	 * The keycap and the character come from one function, so a key
 	 * cannot show one thing and send another. Asserted by asking the same
 	 * question the widget asks for its label.
 	 */
-	QCOMPARE(bssh_shifted_char(U'1', U'!', true), QChar('!'));
-	QCOMPARE(bssh_shifted_char(U'1', U'!', false), QChar('1'));
+	QCOMPARE(sk_shifted_char(U'1', U'!', true), QChar('!'));
+	QCOMPARE(sk_shifted_char(U'1', U'!', false), QChar('1'));
 }
 
 /*
@@ -4795,7 +4795,7 @@ void layout_test::shift_reaches_every_character_a_real_keyboard_has() {
  * this that can be wrong is a connection: the keyboard does not hide
  * itself, the window remembers that the user asked, and the way back is a
  * gesture in a DIFFERENT widget that has to reach the window through the
- * pane container. A test of bssh_soft_keyboard alone would pass with none
+ * pane container. A test of sk_keyboard alone would pass with none
  * of that wired.
  */
 void layout_test::the_hide_key_is_remembered_and_a_tap_undoes_it() {
@@ -4818,7 +4818,7 @@ void layout_test::the_hide_key_is_remembered_and_a_tap_undoes_it() {
 
 	const registry_left_as_found_t tidy(window.registry());
 
-	bssh_soft_keyboard *keys = window.findChild<bssh_soft_keyboard *>();
+	sk_keyboard *keys = window.findChild<sk_keyboard *>();
 	QVERIFY2(keys, "a touch window with the built-in keyboard chosen must build one");
 	QVERIFY2(keys->isVisible(), "and must show it");
 
@@ -4835,7 +4835,7 @@ void layout_test::the_hide_key_is_remembered_and_a_tap_undoes_it() {
 	 * without the flag the keyboard returns a moment after the user asked
 	 * for it to go -- a key that visibly does not work.
 	 */
-	window.resize(BSSH_FULL_KEYBOARD_MIN_DP + 100, BSSH_PHONE_TALL_DP);
+	window.resize(SK_FULL_KEYBOARD_MIN_DP + 100, BSSH_PHONE_TALL_DP);
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 	QVERIFY2(!keys->isVisible(),
 	          "a pane rebuild must not overrule the hide key");
@@ -5095,43 +5095,43 @@ void layout_test::the_back_key_leaves_the_page_not_the_app() {
 }
 
 void layout_test::a_short_wide_screen_gets_the_split_keyboard() {
-	typedef bssh_soft_keyboard_catalog catalog;
+	typedef sk_catalog catalog;
 
 	/*
 	 * Short and wide: whichever keyboard was chosen, a keyboard under
 	 * the terminal takes most of the height, so it splits (sec 6.2). The
 	 * Fold's cover screen in landscape is about 860 by 320.
 	 */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 860, 320), catalog::STYLE_SPLIT);
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL, 860, 320), catalog::STYLE_SPLIT);
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_COMPACT, 860, 320), catalog::STYLE_SPLIT);
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_FULL, 860, 320), catalog::STYLE_SPLIT);
 
 	/* At the boundary and either side of it. */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 1200,
-	                                  BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP - 1),
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_COMPACT, 1200,
+	                                  SK_SPLIT_KEYBOARD_MAX_HEIGHT_DP - 1),
 	          catalog::STYLE_SPLIT);
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 1200,
-	                                  BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP),
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_COMPACT, 1200,
+	                                  SK_SPLIT_KEYBOARD_MAX_HEIGHT_DP),
 	          catalog::STYLE_COMPACT);
 
 	/* Wide is not enough: a tall tablet keeps its keyboard underneath. */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL, 1200, 900), catalog::STYLE_FULL);
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_FULL, 1200, 900), catalog::STYLE_FULL);
 
 	/* Portrait never splits by itself, however short. */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 320, 500), catalog::STYLE_COMPACT);
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_COMPACT, 320, 500), catalog::STYLE_COMPACT);
 
 	/* And split chosen is split everywhere. */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_SPLIT, 320, 2000), catalog::STYLE_SPLIT);
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_SPLIT, 320, 2000), catalog::STYLE_SPLIT);
 }
 
 void layout_test::the_split_keyboard_holds_every_key_once() {
-	typedef bssh_soft_keyboard_catalog catalog;
+	typedef sk_catalog catalog;
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
-	bssh_soft_keyboard keyboard(&router);
+	sk_keyboard keyboard(&router);
 
 	const auto labels = [](const QWidget *within) {
 		QStringList out;
-		for (const bssh_key_cap *cap : within->findChildren<bssh_key_cap *>()) {
+		for (const sk_key_cap *cap : within->findChildren<sk_key_cap *>()) {
 			out.append(cap->text());
 		}
 		out.sort();
@@ -5165,9 +5165,9 @@ void layout_test::the_split_keyboard_holds_every_key_once() {
 		 * portrait, and five rows did not fit a landscape phone.
 		 */
 		QStringList expected = compact;
-		const bssh_soft_key_group_t &page = catalog::instance().all(catalog::STYLE_COMPACT).at(g);
+		const sk_group_t &page = catalog::instance().all(catalog::STYLE_COMPACT).at(g);
 		if (page.digit_row_first) {
-			for (const bssh_key_t &key : page.rows.at(0)) expected.removeOne(key.label);
+			for (const sk_key_t &key : page.rows.at(0)) expected.removeOne(key.label);
 		}
 		if (compact.contains(QStringLiteral("space"))) expected.append(QStringLiteral("space"));
 		if (compact.contains(QStringLiteral("Shift"))) expected.append(QStringLiteral("Shift"));
@@ -5231,9 +5231,9 @@ void layout_test::the_split_keyboard_holds_every_key_once() {
 	QCoreApplication::processEvents();
 	QVERIFY2(keyboard.half(0)->isVisible() && keyboard.half(1)->isVisible(),
 	          "the halves must be laid out for their keys' widths to mean anything");
-	bssh_key_cap *q = nullptr;
-	bssh_key_cap *p = nullptr;
-	for (bssh_key_cap *cap : host.findChildren<bssh_key_cap *>()) {
+	sk_key_cap *q = nullptr;
+	sk_key_cap *p = nullptr;
+	for (sk_key_cap *cap : host.findChildren<sk_key_cap *>()) {
 		if (cap->text() == QStringLiteral("q")) q = cap;
 		if (cap->text() == QStringLiteral("p")) p = cap;
 	}
@@ -5243,7 +5243,7 @@ void layout_test::the_split_keyboard_holds_every_key_once() {
 }
 
 void layout_test::every_compact_page_starts_with_the_digits() {
-	typedef bssh_soft_keyboard_catalog catalog;
+	typedef sk_catalog catalog;
 
 	/*
 	 * Asked for by the holder 2026-10-08: digits without a page switch,
@@ -5255,9 +5255,9 @@ void layout_test::every_compact_page_starts_with_the_digits() {
 	                             QStringLiteral("4"), QStringLiteral("5"), QStringLiteral("6"),
 	                             QStringLiteral("7"), QStringLiteral("8"), QStringLiteral("9"),
 	                             QStringLiteral("0"), QStringLiteral("-") };
-	for (const bssh_soft_key_group_t &group : catalog::instance().all(catalog::STYLE_COMPACT)) {
+	for (const sk_group_t &group : catalog::instance().all(catalog::STYLE_COMPACT)) {
 		QStringList top;
-		for (const bssh_key_t &key : group.rows.value(0)) top.append(key.label);
+		for (const sk_key_t &key : group.rows.value(0)) top.append(key.label);
 		QVERIFY2(top == digits,
 		          qPrintable(QStringLiteral("the %1 page starts with %2")
 		                             .arg(group.display_name, top.join(QLatin1Char(' ')))));
@@ -5267,12 +5267,12 @@ void layout_test::every_compact_page_starts_with_the_digits() {
 	 * The row the digits left on the numbers page holds the shell
 	 * characters no page offered without Shift.
 	 */
-	const QList<bssh_soft_key_group_t> &groups = catalog::instance().all(catalog::STYLE_COMPACT);
+	const QList<sk_group_t> &groups = catalog::instance().all(catalog::STYLE_COMPACT);
 	const int numbers = catalog::instance().index_of(QStringLiteral("numbers"), catalog::STYLE_COMPACT);
 	QStringList plain;
-	for (const QList<bssh_key_t> &row : groups.at(numbers).rows) {
-		for (const bssh_key_t &key : row) {
-			if (key.kind == bssh_key_t::TEXT) plain.append(QString(QChar(uint(key.value))));
+	for (const QList<sk_key_t> &row : groups.at(numbers).rows) {
+		for (const sk_key_t &key : row) {
+			if (key.kind == sk_key_t::TEXT) plain.append(QString(QChar(uint(key.value))));
 		}
 	}
 	for (const char *ch : { "+", "<", ">", "{", "}", ":", "|", "%", "^", "!", "#" }) {
@@ -5301,10 +5301,10 @@ void layout_test::the_split_keyboard_sits_beside_the_terminal() {
 		window.adopt_session(registry->create(named(QStringLiteral("one"))));
 		QCoreApplication::processEvents();
 
-		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
 		bssh_pane_container *panes = window.panes();
 		QVERIFY(keyboard && panes);
-		QCOMPARE(keyboard->style(), bssh_soft_keyboard_catalog::STYLE_SPLIT);
+		QCOMPARE(keyboard->style(), sk_catalog::STYLE_SPLIT);
 
 		QWidget *left = keyboard->half(0);
 		QWidget *right = keyboard->half(1);
@@ -5341,9 +5341,9 @@ void layout_test::the_split_keyboard_sits_beside_the_terminal() {
 		window.resize(320, 860);
 		window.show();
 		QVERIFY(QTest::qWaitForWindowExposed(&window));
-		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
 		QVERIFY(keyboard);
-		QCOMPARE(keyboard->style(), bssh_soft_keyboard_catalog::STYLE_COMPACT);
+		QCOMPARE(keyboard->style(), sk_catalog::STYLE_COMPACT);
 		QVERIFY(!keyboard->half(0)->isVisible());
 		QVERIFY(!keyboard->half(1)->isVisible());
 	}
@@ -5375,7 +5375,7 @@ QWidget *grip_in(QWidget *within) {
 } /* namespace */
 
 void layout_test::dragging_a_bar_resizes_the_keyboard() {
-	typedef bssh_soft_keyboard_catalog catalog;
+	typedef sk_catalog catalog;
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 
@@ -5383,14 +5383,14 @@ void layout_test::dragging_a_bar_resizes_the_keyboard() {
 	QWidget host;
 	QVBoxLayout *column = new QVBoxLayout(&host);
 	column->addStretch(1);
-	bssh_soft_keyboard *keyboard = new bssh_soft_keyboard(&router);
+	sk_keyboard *keyboard = new sk_keyboard(&router);
 	column->addWidget(keyboard);
 	host.resize(400, 800);
 	host.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&host));
 	QCoreApplication::processEvents();
 
-	QSignalSpy chosen(keyboard, &bssh_soft_keyboard::size_chosen);
+	QSignalSpy chosen(keyboard, &sk_keyboard::size_chosen);
 
 	/* The bar on top: up is taller, down is shorter. */
 	QWidget *top = grip_in(keyboard);
@@ -5413,14 +5413,14 @@ void layout_test::dragging_a_bar_resizes_the_keyboard() {
 	drag_grip(top, 0, 2000);
 	const auto shortest = [keyboard] {
 		int out = 1000;
-		for (bssh_key_cap *cap : keyboard->findChildren<bssh_key_cap *>()) {
+		for (sk_key_cap *cap : keyboard->findChildren<sk_key_cap *>()) {
 			if (cap->isVisible()) out = qMin(out, cap->height());
 		}
 		return out;
 	};
 	QTRY_VERIFY2(shortest() < BSSH_TOUCH_TARGET_DP,
 	              qPrintable(QStringLiteral("the shortest key is %1").arg(shortest())));
-	QVERIFY2(shortest() >= bssh_soft_keyboard::SMALLEST_KEY_DP,
+	QVERIFY2(shortest() >= sk_keyboard::SMALLEST_KEY_DP,
 	          qPrintable(QStringLiteral("the shortest key is %1").arg(shortest())));
 
 	/*
@@ -5440,8 +5440,8 @@ void layout_test::dragging_a_bar_resizes_the_keyboard() {
 	 * a bar that stays dim while its half moves reads as one that does
 	 * nothing.
 	 */
-	bssh_resize_grip *left_bar = qobject_cast<bssh_resize_grip *>(left);
-	bssh_resize_grip *right_bar = qobject_cast<bssh_resize_grip *>(right);
+	sk_resize_grip *left_bar = qobject_cast<sk_resize_grip *>(left);
+	sk_resize_grip *right_bar = qobject_cast<sk_resize_grip *>(right);
 	QVERIFY(left_bar && right_bar);
 	QTest::mousePress(left, Qt::LeftButton, Qt::NoModifier, left->rect().center());
 	QVERIFY2(right_bar->lit(), "holding the left bar lights the right one");
@@ -5479,9 +5479,9 @@ void layout_test::a_dragged_keyboard_size_is_kept() {
 	{
 		bssh_main_window window;
 		open(window);
-		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
 		QVERIFY(keyboard);
-		QCOMPARE(keyboard->style(), bssh_soft_keyboard_catalog::STYLE_SPLIT);
+		QCOMPARE(keyboard->style(), sk_catalog::STYLE_SPLIT);
 
 		/*
 		 * 22% of the window per half by default: 30% left the Fold's
@@ -5496,7 +5496,7 @@ void layout_test::a_dragged_keyboard_size_is_kept() {
 		}
 		QVERIFY(found);
 
-		emit keyboard->size_chosen(bssh_soft_keyboard_catalog::STYLE_SPLIT, 210);
+		emit keyboard->size_chosen(sk_catalog::STYLE_SPLIT, 210);
 	}
 
 	QCOMPARE(bssh_app_settings().keyboard_split_width(), 210);
@@ -5505,7 +5505,7 @@ void layout_test::a_dragged_keyboard_size_is_kept() {
 		/* A new window -- a new run, as far as the keyboard knows. */
 		bssh_main_window window;
 		open(window);
-		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
 		QVERIFY(keyboard);
 		bool found = false;
 		for (QWidget *child : keyboard->half(0)->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly)) {
@@ -5610,16 +5610,16 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 }
 
 void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
-	typedef bssh_soft_keyboard_catalog catalog;
+	typedef sk_catalog catalog;
 
 	/* The rule, at the boundary and either side of it. */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL, BSSH_PHONE_DP, 2000),
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_FULL, BSSH_PHONE_DP, 2000),
 	          catalog::STYLE_COMPACT);
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL,
-	                                  BSSH_FULL_KEYBOARD_MIN_DP - 1, 2000),
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_FULL,
+	                                  SK_FULL_KEYBOARD_MIN_DP - 1, 2000),
 	          catalog::STYLE_COMPACT);
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL,
-	                                  BSSH_FULL_KEYBOARD_MIN_DP, 2000),
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_FULL,
+	                                  SK_FULL_KEYBOARD_MIN_DP, 2000),
 	          catalog::STYLE_FULL);
 
 	/*
@@ -5627,7 +5627,7 @@ void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
 	 * fallback narrows what was asked for; it does not overrule someone
 	 * who asked for the thumb keyboard on a tablet.
 	 */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 2000, 2000),
+	QCOMPARE(sk_keyboard_style_for(catalog::STYLE_COMPACT, 2000, 2000),
 	          catalog::STYLE_COMPACT);
 
 	/* Now the wiring. */
@@ -5642,7 +5642,7 @@ void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
 	window.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-	bssh_soft_keyboard *keys = window.findChild<bssh_soft_keyboard *>();
+	sk_keyboard *keys = window.findChild<sk_keyboard *>();
 	QVERIFY2(keys, "the window must build the keyboard it was asked for");
 
 	const QString narrow = keys->group_id();
@@ -5655,7 +5655,7 @@ void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
 	 * the setting being touched, which is the half that says the choice
 	 * was remembered rather than rewritten.
 	 */
-	window.resize(BSSH_FULL_KEYBOARD_MIN_DP + 100, BSSH_PHONE_TALL_DP);
+	window.resize(SK_FULL_KEYBOARD_MIN_DP + 100, BSSH_PHONE_TALL_DP);
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 
 	QVERIFY2(keys->group_id().startsWith(QStringLiteral("full-")),
@@ -5669,12 +5669,12 @@ void layout_test::the_full_keyboard_answers_about_itself() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 
-	bssh_soft_keyboard keyboard(&router);
-	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_FULL);
+	sk_keyboard keyboard(&router);
+	keyboard.set_style(sk_catalog::STYLE_FULL);
 
-	const QList<bssh_soft_key_group_t> &full =
-	        bssh_soft_keyboard_catalog::instance().all(
-	                bssh_soft_keyboard_catalog::STYLE_FULL);
+	const QList<sk_group_t> &full =
+	        sk_catalog::instance().all(
+	                sk_catalog::STYLE_FULL);
 	QVERIFY2(full.size() >= 2, "the full keyboard needs a second page to walk to");
 
 	QCOMPARE(keyboard.group_id(), full.first().id);
@@ -5686,7 +5686,7 @@ void layout_test::the_full_keyboard_answers_about_itself() {
 	for (int i = 0; i <= full.size(); ++i) {
 		keyboard.set_group(i);
 
-		const bssh_soft_key_group_t &expected = full.at(i % full.size());
+		const sk_group_t &expected = full.at(i % full.size());
 		QCOMPARE(keyboard.group_id(), expected.id);
 
 		/*
@@ -5722,11 +5722,11 @@ void layout_test::the_altgr_legend_is_shown_and_then_stands_aside() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 
-	bssh_soft_keyboard keyboard(&router);
-	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_FULL);
+	sk_keyboard keyboard(&router);
+	keyboard.set_style(sk_catalog::STYLE_FULL);
 
-	bssh_key_cap *q = nullptr;
-	for (bssh_key_cap *cap : keyboard.findChildren<bssh_key_cap *>()) {
+	sk_key_cap *q = nullptr;
+	for (sk_key_cap *cap : keyboard.findChildren<sk_key_cap *>()) {
 		if (cap->text() == QStringLiteral("q")) q = cap;
 	}
 	QVERIFY2(q, "the full keyboard drew no q");
@@ -5773,10 +5773,10 @@ void layout_test::every_keyboard_group_is_the_same_shape() {
 	 */
 	const layout_left_as_found_t restore;
 
-	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
-		QVERIFY(bssh_set_keyboard_layout(layout.id));
-		check_keyboard_shape(bssh_soft_keyboard_catalog::STYLE_COMPACT);
-		check_keyboard_shape(bssh_soft_keyboard_catalog::STYLE_FULL);
+	for (const sk_keyboard_layout_t &layout : sk_keyboard_layouts()) {
+		QVERIFY(sk_set_keyboard_layout(layout.id));
+		check_keyboard_shape(sk_catalog::STYLE_COMPACT);
+		check_keyboard_shape(sk_catalog::STYLE_FULL);
 	}
 }
 
@@ -5786,7 +5786,7 @@ void layout_test::the_built_in_keyboard_fits_a_phone() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 
-	bssh_soft_keyboard keyboard(&router);
+	sk_keyboard keyboard(&router);
 	check_fits(QStringLiteral("built-in keyboard"), &keyboard);
 
 	/*
@@ -5801,8 +5801,8 @@ void layout_test::the_built_in_keyboard_fits_a_phone() {
 	 * -- it wants about 770dp). Naming the style is what keeps this test
 	 * about the keyboard it is about.
 	 */
-	const int groups = bssh_soft_keyboard_catalog::instance()
-	        .all(bssh_soft_keyboard_catalog::STYLE_COMPACT).size();
+	const int groups = sk_catalog::instance()
+	        .all(sk_catalog::STYLE_COMPACT).size();
 	for (int i = 1; i < groups; ++i) {
 		keyboard.set_group(i);
 		check_fits(QStringLiteral("built-in keyboard (%1)").arg(keyboard.group_id()),
@@ -5842,8 +5842,8 @@ void layout_test::only_one_on_screen_keyboard_is_ever_shown() {
 		window.show();
 		QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-		bssh_key_row *row = window.findChild<bssh_key_row *>();
-		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		sk_key_row *row = window.findChild<sk_key_row *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
 		QVERIFY2(row && keyboard, "the window builds both and shows one");
 
 		QVERIFY2(!keyboard->isHidden(),
@@ -5865,8 +5865,8 @@ void layout_test::only_one_on_screen_keyboard_is_ever_shown() {
 		window.show();
 		QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-		bssh_key_row *row = window.findChild<bssh_key_row *>();
-		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		sk_key_row *row = window.findChild<sk_key_row *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
 		QVERIFY(row && keyboard);
 
 		QVERIFY2(keyboard->isHidden(),
@@ -7879,9 +7879,9 @@ void layout_test::a_gap_in_a_custom_key_row_holds_its_space() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 
-	const QList<bssh_key_t> plain = bssh_parse_key_row(QStringLiteral("esc tab ctrl"));
-	const QList<bssh_key_t> spaced =
-	        bssh_parse_key_row(QStringLiteral("esc tab gap ctrl"));
+	const QList<sk_key_t> plain = sk_parse_key_row(QStringLiteral("esc tab ctrl"));
+	const QList<sk_key_t> spaced =
+	        sk_parse_key_row(QStringLiteral("esc tab gap ctrl"));
 
 	/*
 	 * The parser keeps the gap, which is the precondition: it skips a
@@ -7892,10 +7892,10 @@ void layout_test::a_gap_in_a_custom_key_row_holds_its_space() {
 	QCOMPARE(plain.size(), 3);
 	QCOMPARE(spaced.size(), 4);
 
-	bssh_key_row_catalog &rows = bssh_key_row_catalog::instance();
+	sk_key_row_catalog &rows = sk_key_row_catalog::instance();
 
 	QVERIFY2(rows.set_custom(plain), "the plain row was refused");
-	bssh_key_row without(&router);
+	sk_key_row without(&router);
 	without.set_layout(QStringLiteral("custom"));
 	/*
 	 * The KEYS' extent, not the row's size hint. The row is a scroll area,
@@ -7904,7 +7904,7 @@ void layout_test::a_gap_in_a_custom_key_row_holds_its_space() {
 	 * the cap, and both rows then reported 612px whatever they held -- in
 	 * the full suite and not alone, where nothing had shown it.
 	 */
-	const auto keys_width = [](bssh_key_row &row) {
+	const auto keys_width = [](sk_key_row &row) {
 		QScrollArea *area = row.findChild<QScrollArea *>();
 		return area && area->widget() ? area->widget()->sizeHint().width() : -1;
 	};
@@ -7912,7 +7912,7 @@ void layout_test::a_gap_in_a_custom_key_row_holds_its_space() {
 	const int narrow = keys_width(without);
 
 	QVERIFY2(rows.set_custom(spaced), "the spaced row was refused");
-	bssh_key_row with(&router);
+	sk_key_row with(&router);
 	with.set_layout(QStringLiteral("custom"));
 	with.adjustSize();
 	const int wide = keys_width(with);
@@ -7953,11 +7953,11 @@ void layout_test::the_key_row_fits_a_phone() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 
-	const bssh_key_row_catalog catalog;
+	const sk_key_row_catalog catalog;
 	QVERIFY(!catalog.all().isEmpty());
 
-	for (const bssh_key_row_layout_t &layout : catalog.all()) {
-		bssh_key_row row(&router);
+	for (const sk_key_row_layout_t &layout : catalog.all()) {
+		sk_key_row row(&router);
 		row.set_layout(layout.id);
 		/*
 		 * Sideways is this one surface's whole design (sec 6.2): its
@@ -7973,7 +7973,7 @@ void layout_test::the_key_row_fits_a_phone() {
 	 * would pass just as well on a row that had quietly lost its keys,
 	 * which is the failure a fits-the-screen check invites.
 	 */
-	bssh_key_row row(&router);
+	sk_key_row row(&router);
 	row.set_layout(QString());
 	row.resize(BSSH_PHONE_DP, 64);
 	row.show();
@@ -8006,7 +8006,7 @@ void layout_test::every_key_that_sends_something_repeats() {
 	 * "Checkable" is the modifiers and the Fn toggle -- the keys that
 	 * change a state rather than send something -- so the two halves of
 	 * that sentence are exactly "sends something" and "does not". A kind
-	 * added to bssh_key_t without a repeat call lands in the wrong half
+	 * added to sk_key_t without a repeat call lands in the wrong half
 	 * and fails here, which is the whole point of writing it this way.
 	 */
 	bssh_emulator emulator(80, 24);
@@ -8015,11 +8015,11 @@ void layout_test::every_key_that_sends_something_repeats() {
 	int repeating = 0;
 	int stateful = 0;
 
-	const bssh_key_row_catalog catalog;
+	const sk_key_row_catalog catalog;
 	QVERIFY(!catalog.all().isEmpty());
 
-	for (const bssh_key_row_layout_t &layout : catalog.all()) {
-		bssh_key_row row(&router);
+	for (const sk_key_row_layout_t &layout : catalog.all()) {
+		sk_key_row row(&router);
 		row.set_layout(layout.id);
 
 		for (const QAbstractButton *button : row.findChildren<QAbstractButton *>()) {
@@ -8037,22 +8037,22 @@ void layout_test::every_key_that_sends_something_repeats() {
 	 * terminal group rather than on the letters, so a check of whatever
 	 * group the board opens on would have missed them.
 	 */
-	const bssh_soft_keyboard_catalog::style_t styles[] = {
-		bssh_soft_keyboard_catalog::STYLE_COMPACT,
-		bssh_soft_keyboard_catalog::STYLE_FULL
+	const sk_catalog::style_t styles[] = {
+		sk_catalog::STYLE_COMPACT,
+		sk_catalog::STYLE_FULL
 	};
 
-	for (bssh_soft_keyboard_catalog::style_t style : styles) {
-		bssh_soft_keyboard keyboard(&router);
+	for (sk_catalog::style_t style : styles) {
+		sk_keyboard keyboard(&router);
 		keyboard.set_style(style);
 
-		const int groups = bssh_soft_keyboard_catalog::instance().all(style).size();
+		const int groups = sk_catalog::instance().all(style).size();
 		QVERIFY(groups > 0);
 
 		for (int group = 0; group < groups; ++group) {
 			keyboard.set_group(group);
 
-			for (const bssh_key_cap *cap : keyboard.findChildren<bssh_key_cap *>()) {
+			for (const sk_key_cap *cap : keyboard.findChildren<sk_key_cap *>()) {
 				const QString where = QStringLiteral("keyboard group %1, key \"%2\"")
 				        .arg(keyboard.group_id(), cap->text());
 				QVERIFY2(cap->autoRepeat() == !cap->isCheckable(), qPrintable(where));
@@ -8068,7 +8068,7 @@ void layout_test::every_key_that_sends_something_repeats() {
 			 */
 			for (const QAbstractButton *button :
 			      keyboard.findChildren<QAbstractButton *>()) {
-				if (qobject_cast<const bssh_key_cap *>(button)) continue;
+				if (qobject_cast<const sk_key_cap *>(button)) continue;
 				QVERIFY2(!button->autoRepeat(),
 				          qPrintable(QStringLiteral("side button \"%1\" repeats")
 				                             .arg(button->objectName())));
@@ -10025,16 +10025,16 @@ void layout_test::the_custom_row_reaches_the_catalogue_at_startup() {
 
 	bssh_main_window window;
 
-	const bssh_key_row_layout_t *custom =
-	        bssh_key_row_catalog::instance().by_id(QStringLiteral("custom"));
+	const sk_key_row_layout_t *custom =
+	        sk_key_row_catalog::instance().by_id(QStringLiteral("custom"));
 	QVERIFY(custom != nullptr);
-	QCOMPARE(bssh_key_row_spec(custom->keys), spec);
+	QCOMPARE(sk_key_row_spec(custom->keys), spec);
 
 	/* Put the setting and the process-wide catalogue back, since both
 	 * outlive this test. */
 	settings.set_custom_key_row(original);
 	if (!original.isEmpty()) {
-		bssh_key_row_catalog::instance().set_custom(bssh_parse_key_row(original));
+		sk_key_row_catalog::instance().set_custom(sk_parse_key_row(original));
 	}
 }
 
@@ -10401,7 +10401,7 @@ void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
 	rows.insert(QStringLiteral("AD01"), QStringLiteral("q|||"));
 	rows.insert(QStringLiteral("AC01"), QStringLiteral("a|||"));
 
-	const QList<bssh_custom_slot_t> parsed = bssh_parse_layout_slots(rows);
+	const QList<sk_custom_slot_t> parsed = sk_parse_layout_slots(rows);
 	QCOMPARE(parsed.size(), 3);
 
 	/*
@@ -10411,7 +10411,7 @@ void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
 	 */
 	QMap<QString, QString> bar;
 	bar.insert(QStringLiteral("BKSL"), QStringLiteral("\\||\u00a6||"));
-	const QList<bssh_custom_slot_t> bar_parsed = bssh_parse_layout_slots(bar);
+	const QList<sk_custom_slot_t> bar_parsed = sk_parse_layout_slots(bar);
 	QCOMPARE(bar_parsed.size(), 1);
 	QCOMPARE(bar_parsed.first().level[0], QStringLiteral("|"));
 
@@ -10420,7 +10420,7 @@ void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
 	QMap<QString, QString> ragged;
 	ragged.insert(QStringLiteral("AE01"), QStringLiteral("1|!"));
 	ragged.insert(QStringLiteral("AE02"), QStringLiteral("2|@||"));
-	QCOMPARE(bssh_parse_layout_slots(ragged).size(), 1);
+	QCOMPARE(sk_parse_layout_slots(ragged).size(), 1);
 
 	/*
 	 * Three slots cannot type ASCII, so the contract refuses them -- and
@@ -10429,7 +10429,7 @@ void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
 	 * wrong.
 	 */
 	QString why;
-	QVERIFY2(!bssh_set_custom_layout(QStringLiteral("Toy"), parsed, &why),
+	QVERIFY2(!sk_set_custom_layout(QStringLiteral("Toy"), parsed, &why),
 	          "a three-key layout was accepted as able to type");
 	QVERIFY2(why.contains(QStringLiteral("cannot type")),
 	          qPrintable(QStringLiteral("refused without saying what is missing: %1")
@@ -10441,9 +10441,9 @@ void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
 	 * cleared first would leave somebody unable to reach the settings
 	 * that would fix it.
 	 */
-	QVERIFY2(!bssh_keyboard_layouts().isEmpty(), "the catalogue lost its layouts");
+	QVERIFY2(!sk_keyboard_layouts().isEmpty(), "the catalogue lost its layouts");
 	bool custom_offered = false;
-	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+	for (const sk_keyboard_layout_t &layout : sk_keyboard_layouts()) {
 		if (layout.id == QStringLiteral("custom")) custom_offered = true;
 	}
 	QVERIFY2(!custom_offered,
@@ -10455,30 +10455,30 @@ void layout_test::a_user_layout_is_transcribed_and_refused_if_it_cannot_type() {
 	 * by a function that refuses everything.
 	 */
 	QMap<QString, QString> whole;
-	for (const bssh_custom_slot_t &slot : bssh_shipped_layout_slots(QStringLiteral("us-intl"))) {
-		whole.insert(slot.slot, bssh_layout_slot_spec(slot));
+	for (const sk_custom_slot_t &slot : sk_shipped_layout_slots(QStringLiteral("us-intl"))) {
+		whole.insert(slot.slot, sk_layout_slot_spec(slot));
 	}
 	QVERIFY2(whole.size() > 40, "the shipped layout came back too small to be one");
 
 	why.clear();
-	QVERIFY2(bssh_set_custom_layout(QStringLiteral("Mine"),
-	                                 bssh_parse_layout_slots(whole), &why),
+	QVERIFY2(sk_set_custom_layout(QStringLiteral("Mine"),
+	                                 sk_parse_layout_slots(whole), &why),
 	          qPrintable(QStringLiteral("a transcription of US International was "
 	                                     "refused: %1").arg(why)));
 
 	/* Now it is offered, and selecting it works. */
 	custom_offered = false;
-	for (const bssh_keyboard_layout_t &layout : bssh_keyboard_layouts()) {
+	for (const sk_keyboard_layout_t &layout : sk_keyboard_layouts()) {
 		if (layout.id == QStringLiteral("custom")) custom_offered = true;
 	}
 	QVERIFY2(custom_offered, "an accepted layout is not in the chooser");
-	QVERIFY(bssh_set_keyboard_layout(QStringLiteral("custom")));
-	QCOMPARE(bssh_keyboard_layout(), QStringLiteral("custom"));
+	QVERIFY(sk_set_keyboard_layout(QStringLiteral("custom")));
+	QCOMPARE(sk_keyboard_layout(), QStringLiteral("custom"));
 
 	/*
 	 * And the CONTROL a person actually looks at, which is one hop
 	 * further than the catalogue and the hop this tree keeps losing
-	 * things at: bssh_keyboard_layouts() can be perfectly right while
+	 * things at: sk_keyboard_layouts() can be perfectly right while
 	 * the combo was built from something else, and the assertion above
 	 * would not notice.
 	 */

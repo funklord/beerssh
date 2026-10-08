@@ -1,6 +1,6 @@
 # Sabotage for the defaulted-style bug.
 #
-# bssh_soft_keyboard's catalogue lookups took a style that defaulted to
+# sk_keyboard's catalogue lookups took a style that defaulted to
 # COMPACT. With the full keyboard on screen that made set_group() clamp an
 # index against the compact list's THREE groups when the full one has two:
 # set_group(2) was accepted, rebuild() found it past the end of the full
@@ -12,13 +12,13 @@
 [[sabotage]]
 name = "set_group clamps against the other keyboard's group count"
 file = "keyboard/soft_keyboard.cpp"
-find = '''void bssh_soft_keyboard::set_group(int index) {
-	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all(m_style);'''
-replace = '''void bssh_soft_keyboard::set_group(int index) {
-	const QList<bssh_soft_key_group_t> &groups =
-	        bssh_soft_keyboard_catalog::instance().all(
-	                bssh_soft_keyboard_catalog::STYLE_COMPACT);'''
+find = '''void sk_keyboard::set_group(int index) {
+	const QList<sk_group_t> &groups =
+	        sk_catalog::instance().all(m_style);'''
+replace = '''void sk_keyboard::set_group(int index) {
+	const QList<sk_group_t> &groups =
+	        sk_catalog::instance().all(
+	                sk_catalog::STYLE_COMPACT);'''
 expect = "the_full_keyboard_answers_about_itself"
 
 # The page stops saying what an unset keyboard gives.

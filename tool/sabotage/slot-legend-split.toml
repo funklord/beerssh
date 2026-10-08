@@ -38,8 +38,8 @@ expect = "both_keyboards_reach_every_printable_character"
 [[sabotage]]
 name = "the geometry names a slot the layout does not have"
 file = "keyboard/soft_keyboard_layout.cpp"
-find = "\tappend_all(home, slot_run(\"AC\", 1, 11, BSSH_FULL_UNIT));"
-replace = "\tappend_all(home, slot_run(\"AC\", 2, 11, BSSH_FULL_UNIT));"
+find = "\tappend_all(home, slot_run(\"AC\", 1, 11, SK_FULL_UNIT));"
+replace = "\tappend_all(home, slot_run(\"AC\", 2, 11, SK_FULL_UNIT));"
 expect = "every_slot_the_geometry_names_exists"
 
 # 3. The third legend is never drawn.
@@ -80,7 +80,7 @@ expect = "the_altgr_legend_is_shown_and_then_stands_aside"
 name = "the keypad inherits the digit row's legends"
 file = "keyboard/soft_keyboard_layout.cpp"
 find = "\tr2.append(keypad_key(QStringLiteral(\"4\"), U'4'));"
-replace = "\tr2.append(literal('4', BSSH_FULL_UNIT));"
+replace = "\tr2.append(literal('4', SK_FULL_UNIT));"
 expect = "a_keypad_key_sends_only_its_digit"
 
 # 6. The compact keyboard loses its AltGr key.

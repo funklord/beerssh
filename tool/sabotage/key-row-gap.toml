@@ -13,8 +13,8 @@
 [[sabotage]]
 name = "a gap in a custom key row reserves no space"
 file = "keyboard/key_row.cpp"
-find = "\t\tcase bssh_key_t::SPACER:\n\t\t\tadd_spacer();\n\t\t\tbreak;"
-replace = "\t\tcase bssh_key_t::SPACER:\n\t\t\tbreak;"
+find = "\t\tcase sk_key_t::SPACER:\n\t\t\tadd_spacer();\n\t\t\tbreak;"
+replace = "\t\tcase sk_key_t::SPACER:\n\t\t\tbreak;"
 expect = "a_gap_in_a_custom_key_row_holds_its_space"
 
 # And a zero-width placeholder, which is the fix that looks right and is

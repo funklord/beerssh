@@ -330,20 +330,20 @@ void bssh_ui_shots::render_touch_surfaces() {
 	 * design and a picture of page one says nothing about page two.
 	 */
 	struct keyboard_shot_t {
-		bssh_soft_keyboard_catalog::style_t style;
+		sk_catalog::style_t style;
 		const char *name;
 	};
 	const keyboard_shot_t keyboards[] = {
-		{ bssh_soft_keyboard_catalog::STYLE_COMPACT, "compact" },
-		{ bssh_soft_keyboard_catalog::STYLE_FULL,    "full" }
+		{ sk_catalog::STYLE_COMPACT, "compact" },
+		{ sk_catalog::STYLE_FULL,    "full" }
 	};
 
 	for (const keyboard_shot_t &which : keyboards) {
-		const QList<bssh_soft_key_group_t> &groups =
-		        bssh_soft_keyboard_catalog::instance().all(which.style);
+		const QList<sk_group_t> &groups =
+		        sk_catalog::instance().all(which.style);
 
 		for (int g = 0; g < groups.size(); ++g) {
-			bssh_soft_keyboard keys(&key_router);
+			sk_keyboard keys(&key_router);
 			keys.set_style(which.style);
 			keys.set_group(g);
 
@@ -362,7 +362,7 @@ void bssh_ui_shots::render_touch_surfaces() {
 			 * elide there. This is the picture that says whether the
 			 * proportions are right.
 			 */
-			if (which.style == bssh_soft_keyboard_catalog::STYLE_FULL) {
+			if (which.style == sk_catalog::STYLE_FULL) {
 				shoot(name + QStringLiteral("-wide"), &keys,
 				       800, keys.sizeHint().height());
 			}
@@ -374,7 +374,7 @@ void bssh_ui_shots::render_touch_surfaces() {
 			 * Idle, a cap reads its letter with the accented character
 			 * small and dimmed in the corner; armed, it reads the
 			 * accented character alone at full weight. That swap is a
-			 * paint rather than a string (bssh_key_cap), so a render is
+			 * paint rather than a string (sk_key_cap), so a render is
 			 * the only thing that can say whether it came out legible
 			 * on a key this size -- which is sec 17's whole argument,
 			 * and the reason the elided labels were found here and not
@@ -384,7 +384,7 @@ void bssh_ui_shots::render_touch_surfaces() {
 			    || groups.at(g).id.contains(QStringLiteral("main"))) {
 				key_router.cycle_modifier(bssh_input_router::MOD_ALTGR);
 				shoot(name + QStringLiteral("-altgr"), &keys,
-				       which.style == bssh_soft_keyboard_catalog::STYLE_FULL
+				       which.style == sk_catalog::STYLE_FULL
 				               ? 800
 				               : BSSH_PHONE_DP,
 				       keys.sizeHint().height());
@@ -413,19 +413,19 @@ void bssh_ui_shots::render_touch_surfaces() {
 	 * catalogue is process-wide and the next thing to ask it for a
 	 * custom row must not get this one.
 	 */
-	const QList<bssh_key_t> found_custom = [] {
-		for (const bssh_key_row_layout_t &layout
-		      : bssh_key_row_catalog::instance().all()) {
+	const QList<sk_key_t> found_custom = [] {
+		for (const sk_key_row_layout_t &layout
+		      : sk_key_row_catalog::instance().all()) {
 			if (layout.id == QStringLiteral("custom")) return layout.keys;
 		}
-		return QList<bssh_key_t>();
+		return QList<sk_key_t>();
 	}();
 
-	bssh_key_row_catalog::instance().set_custom(
-	        bssh_parse_key_row(QStringLiteral("esc tab ctrl alt gap left down up right")));
+	sk_key_row_catalog::instance().set_custom(
+	        sk_parse_key_row(QStringLiteral("esc tab ctrl alt gap left down up right")));
 
-	for (const bssh_key_row_layout_t &layout : bssh_key_row_catalog::instance().all()) {
-		bssh_key_row row(&key_router);
+	for (const sk_key_row_layout_t &layout : sk_key_row_catalog::instance().all()) {
+		sk_key_row row(&key_router);
 		row.set_layout(layout.id);
 
 		shoot(QStringLiteral("touch-key-row-") + layout.id, &row,
@@ -466,7 +466,7 @@ void bssh_ui_shots::render_touch_surfaces() {
 	}
 
 	/* And the catalogue back as it was found. */
-	if (!found_custom.isEmpty()) bssh_key_row_catalog::instance().set_custom(found_custom);
+	if (!found_custom.isEmpty()) sk_key_row_catalog::instance().set_custom(found_custom);
 
 	/*
 	 * The same menu with a thumb in front of it (sec 6.4).

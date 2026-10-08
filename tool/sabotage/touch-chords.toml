@@ -15,8 +15,8 @@ expect = "two_fingers_chord_on_the_key_row"
 [[sabotage]]
 name = "the built-in keyboard does not hold what a finger rests on"
 file = "keyboard/soft_keyboard.cpp"
-find = "\tconnect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {\n\t\tif (m_target) m_target->modifiers().hold(modifier);\n\t\trefresh_modifiers();"
-replace = "\tconnect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {\n\t\tQ_UNUSED(modifier);\n\t\trefresh_modifiers();"
+find = "\tconnect(m_touch, &sk_touch_chords::modifier_held, this, [this](quint8 modifier) {\n\t\tif (m_target) m_target->modifiers().hold(modifier);\n\t\trefresh_modifiers();"
+replace = "\tconnect(m_touch, &sk_touch_chords::modifier_held, this, [this](quint8 modifier) {\n\t\tQ_UNUSED(modifier);\n\t\trefresh_modifiers();"
 expect = "two_fingers_chord_on_the_built_in_keyboard"
 
 # A hold never learns it carried a key, so every release is a tap and a

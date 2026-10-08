@@ -232,7 +232,7 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	 */
 	m_key_row = new QComboBox(this);
 	m_key_row->setObjectName(QStringLiteral("preset-key-row"));
-	for (const bssh_key_row_layout_t &layout : bssh_key_row_catalog::instance().all()) {
+	for (const sk_key_row_layout_t &layout : sk_key_row_catalog::instance().all()) {
 		m_key_row->addItem(layout.display_name, layout.id);
 		m_key_row->setItemData(m_key_row->count() - 1, layout.description, Qt::ToolTipRole);
 	}
@@ -481,7 +481,7 @@ void bssh_preset_editor::show_preset(const bssh_preset_t &preset) {
 	m_font->set_font_choice(preset.font_family, preset.font_size);
 	m_font->set_scheme(preset.colour_scheme);
 
-	const bssh_key_row_catalog &rows = bssh_key_row_catalog::instance();
+	const sk_key_row_catalog &rows = sk_key_row_catalog::instance();
 	const int row_index = m_key_row->findData(rows.effective_id(preset.key_row_layout));
 	m_key_row->setCurrentIndex(row_index < 0 ? 0 : row_index);
 
@@ -522,7 +522,7 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 	if (m_font->font_id() != resolved) preset.font_family = m_font->font_id();
 	preset.font_size = m_font->point_size();
 
-	const bssh_key_row_catalog &rows = bssh_key_row_catalog::instance();
+	const sk_key_row_catalog &rows = sk_key_row_catalog::instance();
 	if (m_key_row->currentData().toString() != rows.effective_id(m_current.key_row_layout)) {
 		preset.key_row_layout = m_key_row->currentData().toString();
 	}
