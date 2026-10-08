@@ -19,7 +19,7 @@ find = '''
 		/*
 		 * The button's state has to follow the router'''
 replace = '''
-	if (!m_router) return;
+	if (!m_target) return;
 
 	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
 		/*
