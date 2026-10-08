@@ -16,6 +16,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSizePolicy>
+#include <QTimer>
 #include <QToolButton>
 
 #include "input/input_router.h"
@@ -478,9 +479,30 @@ void bssh_soft_keyboard::rebuild() {
 	m_letter_buttons.clear();
 	m_letter_keys.clear();
 
+	/*
+	 * Retired, not deleted, because this can run INSIDE the grid's own
+	 * activation: showing the keyboard lays the grid out, that resizes
+	 * the window, and the window's resize asks for the style -- which
+	 * lands here while QLayout::activate() is still walking the items
+	 * this would free. valgrind showed both reads, the layout item and
+	 * the cap; it was silent until a heap layout happened to put
+	 * something that faults under the freed memory.
+	 *
+	 * Unparented now, so findChildren sees only the new keys the moment
+	 * this returns; freed on the next turn of the event loop, after
+	 * whatever is above this on the stack has finished with them.
+	 */
+	QList<QLayoutItem *> retired;
 	while (QLayoutItem *item = m_grid->takeAt(0)) {
-		delete item->widget();
-		delete item;
+		if (QWidget *widget = item->widget()) {
+			widget->hide();
+			widget->setParent(nullptr);
+			widget->deleteLater();
+		}
+		retired.append(item);
+	}
+	if (!retired.isEmpty()) {
+		QTimer::singleShot(0, [retired] { qDeleteAll(retired); });
 	}
 
 	const QList<bssh_soft_key_group_t> &groups =

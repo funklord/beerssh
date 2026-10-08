@@ -1963,6 +1963,23 @@ up, a strip of modifiers has nothing to modify.
   came out of a test failure, and the test was right — the decision was already
   written down.
 
+- **The built-in keyboard freed its keys while laying them out —
+  [FIXED 2026-10-08].** Found by sabotage, not by a user: with the "both
+  keyboards shown" sabotage applied, `layout_test` stopped with SIGSEGV in
+  `QWidgetPrivate::setVisible` instead of failing its named test. Showing
+  the keyboard activates its grid, the grid resizes the window, the window's
+  resize asks `apply_keyboard_style()`, and `rebuild()` deleted the grid's
+  items and caps while `QLayout::activate()` further up the same stack was
+  still walking them. **It predates the touch work**: valgrind on the
+  pre-change tree reports the same invalid read from the same free in
+  `rebuild()`; the touch change only moved the heap so the freed memory
+  faulted. `rebuild()` now unparents the old caps at once (so `findChildren`
+  still sees only the new ones) and frees caps and layout items on the next
+  event-loop turn. Verified by the same instrument: the sabotage under
+  `valgrind --exit-on-first-error` reports 0 errors and the test reaches
+  its verdict. No standing test catches it without valgrind, which is
+  recorded rather than papered over with one that cannot fail.
+
 
 **Shift was `toUpper()`, and that left 21 characters unreachable —
 [FIXED 2026-09-04].** Reported from a device as *"the full keyb isn't
