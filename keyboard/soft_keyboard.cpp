@@ -256,6 +256,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 
 		connect(m_half_grips[side], &bssh_resize_grip::pressed, this, [this] {
 			m_drag_from = m_half_keys[0]->width();
+			for (bssh_resize_grip *grip : m_half_grips) grip->set_lit(true);
 		});
 		connect(m_half_grips[side], &bssh_resize_grip::dragged, this, [this, side](int distance) {
 			const int wanted = side ? m_drag_from - distance : m_drag_from + distance;
@@ -263,6 +264,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 			set_half_width(qBound(120, wanted, widest));
 		});
 		connect(m_half_grips[side], &bssh_resize_grip::released, this, [this] {
+			for (bssh_resize_grip *grip : m_half_grips) grip->set_lit(false);
 			emit size_chosen(bssh_soft_keyboard_catalog::STYLE_SPLIT, m_half_width);
 		});
 

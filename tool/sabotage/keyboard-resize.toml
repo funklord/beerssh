@@ -49,3 +49,27 @@ file = "src/model/app_settings.cpp"
 find = "\tset_keyboard_split_width(0);\n\tset_keyboard_height(false, 0);"
 replace = "\tset_keyboard_height(false, 0);"
 expect = "a_dragged_keyboard_size_is_kept"
+
+# Holding one split bar leaves the other dim, while both halves move.
+[[sabotage]]
+name = "holding one split bar leaves the other dim"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\t\tm_drag_from = m_half_keys[0]->width();\n\t\t\tfor (bssh_resize_grip *grip : m_half_grips) grip->set_lit(true);"
+replace = "\t\t\tm_drag_from = m_half_keys[0]->width();"
+expect = "dragging_a_bar_resizes_the_keyboard"
+
+# The input selector stays a full row on a wide screen (sec 8.7).
+[[sabotage]]
+name = "the input selector keeps its own row when wide"
+file = "src/ui/main_window.cpp"
+find = "\tconst bool wide = width() > height()\n\t                  || width() >= BSSH_FULL_KEYBOARD_MIN_DP;"
+replace = "\tconst bool wide = false;"
+expect = "the_input_selector_joins_the_status_line_when_wide"
+
+# On the status line, but sharing the row half and half with the text.
+[[sabotage]]
+name = "a compact selector keeps its wide buttons"
+file = "src/ui/main_window.cpp"
+find = "\t\ttarget->addWidget(m_input_selector, wide ? 0 : 1);"
+replace = "\t\ttarget->addWidget(m_input_selector, 1);"
+expect = "the_input_selector_joins_the_status_line_when_wide"

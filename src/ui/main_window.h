@@ -405,6 +405,7 @@ private:
 	 */
 	void apply_keyboard_choice();
 	void apply_keyboard_style();
+	void place_input_selector();
 
 	/*
 	 * Set by the keyboard's own Hide key and cleared by a tap in the
@@ -950,6 +951,10 @@ private:
 	 */
 	QPointer<bssh_terminal_view> m_wired_view;
 	QLabel *m_status_label;
+
+	/* The status line's row and the selector's own; see place_input_selector. */
+	QHBoxLayout *m_status_row = nullptr;
+	QHBoxLayout *m_selector_row = nullptr;
 	bssh_session_registry *m_registry;
 
 	/*

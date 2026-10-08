@@ -34,6 +34,15 @@ public:
 
 	QSize sizeHint() const override;
 
+	/*
+	 * Drawn as held without being held: the split keyboard lights both
+	 * halves' bars while either is dragged, because one drag resizes
+	 * both (sec 6.2) and a bar that stays dim while its half moves reads
+	 * as a bar that does nothing.
+	 */
+	void set_lit(bool lit);
+	bool lit() const { return m_lit; }
+
 signals:
 	/* The finger came down; a drag follows. */
 	void pressed();
@@ -56,6 +65,7 @@ private:
 	Qt::Orientation m_drags;
 	int m_from = 0;
 	bool m_down = false;
+	bool m_lit = false;
 };
 
 #endif /* BSSH_RESIZE_GRIP_H */

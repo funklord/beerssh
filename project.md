@@ -2069,7 +2069,10 @@ up, a strip of modifiers has nothing to modify.
   the top of a keyboard underneath, the inner edge of each split half. Not
   the screen's own edges, where Android's back gesture lives — the holder
   said "outer edge", read as the keyboard's edge rather than the screen's;
-  **[OPEN]** if the screen edge was meant. Sizes are device-level and
+  **[OPEN]** if the screen edge was meant; not raised since.
+  **Seen on the Fold:** the 22% halves fit the full prompt
+  `/data/data/se.vibes.beerssh/files $` on one line, a drag narrowed both
+  halves, and the width came back after a restart. Sizes are device-level and
   per keyboard (`keyboard/split_width`, `keyboard/height_compact`,
   `keyboard/height_full`; 0 = default), so shrinking compact leaves full
   alone; "Drag bars to resize the keyboard" and "Reset keyboard size" sit
@@ -2082,8 +2085,12 @@ up, a strip of modifiers has nothing to modify.
   height, which `set_bottom_height` reads as "not chosen", and the keyboard
   snapped back to full size — the opposite of the finger. A drag now never
   asks for less than 1, which the floor raises to the smallest keys.
+  **One drag resizes both split halves** (they share one width, so the
+  keyboard stays balanced), and holding either bar lights both — asked
+  for as "both sides drag at once", and confirmed to mean exactly that
+  rather than two thumbs dragging separately.
   Tests: `dragging_a_bar_resizes_the_keyboard` (both directions, the floor,
-  the inner-edge signs, the setting), `a_dragged_keyboard_size_is_kept`
+  the inner-edge signs, both bars lit, the setting), `a_dragged_keyboard_size_is_kept`
   (22% default, kept across windows, reset). Sabotage:
   `tool/sabotage/keyboard-resize.toml`.
 
@@ -7835,7 +7842,18 @@ gesture.
 
 **One global input selector, visible at all times, five states.** Global
 rather than per terminal, and in every arrangement rather than portrait
-only:
+only. **Where it sits follows the screen — [BUILT 2026-10-08]:** a row of
+its own under the status line, five equal buttons, on a narrow upright
+screen; on one that is wide (600dp+) or lying sideways, at the status
+line's right end with each button its label's width
+(`place_input_selector`: stretch 0 beside the status text's 1 is what holds
+it narrow — a size policy written beside it first was shown by sabotage to
+change nothing, and went). Asked for
+from the Fold in landscape, where five buttons spanning the screen took
+a row the terminal, already sharing its width with the split keyboard,
+could not spare; the holder chose the status line over a corner on its
+own row, because only the status line gives the height back. Heights stay
+at 48dp either way. `the_input_selector_joins_the_status_line_when_wide`.
 
     scroll            body drag moves this terminal's scrollback
     select            body drag highlights
@@ -14663,6 +14681,15 @@ something:
   `/data/data/...`; `run-as ... sh -c` loses the working directory.
   toybox `sed` does not take the one-line `a` form and writes `\n`
   literally, which once mangled `app.ini`.
+- **Putting rotation back takes two writes and a re-read.** Forcing
+  landscape needs `accelerometer_rotation 0` then `user_rotation 1`;
+  restoring with `user_rotation 0` and `accelerometer_rotation 1` in quick
+  succession left auto-rotate reading 0 twice on the Fold (2026-10-08), the
+  second write silently undone — most likely by the system's own reaction
+  to the first, not established. Set it again and re-read after a pause
+  before calling the phone restored. A test drag on the keyboard's resize
+  bar also SAVES a size (`[keyboard] split_width`), so remove it the same
+  way before handing the phone back.
 - **A tombstone is not ours until its header says so.** A "deadlock
   protector" tombstone was nearly claimed as beerssh's; its `>>>
   se.vibes.hydra <<<` line said otherwise. Read the package line first.

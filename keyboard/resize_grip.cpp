@@ -24,6 +24,12 @@ QSize bssh_resize_grip::sizeHint() const {
 	return QSize(THICKNESS_DP, THICKNESS_DP);
 }
 
+void bssh_resize_grip::set_lit(bool lit) {
+	if (lit == m_lit) return;
+	m_lit = lit;
+	update();
+}
+
 int bssh_resize_grip::along(const QPointF &global) const {
 	return int(m_drags == Qt::Horizontal ? global.x() : global.y());
 }
@@ -37,7 +43,7 @@ int bssh_resize_grip::along(const QPointF &global) const {
 void bssh_resize_grip::paintEvent(QPaintEvent *) {
 	QPainter painter(this);
 	QColor ink = palette().color(QPalette::WindowText);
-	ink.setAlphaF(m_down ? 0.8 : 0.35);
+	ink.setAlphaF(m_down || m_lit ? 0.8 : 0.35);
 
 	const int line = qMax(2, THICKNESS_DP / 3);
 	QRect bar = rect();

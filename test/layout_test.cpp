@@ -46,6 +46,8 @@
 #include "keyboard/key_cap.h"
 #include "keyboard/soft_keyboard.h"
 #include "keyboard/soft_keyboard_layout.h"
+#include "keyboard/resize_grip.h"
+#include "ui/input_selector.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "ui/host_list.h"
@@ -5322,6 +5324,20 @@ void layout_test::dragging_a_bar_resizes_the_keyboard() {
 	QWidget *right = grip_in(keyboard->half(1));
 	QVERIFY(left && right);
 
+	/*
+	 * One drag resizes both halves, so holding either bar lights both:
+	 * a bar that stays dim while its half moves reads as one that does
+	 * nothing.
+	 */
+	bssh_resize_grip *left_bar = qobject_cast<bssh_resize_grip *>(left);
+	bssh_resize_grip *right_bar = qobject_cast<bssh_resize_grip *>(right);
+	QVERIFY(left_bar && right_bar);
+	QTest::mousePress(left, Qt::LeftButton, Qt::NoModifier, left->rect().center());
+	QVERIFY2(right_bar->lit(), "holding the left bar lights the right one");
+	QTest::mouseRelease(left, Qt::LeftButton, Qt::NoModifier, left->rect().center());
+	QVERIFY(!right_bar->lit());
+	QVERIFY(!left_bar->lit());
+
 	drag_grip(left, 30, 0);
 	QCOMPARE(chosen.last().at(0).value<catalog::style_t>(), catalog::STYLE_SPLIT);
 	QCOMPARE(chosen.last().at(1).toInt(), 180);
@@ -5401,6 +5417,59 @@ void layout_test::a_dragged_keyboard_size_is_kept() {
 	QCOMPARE(bssh_app_settings().keyboard_height(false), 0);
 
 	settings.set_keyboard(before);
+}
+
+void layout_test::the_input_selector_joins_the_status_line_when_wide() {
+	const forced_touch_t touch(1);
+
+	const auto check = [](int width, int height, bool wide) {
+		const forced_screen_t held(QSize(width, height));
+		bssh_main_window window;
+		window.resize(width, height);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		bssh_session_registry *registry = window.registry();
+		QVERIFY(registry);
+		const registry_left_as_found_t tidy(registry);
+		window.adopt_session(registry->create(named(QStringLiteral("one"))));
+		QCoreApplication::processEvents();
+
+		bssh_input_selector *selector = window.findChild<bssh_input_selector *>();
+		QVERIFY(selector);
+		QTRY_VERIFY(selector->isVisible());
+
+		/* The status text, wherever the status line is. */
+		QLabel *status = nullptr;
+		for (QLabel *label : window.findChildren<QLabel *>()) {
+			if (label->parentWidget() && label->parentWidget()->layout()
+			     && label->parentWidget()->layout()->indexOf(selector) >= 0) {
+				status = label;
+			}
+		}
+
+		const QRect at(selector->mapTo(&window, QPoint(0, 0)), selector->size());
+		if (wide) {
+			/*
+			 * On the status line's row and at its right end, as narrow as
+			 * its labels: reported from the Fold in landscape, where five
+			 * buttons across the screen took a row the terminal needed.
+			 */
+			QVERIFY2(status, "the selector shares a row with the status text");
+			QVERIFY2(at.width() < window.width() / 2,
+			          qPrintable(QStringLiteral("%1 of %2 wide").arg(at.width()).arg(window.width())));
+			QVERIFY(at.right() >= window.width() - 2);
+		} else {
+			/* Upright and narrow, a row of its own, a fifth each. */
+			QVERIFY2(!status, "the selector has a row of its own");
+			QVERIFY2(at.width() > window.width() * 9 / 10,
+			          qPrintable(QStringLiteral("%1 of %2 wide").arg(at.width()).arg(window.width())));
+		}
+		QVERIFY(at.height() >= BSSH_TOUCH_TARGET_DP);
+	};
+
+	check(860, 320, true);
+	check(320, 860, false);
 }
 
 void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {

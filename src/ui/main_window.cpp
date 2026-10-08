@@ -402,7 +402,19 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_body->setSpacing(0);
 	m_body->addWidget(m_panes, 1);
 	layout->addLayout(m_body, 1);
-	layout->addWidget(m_status_label, 0);
+	/*
+	 * The status line is a row with room at its right end for the input
+	 * selector (sec 8.7), which moves there on a wide screen -- see
+	 * place_input_selector. Both rows are always in the layout, so code
+	 * that inserts into it by index finds the same slots either way; an
+	 * empty one takes no height.
+	 */
+	QWidget *status_row = new QWidget(m_terminal_page);
+	m_status_row = new QHBoxLayout(status_row);
+	m_status_row->setContentsMargins(0, 0, 0, 0);
+	m_status_row->setSpacing(0);
+	m_status_row->addWidget(m_status_label, 1);
+	layout->addWidget(status_row, 0);
 
 	/*
 	 * The input selector (sec 8.7), at the bottom edge where a thumb
@@ -416,7 +428,12 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * addWidget to move.
 	 */
 	m_input_selector = new bssh_input_selector(m_terminal_page);
-	layout->addWidget(m_input_selector, 0);
+	QWidget *selector_row = new QWidget(m_terminal_page);
+	m_selector_row = new QHBoxLayout(selector_row);
+	m_selector_row->setContentsMargins(0, 0, 0, 0);
+	m_selector_row->setSpacing(0);
+	m_selector_row->addWidget(m_input_selector, 1);
+	layout->addWidget(selector_row, 0);
 	m_input_selector->setVisible(bssh_platform::instance()
 	                              && bssh_platform::instance()->is_touch_primary());
 
@@ -1603,8 +1620,38 @@ bool bssh_main_window::apply_arrangement() {
 	return changed;
 }
 
+/*
+ * The input selector's row (sec 8.7): under the status line on a narrow
+ * upright screen, where five equal buttons are a thumb's width each, and
+ * at the status line's right end, each button its label's width, on a
+ * screen that is wide or lying sideways. Reported from the Fold in
+ * landscape, where five buttons across the whole screen took a row the
+ * terminal -- already sharing the width with the split keyboard -- could
+ * not spare. Moved only when the answer changes, since this runs on every
+ * frame of a system keyboard opening.
+ */
+void bssh_main_window::place_input_selector() {
+	if (!m_input_selector || !m_status_row || !m_selector_row) return;
+
+	const bool wide = width() > height()
+	                  || width() >= BSSH_FULL_KEYBOARD_MIN_DP;
+	QHBoxLayout *target = wide ? m_status_row : m_selector_row;
+
+	/*
+	 * Stretch 0 beside the status text's 1 is what holds the buttons to
+	 * their labels' width: the text takes the rest of the row. A size
+	 * policy on the selector was tried as well and a sabotage showed it
+	 * changed nothing, so the layout's own answer is the only one.
+	 */
+	if (target->indexOf(m_input_selector) < 0) {
+		target->addWidget(m_input_selector, wide ? 0 : 1);
+	}
+}
+
 void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
+
+	place_input_selector();
 
 	/* Re-shortened from the original: what fits changed. */
 	elide_status();
