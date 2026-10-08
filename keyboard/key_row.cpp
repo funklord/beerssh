@@ -11,6 +11,7 @@
 
 #include "input/input_router.h"
 #include "keyboard/key_cap.h"
+#include "keyboard/touch_chords.h"
 #include "platform/platform.h"
 #include "term/emulator.h"
 #include "keyboard/key_row_layout.h"
@@ -54,6 +55,25 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
 	m_keys = new QWidget(m_scroll);
 	m_scroll->setWidget(m_keys);
 
+	m_touch = new bssh_touch_chords(m_keys);
+
+	/*
+	 * Two thumbs (sec 6.2): a finger resting on a modifier holds it on
+	 * the router, and lifting it with nothing pressed in between is a tap
+	 * -- the same cycle a click on the button gives.
+	 */
+	connect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {
+		if (m_router) m_router->hold_modifier(modifier);
+		refresh_modifier_buttons();
+	});
+	connect(m_touch, &bssh_touch_chords::modifier_released,
+	         this, [this](quint8 modifier, bool cancelled) {
+		if (m_router && m_router->release_modifier(modifier) && !cancelled) {
+			m_router->cycle_modifier(modifier);
+		}
+		refresh_modifier_buttons();
+	});
+
 	QHBoxLayout *layout = new QHBoxLayout(m_keys);
 	layout->setContentsMargins(2, 2, 2, 2);
 	layout->setSpacing(2);
@@ -85,6 +105,8 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
 		 * obvious.
 		 */
 		connect(m_router, &bssh_input_router::locked_modifiers_changed,
+		         this, [this](quint8) { refresh_modifier_buttons(); });
+		connect(m_router, &bssh_input_router::held_modifiers_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
 	}
 
@@ -247,7 +269,11 @@ void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier)
 }
 
 QAbstractButton *bssh_key_row::make_button(const QString &label) {
-	QToolButton *button = new QToolButton(m_keys);
+	/*
+	 * A key cap rather than a plain button, so a modifier on this row
+	 * draws its state the way the built-in keyboard's does (sec 6.2).
+	 */
+	QToolButton *button = new bssh_key_cap(m_keys);
 	button->setText(label);
 	m_buttons.append(button);
 	button->setMinimumSize(BSSH_TOUCH_TARGET_DP, BSSH_TOUCH_TARGET_DP);
@@ -298,6 +324,7 @@ void bssh_key_row::add_text(const QString &label, char32_t ch) {
 void bssh_key_row::add_modifier(const QString &label, quint8 modifier) {
 	QAbstractButton *button = make_button(label);
 	button->setCheckable(true);
+	button->setProperty("bssh_hold_modifier", uint(modifier));
 
 	m_modifier_buttons.append(button);
 	m_modifier_values.append(modifier);
@@ -360,6 +387,7 @@ void bssh_key_row::refresh_modifier_buttons() {
 		 * states share it, which is the whole difficulty.
 		 */
 		button->setProperty("bssh_modifier_state", int(state));
+		button->update();
 
 		QFont font = button->font();
 		if (font.bold() != (state == bssh_input_router::MODIFIER_LOCKED)) {
@@ -378,6 +406,9 @@ bool bssh_key_row::should_be_visible() const {
 void bssh_key_row::set_router(bssh_input_router *router) {
 	if (m_router == router) return;
 
+	/* A finger still down belongs to the old session; let it go there. */
+	if (m_touch) m_touch->cancel();
+
 	if (m_router) disconnect(m_router, nullptr, this, nullptr);
 	m_router = router;
 
@@ -391,6 +422,8 @@ void bssh_key_row::set_router(bssh_input_router *router) {
 		 * obvious.
 		 */
 		connect(m_router, &bssh_input_router::locked_modifiers_changed,
+		         this, [this](quint8) { refresh_modifier_buttons(); });
+		connect(m_router, &bssh_input_router::held_modifiers_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
 	}
 

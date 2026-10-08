@@ -128,6 +128,8 @@ protected:
 	void paintEvent(QPaintEvent *event) override;
 
 private:
+	void paint_modifier(int state);
+
 	QString m_hint;
 };
 

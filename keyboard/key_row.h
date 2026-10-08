@@ -6,6 +6,7 @@
 class QAbstractButton;
 class QScrollArea;
 class bssh_input_router;
+class bssh_touch_chords;
 
 /*
  * bssh_key_row -- the strip of keys a soft keyboard does not have
@@ -75,6 +76,7 @@ private:
 	void refresh_modifier_buttons();
 
 	bssh_input_router *m_router;
+	bssh_touch_chords *m_touch = nullptr;
 	visibility_t m_mode;
 	/*
 	 * The keys scroll horizontally: sec 6.2's own key list at sec 6.2's own

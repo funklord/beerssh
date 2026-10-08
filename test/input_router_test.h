@@ -59,6 +59,10 @@ private slots:
 	void alt_prefixes_with_escape();
 	void sticky_modifier_applies_once_then_clears();
 	void a_modifier_locks_on_the_second_press_and_releases_on_the_third();
+	void a_held_modifier_carries_every_key_and_a_tap_still_cycles();
+	void two_fingers_chord_on_the_key_row();
+	void two_fingers_chord_on_the_built_in_keyboard();
+	void armed_locked_and_off_draw_differently();
 	void ctrl_shift_c_is_kept_by_the_app();
 	void paste_is_bracketed_only_when_the_remote_asked();
 	void kitty_protocol_disambiguates_ctrl_and_escape();

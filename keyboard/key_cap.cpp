@@ -1,8 +1,11 @@
 #include "keyboard/key_cap.h"
 
 #include <QFontMetrics>
+#include <QPainter>
 #include <QStyleOptionToolButton>
 #include <QStylePainter>
+
+#include "input/input_router.h"
 
 bssh_key_cap::bssh_key_cap(QWidget *parent) : QToolButton(parent) {}
 
@@ -76,7 +79,79 @@ QFont bssh_key_cap::fitted_font(const QFont &base, const QString &text, int widt
 	return chosen;
 }
 
+/*
+ * A modifier's state, drawn so that it cannot be mistaken (sec 6.2).
+ *
+ * This used to be the style's "checked" look for armed and the same plus
+ * a bold label for locked. Reported from the phone as unclear, and it
+ * was worse than unclear: whether a toggled button reads as pressed is
+ * the platform style's choice, so on some styles armed and off were hard
+ * to tell apart, and bold on a three-letter label is a difference you
+ * have to already know to look for. The two states differ by what the
+ * next letter will be, so they get differences of KIND:
+ *
+ *     off      the style's plain cap
+ *     armed    a ring in the highlight colour and one short bar --
+ *              one bar, one key
+ *     locked   the whole cap filled with the highlight colour and a
+ *              long bar, like the light on a Caps Lock key
+ *     held     the ring alone over the pressed cap: a finger is on it
+ *
+ * Highlight and HighlightedText are a pair the theme sets together, so
+ * the locked label is readable on its fill in either scheme.
+ */
+void bssh_key_cap::paint_modifier(int state) {
+	QStylePainter painter(this);
+	QStyleOptionToolButton option;
+	initStyleOption(&option);
+
+	const QString label = option.text;
+	option.text.clear();
+	option.icon = QIcon();
+
+	const QColor accent = option.palette.color(QPalette::Highlight);
+	QColor ink = option.palette.color(QPalette::ButtonText);
+
+	painter.setRenderHint(QPainter::Antialiasing);
+	const qreal line = qMax(qreal(2), height() / qreal(16));
+	const QRectF cap = QRectF(rect()).adjusted(line / 2 + 1, line / 2 + 1,
+	                                           -line / 2 - 1, -line / 2 - 1);
+	const qreal bar = qMax(qreal(3), height() / qreal(12));
+
+	if (state == bssh_input_router::MODIFIER_LOCKED) {
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(accent);
+		painter.drawRoundedRect(cap, 4, 4);
+		ink = option.palette.color(QPalette::HighlightedText);
+		painter.setBrush(ink);
+		painter.drawRect(QRectF(cap.left() + cap.width() * 0.2, cap.bottom() - bar * 2,
+		                        cap.width() * 0.6, bar));
+	} else {
+		painter.drawComplexControl(QStyle::CC_ToolButton, option);
+		painter.setPen(QPen(accent, line));
+		painter.setBrush(Qt::NoBrush);
+		painter.drawRoundedRect(cap, 4, 4);
+		if (state == bssh_input_router::MODIFIER_ONCE) {
+			painter.setPen(Qt::NoPen);
+			painter.setBrush(accent);
+			painter.drawRect(QRectF(cap.center().x() - cap.width() * 0.1,
+			                        cap.bottom() - bar * 2, cap.width() * 0.2, bar));
+		}
+	}
+
+	const QRect box = rect().adjusted(2, 1, -2, -1);
+	painter.setFont(fitted_font(font(), label, box.width()));
+	painter.setPen(ink);
+	painter.drawText(box, Qt::AlignCenter, label);
+}
+
 void bssh_key_cap::paintEvent(QPaintEvent *event) {
+	const int state = property("bssh_modifier_state").toInt();
+	if (state != bssh_input_router::MODIFIER_OFF) {
+		paint_modifier(state);
+		return;
+	}
+
 	/*
 	 * The style draws it when nothing here has to: no second legend, no
 	 * ampersand for Qt to eat, and a label that fits. The last of those

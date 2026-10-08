@@ -1466,7 +1466,8 @@ second was an open question in this section for a long time and is settled
 below.
 
 **The key row** — a strip of buttons above the system keyboard providing
-`Esc Tab Ctrl Alt ↑↓←→ Fn - / | ~` and sticky modifiers. This is what
+`Esc Tab Ctrl Alt ↑↓←→ Fn - / | ~` and sticky modifiers (held as well, with two
+fingers, below). This is what
 ConnectBot and Termux do and is what users coming from either expect. It is
 the default, and it is right wherever a system keyboard appears: that keyboard
 keeps its prediction, its languages and its layout, none of which a terminal
@@ -1962,6 +1963,45 @@ up, a strip of modifiers has nothing to modify.
   answering a correction with a lock is the worst available reading of it. That
   came out of a test failure, and the test was right — the decision was already
   written down.
+
+- **Armed and locked drawn by the cap, not left to the style —
+  [FIXED 2026-10-08].** Reported from the phone as *"visually unclear when a
+  modifier is toggled or not"*. Armed was the style's checked look and locked
+  the same plus a bold label; whether a checked button reads as pressed is the
+  platform style's choice, and bold on `Ctrl` is a difference you must already
+  know to look for. `bssh_key_cap::paint_modifier` now draws differences of
+  kind: **armed** is a ring in the highlight colour with one short bar (one
+  bar, one key); **locked** fills the cap with the highlight colour, white
+  label and a long bar, like a Caps Lock light; **held** is the ring on the
+  pressed cap. The key row builds `bssh_key_cap`s too, so both boards agree.
+  `armed_locked_and_off_draw_differently` renders the three and asserts they
+  differ pairwise, and that locked is mostly fill — a relationship, so a
+  restyle may change the look and may not merge two states. **[OPEN]**
+  confirming on the Fold that it reads at a glance.
+
+- **Held modifiers on a multitouch screen, beside the Treo cycle —
+  [BUILT 2026-10-08, not yet tried on a device].** Asked for so that both
+  habits are live at once and one can train the other. A finger resting on a
+  modifier while another presses keys applies it to every one of them and
+  leaves nothing when lifted, as on a physical keyboard; a press and release
+  with no key between is a **tap**, and a tap cycles exactly as above. Held over
+  a lock, the lock survives (the hold never owned it).
+  *Why it needed code:* Qt makes mouse events from ONE touch point, so a second
+  finger on another button pressed nothing — the boards were sticky-only for
+  that reason, not by choice. `keyboard/touch_chords.cpp` takes a board's
+  touches **only once a chord is under way** (a touch beginning on a modifier,
+  or any touch while one is held) and hands each finger its own button as mouse
+  events, so repeat, slide-off and send-on-release are the buttons' own.
+  Every other touch is left to Qt, which is what keeps the key row's
+  QScroller drag working. The router keeps a `HELD` set beside armed and
+  locked; `spend_sticky_modifiers` marks the held set used, and
+  `release_modifier` reports a tap when nothing was sent. Tested through real
+  touch events (`two_fingers_chord_on_the_key_row`, `…_built_in_keyboard`),
+  since clicking buttons would pass on a board where no chord can be pressed.
+  **Unmeasured edge:** a key pressed *before* the modifier is outside the
+  chord (Qt already owns that finger as a mouse). Expected from reading Qt's
+  delivery, not tested: it is sent on its own release with the modifier
+  applied, since keys send on release, where a physical keyboard would not.
 
 - **The built-in keyboard freed its keys while laying them out —
   [FIXED 2026-10-08].** Found by sabotage, not by a user: with the "both

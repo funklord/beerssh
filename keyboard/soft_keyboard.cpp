@@ -9,6 +9,7 @@
 #include "keyboard/soft_keyboard.h"
 
 #include "keyboard/key_cap.h"
+#include "keyboard/touch_chords.h"
 
 #include <QAbstractButton>
 #include <QFont>
@@ -301,10 +302,31 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	connect(m_hide_button, &QAbstractButton::clicked,
 	         this, &bssh_soft_keyboard::hide_requested);
 
+	m_touch = new bssh_touch_chords(this);
+
+	/*
+	 * Two thumbs (sec 6.2): a finger resting on a modifier holds it on
+	 * the router, and lifting it with nothing pressed in between is a tap
+	 * -- the same cycle a click on the button gives.
+	 */
+	connect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {
+		if (m_router) m_router->hold_modifier(modifier);
+		refresh_modifiers();
+	});
+	connect(m_touch, &bssh_touch_chords::modifier_released,
+	         this, [this](quint8 modifier, bool cancelled) {
+		if (m_router && m_router->release_modifier(modifier) && !cancelled) {
+			m_router->cycle_modifier(modifier);
+		}
+		refresh_modifiers();
+	});
+
 	if (m_router) {
 		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
 		connect(m_router, &bssh_input_router::locked_modifiers_changed,
+		         this, [this](quint8) { refresh_modifiers(); });
+		connect(m_router, &bssh_input_router::held_modifiers_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
 	}
 
@@ -384,6 +406,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 	case bssh_key_t::MODIFIER: {
 		const quint8 modifier = key.modifier;
 		button->setCheckable(true);
+		button->setProperty("bssh_hold_modifier", uint(modifier));
 		m_modifier_buttons.append(button);
 		m_modifier_values.append(modifier);
 		connect(button, &QAbstractButton::clicked, this, [this, modifier] {
@@ -557,6 +580,7 @@ void bssh_soft_keyboard::refresh_modifiers() {
 
 		button->setChecked(state != bssh_input_router::MODIFIER_OFF);
 		button->setProperty("bssh_modifier_state", int(state));
+		button->update();
 
 		QFont font = button->font();
 		if (font.bold() != (state == bssh_input_router::MODIFIER_LOCKED)) {
@@ -681,6 +705,9 @@ void bssh_soft_keyboard::refresh_letter_labels() {
 void bssh_soft_keyboard::set_router(bssh_input_router *router) {
 	if (m_router == router) return;
 
+	/* A finger still down belongs to the old session; let it go there. */
+	if (m_touch) m_touch->cancel();
+
 	if (m_router) disconnect(m_router, nullptr, this, nullptr);
 	m_router = router;
 
@@ -688,6 +715,8 @@ void bssh_soft_keyboard::set_router(bssh_input_router *router) {
 		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
 		connect(m_router, &bssh_input_router::locked_modifiers_changed,
+		         this, [this](quint8) { refresh_modifiers(); });
+		connect(m_router, &bssh_input_router::held_modifiers_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
 	}
 

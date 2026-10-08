@@ -27,12 +27,12 @@ expect = "only_one_on_screen_keyboard_is_ever_shown"
 name = "a locked modifier is spent by the keystroke it modifies"
 file = "src/input/input_router.cpp"
 find = '''
-void bssh_input_router::spend_sticky_modifiers() {
+	m_held_used = quint8(m_held_used | m_held);
 	set_sticky_modifiers(bssh_emulator::MOD_NONE);
 }
 '''
 replace = '''
-void bssh_input_router::spend_sticky_modifiers() {
+	m_held_used = quint8(m_held_used | m_held);
 	set_sticky_modifiers(bssh_emulator::MOD_NONE);
 	set_locked_modifiers(bssh_emulator::MOD_NONE);
 }

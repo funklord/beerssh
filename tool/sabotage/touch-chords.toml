@@ -1,0 +1,47 @@
+# Sabotages for sec 6.2's two-thumb modifiers and the drawn modifier
+# states. Each names the test that must notice.
+
+# The board never takes a touch, which is exactly the board before this
+# existed: a second finger presses nothing, so no chord can be made.
+[[sabotage]]
+name = "a touch on a modifier is left to Qt"
+file = "keyboard/touch_chords.cpp"
+find = "\tbool chord = !m_fingers.isEmpty();"
+replace = "\tbool chord = false;\n\tif (chord) m_fingers.clear();"
+expect = "two_fingers_chord_on_the_key_row"
+
+# The same, on the built-in keyboard alone: it is wired separately from
+# the row, so it can be left unwired separately.
+[[sabotage]]
+name = "the built-in keyboard does not hold what a finger rests on"
+file = "keyboard/soft_keyboard.cpp"
+find = "\tconnect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {\n\t\tif (m_router) m_router->hold_modifier(modifier);\n\t\trefresh_modifiers();"
+replace = "\tconnect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {\n\t\tQ_UNUSED(modifier);\n\t\trefresh_modifiers();"
+expect = "two_fingers_chord_on_the_built_in_keyboard"
+
+# A hold never learns it carried a key, so every release is a tap and a
+# Ctrl-C leaves Ctrl armed behind it.
+[[sabotage]]
+name = "a keystroke does not mark the held modifiers used"
+file = "src/input/input_router.cpp"
+find = "\tm_held_used = quint8(m_held_used | m_held);\n\tset_sticky_modifiers"
+replace = "\tset_sticky_modifiers"
+expect = "a_held_modifier_carries_every_key_and_a_tap_still_cycles"
+
+# A tap through touch loses the Treo's cycle: with both styles on one key,
+# the press that chorded nothing still has to arm.
+[[sabotage]]
+name = "a touch tap on a modifier does not cycle it"
+file = "keyboard/key_row.cpp"
+find = "\t\tif (m_router && m_router->release_modifier(modifier) && !cancelled) {\n\t\t\tm_router->cycle_modifier(modifier);"
+replace = "\t\tif (m_router && m_router->release_modifier(modifier) && !cancelled) {\n\t\t\tQ_UNUSED(modifier);"
+expect = "two_fingers_chord_on_the_key_row"
+
+# The states go back to the style's checked look, which is what was
+# reported as unreadable.
+[[sabotage]]
+name = "a modifier cap leaves its state to the style"
+file = "keyboard/key_cap.cpp"
+find = "\tif (state != bssh_input_router::MODIFIER_OFF) {\n\t\tpaint_modifier(state);"
+replace = "\tif (false) {\n\t\tpaint_modifier(state);"
+expect = "armed_locked_and_off_draw_differently"

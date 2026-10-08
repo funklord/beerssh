@@ -13,6 +13,7 @@ class bssh_key_cap;
 class QAbstractButton;
 class QGridLayout;
 class bssh_input_router;
+class bssh_touch_chords;
 
 /*
  * bssh_soft_keyboard -- the keyboard this app draws itself (project.md
@@ -113,6 +114,7 @@ private:
 	void refresh_letter_labels();
 
 	bssh_input_router *m_router;
+	bssh_touch_chords *m_touch = nullptr;
 
 	QWidget *m_keys;
 	QGridLayout *m_grid;

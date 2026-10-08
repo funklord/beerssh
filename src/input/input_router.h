@@ -64,8 +64,8 @@ public:
 
 	/*
 	 * Sticky modifiers, for the on-screen keyboards (sec 6.2): tapping
-	 * Ctrl then C must produce Ctrl-C, because a touch screen cannot hold
-	 * two keys at once.
+	 * Ctrl then C must produce Ctrl-C, because a screen that takes one
+	 * touch at a time -- or a mouse -- cannot hold two keys at once.
 	 *
 	 * THREE states per modifier, not two, and the third is what a Treo
 	 * had: OFF, armed for the next key only, and LOCKED until pressed
@@ -85,6 +85,15 @@ public:
 	 * actually carries is effective_modifiers(), and a keystroke spends
 	 * the armed half while leaving the locked half exactly where it is --
 	 * that difference is the whole feature.
+	 *
+	 * HELD is the fourth, and it is the physical keyboard's: a finger
+	 * resting on the modifier while another presses keys, on a screen
+	 * that reports more than one touch. It applies to every key pressed
+	 * while it lasts and leaves nothing behind when it is lifted. Both
+	 * ways are live at once -- a press and release with no key between
+	 * is a tap, and a tap cycles exactly as above -- so a user moving
+	 * from a Treo-style habit to two thumbs does not have to switch
+	 * anything off to practise the other.
 	 */
 	/*
 	 * A modifier this app tracks and NEVER sends.
@@ -112,7 +121,8 @@ public:
 	enum modifier_state_t {
 		MODIFIER_OFF,
 		MODIFIER_ONCE,
-		MODIFIER_LOCKED
+		MODIFIER_LOCKED,
+		MODIFIER_HELD
 	};
 
 	void set_sticky_modifiers(quint8 modifiers);
@@ -121,8 +131,25 @@ public:
 	void set_locked_modifiers(quint8 modifiers);
 	quint8 locked_modifiers() const { return m_locked; }
 
-	/* What the next keystroke will carry: armed and locked together. */
-	quint8 effective_modifiers() const { return quint8(m_sticky | m_locked); }
+	/* What the next keystroke will carry: armed, locked and held together. */
+	quint8 effective_modifiers() const { return quint8(m_sticky | m_locked | m_held); }
+
+	/*
+	 * A finger has come down on a modifier key (see MODIFIER_HELD). It
+	 * applies until release_modifier().
+	 */
+	void hold_modifier(quint8 modifier);
+
+	/*
+	 * The finger is lifted. Returns true when nothing was sent while it
+	 * was down -- a TAP, which the caller answers with cycle_modifier(),
+	 * so the press that did not chord anything still arms and locks.
+	 * False for a hold that carried a key, and for a modifier that was
+	 * not held at all.
+	 */
+	bool release_modifier(quint8 modifier);
+
+	quint8 held_modifiers() const { return m_held; }
 
 	modifier_state_t modifier_state(quint8 modifier) const;
 
@@ -336,6 +363,9 @@ signals:
 	 * about only one of them can say so. */
 	void locked_modifiers_changed(quint8 modifiers);
 
+	/* The HELD set changed: a finger came down on a modifier or left it. */
+	void held_modifiers_changed(quint8 modifiers);
+
 private:
 	quint8 modifiers_for(QKeyEvent *event) const;
 
@@ -365,6 +395,10 @@ private:
 	bool m_caps_as_ctrl;
 	quint8 m_sticky;
 	quint8 m_locked;
+	quint8 m_held;
+
+	/* The held modifiers a keystroke has gone out under since they came down. */
+	quint8 m_held_used;
 };
 
 #endif /* BSSH_INPUT_ROUTER_H */

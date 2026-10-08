@@ -80,7 +80,25 @@ bssh_input_router::bssh_input_router(bssh_emulator *emulator, QObject *parent)
       m_emulator(emulator),
       m_caps_as_ctrl(false),
       m_sticky(bssh_emulator::MOD_NONE),
-      m_locked(bssh_emulator::MOD_NONE) {
+      m_locked(bssh_emulator::MOD_NONE),
+      m_held(bssh_emulator::MOD_NONE),
+      m_held_used(bssh_emulator::MOD_NONE) {
+}
+
+void bssh_input_router::hold_modifier(quint8 modifier) {
+	m_held_used = quint8(m_held_used & ~modifier);
+	if (m_held & modifier) return;
+	m_held = quint8(m_held | modifier);
+	emit held_modifiers_changed(m_held);
+}
+
+bool bssh_input_router::release_modifier(quint8 modifier) {
+	if (!(m_held & modifier)) return false;
+	const bool tapped = !(m_held_used & modifier);
+	m_held = quint8(m_held & ~modifier);
+	m_held_used = quint8(m_held_used & ~modifier);
+	emit held_modifiers_changed(m_held);
+	return tapped;
 }
 
 void bssh_input_router::set_sticky_modifiers(quint8 modifiers) {
@@ -106,12 +124,19 @@ void bssh_input_router::set_locked_modifiers(quint8 modifiers) {
  * already forgotten it.
  */
 void bssh_input_router::spend_sticky_modifiers() {
+	/*
+	 * Every keystroke comes through here, so this is also where a held
+	 * modifier learns it carried one -- which is what makes its release
+	 * a chord ending rather than a tap.
+	 */
+	m_held_used = quint8(m_held_used | m_held);
 	set_sticky_modifiers(bssh_emulator::MOD_NONE);
 }
 
 bssh_input_router::modifier_state_t
 bssh_input_router::modifier_state(quint8 modifier) const {
 	if (m_locked & modifier) return MODIFIER_LOCKED;
+	if (m_held & modifier) return MODIFIER_HELD;
 	if (m_sticky & modifier) return MODIFIER_ONCE;
 	return MODIFIER_OFF;
 }
@@ -127,17 +152,18 @@ bssh_input_router::modifier_state(quint8 modifier) const {
  * nobody noticed turns every following letter into a control byte.
  */
 void bssh_input_router::cycle_modifier(quint8 modifier) {
-	switch (modifier_state(modifier)) {
-	case MODIFIER_OFF:
-		set_sticky_modifiers(quint8(m_sticky | modifier));
-		break;
-	case MODIFIER_ONCE:
+	/*
+	 * Read from the two latched sets rather than from modifier_state(),
+	 * which would answer HELD for a modifier somebody is also resting a
+	 * finger on: the cycle is about what stays once the finger is gone.
+	 */
+	if (m_locked & modifier) {
+		set_locked_modifiers(quint8(m_locked & ~modifier));
+	} else if (m_sticky & modifier) {
 		set_sticky_modifiers(quint8(m_sticky & ~modifier));
 		set_locked_modifiers(quint8(m_locked | modifier));
-		break;
-	case MODIFIER_LOCKED:
-		set_locked_modifiers(quint8(m_locked & ~modifier));
-		break;
+	} else {
+		set_sticky_modifiers(quint8(m_sticky | modifier));
 	}
 }
 

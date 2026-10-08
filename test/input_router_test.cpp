@@ -16,6 +16,8 @@
 #include "phone_metrics.h"
 #include "term/emulator.h"
 #include "keyboard/key_row.h"
+#include "keyboard/key_cap.h"
+#include "keyboard/soft_keyboard.h"
 
 /*
  * Drives a key through the router and returns the bytes it produced.
@@ -459,6 +461,194 @@ static QAbstractButton *button_labelled(const QWidget &parent, const QString &la
 		if (button->text() == label) return button;
 	}
 	return nullptr;
+}
+
+void input_router_test::a_held_modifier_carries_every_key_and_a_tap_still_cycles() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/*
+	 * A finger resting on Ctrl (sec 6.2): every key under it is a Ctrl
+	 * key, as on a physical keyboard -- not just the first, which is what
+	 * an arm would give.
+	 */
+	router.hold_modifier(bssh_emulator::MOD_CTRL);
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_HELD);
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::NoModifier, QStringLiteral("c")),
+	          QByteArrayLiteral("\x03"));
+	QCOMPARE(press(router, emulator, Qt::Key_D, Qt::NoModifier, QStringLiteral("d")),
+	          QByteArrayLiteral("\x04"));
+
+	/* Lifted after a chord: not a tap, and nothing is left behind. */
+	QVERIFY(!router.release_modifier(bssh_emulator::MOD_CTRL));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_OFF);
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::NoModifier, QStringLiteral("c")),
+	          QByteArrayLiteral("c"));
+
+	/*
+	 * Down and up with nothing between is a TAP, and the release says so
+	 * -- which is what lets both styles live on one key: the board
+	 * answers a tap with the Treo's cycle.
+	 */
+	router.hold_modifier(bssh_emulator::MOD_CTRL);
+	QVERIFY(router.release_modifier(bssh_emulator::MOD_CTRL));
+
+	/*
+	 * Holding over a lock: the chord is sent, and the lock is still
+	 * there when the finger comes off, since the hold never owned it.
+	 */
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	router.cycle_modifier(bssh_emulator::MOD_CTRL);
+	router.hold_modifier(bssh_emulator::MOD_CTRL);
+	QCOMPARE(press(router, emulator, Qt::Key_C, Qt::NoModifier, QStringLiteral("c")),
+	          QByteArrayLiteral("\x03"));
+	QVERIFY(!router.release_modifier(bssh_emulator::MOD_CTRL));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_LOCKED);
+
+	/* Lifting what was never held is neither a tap nor anything else. */
+	QVERIFY(!router.release_modifier(bssh_emulator::MOD_ALT));
+}
+
+namespace {
+
+QPointingDevice *touch_screen() {
+	static QPointingDevice *device = QTest::createTouchDevice();
+	return device;
+}
+
+/* The centre of `button`, in the coordinates of `window`. */
+QPoint centre_in(const QWidget &window, const QAbstractButton *button) {
+	return button->mapTo(&window, button->rect().center());
+}
+
+} /* namespace */
+
+void input_router_test::two_fingers_chord_on_the_key_row() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_key_row row(&router);
+
+	/* Wide enough that Ctrl and the arrows are on screen together. */
+	row.resize(1200, 64);
+	row.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&row));
+	QCoreApplication::processEvents();
+
+	QAbstractButton *ctrl = button_labelled(row, QStringLiteral("Ctrl"));
+	QAbstractButton *up = button_labelled(row, QString::fromUtf8("\xe2\x86\x91"));
+	QVERIFY(ctrl != nullptr);
+	QVERIFY(up != nullptr);
+	emulator.take_output();
+
+	/*
+	 * One thumb on Ctrl and kept there, the other pressing Up twice.
+	 *
+	 * Through real touch events, because the defect this answers lives
+	 * in how Qt delivers them: a second finger becomes no mouse event at
+	 * all, so a test clicking buttons would pass against a board on
+	 * which no chord can be pressed.
+	 */
+	QTest::touchEvent(&row, touch_screen()).press(0, centre_in(row, ctrl));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_HELD);
+	for (int i = 0; i < 2; ++i) {
+		QTest::touchEvent(&row, touch_screen()).stationary(0).press(1, centre_in(row, up));
+		QTest::touchEvent(&row, touch_screen()).stationary(0).release(1, centre_in(row, up));
+	}
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[1;5A\x1b[1;5A"));
+	QTest::touchEvent(&row, touch_screen()).release(0, centre_in(row, ctrl));
+
+	/* Lifted after a chord: nothing armed, and Up is Up again. */
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_OFF);
+
+	/*
+	 * A lone touch on a key is left to Qt's own mouse synthesis -- the
+	 * path the row's drag-to-scroll needs -- and still sends.
+	 */
+	QTest::touchEvent(&row, touch_screen()).press(0, centre_in(row, up));
+	QTest::touchEvent(&row, touch_screen()).release(0, centre_in(row, up));
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b[A"));
+
+	/* And a lone tap on Ctrl is the Treo's: armed, then locked. */
+	QTest::touchEvent(&row, touch_screen()).press(0, centre_in(row, ctrl));
+	QTest::touchEvent(&row, touch_screen()).release(0, centre_in(row, ctrl));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_ONCE);
+	QTest::touchEvent(&row, touch_screen()).press(0, centre_in(row, ctrl));
+	QTest::touchEvent(&row, touch_screen()).release(0, centre_in(row, ctrl));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_LOCKED);
+}
+
+void input_router_test::two_fingers_chord_on_the_built_in_keyboard() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_soft_keyboard keyboard(&router);
+	keyboard.resize(1000, 400);
+	keyboard.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&keyboard));
+	QCoreApplication::processEvents();
+
+	QAbstractButton *ctrl = button_labelled(keyboard, QStringLiteral("Ctrl"));
+	QAbstractButton *c = button_labelled(keyboard, QStringLiteral("c"));
+	QVERIFY(ctrl != nullptr);
+	QVERIFY(c != nullptr);
+	emulator.take_output();
+
+	QTest::touchEvent(&keyboard, touch_screen()).press(0, centre_in(keyboard, ctrl));
+	QTest::touchEvent(&keyboard, touch_screen()).stationary(0).press(1, centre_in(keyboard, c));
+	QTest::touchEvent(&keyboard, touch_screen()).stationary(0).release(1, centre_in(keyboard, c));
+	QTest::touchEvent(&keyboard, touch_screen()).release(0, centre_in(keyboard, ctrl));
+
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x03"));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_OFF);
+}
+
+void input_router_test::armed_locked_and_off_draw_differently() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_key_row row(&router);
+	row.resize(1200, 64);
+	row.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&row));
+
+	QAbstractButton *ctrl = button_labelled(row, QStringLiteral("Ctrl"));
+	QVERIFY(ctrl != nullptr);
+
+	/*
+	 * Reported from the phone: armed and locked were hard to tell from
+	 * each other and from off. Asserted as a relationship between the
+	 * three renders rather than as any one look, so a later restyle is
+	 * free to change the look and not free to merge two states.
+	 */
+	const QImage off = ctrl->grab().toImage();
+	ctrl->click();
+	const QImage armed = ctrl->grab().toImage();
+	ctrl->click();
+	const QImage locked = ctrl->grab().toImage();
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_LOCKED);
+
+	QVERIFY2(off != armed, "armed must not draw as off");
+	QVERIFY2(armed != locked, "locked must not draw as armed");
+	QVERIFY2(off != locked, "locked must not draw as off");
+
+	/*
+	 * Locked is the one that lasts, so it is the one drawn loudest: the
+	 * cap's centre row is mostly the highlight colour.
+	 */
+	const QColor accent = ctrl->palette().color(QPalette::Highlight);
+	const int y = locked.height() / 4;
+	int filled = 0;
+	for (int x = 0; x < locked.width(); ++x) {
+		if (locked.pixelColor(x, y) == accent) ++filled;
+	}
+	QVERIFY2(filled > locked.width() / 2, "a locked modifier should be filled");
 }
 
 void input_router_test::a_modifier_button_stops_claiming_a_session_that_has_gone() {
