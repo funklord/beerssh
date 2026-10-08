@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <QHBoxLayout>
 #include <QScrollArea>
 #include <QMouseEvent>
 #include <QAbstractButton>
@@ -644,6 +645,55 @@ void input_router_test::two_fingers_chord_on_the_built_in_keyboard() {
 	QTest::touchEvent(&keyboard, touch_screen()).release(0, centre_in(keyboard, ctrl));
 
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x03"));
+	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
+	          bssh_input_router::MODIFIER_OFF);
+}
+
+void input_router_test::a_chord_spans_the_split_keyboards_halves() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/*
+	 * Placed as the main window places them: the halves taken OUT of the
+	 * keyboard and put either side of something else. Left inside the
+	 * keyboard, a touch on either half bubbles up to the keyboard itself
+	 * and the chord works whether or not the halves are watched -- which
+	 * is how the first version of this test passed with the right half
+	 * left out of the handler entirely.
+	 */
+	QWidget host;
+	QHBoxLayout *row = new QHBoxLayout(&host);
+	bssh_soft_keyboard *board = new bssh_soft_keyboard(&router);
+	bssh_soft_keyboard &keyboard = *board;
+	keyboard.set_style(bssh_soft_keyboard_catalog::STYLE_SPLIT);
+	row->addWidget(keyboard.half(0));
+	row->addWidget(new QWidget(&host), 1);
+	row->addWidget(keyboard.half(1));
+	row->addWidget(board);
+	host.resize(1000, 300);
+	host.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&host));
+	QCoreApplication::processEvents();
+	QVERIFY(!keyboard.isAncestorOf(keyboard.half(1)));
+
+	/*
+	 * Ctrl is on the left half and p on the right: the chord a split
+	 * keyboard exists for, one thumb each, and the one a handler per half
+	 * could not see -- the right half would not know the left's finger
+	 * was down.
+	 */
+	QAbstractButton *ctrl = button_labelled(*keyboard.half(0), QStringLiteral("Ctrl"));
+	QAbstractButton *p = button_labelled(*keyboard.half(1), QStringLiteral("p"));
+	QVERIFY(ctrl != nullptr);
+	QVERIFY(p != nullptr);
+	emulator.take_output();
+
+	QTest::touchEvent(&host, touch_screen()).press(0, centre_in(host, ctrl));
+	QTest::touchEvent(&host, touch_screen()).stationary(0).press(1, centre_in(host, p));
+	QTest::touchEvent(&host, touch_screen()).stationary(0).release(1, centre_in(host, p));
+	QTest::touchEvent(&host, touch_screen()).release(0, centre_in(host, ctrl));
+
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x10"));
 	QCOMPARE(router.modifier_state(bssh_emulator::MOD_CTRL),
 	          bssh_input_router::MODIFIER_OFF);
 }

@@ -3018,7 +3018,11 @@ int bssh_soft_keyboard_catalog::index_of(const QString &id, style_t style) const
 }
 
 bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
-        bssh_soft_keyboard_catalog::style_t wanted, int width_dp) {
+        bssh_soft_keyboard_catalog::style_t wanted, int width_dp, int height_dp) {
+	if (wanted == bssh_soft_keyboard_catalog::STYLE_SPLIT) return wanted;
+	if (width_dp > height_dp && height_dp < BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP) {
+		return bssh_soft_keyboard_catalog::STYLE_SPLIT;
+	}
 	if (wanted != bssh_soft_keyboard_catalog::STYLE_FULL) return wanted;
 	if (width_dp < BSSH_FULL_KEYBOARD_MIN_DP) {
 		return bssh_soft_keyboard_catalog::STYLE_COMPACT;

@@ -2,6 +2,7 @@
 #define BSSH_TOUCH_CHORDS_H
 
 #include <QHash>
+#include <QList>
 #include <QObject>
 #include <QPointer>
 
@@ -39,6 +40,12 @@ public:
 	explicit bssh_touch_chords(QWidget *board);
 
 	/*
+	 * A further board sharing these fingers: the split keyboard's halves
+	 * (sec 6.2), so Ctrl held on one half carries a key on the other.
+	 */
+	void watch(QWidget *board);
+
+	/*
 	 * Lets go of every finger without sending anything: keys are released
 	 * off their buttons, modifiers reported as cancelled. For a board
 	 * changing session or rebuilding under a finger.
@@ -69,7 +76,7 @@ private:
 	quint8 modifier_of(const QAbstractButton *button) const;
 	void release(finger_t &finger, const QPointF &global, bool cancelled);
 
-	QWidget *m_board;
+	QList<QPointer<QWidget>> m_boards;
 	QHash<int, finger_t> m_fingers;
 };
 

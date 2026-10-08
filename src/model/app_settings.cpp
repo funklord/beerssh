@@ -104,12 +104,13 @@ void bssh_app_settings::set_key_row_visibility(key_row_visibility_t visibility) 
 
 namespace {
 
-const char *const BSSH_KEYBOARD_KEYS[] = { "system", "built_in", "built_in_full" };
+const char *const BSSH_KEYBOARD_KEYS[] = { "system", "built_in", "built_in_full",
+                                            "built_in_split" };
 const char *const BSSH_ARRANGEMENT_KEYS[] = { "auto", "tiled", "column" };
 const int BSSH_ARRANGEMENT_COUNT = 3;
 const char *const BSSH_TAB_POSITION_KEYS[] = { "top", "bottom", "left", "right" };
 const int BSSH_TAB_POSITION_COUNT = 4;
-const int BSSH_KEYBOARD_COUNT = 3;
+const int BSSH_KEYBOARD_COUNT = 4;
 
 } /* namespace */
 

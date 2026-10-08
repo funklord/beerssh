@@ -1,0 +1,62 @@
+# Sabotages for sec 6.2's split keyboard and for the general remaps
+# reaching the on-screen keyboards (sec 6.1). Each names the test that
+# must notice.
+
+# The landscape rule gone: a short wide screen keeps the keyboard under
+# the terminal, which on the Fold's cover screen left it one row.
+[[sabotage]]
+name = "a short wide screen does not split the keyboard"
+file = "keyboard/soft_keyboard_layout.cpp"
+find = "\tif (width_dp > height_dp && height_dp < BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP) {"
+replace = "\tif (false) {"
+expect = "a_short_wide_screen_gets_the_split_keyboard"
+
+# The cut loses every right-hand key: the halves would look like a
+# keyboard and be missing half of one.
+[[sabotage]]
+name = "the split loses the right half's keys"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\t\t\tadd_key(key, m_half_grids[1], 1 + r, column - right_origin);"
+replace = "\t\t\t\tQ_UNUSED(right_origin);"
+expect = "the_split_keyboard_holds_every_key_once"
+
+# The window never places the halves, so they stay inside the keyboard
+# widget under the terminal -- split in name, the old height in practice.
+[[sabotage]]
+name = "the window leaves the halves under the terminal"
+file = "src/ui/main_window.cpp"
+find = "\tm_body->insertWidget(0, m_keyboard->half(0), 0);\n\tm_body->addWidget(m_keyboard->half(1), 0);"
+replace = ""
+expect = "the_split_keyboard_sits_beside_the_terminal"
+
+# The halves ignore Hide: the keyboard goes away and its keys stay.
+[[sabotage]]
+name = "hiding the keyboard leaves the halves on screen"
+file = "keyboard/soft_keyboard.cpp"
+find = "\tconst bool shown = split && !isHidden();"
+replace = "\tconst bool shown = split;"
+expect = "the_split_keyboard_sits_beside_the_terminal"
+
+# A handler that does not know the right half: Ctrl held on the left and
+# a key on the right is two separate touches, and the chord never forms.
+[[sabotage]]
+name = "the right half is not part of the chord"
+file = "keyboard/soft_keyboard.cpp"
+find = "\tm_touch->watch(m_halves[1]);"
+replace = ""
+expect = "a_chord_spans_the_split_keyboards_halves"
+
+# The remaps back to the physical keyboard only.
+[[sabotage]]
+name = "an on-screen named key ignores the remaps"
+file = "src/input/input_router.cpp"
+find = "\tif (key != bssh_emulator::KEY_NONE\n\t     && send_remap("
+replace = "\tif (false\n\t     && send_remap("
+expect = "a_key_remap_reaches_the_on_screen_keyboards"
+
+[[sabotage]]
+name = "an on-screen letter ignores the remaps"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\t\tif (m_router->remap_char(char32_t(sent.unicode()))) {"
+replace = "\t\t\tif (false) {"
+expect = "a_key_remap_reaches_the_on_screen_keyboards"

@@ -109,7 +109,14 @@ public:
 		 * key a 104-key board has, at the width it has there, with the
 		 * clusters that do not fit on a second page (sec 6.2).
 		 */
-		KEYBOARD_BUILT_IN_FULL
+		KEYBOARD_BUILT_IN_FULL,
+
+		/*
+		 * The compact keyboard in two halves beside the terminal, always.
+		 * Compact and full turn split by themselves on a short wide
+		 * screen (sec 6.2); this is for wanting it everywhere.
+		 */
+		KEYBOARD_BUILT_IN_SPLIT
 	};
 
 	/*

@@ -206,6 +206,9 @@ private slots:
 	void a_soft_keyboard_letter_chord_is_kept_by_the_app();
 	void the_full_keyboard_answers_about_itself();
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
+	void a_short_wide_screen_gets_the_split_keyboard();
+	void the_split_keyboard_holds_every_key_once();
+	void the_split_keyboard_sits_beside_the_terminal();
 	void both_keyboards_read_one_layout();
 	void every_slot_the_geometry_names_exists();
 	void a_keypad_key_sends_only_its_digit();

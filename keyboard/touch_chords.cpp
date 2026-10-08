@@ -24,14 +24,22 @@ void send_mouse(QAbstractButton *button, QEvent::Type type, const QPointF &globa
 } /* namespace */
 
 bssh_touch_chords::bssh_touch_chords(QWidget *board)
-    : QObject(board),
-      m_board(board) {
+    : QObject(board) {
+	watch(board);
+}
+
+void bssh_touch_chords::watch(QWidget *board) {
 	board->setAttribute(Qt::WA_AcceptTouchEvents);
 	board->installEventFilter(this);
+	m_boards.append(board);
 }
 
 bool bssh_touch_chords::eventFilter(QObject *watched, QEvent *event) {
-	if (watched != m_board) return false;
+	bool ours = false;
+	for (const QPointer<QWidget> &board : m_boards) {
+		if (board == watched) ours = true;
+	}
+	if (!ours) return false;
 
 	switch (event->type()) {
 	case QEvent::TouchBegin:
@@ -139,11 +147,24 @@ void bssh_touch_chords::release(finger_t &finger, const QPointF &global, bool ca
 	send_mouse(finger.button, QEvent::MouseButtonRelease, at);
 }
 
+/*
+ * Asked of every board rather than the one the event came to, since a
+ * board may be placed anywhere -- the split halves are not even in the
+ * same parent once the window has put them beside the terminal.
+ */
 QAbstractButton *bssh_touch_chords::button_at(const QPointF &global) const {
-	QWidget *widget = m_board->childAt(m_board->mapFromGlobal(global).toPoint());
-	while (widget && widget != m_board) {
-		if (QAbstractButton *button = qobject_cast<QAbstractButton *>(widget)) return button;
-		widget = widget->parentWidget();
+	for (const QPointer<QWidget> &board : m_boards) {
+		if (!board || !board->isVisible()) continue;
+		const QPoint local = board->mapFromGlobal(global).toPoint();
+		if (!board->rect().contains(local)) continue;
+
+		QWidget *widget = board->childAt(local);
+		while (widget && widget != board) {
+			if (QAbstractButton *button = qobject_cast<QAbstractButton *>(widget)) {
+				return button;
+			}
+			widget = widget->parentWidget();
+		}
 	}
 	return nullptr;
 }

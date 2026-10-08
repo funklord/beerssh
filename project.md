@@ -1989,7 +1989,8 @@ up, a strip of modifiers has nothing to modify.
   confirming on the Fold that it reads at a glance.
 
 - **Held modifiers on a multitouch screen, beside the Treo cycle —
-  [BUILT 2026-10-08, not yet tried on a device].** Asked for so that both
+  [BUILT 2026-10-08, confirmed on the Fold the same day]:** held Ctrl with
+  C, and held Shift with letters, reported working by the holder. Asked for so that both
   habits are live at once and one can train the other. A finger resting on a
   modifier while another presses keys applies it to every one of them and
   leaves nothing when lifted, as on a physical keyboard; a press and release
@@ -2028,6 +2029,35 @@ up, a strip of modifiers has nothing to modify.
   `valgrind --exit-on-first-error` reports 0 errors and the test reaches
   its verdict. No standing test catches it without valgrind, which is
   recorded rather than papered over with one that cannot fail.
+
+- **The split keyboard — [BUILT 2026-10-08].** Asked for for landscape. The
+  holder chose the halves **beside the terminal**, not in the bottom corners:
+  on a short wide screen a keyboard underneath takes height the terminal
+  cannot spare (one row on the Fold's cover screen in landscape), while
+  halves at the side take width, which there is plenty of. And **automatic**:
+  compact or full turns split when the window is wider than tall and under
+  `BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP` (600, §8.1's MEDIUM boundary again),
+  and back when rotated; "BeerSSH's own, split" asks for it everywhere. The
+  stored choice is never rewritten.
+  *One keyboard, cut at draw time.* `STYLE_SPLIT` reads the **compact
+  groups** and `lay_out_split` puts each key in the half its middle falls in
+  (`in_left_half`), keeping the rows' stagger. So the language layout, the
+  pages, AltGr, held/armed/locked, repeat and the remaps are the compact
+  keyboard's by construction — the "work equally for every mode" the holder
+  asked for, with no second key list to drift. The halves are widgets of
+  the keyboard that the main window places at the outer ends of the panes'
+  row (tabs placed left or right now go inside them); the keyboard widget
+  stays the one the window shows and hides, and the halves follow it.
+  One `bssh_touch_chords` watches the keyboard and both halves, so a chord
+  can span them — Ctrl under the left thumb, P under the right.
+  Tests: `a_short_wide_screen_gets_the_split_keyboard` (the rule),
+  `the_split_keyboard_holds_every_key_once` (each group's keys equal the
+  compact group's — a relationship, so a key added to compact is checked
+  too), `the_split_keyboard_sits_beside_the_terminal` (placement, the
+  terminal keeping three quarters of the height, hide, and upright giving
+  compact back), `a_chord_spans_the_split_keyboards_halves`. **[OPEN]**
+  on the Fold: whether 30% of the width per half (200–300dp) is right, and
+  whether keys at the bottom of each half suit a two-handed grip.
 
 
 **Shift was `toUpper()`, and that left 21 characters unreachable —
@@ -5839,7 +5869,8 @@ built-in keyboard, rotation set by `settings put system user_rotation`):
 landscape gave the full keyboard nearly the whole height and the terminal
 about one usable row -- the keyboard falls back to compact on a NARROW
 screen (`a_narrow_screen_falls_back_to_the_compact_keyboard`) and has no
-such fallback on a SHORT one; **[OPEN]** whether it should. Back to
+such fallback on a SHORT one; ~~**[OPEN]** whether it should~~ — answered
+the same day by the split keyboard (§6.2), which takes width instead. Back to
 portrait, the shell's prompt was gone, on screen and in scrollback, and the
 next key typed landed at column 0. `emulator_test::a_rotation_and_back_keeps_the_prompt`
 takes the same 49x40 to 120x2 and back and keeps the line, so the

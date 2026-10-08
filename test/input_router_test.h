@@ -63,6 +63,7 @@ private slots:
 	void a_held_modifier_carries_every_key_and_a_tap_still_cycles();
 	void two_fingers_chord_on_the_key_row();
 	void two_fingers_chord_on_the_built_in_keyboard();
+	void a_chord_spans_the_split_keyboards_halves();
 	void armed_locked_and_off_draw_differently();
 	void ctrl_shift_c_is_kept_by_the_app();
 	void paste_is_bracketed_only_when_the_remote_asked();

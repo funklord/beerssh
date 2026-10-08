@@ -1128,6 +1128,15 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_keyboard->hide();
 
 	/*
+	 * The split keyboard's halves go either side of the terminal, at the
+	 * outer edges of the row the panes sit in, so in landscape the keys
+	 * take width and the terminal keeps its height (sec 6.2). The
+	 * keyboard still decides when they show.
+	 */
+	m_body->insertWidget(0, m_keyboard->half(0), 0);
+	m_body->addWidget(m_keyboard->half(1), 0);
+
+	/*
 	 * The keyboard's own two keys (sec 6.2). Hide is remembered rather
 	 * than merely applied: apply_device_settings recomputes visibility on
 	 * every session event and every settings change, so a keyboard that
@@ -1530,11 +1539,16 @@ void bssh_main_window::apply_tab_position(int position) {
 	case bssh_app_settings::TABS_BOTTOM:
 		m_page_layout->insertWidget(m_page_layout->indexOf(m_body) + 1, m_tab_row, 0);
 		break;
+	/*
+	 * Beside the panes rather than at the row's ends: the ends are the
+	 * split keyboard's, and a tab bar outside a keyboard half would put
+	 * the keys between the tabs and the terminal they name.
+	 */
 	case bssh_app_settings::TABS_LEFT:
-		m_body->insertWidget(0, m_tab_row, 0);
+		m_body->insertWidget(m_body->indexOf(m_panes), m_tab_row, 0);
 		break;
 	case bssh_app_settings::TABS_RIGHT:
-		m_body->addWidget(m_tab_row, 0);
+		m_body->insertWidget(m_body->indexOf(m_panes) + 1, m_tab_row, 0);
 		break;
 	default:
 		m_page_layout->insertWidget(0, m_tab_row, 0);
@@ -2021,12 +2035,21 @@ void bssh_main_window::apply_keyboard_style() {
 		m_keyboard->rebuild_keys();
 	}
 
-	const bssh_soft_keyboard_catalog::style_t wanted =
-	        settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_FULL
-	                ? bssh_soft_keyboard_catalog::STYLE_FULL
-	                : bssh_soft_keyboard_catalog::STYLE_COMPACT;
+	bssh_soft_keyboard_catalog::style_t wanted = bssh_soft_keyboard_catalog::STYLE_COMPACT;
+	if (settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_FULL) {
+		wanted = bssh_soft_keyboard_catalog::STYLE_FULL;
+	} else if (settings.keyboard() == bssh_app_settings::KEYBOARD_BUILT_IN_SPLIT) {
+		wanted = bssh_soft_keyboard_catalog::STYLE_SPLIT;
+	}
 
-	m_keyboard->set_style(bssh_keyboard_style_for(wanted, width()));
+	/*
+	 * Each half three tenths of the width, within a range: wide enough
+	 * for a 36dp key (the full board's floor, BSSH_FULL_KEYBOARD_MIN_DP)
+	 * across the eleven half-columns a half holds, and no wider than a
+	 * thumb reaches from a phone's edge. The terminal keeps the rest.
+	 */
+	m_keyboard->set_half_width(qBound(200, width() * 3 / 10, 300));
+	m_keyboard->set_style(bssh_keyboard_style_for(wanted, width(), height()));
 }
 
 void bssh_main_window::on_pane_focus_changed(bssh_session *session) {

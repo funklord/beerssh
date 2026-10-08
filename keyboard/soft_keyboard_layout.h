@@ -247,7 +247,18 @@ public:
 	 */
 	enum style_t {
 		STYLE_COMPACT,
-		STYLE_FULL
+		STYLE_FULL,
+
+		/*
+		 * The compact keyboard cut down the middle, its halves beside
+		 * the terminal rather than under it: for a screen wider than it
+		 * is tall, where a keyboard under the terminal leaves it one
+		 * row (sec 6.2). The SAME groups as compact, divided at draw
+		 * time, so the layout, the pages, AltGr and everything else a
+		 * compact keyboard has come with it by construction rather than
+		 * as a second copy to keep in step.
+		 */
+		STYLE_SPLIT
 	};
 
 	/*
@@ -274,6 +285,16 @@ public:
 
 	const QList<bssh_soft_key_group_t> &all(style_t style) const {
 		return style == STYLE_FULL ? m_full : m_groups;
+	}
+
+	/*
+	 * Which half of a split keyboard a key goes in, from where it sits
+	 * in its row: left when its middle is left of the group's middle.
+	 * By the middle rather than the start, so a key straddling the cut
+	 * goes where most of it is.
+	 */
+	static bool in_left_half(int column, int span, int columns) {
+		return 2 * column + span < columns;
 	}
 
 	/*
@@ -360,7 +381,24 @@ QChar bssh_shifted_char(char32_t plain, char32_t twin, bool shifted);
  */
 QChar bssh_keyboard_char(const bssh_key_t &key, bool shifted, bool altgr);
 
+/*
+ * The tallest a window may be and still get the split keyboard on its
+ * own, in dp: sec 8.1's MEDIUM boundary again, as BSSH_FULL_KEYBOARD_MIN_DP
+ * is. Below it a keyboard under the terminal takes most of the height --
+ * measured on the Fold's cover screen in landscape, where the full board
+ * left one usable row -- and above it there is room for both.
+ */
+const int BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP = 600;
+
+/*
+ * Height as well as width, and required: a landscape phone is the case a
+ * width-only answer got wrong. SPLIT when asked for, or when the window
+ * is wider than tall and short enough that a keyboard underneath would
+ * crowd the terminal out -- whichever of compact and full was chosen,
+ * since both fail there the same way. The stored choice is never
+ * rewritten; rotating back gives back what was chosen.
+ */
 bssh_soft_keyboard_catalog::style_t bssh_keyboard_style_for(
-        bssh_soft_keyboard_catalog::style_t wanted, int width_dp);
+        bssh_soft_keyboard_catalog::style_t wanted, int width_dp, int height_dp);
 
 #endif /* BSSH_SOFT_KEYBOARD_LAYOUT_H */

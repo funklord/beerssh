@@ -5,7 +5,7 @@
 [[sabotage]]
 name = "a bar set to the left stays above the panes"
 file = "src/ui/main_window.cpp"
-find = "\t\tm_body->insertWidget(0, m_tab_row, 0);"
+find = "\t\tm_body->insertWidget(m_body->indexOf(m_panes), m_tab_row, 0);"
 replace = "\t\tm_page_layout->insertWidget(0, m_tab_row, 0);"
 expect = "the_tab_bar_goes_where_it_is_set"
 

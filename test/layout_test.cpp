@@ -5091,17 +5091,164 @@ void layout_test::the_back_key_leaves_the_page_not_the_app() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void layout_test::a_short_wide_screen_gets_the_split_keyboard() {
+	typedef bssh_soft_keyboard_catalog catalog;
+
+	/*
+	 * Short and wide: whichever keyboard was chosen, a keyboard under
+	 * the terminal takes most of the height, so it splits (sec 6.2). The
+	 * Fold's cover screen in landscape is about 860 by 320.
+	 */
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 860, 320), catalog::STYLE_SPLIT);
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL, 860, 320), catalog::STYLE_SPLIT);
+
+	/* At the boundary and either side of it. */
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 1200,
+	                                  BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP - 1),
+	          catalog::STYLE_SPLIT);
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 1200,
+	                                  BSSH_SPLIT_KEYBOARD_MAX_HEIGHT_DP),
+	          catalog::STYLE_COMPACT);
+
+	/* Wide is not enough: a tall tablet keeps its keyboard underneath. */
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL, 1200, 900), catalog::STYLE_FULL);
+
+	/* Portrait never splits by itself, however short. */
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 320, 500), catalog::STYLE_COMPACT);
+
+	/* And split chosen is split everywhere. */
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_SPLIT, 320, 2000), catalog::STYLE_SPLIT);
+}
+
+void layout_test::the_split_keyboard_holds_every_key_once() {
+	typedef bssh_soft_keyboard_catalog catalog;
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	bssh_soft_keyboard keyboard(&router);
+
+	const auto labels = [](const QWidget *within) {
+		QStringList out;
+		for (const bssh_key_cap *cap : within->findChildren<bssh_key_cap *>()) {
+			out.append(cap->text());
+		}
+		out.sort();
+		return out;
+	};
+
+	/*
+	 * Every group, compared with the compact keyboard it is cut from: the
+	 * same keys, none lost in the cut and none drawn twice. A relationship
+	 * rather than a list, so a key added to compact is checked here too.
+	 */
+	const int groups = catalog::instance().all(catalog::STYLE_COMPACT).size();
+	QVERIFY(groups > 0);
+	for (int g = 0; g < groups; ++g) {
+		keyboard.set_style(catalog::STYLE_COMPACT);
+		keyboard.set_group(g);
+		const QStringList compact = labels(&keyboard);
+		QVERIFY(!compact.isEmpty());
+
+		keyboard.set_style(catalog::STYLE_SPLIT);
+		keyboard.set_group(g);
+		QStringList split = labels(keyboard.half(0)) + labels(keyboard.half(1));
+		split.sort();
+		QCOMPARE(split, compact);
+	}
+
+	/* Cut where a keyboard is cut: q on the left, p on the right. */
+	keyboard.set_style(catalog::STYLE_SPLIT);
+	keyboard.set_group(0);
+	QVERIFY(labels(keyboard.half(0)).contains(QStringLiteral("q")));
+	QVERIFY(labels(keyboard.half(1)).contains(QStringLiteral("p")));
+
+	/* The side buttons go with the right half, where they always were. */
+	QAbstractButton *settings = keyboard.findChild<QAbstractButton *>(
+	        QStringLiteral("keyboard-settings"));
+	QVERIFY(settings);
+	QVERIFY(keyboard.half(1)->isAncestorOf(settings));
+}
+
+void layout_test::the_split_keyboard_sits_beside_the_terminal() {
+	const forced_touch_t touch(1);
+	const forced_screen_t held(QSize(860, 320));
+
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+
+	{
+		bssh_main_window window;
+		window.resize(860, 320);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+		bssh_session_registry *registry = window.registry();
+		QVERIFY(registry);
+		const registry_left_as_found_t tidy(registry);
+		window.adopt_session(registry->create(named(QStringLiteral("one"))));
+		QCoreApplication::processEvents();
+
+		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		bssh_pane_container *panes = window.panes();
+		QVERIFY(keyboard && panes);
+		QCOMPARE(keyboard->style(), bssh_soft_keyboard_catalog::STYLE_SPLIT);
+
+		QWidget *left = keyboard->half(0);
+		QWidget *right = keyboard->half(1);
+		QVERIFY(left->isVisible());
+		QVERIFY(right->isVisible());
+
+		const auto global = [](QWidget *w) { return QRect(w->mapToGlobal(QPoint(0, 0)), w->size()); };
+
+		/* Either side of the terminal, not under it. */
+		QVERIFY2(global(left).right() < global(panes).left(), "the left half is left of the terminal");
+		QVERIFY2(global(right).left() > global(panes).right(), "the right half is right of the terminal");
+
+		/*
+		 * Which is the point: the terminal keeps its height. Under the
+		 * terminal, the keyboard left it one row on this screen.
+		 */
+		QVERIFY2(panes->height() > window.height() * 3 / 4,
+		          qPrintable(QStringLiteral("the terminal is %1 of %2 tall")
+		                             .arg(panes->height()).arg(window.height())));
+
+		/* Hide puts both halves away, as it puts the keyboard away. */
+		QAbstractButton *hide = window.findChild<QAbstractButton *>(QStringLiteral("keyboard-hide"));
+		QVERIFY(hide);
+		hide->click();
+		QCoreApplication::processEvents();
+		QVERIFY(!left->isVisible());
+		QVERIFY(!right->isVisible());
+	}
+
+	{
+		/* Upright, the same choice is the compact keyboard underneath. */
+		const forced_screen_t upright(QSize(320, 860));
+		bssh_main_window window;
+		window.resize(320, 860);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		QVERIFY(keyboard);
+		QCOMPARE(keyboard->style(), bssh_soft_keyboard_catalog::STYLE_COMPACT);
+		QVERIFY(!keyboard->half(0)->isVisible());
+		QVERIFY(!keyboard->half(1)->isVisible());
+	}
+
+	settings.set_keyboard(before);
+}
+
 void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
 	typedef bssh_soft_keyboard_catalog catalog;
 
 	/* The rule, at the boundary and either side of it. */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL, BSSH_PHONE_DP),
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL, BSSH_PHONE_DP, 2000),
 	          catalog::STYLE_COMPACT);
 	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL,
-	                                  BSSH_FULL_KEYBOARD_MIN_DP - 1),
+	                                  BSSH_FULL_KEYBOARD_MIN_DP - 1, 2000),
 	          catalog::STYLE_COMPACT);
 	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_FULL,
-	                                  BSSH_FULL_KEYBOARD_MIN_DP),
+	                                  BSSH_FULL_KEYBOARD_MIN_DP, 2000),
 	          catalog::STYLE_FULL);
 
 	/*
@@ -5109,7 +5256,7 @@ void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
 	 * fallback narrows what was asked for; it does not overrule someone
 	 * who asked for the thumb keyboard on a tablet.
 	 */
-	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 2000),
+	QCOMPARE(bssh_keyboard_style_for(catalog::STYLE_COMPACT, 2000, 2000),
 	          catalog::STYLE_COMPACT);
 
 	/* Now the wiring. */

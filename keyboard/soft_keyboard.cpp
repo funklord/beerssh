@@ -196,12 +196,36 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	QHBoxLayout *outer = new QHBoxLayout(this);
 	outer->setContentsMargins(0, 0, 0, 0);
 	outer->setSpacing(0);
+	m_outer = outer;
+
+	/*
+	 * The split keyboard's halves (sec 6.2), built once and filled by
+	 * rebuild(). Each is a key grid in a row of its own, so the right one
+	 * can take the side buttons beside its keys while split.
+	 */
+	for (int side = 0; side < 2; ++side) {
+		m_halves[side] = new QWidget(this);
+		m_halves[side]->setObjectName(side ? QStringLiteral("keyboard-right")
+		                                   : QStringLiteral("keyboard-left"));
+		QHBoxLayout *row = new QHBoxLayout(m_halves[side]);
+		row->setContentsMargins(0, 0, 0, 0);
+		row->setSpacing(1);
+
+		m_half_keys[side] = new QWidget(m_halves[side]);
+		m_half_grids[side] = new QGridLayout(m_half_keys[side]);
+		m_half_grids[side]->setContentsMargins(0, 0, 0, 0);
+		m_half_grids[side]->setSpacing(1);
+		row->addWidget(m_half_keys[side], 1);
+		m_halves[side]->hide();
+	}
 
 	m_keys = new QWidget(this);
 	m_grid = new QGridLayout(m_keys);
 	m_grid->setContentsMargins(0, 0, 0, 0);
 	m_grid->setSpacing(1);
+	outer->addWidget(m_halves[0], 0);
 	outer->addWidget(m_keys, 1);
+	outer->addWidget(m_halves[1], 0);
 
 	/*
 	 * The side button, which is what the whole design turns on: one
@@ -223,7 +247,8 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	 * The page button keeps the stretch, so it stays the big one: it is
 	 * pressed constantly and the other two are not.
 	 */
-	QVBoxLayout *side = new QVBoxLayout;
+	m_side = new QWidget(this);
+	QVBoxLayout *side = new QVBoxLayout(m_side);
 	side->setContentsMargins(0, 0, 0, 0);
 	side->setSpacing(1);   /* the key grid's own spacing */
 
@@ -292,7 +317,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 
 	refresh_side_icons();
 
-	outer->addLayout(side, 0);
+	outer->addWidget(m_side, 0);
 
 	connect(m_group_button, &QAbstractButton::clicked, this, [this] {
 		set_group(bssh_soft_keyboard_catalog::instance().next_index(m_group, m_style));
@@ -302,7 +327,14 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	connect(m_hide_button, &QAbstractButton::clicked,
 	         this, &bssh_soft_keyboard::hide_requested);
 
+	/*
+	 * One handler for the whole keyboard, halves included: a chord can
+	 * span them -- Ctrl under the left thumb, C under the right -- and
+	 * a handler per half would not know the other's finger was down.
+	 */
 	m_touch = new bssh_touch_chords(this);
+	m_touch->watch(m_halves[0]);
+	m_touch->watch(m_halves[1]);
 
 	/*
 	 * Two thumbs (sec 6.2): a finger resting on a modifier holds it on
@@ -360,8 +392,8 @@ void bssh_soft_keyboard::set_group(int index) {
 	rebuild();
 }
 
-bssh_key_cap *bssh_soft_keyboard::make_button(const QString &label) {
-	bssh_key_cap *button = new bssh_key_cap(m_keys);
+bssh_key_cap *bssh_soft_keyboard::make_button(const QString &label, QWidget *parent) {
+	bssh_key_cap *button = new bssh_key_cap(parent);
 	button->setText(label);
 
 	/*
@@ -378,7 +410,8 @@ bssh_key_cap *bssh_soft_keyboard::make_button(const QString &label) {
 	return button;
 }
 
-void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
+void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int row,
+                                 int column) {
 	/*
 	 * A spacer holds its columns and draws nothing: the gap between the
 	 * function banks, and the keys a terminal cannot send. No button is
@@ -387,8 +420,8 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 	 */
 	if (key.kind == bssh_key_t::SPACER) return;
 
-	bssh_key_cap *button = make_button(key.label);
-	m_grid->addWidget(button, row, column, 1, key.span);
+	bssh_key_cap *button = make_button(key.label, grid->parentWidget());
+	grid->addWidget(button, row, column, 1, key.span);
 
 	switch (key.kind) {
 	case bssh_key_t::SPACER:
@@ -527,14 +560,17 @@ void bssh_soft_keyboard::rebuild() {
 	 * whatever is above this on the stack has finished with them.
 	 */
 	QList<QLayoutItem *> retired;
-	while (QLayoutItem *item = m_grid->takeAt(0)) {
-		if (QWidget *widget = item->widget()) {
-			widget->hide();
-			widget->setParent(nullptr);
-			widget->deleteLater();
+	for (QGridLayout *grid : { m_grid, m_half_grids[0], m_half_grids[1] }) {
+		while (QLayoutItem *item = grid->takeAt(0)) {
+			if (QWidget *widget = item->widget()) {
+				widget->hide();
+				widget->setParent(nullptr);
+				widget->deleteLater();
+			}
+			retired.append(item);
 		}
-		retired.append(item);
 	}
+	update_halves();
 	if (!retired.isEmpty()) {
 		QTimer::singleShot(0, [retired] { qDeleteAll(retired); });
 	}
@@ -545,11 +581,15 @@ void bssh_soft_keyboard::rebuild() {
 
 	const bssh_soft_key_group_t &group = groups.at(m_group);
 
-	for (int r = 0; r < group.rows.size(); ++r) {
-		int column = 0;
-		for (const bssh_key_t &key : group.rows.at(r)) {
-			add_key(key, r, column);
-			column += key.span;
+	if (m_style == bssh_soft_keyboard_catalog::STYLE_SPLIT) {
+		lay_out_split(group);
+	} else {
+		for (int r = 0; r < group.rows.size(); ++r) {
+			int column = 0;
+			for (const bssh_key_t &key : group.rows.at(r)) {
+				add_key(key, m_grid, r, column);
+				column += key.span;
+			}
 		}
 	}
 
@@ -601,6 +641,91 @@ void bssh_soft_keyboard::refresh_modifiers() {
 	}
 
 	refresh_letter_labels();
+}
+
+/*
+ * One group into two grids, each key in the half its middle falls in
+ * (bssh_soft_keyboard_catalog::in_left_half). Rows keep their stagger: the
+ * left half keeps each key's column, and the right half measures from the
+ * leftmost column any right-hand key starts at, so the two halves are the
+ * one keyboard pulled apart rather than two keyboards.
+ *
+ * The keys sit at the BOTTOM of each half, at their own height, with the
+ * space above them empty: a half is as tall as the terminal, and a thumb
+ * holding a phone sideways reaches the lower corners, not the middle.
+ */
+void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
+	int right_origin = group.columns;
+	int left_columns = 0;
+	for (const QList<bssh_key_t> &row : group.rows) {
+		int column = 0;
+		for (const bssh_key_t &key : row) {
+			if (bssh_soft_keyboard_catalog::in_left_half(column, key.span, group.columns)) {
+				left_columns = qMax(left_columns, column + key.span);
+			} else {
+				right_origin = qMin(right_origin, column);
+			}
+			column += key.span;
+		}
+	}
+
+	/* Row 0 is the empty space above the keys; the keys start at 1. */
+	for (int r = 0; r < group.rows.size(); ++r) {
+		int column = 0;
+		for (const bssh_key_t &key : group.rows.at(r)) {
+			if (bssh_soft_keyboard_catalog::in_left_half(column, key.span, group.columns)) {
+				add_key(key, m_half_grids[0], 1 + r, column);
+			} else {
+				add_key(key, m_half_grids[1], 1 + r, column - right_origin);
+			}
+			column += key.span;
+		}
+	}
+
+	const int right_columns = group.columns - right_origin;
+	for (int side = 0; side < 2; ++side) {
+		QGridLayout *grid = m_half_grids[side];
+		const int used = side ? right_columns : left_columns;
+		for (int c = 0; c < BSSH_KEYBOARD_MAX_COLUMNS; ++c) {
+			grid->setColumnStretch(c, c < used ? 1 : 0);
+		}
+		grid->setRowStretch(0, 1);
+		for (int r = 0; r < group.rows.size(); ++r) grid->setRowStretch(1 + r, 0);
+	}
+}
+
+/*
+ * Whether the halves show, and where the side buttons go. Split keeps the
+ * side buttons on the right half's outer edge, where the bottom keyboard
+ * has them; otherwise they go back beside the bottom grid.
+ */
+void bssh_soft_keyboard::update_halves() {
+	const bool split = m_style == bssh_soft_keyboard_catalog::STYLE_SPLIT;
+
+	QBoxLayout *right_row = qobject_cast<QBoxLayout *>(m_halves[1]->layout());
+	if (split && m_side->parentWidget() != m_halves[1]) {
+		right_row->addWidget(m_side, 0);
+	} else if (!split && m_side->parentWidget() != this) {
+		m_outer->addWidget(m_side, 0);
+	}
+
+	m_keys->setVisible(!split);
+	const bool shown = split && !isHidden();
+	for (QWidget *half : m_halves) half->setVisible(shown);
+}
+
+void bssh_soft_keyboard::set_half_width(int width_dp) {
+	for (QWidget *keys : m_half_keys) keys->setFixedWidth(width_dp);
+}
+
+void bssh_soft_keyboard::showEvent(QShowEvent *event) {
+	QWidget::showEvent(event);
+	update_halves();
+}
+
+void bssh_soft_keyboard::hideEvent(QHideEvent *event) {
+	QWidget::hideEvent(event);
+	update_halves();
 }
 
 bool bssh_soft_keyboard::altgr_armed() const {

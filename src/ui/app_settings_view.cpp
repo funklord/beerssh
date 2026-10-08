@@ -260,6 +260,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	                     int(bssh_app_settings::KEYBOARD_BUILT_IN));
 	m_keyboard->addItem(QStringLiteral("BeerSSH's own, full size"),
 	                     int(bssh_app_settings::KEYBOARD_BUILT_IN_FULL));
+	m_keyboard->addItem(QStringLiteral("BeerSSH's own, split"),
+	                     int(bssh_app_settings::KEYBOARD_BUILT_IN_SPLIT));
 	bssh_fit_items(m_keyboard);
 	if (on_this_page(SECTION_KEYBOARD, m_keyboard)) form->addRow(QStringLiteral("Keyboard"), m_keyboard);
 
@@ -1331,15 +1333,35 @@ void bssh_app_settings_view::refresh_keyboard_fallback() {
 
 	const bssh_app_settings::keyboard_t chosen =
 	        bssh_app_settings::keyboard_t(m_keyboard->currentData().toInt());
-	if (chosen != bssh_app_settings::KEYBOARD_BUILT_IN_FULL) {
+	bssh_soft_keyboard_catalog::style_t wanted;
+	if (chosen == bssh_app_settings::KEYBOARD_BUILT_IN) {
+		wanted = bssh_soft_keyboard_catalog::STYLE_COMPACT;
+	} else if (chosen == bssh_app_settings::KEYBOARD_BUILT_IN_FULL) {
+		wanted = bssh_soft_keyboard_catalog::STYLE_FULL;
+	} else {
 		m_keyboard_fallback->hide();
 		return;
 	}
 
+	/*
+	 * The WINDOW's size, which is what the keyboard is drawn for: the
+	 * split question compares width with height, and this page's own
+	 * height is the window's less whatever sits above it.
+	 */
+	const QWidget *frame = window();
 	const bssh_soft_keyboard_catalog::style_t drawn =
-	        bssh_keyboard_style_for(bssh_soft_keyboard_catalog::STYLE_FULL, width());
-	if (drawn == bssh_soft_keyboard_catalog::STYLE_FULL) {
+	        bssh_keyboard_style_for(wanted, frame->width(), frame->height());
+	if (drawn == wanted) {
 		m_keyboard_fallback->hide();
+		return;
+	}
+
+	if (drawn == bssh_soft_keyboard_catalog::STYLE_SPLIT) {
+		m_keyboard_fallback->setText(QStringLiteral(
+		        "This screen is short and wide, so the keyboard is split either "
+		        "side of the terminal. Rotate back and the keyboard you chose "
+		        "returns; the choice is kept either way."));
+		m_keyboard_fallback->show();
 		return;
 	}
 

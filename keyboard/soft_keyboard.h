@@ -14,6 +14,7 @@ class QAbstractButton;
 class QGridLayout;
 class bssh_input_router;
 class bssh_touch_chords;
+class QHBoxLayout;
 
 /*
  * bssh_soft_keyboard -- the keyboard this app draws itself (project.md
@@ -73,6 +74,21 @@ public:
 	 */
 	void rebuild_keys() { rebuild(); }
 
+	bssh_soft_keyboard_catalog::style_t style() const { return m_style; }
+
+	/*
+	 * The split keyboard's halves (sec 6.2), 0 for the left and 1 for the
+	 * right. They live in this widget until somebody places them: the
+	 * main window puts them either side of the terminal, where they take
+	 * width instead of height, and this widget is then empty while split.
+	 * Shown only while split and while this widget is not hidden, so the
+	 * window's one show/hide of the keyboard still governs both.
+	 */
+	QWidget *half(int side) const { return m_halves[side ? 1 : 0]; }
+
+	/* How wide each half's keys are, in dp; the window decides. */
+	void set_half_width(int width_dp);
+
 signals:
 	/*
 	 * The configuration key: show the settings the user would otherwise
@@ -92,14 +108,18 @@ signals:
 
 protected:
 	void changeEvent(QEvent *event) override;
+	void showEvent(QShowEvent *event) override;
+	void hideEvent(QHideEvent *event) override;
 
 private:
 	void rebuild();
 	void refresh_side_icons();
 	void refresh_script_button();
-	bssh_key_cap *make_button(const QString &label);
+	bssh_key_cap *make_button(const QString &label, QWidget *parent);
 	bool altgr_armed() const;
-	void add_key(const bssh_key_t &key, int row, int column);
+	void add_key(const bssh_key_t &key, QGridLayout *grid, int row, int column);
+	void lay_out_split(const bssh_soft_key_group_t &group);
+	void update_halves();
 	void refresh_modifiers();
 
 	/*
@@ -118,6 +138,12 @@ private:
 
 	QWidget *m_keys;
 	QGridLayout *m_grid;
+
+	QHBoxLayout *m_outer = nullptr;
+	QWidget *m_side = nullptr;
+	QWidget *m_halves[2] = { nullptr, nullptr };
+	QWidget *m_half_keys[2] = { nullptr, nullptr };
+	QGridLayout *m_half_grids[2] = { nullptr, nullptr };
 	QAbstractButton *m_group_button;
 
 	/*
