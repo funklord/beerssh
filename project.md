@@ -9136,6 +9136,23 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   Java `onConfigurationChanged` hook. Forced in the suite through
   `bssh_platform::force_system_font_scale`, as screen size and activity
   are. `the_interface_follows_the_system_font_size_live`.
+  **The application font alone was not enough — seen on the Fold:** with
+  it changed, one menu glyph grew and the host list did not. Widgets holding
+  their own font ignore `QApplication::setFont`: a title set at 1.4 times
+  the interface size, bold headings, a locked modifier's label, and the
+  host rows, whose style sheet fixed their font when polished.
+  `carry_widget_fonts` rescales the first kind and re-polishes the second;
+  a widget whose font is a fact (the font picker's preview) opts out with
+  `bssh_fixed_font`. The test asserted only the application font at first
+  and passed while the phone showed no change; it now asserts the host rows
+  and title of a list built before the change.
+  **Pixels, measured by a temporary log on the Fold:** Android's interface
+  font is 11px at 1.0, so every scale rounds. Carried fonts are computed
+  from the font and scale a widget had when first carried, not by ratio,
+  which drifted (a 23px label back at 22 after four changes). A title built
+  fresh can still be a pixel larger than a carried one -- 13px fresh at
+  0.8 against 12px carried, 12.3 exact -- because the fresh one is rounded
+  twice; left alone as a one-pixel effect of building, not of following.
   **What was measured before building, and it still holds.** *Nothing in this
   tree read the system font scale* before this — no reference to `fontScale`
   anywhere in `src/`, until the Android backend added one. The grid builds its own `QFont`

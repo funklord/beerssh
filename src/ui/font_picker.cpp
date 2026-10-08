@@ -480,6 +480,9 @@ void bssh_font_picker::refresh_preview() {
 	 */
 	m_preview->setFont(bssh_font_catalog::make_font(catalog.family_for(id), point_size()));
 
+	/* A terminal font at the terminal's point size: not interface chrome (sec 9.5). */
+	m_preview->setProperty("bssh_fixed_font", true);
+
 	/*
 	 * The preview wears the scheme's own colours, so what is on screen is
 	 * what the terminal will look like rather than a font sample on an

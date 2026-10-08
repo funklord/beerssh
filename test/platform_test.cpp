@@ -15,6 +15,8 @@
 #include "phone_metrics.h"
 #include "ui/main_window.h"
 #include "ui/interface_scale.h"
+#include "ui/host_list.h"
+#include <QListWidget>
 
 void platform_test::desktop_platform_is_selected_and_named() {
 	bssh_platform *platform = bssh_platform::instance();
@@ -509,12 +511,86 @@ void platform_test::the_interface_follows_the_system_font_size_live() {
 	 * handles fontScale itself, so nothing restarts the app -- which is
 	 * how a change measured on the Fold went unseen until the next start.
 	 */
+	/*
+	 * Real widgets, built BEFORE the change, and not only the application
+	 * font: the first version of this test checked QApplication::font()
+	 * alone and passed, while on the Fold the host list kept its size --
+	 * only a menu glyph grew. The rows and the title are what a person
+	 * reads, so they are what is asserted.
+	 */
+	bssh_host_list hosts(nullptr);
+	hosts.resize(360, 640);
+	hosts.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&hosts));
+	QListWidget *rows = hosts.findChild<QListWidget *>();
+	QLabel *title = nullptr;
+	for (QLabel *label : hosts.findChildren<QLabel *>()) {
+		if (label->text().trimmed() == QStringLiteral("Hosts")) title = label;
+	}
+	QVERIFY(rows && title);
+	const qreal rows_before = size(rows->font());
+	const qreal title_before = size(title->font());
+
 	bssh_platform::force_application_active(0);
 	bssh_platform::force_system_font_scale(1.5);
 	bssh_platform::force_application_active(1);
 	QVERIFY2(qAbs(size(QApplication::font()) - size(start) * 1.5) < 0.6,
 	          qPrintable(QStringLiteral("%1 -> %2 at 1.5")
 	                             .arg(size(start)).arg(size(QApplication::font()))));
+	QCoreApplication::processEvents();
+	QVERIFY2(qAbs(size(rows->font()) - rows_before * 1.5) < 0.6,
+	          qPrintable(QStringLiteral("the host rows went %1 -> %2 at 1.5")
+	                             .arg(rows_before).arg(size(rows->font()))));
+	QVERIFY2(qAbs(size(title->font()) - title_before * 1.5) < 1.0,
+	          qPrintable(QStringLiteral("the title went %1 -> %2 at 1.5")
+	                             .arg(title_before).arg(size(title->font()))));
+
+	/*
+	 * And the same size as one built fresh at this scale -- exactly, in
+	 * points. In pixels a fresh title can be a pixel larger than a carried
+	 * one, being rounded twice: the Fold measured 13px fresh at 0.8 and
+	 * 12px carried, against 12.3 exact.
+	 */
+	{
+		bssh_host_list fresh(nullptr);
+		QLabel *fresh_title = nullptr;
+		for (QLabel *label : fresh.findChildren<QLabel *>()) {
+			if (label->text().trimmed() == QStringLiteral("Hosts")) fresh_title = label;
+		}
+		QVERIFY(fresh_title);
+		QVERIFY2(qAbs(size(fresh_title->font()) - size(title->font())) < 0.05,
+		          qPrintable(QStringLiteral("carried %1, built fresh %2")
+		                             .arg(size(title->font())).arg(size(fresh_title->font()))));
+		QCOMPARE(fresh_title->font().bold(), title->font().bold());
+	}
+
+	/*
+	 * A widget sized in PIXELS, as Android's fonts are (11px at 1.0 on the
+	 * Fold): taken through several scales and back, it must come back to
+	 * exactly the size it started at. Carried by ratio it drifted a pixel
+	 * at a time.
+	 */
+	QLabel pixel_label(QStringLiteral("pixels"));
+	QFont pixel_font = pixel_label.font();
+	pixel_font.setPixelSize(23);
+	pixel_label.setFont(pixel_font);
+	const int pixel_start = pixel_label.font().pixelSize();
+	const auto scale_to = [](double next) {
+		bssh_platform::force_application_active(0);
+		bssh_platform::force_system_font_scale(next);
+		bssh_platform::force_application_active(1);
+	};
+
+	/*
+	 * Made at 1.5, so at 0.8 it is 23 * 0.8 / 1.5, rounded once. By ratio
+	 * the same path goes 23, 20, 12, 17 and lands on 22, not 23.
+	 */
+	scale_to(1.3);
+	scale_to(0.8);
+	QCOMPARE(pixel_label.font().pixelSize(), qRound(pixel_start * 0.8 / 1.5));
+	scale_to(1.15);
+	scale_to(1.5);
+	QCOMPARE(pixel_label.font().pixelSize(), pixel_start);
 
 	/* From the starting font every time: 1.5 then 1.2 is 1.2, not 1.8. */
 	bssh_platform::force_application_active(0);

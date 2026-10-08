@@ -101,3 +101,30 @@ file = "src/ui/main_window.cpp"
 find = "\t */\n\tbssh_apply_interface_scale();\n\n\tapply_key_row_visibility();"
 replace = "\t */\n\n\tapply_key_row_visibility();"
 expect = "the_interface_follows_the_system_font_size_live"
+
+# Only the application font follows: what the Fold first showed, a menu
+# glyph growing while the host list kept its size.
+[[sabotage]]
+name = "widgets with fonts of their own are left at the old size"
+file = "src/ui/interface_scale.cpp"
+find = "\tcarry_widget_fonts(from, scale);"
+replace = "\tQ_UNUSED(from);"
+expect = "the_interface_follows_the_system_font_size_live"
+
+# The style-sheet half alone: the host rows are styled for their
+# separators and keep the font they were polished with.
+[[sabotage]]
+name = "a styled widget keeps the font it was polished with"
+file = "src/ui/interface_scale.cpp"
+find = "\t\t\twidget->style()->unpolish(widget);\n\t\t\twidget->style()->polish(widget);"
+replace = ""
+expect = "the_interface_follows_the_system_font_size_live"
+
+# Carried by ratio from the current font: pixel sizes drift a step at a
+# time, 23 coming back as 22.
+[[sabotage]]
+name = "an explicit font drifts as it is carried"
+file = "src/ui/interface_scale.cpp"
+find = "\t\t\tconst QFont basis = widget->property(\"bssh_font_basis\").value<QFont>();\n\t\t\tconst double factor = to / widget->property(\"bssh_font_basis_scale\").toDouble();"
+replace = "\t\t\tconst QFont basis = widget->font();\n\t\t\tconst double factor = to / from;"
+expect = "the_interface_follows_the_system_font_size_live"
