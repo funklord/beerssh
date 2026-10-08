@@ -63,6 +63,10 @@ git archive --format=tar HEAD > "$STAGE/src.tar"
 # dead-peer detection and always needs libvterm.
 git -C vterm archive --format=tar --prefix=vterm/ HEAD > "$STAGE/vterm.tar"
 
+# softkeys at the commit HEAD's gitlink names, which is what a checkout gives.
+git -C softkeys archive --format=tar --prefix=softkeys/ \
+	"$(git rev-parse HEAD:softkeys)" > "$STAGE/softkeys.tar"
+
 echo "check-keepalive: building and running inside $IMAGE"
 
 docker run --rm --name "$CONTAINER" --cap-add=NET_ADMIN -v "$STAGE":/in:ro "$IMAGE" sh -c '
@@ -73,7 +77,7 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
 	build-essential pkg-config python3 git openssh-server iptables >/dev/null 2>&1
 
 mkdir -p /build && cd /build
-tar xf /in/src.tar && tar xf /in/vterm.tar
+tar xf /in/src.tar && tar xf /in/vterm.tar && tar xf /in/softkeys.tar
 # No patch stamp: vterm.tar is the submodule at its gitlink commit, so make
 # applies vterm-patch/ here rather than being handed a patched tree with
 # the step stamped away. git is installed above for it; git apply needs no

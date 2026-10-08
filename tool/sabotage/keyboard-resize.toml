@@ -4,7 +4,7 @@
 # The top bar the wrong way round: dragging up shrinks the keyboard.
 [[sabotage]]
 name = "the top bar resizes the wrong way"
-file = "keyboard/soft_keyboard.cpp"
+file = "softkeys/src/keyboard.cpp"
 find = "\t\tset_bottom_height(qMax(1, m_drag_from - distance));"
 replace = "\t\tset_bottom_height(qMax(1, m_drag_from + distance));"
 expect = "dragging_a_bar_resizes_the_keyboard"
@@ -13,7 +13,7 @@ expect = "dragging_a_bar_resizes_the_keyboard"
 # for "not chosen" and the keyboard snaps back to full size.
 [[sabotage]]
 name = "a hard drag down snaps the keyboard back to full size"
-file = "keyboard/soft_keyboard.cpp"
+file = "softkeys/src/keyboard.cpp"
 find = "\t\tset_bottom_height(qMax(1, m_drag_from - distance));"
 replace = "\t\tset_bottom_height(m_drag_from - distance);"
 expect = "dragging_a_bar_resizes_the_keyboard"
@@ -21,7 +21,7 @@ expect = "dragging_a_bar_resizes_the_keyboard"
 # The bars ignore the setting that puts them away.
 [[sabotage]]
 name = "the bars show whatever the setting says"
-file = "keyboard/soft_keyboard.cpp"
+file = "softkeys/src/keyboard.cpp"
 find = "\tfor (QWidget *grip : m_half_grips) grip->setVisible(m_grips_shown);"
 replace = "\tfor (QWidget *grip : m_half_grips) grip->setVisible(true);"
 expect = "dragging_a_bar_resizes_the_keyboard"
@@ -53,7 +53,7 @@ expect = "a_dragged_keyboard_size_is_kept"
 # Holding one split bar leaves the other dim, while both halves move.
 [[sabotage]]
 name = "holding one split bar leaves the other dim"
-file = "keyboard/soft_keyboard.cpp"
+file = "softkeys/src/keyboard.cpp"
 find = "\t\t\tm_drag_from = m_half_keys[0]->width();\n\t\t\tfor (sk_resize_grip *grip : m_half_grips) grip->set_lit(true);"
 replace = "\t\t\tm_drag_from = m_half_keys[0]->width();"
 expect = "dragging_a_bar_resizes_the_keyboard"

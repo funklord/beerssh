@@ -10,16 +10,16 @@
 #include <QtTest>
 
 #include "input/input_router.h"
-#include "keyboard/key_row_layout.h"
+#include "softkeys/key_row_layout.h"
 #include "ui/key_row_editor.h"
 #include "ui/long_press.h"
 #include "input_router_test.h"
 #include "phone_metrics.h"
 #include "term/emulator.h"
-#include "keyboard/key_row.h"
+#include "softkeys/key_row.h"
 #include "platform/platform.h"
-#include "keyboard/key_cap.h"
-#include "keyboard/soft_keyboard.h"
+#include "softkeys/key_cap.h"
+#include "softkeys/keyboard.h"
 
 /*
  * Drives a key through the router and returns the bytes it produced.

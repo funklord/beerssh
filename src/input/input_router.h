@@ -8,8 +8,8 @@
 #include <functional>
 
 #include "term/emulator.h"
-#include "keyboard/sk_modifiers.h"
-#include "keyboard/sk_target.h"
+#include "softkeys/modifiers.h"
+#include "softkeys/target.h"
 #include <QList>
 #include <QString>
 

@@ -1,3 +1,6 @@
 [submodule "vterm"]
 	path = vterm
 	url = https://github.com/neovim/libvterm
+[submodule "softkeys"]
+	path = softkeys
+	url = https://github.com/funklord/softkeys

@@ -183,11 +183,20 @@ PY
 # git archive against the submodule gives what the runner's checkout
 # gives -- the gitlink commit, unpatched -- and `make` then applies the
 # patches in the container exactly as it does on the runner.
+#
+# softkeys is not patched, so its own HEAD would do as well on a quiet
+# tree -- but a session developing softkeys from inside this one moves
+# that HEAD, and the runner checks out the GITLINK. So it is staged from
+# the commit the staged tree names, $STAGED:softkeys, not from whatever
+# the submodule has checked out.
 if [ "$WANTS_SUBMODULES" = yes ]; then
 	git -C vterm archive --format=tar --prefix=vterm/ HEAD > "$STAGE/vterm.tar"
+	git -C softkeys archive --format=tar --prefix=softkeys/ \
+		"$(git rev-parse "$STAGED:softkeys")" > "$STAGE/softkeys.tar"
 else
 	echo "check-ci: the linux job does not ask for submodules, so neither does this"
 	tar -cf "$STAGE/vterm.tar" --files-from /dev/null
+	tar -cf "$STAGE/softkeys.tar" --files-from /dev/null
 fi
 
 docker run --rm --name "$CONTAINER" -v "$STAGE":/in:ro "$IMAGE" sh -c "
@@ -201,6 +210,7 @@ echo \"check-ci: Qt \$(pkg-config --modversion Qt6Core), libssh \$(pkg-config --
 mkdir -p /build && cd /build
 tar xf /in/src.tar
 tar xf /in/vterm.tar
+tar xf /in/softkeys.tar
 # No patch stamp here any more. vterm.tar is the submodule at its gitlink
 # commit, so the patches are NOT applied and make has to apply them --
 # which is the point, since that is what the runner does too. git is

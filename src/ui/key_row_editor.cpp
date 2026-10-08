@@ -1,6 +1,6 @@
 #include "ui/key_row_editor.h"
 
-#include "keyboard/key_row_layout.h"
+#include "softkeys/key_row_layout.h"
 #include "term/emulator.h"
 
 #include <QDialogButtonBox>

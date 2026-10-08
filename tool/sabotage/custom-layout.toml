@@ -16,7 +16,7 @@
 # that cannot type ASCII and find out by trying to use it.
 [[sabotage]]
 name = "a layout that cannot type is installed anyway"
-file = "keyboard/soft_keyboard_layout.cpp"
+file = "softkeys/src/keyboard_layout.cpp"
 find = "\tif (!reason.isEmpty()) {"
 replace = "\tif (false) {"
 expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
@@ -27,7 +27,7 @@ expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
 # the same failure the key row's refusal was built to avoid.
 [[sabotage]]
 name = "a refused layout is offered in the chooser"
-file = "keyboard/soft_keyboard_layout.cpp"
+file = "softkeys/src/keyboard_layout.cpp"
 find = "\tif (custom_layout_ready()) {\n\t\tsk_keyboard_layout_t described;"
 replace = "\tif (true) {\n\t\tsk_keyboard_layout_t described;"
 expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
@@ -36,7 +36,7 @@ expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
 # it would drop the single key the escape exists for.
 [[sabotage]]
 name = "an escaped pipe stops being a legend"
-file = "keyboard/soft_keyboard_layout.cpp"
+file = "softkeys/src/keyboard_layout.cpp"
 find = "\t\t\t\tif (next == QLatin1Char('|') || next == QLatin1Char('\\\\')) {"
 replace = "\t\t\t\tif (next == QLatin1Char('\\\\')) {"
 expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
@@ -48,7 +48,7 @@ expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
 # transcription.
 [[sabotage]]
 name = "a backslash legend is written unescaped"
-file = "keyboard/soft_keyboard_layout.cpp"
+file = "softkeys/src/keyboard_layout.cpp"
 find = "\t\tlevel.replace(QLatin1Char('\\\\'), QStringLiteral(\"\\\\\\\\\"));"
 replace = "\t\t(void)0;"
 expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
@@ -58,7 +58,7 @@ expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"
 # which is worse than losing it: the levels shift.
 [[sabotage]]
 name = "a truncated row is accepted with fewer levels"
-file = "keyboard/soft_keyboard_layout.cpp"
+file = "softkeys/src/keyboard_layout.cpp"
 find = "\t\tif (levels.size() != 4) continue;"
 replace = "\t\twhile (levels.size() < 4) levels.append(QString());"
 expect = "a_user_layout_is_transcribed_and_refused_if_it_cannot_type"

@@ -85,6 +85,8 @@ else
 	git archive --format=tar --prefix=src/ HEAD | tar -xf - -C "$STAGE"
 	git -C vterm archive --format=tar --prefix=src/vterm/ HEAD \
 		| tar -xf - -C "$STAGE"
+	git -C softkeys archive --format=tar --prefix=src/softkeys/ \
+		"$(git rev-parse HEAD:softkeys)" | tar -xf - -C "$STAGE"
 	ln -s "$PWD/fonts" "$STAGE/src/fonts"
 
 	echo "check-deb: building $(git rev-parse --short HEAD) in a throwaway export"

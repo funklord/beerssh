@@ -92,19 +92,11 @@ SOURCES += \
     src/ui/find_bar.cpp \
     src/ui/input_selector.cpp \
     src/ui/interface_scale.cpp \
-    keyboard/key_cap.cpp \
-    keyboard/touch_chords.cpp \
-    keyboard/sk_modifiers.cpp \
-    keyboard/resize_grip.cpp \
-    keyboard/key_row_layout.cpp \
-    keyboard/soft_keyboard.cpp \
-    keyboard/soft_keyboard_layout.cpp \
     src/ui/app_settings_view.cpp \
     src/ui/colour_editor.cpp \
     src/ui/term_features_editor.cpp \
     src/ui/key_row_editor.cpp \
     src/ui/licences_view.cpp \
-    keyboard/key_row.cpp \
     src/ui/long_press.cpp \
     src/term/term_features.cpp \
     src/ui/scroll_guard.cpp \
@@ -166,21 +158,11 @@ HEADERS += \
     src/ui/input_mode.h \
     src/ui/interface_scale.h \
     src/platform/headless.h \
-    keyboard/key_cap.h \
-    keyboard/touch_chords.h \
-    keyboard/sk_modifiers.h \
-    keyboard/sk_target.h \
-    keyboard/sk_metrics.h \
-    keyboard/resize_grip.h \
-    keyboard/key_row_layout.h \
-    keyboard/soft_keyboard.h \
-    keyboard/soft_keyboard_layout.h \
     src/ui/app_settings_view.h \
     src/ui/colour_editor.h \
     src/ui/term_features_editor.h \
     src/ui/key_row_editor.h \
     src/ui/licences_view.h \
-    keyboard/key_row.h \
     src/ui/long_press.h \
     src/term/term_features.h \
     src/ui/scroll_guard.h \
@@ -203,6 +185,12 @@ HEADERS += \
 # Built by the top-level Makefile into a static archive -- `make`, not a
 # bare qmake, is what produces a working build.
 INCLUDEPATH += $$PWD/vterm/include
+
+# The on-screen keyboard is softkeys, vendored as a submodule (project.md
+# sec 6.2): its .pri adds its sources, its headers for moc, and its
+# include/ so "softkeys/keyboard.h" resolves. Not listed here a second
+# time, so a file softkeys adds needs no edit in this tree.
+include($$PWD/softkeys/softkeys.pri)
 
 # One archive per target: the host build is x86_64 and cannot go into an
 # arm64 library, which the first Android link demonstrated at length.

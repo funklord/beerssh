@@ -161,12 +161,14 @@ MAN_PAGE = $(TARGET).1
 # demand: it looks for a file called exactly the command being completed.
 COMPLETION = $(TARGET).bash
 
-# keyboard/ is ours and sits beside src/ rather than inside it, so it is
-# named here too. These are the qmake build's PREREQUISITES rather than
-# its inputs -- miss a directory and editing a file in it quietly fails
-# to trigger a rebuild, which is a stale binary and not an error.
-SOURCES = $(wildcard src/*.cpp src/*/*.cpp keyboard/*.cpp)
-HEADERS = $(wildcard src/*.h src/*/*.h keyboard/*.h)
+# softkeys/ is the on-screen keyboard, vendored (project.md sec 6.2), so
+# it is named here too. These are the qmake build's PREREQUISITES rather
+# than its inputs -- miss a directory and editing a file in it quietly
+# fails to trigger a rebuild, which is a stale binary and not an error.
+# Sabotage edits softkeys/src/ in place, so it matters here as much as
+# for src/.
+SOURCES = $(wildcard src/*.cpp src/*/*.cpp softkeys/src/*.cpp)
+HEADERS = $(wildcard src/*.h src/*/*.h softkeys/include/softkeys/*.h)
 
 # --- vendored libvterm ------------------------------------------------------
 # Built here, by hand, rather than through its own autotools: this repo's
@@ -210,6 +212,30 @@ BSSH_VTERM_FETCH := $(shell \
 		echo "make: fetching the $(VTERM_DIR) submodule" >&2; \
 		git submodule update --init --recursive $(VTERM_DIR) >&2; \
 	fi)
+endif
+endif
+
+# softkeys the same way and for the same reason, and then REFUSED if it
+# is still missing: qmake reads softkeys.pri as it generates the build,
+# and a build that went on without it would fail later naming a header
+# rather than the submodule that was never fetched.
+SOFTKEYS_DIR = softkeys
+
+ifneq ($(filter-out $(BSSH_VTERM_FREE_GOALS),$(or $(MAKECMDGOALS),all)),)
+ifeq ($(wildcard $(SOFTKEYS_DIR)/softkeys.pri),)
+BSSH_SOFTKEYS_FETCH := $(shell \
+	if [ ! -e .git ]; then \
+		echo "make: $(SOFTKEYS_DIR)/ is empty and this is not a git checkout," >&2; \
+		echo "make:   so there is nothing to fetch it from." >&2; \
+	elif ! command -v git >/dev/null 2>&1; then \
+		echo "make: $(SOFTKEYS_DIR)/ is empty and git is not installed." >&2; \
+	else \
+		echo "make: fetching the $(SOFTKEYS_DIR) submodule" >&2; \
+		git submodule update --init $(SOFTKEYS_DIR) >&2; \
+	fi)
+ifeq ($(wildcard $(SOFTKEYS_DIR)/softkeys.pri),)
+$(error the $(SOFTKEYS_DIR) submodule is missing and could not be fetched)
+endif
 endif
 endif
 

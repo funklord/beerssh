@@ -22,7 +22,7 @@ floor = 0.41
 
 exclude = ["attic", "third_party", "vendor", "build", "target",
            "dist", ".pytest_cache", ".claude",
-           "deps", "vterm", "vterm-patch"]
+           "deps", "vterm", "vterm-patch", "softkeys"]
 
 # ASCII outside string literals, which is the rule in code-style.md and is
 # the last of the fourteen projects to take it.

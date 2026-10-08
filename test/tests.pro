@@ -33,6 +33,12 @@ CONFIG -= app_bundle
 
 INCLUDEPATH += $$PWD/../src $$PWD/.. $$PWD $$PWD/../vterm/include
 
+# The on-screen keyboard is softkeys, vendored as a submodule (project.md
+# sec 6.2): its .pri adds its sources, its headers for moc, and its
+# include/ so "softkeys/keyboard.h" resolves. Not listed here a second
+# time, so a file softkeys adds needs no edit in this tree.
+include($$PWD/../softkeys/softkeys.pri)
+
 # Where tool/fetch-fonts.sh puts the curated set (project.md sec 9.2).
 # The font tests skip themselves when it is not there, so a checkout that
 # has never run the fetch script still has a green test suite.
@@ -136,30 +142,16 @@ SOURCES += \
     ../src/ui/tab_status.cpp \
     ../src/ui/touch_metrics.cpp \
     ../src/platform/platform_desktop.cpp \
-    ../keyboard/key_cap.cpp \
-    ../keyboard/touch_chords.cpp \
-    ../keyboard/sk_modifiers.cpp \
-    ../keyboard/resize_grip.cpp \
-    ../keyboard/key_row_layout.cpp \
-    ../keyboard/soft_keyboard.cpp \
-    ../keyboard/soft_keyboard_layout.cpp \
     ../src/ui/app_settings_view.cpp \
     ../src/ui/colour_editor.cpp \
     ../src/ui/term_features_editor.cpp \
     ../src/ui/key_row_editor.cpp \
     ../src/ui/licences_view.cpp \
-    ../keyboard/key_row.cpp \
     ../src/ui/terminal_accessible.cpp \
     ../src/ui/theme.cpp \
     ../src/ui/terminal_view.cpp
 
 HEADERS += \
-    ../keyboard/key_cap.h \
-    ../keyboard/touch_chords.h \
-    ../keyboard/sk_modifiers.h \
-    ../keyboard/sk_target.h \
-    ../keyboard/sk_metrics.h \
-    ../keyboard/resize_grip.h \
     fake_ssh_session.h \
     phone_metrics.h \
     command_line_test.h \
@@ -253,8 +245,6 @@ HEADERS += \
     ../src/ui/term_features_editor.h \
     ../src/ui/key_row_editor.h \
     ../src/ui/licences_view.h \
-    ../keyboard/key_row.h \
-    ../keyboard/soft_keyboard.h \
     ../src/ui/terminal_accessible.h \
     ../src/ui/theme.h \
     ../src/ui/terminal_view.h

@@ -12,7 +12,7 @@
 # The gap goes back to holding nothing.
 [[sabotage]]
 name = "a gap in a custom key row reserves no space"
-file = "keyboard/key_row.cpp"
+file = "softkeys/src/key_row.cpp"
 find = "\t\tcase sk_key_t::SPACER:\n\t\t\tadd_spacer();\n\t\t\tbreak;"
 replace = "\t\tcase sk_key_t::SPACER:\n\t\t\tbreak;"
 expect = "a_gap_in_a_custom_key_row_holds_its_space"
@@ -22,7 +22,7 @@ expect = "a_gap_in_a_custom_key_row_holds_its_space"
 # the whole point of a spacer -- is unchanged.
 [[sabotage]]
 name = "the gap is a widget with no width"
-file = "keyboard/key_row.cpp"
+file = "softkeys/src/key_row.cpp"
 find = "\tgap->setFixedWidth(SK_TOUCH_TARGET_DP);"
 replace = "\tgap->setFixedWidth(0);"
 expect = "a_gap_in_a_custom_key_row_holds_its_space"

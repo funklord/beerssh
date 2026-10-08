@@ -19,7 +19,7 @@
 # against the five curated rows that are correct.
 [[sabotage]]
 name = "an unusable custom row is accepted"
-file = "keyboard/key_row_layout.cpp"
+file = "softkeys/src/key_row_layout.cpp"
 find = "\tif (!sk_key_row_usable(keys)) return false;"
 replace = "\t(void)0;"
 expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
@@ -37,7 +37,7 @@ expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
 # fail, one layer out -- and only running it says which one you wrote.
 [[sabotage]]
 name = "a refused row is written before it is judged"
-file = "keyboard/key_row_layout.cpp"
+file = "softkeys/src/key_row_layout.cpp"
 find = "bool sk_key_row_catalog::set_custom(const QList<sk_key_t> &keys) {\n\tif (!sk_key_row_usable(keys)) return false;"
 replace = "bool sk_key_row_catalog::set_custom(const QList<sk_key_t> &keys) {\n\tfor (sk_key_row_layout_t &early : m_layouts) {\n\t\tif (early.id == QStringLiteral(\"custom\")) early.keys = keys;\n\t}\n\tif (!sk_key_row_usable(keys)) return false;"
 expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
@@ -47,7 +47,7 @@ expect = "a_custom_row_that_cannot_drive_a_terminal_is_refused"
 # cannot find -- the rule the colour catalogue states in as many words.
 [[sabotage]]
 name = "the custom entry loses its reserved id"
-file = "keyboard/key_row_layout.cpp"
+file = "softkeys/src/key_row_layout.cpp"
 find = "\t\tlayout.id = QStringLiteral(\"custom\");"
 replace = "\t\tlayout.id = QStringLiteral(\"user\");"
 expect = "a_custom_key_row_is_composed_from_words"
@@ -57,7 +57,7 @@ expect = "a_custom_key_row_is_composed_from_words"
 # looks wrong until a row has been through app.ini once.
 [[sabotage]]
 name = "a chord does not survive being written back"
-file = "keyboard/key_row_layout.cpp"
+file = "softkeys/src/key_row_layout.cpp"
 find = "\t\t\t\twords.append(QStringLiteral(\"%1-%2\")"
 replace = "\t\t\t\twords.append(QStringLiteral(\"%1_%2\")"
 expect = "a_custom_key_row_is_composed_from_words"

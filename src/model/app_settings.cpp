@@ -432,7 +432,7 @@ QMap<QString, QString> bssh_app_settings::custom_keyboard_layout() const {
 
 	/*
 	 * Read as a GROUP rather than by asking for slots by name. The slot
-	 * vocabulary belongs to keyboard/, and a list of names here would be
+	 * vocabulary belongs to softkeys, and a list of names here would be
 	 * a second copy of it -- one that goes stale the first time a layout
 	 * uses a slot this file has not heard of.
 	 */

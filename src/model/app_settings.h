@@ -239,7 +239,7 @@ public:
 	 * The custom key row, as the words sk_parse_key_row reads (sec 6.2).
 	 *
 	 * A string rather than a parsed row, because this is the layer that
-	 * talks to app.ini and the keyboard/ catalogue is the layer that knows
+	 * talks to app.ini and the softkeys catalogue is the layer that knows
 	 * what a key is -- the same division the custom colour scheme keeps,
 	 * and the reason neither of them reaches across it.
 	 *

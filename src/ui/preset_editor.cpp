@@ -55,7 +55,7 @@ void warn_not_written(QWidget *parent, const QString &title,
 
 } /* namespace */
 #include "ui/form_wrap.h"
-#include "keyboard/key_row_layout.h"
+#include "softkeys/key_row_layout.h"
 
 /*
  * Scrollback is in lines and the range is deliberately wide: 200 is a

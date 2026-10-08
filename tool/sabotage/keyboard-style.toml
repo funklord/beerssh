@@ -11,7 +11,7 @@
 # keyboard's groups and counts the buttons it drew.
 [[sabotage]]
 name = "set_group clamps against the other keyboard's group count"
-file = "keyboard/soft_keyboard.cpp"
+file = "softkeys/src/keyboard.cpp"
 find = '''void sk_keyboard::set_group(int index) {
 	const QList<sk_group_t> &groups =
 	        sk_catalog::instance().all(m_style);'''

@@ -20,12 +20,15 @@ test-env = ["QT_QPA_PLATFORM=offscreen"]
 
 # The vendored libvterm's public header. qmake carries the same path as
 # INCLUDEPATH; without it src/term/emulator_vterm.cpp does not compile and
-# every bssh_emulator method is missing at the link.
-include-dirs = ["vterm/include"]
+# every bssh_emulator method is missing at the link. softkeys/include for
+# the same reason: the keyboard's headers are "softkeys/keyboard.h".
+include-dirs = ["vterm/include", "softkeys/include"]
 
 # Android-only translation units. qmake scopes them out with `android { }`;
 # on a desktop build they reach for QJniEnvironment, which is not there.
 exclude = [
+  # softkeys' own test program, a second main() that is not BeerSSH's.
+  "softkeys/test",
   "src/platform/secret_store_keystore.cpp",
   "src/platform/platform_android.cpp",
   # Android's own HTTPS for font downloads, over JNI (project.md sec 5.2).

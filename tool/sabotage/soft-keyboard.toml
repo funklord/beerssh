@@ -25,7 +25,7 @@ expect = "only_one_on_screen_keyboard_is_ever_shown"
 # is what the test asserts over two keys rather than one.
 [[sabotage]]
 name = "a locked modifier is spent by the keystroke it modifies"
-file = "keyboard/sk_modifiers.cpp"
+file = "softkeys/src/modifiers.cpp"
 find = "\tm_held_used = quint8(m_held_used | m_held);\n\tset_armed(SK_MOD_NONE);\n}\n"
 replace = "\tm_held_used = quint8(m_held_used | m_held);\n\tset_armed(SK_MOD_NONE);\n\tset_locked(SK_MOD_NONE);\n}\n"
 expect = "a_modifier_locks_on_the_second_press_and_releases_on_the_third"
@@ -35,7 +35,7 @@ expect = "a_modifier_locks_on_the_second_press_and_releases_on_the_third"
 # remote is drawing.
 [[sabotage]]
 name = "one key group is a row shorter than the others"
-file = "keyboard/soft_keyboard_layout.cpp"
+file = "softkeys/src/keyboard_layout.cpp"
 find = '''
 	group.rows.append(common_bottom_row());
 	return group;
@@ -59,7 +59,7 @@ expect = "every_keyboard_group_is_the_same_shape"
 # between rows while every group still has the same height.
 [[sabotage]]
 name = "a row is one key short of the grid width"
-file = "keyboard/soft_keyboard_layout.cpp"
+file = "softkeys/src/keyboard_layout.cpp"
 find = '''
 	group.rows.append(slot_run("AC", 1, 11, 2));'''
 replace = '''
@@ -73,7 +73,7 @@ expect = "every_keyboard_group_is_the_same_shape"
 # call on ONE board is enough to break the rule the test asserts.
 [[sabotage]]
 name = "the built-in keyboard's keys stop repeating when held"
-file = "keyboard/soft_keyboard.cpp"
+file = "softkeys/src/keyboard.cpp"
 find = "\t\tconst int code = key.value;\n\t\tsk_set_key_repeat(button);"
 replace = "\t\tconst int code = key.value;"
 expect = "every_key_that_sends_something_repeats"
@@ -84,7 +84,7 @@ expect = "every_key_that_sends_something_repeats"
 # would report the rule as guarded when half of it is not.
 [[sabotage]]
 name = "the key row's keys stop repeating when held"
-file = "keyboard/key_row.cpp"
+file = "softkeys/src/key_row.cpp"
 find = "\tQAbstractButton *button = make_button(label);\n\tsk_set_key_repeat(button);\n\tconnect(button, &QAbstractButton::clicked, this, [this, key] {"
 replace = "\tQAbstractButton *button = make_button(label);\n\tconnect(button, &QAbstractButton::clicked, this, [this, key] {"
 expect = "every_key_that_sends_something_repeats"

@@ -1,7 +1,7 @@
 #include "ui/touch_metrics.h"
 #include "ui/app_settings_view.h"
 
-#include "keyboard/soft_keyboard_layout.h"
+#include "softkeys/keyboard_layout.h"
 
 #include <QCheckBox>
 #include <QHBoxLayout>

@@ -1998,7 +1998,7 @@ up, a strip of modifiers has nothing to modify.
   a lock, the lock survives (the hold never owned it).
   *Why it needed code:* Qt makes mouse events from ONE touch point, so a second
   finger on another button pressed nothing — the boards were sticky-only for
-  that reason, not by choice. `keyboard/touch_chords.cpp` takes a board's
+  that reason, not by choice. `softkeys/src/touch_chords.cpp` takes a board's
   touches **only once a chord is under way** (a touch beginning on a modifier,
   or any touch while one is held) and hands each finger its own button as mouse
   events, so repeat, slide-off and send-on-release are the buttons' own.
@@ -2132,11 +2132,11 @@ up, a strip of modifiers has nothing to modify.
   row, plus one space and one Shift; equal key widths). Sabotage in
   `tool/sabotage/split-keyboard.toml`.
 
-- **The keyboard becomes softkeys — [IN PROGRESS from 2026-10-08, holder's
+- **The keyboard becomes softkeys — [DONE 2026-10-08, holder's
   instruction].** For the holder's own apps only -- BeerSSH, and fuzznet's
   views (the first new consumer, the holder's choice) and through them
-  fuzzypickles -- as a private library at `~/src/softkeys`, vendored like
-  qtty. Its `project.md` holds the design and plan; here is what it costs
+  fuzzypickles -- as a library of its own, https://github.com/funklord/softkeys,
+  vendored here as the `softkeys` submodule the way libvterm is. Its `project.md` holds the design and plan; here is what it costs
   this tree. **Step 1, done in place first so the proof is this tree's
   own suite:** `keyboard/` no longer includes anything of BeerSSH's.
   `sk_modifiers` is the once/locked/held state machine lifted out of
@@ -2168,6 +2168,26 @@ up, a strip of modifiers has nothing to modify.
   word boundary does not exist after a TOML `\t` escape, so six spec
   strings kept old names -- one of them a REPLACEMENT that would have
   failed to compile and could have scored as a catch.
+  **Step 3, the switch:** `keyboard/` is gone and `softkeys` is a
+  submodule (https, since that repository is public and this one is not,
+  so a clone needs no credentials for it). Both `.pro` files take it
+  whole with `include(softkeys/softkeys.pri)` instead of listing its
+  files; the Makefile names `softkeys/src` and its headers as the qmake
+  build's prerequisites -- sabotage edits them in place -- and fetches the
+  submodule at parse time like vterm, but REFUSES to go on when it is
+  still missing. `check-ci`, `check-deb` and `check-keepalive` stage it
+  from the gitlink the staged commit names (`$STAGED:softkeys`), not from
+  its own HEAD: unlike vterm nothing patches it, but a session developing
+  softkeys from inside this tree moves that HEAD, and a checkout never
+  sees it. The code moved byte-identical except softkeys' own additions
+  (a focus target, an editing page, a page choice whose default is this
+  tree's three pages), so the proof is unchanged behaviour: the suite at
+  756 as before, `make style`, every sabotage anchor, fmake building all
+  four programs, and the 73 keyboard sabotage specs run in their new
+  place. One thing it met: the build tree's moc guard refused twelve
+  generated files still naming the old headers, named each, and the
+  build went on once they were removed -- the guard doing its job on the
+  case it was written for.
 
 - **An editor for the built-in keyboard's keys — [DEFERRED by the holder,
   2026-10-08]:** "do that after the default is perfected". The key row has
@@ -3256,7 +3276,7 @@ already holding down. The interval is Qt's 50ms rather than X11's 40ms,
 because each repeat is a round trip through the router into the emulator
 and out to the remote.
 
-One helper, `sk_set_key_repeat()` in `keyboard/key_cap.h`, because the
+One helper, `sk_set_key_repeat()` in `softkeys/include/softkeys/key_cap.h`, because the
 key row builds plain `QToolButton`s and the built-in board builds
 `sk_key_cap`s: two boards, one rule, and the way it would drift is a key
 added to one of them without the call.
@@ -12280,7 +12300,8 @@ sat there for six days and no build noticed.
 
 **Timestamps are why, and the mechanism is worth keeping because nothing
 about it looks wrong.** `6a03c7c`, "keyboard: move the keyboard to its
-own directory", was a RENAME, so `keyboard/key_row.h` kept the mtime it
+own directory", was a RENAME, so keyboard/key_row.h (in softkeys since
+2026-10-08) kept the mtime it
 had at its old path -- 2026-08-07. The moc generated from that old path
 is dated 2026-09-04. **The generated file is NEWER than its own header**,
 so make compared the two and correctly concluded there was nothing to

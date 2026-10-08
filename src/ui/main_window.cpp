@@ -1,7 +1,7 @@
 #include <QApplication>
 #include "ui/interface_scale.h"
 #include "ui/touch_metrics.h"
-#include "keyboard/sk_metrics.h"
+#include "softkeys/metrics.h"
 #include "term/font_catalog.h"
 
 #include <QAbstractItemView>
@@ -77,15 +77,15 @@
 #include "platform/secret_store.h"
 #include "ui/host_editor.h"
 #include "ui/host_list.h"
-#include "keyboard/key_row.h"
-#include "keyboard/soft_keyboard.h"
+#include "softkeys/key_row.h"
+#include "softkeys/keyboard.h"
 #include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
 #include "model/preset.h"
 #include "ui/preset_editor.h"
 #include "term/colour_scheme.h"
-#include "keyboard/key_row_layout.h"
-#include "keyboard/soft_keyboard_layout.h"
+#include "softkeys/key_row_layout.h"
+#include "softkeys/keyboard_layout.h"
 #include "ui/session_dialog.h"
 #include "ui/password_prompt.h"
 #include "ui/tab_status.h"
@@ -1776,7 +1776,7 @@ void bssh_main_window::apply_device_settings() {
 
 	/*
 	 * And the custom key row, for exactly the same reason and in the same
-	 * place: keyboard/ does not read the settings store either.
+	 * place: softkeys does not read the settings store either.
 	 *
 	 * An empty spec is left alone rather than pushed, so the catalogue
 	 * keeps the copy of the default it starts with. Pushing an empty row
@@ -1791,7 +1791,7 @@ void bssh_main_window::apply_device_settings() {
 
 	/*
 	 * And the custom keyboard layout (sec 6.3), pushed the same way and
-	 * for the same reason: keyboard/ does not read the settings store.
+	 * for the same reason: softkeys does not read the settings store.
 	 *
 	 * The return is read. A layout that cannot type is refused by the
 	 * catalogue and the reason comes back here -- which is the only
