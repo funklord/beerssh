@@ -3,6 +3,9 @@
 
 #include <QObject>
 #include <QHash>
+#include <QKeyCombination>
+
+#include <functional>
 
 #include "term/emulator.h"
 #include <QList>
@@ -180,6 +183,14 @@ public:
 	 * table in Qt keys, before Shift is folded into the character (sec 6.1).
 	 */
 	bool steal_char_chord(char32_t ch);
+
+	/*
+	 * The letter path's share of the general remaps (sec 6.1): sends the
+	 * remap target and returns true when this letter, with the modifiers
+	 * armed, held or locked, is a remapped key -- so the caller sends no
+	 * text. The same table handle_key and send_key read.
+	 */
+	bool remap_char(char32_t ch);
 
 	/*
 	 * Caps Lock arms Ctrl for the next key, rather than sending itself
@@ -377,6 +388,9 @@ private:
 	 * remote (sec 6.1).
 	 */
 	bool steal_chord(int key, quint8 modifiers);
+
+	/* Sends the target of the first remap whose "from" `matches`. */
+	bool send_remap(const std::function<bool(const QKeyCombination &)> &matches);
 
 
 	/* Applied to the next key and then gone; see modifier_state_t. */

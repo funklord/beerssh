@@ -53,6 +53,8 @@ static QString seq_text(Qt::KeyboardModifiers mods, Qt::Key key) {
 	return QKeySequence(QKeyCombination(mods, key)).toString(QKeySequence::PortableText);
 }
 
+static QAbstractButton *button_labelled(const QWidget &parent, const QString &label);
+
 void input_router_test::a_key_remap_sends_the_targets_bytes() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
@@ -73,6 +75,43 @@ void input_router_test::a_key_remap_sends_the_targets_bytes() {
 
 	/* A key nobody remapped is untouched. */
 	QCOMPARE(press(router, emulator, Qt::Key_End), end);
+
+	bssh_input_router::set_key_remaps(QHash<QString, QString>());
+}
+
+void input_router_test::a_key_remap_reaches_the_on_screen_keyboards() {
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+	const QByteArray escape = press(router, emulator, Qt::Key_Escape);
+
+	/*
+	 * One setting, every keyboard (sec 6.1, 6.2): a remap applied in
+	 * handle_key alone changed the physical keyboard and left the keys on
+	 * screen sending what they always had.
+	 */
+	QHash<QString, QString> remaps;
+	remaps.insert(seq_text(Qt::NoModifier, Qt::Key_End),
+	              seq_text(Qt::NoModifier, Qt::Key_Escape));
+	remaps.insert(seq_text(Qt::NoModifier, Qt::Key_Q),
+	              seq_text(Qt::NoModifier, Qt::Key_Escape));
+	bssh_input_router::set_key_remaps(remaps);
+
+	/* A named key, the key row's and the built-in keyboard's path. */
+	router.send_key(bssh_emulator::KEY_END, bssh_emulator::MOD_NONE);
+	QCOMPARE(emulator.take_output(), escape);
+
+	/* A letter on the built-in keyboard, which goes as text otherwise. */
+	bssh_soft_keyboard keyboard(&router);
+	QAbstractButton *q = button_labelled(keyboard, QStringLiteral("q"));
+	QAbstractButton *w = button_labelled(keyboard, QStringLiteral("w"));
+	QVERIFY(q != nullptr);
+	QVERIFY(w != nullptr);
+	q->click();
+	QCOMPARE(emulator.take_output(), escape);
+
+	/* And a letter nobody remapped is still a letter. */
+	w->click();
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("w"));
 
 	bssh_input_router::set_key_remaps(QHash<QString, QString>());
 }

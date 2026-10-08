@@ -467,7 +467,18 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, int row, int column) {
 			        m_router->modifier_state(bssh_emulator::MOD_SHIFT)
 			                != bssh_input_router::MODIFIER_OFF;
 
-			m_router->send_text(QString(bssh_keyboard_char(key, shifted, altgr_armed())));
+			const QChar sent = bssh_keyboard_char(key, shifted, altgr_armed());
+
+			/*
+			 * A remapped letter sends its target instead (sec 6.1),
+			 * from the same table the physical keyboard reads.
+			 */
+			if (m_router->remap_char(char32_t(sent.unicode()))) {
+				refresh_letter_labels();
+				return;
+			}
+
+			m_router->send_text(QString(sent));
 			refresh_letter_labels();
 		});
 		break;

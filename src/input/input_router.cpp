@@ -5,6 +5,8 @@
 
 #include <QKeyEvent>
 
+#include <functional>
+
 #include "term/emulator.h"
 
 namespace {
@@ -69,6 +71,16 @@ quint8 emulator_mods_for(Qt::KeyboardModifiers mods) {
 	if (mods & Qt::ShiftModifier) out |= bssh_emulator::MOD_SHIFT;
 	if (mods & Qt::ControlModifier) out |= bssh_emulator::MOD_CTRL;
 	if (mods & Qt::AltModifier) out |= bssh_emulator::MOD_ALT;
+
+	return out;
+}
+
+/* And back: the emulator's three in Qt's, for matching a letter's remap. */
+Qt::KeyboardModifiers qt_modifiers_for(quint8 mods) {
+	Qt::KeyboardModifiers out = Qt::NoModifier;
+	if (mods & bssh_emulator::MOD_SHIFT) out |= Qt::ShiftModifier;
+	if (mods & bssh_emulator::MOD_CTRL) out |= Qt::ControlModifier;
+	if (mods & bssh_emulator::MOD_ALT) out |= Qt::AltModifier;
 
 	return out;
 }
@@ -416,24 +428,11 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 	 * actually keeps (an F-key to a navigation key, a stray key to Escape)
 	 * without a second, text-sending path to reason about.
 	 */
-	if (!user_remaps.isEmpty()) {
-		const QKeySequence pressed(
-		        QKeyCombination(event->modifiers() & meaningful, Qt::Key(event->key())));
-		const QString to = user_remaps.value(pressed.toString(QKeySequence::PortableText));
-
-		if (!to.isEmpty()) {
-			const QKeySequence target(to, QKeySequence::PortableText);
-			if (target.count() == 1) {
-				const QKeyCombination combo = target[0];
-				const int mapped = emulator_key_for(combo.key());
-				if (mapped != bssh_emulator::KEY_NONE) {
-					m_emulator->send_key(mapped,
-					                     emulator_mods_for(combo.keyboardModifiers()));
-					spend_sticky_modifiers();
-					return true;
-				}
-			}
-		}
+	const Qt::KeyboardModifiers held = event->modifiers() & meaningful;
+	if (send_remap([event, held](const QKeyCombination &from) {
+		    return from.key() == event->key() && from.keyboardModifiers() == held;
+	    })) {
+		return true;
 	}
 
 	/*
@@ -530,6 +529,23 @@ void bssh_input_router::send_key(int key, quint8 modifiers) {
 	if (steal_chord(key, sending)) return;
 
 	/*
+	 * The general remaps too, for the same reason as the chords above:
+	 * they were applied in handle_key alone, so a remap made in the
+	 * settings changed the physical keyboard and did nothing to the keys
+	 * on screen -- one setting, two keyboards, two answers. Matched in
+	 * the emulator's terms, as steal_chord matches the chord table.
+	 */
+	const quint8 meaningful = bssh_emulator::MOD_SHIFT | bssh_emulator::MOD_CTRL
+	                          | bssh_emulator::MOD_ALT;
+	if (key != bssh_emulator::KEY_NONE
+	     && send_remap([key, sending, meaningful](const QKeyCombination &from) {
+		        return emulator_key_for(from.key()) == key
+		               && emulator_mods_for(from.keyboardModifiers()) == (sending & meaningful);
+	        })) {
+		return;
+	}
+
+	/*
 	 * Under the kitty protocol's key events this is a key like any other,
 	 * press and release, as handle_key makes it for a physical one. It
 	 * went straight to libvterm, so on the Fold the keyboard's Enter, Tab
@@ -551,6 +567,53 @@ void bssh_input_router::send_key(int key, quint8 modifiers) {
 
 	m_emulator->send_key(key, sending);
 	spend_sticky_modifiers();
+}
+
+/*
+ * The one place a remap is sent from, whichever keyboard asked: the
+ * physical one matches in Qt keys, the on-screen ones in emulator keys or
+ * a letter's Qt key, and all three send the same target the same way.
+ *
+ * Key-to-key only, as sec 6.1 records: a target with no emulator key is
+ * left alone and the pressed key takes its normal path.
+ */
+bool bssh_input_router::send_remap(const std::function<bool(const QKeyCombination &)> &matches) {
+	if (user_remaps.isEmpty() || !m_emulator) return false;
+
+	for (auto it = user_remaps.cbegin(); it != user_remaps.cend(); ++it) {
+		const QKeySequence from(it.key(), QKeySequence::PortableText);
+		if (from.count() != 1 || !matches(from[0])) continue;
+
+		const QKeySequence target(it.value(), QKeySequence::PortableText);
+		if (target.count() != 1) return false;
+		const QKeyCombination combo = target[0];
+		const int mapped = emulator_key_for(combo.key());
+		if (mapped == bssh_emulator::KEY_NONE) return false;
+
+		m_emulator->send_key(mapped, emulator_mods_for(combo.keyboardModifiers()));
+		spend_sticky_modifiers();
+		return true;
+	}
+	return false;
+}
+
+bool bssh_input_router::remap_char(char32_t ch) {
+	/* A letter's Qt key, as steal_char_chord derives it. */
+	int qt_key = 0;
+	if (ch >= U'a' && ch <= U'z') qt_key = Qt::Key_A + int(ch - U'a');
+	else if (ch >= U'A' && ch <= U'Z') qt_key = Qt::Key_A + int(ch - U'A');
+	else return false;
+
+	/*
+	 * The board's Shift is folded into the character, so a capital is
+	 * Shift held -- which is how the physical keyboard reports one too.
+	 */
+	Qt::KeyboardModifiers held = qt_modifiers_for(effective_modifiers());
+	if (ch >= U'A' && ch <= U'Z') held |= Qt::ShiftModifier;
+
+	return send_remap([qt_key, held](const QKeyCombination &from) {
+		return from.key() == qt_key && from.keyboardModifiers() == held;
+	});
 }
 
 bool bssh_input_router::steal_chord(int key, quint8 modifiers) {

@@ -17,8 +17,8 @@
 [[sabotage]]
 name = "a mapped key is never sent"
 file = "src/input/input_router.cpp"
-find = "\t\t\t\tif (mapped != bssh_emulator::KEY_NONE) {"
-replace = "\t\t\t\tif (mapped == bssh_emulator::KEY_NONE) {"
+find = "\t\tif (mapped == bssh_emulator::KEY_NONE) return false;"
+replace = "\t\tif (mapped != bssh_emulator::KEY_NONE) return false;"
 expect = "a_key_remap_sends_the_targets_bytes"
 
 # The stored remap is read back under the wrong key.

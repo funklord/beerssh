@@ -39,6 +39,7 @@ private slots:
 	 */
 	void a_key_remap_sends_the_targets_bytes();
 	void a_stolen_chord_beats_a_key_remap();
+	void a_key_remap_reaches_the_on_screen_keyboards();
 
 	/*
 	 * Press-and-hold (sec 6.4, sec 8.3). Qt does not provide it and does

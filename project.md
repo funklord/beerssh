@@ -1319,6 +1319,15 @@ quirks on Android.
   reach anyway (see that setting), so the classic CapsLock->Escape belongs
   in the OS layout, not here. Guarded by
   `tool/sabotage/key-remap.toml`.
+  **The on-screen keyboards obey it too — [FIXED 2026-10-08].** It was
+  applied in `handle_key` alone, so a remap changed the physical keyboard
+  and left the key row and the built-in keyboard sending what they always
+  had: one setting, two keyboards, two answers. All three now send through
+  `bssh_input_router::send_remap` — `handle_key` matching in Qt keys,
+  `send_key` in emulator keys (as `steal_chord` already matched the chord
+  table), and the built-in keyboard's letters through `remap_char`, with the
+  board's Shift standing for a capital as the physical keyboard reports one.
+  `a_key_remap_reaches_the_on_screen_keyboards`.
 - **Pane navigation shortcuts** once splits exist (§8): e.g. `Ctrl+Alt+Arrow` to
   move focus between panes, `Ctrl+Shift+T` new tab. These must be **intercepted
   before** the byte translation and be **user-remappable**, because any chord you
