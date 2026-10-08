@@ -14,6 +14,7 @@
 #include "platform_test.h"
 #include "phone_metrics.h"
 #include "ui/main_window.h"
+#include "ui/interface_scale.h"
 
 void platform_test::desktop_platform_is_selected_and_named() {
 	bssh_platform *platform = bssh_platform::instance();
@@ -465,6 +466,76 @@ void platform_test::the_desktop_adds_no_interface_scale() {
 	 */
 	QVERIFY2(qFuzzyCompare(platform->system_font_scale(), 1.0),
 	          "the desktop must not double-apply the system font size");
+}
+
+void platform_test::the_interface_follows_the_system_font_size_live() {
+	bssh_app_settings settings;
+	const bool was = settings.honour_system_font_scale();
+	settings.set_honour_system_font_scale(true);
+
+	bssh_follow_interface_scale();
+	const QFont start = QApplication::font();
+
+	/*
+	 * Put back however this test leaves -- a failed QVERIFY returns early,
+	 * and a forced scale left behind enlarged the font for every test that
+	 * ran after it, which turned one failure into seven.
+	 */
+	struct restore_t {
+		bool honour;
+		QFont font;
+		~restore_t() {
+			bssh_app_settings().set_honour_system_font_scale(honour);
+			bssh_platform::force_system_font_scale(0);
+			bssh_apply_interface_scale();
+			bssh_platform::force_application_active(-1);
+
+			/*
+			 * And the font itself, directly: restoring only through the
+			 * code under test leaves it enlarged whenever that code is
+			 * what broke.
+			 */
+			QApplication::setFont(font);
+		}
+	} restore { was, start };
+	const auto size = [](const QFont &font) {
+		return font.pointSizeF() > 0 ? font.pointSizeF() : qreal(font.pixelSize());
+	};
+	QVERIFY(size(start) > 0);
+
+	/*
+	 * The font size is changed in Android's Settings, so the app is in
+	 * the background while it changes and comes back after. The manifest
+	 * handles fontScale itself, so nothing restarts the app -- which is
+	 * how a change measured on the Fold went unseen until the next start.
+	 */
+	bssh_platform::force_application_active(0);
+	bssh_platform::force_system_font_scale(1.5);
+	bssh_platform::force_application_active(1);
+	QVERIFY2(qAbs(size(QApplication::font()) - size(start) * 1.5) < 0.6,
+	          qPrintable(QStringLiteral("%1 -> %2 at 1.5")
+	                             .arg(size(start)).arg(size(QApplication::font()))));
+
+	/* From the starting font every time: 1.5 then 1.2 is 1.2, not 1.8. */
+	bssh_platform::force_application_active(0);
+	bssh_platform::force_system_font_scale(1.2);
+	bssh_platform::force_application_active(1);
+	QVERIFY2(qAbs(size(QApplication::font()) - size(start) * 1.2) < 0.6,
+	          qPrintable(QStringLiteral("%1 -> %2 at 1.2")
+	                             .arg(size(start)).arg(size(QApplication::font()))));
+
+	/*
+	 * And the setting turned off puts the starting font back at once,
+	 * through the path the toggle takes -- the window applying the
+	 * device settings -- rather than at the next start.
+	 */
+	settings.set_honour_system_font_scale(false);
+	{
+		bssh_main_window window;
+		window.apply_device_settings();
+	}
+	QCOMPARE(QApplication::font(), start);
+
 }
 
 void platform_test::the_font_scale_setting_survives_a_restart() {

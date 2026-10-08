@@ -125,6 +125,7 @@ SOURCES += \
     ../src/ui/pane_container.cpp \
     ../src/ui/find_bar.cpp \
     ../src/ui/input_selector.cpp \
+    ../src/ui/interface_scale.cpp \
     ../src/ui/long_press.cpp \
     ../src/term/term_features.cpp \
     ../src/ui/scroll_guard.cpp \

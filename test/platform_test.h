@@ -54,6 +54,7 @@ private slots:
 	 * And the honour-it setting persists, on by default.
 	 */
 	void the_desktop_adds_no_interface_scale();
+	void the_interface_follows_the_system_font_size_live();
 	void the_font_scale_setting_survives_a_restart();
 
 	/* Font ligatures (sec 9.2): off by default, and the choice persists. */

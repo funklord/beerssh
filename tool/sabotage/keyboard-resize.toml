@@ -73,3 +73,31 @@ file = "src/ui/main_window.cpp"
 find = "\t\ttarget->addWidget(m_input_selector, wide ? 0 : 1);"
 replace = "\t\ttarget->addWidget(m_input_selector, 1);"
 expect = "the_input_selector_joins_the_status_line_when_wide"
+
+# sec 9.5's live font scale. Not a keyboard, but the same day's work and
+# the same "default perfected" pass; moved if it grows a file of its own.
+
+# Read once at start and never again: the Fold kept the old size until
+# the app was restarted.
+[[sabotage]]
+name = "the font scale is not read again when the app comes back"
+file = "src/ui/interface_scale.cpp"
+find = "\t\tif (platform->is_application_active()) bssh_apply_interface_scale();"
+replace = "\t\tQ_UNUSED(platform);"
+expect = "the_interface_follows_the_system_font_size_live"
+
+# Scaled from the current font, so each change compounds on the last.
+[[sabotage]]
+name = "each font scale compounds on the last"
+file = "src/ui/interface_scale.cpp"
+find = "\tQApplication::setFont(bssh_interface_font(base, scale));"
+replace = "\tQApplication::setFont(bssh_interface_font(QApplication::font(), scale));"
+expect = "the_interface_follows_the_system_font_size_live"
+
+# The toggle waits for the next start again.
+[[sabotage]]
+name = "turning the font setting off waits for a restart"
+file = "src/ui/main_window.cpp"
+find = "\t */\n\tbssh_apply_interface_scale();\n\n\tapply_key_row_visibility();"
+replace = "\t */\n\n\tapply_key_row_visibility();"
+expect = "the_interface_follows_the_system_font_size_live"

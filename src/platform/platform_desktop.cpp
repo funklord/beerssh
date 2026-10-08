@@ -353,7 +353,7 @@ public:
 		return home + QStringLiteral("/.ssh");
 	}
 
-	double system_font_scale() const override {
+	double platform_system_font_scale() const override {
 		/*
 		 * Nothing to add: Qt applies the desktop's own font size to the
 		 * default application font already, so the interface is already

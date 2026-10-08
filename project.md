@@ -2069,7 +2069,7 @@ up, a strip of modifiers has nothing to modify.
   the top of a keyboard underneath, the inner edge of each split half. Not
   the screen's own edges, where Android's back gesture lives — the holder
   said "outer edge", read as the keyboard's edge rather than the screen's;
-  **[OPEN]** if the screen edge was meant; not raised since.
+  The holder confirmed the terminal-facing edge.
   **Seen on the Fold:** the 22% halves fit the full prompt
   `/data/data/se.vibes.beerssh/files $` on one line, a drag narrowed both
   halves, and the width came back after a restart. Sizes are device-level and
@@ -2093,6 +2093,12 @@ up, a strip of modifiers has nothing to modify.
   the inner-edge signs, both bars lit, the setting), `a_dragged_keyboard_size_is_kept`
   (22% default, kept across windows, reset). Sabotage:
   `tool/sabotage/keyboard-resize.toml`.
+
+- **An editor for the built-in keyboard's keys — [DEFERRED by the holder,
+  2026-10-08]:** "do that after the default is perfected". The key row has
+  one (`bssh_key_row_editor`); the built-in keyboard's pages are compiled
+  in, and its only customisation is the hand-edited `[keyboard_custom_layout]`
+  in app.ini. Not to be started until the holder says the default is right.
 
 
 **Shift was `toUpper()`, and that left 21 characters unreachable —
@@ -9114,12 +9120,22 @@ BMP, and Japanese, Chinese and Korean are not scripts a phone will not meet.
   Fold, 2026-10-08:** the system font size moved from 0.8 to 1.3 by `settings
   put system font_scale` (Android applied it: `mGlobalConfiguration={1.3
   ...}`), and BeerSSH restarted under it drew its host list visibly larger;
-  set back to 0.8 afterwards. **What it does not do is follow a change while
-  running** -- under 1.3 the open app was unchanged until it was restarted.
-  That is what was built (`main()` sets the font once, before any widget),
-  and the manifest lists `fontScale` among the handled configuration
-  changes, so Android does not recreate the activity to deliver it either.
-  Whether it should follow live is the holder's question, not a defect.
+  set back to 0.8 afterwards. It did not follow a change while running:
+  `main()` set the font once, its comment claiming a change recreates the
+  activity, while the manifest lists `fontScale` among the configuration
+  changes it handles itself -- so nothing re-read it until the next start.
+  **Followed live since — [BUILT 2026-10-08, holder's call]:**
+  `bssh_follow_interface_scale` re-reads the scale whenever the app becomes
+  active again, which is when a change made in Android's Settings arrives,
+  and `apply_device_settings` re-applies it when the setting is toggled.
+  Always from the STARTING font, so 1.5 then 1.2 is 1.2 and not 1.8, and
+  only when the scale moved, so a font something else set is left alone.
+  No Java: the existing activity signal carries it. **Limit:** a change
+  made while BeerSSH stays in front (split screen beside Settings) waits
+  for its next return to the front; nothing reports one sooner without a
+  Java `onConfigurationChanged` hook. Forced in the suite through
+  `bssh_platform::force_system_font_scale`, as screen size and activity
+  are. `the_interface_follows_the_system_font_size_live`.
   **What was measured before building, and it still holds.** *Nothing in this
   tree read the system font scale* before this — no reference to `fontScale`
   anywhere in `src/`, until the Android backend added one. The grid builds its own `QFont`

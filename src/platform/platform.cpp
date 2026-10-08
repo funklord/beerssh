@@ -87,6 +87,18 @@ void bssh_platform::force_screen_size(const QSize &size_dp) {
 	bssh_forced_screen = size_dp;
 }
 
+/* 0 until something says otherwise: no real scale is 0. */
+static double bssh_forced_font_scale = 0.0;
+
+double bssh_platform::system_font_scale() const {
+	if (bssh_forced_font_scale > 0.0) return bssh_forced_font_scale;
+	return platform_system_font_scale();
+}
+
+void bssh_platform::force_system_font_scale(double scale) {
+	bssh_forced_font_scale = scale;
+}
+
 /* -1 until something says otherwise, as bssh_forced_touch is. */
 static int bssh_forced_active = -1;
 

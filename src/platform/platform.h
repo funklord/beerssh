@@ -387,8 +387,23 @@ public:
 	 * font size to the default font already, so a desktop has nothing to
 	 * add; Android's fontScale Qt ignores, measured on a Note 9, so the
 	 * Android backend reads it and hands it back for the caller to apply.
+	 *
+	 * Read fresh on every call, and asked again whenever the app becomes
+	 * active (bssh_follow_interface_scale): the manifest declares fontScale
+	 * among the configuration changes it handles, so Android does NOT
+	 * recreate the activity on a change, and a value read once at start
+	 * stayed until the next start -- measured on the Fold.
+	 *
+	 * Forced the way force_screen_size() is, 0 to go back to asking: the
+	 * desktop only ever answers 1.0, and the suite needs another answer.
 	 */
-	virtual double system_font_scale() const = 0;
+	double system_font_scale() const;
+	static void force_system_font_scale(double scale);
+
+protected:
+	virtual double platform_system_font_scale() const = 0;
+
+public:
 
 	/*
 	 * Tier 4 of the shared dark-desktop rule (claude-guidelines

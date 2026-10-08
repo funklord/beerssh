@@ -1,4 +1,5 @@
 #include <QApplication>
+#include "ui/interface_scale.h"
 #include "ui/touch_metrics.h"
 #include "term/font_catalog.h"
 
@@ -1743,6 +1744,12 @@ void bssh_main_window::apply_input_mode() {
 }
 
 void bssh_main_window::apply_device_settings() {
+	/*
+	 * "Follow the system font size" takes effect when it is toggled, not
+	 * at the next start (sec 9.5).
+	 */
+	bssh_apply_interface_scale();
+
 	apply_key_row_visibility();
 
 	const bssh_app_settings settings;

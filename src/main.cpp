@@ -210,14 +210,13 @@ int main(int argc, char *argv[]) {
 	 * builds its own font with an explicit point size, so this moves the
 	 * menus, forms and host list around it and never the column count.
 	 *
-	 * Only Android reports anything but 1.0, and there a font-size change
-	 * recreates the activity, so reading it once here is enough -- the
-	 * next value arrives on the next start. Off is honoured for the user
-	 * who wants this app's chrome at its own size regardless.
+	 * Only Android reports anything but 1.0. A font-size change does NOT
+	 * recreate the activity -- the manifest handles fontScale itself -- so
+	 * this is applied again each time the app comes back to the front,
+	 * which is when a change made in Android's Settings can arrive. Off is
+	 * honoured for the user who wants this app's chrome at its own size.
 	 */
-	if (platform && bssh_app_settings().honour_system_font_scale()) {
-		app.setFont(bssh_interface_font(app.font(), platform->system_font_scale()));
-	}
+	bssh_follow_interface_scale();
 
 	/*
 	 * Pictures a crashed instance spilled (sec 7.1). Sealed under a key

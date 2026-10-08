@@ -583,7 +583,7 @@ public:
 		return QString();
 	}
 
-	double system_font_scale() const override {
+	double platform_system_font_scale() const override {
 		/*
 		 * Configuration.fontScale, the accessibility "Font size" the
 		 * user set for the whole device. Qt ignores it (measured on a

@@ -91,6 +91,7 @@ SOURCES += \
     src/ui/pane_container.cpp \
     src/ui/find_bar.cpp \
     src/ui/input_selector.cpp \
+    src/ui/interface_scale.cpp \
     keyboard/key_cap.cpp \
     keyboard/touch_chords.cpp \
     keyboard/resize_grip.cpp \
