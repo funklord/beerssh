@@ -208,6 +208,7 @@ private slots:
 	void a_narrow_screen_falls_back_to_the_compact_keyboard();
 	void a_short_wide_screen_gets_the_split_keyboard();
 	void the_split_keyboard_holds_every_key_once();
+	void every_compact_page_starts_with_the_digits();
 	void the_split_keyboard_sits_beside_the_terminal();
 	void dragging_a_bar_resizes_the_keyboard();
 	void a_dragged_keyboard_size_is_kept();

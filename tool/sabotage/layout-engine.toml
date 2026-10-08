@@ -6,14 +6,18 @@
 # 1. The compact number row follows the layout again.
 #    This is the state it shipped in and the contract caught on the first
 #    layout that was not US: Swedish puts ( and & where US has * and ^,
-#    so a Swedish compact keyboard cannot type either. The digits are
-#    1-0 in both layouts, so the row looks perfectly right.
+#    so a Swedish compact keyboard could not type either. Since the digit
+#    row went on every page (sec 6.2) and the numbers page's second row
+#    carries ( and &, that is no longer what breaks -- a sabotage run
+#    showed reachability passing. What breaks now is German's fourth
+#    page: eszett is AE11, a layout row puts it on page one, and the page
+#    that exists for it disappears.
 [[sabotage]]
 name = "the number row follows the layout instead of the palette"
 file = "keyboard/soft_keyboard_layout.cpp"
-find = "\tgroup.rows.append(literal_row(\"1234567890-\"));"
-replace = "\tgroup.rows.append(slot_run(\"AE\", 1, 11, 2));"
-expect = "both_keyboards_reach_every_printable_character"
+find = "\treturn literal_row(\"1234567890-\");"
+replace = "\treturn slot_run(\"AE\", 1, 11, 2);"
+expect = "a_fourth_page_appears_only_where_a_letter_needs_it"
 
 # 2. The full keyboard loses the ISO key.
 #    The full board has no symbol page -- its two pages are the main

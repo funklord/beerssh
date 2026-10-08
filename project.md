@@ -2094,6 +2094,44 @@ up, a strip of modifiers has nothing to modify.
   (22% default, kept across windows, reset). Sabotage:
   `tool/sabotage/keyboard-resize.toml`.
 
+- **Perfecting the default: digits, and a split for two thumbs —
+  [BUILT 2026-10-08, holder's picks].** Chosen from a short list drawn
+  from the day's Fold captures.
+  *Digits in portrait:* every compact page now opens with `digit_row()`,
+  the palette row with the US pairs on Shift -- the same row everywhere, so
+  Shift on a digit means one thing, and on every page because pages keep
+  one height. The numbers page, whose digit row it was, fills the freed
+  row with `+ < > { } : | % ^ ! #`, the shell characters no page had
+  without Shift. Seen on the Fold: `42` typed from the row.
+  *The split for two thumbs:* the cut had put the space bar and Shift on
+  one side each, so `lay_out_split` gives each half its own space bar and
+  a right-hand Shift (Bksp gives up a key's width at the outer edge). The
+  second space bar is also what makes a key one width on both sides:
+  without it the left half spanned 10 columns to the right's 13 and its
+  keys came out a third wider, measured on the Fold. Equalising the counts
+  explicitly was written as well, and sabotage showed it changed nothing
+  once the space bar was there, so it went; the width is asserted instead.
+  **That assertion first measured nothing.** The test showed the halves but
+  not the keyboard they follow, so they stayed hidden and every key kept
+  Qt's unlaid 100-pixel default: q and p compared equal whatever the code
+  did, and a sabotage making them 39 and 30 pixels stayed green. It now
+  shows the keyboard as well and asserts the halves are visible first.
+  *The split leaves the digit row out*
+  (`bssh_soft_key_group_t::digit_row_first`): with it, five rows of 48dp
+  keys did not fit the Fold's landscape height and the status line and
+  mode buttons went off the bottom of the screen. Asked for in portrait,
+  so landscape keeps four rows rather than keys below the touch floor.
+  **The instrument had to be fixed to see that.** Off-screen, a window
+  whose contents need more height simply grows; a phone's cannot. So
+  `the_input_selector_joins_the_status_line_when_wide` compares against
+  the height GIVEN, at the Fold's 822x290: with the digit row put back the
+  window grows to 292 and the selector ends at 291. Measured against the
+  window's own height the same sabotage passed.
+  Tests: `every_compact_page_starts_with_the_digits`,
+  `the_split_keyboard_holds_every_key_once` (compact's keys less the digit
+  row, plus one space and one Shift; equal key widths). Sabotage in
+  `tool/sabotage/split-keyboard.toml`.
+
 - **An editor for the built-in keyboard's keys — [DEFERRED by the holder,
   2026-10-08]:** "do that after the default is perfected". The key row has
   one (`bssh_key_row_editor`); the built-in keyboard's pages are compiled

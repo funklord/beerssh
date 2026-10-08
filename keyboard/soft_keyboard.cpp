@@ -5,6 +5,7 @@
 #include <QPixmap>
 #include <QtMath>
 
+#include <algorithm>
 #include <cmath>
 #include "keyboard/soft_keyboard.h"
 
@@ -705,47 +706,113 @@ void bssh_soft_keyboard::refresh_modifiers() {
  * leftmost column any right-hand key starts at, so the two halves are the
  * one keyboard pulled apart rather than two keyboards.
  *
+ * Then two keys a split keyboard needs and a one-piece keyboard does not
+ * (sec 6.2, asked for by the holder 2026-10-08), because each thumb now
+ * reaches only its own half:
+ *
+ *   - the space bar on BOTH halves: the cut put it on the right, so the
+ *     left thumb could not type a space;
+ *   - Shift on both: the left half has it, and the right half's last key
+ *     in that row gives up one key's width to a Shift at the outer edge,
+ *     mirroring the left one.
+ *
+ * The second space bar is also what makes a key one width on either side.
+ * Without it the left half spanned 10 columns and the right 13, and the
+ * left keys came out a third wider, measured on the Fold; with it both are
+ * 13. Equalising the counts explicitly was written too, and a sabotage
+ * showed it changed nothing once the space bar was there, so it went --
+ * the_split_keyboard_holds_every_key_once asserts the widths instead.
+ *
  * The keys sit at the BOTTOM of each half, at their own height, with the
  * space above them empty: a half is as tall as the terminal, and a thumb
  * holding a phone sideways reaches the lower corners, not the middle.
  */
 void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
+	struct placed_t {
+		bssh_key_t key;
+		int column;
+	};
+	/*
+	 * Without the compact pages' digit row (bssh_soft_key_group_t::
+	 * digit_row_first): it was asked for in portrait, and five rows of
+	 * 48dp keys did not fit a landscape phone.
+	 */
+	const int skip = group.digit_row_first ? 1 : 0;
+	const int rows = int(group.rows.size()) - skip;
+	QList<QList<placed_t>> left(rows), right(rows);
+
+	for (int r = 0; r < rows; ++r) {
+		int column = 0;
+		for (const bssh_key_t &key : group.rows.at(skip + r)) {
+			if (bssh_soft_keyboard_catalog::in_left_half(column, key.span, group.columns)) {
+				left[r].append({ key, column });
+			} else {
+				right[r].append({ key, column });
+			}
+			column += key.span;
+		}
+	}
+
+	const auto is_space = [](const bssh_key_t &key) {
+		return key.kind == bssh_key_t::TEXT && key.value == int(U' ');
+	};
+	const auto is_shift = [](const bssh_key_t &key) {
+		return key.kind == bssh_key_t::MODIFIER && key.modifier == bssh_emulator::MOD_SHIFT;
+	};
+	const auto end_of = [](const QList<placed_t> &row) {
+		return row.isEmpty() ? 0 : row.last().column + row.last().key.span;
+	};
+
+	for (int r = 0; r < rows; ++r) {
+		const bool left_space = std::any_of(left[r].cbegin(), left[r].cend(),
+		                                    [&](const placed_t &p) { return is_space(p.key); });
+		for (const placed_t &p : right[r]) {
+			if (!left_space && is_space(p.key)) {
+				left[r].append({ p.key, end_of(left[r]) });
+				break;
+			}
+		}
+
+		const bool left_shift = std::any_of(left[r].cbegin(), left[r].cend(),
+		                                    [&](const placed_t &p) { return is_shift(p.key); });
+		const bool right_shift = std::any_of(right[r].cbegin(), right[r].cend(),
+		                                     [&](const placed_t &p) { return is_shift(p.key); });
+		if (left_shift && !right_shift && !right[r].isEmpty() && right[r].last().key.span >= 4) {
+			bssh_key_t shift;
+			for (const placed_t &p : left[r]) {
+				if (is_shift(p.key)) shift = p.key;
+			}
+			right[r].last().key.span -= 2;
+			shift.span = 2;
+			right[r].append({ shift, end_of(right[r]) });
+		}
+	}
+
 	int right_origin = group.columns;
 	int left_columns = 0;
-	for (const QList<bssh_key_t> &row : group.rows) {
-		int column = 0;
-		for (const bssh_key_t &key : row) {
-			if (bssh_soft_keyboard_catalog::in_left_half(column, key.span, group.columns)) {
-				left_columns = qMax(left_columns, column + key.span);
-			} else {
-				right_origin = qMin(right_origin, column);
-			}
-			column += key.span;
-		}
+	int right_end = 0;
+	for (int r = 0; r < rows; ++r) {
+		left_columns = qMax(left_columns, end_of(left[r]));
+		if (!right[r].isEmpty()) right_origin = qMin(right_origin, right[r].first().column);
+		right_end = qMax(right_end, end_of(right[r]));
 	}
+	const int right_columns = qMax(0, right_end - right_origin);
 
 	/* Row 0 is the empty space above the keys; the keys start at 1. */
-	for (int r = 0; r < group.rows.size(); ++r) {
-		int column = 0;
-		for (const bssh_key_t &key : group.rows.at(r)) {
-			if (bssh_soft_keyboard_catalog::in_left_half(column, key.span, group.columns)) {
-				add_key(key, m_half_grids[0], 1 + r, column);
-			} else {
-				add_key(key, m_half_grids[1], 1 + r, column - right_origin);
-			}
-			column += key.span;
+	for (int r = 0; r < rows; ++r) {
+		for (const placed_t &p : left[r]) add_key(p.key, m_half_grids[0], 1 + r, p.column);
+		for (const placed_t &p : right[r]) {
+			add_key(p.key, m_half_grids[1], 1 + r, p.column - right_origin);
 		}
 	}
 
-	const int right_columns = group.columns - right_origin;
-	for (int side = 0; side < 2; ++side) {
-		QGridLayout *grid = m_half_grids[side];
-		const int used = side ? right_columns : left_columns;
+	for (QGridLayout *grid : m_half_grids) {
+		const int used = grid == m_half_grids[0] ? left_columns : right_columns;
 		for (int c = 0; c < BSSH_KEYBOARD_MAX_COLUMNS; ++c) {
 			grid->setColumnStretch(c, c < used ? 1 : 0);
 		}
 		grid->setRowStretch(0, 1);
-		for (int r = 0; r < group.rows.size(); ++r) grid->setRowStretch(1 + r, 0);
+		for (int r = 0; r < rows; ++r) grid->setRowStretch(1 + r, 0);
 	}
 }
 

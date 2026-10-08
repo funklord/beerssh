@@ -98,6 +98,14 @@ struct bssh_soft_key_group_t {
 	 */
 	QList<QList<bssh_key_t> > rows;
 
+	/*
+	 * Whether rows[0] is the digit row every compact page carries (sec
+	 * 6.2). The split keyboard leaves it out: asked for in portrait, and
+	 * in landscape five rows of 48dp keys did not fit the Fold's cover
+	 * screen -- the status line and the mode buttons went off the bottom.
+	 */
+	bool digit_row_first = false;
+
 	bssh_soft_key_group_t() : columns(BSSH_KEYBOARD_COLUMNS) {}
 };
 

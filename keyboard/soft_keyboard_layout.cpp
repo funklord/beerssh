@@ -1960,6 +1960,29 @@ QList<bssh_key_t> literal_row(const char *characters) {
 	return row;
 }
 
+/*
+ * The compact keyboard's digit row, on top of EVERY page (sec 6.2).
+ *
+ * Asked for by the holder 2026-10-08: ports, PIDs and line numbers are
+ * typed constantly in a terminal, and a page switch for each one is the
+ * interaction a keyboard with a number row never asks for. On every page
+ * rather than only the letters, because every page has the same number of
+ * rows -- switching pages must not resize the terminal -- and digits are
+ * as wanted beside the F-keys as beside the letters.
+ *
+ * A PALETTE row, the US pairs on Shift, and not the layout's own AE row.
+ * The numbers page's reason below -- Swedish ( and & once untypeable -- no
+ * longer holds on its own, since that page's second row carries both now;
+ * a sabotage showed it. What a layout row would break today is the fourth
+ * page: German keeps eszett at AE11, so a layout digit row on every page
+ * puts it on page one and the page that exists for it disappears. And a
+ * palette row means Shift on a digit means one thing on every page and in
+ * every layout.
+ */
+QList<bssh_key_t> digit_row() {
+	return literal_row("1234567890-");
+}
+
 /* ---- the full-size keyboard (sec 6.2) -------------------------------
  *
  * A real keyboard's geometry, in QUARTER-key columns: 1u is 4, so 1.25u
@@ -2236,6 +2259,8 @@ bssh_soft_key_group_t letters_group() {
 	group.button_label = QStringLiteral("abc");
 	group.display_name = QStringLiteral("Letters");
 
+	group.rows.append(digit_row());
+	group.digit_row_first = true;
 	group.rows.append(slot_run("AD", 1, 11, 2));
 
 	/*
@@ -2289,7 +2314,17 @@ bssh_soft_key_group_t numbers_group() {
 	 * Swedish user still gets a Swedish LETTER block, and still gets a
 	 * shell they can type in.
 	 */
-	group.rows.append(literal_row("1234567890-"));
+	group.rows.append(digit_row());
+	group.digit_row_first = true;
+
+	/*
+	 * The row the digits used to fill, now that every page has them on
+	 * top (see digit_row): the shell characters no page offered without
+	 * Shift -- + < > { } : | % ^ ! # -- for redirection, globs, braces,
+	 * job control and arithmetic, one tap each on the page they belong to.
+	 */
+	group.rows.append(literal_row("+<>{}:|%^!#"));
+
 	/*
 	 * A comma rather than a second semicolon: `;` is already on the
 	 * letters group's home row, and this row has exactly ten places. The
@@ -2360,6 +2395,9 @@ bssh_soft_key_group_t terminal_group() {
 	group.id = QStringLiteral("terminal");
 	group.button_label = QStringLiteral("Fn");
 	group.display_name = QStringLiteral("Terminal and function keys");
+
+	group.rows.append(digit_row());
+	group.digit_row_first = true;
 
 	QList<bssh_key_t> row;
 	for (int n = 1; n <= 11; ++n) {
@@ -2519,6 +2557,9 @@ bssh_soft_key_group_t outer_slots_group() {
 	group.id = QStringLiteral("outer");
 	group.display_name = QStringLiteral("Layout row");
 
+	group.rows.append(digit_row());
+	group.digit_row_first = true;
+
 	group.rows.append(spread_slots(BSSH_OUTER_TOP,
 	                                int(sizeof BSSH_OUTER_TOP / sizeof *BSSH_OUTER_TOP),
 	                                BSSH_KEYBOARD_COLUMNS));
@@ -2627,6 +2668,7 @@ void bssh_soft_keyboard_catalog::rebuild() {
 	m_groups.append(letters_group());
 	m_groups.append(numbers_group());
 	m_groups.append(terminal_group());
+
 
 	/*
 	 * The fourth page, for the layouts that need it and no others.

@@ -67,6 +67,7 @@
 #include <QMenu>
 #include <QSettings>
 #include <QSplitter>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QSplitterHandle>
 #include <QTabBar>
@@ -5139,7 +5140,9 @@ void layout_test::the_split_keyboard_holds_every_key_once() {
 
 	/*
 	 * Every group, compared with the compact keyboard it is cut from: the
-	 * same keys, none lost in the cut and none drawn twice. A relationship
+	 * same keys, none lost in the cut -- plus exactly the two a split needs
+	 * because each thumb reaches only its half (sec 6.2): a second space
+	 * bar, and a second Shift wherever the page has one. A relationship
 	 * rather than a list, so a key added to compact is checked here too.
 	 */
 	const int groups = catalog::instance().all(catalog::STYLE_COMPACT).size();
@@ -5152,9 +5155,32 @@ void layout_test::the_split_keyboard_holds_every_key_once() {
 
 		keyboard.set_style(catalog::STYLE_SPLIT);
 		keyboard.set_group(g);
-		QStringList split = labels(keyboard.half(0)) + labels(keyboard.half(1));
+		const QStringList left = labels(keyboard.half(0));
+		const QStringList right = labels(keyboard.half(1));
+		QStringList split = left + right;
 		split.sort();
-		QCOMPARE(split, compact);
+
+		/*
+		 * Less the digit row, which the split leaves out: asked for in
+		 * portrait, and five rows did not fit a landscape phone.
+		 */
+		QStringList expected = compact;
+		const bssh_soft_key_group_t &page = catalog::instance().all(catalog::STYLE_COMPACT).at(g);
+		if (page.digit_row_first) {
+			for (const bssh_key_t &key : page.rows.at(0)) expected.removeOne(key.label);
+		}
+		if (compact.contains(QStringLiteral("space"))) expected.append(QStringLiteral("space"));
+		if (compact.contains(QStringLiteral("Shift"))) expected.append(QStringLiteral("Shift"));
+		expected.sort();
+		QCOMPARE(split, expected);
+
+		/* And each half has its own space bar, and its own Shift where the page has one. */
+		QVERIFY2(left.contains(QStringLiteral("space")) && right.contains(QStringLiteral("space")),
+		          "each thumb reaches a space bar");
+		if (compact.contains(QStringLiteral("Shift"))) {
+			QVERIFY2(left.contains(QStringLiteral("Shift")) && right.contains(QStringLiteral("Shift")),
+			          "each thumb reaches a Shift");
+		}
 	}
 
 	/* Cut where a keyboard is cut: q on the left, p on the right. */
@@ -5168,6 +5194,91 @@ void layout_test::the_split_keyboard_holds_every_key_once() {
 	        QStringLiteral("keyboard-settings"));
 	QVERIFY(settings);
 	QVERIFY(keyboard.half(1)->isAncestorOf(settings));
+
+	/*
+	 * One key, one width, on either side. Laid over their own column
+	 * counts the left half's keys came out a third wider than the right's,
+	 * measured on the Fold.
+	 */
+	QWidget host;
+	QHBoxLayout *row = new QHBoxLayout(&host);
+	row->addWidget(keyboard.half(0));
+	row->addWidget(new QWidget(&host), 1);
+	row->addWidget(keyboard.half(1));
+
+	/*
+	 * The keyboard itself goes in too, because the halves show only while
+	 * it does: left out, the halves stayed hidden, every key kept Qt's
+	 * unlaid 100-pixel default, and the comparison below passed whatever
+	 * the widths were -- a sabotage that made them differ was missed.
+	 */
+	row->addWidget(&keyboard);
+
+	/*
+	 * Handed back before the host goes: the keyboard is this function's,
+	 * and a host that deleted it as a child would leave its destructor to
+	 * run a second time. Declared after the host so it runs first, on an
+	 * early return as well.
+	 */
+	struct hand_back_t {
+		QWidget *widget;
+		~hand_back_t() { widget->setParent(nullptr); }
+	} hand_back { &keyboard };
+	keyboard.set_half_width(200);
+	host.resize(900, 400);
+	host.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&host));
+	QCoreApplication::processEvents();
+	QVERIFY2(keyboard.half(0)->isVisible() && keyboard.half(1)->isVisible(),
+	          "the halves must be laid out for their keys' widths to mean anything");
+	bssh_key_cap *q = nullptr;
+	bssh_key_cap *p = nullptr;
+	for (bssh_key_cap *cap : host.findChildren<bssh_key_cap *>()) {
+		if (cap->text() == QStringLiteral("q")) q = cap;
+		if (cap->text() == QStringLiteral("p")) p = cap;
+	}
+	QVERIFY(q && p);
+	QVERIFY2(qAbs(q->width() - p->width()) <= 2,
+	          qPrintable(QStringLiteral("q is %1 wide and p is %2").arg(q->width()).arg(p->width())));
+}
+
+void layout_test::every_compact_page_starts_with_the_digits() {
+	typedef bssh_soft_keyboard_catalog catalog;
+
+	/*
+	 * Asked for by the holder 2026-10-08: digits without a page switch,
+	 * for ports, PIDs and line numbers. On EVERY page, so the pages keep
+	 * one height (check_keyboard_shape asserts that part), and the same
+	 * palette row everywhere, so Shift on a digit means one thing.
+	 */
+	const QStringList digits = { QStringLiteral("1"), QStringLiteral("2"), QStringLiteral("3"),
+	                             QStringLiteral("4"), QStringLiteral("5"), QStringLiteral("6"),
+	                             QStringLiteral("7"), QStringLiteral("8"), QStringLiteral("9"),
+	                             QStringLiteral("0"), QStringLiteral("-") };
+	for (const bssh_soft_key_group_t &group : catalog::instance().all(catalog::STYLE_COMPACT)) {
+		QStringList top;
+		for (const bssh_key_t &key : group.rows.value(0)) top.append(key.label);
+		QVERIFY2(top == digits,
+		          qPrintable(QStringLiteral("the %1 page starts with %2")
+		                             .arg(group.display_name, top.join(QLatin1Char(' ')))));
+	}
+
+	/*
+	 * The row the digits left on the numbers page holds the shell
+	 * characters no page offered without Shift.
+	 */
+	const QList<bssh_soft_key_group_t> &groups = catalog::instance().all(catalog::STYLE_COMPACT);
+	const int numbers = catalog::instance().index_of(QStringLiteral("numbers"), catalog::STYLE_COMPACT);
+	QStringList plain;
+	for (const QList<bssh_key_t> &row : groups.at(numbers).rows) {
+		for (const bssh_key_t &key : row) {
+			if (key.kind == bssh_key_t::TEXT) plain.append(QString(QChar(uint(key.value))));
+		}
+	}
+	for (const char *ch : { "+", "<", ">", "{", "}", ":", "|", "%", "^", "!", "#" }) {
+		QVERIFY2(plain.contains(QString::fromLatin1(ch)),
+		          qPrintable(QStringLiteral("%1 is not on the numbers page without Shift").arg(QLatin1String(ch))));
+	}
 }
 
 void layout_test::the_split_keyboard_sits_beside_the_terminal() {
@@ -5422,6 +5533,15 @@ void layout_test::a_dragged_keyboard_size_is_kept() {
 void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 	const forced_touch_t touch(1);
 
+	/* The built-in keyboard, so a split is what shares the landscape height. */
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+	struct restore_t {
+		bssh_app_settings::keyboard_t keyboard;
+		~restore_t() { bssh_app_settings().set_keyboard(keyboard); }
+	} restore { before };
+
 	const auto check = [](int width, int height, bool wide) {
 		const forced_screen_t held(QSize(width, height));
 		bssh_main_window window;
@@ -5459,6 +5579,16 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 			QVERIFY2(at.width() < window.width() / 2,
 			          qPrintable(QStringLiteral("%1 of %2 wide").arg(at.width()).arg(window.width())));
 			QVERIFY(at.right() >= window.width() - 2);
+
+			/*
+			 * And on screen at all: with the digit row in the split
+			 * halves, five rows of keys pushed the status line and these
+			 * buttons off the bottom of the Fold in landscape.
+			 */
+			QVERIFY2(at.bottom() < height,
+			          qPrintable(QStringLiteral("the selector ends at %1 on a screen %2 tall "
+			                                     "(the window asked for %3)")
+			                             .arg(at.bottom()).arg(height).arg(window.height())));
 		} else {
 			/* Upright and narrow, a row of its own, a fifth each. */
 			QVERIFY2(!status, "the selector has a row of its own");
@@ -5468,6 +5598,13 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 		QVERIFY(at.height() >= BSSH_TOUCH_TARGET_DP);
 	};
 
+	/*
+	 * The Fold's cover screen in landscape, less the system bars -- the
+	 * size the overflow was seen at. Measured against the height GIVEN
+	 * rather than the window's own: off-screen, a window whose contents
+	 * need more simply grows, where a phone's cannot and cuts them off.
+	 */
+	check(822, 290, true);
 	check(860, 320, true);
 	check(320, 860, false);
 }

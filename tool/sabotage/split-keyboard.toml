@@ -16,8 +16,8 @@ expect = "a_short_wide_screen_gets_the_split_keyboard"
 [[sabotage]]
 name = "the split loses the right half's keys"
 file = "keyboard/soft_keyboard.cpp"
-find = "\t\t\t\tadd_key(key, m_half_grids[1], 1 + r, column - right_origin);"
-replace = "\t\t\t\tQ_UNUSED(right_origin);"
+find = "\t\t\tadd_key(p.key, m_half_grids[1], 1 + r, p.column - right_origin);"
+replace = "\t\t\tQ_UNUSED(p);"
 expect = "the_split_keyboard_holds_every_key_once"
 
 # The window never places the halves, so they stay inside the keyboard
@@ -60,3 +60,56 @@ file = "keyboard/soft_keyboard.cpp"
 find = "\t\t\tif (m_router->remap_char(char32_t(sent.unicode()))) {"
 replace = "\t\t\tif (false) {"
 expect = "a_key_remap_reaches_the_on_screen_keyboards"
+
+# The digit row gone from the letters page: back to a page switch for
+# every port number, and one page a row shorter than the others.
+[[sabotage]]
+name = "the letters page has no digit row"
+file = "keyboard/soft_keyboard_layout.cpp"
+find = "\tgroup.rows.append(digit_row());\n\tgroup.digit_row_first = true;\n\tgroup.rows.append(slot_run(\"AD\", 1, 11, 2));"
+replace = "\tgroup.rows.append(slot_run(\"AD\", 1, 11, 2));"
+expect = "every_compact_page_starts_with_the_digits"
+
+# The numbers page's new row of shell characters gone.
+[[sabotage]]
+name = "the numbers page loses its shell characters"
+file = "keyboard/soft_keyboard_layout.cpp"
+find = "\tgroup.rows.append(literal_row(\"+<>{}:|%^!#\"));"
+replace = "\tgroup.rows.append(literal_row(\"1234567890-\"));"
+expect = "every_compact_page_starts_with_the_digits"
+
+# The left thumb without a space bar again.
+[[sabotage]]
+name = "the split keyboard has one space bar"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\t\tif (!left_space && is_space(p.key)) {"
+replace = "\t\t\tif (false && is_space(p.key)) {"
+expect = "the_split_keyboard_holds_every_key_once"
+
+# The right thumb without a Shift again.
+[[sabotage]]
+name = "the split keyboard has one Shift"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\tif (left_shift && !right_shift && !right[r].isEmpty() && right[r].last().key.span >= 4) {"
+replace = "\t\tif (false) {"
+expect = "the_split_keyboard_holds_every_key_once"
+
+# A narrower second space bar: the left half spans fewer columns than the
+# right, and its keys come out wider -- the width test, not the label test,
+# is what sees this.
+[[sabotage]]
+name = "the split halves have different key widths"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\t\t\tleft[r].append({ p.key, end_of(left[r]) });"
+replace = "\t\t\t\tbssh_key_t narrow = p.key;\n\t\t\t\tnarrow.span = 1;\n\t\t\t\tleft[r].append({ narrow, end_of(left[r]) });"
+expect = "the_split_keyboard_holds_every_key_once"
+
+# The split keeps the digit row: five rows of 48dp keys do not fit the
+# Fold's landscape height, and the status line and mode buttons go off the
+# bottom of the screen.
+[[sabotage]]
+name = "the split keyboard keeps the digit row"
+file = "keyboard/soft_keyboard.cpp"
+find = "\tconst int skip = group.digit_row_first ? 1 : 0;"
+replace = "\tconst int skip = 0;"
+expect = "the_input_selector_joins_the_status_line_when_wide"
