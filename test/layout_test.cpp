@@ -6928,6 +6928,19 @@ void layout_test::a_resized_pane_tells_the_remote_its_size() {
 		QCoreApplication::processEvents();
 
 		/*
+		 * Asked for again, because the view asked for above is GONE: 900
+		 * to 640 crosses from EXPANDED into MEDIUM (sec 8.1), which
+		 * rebuilds the panes and deletes their views. Reading the old
+		 * pointer read freed memory -- valgrind named the free in
+		 * bssh_pane_container::rebuild() -- and it passed on stale
+		 * values until a CI run in the Qt 6.4 image read the grid as
+		 * 0x0. The product is right to rebuild; the test kept a
+		 * pointer across a rebuild it caused itself.
+		 */
+		view = window.panes()->focused_view();
+		QVERIFY(view);
+
+		/*
 		 * The message carries what each end measured, because the bare
 		 * condition cannot separate the three things that produce it:
 		 * the window resize not changing the grid, the grid change not
