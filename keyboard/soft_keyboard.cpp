@@ -9,6 +9,7 @@
 #include "keyboard/soft_keyboard.h"
 
 #include "keyboard/key_cap.h"
+#include "keyboard/resize_grip.h"
 #include "keyboard/touch_chords.h"
 
 #include <QAbstractButton>
@@ -193,10 +194,37 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
       m_script_button(nullptr),
       m_group(0),
       m_style(bssh_soft_keyboard_catalog::STYLE_COMPACT) {
-	QHBoxLayout *outer = new QHBoxLayout(this);
+	/*
+	 * The resize bar on top, the keys below it: the top is the edge that
+	 * faces the terminal when this keyboard sits underneath (sec 6.2).
+	 */
+	QVBoxLayout *column = new QVBoxLayout(this);
+	column->setContentsMargins(0, 0, 0, 0);
+	column->setSpacing(0);
+	m_top_grip = new bssh_resize_grip(Qt::Vertical, this);
+	column->addWidget(m_top_grip, 0);
+
+	QHBoxLayout *outer = new QHBoxLayout;
 	outer->setContentsMargins(0, 0, 0, 0);
 	outer->setSpacing(0);
+	column->addLayout(outer, 1);
 	m_outer = outer;
+
+	connect(m_top_grip, &bssh_resize_grip::pressed, this, [this] {
+		m_drag_from = m_keys->height();
+	});
+	connect(m_top_grip, &bssh_resize_grip::dragged, this, [this](int distance) {
+		/*
+		 * Up is taller: the bar is on top. Never below 1, which the
+		 * floor then raises to the smallest keys: 0 means "not chosen"
+		 * to set_bottom_height, so a hard drag down snapped the keyboard
+		 * back to its natural size -- the opposite of what the finger did.
+		 */
+		set_bottom_height(qMax(1, m_drag_from - distance));
+	});
+	connect(m_top_grip, &bssh_resize_grip::released, this, [this] {
+		emit size_chosen(m_style, m_bottom_height);
+	});
 
 	/*
 	 * The split keyboard's halves (sec 6.2), built once and filled by
@@ -216,6 +244,28 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 		m_half_grids[side]->setContentsMargins(0, 0, 0, 0);
 		m_half_grids[side]->setSpacing(1);
 		row->addWidget(m_half_keys[side], 1);
+
+		/*
+		 * On the INNER edge, beside the terminal: the left half's right
+		 * edge and the right half's left. Dragging toward the terminal
+		 * widens the half, so the sign flips between them.
+		 */
+		m_half_grips[side] = new bssh_resize_grip(Qt::Horizontal, m_halves[side]);
+		if (side) row->insertWidget(0, m_half_grips[side], 0);
+		else row->addWidget(m_half_grips[side], 0);
+
+		connect(m_half_grips[side], &bssh_resize_grip::pressed, this, [this] {
+			m_drag_from = m_half_keys[0]->width();
+		});
+		connect(m_half_grips[side], &bssh_resize_grip::dragged, this, [this, side](int distance) {
+			const int wanted = side ? m_drag_from - distance : m_drag_from + distance;
+			const int widest = qMax(120, window()->width() * 2 / 5);
+			set_half_width(qBound(120, wanted, widest));
+		});
+		connect(m_half_grips[side], &bssh_resize_grip::released, this, [this] {
+			emit size_chosen(bssh_soft_keyboard_catalog::STYLE_SPLIT, m_half_width);
+		});
+
 		m_halves[side]->hide();
 	}
 
@@ -609,6 +659,9 @@ void bssh_soft_keyboard::rebuild() {
 		m_grid->setColumnStretch(c, 0);
 	}
 
+	/* New keys are made at the default height; give them the chosen one. */
+	apply_bottom_height();
+
 	/*
 	 * The side button names the group it goes TO, not the one on screen.
 	 * A button labelled with where you already are is one nobody presses.
@@ -712,10 +765,68 @@ void bssh_soft_keyboard::update_halves() {
 	m_keys->setVisible(!split);
 	const bool shown = split && !isHidden();
 	for (QWidget *half : m_halves) half->setVisible(shown);
+
+	m_top_grip->setVisible(m_grips_shown && !split);
+	for (QWidget *grip : m_half_grips) grip->setVisible(m_grips_shown);
 }
 
 void bssh_soft_keyboard::set_half_width(int width_dp) {
+	m_half_width = width_dp;
 	for (QWidget *keys : m_half_keys) keys->setFixedWidth(width_dp);
+}
+
+void bssh_soft_keyboard::set_grips_shown(bool shown) {
+	if (shown == m_grips_shown) return;
+	m_grips_shown = shown;
+	update_halves();
+}
+
+int bssh_soft_keyboard::row_count() const {
+	const QList<bssh_soft_key_group_t> &groups =
+	        bssh_soft_keyboard_catalog::instance().all(m_style);
+	if (m_group < 0 || m_group >= groups.size()) return 1;
+	return qMax(1, int(groups.at(m_group).rows.size()));
+}
+
+void bssh_soft_keyboard::set_bottom_height(int height_dp) {
+	if (height_dp > 0) {
+		/*
+		 * Between the smallest keys anybody may drag to and three fifths
+		 * of the window: a keyboard taller than that leaves the terminal
+		 * less than the keyboard, which is the problem the bar exists to
+		 * solve rather than to cause.
+		 */
+		const int rows = row_count();
+		const int lowest = rows * SMALLEST_KEY_DP + (rows - 1);
+		const int highest = qMax(lowest, window()->height() * 3 / 5);
+		height_dp = qBound(lowest, height_dp, highest);
+	}
+	m_bottom_height = qMax(0, height_dp);
+	apply_bottom_height();
+}
+
+/*
+ * The keys' minimum height follows the chosen height, down to
+ * SMALLEST_KEY_DP; at 0 everything goes back to the 48dp floor and the
+ * keys' own size. Applied again after every rebuild, since a rebuild makes
+ * new keys at the default.
+ */
+void bssh_soft_keyboard::apply_bottom_height() {
+	const bool chosen = m_bottom_height > 0
+	                    && m_style != bssh_soft_keyboard_catalog::STYLE_SPLIT;
+	int key = BSSH_TOUCH_TARGET_DP;
+	if (chosen) {
+		const int rows = row_count();
+		key = qBound(SMALLEST_KEY_DP, (m_bottom_height - (rows - 1)) / rows,
+		             BSSH_TOUCH_TARGET_DP);
+		m_keys->setFixedHeight(m_bottom_height);
+	} else {
+		m_keys->setMinimumHeight(0);
+		m_keys->setMaximumHeight(QWIDGETSIZE_MAX);
+	}
+	for (bssh_key_cap *cap : m_keys->findChildren<bssh_key_cap *>()) {
+		cap->setMinimumHeight(key);
+	}
 }
 
 void bssh_soft_keyboard::showEvent(QShowEvent *event) {

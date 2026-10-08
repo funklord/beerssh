@@ -5238,6 +5238,171 @@ void layout_test::the_split_keyboard_sits_beside_the_terminal() {
 	settings.set_keyboard(before);
 }
 
+namespace {
+
+/* Drags a resize bar by (dx, dy) as a finger would, in one move. */
+void drag_grip(QWidget *grip, int dx, int dy) {
+	const QPoint from = grip->rect().center();
+	QTest::mousePress(grip, Qt::LeftButton, Qt::NoModifier, from);
+	QMouseEvent move(QEvent::MouseMove, QPointF(from + QPoint(dx, dy)),
+	                 grip->mapToGlobal(QPointF(from + QPoint(dx, dy))),
+	                 Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(grip, &move);
+	QTest::mouseRelease(grip, Qt::LeftButton, Qt::NoModifier, from + QPoint(dx, dy));
+}
+
+/* The bar that is a descendant of `within`, or null. */
+QWidget *grip_in(QWidget *within) {
+	for (QWidget *grip : within->findChildren<QWidget *>(QStringLiteral("keyboard-grip"))) {
+		if (grip->isVisible()) return grip;
+	}
+	return nullptr;
+}
+
+} /* namespace */
+
+void layout_test::dragging_a_bar_resizes_the_keyboard() {
+	typedef bssh_soft_keyboard_catalog catalog;
+	bssh_emulator emulator(80, 24);
+	bssh_input_router router(&emulator);
+
+	/* In a window tall enough to grow into, as the keyboard is in the app. */
+	QWidget host;
+	QVBoxLayout *column = new QVBoxLayout(&host);
+	column->addStretch(1);
+	bssh_soft_keyboard *keyboard = new bssh_soft_keyboard(&router);
+	column->addWidget(keyboard);
+	host.resize(400, 800);
+	host.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&host));
+	QCoreApplication::processEvents();
+
+	QSignalSpy chosen(keyboard, &bssh_soft_keyboard::size_chosen);
+
+	/* The bar on top: up is taller, down is shorter. */
+	QWidget *top = grip_in(keyboard);
+	QVERIFY2(top, "the keyboard under the terminal has a bar on its top edge");
+	const int natural = keyboard->height();
+	drag_grip(top, 0, -60);
+
+	/* Laid out on the way back up through posted events, as in the app. */
+	QTRY_VERIFY2(keyboard->height() > natural,
+	          qPrintable(QStringLiteral("dragged up, %1 -> %2, %3 size(s) chosen, last %4")
+	                             .arg(natural).arg(keyboard->height()).arg(chosen.count())
+	                             .arg(chosen.isEmpty() ? -1 : chosen.last().at(1).toInt())));
+	QCOMPARE(chosen.count(), 1);
+	QCOMPARE(chosen.last().at(0).value<catalog::style_t>(), catalog::STYLE_COMPACT);
+
+	/*
+	 * Far down is as small as keys go, and no smaller: SMALLEST_KEY_DP,
+	 * below sec 6.2's 48dp only because somebody dragged it there.
+	 */
+	drag_grip(top, 0, 2000);
+	const auto shortest = [keyboard] {
+		int out = 1000;
+		for (bssh_key_cap *cap : keyboard->findChildren<bssh_key_cap *>()) {
+			if (cap->isVisible()) out = qMin(out, cap->height());
+		}
+		return out;
+	};
+	QTRY_VERIFY2(shortest() < BSSH_TOUCH_TARGET_DP,
+	              qPrintable(QStringLiteral("the shortest key is %1").arg(shortest())));
+	QVERIFY2(shortest() >= bssh_soft_keyboard::SMALLEST_KEY_DP,
+	          qPrintable(QStringLiteral("the shortest key is %1").arg(shortest())));
+
+	/*
+	 * Split: each half's bar is on its INNER edge, so toward the middle
+	 * widens both -- right on the left half, left on the right one.
+	 */
+	keyboard->set_style(catalog::STYLE_SPLIT);
+	keyboard->set_half_width(150);
+	host.resize(900, 400);
+	QCoreApplication::processEvents();
+	QWidget *left = grip_in(keyboard->half(0));
+	QWidget *right = grip_in(keyboard->half(1));
+	QVERIFY(left && right);
+
+	drag_grip(left, 30, 0);
+	QCOMPARE(chosen.last().at(0).value<catalog::style_t>(), catalog::STYLE_SPLIT);
+	QCOMPARE(chosen.last().at(1).toInt(), 180);
+	drag_grip(right, -20, 0);
+	QCOMPARE(chosen.last().at(1).toInt(), 200);
+
+	/* And the bars go away when the setting says so. */
+	keyboard->set_grips_shown(false);
+	QVERIFY(!grip_in(keyboard->half(0)));
+	QVERIFY(!grip_in(keyboard->half(1)));
+}
+
+void layout_test::a_dragged_keyboard_size_is_kept() {
+	const forced_touch_t touch(1);
+	const forced_screen_t held(QSize(860, 320));
+
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
+	settings.reset_keyboard_size();
+
+	const auto open = [](bssh_main_window &window) {
+		window.resize(860, 320);
+		window.show();
+		QCoreApplication::processEvents();
+	};
+
+	{
+		bssh_main_window window;
+		open(window);
+		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		QVERIFY(keyboard);
+		QCOMPARE(keyboard->style(), bssh_soft_keyboard_catalog::STYLE_SPLIT);
+
+		/*
+		 * 22% of the window per half by default: 30% left the Fold's
+		 * cover screen about 30 terminal columns, reported as way too big.
+		 */
+		bool found = false;
+		for (QWidget *child : keyboard->half(0)->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly)) {
+			if (child->objectName() != QStringLiteral("keyboard-grip")) {
+				QCOMPARE(child->maximumWidth(), 860 * 22 / 100);
+				found = true;
+			}
+		}
+		QVERIFY(found);
+
+		emit keyboard->size_chosen(bssh_soft_keyboard_catalog::STYLE_SPLIT, 210);
+	}
+
+	QCOMPARE(bssh_app_settings().keyboard_split_width(), 210);
+
+	{
+		/* A new window -- a new run, as far as the keyboard knows. */
+		bssh_main_window window;
+		open(window);
+		bssh_soft_keyboard *keyboard = window.findChild<bssh_soft_keyboard *>();
+		QVERIFY(keyboard);
+		bool found = false;
+		for (QWidget *child : keyboard->half(0)->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly)) {
+			if (child->objectName() != QStringLiteral("keyboard-grip")) {
+				QCOMPARE(child->maximumWidth(), 210);
+				found = true;
+			}
+		}
+		QVERIFY(found);
+	}
+
+	/* Reset forgets every chosen size. */
+	{
+		bssh_app_settings_view page(bssh_app_settings_view::SECTION_KEYBOARD, nullptr);
+		QPushButton *reset = page.findChild<QPushButton *>(QStringLiteral("keyboard_reset"));
+		QVERIFY(reset);
+		reset->click();
+	}
+	QCOMPARE(bssh_app_settings().keyboard_split_width(), 0);
+	QCOMPARE(bssh_app_settings().keyboard_height(false), 0);
+
+	settings.set_keyboard(before);
+}
+
 void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
 	typedef bssh_soft_keyboard_catalog catalog;
 

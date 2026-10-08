@@ -137,6 +137,7 @@ SOURCES += \
     ../src/platform/platform_desktop.cpp \
     ../keyboard/key_cap.cpp \
     ../keyboard/touch_chords.cpp \
+    ../keyboard/resize_grip.cpp \
     ../keyboard/key_row_layout.cpp \
     ../keyboard/soft_keyboard.cpp \
     ../keyboard/soft_keyboard_layout.cpp \
@@ -153,6 +154,7 @@ SOURCES += \
 HEADERS += \
     ../keyboard/key_cap.h \
     ../keyboard/touch_chords.h \
+    ../keyboard/resize_grip.h \
     fake_ssh_session.h \
     phone_metrics.h \
     command_line_test.h \

@@ -209,6 +209,8 @@ private slots:
 	void a_short_wide_screen_gets_the_split_keyboard();
 	void the_split_keyboard_holds_every_key_once();
 	void the_split_keyboard_sits_beside_the_terminal();
+	void dragging_a_bar_resizes_the_keyboard();
+	void a_dragged_keyboard_size_is_kept();
 	void both_keyboards_read_one_layout();
 	void every_slot_the_geometry_names_exists();
 	void a_keypad_key_sends_only_its_digit();

@@ -2055,9 +2055,37 @@ up, a strip of modifiers has nothing to modify.
   compact group's — a relationship, so a key added to compact is checked
   too), `the_split_keyboard_sits_beside_the_terminal` (placement, the
   terminal keeping three quarters of the height, hide, and upright giving
-  compact back), `a_chord_spans_the_split_keyboards_halves`. **[OPEN]**
-  on the Fold: whether 30% of the width per half (200–300dp) is right, and
-  whether keys at the bottom of each half suit a two-handed grip.
+  compact back), `a_chord_spans_the_split_keyboards_halves`.
+  **Seen on the Fold the same day:** landscape split by itself, `ls` typed
+  across both halves ran, portrait gave compact back. **30% per half was too
+  much** — the terminal got about 30 columns between halves the holder
+  called "way too big" — so the default is **22%** (140–260dp), about 54
+  columns and keys near the full board's 36dp floor.
+
+- **Resize bars on the built-in keyboard — [BUILT 2026-10-08].** Asked for
+  with the 22%: a very thin bar to resize each keyboard, a setting to turn
+  the bars off, and the size saved. `bssh_resize_grip` is a 12dp strip
+  drawing a line a third as thick, on the edge that **faces the terminal**:
+  the top of a keyboard underneath, the inner edge of each split half. Not
+  the screen's own edges, where Android's back gesture lives — the holder
+  said "outer edge", read as the keyboard's edge rather than the screen's;
+  **[OPEN]** if the screen edge was meant. Sizes are device-level and
+  per keyboard (`keyboard/split_width`, `keyboard/height_compact`,
+  `keyboard/height_full`; 0 = default), so shrinking compact leaves full
+  alone; "Drag bars to resize the keyboard" and "Reset keyboard size" sit
+  on the Keyboard page. Dragging may take keys **below §6.2's 48dp floor,
+  to `SMALLEST_KEY_DP` (28)** — the default stays at 48 and the touch-size
+  test still holds it; going smaller is the user's explicit choice, asked
+  for in as many words. Half width is kept between 120dp and 40% of the
+  window, height under three fifths of it.
+  **A bug the test found first:** a hard drag down asked for a negative
+  height, which `set_bottom_height` reads as "not chosen", and the keyboard
+  snapped back to full size — the opposite of the finger. A drag now never
+  asks for less than 1, which the floor raises to the smallest keys.
+  Tests: `dragging_a_bar_resizes_the_keyboard` (both directions, the floor,
+  the inner-edge signs, the setting), `a_dragged_keyboard_size_is_kept`
+  (22% default, kept across windows, reset). Sabotage:
+  `tool/sabotage/keyboard-resize.toml`.
 
 
 **Shift was `toUpper()`, and that left 21 characters unreachable —

@@ -253,6 +253,40 @@ void bssh_app_settings::set_caps_as_ctrl(bool caps_as_ctrl) {
 	store(QStringLiteral("input/caps_as_ctrl"), caps_as_ctrl);
 }
 
+bool bssh_app_settings::keyboard_grips() const {
+	return value(QStringLiteral("keyboard/grips"), true).toBool();
+}
+
+void bssh_app_settings::set_keyboard_grips(bool shown) {
+	store(QStringLiteral("keyboard/grips"), shown);
+}
+
+int bssh_app_settings::keyboard_split_width() const {
+	return qMax(0, value(QStringLiteral("keyboard/split_width"), 0).toInt());
+}
+
+void bssh_app_settings::set_keyboard_split_width(int width_dp) {
+	store(QStringLiteral("keyboard/split_width"), qMax(0, width_dp));
+}
+
+int bssh_app_settings::keyboard_height(bool full) const {
+	const QString key = full ? QStringLiteral("keyboard/height_full")
+	                         : QStringLiteral("keyboard/height_compact");
+	return qMax(0, value(key, 0).toInt());
+}
+
+void bssh_app_settings::set_keyboard_height(bool full, int height_dp) {
+	store(full ? QStringLiteral("keyboard/height_full")
+	           : QStringLiteral("keyboard/height_compact"),
+	      qMax(0, height_dp));
+}
+
+void bssh_app_settings::reset_keyboard_size() {
+	set_keyboard_split_width(0);
+	set_keyboard_height(false, 0);
+	set_keyboard_height(true, 0);
+}
+
 bool bssh_app_settings::hide_from_screenshots() const {
 	return value(QStringLiteral("security/hide_from_screenshots"), false).toBool();
 }

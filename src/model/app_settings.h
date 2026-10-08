@@ -300,6 +300,24 @@ public:
 	void set_caps_as_ctrl(bool caps_as_ctrl);
 
 	/*
+	 * The built-in keyboard's size, as its resize bars left it (sec 6.2):
+	 * a split half's width, and the keys' height under the terminal for
+	 * compact and for full, in dp. 0 is "not chosen", which draws the
+	 * default -- 22% of the window per half, and the keys' own height.
+	 * Device-level, like the keyboard choice: it is about the hands and
+	 * the screen, not about any host.
+	 */
+	bool keyboard_grips() const;
+	void set_keyboard_grips(bool shown);
+	int keyboard_split_width() const;
+	void set_keyboard_split_width(int width_dp);
+	int keyboard_height(bool full) const;
+	void set_keyboard_height(bool full, int height_dp);
+
+	/* Back to the defaults: every chosen size forgotten. */
+	void reset_keyboard_size();
+
+	/*
 	 * Keep the terminal out of the OS screenshot and recents-thumbnail
 	 * path (sec 11, sec 13). Off by default: it is a real restriction --
 	 * the user cannot screenshot their own terminal either -- and a

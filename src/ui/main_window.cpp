@@ -1157,6 +1157,21 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * there is nothing to show; the button is only ever pressed on a
 	 * device that has one.
 	 */
+	/*
+	 * A resize bar let go: the size is kept for next time, per keyboard
+	 * (sec 6.2), so a shrunk compact keyboard does not shrink the full one.
+	 */
+	connect(m_keyboard, &bssh_soft_keyboard::size_chosen,
+	         this, [](bssh_soft_keyboard_catalog::style_t style, int size_dp) {
+		bssh_app_settings settings;
+		if (style == bssh_soft_keyboard_catalog::STYLE_SPLIT) {
+			settings.set_keyboard_split_width(size_dp);
+		} else {
+			settings.set_keyboard_height(style == bssh_soft_keyboard_catalog::STYLE_FULL,
+			                             size_dp);
+		}
+	});
+
 	connect(m_keyboard, &bssh_soft_keyboard::settings_requested, this, [this] {
 		if (m_pages && m_device_settings) show_page(m_device_settings);
 	});
@@ -2043,13 +2058,23 @@ void bssh_main_window::apply_keyboard_style() {
 	}
 
 	/*
-	 * Each half three tenths of the width, within a range: wide enough
-	 * for a 36dp key (the full board's floor, BSSH_FULL_KEYBOARD_MIN_DP)
-	 * across the eleven half-columns a half holds, and no wider than a
-	 * thumb reaches from a phone's edge. The terminal keeps the rest.
+	 * Each half 22% of the width unless a resize bar chose otherwise: 30%
+	 * was tried first and, on the Fold's cover screen in landscape, left
+	 * the terminal about 30 columns between halves the holder called way
+	 * too big. 22% gives it about 54 and keys near the full board's 36dp
+	 * floor. A chosen width is kept within what this window can spare.
 	 */
-	m_keyboard->set_half_width(qBound(200, width() * 3 / 10, 300));
-	m_keyboard->set_style(bssh_keyboard_style_for(wanted, width(), height()));
+	const int chosen_width = settings.keyboard_split_width();
+	const int widest = qMax(120, width() * 2 / 5);
+	m_keyboard->set_half_width(chosen_width > 0 ? qBound(120, chosen_width, widest)
+	                                            : qBound(140, width() * 22 / 100, 260));
+	m_keyboard->set_grips_shown(settings.keyboard_grips());
+
+	const bssh_soft_keyboard_catalog::style_t drawn =
+	        bssh_keyboard_style_for(wanted, width(), height());
+	m_keyboard->set_style(drawn);
+	m_keyboard->set_bottom_height(
+	        settings.keyboard_height(drawn == bssh_soft_keyboard_catalog::STYLE_FULL));
 }
 
 void bssh_main_window::on_pane_focus_changed(bssh_session *session) {

@@ -140,6 +140,8 @@ private:
 	QLineEdit *m_window_title;
 	QComboBox *m_context_menu;
 	QCheckBox *m_caps_as_ctrl;
+	QCheckBox *m_keyboard_grips;
+	QPushButton *m_keyboard_reset;
 	QCheckBox *m_warn_multiline_paste;
 	QCheckBox *m_honour_font_scale;
 	QCheckBox *m_font_ligatures;

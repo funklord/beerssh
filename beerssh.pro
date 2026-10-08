@@ -93,6 +93,7 @@ SOURCES += \
     src/ui/input_selector.cpp \
     keyboard/key_cap.cpp \
     keyboard/touch_chords.cpp \
+    keyboard/resize_grip.cpp \
     keyboard/key_row_layout.cpp \
     keyboard/soft_keyboard.cpp \
     keyboard/soft_keyboard_layout.cpp \
@@ -164,6 +165,7 @@ HEADERS += \
     src/ui/interface_scale.h \
     keyboard/key_cap.h \
     keyboard/touch_chords.h \
+    keyboard/resize_grip.h \
     keyboard/key_row_layout.h \
     keyboard/soft_keyboard.h \
     keyboard/soft_keyboard_layout.h \

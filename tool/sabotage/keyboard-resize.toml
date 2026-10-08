@@ -1,0 +1,51 @@
+# Sabotages for sec 6.2's keyboard resize bars and the sizes they keep.
+# Each names the test that must notice.
+
+# The top bar the wrong way round: dragging up shrinks the keyboard.
+[[sabotage]]
+name = "the top bar resizes the wrong way"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\tset_bottom_height(qMax(1, m_drag_from - distance));"
+replace = "\t\tset_bottom_height(qMax(1, m_drag_from + distance));"
+expect = "dragging_a_bar_resizes_the_keyboard"
+
+# The floor gone, which is the bug the test found: a hard drag down asks
+# for "not chosen" and the keyboard snaps back to full size.
+[[sabotage]]
+name = "a hard drag down snaps the keyboard back to full size"
+file = "keyboard/soft_keyboard.cpp"
+find = "\t\tset_bottom_height(qMax(1, m_drag_from - distance));"
+replace = "\t\tset_bottom_height(m_drag_from - distance);"
+expect = "dragging_a_bar_resizes_the_keyboard"
+
+# The bars ignore the setting that puts them away.
+[[sabotage]]
+name = "the bars show whatever the setting says"
+file = "keyboard/soft_keyboard.cpp"
+find = "\tfor (QWidget *grip : m_half_grips) grip->setVisible(m_grips_shown);"
+replace = "\tfor (QWidget *grip : m_half_grips) grip->setVisible(true);"
+expect = "dragging_a_bar_resizes_the_keyboard"
+
+# A dragged size that is never kept: the next run is the default again.
+[[sabotage]]
+name = "a dragged split width is not kept"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tsettings.set_keyboard_split_width(size_dp);"
+replace = "\t\t\tQ_UNUSED(size_dp);"
+expect = "a_dragged_keyboard_size_is_kept"
+
+# The default back at 30%, which left the Fold about 30 columns.
+[[sabotage]]
+name = "the split halves default to 30% again"
+file = "src/ui/main_window.cpp"
+find = ": qBound(140, width() * 22 / 100, 260));"
+replace = ": qBound(140, width() * 30 / 100, 260));"
+expect = "a_dragged_keyboard_size_is_kept"
+
+# Reset that forgets the heights and keeps the split width.
+[[sabotage]]
+name = "reset keeps the split width"
+file = "src/model/app_settings.cpp"
+find = "\tset_keyboard_split_width(0);\n\tset_keyboard_height(false, 0);"
+replace = "\tset_keyboard_height(false, 0);"
+expect = "a_dragged_keyboard_size_is_kept"

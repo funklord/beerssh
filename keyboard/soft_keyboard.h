@@ -15,6 +15,7 @@ class QGridLayout;
 class bssh_input_router;
 class bssh_touch_chords;
 class QHBoxLayout;
+class bssh_resize_grip;
 
 /*
  * bssh_soft_keyboard -- the keyboard this app draws itself (project.md
@@ -89,7 +90,27 @@ public:
 	/* How wide each half's keys are, in dp; the window decides. */
 	void set_half_width(int width_dp);
 
+	/*
+	 * How tall the keys are when the keyboard sits under the terminal, in
+	 * dp; 0 for their natural height. Below sec 6.2's 48dp floor only
+	 * because somebody dragged it there, and never below a 28dp key.
+	 */
+	void set_bottom_height(int height_dp);
+
+	/* Whether the resize bars show (sec 6.2); a setting decides. */
+	void set_grips_shown(bool shown);
+
+	/* The smallest a key gets by dragging, in dp. */
+	static const int SMALLEST_KEY_DP = 28;
+
 signals:
+	/*
+	 * A resize bar was let go: `size_dp` is a split half's width for
+	 * STYLE_SPLIT, and the keys' height for the others. The window keeps
+	 * it; this widget keeps nothing between runs.
+	 */
+	void size_chosen(bssh_soft_keyboard_catalog::style_t style, int size_dp);
+
 	/*
 	 * The configuration key: show the settings the user would otherwise
 	 * reach through the front door and a menu, which from a live session
@@ -120,6 +141,8 @@ private:
 	void add_key(const bssh_key_t &key, QGridLayout *grid, int row, int column);
 	void lay_out_split(const bssh_soft_key_group_t &group);
 	void update_halves();
+	void apply_bottom_height();
+	int row_count() const;
 	void refresh_modifiers();
 
 	/*
@@ -140,6 +163,12 @@ private:
 	QGridLayout *m_grid;
 
 	QHBoxLayout *m_outer = nullptr;
+	bssh_resize_grip *m_top_grip = nullptr;
+	bssh_resize_grip *m_half_grips[2] = { nullptr, nullptr };
+	bool m_grips_shown = true;
+	int m_half_width = 0;
+	int m_bottom_height = 0;
+	int m_drag_from = 0;
 	QWidget *m_side = nullptr;
 	QWidget *m_halves[2] = { nullptr, nullptr };
 	QWidget *m_half_keys[2] = { nullptr, nullptr };

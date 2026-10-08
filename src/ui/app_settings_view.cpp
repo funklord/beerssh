@@ -106,6 +106,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
       m_window_title(nullptr),
       m_context_menu(nullptr),
       m_caps_as_ctrl(nullptr),
+      m_keyboard_grips(nullptr),
+      m_keyboard_reset(nullptr),
       m_warn_multiline_paste(nullptr),
       m_honour_font_scale(nullptr),
       m_font_ligatures(nullptr),
@@ -685,6 +687,32 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	                        "keyboard layout instead."));
 	if (on_this_page(SECTION_KEYBOARD, m_caps_as_ctrl)) form->addRow(m_caps_as_ctrl);
 
+	/*
+	 * The built-in keyboard's resize bars (sec 6.2), and the way back
+	 * from a size dragged too far. A bar is a thing that can be grabbed
+	 * by accident at an edge, so it can be put away; the size it chose
+	 * is kept whether or not the bars show.
+	 */
+	m_keyboard_grips = new QCheckBox(QStringLiteral("Drag bars to resize the keyboard"), this);
+	m_keyboard_grips->setObjectName(QStringLiteral("keyboard_grips"));
+	m_keyboard_grips->setToolTip(
+	        QStringLiteral("A thin bar on the edge of BeerSSH's own keyboard, facing the "
+	                        "terminal. Drag it to make the keys bigger or smaller; the size "
+	                        "is kept for each keyboard."));
+	if (on_this_page(SECTION_KEYBOARD, m_keyboard_grips)) form->addRow(m_keyboard_grips);
+
+	m_keyboard_reset = new QPushButton(QStringLiteral("Reset keyboard size"), this);
+	m_keyboard_reset->setObjectName(QStringLiteral("keyboard_reset"));
+	connect(m_keyboard_reset, &QPushButton::clicked, this, [this] {
+		commit([](bssh_app_settings &s) { s.reset_keyboard_size(); });
+	});
+	QWidget *reset_row = new QWidget(this);
+	QHBoxLayout *reset_layout = new QHBoxLayout(reset_row);
+	reset_layout->setContentsMargins(0, 0, 0, 0);
+	reset_layout->addWidget(m_keyboard_reset);
+	reset_layout->addStretch(1);
+	if (on_this_page(SECTION_KEYBOARD, reset_row)) form->addRow(reset_row);
+
 	m_raise_contrast = new QCheckBox(QStringLiteral("Raise low-contrast colours"), this);
 	m_raise_contrast->setToolTip(
 	        QStringLiteral("Colour schemes are reproduced exactly, and some of them are hard "
@@ -1096,6 +1124,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		m_focus_follows_mouse->setChecked(settings.focus_follows_mouse());
 	}
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
+	m_keyboard_grips->setChecked(settings.keyboard_grips());
 	m_warn_multiline_paste->setChecked(settings.warn_multiline_paste());
 	m_honour_font_scale->setChecked(settings.honour_system_font_scale());
 	m_font_ligatures->setChecked(settings.font_ligatures());
@@ -1223,6 +1252,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 			});
 		});
 	}
+	connect(m_keyboard_grips, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) { s.set_keyboard_grips(m_keyboard_grips->isChecked()); });
+	});
 	connect(m_caps_as_ctrl, &QCheckBox::toggled, this, [this] {
 		commit([this](bssh_app_settings &s) { s.set_caps_as_ctrl(m_caps_as_ctrl->isChecked()); });
 	});
