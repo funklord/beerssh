@@ -23,6 +23,6 @@ expect = "a_gap_in_a_custom_key_row_holds_its_space"
 [[sabotage]]
 name = "the gap is a widget with no width"
 file = "keyboard/key_row.cpp"
-find = "\tgap->setFixedWidth(BSSH_TOUCH_TARGET_DP);"
+find = "\tgap->setFixedWidth(SK_TOUCH_TARGET_DP);"
 replace = "\tgap->setFixedWidth(0);"
 expect = "a_gap_in_a_custom_key_row_holds_its_space"

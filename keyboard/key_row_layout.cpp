@@ -1,6 +1,6 @@
 #include "keyboard/key_row_layout.h"
 
-#include "term/emulator.h"
+#include "keyboard/sk_modifiers.h"
 
 #include <QStringList>
 
@@ -49,10 +49,10 @@ bssh_key_t function_toggle() {
 
 QList<bssh_key_t> arrows() {
 	return {
-		named(QStringLiteral("←"), bssh_emulator::KEY_LEFT),
-		named(QStringLiteral("↓"), bssh_emulator::KEY_DOWN),
-		named(QStringLiteral("↑"), bssh_emulator::KEY_UP),
-		named(QStringLiteral("→"), bssh_emulator::KEY_RIGHT)
+		named(QStringLiteral("←"), Qt::Key_Left),
+		named(QStringLiteral("↓"), Qt::Key_Down),
+		named(QStringLiteral("↑"), Qt::Key_Up),
+		named(QStringLiteral("→"), Qt::Key_Right)
 	};
 }
 
@@ -72,26 +72,26 @@ struct token_t {
 };
 
 const token_t BSSH_KEY_WORDS[] = {
-	{ "esc",   bssh_key_t::KEY, bssh_emulator::KEY_ESCAPE,    0, "Esc" },
-	{ "tab",   bssh_key_t::KEY, bssh_emulator::KEY_TAB,       0, "Tab" },
-	{ "enter", bssh_key_t::KEY, bssh_emulator::KEY_ENTER,     0, "Enter" },
-	{ "bksp",  bssh_key_t::KEY, bssh_emulator::KEY_BACKSPACE, 0, "Bksp" },
-	{ "ins",   bssh_key_t::KEY, bssh_emulator::KEY_INSERT,    0, "Ins" },
-	{ "del",   bssh_key_t::KEY, bssh_emulator::KEY_DELETE,    0, "Del" },
-	{ "home",  bssh_key_t::KEY, bssh_emulator::KEY_HOME,      0, "Home" },
-	{ "end",   bssh_key_t::KEY, bssh_emulator::KEY_END,       0, "End" },
-	{ "pgup",  bssh_key_t::KEY, bssh_emulator::KEY_PAGE_UP,   0, "PgUp" },
-	{ "pgdn",  bssh_key_t::KEY, bssh_emulator::KEY_PAGE_DOWN, 0, "PgDn" },
+	{ "esc",   bssh_key_t::KEY, Qt::Key_Escape,    0, "Esc" },
+	{ "tab",   bssh_key_t::KEY, Qt::Key_Tab,       0, "Tab" },
+	{ "enter", bssh_key_t::KEY, Qt::Key_Return,     0, "Enter" },
+	{ "bksp",  bssh_key_t::KEY, Qt::Key_Backspace, 0, "Bksp" },
+	{ "ins",   bssh_key_t::KEY, Qt::Key_Insert,    0, "Ins" },
+	{ "del",   bssh_key_t::KEY, Qt::Key_Delete,    0, "Del" },
+	{ "home",  bssh_key_t::KEY, Qt::Key_Home,      0, "Home" },
+	{ "end",   bssh_key_t::KEY, Qt::Key_End,       0, "End" },
+	{ "pgup",  bssh_key_t::KEY, Qt::Key_PageUp,   0, "PgUp" },
+	{ "pgdn",  bssh_key_t::KEY, Qt::Key_PageDown, 0, "PgDn" },
 	/* The arrows carry the glyphs the curated rows use, so a custom row
 	 * sits beside them without looking like a different widget. */
-	{ "left",  bssh_key_t::KEY, bssh_emulator::KEY_LEFT,  0, "\xe2\x86\x90" },
-	{ "down",  bssh_key_t::KEY, bssh_emulator::KEY_DOWN,  0, "\xe2\x86\x93" },
-	{ "up",    bssh_key_t::KEY, bssh_emulator::KEY_UP,    0, "\xe2\x86\x91" },
-	{ "right", bssh_key_t::KEY, bssh_emulator::KEY_RIGHT, 0, "\xe2\x86\x92" },
+	{ "left",  bssh_key_t::KEY, Qt::Key_Left,  0, "\xe2\x86\x90" },
+	{ "down",  bssh_key_t::KEY, Qt::Key_Down,  0, "\xe2\x86\x93" },
+	{ "up",    bssh_key_t::KEY, Qt::Key_Up,    0, "\xe2\x86\x91" },
+	{ "right", bssh_key_t::KEY, Qt::Key_Right, 0, "\xe2\x86\x92" },
 
-	{ "ctrl",  bssh_key_t::MODIFIER, 0, bssh_emulator::MOD_CTRL,  "Ctrl" },
-	{ "alt",   bssh_key_t::MODIFIER, 0, bssh_emulator::MOD_ALT,   "Alt" },
-	{ "shift", bssh_key_t::MODIFIER, 0, bssh_emulator::MOD_SHIFT, "Shift" },
+	{ "ctrl",  bssh_key_t::MODIFIER, 0, SK_MOD_CTRL,  "Ctrl" },
+	{ "alt",   bssh_key_t::MODIFIER, 0, SK_MOD_ALT,   "Alt" },
+	{ "shift", bssh_key_t::MODIFIER, 0, SK_MOD_SHIFT, "Shift" },
 
 	{ "fn",    bssh_key_t::FUNCTION_TOGGLE, 0, 0, "Fn" },
 	{ "gap",   bssh_key_t::SPACER,          0, 0, "" }
@@ -128,7 +128,7 @@ QList<bssh_key_t> bssh_function_keys() {
 	QList<bssh_key_t> keys;
 	for (int n = 1; n <= 12; ++n) {
 		keys.append(named(QStringLiteral("F%1").arg(n),
-		                   bssh_emulator::KEY_FUNCTION_BASE + n));
+		                   Qt::Key_F1 + n - 1));
 	}
 	return keys;
 }
@@ -152,10 +152,10 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 		        "keyboard buries.");
 
 		layout.keys = {
-			named(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE),
-			named(QStringLiteral("Tab"), bssh_emulator::KEY_TAB),
-			modifier(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL),
-			modifier(QStringLiteral("Alt"), bssh_emulator::MOD_ALT)
+			named(QStringLiteral("Esc"), Qt::Key_Escape),
+			named(QStringLiteral("Tab"), Qt::Key_Tab),
+			modifier(QStringLiteral("Ctrl"), SK_MOD_CTRL),
+			modifier(QStringLiteral("Alt"), SK_MOD_ALT)
 		};
 		layout.keys += arrows();
 		layout.keys += QList<bssh_key_t>{
@@ -185,9 +185,9 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 		        "and | rather than Alt and history keys.");
 
 		layout.keys = {
-			named(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE),
-			named(QStringLiteral("Tab"), bssh_emulator::KEY_TAB),
-			modifier(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL),
+			named(QStringLiteral("Esc"), Qt::Key_Escape),
+			named(QStringLiteral("Tab"), Qt::Key_Tab),
+			modifier(QStringLiteral("Ctrl"), SK_MOD_CTRL),
 			text(QStringLiteral("?"), U'?'),
 			text(QStringLiteral("|"), U'|')
 		};
@@ -216,9 +216,9 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 		        "The Ctrl-B prefix as one key, plus what usually follows it.");
 
 		layout.keys = {
-			chord(QStringLiteral("C-b"), U'b', bssh_emulator::MOD_CTRL),
-			named(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE),
-			modifier(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL),
+			chord(QStringLiteral("C-b"), U'b', SK_MOD_CTRL),
+			named(QStringLiteral("Esc"), Qt::Key_Escape),
+			modifier(QStringLiteral("Ctrl"), SK_MOD_CTRL),
 			text(QStringLiteral("c"), U'c'),
 			text(QStringLiteral("n"), U'n'),
 			text(QStringLiteral("p"), U'p'),
@@ -244,8 +244,8 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 		        "registers.");
 
 		layout.keys = {
-			named(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE),
-			modifier(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL),
+			named(QStringLiteral("Esc"), Qt::Key_Escape),
+			modifier(QStringLiteral("Ctrl"), SK_MOD_CTRL),
 			text(QStringLiteral(":"), U':'),
 			text(QStringLiteral("/"), U'/'),
 			text(QStringLiteral("$"), U'$'),
@@ -271,10 +271,10 @@ bssh_key_row_catalog::bssh_key_row_catalog() {
 		        "Four keys and the arrows, for a narrow screen.");
 
 		layout.keys = {
-			named(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE),
-			named(QStringLiteral("Tab"), bssh_emulator::KEY_TAB),
-			modifier(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL),
-			modifier(QStringLiteral("Alt"), bssh_emulator::MOD_ALT)
+			named(QStringLiteral("Esc"), Qt::Key_Escape),
+			named(QStringLiteral("Tab"), Qt::Key_Tab),
+			modifier(QStringLiteral("Ctrl"), SK_MOD_CTRL),
+			modifier(QStringLiteral("Alt"), SK_MOD_ALT)
 		};
 		layout.keys += arrows();
 
@@ -326,7 +326,7 @@ bool bssh_key_row_usable(const QList<bssh_key_t> &keys) {
 	bool has_modifier = false;
 
 	for (const bssh_key_t &key : keys) {
-		if (key.kind == bssh_key_t::KEY && key.value == bssh_emulator::KEY_ESCAPE) {
+		if (key.kind == bssh_key_t::KEY && key.value == Qt::Key_Escape) {
 			has_escape = true;
 		}
 		if (key.kind == bssh_key_t::MODIFIER) has_modifier = true;

@@ -1,6 +1,7 @@
 #include <QApplication>
 #include "ui/interface_scale.h"
 #include "ui/touch_metrics.h"
+#include "keyboard/sk_metrics.h"
 #include "term/font_catalog.h"
 
 #include <QAbstractItemView>
@@ -1127,7 +1128,16 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * router belongs to a session, and the key row is retargeted at
 	 * whichever session is showing (sec 3, core principle 2).
 	 */
+	/* One touch floor for this app and its keyboard (sec 6.2). */
+	static_assert(SK_TOUCH_TARGET_DP == BSSH_TOUCH_TARGET_DP,
+	              "softkeys' touch target and this app's disagree");
+
 	m_key_row = new bssh_key_row(nullptr, this);
+
+	/* AUTO follows this app's own answer, which its tests can force. */
+	m_key_row->set_touch_primary([] {
+		return bssh_platform::instance() && bssh_platform::instance()->is_touch_primary();
+	});
 	layout->insertWidget(2, m_key_row);
 
 	/*
@@ -2253,9 +2263,9 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		 */
 		m_current = session;
 
-		if (m_keyboard) m_keyboard->set_router(session->input_router());
+		if (m_keyboard) m_keyboard->set_target(session->input_router());
 		if (m_key_row) {
-			m_key_row->set_router(session->input_router());
+			m_key_row->set_target(session->input_router());
 			m_key_row->set_layout(
 			        session->settings().value(QStringLiteral("key_row_layout")).toString());
 		}
@@ -2314,8 +2324,8 @@ void bssh_main_window::detach_session() {
 	if (m_panes) m_panes->rebuild();
 
 	m_terminal_view = m_panes ? m_panes->focused_view() : nullptr;
-	if (m_key_row) m_key_row->set_router(nullptr);
-	if (m_keyboard) m_keyboard->set_router(nullptr);
+	if (m_key_row) m_key_row->set_target(nullptr);
+	if (m_keyboard) m_keyboard->set_target(nullptr);
 }
 
 bool bssh_main_window::other_windows_exist() const {

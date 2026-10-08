@@ -57,7 +57,7 @@ expect = "a_key_remap_reaches_the_on_screen_keyboards"
 [[sabotage]]
 name = "an on-screen letter ignores the remaps"
 file = "keyboard/soft_keyboard.cpp"
-find = "\t\t\tif (m_router->remap_char(char32_t(sent.unicode()))) {"
+find = "\t\t\tif (m_target->claim_letter(char32_t(sent.unicode()))) {"
 replace = "\t\t\tif (false) {"
 expect = "a_key_remap_reaches_the_on_screen_keyboards"
 

@@ -5,7 +5,7 @@
 #include <QStyleOptionToolButton>
 #include <QStylePainter>
 
-#include "input/input_router.h"
+#include "keyboard/sk_modifiers.h"
 
 bssh_key_cap::bssh_key_cap(QWidget *parent) : QToolButton(parent) {}
 
@@ -118,7 +118,7 @@ void bssh_key_cap::paint_modifier(int state) {
 	                                           -line / 2 - 1, -line / 2 - 1);
 	const qreal bar = qMax(qreal(3), height() / qreal(12));
 
-	if (state == bssh_input_router::MODIFIER_LOCKED) {
+	if (state == sk_modifiers::LOCKED) {
 		painter.setPen(Qt::NoPen);
 		painter.setBrush(accent);
 		painter.drawRoundedRect(cap, 4, 4);
@@ -131,7 +131,7 @@ void bssh_key_cap::paint_modifier(int state) {
 		painter.setPen(QPen(accent, line));
 		painter.setBrush(Qt::NoBrush);
 		painter.drawRoundedRect(cap, 4, 4);
-		if (state == bssh_input_router::MODIFIER_ONCE) {
+		if (state == sk_modifiers::ONCE) {
 			painter.setPen(Qt::NoPen);
 			painter.setBrush(accent);
 			painter.drawRect(QRectF(cap.center().x() - cap.width() * 0.1,
@@ -147,7 +147,7 @@ void bssh_key_cap::paint_modifier(int state) {
 
 void bssh_key_cap::paintEvent(QPaintEvent *event) {
 	const int state = property("bssh_modifier_state").toInt();
-	if (state != bssh_input_router::MODIFIER_OFF) {
+	if (state != sk_modifiers::OFF) {
 		paint_modifier(state);
 		return;
 	}

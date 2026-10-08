@@ -8,6 +8,8 @@
 #include <functional>
 
 #include "term/emulator.h"
+#include "keyboard/sk_modifiers.h"
+#include "keyboard/sk_target.h"
 #include <QList>
 #include <QString>
 
@@ -33,7 +35,13 @@ class QKeyEvent;
  * Focus-awareness (sec 6.3: exactly one pane receives input) arrives with
  * panes at M8. Today there is one terminal, so there is one router.
  */
-class bssh_input_router : public QObject {
+/*
+ * Also the on-screen keyboard's target (sk_target): the keyboard is
+ * softkeys', generic, and this is what makes what it types reach the
+ * terminal -- with the chords this app keeps, the remaps, and one modifier
+ * state shared with the physical keyboard.
+ */
+class bssh_input_router : public QObject, public sk_target {
 	Q_OBJECT
 
 public:
@@ -119,23 +127,27 @@ public:
 	 * of send_text and for the same reason: the character already IS the
 	 * answer.
 	 */
-	static const quint8 MOD_ALTGR = 0x08;
+	static const quint8 MOD_ALTGR = SK_MOD_ALTGR;
 
-	enum modifier_state_t {
-		MODIFIER_OFF,
-		MODIFIER_ONCE,
-		MODIFIER_LOCKED,
-		MODIFIER_HELD
-	};
+	/*
+	 * The states are softkeys' (sk_modifiers), named here as they always
+	 * were so nothing that reads them had to change when the state machine
+	 * moved out of this class.
+	 */
+	typedef sk_modifiers::state_t modifier_state_t;
+	static constexpr modifier_state_t MODIFIER_OFF = sk_modifiers::OFF;
+	static constexpr modifier_state_t MODIFIER_ONCE = sk_modifiers::ONCE;
+	static constexpr modifier_state_t MODIFIER_LOCKED = sk_modifiers::LOCKED;
+	static constexpr modifier_state_t MODIFIER_HELD = sk_modifiers::HELD;
 
 	void set_sticky_modifiers(quint8 modifiers);
-	quint8 sticky_modifiers() const { return m_sticky; }
+	quint8 sticky_modifiers() const { return m_modifiers.armed(); }
 
 	void set_locked_modifiers(quint8 modifiers);
-	quint8 locked_modifiers() const { return m_locked; }
+	quint8 locked_modifiers() const { return m_modifiers.locked(); }
 
 	/* What the next keystroke will carry: armed, locked and held together. */
-	quint8 effective_modifiers() const { return quint8(m_sticky | m_locked | m_held); }
+	quint8 effective_modifiers() const { return m_modifiers.effective(); }
 
 	/*
 	 * A finger has come down on a modifier key (see MODIFIER_HELD). It
@@ -152,7 +164,13 @@ public:
 	 */
 	bool release_modifier(quint8 modifier);
 
-	quint8 held_modifiers() const { return m_held; }
+	quint8 held_modifiers() const { return m_modifiers.held(); }
+
+	/* sk_target: what the on-screen keyboard types arrives here. */
+	sk_modifiers &modifiers() override { return m_modifiers; }
+	void key(int qt_key, quint8 modifiers) override;
+	void text(const QString &text) override;
+	bool claim_letter(char32_t letter) override;
 
 	modifier_state_t modifier_state(quint8 modifier) const;
 
@@ -407,12 +425,8 @@ private:
 
 	bssh_emulator *m_emulator;
 	bool m_caps_as_ctrl;
-	quint8 m_sticky;
-	quint8 m_locked;
-	quint8 m_held;
-
-	/* The held modifiers a keystroke has gone out under since they came down. */
-	quint8 m_held_used;
+	/* Armed, locked and held: one state, shared with the on-screen keyboards. */
+	sk_modifiers m_modifiers;
 };
 
 #endif /* BSSH_INPUT_ROUTER_H */

@@ -32,9 +32,6 @@ expect = "a_modifier_button_stops_claiming_a_session_that_has_gone"
 [[sabotage]]
 name = "a modifier pressed with no session stays pressed"
 file = "keyboard/key_row.cpp"
-find = '''
-		if (m_router) m_router->cycle_modifier(modifier);'''
-replace = '''
-		if (!m_router) return;
-		m_router->cycle_modifier(modifier);'''
+find = "\t\tif (m_target) m_target->modifiers().cycle(modifier);"
+replace = "\t\tif (!m_target) return;\n\t\tm_target->modifiers().cycle(modifier);"
 expect = "a_modifier_button_stops_claiming_a_session_that_has_gone"

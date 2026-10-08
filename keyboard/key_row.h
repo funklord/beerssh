@@ -3,9 +3,11 @@
 
 #include <QWidget>
 
+#include <functional>
+
 class QAbstractButton;
 class QScrollArea;
-class bssh_input_router;
+class sk_target;
 class bssh_touch_chords;
 
 /*
@@ -42,10 +44,10 @@ public:
 		NEVER
 	};
 
-	explicit bssh_key_row(bssh_input_router *router, QWidget *parent = nullptr);
+	explicit bssh_key_row(sk_target *target, QWidget *parent = nullptr);
 
 	/* Retargeted when the shown session changes (sec 3, principle 2). */
-	void set_router(bssh_input_router *router);
+	void set_target(sk_target *target);
 
 	void set_visibility_mode(visibility_t mode);
 
@@ -61,6 +63,14 @@ public:
 	/* Whether the row should be shown, given the mode and the platform. */
 	bool should_be_visible() const;
 
+	/*
+	 * How AUTO asks whether this is a touch device. The application knows
+	 * better than any guess here -- BeerSSH has its own platform answer,
+	 * forced in its tests -- so it may say; without one, any touchscreen Qt
+	 * reports counts.
+	 */
+	void set_touch_primary(std::function<bool()> query) { m_touch_primary = std::move(query); }
+
 private:
 	void add_key(const QString &label, int key);
 	void add_modifier(const QString &label, quint8 modifier);
@@ -75,7 +85,8 @@ private:
 	QAbstractButton *make_button(const QString &label);
 	void refresh_modifier_buttons();
 
-	bssh_input_router *m_router;
+	sk_target *m_target;
+	std::function<bool()> m_touch_primary;
 	bssh_touch_chords *m_touch = nullptr;
 	visibility_t m_mode;
 	/*

@@ -25,18 +25,9 @@ expect = "only_one_on_screen_keyboard_is_ever_shown"
 # is what the test asserts over two keys rather than one.
 [[sabotage]]
 name = "a locked modifier is spent by the keystroke it modifies"
-file = "src/input/input_router.cpp"
-find = '''
-	m_held_used = quint8(m_held_used | m_held);
-	set_sticky_modifiers(bssh_emulator::MOD_NONE);
-}
-'''
-replace = '''
-	m_held_used = quint8(m_held_used | m_held);
-	set_sticky_modifiers(bssh_emulator::MOD_NONE);
-	set_locked_modifiers(bssh_emulator::MOD_NONE);
-}
-'''
+file = "keyboard/sk_modifiers.cpp"
+find = "\tm_held_used = quint8(m_held_used | m_held);\n\tset_armed(SK_MOD_NONE);\n}\n"
+replace = "\tm_held_used = quint8(m_held_used | m_held);\n\tset_armed(SK_MOD_NONE);\n\tset_locked(SK_MOD_NONE);\n}\n"
 expect = "a_modifier_locks_on_the_second_press_and_releases_on_the_third"
 
 # A group one row shorter than its neighbours. On a device this resizes the

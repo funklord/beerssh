@@ -22,10 +22,11 @@
 #include <QTimer>
 #include <QToolButton>
 
-#include "input/input_router.h"
-#include "term/emulator.h"
+#include "keyboard/sk_modifiers.h"
+#include "keyboard/sk_target.h"
+#include "keyboard/sk_modifiers.h"
 #include "keyboard/soft_keyboard_layout.h"
-#include "ui/touch_metrics.h"
+#include "keyboard/sk_metrics.h"
 
 namespace {
 
@@ -184,9 +185,9 @@ const int BSSH_KEY_MIN_WIDTH_DP = 12;
 
 } /* namespace */
 
-bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *parent)
+bssh_soft_keyboard::bssh_soft_keyboard(sk_target *target, QWidget *parent)
     : QWidget(parent),
-      m_router(router),
+      m_target(target),
       m_keys(nullptr),
       m_grid(nullptr),
       m_group_button(nullptr),
@@ -318,8 +319,8 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	m_settings_button->setAccessibleName(QStringLiteral("Settings"));
 	m_settings_button->setToolTip(QStringLiteral("Settings"));
 	m_settings_button->setFocusPolicy(Qt::NoFocus);
-	m_settings_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
-	m_settings_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	m_settings_button->setMinimumWidth(SK_TOUCH_TARGET_DP);
+	m_settings_button->setMinimumHeight(SK_TOUCH_TARGET_DP);
 	m_settings_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	side->addWidget(m_settings_button, 0);
 
@@ -342,8 +343,8 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	m_script_button = new QToolButton(this);
 	m_script_button->setObjectName(QStringLiteral("keyboard-script"));
 	m_script_button->setFocusPolicy(Qt::NoFocus);
-	m_script_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
-	m_script_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	m_script_button->setMinimumWidth(SK_TOUCH_TARGET_DP);
+	m_script_button->setMinimumHeight(SK_TOUCH_TARGET_DP);
 	m_script_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	side->addWidget(m_script_button, 0);
 
@@ -354,7 +355,7 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 
 	m_group_button = new QToolButton(this);
 	m_group_button->setFocusPolicy(Qt::NoFocus);
-	m_group_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
+	m_group_button->setMinimumWidth(SK_TOUCH_TARGET_DP);
 	m_group_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 	side->addWidget(m_group_button, 1);
 
@@ -363,8 +364,8 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	m_hide_button->setAccessibleName(QStringLiteral("Hide the keyboard"));
 	m_hide_button->setToolTip(QStringLiteral("Hide the keyboard"));
 	m_hide_button->setFocusPolicy(Qt::NoFocus);
-	m_hide_button->setMinimumWidth(BSSH_TOUCH_TARGET_DP);
-	m_hide_button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	m_hide_button->setMinimumWidth(SK_TOUCH_TARGET_DP);
+	m_hide_button->setMinimumHeight(SK_TOUCH_TARGET_DP);
 	m_hide_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
 	side->addWidget(m_hide_button, 0);
 
@@ -395,23 +396,23 @@ bssh_soft_keyboard::bssh_soft_keyboard(bssh_input_router *router, QWidget *paren
 	 * -- the same cycle a click on the button gives.
 	 */
 	connect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {
-		if (m_router) m_router->hold_modifier(modifier);
+		if (m_target) m_target->modifiers().hold(modifier);
 		refresh_modifiers();
 	});
 	connect(m_touch, &bssh_touch_chords::modifier_released,
 	         this, [this](quint8 modifier, bool cancelled) {
-		if (m_router && m_router->release_modifier(modifier) && !cancelled) {
-			m_router->cycle_modifier(modifier);
+		if (m_target && m_target->modifiers().release(modifier) && !cancelled) {
+			m_target->modifiers().cycle(modifier);
 		}
 		refresh_modifiers();
 	});
 
-	if (m_router) {
-		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
+	if (m_target) {
+		connect(&m_target->modifiers(), &sk_modifiers::armed_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
-		connect(m_router, &bssh_input_router::locked_modifiers_changed,
+		connect(&m_target->modifiers(), &sk_modifiers::locked_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
-		connect(m_router, &bssh_input_router::held_modifiers_changed,
+		connect(&m_target->modifiers(), &sk_modifiers::held_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
 	}
 
@@ -456,7 +457,7 @@ bssh_key_cap *bssh_soft_keyboard::make_button(const QString &label, QWidget *par
 	 */
 	button->setFocusPolicy(Qt::NoFocus);
 
-	button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	button->setMinimumHeight(SK_TOUCH_TARGET_DP);
 	button->setMinimumWidth(BSSH_KEY_MIN_WIDTH_DP);
 	button->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
 
@@ -485,7 +486,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 		const int code = key.value;
 		bssh_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, code] {
-			if (m_router) m_router->send_key(code, bssh_emulator::MOD_NONE);
+			if (m_target) m_target->key(code, SK_MOD_NONE);
 		});
 		break;
 	}
@@ -497,7 +498,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 		m_modifier_values.append(modifier);
 		connect(button, &QAbstractButton::clicked, this, [this, modifier] {
 			/* One press arms, a second locks, a third releases (sec 6.2). */
-			if (m_router) m_router->cycle_modifier(modifier);
+			if (m_target) m_target->modifiers().cycle(modifier);
 
 			/*
 			 * Refreshed outside the guard: the button is checkable, so
@@ -529,18 +530,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 
 		bssh_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, key] {
-			if (!m_router) return;
-
-			/*
-			 * A chord first, exactly as a physical keyboard's letter chord
-			 * is stolen before it becomes text (sec 6.1): if the armed
-			 * modifiers make this letter Ctrl+Shift+C and the like, it is
-			 * the app's, not a character for the shell.
-			 */
-			if (m_router->steal_char_chord(char32_t(key.value))) {
-				refresh_letter_labels();
-				return;
-			}
+			if (!m_target) return;
 
 			/*
 			 * Shift is applied HERE, to the character, and not sent as a
@@ -550,21 +540,24 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 			 * there as well would be asking twice and getting neither.
 			 */
 			const bool shifted =
-			        m_router->modifier_state(bssh_emulator::MOD_SHIFT)
-			                != bssh_input_router::MODIFIER_OFF;
+			        m_target->modifiers().state(SK_MOD_SHIFT)
+			                != sk_modifiers::OFF;
 
 			const QChar sent = bssh_keyboard_char(key, shifted, altgr_armed());
 
 			/*
-			 * A remapped letter sends its target instead (sec 6.1),
-			 * from the same table the physical keyboard reads.
+			 * Offered to the application before it is typed, exactly as a
+			 * physical keyboard's letter is: a chord the application keeps
+			 * (Ctrl+Shift+C as copy) or a remap is its business, not a
+			 * character to send. The letter as it will be typed, so a
+			 * capital reads as Shift held.
 			 */
-			if (m_router->remap_char(char32_t(sent.unicode()))) {
+			if (m_target->claim_letter(char32_t(sent.unicode()))) {
 				refresh_letter_labels();
 				return;
 			}
 
-			m_router->send_text(QString(sent));
+			m_target->text(QString(sent));
 			refresh_letter_labels();
 		});
 		break;
@@ -574,7 +567,7 @@ void bssh_soft_keyboard::add_key(const bssh_key_t &key, QGridLayout *grid, int r
 		const quint8 modifier = key.modifier;
 		bssh_set_key_repeat(button);
 		connect(button, &QAbstractButton::clicked, this, [this, code, modifier] {
-			if (m_router) m_router->send_key(code, modifier);
+			if (m_target) m_target->key(code, modifier);
 		});
 		break;
 	}
@@ -681,17 +674,17 @@ void bssh_soft_keyboard::refresh_modifiers() {
 	/* No router means no session, so nothing is armed; see the key row. */
 	for (int i = 0; i < m_modifier_buttons.size(); ++i) {
 		QAbstractButton *button = m_modifier_buttons.at(i);
-		const bssh_input_router::modifier_state_t state =
-		        m_router ? m_router->modifier_state(m_modifier_values.at(i))
-		                 : bssh_input_router::MODIFIER_OFF;
+		const sk_modifiers::state_t state =
+		        m_target ? m_target->modifiers().state(m_modifier_values.at(i))
+		                 : sk_modifiers::OFF;
 
-		button->setChecked(state != bssh_input_router::MODIFIER_OFF);
+		button->setChecked(state != sk_modifiers::OFF);
 		button->setProperty("bssh_modifier_state", int(state));
 		button->update();
 
 		QFont font = button->font();
-		if (font.bold() != (state == bssh_input_router::MODIFIER_LOCKED)) {
-			font.setBold(state == bssh_input_router::MODIFIER_LOCKED);
+		if (font.bold() != (state == sk_modifiers::LOCKED)) {
+			font.setBold(state == sk_modifiers::LOCKED);
 			button->setFont(font);
 		}
 	}
@@ -757,7 +750,7 @@ void bssh_soft_keyboard::lay_out_split(const bssh_soft_key_group_t &group) {
 		return key.kind == bssh_key_t::TEXT && key.value == int(U' ');
 	};
 	const auto is_shift = [](const bssh_key_t &key) {
-		return key.kind == bssh_key_t::MODIFIER && key.modifier == bssh_emulator::MOD_SHIFT;
+		return key.kind == bssh_key_t::MODIFIER && key.modifier == SK_MOD_SHIFT;
 	};
 	const auto end_of = [](const QList<placed_t> &row) {
 		return row.isEmpty() ? 0 : row.last().column + row.last().key.span;
@@ -883,11 +876,11 @@ void bssh_soft_keyboard::set_bottom_height(int height_dp) {
 void bssh_soft_keyboard::apply_bottom_height() {
 	const bool chosen = m_bottom_height > 0
 	                    && m_style != bssh_soft_keyboard_catalog::STYLE_SPLIT;
-	int key = BSSH_TOUCH_TARGET_DP;
+	int key = SK_TOUCH_TARGET_DP;
 	if (chosen) {
 		const int rows = row_count();
 		key = qBound(SMALLEST_KEY_DP, (m_bottom_height - (rows - 1)) / rows,
-		             BSSH_TOUCH_TARGET_DP);
+		             SK_TOUCH_TARGET_DP);
 		m_keys->setFixedHeight(m_bottom_height);
 	} else {
 		m_keys->setMinimumHeight(0);
@@ -909,9 +902,9 @@ void bssh_soft_keyboard::hideEvent(QHideEvent *event) {
 }
 
 bool bssh_soft_keyboard::altgr_armed() const {
-	return m_router
-	        && m_router->modifier_state(bssh_input_router::MOD_ALTGR)
-	                != bssh_input_router::MODIFIER_OFF;
+	return m_target
+	        && m_target->modifiers().state(SK_MOD_ALTGR)
+	                != sk_modifiers::OFF;
 }
 
 /*
@@ -965,7 +958,7 @@ void bssh_soft_keyboard::refresh_side_icons() {
 	if (!m_settings_button || !m_hide_button) return;
 
 	const QColor ink = palette().color(QPalette::ButtonText);
-	const int size = qMax(16, int(BSSH_TOUCH_TARGET_DP * 0.55));
+	const int size = qMax(16, int(SK_TOUCH_TARGET_DP * 0.55));
 
 	m_settings_button->setIcon(bssh_painted_icon(ink, size * 2, true));
 	m_settings_button->setIconSize(QSize(size, size));
@@ -985,9 +978,9 @@ void bssh_soft_keyboard::refresh_letter_labels() {
 	 * the letters read lowercase. Returning early left a keyboard drawn
 	 * in capitals after the session that shifted it had gone.
 	 */
-	const bool shifted = m_router
-	        && m_router->modifier_state(bssh_emulator::MOD_SHIFT)
-	                != bssh_input_router::MODIFIER_OFF;
+	const bool shifted = m_target
+	        && m_target->modifiers().state(SK_MOD_SHIFT)
+	                != sk_modifiers::OFF;
 
 	const bool altgr = altgr_armed();
 
@@ -1018,21 +1011,21 @@ void bssh_soft_keyboard::refresh_letter_labels() {
 	}
 }
 
-void bssh_soft_keyboard::set_router(bssh_input_router *router) {
-	if (m_router == router) return;
+void bssh_soft_keyboard::set_target(sk_target *target) {
+	if (m_target == target) return;
 
 	/* A finger still down belongs to the old session; let it go there. */
 	if (m_touch) m_touch->cancel();
 
-	if (m_router) disconnect(m_router, nullptr, this, nullptr);
-	m_router = router;
+	if (m_target) disconnect(&m_target->modifiers(), nullptr, this, nullptr);
+	m_target = target;
 
-	if (m_router) {
-		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
+	if (m_target) {
+		connect(&m_target->modifiers(), &sk_modifiers::armed_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
-		connect(m_router, &bssh_input_router::locked_modifiers_changed,
+		connect(&m_target->modifiers(), &sk_modifiers::locked_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
-		connect(m_router, &bssh_input_router::held_modifiers_changed,
+		connect(&m_target->modifiers(), &sk_modifiers::held_changed,
 		         this, [this](quint8) { refresh_modifiers(); });
 	}
 

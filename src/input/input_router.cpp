@@ -87,96 +87,98 @@ Qt::KeyboardModifiers qt_modifiers_for(quint8 mods) {
 
 } /* namespace */
 
+/*
+ * softkeys' modifier bits are this terminal's own, so the keyboard's state
+ * is used as it stands rather than translated. Asserted rather than
+ * assumed, so a change on either side stops the build instead of turning
+ * Ctrl into Alt.
+ */
+static_assert(int(SK_MOD_SHIFT) == int(bssh_emulator::MOD_SHIFT), "softkeys and the emulator disagree on Shift");
+static_assert(int(SK_MOD_ALT) == int(bssh_emulator::MOD_ALT), "softkeys and the emulator disagree on Alt");
+static_assert(int(SK_MOD_CTRL) == int(bssh_emulator::MOD_CTRL), "softkeys and the emulator disagree on Ctrl");
+
 bssh_input_router::bssh_input_router(bssh_emulator *emulator, QObject *parent)
     : QObject(parent),
       m_emulator(emulator),
-      m_caps_as_ctrl(false),
-      m_sticky(bssh_emulator::MOD_NONE),
-      m_locked(bssh_emulator::MOD_NONE),
-      m_held(bssh_emulator::MOD_NONE),
-      m_held_used(bssh_emulator::MOD_NONE) {
+      m_caps_as_ctrl(false) {
+	/*
+	 * The state machine is softkeys' (sk_modifiers) and this class's own
+	 * signals keep their names, so everything connected to them before the
+	 * move is connected to the same thing after it.
+	 */
+	connect(&m_modifiers, &sk_modifiers::armed_changed,
+	         this, &bssh_input_router::sticky_modifiers_changed);
+	connect(&m_modifiers, &sk_modifiers::locked_changed,
+	         this, &bssh_input_router::locked_modifiers_changed);
+	connect(&m_modifiers, &sk_modifiers::held_changed,
+	         this, &bssh_input_router::held_modifiers_changed);
 }
 
 void bssh_input_router::hold_modifier(quint8 modifier) {
-	m_held_used = quint8(m_held_used & ~modifier);
-	if (m_held & modifier) return;
-	m_held = quint8(m_held | modifier);
-	emit held_modifiers_changed(m_held);
+	m_modifiers.hold(modifier);
 }
 
 bool bssh_input_router::release_modifier(quint8 modifier) {
-	if (!(m_held & modifier)) return false;
-	const bool tapped = !(m_held_used & modifier);
-	m_held = quint8(m_held & ~modifier);
-	m_held_used = quint8(m_held_used & ~modifier);
-	emit held_modifiers_changed(m_held);
-	return tapped;
+	return m_modifiers.release(modifier);
 }
 
 void bssh_input_router::set_sticky_modifiers(quint8 modifiers) {
-	if (m_sticky == modifiers) return;
-	m_sticky = modifiers;
-	emit sticky_modifiers_changed(m_sticky);
+	m_modifiers.set_armed(modifiers);
 }
 
 void bssh_input_router::set_locked_modifiers(quint8 modifiers) {
-	if (m_locked == modifiers) return;
-	m_locked = modifiers;
-	emit locked_modifiers_changed(m_locked);
+	m_modifiers.set_locked(modifiers);
 }
 
 /*
- * A keystroke has just gone out carrying effective_modifiers(). The armed
- * half is spent; the locked half is not.
- *
- * One function rather than the clear-and-emit that was written out at
- * eight call sites. Every one of them was the same two lines, and the
- * eighth is the one that would eventually be a clear without an emit --
- * which is a Ctrl button left drawn as pressed over a terminal that has
- * already forgotten it.
+ * A keystroke has just gone out carrying effective_modifiers(). One
+ * function rather than the clear-and-emit that was once written out at
+ * eight call sites, the eighth of which would eventually have been a clear
+ * without an emit -- a Ctrl button left drawn as pressed over a terminal
+ * that had already forgotten it. What spending means is sk_modifiers'.
  */
 void bssh_input_router::spend_sticky_modifiers() {
-	/*
-	 * Every keystroke comes through here, so this is also where a held
-	 * modifier learns it carried one -- which is what makes its release
-	 * a chord ending rather than a tap.
-	 */
-	m_held_used = quint8(m_held_used | m_held);
-	set_sticky_modifiers(bssh_emulator::MOD_NONE);
+	m_modifiers.spend();
 }
 
 bssh_input_router::modifier_state_t
 bssh_input_router::modifier_state(quint8 modifier) const {
-	if (m_locked & modifier) return MODIFIER_LOCKED;
-	if (m_held & modifier) return MODIFIER_HELD;
-	if (m_sticky & modifier) return MODIFIER_ONCE;
-	return MODIFIER_OFF;
+	return m_modifiers.state(modifier);
+}
+
+void bssh_input_router::cycle_modifier(quint8 modifier) {
+	m_modifiers.cycle(modifier);
 }
 
 /*
- * OFF -> ONCE -> LOCKED -> OFF, which is the order a Treo goes round and
- * the reason the header calls the press count the state.
+ * sk_target: the on-screen keyboard's keys, onto the paths a physical key
+ * already takes.
  *
- * Locking from ARMED rather than from OFF is what makes the common case
- * cheap: one tap for the Ctrl-C everybody sends, and a second only when
- * you already know you are sending more. Going OFF -> LOCKED first would
- * make the rare case free and the common one dangerous, since a lock
- * nobody noticed turns every following letter into a control byte.
+ * A key the terminal names goes through send_key, with the stolen chords
+ * and remaps it applies. Anything else -- a letter chord such as the key
+ * row's Ctrl-B -- goes through handle_key as a key event carrying its KEY
+ * CODE and no text, which is how the router reads a Ctrl letter from a
+ * real keyboard: with Ctrl held a real event's text is already the control
+ * character, so the router takes the codepoint from key(), and an event
+ * carrying only text would arrive as a plain letter.
  */
-void bssh_input_router::cycle_modifier(quint8 modifier) {
-	/*
-	 * Read from the two latched sets rather than from modifier_state(),
-	 * which would answer HELD for a modifier somebody is also resting a
-	 * finger on: the cycle is about what stays once the finger is gone.
-	 */
-	if (m_locked & modifier) {
-		set_locked_modifiers(quint8(m_locked & ~modifier));
-	} else if (m_sticky & modifier) {
-		set_sticky_modifiers(quint8(m_sticky & ~modifier));
-		set_locked_modifiers(quint8(m_locked | modifier));
-	} else {
-		set_sticky_modifiers(quint8(m_sticky | modifier));
+void bssh_input_router::key(int qt_key, quint8 modifiers) {
+	const int mapped = emulator_key_for(qt_key);
+	if (mapped != bssh_emulator::KEY_NONE) {
+		send_key(mapped, modifiers);
+		return;
 	}
+
+	QKeyEvent event(QEvent::KeyPress, qt_key, qt_modifiers_for(modifiers), QString());
+	handle_key(&event);
+}
+
+void bssh_input_router::text(const QString &characters) {
+	send_text(characters);
+}
+
+bool bssh_input_router::claim_letter(char32_t letter) {
+	return steal_char_chord(letter) || remap_char(letter);
 }
 
 quint8 bssh_input_router::modifiers_for(QKeyEvent *event) const {
@@ -377,10 +379,10 @@ bool bssh_input_router::handle_key(QKeyEvent *event) {
 		 * key whose own light is busy telling you something else.
 		 */
 		if (modifier_state(bssh_emulator::MOD_CTRL) == MODIFIER_OFF) {
-			set_sticky_modifiers(quint8(m_sticky | bssh_emulator::MOD_CTRL));
+			set_sticky_modifiers(quint8(m_modifiers.armed() | bssh_emulator::MOD_CTRL));
 		} else {
-			set_sticky_modifiers(quint8(m_sticky & ~bssh_emulator::MOD_CTRL));
-			set_locked_modifiers(quint8(m_locked & ~bssh_emulator::MOD_CTRL));
+			set_sticky_modifiers(quint8(m_modifiers.armed() & ~bssh_emulator::MOD_CTRL));
+			set_locked_modifiers(quint8(m_modifiers.locked() & ~bssh_emulator::MOD_CTRL));
 		}
 		return true;
 	}

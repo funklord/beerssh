@@ -7897,14 +7897,25 @@ void layout_test::a_gap_in_a_custom_key_row_holds_its_space() {
 	QVERIFY2(rows.set_custom(plain), "the plain row was refused");
 	bssh_key_row without(&router);
 	without.set_layout(QStringLiteral("custom"));
+	/*
+	 * The KEYS' extent, not the row's size hint. The row is a scroll area,
+	 * whose hint is capped at 36 font heights and cached the first time it
+	 * is asked: a row shown during construction cached its DEFAULT keys at
+	 * the cap, and both rows then reported 612px whatever they held -- in
+	 * the full suite and not alone, where nothing had shown it.
+	 */
+	const auto keys_width = [](bssh_key_row &row) {
+		QScrollArea *area = row.findChild<QScrollArea *>();
+		return area && area->widget() ? area->widget()->sizeHint().width() : -1;
+	};
 	without.adjustSize();
-	const int narrow = without.sizeHint().width();
+	const int narrow = keys_width(without);
 
 	QVERIFY2(rows.set_custom(spaced), "the spaced row was refused");
 	bssh_key_row with(&router);
 	with.set_layout(QStringLiteral("custom"));
 	with.adjustSize();
-	const int wide = with.sizeHint().width();
+	const int wide = keys_width(with);
 
 	/*
 	 * A KEY's width, not merely wider. `wide > narrow` was the first

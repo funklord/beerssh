@@ -17,6 +17,7 @@
 #include "phone_metrics.h"
 #include "term/emulator.h"
 #include "keyboard/key_row.h"
+#include "platform/platform.h"
 #include "keyboard/key_cap.h"
 #include "keyboard/soft_keyboard.h"
 
@@ -760,7 +761,7 @@ void input_router_test::a_modifier_button_stops_claiming_a_session_that_has_gone
 	 * mode and the platform (should_be_visible) and never on whether a
 	 * session exists, so it stays on screen with nothing behind it.
 	 */
-	row.set_router(nullptr);
+	row.set_target(nullptr);
 
 	QVERIFY2(!ctrl->isChecked(),
 	          "with no session there is nothing armed, and a Ctrl still drawn "
@@ -1043,6 +1044,16 @@ void input_router_test::key_row_visibility_follows_the_input_device() {
 	bssh_emulator emulator(80, 24);
 	bssh_input_router router(&emulator);
 	bssh_key_row row(&router);
+
+	/*
+	 * BeerSSH's own answer to "is this a touch device", as the main window
+	 * gives it. The row's default asks Qt for any touchscreen, and a test
+	 * process that has made a fake touch device for its two-finger tests
+	 * has one.
+	 */
+	row.set_touch_primary([] {
+		return bssh_platform::instance() && bssh_platform::instance()->is_touch_primary();
+	});
 
 	/* Tests run on the desktop platform, which is not touch-primary. */
 	QCOMPARE(row.visibility_mode(), bssh_key_row::AUTO);
@@ -1606,7 +1617,7 @@ void input_router_test::a_custom_key_row_is_composed_from_words() {
 
 	QCOMPARE(keys.size(), 11);
 	QCOMPARE(keys.at(0).kind, bssh_key_t::KEY);
-	QCOMPARE(keys.at(0).value, int(bssh_emulator::KEY_ESCAPE));
+	QCOMPARE(keys.at(0).value, int(Qt::Key_Escape));
 	QCOMPARE(keys.at(2).kind, bssh_key_t::MODIFIER);
 	QCOMPARE(keys.at(2).modifier, quint8(bssh_emulator::MOD_CTRL));
 

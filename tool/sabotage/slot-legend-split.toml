@@ -97,8 +97,8 @@ expect = "a_keypad_key_sends_only_its_digit"
 [[sabotage]]
 name = "the board advertises a level it has no key for"
 file = "keyboard/soft_keyboard_layout.cpp"
-find = "\trow.append(modifier_key(QStringLiteral(\"AltGr\"), bssh_input_router::MOD_ALTGR, 3));"
-replace = "\trow.append(modifier_key(QStringLiteral(\"Alt\"), bssh_emulator::MOD_ALT, 3));"
+find = "\trow.append(modifier_key(QStringLiteral(\"AltGr\"), SK_MOD_ALTGR, 3));"
+replace = "\trow.append(modifier_key(QStringLiteral(\"Alt\"), SK_MOD_ALT, 3));"
 expect = "a_keyboard_can_reach_every_level_it_shows"
 
 # 7. The ampersand cap goes back to the style, and draws nothing.

@@ -12,7 +12,7 @@ class bssh_key_cap;
 
 class QAbstractButton;
 class QGridLayout;
-class bssh_input_router;
+class sk_target;
 class bssh_touch_chords;
 class QHBoxLayout;
 class bssh_resize_grip;
@@ -41,10 +41,10 @@ class bssh_soft_keyboard : public QWidget {
 	Q_OBJECT
 
 public:
-	explicit bssh_soft_keyboard(bssh_input_router *router, QWidget *parent = nullptr);
+	explicit bssh_soft_keyboard(sk_target *target, QWidget *parent = nullptr);
 
 	/* Retargeted when the shown session changes (sec 3, principle 2). */
-	void set_router(bssh_input_router *router);
+	void set_target(sk_target *target);
 
 	/*
 	 * Which group of keys is on screen. The side button walks these; the
@@ -156,7 +156,7 @@ private:
 	 */
 	void refresh_letter_labels();
 
-	bssh_input_router *m_router;
+	sk_target *m_target;
 	bssh_touch_chords *m_touch = nullptr;
 
 	QWidget *m_keys;

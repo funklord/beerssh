@@ -115,7 +115,7 @@ struct bssh_key_t {
 	 *
 	 * AltGr is NOT sent. It picks a character, the way Shift does; by the
 	 * time anything reaches the wire its whole effect is in the text.
-	 * See bssh_input_router::MOD_ALTGR.
+	 * See SK_MOD_ALTGR.
 	 */
 	int altgr_value;
 	int shift_altgr_value;

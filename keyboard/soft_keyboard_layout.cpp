@@ -1,7 +1,6 @@
 #include "keyboard/soft_keyboard_layout.h"
 
-#include "term/emulator.h"
-#include "input/input_router.h"
+#include "keyboard/sk_modifiers.h"
 
 #include <QSet>
 
@@ -1923,9 +1922,9 @@ bssh_key_t modifier_key(const QString &label, quint8 modifier, int span = 2) {
  */
 QList<bssh_key_t> common_bottom_row() {
 	QList<bssh_key_t> row;
-	row.append(modifier_key(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL, 3));
-	row.append(modifier_key(QStringLiteral("Alt"), bssh_emulator::MOD_ALT, 3));
-	row.append(named_key(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE, 3));
+	row.append(modifier_key(QStringLiteral("Ctrl"), SK_MOD_CTRL, 3));
+	row.append(modifier_key(QStringLiteral("Alt"), SK_MOD_ALT, 3));
+	row.append(named_key(QStringLiteral("Esc"), Qt::Key_Escape, 3));
 	row.append(text_key(QStringLiteral("space"), U' ', 4));
 
 	/*
@@ -1948,9 +1947,9 @@ QList<bssh_key_t> common_bottom_row() {
 	 * the width of a letter key rather than below it. Ctrl, Esc and
 	 * Enter keep theirs, being what a terminal reaches for most.
 	 */
-	row.append(modifier_key(QStringLiteral("AltGr"), bssh_input_router::MOD_ALTGR, 3));
-	row.append(named_key(QStringLiteral("Tab"), bssh_emulator::KEY_TAB, 3));
-	row.append(named_key(QStringLiteral("Enter"), bssh_emulator::KEY_ENTER, 3));
+	row.append(modifier_key(QStringLiteral("AltGr"), SK_MOD_ALTGR, 3));
+	row.append(named_key(QStringLiteral("Tab"), Qt::Key_Tab, 3));
+	row.append(named_key(QStringLiteral("Enter"), Qt::Key_Return, 3));
 	return row;
 }
 
@@ -2031,11 +2030,11 @@ void append_all(QList<bssh_key_t> &row, const QList<bssh_key_t> &more) {
 QList<bssh_key_t> full_bottom_row(bool keypad_page) {
 	const int mod = 5;   /* 1.25u */
 	QList<bssh_key_t> row;
-	row.append(modifier_key(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL, mod));
+	row.append(modifier_key(QStringLiteral("Ctrl"), SK_MOD_CTRL, mod));
 	row.append(spacer(mod));
-	row.append(modifier_key(QStringLiteral("Alt"), bssh_emulator::MOD_ALT, mod));
+	row.append(modifier_key(QStringLiteral("Alt"), SK_MOD_ALT, mod));
 	if (keypad_page) {
-		row.append(named_key(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE, 25));
+		row.append(named_key(QStringLiteral("Esc"), Qt::Key_Escape, 25));
 	} else {
 		row.append(text_key(QStringLiteral("space"), U' ', 25));
 	}
@@ -2046,10 +2045,10 @@ QList<bssh_key_t> full_bottom_row(bool keypad_page) {
 	 * still works, which is the same trade a physical European board
 	 * makes.
 	 */
-	row.append(modifier_key(QStringLiteral("AltGr"), bssh_input_router::MOD_ALTGR, mod));
+	row.append(modifier_key(QStringLiteral("AltGr"), SK_MOD_ALTGR, mod));
 	row.append(spacer(mod));
 	row.append(spacer(mod));
-	row.append(modifier_key(QStringLiteral("Ctrl"), bssh_emulator::MOD_CTRL, mod));
+	row.append(modifier_key(QStringLiteral("Ctrl"), SK_MOD_CTRL, mod));
 	return row;
 }
 
@@ -2067,11 +2066,11 @@ bssh_soft_key_group_t full_main_group() {
 	 * left edge.
 	 */
 	QList<bssh_key_t> fn;
-	fn.append(named_key(QStringLiteral("Esc"), bssh_emulator::KEY_ESCAPE, 4));
+	fn.append(named_key(QStringLiteral("Esc"), Qt::Key_Escape, 4));
 	fn.append(spacer(2));
 	for (int i = 1; i <= 12; ++i) {
 		fn.append(named_key(QStringLiteral("F%1").arg(i),
-		                     bssh_emulator::KEY_FUNCTION_BASE + i, 4));
+		                     Qt::Key_F1 + i - 1, 4));
 		if (i == 4 || i == 8) fn.append(spacer(1));
 	}
 	fn.append(spacer(4));
@@ -2080,11 +2079,11 @@ bssh_soft_key_group_t full_main_group() {
 	QList<bssh_key_t> digits;
 	digits.append(slot_key("TLDE", BSSH_FULL_UNIT));
 	append_all(digits, slot_run("AE", 1, 12, BSSH_FULL_UNIT));
-	digits.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 8));
+	digits.append(named_key(QStringLiteral("Bksp"), Qt::Key_Backspace, 8));
 	group.rows.append(digits);
 
 	QList<bssh_key_t> tab;
-	tab.append(named_key(QStringLiteral("Tab"), bssh_emulator::KEY_TAB, 6));
+	tab.append(named_key(QStringLiteral("Tab"), Qt::Key_Tab, 6));
 	append_all(tab, slot_run("AD", 1, 12, BSSH_FULL_UNIT));
 	tab.append(slot_key("BKSL", 6));
 	group.rows.append(tab);
@@ -2098,7 +2097,7 @@ bssh_soft_key_group_t full_main_group() {
 	QList<bssh_key_t> home;
 	home.append(spacer(7));
 	append_all(home, slot_run("AC", 1, 11, BSSH_FULL_UNIT));
-	home.append(named_key(QStringLiteral("Enter"), bssh_emulator::KEY_ENTER, 9));
+	home.append(named_key(QStringLiteral("Enter"), Qt::Key_Return, 9));
 	group.rows.append(home);
 
 	/*
@@ -2109,11 +2108,11 @@ bssh_soft_key_group_t full_main_group() {
 	 */
 	QList<bssh_key_t> shift;
 	const bool iso = layout_slot("LSGT") != nullptr;
-	shift.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT,
+	shift.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT,
 	                           iso ? 5 : 9));
 	if (iso) shift.append(slot_key("LSGT", BSSH_FULL_UNIT));
 	append_all(shift, slot_run("AB", 1, 10, BSSH_FULL_UNIT));
-	shift.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 11));
+	shift.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 11));
 	group.rows.append(shift);
 
 	group.rows.append(full_bottom_row(false));
@@ -2196,9 +2195,9 @@ bssh_soft_key_group_t full_keypad_group() {
 	group.rows.append(top);
 
 	QList<bssh_key_t> r1;
-	r1.append(named_key(QStringLiteral("Ins"), bssh_emulator::KEY_INSERT, BSSH_FULL_UNIT));
-	r1.append(named_key(QStringLiteral("Home"), bssh_emulator::KEY_HOME, BSSH_FULL_UNIT));
-	r1.append(named_key(QStringLiteral("PgUp"), bssh_emulator::KEY_PAGE_UP, BSSH_FULL_UNIT));
+	r1.append(named_key(QStringLiteral("Ins"), Qt::Key_Insert, BSSH_FULL_UNIT));
+	r1.append(named_key(QStringLiteral("Home"), Qt::Key_Home, BSSH_FULL_UNIT));
+	r1.append(named_key(QStringLiteral("PgUp"), Qt::Key_PageUp, BSSH_FULL_UNIT));
 	r1.append(spacer(gap));
 	r1.append(keypad_key(QStringLiteral("7"), U'7'));
 	r1.append(keypad_key(QStringLiteral("8"), U'8'));
@@ -2208,9 +2207,9 @@ bssh_soft_key_group_t full_keypad_group() {
 	group.rows.append(r1);
 
 	QList<bssh_key_t> r2;
-	r2.append(named_key(QStringLiteral("Del"), bssh_emulator::KEY_DELETE, BSSH_FULL_UNIT));
-	r2.append(named_key(QStringLiteral("End"), bssh_emulator::KEY_END, BSSH_FULL_UNIT));
-	r2.append(named_key(QStringLiteral("PgDn"), bssh_emulator::KEY_PAGE_DOWN, BSSH_FULL_UNIT));
+	r2.append(named_key(QStringLiteral("Del"), Qt::Key_Delete, BSSH_FULL_UNIT));
+	r2.append(named_key(QStringLiteral("End"), Qt::Key_End, BSSH_FULL_UNIT));
+	r2.append(named_key(QStringLiteral("PgDn"), Qt::Key_PageDown, BSSH_FULL_UNIT));
 	r2.append(spacer(gap));
 	r2.append(keypad_key(QStringLiteral("4"), U'4'));
 	r2.append(keypad_key(QStringLiteral("5"), U'5'));
@@ -2221,20 +2220,20 @@ bssh_soft_key_group_t full_keypad_group() {
 
 	QList<bssh_key_t> r3;
 	r3.append(spacer(BSSH_FULL_UNIT));
-	r3.append(named_key(QStringLiteral("Up"), bssh_emulator::KEY_UP, BSSH_FULL_UNIT));
+	r3.append(named_key(QStringLiteral("Up"), Qt::Key_Up, BSSH_FULL_UNIT));
 	r3.append(spacer(BSSH_FULL_UNIT));
 	r3.append(spacer(gap));
 	r3.append(keypad_key(QStringLiteral("1"), U'1'));
 	r3.append(keypad_key(QStringLiteral("2"), U'2'));
 	r3.append(keypad_key(QStringLiteral("3"), U'3'));
-	r3.append(named_key(QStringLiteral("Ent"), bssh_emulator::KEY_ENTER, BSSH_FULL_UNIT));
+	r3.append(named_key(QStringLiteral("Ent"), Qt::Key_Return, BSSH_FULL_UNIT));
 	r3.append(spacer(trailing));
 	group.rows.append(r3);
 
 	QList<bssh_key_t> r4;
-	r4.append(named_key(QStringLiteral("Left"), bssh_emulator::KEY_LEFT, BSSH_FULL_UNIT));
-	r4.append(named_key(QStringLiteral("Down"), bssh_emulator::KEY_DOWN, BSSH_FULL_UNIT));
-	r4.append(named_key(QStringLiteral("Right"), bssh_emulator::KEY_RIGHT, BSSH_FULL_UNIT));
+	r4.append(named_key(QStringLiteral("Left"), Qt::Key_Left, BSSH_FULL_UNIT));
+	r4.append(named_key(QStringLiteral("Down"), Qt::Key_Down, BSSH_FULL_UNIT));
+	r4.append(named_key(QStringLiteral("Right"), Qt::Key_Right, BSSH_FULL_UNIT));
 	r4.append(spacer(gap));
 	r4.append(keypad_key(QStringLiteral("0"), U'0', 2 * BSSH_FULL_UNIT));
 	r4.append(keypad_key(QStringLiteral("."), U'.'));
@@ -2273,9 +2272,9 @@ bssh_soft_key_group_t letters_group() {
 	group.rows.append(slot_run("AC", 1, 11, 2));
 
 	QList<bssh_key_t> row;
-	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 4));
+	row.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 4));
 	row.append(slot_run("AB", 1, 7, 2));
-	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 4));
+	row.append(named_key(QStringLiteral("Bksp"), Qt::Key_Backspace, 4));
 	group.rows.append(row);
 
 	group.rows.append(common_bottom_row());
@@ -2352,7 +2351,7 @@ bssh_soft_key_group_t numbers_group() {
 	 * point of being written.
 	 */
 	QList<bssh_key_t> row;
-	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 4));
+	row.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 4));
 	/*
 	 * The second symbol row, chosen for what a SHELL cannot do without
 	 * rather than for what looks like a symbol page.
@@ -2375,7 +2374,7 @@ bssh_soft_key_group_t numbers_group() {
 	 * layout table already gives each of them { } + and | on Shift.
 	 */
 	row.append(literal_row(".\\~[]=*"));
-	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 4));
+	row.append(named_key(QStringLiteral("Bksp"), Qt::Key_Backspace, 4));
 	group.rows.append(row);
 
 	group.rows.append(common_bottom_row());
@@ -2402,7 +2401,7 @@ bssh_soft_key_group_t terminal_group() {
 	QList<bssh_key_t> row;
 	for (int n = 1; n <= 11; ++n) {
 		row.append(named_key(QStringLiteral("F%1").arg(n),
-		                      bssh_emulator::KEY_FUNCTION_BASE + n));
+		                      Qt::Key_F1 + n - 1));
 	}
 	group.rows.append(row);
 
@@ -2414,27 +2413,27 @@ bssh_soft_key_group_t terminal_group() {
 	 * chosen to fit instead.
 	 */
 	row.clear();
-	row.append(named_key(QStringLiteral("F12"), bssh_emulator::KEY_FUNCTION_BASE + 12));
-	row.append(named_key(QStringLiteral("Ins"), bssh_emulator::KEY_INSERT));
-	row.append(named_key(QStringLiteral("Del"), bssh_emulator::KEY_DELETE));
-	row.append(named_key(QStringLiteral("Hom"), bssh_emulator::KEY_HOME));
-	row.append(named_key(QStringLiteral("End"), bssh_emulator::KEY_END));
-	row.append(named_key(QStringLiteral("PgU"), bssh_emulator::KEY_PAGE_UP));
-	row.append(named_key(QStringLiteral("PgD"), bssh_emulator::KEY_PAGE_DOWN));
+	row.append(named_key(QStringLiteral("F12"), Qt::Key_F1 + 12 - 1));
+	row.append(named_key(QStringLiteral("Ins"), Qt::Key_Insert));
+	row.append(named_key(QStringLiteral("Del"), Qt::Key_Delete));
+	row.append(named_key(QStringLiteral("Hom"), Qt::Key_Home));
+	row.append(named_key(QStringLiteral("End"), Qt::Key_End));
+	row.append(named_key(QStringLiteral("PgU"), Qt::Key_PageUp));
+	row.append(named_key(QStringLiteral("PgD"), Qt::Key_PageDown));
 	/*
 	 * Every arrow on one row, which the extra columns paid for. They
 	 * were split across two rows because ten keys was the width; a
 	 * cursor cluster with two of its arrows on the row above is not one
 	 * a thumb can use without looking.
 	 */
-	row.append(named_key(QStringLiteral("←"), bssh_emulator::KEY_LEFT));
-	row.append(named_key(QStringLiteral("↓"), bssh_emulator::KEY_DOWN));
-	row.append(named_key(QStringLiteral("↑"), bssh_emulator::KEY_UP));
-	row.append(named_key(QStringLiteral("→"), bssh_emulator::KEY_RIGHT));
+	row.append(named_key(QStringLiteral("←"), Qt::Key_Left));
+	row.append(named_key(QStringLiteral("↓"), Qt::Key_Down));
+	row.append(named_key(QStringLiteral("↑"), Qt::Key_Up));
+	row.append(named_key(QStringLiteral("→"), Qt::Key_Right));
 	group.rows.append(row);
 
 	row.clear();
-	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 4));
+	row.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 4));
 	row.append(literal('-'));
 	row.append(literal('/'));
 	row.append(literal('|'));
@@ -2442,7 +2441,7 @@ bssh_soft_key_group_t terminal_group() {
 	row.append(literal('`'));
 	row.append(literal('$'));
 	row.append(literal('*'));
-	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 4));
+	row.append(named_key(QStringLiteral("Bksp"), Qt::Key_Backspace, 4));
 	group.rows.append(row);
 
 	group.rows.append(common_bottom_row());
@@ -2569,10 +2568,10 @@ bssh_soft_key_group_t outer_slots_group() {
 	                                BSSH_KEYBOARD_COLUMNS));
 
 	QList<bssh_key_t> row;
-	row.append(modifier_key(QStringLiteral("Shift"), bssh_emulator::MOD_SHIFT, 4));
+	row.append(modifier_key(QStringLiteral("Shift"), SK_MOD_SHIFT, 4));
 	row.append(spread_slots(BSSH_OUTER_BOTTOM,
 	                         int(sizeof BSSH_OUTER_BOTTOM / sizeof *BSSH_OUTER_BOTTOM), 12));
-	row.append(named_key(QStringLiteral("Bksp"), bssh_emulator::KEY_BACKSPACE, 6));
+	row.append(named_key(QStringLiteral("Bksp"), Qt::Key_Backspace, 6));
 	group.rows.append(row);
 
 	group.rows.append(common_bottom_row());
@@ -2764,10 +2763,10 @@ bool levels_are_reachable(bssh_soft_keyboard_catalog::style_t style) {
 				if (key.kind != bssh_key_t::TEXT) continue;
 
 				if (key.shifted_value != 0 || QChar::isLetter(uint(key.value))) {
-					advertised |= quint8(bssh_emulator::MOD_SHIFT);
+					advertised |= quint8(SK_MOD_SHIFT);
 				}
 				if (key.altgr_value != 0 || key.shift_altgr_value != 0) {
-					advertised |= bssh_input_router::MOD_ALTGR;
+					advertised |= SK_MOD_ALTGR;
 				}
 			}
 		}

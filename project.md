@@ -2132,6 +2132,32 @@ up, a strip of modifiers has nothing to modify.
   row, plus one space and one Shift; equal key widths). Sabotage in
   `tool/sabotage/split-keyboard.toml`.
 
+- **The keyboard becomes softkeys — [IN PROGRESS from 2026-10-08, holder's
+  instruction].** For the holder's own apps only -- BeerSSH, and fuzznet's
+  views (the first new consumer, the holder's choice) and through them
+  fuzzypickles -- as a private library at `~/src/softkeys`, vendored like
+  qtty. Its `project.md` holds the design and plan; here is what it costs
+  this tree. **Step 1, done in place first so the proof is this tree's
+  own suite:** `keyboard/` no longer includes anything of BeerSSH's.
+  `sk_modifiers` is the once/locked/held state machine lifted out of
+  `bssh_input_router`, which now holds one and delegates, keeping its whole
+  API and signals so nothing that read them changed. `sk_target` is what
+  the keyboard types into; the router implements it (named keys as
+  `Qt::Key` into `send_key`, a letter chord into `handle_key`, text into
+  `send_text`, and `claim_letter` = the kept chords then the remaps).
+  The catalogue names keys in `Qt::Key`; stored custom rows are words, so
+  they read back unchanged. The key row asks the app whether this is a
+  touch device (`set_touch_primary`); BeerSSH answers with its platform.
+  The modifier bits and the 48dp floor are asserted equal at compile time.
+  **What the move found:** two tests had been measuring something else.
+  The gap test read the key row's size hint, which is a scroll area's --
+  capped at 36 font heights and cached on first ask -- and a row shown
+  during construction (the default touch question finds the suite's fake
+  touch device) cached its default keys at the cap, so both rows reported
+  612px; it measures the keys now. And a claim that no test compared key
+  values against terminal codes was wrong, the search missing
+  `int(bssh_emulator::KEY_ESCAPE)` -- one did, caught by the suite.
+
 - **An editor for the built-in keyboard's keys — [DEFERRED by the holder,
   2026-10-08]:** "do that after the default is perfected". The key row has
   one (`bssh_key_row_editor`); the built-in keyboard's pages are compiled

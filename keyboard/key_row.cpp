@@ -1,4 +1,4 @@
-#include "ui/touch_metrics.h"
+#include "keyboard/sk_metrics.h"
 #include "keyboard/key_row.h"
 
 #include <QFont>
@@ -9,16 +9,17 @@
 #include <QKeyEvent>
 #include <QToolButton>
 
-#include "input/input_router.h"
+#include "keyboard/sk_modifiers.h"
+#include "keyboard/sk_target.h"
 #include "keyboard/key_cap.h"
 #include "keyboard/touch_chords.h"
-#include "platform/platform.h"
-#include "term/emulator.h"
+#include <QInputDevice>
+#include "keyboard/sk_modifiers.h"
 #include "keyboard/key_row_layout.h"
 
-bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
+bssh_key_row::bssh_key_row(sk_target *target, QWidget *parent)
     : QWidget(parent),
-      m_router(router),
+      m_target(target),
       m_mode(AUTO),
       m_scroll(nullptr),
       m_keys(nullptr),
@@ -63,13 +64,13 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
 	 * -- the same cycle a click on the button gives.
 	 */
 	connect(m_touch, &bssh_touch_chords::modifier_held, this, [this](quint8 modifier) {
-		if (m_router) m_router->hold_modifier(modifier);
+		if (m_target) m_target->modifiers().hold(modifier);
 		refresh_modifier_buttons();
 	});
 	connect(m_touch, &bssh_touch_chords::modifier_released,
 	         this, [this](quint8 modifier, bool cancelled) {
-		if (m_router && m_router->release_modifier(modifier) && !cancelled) {
-			m_router->cycle_modifier(modifier);
+		if (m_target && m_target->modifiers().release(modifier) && !cancelled) {
+			m_target->modifiers().cycle(modifier);
 		}
 		refresh_modifier_buttons();
 	});
@@ -95,8 +96,8 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
 	 */
 	set_layout(QString());
 
-	if (m_router) {
-		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
+	if (m_target) {
+		connect(&m_target->modifiers(), &sk_modifiers::armed_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
 		/*
 		 * Both halves, because a lock survives the keystroke that spends
@@ -104,9 +105,9 @@ bssh_key_row::bssh_key_row(bssh_input_router *router, QWidget *parent)
 		 * would stop redrawing exactly when the state stopped being
 		 * obvious.
 		 */
-		connect(m_router, &bssh_input_router::locked_modifiers_changed,
+		connect(&m_target->modifiers(), &sk_modifiers::locked_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
-		connect(m_router, &bssh_input_router::held_modifiers_changed,
+		connect(&m_target->modifiers(), &sk_modifiers::held_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
 	}
 
@@ -207,7 +208,7 @@ void bssh_key_row::add_spacer() {
 	 * counted as one.
 	 */
 	QWidget *gap = new QWidget(m_keys);
-	gap->setFixedWidth(BSSH_TOUCH_TARGET_DP);
+	gap->setFixedWidth(SK_TOUCH_TARGET_DP);
 	gap->setFocusPolicy(Qt::NoFocus);
 
 	m_keys->layout()->addWidget(gap);
@@ -239,7 +240,7 @@ void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier)
 	bssh_set_key_repeat(button);
 
 	connect(button, &QAbstractButton::clicked, this, [this, ch, modifier] {
-		if (!m_router) return;
+		if (!m_target) return;
 
 		/*
 		 * Sent as one event with the modifier attached, NOT by setting a
@@ -248,23 +249,15 @@ void bssh_key_row::add_chord(const QString &label, char32_t ch, quint8 modifier)
 		 * nobody asked for. A chord is a single press with a single
 		 * meaning.
 		 */
-		const Qt::KeyboardModifiers qt_modifiers =
-		        (modifier & bssh_emulator::MOD_CTRL ? Qt::ControlModifier : Qt::NoModifier) |
-		        (modifier & bssh_emulator::MOD_ALT ? Qt::AltModifier : Qt::NoModifier);
-
 		/*
-		 * The KEY CODE, with empty text, and this is not incidental: with
-		 * Ctrl held the router reads the codepoint from key() rather than
-		 * from text(), because a real keyboard's text() is already the
-		 * control character and using it would encode the modifier twice.
-		 * A synthetic event carrying only text therefore falls through
-		 * that branch and arrives as a plain letter -- pressing the tmux
-		 * prefix would type "b" into the shell.
+		 * The KEY CODE -- Qt::Key_B for b -- not the character: a target
+		 * reading a Ctrl letter takes it from the key, because a real
+		 * keyboard's text is already the control character, and a key
+		 * sent as text would arrive as a plain letter. Pressing the tmux
+		 * prefix typed "b" into the shell when it went that way.
 		 */
 		const int code = QChar(char16_t(ch)).toUpper().unicode();
-
-		QKeyEvent event(QEvent::KeyPress, code, qt_modifiers, QString());
-		m_router->handle_key(&event);
+		m_target->key(code, quint8(modifier & (SK_MOD_CTRL | SK_MOD_ALT)));
 	});
 }
 
@@ -276,7 +269,7 @@ QAbstractButton *bssh_key_row::make_button(const QString &label) {
 	QToolButton *button = new bssh_key_cap(m_keys);
 	button->setText(label);
 	m_buttons.append(button);
-	button->setMinimumSize(BSSH_TOUCH_TARGET_DP, BSSH_TOUCH_TARGET_DP);
+	button->setMinimumSize(SK_TOUCH_TARGET_DP, SK_TOUCH_TARGET_DP);
 
 	/*
 	 * The row must never take focus: a key press that lands on a button
@@ -306,7 +299,7 @@ void bssh_key_row::add_key(const QString &label, int key) {
 	QAbstractButton *button = make_button(label);
 	bssh_set_key_repeat(button);
 	connect(button, &QAbstractButton::clicked, this, [this, key] {
-		if (m_router) m_router->send_key(key, bssh_emulator::MOD_NONE);
+		if (m_target) m_target->key(key, SK_MOD_NONE);
 	});
 }
 
@@ -314,10 +307,9 @@ void bssh_key_row::add_text(const QString &label, char32_t ch) {
 	QAbstractButton *button = make_button(label);
 	bssh_set_key_repeat(button);
 	connect(button, &QAbstractButton::clicked, this, [this, ch] {
-		if (!m_router) return;
-		/* Through the router, so a sticky Ctrl applies to these too. */
-		QKeyEvent event(QEvent::KeyPress, 0, Qt::NoModifier, QString::fromUcs4(&ch, 1));
-		m_router->handle_key(&event);
+		if (!m_target) return;
+		/* Through the target, so an armed Ctrl applies to these too. */
+		m_target->text(QString::fromUcs4(&ch, 1));
 	});
 }
 
@@ -335,7 +327,7 @@ void bssh_key_row::add_modifier(const QString &label, quint8 modifier) {
 		 * cycle, and the router owns it because the built-in keyboard
 		 * (sec 6.2) asks the same question with different buttons.
 		 */
-		if (m_router) m_router->cycle_modifier(modifier);
+		if (m_target) m_target->modifiers().cycle(modifier);
 
 		/*
 		 * Refreshed even with no router, and that is the whole point of
@@ -375,11 +367,11 @@ void bssh_key_row::refresh_modifier_buttons() {
 		 * both.
 		 */
 		QAbstractButton *button = m_modifier_buttons.at(i);
-		const bssh_input_router::modifier_state_t state =
-		        m_router ? m_router->modifier_state(m_modifier_values.at(i))
-		                 : bssh_input_router::MODIFIER_OFF;
+		const sk_modifiers::state_t state =
+		        m_target ? m_target->modifiers().state(m_modifier_values.at(i))
+		                 : sk_modifiers::OFF;
 
-		button->setChecked(state != bssh_input_router::MODIFIER_OFF);
+		button->setChecked(state != sk_modifiers::OFF);
 
 		/*
 		 * Named on the button as well, so a test can ask which of the
@@ -390,8 +382,8 @@ void bssh_key_row::refresh_modifier_buttons() {
 		button->update();
 
 		QFont font = button->font();
-		if (font.bold() != (state == bssh_input_router::MODIFIER_LOCKED)) {
-			font.setBold(state == bssh_input_router::MODIFIER_LOCKED);
+		if (font.bold() != (state == sk_modifiers::LOCKED)) {
+			font.setBold(state == sk_modifiers::LOCKED);
 			button->setFont(font);
 		}
 	}
@@ -400,20 +392,24 @@ void bssh_key_row::refresh_modifier_buttons() {
 bool bssh_key_row::should_be_visible() const {
 	if (m_mode == ALWAYS) return true;
 	if (m_mode == NEVER) return false;
-	return bssh_platform::instance()->is_touch_primary();
+	if (m_touch_primary) return m_touch_primary();
+	for (const QInputDevice *device : QInputDevice::devices()) {
+		if (device->type() == QInputDevice::DeviceType::TouchScreen) return true;
+	}
+	return false;
 }
 
-void bssh_key_row::set_router(bssh_input_router *router) {
-	if (m_router == router) return;
+void bssh_key_row::set_target(sk_target *target) {
+	if (m_target == target) return;
 
 	/* A finger still down belongs to the old session; let it go there. */
 	if (m_touch) m_touch->cancel();
 
-	if (m_router) disconnect(m_router, nullptr, this, nullptr);
-	m_router = router;
+	if (m_target) disconnect(&m_target->modifiers(), nullptr, this, nullptr);
+	m_target = target;
 
-	if (m_router) {
-		connect(m_router, &bssh_input_router::sticky_modifiers_changed,
+	if (m_target) {
+		connect(&m_target->modifiers(), &sk_modifiers::armed_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
 		/*
 		 * Both halves, because a lock survives the keystroke that spends
@@ -421,9 +417,9 @@ void bssh_key_row::set_router(bssh_input_router *router) {
 		 * would stop redrawing exactly when the state stopped being
 		 * obvious.
 		 */
-		connect(m_router, &bssh_input_router::locked_modifiers_changed,
+		connect(&m_target->modifiers(), &sk_modifiers::locked_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
-		connect(m_router, &bssh_input_router::held_modifiers_changed,
+		connect(&m_target->modifiers(), &sk_modifiers::held_changed,
 		         this, [this](quint8) { refresh_modifier_buttons(); });
 	}
 

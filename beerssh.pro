@@ -94,6 +94,7 @@ SOURCES += \
     src/ui/interface_scale.cpp \
     keyboard/key_cap.cpp \
     keyboard/touch_chords.cpp \
+    keyboard/sk_modifiers.cpp \
     keyboard/resize_grip.cpp \
     keyboard/key_row_layout.cpp \
     keyboard/soft_keyboard.cpp \
@@ -167,6 +168,9 @@ HEADERS += \
     src/platform/headless.h \
     keyboard/key_cap.h \
     keyboard/touch_chords.h \
+    keyboard/sk_modifiers.h \
+    keyboard/sk_target.h \
+    keyboard/sk_metrics.h \
     keyboard/resize_grip.h \
     keyboard/key_row_layout.h \
     keyboard/soft_keyboard.h \
