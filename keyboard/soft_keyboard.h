@@ -101,7 +101,7 @@ public:
 	void set_grips_shown(bool shown);
 
 	/* The smallest a key gets by dragging, in dp. */
-	static const int SMALLEST_KEY_DP = 28;
+	static constexpr int SMALLEST_KEY_DP = 28;
 
 signals:
 	/*

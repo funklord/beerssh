@@ -30,7 +30,7 @@ public:
 	 * Thick enough for a finger to find, thin enough to be no more than an
 	 * edge: the line drawn is a third of it.
 	 */
-	static const int THICKNESS_DP = 12;
+	static constexpr int THICKNESS_DP = 12;
 
 	QSize sizeHint() const override;
 

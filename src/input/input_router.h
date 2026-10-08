@@ -127,7 +127,7 @@ public:
 	 * of send_text and for the same reason: the character already IS the
 	 * answer.
 	 */
-	static const quint8 MOD_ALTGR = SK_MOD_ALTGR;
+	static constexpr quint8 MOD_ALTGR = SK_MOD_ALTGR;
 
 	/*
 	 * The states are softkeys' (sk_modifiers), named here as they always
