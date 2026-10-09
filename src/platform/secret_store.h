@@ -56,6 +56,14 @@ public:
 	 */
 	static void set_instance(bssh_secret_store *store);
 
+	/*
+	 * How many times instance() has been asked, in this process -- a test
+	 * seam. The first answer on a desktop probes for a Secret Service, so
+	 * nothing on the way to the first window may ask: a probe there held
+	 * the window for 27 seconds wherever no keyring answered (sec 11).
+	 */
+	static int lookups();
+
 	/* Shown to the user, verbatim. Never softened. */
 	virtual QString backend_name() const = 0;
 	virtual bool is_hardware_backed() const = 0;

@@ -10,6 +10,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include "ui/app_settings_view.h"
+#include "ui/main_window.h"
 #include "ui/password_prompt.h"
 #include "secret_store_test.h"
 #include "phone_metrics.h"
@@ -352,6 +353,10 @@ void secret_store_test::the_settings_page_names_the_secret_backend()
 
 	bssh_app_settings_view view;
 
+	/* Filled when the page is first shown, not when it is built. */
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
 	/*
 	 * The name VERBATIM. Asserting on a substring, or on "some label
 	 * mentions a keyring", would pass a page that softened the wording --
@@ -379,6 +384,32 @@ void secret_store_test::the_settings_page_names_the_secret_backend()
 
 	QVERIFY2(named, "the settings page must show the backend's own name, unsoftened");
 	QVERIFY2(explained, "and say what that means for the passwords in it");
+}
+
+void secret_store_test::building_the_window_does_not_ask_for_the_store()
+{
+	/*
+	 * The first question about the store probes for a keyring, and it was
+	 * asked while the main window was being built -- by the settings page
+	 * naming the backend -- so on a display with no session bus the first
+	 * window took 27 seconds to appear (sec 11, measured 2026-10-09). The
+	 * relation that has to hold: building and showing the window asks
+	 * nothing of the store; showing the page that names it does.
+	 */
+	const int before = bssh_secret_store::lookups();
+	{
+		bssh_main_window window;
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		QCoreApplication::processEvents();
+		QCOMPARE(bssh_secret_store::lookups(), before);
+	}
+
+	bssh_app_settings_view page;
+	QCOMPARE(bssh_secret_store::lookups(), before);
+	page.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&page));
+	QVERIFY2(bssh_secret_store::lookups() > before, "showing the page is what names the store");
 }
 
 void secret_store_test::no_setting_is_cut_off_at_a_phone_width()

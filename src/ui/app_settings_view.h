@@ -84,11 +84,24 @@ signals:
 
 protected:
 	void resizeEvent(QResizeEvent *event) override;
+	void showEvent(QShowEvent *event) override;
 
 private slots:
 	void refresh_keyboard_fallback();
 
 private:
+	/*
+	 * The stored-passwords rows, filled the first time the page is shown
+	 * rather than when it is built: naming the store asks which one there
+	 * is, which on a desktop probes for a keyring -- and this view is built
+	 * with the main window, so the probe held the first window for as long
+	 * as D-Bus took to give up (sec 11).
+	 */
+	void fill_store_notes();
+	QLabel *m_store_name = nullptr;
+	QLabel *m_store_detail = nullptr;
+	bool m_store_filled = false;
+
 	/*
 	 * Writes ONE setting and tells the window.
 	 *

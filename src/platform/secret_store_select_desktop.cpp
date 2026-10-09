@@ -2,6 +2,7 @@
 
 /* Defined in secret_store.cpp, beside the setter. */
 bssh_secret_store *bssh_secret_store_override();
+void bssh_secret_store_count_lookup();
 
 /*
  * Which secret store the desktop uses (project.md sec 11).
@@ -23,6 +24,7 @@ bssh_secret_store *bssh_secret_store::instance() {
 	 * appeared and from the file afterwards, and secrets written to one
 	 * would be invisible in the other.
 	 */
+	bssh_secret_store_count_lookup();
 	if (bssh_secret_store_override()) return bssh_secret_store_override();
 
 	static bssh_secret_store *selected = nullptr;

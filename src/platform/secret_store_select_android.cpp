@@ -2,6 +2,7 @@
 
 /* Defined in secret_store.cpp, beside the setter. */
 bssh_secret_store *bssh_secret_store_override();
+void bssh_secret_store_count_lookup();
 
 /*
  * Which secret store Android uses (project.md sec 11).
@@ -25,6 +26,7 @@ bssh_secret_store *bssh_secret_store_override();
  * assume the stronger one.
  */
 bssh_secret_store *bssh_secret_store::instance() {
+	bssh_secret_store_count_lookup();
 	if (bssh_secret_store_override()) return bssh_secret_store_override();
 
 	static bssh_secret_store *store = []() -> bssh_secret_store * {

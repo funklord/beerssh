@@ -26,6 +26,7 @@ private slots:
 	 * know were the ones who could not find out.
 	 */
 	void the_settings_page_names_the_secret_backend();
+	void building_the_window_does_not_ask_for_the_store();
 	void a_second_settings_page_does_not_write_back_a_stale_snapshot();
 
 	/*

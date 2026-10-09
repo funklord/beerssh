@@ -846,6 +846,12 @@ check-ssh: $(TEST_BIN)
 check-handoff:
 	./tool/handoff/run.sh
 
+# sec 11's startup without a keyring: the first window within 5 seconds with
+# no session bus, and with one whose secrets service never comes up. Both
+# were 27 seconds. Needs Xvfb and dbus-run-session.
+check-startup: $(TARGET)
+	./tool/check-startup.sh
+
 # sec 8.4's refusal of a drop on another BeerSSH process, on X11, with a
 # control that the same drag onto nothing tears out. Needs Xvfb, xdotool
 # and dbus-run-session; drives a real pointer on a private X server.

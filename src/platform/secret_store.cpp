@@ -21,6 +21,19 @@ bssh_secret_store *bssh_secret_store_override() {
 	return g_override;
 }
 
+namespace {
+int g_lookups = 0;
+}
+
+/* Counted by both selectors; read by lookups(). */
+void bssh_secret_store_count_lookup() {
+	++g_lookups;
+}
+
+int bssh_secret_store::lookups() {
+	return g_lookups;
+}
+
 void bssh_secret_store::set_instance(bssh_secret_store *store) {
 	g_override = store;
 }

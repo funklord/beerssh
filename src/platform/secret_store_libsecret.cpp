@@ -158,13 +158,82 @@ public:
 	}
 };
 
+namespace {
+
+/*
+ * Whether a Secret Service answers, asked so that the answer comes in a few
+ * seconds whatever the session is like (project.md sec 11, sec 8.4's
+ * finding of 2026-10-09).
+ *
+ * secret_service_get_sync() alone waits as long as D-Bus does -- its
+ * default is 25 seconds -- and it was asked while the main window was
+ * being built: on a display with no session bus the first window took 27
+ * seconds, measured, and as long again with a bus whose secrets service
+ * was activatable and never came up. Two things made it that slow, and
+ * each is closed here:
+ *
+ * - With no bus address, GLib AUTOLAUNCHES a bus through dbus-launch, a
+ *   daemon nothing reaps. Only an address or the user's runtime bus
+ *   socket is used, so an absent bus is an immediate "no".
+ * - An activatable service that never starts was waited for in full. The
+ *   bus is asked first whether the name is owned, in one second; if not,
+ *   the service is started with three seconds to answer.
+ */
+bool secret_service_answers() {
+	const char *address = g_getenv("DBUS_SESSION_BUS_ADDRESS");
+	if (!address || !*address) {
+		gchar *runtime_bus = g_build_filename(g_get_user_runtime_dir(), "bus", nullptr);
+		const bool there = g_file_test(runtime_bus, G_FILE_TEST_EXISTS);
+		g_free(runtime_bus);
+		if (!there) return false;
+	}
+
+	GError *error = nullptr;
+	GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SESSION, nullptr, &error);
+	if (!bus) {
+		g_clear_error(&error);
+		return false;
+	}
+
+	bool answers = false;
+	GVariant *owned = g_dbus_connection_call_sync(
+	        bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+	        "NameHasOwner", g_variant_new("(s)", "org.freedesktop.secrets"),
+	        G_VARIANT_TYPE("(b)"), G_DBUS_CALL_FLAGS_NONE, 1000, nullptr, &error);
+	if (owned) {
+		gboolean has = FALSE;
+		g_variant_get(owned, "(b)", &has);
+		g_variant_unref(owned);
+		answers = has;
+
+		if (!answers) {
+			GVariant *started = g_dbus_connection_call_sync(
+			        bus, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus",
+			        "StartServiceByName", g_variant_new("(su)", "org.freedesktop.secrets", 0u),
+			        G_VARIANT_TYPE("(u)"), G_DBUS_CALL_FLAGS_NONE, 3000, nullptr, &error);
+			if (started) {
+				answers = true;
+				g_variant_unref(started);
+			}
+		}
+	}
+	g_clear_error(&error);
+	g_object_unref(bus);
+	return answers;
+}
+
+} /* namespace */
+
 bssh_secret_store *bssh_make_libsecret_store() {
 	/*
 	 * Asked, not assumed. libsecret being installed says nothing about a
 	 * service answering: this returns null on a headless login, in a
 	 * container, or with no session bus, and the caller falls back to the
-	 * file store rather than failing to save anything.
+	 * file store rather than failing to save anything. Asked BOUNDED first,
+	 * so that by the time libsecret is called a service is known to answer.
 	 */
+	if (!secret_service_answers()) return nullptr;
+
 	GError *error = nullptr;
 	SecretService *service = secret_service_get_sync(SECRET_SERVICE_NONE, nullptr, &error);
 

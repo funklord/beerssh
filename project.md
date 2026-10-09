@@ -15090,19 +15090,38 @@ something:
 - **A shared device driven through screenshots cannot answer a question
   about specific grid cells** -- measure those in the emulator or a test.
 
-### Half a minute to the first window with no reachable bus -- [OPEN, found 2026-10-09]
+### Half a minute to the first window with no reachable bus -- [FIXED 2026-10-09]
 
-Found building `check-x11-drag`: on a display with no session bus the
-first window took **27 seconds** to appear, and 27 again under
-`dbus-run-session` with no keyring installed, where the bus logged the
-activation of `org.freedesktop.secrets` on BeerSSH's behalf. So something
-on the way to the first window waits out a D-Bus timeout (libdbus's
-default is 25s) -- the secret store is the named suspect, not established.
-On the holder's desktop there is a bus and a keyring, so it does not show
-there; it does for anybody without one, and over forwarded X. The
-measurement: start `build/beerssh` on Xvfb with a fresh HOME and poll
-`xwininfo -root -children` for a "BeerSSH" title. Not fixed: which call
-waits, and whether it belongs off the startup path, wants its own look.
+Found building `check-x11-drag`: on a display with no session bus the first
+window took **27 seconds**, and 27 again under `dbus-run-session`, where the
+bus was asked to activate `org.freedesktop.secrets` (gnome-keyring, which
+never came up). The holder called it serious. A backtrace of the waiting
+process named it rather than a guess: `main` -> `bssh_main_window` ->
+`bssh_session_dialog` -> `bssh_app_settings_view` ->
+`bssh_secret_store::instance()` -> `bssh_make_libsecret_store()` ->
+`secret_service_get_sync()`, inside GLib waiting out D-Bus. The settings page
+named the secret store while the main window was being built, and the first
+question about the store probes for a keyring.
+
+Fixed in two layers, because either alone leaves a wait somewhere:
+- **Off the startup path.** The page's store rows are built empty and filled
+  the first time it is shown (`fill_store_notes`).
+  `building_the_window_does_not_ask_for_the_store` asserts nothing asks
+  while a main window is built and shown, by a lookup count
+  (`bssh_secret_store::lookups()`); sabotaged both ways in
+  `secret-store-startup.toml`.
+- **The probe bounded.** `bssh_make_libsecret_store()` asks first, in GIO,
+  whether a Secret Service answers: never autolaunching a bus (an address or
+  the runtime bus socket, else "no"), `NameHasOwner` with one second, and if
+  the name is not owned `StartServiceByName` with three -- against D-Bus's
+  twenty-five. Measured with the hanging activation: the whole lookup in 3.2
+  seconds, falling back to the passphrase file as before.
+
+**Measured**: first window 27s -> **0.42s**, with no bus and with the
+hanging keyring alike. `make check-startup` re-takes it on Xvfb and fails
+above 5 seconds; with both layers removed it failed at 25.4s, so it can see
+this. A unit test cannot stand in for it -- without a display, GLib's
+autolaunch fails at once whether bounded or not.
 
 ### Session-bus leaks: not this tree's code -- and a count that proved nothing
 

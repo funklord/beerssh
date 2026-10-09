@@ -4,6 +4,7 @@
 #include "softkeys/keyboard_layout.h"
 
 #include <QCheckBox>
+#include <QShowEvent>
 #include <QHBoxLayout>
 #include <QSlider>
 #include <QSpinBox>
@@ -838,68 +839,36 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 * The only place it appeared was the unlock prompt, which the keyring
 	 * backend never raises, so the users who most needed to know were the
 	 * ones who could not find out.
-	 *
-	 * Read once, at build: the backend is chosen at startup and does not
-	 * change under a running app.
 	 */
-	const bssh_secret_store *store = bssh_secret_store::instance();
-	if (store) {
-		QLabel *backend = bssh_wrapped_note(store->backend_name(), this);
-		backend->setTextInteractionFlags(Qt::TextSelectableByMouse);
+	/*
+	 * Built empty and filled on first show (fill_store_notes): which store
+	 * this is is the one question here that can take seconds to answer.
+	 */
+	m_store_name = bssh_wrapped_note(QString(), this);
+	m_store_name->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
-		/*
-		 * A wrapped label in a form's field column is clipped rather
-		 * than grown -- the layout asks it for a height before it knows
-		 * the width it will get. On a phone that cut this one off at
-		 * "passphrase-encrypted file (no", and losing the end of that
-		 * particular label changes what it says.
-		 */
-		backend->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
-		backend->setMinimumHeight(backend->sizeHint().height());
-		/*
-		 * No row label on its own page: there the heading already says
-		 * "Stored passwords", and this is the only row, so the words
-		 * appeared twice one line apart. The label earns its place on the
-		 * desktop, where the row sits among everything else in the "This
-		 * device" category and has to say which setting it is.
-		 */
-		if (on_this_page(SECTION_PASSWORDS, backend)) {
-			if (m_section == SECTION_PASSWORDS) form->addRow(backend);
-			else form->addRow(QStringLiteral("Stored passwords"), backend);
-		}
-
-		/*
-		 * Derived from what the store reports, never from which class it
-		 * is. needs_passphrase() is the honest dividing line: a store the
-		 * user has to unlock by typing something is only as strong as
-		 * that something, whoever wrote it.
-		 */
-		QString detail;
-		if (store->needs_passphrase()) {
-			detail = QStringLiteral(
-			        "Only as safe as the passphrase you choose and as this machine: "
-			        "anyone who can read the file and guess the passphrase can read "
-			        "what is in it.");
-		} else if (store->is_hardware_backed()) {
-			detail = QStringLiteral(
-			        "Held in hardware that will not hand the key back, and unlocked "
-			        "the way this device is.");
-		} else {
-			/*
-			 * True of both stores that reach this branch: a desktop
-			 * keyring unlocked by the login session, and an Android
-			 * Keystore whose key the system releases to this app. Saying
-			 * "your session" here, as this did, is a desktop idea that
-			 * does not survive the trip to a phone.
-			 */
-			detail = QStringLiteral(
-			        "Held by the system and released to this app with nothing for you "
-			        "to type. Not hardware-backed.");
-		}
-
-		QLabel *backend_note = bssh_wrapped_note(detail, this);
-		if (on_this_page(SECTION_PASSWORDS, backend_note)) form->addRow(backend_note);
+	/*
+	 * A wrapped label in a form's field column is clipped rather
+	 * than grown -- the layout asks it for a height before it knows
+	 * the width it will get. On a phone that cut this one off at
+	 * "passphrase-encrypted file (no", and losing the end of that
+	 * particular label changes what it says.
+	 */
+	m_store_name->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::MinimumExpanding);
+	/*
+	 * No row label on its own page: there the heading already says
+	 * "Stored passwords", and this is the only row, so the words
+	 * appeared twice one line apart. The label earns its place on the
+	 * desktop, where the row sits among everything else in the "This
+	 * device" category and has to say which setting it is.
+	 */
+	if (on_this_page(SECTION_PASSWORDS, m_store_name)) {
+		if (m_section == SECTION_PASSWORDS) form->addRow(m_store_name);
+		else form->addRow(QStringLiteral("Stored passwords"), m_store_name);
 	}
+
+	m_store_detail = bssh_wrapped_note(QString(), this);
+	if (on_this_page(SECTION_PASSWORDS, m_store_detail)) form->addRow(m_store_detail);
 
 	/*
 	 * Not added at all when this page has no rows in it -- a
@@ -1414,4 +1383,55 @@ void bssh_app_settings_view::refresh_keyboard_fallback() {
 void bssh_app_settings_view::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
 	refresh_keyboard_fallback();
+}
+
+void bssh_app_settings_view::showEvent(QShowEvent *event) {
+	QWidget::showEvent(event);
+	fill_store_notes();
+}
+
+void bssh_app_settings_view::fill_store_notes() {
+	if (m_store_filled || !m_store_name || !m_store_detail) return;
+	m_store_filled = true;
+
+	/*
+	 * Read once: the backend is chosen the first time anything asks and
+	 * does not change under a running app.
+	 */
+	const bssh_secret_store *store = bssh_secret_store::instance();
+	if (!store) return;
+
+	m_store_name->setText(store->backend_name());
+	m_store_name->setMinimumHeight(m_store_name->sizeHint().height());
+
+	/*
+	 * Derived from what the store reports, never from which class it
+	 * is. needs_passphrase() is the honest dividing line: a store the
+	 * user has to unlock by typing something is only as strong as
+	 * that something, whoever wrote it.
+	 */
+	QString detail;
+	if (store->needs_passphrase()) {
+		detail = QStringLiteral(
+		        "Only as safe as the passphrase you choose and as this machine: "
+		        "anyone who can read the file and guess the passphrase can read "
+		        "what is in it.");
+	} else if (store->is_hardware_backed()) {
+		detail = QStringLiteral(
+		        "Held in hardware that will not hand the key back, and unlocked "
+		        "the way this device is.");
+	} else {
+		/*
+		 * True of both stores that reach this branch: a desktop
+		 * keyring unlocked by the login session, and an Android
+		 * Keystore whose key the system releases to this app. Saying
+		 * "your session" here, as this did, is a desktop idea that
+		 * does not survive the trip to a phone.
+		 */
+		detail = QStringLiteral(
+		        "Held by the system and released to this app with nothing for you "
+		        "to type. Not hardware-backed.");
+	}
+
+	m_store_detail->setText(detail);
 }
