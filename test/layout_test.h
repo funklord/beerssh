@@ -261,6 +261,15 @@ private slots:
 	 */
 	void the_screen_decides_the_arrangement_and_the_count();
 	void turning_the_device_rearranges_the_window();
+
+	/*
+	 * A form switches from the system keyboard to softkeys and back
+	 * (sec 6.2): the switch shows over a focused field while the system
+	 * keyboard is up, pressing it puts the forms' keyboard under the page
+	 * and keeps the system one down, its keys type into the field, and
+	 * its system key undoes all of it. The terminal's page has neither.
+	 */
+	void a_form_switches_to_softkeys_and_back();
 	void a_column_shows_the_count_and_scrolls_to_the_rest();
 
 	/* The tab bar on the side it is set to, and a drop aimed at it there. */

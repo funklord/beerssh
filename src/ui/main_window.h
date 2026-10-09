@@ -11,6 +11,7 @@
 #include "ui/long_press.h"
 
 #include "input/input_router.h"
+#include "softkeys/focus_target.h"
 #include "ssh/ssh_session.h"
 
 class QAction;
@@ -38,6 +39,7 @@ class bssh_input_selector;
 class bssh_find_bar;
 class sk_key_row;
 class sk_keyboard;
+class sk_keyboard_switch;
 class bssh_profile_store;
 class bssh_session_dialog;
 class bssh_session;
@@ -79,6 +81,7 @@ public:
 	 */
 	explicit bssh_main_window(const bssh_profile_t &launch = bssh_profile_t(),
 	                           QWidget *parent = nullptr);
+	~bssh_main_window() override;
 
 	/*
 	 * The sessions this window is a view onto (sec 8.4). Process-wide and
@@ -1035,6 +1038,21 @@ private:
 	bssh_long_press *m_tab_long_press;
 	sk_key_row *m_key_row;
 	sk_keyboard *m_keyboard;
+
+	/*
+	 * The forms' keyboard (sec 6.2): softkeys in place of the system
+	 * keyboard on every page but the terminal's, once the switch over the
+	 * system keyboard is pressed. Touch front door only; null elsewhere.
+	 * Typed into whatever has focus, through m_form_target.
+	 */
+	sk_keyboard *m_form_keyboard = nullptr;
+	sk_keyboard_switch *m_keyboard_switch = nullptr;
+	sk_focus_target m_form_target;
+
+	/* Chosen with the switch, for this run; see use_softkeys_in_forms. */
+	bool m_forms_use_softkeys = false;
+	void use_softkeys_in_forms(bool use);
+	void update_form_keyboard();
 	QString m_error;
 
 	/*

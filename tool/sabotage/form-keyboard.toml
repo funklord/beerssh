@@ -1,0 +1,49 @@
+# Sabotages for sec 6.2's forms' keyboard: the switch over the system
+# keyboard on every page but the terminal's, softkeys under the page once
+# it is pressed, and the system key back. Held by layout_test's
+# a_form_switches_to_softkeys_and_back; the switch's own rules -- the
+# panel up, a field focused, never over the field -- are softkeys' and are
+# sabotaged in that tree.
+
+# Pressed, and nothing keeps the system keyboard down: every field asks
+# for it on focus, so both keyboards stack on a phone.
+[[sabotage]]
+name = "the system keyboard is not kept down"
+file = "src/ui/main_window.cpp"
+find = "\tqApp->setAutoSipEnabled(!ours);\n"
+replace = ""
+expect = "a_form_switches_to_softkeys_and_back"
+
+# The switch never offered: the forms have the system keyboard only.
+[[sabotage]]
+name = "the switch is never offered"
+file = "src/ui/main_window.cpp"
+find = "\tm_keyboard_switch->set_offered(on_form && !m_forms_use_softkeys);\n"
+replace = "\tm_keyboard_switch->set_offered(false);\n"
+expect = "a_form_switches_to_softkeys_and_back"
+
+# The forms' keyboard on the terminal's page too, under the terminal's
+# own: two keyboards, two answers to what is armed.
+[[sabotage]]
+name = "the forms' keyboard shows on the terminal's page"
+file = "src/ui/main_window.cpp"
+find = "\tconst bool ours = on_form && m_forms_use_softkeys;\n"
+replace = "\tconst bool ours = m_forms_use_softkeys;\n"
+expect = "a_form_switches_to_softkeys_and_back"
+
+# The system key does nothing: a user who switched cannot get back.
+[[sabotage]]
+name = "the system key does not switch back"
+file = "src/ui/main_window.cpp"
+find = "\t\t         this, [this] { use_softkeys_in_forms(false); });\n"
+replace = "\t\t         this, [] {});\n"
+expect = "a_form_switches_to_softkeys_and_back"
+
+# The terminal's pages in the forms' keyboard: no editing page, which is
+# the reason to switch.
+[[sabotage]]
+name = "the forms' keyboard has no editing page"
+file = "src/ui/main_window.cpp"
+find = "QStringLiteral(\"letters\"), QStringLiteral(\"editing\"),"
+replace = "QStringLiteral(\"letters\"), QStringLiteral(\"terminal\"),"
+expect = "a_form_switches_to_softkeys_and_back"

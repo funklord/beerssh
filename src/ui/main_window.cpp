@@ -87,6 +87,7 @@ static bool another_beerssh_under_pointer(const QWidget *ours);
 #include "ui/host_list.h"
 #include "softkeys/key_row.h"
 #include "softkeys/keyboard.h"
+#include "softkeys/keyboard_switch.h"
 #include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
 #include "model/preset.h"
@@ -479,6 +480,50 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	}
 
 	outer->addWidget(m_pages, 1);
+
+	/*
+	 * The forms' keyboard (sec 6.2), on the touch front door only: every
+	 * page but the terminal's types with the system keyboard until the
+	 * switch over it is pressed, and then with softkeys -- whose editing
+	 * page has the arrows, undo and the clipboard Android's keyboards do
+	 * badly, which is the reason softkeys exists. Under the pages, so a
+	 * page shrinks to make room for it as it does for the system one.
+	 *
+	 * Its own keyboard rather than the terminal's: that one types into a
+	 * session's router and lives on the terminal page, and the two want
+	 * different pages. Compact always, since a split keyboard's halves
+	 * belong beside a terminal and there is none here.
+	 */
+	if (front_door_for(bssh_platform::instance()->is_touch_primary())
+	    != FRONT_DOOR_SESSION_DIALOG) {
+		m_form_keyboard = new sk_keyboard(&m_form_target, this);
+		m_form_keyboard->setObjectName(QStringLiteral("form-keyboard"));
+		m_form_keyboard->set_pages({ QStringLiteral("letters"), QStringLiteral("editing"),
+		                             QStringLiteral("numbers") });
+		m_form_keyboard->set_system_key_shown(true);
+		m_form_keyboard->hide();
+		outer->addWidget(m_form_keyboard, 0);
+
+		m_keyboard_switch = new sk_keyboard_switch(this);
+		connect(m_keyboard_switch, &sk_keyboard_switch::switch_requested,
+		         this, [this] { use_softkeys_in_forms(true); });
+		connect(m_form_keyboard, &sk_keyboard::system_keyboard_requested,
+		         this, [this] { use_softkeys_in_forms(false); });
+
+		/*
+		 * Hide leaves the field, the way putting Android's keyboard
+		 * away does: the keyboard follows the focus, so the next tap on
+		 * a field brings it back, and a remembered "hidden" would need
+		 * its own way to be undone.
+		 */
+		connect(m_form_keyboard, &sk_keyboard::hide_requested, this, [] {
+			if (QWidget *focus = QApplication::focusWidget()) focus->clearFocus();
+		});
+		connect(m_pages, &QStackedWidget::currentChanged,
+		         this, [this](int) { update_form_keyboard(); });
+		connect(qApp, &QApplication::focusChanged,
+		         this, [this](QWidget *, QWidget *) { update_form_keyboard(); });
+	}
 
 	QVBoxLayout *layout = new QVBoxLayout(m_terminal_page);
 	layout->setContentsMargins(0, 0, 0, 0);
@@ -1356,6 +1401,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * by a test that runs on the desktop.
 	 */
 	m_keyboard = new sk_keyboard(nullptr, this);
+	m_keyboard->setObjectName(QStringLiteral("terminal-keyboard"));
 	layout->insertWidget(3, m_keyboard);
 	m_keyboard->hide();
 
@@ -4256,6 +4302,16 @@ bool bssh_main_window::go_back() {
  * touch the host list is the root (sec 8.5), and Back goes up to it.
  */
 void bssh_main_window::keyPressEvent(QKeyEvent *event) {
+	/*
+	 * Back puts the forms' keyboard away first, as it does Android's,
+	 * rather than leaving the page with a field still being typed into.
+	 */
+	if (event->key() == Qt::Key_Back && m_form_keyboard && m_form_keyboard->isVisible()) {
+		if (QWidget *focus = QApplication::focusWidget()) focus->clearFocus();
+		event->accept();
+		return;
+	}
+
 	if (event->key() == Qt::Key_Back && go_back()) {
 		event->accept();
 		return;
@@ -4279,6 +4335,60 @@ void bssh_main_window::keyPressEvent(QKeyEvent *event) {
 	}
 
 	QWidget::keyPressEvent(event);
+}
+
+/*
+ * Before the children go: deleting them moves the focus, and the forms'
+ * keyboard listens for that application-wide -- which by then would be
+ * calling into a window whose own members are already gone. And the
+ * keyboard before the target it types into, which is a member here.
+ */
+bssh_main_window::~bssh_main_window() {
+	disconnect(qApp, &QApplication::focusChanged, this, nullptr);
+	delete m_form_keyboard;
+	m_form_keyboard = nullptr;
+	if (m_forms_use_softkeys) qApp->setAutoSipEnabled(true);
+}
+
+/*
+ * The switch, either way (sec 6.2). For this run only: which keyboard a
+ * form gets is a habit the user shows by pressing the switch, and a
+ * choice kept across runs would come back as the keyboard that appeared
+ * from nowhere -- the brightness that outlived its run, again.
+ */
+void bssh_main_window::use_softkeys_in_forms(bool use) {
+	m_forms_use_softkeys = use;
+	update_form_keyboard();
+
+	QWidget *focus = QApplication::focusWidget();
+	if (use) QGuiApplication::inputMethod()->hide();
+	else if (focus && focus->inputMethodQuery(Qt::ImEnabled).toBool()) {
+		QGuiApplication::inputMethod()->show();
+	}
+}
+
+/*
+ * Which keyboard a form has, from where the user is: off the terminal's
+ * page, the switch while the system keyboard is the one, and ours, shown
+ * while a field has the focus, once it is not.
+ *
+ * Keeping the system keyboard down is Qt's autoSipEnabled: a QLineEdit
+ * asks for the panel on focus and on a tap through it, and nothing else
+ * would stop it. Turned back on everywhere ours is not wanted, the
+ * terminal's page included -- the terminal asks for the panel itself.
+ */
+void bssh_main_window::update_form_keyboard() {
+	if (!m_form_keyboard || !m_pages || !m_keyboard_switch) return;
+
+	const bool on_form = m_pages->currentWidget() != m_terminal_page;
+	const bool ours = on_form && m_forms_use_softkeys;
+	qApp->setAutoSipEnabled(!ours);
+
+	QWidget *focus = QApplication::focusWidget();
+	const bool typing = focus && isAncestorOf(focus) && focus->isVisible()
+	                    && focus->inputMethodQuery(Qt::ImEnabled).toBool();
+	m_form_keyboard->setVisible(ours && typing);
+	m_keyboard_switch->set_offered(on_form && !m_forms_use_softkeys);
 }
 
 void bssh_main_window::style_settings_index() {

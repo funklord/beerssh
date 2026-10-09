@@ -2189,6 +2189,39 @@ up, a strip of modifiers has nothing to modify.
   generated files still naming the old headers, named each, and the
   build went on once they were removed -- the guard doing its job on the
   case it was written for.
+  **Step 4, softkeys in the forms — [BUILT 2026-10-09, the holder's
+  choice of where it goes first]:** every page but the terminal's
+  (the host editor, the settings, the presets) types with Android's
+  keyboard, which is where its weak arrows, undo and clipboard bite
+  hardest. softkeys' `sk_keyboard_switch` is now a button over the window
+  at the bottom-left -- the top-left of the room Android's keyboard leaves
+  under `adjustResize` -- shown while a field there has the focus and that
+  keyboard is up. Pressing it shows a second `sk_keyboard`, the forms'
+  one, under the page: letters, editing, numbers, typing through
+  `sk_focus_target` into whatever has the focus, with a key in the
+  settings key's place back to Android's. Its own keyboard rather than the
+  terminal's, which types into a session's router and wants the terminal
+  page; softkeys gained per-keyboard pages for it. **What keeps Android's
+  keyboard down is `QApplication::autoSipEnabled`**, read off Qt 6.12's
+  source rather than guessed: a `QLineEdit` asks for the panel itself on
+  focus and on a tap, ignoring `WA_InputMethodEnabled` -- the attribute
+  the terminal clears -- so only the application-wide switch stops it.
+  Off only while a form has softkeys, on everywhere else, the terminal's
+  page included. The choice lasts the run, not across runs: a keyboard
+  that comes back by itself is the brightness that outlived its run again.
+  Hide leaves the field, as putting Android's keyboard away does, and
+  Back does the same before it leaves the page. The window gained a
+  destructor for it: the forms' keyboard listens to the application's
+  focus changes, and deleting the children moves the focus into a window
+  whose members are already gone. Its tests found the terminal's keyboard
+  by type, which the second keyboard broke in nine places; the terminal's
+  is named `terminal-keyboard` now and they ask for it by name. Held by
+  `a_form_switches_to_softkeys_and_back` and
+  `tool/sabotage/form-keyboard.toml`. **Not yet seen on the device**, and
+  that is the part a desktop test cannot stand in for: whether Qt's
+  Android input context brings the panel back on a focus change by
+  itself (`QAndroidInputContext::reset` restarts input), and where the
+  button lands with the status bar hidden.
 
 - **An editor for the built-in keyboard's keys — [DEFERRED by the holder,
   2026-10-08]:** "do that after the default is perfected". The key row has

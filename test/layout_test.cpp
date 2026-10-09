@@ -54,6 +54,7 @@
 #include "term/emulator.h"
 #include "ui/host_list.h"
 #include "ui/host_editor.h"
+#include "softkeys/keyboard_switch.h"
 #include "ui/form_wrap.h"
 #include "ui/preset_editor.h"
 #include "ui/term_features_editor.h"
@@ -4388,6 +4389,92 @@ void layout_test::turning_the_device_rearranges_the_window() {
 	          "an unfolded screen is still stacking its terminals in a column");
 }
 
+void layout_test::a_form_switches_to_softkeys_and_back() {
+	const forced_touch_t touch(1);
+	forced_screen_t held(QSize(360, 740));
+
+	bssh_main_window window;
+	window.resize(360, 700);
+	window.show();
+	window.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&window));
+
+	sk_keyboard *ours = window.findChild<sk_keyboard *>(QStringLiteral("form-keyboard"));
+	sk_keyboard_switch *toggle = window.findChild<sk_keyboard_switch *>();
+	QVERIFY(ours);
+	QVERIFY(toggle);
+
+	/* No system keyboard offscreen, so this says when there is one. */
+	bool panel = true;
+	toggle->set_panel_probe([&panel] { return panel; });
+
+	/* The host editor's first line edit, on its page. */
+	QStackedWidget *pages = window.findChild<QStackedWidget *>();
+	bssh_host_editor *editor = window.findChild<bssh_host_editor *>();
+	QVERIFY(pages);
+	QVERIFY(editor);
+	QWidget *page = editor;
+	while (page && page->parentWidget() != pages) page = page->parentWidget();
+	QVERIFY(page);
+	pages->setCurrentWidget(page);
+	QCoreApplication::processEvents();
+
+	QLineEdit *field = nullptr;
+	for (QLineEdit *each : editor->findChildren<QLineEdit *>()) {
+		if (each->isVisible() && !each->isReadOnly()) {
+			field = each;
+			break;
+		}
+	}
+	QVERIFY(field);
+	field->setFocus();
+	field->clear();
+	QTRY_VERIFY(toggle->isVisible());
+	QVERIFY(!ours->isVisible());
+	QVERIFY(qApp->autoSipEnabled());
+
+	toggle->click();
+	QTRY_VERIFY(ours->isVisible());
+	QVERIFY(!toggle->isVisible());
+	QVERIFY2(!qApp->autoSipEnabled(), "the system keyboard is still asked for by every field");
+	QCOMPARE(QApplication::focusWidget(), static_cast<QWidget *>(field));
+
+	/* The editing page is one press of the side button away. */
+	QCOMPARE(ours->pages().value(1), QStringLiteral("editing"));
+
+	QAbstractButton *a = nullptr;
+	for (QAbstractButton *button : ours->findChildren<QAbstractButton *>()) {
+		if (button->text() == QStringLiteral("a") && button->isVisible()) a = button;
+	}
+	QVERIFY(a);
+	a->click();
+	QCOMPARE(field->text(), QStringLiteral("a"));
+
+	/* Hide leaves the field, and the field brings it back. */
+	ours->findChild<QAbstractButton *>(QStringLiteral("keyboard-hide"))->click();
+	QTRY_VERIFY(!ours->isVisible());
+	field->setFocus();
+	QTRY_VERIFY(ours->isVisible());
+
+	/*
+	 * The terminal's page -- the last one built -- has its own keyboard
+	 * and asks for the panel itself.
+	 */
+	pages->setCurrentWidget(pages->widget(pages->count() - 1));
+	QCoreApplication::processEvents();
+	QVERIFY(!ours->isVisible());
+	QVERIFY(qApp->autoSipEnabled());
+
+	/* Back on the form, and the system key undoes the switch. */
+	pages->setCurrentWidget(page);
+	field->setFocus();
+	QTRY_VERIFY(ours->isVisible());
+	ours->system_button()->click();
+	QTRY_VERIFY(!ours->isVisible());
+	QVERIFY(qApp->autoSipEnabled());
+	QTRY_VERIFY(toggle->isVisible());
+}
+
 void layout_test::a_column_shows_the_count_and_scrolls_to_the_rest() {
 	const forced_touch_t touch(1);
 	const forced_screen_t held(QSize(740, 360));
@@ -5210,7 +5297,7 @@ void layout_test::the_hide_key_is_remembered_and_a_tap_undoes_it() {
 
 	const registry_left_as_found_t tidy(window.registry());
 
-	sk_keyboard *keys = window.findChild<sk_keyboard *>();
+	sk_keyboard *keys = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 	QVERIFY2(keys, "a touch window with the built-in keyboard chosen must build one");
 	QVERIFY2(keys->isVisible(), "and must show it");
 
@@ -5693,7 +5780,7 @@ void layout_test::the_split_keyboard_sits_beside_the_terminal() {
 		window.adopt_session(registry->create(named(QStringLiteral("one"))));
 		QCoreApplication::processEvents();
 
-		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 		bssh_pane_container *panes = window.panes();
 		QVERIFY(keyboard && panes);
 		QCOMPARE(keyboard->style(), sk_catalog::STYLE_SPLIT);
@@ -5733,7 +5820,7 @@ void layout_test::the_split_keyboard_sits_beside_the_terminal() {
 		window.resize(320, 860);
 		window.show();
 		QVERIFY(QTest::qWaitForWindowExposed(&window));
-		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 		QVERIFY(keyboard);
 		QCOMPARE(keyboard->style(), sk_catalog::STYLE_COMPACT);
 		QVERIFY(!keyboard->half(0)->isVisible());
@@ -5871,7 +5958,7 @@ void layout_test::a_dragged_keyboard_size_is_kept() {
 	{
 		bssh_main_window window;
 		open(window);
-		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 		QVERIFY(keyboard);
 		QCOMPARE(keyboard->style(), sk_catalog::STYLE_SPLIT);
 
@@ -5897,7 +5984,7 @@ void layout_test::a_dragged_keyboard_size_is_kept() {
 		/* A new window -- a new run, as far as the keyboard knows. */
 		bssh_main_window window;
 		open(window);
-		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 		QVERIFY(keyboard);
 		bool found = false;
 		for (QWidget *child : keyboard->half(0)->findChildren<QWidget *>(QString(), Qt::FindDirectChildrenOnly)) {
@@ -5977,7 +6064,7 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 		}
 
 		const QRect at(selector->mapTo(&window, QPoint(0, 0)), selector->size());
-		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 		QVERIFY(keyboard);
 		if (where == OVER_HALVES) {
 			/*
@@ -6094,7 +6181,7 @@ void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
 	window.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-	sk_keyboard *keys = window.findChild<sk_keyboard *>();
+	sk_keyboard *keys = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 	QVERIFY2(keys, "the window must build the keyboard it was asked for");
 
 	const QString narrow = keys->group_id();
@@ -6295,7 +6382,7 @@ void layout_test::only_one_on_screen_keyboard_is_ever_shown() {
 		QVERIFY(QTest::qWaitForWindowExposed(&window));
 
 		sk_key_row *row = window.findChild<sk_key_row *>();
-		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 		QVERIFY2(row && keyboard, "the window builds both and shows one");
 
 		QVERIFY2(!keyboard->isHidden(),
@@ -6318,7 +6405,7 @@ void layout_test::only_one_on_screen_keyboard_is_ever_shown() {
 		QVERIFY(QTest::qWaitForWindowExposed(&window));
 
 		sk_key_row *row = window.findChild<sk_key_row *>();
-		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 		QVERIFY(row && keyboard);
 
 		QVERIFY2(keyboard->isHidden(),

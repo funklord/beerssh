@@ -13,12 +13,10 @@
 name = "set_group clamps against the other keyboard's group count"
 file = "softkeys/src/keyboard.cpp"
 find = '''void sk_keyboard::set_group(int index) {
-	const QList<sk_group_t> &groups =
-	        sk_catalog::instance().all(m_style);'''
+	const QList<sk_group_t> &groups = walked_groups();'''
 replace = '''void sk_keyboard::set_group(int index) {
 	const QList<sk_group_t> &groups =
-	        sk_catalog::instance().all(
-	                sk_catalog::STYLE_COMPACT);'''
+	        sk_catalog::instance().all(sk_catalog::STYLE_COMPACT);'''
 expect = "the_full_keyboard_answers_about_itself"
 
 # The page stops saying what an unset keyboard gives.
