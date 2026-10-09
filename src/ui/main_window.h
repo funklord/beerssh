@@ -614,14 +614,32 @@ public:
 
 	/*
 	 * A session dropped on the pane showing `target`, at `edge` (a
-	 * bssh_layout_manager::drop_edge_t) -- sec 8.3's placing drop. An
-	 * edge splits the target that way, the middle swaps the two. A pane
-	 * of this window moves; a tab or another window's session arrives,
-	 * and where there is no room for another pane it falls back to what
-	 * drop_session() does, a tab that keeps the arrangement. Public for
-	 * the reason drop_session is: the model can be driven without a drag.
+	 * bssh_layout_manager::drop_edge_t) -- sec 8.3's placing drop, doing
+	 * exactly what drop_zone_for() says it will. Public for the reason
+	 * drop_session is: the model can be driven without a drag.
 	 */
 	void drop_session_on(bssh_session *session, bssh_session *target, int edge);
+
+	/*
+	 * What a drop of `session` on the pane showing `target`, in the zone
+	 * `edge`, would do here (sec 8.4's picture, decided by the holder
+	 * 2026-10-09): the edge itself where that split fits; the middle --
+	 * a swap -- where it does not, which is an arrival into a window at
+	 * its pane cap and left or right in the portrait column; the middle
+	 * as the middle; BSSH_DROP_CANCEL on the pane being carried; and
+	 * BSSH_DROP_REFUSED for a payload that names no session here.
+	 *
+	 * The ONE answer: the pane draws it and drop_session_on() does it,
+	 * so what is shown before the release is what the release does.
+	 */
+	int drop_zone_for(bssh_session *session, bssh_session *target, int edge) const;
+
+	/*
+	 * The payload a drag of `session` carries, built in one place so that
+	 * a drag and a test cannot disagree about it. The caller owns it;
+	 * null for a session the registry does not hold.
+	 */
+	QMimeData *session_drag_mime(bssh_session *session) const;
 
 	/*
 	 * Whether a point in this window's coordinates is on the tab ROW.
@@ -806,6 +824,18 @@ private:
 		bool on_tab_row = false;
 	};
 	static drop_spot_t drop_spot_at(const QPoint &global);
+
+	/* The window of ours whose list holds `session`, or null. */
+	static bssh_main_window *window_showing(bssh_session *session);
+
+	/*
+	 * `in` takes `out`'s place in this window, pane for pane or tab for
+	 * tab, without the space closing up first.
+	 */
+	void exchange_session(bssh_session *out, bssh_session *in);
+
+	/* The middle of a pane: `session` and `target` trade places. */
+	void swap_sessions(bssh_session *session, bssh_session *target);
 
 public:
 	/*

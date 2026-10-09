@@ -1229,10 +1229,16 @@ void bssh_terminal_view::dragEnterEvent(QDragEnterEvent *event) {
 	 * So it is accepted here and handed up, which is the only arrangement
 	 * that gets the window the drop.
 	 */
-	if (!text_for_drop(event->mimeData()).isEmpty()
-	     || event->mimeData()->hasFormat(bssh_session_mime_type())) {
+	if (event->mimeData()->hasFormat(bssh_session_mime_type())) {
+		const int edge = bssh_drop_edge_at(event->position().toPoint(), size());
+		if (m_drop_planner && m_drop_planner(event->mimeData(), edge) == BSSH_DROP_REFUSED) {
+			event->ignore();
+			return;
+		}
 		event->acceptProposedAction();
+		return;
 	}
+	if (!text_for_drop(event->mimeData()).isEmpty()) event->acceptProposedAction();
 }
 
 /*
@@ -1246,9 +1252,23 @@ void bssh_terminal_view::dragMoveEvent(QDragMoveEvent *event) {
 		return;
 	}
 
+	/*
+	 * What the window says the drop would DO, not merely which zone the
+	 * pointer is in: a side that does not fit is drawn as the swap it
+	 * would become, and the pane being carried as a cancel.
+	 */
 	const int edge = bssh_drop_edge_at(event->position().toPoint(), size());
-	if (edge != m_drop_edge) {
-		m_drop_edge = edge;
+	const int plan = m_drop_planner ? m_drop_planner(event->mimeData(), edge) : edge;
+	if (plan == BSSH_DROP_REFUSED) {
+		if (m_drop_edge != -1) {
+			m_drop_edge = -1;
+			update();
+		}
+		event->ignore();
+		return;
+	}
+	if (plan != m_drop_edge) {
+		m_drop_edge = plan;
 		update();
 	}
 	event->acceptProposedAction();
@@ -1957,7 +1977,23 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	 * all four sides for the swap. Filled rather than hatched, because the
 	 * hatch already means "this is the pane being carried".
 	 */
-	if (m_drop_edge >= 0) {
+	if (m_drop_edge == BSSH_DROP_CANCEL) {
+		/*
+		 * Letting go here does nothing, and the pane says so: a ring with
+		 * a bar through it, in the middle, over the hatch that already
+		 * marks this as the pane being carried.
+		 */
+		const int radius = qMax(12, qMin(width(), height()) / 8);
+		const QPoint centre = rect().center();
+		QPen ring(palette().color(QPalette::Highlight));
+		ring.setWidthF(qMax(2.0, radius / 5.0));
+		painter.setPen(ring);
+		painter.setBrush(Qt::NoBrush);
+		painter.drawEllipse(centre, radius, radius);
+		const qreal reach = radius * 0.7071;
+		painter.drawLine(QPointF(centre) + QPointF(-reach, -reach),
+		                 QPointF(centre) + QPointF(reach, reach));
+	} else if (m_drop_edge >= 0) {
 		QRect zone = rect();
 		switch (m_drop_edge) {
 		case bssh_layout_manager::EDGE_LEFT:   zone.setWidth(width() / 2); break;

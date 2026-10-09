@@ -30,6 +30,8 @@
 #include <QEnterEvent>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+
+#include <memory>
 #include <QtTest>
 
 #include <QAccessible>
@@ -3680,6 +3682,221 @@ void layout_test::a_pane_dropped_in_the_middle_swaps() {
 	QCOMPARE(shape_of(layout.tree(), names), QStringLiteral("H(c,V(d,a))"));
 	QVERIFY(!layout.intent().contains(b));
 	QCOMPARE(registry.count(), 4);
+}
+
+
+namespace {
+
+/* A point well inside the zone `edge` of a pane this size. */
+QPoint zone_point(const QSize &size, int edge) {
+	switch (edge) {
+	case bssh_layout_manager::EDGE_LEFT:   return QPoint(size.width() / 10, size.height() / 2);
+	case bssh_layout_manager::EDGE_RIGHT:  return QPoint(size.width() * 9 / 10, size.height() / 2);
+	case bssh_layout_manager::EDGE_TOP:    return QPoint(size.width() / 2, size.height() / 10);
+	case bssh_layout_manager::EDGE_BOTTOM: return QPoint(size.width() / 2, size.height() * 9 / 10);
+	default:                               return QPoint(size.width() / 2, size.height() / 2);
+	}
+}
+
+/* Where a session's pane is, in global coordinates; null if not a pane. */
+QRect pane_rect(bssh_main_window &window, bssh_session *session) {
+	bssh_terminal_view *view = window.panes() ? window.panes()->view_for(session) : nullptr;
+	if (!view || !view->isVisible()) return QRect();
+	return QRect(view->mapToGlobal(QPoint(0, 0)), view->size());
+}
+
+/*
+ * Drags `session` over the pane showing `target` at `edge`, as Qt
+ * delivers it, and lets go: returns the zone the pane DREW just before.
+ */
+int drag_over_and_drop(bssh_main_window &from, bssh_main_window &onto,
+                       bssh_session *session, bssh_session *target, int edge) {
+	bssh_terminal_view *view = onto.panes()->view_for(target);
+	if (!view) return -100;
+
+	std::unique_ptr<QMimeData> mime(from.session_drag_mime(session));
+	if (!mime) return -101;
+
+	const QPoint at = zone_point(view->size(), edge);
+	QDragEnterEvent enter(at, Qt::MoveAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(view, &enter);
+	QDragMoveEvent move(at, Qt::MoveAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(view, &move);
+	const int drawn = view->drop_zone();
+
+	QDropEvent drop(QPointF(at), Qt::MoveAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(view, &drop);
+	QCoreApplication::processEvents();
+	QCoreApplication::processEvents();
+	return drawn;
+}
+
+/* Whether `a` lies on side `edge` of `b`, overlapping it across. */
+bool lies_beside(const QRect &a, const QRect &b, int edge) {
+	switch (edge) {
+	case bssh_layout_manager::EDGE_LEFT:
+		return a.right() < b.left() && a.top() < b.bottom() && b.top() < a.bottom();
+	case bssh_layout_manager::EDGE_RIGHT:
+		return a.left() > b.right() && a.top() < b.bottom() && b.top() < a.bottom();
+	case bssh_layout_manager::EDGE_TOP:
+		return a.bottom() < b.top() && a.left() < b.right() && b.left() < a.right();
+	case bssh_layout_manager::EDGE_BOTTOM:
+		return a.top() > b.bottom() && a.left() < b.right() && b.left() < a.right();
+	}
+	return false;
+}
+
+bool near(const QRect &a, const QRect &b) {
+	return qAbs(a.left() - b.left()) <= 2 && qAbs(a.top() - b.top()) <= 2
+	        && qAbs(a.width() - b.width()) <= 2 && qAbs(a.height() - b.height()) <= 2;
+}
+
+} /* namespace */
+
+void layout_test::the_zone_drawn_is_what_the_drop_does() {
+	/*
+	 * The relationship, not a value: whatever a pane draws while a drag
+	 * is over it, the release does -- a side puts the dropped terminal on
+	 * that side, the middle trades the two, a cancel changes nothing.
+	 * Three rows of sec 8.4's table broke it: a side into a full window
+	 * landing as a tab, left and right in the column landing above and
+	 * below, and zones lit on the pane being carried.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	const auto check = [](int drawn, int edge, const QRect &s_before, const QRect &t_before,
+	                      const QRect &s_after, const QRect &t_after, const char *what) {
+		const QByteArray context = QByteArray(what) + " zone " + QByteArray::number(edge)
+		        + " drawn " + QByteArray::number(drawn);
+		if (drawn == BSSH_DROP_CANCEL) {
+			QVERIFY2(near(s_after, s_before) && near(t_after, t_before), context.constData());
+		} else if (drawn == bssh_layout_manager::EDGE_MIDDLE) {
+			/* Each in the other's slot: a rebuild may redistribute a few
+			 * pixels between panes, so the test is the slot, not the size. */
+			QVERIFY2(t_before.contains(s_after.center()) && s_before.contains(t_after.center()),
+			         context.constData());
+		} else {
+			QVERIFY2(drawn >= 0, context.constData());
+			QVERIFY2(lies_beside(s_after, t_after, drawn), context.constData());
+		}
+	};
+
+	/* One window, two panes, every zone of the second. */
+	for (int edge = bssh_layout_manager::EDGE_LEFT; edge <= bssh_layout_manager::EDGE_MIDDLE; ++edge) {
+		bssh_main_window window;
+		window.resize(1400, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+		window.adopt_session(a);
+		bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+		window.drop_session_on(b, a, bssh_layout_manager::EDGE_RIGHT);
+		QCoreApplication::processEvents();
+		QCOMPARE(window.panes()->views().size(), 2);
+
+		const QRect a_before = pane_rect(window, a), b_before = pane_rect(window, b);
+		const int drawn = drag_over_and_drop(window, window, a, b, edge);
+		QCOMPARE(drawn, edge);
+		check(drawn, edge, a_before, b_before, pane_rect(window, a), pane_rect(window, b),
+		      "same window");
+		while (window.registry()->count() > 0) window.registry()->close(window.registry()->at(0));
+	}
+
+	/* The pane being carried: a cancel, wherever on it. */
+	for (const int edge : { int(bssh_layout_manager::EDGE_MIDDLE), int(bssh_layout_manager::EDGE_LEFT) }) {
+		bssh_main_window window;
+		window.resize(1400, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+		window.adopt_session(a);
+		bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+		window.drop_session_on(b, a, bssh_layout_manager::EDGE_RIGHT);
+		QCoreApplication::processEvents();
+
+		const QRect a_before = pane_rect(window, a), b_before = pane_rect(window, b);
+		const int drawn = drag_over_and_drop(window, window, a, a, edge);
+		QCOMPARE(drawn, BSSH_DROP_CANCEL);
+		check(drawn, edge, a_before, b_before, pane_rect(window, a), pane_rect(window, b),
+		      "own pane");
+		while (window.registry()->count() > 0) window.registry()->close(window.registry()->at(0));
+	}
+
+	/*
+	 * The portrait column stacks its panes whatever the tree says, so
+	 * left and right have no meaning there: drawn and done as the swap.
+	 */
+	struct arrangement_restored_t {
+		const bssh_app_settings::arrangement_t was = bssh_app_settings().arrangement();
+		~arrangement_restored_t() { bssh_app_settings().set_arrangement(was); }
+	} arrangement_restored;
+	bssh_app_settings().set_arrangement(bssh_app_settings::ARRANGEMENT_COLUMN);
+	for (const int edge : { int(bssh_layout_manager::EDGE_LEFT), int(bssh_layout_manager::EDGE_RIGHT),
+	                        int(bssh_layout_manager::EDGE_BOTTOM) }) {
+		bssh_main_window window;
+		window.resize(900, 900);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+		window.adopt_session(a);
+		bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+		window.adopt_session(b);
+		QCoreApplication::processEvents();
+		bssh_layout_manager *layout = window.findChild<bssh_layout_manager *>();
+		QVERIFY(layout);
+		QCOMPARE(layout->arrangement(), bssh_layout_manager::COLUMN);
+		QCOMPARE(window.panes()->views().size(), 2);
+
+		const QRect a_before = pane_rect(window, a), b_before = pane_rect(window, b);
+		const int drawn = drag_over_and_drop(window, window, a, b, edge);
+		QCOMPARE(drawn, edge == bssh_layout_manager::EDGE_BOTTOM ? edge
+		                                                          : int(bssh_layout_manager::EDGE_MIDDLE));
+		check(drawn, edge, a_before, b_before, pane_rect(window, a), pane_rect(window, b),
+		      "column");
+		while (window.registry()->count() > 0) window.registry()->close(window.registry()->at(0));
+	}
+	bssh_app_settings().set_arrangement(arrangement_restored.was);
+
+	/*
+	 * Into a FULL window from another: 700 wide holds two, so a side
+	 * would need a third pane -- it is drawn as the middle and swaps, the
+	 * resident going back to the slot the arrival left.
+	 */
+	{
+		const QRect screen = QGuiApplication::primaryScreen()->geometry();
+		bssh_main_window from;
+		from.resize(700, 500);
+		from.move(screen.topLeft() + QPoint(0, 0));
+		from.show();
+		bssh_main_window onto;
+		onto.resize(700, 500);
+		onto.move(screen.topLeft() + QPoint(720, 0));
+		onto.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&from));
+		QVERIFY(QTest::qWaitForWindowExposed(&onto));
+
+		bssh_session *x = from.registry()->create(named(QStringLiteral("x")));
+		from.adopt_session(x);
+		bssh_session *y = from.registry()->create(named(QStringLiteral("y")));
+		from.drop_session_on(y, x, bssh_layout_manager::EDGE_RIGHT);
+		bssh_session *a = onto.registry()->create(named(QStringLiteral("a")));
+		onto.adopt_session(a);
+		bssh_session *b = onto.registry()->create(named(QStringLiteral("b")));
+		onto.drop_session_on(b, a, bssh_layout_manager::EDGE_RIGHT);
+		QCoreApplication::processEvents();
+		QCOMPARE(onto.panes()->views().size(), 2);
+		QCOMPARE(from.panes()->views().size(), 2);
+
+		const QRect x_before = pane_rect(from, x), b_before = pane_rect(onto, b);
+		const int drawn = drag_over_and_drop(from, onto, x, b, bssh_layout_manager::EDGE_LEFT);
+		QCOMPARE(drawn, int(bssh_layout_manager::EDGE_MIDDLE));
+		check(drawn, bssh_layout_manager::EDGE_LEFT, x_before, b_before,
+		      pane_rect(onto, x), pane_rect(from, b), "full window");
+		QVERIFY2(onto.shown_sessions().contains(x) && from.shown_sessions().contains(b),
+		         "a swap across windows trades the two between them");
+	}
 }
 
 void layout_test::reordering_the_panes_keeps_the_shape_they_are_in() {
@@ -9008,15 +9225,7 @@ void layout_test::a_dragged_tab_lands_where_it_is_dropped() {
 	QCOMPARE(window.shown_sessions().size(), 3);
 	QCOMPARE(tabs->count(), 2);
 
-	/*
-	 * A different session, low in the window where the panes are.
-	 *
-	 * Different because a session cannot tile beside itself: the one just
-	 * dropped on the bar is now the only pane, and split_with() declines a
-	 * session the intent already holds. Dropping it on the panes is a
-	 * no-op by design, not a defect -- the payload has to name a session
-	 * that is somewhere else for "beside" to mean anything.
-	 */
+	/* A different session, low in the window, delivered to the window. */
 	bssh_session *tiled = window.registry()->create(named(QStringLiteral("tiled")));
 	const int tiled_index = shared->index_of(tiled);
 	QVERIFY(tiled_index >= 0);
@@ -9039,9 +9248,16 @@ void layout_test::a_dragged_tab_lands_where_it_is_dropped() {
 	QCoreApplication::sendEvent(&window, &on_panes);
 	QCoreApplication::processEvents();
 
-	QVERIFY2(panes->pane_count() == 2,
-	          qPrintable(QStringLiteral("a drop on the panes must tile; got %1 pane(s)")
-	                             .arg(panes->pane_count())));
+	/*
+	 * Delivered to the WINDOW, off the tab row, it is a drop on no
+	 * terminal -- and that does nothing (the holder, 2026-10-09). A drop
+	 * over a terminal goes to the terminal, and the_zone_drawn_is_what_
+	 * the_drop_does covers it. Accepted all the same, or the source would
+	 * read "nobody wanted it" and tear out a window over this one.
+	 */
+	QVERIFY(on_panes.isAccepted());
+	QCOMPARE(panes->pane_count(), 1);
+	QVERIFY(!window.shown_sessions().contains(tiled));
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 }

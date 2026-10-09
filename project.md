@@ -6829,6 +6829,25 @@ window with no name is a blank row in the task switcher.
   So a full window's side zones fold into the swap, which the holder's
   model already says, and a drop that cannot be a split, a swap or a tab
   is a cancel rather than a tab.
+  **Built, step 1 (2026-10-09): one plan, drawn and obeyed.**
+  `bssh_main_window::drop_zone_for()` is the single answer -- the side,
+  the swap a side folds into (an arrival at the pane cap; left and right
+  in the column), `BSSH_DROP_CANCEL` on the pane being carried, or
+  `BSSH_DROP_REFUSED` -- and every pane asks it while a drag is over it
+  (`set_drop_planner`), so the zone lit is the outcome rather than the
+  geometry; the cancel draws a ring with a bar. The middle swaps across
+  windows too: `exchange_session()` puts each where the other was, pane
+  for pane or tab for tab, and had to place before detaching -- detaching
+  first forgot the outgoing leaf, and the arrival landed in the list with
+  no pane. A drop on a window off its tab row does nothing and is still
+  ACCEPTED, so QDrag's source does not tear a window out over it.
+  `the_zone_drawn_is_what_the_drop_does` drags over each zone and asserts
+  the geometry afterwards against what was drawn -- beside on that side,
+  each in the other's slot, or nothing moved -- in one window, on the
+  carried pane, in the column and into a full window from another;
+  `drop-plan.toml` breaks each rule in turn and all seven are caught.
+  Still to do: the tab row's slot and its strip, the process stamp, and
+  Escape under QDrag.
 
   *Guarded today* by 28 layout and terminal-view tests -- counted by
   name, a grep for drop, drag, tear, swap, reorder and grip less the

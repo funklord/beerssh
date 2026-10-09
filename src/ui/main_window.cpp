@@ -538,6 +538,14 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 			if (dropped && onto) drop_session_on(dropped, onto, edge);
 		}, Qt::QueuedConnection);
 	});
+	/*
+	 * And what such a drop WOULD do, asked by the pane as the pointer
+	 * moves so that the zone it lights is the outcome rather than the
+	 * geometry -- the same function the drop then obeys.
+	 */
+	m_panes->set_drop_planner([this](const QMimeData *mime, bssh_session *target, int edge) {
+		return drop_zone_for(session_from_mime(mime), target, edge);
+	});
 	connect(m_panes, &bssh_pane_container::find_matches_changed,
 	         this, &bssh_main_window::update_find_status);
 
@@ -2986,25 +2994,130 @@ void bssh_main_window::adopt_session(bssh_session *session) {
 	show_session(session);
 }
 
+int bssh_main_window::drop_zone_for(bssh_session *session, bssh_session *target,
+                                     int edge) const {
+	if (!session) return BSSH_DROP_REFUSED;
+	if (!target || session == target || !m_layout || !m_layout->intent().contains(target))
+		return BSSH_DROP_CANCEL;
+
+	typedef bssh_layout_manager layout;
+	if (edge < layout::EDGE_LEFT || edge > layout::EDGE_MIDDLE) return BSSH_DROP_CANCEL;
+	if (edge == layout::EDGE_MIDDLE) return edge;
+
+	/*
+	 * A side that cannot be honoured is the swap instead, drawn and done
+	 * as one (the holder's rule, 2026-10-09). An arrival into a window at
+	 * its pane cap would make a pane there is no room for; and the
+	 * portrait column stacks its panes whatever the tree says, so left
+	 * and right have no meaning there -- they used to be drawn as halves
+	 * and land as above and below.
+	 */
+	const bool arriving = !m_layout->intent().contains(session);
+	if (arriving && m_layout->intent().size() >= m_layout->max_panes()) return layout::EDGE_MIDDLE;
+	if (m_layout->arrangement() == layout::COLUMN
+	    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))
+		return layout::EDGE_MIDDLE;
+
+	return edge;
+}
+
+bssh_main_window *bssh_main_window::window_showing(bssh_session *session) {
+	for (QWidget *widget : QApplication::topLevelWidgets()) {
+		bssh_main_window *window = qobject_cast<bssh_main_window *>(widget);
+		if (window && window->m_shown.contains(session)) return window;
+	}
+	return nullptr;
+}
+
+void bssh_main_window::exchange_session(bssh_session *out, bssh_session *in) {
+	const int at = m_shown.indexOf(out);
+	if (at < 0 || !in || !m_layout || !m_panes) return;
+
+	/*
+	 * `in` takes `out`'s place exactly: the same leaf of the tree if `out`
+	 * was a pane, the same position among the tabs if it was one. Done in
+	 * place rather than by taking and letting go, because a window that
+	 * loses a session closes up the space it had, and the space is the
+	 * whole point of a swap.
+	 */
+	wire_session(in);
+	if (m_layout->intent().contains(out))
+		m_layout->place(in, out, bssh_layout_manager::EDGE_MIDDLE);
+	m_shown[at] = in;
+
+	/*
+	 * After the place, not before: detaching forgets the session in the
+	 * layout, which beforehand took `out`'s leaf with it and left `in`
+	 * nothing to step into -- the swap landed `in` in this window's list
+	 * with no pane, measured. Now `out` has already left the layout and
+	 * the forget finds nothing.
+	 */
+	if (m_current == out) detach_session();
+
+	m_panes->rebuild();
+	if (m_layout->intent().contains(in)) m_panes->focus_session(in);
+	refresh_tab_bar();
+	update_status();
+}
+
+void bssh_main_window::swap_sessions(bssh_session *session, bssh_session *target) {
+	bssh_main_window *source = window_showing(session);
+
+	if (source == this) {
+		/*
+		 * Both here: a pane with a pane trades leaves, a tab with a pane
+		 * trades places -- the tab shown where the pane was, the pane
+		 * listed where the tab was.
+		 */
+		const int a = m_shown.indexOf(session);
+		const int b = m_shown.indexOf(target);
+		if (a >= 0 && b >= 0) m_shown.swapItemsAt(a, b);
+		m_layout->place(session, target, bssh_layout_manager::EDGE_MIDDLE);
+		m_panes->focus_session(session);
+		refresh_tab_bar();
+		update_status();
+		return;
+	}
+
+	if (source) {
+		/*
+		 * From another window: the two trade windows and places. The
+		 * target goes to the slot the arrival left -- a pane where it was
+		 * a pane, a tab where it was a tab -- rather than becoming a tab
+		 * here, which made a tab out of a drop aimed at a terminal.
+		 */
+		source->exchange_session(session, target);
+		exchange_session(target, session);
+		return;
+	}
+
+	/*
+	 * A session no window shows -- nothing a drag produces, since every
+	 * drag starts in a window, but the model is public. It takes the
+	 * target's place, and the target, with nowhere to go back to, stays
+	 * here as a tab: leaving the panes is never closing (sec 8.2).
+	 */
+	take_session(session);
+	m_layout->place(session, target, bssh_layout_manager::EDGE_MIDDLE);
+	m_panes->focus_session(session);
+	refresh_tab_bar();
+	update_status();
+}
+
 void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *target,
                                         int edge) {
-	if (!session || !target || !m_layout || !m_panes || session == target) return;
+	if (!session || !target || !m_layout || !m_panes) return;
 
-	const auto where = bssh_layout_manager::drop_edge_t(edge);
+	const int plan = drop_zone_for(session, target, edge);
+	if (plan < 0) return;
 
-	if (!m_layout->intent().contains(session)) {
-		/*
-		 * An arrival adds a pane unless it takes the target's place, and
-		 * a window with no room keeps its arrangement and shows the
-		 * arrival as a tab -- drop_session()'s rule, for its reason.
-		 */
-		if (where != bssh_layout_manager::EDGE_MIDDLE
-		    && m_layout->intent().size() >= m_layout->max_panes()) {
-			drop_session(session, true);
-			return;
-		}
-		take_session(session);
+	const auto where = bssh_layout_manager::drop_edge_t(plan);
+	if (where == bssh_layout_manager::EDGE_MIDDLE) {
+		swap_sessions(session, target);
+		return;
 	}
+
+	if (!m_layout->intent().contains(session)) take_session(session);
 
 	if (!m_layout->place(session, target, where)) return;
 
@@ -3132,6 +3245,15 @@ QString bssh_main_window::session_mime_type() {
 	return bssh_session_mime_type();
 }
 
+QMimeData *bssh_main_window::session_drag_mime(bssh_session *session) const {
+	const int index = m_registry && session ? m_registry->index_of(session) : -1;
+	if (index < 0) return nullptr;
+
+	QMimeData *mime = new QMimeData;
+	mime->setData(session_mime_type(), QByteArray::number(index));
+	return mime;
+}
+
 bssh_session *bssh_main_window::session_from_mime(const QMimeData *mime) const {
 	if (!mime || !mime->hasFormat(session_mime_type())) return nullptr;
 
@@ -3212,8 +3334,8 @@ void bssh_main_window::start_session_drag(bssh_session *session) {
 		return;
 	}
 
-	QMimeData *mime = new QMimeData;
-	mime->setData(session_mime_type(), QByteArray::number(in_registry));
+	QMimeData *mime = session_drag_mime(session);
+	if (!mime) return;
 
 	QDrag *drag = new QDrag(this);
 	drag->setMimeData(mime);
@@ -3276,13 +3398,13 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 	QPointer<bssh_terminal_view> lit;
 
 	session_drag_ghost ghost(session_drag_pixmap(session));
-	ghost.moved = [&lit](const QPoint &at) {
+	ghost.moved = [&lit, carried](const QPoint &at) {
 		const drop_spot_t spot = drop_spot_at(at);
 		bssh_terminal_view *view = spot.window && spot.target
 		        ? spot.window->panes()->view_for(spot.target) : nullptr;
 
 		if (lit && lit != view) lit->show_drop_zone(-1);
-		if (view) view->show_drop_zone(spot.edge);
+		if (view) view->show_drop_zone(spot.window->drop_zone_for(carried, spot.target, spot.edge));
 		lit = view;
 	};
 
@@ -3342,9 +3464,13 @@ void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &
 		return;
 	}
 
+	/*
+	 * On a window but not on a terminal or its tab row -- the status
+	 * line, the keyboard, the front door's page: nothing (the holder,
+	 * 2026-10-09). It used to tile beside, with nothing drawn to say so.
+	 */
 	if (spot.on_tab_row) spot.window->drop_session(session, false);
 	else if (spot.target) spot.window->drop_session_on(session, spot.target, spot.edge);
-	else spot.window->drop_session(session, true);
 }
 
 void bssh_main_window::dragEnterEvent(QDragEnterEvent *event) {
@@ -3370,9 +3496,9 @@ void bssh_main_window::dropEvent(QDropEvent *event) {
 	if (!session) return;
 
 	/*
-	 * Where it lands is what it means (sec 8.3): the tab bar makes a tab,
-	 * and anywhere else -- the panes, which is most of the window -- makes
-	 * a tile beside what is already showing.
+	 * Where it lands is what it means (sec 8.3, 8.4): the tab row makes a
+	 * tab. A drop on a terminal never arrives here -- the pane accepts it
+	 * and the window places it through drop_session_on().
 	 *
 	 * Mapped into the bar's own coordinates rather than compared against
 	 * its geometry(), which is expressed in its parent's and would be
@@ -3389,7 +3515,13 @@ void bssh_main_window::dropEvent(QDropEvent *event) {
 	 * the band across the top where tabs live, so the test is on Y
 	 * alone and the whole row answers.
 	 */
-	drop_session(session, !point_is_on_tab_row(event->position().toPoint()));
+	/*
+	 * Off the tab row and off every terminal -- the drops onto a terminal
+	 * are the panes' own -- a release does nothing, and is ACCEPTED doing
+	 * it: refused, the source would read "nobody wanted it" and tear out
+	 * a window over the one the user was aiming at.
+	 */
+	if (point_is_on_tab_row(event->position().toPoint())) drop_session(session, false);
 	event->acceptProposedAction();
 }
 

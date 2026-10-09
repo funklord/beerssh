@@ -8,6 +8,8 @@
 #include <QJsonObject>
 #include <QWidget>
 
+#include <functional>
+
 #include "term/colour_scheme.h"
 #include "term/image_store.h"
 #include "term/screen.h"
@@ -36,6 +38,21 @@ QString bssh_session_mime_type();
  * eyeballed.
  */
 int bssh_drop_edge_at(const QPoint &at, const QSize &pane);
+
+/*
+ * What a drop on a pane can come to besides the five zones (sec 8.4's
+ * picture): CANCEL does nothing and says so -- the pane being carried, for
+ * one -- and REFUSED is not accepted at all, so the pointer shows no-drop.
+ */
+const int BSSH_DROP_CANCEL = -2;
+const int BSSH_DROP_REFUSED = -3;
+
+/*
+ * The window's answer to "dropped here, at this zone, what happens": a
+ * drop_edge_t, BSSH_DROP_CANCEL or BSSH_DROP_REFUSED. The pane draws what
+ * this says and the window does what it says, so the two cannot disagree.
+ */
+typedef std::function<int(const QMimeData *mime, int edge)> bssh_drop_planner_t;
 
 class QMouseEvent;
 class QPainter;
@@ -775,6 +792,13 @@ public:
 	int drop_zone() const { return m_drop_edge; }
 
 	/*
+	 * Who decides what a session dropped here does. Without one the zone
+	 * under the pointer is taken as it is, which is what a bare view in a
+	 * test wants; a window sets one on every pane it shows.
+	 */
+	void set_drop_planner(bssh_drop_planner_t planner) { m_drop_planner = std::move(planner); }
+
+	/*
 	 * Whether the grip is drawn right now.
 	 *
 	 * Only under the pointer. It has to be, and two pixel tests proved
@@ -1006,6 +1030,7 @@ private:
 	 * letting go.
 	 */
 	int m_drop_edge;
+	bssh_drop_planner_t m_drop_planner;
 	bool m_pointer_inside;
 	bool m_pane_handle;
 

@@ -4,6 +4,8 @@
 #include <QList>
 #include <QWidget>
 
+#include <functional>
+
 class QMimeData;
 class QScrollArea;
 class QSplitter;
@@ -102,7 +104,17 @@ public:
 	 */
 	void settle_column_scroll();
 
+	/*
+	 * Who decides what a session dropped on a pane does (sec 8.4): given
+	 * the payload, the pane's own session and the zone, a drop_edge_t,
+	 * BSSH_DROP_CANCEL or BSSH_DROP_REFUSED. Handed to every pane built
+	 * from now on, and to the ones already up.
+	 */
+	void set_drop_planner(std::function<int(const QMimeData *, bssh_session *, int)> planner);
+
 private:
+	std::function<int(const QMimeData *, bssh_session *, int)> m_drop_planner;
+	void apply_drop_planner(bssh_terminal_view *view, bssh_session *session);
 	/* Marks the panes on screen, or away if this widget is not showing. */
 	void update_on_screen();
 

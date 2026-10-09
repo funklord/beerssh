@@ -345,6 +345,7 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	         [this, session](const QMimeData *mime, int edge) {
 		emit session_dropped(mime, session, edge);
 	});
+	apply_drop_planner(view, session);
 
 	connect(view, &bssh_terminal_view::pane_move_requested, this,
 	         [this, alive = QPointer<bssh_session>(session)](int direction) {
@@ -775,4 +776,24 @@ void bssh_pane_container::showEvent(QShowEvent *event) {
 void bssh_pane_container::hideEvent(QHideEvent *event) {
 	QWidget::hideEvent(event);
 	update_on_screen();
+}
+
+void bssh_pane_container::set_drop_planner(
+        std::function<int(const QMimeData *, bssh_session *, int)> planner) {
+	m_drop_planner = std::move(planner);
+	for (int i = 0; i < m_views.size() && i < m_sessions.size(); ++i) {
+		apply_drop_planner(m_views.at(i), m_sessions.at(i));
+	}
+}
+
+void bssh_pane_container::apply_drop_planner(bssh_terminal_view *view, bssh_session *session) {
+	if (!view) return;
+	if (!m_drop_planner) {
+		view->set_drop_planner(nullptr);
+		return;
+	}
+	view->set_drop_planner([this, alive = QPointer<bssh_session>(session)](const QMimeData *mime,
+	                                                                      int edge) {
+		return alive && m_drop_planner ? m_drop_planner(mime, alive.data(), edge) : BSSH_DROP_CANCEL;
+	});
 }

@@ -1,0 +1,82 @@
+# Sabotages for sec 8.4's drop plan: what a pane draws during a drag is
+# what the release does. Each names the test that must notice.
+
+# The fold gone: an arrival into a window at its pane cap is drawn as a
+# split, and the drop cannot make a pane there is no room for.
+[[sabotage]]
+name = "a side into a full window is drawn as a split"
+file = "src/ui/main_window.cpp"
+find = "\tif (arriving && m_layout->intent().size() >= m_layout->max_panes()) return layout::EDGE_MIDDLE;"
+replace = "\tQ_UNUSED(arriving);"
+expect = "the_zone_drawn_is_what_the_drop_does"
+
+# The column's fold gone: left and right drawn as halves in a column that
+# stacks its panes whatever the tree says.
+[[sabotage]]
+name = "left and right in the column are drawn as halves"
+file = "src/ui/main_window.cpp"
+find = '''
+	if (m_layout->arrangement() == layout::COLUMN
+	    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))
+		return layout::EDGE_MIDDLE;'''
+replace = '''
+	if (false)
+		return layout::EDGE_MIDDLE;'''
+expect = "the_zone_drawn_is_what_the_drop_does"
+
+# The pane being carried lights zones it will not honour.
+[[sabotage]]
+name = "the pane being carried lights its zones"
+file = "src/ui/main_window.cpp"
+find = "\tif (!target || session == target || !m_layout || !m_layout->intent().contains(target))"
+replace = "\tif (!target || !m_layout || !m_layout->intent().contains(target))"
+expect = "the_zone_drawn_is_what_the_drop_does"
+
+# The pane draws the zone under the pointer rather than the window's plan.
+[[sabotage]]
+name = "the pane draws the geometry, not the plan"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst int plan = m_drop_planner ? m_drop_planner(event->mimeData(), edge) : edge;"
+replace = "\tconst int plan = edge;"
+expect = "the_zone_drawn_is_what_the_drop_does"
+
+# A swap across windows only half happens: the arrival takes the slot and
+# the target stays in the window it was in, as a tab.
+[[sabotage]]
+name = "a swap across windows leaves the target behind"
+file = "src/ui/main_window.cpp"
+find = '''
+		source->exchange_session(session, target);
+		exchange_session(target, session);'''
+replace = '''
+		exchange_session(target, session);'''
+expect = "the_zone_drawn_is_what_the_drop_does"
+
+# Detaching before placing: the forget takes the outgoing leaf, and the
+# arrival lands in the list with no pane -- the fault this order fixed.
+[[sabotage]]
+name = "the exchange detaches before it places"
+file = "src/ui/main_window.cpp"
+find = '''
+	wire_session(in);
+	if (m_layout->intent().contains(out))'''
+replace = '''
+	wire_session(in);
+	if (m_current == out) detach_session();
+	if (m_layout->intent().contains(out))'''
+expect = "the_zone_drawn_is_what_the_drop_does"
+
+# A drop on a window off the tab row refused rather than accepted doing
+# nothing: under QDrag the source then tears a window out over this one.
+[[sabotage]]
+name = "a drop off the tab row is refused"
+file = "src/ui/main_window.cpp"
+find = '''
+	if (point_is_on_tab_row(event->position().toPoint())) drop_session(session, false);
+	event->acceptProposedAction();'''
+replace = '''
+	if (point_is_on_tab_row(event->position().toPoint())) {
+		drop_session(session, false);
+		event->acceptProposedAction();
+	}'''
+expect = "a_dragged_tab_lands_where_it_is_dropped"
