@@ -240,6 +240,8 @@ private slots:
 	void a_pane_dropped_on_an_edge_splits_the_target_that_way();
 	void a_pane_dropped_in_the_middle_swaps();
 	void the_zone_drawn_is_what_the_drop_does();
+	void the_tab_row_takes_a_drop_at_the_slot_it_marks();
+	void a_drop_from_another_process_is_refused();
 	void reordering_the_panes_keeps_the_shape_they_are_in();
 	void a_narrow_window_shows_the_first_panes_of_the_tree();
 	void the_drop_zones_are_the_edges_and_the_middle();

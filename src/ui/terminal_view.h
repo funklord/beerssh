@@ -30,6 +30,22 @@ class QMimeData;
 QString bssh_session_mime_type();
 
 /*
+ * The payload a session drag carries: "<pid>:<registry index>" (sec 8.4).
+ * The process is part of it because an index means something only in the
+ * registry that issued it -- a bare index, dropped on another BeerSSH,
+ * named one of THAT process's sessions and moved it. A live session cannot
+ * cross processes, so a payload from another one is refused.
+ */
+QByteArray bssh_session_payload(int registry_index);
+
+/*
+ * The registry index a payload names in THIS process, or -1. `foreign` is
+ * set when the payload is a session drag from another process -- including
+ * a bare index, the format before the process was stamped in.
+ */
+int bssh_session_payload_index(const QMimeData *mime, bool *foreign);
+
+/*
  * Which part of a pane a dropped pane lands on (sec 8.3), as
  * bssh_layout_manager::drop_edge_t: the four edges split the pane that
  * way and the middle swaps. A band a quarter of the pane deep along each
@@ -894,6 +910,7 @@ protected:
 	void dropEvent(QDropEvent *event) override;
 
 private:
+
 	/*
 	 * One place that builds m_font from the id, the size and the zoom,
 	 * and then re-measures. Both ways in -- a resolve and a zoom -- go

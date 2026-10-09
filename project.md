@@ -6846,8 +6846,49 @@ window with no name is a blank row in the task switcher.
   each in the other's slot, or nothing moved -- in one window, on the
   carried pane, in the column and into a full window from another;
   `drop-plan.toml` breaks each rule in turn and all seven are caught.
-  Still to do: the tab row's slot and its strip, the process stamp, and
-  Escape under QDrag.
+  **Built, step 2: the tab row.** For the length of any session drag
+  every window of the process shows `bssh_tab_drop` over its tab row: over
+  the bar it marks, with a bar of the accent, the slot the tab would take
+  -- before the first tab whose middle is past the pointer -- and with no
+  bar it is a strip where the bar would appear, labelled "Drop here for a
+  tab". An overlay rather than the hidden row shown, which would shrink
+  every terminal at the start of every drag. `drop_session_as_tab()`
+  replaces `drop_session()`: a pane of this window becomes a tab there, a
+  tab moves there, an arrival arrives there, and the window's only pane
+  -- which no slot is offered for -- stays. Nothing else makes a tab. The
+  overlay and the bar are not each other's ancestors, so `mapFrom()`
+  between them was wrong (the slot right, its mark drawn nowhere) and the
+  mapping goes through global coordinates.
+  `the_tab_row_takes_a_drop_at_the_slot_it_marks`.
+  **Built, step 3: another process refused, and Escape.** The payload is
+  `<pid>:<index>` (`bssh_session_payload`); one from another process --
+  or a bare index, the format before -- names nothing here. Under QDrag
+  the window answers it with a LINK, which moves nothing; the panes and
+  the tab row ignore it and Qt hands an ignored drag up to the window, so
+  there is one answer rather than two that could disagree -- the first
+  version answered in all three, and a sabotage of the pane's answer was
+  missed because the window's caught it. The source draws a no-drop
+  cursor for a link and does nothing on one, so the refusal neither tears
+  out nor moves a wrong session.
+  `a_drop_from_another_process_is_refused`, with the index naming a real
+  session here, as in the fault. QDrag's IgnoreAction no longer tears out
+  when the pointer is over one of our windows (every spot on them accepts,
+  so ignored there is a cancel) or the button is still down (Escape); this
+  half is not reached by the suite, which cannot run `QDrag::exec()`. It
+  did change what one test could see: `a_reorder_along_the_strip_is_not_
+  a_tear_out` watched for the tear-out, and with the simulated button
+  still down the new cancel suppressed it, so a sabotage starting the drag
+  too early went unseen. The test now counts drags started
+  (`session_drags_started()`), which is the cause rather than its effect.
+  **Open, the holder's: X11 across processes.** On X11 the drag is the
+  app's own ghost, deliberately invisible to other programs (TDE's
+  desktop accepted any payload). So another BeerSSH's window is "outside
+  every window of ours" and a release over it tears out a window in the
+  source process -- safe, never a wrong session, but not the refusal
+  chosen. Refusing needs the X server asked which window is under the
+  pointer, which means linking xcb: a new build dependency (libxcb1-dev in
+  `debian/control` and the CI package list, `-lxcb`). Not added without
+  the holder's say.
 
   *Guarded today* by 28 layout and terminal-view tests -- counted by
   name, a grep for drop, drag, tear, swap, reorder and grip less the
@@ -15039,6 +15080,22 @@ something:
   is the sessions' own practice, not an instruction from the holder.
 - **A shared device driven through screenshots cannot answer a question
   about specific grid cells** -- measure those in the emulator or a test.
+
+### The test binary does not leak session buses -- measured 2026-10-09
+
+Raised from claude-guidelines' session (inbox, 2026-10-09): 43 orphaned
+`dbus-daemon --session` processes of the autolaunch shape, timed against
+this tree's check-ci and sabotage runs, with the host-side offscreen test
+binary as the suspect -- then corrected by its sender the same hour, the
+orphans' environments naming the agent CLI. Settled here by measurement:
+with `DBUS_SESSION_BUS_ADDRESS` unset, the orphaned buses owned by this
+account were listed before and after one full run of
+`build-tests/beerssh_test` -- 20 before, 20 after, no new pid to
+attribute. Nothing in this tree to fix. The method, for the next time
+the question comes up: list `ps -eo pid=,ppid=,user=,comm=` for
+`dbus-daemon` with ppid 1, run the binary under `env -u
+DBUS_SESSION_BUS_ADDRESS`, list again, and read `_=` in any new pid's
+`/proc/<pid>/environ` for what launched it.
 
 ---
 

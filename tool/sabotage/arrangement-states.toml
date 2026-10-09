@@ -36,8 +36,8 @@ expect = "narrowing_a_window_turns_its_extra_panes_into_tabs"
 [[sabotage]]
 name = "a pane dropped on the tab bar is shown instead of tabbed"
 file = "src/ui/main_window.cpp"
-find = "\tif (!beside && m_layout && m_layout->intent().contains(session)) {\n\t\tshow_as_tab(session);\n\t\treturn;\n\t}"
-replace = "\t(void)beside;"
+find = "\tif (pane_here) {\n\t\tshow_as_tab(session);"
+replace = "\tif (pane_here) {\n\t\t(void)0;"
 expect = "a_pane_dropped_on_the_tab_bar_becomes_a_tab"
 
 # A window with no pane shows nothing at all.

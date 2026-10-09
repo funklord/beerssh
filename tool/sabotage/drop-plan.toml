@@ -72,11 +72,104 @@ expect = "the_zone_drawn_is_what_the_drop_does"
 name = "a drop off the tab row is refused"
 file = "src/ui/main_window.cpp"
 find = '''
-	if (point_is_on_tab_row(event->position().toPoint())) drop_session(session, false);
+	if (point_is_on_tab_row(event->position().toPoint())) drop_session_as_tab(session, -1);
 	event->acceptProposedAction();'''
 replace = '''
 	if (point_is_on_tab_row(event->position().toPoint())) {
-		drop_session(session, false);
+		drop_session_as_tab(session, -1);
 		event->acceptProposedAction();
 	}'''
 expect = "a_dragged_tab_lands_where_it_is_dropped"
+
+# The slot ignored: every tab-row drop goes to the end, whatever was marked.
+[[sabotage]]
+name = "a tab-row drop ignores the slot it marked"
+file = "src/ui/main_window.cpp"
+find = "\tif (slot >= 0 && slot < tabs.size()) m_shown.insert(m_shown.indexOf(tabs.at(slot)), session);\n\telse m_shown.append(session);"
+replace = "\tQ_UNUSED(slot);\n\tm_shown.append(session);"
+expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
+
+# No strip where the bar would be: with no bar, nothing can make a tab.
+[[sabotage]]
+name = "a window with no bar shows no strip to drop on"
+file = "src/ui/main_window.cpp"
+find = '''
+	m_tab_drop->set_shape(strip, vertical);
+	m_tab_drop->setGeometry(where);
+	m_tab_drop->show();'''
+replace = '''
+	m_tab_drop->set_shape(strip, vertical);
+	m_tab_drop->setGeometry(where);
+	if (!strip) m_tab_drop->show();'''
+expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
+
+# The window's only pane offered a slot on its own row: a mark drawn for a
+# drop that does nothing.
+[[sabotage]]
+name = "the only pane is offered a tab slot"
+file = "src/ui/main_window.cpp"
+find = '''
+	/* The only pane of this window: a drop here would do nothing. */
+	if (m_layout->intent().contains(session) && m_layout->intent().size() < 2) return -1;'''
+replace = '''
+'''
+expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
+
+# A tab-row drop SHOWN rather than made a tab: the old single-pane path,
+# which put the arrival in the panes and the pane in the bar.
+[[sabotage]]
+name = "a drop on the tab row is shown instead of tabbed"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (m_layout->intent().isEmpty()) {\n\t\t\tshow_session(session);"
+replace = "\t\tif (true) {\n\t\t\tshow_session(session);"
+expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
+
+# A tab-row drop that does nothing, refused: the source tears out a window.
+[[sabotage]]
+name = "a do-nothing drop on the tab row is refused"
+file = "src/ui/main_window.cpp"
+find = '''
+		hover(-1, -1);
+		event->acceptProposedAction();
+		if (slot >= 0 && dropped) dropped(event->mimeData(), slot);'''
+replace = '''
+		hover(-1, -1);
+		if (slot >= 0) event->acceptProposedAction();
+		if (slot >= 0 && dropped) dropped(event->mimeData(), slot);'''
+expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
+
+# The mark mapped with mapFrom() between widgets neither of which is the
+# other's ancestor: the slot is right and its mark is drawn nowhere.
+[[sabotage]]
+name = "the tab slot's mark is mapped by the wrong ancestry"
+file = "src/ui/main_window.cpp"
+find = "\t\tconst QPoint in_overlay = m_tab_drop->mapFromGlobal(m_tabs->mapToGlobal(edge));"
+replace = "\t\tconst QPoint in_overlay = m_tab_drop->mapFrom(m_tab_drop->window(), edge - QPoint(5000, 5000));"
+expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
+
+# The process no longer checked: another BeerSSH's index is resolved here,
+# and moves one of this process's sessions -- defect 1.
+[[sabotage]]
+name = "a payload from another process is resolved here"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (!pid_ok || !index_ok || pid != QCoreApplication::applicationPid()) {"
+replace = "\tif (!index_ok) {"
+expect = "a_drop_from_another_process_is_refused"
+
+# A foreign drop ignored rather than answered with a link: the source reads
+# it as a release over nothing and tears a window out over this one. The
+# window is the one place that answers -- panes and the tab row ignore it
+# and Qt hands it up -- so this is the answer to break.
+[[sabotage]]
+name = "a window ignores a foreign drop instead of linking it"
+file = "src/ui/main_window.cpp"
+find = """
+	if (!foreign || !(event->possibleActions() & Qt::LinkAction)) return foreign;
+	event->setDropAction(Qt::LinkAction);
+	event->accept();
+	return true;"""
+replace = """
+	if (!foreign || !(event->possibleActions() & Qt::LinkAction)) return foreign;
+	event->ignore();
+	return true;"""
+expect = "a_drop_from_another_process_is_refused"

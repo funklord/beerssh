@@ -77,11 +77,13 @@ expect = "a_desktop_can_be_asked_for_the_column"
 # become tabs and the newcomer takes the window. Nothing is closed, which
 # is why it went unnoticed -- what goes is the arrangement, and sec 8.2's
 # "remembered per tab-group" cannot survive the intent being overwritten.
+# Re-aimed 2026-10-09: a no-room arrival is a swap now (sec 8.4), and this
+# is the swap's fallback for a session no window shows.
 [[sabotage]]
 name = "a drop with no room collapses the split"
 file = "src/ui/main_window.cpp"
-find = "\tif (showing > 1) return;"
-replace = ""
+find = "\ttake_session(session);\n\tm_layout->place(session, target, bssh_layout_manager::EDGE_MIDDLE);"
+replace = "\ttake_session(session);\n\tshow_session(session);"
 expect = "a_drop_with_no_room_keeps_an_arrangement_it_cannot_join"
 
 # And the other half: a ONE-pane window must still hand the screen over,
@@ -90,6 +92,6 @@ expect = "a_drop_with_no_room_keeps_an_arrangement_it_cannot_join"
 [[sabotage]]
 name = "a drop onto a single pane does nothing visible"
 file = "src/ui/main_window.cpp"
-find = "\tconst int showing = m_layout ? m_layout->visible_panes().size() : 0;\n\tif (showing > 1) return;"
-replace = "\treturn;"
+find = "\ttake_session(session);\n\tm_layout->place(session, target, bssh_layout_manager::EDGE_MIDDLE);"
+replace = "\ttake_session(session);"
 expect = "a_drop_with_no_room_keeps_an_arrangement_it_cannot_join"

@@ -235,6 +235,131 @@ private:
 
 } /* namespace */
 
+/*
+ * The tab row as a drop target while a session is being dragged (sec 8.4,
+ * the holder's rule of 2026-10-09: only the place where the tab bar is, or
+ * would be, makes a tab).
+ *
+ * Over the bar when there is one, marking the slot a drop would take; over
+ * the edge of the panes where the bar would appear when there is none, as a
+ * strip that says so. An overlay rather than the hidden row shown, because
+ * showing the row shrinks every terminal at the start of every drag. Shown
+ * only while a drag is up.
+ */
+class bssh_tab_drop : public QWidget {
+public:
+	/* The slot a drop at `at` takes, and where its mark goes; -1 for none. */
+	std::function<int(const QMimeData *, const QPoint &at, int *mark)> slot_at;
+	std::function<void(const QMimeData *, int slot)> dropped;
+
+	explicit bssh_tab_drop(QWidget *parent) : QWidget(parent) {
+		setAcceptDrops(true);
+		hide();
+	}
+
+	void set_shape(bool strip, bool vertical) {
+		m_strip = strip;
+		m_vertical = vertical;
+		update();
+	}
+
+	void hover(int slot, int mark) {
+		if (slot == m_slot && mark == m_mark) return;
+		m_slot = slot;
+		m_mark = mark;
+		update();
+	}
+	int slot() const { return m_slot; }
+
+protected:
+	void dragEnterEvent(QDragEnterEvent *event) override {
+		if (!event->mimeData()->hasFormat(bssh_session_mime_type())) return;
+		if (refused(event)) return;
+		follow(event->mimeData(), event->position().toPoint());
+		event->acceptProposedAction();
+	}
+
+	void dragMoveEvent(QDragMoveEvent *event) override {
+		if (refused(event)) return;
+		follow(event->mimeData(), event->position().toPoint());
+		event->acceptProposedAction();
+	}
+
+	void dragLeaveEvent(QDragLeaveEvent *) override { hover(-1, -1); }
+
+	/*
+	 * Accepted even where it does nothing, so the source does not read the
+	 * release as "nobody wanted it" and tear a window out over this one.
+	 */
+	void dropEvent(QDropEvent *event) override {
+		if (refused(event)) return;
+		int mark = -1;
+		const int slot = slot_at ? slot_at(event->mimeData(), event->position().toPoint(), &mark) : -1;
+		hover(-1, -1);
+		event->acceptProposedAction();
+		if (slot >= 0 && dropped) dropped(event->mimeData(), slot);
+	}
+
+	void paintEvent(QPaintEvent *) override {
+		QPainter painter(this);
+		const QColor accent = palette().color(QPalette::Highlight);
+
+		if (m_strip) {
+			QColor fill(accent);
+			fill.setAlphaF(m_slot >= 0 ? 0.5 : 0.22);
+			painter.fillRect(rect(), fill);
+			QPen edge(accent);
+			edge.setStyle(Qt::DashLine);
+			painter.setPen(edge);
+			painter.drawRect(rect().adjusted(0, 0, -1, -1));
+
+			painter.setPen(palette().color(QPalette::WindowText));
+			const QString label = QStringLiteral("Drop here for a tab");
+			if (m_vertical) {
+				painter.translate(width() / 2, height() / 2);
+				painter.rotate(-90);
+				painter.drawText(QRect(-height() / 2, -width() / 2, height(), width()),
+				                 Qt::AlignCenter, label);
+			} else {
+				painter.drawText(rect(), Qt::AlignCenter, label);
+			}
+			return;
+		}
+
+		/* The bar is there: a bar of the accent where the tab would go. */
+		if (m_slot < 0 || m_mark < 0) return;
+		const QRect mark = m_vertical ? QRect(0, m_mark - 2, width(), 4)
+		                              : QRect(m_mark - 2, 0, 4, height());
+		painter.fillRect(mark, accent);
+	}
+
+private:
+	/*
+	 * Another process's session: ignored here, and Qt hands an ignored
+	 * drag up to the window, which answers it with a link (sec 8.4) -- one
+	 * place that answers, rather than two that could disagree.
+	 */
+	bool refused(QDropEvent *event) {
+		bool foreign = false;
+		bssh_session_payload_index(event->mimeData(), &foreign);
+		if (!foreign) return false;
+		hover(-1, -1);
+		event->ignore();
+		return true;
+	}
+
+	void follow(const QMimeData *mime, const QPoint &at) {
+		int mark = -1;
+		const int slot = slot_at ? slot_at(mime, at, &mark) : -1;
+		hover(slot, mark);
+	}
+
+	bool m_strip = false;
+	bool m_vertical = false;
+	int m_slot = -1;
+	int m_mark = -1;
+};
+
 bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent)
     : QWidget(parent),
       m_keyboard_hidden_by_user(false),
@@ -387,6 +512,23 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_tab_row->setLayout(tab_row);
 	m_tab_row->hide();
 	layout->addWidget(m_tab_row, 0);
+
+	/*
+	 * The tab row as a drop target, over the bar or where it would be, for
+	 * the length of a session drag (set_session_drag_active). Placed a turn
+	 * later, as the panes' drops are: placing rebuilds what is delivering.
+	 */
+	m_tab_drop = new bssh_tab_drop(m_terminal_page);
+	m_tab_drop->slot_at = [this](const QMimeData *mime, const QPoint &at, int *mark) {
+		return tab_drop_slot(session_from_mime(mime), at, mark);
+	};
+	m_tab_drop->dropped = [this](const QMimeData *mime, int slot) {
+		QPointer<bssh_session> session = session_from_mime(mime);
+		if (!session) return;
+		QMetaObject::invokeMethod(this, [this, session, slot] {
+			if (session) drop_session_as_tab(session, slot);
+		}, Qt::QueuedConnection);
+	};
 	m_page_layout = layout;
 
 	/*
@@ -3144,99 +3286,145 @@ void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *targ
 	update_status();
 }
 
-void bssh_main_window::drop_session(bssh_session *session, bool beside) {
-	if (!session) return;
+void bssh_main_window::drop_session_as_tab(bssh_session *session, int slot) {
+	if (!session || !m_layout || !m_panes) return;
+
+	const bool pane_here = m_layout->intent().contains(session);
 
 	/*
-	 * Dropped back where it came from: nothing happens, which is what
-	 * cancelling a drag should look like.
-	 *
-	 * Without this the drop still went through take-and-show below, and
-	 * on a window with no room for another pane that means show_session()
-	 * -- which replaces the intent with this session ALONE, so putting a
-	 * pane back exactly where it was collapsed the split it was part of.
-	 * A gesture whose undo is destructive is worse than one that cannot
-	 * be undone.
+	 * show_as_tab() declines the window's only pane, which would leave it
+	 * showing nothing; tab_drop_slot() offers no slot for it either.
 	 */
-	if (beside && m_layout && m_layout->intent().contains(session)) return;
-
-	/*
-	 * A pane of THIS window, dropped on THIS window's tab bar, is the
-	 * un-split (sec 8.3). It has to be caught before the take-and-show
-	 * below, which would put the session back on screen as the only pane
-	 * -- the opposite of what aiming at the bar means, and the same shape
-	 * of mistake as a drop that evicted the pane it was meant to join.
-	 */
-	if (!beside && m_layout && m_layout->intent().contains(session)) {
+	if (pane_here) {
 		show_as_tab(session);
-		return;
+	} else if (!m_shown.contains(session)) {
+		take_session(session);
+
+		/* Into a window showing nothing, a tab would leave it empty. */
+		if (m_layout->intent().isEmpty()) {
+			show_session(session);
+			return;
+		}
 	}
 
 	/*
-	 * Taken before it is shown, and those are two decisions rather than
-	 * one. adopt_session() bundles them, and its "show" half replaces the
-	 * intent with this session alone -- correct for a tab, and fatal for a
-	 * tile: split_with() declines a session the intent already contains,
-	 * so a drop onto the panes of a wide window produced ONE pane showing
-	 * the dropped session, having just evicted the one it was meant to sit
-	 * beside. It looked like a drop that had done nothing, when in fact it
-	 * had done something worse.
+	 * Now a tab here, wherever it was: put it at `slot` among the tabs.
+	 * The bar lists m_shown less the panes, in m_shown's order, so the
+	 * place is before whichever tab holds that slot now.
 	 */
-	take_session(session);
+	const QList<bssh_session *> panes = m_layout->visible_panes();
+	QList<bssh_session *> tabs;
+	for (bssh_session *each : m_shown) {
+		if (each != session && !panes.contains(each)) tabs.append(each);
+	}
+	m_shown.removeAll(session);
+	if (slot >= 0 && slot < tabs.size()) m_shown.insert(m_shown.indexOf(tabs.at(slot)), session);
+	else m_shown.append(session);
+
+	refresh_tab_bar();
+	update_status();
+}
+
+int bssh_main_window::tab_drop_slot(bssh_session *session, const QPoint &at, int *mark) const {
+	if (mark) *mark = -1;
+	if (!session || !m_layout || !m_tabs || !m_tab_drop) return -1;
+
+	/* The only pane of this window: a drop here would do nothing. */
+	if (m_layout->intent().contains(session) && m_layout->intent().size() < 2) return -1;
+
+	/* No bar: the strip is the one slot, and lights whole. */
+	if (!m_tab_row || m_tab_row->isHidden()) return 0;
 
 	/*
-	 * Beside, not instead: split_with() is what sec 8.3's "Show beside
-	 * current" does, and a drop onto the panes means the same thing.
-	 *
-	 * Declined where the size class has no room for another pane
-	 * (sec 8.2), and the fallback is to show it as a tab rather than to do
-	 * nothing -- a drop onto a phone-width window still puts the session
-	 * in front of the person who dropped it.
+	 * Before the first tab whose middle is past the pointer, along the
+	 * bar's own direction; after the last otherwise. The mark sits on the
+	 * boundary the tab would take, in the overlay's coordinates.
 	 */
-	const bool room = beside && m_layout
-	                  && m_layout->intent().size() < m_layout->max_panes();
+	const bool vertical = m_tabs->shape() == QTabBar::RoundedWest
+	                      || m_tabs->shape() == QTabBar::RoundedEast;
+	/* Through global coordinates: neither widget is the other's ancestor,
+	 * which mapFrom() requires. */
+	const QPoint in_bar = m_tabs->mapFromGlobal(m_tab_drop->mapToGlobal(at));
+	const int count = m_tabs->count();
+	int slot = count;
+	for (int i = 0; i < count; ++i) {
+		const QRect tab = m_tabs->tabRect(i);
+		if (vertical ? in_bar.y() < tab.center().y() : in_bar.x() < tab.center().x()) {
+			slot = i;
+			break;
+		}
+	}
 
-	if (room) {
-		split_with(session);
+	if (mark) {
+		QPoint edge(0, 0);
+		if (slot < count) {
+			edge = m_tabs->tabRect(slot).topLeft();
+		} else if (count > 0) {
+			const QRect last = m_tabs->tabRect(count - 1);
+			edge = vertical ? last.bottomLeft() + QPoint(0, 1) : last.topRight() + QPoint(1, 0);
+		}
+		const QPoint in_overlay = m_tab_drop->mapFromGlobal(m_tabs->mapToGlobal(edge));
+		*mark = vertical ? in_overlay.y() : in_overlay.x();
+	}
+	return slot;
+}
+
+QWidget *bssh_main_window::tab_drop_target() const {
+	return m_tab_drop;
+}
+
+void bssh_main_window::set_session_drag_active(bool active) {
+	if (!m_tab_drop || !m_terminal_page || !m_panes || !m_tabs) return;
+
+	if (!active) {
+		m_tab_drop->hover(-1, -1);
+		m_tab_drop->hide();
 		return;
 	}
 
-	/*
-	 * No room, and what happens then depends on whether there is an
-	 * ARRANGEMENT to lose.
-	 *
-	 * show_session() replaces the intent with this session alone. On a
-	 * window showing one pane that is exactly right: the drop is visible,
-	 * the session it displaced becomes a tab, and nothing the user built
-	 * is gone -- which is the case the paragraph above was written for,
-	 * a phone-width window with a single terminal.
-	 *
-	 * On a window showing SEVERAL it is the opposite. A user who has
-	 * arranged two panes side by side and drags a third onto them loses
-	 * the split: both panes become tabs and the dropped session takes the
-	 * whole window. Nothing is closed -- sec 8.2's rule holds -- but
-	 * sec 8.2's other half does not, because "the layout intent is
-	 * remembered per tab-group" cannot survive the intent being
-	 * overwritten. An arrangement made by hand goes in one drag, with no
-	 * warning and no way back.
-	 *
-	 * So a multi-pane window keeps its panes and the dropped session
-	 * arrives as a tab. take_session() above has already put it in the
-	 * shown list, which IS being a tab, so there is nothing more to do
-	 * for it to be reachable.
-	 *
-	 * Found from the picture: sec 12.3's split shot dropped a third
-	 * session to create a split and destroyed the one it already had.
-	 * Built on the copyright holder's repeated instruction to carry on
-	 * rather than on an answer to the question in sec 16, which asked
-	 * which of the two behaviours was wanted -- so the entry there
-	 * records what was chosen and why, and reversing it is deleting this
-	 * branch.
-	 */
-	const int showing = m_layout ? m_layout->visible_panes().size() : 0;
-	if (showing > 1) return;
+	const bool vertical = m_tab_position == bssh_app_settings::TABS_LEFT
+	                      || m_tab_position == bssh_app_settings::TABS_RIGHT;
+	const bool strip = !m_tab_row || m_tab_row->isHidden();
 
-	show_session(session);
+	QRect where;
+	if (!strip) {
+		where = QRect(m_tab_row->mapTo(m_terminal_page, QPoint(0, 0)), m_tab_row->size());
+	} else {
+		/*
+		 * The edge of the panes the bar would appear on, as deep as the
+		 * bar would be -- that is where a user who wants a tab looks.
+		 */
+		const QRect panes(m_panes->mapTo(m_terminal_page, QPoint(0, 0)), m_panes->size());
+		const int deep = qMax(m_tabs->sizeHint().height(), fontMetrics().height() * 2);
+		const int wide = qMax(m_tabs->sizeHint().width(), fontMetrics().height() * 2);
+		switch (m_tab_position) {
+		case bssh_app_settings::TABS_BOTTOM:
+			where = QRect(panes.left(), panes.bottom() - deep + 1, panes.width(), deep);
+			break;
+		case bssh_app_settings::TABS_LEFT:
+			where = QRect(panes.left(), panes.top(), wide, panes.height());
+			break;
+		case bssh_app_settings::TABS_RIGHT:
+			where = QRect(panes.right() - wide + 1, panes.top(), wide, panes.height());
+			break;
+		default:
+			where = QRect(panes.left(), panes.top(), panes.width(), deep);
+			break;
+		}
+	}
+
+	m_tab_drop->set_shape(strip, vertical);
+	m_tab_drop->setGeometry(where);
+	m_tab_drop->show();
+	m_tab_drop->raise();
+}
+
+/* Every window of this process, for the length of one session drag. */
+static void set_session_drag_active_everywhere(bool active) {
+	for (QWidget *widget : QApplication::topLevelWidgets()) {
+		if (bssh_main_window *window = qobject_cast<bssh_main_window *>(widget))
+			window->set_session_drag_active(active);
+	}
 }
 
 QString bssh_main_window::session_mime_type() {
@@ -3250,16 +3438,14 @@ QMimeData *bssh_main_window::session_drag_mime(bssh_session *session) const {
 	if (index < 0) return nullptr;
 
 	QMimeData *mime = new QMimeData;
-	mime->setData(session_mime_type(), QByteArray::number(index));
+	mime->setData(session_mime_type(), bssh_session_payload(index));
 	return mime;
 }
 
 bssh_session *bssh_main_window::session_from_mime(const QMimeData *mime) const {
-	if (!mime || !mime->hasFormat(session_mime_type())) return nullptr;
-
-	bool ok = false;
-	const int index = mime->data(session_mime_type()).toInt(&ok);
-	if (!ok) return nullptr;
+	/* Another process's payload names nothing here, whatever its index. */
+	const int index = bssh_session_payload_index(mime, nullptr);
+	if (index < 0) return nullptr;
 
 	/*
 	 * Resolved out of the registry rather than dereferenced: the payload
@@ -3280,6 +3466,21 @@ void bssh_main_window::start_tab_drag(int index) {
  * Painted rather than loaded: this program ships no icon theme, and a
  * missing asset would leave the gesture looking like nothing again.
  */
+/* A no-drop sign, for the cursor while another process refuses a drop. */
+static QPixmap refused_cursor() {
+	QPixmap canvas(32, 32);
+	canvas.fill(Qt::transparent);
+	QPainter painter(&canvas);
+	painter.setRenderHint(QPainter::Antialiasing, true);
+	QPen pen(QColor(200, 40, 40));
+	pen.setWidthF(3.0);
+	painter.setPen(pen);
+	painter.drawEllipse(QRectF(4, 4, 24, 24));
+	painter.drawLine(QPointF(8.5, 8.5), QPointF(23.5, 23.5));
+	painter.end();
+	return canvas;
+}
+
 QPixmap bssh_main_window::session_drag_pixmap(bssh_session *session) const {
 	const QString name = session && !session->title().isEmpty()
 	        ? session->title()
@@ -3323,8 +3524,15 @@ QPixmap bssh_main_window::session_drag_pixmap(bssh_session *session) const {
 	return canvas;
 }
 
+static int g_session_drags_started = 0;
+
+int bssh_main_window::session_drags_started() {
+	return g_session_drags_started;
+}
+
 void bssh_main_window::start_session_drag(bssh_session *session) {
 	if (!session || !m_registry) return;
+	++g_session_drags_started;
 
 	const int in_registry = m_registry->index_of(session);
 	if (in_registry < 0) return;
@@ -3361,6 +3569,7 @@ void bssh_main_window::start_session_drag(bssh_session *session) {
 	QPointer<bssh_terminal_view> source =
 	        m_panes ? m_panes->view_for(session) : nullptr;
 	if (source) source->set_being_dragged(true);
+	set_session_drag_active_everywhere(true);
 
 	/*
 	 * A move, not a copy: a session is shown in exactly one place
@@ -3372,11 +3581,28 @@ void bssh_main_window::start_session_drag(bssh_session *session) {
 	 * through their own dropEvent, never through anything this window
 	 * called on them.
 	 */
-	const Qt::DropAction landed = drag->exec(Qt::MoveAction);
+	/*
+	 * A LINK is what another BeerSSH answers with: a live session cannot
+	 * cross processes, so it takes nothing and says so (sec 8.4). The
+	 * cursor for it is a no-drop sign, which is the refusal the user sees.
+	 */
+	drag->setDragCursor(refused_cursor(), Qt::LinkAction);
+	const Qt::DropAction landed = drag->exec(Qt::MoveAction | Qt::LinkAction, Qt::MoveAction);
 
+	set_session_drag_active_everywhere(false);
 	if (source) source->set_being_dragged(false);
 
 	if (landed != Qt::IgnoreAction) return;
+
+	/*
+	 * Nobody took it -- or the drag was cancelled, which exec() reports
+	 * the same way, so Escape used to tear out a window. Every spot on a
+	 * window of ours accepts (a cancel included), so ignored over one of
+	 * them is a cancel; and the button still down is Escape pressed
+	 * mid-drag. Only a release over nothing of ours is the tear-out.
+	 */
+	if (QApplication::topLevelAt(QCursor::pos())) return;
+	if (QGuiApplication::mouseButtons() & Qt::LeftButton) return;
 
 	/*
 	 * Nobody wanted it, so the gesture means what it meant before there
@@ -3389,6 +3615,7 @@ void bssh_main_window::start_session_drag(bssh_session *session) {
 
 void bssh_main_window::run_own_session_drag(bssh_session *session) {
 	QPointer<bssh_session> carried = session;
+	++g_session_drags_started;
 
 	QPointer<bssh_terminal_view> source =
 	        m_panes ? m_panes->view_for(session) : nullptr;
@@ -3396,28 +3623,39 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 
 	/* The pane whose zone is lit, so the last one is cleared as the pointer moves on. */
 	QPointer<bssh_terminal_view> lit;
+	/* And the tab row whose slot is marked, likewise. */
+	QPointer<bssh_main_window> lit_row;
+
+	set_session_drag_active_everywhere(true);
 
 	session_drag_ghost ghost(session_drag_pixmap(session));
-	ghost.moved = [&lit, carried](const QPoint &at) {
-		const drop_spot_t spot = drop_spot_at(at);
+	ghost.moved = [&lit, &lit_row, carried](const QPoint &at) {
+		const drop_spot_t spot = drop_spot_at(at, carried);
 		bssh_terminal_view *view = spot.window && spot.target
 		        ? spot.window->panes()->view_for(spot.target) : nullptr;
 
 		if (lit && lit != view) lit->show_drop_zone(-1);
 		if (view) view->show_drop_zone(spot.window->drop_zone_for(carried, spot.target, spot.edge));
 		lit = view;
+
+		bssh_main_window *row = spot.on_tab_row ? spot.window : nullptr;
+		if (lit_row && lit_row != row && lit_row->m_tab_drop) lit_row->m_tab_drop->hover(-1, -1);
+		if (row && row->m_tab_drop) row->m_tab_drop->hover(spot.slot, spot.mark);
+		lit_row = row;
 	};
 
 	QPoint released;
 	const bool dropped = ghost.run(&released);
 
 	if (lit) lit->show_drop_zone(-1);
+	set_session_drag_active_everywhere(false);
 	if (source) source->set_being_dragged(false);
 
 	if (dropped && carried) finish_session_drag(carried, released);
 }
 
-bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &global) {
+bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &global,
+                                                              bssh_session *session) {
 	drop_spot_t spot;
 
 	bssh_main_window *window =
@@ -3425,7 +3663,19 @@ bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &globa
 	if (!window) return spot;
 	spot.window = window;
 
-	if (window->point_is_on_tab_row(window->mapFromGlobal(global))) {
+	/*
+	 * The tab row while a drag is up: the overlay over the bar or where it
+	 * would be, asked for the slot it draws. A slot of -1 means a drop
+	 * there does nothing, which is a spot on nothing.
+	 */
+	if (window->m_tab_drop && window->m_tab_drop->isVisible()) {
+		const QPoint at = window->m_tab_drop->mapFromGlobal(global);
+		if (window->m_tab_drop->rect().contains(at)) {
+			spot.slot = window->tab_drop_slot(session, at, &spot.mark);
+			spot.on_tab_row = spot.slot >= 0;
+			return spot;
+		}
+	} else if (window->point_is_on_tab_row(window->mapFromGlobal(global))) {
 		spot.on_tab_row = true;
 		return spot;
 	}
@@ -3450,7 +3700,7 @@ bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &globa
 void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &global) {
 	if (!session) return;
 
-	const drop_spot_t spot = drop_spot_at(global);
+	const drop_spot_t spot = drop_spot_at(global, session);
 
 	/*
 	 * Outside every window of ours: the gesture's original meaning, a
@@ -3469,11 +3719,27 @@ void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &
 	 * line, the keyboard, the front door's page: nothing (the holder,
 	 * 2026-10-09). It used to tile beside, with nothing drawn to say so.
 	 */
-	if (spot.on_tab_row) spot.window->drop_session(session, false);
+	if (spot.on_tab_row) spot.window->drop_session_as_tab(session, spot.slot);
 	else if (spot.target) spot.window->drop_session_on(session, spot.target, spot.edge);
 }
 
+/*
+ * A session drag from ANOTHER BeerSSH: accepted as a link, which moves
+ * nothing. Refusing outright would read, at the source, as a release over
+ * nothing -- and tear a window out over this one. The source draws its
+ * no-drop cursor for a link, so the refusal is what the user sees.
+ */
+static bool answer_foreign_drag(QDropEvent *event) {
+	bool foreign = false;
+	bssh_session_payload_index(event->mimeData(), &foreign);
+	if (!foreign || !(event->possibleActions() & Qt::LinkAction)) return foreign;
+	event->setDropAction(Qt::LinkAction);
+	event->accept();
+	return true;
+}
+
 void bssh_main_window::dragEnterEvent(QDragEnterEvent *event) {
+	if (answer_foreign_drag(event)) return;
 	if (session_from_mime(event->mimeData())) event->acceptProposedAction();
 }
 
@@ -3492,6 +3758,7 @@ bool bssh_main_window::point_is_on_tab_row(const QPoint &at) const {
 }
 
 void bssh_main_window::dropEvent(QDropEvent *event) {
+	if (answer_foreign_drag(event)) return;
 	bssh_session *session = session_from_mime(event->mimeData());
 	if (!session) return;
 
@@ -3521,7 +3788,7 @@ void bssh_main_window::dropEvent(QDropEvent *event) {
 	 * it: refused, the source would read "nobody wanted it" and tear out
 	 * a window over the one the user was aiming at.
 	 */
-	if (point_is_on_tab_row(event->position().toPoint())) drop_session(session, false);
+	if (point_is_on_tab_row(event->position().toPoint())) drop_session_as_tab(session, -1);
 	event->acceptProposedAction();
 }
 
@@ -4617,8 +4884,8 @@ void bssh_main_window::refresh_menu_bar() {
 
 	/*
 	 * A split needs somewhere to put the pane, which is the same question
-	 * drop_session() asks -- so the menu says no in the case where the
-	 * action would silently fall back to a tab.
+	 * drop_zone_for() asks of a side -- so the menu says no where there is
+	 * no room, rather than doing something else instead.
 	 */
 	if (m_split_action) {
 		const bool room = m_layout

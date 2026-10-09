@@ -6,6 +6,7 @@
 #include "ui/theme.h"
 #include "ui/layout_manager.h"
 
+#include <QCoreApplication>
 #include <QDragEnterEvent>
 #include <QEnterEvent>
 #include <QDropEvent>
@@ -1184,6 +1185,26 @@ QString bssh_terminal_view::text_for_drop(const QMimeData *mime) {
 	return QString();
 }
 
+QByteArray bssh_session_payload(int registry_index) {
+	return QByteArray::number(QCoreApplication::applicationPid()) + ':'
+	        + QByteArray::number(registry_index);
+}
+
+int bssh_session_payload_index(const QMimeData *mime, bool *foreign) {
+	if (foreign) *foreign = false;
+	if (!mime || !mime->hasFormat(bssh_session_mime_type())) return -1;
+
+	const QList<QByteArray> parts = mime->data(bssh_session_mime_type()).split(':');
+	bool pid_ok = false, index_ok = false;
+	const qint64 pid = parts.size() == 2 ? parts.at(0).toLongLong(&pid_ok) : -1;
+	const int index = parts.size() == 2 ? parts.at(1).toInt(&index_ok) : -1;
+	if (!pid_ok || !index_ok || pid != QCoreApplication::applicationPid()) {
+		if (foreign) *foreign = true;
+		return -1;
+	}
+	return index;
+}
+
 QString bssh_session_mime_type() {
 	return QStringLiteral("application/x-bssh-session");
 }
@@ -1293,6 +1314,16 @@ void bssh_terminal_view::dropEvent(QDropEvent *event) {
 		const int edge = bssh_drop_edge_at(event->position().toPoint(), size());
 		m_drop_edge = -1;
 		update();
+
+		/*
+		 * Refused -- a payload naming nothing here, another process's
+		 * included -- is ignored, and Qt hands an ignored drop to the
+		 * window, which answers another process with a link (sec 8.4).
+		 */
+		if (m_drop_planner && m_drop_planner(event->mimeData(), edge) == BSSH_DROP_REFUSED) {
+			event->ignore();
+			return;
+		}
 
 		event->acceptProposedAction();
 		emit session_dropped(event->mimeData(), edge);

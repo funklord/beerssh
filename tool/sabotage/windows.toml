@@ -49,8 +49,8 @@ expect = "a_dropped_session_leaves_the_window_it_came_from"
 [[sabotage]]
 name = "a drop on the panes never tiles"
 file = "src/ui/main_window.cpp"
-find = "\tif (room) {\n\t\tsplit_with(session);"
-replace = "\tif (room) {\n\t\tshow_session(session);"
+find = "\tif (!m_layout->place(session, target, where)) return;"
+replace = "\tif (!m_layout->place(session, target, bssh_layout_manager::EDGE_MIDDLE)) return;"
 expect = "a_drop_on_the_panes_tiles_where_there_is_room"
 
 # The reported bug: leaving the settings closed the whole window and took

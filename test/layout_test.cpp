@@ -3899,6 +3899,179 @@ void layout_test::the_zone_drawn_is_what_the_drop_does() {
 	}
 }
 
+
+namespace {
+
+/* The sessions in the bar, in order: shown, less the panes. */
+QList<bssh_session *> tab_sessions(bssh_main_window &window) {
+	bssh_layout_manager *layout = window.findChild<bssh_layout_manager *>();
+	const QList<bssh_session *> panes = layout ? layout->visible_panes() : QList<bssh_session *>();
+	QList<bssh_session *> out;
+	for (bssh_session *each : window.shown_sessions()) {
+		if (!panes.contains(each)) out.append(each);
+	}
+	return out;
+}
+
+/* Drags `session` over the tab-drop overlay at `at` and lets go. */
+void drop_on_tab_row(bssh_main_window &window, bssh_session *session, const QPoint &at,
+                     bool *accepted) {
+	QWidget *overlay = window.tab_drop_target();
+	std::unique_ptr<QMimeData> mime(window.session_drag_mime(session));
+	QDragEnterEvent enter(at, Qt::MoveAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(overlay, &enter);
+	QDragMoveEvent move(at, Qt::MoveAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(overlay, &move);
+	QDropEvent drop(QPointF(at), Qt::MoveAction, mime.get(), Qt::LeftButton, Qt::NoModifier);
+	QCoreApplication::sendEvent(overlay, &drop);
+	if (accepted) *accepted = drop.isAccepted();
+	QCoreApplication::processEvents();
+	QCoreApplication::processEvents();
+}
+
+} /* namespace */
+
+void layout_test::the_tab_row_takes_a_drop_at_the_slot_it_marks() {
+	/*
+	 * The holder's rule (sec 8.4, 2026-10-09): only the place where the
+	 * tab bar is, or would be, makes a tab; with a bar the drop position
+	 * picks the slot, marked before the release; without one, a strip
+	 * where the bar would appear takes the drop. Asserted as the relation
+	 * between the slot marked and where the tab lands.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	QWidget *overlay = window.tab_drop_target();
+	QVERIFY(overlay);
+	QVERIFY2(!overlay->isVisible(), "the tab row's target shows only while a drag is up");
+
+	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(a);
+	QCoreApplication::processEvents();
+	QTabBar *bar = window.findChild<QTabBar *>();
+	QVERIFY(bar);
+	QCOMPARE(bar->count(), 0);
+
+	window.set_session_drag_active(true);
+	QVERIFY2(overlay->isVisible(), "with no bar, the strip is where a tab can be made");
+
+	/* The window's only pane over its own strip: nothing marked, nothing done. */
+	int mark = -1;
+	QCOMPARE(window.tab_drop_slot(a, overlay->rect().center(), &mark), -1);
+	bool accepted = false;
+	drop_on_tab_row(window, a, overlay->rect().center(), &accepted);
+	QVERIFY2(accepted, "a drop that does nothing is accepted, or the source tears out a window");
+	QCOMPARE(window.panes()->pane_count(), 1);
+	QCOMPARE(bar->count(), 0);
+
+	/* Another session over the strip: one slot, and a tab -- the pane stays. */
+	bssh_session *c = window.registry()->create(named(QStringLiteral("c")));
+	QCOMPARE(window.tab_drop_slot(c, overlay->rect().center(), &mark), 0);
+	drop_on_tab_row(window, c, overlay->rect().center(), nullptr);
+	window.set_session_drag_active(false);
+	QVERIFY(!overlay->isVisible());
+	QCOMPARE(window.panes()->pane_count(), 1);
+	QVERIFY(window.panes()->view_for(a));
+	QCOMPARE(tab_sessions(window), QList<bssh_session *>({ c }));
+
+	/*
+	 * With a bar: before each tab and after the last, a fresh session each
+	 * time, and it lands at the slot that was marked.
+	 */
+	for (int slot = 0; slot <= 2; ++slot) {
+		window.set_session_drag_active(true);
+		QVERIFY(bar->isVisible() && bar->count() >= 1);
+		const QPoint in_bar = slot < bar->count()
+		        ? bar->tabRect(slot).center() - QPoint(4, 0)
+		        : bar->tabRect(bar->count() - 1).center() + QPoint(4, 0);
+		const QPoint at = overlay->mapFromGlobal(bar->mapToGlobal(in_bar));
+
+		bssh_session *arriving = window.registry()->create(named(QStringLiteral("n%1").arg(slot)));
+		const int wanted = qMin(slot, bar->count());
+		mark = -1;
+		QCOMPARE(window.tab_drop_slot(arriving, at, &mark), wanted);
+		QVERIFY2(mark >= 0, "a slot with no mark drawn is a slot nobody can aim at");
+
+		drop_on_tab_row(window, arriving, at, nullptr);
+		window.set_session_drag_active(false);
+		QCOMPARE(tab_sessions(window).indexOf(arriving), wanted);
+		QCOMPARE(window.panes()->pane_count(), 1);
+	}
+}
+
+
+void layout_test::a_drop_from_another_process_is_refused() {
+	/*
+	 * sec 8.4's defect 1: the payload was a bare registry index, resolved
+	 * by whichever process received it -- so a drop onto another BeerSSH
+	 * moved one of THAT process's sessions, the one at that index, and the
+	 * source kept its own. A live session cannot cross processes, and the
+	 * holder chose refusal: accepted as a link, which moves nothing, so the
+	 * source neither tears out nor believes it moved.
+	 *
+	 * Index 0 is a real session here, which is the point: the foreign
+	 * payload names a slot that exists, as it would in the real fault.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(a);
+	bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+	window.drop_session_on(b, a, bssh_layout_manager::EDGE_RIGHT);
+	bssh_session *t = window.registry()->create(named(QStringLiteral("t")));
+	window.drop_session_as_tab(t, -1);
+	QCoreApplication::processEvents();
+	QCOMPARE(shared->index_of(a), 0);
+
+	const QList<bssh_session *> shown = window.shown_sessions();
+	const int panes = window.panes()->pane_count();
+
+	const QByteArray other = QByteArray::number(QCoreApplication::applicationPid() + 1) + ":0";
+	for (const QByteArray &payload : { other, QByteArray("0") }) {
+		QMimeData mime;
+		mime.setData(bssh_session_mime_type(), payload);
+
+		const auto offer = [&mime](QWidget *to, const QPoint &at, const char *what) {
+			QDragEnterEvent enter(at, Qt::MoveAction | Qt::LinkAction, &mime, Qt::LeftButton, Qt::NoModifier);
+			QCoreApplication::sendEvent(to, &enter);
+			QDragMoveEvent move(at, Qt::MoveAction | Qt::LinkAction, &mime, Qt::LeftButton, Qt::NoModifier);
+			QCoreApplication::sendEvent(to, &move);
+			QDropEvent drop(QPointF(at), Qt::MoveAction | Qt::LinkAction, &mime, Qt::LeftButton,
+			                Qt::NoModifier);
+			QCoreApplication::sendEvent(to, &drop);
+			QVERIFY2(drop.isAccepted() && drop.dropAction() == Qt::LinkAction, what);
+			QCoreApplication::processEvents();
+			QCoreApplication::processEvents();
+		};
+
+		bssh_terminal_view *pane = window.panes()->view_for(b);
+		QVERIFY(pane);
+		offer(pane, QPoint(pane->width() / 10, pane->height() / 2), "a terminal answers with a link");
+		QCOMPARE(pane->drop_zone(), -1);
+
+		window.set_session_drag_active(true);
+		offer(window.tab_drop_target(), window.tab_drop_target()->rect().center(),
+		      "the tab row answers with a link");
+		window.set_session_drag_active(false);
+
+		QCOMPARE(window.shown_sessions(), shown);
+		QCOMPARE(window.panes()->pane_count(), panes);
+		QVERIFY(window.panes()->view_for(a));
+	}
+}
+
 void layout_test::reordering_the_panes_keeps_the_shape_they_are_in() {
 	bssh_session_registry registry;
 	bssh_layout_manager layout;
@@ -4016,7 +4189,7 @@ void layout_test::a_drop_on_a_pane_that_is_not_focused_places_the_pane() {
 	bssh_terminal_view *onto = panes->view_for(target);
 
 	QMimeData mime;
-	mime.setData(bssh_session_mime_type(), QByteArray::number(registry->index_of(moving)));
+	mime.setData(bssh_session_mime_type(), bssh_session_payload(registry->index_of(moving)));
 
 	/* The bottom edge of the target: the moving pane goes below it. */
 	/*
@@ -4607,7 +4780,8 @@ void layout_test::a_pane_dropped_back_changes_nothing() {
 	QVERIFY2(before.size() >= 2, "the split produced fewer than two panes");
 
 	/* Dropped onto the panes it is already one of. */
-	window.drop_session(panes->views().size() >= 2 ? second : first, true);
+	bssh_session *back = panes->views().size() >= 2 ? second : first;
+	window.drop_session_on(back, back, bssh_layout_manager::EDGE_MIDDLE);
 
 	QCOMPARE(panes->views().size(), before.size());
 }
@@ -7116,7 +7290,7 @@ void layout_test::a_drop_with_no_room_keeps_an_arrangement_it_cannot_join() {
 	const int tabs_before = bar->count();
 
 	bssh_session *third = window.registry()->create(named(QStringLiteral("third")));
-	window.drop_session(third, true);
+	window.drop_session_on(third, window.panes()->focused_session(), bssh_layout_manager::EDGE_RIGHT);
 	QCoreApplication::processEvents();
 
 	QVERIFY2(window.panes()->views().size() == 2,
@@ -7140,7 +7314,7 @@ void layout_test::a_drop_with_no_room_keeps_an_arrangement_it_cannot_join() {
 	QCOMPARE(narrow.panes()->views().size(), 1);
 
 	bssh_session *dropped = narrow.registry()->create(named(QStringLiteral("dropped")));
-	narrow.drop_session(dropped, true);
+	narrow.drop_session_on(dropped, alone, bssh_layout_manager::EDGE_RIGHT);
 	QCoreApplication::processEvents();
 
 	QCOMPARE(narrow.panes()->views().size(), 1);
@@ -7206,7 +7380,7 @@ void layout_test::a_tiled_session_leaves_the_tab_bar() {
 	QCOMPARE(window.panes()->views().size(), 1);
 
 	/* Tiled beside what is already there -- the drop-on-the-panes half. */
-	window.drop_session(tiled, true);
+	window.drop_session_on(tiled, window.panes()->focused_session(), bssh_layout_manager::EDGE_RIGHT);
 	QCoreApplication::processEvents();
 
 	QCOMPARE(window.panes()->views().size(), 2);
@@ -7252,7 +7426,7 @@ void layout_test::a_pane_dropped_on_the_tab_bar_becomes_a_tab() {
 	QVERIFY2(bar->count() == 0,
 	          "two panes and nothing else is a window with no tabs at all");
 
-	window.drop_session(first, false);
+	window.drop_session_as_tab(first, -1);
 	QCoreApplication::processEvents();
 
 	QCOMPARE(window.panes()->views().size(), 1);
@@ -7270,7 +7444,7 @@ void layout_test::a_pane_dropped_on_the_tab_bar_becomes_a_tab() {
 	bssh_session *last = window.panes()->focused_session();
 	QVERIFY(last);
 
-	window.drop_session(last, false);
+	window.drop_session_as_tab(last, -1);
 	QCoreApplication::processEvents();
 
 	QCOMPARE(window.panes()->views().size(), 1);
@@ -9073,7 +9247,7 @@ void layout_test::a_dropped_session_leaves_the_window_it_came_from() {
 	QCOMPARE(from_tabs->count(), 1);
 	QCOMPARE(onto_tabs->count(), 0);
 
-	onto.drop_session(moving, false);
+	onto.drop_session_as_tab(moving, -1);
 
 	QCOMPARE(onto.shown_sessions(), QList<bssh_session *>{ moving });
 	QVERIFY2(from.shown_sessions() == QList<bssh_session *>{ staying },
@@ -9113,7 +9287,7 @@ void layout_test::a_drop_on_the_panes_tiles_where_there_is_room() {
 	QCOMPARE(panes->pane_count(), 1);
 
 	bssh_session *dropped = window.registry()->create(named(QStringLiteral("dropped")));
-	window.drop_session(dropped, true);
+	window.drop_session_on(dropped, first, bssh_layout_manager::EDGE_RIGHT);
 	QCoreApplication::processEvents();
 
 	QVERIFY2(panes->pane_count() == 2,
@@ -9133,7 +9307,7 @@ void layout_test::a_drop_on_the_panes_tiles_where_there_is_room() {
 	narrow.adopt_session(only);
 
 	bssh_session *squeezed = narrow.registry()->create(named(QStringLiteral("squeezed")));
-	narrow.drop_session(squeezed, true);
+	narrow.drop_session_on(squeezed, only, bssh_layout_manager::EDGE_RIGHT);
 	QCoreApplication::processEvents();
 
 	bssh_pane_container *narrow_panes = narrow.findChild<bssh_pane_container *>();
@@ -9169,7 +9343,7 @@ void layout_test::a_drop_on_the_panes_tiles_where_there_is_room() {
 static QMimeData *session_payload(int registry_index) {
 	QMimeData *mime = new QMimeData;
 	mime->setData(bssh_main_window::session_mime_type(),
-	               QByteArray::number(registry_index));
+	               bssh_session_payload(registry_index));
 	return mime;
 }
 
@@ -9559,7 +9733,7 @@ void layout_test::a_tab_dropped_on_a_pane_reaches_the_window() {
 	 */
 	QMimeData *mime = new QMimeData;
 	mime->setData(bssh_session_mime_type(),
-	               QByteArray::number(onto.registry()->index_of(moving)));
+	               bssh_session_payload(onto.registry()->index_of(moving)));
 
 	/*
 	 * At the right edge, which puts it beside the pane (sec 8.3). The
@@ -9626,6 +9800,7 @@ void layout_test::a_reorder_along_the_strip_is_not_a_tear_out() {
 	 * thing its comment said it avoided. Forty pixels of slack, then the
 	 * reorder silently became a window operation.
 	 */
+	const int drags = bssh_main_window::session_drags_started();
 	const QPoint along(bar->width() + 60, bar->height() / 2);
 	QMouseEvent press(QEvent::MouseButtonPress, QPointF(10, bar->height() / 2),
 	                   bar->mapToGlobal(QPoint(10, bar->height() / 2)),
@@ -9641,6 +9816,13 @@ void layout_test::a_reorder_along_the_strip_is_not_a_tear_out() {
 	 * not detach anything. */
 	QCOMPARE(window.shown_sessions().size(), 3);
 	QCOMPARE(bar->count(), 2);
+
+	/*
+	 * And no drag began at all. The tear-out was this test's only witness,
+	 * and a drag whose release counts as a cancel -- the button still
+	 * down, as Escape leaves it -- tears nothing out, so it went quiet.
+	 */
+	QCOMPARE(bssh_main_window::session_drags_started(), drags);
 
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
@@ -10101,7 +10283,7 @@ void layout_test::hovering_a_tiled_pane_moves_focus_to_it() {
 		 * what a tab dropped onto the panes does (sec 8.4).
 		 */
 		bssh_session *right = window.registry()->create(named(QStringLiteral("right")));
-		window.drop_session(right, true);
+		window.drop_session_on(right, window.panes()->focused_session(), bssh_layout_manager::EDGE_RIGHT);
 		QCoreApplication::processEvents();
 
 		QCOMPARE(window.panes()->views().size(), 2);

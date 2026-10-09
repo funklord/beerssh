@@ -33,6 +33,7 @@ class bssh_preset_editor;
 class bssh_host_list;
 class bssh_layout_manager;
 class bssh_pane_container;
+class bssh_tab_drop;
 class bssh_input_selector;
 class bssh_find_bar;
 class sk_key_row;
@@ -598,19 +599,39 @@ public:
 	bssh_main_window *tear_out_tab(int index);
 
 	/*
-	 * Takes a session from another window and shows it here (sec 8.4).
-	 *
-	 * `beside` decides which: false makes it a tab, true puts it beside
-	 * whatever this window is already showing -- a tile. That is the
-	 * distinction a drop makes by where it lands, the tab bar or the
-	 * panes, and it is expressed here as a plain command so the model can
-	 * be driven and tested without synthesising a drag.
-	 *
-	 * Declines a tile where there is no room for another pane (sec 8.2's
-	 * size classes) and falls back to a tab, because the alternative is a
-	 * drop that appears to do nothing.
+	 * A session dropped on this window's tab row, at `slot` among its tabs
+	 * (sec 8.4): the only drop that makes a tab, at the place it was let
+	 * go. -1 for after the last. A pane of this window becomes a tab there
+	 * (the un-split), a tab of it moves there, and one from elsewhere
+	 * arrives there -- except into a window showing nothing, where a tab
+	 * would leave the screen empty, so it is shown. Public so the model
+	 * can be driven without a drag.
 	 */
-	void drop_session(bssh_session *session, bool beside);
+	void drop_session_as_tab(bssh_session *session, int slot);
+
+	/*
+	 * Where on the tab row a drop of `session` at `at` (in the tab-drop
+	 * overlay's coordinates) would go: the slot, and in `mark` where the
+	 * slot is drawn; -1 where the drop would do nothing. Same answer for
+	 * the drawing and the drop, as drop_zone_for is for the panes.
+	 */
+	int tab_drop_slot(bssh_session *session, const QPoint &at, int *mark) const;
+
+	/*
+	 * A session drag has started or ended somewhere in this process: the
+	 * tab row becomes a visible target for its length -- the bar marked
+	 * where a tab would go, or a strip where the bar would appear.
+	 */
+	void set_session_drag_active(bool active);
+
+	/* The tab row's drop overlay; public for tests. */
+	QWidget *tab_drop_target() const;
+
+	/*
+	 * How many session drags have started in this process -- a test seam:
+	 * a drag cancelled or refused leaves nothing else behind to count.
+	 */
+	static int session_drags_started();
 
 	/*
 	 * A session dropped on the pane showing `target`, at `edge` (a
@@ -822,8 +843,10 @@ private:
 		bssh_session *target = nullptr;
 		int edge = 0;
 		bool on_tab_row = false;
+		int slot = -1;
+		int mark = -1;
 	};
-	static drop_spot_t drop_spot_at(const QPoint &global);
+	static drop_spot_t drop_spot_at(const QPoint &global, bssh_session *session = nullptr);
 
 	/* The window of ours whose list holds `session`, or null. */
 	static bssh_main_window *window_showing(bssh_session *session);
@@ -925,6 +948,7 @@ private:
 	bool m_front_door_up;
 	QMenuBar *m_menu_bar;
 	QWidget *m_tab_row;
+	bssh_tab_drop *m_tab_drop = nullptr;
 	QList<QAction *> m_session_actions;
 	QAction *m_copy_action;
 	QAction *m_paste_action;
