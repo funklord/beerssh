@@ -111,3 +111,28 @@ file = "src/sshd/sshd_window.cpp"
 find = "\tm_platform->set_stop_hook([this] { m_server.stop(); });"
 replace = "\tm_platform->set_stop_hook([] {});"
 expect = "the_time_limit_stops_the_server_and_says_why"
+
+# A password set on the phone (sec 19, 2026-10-09): any password at all
+# logs in -- the comparison that makes it a password gone.
+[[sabotage]]
+name = "any password logs in"
+file = "src/sshd/sshd.cpp"
+find = "\treturn hash.size() == stored.hash.size()\n\t       && CRYPTO_memcmp(hash.constData(), stored.hash.constData(), size_t(hash.size())) == 0;"
+replace = "\treturn !hash.isEmpty();"
+expect = "a_password_logs_in_once_it_is_set"
+
+# Password login never offered: set on the phone, refused at the door.
+[[sabotage]]
+name = "a set password is never offered"
+file = "src/sshd/sshd.cpp"
+find = "\t                              | (passwords ? SSH_AUTH_METHOD_PASSWORD : 0));"
+replace = "\t                              | 0);"
+expect = "a_password_logs_in_once_it_is_set"
+
+# The password itself written to disk rather than its salted hash.
+[[sabotage]]
+name = "the password is stored as it was typed"
+file = "src/sshd/sshd.cpp"
+find = "\t        + ':' + salt.toHex() + ':' + hash.toHex() + '\\n';"
+replace = "\t        + ':' + salt.toHex() + ':' + hash.toHex() + ':' + password.toUtf8() + '\\n';"
+expect = "a_password_is_stored_as_a_salted_hash"
