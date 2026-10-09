@@ -72,6 +72,7 @@
 #include <QSplitterHandle>
 #include <QTabBar>
 #include <QMetaMethod>
+#include <QToolButton>
 #include "ui/long_press.h"
 #include "ui/main_window.h"
 #include "fake_ssh_session.h"
@@ -5542,7 +5543,10 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 		~restore_t() { bssh_app_settings().set_keyboard(keyboard); }
 	} restore { before };
 
-	const auto check = [](int width, int height, bool wide, bool turned) {
+	/* Where the selector belongs: its own row, the status line's end, or
+	 * the band above the split keyboard's right half. */
+	enum where_t { OWN_ROW, STATUS_END, OVER_HALVES };
+	const auto check = [](int width, int height, where_t where, bool turned) {
 		const forced_screen_t held(QSize(width, height));
 		bssh_main_window window;
 
@@ -5582,7 +5586,45 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 		}
 
 		const QRect at(selector->mapTo(&window, QPoint(0, 0)), selector->size());
-		if (wide) {
+		sk_keyboard *keyboard = window.findChild<sk_keyboard *>();
+		QVERIFY(keyboard);
+		if (where == OVER_HALVES) {
+			/*
+			 * Over the split halves, where the keys leave a band empty:
+			 * the selector over the right half, the status text over the
+			 * left. The point is the height: under the terminal, their
+			 * row cost 48dp of a landscape phone's 296, and the holder
+			 * asked for it back (2026-10-09).
+			 */
+			QTRY_VERIFY(keyboard->half_header(1)->isAncestorOf(selector));
+			QLabel *left = keyboard->half_header(0)->findChild<QLabel *>();
+			QVERIFY2(left, "the status text sits over the left half");
+			QVERIFY(!status);
+
+			bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+			QVERIFY(panes);
+			const int panes_bottom = panes->mapTo(&window, QPoint(0, panes->height())).y();
+			QVERIFY2(panes_bottom == window.height(),
+			          qPrintable(QStringLiteral("the terminal ends at %1 of %2")
+			                             .arg(panes_bottom).arg(window.height())));
+			QVERIFY2(at.bottom() < height,
+			          qPrintable(QStringLiteral("the selector ends at %1 on a screen %2 tall")
+			                             .arg(at.bottom()).arg(height)));
+
+			/*
+			 * And back under the terminal when the keyboard is put away,
+			 * or hiding it would take the status line and the selector
+			 * with it. Hiding resizes nothing, so this is what the
+			 * window's watch on the halves' own show and hide is for.
+			 */
+			QToolButton *hide = window.findChild<QToolButton *>(QStringLiteral("keyboard-hide"));
+			QVERIFY(hide);
+			hide->click();
+			QTRY_VERIFY(!keyboard->half(1)->isVisible());
+			QTRY_VERIFY(!keyboard->half_header(1)->isAncestorOf(selector));
+			QTRY_VERIFY(selector->isVisible());
+			QVERIFY(!keyboard->half_header(0)->findChild<QLabel *>());
+		} else if (where == STATUS_END) {
 			/*
 			 * On the status line's row and at its right end, as narrow as
 			 * its labels: reported from the Fold in landscape, where five
@@ -5618,9 +5660,13 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 	 * need more simply grows, where a phone's cannot and cuts them off.
 	 */
 	for (const bool turned : { false, true }) {
-		check(822, 290, true, turned);
-		check(860, 320, true, turned);
-		check(320, 860, false, turned);
+		check(822, 290, OVER_HALVES, turned);
+		check(860, 320, OVER_HALVES, turned);
+		check(320, 860, OWN_ROW, turned);
+
+		/* Wide but tall enough to keep the keyboard under the terminal:
+		 * no halves, so the status line's right end. */
+		check(1000, 700, STATUS_END, turned);
 	}
 }
 

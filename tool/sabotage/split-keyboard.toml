@@ -127,3 +127,29 @@ find = '''
 replace = '''
 		outer->setSizeConstraint(QLayout::SetDefaultConstraint);'''
 expect = "the_input_selector_joins_the_status_line_when_wide"
+
+# The status line and the selector stay in their row under the terminal
+# with the split keyboard showing: the band above the halves' keys stays
+# empty and the terminal loses the 48dp the holder asked to have back.
+[[sabotage]]
+name = "the status line stays under the terminal beside the split halves"
+file = "src/ui/main_window.cpp"
+find = '''
+	if (halves) {
+		QLayout *left'''
+replace = '''
+	if (false) {
+		QLayout *left'''
+expect = "the_input_selector_joins_the_status_line_when_wide"
+
+# Nothing watches the halves' own show and hide: putting the keyboard away
+# resizes nothing, so the status line and the selector leave with it.
+[[sabotage]]
+name = "hiding the split keyboard takes the status line with it"
+file = "src/ui/main_window.cpp"
+find = '''
+		QTimer::singleShot(0, this, [this] { place_input_selector(); });
+		return false;'''
+replace = '''
+		return false;'''
+expect = "the_input_selector_joins_the_status_line_when_wide"

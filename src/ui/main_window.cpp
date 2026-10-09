@@ -1184,6 +1184,13 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_body->addWidget(m_keyboard->half(1), 0);
 
 	/*
+	 * Whether the halves show decides where the status line goes (see
+	 * place_input_selector), and showing or hiding the keyboard changes
+	 * no size the window is told about -- so their own show and hide.
+	 */
+	m_keyboard->half(1)->installEventFilter(this);
+
+	/*
 	 * The keyboard's own two keys (sec 6.2). Hide is remembered rather
 	 * than merely applied: apply_device_settings recomputes visibility on
 	 * every session event and every settings change, so a keyboard that
@@ -1662,6 +1669,27 @@ bool bssh_main_window::apply_arrangement() {
  */
 void bssh_main_window::place_input_selector() {
 	if (!m_input_selector || !m_status_row || !m_selector_row) return;
+
+	/*
+	 * With the split keyboard showing, into the band above each half's
+	 * keys: the status text over the left half, the selector over the
+	 * right. The keys sit at the bottom where thumbs are, so that band was
+	 * empty, while the status line's row under the terminal cost it 48dp
+	 * of a landscape phone's 296 -- moving the buttons to that row's end
+	 * had saved only the status text's height, and the holder asked for
+	 * the rest back (2026-10-09).
+	 */
+	const bool halves = m_keyboard
+	                    && m_keyboard->style() == sk_catalog::STYLE_SPLIT
+	                    && m_keyboard->half(1)->isVisibleTo(this);
+	if (halves) {
+		QLayout *left = m_keyboard->half_header(0)->layout();
+		QLayout *right = m_keyboard->half_header(1)->layout();
+		if (left->indexOf(m_status_label) < 0) left->addWidget(m_status_label);
+		if (right->indexOf(m_input_selector) < 0) right->addWidget(m_input_selector);
+		return;
+	}
+	if (m_status_row->indexOf(m_status_label) < 0) m_status_row->insertWidget(0, m_status_label, 1);
 
 	const bool wide = width() > height()
 	                  || width() >= SK_FULL_KEYBOARD_MIN_DP;
@@ -3524,6 +3552,17 @@ void bssh_main_window::on_tab_close_requested(int index) {
  * -- so the button is read off the event here.
  */
 bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
+	/*
+	 * The split halves shown or hidden: the status line follows them.
+	 * Queued, because moving widgets into a half from inside its own show
+	 * event is reparenting under a layout that is being laid out.
+	 */
+	if (m_keyboard && watched == m_keyboard->half(1)
+	    && (event->type() == QEvent::Show || event->type() == QEvent::Hide)) {
+		QTimer::singleShot(0, this, [this] { place_input_selector(); });
+		return false;
+	}
+
 	/*
 	 * sec 8.3's drag, taken past the bar: a tab dragged well clear of the
 	 * tab bar becomes a window of its own (sec 8.4).

@@ -7973,6 +7973,22 @@ the window came back 830x395. On the phone front door the outer layout is
 keeps its minimum. The test turns the window as well as opening it wide,
 and a sabotage putting the constraint back fails the three turned cases.
 
+**Over the split halves rather than under the terminal — [BUILT
+2026-10-09, holder's choice].** Moving the selector to the status line's
+end saved only the status text's height: the row was still 48dp of a
+landscape phone's 296, and the holder asked for it back. The split
+keyboard's keys sit at the bottom of each half, so each half had an empty
+band above them; softkeys now offers that band as `half_header(side)`, and
+with the halves showing the status text goes over the left half and the
+selector over the right, beside the gear. The terminal runs the window's
+full height -- measured on the Fold, `[507,0][1609,839]` of 840. Putting
+the keyboard away resizes nothing, so the window watches the right half's
+own show and hide and puts both back under the terminal. Wide without the
+split (a screen tall enough to keep the keyboard under the terminal) keeps
+the status line's right end. Test: the same selector test, which now also
+asserts the terminal reaches the window's bottom and that hiding the
+keyboard brings the row back; two sabotages, one per half of that.
+
     scroll            body drag moves this terminal's scrollback
     select            body drag highlights
     click             the gesture is forwarded to the remote
