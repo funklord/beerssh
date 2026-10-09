@@ -212,6 +212,17 @@ public:
 	virtual void set_hide_from_screenshots(bool hide) = 0;
 
 	/*
+	 * Hide the system's status bar -- the clock and the icons above the
+	 * window -- where there is one, for good: a swipe down from the top
+	 * shows it for a few seconds and it goes again by itself. Asked for by
+	 * the holder 2026-10-09; height is what a phone's terminal is short of,
+	 * in landscape most of all. The navigation bar stays, since Back and
+	 * Home are used. Nothing on a desktop, whose window manager owns its
+	 * own bars.
+	 */
+	virtual void hide_status_bar() {}
+
+	/*
 	 * How many sessions are connected -- notification text on Android,
 	 * the tray tooltip on desktop. Taken from the session registry, never
 	 * from the view state: panes and tabs come and go, sessions are what

@@ -2,6 +2,7 @@
 #include "platform/range_source_android.h"
 
 #include <QGuiApplication>
+#include <QInputMethod>
 #include <QScreen>
 #include <QPalette>
 #include <QStyleHints>
@@ -313,6 +314,30 @@ public:
 
 	bool can_hide_from_screenshots() const override {
 		return true;
+	}
+
+	/*
+	 * The status bar hidden and the navigation bar shown, and again
+	 * whenever Qt may have undone it.
+	 *
+	 * Qt has its own idea here: on resume, on a window focus change and on
+	 * the system keyboard showing or hiding, its QtWindowInsetsController
+	 * treats a hidden status bar as "this window is full screen" and
+	 * re-applies full screen -- which hides the navigation bar too. Read out of Qt 6.12's
+	 * Qt6Android.jar (restoreFullScreenVisibility, isFullScreen). So this
+	 * runs once and then on each of those moments, after Qt's own: the
+	 * app turning active again covers the first two, the input method's
+	 * visibility the third.
+	 */
+	void hide_status_bar() override {
+		apply_status_bar();
+		if (m_status_bar_hooked || !qApp) return;
+		m_status_bar_hooked = true;
+		connect(this, &bssh_platform::application_active_changed, this, [this] {
+			if (is_application_active()) apply_status_bar();
+		});
+		connect(QGuiApplication::inputMethod(), &QInputMethod::visibleChanged,
+		         this, [this] { apply_status_bar(); });
 	}
 
 	void set_hide_from_screenshots(bool hide) override {
@@ -721,6 +746,50 @@ public:
 	}
 
 private:
+	static void apply_status_bar() {
+		QNativeInterface::QAndroidApplication::runOnAndroidMainThread([] {
+			const QJniObject activity = android_context();
+			if (!activity.isValid()) return;
+			const QJniObject window =
+			        activity.callObjectMethod("getWindow", "()Landroid/view/Window;");
+			if (!window.isValid()) return;
+
+			const jint sdk = QJniObject::getStaticField<jint>("android/os/Build$VERSION",
+			                                                   "SDK_INT");
+			if (sdk >= 30) {
+				/*
+				 * WindowInsetsController, API 30. Behavior 2 is
+				 * BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE: a swipe shows
+				 * the bar over the window for a moment, and it hides
+				 * again without the window being resized.
+				 */
+				const QJniObject controller = window.callObjectMethod(
+				        "getInsetsController", "()Landroid/view/WindowInsetsController;");
+				if (!controller.isValid()) return;
+				const jint status = QJniObject::callStaticMethod<jint>(
+				        "android/view/WindowInsets$Type", "statusBars", "()I");
+				const jint navigation = QJniObject::callStaticMethod<jint>(
+				        "android/view/WindowInsets$Type", "navigationBars", "()I");
+				controller.callMethod<void>("setSystemBarsBehavior", "(I)V", jint(2));
+				controller.callMethod<void>("show", "(I)V", navigation);
+				controller.callMethod<void>("hide", "(I)V", status);
+			} else {
+				/*
+				 * Before API 30 (minSdk is 26): SYSTEM_UI_FLAG_FULLSCREEN
+				 * 0x4, with IMMERSIVE_STICKY 0x1000 for the same
+				 * swipe-to-peek, as values for the reason FLAG_SECURE
+				 * above is one.
+				 */
+				const QJniObject decor =
+				        window.callObjectMethod("getDecorView", "()Landroid/view/View;");
+				if (decor.isValid()) {
+					decor.callMethod<void>("setSystemUiVisibility", "(I)V", jint(0x4 | 0x1000));
+				}
+			}
+		});
+	}
+
+	bool m_status_bar_hooked = false;
 	mutable bssh_appearance_t m_last_scheme = BSSH_APPEARANCE_UNKNOWN;
 	bool m_keep_alive;
 	QString m_status;

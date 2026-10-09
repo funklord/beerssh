@@ -6724,6 +6724,18 @@ window with no name is a blank row in the task switcher.
   answer here would be guessing at intent.
   Offered only where there is a pointer, on the same answer that gates
   reordering: a drag nothing can start needs no drop target.
+  **A complete analysis of drag and drop, in every mode — [QUEUED
+  2026-10-09, holder's instruction: after the keyboard and landscape work
+  in hand].** Every drag the app starts (tab, pane, window, and whatever
+  else turns up when they are enumerated rather than recalled), in every
+  arrangement and input mode, against every place it can be let go: the
+  drop targets have to make sense together and form a complete picture.
+  Where the GUI can draw the result before the release -- the tile a drop
+  would make, the slot a tab would take -- it should. And there must be a
+  clear target that does nothing, so a drag can be cancelled: the holder
+  suggests most of the middle of the terminal the drag started from. Today
+  a release that nobody accepts tears out a window, so "nowhere" is not
+  yet a cancel; that is one of the cases the analysis has to settle.
   **A torn-out window showed the FRONT DOOR, and had since the feature
   landed.** `adopt_session()` is how both a torn-out tab and a dropped one
   arrive, and only `open_profile()` switched the stack to the terminal page —
@@ -7988,6 +8000,34 @@ split (a screen tall enough to keep the keyboard under the terminal) keeps
 the status line's right end. Test: the same selector test, which now also
 asserts the terminal reaches the window's bottom and that hiding the
 keyboard brings the row back; two sabotages, one per half of that.
+
+**The status bar hidden, the navigation bar kept — [BUILT 2026-10-09,
+holder's choice of "always"].** `bssh_platform::hide_status_bar()`, called
+once the window is shown; nothing on a desktop. On Android the status bar
+is hidden through `WindowInsetsController` (API 30+) with transient-by-swipe
+behaviour -- a swipe down shows it over the window and it goes again by
+itself, seen on the Fold -- and `SYSTEM_UI_FLAG_FULLSCREEN` with
+`IMMERSIVE_STICKY` below 30 (minSdk 26, not tried on a device). Two things
+Qt does had to be met, both read out of Qt 6.12's `Qt6Android.jar`:
+- **Qt re-applies "full screen" on resume, on window focus and on the
+  system keyboard showing or hiding** (`restoreFullScreenVisibility`), and
+  treats a hidden status bar as full screen -- which hides the navigation
+  bar too. So the hide is re-applied on each of those moments, the
+  navigation bar shown again with it.
+- **A normal Qt window kept the bar's height as a blank band.** The window
+  is created with `Qt::ExpandedClientAreaHint` (Qt 6.9+, Android only; the
+  desktop's Qt is 6.8), so it runs edge to edge and its contents follow
+  the safe area, which tracks the bars' visibility.
+**What upright does not get back is the camera.** On the Fold's cover
+screen the safe area's top stays 81px with the status bar hidden: it is
+the display cutout (Qt's safe area is `systemBars | displayCutout`), the
+camera hole at the top centre. Lying sideways the cutout is on a side
+edge, so landscape gets the full height; upright keeps a band the height
+of the camera. Drawing the terminal under the hole is possible and would
+put a cell or two of the top row behind it -- not done, and the holder's
+to decide. No unit test reaches any of this: the desktop build compiles
+none of it, so the evidence is the device -- screenshots and uiautomator
+bounds, upright and turned, before and after a swipe.
 
     scroll            body drag moves this terminal's scrollback
     select            body drag highlights

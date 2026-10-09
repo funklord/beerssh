@@ -349,7 +349,23 @@ int main(int argc, char *argv[]) {
 	}
 	if (line.has_position) window.move(line.x, line.y);
 
+#if defined(Q_OS_ANDROID) && QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+	/*
+	 * Edge to edge, with the content kept inside the safe area -- which is
+	 * what lets the hidden status bar's height go to the terminal. A
+	 * normal window measured the bars without asking whether they were
+	 * showing: hidden, the status bar left a blank band of its own height
+	 * at the top, the window's frame covering the screen and Qt's content
+	 * starting below the band anyway (seen on the Fold, 2026-10-09). The
+	 * safe area does follow visibility. Before show(): a window flag set
+	 * afterwards re-creates the window.
+	 */
+	window.setWindowFlag(Qt::ExpandedClientAreaHint);
+#endif
 	window.show();
+
+	/* After show(): the bar belongs to the window the app now has. */
+	if (bssh_platform *platform = bssh_platform::instance()) platform->hide_status_bar();
 
 	if (line.self_test) {
 		QTimer::singleShot(0, &app, &QCoreApplication::quit);
