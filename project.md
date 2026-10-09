@@ -6813,10 +6813,22 @@ window with no name is a blank row in the task switcher.
     else there -- the nearest honest thing would be opening the same host
     afresh in that process, which is a new session rather than a move.
 
-  *Open for the holder*: whether the rest of a window (status line,
-  keyboard, front door) should be a tile-beside target -- today it is,
-  drawn as nothing -- or join the do-nothing target; and whether the
-  middle should read differently for swap and replace.
+  *Decided by the holder, 2026-10-09:*
+  - **The rest of a window does nothing.** Status line, keyboard, the
+    front door's page: they join the cancel target. Only a terminal, the
+    tab row and outside every window act.
+  - **The middle is a swap wherever the arrival comes from.** "Replace"
+    -- the target turning into a tab -- was the wrong word for the wrong
+    behaviour: across windows the two terminals trade places, the target
+    going to the window and the slot the arrival left.
+  - **A tab is made only by aiming at where the tab bar is, or would be.**
+    Nothing else creates one. With a bar, the drop position picks the slot
+    among the tabs, and the slot is drawn before release; without one, the
+    strip where it would appear takes the drop.
+  - **Another process: refused**, the no-drop cursor and nothing moved.
+  So a full window's side zones fold into the swap, which the holder's
+  model already says, and a drop that cannot be a split, a swap or a tab
+  is a cancel rather than a tab.
 
   *Guarded today* by 28 layout and terminal-view tests -- counted by
   name, a grep for drop, drag, tear, swap, reorder and grip less the
