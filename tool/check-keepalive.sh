@@ -73,7 +73,7 @@ docker run --rm --name "$CONTAINER" --cap-add=NET_ADMIN -v "$STAGE":/in:ro "$IMA
 set -e
 apt-get update -qq >/dev/null 2>&1
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-	qt6-base-dev libgl1-mesa-dev libssh-dev libsixel-dev libssl-dev libsecret-1-dev \
+	qt6-base-dev libgl1-mesa-dev libssh-dev libsixel-dev libssl-dev libsecret-1-dev libxcb1-dev \
 	build-essential pkg-config python3 git openssh-server iptables >/dev/null 2>&1
 
 mkdir -p /build && cd /build

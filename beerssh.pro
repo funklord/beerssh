@@ -326,4 +326,9 @@ android {
 
     CONFIG += link_pkgconfig
     PKGCONFIG += libssh libsixel libcrypto libsecret-1
+
+    # The X server, asked which window is under the pointer during the
+    # app's own session drag (project.md sec 8.4): the one way to tell a
+    # drop on another BeerSSH from a drop on the desktop.
+    PKGCONFIG += xcb
 }

@@ -80,7 +80,7 @@ jobs:
           # nothing about the server.
           sudo apt-get install -y qt6-base-dev libgl1-mesa-dev libssh-dev \
                                   libsixel-dev libssl-dev libsecret-1-dev \
-                                  zlib1g-dev openssh-client
+                                  zlib1g-dev libxcb1-dev openssh-client
       - name: Build
         run: make
       - name: Headless smoke test

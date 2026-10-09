@@ -6880,15 +6880,24 @@ window with no name is a blank row in the task switcher.
   still down the new cancel suppressed it, so a sabotage starting the drag
   too early went unseen. The test now counts drags started
   (`session_drags_started()`), which is the cause rather than its effect.
-  **Open, the holder's: X11 across processes.** On X11 the drag is the
-  app's own ghost, deliberately invisible to other programs (TDE's
-  desktop accepted any payload). So another BeerSSH's window is "outside
-  every window of ours" and a release over it tears out a window in the
-  source process -- safe, never a wrong session, but not the refusal
-  chosen. Refusing needs the X server asked which window is under the
-  pointer, which means linking xcb: a new build dependency (libxcb1-dev in
-  `debian/control` and the CI package list, `-lxcb`). Not added without
-  the holder's say.
+  **Built, step 4: X11 across processes refused** (the holder said yes to
+  xcb, 2026-10-09). On X11 the drag is the app's own ghost, deliberately
+  invisible to other programs (TDE's desktop accepted any payload), so no
+  other process can answer it: the X server is asked instead. While the
+  ghost is over no window of ours, `another_beerssh_under_pointer()` walks
+  `xcb_query_pointer` from the root to the deepest window and takes the
+  first with a WM_CLASS: the same class as ours with another `_NET_WM_PID`
+  is another BeerSSH. Over one, the ghost wears a no-drop sign and the
+  forbidden cursor, and the release does nothing. `xcb` is a build
+  dependency now (`PKGCONFIG`, `libxcb1-dev` in `debian/control`, the CI
+  workflow and check-keepalive's list) -- qt6-base-dev does not pull it in,
+  so the declaration is load-bearing. **The suite cannot reach it** (it runs
+  offscreen); `make check-x11-drag` does: two processes on Xvfb under a
+  private bus, A's pane Alt-dragged onto B -- A keeps one window -- and the
+  same drag onto nothing tearing out, the control. With the refusal removed
+  the first drag tore out (A had two). The first attempt at that control
+  read the same "refused" result as the fix, which was a stale binary:
+  `make build/beerssh` is not a rule and built nothing; `make beerssh` is.
 
   *Guarded today* by 28 layout and terminal-view tests -- counted by
   name, a grep for drop, drag, tear, swap, reorder and grip less the
@@ -15080,6 +15089,20 @@ something:
   is the sessions' own practice, not an instruction from the holder.
 - **A shared device driven through screenshots cannot answer a question
   about specific grid cells** -- measure those in the emulator or a test.
+
+### Half a minute to the first window with no reachable bus -- [OPEN, found 2026-10-09]
+
+Found building `check-x11-drag`: on a display with no session bus the
+first window took **27 seconds** to appear, and 27 again under
+`dbus-run-session` with no keyring installed, where the bus logged the
+activation of `org.freedesktop.secrets` on BeerSSH's behalf. So something
+on the way to the first window waits out a D-Bus timeout (libdbus's
+default is 25s) -- the secret store is the named suspect, not established.
+On the holder's desktop there is a bus and a keyring, so it does not show
+there; it does for anybody without one, and over forwarded X. The
+measurement: start `build/beerssh` on Xvfb with a fresh HOME and poll
+`xwininfo -root -children` for a "BeerSSH" title. Not fixed: which call
+waits, and whether it belongs off the startup path, wants its own look.
 
 ### Session-bus leaks: not this tree's code -- and a count that proved nothing
 

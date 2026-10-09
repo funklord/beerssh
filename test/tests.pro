@@ -27,7 +27,7 @@ isEmpty(BSSH_VERSION): BSSH_VERSION = 0.1.0
 DEFINES += BSSH_VERSION_STRING=\\\"$$BSSH_VERSION\\\"
 
 CONFIG += link_pkgconfig
-PKGCONFIG += libsixel libssh libcrypto libsecret-1
+PKGCONFIG += libsixel libssh libcrypto libsecret-1 xcb
 CONFIG += c++17 console
 CONFIG -= app_bundle
 

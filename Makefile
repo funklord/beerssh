@@ -846,6 +846,12 @@ check-ssh: $(TEST_BIN)
 check-handoff:
 	./tool/handoff/run.sh
 
+# sec 8.4's refusal of a drop on another BeerSSH process, on X11, with a
+# control that the same drag onto nothing tears out. Needs Xvfb, xdotool
+# and dbus-run-session; drives a real pointer on a private X server.
+check-x11-drag: $(TARGET)
+	./tool/check-x11-drag.sh
+
 # sec 5.3's dead-peer detection against a link whose packets vanish.
 # Needs docker and NET_ADMIN -- a closed socket is not a dropped link, and
 # only iptables can make packets disappear rather than be refused. Slow by

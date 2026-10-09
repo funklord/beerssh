@@ -55,6 +55,14 @@
 #include <QPixmap>
 #include <QTabBar>
 
+#if !defined(Q_OS_ANDROID) && QT_CONFIG(xcb)
+#include <xcb/xcb.h>
+#define BSSH_ASK_X11 1
+#endif
+
+/* Defined beside drop_spot_at(), which it serves. */
+static bool another_beerssh_under_pointer(const QWidget *ours);
+
 #include "model/profile_store.h"
 #include "model/session.h"
 #include "model/conn_manager.h"
@@ -167,17 +175,30 @@ public:
 	std::function<void(const QPoint &)> moved;
 
 	/*
+	 * Over a window that will not take the drop -- another BeerSSH
+	 * (sec 8.4): the forbidden cursor, and a no-drop sign on the ghost.
+	 */
+	void set_refused(bool refused) {
+		if (refused == m_refused) return;
+		m_refused = refused;
+		if (m_running) grabMouse(refused ? Qt::ForbiddenCursor : Qt::ClosedHandCursor);
+		update();
+	}
+
+	/*
 	 * Runs until the drag ends and says where: the release point, or
 	 * nothing when it was cancelled.
 	 */
 	bool run(QPoint *released) {
 		follow(QCursor::pos());
 		show();
-		grabMouse(Qt::ClosedHandCursor);
+		grabMouse(m_refused ? Qt::ForbiddenCursor : Qt::ClosedHandCursor);
 		grabKeyboard();
 		m_watch.start();
+		m_running = true;
 
 		m_loop.exec();
+		m_running = false;
 
 		m_watch.stop();
 		releaseKeyboard();
@@ -192,6 +213,18 @@ protected:
 	void paintEvent(QPaintEvent *) override {
 		QPainter painter(this);
 		painter.drawPixmap(0, 0, m_picture);
+		if (m_refused) {
+			painter.setRenderHint(QPainter::Antialiasing, true);
+			QPen pen(QColor(200, 40, 40));
+			pen.setWidthF(3.0);
+			painter.setPen(pen);
+			const qreal side = qMin(width(), height()) - 8;
+			const QRectF sign(4, 4, side, side);
+			painter.drawEllipse(sign);
+			const qreal inset = side * 0.1464;
+			painter.drawLine(sign.topLeft() + QPointF(inset, inset),
+			                 sign.bottomRight() - QPointF(inset, inset));
+		}
 	}
 
 	void mouseMoveEvent(QMouseEvent *event) override {
@@ -231,6 +264,8 @@ private:
 	QTimer m_watch;
 	QPoint m_at;
 	bool m_dropped = false;
+	bool m_refused = false;
+	bool m_running = false;
 };
 
 } /* namespace */
@@ -3629,7 +3664,7 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 	set_session_drag_active_everywhere(true);
 
 	session_drag_ghost ghost(session_drag_pixmap(session));
-	ghost.moved = [&lit, &lit_row, carried](const QPoint &at) {
+	ghost.moved = [this, &ghost, &lit, &lit_row, carried](const QPoint &at) {
 		const drop_spot_t spot = drop_spot_at(at, carried);
 		bssh_terminal_view *view = spot.window && spot.target
 		        ? spot.window->panes()->view_for(spot.target) : nullptr;
@@ -3637,6 +3672,8 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 		if (lit && lit != view) lit->show_drop_zone(-1);
 		if (view) view->show_drop_zone(spot.window->drop_zone_for(carried, spot.target, spot.edge));
 		lit = view;
+
+		ghost.set_refused(!spot.window && another_beerssh_under_pointer(this));
 
 		bssh_main_window *row = spot.on_tab_row ? spot.window : nullptr;
 		if (lit_row && lit_row != row && lit_row->m_tab_drop) lit_row->m_tab_drop->hover(-1, -1);
@@ -3652,6 +3689,92 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 	if (source) source->set_being_dragged(false);
 
 	if (dropped && carried) finish_session_drag(carried, released);
+}
+
+#ifdef BSSH_ASK_X11
+namespace {
+
+/* A window's WM_CLASS -- "instance\0class\0" -- or empty. */
+QByteArray x11_wm_class(xcb_connection_t *connection, xcb_window_t window) {
+	xcb_get_property_reply_t *reply = xcb_get_property_reply(connection,
+	        xcb_get_property(connection, 0, window, XCB_ATOM_WM_CLASS, XCB_ATOM_STRING, 0, 64),
+	        nullptr);
+	QByteArray value;
+	if (reply) {
+		value = QByteArray(static_cast<const char *>(xcb_get_property_value(reply)),
+		                   xcb_get_property_value_length(reply));
+		free(reply);
+	}
+	return value;
+}
+
+/* A window's _NET_WM_PID, or 0. */
+qint64 x11_window_pid(xcb_connection_t *connection, xcb_window_t window) {
+	static const char name[] = "_NET_WM_PID";
+	xcb_intern_atom_reply_t *atom = xcb_intern_atom_reply(connection,
+	        xcb_intern_atom(connection, 1, sizeof(name) - 1, name), nullptr);
+	if (!atom) return 0;
+	const xcb_atom_t pid_atom = atom->atom;
+	free(atom);
+	if (pid_atom == XCB_ATOM_NONE) return 0;
+
+	xcb_get_property_reply_t *reply = xcb_get_property_reply(connection,
+	        xcb_get_property(connection, 0, window, pid_atom, XCB_ATOM_CARDINAL, 0, 1), nullptr);
+	qint64 pid = 0;
+	if (reply) {
+		if (xcb_get_property_value_length(reply) >= 4)
+			pid = *static_cast<const quint32 *>(xcb_get_property_value(reply));
+		free(reply);
+	}
+	return pid;
+}
+
+} /* namespace */
+#endif
+
+/*
+ * Whether the window under the pointer is another BeerSSH process's
+ * (sec 8.4). On X11 the session drag is the app's own ghost, invisible to
+ * other programs, so nothing else can say so: the X server is asked which
+ * window is under the pointer, down the tree from the root to the deepest,
+ * and the first one carrying a WM_CLASS decides -- ours if it is the same
+ * class as `ours` and belongs to another pid. False wherever the question
+ * cannot be asked, which is every platform but X11.
+ */
+static bool another_beerssh_under_pointer(const QWidget *ours) {
+#ifdef BSSH_ASK_X11
+	if (!ours || QGuiApplication::platformName() != QStringLiteral("xcb")) return false;
+	auto *x11 = qApp->nativeInterface<QNativeInterface::QX11Application>();
+	xcb_connection_t *connection = x11 ? x11->connection() : nullptr;
+	if (!connection) return false;
+
+	const QByteArray own_class = x11_wm_class(connection, xcb_window_t(ours->window()->winId()));
+	if (own_class.isEmpty()) return false;
+
+	const xcb_setup_t *setup = xcb_get_setup(connection);
+	xcb_window_t at = xcb_setup_roots_iterator(setup).data->root;
+	QList<xcb_window_t> chain;
+	for (int depth = 0; depth < 16; ++depth) {
+		xcb_query_pointer_reply_t *reply = xcb_query_pointer_reply(connection,
+		        xcb_query_pointer(connection, at), nullptr);
+		const xcb_window_t child = reply ? reply->child : XCB_WINDOW_NONE;
+		free(reply);
+		if (child == XCB_WINDOW_NONE) break;
+		chain.prepend(child);
+		at = child;
+	}
+
+	for (const xcb_window_t window : chain) {
+		const QByteArray cls = x11_wm_class(connection, window);
+		if (cls.isEmpty()) continue;
+		if (cls != own_class) return false;
+		const qint64 pid = x11_window_pid(connection, window);
+		return pid > 0 && pid != QCoreApplication::applicationPid();
+	}
+#else
+	Q_UNUSED(ours);
+#endif
+	return false;
 }
 
 bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &global,
@@ -3708,6 +3831,12 @@ void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &
 	 * than wherever a new window lands by default.
 	 */
 	if (!spot.window) {
+		/*
+		 * Over another BeerSSH: refused, as under QDrag -- the session
+		 * stays where it was rather than tearing out on top of a window
+		 * that will not take it (the holder's choice, 2026-10-09).
+		 */
+		if (another_beerssh_under_pointer(this)) return;
 		if (bssh_main_window *window = tear_out(session)) {
 			window->move(global - QPoint(40, 20));
 		}
