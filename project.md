@@ -6724,18 +6724,110 @@ window with no name is a blank row in the task switcher.
   answer here would be guessing at intent.
   Offered only where there is a pointer, on the same answer that gates
   reordering: a drag nothing can start needs no drop target.
-  **A complete analysis of drag and drop, in every mode — [QUEUED
-  2026-10-09, holder's instruction: after the keyboard and landscape work
-  in hand].** Every drag the app starts (tab, pane, window, and whatever
-  else turns up when they are enumerated rather than recalled), in every
-  arrangement and input mode, against every place it can be let go: the
-  drop targets have to make sense together and form a complete picture.
-  Where the GUI can draw the result before the release -- the tile a drop
-  would make, the slot a tab would take -- it should. And there must be a
-  clear target that does nothing, so a drag can be cancelled: the holder
-  suggests most of the middle of the terminal the drag started from. Today
-  a release that nobody accepts tears out a window, so "nowhere" is not
-  yet a cancel; that is one of the cases the analysis has to settle.
+  **Drag and drop, the complete picture — [ANALYSED 2026-10-09, holder's
+  instruction; the model at the end awaits the holder's decisions].**
+  Measured from the code, not recalled: every place a drag starts, every
+  place it can be let go, what happens there today and what the screen
+  showed beforehand.
+
+  *Where a drag starts.* Two engines carry the same payload
+  (`application/x-bssh-session`, a registry index): on X11 the app's own
+  ghost (`run_own_session_drag`, resolved by `drop_spot_at`), everywhere
+  else Qt's `QDrag` (Wayland, Windows, macOS, the off-screen tests).
+  - the pane grip, drawn only under a hovering pointer;
+  - Alt+drag anywhere on a terminal's body (pointer);
+  - a tab pulled more than 40dp clear of the tab ROW; along the row it is
+    QTabBar's reorder instead (pointer only, `setMovable(pointer)`);
+  - touch starts no session drag at all: Android hands a QDrag to the
+    system's drag-to-split-screen, measured on the Fold. Touch has the
+    input selector's Move mode -- a vertical body drag moves the pane ONE
+    place up or down, with nothing drawn and no cancel once it has moved
+    -- and the menu's Move Left/Right.
+  The keyboard's resize bars and the splitter handles are drags too, but
+  resize rather than move, and are outside this.
+
+  *Where it can be let go, today.*
+
+      release on                         does                       drawn first
+      middle of another pane, same win   swap                       inset frame
+      edge of another pane, same win     split that side            that half
+        ...in the portrait column        left/right act as          that half (wrong)
+                                         before/after (tree unused)
+      edge of a pane, arriving, room     split that side            that half
+      edge, arriving, NO room            a tab, or replaces a       that half (wrong)
+        (pane cap 1/2/4 by width)        single pane
+      middle, arriving                   replaces; target -> tab    inset frame
+      its OWN pane, anywhere             nothing                    zones lit on it (wrong)
+      the tab row (shown)                a tab; own pane un-splits  nothing
+      the tab row when HIDDEN            unreachable: lands as a    --
+        (one session, no bar)            tile or a replacement
+      rest of a window (status line,     tile appended at the end   nothing
+        keyboard, front door page)       if room, else a tab;
+                                         own pane: nothing
+      outside every window               a new window, same         the drag pixmap
+                                         process (sec 8.4)          only
+      another BeerSSH PROCESS's window   X11: treated as outside;   --
+                                         QDrag: see defect 1
+      another application                refused -> a new window    --
+      Escape mid-drag                    X11: cancelled;            --
+                                         QDrag: a new window
+
+  *Defects found, independent of any decision:*
+  1. **A drop on another BeerSSH process moves the wrong session.** The
+     payload is a bare index, and no single-instance rule exists: under
+     QDrag the receiving process resolves it in ITS registry, moves
+     whichever of its own sessions holds that index, and accepts -- so the
+     source keeps its session and nobody sees an error. A live session
+     cannot cross processes today (the migration probe above), so the
+     right answer is to stamp the process into the payload and refuse a
+     foreign one with the no-drop cursor.
+  2. **Escape tears out a window under QDrag.** `exec()` returns
+     IgnoreAction for a cancel exactly as for a release over nothing, and
+     both are read as "nobody wanted it". The X11 ghost tells them apart.
+  3. **The indicator promises what the drop will not do** in three rows
+     above: a side zone into a full window, left/right in the column, and
+     any zone on the pane being carried.
+
+  *The model, as the holder described it, against the code:*
+  - **Each pane: four sides and a middle.** A side splits the target that
+    way; the middle swaps (same window) or replaces (an arrival, the
+    target becoming a tab). Built, apart from the two below.
+  - **A side that is not allowed becomes middle**, drawn and acting as
+    middle: an arrival into a window at its pane cap, and left/right in
+    the column. Not built -- `bssh_drop_edge_at` divides by geometry
+    alone, so it needs the window's answer to "would this side fit".
+  - **A clear do-nothing target.** The pane being carried already does
+    nothing on release; it should SAY so -- no zones, a cancel mark --
+    rather than light zones it will not honour. The holder suggests the
+    middle of the source terminal; the code already gives the whole of it.
+    Escape cancels in both engines once defect 2 is fixed.
+  - **Into a tab when there is no tab bar.** Nothing reaches it today.
+    Proposed: while a session drag is up, every window shows its tab row
+    as a drop strip -- the hidden bar's place, labelled -- and the row is
+    lit when the pointer is on it, shown or not.
+  - **Outside the window**: a new window in the same process, as sec 8.4
+    decided (one process-wide registry). A new PROCESS would need the
+    session to migrate, probed above and not built.
+  - **Into another window**: built, same process. **Into another
+    process**: refused, per defect 1, unless the holder wants something
+    else there -- the nearest honest thing would be opening the same host
+    afresh in that process, which is a new session rather than a move.
+
+  *Open for the holder*: whether the rest of a window (status line,
+  keyboard, front door) should be a tile-beside target -- today it is,
+  drawn as nothing -- or join the do-nothing target; and whether the
+  middle should read differently for swap and replace.
+
+  *Guarded today* by 28 layout and terminal-view tests -- counted by
+  name, a grep for drop, drag, tear, swap, reorder and grip less the
+  unrelated -- such as `a_pane_dropped_in_the_middle_swaps`,
+  `a_drop_with_no_room_keeps_an_arrangement_it_cannot_join`,
+  `a_drag_released_outside_every_window_tears_out` and
+  `the_tab_bar_row_takes_a_drop_beyond_the_tabs`. **No test reads the
+  indicator at all**: nothing in test/ calls `drop_zone()` or
+  `show_drop_zone()`. So what is drawn and what then happens are never
+  compared, which is the relationship all three of defect 3's rows break,
+  and the first test this work wants.
   **A torn-out window showed the FRONT DOOR, and had since the feature
   landed.** `adopt_session()` is how both a torn-out tab and a dropped one
   arrive, and only `open_profile()` switched the stack to the terminal page —
