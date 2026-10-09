@@ -113,3 +113,17 @@ file = "softkeys/src/keyboard.cpp"
 find = "\tconst int skip = group.digit_row_first ? 1 : 0;"
 replace = "\tconst int skip = 0;"
 expect = "the_input_selector_joins_the_status_line_when_wide"
+
+# A phone arrives in landscape by turning, and the upright layout's minimum
+# height was still on the window when the new height came: clamped to 395dp
+# where the screen had 296, the status line and the input selector went off
+# the bottom of the Fold. Put the minimum back and the turned window is
+# taller than it was asked to be.
+[[sabotage]]
+name = "a turned phone keeps the upright layout's minimum height"
+file = "src/ui/main_window.cpp"
+find = '''
+		outer->setSizeConstraint(QLayout::SetNoConstraint);'''
+replace = '''
+		outer->setSizeConstraint(QLayout::SetDefaultConstraint);'''
+expect = "the_input_selector_joins_the_status_line_when_wide"

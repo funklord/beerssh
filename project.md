@@ -2119,7 +2119,8 @@ up, a strip of modifiers has nothing to modify.
   *The split leaves the digit row out*
   (`sk_group_t::digit_row_first`): with it, five rows of 48dp
   keys did not fit the Fold's landscape height and the status line and
-  mode buttons went off the bottom of the screen. Asked for in portrait,
+  mode buttons went off the bottom of the screen (one of two causes; the
+  other is turning, sec 8.7). Asked for in portrait,
   so landscape keeps four rows rather than keys below the touch floor.
   **The instrument had to be fixed to see that.** Off-screen, a window
   whose contents need more height simply grows; a phone's cannot. So
@@ -7955,6 +7956,22 @@ a row the terminal, already sharing its width with the split keyboard,
 could not spare; the holder chose the status line over a corner on its
 own row, because only the status line gives the height back. Heights stay
 at 48dp either way. `the_input_selector_joins_the_status_line_when_wide`.
+
+**And off the bottom again after TURNING — [FIXED 2026-10-09].** Seen on
+the Fold's cover screen once softkeys was in: opened upright and turned,
+the status line and the selector were gone, uiautomator reporting both at
+`[0,0][0,0]` with the split's key rows ending on the screen's last pixel.
+Opened already sideways, it was fine -- and so was the test, which only
+ever opened that way. The cause is ordering: a top-level layout pins the
+window's minimum to its contents, the upright layout (full keyboard,
+selector row) needs 395dp, and the new 296dp height arrives BEFORE
+`resizeEvent` swaps in the split keyboard, which needs 243. Clamped to
+395 and never given back -- the system does not grow a phone's window to
+fit. Reproduced off-screen by opening at 296x830 and resizing to 830x296:
+the window came back 830x395. On the phone front door the outer layout is
+`SetNoConstraint` now, since the system sizes that window; the desktop
+keeps its minimum. The test turns the window as well as opening it wide,
+and a sabotage putting the constraint back fails the three turned cases.
 
     scroll            body drag moves this terminal's scrollback
     select            body drag highlights

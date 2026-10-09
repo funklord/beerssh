@@ -297,6 +297,25 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	    == FRONT_DOOR_SESSION_DIALOG) {
 		build_menu_bar();
 		if (m_menu_bar) outer->addWidget(m_menu_bar, 0);
+	} else {
+		/*
+		 * No minimum size for the window, where the system sizes it.
+		 *
+		 * A top-level layout pins its window's minimum to what the
+		 * contents need, and on a phone that minimum is stale exactly
+		 * when it matters: turning to landscape delivers the new height
+		 * BEFORE resizeEvent swaps the bottom keyboard for the split
+		 * one, so the height was clamped to the upright layout's 395dp
+		 * and never given back once the split needed only 243. The
+		 * system does not grow a window to fit, so the bottom 99dp --
+		 * the status line and the input selector -- were drawn off the
+		 * Fold's cover screen. Measured with uiautomator: both at
+		 * [0,0][0,0], the key rows ending on the screen's last pixel.
+		 *
+		 * The desktop keeps its minimum: there the window manager does
+		 * honour it, and a window shrunk past its contents is worse.
+		 */
+		outer->setSizeConstraint(QLayout::SetNoConstraint);
 	}
 
 	outer->addWidget(m_pages, 1);

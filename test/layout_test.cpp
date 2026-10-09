@@ -5542,10 +5542,18 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 		~restore_t() { bssh_app_settings().set_keyboard(keyboard); }
 	} restore { before };
 
-	const auto check = [](int width, int height, bool wide) {
+	const auto check = [](int width, int height, bool wide, bool turned) {
 		const forced_screen_t held(QSize(width, height));
 		bssh_main_window window;
-		window.resize(width, height);
+
+		/*
+		 * Turned: opened the other way up and then rotated, which is how
+		 * a phone arrives in landscape. Opening already wide passed while
+		 * the Fold cut the status line off: the upright layout's minimum
+		 * height was still on the window when the new height arrived, and
+		 * clamped it before the keyboard had become the split one.
+		 */
+		window.resize(turned ? QSize(height, width) : QSize(width, height));
 		window.show();
 		QVERIFY(QTest::qWaitForWindowExposed(&window));
 
@@ -5554,6 +5562,11 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 		const registry_left_as_found_t tidy(registry);
 		window.adopt_session(registry->create(named(QStringLiteral("one"))));
 		QCoreApplication::processEvents();
+		if (turned) {
+			window.resize(width, height);
+			QCoreApplication::processEvents();
+		}
+		QCOMPARE(window.size(), QSize(width, height));
 
 		bssh_input_selector *selector = window.findChild<bssh_input_selector *>();
 		QVERIFY(selector);
@@ -5604,9 +5617,11 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 	 * rather than the window's own: off-screen, a window whose contents
 	 * need more simply grows, where a phone's cannot and cuts them off.
 	 */
-	check(822, 290, true);
-	check(860, 320, true);
-	check(320, 860, false);
+	for (const bool turned : { false, true }) {
+		check(822, 290, true, turned);
+		check(860, 320, true, turned);
+		check(320, 860, false, turned);
+	}
 }
 
 void layout_test::a_narrow_screen_falls_back_to_the_compact_keyboard() {
