@@ -5,6 +5,7 @@
 #include <QFormLayout>
 #include <QGuiApplication>
 #include <QLabel>
+#include <QHBoxLayout>
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -81,8 +82,9 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	access_layout->setContentsMargins(0, 0, 0, 0);
 	access_layout->addWidget(wrapped_label(
 	        tr("beersshd serves your phone's shared storage -- Downloads, DCIM, Documents "
-	           "and the rest -- to the keys you list below. Android calls that \"All files "
-	           "access\", and it is turned on in Settings.")));
+	           "and the rest -- to the keys you list below, and to a password if you set "
+	           "one. Android calls that \"All files access\", and it is turned on in "
+	           "Settings.")));
 	auto *grant = new QPushButton(tr("Open Settings"));
 	grant->setObjectName(QStringLiteral("sshd-grant"));
 	connect(grant, &QPushButton::clicked, this, [this] { m_platform->request_storage_access(); });
@@ -117,6 +119,39 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	m_key_count = wrapped_label();
 	m_key_count->setObjectName(QStringLiteral("sshd-key-count"));
 	layout->addWidget(m_key_count);
+
+	/*
+	 * A password, for a computer whose key is not on the phone yet -- the
+	 * holder, 2026-10-09: a key has to be carried here first, and a
+	 * password does not. Off until set. Only its salted hash is written
+	 * (bssh_sshd::set_password), and like the keys it is read at each
+	 * login, so setting or removing it applies to the next one.
+	 */
+	layout->addWidget(wrapped_label(
+	        tr("Password: anyone on this Wi-Fi who has it can read and change your files. "
+	           "Leave it unset to allow keys only.")));
+	m_password = new QLineEdit;
+	m_password->setObjectName(QStringLiteral("sshd-password"));
+	m_password->setEchoMode(QLineEdit::Password);
+	m_password->setPlaceholderText(tr("New password"));
+	layout->addWidget(m_password);
+
+	auto *password_buttons = new QHBoxLayout;
+	auto *set_button = new QPushButton(tr("Set password"));
+	set_button->setObjectName(QStringLiteral("sshd-set-password"));
+	connect(set_button, &QPushButton::clicked, this, [this] {
+		if (!m_password->text().isEmpty()) set_password(m_password->text());
+	});
+	auto *remove_button = new QPushButton(tr("Remove password"));
+	remove_button->setObjectName(QStringLiteral("sshd-remove-password"));
+	connect(remove_button, &QPushButton::clicked, this, [this] { set_password(QString()); });
+	password_buttons->addWidget(set_button);
+	password_buttons->addWidget(remove_button);
+	layout->addLayout(password_buttons);
+
+	m_password_state = wrapped_label();
+	m_password_state->setObjectName(QStringLiteral("sshd-password-state"));
+	layout->addWidget(m_password_state);
 
 	m_log = new QPlainTextEdit;
 	m_log->setObjectName(QStringLiteral("sshd-log"));
@@ -172,7 +207,29 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	m_address_timer->start();
 
 	reload_keys();
+	refresh_password_state();
 	refresh();
+}
+
+QString bssh_sshd_window::password_path() const {
+	return m_platform->data_directory() + QStringLiteral("/password");
+}
+
+void bssh_sshd_window::set_password(const QString &password) {
+	QString error;
+	if (!bssh_sshd::set_password(password_path(), password, &error)) {
+		log(tr("Password not changed: %1").arg(error));
+		return;
+	}
+	m_password->clear();
+	log(password.isEmpty() ? tr("Password removed: keys only.") : tr("Password set."));
+	refresh_password_state();
+}
+
+void bssh_sshd_window::refresh_password_state() {
+	m_password_state->setText(bssh_sshd::has_password(password_path())
+	                                  ? tr("Password login is on.")
+	                                  : tr("Password login is off."));
 }
 
 void bssh_sshd_window::reload_keys() {
@@ -243,6 +300,7 @@ void bssh_sshd_window::start() {
 	config.root = QFile::encodeName(m_platform->storage_root());
 	config.host_key_path = data + QStringLiteral("/host_ed25519_key");
 	config.authorized_keys_path = authorized_keys_path();
+	config.password_path = password_path();
 	config.bind_address = address.toString().toLatin1();
 	config.port = m_port->value();
 

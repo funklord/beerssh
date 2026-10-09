@@ -15342,7 +15342,24 @@ is reachable by neither route, nor by anything short of root.
 
 SFTP and nothing else, inside one directory, to the keys in one file.
 
-- **Keys only.** `ssh_set_auth_methods(PUBLICKEY)`; no password, no
+- **Keys, and a password once one is set — [password added 2026-10-09,
+  the holder: "I need the key or a password prompt, we should also have a
+  password"].** A key has to be carried to the phone before it can be used,
+  and a computer meeting the phone for the first time has no way to do that;
+  a password typed on both ends does. Set and removed from the app (the
+  desktop server: `--set-password`, one line from standard input, echo
+  off). Only PBKDF2-SHA256 over a 16-byte random salt is stored, owner-only
+  from creation, and like the keys it is re-read at every login. Offered to
+  the client only while one is set, so an unset password is keys-only
+  exactly as before. Three tries a connection with a second's pause after a
+  wrong one, under the four-connection cap, each failure in the log.
+  `a_password_is_stored_as_a_salted_hash`,
+  `a_password_logs_in_once_it_is_set` -- the latter through OpenSSH's own
+  client with SSH_ASKPASS, and **not with `sftp -b`**, whose batch mode
+  turns on ssh's BatchMode and refuses every password prompt: the first
+  version's refusals passed because no password was ever sent. The attempt
+  limit itself has no test. No keyboard-interactive.
+- **Formerly keys only.** `ssh_set_auth_methods(PUBLICKEY)`; no password, no
   keyboard-interactive. The authorized-keys file is OpenSSH's format and is
   **re-read at every login**, so an edit applies to the next connection.
   **A line with options is skipped, not honoured without them**: `from=`,

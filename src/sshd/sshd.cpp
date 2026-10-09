@@ -17,9 +17,14 @@
 #include <libssh/server.h>
 #include <libssh/sftp.h>
 
+#include <openssl/crypto.h>
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+
 #include <arpa/inet.h>
 #include <cerrno>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <fcntl.h>
 #include <netinet/in.h>
@@ -41,6 +46,22 @@ const auto HANGUP_GRACE = std::chrono::seconds(5);
 
 /* Keys offered before giving up; an agent with many keys offers each in turn. */
 const int AUTH_ATTEMPT_LIMIT = 20;
+
+/*
+ * Passwords, unlike keys, can be guessed: three tries a connection, a
+ * second's pause after each wrong one, and the four-connection cap above
+ * all of it -- about twelve guesses a second at the very most, and every
+ * one of them in the log.
+ */
+const int PASSWORD_ATTEMPT_LIMIT = 3;
+const auto PASSWORD_FAILURE_PAUSE = std::chrono::seconds(1);
+
+/*
+ * PBKDF2-SHA256's iterations: what a guess costs whoever holds the file. Paid
+ * once per login attempt here, which the limits above already keep rare.
+ */
+const int PASSWORD_ITERATIONS = 200000;
+const char PASSWORD_SCHEME[] = "pbkdf2-sha256";
 
 QString peer_of(ssh_session session) {
 	struct sockaddr_storage address;
@@ -158,6 +179,7 @@ struct bssh_sshd::connection_t {
 	QString user;
 	bool authenticated = false;
 	int attempts = 0;
+	int password_attempts = 0;
 	ssh_channel channel = nullptr;
 	bool sftp_requested = false;
 	struct ssh_channel_callbacks_struct channel_callbacks;
@@ -172,12 +194,107 @@ namespace {
 
 int on_auth_pubkey(ssh_session, const char *user, struct ssh_key_struct *key,
                    char signature_state, void *userdata);
+int on_auth_password(ssh_session, const char *user, const char *password, void *userdata);
 ssh_channel on_channel_open(ssh_session session, void *userdata);
 int on_subsystem(ssh_session, ssh_channel channel, const char *subsystem, void *userdata);
 
 } /* namespace */
 
 bssh_sshd::bssh_sshd(QObject *parent) : QObject(parent) {
+}
+
+namespace {
+
+/* PBKDF2-SHA256 of `password` over `salt`, 32 bytes; empty on failure. */
+QByteArray derive(const QByteArray &password, const QByteArray &salt, int iterations) {
+	QByteArray out(32, 0);
+	if (PKCS5_PBKDF2_HMAC(password.constData(), int(password.size()),
+	                      reinterpret_cast<const unsigned char *>(salt.constData()), int(salt.size()),
+	                      iterations, EVP_sha256(), int(out.size()),
+	                      reinterpret_cast<unsigned char *>(out.data())) != 1)
+		return QByteArray();
+	return out;
+}
+
+struct stored_password_t {
+	int iterations = 0;
+	QByteArray salt;
+	QByteArray hash;
+};
+
+/* "pbkdf2-sha256:<iterations>:<salt hex>:<hash hex>", or nothing usable. */
+bool read_password(const QString &path, stored_password_t *out) {
+	if (path.isEmpty()) return false;
+	QFile file(path);
+	if (!file.open(QIODevice::ReadOnly)) return false;
+	const QList<QByteArray> parts = file.readAll().trimmed().split(':');
+	if (parts.size() != 4 || parts.at(0) != PASSWORD_SCHEME) return false;
+	bool ok = false;
+	out->iterations = parts.at(1).toInt(&ok);
+	out->salt = QByteArray::fromHex(parts.at(2));
+	out->hash = QByteArray::fromHex(parts.at(3));
+	return ok && out->iterations > 0 && out->salt.size() >= 16 && out->hash.size() == 32;
+}
+
+} /* namespace */
+
+bool bssh_sshd::set_password(const QString &path, const QString &password, QString *error) {
+	if (path.isEmpty()) {
+		if (error) *error = QStringLiteral("nowhere to keep a password");
+		return false;
+	}
+	if (password.isEmpty()) {
+		if (QFile::exists(path) && !QFile::remove(path)) {
+			if (error) *error = QStringLiteral("could not remove %1").arg(path);
+			return false;
+		}
+		return true;
+	}
+
+	QByteArray salt(16, 0);
+	if (RAND_bytes(reinterpret_cast<unsigned char *>(salt.data()), int(salt.size())) != 1) {
+		if (error) *error = QStringLiteral("no random bytes for the salt");
+		return false;
+	}
+	const QByteArray hash = derive(password.toUtf8(), salt, PASSWORD_ITERATIONS);
+	if (hash.isEmpty()) {
+		if (error) *error = QStringLiteral("the password could not be hashed");
+		return false;
+	}
+	const QByteArray line = QByteArray(PASSWORD_SCHEME) + ':' + QByteArray::number(PASSWORD_ITERATIONS)
+	        + ':' + salt.toHex() + ':' + hash.toHex() + '\n';
+
+	/*
+	 * Created owner-only rather than chmod'ed afterwards, as the host key
+	 * is, so the hash is never readable by anybody else in between.
+	 */
+	const QString temporary = path + QStringLiteral(".new");
+	const mode_t was = umask(077);
+	QFile file(temporary);
+	const bool written = file.open(QIODevice::WriteOnly | QIODevice::Truncate)
+	                     && file.write(line) == line.size() && file.flush();
+	file.close();
+	umask(was);
+	if (!written || std::rename(QFile::encodeName(temporary).constData(),
+	                            QFile::encodeName(path).constData()) != 0) {
+		QFile::remove(temporary);
+		if (error) *error = QStringLiteral("could not write %1").arg(path);
+		return false;
+	}
+	return true;
+}
+
+bool bssh_sshd::has_password(const QString &path) {
+	stored_password_t stored;
+	return read_password(path, &stored);
+}
+
+bool bssh_sshd::password_matches(const QString &path, const QByteArray &password) {
+	stored_password_t stored;
+	if (!read_password(path, &stored) || password.isEmpty()) return false;
+	const QByteArray hash = derive(password, stored.salt, stored.iterations);
+	return hash.size() == stored.hash.size()
+	       && CRYPTO_memcmp(hash.constData(), stored.hash.constData(), size_t(hash.size())) == 0;
 }
 
 int bssh_sshd::usable_keys(const QByteArray &text) {
@@ -337,12 +454,19 @@ void bssh_sshd::accept_loop() {
 
 void bssh_sshd::serve(connection_t *connection) {
 	ssh_session session = connection->session;
-	ssh_set_auth_methods(session, SSH_AUTH_METHOD_PUBLICKEY);
+	/*
+	 * A password is offered only while one is set: with none, the client is
+	 * not even asked, which is what keys-only meant before there was one.
+	 */
+	const bool passwords = has_password(m_config.password_path);
+	ssh_set_auth_methods(session, SSH_AUTH_METHOD_PUBLICKEY
+	                              | (passwords ? SSH_AUTH_METHOD_PASSWORD : 0));
 
 	struct ssh_server_callbacks_struct server_callbacks;
 	std::memset(&server_callbacks, 0, sizeof server_callbacks);
 	server_callbacks.userdata = connection;
 	server_callbacks.auth_pubkey_function = on_auth_pubkey;
+	if (passwords) server_callbacks.auth_password_function = on_auth_password;
 	server_callbacks.channel_open_request_session_function = on_channel_open;
 	ssh_callbacks_init(&server_callbacks);
 	ssh_set_server_callbacks(session, &server_callbacks);
@@ -366,6 +490,8 @@ void bssh_sshd::serve(connection_t *connection) {
 			if (ssh_event_dopoll(loop, 100) == SSH_ERROR) break;
 			if (std::chrono::steady_clock::now() > deadline) break;
 			if (connection->attempts > AUTH_ATTEMPT_LIMIT) break;
+			if (connection->password_attempts >= PASSWORD_ATTEMPT_LIMIT
+			    && !connection->authenticated) break;
 			if (ssh_get_status(session) & (SSH_CLOSED | SSH_CLOSED_ERROR)) break;
 		}
 
@@ -467,6 +593,27 @@ int on_auth_pubkey(ssh_session, const char *user, struct ssh_key_struct *key,
 		connection->user = QString::fromUtf8(user);
 	}
 	return SSH_AUTH_SUCCESS;
+}
+
+int on_auth_password(ssh_session, const char *user, const char *password, void *userdata) {
+	auto *connection = static_cast<bssh_sshd::connection_t *>(userdata);
+	if (connection->password_attempts >= PASSWORD_ATTEMPT_LIMIT) return SSH_AUTH_DENIED;
+	++connection->password_attempts;
+
+	/*
+	 * Re-read now, like the keys: a password changed or removed on the
+	 * phone applies to the next attempt, not the next start.
+	 */
+	if (password && bssh_sshd::password_matches(connection->owner->config().password_path,
+	                                             QByteArray(password))) {
+		connection->authenticated = true;
+		connection->user = QString::fromUtf8(user);
+		return SSH_AUTH_SUCCESS;
+	}
+
+	emit connection->owner->logged(QStringLiteral("%1: wrong password").arg(connection->peer));
+	std::this_thread::sleep_for(PASSWORD_FAILURE_PAUSE);
+	return SSH_AUTH_DENIED;
 }
 
 ssh_channel on_channel_open(ssh_session session, void *userdata) {

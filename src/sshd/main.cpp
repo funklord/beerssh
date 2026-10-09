@@ -8,12 +8,14 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSocketNotifier>
 #include <QStandardPaths>
 #include <QTextStream>
 
 #include <csignal>
 #include <fcntl.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include "sshd/sshd.h"
@@ -30,15 +32,21 @@ void on_signal(int) {
 void usage(QTextStream &out) {
 	out << "usage: beersshd --root DIR [--port N] [--bind ADDRESS]\n"
 	       "                [--host-key FILE] [--authorized-keys FILE]\n"
+	       "                [--password-file FILE]\n"
+	       "       beersshd --set-password [--password-file FILE]\n"
 	       "\n"
 	       "Serves DIR over SFTP, and nothing else, to the keys in the\n"
-	       "authorized keys file. Modern scp works; scp -O does not.\n"
+	       "authorized keys file and to the password, if one is set.\n"
+	       "Modern scp works; scp -O does not.\n"
 	       "\n"
 	       "  --root DIR             the folder served as /; required\n"
 	       "  --port N               default 8022; 0 picks a free one\n"
 	       "  --bind ADDRESS         default 0.0.0.0\n"
 	       "  --host-key FILE        created if missing\n"
 	       "  --authorized-keys FILE OpenSSH format, re-read at each login\n"
+	       "  --password-file FILE   the password's hash, re-read at each login\n"
+	       "  --set-password         read a password from standard input and\n"
+	       "                         store its hash; an empty line removes it\n"
 	       "  --version\n";
 }
 
@@ -58,6 +66,8 @@ int main(int argc, char *argv[]) {
 	bssh_sshd_config_t config;
 	config.host_key_path = config_dir + QStringLiteral("/host_ed25519_key");
 	config.authorized_keys_path = config_dir + QStringLiteral("/authorized_keys");
+	config.password_path = config_dir + QStringLiteral("/password");
+	bool set_password = false;
 
 	const QStringList args = app.arguments().mid(1);
 	for (int i = 0; i < args.size(); ++i) {
@@ -86,10 +96,43 @@ int main(int argc, char *argv[]) {
 			config.host_key_path = args.at(++i);
 		} else if (arg == QStringLiteral("--authorized-keys") && has_value) {
 			config.authorized_keys_path = args.at(++i);
+		} else if (arg == QStringLiteral("--password-file") && has_value) {
+			config.password_path = args.at(++i);
+		} else if (arg == QStringLiteral("--set-password")) {
+			set_password = true;
 		} else {
 			usage(err);
 			return 2;
 		}
+	}
+
+	/*
+	 * One line from standard input, hashed and stored; nothing echoed, and
+	 * nothing served. A terminal is the person typing, so they are asked.
+	 */
+	if (set_password) {
+		termios was {};
+		const bool typed = ::isatty(STDIN_FILENO) && ::tcgetattr(STDIN_FILENO, &was) == 0;
+		if (typed) {
+			err << "password (empty to remove): " << Qt::flush;
+			termios quiet = was;
+			quiet.c_lflag &= ~tcflag_t(ECHO);
+			::tcsetattr(STDIN_FILENO, TCSAFLUSH, &quiet);
+		}
+		QTextStream in(stdin);
+		const QString password = in.readLine();
+		if (typed) {
+			::tcsetattr(STDIN_FILENO, TCSAFLUSH, &was);
+			err << "\n" << Qt::flush;
+		}
+		QDir().mkpath(QFileInfo(config.password_path).absolutePath());
+		QString error;
+		if (!bssh_sshd::set_password(config.password_path, password, &error)) {
+			err << "beersshd: " << error << "\n";
+			return 1;
+		}
+		out << (password.isEmpty() ? "password removed\n" : "password set\n");
+		return 0;
 	}
 
 	/*
@@ -101,9 +144,10 @@ int main(int argc, char *argv[]) {
 		return 2;
 	}
 
-	if (!QFile::exists(config.authorized_keys_path)) {
+	if (!QFile::exists(config.authorized_keys_path)
+	    && !bssh_sshd::has_password(config.password_path)) {
 		err << "beersshd: " << config.authorized_keys_path
-		    << " does not exist, so no key can log in.\n";
+		    << " does not exist and no password is set, so nobody can log in.\n";
 	}
 
 	bssh_sshd server;

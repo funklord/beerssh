@@ -34,6 +34,7 @@ public:
 
 	/* Where the authorized keys are kept: the platform's data directory. */
 	QString authorized_keys_path() const;
+	QString password_path() const;
 
 public slots:
 	void start();
@@ -55,6 +56,8 @@ public slots:
 
 private:
 	void save_keys();
+	void set_password(const QString &password);
+	void refresh_password_state();
 	void log(const QString &line);
 	void update_status();
 	QString status_line() const;
@@ -70,6 +73,8 @@ private:
 	QSpinBox *m_port = nullptr;
 	QPlainTextEdit *m_keys = nullptr;
 	QLabel *m_key_count = nullptr;
+	QLineEdit *m_password = nullptr;
+	QLabel *m_password_state = nullptr;
 	QPlainTextEdit *m_log = nullptr;
 	QTimer *m_address_timer = nullptr;
 };

@@ -112,6 +112,7 @@ bool sshd_test::start_server() {
 	config.root = QFile::encodeName(m_root);
 	config.host_key_path = m_config + QStringLiteral("/host_key");
 	config.authorized_keys_path = m_config + QStringLiteral("/authorized_keys");
+	config.password_path = m_config + QStringLiteral("/password");
 	config.bind_address = "127.0.0.1";
 	config.port = 0;
 
@@ -140,9 +141,17 @@ QStringList sshd_test::client_options(const QString &key) const {
  * that stops answering fails a test instead of holding the suite.
  */
 int sshd_test::client(const QString &program, const QStringList &args, const QByteArray &input,
-                      QByteArray *output) {
+                      QByteArray *output, const QStringList &environment) {
 	QProcess process;
 	process.setProcessChannelMode(QProcess::MergedChannels);
+	if (!environment.isEmpty()) {
+		QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+		for (const QString &pair : environment) {
+			const int eq = pair.indexOf(QLatin1Char('='));
+			env.insert(pair.left(eq), pair.mid(eq + 1));
+		}
+		process.setProcessEnvironment(env);
+	}
 	process.start(program, args);
 	if (!process.waitForStarted(5000)) return -1;
 	if (!input.isEmpty()) process.write(input);
@@ -241,6 +250,89 @@ void sshd_test::only_a_listed_key_logs_in() {
 	keys.write(read_file(other + QStringLiteral(".pub")));
 	keys.close();
 	QCOMPARE(client(QStringLiteral("sftp"), args, "ls\n", &output), 0);
+}
+
+void sshd_test::a_password_is_stored_as_a_salted_hash() {
+	const QString path = m_config + QStringLiteral("/password");
+	QVERIFY(!bssh_sshd::has_password(path));
+
+	QString error;
+	QVERIFY2(bssh_sshd::set_password(path, QStringLiteral("correct horse"), &error), qPrintable(error));
+	QVERIFY(bssh_sshd::has_password(path));
+
+	/* The hash and never the password, readable by the owner alone. */
+	const QByteArray stored = read_file(path);
+	QVERIFY(!stored.contains("correct horse"));
+	QVERIFY2(stored.startsWith("pbkdf2-sha256:"), stored.constData());
+	QCOMPARE(QFile::permissions(path) & (QFileDevice::ReadGroup | QFileDevice::ReadOther
+	                                      | QFileDevice::WriteGroup | QFileDevice::WriteOther),
+	         QFileDevice::Permissions());
+
+	QVERIFY(bssh_sshd::password_matches(path, "correct horse"));
+	QVERIFY(!bssh_sshd::password_matches(path, "correct hors"));
+	QVERIFY(!bssh_sshd::password_matches(path, ""));
+
+	/* Salted: the same password twice is two different lines. */
+	QVERIFY(bssh_sshd::set_password(path, QStringLiteral("correct horse"), &error));
+	QVERIFY(read_file(path) != stored);
+	QVERIFY(bssh_sshd::password_matches(path, "correct horse"));
+
+	/* And an empty one takes it away: keys only again. */
+	QVERIFY(bssh_sshd::set_password(path, QString(), &error));
+	QVERIFY(!bssh_sshd::has_password(path));
+	QVERIFY(!QFile::exists(path));
+}
+
+void sshd_test::a_password_logs_in_once_it_is_set() {
+	if (!start_server()) QSKIP("the OpenSSH client is not installed");
+
+	/*
+	 * OpenSSH asks for a password through SSH_ASKPASS when told to, which is
+	 * how a test can type one. No key is offered at all.
+	 */
+	const QString askpass = m_config + QStringLiteral("/askpass");
+	const QString typed = m_config + QStringLiteral("/typed");
+	QVERIFY(write_file(askpass, "#!/bin/sh\ncat \"$(dirname \"$0\")/typed\"\n"));
+	QVERIFY(QFile::setPermissions(askpass, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+	                                       | QFileDevice::ExeOwner));
+	const QStringList environment = {QStringLiteral("SSH_ASKPASS=") + askpass,
+	                                  QStringLiteral("SSH_ASKPASS_REQUIRE=force"),
+	                                  QStringLiteral("DISPLAY=:0")};
+	const QStringList args = {
+		QStringLiteral("-o"), QStringLiteral("PubkeyAuthentication=no"),
+		QStringLiteral("-o"), QStringLiteral("PreferredAuthentications=password"),
+		QStringLiteral("-o"), QStringLiteral("NumberOfPasswordPrompts=1"),
+		QStringLiteral("-o"), QStringLiteral("IdentityAgent=none"),
+		QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=no"),
+		QStringLiteral("-o"), QStringLiteral("UserKnownHostsFile=/dev/null"),
+		QStringLiteral("-o"), QStringLiteral("LogLevel=ERROR"),
+		QStringLiteral("-F"), QStringLiteral("/dev/null"),
+		QStringLiteral("-P"), QString::number(m_server->port()), QStringLiteral("anyone@127.0.0.1")};
+	/*
+	 * Commands from standard input rather than `-b -`: sftp's batch mode
+	 * turns on ssh's BatchMode, which refuses every password prompt --
+	 * askpass included -- so with -b no password was ever sent, and the
+	 * two refusals below passed without testing anything.
+	 */
+
+	/* None set: the server does not even offer passwords. */
+	QVERIFY(write_file(typed, "correct horse\n"));
+	QByteArray output;
+	QVERIFY(client(QStringLiteral("sftp"), args, "ls\n", &output, environment) != 0);
+
+	/* Set, and read at the next login without a restart. */
+	QString error;
+	QVERIFY(bssh_sshd::set_password(m_config + QStringLiteral("/password"),
+	                                QStringLiteral("correct horse"), &error));
+
+	QVERIFY(write_file(typed, "wrong horse\n"));
+	QVERIFY(client(QStringLiteral("sftp"), args, "ls\n", &output, environment) != 0);
+	QVERIFY2(output.contains("Permission denied"), output.constData());
+
+	QVERIFY(write_file(typed, "correct horse\n"));
+	const int rc = client(QStringLiteral("sftp"), args, "ls\n", &output, environment);
+	QVERIFY2(rc == 0, output.constData());
+	QVERIFY2(output.contains("hello.txt"), output.constData());
 }
 
 void sshd_test::a_key_with_options_is_not_honoured_without_them() {

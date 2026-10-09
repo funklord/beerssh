@@ -89,5 +89,7 @@ android {
     SOURCES += src/sshd/main.cpp
 
     CONFIG += link_pkgconfig
-    PKGCONFIG += libssh
+    # libcrypto for the password's PBKDF2 (project.md sec 19); Android links
+    # it with libssh above.
+    PKGCONFIG += libssh libcrypto
 }

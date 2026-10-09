@@ -21,6 +21,12 @@ struct bssh_sshd_config_t {
 	/* OpenSSH's format; re-read at every login, so an edit applies to the next one. */
 	QString authorized_keys_path;
 
+	/*
+	 * A password's salted hash, written by set_password(); re-read at every
+	 * login like the keys. No file, or an empty path, is no password login.
+	 */
+	QString password_path;
+
 	QByteArray bind_address = "0.0.0.0";
 
 	/* 0 asks the system for any free port; port() says which. */
@@ -34,7 +40,9 @@ struct bssh_sshd_config_t {
  * beersshd's server: SFTP and nothing else, inside one directory, to keys
  * listed in one file (project.md sec 19).
  *
- * No shell, no exec, no forwarding, no password. Modern scp runs over
+ * No shell, no exec, no forwarding. Keys, and a password where one is set
+ * (the holder, 2026-10-09: a key has to be carried to the phone first, and
+ * a password does not). Modern scp runs over
  * SFTP and so works; `scp -O`, the legacy protocol, is an exec request
  * and is refused with the rest.
  *
@@ -75,6 +83,20 @@ public:
 	 * login skips, is not counted either.
 	 */
 	static int usable_keys(const QByteArray &text);
+
+	/*
+	 * Sets the login password, or with an empty one removes it. What is
+	 * written is PBKDF2-SHA256 over a random salt -- never the password --
+	 * to a file only the owner can read. False, with `error`, when that
+	 * could not be done.
+	 */
+	static bool set_password(const QString &path, const QString &password, QString *error);
+
+	/* Whether `path` holds a password a login could match. */
+	static bool has_password(const QString &path);
+
+	/* Whether `password` is the one `path` holds; constant time in the hash. */
+	static bool password_matches(const QString &path, const QByteArray &password);
 
 	/* Opaque; named here only so libssh's C callbacks can reach it. */
 	struct connection_t;
