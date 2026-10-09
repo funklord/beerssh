@@ -15081,21 +15081,27 @@ something:
 - **A shared device driven through screenshots cannot answer a question
   about specific grid cells** -- measure those in the emulator or a test.
 
-### The test binary does not leak session buses -- measured 2026-10-09
+### Session-bus leaks: not this tree's code -- and a count that proved nothing
 
 Raised from claude-guidelines' session (inbox, 2026-10-09): 43 orphaned
 `dbus-daemon --session` processes of the autolaunch shape, timed against
 this tree's check-ci and sabotage runs, with the host-side offscreen test
-binary as the suspect -- then corrected by its sender the same hour, the
-orphans' environments naming the agent CLI. Settled here by measurement:
-with `DBUS_SESSION_BUS_ADDRESS` unset, the orphaned buses owned by this
-account were listed before and after one full run of
-`build-tests/beerssh_test` -- 20 before, 20 after, no new pid to
-attribute. Nothing in this tree to fix. The method, for the next time
-the question comes up: list `ps -eo pid=,ppid=,user=,comm=` for
-`dbus-daemon` with ppid 1, run the binary under `env -u
-DBUS_SESSION_BUS_ADDRESS`, list again, and read `_=` in any new pid's
-`/proc/<pid>/environ` for what launched it.
+binary as the suspect -- corrected by its sender the same hour. What
+settles it is the orphans' own environments, read by the holder: `_=`
+the agent CLI, no `CLAUDE_CODE_SESSION_ID`, `PWD` this tree or hydra --
+the two CLIs started without `DBUS_SESSION_BUS_ADDRESS`. The fix is the
+holder's (an address in the CLI's environment); nothing here to change.
+
+**A measurement taken here was vacuous, and is kept as the lesson.**
+Orphaned buses were counted before and after a full test run with the
+address unset -- 20 and 20 -- and first recorded as clearing the binary.
+It could not have come out otherwise: from a tool shell
+`env -u DBUS_SESSION_BUS_ADDRESS dbus-send --session ...` fails with
+"Unable to autolaunch a dbus-daemon without a $DISPLAY for X11" and
+starts nothing, so no program run from there can autolaunch whatever it
+does. Pointed out by the other session; the control was then run here
+and agreed. A test-binary experiment worth anything needs a `DISPLAY` in
+its environment and that control shown to start a bus first.
 
 ---
 
