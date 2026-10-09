@@ -1068,3 +1068,50 @@ void platform_test::the_applied_lxqt_palette_is_read_from_lxqt_conf_itself() {
 	 * this file regardless. */
 	QCOMPARE(bssh_appearance_from_scheme_files({conf}), BSSH_APPEARANCE_DARK);
 }
+
+void platform_test::brightness_and_contrast_do_not_outlive_the_run() {
+	/*
+	 * The holder, 2026-10-09: "I want the software to always start with full
+	 * brightness/contrast". The dim had come back every time from a value
+	 * stored in app.ini -- a 10, read as the floor of 40 and dim on every
+	 * start. So: a stored dim is not honoured, the old keys are removed, and
+	 * a value set during a run is never written.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	const QString ini = dir.path() + QStringLiteral("/app.ini");
+	{
+		QSettings file(ini, QSettings::IniFormat);
+		file.setValue(QStringLiteral("appearance/text_brightness"), 10);
+		file.setValue(QStringLiteral("appearance/raise_contrast"), false);
+		file.sync();
+	}
+
+	bssh_app_settings settings(dir.path());
+	QCOMPARE(settings.text_brightness(), 100);
+	QCOMPARE(settings.raise_contrast(), true);
+
+	settings.forget_session_appearance();
+	{
+		QSettings file(ini, QSettings::IniFormat);
+		QVERIFY2(!file.contains(QStringLiteral("appearance/text_brightness")),
+		         "the stored dim has to leave app.ini, or a later reader brings it back");
+		QVERIFY(!file.contains(QStringLiteral("appearance/raise_contrast")));
+	}
+
+	/* Within a run the slider and the box work, everywhere at once... */
+	settings.set_text_brightness(60);
+	settings.set_raise_contrast(false);
+	QCOMPARE(bssh_app_settings(dir.path()).text_brightness(), 60);
+	QCOMPARE(bssh_app_settings(dir.path()).raise_contrast(), false);
+
+	/* ...and nothing of it reaches the file the next start reads. */
+	{
+		QSettings file(ini, QSettings::IniFormat);
+		QVERIFY(!file.contains(QStringLiteral("appearance/text_brightness")));
+		QVERIFY(!file.contains(QStringLiteral("appearance/raise_contrast")));
+	}
+
+	settings.set_text_brightness(100);
+	settings.set_raise_contrast(true);
+}

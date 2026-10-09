@@ -327,50 +327,66 @@ void bssh_app_settings::set_theme(const QString &theme) {
 	store(QStringLiteral("appearance/theme"), theme);
 }
 
+/*
+ * Brightness and the contrast floor belong to this RUN, not to app.ini (the
+ * holder, 2026-10-09: "I want the software to always start with full
+ * brightness/contrast. It is not worth it if it's going to have this bug
+ * all the time").
+ *
+ * The bug in question had come back three ways, each time from a value
+ * that outlived the moment it was set in. A slider that went down to 10 and
+ * a config that kept 10; the wheel walking the slider while scrolling the
+ * settings page, written straight to disk; and a floor of 40 clamping the
+ * stored 10 on read, which made it readable and still dim on every start.
+ * Each was fixed where it was found and the dim came back by the next door,
+ * because what made it a bug rather than a choice was always the same
+ * thing: it survived a restart nobody associated with it.
+ *
+ * So the slider and the checkbox still work, for as long as the program
+ * runs, and every start is at full brightness with the floor on. Kept in
+ * the process rather than per settings object, so every window and every
+ * reader agrees. forget_session_appearance() takes the old keys out of
+ * app.ini, so a stored value cannot come back through a reader written
+ * later.
+ */
+namespace {
+int g_text_brightness = 100;
+bool g_raise_contrast = true;
+}
+
 bool bssh_app_settings::raise_contrast() const {
-	return value(QStringLiteral("appearance/raise_contrast"), true).toBool();
+	return g_raise_contrast;
 }
 
 void bssh_app_settings::set_raise_contrast(bool raise) {
-	store(QStringLiteral("appearance/raise_contrast"), raise);
+	g_raise_contrast = raise;
 }
 
 int bssh_app_settings::text_brightness() const {
-	/*
-	 * Bounded on the way OUT as well as in. A hand-edited config saying 0
-	 * would otherwise render an invisible terminal, and the first thing
-	 * somebody does about an invisible terminal is not open the settings.
-	 *
-	 * THE FLOOR IS 40 AND WAS 10, which is the same argument finishing
-	 * its own sentence. sec 9.3 sets a 3:1 contrast floor for anything
-	 * this program draws, and the dim is deliberately applied AFTER that
-	 * floor so a user who wants it dimmer than the default can have it.
-	 * What nobody decided was how much dimmer. Measured against pure
-	 * black, which is what a dark scheme's background is:
-	 *
-	 *     100%  #ffffff  21.00:1      40%  #666666   3.66:1
-	 *      70%  #b2b2b2   9.90:1      30%  #4c4c4c   2.45:1
-	 *      50%  #7f7f7f   5.24:1      10%  #191919   1.19:1
-	 *
-	 * So the slider could be set to a QUARTER of this program's own
-	 * minimum, and 10 was the value one of these configs actually held
-	 * -- reported as "the text colours are dark, impossible to read",
-	 * which at 1.19:1 is a literal description. 40 is the lowest step
-	 * that still clears 3:1, so every position the slider can reach is
-	 * one the rest of the program would accept.
-	 *
-	 * Clamping on READ is what matters: a config already holding 10
-	 * comes back as 40 and the terminal is readable again on the next
-	 * launch, without anybody having to find the setting that made it
-	 * unreadable.
-	 */
-	return qBound(BSSH_TEXT_BRIGHTNESS_MIN,
-	               value(QStringLiteral("appearance/text_brightness"), 100).toInt(), 100);
+	return g_text_brightness;
 }
 
+/*
+ * Bounded below at BSSH_TEXT_BRIGHTNESS_MIN: sec 9.3's 3:1 floor, measured
+ * against black --
+ *
+ *     100%  #ffffff  21.00:1      40%  #666666   3.66:1
+ *      70%  #b2b2b2   9.90:1      30%  #4c4c4c   2.45:1
+ *      50%  #7f7f7f   5.24:1      10%  #191919   1.19:1
+ *
+ * -- so even within a run, no position is one the rest of the program
+ * would refuse.
+ */
 void bssh_app_settings::set_text_brightness(int percent) {
-	store(QStringLiteral("appearance/text_brightness"),
-	       qBound(BSSH_TEXT_BRIGHTNESS_MIN, percent, 100));
+	g_text_brightness = qBound(BSSH_TEXT_BRIGHTNESS_MIN, percent, 100);
+}
+
+void bssh_app_settings::forget_session_appearance() {
+	if (m_path.isEmpty()) return;
+	QSettings file(m_path, QSettings::IniFormat);
+	file.remove(QStringLiteral("appearance/text_brightness"));
+	file.remove(QStringLiteral("appearance/raise_contrast"));
+	file.sync();
 }
 
 namespace {

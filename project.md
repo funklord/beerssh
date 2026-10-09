@@ -9830,6 +9830,21 @@ Three rules, all asked for directly and all konsole's convention before that.
   window that can hold focus.
 
 
+#### Every start at full brightness — **[DECIDED 2026-10-09, the holder]**
+
+"I want the software to always start with full brightness/contrast. It is
+not worth it if it's going to have this bug all the time." The dim had come
+back again: this machine's `app.ini` still held `text_brightness=10` from
+before the floor below was raised, read as 40 and dim on every start. Each
+earlier fix closed one route -- the floor, the wheel walking the slider --
+and the dim returned by the next, because what made it a bug was always
+that it outlived the run. So text brightness and the contrast floor are
+per-run now: the slider and the checkbox work while the program runs, held
+in the process so every window agrees, nothing of them is written, and
+`forget_session_appearance()` removes the old keys from `app.ini` at
+startup. `brightness_and_contrast_do_not_outlive_the_run`. The history
+below stays, as the record of why.
+
 #### The brightness slider could be set to unreadable — **[FIXED 2026-09-04]**
 
 Reported as "the text colours are dark, impossible to read", and it was

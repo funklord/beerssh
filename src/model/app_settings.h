@@ -223,6 +223,14 @@ public:
 	void set_text_brightness(int percent);
 
 	/*
+	 * Text brightness and the contrast floor last only as long as the
+	 * program runs; every start is at full brightness with the floor on.
+	 * This takes the keys older versions stored out of app.ini, once, at
+	 * startup -- a stored 10 was what kept bringing the dim back.
+	 */
+	void forget_session_appearance();
+
+	/*
 	 * The user's own palette, for the "custom" scheme (sec 9.3). Stored
 	 * as #rrggbb strings rather than integers so the config file stays
 	 * something a person can read and edit, which is most of the point of

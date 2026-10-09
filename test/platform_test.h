@@ -106,6 +106,7 @@ private slots:
 	void an_lxqt_light_palette_reads_light();
 	void an_lxqt_palette_file_named_light_holding_dark_reads_dark();
 	void the_applied_lxqt_palette_is_read_from_lxqt_conf_itself();
+	void brightness_and_contrast_do_not_outlive_the_run();
 };
 
 #endif /* BSSH_PLATFORM_TEST_H */

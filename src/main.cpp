@@ -300,6 +300,13 @@ int main(int argc, char *argv[]) {
 	 */
 	bssh_theme::apply(bssh_theme::from_text(bssh_app_settings().theme()));
 
+	/*
+	 * Every start at full brightness with the contrast floor on: those two
+	 * last only as long as a run, and the values older versions stored --
+	 * a 10 that kept bringing the dim back -- are taken out here, once.
+	 */
+	bssh_app_settings().forget_session_appearance();
+
 	/* --self-test never opens anything: CI has no server and no shell to run. */
 
 	/*
