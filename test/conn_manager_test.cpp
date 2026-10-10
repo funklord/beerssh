@@ -383,6 +383,7 @@ void conn_manager_test::a_refused_password_is_not_reconnected() {
 	bssh_session session(host(QStringLiteral("counting")));
 	bssh_conn_manager manager(&session);
 	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
+	QSignalSpy failures(&session, &bssh_session::failed);
 	session.connect_to_host();
 	fake->simulate_password_required();
 	session.supply_password(QStringLiteral("wrong"));
@@ -390,6 +391,11 @@ void conn_manager_test::a_refused_password_is_not_reconnected() {
 	/* The server's own MaxAuthTries: it hangs up. */
 	fake->simulate_connection_lost();
 	QCOMPARE(scheduled.count(), 0);
+
+	/* Said as a refusal, not as whatever the closed socket looked like. */
+	QCOMPARE(failures.count(), 1);
+	QVERIFY2(failures.at(0).at(0).toString().contains(QStringLiteral("refused the password")),
+	         qPrintable(failures.at(0).at(0).toString()));
 
 	/* Nor does a network change dial it. */
 	manager.note_network_changed();
@@ -458,11 +464,16 @@ void conn_manager_test::a_password_never_answered_is_not_replayed() {
 	bssh_conn_manager manager(&session);
 	QSignalSpy started(&manager, &bssh_conn_manager::reconnect_started);
 	QSignalSpy asked(&session, &bssh_session::needs_password);
+	QSignalSpy failures(&session, &bssh_session::failed);
 
 	session.connect_to_host();
 	fakes.last()->simulate_password_required();
 	session.supply_password(QStringLiteral("typed"));
 	fakes.last()->simulate_connection_lost();
+
+	/* Nothing was refused, so the drop keeps its own reason. */
+	QCOMPARE(failures.count(), 1);
+	QCOMPARE(failures.at(0).at(0).toString(), QStringLiteral("connection reset"));
 
 	QVERIFY2(started.wait(5000), "a drop with nothing refused was not retried");
 	QCOMPARE(fakes.size(), 2);

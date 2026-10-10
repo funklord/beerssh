@@ -10367,8 +10367,12 @@ is kept for reconnects only once the server has let it in, and "Remember
 this password" saves only on getting in, so a mistyped one cannot reach the
 store. After a refusal the manager does not dial at all, not even on a
 network change, until a connection gets in; if the server hangs up on its
-own count of failures, opening the host again is the user's choice. Held by
-three `conn_manager_test` cases and `tool/sabotage/password-refused.toml`.
+own count of failures, opening the host again is the user's choice -- and
+the status line says so: "The server refused the password and closed the
+connection", where it used to pass on libssh's reading of the closed socket
+("Socket error: No such file or directory", seen against beersshd on the
+phone). Held by
+four `conn_manager_test` cases and `tool/sabotage/password-refused.toml`.
 Not held by a test: the worker's mapping of `SSH_AUTH_DENIED` (a real
 server shows it), and the window skipping a refused stored password, which
 the session's own refusal stands behind.

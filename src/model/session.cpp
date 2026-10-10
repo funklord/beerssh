@@ -277,6 +277,20 @@ void bssh_session::connect_to_host() {
 	         m_emulator, &bssh_emulator::feed);
 	connect(m_transport, &bssh_ssh_session::failed, this, [this](const QString &reason) {
 		note_connection_lost();
+
+		/*
+		 * Hung up on after a refused password: said as that. A server
+		 * counting failures closes the connection, and what libssh makes
+		 * of the closed socket -- "Socket error: No such file or
+		 * directory", seen on the phone against beersshd -- names neither
+		 * the password nor what to do next. Nothing reconnects after a
+		 * refusal (conn_manager), so the way on is the user's.
+		 */
+		if (m_password_refused) {
+			emit failed(QStringLiteral("The server refused the password and closed the "
+			                            "connection. Open the host again to try another."));
+			return;
+		}
 		emit failed(reason);
 	});
 	connect(m_transport, &bssh_ssh_session::shell_exited,
