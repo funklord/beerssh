@@ -123,6 +123,15 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 		m_keyboard->hide();
 		outer->addWidget(m_keyboard);
 
+		/*
+		 * The whole screen, like the forms' pages. As a dialog sized to
+		 * its contents it sat over the terminal with the terminal's own
+		 * keyboard showing beside and below it, so its keyboard read as a
+		 * second, smaller one -- reported from the phone. Filling the
+		 * screen makes this the only keyboard and gives it the width.
+		 */
+		setWindowState(windowState() | Qt::WindowMaximized);
+
 		m_switch = new sk_keyboard_switch(this);
 		connect(m_switch, &sk_keyboard_switch::switch_requested,
 		         this, [this] { use_softkeys(true); });

@@ -1588,6 +1588,13 @@ void layout_test::every_touch_surface_fits_a_phone()
 	{
 		bssh_password_prompt prompt(QStringLiteral("nabbe.testing@build.internal.example.com:2299"),
 		                             true);
+
+		/*
+		 * Maximised on a touch screen, which on a phone IS the phone's
+		 * width; offscreen it is the test screen's, and a maximised
+		 * window ignores the resize that measures it at a phone's.
+		 */
+		prompt.setWindowState(Qt::WindowNoState);
 		check_fits(QStringLiteral("password prompt"), &prompt);
 	}
 	{
@@ -4489,6 +4496,9 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	QVERIFY(toggle);
 	QVERIFY(field);
 	toggle->set_panel_probe([] { return true; });
+
+	/* A screen of its own, not a box over the terminal and its keyboard. */
+	QVERIFY(prompt.windowState() & Qt::WindowMaximized);
 
 	QVERIFY(note->isHidden());
 	prompt.set_note(QStringLiteral("The server did not accept that password."));

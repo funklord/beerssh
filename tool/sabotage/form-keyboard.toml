@@ -47,3 +47,12 @@ file = "src/ui/main_window.cpp"
 find = "QStringLiteral(\"letters\"), QStringLiteral(\"editing\"),"
 replace = "QStringLiteral(\"letters\"), QStringLiteral(\"terminal\"),"
 expect = "a_form_switches_to_softkeys_and_back"
+
+# The prompt as a box over the terminal again, its keyboard a second,
+# smaller one beside the terminal's -- reported from the phone.
+[[sabotage]]
+name = "the password prompt does not fill a touch screen"
+file = "src/ui/password_prompt.cpp"
+find = "\t\tsetWindowState(windowState() | Qt::WindowMaximized);\n"
+replace = ""
+expect = "the_password_prompt_types_with_softkeys"
