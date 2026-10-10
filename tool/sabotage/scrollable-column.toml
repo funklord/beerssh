@@ -1,6 +1,5 @@
-# The portrait column holds every session and scrolls (project.md sec
-# 8.7), which is what dissolves the reported tab off-by-one: with every
-# session a pane there is nothing to convert to a tab. None of these
+# The portrait column scrolls through its panes (project.md sec 8.7); each
+# pane has its own bar now (sec 8.3), so a new session is a tab in one. None of these
 # failures is an error -- a column that truncates, a window that never
 # fills the column, or an overflow that clips the panes past the bottom of
 # the screen out of reach.
@@ -9,17 +8,15 @@
 # itself -- a column truncating instead of holding every session -- is
 # already guarded by column-mode.toml, so it is not repeated here.
 
-# The window stops filling the column with the shown list.
-#
-# The layout can hold every session, but nothing tells it to: the column
-# never gets the sessions the window holds, so the panes never appear. The
-# window-level test is the one that sees the wiring, not the model.
+# A session opened in a column stacks a pane of its own, as the column did
+# before every pane had a bar (sec 8.3, superseding the every-session-a-pane
+# column of sec 8.7): the holder chose the same model on the phone.
 [[sabotage]]
-name = "the shown list never reaches the column"
+name = "a new session in a column takes a pane of its own"
 file = "src/ui/main_window.cpp"
-find = "\t\tm_layout->set_intent(m_shown);"
-replace = "\t\t(void) m_shown;"
-expect = "a_column_holds_every_session_and_dissolves_the_tabs"
+find = "\t\t\tm_layout->add_tab(session, into, INT_MAX);\n\t\t\tm_layout->bring_to_front(into);"
+replace = "\t\t\tm_layout->set_intent(m_layout->intent() + QList<bssh_session *>{ session });"
+expect = "a_column_keeps_new_sessions_as_tabs"
 
 # The column never moves into its scroll area.
 #

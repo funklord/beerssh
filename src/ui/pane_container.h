@@ -112,6 +112,25 @@ public:
 	 */
 	void set_drop_planner(std::function<int(const QMimeData *, bssh_session *, int)> planner);
 
+	/*
+	 * A tab bar per pane (sec 8.3): each pane is a frame holding its bar
+	 * and its view, and the bar is the WINDOW's to build -- what a tab
+	 * does when picked, closed, dragged or right-clicked is the window's
+	 * business, not this container's. Called for every pane on every
+	 * rebuild with the pane's front session; null for no bar.
+	 */
+	void set_bar_factory(std::function<QWidget *(bssh_session *front, QWidget *parent)> factory);
+
+	/* Which side of each pane its bar sits on; the tab position setting. */
+	void set_bar_edge(Qt::Edge edge);
+	Qt::Edge bar_edge() const { return m_bar_edge; }
+
+	/* The frame a pane is drawn in -- its bar and its view -- or null. */
+	QWidget *frame_for(bssh_session *front) const;
+
+	/* The bar the factory built for that pane, or null. */
+	QWidget *bar_for(bssh_session *front) const;
+
 private:
 	std::function<int(const QMimeData *, bssh_session *, int)> m_drop_planner;
 	void apply_drop_planner(bssh_terminal_view *view, bssh_session *session);
@@ -235,6 +254,14 @@ private:
 	 * pass; this is reachability, not yet the gesture.
 	 */
 	QScrollArea *m_scroll;
+
+	/* One per pane, in step with m_views: what holds its bar and its view. */
+	QList<QWidget *> m_frames;
+	QList<QWidget *> m_bars;
+	std::function<QWidget *(bssh_session *, QWidget *)> m_bar_factory;
+	Qt::Edge m_bar_edge = Qt::TopEdge;
+	bool m_rebuilding = false;
+
 	QList<bssh_terminal_view *> m_views;
 	QList<bssh_session *> m_sessions;
 	bssh_session *m_focused;

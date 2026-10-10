@@ -9,9 +9,9 @@
 
 [[sabotage]]
 name = "a tab label is not elided, so one title pushes the other tabs off"
-file = "src/ui/main_window.cpp"
-find = "\tm_tabs->setElideMode(Qt::ElideMiddle);"
-replace = "\t/* sabotage: no elide */"
+file = "src/ui/pane_bar.cpp"
+find = "\tm_bar->setElideMode(Qt::ElideMiddle);\n"
+replace = ""
 expect = "a_long_title_cannot_push_the_other_tabs_off_the_bar"
 
 # The link ids wrap at 65535 and the comment said the allocation was

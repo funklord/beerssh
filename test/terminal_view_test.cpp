@@ -4083,10 +4083,11 @@ void terminal_view_test::a_pane_can_leave_its_window_without_a_pointer() {
 	          "tear_out refuses -- an entry that does nothing when chosen");
 
 	/*
-	 * Show as Tab is the same question asked of the other verb, and in a
-	 * column the answer is no: show_as_tab returns early there, because
-	 * a column holds every session and has no bar to reach a dropped one
-	 * by. The entry was enabled anyway.
+	 * Show as Tab is the same question asked of the other verb. Two
+	 * sessions here share one pane -- the second opened as a tab in it
+	 * (sec 8.3's bar per pane) -- and with one pane there is no neighbour
+	 * whose bar it could join, so show_as_tab declines and the entry must
+	 * say so rather than be offered and do nothing.
 	 */
 	window.adopt_session(registry->create(profile));
 
@@ -4097,7 +4098,7 @@ void terminal_view_test::a_pane_can_leave_its_window_without_a_pointer() {
 	QAction *as_tab = menu->findChild<QAction *>(QStringLiteral("terminal_show_as_tab"));
 	QVERIFY(as_tab);
 	QVERIFY2(!as_tab->isEnabled(),
-	          "Show as Tab was offered in a column, where choosing it does "
+	          "Show as Tab was offered with one pane, where choosing it does "
 	          "nothing at all");
 
 	/* And with two sessions there is something to detach. */

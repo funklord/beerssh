@@ -21,16 +21,11 @@
 # broken for an unrelated reason and a test for it produced one pane
 # instead of two.
 
-# Promoting a successor. The tab bar is rebuilt under a QSignalBlocker,
-# so currentChanged never fires and show_session() is never reached --
-# closing the tab you were looking at left the window BLANK with a live
-# session still in the list.
-[[sabotage]]
-name = "no successor is promoted when the current tab closes"
-file = "src/ui/main_window.cpp"
-find = "\t\tbssh_session *successor = session_at_tab(m_tabs->currentIndex());\n\t\tshow_session(successor ? successor : m_shown.first());"
-replace = "\t\t(void)0;"
-expect = "closing_the_visible_tab_leaves_no_view_on_a_dead_session"
+# Promoting a successor is the layout model's now: each pane is a stack of
+# tabs and a closing front hands its pane to the tab beside it (sec 8.3's
+# bar per pane). Guarded in pane-stacks.toml, "a closing front hands the
+# pane to no other tab"; the window's own fallback no longer decides
+# anything a test can see, which is what retired this spec (2026-10-10).
 
 # The only touch route to closing a session goes away again.
 #
@@ -118,6 +113,6 @@ expect = "a_pane_can_leave_its_window_without_a_pointer"
 [[sabotage]]
 name = "show as tab is offered in a column"
 file = "src/ui/main_window.cpp"
-find = "\t                    && m_layout->arrangement() != bssh_layout_manager::COLUMN);"
-replace = "\t                    );"
+find = "\tas_tab->setEnabled(m_current && m_layout && m_layout->visible_panes().size() > 1);\n"
+replace = "\tas_tab->setEnabled(m_current != nullptr);\n"
 expect = "a_pane_can_leave_its_window_without_a_pointer"

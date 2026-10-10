@@ -6,8 +6,8 @@
 [[sabotage]]
 name = "a side into a full window is drawn as a split"
 file = "src/ui/main_window.cpp"
-find = "\tif (arriving && m_layout->intent().size() >= m_layout->max_panes()) return layout::EDGE_MIDDLE;"
-replace = "\tQ_UNUSED(arriving);"
+find = "\tif (new_pane && m_layout->intent().size() >= m_layout->max_panes()) return folded;\n"
+replace = ""
 expect = "the_zone_drawn_is_what_the_drop_does"
 
 # The column's fold gone: left and right drawn as halves in a column that
@@ -15,21 +15,16 @@ expect = "the_zone_drawn_is_what_the_drop_does"
 [[sabotage]]
 name = "left and right in the column are drawn as halves"
 file = "src/ui/main_window.cpp"
-find = '''
-	if (m_layout->arrangement() == layout::COLUMN
-	    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))
-		return layout::EDGE_MIDDLE;'''
-replace = '''
-	if (false)
-		return layout::EDGE_MIDDLE;'''
+find = "\tif (m_layout->arrangement() == layout::COLUMN\n\t    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))\n\t\treturn folded;\n"
+replace = ""
 expect = "the_zone_drawn_is_what_the_drop_does"
 
 # The pane being carried lights zones it will not honour.
 [[sabotage]]
 name = "the pane being carried lights its zones"
 file = "src/ui/main_window.cpp"
-find = "\tif (!target || session == target || !m_layout || !m_layout->intent().contains(target))"
-replace = "\tif (!target || !m_layout || !m_layout->intent().contains(target))"
+find = "\tif (own && m_layout->tabs(session).size() < 2) return BSSH_DROP_CANCEL;\n"
+replace = ""
 expect = "the_zone_drawn_is_what_the_drop_does"
 
 # The pane draws the zone under the pointer rather than the window's plan.
@@ -71,36 +66,24 @@ expect = "the_zone_drawn_is_what_the_drop_does"
 [[sabotage]]
 name = "a drop off the tab row is refused"
 file = "src/ui/main_window.cpp"
-find = '''
-	if (point_is_on_tab_row(event->position().toPoint())) drop_session_as_tab(session, -1);
-	event->acceptProposedAction();'''
-replace = '''
-	if (point_is_on_tab_row(event->position().toPoint())) {
-		drop_session_as_tab(session, -1);
-		event->acceptProposedAction();
-	}'''
+find = "\tif (bssh_session *front = tab_row_at(event->position().toPoint()))\n\t\tdrop_session_as_tab(session, front, -1);\n\tevent->acceptProposedAction();\n"
+replace = "\tif (bssh_session *front = tab_row_at(event->position().toPoint())) {\n\t\tdrop_session_as_tab(session, front, -1);\n\t\tevent->acceptProposedAction();\n\t}\n"
 expect = "a_dragged_tab_lands_where_it_is_dropped"
 
 # The slot ignored: every tab-row drop goes to the end, whatever was marked.
 [[sabotage]]
 name = "a tab-row drop ignores the slot it marked"
 file = "src/ui/main_window.cpp"
-find = "\tif (slot >= 0 && slot < tabs.size()) m_shown.insert(m_shown.indexOf(tabs.at(slot)), session);\n\telse m_shown.append(session);"
-replace = "\tQ_UNUSED(slot);\n\tm_shown.append(session);"
+find = "\tm_layout->add_tab(session, front, slot < 0 ? INT_MAX : slot);\n"
+replace = "\tm_layout->add_tab(session, front, INT_MAX);\n"
 expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 
 # No strip where the bar would be: with no bar, nothing can make a tab.
 [[sabotage]]
 name = "a window with no bar shows no strip to drop on"
 file = "src/ui/main_window.cpp"
-find = '''
-	m_tab_drop->set_shape(strip, vertical);
-	m_tab_drop->setGeometry(where);
-	m_tab_drop->show();'''
-replace = '''
-	m_tab_drop->set_shape(strip, vertical);
-	m_tab_drop->setGeometry(where);
-	if (!strip) m_tab_drop->show();'''
+find = "\t\tconst bool strip = !bar || bar->isHidden();\n"
+replace = "\t\tconst bool strip = !bar || bar->isHidden();\n\t\tif (strip) continue;\n"
 expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 
 # The window's only pane offered a slot on its own row: a mark drawn for a
@@ -108,11 +91,8 @@ expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 [[sabotage]]
 name = "the only pane is offered a tab slot"
 file = "src/ui/main_window.cpp"
-find = '''
-	/* The only pane of this window: a drop here would do nothing. */
-	if (m_layout->intent().contains(session) && m_layout->intent().size() < 2) return -1;'''
-replace = '''
-'''
+find = "\tif (tabs == QList<bssh_session *>{ session }) return -1;\n"
+replace = ""
 expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 
 # A tab-row drop SHOWN rather than made a tab: the old single-pane path,
@@ -120,8 +100,8 @@ expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 [[sabotage]]
 name = "a drop on the tab row is shown instead of tabbed"
 file = "src/ui/main_window.cpp"
-find = "\t\tif (m_layout->intent().isEmpty()) {\n\t\t\tshow_session(session);"
-replace = "\t\tif (true) {\n\t\t\tshow_session(session);"
+find = "\tif (!front || !m_layout->sessions().contains(front) || front == session) {\n"
+replace = "\tif (true) {\n"
 expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 
 # A tab-row drop that does nothing, refused: the source tears out a window.
@@ -143,8 +123,8 @@ expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 [[sabotage]]
 name = "the tab slot's mark is mapped by the wrong ancestry"
 file = "src/ui/main_window.cpp"
-find = "\t\tconst QPoint in_overlay = m_tab_drop->mapFromGlobal(m_tabs->mapToGlobal(edge));"
-replace = "\t\tconst QPoint in_overlay = m_tab_drop->mapFrom(m_tab_drop->window(), edge - QPoint(5000, 5000));"
+find = "\t\tconst QPoint in_overlay = overlay->mapFromGlobal(bar->mapToGlobal(edge));\n"
+replace = "\t\tconst QPoint in_overlay = overlay->mapFrom(bar, edge);\n"
 expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 
 # The process no longer checked: another BeerSSH's index is resolved here,

@@ -35,6 +35,7 @@ class bssh_host_list;
 class bssh_layout_manager;
 class bssh_pane_container;
 class bssh_tab_drop;
+class bssh_pane_bar;
 class bssh_input_selector;
 class bssh_find_bar;
 class sk_key_row;
@@ -121,6 +122,9 @@ public:
 	 * bug it was written for.
 	 */
 	bssh_pane_container *panes() const { return m_panes; }
+
+	/* What the panes are built from: the tree, each pane's tabs (sec 8.3). */
+	bssh_layout_manager *layout_manager() const { return m_layout; }
 
 	/*
 	 * The terminals this window HOLDS, in tab order -- panes and tabs
@@ -332,8 +336,6 @@ protected:
 private slots:
 	void open_profile(const bssh_profile_t &profile);
 	void on_add_host();
-	void on_tab_changed(int index);
-	void on_tab_close_requested(int index);
 	void on_registry_changed();
 	void on_grid_resized(int cols, int rows);
 	void on_failed(const QString &reason);
@@ -462,13 +464,6 @@ private:
 	void close_find();
 	void update_find_status();
 
-	/*
-	 * Keeps the column's layout intent equal to the shown list (sec 8.7),
-	 * so the column holds every session the window holds and the tab bar
-	 * has nothing left to convert. Called wherever the shown list changes;
-	 * a no-op outside the column arrangement.
-	 */
-	void sync_column_intent();
 
 	/*
 	 * Adds a session to the visible panes rather than replacing them
@@ -520,19 +515,21 @@ private:
 	int live_shown_count() const;
 
 	/*
-	 * Rebuilds the tab bar from m_shown minus whatever is on screen as a
-	 * pane. A tab and a pane are different states (sec 8.3), and this is
-	 * the one place that knows which sessions are in which.
+	 * The bars per pane (sec 8.3) brought up to date: their labels and
+	 * dots, or the panes rebuilt when which tabs a bar holds has moved.
 	 */
 	void refresh_tab_bar();
 
 	/*
-	 * The sessions this window holds and is NOT showing, in tab order.
-	 * Derived from m_shown and the pane list rather than maintained
-	 * beside them -- two lists kept in step by hand drift, and the tab
-	 * bar's indices are read back out of this one.
+	 * Every session this window shows is in exactly one pane's stack
+	 * (sec 8.3). One the window has taken and the tree does not hold
+	 * joins the focused pane's stack, in front -- what New Tab means --
+	 * and one the window let go leaves the tree.
 	 */
-	QList<bssh_session *> m_tab_order;
+	void sync_tree_with_shown();
+
+	/* The pane bar the container asks for, wired to this window. */
+	QWidget *make_pane_bar(bssh_session *front, QWidget *parent);
 	void show_session(bssh_session *session);
 	void detach_session();
 	void update_status();
@@ -555,7 +552,7 @@ private:
 	 * second copy of the prompt is a second place for it to be forgotten.
 	 */
 	void open_remote_link(const QString &uri);
-	void show_tab_menu(const QPoint &at);
+	void show_tab_menu(bssh_session *session, const QPoint &global);
 
 	/*
 	 * The desktop menu bar (sec 8.3). Built once and kept, so that
@@ -576,8 +573,6 @@ private:
 	bool can_copy() const;
 	bool can_paste() const;
 
-	/* The session behind a tab of THIS window, or null (sec 8.4). */
-	bssh_session *session_at_tab(int index) const;
 
 public:
 	/*
@@ -599,26 +594,31 @@ public:
 	 * window with no tabs and no front door showing is one nobody can do
 	 * anything with.
 	 */
-	bssh_main_window *tear_out_tab(int index);
+	bssh_main_window *tear_out_tab(bssh_session *session) { return tear_out(session); }
+
+	/* Every pane's bar, and the one of the pane showing `front`. */
+	QList<bssh_pane_bar *> pane_bars() const;
+	bssh_pane_bar *bar_for(bssh_session *front) const;
 
 	/*
-	 * A session dropped on this window's tab row, at `slot` among its tabs
-	 * (sec 8.4): the only drop that makes a tab, at the place it was let
-	 * go. -1 for after the last. A pane of this window becomes a tab there
-	 * (the un-split), a tab of it moves there, and one from elsewhere
-	 * arrives there -- except into a window showing nothing, where a tab
-	 * would leave the screen empty, so it is shown. Public so the model
-	 * can be driven without a drag.
+	 * A session dropped on the bar of the pane showing `front`, at `slot`
+	 * among its tabs (sec 8.3, 8.4): the only drop that makes a tab, at
+	 * the place it was let go; -1 for after the last. A pane of this
+	 * window becomes a tab there (the un-split), a tab moves there, and
+	 * one from elsewhere arrives there -- into a window showing nothing,
+	 * it is simply shown. Public so the model can be driven without a drag.
 	 */
-	void drop_session_as_tab(bssh_session *session, int slot);
+	void drop_session_as_tab(bssh_session *session, bssh_session *front, int slot);
 
 	/*
-	 * Where on the tab row a drop of `session` at `at` (in the tab-drop
-	 * overlay's coordinates) would go: the slot, and in `mark` where the
-	 * slot is drawn; -1 where the drop would do nothing. Same answer for
-	 * the drawing and the drop, as drop_zone_for is for the panes.
+	 * Where on the bar of the pane showing `front` a drop of `session` at
+	 * `at` (in that pane's drop overlay's coordinates) would go: the slot,
+	 * and in `mark` where it is drawn; -1 where the drop would do nothing.
+	 * Same answer for the drawing and the drop, as drop_zone_for is for
+	 * the panes.
 	 */
-	int tab_drop_slot(bssh_session *session, const QPoint &at, int *mark) const;
+	int tab_drop_slot(bssh_session *session, bssh_session *front, const QPoint &at,
+	                  int *mark) const;
 
 	/*
 	 * A session drag has started or ended somewhere in this process: the
@@ -627,8 +627,8 @@ public:
 	 */
 	void set_session_drag_active(bool active);
 
-	/* The tab row's drop overlay; public for tests. */
-	QWidget *tab_drop_target() const;
+	/* The drop overlay over the bar of the pane showing `front`; public for tests. */
+	QWidget *tab_drop_target(bssh_session *front) const;
 
 	/*
 	 * How many session drags have started in this process -- a test seam:
@@ -679,7 +679,12 @@ public:
 	 * does not reach dropEvent() -- Qt's drop delivery wants a real
 	 * drag -- so the geometry is what a test can hold.
 	 */
-	bool point_is_on_tab_row(const QPoint &at) const;
+	/*
+	 * Retargeted to the bar per pane (sec 8.3): the front of the pane
+	 * whose bar ROW -- or, with no bar, the strip where it would be --
+	 * holds the window point `at`, or null.
+	 */
+	bssh_session *tab_row_at(const QPoint &at) const;
 
 	/* Whether any other window of ours is still up. */
 	bool other_windows_exist() const;
@@ -706,11 +711,11 @@ public:
 	void split_beside_current();
 
 	/*
-	 * Takes a session off the screen and leaves it in the bar -- the
-	 * un-split, and the other direction of "Show beside current"
-	 * (sec 8.3). Public because it is a plain command with two front
-	 * doors: the terminal menu's verb, and a pane dropped on the tab
-	 * bar.
+	 * Takes a pane off the screen and puts its tabs in the bar of the pane
+	 * beside it -- the un-split, and the other direction of "Show beside
+	 * current" (sec 8.3's bar per pane). Public because it is a plain
+	 * command with two front doors: the terminal menu's verb, and a pane
+	 * dropped on another pane's bar.
 	 */
 	void show_as_tab(bssh_session *session);
 
@@ -774,7 +779,7 @@ public:
 	 * the menu item fired, the session moved from registry index 0 to 1,
 	 * and the bar did not move.
 	 */
-	void move_tab(int from, int to);
+	void move_tab(bssh_session *session, int direction);
 
 private:
 	/*
@@ -810,7 +815,6 @@ private:
 	 * -- so the gesture keeps its old meaning where there is nothing to
 	 * drop onto, and gains a second one where there is.
 	 */
-	void start_tab_drag(int index);
 
 	/*
 	 * The session drag on X11, where the platform's drag and drop cannot
@@ -838,7 +842,6 @@ private:
 	int m_tab_position = 0;
 	QVBoxLayout *m_page_layout = nullptr;
 	QHBoxLayout *m_body = nullptr;
-	QBoxLayout *m_tab_row_layout = nullptr;
 
 	/* What lies under a point on screen, for the drag above. */
 	struct drop_spot_t {
@@ -846,6 +849,7 @@ private:
 		bssh_session *target = nullptr;
 		int edge = 0;
 		bool on_tab_row = false;
+		bssh_session *front = nullptr;   /* whose bar, when on_tab_row */
 		int slot = -1;
 		int mark = -1;
 	};
@@ -911,7 +915,7 @@ public:
 	 * next door had both pinned. Returns null for an index with no
 	 * session behind it.
 	 */
-	QMenu *build_tab_menu(int index, QWidget *parent) const;
+	QMenu *build_tab_menu(bssh_session *session, QWidget *parent) const;
 
 	/*
 	 * The touch metrics, applied to any of this window's context menus.
@@ -950,8 +954,8 @@ private:
 	bool go_back();
 	bool m_front_door_up;
 	QMenuBar *m_menu_bar;
-	QWidget *m_tab_row;
-	bssh_tab_drop *m_tab_drop = nullptr;
+	/* One drop overlay per pane while a session drag is up (sec 8.3, 8.4). */
+	QList<QPointer<bssh_tab_drop>> m_tab_drops;
 	QList<QAction *> m_session_actions;
 	QAction *m_copy_action;
 	QAction *m_paste_action;
@@ -1041,8 +1045,6 @@ private:
 	QList<bssh_session *> m_shown;
 	bssh_layout_manager *m_layout;
 	bssh_session *m_current;
-	QTabBar *m_tabs;
-	bssh_long_press *m_tab_long_press;
 	sk_key_row *m_key_row;
 	sk_keyboard *m_keyboard;
 

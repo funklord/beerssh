@@ -368,11 +368,16 @@ bool bssh_layout_manager::place(bssh_session *session, bssh_session *target,
 		parent->children.insert(parent->children.begin() + long(before ? index : index + 1),
 		                        leaf(session));
 	} else {
-		/* Across the target's run: the target itself is split in two. */
+		/*
+		 * Across the target's run: the target itself is split in two --
+		 * the target's node as it is, tabs and all, not a new leaf of it
+		 * alone, which dropped every tab behind it.
+		 */
+		bssh_pane_node kept = *found;
 		bssh_pane_node split;
 		split.orientation = along;
-		split.children.push_back(before ? leaf(session) : leaf(target));
-		split.children.push_back(before ? leaf(target) : leaf(session));
+		split.children.push_back(before ? leaf(session) : kept);
+		split.children.push_back(before ? kept : leaf(session));
 		*found = std::move(split);
 	}
 

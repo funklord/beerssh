@@ -1,0 +1,62 @@
+# Sabotages for sec 8.3's tab bar per pane, steps 2 and 3: each pane's own
+# bar and drop target, built by the window for the pane container. Held by
+# each_pane_keeps_its_own_tabs and the tests the single bar's were rewritten
+# into.
+
+[[sabotage]]
+name = "a pane of one shows a bar"
+file = "src/ui/main_window.cpp"
+find = "\tbar->setVisible(tabs.size() > 1);\n"
+replace = "\tbar->setVisible(true);\n"
+expect = "each_pane_keeps_its_own_tabs"
+
+[[sabotage]]
+name = "a session opened goes to the first pane, not the focused one"
+file = "src/ui/main_window.cpp"
+find = "\t\tbssh_session *into = m_current && placed.contains(m_current)\n\t\t                             ? m_layout->front_of(m_current) : nullptr;\n"
+replace = "\t\tbssh_session *into = nullptr;\n"
+expect = "each_pane_keeps_its_own_tabs"
+
+[[sabotage]]
+name = "picking a tab does nothing"
+file = "src/ui/main_window.cpp"
+find = "\t\tlater([this, picked] { if (picked) show_session(picked); });\n"
+replace = "\t\t(void) picked;\n"
+expect = "each_pane_keeps_its_own_tabs"
+
+[[sabotage]]
+name = "Show as Tab moves the front and leaves its tabs"
+file = "src/ui/main_window.cpp"
+find = "\tfor (bssh_session *tab : m_layout->tabs(session)) m_layout->add_tab(tab, into, INT_MAX);\n"
+replace = "\tm_layout->add_tab(session, into, INT_MAX);\n"
+expect = "each_pane_keeps_its_own_tabs"
+
+[[sabotage]]
+name = "a pane's front cannot split off its own pane"
+file = "src/ui/main_window.cpp"
+find = "\tif (own && m_layout->tabs(session).size() < 2) return BSSH_DROP_CANCEL;\n"
+replace = "\tif (own) return BSSH_DROP_CANCEL;\n"
+expect = "each_pane_keeps_its_own_tabs"
+
+[[sabotage]]
+name = "a drop on a pane's strip goes before its own tab"
+file = "src/ui/main_window.cpp"
+find = "\tif (!row || row->isHidden()) return int(tabs.size());\n"
+replace = "\tif (!row || row->isHidden()) return 0;\n"
+expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
+
+[[sabotage]]
+name = "a session put back by a drop covers the drop"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tm_layout->add_tab(session, into, INT_MAX);\n\t\t\tm_layout->bring_to_front(into);\n"
+replace = "\t\t\tm_layout->add_tab(session, into, INT_MAX);\n"
+expect = "a_column_reorder_survives_a_new_session"
+
+# The first pane of a rebuild hidden and zero wide: nothing polishes a plain
+# frame, so the splitter never shows it.
+[[sabotage]]
+name = "a pane's frame is left for the splitter to show"
+file = "src/ui/pane_container.cpp"
+find = "\tparent->addWidget(frame);\n"
+replace = ""
+expect = "dividers_snap_to_whole_cells"

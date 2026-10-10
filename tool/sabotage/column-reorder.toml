@@ -29,8 +29,8 @@ expect = "the_move_state_is_offered_only_in_a_column"
 [[sabotage]]
 name = "a reorder does not move the shown list"
 file = "src/ui/main_window.cpp"
-find = "\t\t\tm_shown.move(sfrom, sto);"
-replace = "\t\t\tm_shown.move(sfrom, sfrom);"
+find = "\tintent.move(from, to);\n\tm_layout->set_intent(intent);\n"
+replace = "\tintent.move(from, to);\n"
 expect = "a_column_reorder_survives_a_new_session"
 
 # The reorder gesture asks for the wrong direction.

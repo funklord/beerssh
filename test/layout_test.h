@@ -57,13 +57,14 @@ private slots:
 	void letting_go_of_a_pan_settles_the_column();
 
 	/*
-	 * The reported tab off-by-one, dissolved (sec 8.7): a column holds
-	 * every session the window shows as a pane, so there is nothing to
-	 * convert to a tab and the bar is empty. And an overflowing column
-	 * keeps every pane -- none dropped because they do not fit -- with the
-	 * scroll area there to reach the ones past the bottom of the screen.
+	 * A column keeps a bar per pane like any arrangement (sec 8.3, the
+	 * holder's "same model" of 2026-10-10): a session opened in it joins
+	 * the focused pane's stack rather than stacking a pane of its own.
+	 * And an overflowing column keeps every pane -- none dropped because
+	 * they do not fit -- with the scroll area there to reach the ones past
+	 * the bottom of the screen.
 	 */
-	void a_column_holds_every_session_and_dissolves_the_tabs();
+	void a_column_keeps_new_sessions_as_tabs();
 	void an_overflowing_column_keeps_every_pane_reachable();
 
 	/*
@@ -295,6 +296,13 @@ private slots:
 	void the_middle_swaps_panes_whole_and_trades_a_tab();
 	void a_collapsed_pane_lives_on_in_the_last_bar();
 	void a_pane_of_tabs_survives_being_written_down();
+
+	/*
+	 * The window side of the bar per pane: each pane shows its own tabs,
+	 * a session opened goes into the focused pane, a pane's "+" opens
+	 * into that pane, and Show as Tab moves a pane into its neighbour.
+	 */
+	void each_pane_keeps_its_own_tabs();
 	void a_restored_window_comes_back_in_its_shape();
 	void a_closed_window_writes_down_its_shape();
 

@@ -1,0 +1,70 @@
+#ifndef BSSH_PANE_BAR_H
+#define BSSH_PANE_BAR_H
+
+#include <QList>
+#include <QPointer>
+#include <QWidget>
+
+class QTabBar;
+class QToolButton;
+class bssh_long_press;
+class bssh_session;
+
+/*
+ * bssh_pane_bar -- one pane's tab bar and its "+" (project.md sec 8.3,
+ * the bar per pane agreed 2026-10-10).
+ *
+ * It shows the tabs it is given and reports what a hand does to them;
+ * it decides nothing. Which sessions those are comes from the layout
+ * manager, and what picking, closing, moving or tearing one out MEANS is
+ * the window's. Rebuilt with its pane on every layout change, so it holds
+ * no state worth keeping.
+ *
+ * Every tab carries its session, so an index is read back as a session at
+ * the moment of the event rather than through a list kept beside the bar
+ * that can fall out of step with it.
+ */
+class bssh_pane_bar : public QWidget {
+	Q_OBJECT
+
+public:
+	/* `front` is the pane's own session; `tabs` what its bar lists. */
+	bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &tabs,
+	              Qt::Edge edge, bool pointer, QWidget *parent = nullptr);
+
+	bssh_session *front() const { return m_front; }
+	QList<bssh_session *> sessions() const;
+	QTabBar *tab_bar() const { return m_bar; }
+
+	/* The session behind tab `index`, or null. */
+	bssh_session *session_at(int index) const;
+
+	/* Titles, tooltips and status dots again; the tabs are the same. */
+	void refresh();
+
+signals:
+	void tab_picked(bssh_session *session);
+	void close_requested(bssh_session *session);
+
+	/* Moved along the bar to `slot`, in the bar's order after the move. */
+	void tab_moved(bssh_session *session, int slot);
+
+	void menu_requested(bssh_session *session, const QPoint &global);
+
+	/* Dragged clear of the bar: the session drag takes over (sec 8.4). */
+	void drag_requested(bssh_session *session);
+
+	/* The "+": another session, in this pane. */
+	void new_tab_requested();
+
+protected:
+	bool eventFilter(QObject *watched, QEvent *event) override;
+
+private:
+	bssh_session *m_front;
+	QTabBar *m_bar;
+	QToolButton *m_add;
+	bssh_long_press *m_long_press;
+};
+
+#endif /* BSSH_PANE_BAR_H */

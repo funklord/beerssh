@@ -12,16 +12,8 @@
 [[sabotage]]
 name = "tabs come from the whole registry"
 file = "src/ui/main_window.cpp"
-find = '''
-	for (bssh_session *session : m_shown) {
-		if (!panes.contains(session)) m_tab_order.append(session);
-	}
-'''
-replace = '''
-	for (bssh_session *session : m_registry->sessions()) {
-		if (!panes.contains(session)) m_tab_order.append(session);
-	}
-'''
+find = "\tfor (bssh_session *session : m_shown) {\n\t\tconst QList<bssh_session *> placed = m_layout->sessions();\n"
+replace = "\tfor (bssh_session *session : m_registry->sessions()) {\n\t\tconst QList<bssh_session *> placed = m_layout->sessions();\n"
 expect = "a_window_shows_only_its_own_tabs"
 
 [[sabotage]]

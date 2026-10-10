@@ -6077,7 +6077,7 @@ the same number for a layout manager that had quietly stopped working.
 
 ### 8.3 Tabs and focus
 
-**A tab bar per pane — [AGREED 2026-10-10, BEING BUILT].** The holder: "a
+**A tab bar per pane — [AGREED 2026-10-10, BUILT ON THE DESKTOP].** The holder: "a
 single tab bar doesn't seem to make sense, maybe a possible tab bar for each
 terminal makes more sense." The single bar listed the sessions in no pane, and
 picking one swapped it into whichever pane had the focus: unambiguous with one
@@ -6126,6 +6126,37 @@ The steps, each tested and pushed on its own: (1) the model -- stacks in the
 tree, with switching, adding at a slot, removing and saving; (2) a bar per
 pane in the pane container, the window's single bar retired; (3) drops on a
 pane's bar and strip; (4) the phone's column, checked on the device.
+
+**Steps 1 to 3 built, 2026-10-10.** Two and three went in together: once each
+pane had its own bar the window's single drop strip had nothing to stand on.
+The pane container builds a frame per pane -- bar on the set edge, terminal
+in the rest -- and asks the window for the bar (`bssh_pane_bar`, which holds
+the pick, close, reorder, middle-click, menu, held-finger and tear-out
+gestures the window's bar had); during a session drag each pane gets its own
+drop overlay over its bar, or over the strip where its bar would be. The
+window's list stays the record of which sessions it holds and the tree says
+where each sits: one it takes joins the focused pane BEHIND that pane's front,
+and is brought forward only by being shown -- so New Tab still lands in front,
+and a session put back by a drop that took its place does not cover the drop.
+**Three findings, each now held by a test:**
+
+- **An edge drop dropped the target pane's tabs.** `place()` rebuilt the
+  split target as a new leaf of its front alone. Found by the window's own
+  test of a tiled tab leaving its bar, not by the model's tests -- which had
+  split only panes of one.
+- **The first pane of a rebuild came up hidden and zero wide.** A splitter
+  shows a new child when the child is polished, and nothing polishes a plain
+  frame; the terminal had done it for itself, measuring its font, so the
+  views never met this. Frames are added with `addWidget()`, which shows them.
+- **A pane's front could not leave its own pane.** Dragged onto its own
+  pane's edge it drew a refusal, as a session dropped on itself always had.
+  With tabs behind it an edge now splits it off, the tab beside it taking the
+  front; the middle, or a pane of one, is still the cancel.
+
+Seen working under X11 with a real pointer (Xvfb and xdotool): a tab dragged
+to its pane's right edge became a pane of its own, the bar it left kept the
+other two, and that pane dragged onto the left pane's bar became its third
+tab. Step 4 -- the column on the phone -- is what remains.
 
 **[BUILT] A tab tears out on DISTANCE, not on direction.** The gesture measured
 how far below the bar the pointer had gone and nothing else, so a tab could be

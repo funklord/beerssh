@@ -40,9 +40,9 @@ expect = "a_tab_dropped_on_a_pane_reaches_the_window"
 # slack before a reorder silently became a tear-out.
 [[sabotage]]
 name = "tear-out is measured from the tabs, not the strip"
-file = "src/ui/main_window.cpp"
-find = "\t\t\tQWidget *strip = m_tab_row ? m_tab_row : static_cast<QWidget *>(m_tabs);"
-replace = "\t\t\tQWidget *strip = m_tabs;"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\tconst QPoint in_row = m_bar->mapTo(this, mouse->position().toPoint());\n\t\t\tconst int clear = qMax(qMax(-in_row.y(), in_row.y() - height()),\n\t\t\t                       qMax(-in_row.x(), in_row.x() - width()));\n"
+replace = "\t\t\tconst QPoint in_row = mouse->position().toPoint();\n\t\t\tconst int clear = qMax(qMax(-in_row.y(), in_row.y() - m_bar->height()),\n\t\t\t                       qMax(-in_row.x(), in_row.x() - m_bar->width()));\n"
 expect = "a_reorder_along_the_strip_is_not_a_tear_out"
 
 # The setting is read but never applied to a window that is open.

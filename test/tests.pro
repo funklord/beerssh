@@ -128,6 +128,7 @@ SOURCES += \
     ../src/ui/override_badge.cpp \
     ../src/ui/host_list.cpp \
     ../src/ui/layout_manager.cpp \
+    ../src/ui/pane_bar.cpp \
     ../src/ui/pane_container.cpp \
     ../src/ui/find_bar.cpp \
     ../src/ui/input_selector.cpp \
@@ -224,6 +225,7 @@ HEADERS += \
     ../src/ui/override_badge.h \
     ../src/ui/host_list.h \
     ../src/ui/layout_manager.h \
+    ../src/ui/pane_bar.h \
     ../src/ui/pane_container.h \
     ../src/ui/pane_snap.h \
     ../src/ui/find_bar.h \

@@ -40,3 +40,12 @@ file = "src/ui/layout_manager.cpp"
 find = "\t\tif (named.size() < 2) return named.value(0);\n"
 replace = "\t\tif (true) return name(node.session);\n"
 expect = "a_pane_of_tabs_survives_being_written_down"
+
+# A pane split by an edge drop rebuilt as its front alone: every tab behind
+# it gone. Found by the window's own test of a tiled tab leaving its bar.
+[[sabotage]]
+name = "an edge drop drops the target's tabs"
+file = "src/ui/layout_manager.cpp"
+find = "\t\tbssh_pane_node kept = *found;\n"
+replace = "\t\tbssh_pane_node kept = leaf(target);\n"
+expect = "a_tab_moves_between_panes_and_along_a_bar"

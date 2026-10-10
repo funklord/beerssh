@@ -4,16 +4,16 @@
 # Set to the left, and it goes back above the panes.
 [[sabotage]]
 name = "a bar set to the left stays above the panes"
-file = "src/ui/main_window.cpp"
-find = "\t\tm_body->insertWidget(m_body->indexOf(m_panes), m_tab_row, 0);"
-replace = "\t\tm_page_layout->insertWidget(0, m_tab_row, 0);"
+file = "src/ui/pane_container.cpp"
+find = "\tcase Qt::LeftEdge:   direction = QBoxLayout::LeftToRight; break;\n"
+replace = ""
 expect = "the_tab_bar_goes_where_it_is_set"
 
 # Beside the panes, but still drawn facing up.
 [[sabotage]]
 name = "a bar on the left keeps its horizontal shape"
-file = "src/ui/main_window.cpp"
-find = "\tcase bssh_app_settings::TABS_LEFT:   m_tabs->setShape(QTabBar::RoundedWest); break;"
+file = "src/ui/pane_bar.cpp"
+find = "\tcase Qt::LeftEdge:   m_bar->setShape(QTabBar::RoundedWest); break;\n"
 replace = ""
 expect = "the_tab_bar_goes_where_it_is_set"
 
@@ -21,6 +21,6 @@ expect = "the_tab_bar_goes_where_it_is_set"
 [[sabotage]]
 name = "a drop down a side bar is not on the bar"
 file = "src/ui/main_window.cpp"
-find = "\tif (m_tabs->shape() == QTabBar::RoundedWest || m_tabs->shape() == QTabBar::RoundedEast)"
-replace = "\tif (false)"
+find = "\t\tif (bar->rect().contains(bar->mapFrom(this, at))) return bar->front();\n"
+replace = "\t\tif (bar->tab_bar()->rect().contains(bar->tab_bar()->mapFrom(this, at))) return bar->front();\n"
 expect = "the_tab_bar_goes_where_it_is_set"

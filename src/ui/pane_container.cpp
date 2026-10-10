@@ -10,6 +10,7 @@
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QPointer>
+#include <QBoxLayout>
 #include <QVBoxLayout>
 
 #include "model/session.h"
@@ -70,6 +71,27 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
 		connect(m_layout, &bssh_layout_manager::layout_changed,
 		         this, &bssh_pane_container::rebuild);
 	}
+}
+
+void bssh_pane_container::set_bar_factory(
+        std::function<QWidget *(bssh_session *, QWidget *)> factory) {
+	m_bar_factory = std::move(factory);
+}
+
+void bssh_pane_container::set_bar_edge(Qt::Edge edge) {
+	if (edge == m_bar_edge) return;
+	m_bar_edge = edge;
+	rebuild();
+}
+
+QWidget *bssh_pane_container::frame_for(bssh_session *front) const {
+	const int index = m_sessions.indexOf(front);
+	return index >= 0 && index < m_frames.size() ? m_frames.at(index) : nullptr;
+}
+
+QWidget *bssh_pane_container::bar_for(bssh_session *front) const {
+	const int index = m_sessions.indexOf(front);
+	return index >= 0 && index < m_bars.size() ? m_bars.at(index) : nullptr;
 }
 
 bssh_terminal_view *bssh_pane_container::view_for(bssh_session *session) const {
@@ -173,7 +195,39 @@ void bssh_pane_container::configure_splitter(QSplitter *splitter) {
 
 bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
                                                     QSplitter *parent) {
-	bssh_terminal_view *view = new bssh_terminal_view(parent);
+	/*
+	 * A frame per pane, its bar on the set edge and the view taking the
+	 * rest (sec 8.3's bar per pane). The splitter holds frames, so a
+	 * divider moves a pane and its bar together.
+	 */
+	QWidget *frame = new QWidget(parent);
+	frame->setObjectName(QStringLiteral("pane-frame"));
+	QBoxLayout::Direction direction = QBoxLayout::TopToBottom;
+	switch (m_bar_edge) {
+	case Qt::BottomEdge: direction = QBoxLayout::BottomToTop; break;
+	case Qt::LeftEdge:   direction = QBoxLayout::LeftToRight; break;
+	case Qt::RightEdge:  direction = QBoxLayout::RightToLeft; break;
+	default:             break;
+	}
+	QBoxLayout *box = new QBoxLayout(direction, frame);
+	box->setContentsMargins(0, 0, 0, 0);
+	box->setSpacing(0);
+
+	QWidget *bar = m_bar_factory ? m_bar_factory(session, frame) : nullptr;
+	if (bar) box->addWidget(bar, 0);
+
+	bssh_terminal_view *view = new bssh_terminal_view(frame);
+	box->addWidget(view, 1);
+
+	/*
+	 * Added explicitly, which shows it. A splitter otherwise shows a new
+	 * child when the child is POLISHED, and nothing polishes a plain
+	 * frame -- the view did it for itself, measuring its font -- so the
+	 * first pane of a rebuild came up hidden and zero wide.
+	 */
+	parent->addWidget(frame);
+	m_frames.append(frame);
+	m_bars.append(bar);
 
 	/*
 	 * It is a pane, so it gets the drag handle (sec 8.4). A view
@@ -290,6 +344,12 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	 * taking a destructive command is a real outcome.
 	 */
 	connect(view, &bssh_terminal_view::focus_received, this, [this, session] {
+		/*
+		 * Not while the panes are being rebuilt: deleting a frame hands
+		 * Qt's focus to whichever view is next in the chain, and that is
+		 * not the user choosing a pane.
+		 */
+		if (m_rebuilding) return;
 		focus_session(session);
 
 		/*
@@ -446,7 +506,11 @@ void bssh_pane_container::rebuild() {
 	 * loses precisely nothing. Diffing would be an optimisation of the
 	 * cheap half at the cost of the subtle half.
 	 */
-	qDeleteAll(m_views);
+	/* The frames, which take their bars and views with them. */
+	m_rebuilding = true;
+	qDeleteAll(m_frames);
+	m_frames.clear();
+	m_bars.clear();
 	m_views.clear();
 
 	/*
@@ -494,6 +558,7 @@ void bssh_pane_container::rebuild() {
 		}
 	}
 
+	m_rebuilding = false;
 	if (!panes.contains(m_focused)) m_focused = panes.isEmpty() ? nullptr : panes.first();
 
 	apply_focus_styling();

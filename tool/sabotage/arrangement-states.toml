@@ -10,9 +10,9 @@
 # The split. A pane is not a tab.
 [[sabotage]]
 name = "a tiled session is listed in the tab bar as well"
-file = "src/ui/main_window.cpp"
-find = "\t\tif (!panes.contains(session)) m_tab_order.append(session);"
-replace = "\t\tm_tab_order.append(session);"
+file = "src/ui/layout_manager.cpp"
+find = "\t/* Whatever it was, it leaves its old place first, and that space closes. */\n\ttake_out(m_tree, session);\n"
+replace = "\t/* Whatever it was, it leaves its old place first, and that space closes. */\n"
 expect = "a_tiled_session_leaves_the_tab_bar"
 
 # And the bar has to be rebuilt when the PANES change, not only when the
@@ -36,17 +36,17 @@ expect = "narrowing_a_window_turns_its_extra_panes_into_tabs"
 [[sabotage]]
 name = "a pane dropped on the tab bar is shown instead of tabbed"
 file = "src/ui/main_window.cpp"
-find = "\tif (pane_here) {\n\t\tshow_as_tab(session);"
-replace = "\tif (pane_here) {\n\t\t(void)0;"
+find = "\tm_layout->add_tab(session, front, slot < 0 ? INT_MAX : slot);\n"
+replace = "\tshow_session(session);\n"
 expect = "a_pane_dropped_on_the_tab_bar_becomes_a_tab"
 
 # A window with no pane shows nothing at all.
 [[sabotage]]
 name = "the last pane can be turned into a tab"
 file = "src/ui/main_window.cpp"
-find = "\tif (intent.size() < 2) return;"
-replace = "\tif (intent.isEmpty()) return;"
-expect = "a_pane_dropped_on_the_tab_bar_becomes_a_tab"
+find = "\tif (panes.size() < 2) return;\n"
+replace = ""
+expect = "each_pane_keeps_its_own_tabs"
 
 # Moving a pane off the end of the arrangement. The guard refuses rather
 # than wrapping, because a wrap makes "left" mean "far right" at exactly

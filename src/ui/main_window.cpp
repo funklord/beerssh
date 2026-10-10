@@ -1,4 +1,5 @@
 #include <QApplication>
+#include <climits>
 #include "ui/interface_scale.h"
 #include "ui/touch_metrics.h"
 #include "softkeys/metrics.h"
@@ -74,6 +75,7 @@ static bool another_beerssh_under_pointer(const QWidget *ours);
 #include "ui/layout_manager.h"
 #include "ui/find_bar.h"
 #include "ui/input_selector.h"
+#include "ui/pane_bar.h"
 #include "ui/pane_container.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
@@ -288,6 +290,9 @@ public:
 	std::function<int(const QMimeData *, const QPoint &at, int *mark)> slot_at;
 	std::function<void(const QMimeData *, int slot)> dropped;
 
+	/* The pane whose bar or strip this lies over (sec 8.3's bar per pane). */
+	bssh_session *front = nullptr;
+
 	explicit bssh_tab_drop(QWidget *parent) : QWidget(parent) {
 		setAcceptDrops(true);
 		hide();
@@ -404,7 +409,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_pages(new QStackedWidget(this)),
       m_front_door_up(false),
       m_menu_bar(nullptr),
-      m_tab_row(nullptr),
       m_copy_action(nullptr),
       m_paste_action(nullptr),
       m_split_action(nullptr),
@@ -424,8 +428,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_registry(bssh_session_registry::shared()),
       m_layout(nullptr),
       m_current(nullptr),
-      m_tabs(new QTabBar(m_terminal_page)),
-      m_tab_long_press(nullptr),
       m_key_row(nullptr),
       m_keyboard(nullptr),
       m_status_line(bssh_app_settings::STATUS_LINE_SESSION),
@@ -530,85 +532,13 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	layout->setSpacing(0);
 
 	/*
-	 * Tabs above the terminal (sec 8.3). One per session, labelled from
-	 * the OSC title with the profile name as fallback, and hidden while
-	 * there is only one -- a single tab is a strip of wasted rows on a
-	 * phone.
+	 * No tab bar of the window's own any more: each pane has one
+	 * (sec 8.3, agreed 2026-10-10), built by make_pane_bar() whenever the
+	 * pane container builds the pane. What the single bar's comments
+	 * argued -- a "+" where every browser puts it, labels elided in the
+	 * middle, no bar while there is nothing to switch to -- is in
+	 * bssh_pane_bar now, per pane.
 	 */
-	m_tabs->setExpanding(false);
-	m_tabs->setTabsClosable(true);
-	m_tabs->setDrawBase(false);
-
-	/*
-	 * ELIDED, because the label is a string the REMOTE writes. A title
-	 * arrives by OSC (sec 8.3) and is capped at 1024 characters, which
-	 * with setExpanding(false) is a tab about eleven thousand pixels
-	 * wide: measured, and it puts every tab after it past the right-hand
-	 * edge, reachable only through the scroll buttons. No hostility is
-	 * needed for this -- a shell that puts the full command line or a
-	 * deep path in its title gets there on an ordinary afternoon.
-	 *
-	 * In the MIDDLE, for the reason bssh_host_list gives about the same
-	 * kind of string: the two ends are what identify a session and the
-	 * middle of a long path is the part nobody needs. Several tabs on one
-	 * host differ in their LEAF directory, so eliding at the end throws
-	 * away the character that tells them apart.
-	 */
-	m_tabs->setElideMode(Qt::ElideMiddle);
-
-	m_tabs->hide();
-
-	/*
-	 * A "+" at the end of the tab strip, which is where every browser and
-	 * every terminal since the mid-2000s has put it -- so it needs no
-	 * explaining, and it is the one affordance that is visible at the
-	 * moment somebody wants it rather than filed under a menu.
-	 *
-	 * The menu bar carries the same action with its chord beside it; this
-	 * is the shortcut for the hand already on the mouse. Both, not either:
-	 * a menu teaches the chord and a button is quicker once you know.
-	 *
-	 * It lives in the tab bar's corner, so it appears and disappears with
-	 * the strip -- a lone "+" floating above a single-session window
-	 * would be chrome with nothing to sit beside.
-	 */
-	QToolButton *add_tab = new QToolButton(m_tabs);
-	add_tab->setText(QStringLiteral("+"));
-	add_tab->setAutoRaise(true);
-	add_tab->setToolTip(QStringLiteral("Open another session in a tab"));
-	add_tab->setAccessibleName(QStringLiteral("New tab"));
-	connect(add_tab, &QToolButton::clicked, this, [this] { open_another_session(false); });
-	m_tabs->setDrawBase(false);
-
-	QHBoxLayout *tab_row = new QHBoxLayout();
-	m_tab_row_layout = tab_row;
-	tab_row->setContentsMargins(0, 0, 0, 0);
-	tab_row->setSpacing(0);
-	tab_row->addWidget(m_tabs, 0);
-	tab_row->addWidget(add_tab, 0);
-	tab_row->addStretch(1);
-
-	m_tab_row = new QWidget(m_terminal_page);
-	m_tab_row->setLayout(tab_row);
-	m_tab_row->hide();
-	layout->addWidget(m_tab_row, 0);
-
-	/*
-	 * The tab row as a drop target, over the bar or where it would be, for
-	 * the length of a session drag (set_session_drag_active). Placed a turn
-	 * later, as the panes' drops are: placing rebuilds what is delivering.
-	 */
-	m_tab_drop = new bssh_tab_drop(m_terminal_page);
-	m_tab_drop->slot_at = [this](const QMimeData *mime, const QPoint &at, int *mark) {
-		return tab_drop_slot(session_from_mime(mime), at, mark);
-	};
-	m_tab_drop->dropped = [this](const QMimeData *mime, int slot) {
-		QPointer<bssh_session> session = session_from_mime(mime);
-		if (!session) return;
-		QMetaObject::invokeMethod(this, [this, session, slot] {
-			if (session) drop_session_as_tab(session, slot);
-		}, Qt::QueuedConnection);
-	};
 	m_page_layout = layout;
 
 	/*
@@ -636,6 +566,9 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_layout->set_arrangement(chosen_arrangement().arrangement);
 
 	m_panes = new bssh_pane_container(m_layout, m_terminal_page);
+	m_panes->set_bar_factory([this](bssh_session *front, QWidget *parent) {
+		return make_pane_bar(front, parent);
+	});
 	/*
 	 * In a row of their own, so a tab bar placed on the left or the right
 	 * (sec 8.7) sits beside the panes rather than above them.
@@ -798,84 +731,20 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		apply_input_mode();
 	});
 
-	connect(m_tabs, &QTabBar::currentChanged, this, &bssh_main_window::on_tab_changed);
-	connect(m_tabs, &QTabBar::tabCloseRequested,
-	         this, &bssh_main_window::on_tab_close_requested);
-
 	/*
-	 * sec 8.3's drag-to-reorder, and it is DESKTOP ONLY because that
-	 * section says so: the tab bar scrolls horizontally on a phone, and a
-	 * bar that both scrolls and rearranges under the same drag picks one
-	 * of them by accident.
+	 * The bars' gestures -- pick, close, reorder, middle-click, the menu
+	 * by right-click or a held finger, tearing out -- are wired per pane
+	 * in make_pane_bar() now (sec 8.3's bar per pane).
 	 *
-	 * The reorder is applied to the REGISTRY, not left in the bar. Tab
-	 * index and registry index are one thing here -- every tab action
-	 * turns an index into a session with at() -- and on_registry_changed
-	 * rebuilds the bar from the registry, so a drag the registry never
-	 * heard about is undone at the next repaint, having in the meantime
-	 * pointed Close at whichever session used to be in that slot.
+	 * A tab pulled clear of one window's bar can land on another's
+	 * (sec 8.4). Gated on a pointer, because the drag it receives can
+	 * only be started where there is a pointer to start it -- offering
+	 * to receive one on a phone would be a capability nothing can
+	 * exercise.
 	 */
 	const bool pointer = bssh_platform::instance()
 	                      && !bssh_platform::instance()->is_touch_primary();
-	m_tabs->setMovable(pointer);
-
-	/*
-	 * And the other end of that same gesture: a tab pulled clear of one
-	 * window's bar can land on another's (sec 8.4). Gated on the same
-	 * answer, because the drag it receives can only be started where
-	 * there is a pointer to start it -- offering to receive one on a
-	 * phone would be a capability nothing can exercise.
-	 */
 	setAcceptDrops(pointer);
-
-	connect(m_tabs, &QTabBar::tabMoved, this, [this](int from, int to) {
-		/*
-		 * The window's own order, not the registry's. Which order a
-		 * window shows its tabs in is that window's business; moving
-		 * them in the registry would rearrange every other window's
-		 * tabs as a side effect (sec 8.4).
-		 */
-		move_tab(from, to);
-	});
-
-	/*
-	 * And sec 8.3's middle-click close, the other half of that sentence.
-	 * Every tabbed program since the browsers settled it does this, and a
-	 * user who has the habit tries it before they look for the small x.
-	 *
-	 * On RELEASE, like every other click: pressing over a tab and
-	 * dragging away is a cancelled click everywhere else, and a close
-	 * that fires under the finger is the one that cannot be taken back.
-	 * Not gated on the platform -- a phone has no middle button to press,
-	 * and a mouse plugged into one may as well work.
-	 */
-	m_tabs->installEventFilter(this);
-
-	/*
-	 * sec 8.3's tab context menu. "Show beside current" is how a split is
-	 * MADE -- until now the pane container could show four panes and
-	 * nothing in the app could ask it to show two.
-	 */
-	m_tabs->setContextMenuPolicy(Qt::CustomContextMenu);
-	connect(m_tabs, &QWidget::customContextMenuRequested,
-	         this, &bssh_main_window::show_tab_menu);
-
-	/*
-	 * And by press-and-hold, which is the other half of sec 8.3's
-	 * "long-press (touch) or right-click (desktop)" and was the half with
-	 * no implementation: Qt does not raise a context-menu event from a
-	 * long press on Android. Same gesture as the host list and the
-	 * terminal, and enabled the same way -- only where touch is the
-	 * primary input, since with a pointer a held press on a tab means
-	 * nothing and should keep meaning nothing.
-	 */
-	m_tab_long_press = new bssh_long_press(m_tabs, this);
-	m_tab_long_press->set_enabled(bssh_platform::instance()
-	                               && bssh_platform::instance()->is_touch_primary());
-
-	connect(m_tab_long_press, &bssh_long_press::triggered, this, [this](const QPoint &at) {
-		show_tab_menu(m_tabs->mapFromGlobal(at));
-	});
 
 	connect(m_registry, &bssh_session_registry::changed,
 	         this, &bssh_main_window::on_registry_changed);
@@ -1613,24 +1482,14 @@ void bssh_main_window::show_session(bssh_session *session) {
 	 * four, collapsing to tabs when the window narrows, is a question
 	 * about the LIST rather than about any one view.
 	 */
-	if (m_layout->arrangement() == bssh_layout_manager::COLUMN) {
-		/*
-		 * A column holds every session the window shows (sec 8.7), in the
-		 * order they arrived, so showing one shows the whole column and
-		 * there are no tabs to leave behind. That is what dissolves the
-		 * bar's off-by-one rather than fixing it: with nothing to convert
-		 * to a tab, the miscount has nowhere to happen.
-		 */
-		sync_column_intent();
-	} else if (!m_layout->intent().contains(session)) {
-		/*
-		 * Selecting a tab shows that session alone. Adding it BESIDE the
-		 * others is a separate, deliberate act (the tab context menu's
-		 * "Show beside current"), because a tab switch that silently
-		 * split the window would be a click doing two things.
-		 */
-		m_layout->set_intent(QList<bssh_session *>{ session });
-	}
+	/*
+	 * Every session is in some pane's stack (sec 8.3's bar per pane), so
+	 * showing one brings it to the front of its pane -- and a pane a
+	 * narrow window could not show trades places with one it can. In a
+	 * column as on the desktop: a stack per pane in both.
+	 */
+	sync_tree_with_shown();
+	m_layout->bring_to_front(session);
 
 	m_panes->rebuild();
 	m_panes->focus_session(session);
@@ -1696,40 +1555,35 @@ void bssh_main_window::split_beside_current() {
 void bssh_main_window::show_as_tab(bssh_session *session) {
 	if (!session || !m_layout || !m_panes) return;
 
-	/*
-	 * A column has no tabs (sec 8.7): it holds every session as a pane, so
-	 * "show as a tab" would drop a session out of the intent with no bar
-	 * to reach it by. Left where it is rather than hidden.
-	 */
-	if (m_layout->arrangement() == bssh_layout_manager::COLUMN) return;
-
-	QList<bssh_session *> intent = m_layout->intent();
-	if (!intent.contains(session)) return;
+	const QList<bssh_session *> panes = m_layout->visible_panes();
+	const int at = panes.indexOf(session);
+	if (at < 0) return;
 
 	/*
 	 * The last pane cannot become a tab: a window with no pane is a
-	 * window showing nothing, and there would be no way back to any of
-	 * its terminals except the bar it just grew. Refused rather than
-	 * silently ignored is the same answer tear_out gives ("a window will
-	 * not empty itself", sec 8.4) applied one level in.
+	 * window showing nothing. Refused rather than silently ignored is the
+	 * same answer tear_out gives ("a window will not empty itself",
+	 * sec 8.4) applied one level in.
 	 */
-	if (intent.size() < 2) return;
+	if (panes.size() < 2) return;
 
-	intent.removeAll(session);
-	m_layout->set_intent(intent);
-
-	m_panes->rebuild();
+	/*
+	 * Into the bar of the pane beside it -- the one before, or after the
+	 * first -- every tab of it, behind what that pane shows (sec 8.3's
+	 * bar per pane). The pane it leaves closes and its neighbours take
+	 * the room.
+	 */
+	bssh_session *into = panes.at(at > 0 ? at - 1 : 1);
+	for (bssh_session *tab : m_layout->tabs(session)) m_layout->add_tab(tab, into, INT_MAX);
+	m_layout->bring_to_front(into);
 
 	/*
 	 * Focus goes somewhere, and it has to be said explicitly: the pane
-	 * that was focused is the one that just left, so leaving this out
-	 * gives a window whose panes are all unfocused -- no border, no
-	 * cursor filled, and keystrokes going to whatever Qt picked.
+	 * that was focused may be the one that just left, which leaves a
+	 * window whose panes are all unfocused -- no border, no cursor
+	 * filled, and keystrokes going to whatever Qt picked.
 	 */
-	if (m_current == session || !m_current) {
-		const QList<bssh_session *> panes = m_layout->visible_panes();
-		if (!panes.isEmpty()) m_panes->focus_session(panes.first());
-	}
+	m_panes->focus_session(into);
 
 	refresh_tab_bar();
 	update_status();
@@ -1812,49 +1666,19 @@ void bssh_main_window::on_screen_changed() {
 }
 
 void bssh_main_window::apply_tab_position(int position) {
-	if (!m_tab_row || !m_page_layout || !m_body || !m_tab_row_layout) return;
+	if (!m_panes) return;
 	if (position == m_tab_position) return;
 	m_tab_position = position;
 
-	const bool vertical = position == bssh_app_settings::TABS_LEFT
-	                      || position == bssh_app_settings::TABS_RIGHT;
-
-	/*
-	 * The bar's own shape, so the tabs face the panes, and the row's
-	 * direction with it -- the "+" and the stretch that makes the whole
-	 * strip a drop target run along whichever edge it is on.
-	 */
+	/* Every pane's bar on that side of its pane (sec 8.3's bar per pane). */
+	Qt::Edge edge = Qt::TopEdge;
 	switch (position) {
-	case bssh_app_settings::TABS_BOTTOM: m_tabs->setShape(QTabBar::RoundedSouth); break;
-	case bssh_app_settings::TABS_LEFT:   m_tabs->setShape(QTabBar::RoundedWest); break;
-	case bssh_app_settings::TABS_RIGHT:  m_tabs->setShape(QTabBar::RoundedEast); break;
-	default:                             m_tabs->setShape(QTabBar::RoundedNorth); break;
+	case bssh_app_settings::TABS_BOTTOM: edge = Qt::BottomEdge; break;
+	case bssh_app_settings::TABS_LEFT:   edge = Qt::LeftEdge; break;
+	case bssh_app_settings::TABS_RIGHT:  edge = Qt::RightEdge; break;
+	default:                             break;
 	}
-	m_tab_row_layout->setDirection(vertical ? QBoxLayout::TopToBottom
-	                                        : QBoxLayout::LeftToRight);
-
-	m_page_layout->removeWidget(m_tab_row);
-	m_body->removeWidget(m_tab_row);
-
-	switch (position) {
-	case bssh_app_settings::TABS_BOTTOM:
-		m_page_layout->insertWidget(m_page_layout->indexOf(m_body) + 1, m_tab_row, 0);
-		break;
-	/*
-	 * Beside the panes rather than at the row's ends: the ends are the
-	 * split keyboard's, and a tab bar outside a keyboard half would put
-	 * the keys between the tabs and the terminal they name.
-	 */
-	case bssh_app_settings::TABS_LEFT:
-		m_body->insertWidget(m_body->indexOf(m_panes), m_tab_row, 0);
-		break;
-	case bssh_app_settings::TABS_RIGHT:
-		m_body->insertWidget(m_body->indexOf(m_panes) + 1, m_tab_row, 0);
-		break;
-	default:
-		m_page_layout->insertWidget(0, m_tab_row, 0);
-		break;
-	}
+	m_panes->set_bar_edge(edge);
 }
 
 bool bssh_main_window::apply_arrangement() {
@@ -2003,24 +1827,6 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	 * set_style returns at once when the answer has not changed.
 	 */
 	apply_keyboard_style();
-}
-
-/*
- * Both device-level appearance settings, applied together because they
- * arrive on the same signal and a caller that remembers one and forgets
- * the other is the bug this function exists to not have.
- */
-void bssh_main_window::sync_column_intent() {
-	/*
-	 * In a column every session the window shows is a pane (sec 8.7), so
-	 * the layout intent is exactly the shown list, in the same order. A
-	 * no-op in every other arrangement, and when the two already agree, so
-	 * a rebuild fires only on a real change.
-	 */
-	if (m_layout && m_layout->arrangement() == bssh_layout_manager::COLUMN
-	    && m_layout->intent() != m_shown) {
-		m_layout->set_intent(m_shown);
-	}
 }
 
 void bssh_main_window::apply_input_mode() {
@@ -3256,26 +3062,35 @@ void bssh_main_window::adopt_session(bssh_session *session) {
 int bssh_main_window::drop_zone_for(bssh_session *session, bssh_session *target,
                                      int edge) const {
 	if (!session) return BSSH_DROP_REFUSED;
-	if (!target || session == target || !m_layout || !m_layout->intent().contains(target))
-		return BSSH_DROP_CANCEL;
+	if (!target || !m_layout || !m_layout->intent().contains(target)) return BSSH_DROP_CANCEL;
+
+	/*
+	 * A pane's front on its OWN pane (sec 8.3's bar per pane): with tabs
+	 * behind it an edge splits it off into a pane of its own, the next
+	 * tab taking the front; the middle, or a pane of one, is a cancel.
+	 */
+	const bool own = session == target;
+	if (own && m_layout->tabs(session).size() < 2) return BSSH_DROP_CANCEL;
 
 	typedef bssh_layout_manager layout;
 	if (edge < layout::EDGE_LEFT || edge > layout::EDGE_MIDDLE) return BSSH_DROP_CANCEL;
-	if (edge == layout::EDGE_MIDDLE) return edge;
+	if (edge == layout::EDGE_MIDDLE) return own ? BSSH_DROP_CANCEL : edge;
 
 	/*
 	 * A side that cannot be honoured is the swap instead, drawn and done
-	 * as one (the holder's rule, 2026-10-09). An arrival into a window at
-	 * its pane cap would make a pane there is no room for; and the
-	 * portrait column stacks its panes whatever the tree says, so left
-	 * and right have no meaning there -- they used to be drawn as halves
-	 * and land as above and below.
+	 * as one (the holder's rule, 2026-10-09) -- or, for a pane's own
+	 * front, the cancel its own middle is. A new pane in a window at its
+	 * pane cap would make a pane there is no room for; and the portrait
+	 * column stacks its panes whatever the tree says, so left and right
+	 * have no meaning there -- they used to be drawn as halves and land
+	 * as above and below.
 	 */
-	const bool arriving = !m_layout->intent().contains(session);
-	if (arriving && m_layout->intent().size() >= m_layout->max_panes()) return layout::EDGE_MIDDLE;
+	const int folded = own ? BSSH_DROP_CANCEL : int(layout::EDGE_MIDDLE);
+	const bool new_pane = own || !m_layout->intent().contains(session);
+	if (new_pane && m_layout->intent().size() >= m_layout->max_panes()) return folded;
 	if (m_layout->arrangement() == layout::COLUMN
 	    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))
-		return layout::EDGE_MIDDLE;
+		return folded;
 
 	return edge;
 }
@@ -3378,6 +3193,16 @@ void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *targ
 
 	if (!m_layout->intent().contains(session)) take_session(session);
 
+	/* Off its own pane: the tab beside it fronts the pane, and is the target. */
+	if (session == target) {
+		const QList<bssh_session *> tabs = m_layout->tabs(session);
+		const int at = tabs.indexOf(session);
+		bssh_session *other = tabs.value(at + 1 < tabs.size() ? at + 1 : at - 1);
+		if (!other) return;
+		m_layout->bring_to_front(other);
+		target = other;
+	}
+
 	if (!m_layout->place(session, target, where)) return;
 
 	/*
@@ -3403,69 +3228,56 @@ void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *targ
 	update_status();
 }
 
-void bssh_main_window::drop_session_as_tab(bssh_session *session, int slot) {
+void bssh_main_window::drop_session_as_tab(bssh_session *session, bssh_session *front,
+                                            int slot) {
 	if (!session || !m_layout || !m_panes) return;
 
-	const bool pane_here = m_layout->intent().contains(session);
+	/* From another window: this one takes it first, then places it. */
+	if (!m_shown.contains(session)) take_session(session);
 
-	/*
-	 * show_as_tab() declines the window's only pane, which would leave it
-	 * showing nothing; tab_drop_slot() offers no slot for it either.
-	 */
-	if (pane_here) {
-		show_as_tab(session);
-	} else if (!m_shown.contains(session)) {
-		take_session(session);
-
-		/* Into a window showing nothing, a tab would leave it empty. */
-		if (m_layout->intent().isEmpty()) {
-			show_session(session);
-			return;
-		}
+	/* A window showing nothing, or a pane no longer here: simply shown. */
+	if (!front || !m_layout->sessions().contains(front) || front == session) {
+		show_session(session);
+		return;
 	}
 
-	/*
-	 * Now a tab here, wherever it was: put it at `slot` among the tabs.
-	 * The bar lists m_shown less the panes, in m_shown's order, so the
-	 * place is before whichever tab holds that slot now.
-	 */
-	const QList<bssh_session *> panes = m_layout->visible_panes();
-	QList<bssh_session *> tabs;
-	for (bssh_session *each : m_shown) {
-		if (each != session && !panes.contains(each)) tabs.append(each);
-	}
-	m_shown.removeAll(session);
-	if (slot >= 0 && slot < tabs.size()) m_shown.insert(m_shown.indexOf(tabs.at(slot)), session);
-	else m_shown.append(session);
-
+	m_layout->add_tab(session, front, slot < 0 ? INT_MAX : slot);
+	m_panes->focus_session(session);
 	refresh_tab_bar();
 	update_status();
 }
 
-int bssh_main_window::tab_drop_slot(bssh_session *session, const QPoint &at, int *mark) const {
+int bssh_main_window::tab_drop_slot(bssh_session *session, bssh_session *front,
+                                    const QPoint &at, int *mark) const {
 	if (mark) *mark = -1;
-	if (!session || !m_layout || !m_tabs || !m_tab_drop) return -1;
+	if (!session || !front || !m_layout || !m_panes) return -1;
 
-	/* The only pane of this window: a drop here would do nothing. */
-	if (m_layout->intent().contains(session) && m_layout->intent().size() < 2) return -1;
+	/* A pane's only tab dropped on its own bar or strip: nothing to do. */
+	const QList<bssh_session *> tabs = m_layout->bar_tabs(front);
+	if (tabs == QList<bssh_session *>{ session }) return -1;
 
-	/* No bar: the strip is the one slot, and lights whole. */
-	if (!m_tab_row || m_tab_row->isHidden()) return 0;
+	/* No bar: the strip is the one slot, after the pane's own, and lights whole. */
+	bssh_pane_bar *row = bar_for(front);
+	if (!row || row->isHidden()) return int(tabs.size());
+
+	QWidget *overlay = tab_drop_target(front);
+	QTabBar *bar = row->tab_bar();
+	if (!overlay || !bar) return -1;
 
 	/*
 	 * Before the first tab whose middle is past the pointer, along the
 	 * bar's own direction; after the last otherwise. The mark sits on the
-	 * boundary the tab would take, in the overlay's coordinates.
+	 * boundary the tab would take, in the overlay's coordinates. Through
+	 * global coordinates: neither widget is the other's ancestor, which
+	 * mapFrom() requires.
 	 */
-	const bool vertical = m_tabs->shape() == QTabBar::RoundedWest
-	                      || m_tabs->shape() == QTabBar::RoundedEast;
-	/* Through global coordinates: neither widget is the other's ancestor,
-	 * which mapFrom() requires. */
-	const QPoint in_bar = m_tabs->mapFromGlobal(m_tab_drop->mapToGlobal(at));
-	const int count = m_tabs->count();
+	const bool vertical = bar->shape() == QTabBar::RoundedWest
+	                      || bar->shape() == QTabBar::RoundedEast;
+	const QPoint in_bar = bar->mapFromGlobal(overlay->mapToGlobal(at));
+	const int count = bar->count();
 	int slot = count;
 	for (int i = 0; i < count; ++i) {
-		const QRect tab = m_tabs->tabRect(i);
+		const QRect tab = bar->tabRect(i);
 		if (vertical ? in_bar.y() < tab.center().y() : in_bar.x() < tab.center().x()) {
 			slot = i;
 			break;
@@ -3475,65 +3287,103 @@ int bssh_main_window::tab_drop_slot(bssh_session *session, const QPoint &at, int
 	if (mark) {
 		QPoint edge(0, 0);
 		if (slot < count) {
-			edge = m_tabs->tabRect(slot).topLeft();
+			edge = bar->tabRect(slot).topLeft();
 		} else if (count > 0) {
-			const QRect last = m_tabs->tabRect(count - 1);
+			const QRect last = bar->tabRect(count - 1);
 			edge = vertical ? last.bottomLeft() + QPoint(0, 1) : last.topRight() + QPoint(1, 0);
 		}
-		const QPoint in_overlay = m_tab_drop->mapFromGlobal(m_tabs->mapToGlobal(edge));
+		const QPoint in_overlay = overlay->mapFromGlobal(bar->mapToGlobal(edge));
 		*mark = vertical ? in_overlay.y() : in_overlay.x();
 	}
 	return slot;
 }
 
-QWidget *bssh_main_window::tab_drop_target() const {
-	return m_tab_drop;
+QWidget *bssh_main_window::tab_drop_target(bssh_session *front) const {
+	for (const QPointer<bssh_tab_drop> &overlay : m_tab_drops) {
+		if (overlay && overlay->front == front) return overlay;
+	}
+	return nullptr;
+}
+
+QList<bssh_pane_bar *> bssh_main_window::pane_bars() const {
+	QList<bssh_pane_bar *> bars;
+	if (!m_panes || !m_layout) return bars;
+	for (bssh_session *front : m_layout->visible_panes()) {
+		if (bssh_pane_bar *bar = bar_for(front)) bars.append(bar);
+	}
+	return bars;
+}
+
+bssh_pane_bar *bssh_main_window::bar_for(bssh_session *front) const {
+	return m_panes ? qobject_cast<bssh_pane_bar *>(m_panes->bar_for(front)) : nullptr;
 }
 
 void bssh_main_window::set_session_drag_active(bool active) {
-	if (!m_tab_drop || !m_terminal_page || !m_panes || !m_tabs) return;
-
-	if (!active) {
-		m_tab_drop->hover(-1, -1);
-		m_tab_drop->hide();
-		return;
+	/* Out of sight at once, gone a turn later: one may be delivering the drop. */
+	for (const QPointer<bssh_tab_drop> &overlay : m_tab_drops) {
+		if (!overlay) continue;
+		overlay->hide();
+		overlay->deleteLater();
 	}
+	m_tab_drops.clear();
+	if (!active || !m_terminal_page || !m_panes || !m_layout) return;
 
 	const bool vertical = m_tab_position == bssh_app_settings::TABS_LEFT
 	                      || m_tab_position == bssh_app_settings::TABS_RIGHT;
-	const bool strip = !m_tab_row || m_tab_row->isHidden();
+	const int deep = fontMetrics().height() * 2;
 
-	QRect where;
-	if (!strip) {
-		where = QRect(m_tab_row->mapTo(m_terminal_page, QPoint(0, 0)), m_tab_row->size());
-	} else {
-		/*
-		 * The edge of the panes the bar would appear on, as deep as the
-		 * bar would be -- that is where a user who wants a tab looks.
-		 */
-		const QRect panes(m_panes->mapTo(m_terminal_page, QPoint(0, 0)), m_panes->size());
-		const int deep = qMax(m_tabs->sizeHint().height(), fontMetrics().height() * 2);
-		const int wide = qMax(m_tabs->sizeHint().width(), fontMetrics().height() * 2);
-		switch (m_tab_position) {
-		case bssh_app_settings::TABS_BOTTOM:
-			where = QRect(panes.left(), panes.bottom() - deep + 1, panes.width(), deep);
-			break;
-		case bssh_app_settings::TABS_LEFT:
-			where = QRect(panes.left(), panes.top(), wide, panes.height());
-			break;
-		case bssh_app_settings::TABS_RIGHT:
-			where = QRect(panes.right() - wide + 1, panes.top(), wide, panes.height());
-			break;
-		default:
-			where = QRect(panes.left(), panes.top(), panes.width(), deep);
-			break;
+	/*
+	 * Each pane's bar, or with none the strip along the pane's edge where
+	 * it would be (sec 8.3): that is where somebody who wants a tab in
+	 * THAT pane looks.
+	 */
+	for (bssh_session *front : m_layout->visible_panes()) {
+		QWidget *frame = m_panes->frame_for(front);
+		if (!frame || !frame->isVisible()) continue;
+
+		bssh_pane_bar *bar = bar_for(front);
+		const bool strip = !bar || bar->isHidden();
+		const QRect pane(frame->mapTo(m_terminal_page, QPoint(0, 0)), frame->size());
+
+		QRect where;
+		if (!strip) {
+			where = QRect(bar->mapTo(m_terminal_page, QPoint(0, 0)), bar->size());
+		} else {
+			switch (m_tab_position) {
+			case bssh_app_settings::TABS_BOTTOM:
+				where = QRect(pane.left(), pane.bottom() - deep + 1, pane.width(), deep);
+				break;
+			case bssh_app_settings::TABS_LEFT:
+				where = QRect(pane.left(), pane.top(), deep, pane.height());
+				break;
+			case bssh_app_settings::TABS_RIGHT:
+				where = QRect(pane.right() - deep + 1, pane.top(), deep, pane.height());
+				break;
+			default:
+				where = QRect(pane.left(), pane.top(), pane.width(), deep);
+				break;
+			}
 		}
-	}
 
-	m_tab_drop->set_shape(strip, vertical);
-	m_tab_drop->setGeometry(where);
-	m_tab_drop->show();
-	m_tab_drop->raise();
+		bssh_tab_drop *overlay = new bssh_tab_drop(m_terminal_page);
+		overlay->front = front;
+		overlay->slot_at = [this, front](const QMimeData *mime, const QPoint &at, int *mark) {
+			return tab_drop_slot(session_from_mime(mime), front, at, mark);
+		};
+		overlay->dropped = [this, front](const QMimeData *mime, int slot) {
+			QPointer<bssh_session> session = session_from_mime(mime);
+			QPointer<bssh_session> into = front;
+			if (!session) return;
+			QMetaObject::invokeMethod(this, [this, session, into, slot] {
+				if (session) drop_session_as_tab(session, into, slot);
+			}, Qt::QueuedConnection);
+		};
+		overlay->set_shape(strip, vertical);
+		overlay->setGeometry(where);
+		overlay->show();
+		overlay->raise();
+		m_tab_drops.append(overlay);
+	}
 }
 
 /* Every window of this process, for the length of one session drag. */
@@ -3573,9 +3423,6 @@ bssh_session *bssh_main_window::session_from_mime(const QMimeData *mime) const {
 	return m_registry ? m_registry->at(index) : nullptr;
 }
 
-void bssh_main_window::start_tab_drag(int index) {
-	start_session_drag(session_at_tab(index));
-}
 
 /*
  * What the pointer carries during a session drag.
@@ -3758,8 +3605,14 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 		ghost.set_refused(!spot.window && another_beerssh_under_pointer(this));
 
 		bssh_main_window *row = spot.on_tab_row ? spot.window : nullptr;
-		if (lit_row && lit_row != row && lit_row->m_tab_drop) lit_row->m_tab_drop->hover(-1, -1);
-		if (row && row->m_tab_drop) row->m_tab_drop->hover(spot.slot, spot.mark);
+		for (bssh_main_window *each : { lit_row.data(), row }) {
+			if (!each) continue;
+			for (const QPointer<bssh_tab_drop> &overlay : each->m_tab_drops) {
+				if (!overlay) continue;
+				const bool lit = each == row && overlay->front == spot.front;
+				overlay->hover(lit ? spot.slot : -1, lit ? spot.mark : -1);
+			}
+		}
 		lit_row = row;
 	};
 
@@ -3873,16 +3726,22 @@ bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &globa
 	 * would be, asked for the slot it draws. A slot of -1 means a drop
 	 * there does nothing, which is a spot on nothing.
 	 */
-	if (window->m_tab_drop && window->m_tab_drop->isVisible()) {
-		const QPoint at = window->m_tab_drop->mapFromGlobal(global);
-		if (window->m_tab_drop->rect().contains(at)) {
-			spot.slot = window->tab_drop_slot(session, at, &spot.mark);
+	for (const QPointer<bssh_tab_drop> &overlay : window->m_tab_drops) {
+		if (!overlay || !overlay->isVisible()) continue;
+		const QPoint at = overlay->mapFromGlobal(global);
+		if (overlay->rect().contains(at)) {
+			spot.front = overlay->front;
+			spot.slot = window->tab_drop_slot(session, overlay->front, at, &spot.mark);
 			spot.on_tab_row = spot.slot >= 0;
 			return spot;
 		}
-	} else if (window->point_is_on_tab_row(window->mapFromGlobal(global))) {
-		spot.on_tab_row = true;
-		return spot;
+	}
+	if (window->m_tab_drops.isEmpty()) {
+		if (bssh_session *front = window->tab_row_at(window->mapFromGlobal(global))) {
+			spot.on_tab_row = true;
+			spot.front = front;
+			return spot;
+		}
 	}
 
 	bssh_pane_container *panes = window->panes();
@@ -3930,7 +3789,7 @@ void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &
 	 * line, the keyboard, the front door's page: nothing (the holder,
 	 * 2026-10-09). It used to tile beside, with nothing drawn to say so.
 	 */
-	if (spot.on_tab_row) spot.window->drop_session_as_tab(session, spot.slot);
+	if (spot.on_tab_row) spot.window->drop_session_as_tab(session, spot.front, spot.slot);
 	else if (spot.target) spot.window->drop_session_on(session, spot.target, spot.edge);
 }
 
@@ -3954,18 +3813,18 @@ void bssh_main_window::dragEnterEvent(QDragEnterEvent *event) {
 	if (session_from_mime(event->mimeData())) event->acceptProposedAction();
 }
 
-bool bssh_main_window::point_is_on_tab_row(const QPoint &at) const {
-	if (!m_tabs || !m_tabs->isVisible()) return false;
-
+bssh_session *bssh_main_window::tab_row_at(const QPoint &at) const {
 	/*
-	 * Across the strip, whichever way it runs: a bar on the left or the
-	 * right is a column the whole height of the window, and aiming at it
-	 * means being in that column, however far down.
+	 * Across each pane's bar ROW, whichever way it runs, not the QTabBar
+	 * widget: a bar is only as wide as its tabs, and somebody aiming at
+	 * "the tab bar" means the band, not the widget -- a drop at x=340 on
+	 * the same row as one at x=60 once missed for exactly that.
 	 */
-	const QPoint in_bar = m_tabs->mapFrom(this, at);
-	if (m_tabs->shape() == QTabBar::RoundedWest || m_tabs->shape() == QTabBar::RoundedEast)
-		return in_bar.x() >= 0 && in_bar.x() < m_tabs->width();
-	return in_bar.y() >= 0 && in_bar.y() < m_tabs->height();
+	for (bssh_pane_bar *bar : pane_bars()) {
+		if (!bar->isVisible()) continue;
+		if (bar->rect().contains(bar->mapFrom(this, at))) return bar->front();
+	}
+	return nullptr;
 }
 
 void bssh_main_window::dropEvent(QDropEvent *event) {
@@ -3999,7 +3858,8 @@ void bssh_main_window::dropEvent(QDropEvent *event) {
 	 * it: refused, the source would read "nobody wanted it" and tear out
 	 * a window over the one the user was aiming at.
 	 */
-	if (point_is_on_tab_row(event->position().toPoint())) drop_session_as_tab(session, -1);
+	if (bssh_session *front = tab_row_at(event->position().toPoint()))
+		drop_session_as_tab(session, front, -1);
 	event->acceptProposedAction();
 }
 
@@ -4029,10 +3889,6 @@ void bssh_main_window::open_another_session(bool in_a_window) {
 	window->open_profile(bssh_profile_t::local_shell());
 }
 
-bssh_main_window *bssh_main_window::tear_out_tab(int index) {
-	return tear_out(session_at_tab(index));
-}
-
 /*
  * Move a pane one place earlier or later. See the header for why this
  * exists rather than a touch drag.
@@ -4043,36 +3899,24 @@ bssh_main_window *bssh_main_window::tear_out_tab(int index) {
  * next time the window resized.
  */
 /*
- * Move a tab along this window's bar. See the header for why it is the
- * window's order rather than the registry's.
- *
- * Shared by the desktop DRAG and the menu items, which is the point:
- * the menu's first version moved the session in the registry instead,
- * and a registry step past an on-screen pane moved nothing the user
- * could see. One implementation, two callers.
+ * Move a tab one place along its pane's bar (sec 8.3's bar per pane),
+ * for the menu items; the desktop drag reorders through the bar itself.
+ * The pane's own order, held by the layout manager: which order a bar
+ * shows its tabs in is the pane's business, not the registry's -- moving
+ * them there once rearranged another window's tabs as a side effect.
  */
-void bssh_main_window::move_tab(int from, int to) {
-	if (from < 0 || from >= m_tab_order.size()) return;
-	if (to < 0 || to >= m_tab_order.size()) return;
+void bssh_main_window::move_tab(bssh_session *session, int direction) {
+	if (!session || !m_layout || direction == 0) return;
 
-	/*
-	 * The bar's indices are into the TAB list, which is m_shown without
-	 * the sessions currently on screen as panes. So the move is applied
-	 * there and written back through m_shown, leaving the panes where
-	 * they are: a move in the bar must not reorder terminals the bar is
-	 * not showing.
-	 */
-	m_tab_order.move(from, to);
+	bssh_session *front = m_layout->front_of(session);
+	const QList<bssh_session *> tabs = m_layout->tabs(session);
+	const int from = tabs.indexOf(session);
+	const int to = from + (direction < 0 ? -1 : 1);
+	if (!front || from < 0 || to < 0 || to >= tabs.size()) return;
 
-	int next = 0;
-	const QList<bssh_session *> panes =
-	        m_layout ? m_layout->visible_panes() : QList<bssh_session *>();
-
-	for (int i = 0; i < m_shown.size() && next < m_tab_order.size(); ++i) {
-		if (panes.contains(m_shown.at(i))) continue;
-		m_shown[i] = m_tab_order.at(next++);
-	}
-
+	/* add_tab counts the slot in the bar as it is, the tab still in it. */
+	m_layout->add_tab(session, front, direction < 0 ? to : to + 1);
+	if (front != session) m_layout->bring_to_front(front);
 	refresh_tab_bar();
 }
 
@@ -4089,18 +3933,6 @@ void bssh_main_window::move_pane(bssh_session *session, int direction) {
 	intent.move(from, to);
 	m_layout->set_intent(intent);
 
-	/*
-	 * In a column m_shown is the order of record -- sync_column_intent
-	 * copies it into the intent -- so a reorder that touched only the
-	 * intent would be undone the next time a session is opened or closed.
-	 * Move it there too, by the same step, to make the change stick.
-	 */
-	if (m_layout->arrangement() == bssh_layout_manager::COLUMN) {
-		const int sfrom = m_shown.indexOf(session);
-		const int sto = sfrom + (direction < 0 ? -1 : 1);
-		if (sfrom >= 0 && sto >= 0 && sto < m_shown.size())
-			m_shown.move(sfrom, sto);
-	}
 
 	m_panes->rebuild();
 
@@ -4135,32 +3967,6 @@ bssh_main_window *bssh_main_window::tear_out(bssh_session *session) {
 	return window;
 }
 
-bssh_session *bssh_main_window::session_at_tab(int index) const {
-	/*
-	 * A tab index means a position in THIS window's list, not in the
-	 * registry (sec 8.4). They were the same thing while a window could
-	 * only be one, and with two windows the registry's index is somebody
-	 * else's tab.
-	 */
-	if (index < 0 || index >= m_tab_order.size()) return nullptr;
-	return m_tab_order.at(index);
-}
-
-void bssh_main_window::on_tab_changed(int index) {
-	bssh_session *session = session_at_tab(index);
-	if (session && session != m_current) show_session(session);
-}
-
-void bssh_main_window::on_tab_close_requested(int index) {
-	bssh_session *session = session_at_tab(index);
-	if (session) m_registry->close(session);
-}
-
-/*
- * sec 8.3's middle-click close. QTabBar raises no signal for it --
- * tabCloseRequested comes from its own close button and from nothing else
- * -- so the button is read off the event here.
- */
 bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
 	/*
 	 * The split halves shown or hidden: the status line follows them.
@@ -4173,92 +3979,7 @@ bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
 		return false;
 	}
 
-	/*
-	 * sec 8.3's drag, taken past the bar: a tab dragged well clear of the
-	 * tab bar becomes a window of its own (sec 8.4).
-	 *
-	 * Distance rather than "left the widget", because a tab bar is thin
-	 * and a pointer crosses its edge constantly while merely reordering
-	 * -- tearing out on that would make reordering nearly impossible. The
-	 * threshold is generous for the same reason.
-	 */
-	if (watched == m_tabs && event->type() == QEvent::MouseMove) {
-		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
-		if (mouse->buttons().testFlag(Qt::LeftButton) && m_tabs->isMovable()) {
-			const QPoint at = mouse->position().toPoint();
-
-			/*
-			 * Clear of the bar in ANY direction, not just below it.
-			 *
-			 * This measured `at.y() - height()` and nothing else, so
-			 * a tab could only be torn out by dragging DOWNWARD.
-			 * Dragging one up, or off either end, did nothing at all
-			 * -- and "nothing at all" is indistinguishable from a
-			 * feature that does not exist, which is how it was
-			 * reported: tabs cannot be dragged freely. Konsole and
-			 * every browser detach on distance, not on direction.
-			 *
-			 * Sideways is measured from the bar's full WIDTH rather
-			 * than from the last tab, because dragging along a
-			 * half-empty strip is still reordering. Measured from
-			 * the tabs, a tab dragged to the end of a two-tab bar
-			 * would tear itself out mid-reorder.
-			 *
-			 * And that is exactly what it did, because the bar has no
-			 * half-empty strip to drag along: the row lays it out at
-			 * stretch 0 with the stretch AFTER the "+" button, so
-			 * QTabBar is exactly as wide as its tabs. Measuring
-			 * against m_tabs->width() therefore measured distance
-			 * past the LAST TAB -- the thing the comment says it
-			 * avoided -- leaving about 40px of slack before a reorder
-			 * turned into a tear-out. Dragging a tab to the last
-			 * position starts within that margin, which is why moving
-			 * tabs behaved differently depending on where you let go:
-			 * over the panes it split the window, back on the bar it
-			 * dropped the rest of the move, over nothing it detached.
-			 *
-			 * The ROW is the strip the comment meant. It spans the
-			 * window because of that trailing stretch, so sideways
-			 * travel stays a reorder however far along the bar it
-			 * goes, and only leaving the row vertically -- or running
-			 * off the window entirely -- is a tear-out.
-			 */
-			QWidget *strip = m_tab_row ? m_tab_row : static_cast<QWidget *>(m_tabs);
-			const QPoint in_strip = m_tabs->mapTo(strip, at);
-
-			const int above = -in_strip.y();
-			const int below = in_strip.y() - strip->height();
-			const int left = -in_strip.x();
-			const int right = in_strip.x() - strip->width();
-
-			const int clear = qMax(qMax(above, below), qMax(left, right));
-
-			if (clear > BSSH_TEAR_OUT_DP && m_tabs->count() > 0) {
-				/*
-				 * Consumed, and the drag is over as far as QTabBar
-				 * is concerned: it is still mid-move on a tab that
-				 * may be about to leave this bar, so releasing the
-				 * grab is what stops it moving one that no longer
-				 * belongs here. Qt's drag takes the pointer from
-				 * this point on.
-				 */
-				m_tabs->releaseMouse();
-				start_tab_drag(m_tabs->currentIndex());
-				return true;
-			}
-		}
-	}
-
-	if (watched == m_tabs && event->type() == QEvent::MouseButtonRelease) {
-		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
-		if (mouse->button() == Qt::MiddleButton) {
-			const int index = m_tabs->tabAt(mouse->position().toPoint());
-			if (index >= 0) {
-				on_tab_close_requested(index);
-				return true;
-			}
-		}
-	}
+	/* Tearing a tab out and middle-click close are bssh_pane_bar's now. */
 
 	return QWidget::eventFilter(watched, event);
 }
@@ -4447,69 +4168,124 @@ void bssh_main_window::changeEvent(QEvent *event) {
 }
 
 void bssh_main_window::refresh_tab_bar() {
-	if (!m_tabs) return;
+	if (!m_panes || !m_layout) return;
 
 	/*
-	 * A tab is a terminal this window HOLDS and is not showing. A pane is
-	 * one it is showing. They are different states, and the bar lists
-	 * only the first (sec 8.3: "a session with a pane is on screen, one
-	 * without is a tab").
+	 * Each pane's bar against what the layout says it holds (sec 8.3's
+	 * bar per pane). The same tabs: their labels and dots are brought up
+	 * to date in place. Different tabs: the panes are rebuilt, which
+	 * builds every bar afresh -- cheap, and the one way the bars cannot
+	 * drift from the tree.
 	 *
-	 * The bar used to be built from m_shown outright, so a session was a
-	 * pane AND a tab at the same time -- split a window in two and both
-	 * terminals appeared in the bar above themselves. Reported as exactly
-	 * that: "they become tabs". The document had said otherwise since
-	 * M8 and nothing had ever read it that way.
-	 *
-	 * visible_panes() rather than the intent, because a window narrowed
-	 * past its size class is showing fewer panes than were asked for
-	 * (sec 8.2) and the ones it is not showing are tabs again -- which is
-	 * what "panes convert to tabs, preserving order" means, expressed
-	 * once instead of by a second list somebody has to keep in step.
+	 * On the TABS only, never on whether a bar shows. That is decided in
+	 * make_pane_bar(), so a rebuild cannot change it, and a check that
+	 * asked would rebuild for ever once the two disagreed -- found by
+	 * breaking the decision on purpose, when the suite hung.
 	 */
-	const QList<bssh_session *> panes =
-	        m_layout ? m_layout->visible_panes() : QList<bssh_session *>();
+	bool stale = false;
+	for (bssh_session *front : m_layout->visible_panes()) {
+		const QList<bssh_session *> tabs = m_layout->bar_tabs(front);
+		bssh_pane_bar *bar = bar_for(front);
+		if (!bar || bar->sessions() != tabs) {
+			stale = true;
+			break;
+		}
+		bar->refresh();
+	}
+	if (stale) m_panes->rebuild();
+}
 
-	m_tab_order.clear();
+/*
+ * Every session the window shows sits in exactly one pane's stack
+ * (sec 8.3). The window's list is the record of WHICH sessions it holds;
+ * the tree says where each one is. One taken and not yet placed joins the
+ * focused pane's stack, in front -- what New Tab is, and what adopting a
+ * torn-out session is -- and one let go leaves the tree.
+ */
+void bssh_main_window::sync_tree_with_shown() {
+	if (!m_layout) return;
+
+	for (bssh_session *placed : m_layout->sessions()) {
+		if (!m_shown.contains(placed)) m_layout->forget(placed);
+	}
+
 	for (bssh_session *session : m_shown) {
-		if (!panes.contains(session)) m_tab_order.append(session);
-	}
+		const QList<bssh_session *> placed = m_layout->sessions();
+		if (placed.contains(session)) continue;
 
-	const QSignalBlocker blocker(m_tabs);
-
-	while (m_tabs->count() > m_tab_order.size()) {
-		m_tabs->removeTab(m_tabs->count() - 1);
-	}
-	while (m_tabs->count() < m_tab_order.size()) {
-		m_tabs->addTab(QString());
-	}
-
-	for (int i = 0; i < m_tab_order.size(); ++i) {
-		bssh_session *session = m_tab_order.at(i);
-		m_tabs->setTabText(i, session->title());
-		m_tabs->setTabToolTip(i, session->profile().target());
+		bssh_session *into = m_current && placed.contains(m_current)
+		                             ? m_layout->front_of(m_current) : nullptr;
+		if (!into && !m_layout->visible_panes().isEmpty()) into = m_layout->visible_panes().first();
 
 		/*
-		 * The status dot (sec 8.3). Painted rather than shipped as an
-		 * icon file: four solid circles are cheaper to draw than to
-		 * package, and they follow the theme's own sizing.
+		 * Behind what the pane shows: one put back by a drop that took
+		 * its place must not cover the drop. A new tab comes to the
+		 * front through show_session(), which is how one is opened.
 		 */
-		const int size = m_tabs->fontMetrics().height() / 2;
-		m_tabs->setTabIcon(i, QIcon(bssh_tab_status::dot(
-		        size, bssh_tab_status::state_for(session))));
+		if (into) {
+			m_layout->add_tab(session, into, INT_MAX);
+			m_layout->bring_to_front(into);
+		} else {
+			m_layout->set_intent({ session });
+		}
 	}
+}
+
+QWidget *bssh_main_window::make_pane_bar(bssh_session *front, QWidget *parent) {
+	if (!m_layout || !m_panes) return nullptr;
+
+	const QList<bssh_session *> tabs = m_layout->bar_tabs(front);
+	const bool pointer = bssh_platform::instance()
+	                     && !bssh_platform::instance()->is_touch_primary();
+	bssh_pane_bar *bar = new bssh_pane_bar(front, tabs, m_panes->bar_edge(), pointer, parent);
+
+	/* No bar for a pane of one: the bar appears with the second tab (sec 8.3). */
+	bar->setVisible(tabs.size() > 1);
 
 	/*
-	 * Shown whenever there is anything in it, which is a weaker test than
-	 * the "more than one" it replaces -- and it has to be. One tab beside
-	 * a pane is a real thing to show now: it is the terminal you are NOT
-	 * looking at, and hiding it would leave no way back to it. What that
-	 * old test was really guarding against is a bar listing the one
-	 * terminal on screen, and that cannot arise any more: the thing on
-	 * screen is a pane and panes are not in this list.
+	 * Queued, each of these: what they do rebuilds the panes, and with
+	 * them the bar whose signal is being delivered.
 	 */
-	m_tabs->setVisible(!m_tab_order.isEmpty());
-	if (m_tab_row) m_tab_row->setVisible(!m_tab_order.isEmpty());
+	const QPointer<bssh_main_window> self(this);
+	const auto later = [self](std::function<void()> act) {
+		QMetaObject::invokeMethod(self.data(), [self, act] { if (self) act(); },
+		                          Qt::QueuedConnection);
+	};
+
+	connect(bar, &bssh_pane_bar::tab_picked, this, [this, later, front](bssh_session *session) {
+		QPointer<bssh_session> picked = session;
+		if (session == front) return;
+		later([this, picked] { if (picked) show_session(picked); });
+	});
+	connect(bar, &bssh_pane_bar::close_requested, this, [this, later](bssh_session *session) {
+		QPointer<bssh_session> closing = session;
+		later([this, closing] { if (closing) m_registry->close(closing); });
+	});
+	connect(bar, &bssh_pane_bar::tab_moved, this,
+	        [this, later, front](bssh_session *session, int slot) {
+		QPointer<bssh_session> moved = session;
+		QPointer<bssh_session> pane = front;
+		later([this, moved, pane, slot] {
+			if (!moved || !pane) return;
+			m_layout->add_tab(moved, pane, slot);
+			refresh_tab_bar();
+		});
+	});
+	connect(bar, &bssh_pane_bar::menu_requested, this,
+	        [this, later](bssh_session *session, const QPoint &global) {
+		QPointer<bssh_session> held = session;
+		later([this, held, global] { if (held) show_tab_menu(held, global); });
+	});
+	connect(bar, &bssh_pane_bar::drag_requested, this,
+	        [this](bssh_session *session) { start_session_drag(session); });
+	connect(bar, &bssh_pane_bar::new_tab_requested, this, [this, later, front] {
+		QPointer<bssh_session> pane = front;
+		later([this, pane] {
+			if (pane && m_panes) m_panes->focus_session(pane);
+			open_another_session(false);
+		});
+	});
+	return bar;
 }
 
 void bssh_main_window::on_registry_changed() {
@@ -4519,7 +4295,6 @@ void bssh_main_window::on_registry_changed() {
 	 * that drifts here shows the wrong session's name over the wrong
 	 * terminal.
 	 */
-	const QSignalBlocker blocker(m_tabs);
 
 	/*
 	 * Drop anything this window was showing that no longer exists --
@@ -4534,7 +4309,7 @@ void bssh_main_window::on_registry_changed() {
 	 * left it has to leave the column too. Before the tab bar is rebuilt,
 	 * since in a column the bar is what this empties.
 	 */
-	sync_column_intent();
+	sync_tree_with_shown();
 
 	refresh_tab_bar();
 
@@ -4590,8 +4365,10 @@ void bssh_main_window::on_registry_changed() {
 		 * agrees with the tab that is drawn as selected rather than
 		 * picking a second answer.
 		 */
-		bssh_session *successor = session_at_tab(m_tabs->currentIndex());
-		show_session(successor ? successor : m_shown.first());
+		/* The first pane still showing, or failing that the first session. */
+		const QList<bssh_session *> panes = m_layout ? m_layout->visible_panes()
+		                                             : QList<bssh_session *>();
+		show_session(!panes.isEmpty() ? panes.first() : m_shown.first());
 	}
 
 	update_status();
@@ -4931,8 +4708,8 @@ void bssh_main_window::build_menu_bar() {
 
 	QAction *close_tab = file->addAction(QStringLiteral("&Close Tab"));
 	connect(close_tab, &QAction::triggered, this, [this] {
-		const int index = m_tabs->currentIndex();
-		if (index >= 0) on_tab_close_requested(index);
+		/* The session in front of the focused pane: the tab being looked at. */
+		if (m_current) m_registry->close(m_current);
 	});
 	m_session_actions.append(close_tab);
 
@@ -5374,14 +5151,12 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	QAction *as_tab = pane_menu->addAction(QStringLiteral("Show as &Tab"));
 	as_tab->setObjectName(QStringLiteral("terminal_show_as_tab"));
 	/*
-	 * Refused in a column, because show_as_tab refuses there: sec 8.7's
-	 * column holds every session and has no bar to reach a dropped one
-	 * by, so the verb returns early. Offered anyway, it was an entry
-	 * that looked available and did nothing when chosen -- which is the
-	 * thing tear_out's own comment calls worse than a refusal.
+	 * Offered where show_as_tab acts -- two panes or more, in a column as
+	 * anywhere, now each pane has a bar (sec 8.3) -- and not otherwise:
+	 * an entry that looked available and did nothing when chosen is what
+	 * tear_out's own comment calls worse than a refusal.
 	 */
-	as_tab->setEnabled(m_current && m_layout && m_layout->intent().size() > 1
-	                    && m_layout->arrangement() != bssh_layout_manager::COLUMN);
+	as_tab->setEnabled(m_current && m_layout && m_layout->visible_panes().size() > 1);
 
 	/*
 	 * The other way out of this window, and until now it had one route
@@ -5799,9 +5574,13 @@ void bssh_main_window::hide_front_door() {
  * gestures reach it now and the alternative is the same menu built in two
  * places.
  */
-QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
-	bssh_session *session = session_at_tab(index);
-	if (!session) return nullptr;
+QMenu *bssh_main_window::build_tab_menu(bssh_session *session, QWidget *parent) const {
+	if (!session || !m_layout) return nullptr;
+
+	/* Where it sits in its own pane's bar (sec 8.3's bar per pane). */
+	const QList<bssh_session *> tabs = m_layout->tabs(session);
+	const int index = tabs.indexOf(session);
+	if (index < 0) return nullptr;
 
 	QMenu *menu = new QMenu(parent);
 	menu->setObjectName(QStringLiteral("tab_context_menu"));
@@ -5869,7 +5648,7 @@ QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
 
 	QAction *move_right = menu->addAction(QStringLiteral("Move &Right"));
 	move_right->setObjectName(QStringLiteral("tab_move_right"));
-	move_right->setEnabled(index >= 0 && index < m_tab_order.size() - 1);
+	move_right->setEnabled(index < tabs.size() - 1);
 
 	menu->addSeparator();
 
@@ -5883,15 +5662,14 @@ QMenu *bssh_main_window::build_tab_menu(int index, QWidget *parent) const {
 	return menu;
 }
 
-void bssh_main_window::show_tab_menu(const QPoint &at) {
-	const int index = m_tabs->tabAt(at);
-	bssh_session *session = session_at_tab(index);
+void bssh_main_window::show_tab_menu(bssh_session *session, const QPoint &global) {
 	if (!session) return;
 
-	QMenu *menu = build_tab_menu(index, this);
+	QMenu *menu = build_tab_menu(session, this);
 	if (!menu) return;
 
-	const QAction *chosen = menu->exec(m_tabs->mapToGlobal(at));
+	QPointer<bssh_session> held = session;
+	const QAction *chosen = menu->exec(global);
 	const QAction *duplicate = menu->findChild<QAction *>(QStringLiteral("tab_duplicate"));
 	const QAction *split = menu->findChild<QAction *>(QStringLiteral("tab_split"));
 	const QAction *close = menu->findChild<QAction *>(QStringLiteral("tab_close"));
@@ -5900,13 +5678,14 @@ void bssh_main_window::show_tab_menu(const QPoint &at) {
 	menu->deleteLater();
 
 	/*
-	 * Through the same method the desktop drag uses, so the two cannot
-	 * drift: one of them being wrong is how this arrived, the menu
-	 * having moved the session in the registry while the drag moved it
-	 * in the bar.
+	 * Within its pane's bar, through the layout manager the desktop drag
+	 * uses too, so the two cannot drift: one of them being wrong is how
+	 * this arrived, the menu having moved the session in the registry
+	 * while the drag moved it in the bar.
 	 */
+	if (!held) return;
 	if (chosen == move_left || chosen == move_right) {
-		move_tab(index, index + (chosen == move_left ? -1 : 1));
+		move_tab(held, chosen == move_left ? -1 : 1);
 		return;
 	}
 
@@ -5919,7 +5698,7 @@ void bssh_main_window::show_tab_menu(const QPoint &at) {
 	 */
 	if (chosen == duplicate) open_profile(session->profile());
 	if (chosen == split) split_with(session);
-	if (chosen == close) on_tab_close_requested(index);
+	if (chosen == close) m_registry->close(held);
 }
 
 bool bssh_main_window::paste_needs_confirming(const QString &text, bool warn_enabled) {
@@ -6316,14 +6095,16 @@ QSize bssh_main_window::size_for_grid(int cols, int rows) {
 	if (m_menu_bar && !m_menu_bar->isHidden()) {
 		wanted.rheight() += m_menu_bar->sizeHint().height();
 	}
-	if (m_tab_row && !m_tab_row->isHidden()) {
-		if (m_tab_position == bssh_app_settings::TABS_LEFT
-		    || m_tab_position == bssh_app_settings::TABS_RIGHT)
-			wanted.rwidth() += m_tab_row->sizeHint().width();
-		else
-			wanted.rheight() += m_tab_row->sizeHint().height();
-	} else if (m_tabs && !m_tabs->isHidden()) {
-		wanted.rheight() += m_tabs->sizeHint().height();
+	/* The focused pane's own bar, when it has one (sec 8.3's bar per pane). */
+	if (bssh_pane_bar *bar = m_current && m_layout ? bar_for(m_layout->front_of(m_current))
+	                                                : nullptr) {
+		if (!bar->isHidden()) {
+			if (m_tab_position == bssh_app_settings::TABS_LEFT
+			    || m_tab_position == bssh_app_settings::TABS_RIGHT)
+				wanted.rwidth() += bar->sizeHint().width();
+			else
+				wanted.rheight() += bar->sizeHint().height();
+		}
 	}
 	if (m_status_label) wanted.rheight() += m_status_label->sizeHint().height();
 	if (m_key_row && !m_key_row->isHidden()) wanted.rheight() += m_key_row->sizeHint().height();
