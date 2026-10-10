@@ -88,6 +88,9 @@ void bssh_conn_manager::note_network_changed() {
 	/* Nor does a new network make an exited shell worth reopening. */
 	if (m_session->exited_cleanly()) return;
 
+	/* Nor a refused password worth offering again; see above. */
+	if (m_session->password_refused()) return;
+
 	/*
 	 * The network moved, so whatever the backoff was waiting for has
 	 * probably just changed. Reset rather than sitting out the remainder
@@ -158,6 +161,19 @@ void bssh_conn_manager::on_session_state_changed() {
 	 * say which kind of ending it was.
 	 */
 	if (m_session->exited_cleanly()) {
+		cancel();
+		return;
+	}
+
+	/*
+	 * Nor is a refused password a dropped connection (sec 11). The server
+	 * said no and then, after its own count of failures, hung up; dialling
+	 * again can only offer it something it has refused or ask a person
+	 * who may not be there, and a server counting failures blackholes the
+	 * address. Reported from a phone, retrying a wrong password until it
+	 * gave up. Opening the host again is a fresh attempt the user chose.
+	 */
+	if (m_session->password_refused()) {
 		cancel();
 		return;
 	}

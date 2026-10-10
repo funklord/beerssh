@@ -2,6 +2,9 @@
 #include "ui/password_prompt.h"
 
 #include <QAbstractButton>
+#include <QApplication>
+#include <QGuiApplication>
+#include <QInputMethod>
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QLabel>
@@ -11,6 +14,8 @@
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
+#include "softkeys/keyboard.h"
+#include "softkeys/keyboard_switch.h"
 
 bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_remember,
                                             QWidget *parent)
@@ -31,6 +36,11 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 	 */
 	QLabel *prompt = bssh_wrapped_note(QStringLiteral("Password for %1").arg(target), this);
 	outer->addWidget(prompt);
+
+	m_note = bssh_wrapped_note(QString(), this);
+	m_note->setObjectName(QStringLiteral("password-note"));
+	m_note->hide();
+	outer->addWidget(m_note);
 
 	m_field->setEchoMode(QLineEdit::Password);
 
@@ -99,9 +109,85 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 		for (QAbstractButton *button : buttons->buttons()) {
 			button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 		}
+
+		/*
+		 * Its own softkeys, under the buttons (sec 6.2). Reported from a
+		 * phone: this prompt could only be typed with Android's keyboard,
+		 * the forms' keyboard living in another window.
+		 */
+		m_keyboard = new sk_keyboard(&m_target, this);
+		m_keyboard->setObjectName(QStringLiteral("prompt-keyboard"));
+		m_keyboard->set_pages({ QStringLiteral("letters"), QStringLiteral("numbers"),
+		                        QStringLiteral("editing") });
+		m_keyboard->set_system_key_shown(true);
+		m_keyboard->hide();
+		outer->addWidget(m_keyboard);
+
+		m_switch = new sk_keyboard_switch(this);
+		connect(m_switch, &sk_keyboard_switch::switch_requested,
+		         this, [this] { use_softkeys(true); });
+		connect(m_keyboard, &sk_keyboard::system_keyboard_requested,
+		         this, [this] { use_softkeys(false); });
+
+		/* Hide leaves the field; the next tap on it brings the keys back. */
+		connect(m_keyboard, &sk_keyboard::hide_requested, this, [this] {
+			m_field->clearFocus();
+			update_keyboard();
+		});
+		connect(qApp, &QApplication::focusChanged,
+		         this, [this](QWidget *, QWidget *) { update_keyboard(); });
 	}
 
 	m_field->setFocus();
+}
+
+/*
+ * The keyboard goes before the target it types into, and the focus
+ * listener before either: deleting the children moves the focus.
+ */
+bssh_password_prompt::~bssh_password_prompt() {
+	disconnect(qApp, &QApplication::focusChanged, this, nullptr);
+	delete m_keyboard;
+	m_keyboard = nullptr;
+}
+
+void bssh_password_prompt::set_note(const QString &note) {
+	m_note->setText(note);
+	m_note->setVisible(!note.isEmpty());
+}
+
+void bssh_password_prompt::use_softkeys(bool use) {
+	m_softkeys = use;
+	update_keyboard();
+	if (!m_keyboard || !isVisible()) return;
+
+	if (use) QGuiApplication::inputMethod()->hide();
+	else if (m_field->hasFocus()) QGuiApplication::inputMethod()->show();
+}
+
+/*
+ * Shown while the field has the focus and softkeys is the choice; the
+ * switch while it is not. Android's keyboard is kept down the way the
+ * forms keep it down, through autoSipEnabled, and given back on close.
+ */
+void bssh_password_prompt::update_keyboard() {
+	if (!m_keyboard || !m_switch) return;
+
+	const bool ours = m_softkeys && isVisible();
+	if (isVisible()) qApp->setAutoSipEnabled(!m_softkeys);
+	m_keyboard->setVisible(ours && m_field->hasFocus());
+	m_switch->set_offered(isVisible() && !m_softkeys);
+}
+
+void bssh_password_prompt::showEvent(QShowEvent *event) {
+	QDialog::showEvent(event);
+	update_keyboard();
+}
+
+/* After closing, since closing moves the focus and that re-applies it. */
+void bssh_password_prompt::done(int result) {
+	QDialog::done(result);
+	if (m_keyboard) qApp->setAutoSipEnabled(true);
 }
 
 QString bssh_password_prompt::password() const {

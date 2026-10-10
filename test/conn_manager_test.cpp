@@ -336,3 +336,139 @@ void conn_manager_test::auto_reconnect_can_be_switched_off() {
 	QCOMPARE(scheduled.count(), 0);
 	QVERIFY(!manager.is_reconnecting());
 }
+
+void conn_manager_test::a_refused_password_is_never_offered_again() {
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		fake->set_accepted_password(QStringLiteral("right"));
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("guarded")));
+	QSignalSpy asked(&session, &bssh_session::needs_password);
+	session.connect_to_host();
+	QVERIFY(fake);
+	fake->simulate_password_required();
+	QCOMPARE(asked.count(), 1);
+
+	session.supply_password(QStringLiteral("wrong"));
+	QCOMPARE(asked.count(), 2);
+	QVERIFY(session.password_refused());
+	QVERIFY(session.was_refused(QStringLiteral("wrong")));
+	QVERIFY(!session.was_refused(QStringLiteral("right")));
+
+	/* The same one again is answered here, not sent. */
+	session.supply_password(QStringLiteral("wrong"));
+	QCOMPARE(asked.count(), 3);
+	QCOMPARE(fake->passwords_offered(), QStringList({ QStringLiteral("wrong") }));
+
+	session.supply_password(QStringLiteral("right"));
+	QCOMPARE(session.state(), bssh_ssh_session::CONNECTED);
+	QVERIFY(!session.password_refused());
+	QCOMPARE(fake->passwords_offered(),
+	         QStringList({ QStringLiteral("wrong"), QStringLiteral("right") }));
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void conn_manager_test::a_refused_password_is_not_reconnected() {
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		fake->set_accepted_password(QStringLiteral("right"));
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("counting")));
+	bssh_conn_manager manager(&session);
+	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
+	session.connect_to_host();
+	fake->simulate_password_required();
+	session.supply_password(QStringLiteral("wrong"));
+
+	/* The server's own MaxAuthTries: it hangs up. */
+	fake->simulate_connection_lost();
+	QCOMPARE(scheduled.count(), 0);
+
+	/* Nor does a network change dial it. */
+	manager.note_network_changed();
+	QCOMPARE(scheduled.count(), 0);
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void conn_manager_test::a_reconnect_offers_only_the_password_that_got_in() {
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fake->set_accepted_password(QStringLiteral("right"));
+		fakes.append(fake);
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("flaky")));
+	bssh_conn_manager manager(&session);
+	QSignalSpy started(&manager, &bssh_conn_manager::reconnect_started);
+	QSignalSpy asked(&session, &bssh_session::needs_password);
+
+	session.connect_to_host();
+	fakes.last()->simulate_password_required();
+	session.supply_password(QStringLiteral("wrong"));
+	session.supply_password(QStringLiteral("right"));
+	QCOMPARE(session.state(), bssh_ssh_session::CONNECTED);
+
+	/* A real drop, after getting in: that one is retried. */
+	fakes.last()->simulate_connection_lost();
+	QVERIFY2(started.wait(5000), "a drop after getting in was not retried");
+	QCOMPARE(fakes.size(), 2);
+
+	const int asked_before = asked.count();
+	fakes.last()->simulate_password_required();
+	QCOMPARE(fakes.last()->passwords_offered(), QStringList({ QStringLiteral("right") }));
+	QCOMPARE(asked.count(), asked_before);
+
+	/* And when the server stops taking it, nothing else is tried. */
+	fakes.last()->simulate_connection_lost();
+	QVERIFY(started.wait(5000));
+	fakes.last()->set_accepted_password(QStringLiteral("changed"));
+	fakes.last()->simulate_password_required();
+	QCOMPARE(fakes.last()->passwords_offered(), QStringList({ QStringLiteral("right") }));
+	QCOMPARE(asked.count(), asked_before + 1);
+	QVERIFY(session.password_refused());
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+/*
+ * A password the server never answered -- the link went first -- is not
+ * one that got in, so the reconnect asks rather than replaying it.
+ */
+void conn_manager_test::a_password_never_answered_is_not_replayed() {
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		fake->set_accepted_password(QStringLiteral("right"));
+		fake->set_answers_held(fakes.isEmpty());
+		fakes.append(fake);
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("dropped")));
+	bssh_conn_manager manager(&session);
+	QSignalSpy started(&manager, &bssh_conn_manager::reconnect_started);
+	QSignalSpy asked(&session, &bssh_session::needs_password);
+
+	session.connect_to_host();
+	fakes.last()->simulate_password_required();
+	session.supply_password(QStringLiteral("typed"));
+	fakes.last()->simulate_connection_lost();
+
+	QVERIFY2(started.wait(5000), "a drop with nothing refused was not retried");
+	QCOMPARE(fakes.size(), 2);
+	fakes.last()->simulate_password_required();
+	QCOMPARE(fakes.last()->passwords_offered(), QStringList());
+	QCOMPARE(asked.count(), 2);
+
+	bssh_ssh_session::set_factory(nullptr);
+}

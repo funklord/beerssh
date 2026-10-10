@@ -234,6 +234,7 @@ signals:
 	void failed(const QString &reason);
 	void exited(int exit_status);
 	void password_required();
+	void password_rejected();
 	void key_passphrase_required();
 	void host_key_unknown(const QString &fingerprint);
 	void host_key_changed(const QString &fingerprint);
@@ -1039,8 +1040,13 @@ void bssh_libssh_worker::do_authenticate_password(const QString &password) {
 		emit state_changed(bssh_ssh_session::CONNECTED);
 		return;
 
+	/*
+	 * Refused, and the session is still there to try another: libssh
+	 * keeps it authenticating until the server gives up on its own
+	 * MaxAuthTries, which arrives as a dropped connection.
+	 */
 	case BSSH_AUTH_REJECTED:
-		fail(QStringLiteral("Authentication failed"));
+		emit password_rejected();
 		return;
 
 	/*
@@ -1426,6 +1432,8 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 	         this, &bssh_ssh_session::shell_exited);
 	connect(m_worker, &bssh_libssh_worker::password_required,
 	         this, &bssh_ssh_session::password_required);
+	connect(m_worker, &bssh_libssh_worker::password_rejected,
+	         this, &bssh_ssh_session::password_rejected);
 	connect(m_worker, &bssh_libssh_worker::key_passphrase_required,
 	         this, &bssh_ssh_session::key_passphrase_required);
 	connect(m_worker, &bssh_libssh_worker::host_key_unknown,

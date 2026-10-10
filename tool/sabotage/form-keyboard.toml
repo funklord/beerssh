@@ -10,7 +10,7 @@
 [[sabotage]]
 name = "the system keyboard is not kept down"
 file = "src/ui/main_window.cpp"
-find = "\tqApp->setAutoSipEnabled(!ours);\n"
+find = "\tif (!focus || focus->window() == window()) qApp->setAutoSipEnabled(!ours);\n"
 replace = ""
 expect = "a_form_switches_to_softkeys_and_back"
 

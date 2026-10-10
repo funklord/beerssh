@@ -29,7 +29,12 @@ void bssh_fake_ssh_session::connect_to_host(const QString &host, quint16 port, c
 }
 
 void bssh_fake_ssh_session::authenticate_password(const QString &password) {
-	Q_UNUSED(password);
+	m_passwords_offered.append(password);
+	if (m_answers_held) return;
+	if (!m_accepted_password.isNull() && password != m_accepted_password) {
+		emit password_rejected();
+		return;
+	}
 	set_state(CONNECTED);
 }
 

@@ -1,5 +1,8 @@
 #include "model/session.h"
 
+#include <QCryptographicHash>
+#include <QRandomGenerator>
+
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "term/term_features.h"
@@ -292,17 +295,34 @@ void bssh_session::connect_to_host() {
 		m_password_requested = true;
 
 		/*
-		 * A reconnect can answer for itself if a password was given
-		 * before; a first connection has to ask. Keeping the password
-		 * only once it has actually been needed is narrower than
-		 * keeping it always, which is what this did before keys were
-		 * tried.
+		 * A reconnect can answer for itself with a password this host
+		 * ACCEPTED before; a first connection has to ask. Kept only once
+		 * the server took it -- it used to be kept as soon as it was
+		 * typed, so a wrong one was replayed by every reconnect.
 		 */
-		if (!m_password.isEmpty()) {
+		if (!m_password.isEmpty() && !was_refused(m_password)) {
+			m_offered = m_password;
 			m_transport->authenticate_password(m_password);
 			return;
 		}
 
+		emit needs_password();
+	});
+
+	/*
+	 * Refused: remembered, never offered again, and the user asked --
+	 * on this same connection, which is still authenticating.
+	 */
+	connect(m_transport, &bssh_ssh_session::password_rejected, this, [this] {
+		if (m_refused_salt.isEmpty()) {
+			quint32 salt[4];
+			QRandomGenerator::system()->fillRange(salt);
+			m_refused_salt = QByteArray(reinterpret_cast<const char *>(salt), sizeof(salt));
+		}
+		if (!m_offered.isEmpty()) m_refused.insert(refused_key(m_offered));
+		if (m_offered == m_password) m_password.clear();
+		m_offered.clear();
+		m_password_refused = true;
 		emit needs_password();
 	});
 
@@ -327,6 +347,11 @@ void bssh_session::connect_to_host() {
 			 * memory (sec 11).
 			 */
 			if (!m_password_requested) m_used_key_auth = true;
+
+			/* In: what was offered is the password worth replaying. */
+			if (!m_offered.isEmpty()) m_password = m_offered;
+			m_offered.clear();
+			m_password_refused = false;
 			m_transport->open_shell(m_cols, m_rows);
 
 			/*
@@ -406,9 +431,33 @@ void bssh_session::reconnect() {
 	connect_to_host();
 }
 
+/*
+ * Offered, and kept only if the server takes it (see CONNECTED above).
+ *
+ * A password the server has already refused is not sent: it cannot work,
+ * and every refusal is a failure a server may be counting towards
+ * blackholing this address (sec 11). The user is asked instead, which is
+ * the same answer a refusal gets.
+ */
 void bssh_session::supply_password(const QString &password) {
-	m_password = password;
+	if (was_refused(password)) {
+		m_password_refused = true;
+		emit needs_password();
+		return;
+	}
+
+	m_offered = password;
 	if (m_transport) m_transport->authenticate_password(password);
+}
+
+bool bssh_session::was_refused(const QString &password) const {
+	return !m_refused.isEmpty() && m_refused.contains(refused_key(password));
+}
+
+/* Salted by the first refusal, which is the first time one is needed. */
+QByteArray bssh_session::refused_key(const QString &password) const {
+	return QCryptographicHash::hash(m_refused_salt + password.toUtf8(),
+	                                QCryptographicHash::Sha256);
 }
 
 void bssh_session::supply_key_passphrase(const QString &passphrase) {

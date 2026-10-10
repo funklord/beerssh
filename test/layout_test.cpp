@@ -4475,6 +4475,57 @@ void layout_test::a_form_switches_to_softkeys_and_back() {
 	QTRY_VERIFY(toggle->isVisible());
 }
 
+void layout_test::the_password_prompt_types_with_softkeys() {
+	const forced_touch_t touch(1);
+	forced_screen_t held(QSize(360, 740));
+
+	bssh_password_prompt prompt(QStringLiteral("nabbe@example.com"), true);
+	QLabel *note = prompt.findChild<QLabel *>(QStringLiteral("password-note"));
+	sk_keyboard *keys = prompt.findChild<sk_keyboard *>(QStringLiteral("prompt-keyboard"));
+	sk_keyboard_switch *toggle = prompt.findChild<sk_keyboard_switch *>();
+	QLineEdit *field = prompt.findChild<QLineEdit *>();
+	QVERIFY(note);
+	QVERIFY(keys);
+	QVERIFY(toggle);
+	QVERIFY(field);
+	toggle->set_panel_probe([] { return true; });
+
+	QVERIFY(note->isHidden());
+	prompt.set_note(QStringLiteral("The server did not accept that password."));
+	QVERIFY(!note->isHidden());
+
+	prompt.use_softkeys(true);
+	prompt.show();
+	prompt.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&prompt));
+	field->setFocus();
+	QTRY_VERIFY(keys->isVisible());
+	QVERIFY(!toggle->isVisible());
+	QVERIFY2(!qApp->autoSipEnabled(), "the system keyboard is still asked for");
+
+	QAbstractButton *a = nullptr;
+	for (QAbstractButton *button : keys->findChildren<QAbstractButton *>()) {
+		if (button->text() == QStringLiteral("a") && button->isVisible()) a = button;
+	}
+	QVERIFY(a);
+	a->click();
+	QCOMPARE(prompt.password(), QStringLiteral("a"));
+
+	keys->system_button()->click();
+	QTRY_VERIFY(!keys->isVisible());
+	QVERIFY(!prompt.uses_softkeys());
+	QVERIFY(qApp->autoSipEnabled());
+	QTRY_VERIFY(toggle->isVisible());
+
+	toggle->click();
+	QTRY_VERIFY(keys->isVisible());
+	QVERIFY(!qApp->autoSipEnabled());
+
+	/* Closing gives the system keyboard back to everything else. */
+	prompt.reject();
+	QVERIFY(qApp->autoSipEnabled());
+}
+
 void layout_test::a_column_shows_the_count_and_scrolls_to_the_rest() {
 	const forced_touch_t touch(1);
 	const forced_screen_t held(QSize(740, 360));

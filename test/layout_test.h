@@ -270,6 +270,13 @@ private slots:
 	 * its system key undoes all of it. The terminal's page has neither.
 	 */
 	void a_form_switches_to_softkeys_and_back();
+
+	/*
+	 * The password prompt is a window of its own, so it carries its own
+	 * softkeys and switch (sec 6.2), says when the last password was
+	 * refused (sec 11), and gives the system keyboard back when it closes.
+	 */
+	void the_password_prompt_types_with_softkeys();
 	void a_column_shows_the_count_and_scrolls_to_the_rest();
 
 	/* The tab bar on the side it is set to, and a drop aimed at it there. */

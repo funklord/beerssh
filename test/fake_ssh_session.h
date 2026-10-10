@@ -68,6 +68,18 @@ public:
 	int rows() const { return m_rows; }
 	int resize_count() const { return m_resize_count; }
 
+	/*
+	 * The one password this "server" takes; any other is refused with
+	 * password_rejected(). Unset, every password gets in, as before.
+	 */
+	void set_accepted_password(const QString &password) { m_accepted_password = password; }
+
+	/* Take passwords without answering, as a server that hangs up first. */
+	void set_answers_held(bool held) { m_answers_held = held; }
+
+	/* Every password offered to this transport, in order. */
+	QStringList passwords_offered() const { return m_passwords_offered; }
+
 	/* Make the next connect_to_host() fail, to exercise the sad path. */
 	void set_fail_on_connect(const QString &reason) { m_fail_reason = reason; }
 
@@ -123,6 +135,9 @@ private:
 	QStringList m_command;
 	bool m_compression = false;
 	QString m_passphrase;
+	QString m_accepted_password;
+	QStringList m_passwords_offered;
+	bool m_answers_held = false;
 };
 
 #endif /* BSSH_FAKE_SSH_SESSION_H */

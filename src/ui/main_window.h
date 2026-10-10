@@ -966,6 +966,13 @@ private:
 	 * records costing this project a feature twice.
 	 */
 	QSet<bssh_session *> m_wired_sessions;
+
+	/*
+	 * A password the user asked to remember, held until the server takes
+	 * it (sec 11). Saved on the way in it would have stored a mistyped
+	 * one, which the next connection then offered without asking.
+	 */
+	QHash<bssh_session *, QString> m_remember_once_in;
 	bssh_session_dialog *m_session_dialog;
 	bssh_host_list *m_host_list;
 	bssh_host_editor *m_host_editor;

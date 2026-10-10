@@ -908,6 +908,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 * this line. A check that cannot fail is worse than none.
 		 */
 		m_wired_sessions.remove(session);
+		m_remember_once_in.remove(session);
 
 		/*
 		 * Out of the layout whether or not it is the one on screen. A
@@ -2781,15 +2782,37 @@ void bssh_main_window::ask_for_password(bssh_session *session) {
 	bssh_password_prompt dialog(session->profile().target(),
 	                             session->profile().id != 0, this);
 
-	if (dialog.exec() != QDialog::Accepted) {
+	/*
+	 * Asked again because the server said no, and saying so: the same
+	 * prompt with nothing different about it reads as the app having
+	 * forgotten what was typed.
+	 */
+	if (session->password_refused()) {
+		dialog.set_note(QStringLiteral("The server did not accept that password."));
+	}
+
+	/* The forms' choice of keyboard, and a switch made here is kept. */
+	dialog.use_softkeys(m_forms_use_softkeys);
+
+	m_remember_once_in.remove(session);
+	const int answer = dialog.exec();
+	if (m_form_keyboard) {
+		m_forms_use_softkeys = dialog.uses_softkeys();
+		update_form_keyboard();
+	}
+	if (answer != QDialog::Accepted) {
 		session->disconnect_from_host();
 		return;
 	}
 
 	const QString password = dialog.password();
-	session->supply_password(password);
 
-	if (dialog.remember()) offer_to_remember(session, password);
+	/*
+	 * Kept for saving BEFORE it is offered: a fake or a fast server can
+	 * answer inside supply_password(), and the answer is what saves it.
+	 */
+	if (dialog.remember()) m_remember_once_in.insert(session, password);
+	session->supply_password(password);
 }
 
 void bssh_main_window::wire_session(bssh_session *session) {
@@ -2988,8 +3011,15 @@ void bssh_main_window::wire_session(bssh_session *session) {
 		 * auto-reconnect work for password-authenticated hosts without
 		 * holding the credential in memory all session (sec 5.3, 11).
 		 */
-		const QString stored = stored_password_for(session->profile());
-		if (!stored.isEmpty()) {
+		/*
+		 * Not one the server has refused (sec 11): a stored password
+		 * that has stopped working is asked about, not offered again --
+		 * offering it again is the loop that gets an address blackholed.
+		 */
+		const QString stored = session->password_refused()
+		                               ? QString()
+		                               : stored_password_for(session->profile());
+		if (!stored.isEmpty() && !session->was_refused(stored)) {
 			/*
 			 * Unless this host asks the user to prove it is them first
 			 * (sec 11). Per host and off by default, because the
@@ -3059,6 +3089,12 @@ void bssh_main_window::wire_session(bssh_session *session) {
 		if (session == m_current && session->is_live()) {
 			m_error.clear();
 			update_status();
+		}
+
+		/* In, so the password asked to be remembered is one that works. */
+		if (session->state() == bssh_ssh_session::CONNECTED
+		    && m_remember_once_in.contains(session)) {
+			offer_to_remember(session, m_remember_once_in.take(session));
 		}
 	});
 
@@ -4382,9 +4418,14 @@ void bssh_main_window::update_form_keyboard() {
 
 	const bool on_form = m_pages->currentWidget() != m_terminal_page;
 	const bool ours = on_form && m_forms_use_softkeys;
-	qApp->setAutoSipEnabled(!ours);
-
 	QWidget *focus = QApplication::focusWidget();
+
+	/*
+	 * Not while the focus is in another window -- the password prompt,
+	 * which keeps the system keyboard down or up for itself.
+	 */
+	if (!focus || focus->window() == window()) qApp->setAutoSipEnabled(!ours);
+
 	const bool typing = focus && isAncestorOf(focus) && focus->isVisible()
 	                    && focus->inputMethodQuery(Qt::ImEnabled).toBool();
 	m_form_keyboard->setVisible(ours && typing);

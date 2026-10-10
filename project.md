@@ -10324,6 +10324,43 @@ All of it goes behind one interface — `bssh_secret_store` (`store`, `load`,
 `erase`, `is_hardware_backed`) — with one implementation per platform, per §3's
 core principle 3. Callers get an opaque ID back and never see a key mechanism.
 
+**A refused password is never offered again, and a refusal is not a drop
+[FIXED 2026-10-10].** Reported from the phone: a wrong password was retried
+until the reconnect manager gave up, which against a server counting
+failures (fail2ban, sshguard, MaxAuthTries) is how an address gets
+blackholed. The holder's rule, in their words: whatever is retried must
+have a chance of working. Three faults made the loop. The session kept a
+password as soon as it was typed rather than once the server took it.
+libssh's refusal FAILED the connection, which the reconnect manager reads
+as an outage. And every reconnect then answered the server's password
+request with the kept, wrong password -- ten times, backing off. A wrong
+stored password went round the same way through the window.
+
+Now a refusal is `password_rejected` on a connection still authenticating:
+the session records it as a salted SHA-256 hash (enough to recognise the
+password, not to recover it), never sends that password again -- from a
+reconnect, from the store or typed again, which is answered locally -- and
+asks the user with a line saying the server did not accept it. A password
+is kept for reconnects only once the server has let it in, and "Remember
+this password" saves only on getting in, so a mistyped one cannot reach the
+store. After a refusal the manager does not dial at all, not even on a
+network change, until a connection gets in; if the server hangs up on its
+own count of failures, opening the host again is the user's choice. Held by
+three `conn_manager_test` cases and `tool/sabotage/password-refused.toml`.
+Not held by a test: the worker's mapping of `SSH_AUTH_DENIED` (a real
+server shows it), and the window skipping a refused stored password, which
+the session's own refusal stands behind.
+
+**The prompt types with softkeys too** (sec 6.2's step 4): it is a window of
+its own, so the forms' keyboard cannot reach it, and it could only be typed
+with Android's -- the second half of the same report. It carries its own
+keyboard (letters, numbers, editing) and the switch, starts from the forms'
+choice, and hands a switch made in it back to them. Android's keyboard comes
+back when it closes. The forms still start on Android's keyboard with the
+switch: on a touch screen the device setting defaults to BeerSSH's own
+keyboard, and following it would have made softkeys the forms' default
+without anyone choosing that.
+
 **A discarded `ssh_options_set` could have skipped the jump host without
 saying so.** Found by asking the rigorous form of the question rather than
 stopping at the first instance: *every* libssh call in

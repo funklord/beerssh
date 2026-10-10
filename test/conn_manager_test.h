@@ -25,6 +25,18 @@ private slots:
 	void a_user_disconnect_is_not_retried();
 	void a_user_disconnect_is_not_retried_when_nobody_calls_the_setter();
 	void auto_reconnect_can_be_switched_off();
+
+	/*
+	 * A password the server refused is never offered again (sec 11) --
+	 * not by the session, not by a reconnect -- and a refusal is not a
+	 * drop the manager dials after. Reported from a phone, where a wrong
+	 * password was retried until the manager gave up: the way a server
+	 * counting failures blackholes the address.
+	 */
+	void a_refused_password_is_never_offered_again();
+	void a_refused_password_is_not_reconnected();
+	void a_reconnect_offers_only_the_password_that_got_in();
+	void a_password_never_answered_is_not_replayed();
 };
 
 #endif /* BSSH_CONN_MANAGER_TEST_H */

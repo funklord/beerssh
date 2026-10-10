@@ -3,6 +3,7 @@
 
 #include <QJsonObject>
 #include <QObject>
+#include <QSet>
 #include <QString>
 
 #include "model/profile.h"
@@ -158,6 +159,22 @@ public:
 	bool used_key_auth() const { return m_used_key_auth; }
 
 	/*
+	 * The server refused a password since this session last got in
+	 * (sec 11). The window asks the user rather than offering a stored
+	 * password again, and the reconnect manager does not dial: a refusal
+	 * is not an outage, and retrying it is how a server counting failures
+	 * blackholes the client. Cleared only by getting in.
+	 */
+	bool password_refused() const { return m_password_refused; }
+
+	/*
+	 * Whether this password is one the server has refused, so offering it
+	 * cannot work. supply_password() checks it too; the window asks first
+	 * so it can say why it is asking.
+	 */
+	bool was_refused(const QString &password) const;
+
+	/*
 	 * Reconnect after a drop. A NEW remote shell: the running program and
 	 * the working directory are gone, and only the local scrollback
 	 * survives (sec 5.3). Callers must not present this as resumption.
@@ -237,7 +254,21 @@ private:
 	bssh_input_router *m_input_router;
 	QString m_remote_title;
 	QString m_error;
+	/* Only a password the server ACCEPTED, for a reconnect to replay. */
 	QString m_password;
+
+	/* The one offered and not yet answered. */
+	QString m_offered;
+
+	/*
+	 * Every password the server refused, as salted hashes rather than
+	 * the passwords: what is kept is only enough to recognise one, and a
+	 * memory dump of a session holds no wrong guesses at the right one.
+	 */
+	QByteArray m_refused_salt;
+	QSet<QByteArray> m_refused;
+	bool m_password_refused = false;
+	QByteArray refused_key(const QString &password) const;
 	bool m_user_disconnected;
 	bool m_unseen_bell;
 	bool m_remote_exited;

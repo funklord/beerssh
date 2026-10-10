@@ -214,6 +214,15 @@ signals:
 	void password_required();
 
 	/*
+	 * The server refused the password just offered. The connection stays
+	 * open for another: a refusal is not an outage, and failing the
+	 * connection here is what let the reconnect machinery dial again and
+	 * offer the same wrong password, ten times, to a server counting
+	 * failures -- the way to be blackholed (sec 11).
+	 */
+	void password_rejected();
+
+	/*
 	 * A private key exists but did not get us in unaided, which usually
 	 * means it is passphrase-protected and no agent is loaded. Asked
 	 * before falling back to a password, because unlocking the key is
