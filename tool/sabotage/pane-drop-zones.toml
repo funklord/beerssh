@@ -33,8 +33,8 @@ expect = "a_pane_dropped_on_an_edge_splits_the_target_that_way"
 [[sabotage]]
 name = "the middle does not swap"
 file = "src/ui/layout_manager.cpp"
-find = "\t\tif (from >= 0) order.swapItemsAt(from, at);"
-replace = "\t\tif (from >= 0) {}"
+find = "\t\t\t\torder.swapItemsAt(from, at);\n\t\t\t\tassign_leaves(m_tree, order);"
+replace = "\t\t\t\tassign_leaves(m_tree, order);"
 expect = "a_pane_dropped_in_the_middle_swaps"
 
 # Reordering by the list flattens the places the user built.

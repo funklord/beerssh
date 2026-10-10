@@ -6077,6 +6077,56 @@ the same number for a layout manager that had quietly stopped working.
 
 ### 8.3 Tabs and focus
 
+**A tab bar per pane — [AGREED 2026-10-10, BEING BUILT].** The holder: "a
+single tab bar doesn't seem to make sense, maybe a possible tab bar for each
+terminal makes more sense." The single bar listed the sessions in no pane, and
+picking one swapped it into whichever pane had the focus: unambiguous with one
+pane, and with several nothing on screen said which pane a tab belonged to or
+where a drop on the bar would land -- the likeliest reading of the reported
+"dropping on the tab bar made a split" that no reproduction found.
+
+The model becomes the editor-group one (VS Code, Terminator, Kitty): **every
+pane is a stack of sessions with a bar of its own**, and every shown session
+belongs to exactly one pane. The holder's four answers:
+
+- **A pane holding one session shows no bar**; the bar appears when a second
+  session joins it. A drop strip along the pane's edge, where its bar would
+  be, makes the first tab by dragging -- the window's strip of §8.4 step 3,
+  per pane.
+- **New tab** (the chord, the `+`) puts the new session at the front of the
+  **focused pane's** stack. Each bar carries its own `+`.
+- **The phone has the same model**: each pane of the column has a bar when it
+  holds more than one session, and one pane on screen looks like the single
+  bar did.
+- **A pane whose last tab is closed or dragged away closes**, its space going
+  to its neighbours, as closing a pane's only session does now.
+
+What it does to the rest, decided here so the steps do not each decide it:
+
+- **The tree's leaves become stacks.** A leaf holds an ordered list of
+  sessions and which is in front; the front is what the pane shows, and
+  `intent()` -- every list reader's view -- stays the fronts in depth-first
+  order, so splits, swaps, persistence and the column keep working on it.
+- **Collapse (§8.2) keeps its promise in the new shape.** Panes a narrow
+  window cannot show are not closed: their sessions join the bar of the
+  last pane that is shown, behind its own, and go home when the width
+  returns, because the tree never stopped holding them.
+- **Drops** (§8.4): a pane's bar takes a tab at the marked slot; the middle
+  swaps; an edge splits. The window-wide strip is replaced by each pane's.
+- **The tab position setting** (top, bottom, left, right) applies to every
+  pane's bar.
+- **layout.ini** saves the stacks: a leaf written `a` becomes `b|*a|c` when
+  it holds tabs -- in their order, the front marked -- which an older build
+  reads as a host it cannot find and drops, keeping the rest.
+- **The middle** swaps two panes WHOLE, tabs and all, when a pane is dropped
+  on a pane; a tab dragged out of a bar onto a pane trades places with that
+  pane's front, which goes into the bar the tab came from.
+
+The steps, each tested and pushed on its own: (1) the model -- stacks in the
+tree, with switching, adding at a slot, removing and saving; (2) a bar per
+pane in the pane container, the window's single bar retired; (3) drops on a
+pane's bar and strip; (4) the phone's column, checked on the device.
+
 **[BUILT] A tab tears out on DISTANCE, not on direction.** The gesture measured
 how far below the bar the pointer had gone and nothing else, so a tab could be
 pulled out downward and not upward, sideways, or off either end. Three of the

@@ -21,12 +21,25 @@ class bssh_session;
  * promise for QList.
  */
 struct bssh_pane_node {
+	/* A leaf's FRONT session: the one its pane shows. */
 	bssh_session *session = nullptr;
+
+	/*
+	 * A leaf's tabs, in their order, the front among them (sec 8.3's bar
+	 * per pane). Empty means the front alone, so a leaf built with just a
+	 * session -- every leaf before tabs were per pane -- is a pane of one.
+	 */
+	QList<bssh_session *> tabs;
+
 	Qt::Orientation orientation = Qt::Horizontal;
 	std::vector<bssh_pane_node> children;
 
 	bool is_leaf() const { return session != nullptr; }
 	bool is_empty() const { return !session && children.empty(); }
+	QList<bssh_session *> pane_tabs() const {
+		if (!session) return {};
+		return tabs.isEmpty() ? QList<bssh_session *>{ session } : tabs;
+	}
 };
 
 /*
@@ -176,7 +189,46 @@ public:
 	/* True when the intent does not fit and the rest became tabs. */
 	bool is_collapsed() const;
 
+	/* Out of the tree, wherever it is: a pane left empty closes. */
 	void forget(bssh_session *session);
+
+	/*
+	 * Each pane is a stack of sessions with a bar of its own (sec 8.3,
+	 * agreed 2026-10-10). The intent stays the panes' FRONT sessions, so
+	 * everything reading it as a list goes on meaning the panes.
+	 */
+
+	/* Every session in the tree, pane by pane, each pane's tabs in order. */
+	QList<bssh_session *> sessions() const;
+
+	/* The tabs of the pane holding `member`, in order; empty if none does. */
+	QList<bssh_session *> tabs(bssh_session *member) const;
+
+	/* The front of the pane holding `member`, or null. */
+	bssh_session *front_of(bssh_session *member) const;
+
+	/*
+	 * What the bar of the pane showing `front` lists: its own tabs, and
+	 * on the last pane a narrow window shows, the tabs of every pane it
+	 * cannot (sec 8.2) -- never closed, reachable from there.
+	 */
+	QList<bssh_session *> bar_tabs(bssh_session *front) const;
+
+	/*
+	 * `session` joins the pane holding `member` as a tab at `slot` (past
+	 * the end appends) and comes to the front, leaving wherever it was --
+	 * its old pane closes if it was that pane's last tab. False, changing
+	 * nothing, when no pane holds `member`.
+	 */
+	bool add_tab(bssh_session *session, bssh_session *member, int slot);
+
+	/*
+	 * The tab picked: `session` becomes the front of its pane. One whose
+	 * pane a narrow window does not show trades places with the last pane
+	 * it does, so picking it from that pane's bar shows it. False when the
+	 * tree does not hold it.
+	 */
+	bool bring_to_front(bssh_session *session);
 
 	/*
 	 * Where a dropped pane goes, relative to the pane it was dropped on
@@ -188,11 +240,14 @@ public:
 
 	/*
 	 * Puts `session` at `edge` of the pane showing `target`, which must be
-	 * in the intent. `session` may already be a pane here (it moves) or
-	 * not (it arrives); arriving in the middle takes the target's place,
-	 * and the target goes on being shown as a tab rather than closed
-	 * (sec 8.2). The caller asks max_panes() first when a session
-	 * arrives; this places what it is told to.
+	 * in the intent. `session` may already be a pane here (it moves), a
+	 * tab in some pane's stack (it leaves that stack), or not in the tree
+	 * (it arrives); an edge gives it a pane of its own. The middle swaps:
+	 * two fronts swap their panes whole, tabs and all; a tab trades places
+	 * with the target, which goes into the bar the tab came from; and an
+	 * arrival takes the target's place, the target leaving the tree for
+	 * the caller to keep (sec 8.2). The caller asks max_panes() first when
+	 * a session arrives; this places what it is told to.
 	 *
 	 * False, changing nothing, for a target that is not a pane or a
 	 * session dropped on itself.

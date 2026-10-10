@@ -1,0 +1,42 @@
+# Sabotages for sec 8.3's tab bar per pane, step 1: each leaf of the layout
+# tree a stack of sessions. Held by the five model tests in layout_test.
+
+# The front closing leaves the pane fronted by nothing it holds.
+[[sabotage]]
+name = "a closing front hands the pane to no other tab"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (pane->session == session) pane->session = rest.at(qMin(at, int(rest.size()) - 1));\n"
+replace = ""
+expect = "a_pane_holds_tabs_and_closes_with_its_last"
+
+# A reordered pane leaves its tabs behind.
+[[sabotage]]
+name = "a pane moved along the list loses its tabs"
+file = "src/ui/layout_manager.cpp"
+find = "\t\t\tnode.tabs = stacks.value(node.session);\n"
+replace = "\t\t\tnode.tabs.clear();\n"
+expect = "a_tab_moves_between_panes_and_along_a_bar"
+
+# A tab traded into another pane leaves its old bar unchanged.
+[[sabotage]]
+name = "a traded tab's old bar never takes the target"
+file = "src/ui/layout_manager.cpp"
+find = "\t\t\there->tabs = from.size() > 1 ? from : QList<bssh_session *>();\n"
+replace = ""
+expect = "the_middle_swaps_panes_whole_and_trades_a_tab"
+
+# A narrow window's hidden panes reachable from no bar.
+[[sabotage]]
+name = "a collapsed pane's tabs are in no bar"
+file = "src/ui/layout_manager.cpp"
+find = "\t\tif (!visible.contains(hidden)) bar.append(tabs(hidden));\n"
+replace = ""
+expect = "a_collapsed_pane_lives_on_in_the_last_bar"
+
+# Saved as its front alone: a restart loses every tab behind it.
+[[sabotage]]
+name = "a pane's tabs are not written down"
+file = "src/ui/layout_manager.cpp"
+find = "\t\tif (named.size() < 2) return named.value(0);\n"
+replace = "\t\tif (true) return name(node.session);\n"
+expect = "a_pane_of_tabs_survives_being_written_down"

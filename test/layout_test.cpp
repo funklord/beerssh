@@ -4667,6 +4667,198 @@ void layout_test::a_shape_survives_being_written_down() {
 	QVERIFY(bssh_layout_manager::parse_shape(QString(), find).is_empty());
 }
 
+namespace {
+
+/* A layout's shape with every pane's tabs, "H(b|*a,c)", for one-line compares. */
+QString stacked_shape(const bssh_layout_manager &layout,
+                      const QHash<bssh_session *, QString> &names) {
+	return bssh_layout_manager::shape_text(layout.tree(), [&names](bssh_session *each) {
+		return names.value(each);
+	});
+}
+
+} /* namespace */
+
+void layout_test::a_pane_holds_tabs_and_closes_with_its_last() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")}, {c, QStringLiteral("c")}};
+
+	layout.set_intent({a, b});
+	QVERIFY(layout.add_tab(c, a, 1));
+
+	/* In front of a's pane, behind it in the bar; the intent is the fronts. */
+	QCOMPARE(layout.tabs(a), QList<bssh_session *>({a, c}));
+	QCOMPARE(layout.intent(), QList<bssh_session *>({c, b}));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(a|*c,b)"));
+	QCOMPARE(layout.sessions(), QList<bssh_session *>({a, c, b}));
+
+	/* Picking a tab changes the front and nothing else. */
+	QVERIFY(layout.bring_to_front(a));
+	QCOMPARE(layout.intent(), QList<bssh_session *>({a, b}));
+	QCOMPARE(layout.tabs(c), QList<bssh_session *>({a, c}));
+
+	/* The front closing hands the pane to the next tab... */
+	layout.forget(a);
+	QCOMPARE(layout.intent(), QList<bssh_session *>({c, b}));
+	QCOMPARE(layout.tabs(c), QList<bssh_session *>({c}));
+
+	/* ...and the last one going closes the pane. */
+	layout.forget(c);
+	QCOMPARE(layout.intent(), QList<bssh_session *>({b}));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("b"));
+	QVERIFY(!layout.add_tab(c, a, 0));
+}
+
+void layout_test::a_tab_moves_between_panes_and_along_a_bar() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")}, {c, QStringLiteral("c")}};
+
+	layout.set_intent({a, b, c});
+
+	/* b's pane had only b: moving it into a's closes it. */
+	QVERIFY(layout.add_tab(b, a, 0));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(*b|a,c)"));
+
+	/* Along its own bar: past a, so the slot counts the bar as it is. */
+	QVERIFY(layout.add_tab(b, a, 2));
+	QCOMPARE(layout.tabs(a), QList<bssh_session *>({a, b}));
+
+	/* A tab out of a bar of two leaves a pane of one behind. */
+	QVERIFY(layout.add_tab(b, c, 1));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(a,c|*b)"));
+
+	/* An edge gives a tab a pane of its own, out of its bar. */
+	QVERIFY(layout.place(b, a, bssh_layout_manager::EDGE_LEFT));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(b,a,c)"));
+
+	/* A list reorder moves panes with their tabs. */
+	QVERIFY(layout.add_tab(b, c, 0));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(a,*b|c)"));
+	layout.set_intent({b, a});
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(*b|c,a)"));
+}
+
+void layout_test::the_middle_swaps_panes_whole_and_trades_a_tab() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	bssh_session *d = registry.create(named(QStringLiteral("d")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")},
+		{c, QStringLiteral("c")}, {d, QStringLiteral("d")}};
+
+	layout.set_intent({a, b});
+	QVERIFY(layout.add_tab(c, a, 1));
+	QVERIFY(layout.bring_to_front(a));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(*a|c,b)"));
+
+	/* Pane on pane: they swap whole, a's tab going with it. */
+	QVERIFY(layout.place(a, b, bssh_layout_manager::EDGE_MIDDLE));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(b,*a|c)"));
+
+	/* A tab on another pane: it fronts that pane, the front taking its slot. */
+	QVERIFY(layout.place(c, b, bssh_layout_manager::EDGE_MIDDLE));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(c,*a|b)"));
+
+	/* A tab on its own pane comes to the front. */
+	QVERIFY(layout.place(b, a, bssh_layout_manager::EDGE_MIDDLE));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(c,a|*b)"));
+
+	/* An arrival takes the target's place; the target leaves for the caller. */
+	QVERIFY(layout.place(d, b, bssh_layout_manager::EDGE_MIDDLE));
+	QCOMPARE(stacked_shape(layout, names), QStringLiteral("H(c,a|*d)"));
+
+	/* And a target that is not a pane's front is not one to drop on. */
+	QVERIFY(!layout.place(c, a, bssh_layout_manager::EDGE_MIDDLE));
+}
+
+void layout_test::a_collapsed_pane_lives_on_in_the_last_bar() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	bssh_session *d = registry.create(named(QStringLiteral("d")));
+
+	layout.set_intent({a, b});
+	QVERIFY(layout.add_tab(c, b, 1));
+	QVERIFY(layout.add_tab(d, a, 1));
+	QCOMPARE(layout.bar_tabs(d), QList<bssh_session *>({a, d}));
+
+	/* Too narrow for two: the second pane's tabs join the first's bar. */
+	layout.set_width(400);
+	QCOMPARE(layout.visible_panes(), QList<bssh_session *>({d}));
+	QCOMPARE(layout.bar_tabs(d), QList<bssh_session *>({a, d, b, c}));
+
+	/* Picked from there, it is shown -- the panes trade places, not tabs. */
+	QVERIFY(layout.bring_to_front(b));
+	QCOMPARE(layout.visible_panes(), QList<bssh_session *>({b}));
+	QCOMPARE(layout.tabs(b), QList<bssh_session *>({b, c}));
+	QCOMPARE(layout.tabs(d), QList<bssh_session *>({a, d}));
+
+	/* Wide again: both panes, every tab where it was. */
+	layout.set_width(1200);
+	QCOMPARE(layout.visible_panes().size(), 2);
+	QCOMPARE(layout.sessions().size(), 4);
+}
+
+void layout_test::a_pane_of_tabs_survives_being_written_down() {
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")}, {c, QStringLiteral("c")}};
+	const auto name = [&names](bssh_session *session) { return names.value(session); };
+	const auto find = [&names](const QString &text) { return names.key(text, nullptr); };
+
+	layout.set_intent({a, c});
+	QVERIFY(layout.add_tab(b, a, 0));
+	QVERIFY(layout.bring_to_front(a));
+
+	const QString text = bssh_layout_manager::shape_text(layout.tree(), name);
+	QCOMPARE(text, QStringLiteral("H(b|*a,c)"));
+
+	bssh_layout_manager restored;
+	restored.set_width(1200);
+	restored.set_tree(bssh_layout_manager::parse_shape(text, find));
+	QCOMPARE(bssh_layout_manager::shape_text(restored.tree(), name), text);
+	QCOMPARE(restored.intent(), QList<bssh_session *>({a, c}));
+
+	/* A tab whose host is gone is dropped, the rest of its pane kept. */
+	QCOMPARE(bssh_layout_manager::shape_text(
+	                 bssh_layout_manager::parse_shape(QStringLiteral("H(gone|*a|b,c)"), find), name),
+	         QStringLiteral("H(*a|b,c)"));
+
+	/* The front gone: the first tab left takes its place. */
+	QCOMPARE(bssh_layout_manager::shape_text(
+	                 bssh_layout_manager::parse_shape(QStringLiteral("H(b|*gone,c)"), find), name),
+	         QStringLiteral("H(b,c)"));
+}
+
 void layout_test::a_restored_window_comes_back_in_its_shape() {
 	bssh_profile_store *store = bssh_profile_store::shared();
 	QVERIFY(store && store->is_open());

@@ -284,6 +284,17 @@ private slots:
 
 	/* The shape saved to layout.ini, and a window restored into it (sec 8.4). */
 	void a_shape_survives_being_written_down();
+
+	/*
+	 * A tab bar per pane (sec 8.3, agreed 2026-10-10): each leaf of the
+	 * tree is a stack of sessions, the intent stays the fronts, and a
+	 * pane whose last tab leaves closes.
+	 */
+	void a_pane_holds_tabs_and_closes_with_its_last();
+	void a_tab_moves_between_panes_and_along_a_bar();
+	void the_middle_swaps_panes_whole_and_trades_a_tab();
+	void a_collapsed_pane_lives_on_in_the_last_bar();
+	void a_pane_of_tabs_survives_being_written_down();
 	void a_restored_window_comes_back_in_its_shape();
 	void a_closed_window_writes_down_its_shape();
 

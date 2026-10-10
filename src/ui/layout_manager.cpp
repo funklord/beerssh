@@ -2,6 +2,7 @@
 
 #include <functional>
 
+#include <QHash>
 #include <QStringList>
 
 namespace {
@@ -54,18 +55,63 @@ void prune(bssh_pane_node &node, const std::function<bool(bssh_session *)> &keep
 	normalize(node);
 }
 
+/* Every leaf's tabs, leaf by leaf. */
+void collect_all(const bssh_pane_node &node, QList<bssh_session *> &out) {
+	if (node.is_leaf()) {
+		out.append(node.pane_tabs());
+		return;
+	}
+	for (const bssh_pane_node &child : node.children) collect_all(child, out);
+}
+
+/* Each leaf's tabs, keyed by its front, so a front can be moved with them. */
+void collect_stacks(const bssh_pane_node &node,
+                    QHash<bssh_session *, QList<bssh_session *>> &out) {
+	if (node.is_leaf()) {
+		out.insert(node.session, node.tabs);
+		return;
+	}
+	for (const bssh_pane_node &child : node.children) collect_stacks(child, out);
+}
+
 /*
  * Hands `order` out to the leaves in depth-first order, so a list that
  * is a permutation of the leaves reorders the sessions and keeps the
- * shape: what the list callers mean by "move this pane along".
+ * shape: what the list callers mean by "move this pane along". A front
+ * takes its tabs with it (sec 8.3: the pane moves, not one session of
+ * it); one new to the tree arrives alone.
  */
-void assign_leaves(bssh_pane_node &node, const QList<bssh_session *> &order, int &next) {
+void assign_leaves(bssh_pane_node &node, const QList<bssh_session *> &order, int &next,
+                   const QHash<bssh_session *, QList<bssh_session *>> &stacks) {
 	if (node.is_leaf()) {
-		if (next < order.size()) node.session = order.at(next);
+		if (next < order.size()) {
+			node.session = order.at(next);
+			node.tabs = stacks.value(node.session);
+		}
 		++next;
 		return;
 	}
-	for (bssh_pane_node &child : node.children) assign_leaves(child, order, next);
+	for (bssh_pane_node &child : node.children) assign_leaves(child, order, next, stacks);
+}
+
+void assign_leaves(bssh_pane_node &root, const QList<bssh_session *> &order) {
+	QHash<bssh_session *, QList<bssh_session *>> stacks;
+	collect_stacks(root, stacks);
+	int next = 0;
+	assign_leaves(root, order, next, stacks);
+}
+
+/* The leaf whose tabs hold `session`, front or not. */
+bssh_pane_node *find_pane(bssh_pane_node &node, bssh_session *session) {
+	if (node.is_leaf()) return node.pane_tabs().contains(session) ? &node : nullptr;
+	for (bssh_pane_node &child : node.children) {
+		if (bssh_pane_node *found = find_pane(child, session)) return found;
+	}
+	return nullptr;
+}
+
+const bssh_pane_node *find_pane(const bssh_pane_node &node, bssh_session *session) {
+	return find_pane(const_cast<bssh_pane_node &>(node), session);
 }
 
 bssh_pane_node *find_leaf(bssh_pane_node &node, bssh_session *session,
@@ -86,6 +132,27 @@ bssh_pane_node leaf(bssh_session *session) {
 	bssh_pane_node node;
 	node.session = session;
 	return node;
+}
+
+/*
+ * `session` out of whichever pane holds it. Another tab takes the front
+ * if it was there -- the one after it, or before it at the end, as a
+ * browser does -- and a pane left with nothing closes, its split closing
+ * around it. Nothing happens to a session the tree does not hold.
+ */
+void take_out(bssh_pane_node &root, bssh_session *session) {
+	bssh_pane_node *pane = find_pane(root, session);
+	if (!pane) return;
+
+	QList<bssh_session *> rest = pane->pane_tabs();
+	const int at = rest.indexOf(session);
+	rest.removeAt(at);
+	if (rest.isEmpty()) {
+		prune(root, [session](bssh_session *each) { return each != session; });
+		return;
+	}
+	if (pane->session == session) pane->session = rest.at(qMin(at, int(rest.size()) - 1));
+	pane->tabs = rest.size() > 1 ? rest : QList<bssh_session *>();
 }
 
 /*
@@ -219,11 +286,14 @@ void bssh_layout_manager::set_intent(const QList<bssh_session *> &sessions) {
 	QList<bssh_session *> present;
 	collect_leaves(m_tree, present);
 	for (bssh_session *session : sessions) {
-		if (!present.contains(session)) append_beside(m_tree, session);
+		if (present.contains(session)) continue;
+
+		/* A tab named as a pane leaves its stack for a pane of its own. */
+		take_out(m_tree, session);
+		append_beside(m_tree, session);
 	}
 
-	int next = 0;
-	assign_leaves(m_tree, sessions, next);
+	assign_leaves(m_tree, sessions);
 
 	m_intent = sessions;
 	emit layout_changed();
@@ -234,28 +304,54 @@ bool bssh_layout_manager::place(bssh_session *session, bssh_session *target,
 	if (!session || session == target || !m_intent.contains(target)) return false;
 
 	if (edge == EDGE_MIDDLE) {
-		/*
-		 * A swap when both are panes; otherwise the arrival takes the
-		 * target's place and the target leaves the panes -- still shown,
-		 * as a tab, because leaving the intent is never closing (sec 8.2).
-		 */
-		QList<bssh_session *> order = m_intent;
-		const int at = order.indexOf(target);
-		const int from = order.indexOf(session);
-		if (from >= 0) order.swapItemsAt(from, at);
-		else order[at] = session;
+		bssh_pane_node *there = find_pane(m_tree, target);
+		bssh_pane_node *here = find_pane(m_tree, session);
 
-		int next = 0;
-		assign_leaves(m_tree, order, next);
-		m_intent = order;
+		if (m_intent.contains(session) || !here) {
+			/*
+			 * Two fronts: the panes swap whole, their tabs going with
+			 * them. An arrival takes the target's place and the target
+			 * leaves the tree -- still shown, for the caller to keep,
+			 * because leaving is never closing (sec 8.2).
+			 */
+			QList<bssh_session *> order = m_intent;
+			const int at = order.indexOf(target);
+			const int from = order.indexOf(session);
+			if (from >= 0) {
+				order.swapItemsAt(from, at);
+				assign_leaves(m_tree, order);
+			} else {
+				QList<bssh_session *> tabs = there->pane_tabs();
+				tabs[tabs.indexOf(target)] = session;
+				there->session = session;
+				there->tabs = tabs.size() > 1 ? tabs : QList<bssh_session *>();
+			}
+		} else if (here == there) {
+			/* A tab of the target's own pane: it simply comes to the front. */
+			there->session = session;
+		} else {
+			/*
+			 * A tab of another pane trades places with the target: it
+			 * fronts the target's pane in the target's slot, and the
+			 * target goes into the bar it came from, in its slot.
+			 */
+			QList<bssh_session *> to = there->pane_tabs();
+			QList<bssh_session *> from = here->pane_tabs();
+			to[to.indexOf(target)] = session;
+			from[from.indexOf(session)] = target;
+			there->session = session;
+			there->tabs = to.size() > 1 ? to : QList<bssh_session *>();
+			here->tabs = from.size() > 1 ? from : QList<bssh_session *>();
+		}
+
+		m_intent.clear();
+		collect_leaves(m_tree, m_intent);
 		emit layout_changed();
 		return true;
 	}
 
-	/* A pane that is moving leaves its old place first, and that space closes. */
-	if (m_intent.contains(session)) {
-		prune(m_tree, [session](bssh_session *each) { return each != session; });
-	}
+	/* Whatever it was, it leaves its old place first, and that space closes. */
+	take_out(m_tree, session);
 
 	const Qt::Orientation along =
 	        (edge == EDGE_LEFT || edge == EDGE_RIGHT) ? Qt::Horizontal : Qt::Vertical;
@@ -299,7 +395,25 @@ void bssh_layout_manager::set_tree(const bssh_pane_node &tree) {
 
 QString bssh_layout_manager::shape_text(const bssh_pane_node &node,
                                         const std::function<QString(bssh_session *)> &name) {
-	if (node.is_leaf()) return name(node.session);
+	if (node.is_leaf()) {
+		/*
+		 * A pane of tabs as "b|*a|c": in their order, the front marked.
+		 * Those with no name are left out; the front's going, the first
+		 * left takes its mark.
+		 */
+		const QList<bssh_session *> tabs = node.pane_tabs();
+		QStringList named;
+		int front = -1;
+		for (bssh_session *each : tabs) {
+			const QString text = name(each);
+			if (text.isEmpty()) continue;
+			if (each == node.session) front = int(named.size());
+			named.append(text);
+		}
+		if (named.size() < 2) return named.value(0);
+		named[qMax(0, front)].prepend(QLatin1Char('*'));
+		return named.join(QLatin1Char('|'));
+	}
 	if (node.is_empty()) return QString();
 
 	QStringList parts;
@@ -346,7 +460,20 @@ bool parse_node(const QString &text, int &at, bssh_pane_node &out,
 		++at;
 	if (at == start) return false;
 
-	out.session = find(text.mid(start, at - start));
+	/* "b|*a|c": tabs, the front marked; hosts not found are dropped. */
+	QList<bssh_session *> tabs;
+	bssh_session *front = nullptr;
+	for (QString part : text.mid(start, at - start).split(QLatin1Char('|'))) {
+		const bool marked = part.startsWith(QLatin1Char('*'));
+		if (marked) part.remove(0, 1);
+		bssh_session *found = part.isEmpty() ? nullptr : find(part);
+		if (!found || tabs.contains(found)) continue;
+		tabs.append(found);
+		if (marked) front = found;
+	}
+	if (tabs.isEmpty()) return true;
+	out.session = front ? front : tabs.first();
+	if (tabs.size() > 1) out.tabs = tabs;
 	return true;
 }
 
@@ -392,9 +519,87 @@ bool bssh_layout_manager::is_collapsed() const {
 }
 
 void bssh_layout_manager::forget(bssh_session *session) {
-	if (!m_intent.contains(session)) return;
+	if (!find_pane(m_tree, session)) return;
 
-	QList<bssh_session *> rest = m_intent;
-	rest.removeAll(session);
-	set_intent(rest);
+	take_out(m_tree, session);
+	normalize(m_tree);
+	m_intent.clear();
+	collect_leaves(m_tree, m_intent);
+	emit layout_changed();
+}
+
+QList<bssh_session *> bssh_layout_manager::sessions() const {
+	QList<bssh_session *> all;
+	collect_all(m_tree, all);
+	return all;
+}
+
+QList<bssh_session *> bssh_layout_manager::tabs(bssh_session *member) const {
+	const bssh_pane_node *pane = find_pane(m_tree, member);
+	return pane ? pane->pane_tabs() : QList<bssh_session *>();
+}
+
+bssh_session *bssh_layout_manager::front_of(bssh_session *member) const {
+	const bssh_pane_node *pane = find_pane(m_tree, member);
+	return pane ? pane->session : nullptr;
+}
+
+QList<bssh_session *> bssh_layout_manager::bar_tabs(bssh_session *front) const {
+	QList<bssh_session *> bar = tabs(front);
+	const QList<bssh_session *> visible = visible_panes();
+	if (visible.isEmpty() || front != visible.last()) return bar;
+
+	for (bssh_session *hidden : m_intent) {
+		if (!visible.contains(hidden)) bar.append(tabs(hidden));
+	}
+	return bar;
+}
+
+bool bssh_layout_manager::add_tab(bssh_session *session, bssh_session *member, int slot) {
+	bssh_pane_node *pane = find_pane(m_tree, member);
+	if (!session || !pane) return false;
+
+	QList<bssh_session *> list = pane->pane_tabs();
+	const int from = list.indexOf(session);
+	if (from >= 0) {
+		/* Along its own bar: the slot counts the tabs as they are now. */
+		list.removeAt(from);
+		if (slot > from) --slot;
+	} else {
+		/* From another pane, which closes if this was its last tab. */
+		take_out(m_tree, session);
+		pane = find_pane(m_tree, member);
+		list = pane->pane_tabs();
+	}
+
+	list.insert(qBound(0, slot, int(list.size())), session);
+	pane->session = session;
+	pane->tabs = list.size() > 1 ? list : QList<bssh_session *>();
+
+	normalize(m_tree);
+	m_intent.clear();
+	collect_leaves(m_tree, m_intent);
+	emit layout_changed();
+	return true;
+}
+
+bool bssh_layout_manager::bring_to_front(bssh_session *session) {
+	bssh_pane_node *pane = find_pane(m_tree, session);
+	if (!pane) return false;
+
+	pane->session = session;
+	m_intent.clear();
+	collect_leaves(m_tree, m_intent);
+
+	/* Its pane not shown: it trades places with the last that is. */
+	const QList<bssh_session *> visible = visible_panes();
+	if (!visible.isEmpty() && !visible.contains(session)) {
+		QList<bssh_session *> order = m_intent;
+		order.swapItemsAt(order.indexOf(session), order.indexOf(visible.last()));
+		assign_leaves(m_tree, order);
+		m_intent = order;
+	}
+
+	emit layout_changed();
+	return true;
 }
