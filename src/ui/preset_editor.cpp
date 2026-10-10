@@ -266,6 +266,17 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 
 	if (shown(m_name, all)) form->addRow(QStringLiteral("Name"), m_name);
 
+	/*
+	 * Headed where the whole preset is shown, which is now the only place
+	 * the desktop edits one: the Terminal and Connection categories that
+	 * each showed one of these groups are gone (2026-10-10), and the
+	 * headings keep the two groups as easy to find as the categories did.
+	 */
+	const auto heading = [&](const QString &text) {
+		if (all) form->addRow(new QLabel(QStringLiteral("<b>%1</b>").arg(text), this));
+	};
+
+	heading(QStringLiteral("Terminal"));
 	if (shown(m_term, terminal)) form->addRow(QStringLiteral("TERM"), m_term);
 	if (shown(m_scrollback, terminal)) form->addRow(QStringLiteral("Scrollback"), m_scrollback);
 	if (shown(m_bell, terminal)) form->addRow(QString(), m_bell);
@@ -273,12 +284,13 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	if (shown(m_cursor_blink, terminal)) form->addRow(QString(), m_cursor_blink);
 	if (shown(m_features, terminal)) form->addRow(QStringLiteral("Features"), m_features);
 
+	if (shown(m_key_row, all)) form->addRow(QStringLiteral("Key row"), m_key_row);
+
+	heading(QStringLiteral("Connection"));
 	if (shown(m_keepalive, connection)) form->addRow(QStringLiteral("Keepalive"), m_keepalive);
 	if (shown(m_compression, connection)) form->addRow(QString(), m_compression);
 	if (shown(m_clipboard, connection)) form->addRow(QString(), m_clipboard);
 	if (shown(m_on_connect, connection)) form->addRow(QStringLiteral("On connect"), m_on_connect);
-
-	if (shown(m_key_row, all)) form->addRow(QStringLiteral("Key row"), m_key_row);
 	fields->addLayout(form);
 
 	/*

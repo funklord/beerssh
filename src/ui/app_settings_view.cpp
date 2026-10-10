@@ -77,13 +77,20 @@ QString bssh_app_settings_view::section_name(section_t section) {
 	case SECTION_TERMINAL:   return QStringLiteral("Terminal");
 	case SECTION_PASSWORDS:  return QStringLiteral("Stored passwords");
 	case SECTION_SHORTCUTS:  return QStringLiteral("Shortcuts");
-	case EVERYTHING:         break;
+	case EVERYTHING:
+	case EVERYTHING_BUT_APPEARANCE:
+		break;
 	}
 	return QStringLiteral("This device");
 }
 
+void bssh_app_settings_view::set_heading(const QString &heading) {
+	m_heading->setText(QStringLiteral("<b>%1</b>").arg(heading.toHtmlEscaped()));
+}
+
 bool bssh_app_settings_view::on_this_page(section_t section, QWidget *widget) {
-	const bool wanted = (m_section == EVERYTHING || m_section == section);
+	const bool wanted = m_section == EVERYTHING || m_section == section
+	                    || (m_section == EVERYTHING_BUT_APPEARANCE && section != SECTION_APPEARANCE);
 	if (!wanted && widget) widget->hide();
 	return wanted;
 }
@@ -163,10 +170,10 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 * section page says which section it is, since the user arrived by
 	 * tapping that row and Back is the way out.
 	 */
-	QLabel *heading = new QLabel(QStringLiteral("<b>%1</b>")
-	                                     .arg(section_name(m_section).toHtmlEscaped()),
-	                              this);
-	body->addWidget(heading);
+	m_heading = new QLabel(QStringLiteral("<b>%1</b>")
+	                               .arg(section_name(m_section).toHtmlEscaped()),
+	                        this);
+	body->addWidget(m_heading);
 
 	QFormLayout *form = new QFormLayout();
 	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
@@ -399,6 +406,13 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
 	bssh_fit_items(m_theme);
 	if (on_this_page(SECTION_APPEARANCE, m_theme)) form->addRow(QStringLiteral("Appearance"), m_theme);
+
+	/*
+	 * Where brightness and contrast go, built further down: straight
+	 * under the theme, the first things on the page rather than below
+	 * the fold. Looked for and not found was the report (2026-10-10).
+	 */
+	int lighting_row = form->rowCount();
 
 	/*
 	 * sec 9.3's contrast floor. The schemes are faithful reproductions
@@ -719,7 +733,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	        QStringLiteral("Colour schemes are reproduced exactly, and some of them are hard "
 	                        "to read. This lifts a colour only while drawing it, and only when "
 	                        "it falls below the readable minimum."));
-	if (on_this_page(SECTION_APPEARANCE, m_raise_contrast)) form->addRow(m_raise_contrast);
+	if (on_this_page(SECTION_APPEARANCE, m_raise_contrast)) form->insertRow(lighting_row++, m_raise_contrast);
 
 	/*
 	 * The night knob (sec 9.3). A slider rather than a light/dark toggle
@@ -768,13 +782,17 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	brightness_layout->addWidget(m_text_brightness_value);
 
 	/* Sized by the walk at the end of this constructor, never by name. */
-	if (on_this_page(SECTION_APPEARANCE, brightness_row)) form->addRow(QStringLiteral("Text brightness"), brightness_row);
+	if (on_this_page(SECTION_APPEARANCE, brightness_row)) {
+		form->insertRow(lighting_row++, QStringLiteral("Text brightness"), brightness_row);
+	}
 
+	/* Until the app closes: sec 9.3, the holder's rule of 2026-10-09. */
 	QLabel *brightness_note = bssh_wrapped_note(
 	        QStringLiteral("For reading at night. Applies to every terminal on this "
-	                        "device, not to one host."),
+	                        "device until BeerSSH closes; it starts at full brightness "
+	                        "and contrast every time."),
 	        this);
-	if (on_this_page(SECTION_APPEARANCE, brightness_note)) form->addRow(brightness_note);
+	if (on_this_page(SECTION_APPEARANCE, brightness_note)) form->insertRow(lighting_row++, brightness_note);
 
 	/*
 	 * The escape hatch (sec 9.3). A button to a dialog rather than
@@ -897,7 +915,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 * build it again, and the honest reasons in it are what make the
 	 * claim credible.
 	 */
-	if (m_section == EVERYTHING || m_section == SECTION_SHORTCUTS) {
+	if (whole() || m_section == SECTION_SHORTCUTS) {
 		/*
 		 * On a section page the page's own heading already says
 		 * "Shortcuts", so this one would be a second title for the same
@@ -908,7 +926,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		 * category and this is what separates the chords from everything
 		 * above them.
 		 */
-		if (m_section == EVERYTHING) {
+		if (whole()) {
 			QLabel *chords_heading = new QLabel(
 			        QStringLiteral("<b>Keys this app keeps</b>"), this);
 			body->addWidget(chords_heading);
@@ -1015,7 +1033,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		 * WrapLongRows stacks the second under the first where they do not
 		 * fit beside each other, the same way the chords above wrap.
 		 */
-		if (m_section == EVERYTHING) {
+		if (whole()) {
 			QLabel *remap_heading = new QLabel(
 			        QStringLiteral("<b>Remap keys</b>"), this);
 			body->addWidget(remap_heading);
@@ -1330,7 +1348,7 @@ void bssh_app_settings_view::refresh_keyboard_fallback() {
 	 * -- which is why every assertion stayed green and only opening the
 	 * page on a phone showed it.
 	 */
-	if (m_section != EVERYTHING && m_section != SECTION_KEYBOARD) return;
+	if (!whole() && m_section != SECTION_KEYBOARD) return;
 
 	const bssh_app_settings::keyboard_t chosen =
 	        bssh_app_settings::keyboard_t(m_keyboard->currentData().toInt());

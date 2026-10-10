@@ -7639,8 +7639,30 @@ visible on both, which is what tells a reader they are editing something
 
 *SSH* is gone. It could not be given settings because it had none to give:
 the key is per host and lives on *Session*, keepalive and compression are per
-preset and live on *Connection*. Its paragraph moved beside the key field it
+preset and live on *Presets*. Its paragraph moved beside the key field it
 explains, which is where it was pointing anyway.
+
+**[SUPERSEDED 2026-10-10] Terminal and Connection are gone too; Presets is
+the one place.** The slices above answered "a category that leads nowhere"
+and made a second problem: three categories editing one preset, which the
+holder reported as Terminal and Presets doing almost the same thing. Their
+choice: one Presets page, its fields under **Terminal** and **Connection**
+headings (the key row moved into the Terminal group). The tree is Session,
+Appearance, Presets, This device, Licences, and a test names all five rather
+than counting a floor, so neither slice comes back unnoticed.
+
+**Brightness is on Appearance [2026-10-10].** It was under *This device* and
+was reported as nowhere to be found -- the slider existed, four levels deep,
+in a category nobody looks in for brightness. The holder's choice: the
+Appearance category shows the device-wide appearance first, headed "Every
+host on this device" (theme, contrast, text brightness, then the rest of
+that section), over this host's font and colours headed "This host". *This
+device* shows everything but that section (`EVERYTHING_BUT_APPEARANCE`), so
+each setting keeps one widget. Brightness and contrast moved to the top of
+the section, above the fold, on the phone as well; the note under them now
+says what 1acd8d7 made true -- the slider lasts until BeerSSH closes, and it
+starts at full every time. Held by `brightness_is_on_the_appearance_page`
+and `tool/sabotage/settings-places.toml`.
 
 *Window* is **Appearance**, because the page has always been headed Appearance
 and holds the font, its size and the colours. PuTTY nests Appearance under

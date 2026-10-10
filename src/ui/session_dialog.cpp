@@ -101,8 +101,6 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 
 	QTreeWidgetItem *session = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Session")));
-	QTreeWidgetItem *terminal = new QTreeWidgetItem(m_categories,
-	        QStringList(QStringLiteral("Terminal")));
 	/*
 	 * "Appearance", not "Window". The page has always been headed
 	 * Appearance and holds the font, its size and the colours; the tree
@@ -122,8 +120,6 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	QTreeWidgetItem *presets = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Presets")));
 
-	QTreeWidgetItem *connection = new QTreeWidgetItem(m_categories,
-	        QStringList(QStringLiteral("Connection")));
 
 	/*
 	 * sec 9.4's Open Source Licences screen. A category rather than an
@@ -143,27 +139,18 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	 * category that sets nothing is a category that reads as unfinished,
 	 * and this one could not be given settings because it had none to
 	 * give: the key is per host and lives on Session, and keepalive and
-	 * compression are per preset and live on Connection.
+	 * compression are per preset and live on Presets.
 	 */
 
 	m_pages = new QStackedWidget(this);
 	m_pages->addWidget(build_session_page());
 	/*
-	 * Terminal and Connection are REAL pages now (sec 8.5). They were
-	 * prose plus a button reading "Open Presets", because what they name
-	 * lives in a preset rather than in a session -- but PuTTY has both
-	 * categories and both hold settings, so a tree that borrows PuTTY's
-	 * shape and then leads nowhere reads as unfinished. Reported as
-	 * exactly that.
-	 *
-	 * They are the same preset editor showing a subset of its fields, so
-	 * there is one implementation of what TERM means, one save and one
-	 * propagation -- and the preset list stays visible on each, which is
-	 * what tells a reader they are editing something SHARED rather than
-	 * this one session.
+	 * No Terminal or Connection category any more (the holder's choice,
+	 * 2026-10-10). They were the preset editor below showing a slice of
+	 * its fields each, so three categories edited one thing and read, in
+	 * the holder's words, as doing almost the same thing. Presets is the
+	 * one place, its fields under Terminal and Connection headings.
 	 */
-	m_pages->addWidget(new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP,
-	                                           bssh_preset_editor::TERMINAL, this));
 	m_pages->addWidget(build_window_page());
 	m_preset_editor = new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP,
 	                                          bssh_preset_editor::EVERYTHING, this);
@@ -173,9 +160,9 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	connect(m_preset_editor, &bssh_preset_editor::preset_removed,
 	         this, &bssh_session_dialog::presets_changed);
 
-	m_pages->addWidget(new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP,
-	                                           bssh_preset_editor::CONNECTION, this));
-	bssh_app_settings_view *device = new bssh_app_settings_view(this);
+	/* Its appearance is on the Appearance page; see build_window_page. */
+	bssh_app_settings_view *device = new bssh_app_settings_view(
+	        bssh_app_settings_view::EVERYTHING_BUT_APPEARANCE, this);
 	m_pages->addWidget(device);
 	connect(device, &bssh_app_settings_view::changed,
 	         this, &bssh_session_dialog::device_settings_changed);
@@ -183,10 +170,8 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	m_pages->addWidget(new bssh_licences_view(this));
 
 	Q_UNUSED(session);
-	Q_UNUSED(terminal);
 	Q_UNUSED(window);
 	Q_UNUSED(presets);
-	Q_UNUSED(connection);
 	Q_UNUSED(licences);
 	Q_UNUSED(application);
 
@@ -528,12 +513,10 @@ void bssh_session_dialog::on_category_changed() {
 	 * asserted against these by a test rather than trusted.
 	 */
 	if (name == QStringLiteral("Session")) m_pages->setCurrentIndex(0);
-	else if (name == QStringLiteral("Terminal")) m_pages->setCurrentIndex(1);
-	else if (name == QStringLiteral("Appearance")) m_pages->setCurrentIndex(2);
-	else if (name == QStringLiteral("Presets")) m_pages->setCurrentIndex(3);
-	else if (name == QStringLiteral("Connection")) m_pages->setCurrentIndex(4);
-	else if (name == QStringLiteral("This device")) m_pages->setCurrentIndex(5);
-	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(6);
+	else if (name == QStringLiteral("Appearance")) m_pages->setCurrentIndex(1);
+	else if (name == QStringLiteral("Presets")) m_pages->setCurrentIndex(2);
+	else if (name == QStringLiteral("This device")) m_pages->setCurrentIndex(3);
+	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(4);
 }
 
 void bssh_session_dialog::reload_sessions() {
@@ -765,7 +748,23 @@ QWidget *bssh_session_dialog::build_window_page() {
 	QWidget *page = new QWidget(this);
 	QVBoxLayout *layout = new QVBoxLayout(page);
 
-	QLabel *heading = new QLabel(QStringLiteral("<b>Appearance</b>"), page);
+	/*
+	 * The device's appearance first -- text brightness, contrast, the
+	 * theme -- then this host's font and colours. Brightness lived under
+	 * "This device", where nobody looking for it looked (reported
+	 * 2026-10-10, the holder's choice of where it goes). Headed so the
+	 * two scopes cannot be mistaken for one: the top applies to every
+	 * host, the bottom to the one selected.
+	 */
+	bssh_app_settings_view *everywhere = new bssh_app_settings_view(
+	        bssh_app_settings_view::SECTION_APPEARANCE, page);
+	everywhere->setObjectName(QStringLiteral("device_appearance"));
+	everywhere->set_heading(QStringLiteral("Every host on this device"));
+	layout->addWidget(everywhere, 1);
+	connect(everywhere, &bssh_app_settings_view::changed,
+	         this, &bssh_session_dialog::device_settings_changed);
+
+	QLabel *heading = new QLabel(QStringLiteral("<b>This host</b>"), page);
 	layout->addWidget(heading);
 
 	m_font_picker = new bssh_font_picker(page);
@@ -836,7 +835,7 @@ QWidget *bssh_session_dialog::build_window_page() {
 	connect(m_font_picker, &bssh_font_picker::scheme_chosen,
 	         this, [this] { update_override_badges(); });
 
-	layout->addStretch(1);
+	/* No stretch of its own: the device's half above scrolls and takes it. */
 	return page;
 }
 

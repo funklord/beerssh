@@ -54,6 +54,14 @@ public:
 	 */
 	enum section_t {
 		EVERYTHING,
+
+		/*
+		 * The desktop's "This device" category: everything but the
+		 * appearance, which the dialog's Appearance category shows --
+		 * brightness was there to find and nobody looked under "This
+		 * device" for it (reported 2026-10-10).
+		 */
+		EVERYTHING_BUT_APPEARANCE,
 		SECTION_KEYBOARD,
 		SECTION_APPEARANCE,
 		SECTION_TERMINAL,
@@ -71,6 +79,9 @@ public:
 	 * by hand is the shape sec 8.7 already records an off-by-one in.
 	 */
 	section_t section() const { return m_section; }
+
+	/* The page's heading, where the section's own name is the wrong one. */
+	void set_heading(const QString &heading);
 
 	explicit bssh_app_settings_view(QWidget *parent = nullptr);
 	bssh_app_settings_view(section_t section, QWidget *parent);
@@ -137,6 +148,10 @@ private:
 
 
 	section_t m_section;
+	QLabel *m_heading = nullptr;
+
+	/* The whole view rather than one section's page: the desktop's form. */
+	bool whole() const { return m_section == EVERYTHING || m_section == EVERYTHING_BUT_APPEARANCE; }
 
 	QComboBox *m_key_row;
 	QComboBox *m_keyboard;

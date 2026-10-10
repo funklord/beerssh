@@ -9057,6 +9057,38 @@ void layout_test::focus_follows_the_pointer_only_when_asked() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+/*
+ * Brightness on the Appearance page, where it is looked for, and only
+ * there: it lived under "This device" and was reported as nowhere to be
+ * found (2026-10-10). Each setting has one widget, so the device page
+ * must not show it a second time.
+ */
+void layout_test::brightness_is_on_the_appearance_page() {
+	const forced_touch_t touch(0);
+
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("hosts.ini")));
+	bssh_session_dialog dialog(&store);
+	QTreeWidget *tree = dialog.findChild<QTreeWidget *>();
+	QStackedWidget *pages = dialog.findChild<QStackedWidget *>();
+	QVERIFY(tree && pages);
+
+	const auto sliders_on = [&](const QString &category) {
+		const QList<QTreeWidgetItem *> found = tree->findItems(category, Qt::MatchExactly);
+		if (found.isEmpty()) return -1;
+		tree->setCurrentItem(found.first());
+		int count = 0;
+		for (const QSlider *slider : pages->currentWidget()->findChildren<QSlider *>()) {
+			if (slider->accessibleName() == QStringLiteral("Text brightness")
+			    && slider->isVisibleTo(pages->currentWidget())) ++count;
+		}
+		return count;
+	};
+	QCOMPARE(sliders_on(QStringLiteral("Appearance")), 1);
+	QCOMPARE(sliders_on(QStringLiteral("This device")), 0);
+
+}
+
 void layout_test::every_config_category_shows_its_own_page() {
 	/*
 	 * The tree and the stack are joined by a list of magic indices, and
@@ -9088,7 +9120,16 @@ void layout_test::every_config_category_shows_its_own_page() {
 			items.append(tree->topLevelItem(i)->child(child));
 		}
 	}
-	QVERIFY2(items.size() >= 6, "the category tree lost its categories");
+	/*
+	 * Named, not counted: Terminal and Connection were removed on purpose
+	 * (2026-10-10) as slices of Presets, and a floor on the count would
+	 * let either come back unnoticed.
+	 */
+	QStringList names;
+	for (const QTreeWidgetItem *item : items) names.append(item->text(0));
+	QCOMPARE(names, QStringList({ QStringLiteral("Session"), QStringLiteral("Appearance"),
+	                              QStringLiteral("Presets"), QStringLiteral("This device"),
+	                              QStringLiteral("Licences") }));
 
 	QSet<QWidget *> seen;
 	for (QTreeWidgetItem *item : items) {
