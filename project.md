@@ -1176,6 +1176,26 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   answers whether the platform did it; false means the caller hides its own
   window. Found by driving the prompt on a device — the desktop half is right
   either way, which is why nothing on a desktop could have caught it.
+- **[FIXED 2026-10-11] The tray was not the way back it is described as
+  above.** Its menu held *Quit BeerSSH* and nothing else, and nothing
+  answered a click on the icon, so *Keep running* hid a live shell that no
+  route could show again -- found by asking what the holder asked: which
+  terminals keep running with no visible way to them. Two more from the same
+  question: the icon was tied to *live* sessions alone, so a shell ending in
+  a hidden window took the icon away and left a process with a hidden window
+  and nothing to click; a desktop with no notification area got a hidden
+  window and no icon at all; and a hidden window whose last shell ENDED --
+  which closes the window, hidden or not -- stayed marked as away, holding
+  the icon for a window that was gone, while Qt, which quits on the last
+  VISIBLE window closing, had nothing left to quit on. Now the icon has *Show BeerSSH* first
+  and a click does the same (`bssh_platform::show_requested`), residency
+  holds while anything is live **or** any window is out of sight, a window
+  closed while away stops being away and quits the process when nothing
+  else is on screen and nothing is left to stay for, and with
+  no tray (`has_way_back()` false) the prompt offers Cancel instead of *Keep
+  running* and a remembered "keep running" is asked again rather than
+  obeyed (`a_window_kept_running_comes_back_from_the_tray`,
+  `with_no_tray_a_window_is_not_kept_running`).
 - **Suspend/resume, not screen-off, is the desktop analogue** of the Android
   background problem: a laptop lid closing kills every TCP connection in a way
   that looks exactly like a network flap on wake. Treat resume as a
@@ -6176,6 +6196,20 @@ ordering lives in the interactive drag loop, which the suite cannot run, so
 the test holds only the placement; the Xvfb harness is what saw the fix,
 with a background tab dropped on another pane's strip becoming its second
 tab, and one dragged sideways out of that bar landing in the first pane.
+
+**Two ways a session was open and in no bar (2026-10-11),** found by the
+holder's question of what keeps running with no visible way to it. A
+restore replaced the tree with the saved shape, which names only the
+closing window's panes while the saved hosts are the whole registry's; a
+host it left out was open and shown nowhere until something happened to
+sync the tree. It is synced straight after now
+(`a_restored_host_the_shape_leaves_out_is_still_a_tab`). And a swap across
+windows exchanged only pane fronts: a tab dragged from BEHIND its front --
+reachable since the fix above -- left the arrival listed in its window and
+in no bar, and itself still in that window's stack. It takes the tab's slot
+now (`a_background_tab_swapped_across_windows_stays_in_a_bar`). Nothing
+asserts the invariant in general -- every shown session in exactly one
+stack -- beyond `sync_tree_with_shown()` repairing it where it runs.
 
 **On the phone, 2026-10-11 (step 4, in part).** A second session opened from
 the host list became a tab in the one pane, its bar appearing with the second

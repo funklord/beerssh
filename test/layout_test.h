@@ -255,6 +255,10 @@ private slots:
 	 */
 	void a_drag_released_outside_every_window_tears_out();
 	void a_release_on_a_strip_makes_a_tab();
+	void a_window_kept_running_comes_back_from_the_tray();
+	void with_no_tray_a_window_is_not_kept_running();
+	void a_restored_host_the_shape_leaves_out_is_still_a_tab();
+	void a_background_tab_swapped_across_windows_stays_in_a_bar();
 	void a_drag_released_on_another_windows_pane_places_it();
 
 	/*

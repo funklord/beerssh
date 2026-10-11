@@ -456,6 +456,12 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * visible way to add windows, tabs or tiles. A menu bar is how a
 	 * desktop application says what it can do without being asked.
 	 */
+	/* The tray's way back (sec 5.5): each window put away answers it. */
+	if (bssh_platform::instance()) {
+		connect(bssh_platform::instance(), &bssh_platform::show_requested,
+		        this, &bssh_main_window::come_back);
+	}
+
 	if (front_door_for(bssh_platform::instance()->is_touch_primary())
 	    == FRONT_DOOR_SESSION_DIALOG) {
 		build_menu_bar();
@@ -3124,8 +3130,19 @@ void bssh_main_window::exchange_session(bssh_session *out, bssh_session *in) {
 	 * whole point of a swap.
 	 */
 	wire_session(in);
-	if (m_layout->intent().contains(out))
+	if (m_layout->intent().contains(out)) {
 		m_layout->place(in, out, bssh_layout_manager::EDGE_MIDDLE);
+	} else if (bssh_session *front = m_layout->front_of(out)) {
+		/*
+		 * A tab behind its pane's front -- one dragged out from behind
+		 * can be the side that leaves. Only the fronts were exchanged,
+		 * so the arrival was listed here and in no bar, and the one that
+		 * left stayed in this window's stack while another showed it.
+		 */
+		m_layout->add_tab(in, out, m_layout->tabs(out).indexOf(out));
+		m_layout->bring_to_front(front);
+		m_layout->forget(out);
+	}
 	m_shown[at] = in;
 
 	/*
@@ -4348,9 +4365,7 @@ void bssh_main_window::on_registry_changed() {
 	 * On desktop the same call means the tray icon and staying resident;
 	 * on Android it means the foreground service. Neither is named here.
 	 */
-	const int live = m_registry->live_count();
-	bssh_platform::instance()->set_session_count(live);
-	bssh_platform::instance()->set_keep_alive(live > 0);
+	update_residency();
 
 	/*
 	 * And kept awake while a host that asks for it is connected (sec 5.5).
@@ -4499,6 +4514,14 @@ void bssh_main_window::restore_layout() {
 
 	if (!shape.is_leaf() && !shape.is_empty()) {
 		m_layout->set_tree(shape);
+
+		/*
+		 * The shape replaces the whole tree, and it names only what the
+		 * window it was saved from showed -- the hosts list is the whole
+		 * registry's, every window's. A host it does not name is put back
+		 * as a tab, or it would be open here and in no pane and no bar.
+		 */
+		sync_tree_with_shown();
 		panes = m_layout->intent().size();
 	} else {
 		/* A layout saved before panes could nest: the first N, side by side. */
@@ -5891,7 +5914,8 @@ void bssh_main_window::elide_status() {
 }
 
 bssh_main_window::close_action_t bssh_main_window::close_action(bool sessions_live,
-                                                                 bool remembered_background) {
+                                                                 bool remembered_background,
+                                                                 bool way_back) {
 	/*
 	 * Nothing live: an ordinary close, and the process should go. Keeping
 	 * a terminal resident with no sessions would be a background process
@@ -5905,7 +5929,31 @@ bssh_main_window::close_action_t bssh_main_window::close_action(bool sessions_li
 	 * they had closed -- and one that silently kills a running build is
 	 * worse (sec 5.5).
 	 */
-	return remembered_background ? CLOSE_TO_BACKGROUND : ASK_FIRST;
+	return remembered_background && way_back ? CLOSE_TO_BACKGROUND : ASK_FIRST;
+}
+
+void bssh_main_window::come_back() {
+	if (!m_in_background) return;
+	m_in_background = false;
+	showNormal();
+	raise();
+	activateWindow();
+	update_residency();
+}
+
+void bssh_main_window::update_residency() {
+	bssh_platform *platform = bssh_platform::instance();
+	if (!platform || !m_registry) return;
+
+	bool hidden = false;
+	for (QWidget *top : QApplication::topLevelWidgets()) {
+		bssh_main_window *window = qobject_cast<bssh_main_window *>(top);
+		if (window && window->m_in_background) hidden = true;
+	}
+
+	const int live = m_registry->live_count();
+	platform->set_session_count(live);
+	platform->set_keep_alive(live > 0 || hidden);
 }
 
 void bssh_main_window::closeEvent(QCloseEvent *event) {
@@ -5940,8 +5988,10 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 	 */
 	const int live_here = live_shown_count();
 
+	const bool way_back = bssh_platform::instance()->has_way_back();
 	close_action_t action = close_action(live_here > 0,
-	                                      m_asked_about_closing && m_background_on_close);
+	                                      m_asked_about_closing && m_background_on_close,
+	                                      way_back);
 
 	if (action == ASK_FIRST) {
 		QMessageBox box(this);
@@ -5950,18 +6000,35 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 		                    ? QStringLiteral("A session is still connected.")
 		                    : QStringLiteral("%1 sessions are still connected.")
 		                              .arg(live_here));
-		box.setInformativeText(QStringLiteral(
-		        "Keep it running in the background, or disconnect and quit?"));
+		/*
+		 * With no tray there is nothing to come back from, so the window
+		 * is not offered out of sight: Cancel stands in for it.
+		 */
+		box.setInformativeText(way_back
+		        ? QStringLiteral("Keep it running in the background, or disconnect and quit?")
+		        : QStringLiteral("This desktop has no system tray to bring the window back "
+		                         "from, so closing it disconnects."));
 
-		QPushButton *background = box.addButton(QStringLiteral("Keep running"),
-		                                         QMessageBox::AcceptRole);
+		QPushButton *background = way_back
+		        ? box.addButton(QStringLiteral("Keep running"), QMessageBox::AcceptRole)
+		        : nullptr;
+		QPushButton *cancel = way_back ? nullptr : box.addButton(QMessageBox::Cancel);
 		box.addButton(QStringLiteral("Disconnect and quit"), QMessageBox::DestructiveRole);
-		box.setDefaultButton(background);
+		box.setDefaultButton(background ? background : cancel);
 		box.exec();
 
-		m_asked_about_closing = true;
-		m_background_on_close = box.clickedButton() == static_cast<QAbstractButton *>(background);
-		action = m_background_on_close ? CLOSE_TO_BACKGROUND : CLOSE_AND_QUIT;
+		if (cancel && box.clickedButton() == static_cast<QAbstractButton *>(cancel)) {
+			event->ignore();
+			return;
+		}
+
+		const bool chose_background =
+		        background && box.clickedButton() == static_cast<QAbstractButton *>(background);
+		if (way_back) {
+			m_asked_about_closing = true;
+			m_background_on_close = chose_background;
+		}
+		action = chose_background ? CLOSE_TO_BACKGROUND : CLOSE_AND_QUIT;
 	}
 
 	if (action == CLOSE_TO_BACKGROUND) {
@@ -5975,17 +6042,17 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 		 * icon and staying resident; on Android it means the foreground
 		 * service. Neither is named here.
 		 */
-		const int live = m_registry->live_count();
-		bssh_platform::instance()->set_session_count(live);
-		bssh_platform::instance()->set_keep_alive(live > 0);
-
 		/*
 		 * And the window hides only if the platform did not already put
 		 * the app away. On Android it did, and hiding as well is what
 		 * left a blank Activity nothing could recover -- see
-		 * send_to_background().
+		 * send_to_background(). Residency is settled before the hide, so
+		 * the last visible window going does not quit the app.
 		 */
-		if (!bssh_platform::instance()->send_to_background()) hide();
+		const bool hide_here = !bssh_platform::instance()->send_to_background();
+		m_in_background = hide_here;
+		update_residency();
+		if (hide_here) hide();
 
 		event->ignore();
 		return;
@@ -6020,10 +6087,26 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 	 * quits when the last VISIBLE window closes, and a backgrounded one
 	 * is not visible.
 	 */
-	const int live = m_registry->live_count();
-	bssh_platform::instance()->set_session_count(live);
-	bssh_platform::instance()->set_keep_alive(live > 0);
+	/*
+	 * A window closed while out of sight -- its last shell ended there,
+	 * and an ending closes the window -- is not waiting for the tray any
+	 * more. Kept marked, it held the icon for a window that was gone.
+	 * And Qt quits on the last VISIBLE window closing, which this one
+	 * had already stopped being, so with nothing else on screen and
+	 * nothing to stay for, the process is told to go.
+	 */
+	const bool was_away = m_in_background;
+	m_in_background = false;
+	update_residency();
 	event->accept();
+
+	if (was_away && QApplication::quitOnLastWindowClosed()) {
+		bool shown = false;
+		for (QWidget *top : QApplication::topLevelWidgets()) {
+			if (top != this && top->isVisible()) shown = true;
+		}
+		if (!shown) QTimer::singleShot(0, qApp, &QCoreApplication::quit);
+	}
 }
 
 int bssh_main_window::live_shown_count() const {

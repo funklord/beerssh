@@ -34,6 +34,39 @@ expect = "closing_a_window_leaves_the_other_windows_sessions_alone"
 [[sabotage]]
 name = "closing a window drops residency while sessions are live elsewhere"
 file = "src/ui/main_window.cpp"
-find = "\tconst int live = m_registry->live_count();\n\tbssh_platform::instance()->set_session_count(live);\n\tbssh_platform::instance()->set_keep_alive(live > 0);\n\tevent->accept();"
-replace = "\tbssh_platform::instance()->set_keep_alive(false);\n\tevent->accept();"
+find = "\tm_in_background = false;\n\tupdate_residency();\n\tevent->accept();"
+replace = "\tm_in_background = false;\n\tbssh_platform::instance()->set_keep_alive(false);\n\tevent->accept();"
 expect = "closing_a_window_leaves_the_other_windows_sessions_alone"
+
+# sec 5.5's way back: the tray brings a window put away back, residency
+# holds while one is away, and with no tray none is put away. Held by
+# a_window_kept_running_comes_back_from_the_tray and
+# with_no_tray_a_window_is_not_kept_running.
+
+[[sabotage]]
+name = "the tray's way back brings nothing back"
+file = "src/ui/main_window.cpp"
+find = "\tif (!m_in_background) return;\n\tm_in_background = false;\n\tshowNormal();\n"
+replace = "\treturn;\n\tm_in_background = false;\n\tshowNormal();\n"
+expect = "a_window_kept_running_comes_back_from_the_tray"
+
+[[sabotage]]
+name = "residency goes with the last live session, a window still away"
+file = "src/ui/main_window.cpp"
+find = "\tplatform->set_keep_alive(live > 0 || hidden);\n"
+replace = "\tplatform->set_keep_alive(live > 0);\n"
+expect = "a_window_kept_running_comes_back_from_the_tray"
+
+[[sabotage]]
+name = "a window closed while away still holds the tray"
+file = "src/ui/main_window.cpp"
+find = "\tconst bool was_away = m_in_background;\n\tm_in_background = false;\n"
+replace = "\tconst bool was_away = m_in_background;\n"
+expect = "a_window_kept_running_comes_back_from_the_tray"
+
+[[sabotage]]
+name = "keep running is offered with no tray to come back from"
+file = "src/ui/main_window.cpp"
+find = "\tconst bool way_back = bssh_platform::instance()->has_way_back();\n"
+replace = "\tconst bool way_back = true;\n"
+expect = "with_no_tray_a_window_is_not_kept_running"

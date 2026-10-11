@@ -163,7 +163,19 @@ public:
 		ASK_FIRST            /* live sessions and no remembered answer */
 	};
 
-	static close_action_t close_action(bool sessions_live, bool remembered_background);
+	/*
+	 * way_back false -- no tray to come back from -- never answers
+	 * CLOSE_TO_BACKGROUND: a hidden window there is a process nobody can
+	 * reach, so it asks, and the prompt does not offer it.
+	 */
+	static close_action_t close_action(bool sessions_live, bool remembered_background,
+	                                   bool way_back = true);
+
+	/* Put out of sight by "Keep running", waiting for the way back (sec 5.5). */
+	bool is_in_background() const { return m_in_background; }
+
+	/* The tray's way back: a window put out of sight comes back. */
+	void come_back();
 
 	/*
 	 * Which front door to show (sec 8.5). A capability question, like the
@@ -513,6 +525,14 @@ private:
 	 * one.
 	 */
 	int live_shown_count() const;
+
+	/*
+	 * Stay resident, and keep the tray icon: while anything is live, and
+	 * while any window is out of sight waiting for the icon to bring it
+	 * back. On live sessions alone, the last one dropping in a hidden
+	 * window took the icon away and left a process with no way back.
+	 */
+	void update_residency();
 
 	/*
 	 * The bars per pane (sec 8.3) brought up to date: their labels and
@@ -1094,6 +1114,7 @@ private:
 
 	bool m_asked_about_closing;
 	bool m_background_on_close;
+	bool m_in_background = false;
 };
 
 #endif /* BSSH_MAIN_WINDOW_H */

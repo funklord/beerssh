@@ -49,3 +49,20 @@ file = "src/ui/layout_manager.cpp"
 find = "\t\tbssh_pane_node kept = *found;\n"
 replace = "\t\tbssh_pane_node kept = leaf(target);\n"
 expect = "a_tab_moves_between_panes_and_along_a_bar"
+
+# Every session a window shows is in one of its stacks: a restored host
+# the saved shape leaves out, and a background tab traded across windows.
+
+[[sabotage]]
+name = "a restored host the shape leaves out is in no pane"
+file = "src/ui/main_window.cpp"
+find = "\t\tsync_tree_with_shown();\n\t\tpanes = m_layout->intent().size();\n"
+replace = "\t\tpanes = m_layout->intent().size();\n"
+expect = "a_restored_host_the_shape_leaves_out_is_still_a_tab"
+
+[[sabotage]]
+name = "a background tab traded across windows is exchanged as a front"
+file = "src/ui/main_window.cpp"
+find = "\t} else if (bssh_session *front = m_layout->front_of(out)) {\n"
+replace = "\t} else if (bssh_session *front = out == in ? m_layout->front_of(out) : nullptr) {\n"
+expect = "a_background_tab_swapped_across_windows_stays_in_a_bar"

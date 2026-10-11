@@ -453,6 +453,11 @@ public:
 		return false;
 	}
 
+	/* The tray icon is the way back; with no notification area there is none. */
+	bool platform_has_way_back() const override {
+		return QSystemTrayIcon::isSystemTrayAvailable();
+	}
+
 	void authenticate(const QString &reason, std::function<void(bool)> done) override {
 		Q_UNUSED(reason);
 
@@ -511,9 +516,19 @@ private:
 		 */
 		m_tray->setIcon(QGuiApplication::windowIcon());
 
+		/*
+		 * Show first: it is what the icon is for. A click on the icon
+		 * itself does the same, which is what every tray icon teaches.
+		 */
 		QMenu *menu = new QMenu();
+		menu->addAction(QStringLiteral("Show BeerSSH"), this, &bssh_platform::show_requested);
 		menu->addAction(QStringLiteral("Quit BeerSSH"), qApp, &QCoreApplication::quit);
 		m_tray->setContextMenu(menu);
+		connect(m_tray, &QSystemTrayIcon::activated, this,
+		        [this](QSystemTrayIcon::ActivationReason reason) {
+			if (reason == QSystemTrayIcon::Trigger || reason == QSystemTrayIcon::DoubleClick)
+				emit show_requested();
+		});
 
 		m_tray->show();
 	}

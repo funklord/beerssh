@@ -152,3 +152,15 @@ void bssh_platform::set_sleep_inhibited(bool inhibit) {
 void bssh_platform::force_biometric(int available) {
 	bssh_forced_biometric = available;
 }
+
+/* -1 until something says otherwise, exactly as above. */
+static int bssh_forced_way_back = -1;
+
+bool bssh_platform::has_way_back() const {
+	if (bssh_forced_way_back >= 0) return bssh_forced_way_back != 0;
+	return platform_has_way_back();
+}
+
+void bssh_platform::force_way_back(int available) {
+	bssh_forced_way_back = available;
+}

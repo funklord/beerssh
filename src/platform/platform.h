@@ -129,6 +129,15 @@ public:
 	static void force_biometric(int available);
 
 	/*
+	 * Whether a window put out of sight can be brought back (sec 5.5):
+	 * the tray icon on a desktop, the launcher on Android. False on a
+	 * desktop with no notification area -- where a hidden window is a
+	 * process nobody can reach, so "keep running" is not offered.
+	 */
+	bool has_way_back() const;
+	static void force_way_back(int available);
+
+	/*
 	 * Ask, and hear the answer later.
 	 *
 	 * Asynchronous because every platform that has this shows a system
@@ -146,6 +155,7 @@ protected:
 	/* What terminfo_directory() answers when nothing is forcing it. */
 	virtual QString platform_terminfo_directory() const = 0;
 	virtual bool platform_has_biometric() const = 0;
+	virtual bool platform_has_way_back() const { return true; }
 	virtual void platform_notify(const QString &title, const QString &body) = 0;
 	virtual void platform_set_sleep_inhibited(bool inhibit) = 0;
 
@@ -278,6 +288,14 @@ signals:
 
 	/* Emitted when set_sleep_inhibited() changes its answer. */
 	void sleep_inhibition_changed(bool inhibited);
+
+	/*
+	 * The user asked for the windows put out of sight back -- the tray
+	 * icon clicked, or its Show entry (sec 5.5). The way back the tray
+	 * was always said to be, and for a long time was not: its menu held
+	 * Quit and nothing else.
+	 */
+	void show_requested();
 
 public:
 

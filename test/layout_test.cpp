@@ -68,6 +68,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
+#include <QMessageBox>
 #include <QSettings>
 #include <QSplitter>
 #include <QHBoxLayout>
@@ -4276,6 +4277,275 @@ void layout_test::a_release_on_a_strip_makes_a_tab() {
 
 	QCOMPARE(window.panes()->pane_count(), 1);
 	QCOMPARE(tab_sessions(window, a), QList<bssh_session *>({ a, c }));
+}
+
+namespace {
+
+/* Answers the close prompt that opens next, by the button's text. */
+void answer_next_box(const QString &button, QString *offered = nullptr) {
+	QTimer::singleShot(0, [button, offered] {
+		QMessageBox *box = qobject_cast<QMessageBox *>(QApplication::activeModalWidget());
+		if (!box) return;
+		if (offered) {
+			QStringList texts;
+			for (QAbstractButton *each : box->buttons()) texts << each->text();
+			*offered = texts.join(QLatin1Char('|'));
+		}
+		for (QAbstractButton *each : box->buttons()) {
+			if (each->text().remove(QLatin1Char('&')) == button) {
+				each->click();
+				return;
+			}
+		}
+		box->reject();
+	});
+}
+
+} /* namespace */
+
+void layout_test::a_window_kept_running_comes_back_from_the_tray() {
+	/*
+	 * sec 5.5: the tray icon is the way back to a window kept running.
+	 * It was not -- its menu held Quit and nothing else, and a click on
+	 * it did nothing -- so "Keep running" hid a live shell nothing could
+	 * show again. And the icon went with the last live session, so one
+	 * that dropped while hidden left a process with no way back at all.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+	bssh_platform::force_way_back(1);
+	bssh_platform *platform = bssh_platform::instance();
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_profile_t host = named(QStringLiteral("kept"));
+		host.host = QStringLiteral("kept.example");
+		bssh_session *session = registry->create(host);
+		window.adopt_session(session);
+		session->connect_to_host();
+		QVERIFY(fake);
+		fake->simulate_key_auth_success();
+		QCoreApplication::processEvents();
+		QVERIFY(session->is_live());
+
+		answer_next_box(QStringLiteral("Keep running"));
+		window.close();
+		QCoreApplication::processEvents();
+		QVERIFY2(window.isHidden() && window.is_in_background(), "Keep running did not put it away");
+		QVERIFY(!QApplication::quitOnLastWindowClosed());
+
+		/*
+		 * The session stops being live while nobody is looking -- here
+		 * disconnected, as a failed reconnect leaves it: the window stays,
+		 * and so must the icon that brings it back.
+		 */
+		session->disconnect_from_host();
+		QCoreApplication::processEvents();
+		QCoreApplication::processEvents();
+		QVERIFY(!session->is_live());
+		QVERIFY(window.is_in_background());
+		QVERIFY2(!QApplication::quitOnLastWindowClosed(),
+		          "the way back went with the last live session, the window still hidden");
+
+		emit platform->show_requested();
+		QCoreApplication::processEvents();
+		QVERIFY2(!window.is_in_background(), "the tray asked for the window and it stayed away");
+		QVERIFY2(window.isVisible(), "the tray asked for the window and it stayed hidden");
+		QVERIFY2(QApplication::quitOnLastWindowClosed(),
+		          "resident with nothing live and nothing hidden");
+
+	}
+
+	{
+		/*
+		 * Put away, and this time the shell ENDS: an ending closes the
+		 * window, hidden or not, and nothing is left to stay for.
+		 */
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_profile_t host = named(QStringLiteral("ending"));
+		host.host = QStringLiteral("ending.example");
+		bssh_session *session = registry->create(host);
+		window.adopt_session(session);
+		session->connect_to_host();
+		fake->simulate_key_auth_success();
+		QCoreApplication::processEvents();
+		QVERIFY(session->is_live());
+
+		answer_next_box(QStringLiteral("Keep running"));
+		window.close();
+		QCoreApplication::processEvents();
+		QVERIFY(window.is_in_background());
+
+		fake->simulate_remote_exit(0);
+		QTRY_VERIFY2_WITH_TIMEOUT(!window.is_in_background(),
+		                          "a window closed by its shell ending still holds the tray", 2000);
+		QVERIFY2(QApplication::quitOnLastWindowClosed(),
+		          "resident for a window that has closed");
+	}
+
+	bssh_platform::force_way_back(-1);
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void layout_test::with_no_tray_a_window_is_not_kept_running() {
+	/*
+	 * No notification area, so no icon to come back from: a window hidden
+	 * there is a live shell in a process nobody can reach. Not offered;
+	 * Cancel stands in for it, and a remembered "keep running" is asked
+	 * again rather than obeyed.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+	bssh_platform::force_way_back(0);
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_profile_t host = named(QStringLiteral("trayless"));
+		host.host = QStringLiteral("trayless.example");
+		bssh_session *session = registry->create(host);
+		window.adopt_session(session);
+		session->connect_to_host();
+		QVERIFY(fake);
+		fake->simulate_key_auth_success();
+		QCoreApplication::processEvents();
+
+		QString offered;
+		answer_next_box(QStringLiteral("Cancel"), &offered);
+		window.close();
+		QCoreApplication::processEvents();
+		QVERIFY2(!offered.contains(QStringLiteral("Keep running")),
+		          qPrintable(QStringLiteral("offered: ") + offered));
+		QVERIFY2(window.isVisible() && !window.is_in_background(), "Cancel closed it anyway");
+		QVERIFY(session->is_live());
+
+		registry->close(session);
+		QCoreApplication::processEvents();
+	}
+
+	QCOMPARE(bssh_main_window::close_action(true, true, false), bssh_main_window::ASK_FIRST);
+	bssh_platform::force_way_back(-1);
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void layout_test::a_restored_host_the_shape_leaves_out_is_still_a_tab() {
+	/*
+	 * The hosts are saved from the whole registry -- every window's -- and
+	 * the shape from the closing window's tree. A restore opened every
+	 * host and then replaced the tree with the shape, so a host the shape
+	 * did not name was open in this window and in no pane and no bar.
+	 */
+	bssh_profile_store *store = bssh_profile_store::shared();
+	QVERIFY(store && store->is_open());
+
+	const int left_id = store->save(named(QStringLiteral("unnamed-left")));
+	const int right_id = store->save(named(QStringLiteral("unnamed-right")));
+	const int other_id = store->save(named(QStringLiteral("unnamed-other")));
+	QVERIFY(left_id && right_id && other_id);
+	const bssh_profile_store::layout_state_t was = store->layout();
+
+	bssh_profile_store::layout_state_t saved;
+	saved.profile_ids = {left_id, right_id, other_id};
+	saved.pane_count = 2;
+	saved.shape = QStringLiteral("H(%1,%2)").arg(left_id).arg(right_id);
+	QVERIFY(store->save_layout(saved));
+
+	{
+		bssh_main_window window;
+		window.resize(1200, 800);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		const registry_left_as_found_t tidy(window.registry());
+
+		window.restore_layout();
+		QCoreApplication::processEvents();
+
+		const QList<bssh_session *> placed = window.layout_manager()->sessions();
+		int restored = 0;
+		for (bssh_session *session : window.registry()->sessions()) {
+			const int id = session->profile().id;
+			if (id != left_id && id != right_id && id != other_id) continue;
+			++restored;
+			QVERIFY2(placed.contains(session),
+			          qPrintable(session->profile().name + QStringLiteral(" is open in no pane")));
+		}
+		QCOMPARE(restored, 3);
+		QCOMPARE(window.panes()->pane_count(), 2);
+	}
+
+	store->save_layout(was);
+	store->remove(left_id);
+	store->remove(right_id);
+	store->remove(other_id);
+}
+
+void layout_test::a_background_tab_swapped_across_windows_stays_in_a_bar() {
+	/*
+	 * A tab dragged from behind its pane's front onto the middle of a
+	 * pane in another window: the two trade places. Only fronts were
+	 * exchanged, so the arrival was listed in the first window and in no
+	 * bar there, and the tab that left stayed in that window's stack
+	 * while the second showed it too.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window first;
+	first.resize(900, 600);
+	first.show();
+	bssh_main_window second;
+	second.resize(900, 600);
+	second.move(1000, 0);
+	second.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&first));
+	QVERIFY(QTest::qWaitForWindowExposed(&second));
+
+	bssh_session *a = shared->create(named(QStringLiteral("a")));
+	bssh_session *b = shared->create(named(QStringLiteral("b")));
+	bssh_session *c = shared->create(named(QStringLiteral("c")));
+	first.adopt_session(a);
+	first.adopt_session(b);
+	second.adopt_session(c);
+	QCoreApplication::processEvents();
+	first.layout_manager()->bring_to_front(a);
+	QCoreApplication::processEvents();
+	QCOMPARE(tab_sessions(first, a), QList<bssh_session *>({ a, b }));
+	QCOMPARE(first.layout_manager()->front_of(b), a);
+
+	second.drop_session_on(b, c, bssh_layout_manager::EDGE_MIDDLE);
+	QCoreApplication::processEvents();
+
+	QVERIFY2(first.layout_manager()->sessions().contains(c),
+	          "the session that came back is in no pane of the first window");
+	QVERIFY2(!first.layout_manager()->sessions().contains(b),
+	          "the tab that left is still in the first window's stack");
+	QCOMPARE(tab_sessions(first, a), QList<bssh_session *>({ a, c }));
+	QVERIFY(second.layout_manager()->sessions().contains(b));
+	QVERIFY(!second.layout_manager()->sessions().contains(c));
 }
 
 void layout_test::a_drag_released_outside_every_window_tears_out() {
