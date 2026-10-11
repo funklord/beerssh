@@ -1535,9 +1535,18 @@ void bssh_main_window::split_beside_current() {
 	 * Naming both sides here is what makes "beside" mean beside.
 	 */
 	const QList<bssh_session *> before = m_layout->intent();
+	bssh_session *front_before = m_layout->front_of(m_current);
 
 	bssh_session *session = prepare_profile(bssh_profile_t::local_shell());
 	if (!session) return;
+
+	/*
+	 * Opening it showed it -- at the front of the focused pane (sec 8.3's
+	 * bar per pane) -- so that pane's front is handed back first, or the
+	 * split below moves the session the user was looking at into the new
+	 * pane and leaves the new one behind. Seen on the phone.
+	 */
+	if (front_before && front_before != session) m_layout->bring_to_front(front_before);
 
 	QList<bssh_session *> beside = before;
 	if (!beside.contains(session)) beside.append(session);

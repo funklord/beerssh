@@ -10206,6 +10206,29 @@ void layout_test::split_beside_current_makes_a_second_pane() {
 	QCOMPARE(window.panes()->views().size(), 2);
 	QCOMPARE(window.registry()->count(), 2);
 
+	/*
+	 * With tabs in the focused pane (sec 8.3's bar per pane), the NEW
+	 * session takes the new pane and the one being looked at stays where
+	 * it was, its tabs with it. Seen on the phone the other way round: the
+	 * session in front left for the new pane, alone.
+	 */
+	window.show_as_tab(window.layout_manager()->intent().value(1));
+	bssh_session *other = window.registry()->create(named(QStringLiteral("other")));
+	window.adopt_session(other);
+	window.layout_manager()->bring_to_front(only);
+	QCoreApplication::processEvents();
+	QCOMPARE(window.panes()->views().size(), 1);
+	const QList<bssh_session *> tabs_before = window.layout_manager()->tabs(only);
+	QCOMPARE(tabs_before.size(), 3);
+
+	window.split_beside_current();
+	QCoreApplication::processEvents();
+	const QList<bssh_session *> panes = window.layout_manager()->intent();
+	QCOMPARE(panes.size(), 2);
+	QCOMPARE(panes.first(), only);
+	QCOMPARE(window.layout_manager()->tabs(only), tabs_before);
+	QVERIFY(!tabs_before.contains(panes.last()));
+
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 

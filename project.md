@@ -6158,6 +6158,20 @@ to its pane's right edge became a pane of its own, the bar it left kept the
 other two, and that pane dragged onto the left pane's bar became its third
 tab. Step 4 -- the column on the phone -- is what remains.
 
+**On the phone, 2026-10-11 (step 4, in part).** A second session opened from
+the host list became a tab in the one pane, its bar appearing with the second
+tab; the `+` on that bar opened the host list (New Tab's touch behaviour, as
+before) and the session chosen there joined the same pane as a third tab;
+picking a tab brought it to the front. **One fault found and fixed:** the
+pane menu's *Split Beside Current* moved the session in FRONT into the new
+pane, alone, and left the new session behind in the bar -- opening it had
+brought it to the front of the focused pane, and the split rebuilt the panes
+from the fronts as they then were. The focused pane's front is handed back
+before the split (`split_beside_current_makes_a_second_pane` now holds it,
+with a tab picked first, which is what the phone did). Still to see on the
+device: two panes in the column each with a bar, and a tab dragged between
+them.
+
 **[BUILT] A tab tears out on DISTANCE, not on direction.** The gesture measured
 how far below the bar the pointer had gone and nothing else, so a tab could be
 pulled out downward and not upward, sideways, or off either end. Three of the

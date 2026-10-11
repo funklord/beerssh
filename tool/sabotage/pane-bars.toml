@@ -60,3 +60,13 @@ file = "src/ui/pane_container.cpp"
 find = "\tparent->addWidget(frame);\n"
 replace = ""
 expect = "dividers_snap_to_whole_cells"
+
+# Split Beside Current moves the session being looked at into the new pane,
+# alone, and leaves the new one behind in its bar. Opening the new session
+# had brought it to the front of the focused pane. Seen on the phone.
+[[sabotage]]
+name = "a split takes the tab in front rather than the new session"
+file = "src/ui/main_window.cpp"
+find = "\tif (front_before && front_before != session) m_layout->bring_to_front(front_before);\n"
+replace = ""
+expect = "split_beside_current_makes_a_second_pane"
