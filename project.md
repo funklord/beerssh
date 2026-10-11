@@ -6077,7 +6077,7 @@ the same number for a layout manager that had quietly stopped working.
 
 ### 8.3 Tabs and focus
 
-**A tab bar per pane — [AGREED 2026-10-10, BUILT ON THE DESKTOP].** The holder: "a
+**A tab bar per pane — [AGREED 2026-10-10, BUILT 2026-10-11].** The holder: "a
 single tab bar doesn't seem to make sense, maybe a possible tab bar for each
 terminal makes more sense." The single bar listed the sessions in no pane, and
 picking one swapped it into whichever pane had the focus: unambiguous with one
@@ -6168,9 +6168,14 @@ pane, alone, and left the new session behind in the bar -- opening it had
 brought it to the front of the focused pane, and the split rebuilt the panes
 from the fronts as they then were. The focused pane's front is handed back
 before the split (`split_beside_current_makes_a_second_pane` now holds it,
-with a tab picked first, which is what the phone did). Still to see on the
-device: two panes in the column each with a bar, and a tab dragged between
-them.
+with a tab picked first, which is what the phone did). Seen again on the
+device after the fix, the same day: *Split Beside Current* on a pane of two
+tabs left both in the upper pane, its bar showing, and put the new shell in
+a pane of its own below with no bar; *Show as Tab* on that lower pane sent it
+into the upper pane's bar as a third tab, the tab in front staying in front.
+**Step 4 done.** Tabs are not dragged on a touch screen -- the bar scrolls
+there, as sec 8.3 settled -- so moving one between panes on a phone is the
+pane menu's verbs; no drag was tried.
 
 **[BUILT] A tab tears out on DISTANCE, not on direction.** The gesture measured
 how far below the bar the pointer had gone and nothing else, so a tab could be
