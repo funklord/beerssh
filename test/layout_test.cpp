@@ -4240,6 +4240,44 @@ void layout_test::a_drop_on_a_pane_that_is_not_focused_places_the_pane() {
 	QCOMPARE(panes->focused_session(), moving);
 }
 
+void layout_test::a_release_on_a_strip_makes_a_tab() {
+	/*
+	 * BeerSSH's own drag (X11) places the release through
+	 * finish_session_drag(), and a pane of one tab has no bar -- only the
+	 * strip drawn while the drag is up. Released there, it is a tab, the
+	 * same as under QDrag. Found on Xvfb: the strips were taken down
+	 * before the release was placed, so it split the pane's top edge
+	 * instead. That ordering lives in the interactive drag loop, which
+	 * this cannot run; what it pins is that the placement reads the
+	 * strip while it is up.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window window;
+	window.resize(1000, 700);
+	window.move(0, 0);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+
+	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(a);
+	bssh_session *c = window.registry()->create(named(QStringLiteral("c")));
+	QCoreApplication::processEvents();
+	QVERIFY(window.bar_for(a) && window.bar_for(a)->isHidden());
+
+	window.set_session_drag_active(true);
+	QWidget *strip = window.tab_drop_target(a);
+	QVERIFY(strip && strip->isVisible());
+	window.finish_session_drag(c, strip->mapToGlobal(strip->rect().center()));
+	window.set_session_drag_active(false);
+	QCoreApplication::processEvents();
+
+	QCOMPARE(window.panes()->pane_count(), 1);
+	QCOMPARE(tab_sessions(window, a), QList<bssh_session *>({ a, c }));
+}
+
 void layout_test::a_drag_released_outside_every_window_tears_out() {
 	bssh_main_window window;
 	window.resize(1000, 700);
@@ -4975,6 +5013,82 @@ void layout_test::each_pane_keeps_its_own_tabs() {
 	QCOMPARE(layout->tabs(left), QList<bssh_session *>({ right, left, third }));
 	QCOMPARE(window.drop_zone_for(second, second, bssh_layout_manager::EDGE_LEFT),
 	         int(BSSH_DROP_CANCEL));
+}
+
+void layout_test::a_background_tab_can_be_dragged_out() {
+	bssh_session_registry registry;
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+
+	QWidget host;
+	QVBoxLayout *column = new QVBoxLayout(&host);
+	bssh_pane_bar *row = new bssh_pane_bar(c, { a, b, c }, Qt::TopEdge, true, &host);
+	column->addWidget(row);
+	column->addStretch(1);
+	host.resize(600, 300);
+	host.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&host));
+	QTabBar *bar = row->tab_bar();
+	QCOMPARE(bar->currentIndex(), 2);
+
+	QSignalSpy picked(row, &bssh_pane_bar::tab_picked);
+	QSignalSpy dragged(row, &bssh_pane_bar::drag_requested);
+
+	const auto send = [bar](QEvent::Type type, const QPoint &at, Qt::MouseButton button,
+	                        Qt::MouseButtons held) {
+		QMouseEvent event(type, at, bar->mapToGlobal(at), button, held, Qt::NoModifier);
+		QApplication::sendEvent(bar, &event);
+	};
+
+	/* Pressed: selected in the bar, but not yet picked. */
+	const QPoint on_a = bar->tabRect(0).center();
+	send(QEvent::MouseButtonPress, on_a, Qt::LeftButton, Qt::LeftButton);
+	QCOMPARE(picked.count(), 0);
+
+	/* Dragged well clear: the tab under the press is carried, and never picked. */
+	for (int step = 1; step <= 4; ++step)
+		send(QEvent::MouseMove, on_a + QPoint(0, step * 40), Qt::NoButton, Qt::LeftButton);
+	QCOMPARE(dragged.count(), 1);
+	QCOMPARE(dragged.at(0).at(0).value<bssh_session *>(), a);
+	QCOMPARE(picked.count(), 0);
+
+	/* A click on another: picked when the button comes up. */
+	const QPoint on_b = bar->tabRect(1).center();
+	send(QEvent::MouseButtonPress, on_b, Qt::LeftButton, Qt::LeftButton);
+	QCOMPARE(picked.count(), 0);
+	send(QEvent::MouseButtonRelease, on_b, Qt::LeftButton, Qt::NoButton);
+	QCOMPARE(picked.count(), 1);
+	QCOMPARE(picked.at(0).at(0).value<bssh_session *>(), b);
+
+	/*
+	 * Sideways first, past a neighbour, then out: the bar's own reorder
+	 * is held while the button is down. Applied at once it rebuilt the
+	 * panes, and this bar, under the pointer -- which is why a tab moved
+	 * along its row on X11 could never go on to tear out. Measured on
+	 * Xvfb before this was written.
+	 */
+	QSignalSpy moved(row, &bssh_pane_bar::tab_moved);
+	const QPoint on_c = bar->tabRect(2).center();
+	const int stride = bar->tabRect(1).width();
+	send(QEvent::MouseButtonPress, on_c, Qt::LeftButton, Qt::LeftButton);
+	for (int step = 1; step <= 6; ++step)
+		send(QEvent::MouseMove, on_c - QPoint(step * stride / 4, 0), Qt::NoButton, Qt::LeftButton);
+	QCOMPARE(moved.count(), 0);
+	for (int step = 1; step <= 4; ++step)
+		send(QEvent::MouseMove, on_c - QPoint(6 * stride / 4, -step * 40), Qt::NoButton, Qt::LeftButton);
+	QCOMPARE(dragged.count(), 2);
+	QCOMPARE(dragged.at(1).at(0).value<bssh_session *>(), c);
+	QCOMPARE(moved.count(), 0);
+
+	/* And a reorder that stays on the row lands when the button comes up. */
+	const QPoint on_first = bar->tabRect(0).center();
+	send(QEvent::MouseButtonPress, on_first, Qt::LeftButton, Qt::LeftButton);
+	for (int step = 1; step <= 6; ++step)
+		send(QEvent::MouseMove, on_first + QPoint(step * stride / 4, 0), Qt::NoButton, Qt::LeftButton);
+	QCOMPARE(moved.count(), 0);
+	send(QEvent::MouseButtonRelease, on_first + QPoint(6 * stride / 4, 0), Qt::LeftButton, Qt::NoButton);
+	QCOMPARE(moved.count(), 1);
 }
 
 void layout_test::a_restored_window_comes_back_in_its_shape() {

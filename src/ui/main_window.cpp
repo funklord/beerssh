@@ -3629,10 +3629,16 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 	const bool dropped = ghost.run(&released);
 
 	if (lit) lit->show_drop_zone(-1);
-	set_session_drag_active_everywhere(false);
 	if (source) source->set_being_dragged(false);
 
+	/*
+	 * Placed while the tab strips are still up, and only then taken down:
+	 * a pane with one tab has no bar, only the strip drawn for the drag,
+	 * so asked afterwards the release fell through to the pane's top edge
+	 * and split it under a strip that had just said "a tab".
+	 */
 	if (dropped && carried) finish_session_drag(carried, released);
+	set_session_drag_active_everywhere(false);
 }
 
 #ifdef BSSH_ASK_X11

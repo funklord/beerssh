@@ -6158,6 +6158,25 @@ to its pane's right edge became a pane of its own, the bar it left kept the
 other two, and that pane dragged onto the left pane's bar became its third
 tab. Step 4 -- the column on the phone -- is what remains.
 
+**Two more faults, found by dragging tabs that were NOT in front (X11,
+Xvfb and xdotool, 2026-10-11).** A background tab did not tear out at all.
+QTabBar selects on PRESS, and the pick was acted on at once: the pane
+brought that tab to the front and rebuilt its bar under the pointer, which
+ended the gesture. The same happened to a tab dragged along its row past a
+neighbour, through the bar's own reorder. Both are now held while the
+button is down and applied on release; a tear-out drops them, so a tab
+carried away is neither picked nor reordered first
+(`a_background_tab_can_be_dragged_out`, three sabotages in
+`tool/sabotage/pane-bars.toml`). The second fault was in the drop: the
+strips drawn over bar-less panes for the drag were taken down BEFORE the
+release was placed, so a release on one fell through to the pane's top
+edge and split it, under a strip that had just said "Drop here for a tab".
+The release is placed first now (`a_release_on_a_strip_makes_a_tab`). That
+ordering lives in the interactive drag loop, which the suite cannot run, so
+the test holds only the placement; the Xvfb harness is what saw the fix,
+with a background tab dropped on another pane's strip becoming its second
+tab, and one dragged sideways out of that bar landing in the first pane.
+
 **On the phone, 2026-10-11 (step 4, in part).** A second session opened from
 the host list became a tab in the one pane, its bar appearing with the second
 tab; the `+` on that bar opened the host list (New Tab's touch behaviour, as

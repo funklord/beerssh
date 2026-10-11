@@ -254,6 +254,7 @@ private slots:
 	 * asked for a filename rather than letting the pane tear out.
 	 */
 	void a_drag_released_outside_every_window_tears_out();
+	void a_release_on_a_strip_makes_a_tab();
 	void a_drag_released_on_another_windows_pane_places_it();
 
 	/*
@@ -303,6 +304,13 @@ private slots:
 	 * into that pane, and Show as Tab moves a pane into its neighbour.
 	 */
 	void each_pane_keeps_its_own_tabs();
+
+	/*
+	 * A tab NOT in front can be dragged out of its bar: pressing it does
+	 * not pick it -- picking rebuilds the bar, which killed the drag the
+	 * press was starting -- and a click still picks, on release.
+	 */
+	void a_background_tab_can_be_dragged_out();
 	void a_restored_window_comes_back_in_its_shape();
 	void a_closed_window_writes_down_its_shape();
 

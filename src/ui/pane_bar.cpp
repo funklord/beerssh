@@ -74,13 +74,30 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 
 	connect(m_add, &QToolButton::clicked, this, &bssh_pane_bar::new_tab_requested);
 	connect(m_bar, &QTabBar::currentChanged, this, [this](int index) {
-		if (bssh_session *session = session_at(index)) emit tab_picked(session);
+		bssh_session *session = session_at(index);
+		if (!session) return;
+		if (m_pressed) m_pending = session;
+		else emit tab_picked(session);
 	});
 	connect(m_bar, &QTabBar::tabCloseRequested, this, [this](int index) {
 		if (bssh_session *session = session_at(index)) emit close_requested(session);
 	});
 	connect(m_bar, &QTabBar::tabMoved, this, [this](int, int to) {
-		if (bssh_session *session = session_at(to)) emit tab_moved(session, to);
+		bssh_session *session = session_at(to);
+		if (!session) return;
+
+		/*
+		 * Under a held press, held too: applying a reorder rebuilds the
+		 * panes, and this bar with them, while the pointer is still down --
+		 * which ended the gesture, so a tab dragged sideways past its
+		 * neighbour could never go on to tear out.
+		 */
+		if (m_pressed) {
+			m_moved = session;
+			m_moved_to = to;
+		} else {
+			emit tab_moved(session, to);
+		}
 	});
 	connect(m_bar, &QWidget::customContextMenuRequested, this, [this](const QPoint &at) {
 		if (bssh_session *session = session_at(m_bar->tabAt(at)))
@@ -123,13 +140,20 @@ void bssh_pane_bar::refresh() {
 
 bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
 	if (watched != m_bar) return QWidget::eventFilter(watched, event);
+	const QEvent::Type type = event->type();
+
+	if (type == QEvent::MouseButtonPress
+	    && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {
+		m_pressed = true;
+	}
 
 	/*
 	 * Torn out on DISTANCE in any direction, measured from the whole
 	 * bar's row (sec 8.3): dragging along a half-empty row is still
 	 * reordering, and a tab pulled up, down or off either end leaves.
+	 * Once per press: the drag the first one starts owns the rest.
 	 */
-	if (event->type() == QEvent::MouseMove && m_bar->isMovable()) {
+	if (type == QEvent::MouseMove && m_pressed && m_bar->isMovable()) {
 		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
 		if (mouse->buttons().testFlag(Qt::LeftButton)) {
 			const QPoint in_row = m_bar->mapTo(this, mouse->position().toPoint());
@@ -137,6 +161,10 @@ bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
 			                       qMax(-in_row.x(), in_row.x() - width()));
 			if (clear > TEAR_OUT_DP) {
 				if (bssh_session *session = session_at(m_bar->currentIndex())) {
+					/* Carried away, not picked: the drag decides where it goes. */
+					m_pressed = false;
+					m_pending.clear();
+					m_moved.clear();
 					m_bar->releaseMouse();
 					emit drag_requested(session);
 					return true;
@@ -145,8 +173,23 @@ bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
 		}
 	}
 
+	if (type == QEvent::MouseButtonRelease && m_pressed
+	    && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {
+		m_pressed = false;
+		if (m_moved) {
+			QPointer<bssh_session> moved = m_moved;
+			m_moved.clear();
+			emit tab_moved(moved, m_moved_to);
+		}
+		if (m_pending) {
+			QPointer<bssh_session> picked = m_pending;
+			m_pending.clear();
+			emit tab_picked(picked);
+		}
+	}
+
 	/* A middle click closes, as in every browser and in konsole. */
-	if (event->type() == QEvent::MouseButtonRelease) {
+	if (type == QEvent::MouseButtonRelease) {
 		const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
 		if (mouse->button() == Qt::MiddleButton) {
 			if (bssh_session *session = session_at(m_bar->tabAt(mouse->position().toPoint()))) {

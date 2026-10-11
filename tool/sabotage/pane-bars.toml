@@ -70,3 +70,28 @@ file = "src/ui/main_window.cpp"
 find = "\tif (front_before && front_before != session) m_layout->bring_to_front(front_before);\n"
 replace = ""
 expect = "split_beside_current_makes_a_second_pane"
+
+# A press on a tab neither picks it nor lets the bar's own reorder land
+# until the button comes up, so a background tab can still be dragged out
+# -- along its row first, too. Held by a_background_tab_can_be_dragged_out.
+
+[[sabotage]]
+name = "a press picks the tab under it at once"
+file = "src/ui/pane_bar.cpp"
+find = "\t\tif (m_pressed) m_pending = session;\n\t\telse emit tab_picked(session);\n"
+replace = "\t\temit tab_picked(session);\n"
+expect = "a_background_tab_can_be_dragged_out"
+
+[[sabotage]]
+name = "a reorder under a held press is applied at once"
+file = "src/ui/pane_bar.cpp"
+find = "\t\tif (m_pressed) {\n\t\t\tm_moved = session;\n"
+replace = "\t\tif (false) {\n\t\t\tm_moved = session;\n"
+expect = "a_background_tab_can_be_dragged_out"
+
+[[sabotage]]
+name = "a held reorder is dropped at the release"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\tm_moved.clear();\n\t\t\temit tab_moved(moved, m_moved_to);\n"
+replace = "\t\t\tm_moved.clear();\n"
+expect = "a_background_tab_can_be_dragged_out"

@@ -63,6 +63,19 @@ protected:
 private:
 	bssh_session *m_front;
 	QTabBar *m_bar;
+
+	/*
+	 * A tab picked under a held button, delivered when it comes up: picking
+	 * rebuilds the panes and this bar with them, and doing it on the press
+	 * destroyed the bar under the drag that press may be starting -- so a
+	 * tab not already in front could never be dragged out.
+	 */
+	bool m_pressed = false;
+	QPointer<bssh_session> m_pending;
+
+	/* And a reorder made under it, applied the same way. */
+	QPointer<bssh_session> m_moved;
+	int m_moved_to = 0;
 	QToolButton *m_add;
 	bssh_long_press *m_long_press;
 };
