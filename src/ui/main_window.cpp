@@ -5105,6 +5105,11 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	reset_terminal->setObjectName(QStringLiteral("terminal_reset"));
 	reset_terminal->setEnabled(m_current != nullptr);
 
+	/* What the connection has carried, and what changes the keys (sec 5.3). */
+	QAction *details = terminal_menu->addAction(QStringLiteral("Connection &Details"));
+	details->setObjectName(QStringLiteral("terminal_details"));
+	details->setEnabled(m_current != nullptr);
+
 	menu->addSeparator();
 
 	/*
@@ -5456,6 +5461,17 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	        menu->findChild<QAction *>(QStringLiteral("terminal_reset"));
 	if (chosen == reset_terminal) {
 		reset_terminal_state();
+		return;
+	}
+
+	const QAction *details =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_details"));
+	if (chosen == details && m_current) {
+		QMessageBox box(this);
+		box.setWindowTitle(QStringLiteral("Connection Details"));
+		box.setText(m_current->profile().target());
+		box.setInformativeText(m_current->details(QDateTime::currentDateTimeUtc()));
+		box.exec();
 		return;
 	}
 

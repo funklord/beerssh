@@ -564,6 +564,61 @@ void session_registry_test::a_reconnected_session_shows_and_takes_the_new_shell(
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void session_registry_test::connection_details_say_what_the_link_carried() {
+	/*
+	 * Connection Details exists to tell three things apart from the
+	 * session's own menu: a server that went quiet, keys that never left,
+	 * and a keyboard left encoding for a program that is gone. So each
+	 * figure is asserted against what the fake actually carried.
+	 */
+	QList<QPointer<bssh_fake_ssh_session>> made;
+	bssh_ssh_session::set_factory([&made](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		made.append(fake);
+		return fake;
+	});
+
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("box.example.com");
+	bssh_session session(profile);
+
+	const QDateTime start = QDateTime::currentDateTimeUtc();
+	QVERIFY(session.details(start).contains(QStringLiteral("Received: 0 bytes, last never")));
+
+	session.connect_to_host();
+	made.at(0)->simulate_key_auth_success();
+	QCOMPARE(session.connections(), 1);
+
+	made.at(0)->emit_chunk("hello");
+	QCOMPARE(session.bytes_in(), qint64(5));
+	QVERIFY(session.last_in().isValid());
+
+	session.input_router()->send_text(QStringLiteral("ab"));
+	QCoreApplication::processEvents();
+	QCOMPARE(session.bytes_out(), qint64(made.at(0)->written().size()));
+	QVERIFY(session.bytes_out() >= 2);
+
+	const QDateTime later = start.addSecs(125);
+	const QString said = session.details(later);
+	QVERIFY2(said.contains(QStringLiteral("Received: 5 bytes, last 2 min")), qPrintable(said));
+	QVERIFY2(said.contains(QStringLiteral("Keyboard: plain")), qPrintable(said));
+
+	/* A Ctrl tapped twice is locked, and every key after it a control character. */
+	session.input_router()->cycle_modifier(bssh_emulator::MOD_CTRL);
+	session.input_router()->cycle_modifier(bssh_emulator::MOD_CTRL);
+	QVERIFY2(session.details(later).contains(QStringLiteral("Ctrl locked")),
+	          qPrintable(session.details(later)));
+
+	/* And counted afresh for a new connection: the question is about this one. */
+	made.at(0)->simulate_connection_lost();
+	session.reconnect();
+	made.at(1)->simulate_key_auth_success();
+	QCOMPARE(session.connections(), 2);
+	QCOMPARE(session.bytes_in(), qint64(0));
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void session_registry_test::editing_a_host_reaches_the_session_already_open_on_it() {
 	bssh_fake_ssh_session *fake = nullptr;
 	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {

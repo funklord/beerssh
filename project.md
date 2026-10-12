@@ -1140,6 +1140,25 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   dependency). For v1, offer optional integration with `tmux`/`screen` guidance in
   the UI/help instead — and note that a preset's **on-connect command** (§10.2) is
   the natural place to auto-attach tmux.
+- **[BUILT 2026-10-12] Connection Details**, in the terminal menu's Terminal
+  group: since the last connect, bytes each way and when the last came, how
+  long it has been connected and which connection of the tab this is, and
+  anything changing what a key sends (kitty flags, modifyOtherKeys, mouse
+  reporting, the alternate screen, a modifier armed or locked). From the
+  phone that morning: a session reconnected around 08:45 and then said
+  "connected" while showing nothing of the new shell, not even a prompt.
+  Over adb its socket was up, the server acknowledged our keepalives, and
+  no SSH data came back -- but whether a key typed into it ever left could
+  not be settled, because the phone dropped off USB twice before one could
+  be measured, and the state was gone by the time it returned. Three
+  explanations stayed open (a silent server, keys that never left, output
+  never drawn), and these figures separate them from the session's own
+  menu with no cable. Ruled out that day by reading and by test: a worker
+  blocked on a write, the channel window never reopened, a shell never
+  requested, DEC 2026 holding a frame (it releases after 150 ms), and the
+  model's reconnect wiring (`a_reconnected_session_shows_and_takes_the_new_shell`).
+  The soft keyboard's Ctrl was driven on the emulator under `cat -v` with
+  real taps: one control byte per tap, the next key plain.
 
 ### 5.4 Battery / OEM caveats (Android)
 Aggressive OEM battery managers (e.g. some Chinese OEM skins) may kill the

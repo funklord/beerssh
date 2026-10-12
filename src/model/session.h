@@ -1,6 +1,7 @@
 #ifndef BSSH_SESSION_H
 #define BSSH_SESSION_H
 
+#include <QDateTime>
 #include <QJsonObject>
 #include <QObject>
 #include <QSet>
@@ -192,6 +193,25 @@ public:
 	/* Shown or hidden -- drives whether a bell counts as unseen. */
 	void set_on_screen(bool on_screen);
 
+	/*
+	 * What the connection has actually carried, for Connection Details
+	 * (sec 5.3). Reported from the phone 2026-10-12: a session said
+	 * "connected" and showed nothing, and telling a silent server from
+	 * keys that never left from output that was never drawn took adb, a
+	 * cable and an hour -- and the state was gone before the one test
+	 * that separates them could run. These answer it from the session's
+	 * own menu: since the last connect, how much each way and when.
+	 */
+	qint64 bytes_in() const { return m_bytes_in; }
+	qint64 bytes_out() const { return m_bytes_out; }
+	QDateTime last_in() const { return m_last_in; }
+	QDateTime last_out() const { return m_last_out; }
+	QDateTime connected_at() const { return m_connected_at; }
+	int connections() const { return m_connections; }
+
+	/* All of it as text, with every time measured against `now`. */
+	QString details(const QDateTime &now) const;
+
 signals:
 	/*
 	 * A bell rang while nothing was showing this session (sec 5.5).
@@ -278,6 +298,16 @@ private:
 	bool m_on_screen;
 	int m_cols;
 	int m_rows;
+
+	/* Out through the transport, counted. */
+	void send_out(const QByteArray &bytes);
+
+	qint64 m_bytes_in = 0;
+	qint64 m_bytes_out = 0;
+	QDateTime m_last_in;
+	QDateTime m_last_out;
+	QDateTime m_connected_at;
+	int m_connections = 0;
 };
 
 /*

@@ -2,6 +2,7 @@
 
 #include <QCryptographicHash>
 #include <QRandomGenerator>
+#include <QStringList>
 
 #include "input/input_router.h"
 #include "term/emulator.h"
@@ -273,6 +274,18 @@ void bssh_session::connect_to_host() {
 	 */
 	m_transport->set_command(m_profile.command);
 
+	/* Counted per connection: the question is always about this one. */
+	m_bytes_in = 0;
+	m_bytes_out = 0;
+	m_last_in = QDateTime();
+	m_last_out = QDateTime();
+	m_connected_at = QDateTime();
+
+	connect(m_transport, &bssh_ssh_session::bytes_received,
+	         this, [this](const QByteArray &bytes) {
+		m_bytes_in += bytes.size();
+		m_last_in = QDateTime::currentDateTimeUtc();
+	});
 	connect(m_transport, &bssh_ssh_session::bytes_received,
 	         m_emulator, &bssh_emulator::feed);
 	connect(m_transport, &bssh_ssh_session::failed, this, [this](const QString &reason) {
@@ -348,7 +361,7 @@ void bssh_session::connect_to_host() {
 	 */
 	connect(m_emulator, &bssh_emulator::output_ready, this, [this] {
 		const QByteArray reply = m_emulator->take_output();
-		if (!reply.isEmpty() && m_transport) m_transport->send(reply);
+		if (!reply.isEmpty()) send_out(reply);
 	});
 
 	connect(m_transport, &bssh_ssh_session::state_changed,
@@ -361,6 +374,9 @@ void bssh_session::connect_to_host() {
 			 * memory (sec 11).
 			 */
 			if (!m_password_requested) m_used_key_auth = true;
+
+			m_connected_at = QDateTime::currentDateTimeUtc();
+			++m_connections;
 
 			/* In: what was offered is the password worth replaying. */
 			if (!m_offered.isEmpty()) m_password = m_offered;
@@ -381,7 +397,7 @@ void bssh_session::connect_to_host() {
 			const QString command =
 			        m_settings.value(QStringLiteral("on_connect_command")).toString();
 			if (!command.isEmpty()) {
-				m_transport->send(command.toUtf8() + '\n');
+				send_out(command.toUtf8() + '\n');
 			}
 		}
 		emit state_changed();
@@ -516,4 +532,84 @@ void bssh_session::resize(int cols, int rows) {
 
 	m_emulator->resize(cols, rows);
 	if (m_transport) m_transport->resize(cols, rows);
+}
+
+void bssh_session::send_out(const QByteArray &bytes) {
+	if (!m_transport || bytes.isEmpty()) return;
+	m_bytes_out += bytes.size();
+	m_last_out = QDateTime::currentDateTimeUtc();
+	m_transport->send(bytes);
+}
+
+namespace {
+
+/* "never", or how long ago, to the second: the question is "recently?". */
+QString ago(const QDateTime &then, const QDateTime &now) {
+	if (!then.isValid()) return QStringLiteral("never");
+	qint64 seconds = qMax<qint64>(0, then.secsTo(now));
+	if (seconds < 60) return QStringLiteral("%1 s ago").arg(seconds);
+	const qint64 minutes = seconds / 60;
+	seconds %= 60;
+	if (minutes < 60) return QStringLiteral("%1 min %2 s ago").arg(minutes).arg(seconds);
+	return QStringLiteral("%1 h %2 min ago").arg(minutes / 60).arg(minutes % 60);
+}
+
+const char *state_name(bssh_ssh_session::state_t state) {
+	switch (state) {
+	case bssh_ssh_session::DISCONNECTED:   return "disconnected";
+	case bssh_ssh_session::RESOLVING:      return "resolving";
+	case bssh_ssh_session::CONNECTING:     return "connecting";
+	case bssh_ssh_session::AUTHENTICATING: return "authenticating";
+	case bssh_ssh_session::CONNECTED:      return "connected";
+	case bssh_ssh_session::FAILED:         return "failed";
+	}
+	return "unknown";
+}
+
+} /* namespace */
+
+QString bssh_session::details(const QDateTime &now) const {
+	QStringList lines;
+	lines << QStringLiteral("State: %1").arg(QLatin1String(state_name(state())));
+	lines << QStringLiteral("Connected: %1, connection %2 of this tab")
+	                 .arg(ago(m_connected_at, now)).arg(m_connections);
+	lines << QStringLiteral("Received: %1 bytes, last %2")
+	                 .arg(m_bytes_in).arg(ago(m_last_in, now));
+	lines << QStringLiteral("Sent: %1 bytes, last %2")
+	                 .arg(m_bytes_out).arg(ago(m_last_out, now));
+
+	/*
+	 * Anything that changes what a key sends. A program that turns one of
+	 * these on and dies, or is detached from, leaves every key encoded
+	 * for it -- which reads as a keyboard gone wrong.
+	 */
+	QStringList keys;
+	if (m_emulator) {
+		if (m_emulator->kitty_keyboard_flags() != 0)
+			keys << QStringLiteral("kitty keyboard flags %1").arg(m_emulator->kitty_keyboard_flags());
+		if (m_emulator->modify_other_keys_level() != 0)
+			keys << QStringLiteral("modifyOtherKeys %1").arg(m_emulator->modify_other_keys_level());
+		if (m_emulator->mouse_reporting()) keys << QStringLiteral("mouse reporting");
+		if (m_emulator->alternate_screen()) keys << QStringLiteral("alternate screen");
+	}
+	if (m_input_router) {
+		const struct { quint8 bit; const char *name; } held[] = {
+			{ bssh_emulator::MOD_CTRL, "Ctrl" },
+			{ bssh_emulator::MOD_ALT, "Alt" },
+			{ bssh_emulator::MOD_SHIFT, "Shift" },
+		};
+		for (const auto &each : held) {
+			const auto state = m_input_router->modifier_state(each.bit);
+			if (state == bssh_input_router::MODIFIER_ONCE)
+				keys << QStringLiteral("%1 armed").arg(QLatin1String(each.name));
+			else if (state == bssh_input_router::MODIFIER_LOCKED)
+				keys << QStringLiteral("%1 locked").arg(QLatin1String(each.name));
+			else if (state != bssh_input_router::MODIFIER_OFF)
+				keys << QStringLiteral("%1 held").arg(QLatin1String(each.name));
+		}
+	}
+	lines << QStringLiteral("Keyboard: %1")
+	                 .arg(keys.isEmpty() ? QStringLiteral("plain") : keys.join(QStringLiteral(", ")));
+
+	return lines.join(QLatin1Char('\n'));
 }

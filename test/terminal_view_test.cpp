@@ -2547,14 +2547,17 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 */
 	/*
 	 * Putting the terminal back in order: the history, and the modes a
-	 * dead program left behind. Two rows in a group rather than two at
-	 * the top level, because a fourteenth top-level row does not fit a
-	 * 640dp cover screen.
+	 * dead program left behind. Rows in a group rather than at the top
+	 * level, because a fourteenth top-level row does not fit a 640dp
+	 * cover screen. The third says what the connection has carried and
+	 * whether a mode is changing the keys -- what tells a user whether
+	 * Reset above is the cure.
 	 */
 	const QList<QAction *> state = actions.at(5)->menu()->actions();
-	QCOMPARE(state.size(), 2);
+	QCOMPARE(state.size(), 3);
 	QCOMPARE(state.at(0)->text(), QStringLiteral("Clear Scroll&back"));
 	QCOMPARE(state.at(1)->text(), QStringLiteral("&Reset Terminal"));
+	QCOMPARE(state.at(2)->text(), QStringLiteral("Connection &Details"));
 
 	const QList<QAction *> sessions = actions.at(10)->menu()->actions();
 	QCOMPARE(sessions.size(), 5);

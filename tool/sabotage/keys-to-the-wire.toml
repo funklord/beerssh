@@ -28,7 +28,7 @@ expect = "a_keystroke_in_a_pane_reaches_the_wire"
 [[sabotage]]
 name = "what the emulator produced never reaches the transport"
 file = "src/model/session.cpp"
-find = "\t\tif (!reply.isEmpty() && m_transport) m_transport->send(reply);"
+find = "\t\tif (!reply.isEmpty()) send_out(reply);"
 replace = "\t\t(void)reply;"
 expect = "a_keystroke_in_a_pane_reaches_the_wire"
 
@@ -64,3 +64,20 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tif (modifiers & MOD_CTRL) {\n\t\tconst quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);"
 replace = "\tif (false) {\n\t\tconst quint8 without_ctrl = quint8(modifiers & ~MOD_CTRL);"
 expect = "ctrl_punctuation_reaches_a_legacy_shell_as_a_vt100_would"
+
+# Connection Details (sec 5.3) counts what the link carried, so it can
+# tell a silent server from keys that never left. A count that stays at
+# zero says "nothing was sent" about a session that sent everything.
+[[sabotage]]
+name = "what goes out is sent and not counted"
+file = "src/model/session.cpp"
+find = "\tm_bytes_out += bytes.size();\n"
+replace = ""
+expect = "connection_details_say_what_the_link_carried"
+
+[[sabotage]]
+name = "a locked Ctrl is not reported"
+file = "src/model/session.cpp"
+find = "\t\t\telse if (state == bssh_input_router::MODIFIER_LOCKED)\n"
+replace = "\t\t\telse if (false)\n"
+expect = "connection_details_say_what_the_link_carried"
