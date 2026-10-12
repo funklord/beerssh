@@ -34,6 +34,7 @@ private slots:
 	void the_on_connect_command_runs_on_every_connect();
 	void a_reconnect_hands_the_new_shell_a_clean_terminal();
 	void editing_a_host_reaches_the_session_already_open_on_it();
+	void a_reconnected_session_shows_and_takes_the_new_shell();
 	void a_silenced_bell_does_not_mark_the_tab();
 	void turning_scrollback_off_actually_turns_it_off();
 

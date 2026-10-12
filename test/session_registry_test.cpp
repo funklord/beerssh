@@ -1,3 +1,4 @@
+#include <QPointer>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -493,6 +494,72 @@ void session_registry_test::the_on_connect_command_runs_on_every_connect() {
 	fake->simulate_connection_lost();
 	fake->simulate_key_auth_success();
 	QVERIFY2(fake->written().size() > first, "it must run again on a reconnect");
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+namespace {
+
+/* Everything on the emulator's screen, row by row. */
+QString screen_text(const bssh_emulator *emulator) {
+	QString text;
+	const bssh_screen &screen = emulator->screen();
+	for (int row = 0; row < screen.rows(); ++row) {
+		for (int col = 0; col < screen.cols(); ++col) {
+			const char32_t ch = screen.cell(row, col).ch;
+			text += ch ? QString::fromUcs4(&ch, 1) : QStringLiteral(" ");
+		}
+		text += QLatin1Char('\n');
+	}
+	return text;
+}
+
+} /* namespace */
+
+void session_registry_test::a_reconnected_session_shows_and_takes_the_new_shell() {
+	/*
+	 * Reported from the phone 2026-10-12: a session that dropped and
+	 * reconnected said "connected" and then showed nothing of the new
+	 * shell, not even its prompt, while the old screen stayed up. A
+	 * reconnect is a NEW transport (sec 5.3), and nothing checked that
+	 * the new one is wired both ways: its output onto the same screen,
+	 * and the keys typed afterwards out through it rather than the one
+	 * that died.
+	 */
+	QList<QPointer<bssh_fake_ssh_session>> made;
+	bssh_ssh_session::set_factory([&made](QObject *parent) -> bssh_ssh_session * {
+		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
+		made.append(fake);
+		return fake;
+	});
+
+	bssh_profile_t profile;
+	profile.host = QStringLiteral("box.example.com");
+	bssh_session session(profile);
+	session.connect_to_host();
+	QCOMPARE(made.size(), 1);
+	made.at(0)->simulate_key_auth_success();
+	made.at(0)->emit_chunk("old shell$ ");
+	QVERIFY(screen_text(session.emulator()).contains(QStringLiteral("old shell$")));
+
+	made.at(0)->simulate_connection_lost();
+	session.reconnect();
+	QCOMPARE(made.size(), 2);
+	QPointer<bssh_fake_ssh_session> fresh = made.at(1);
+	QVERIFY(fresh && fresh != made.at(0));
+	fresh->simulate_key_auth_success();
+	QCoreApplication::processEvents();
+	QVERIFY(session.is_live());
+
+	fresh->emit_chunk("\r\nnew shell$ ");
+	QVERIFY2(screen_text(session.emulator()).contains(QStringLiteral("new shell$")),
+	          "the reconnected shell's output never reached the screen");
+
+	fresh->clear_written();
+	session.input_router()->send_text(QStringLiteral("x"));
+	QCoreApplication::processEvents();
+	QVERIFY2(fresh->written().contains('x'),
+	          "a key typed after the reconnect did not go out on the new connection");
 
 	bssh_ssh_session::set_factory(nullptr);
 }
