@@ -344,15 +344,19 @@ into it, so a tree where they have not been applied fails on
 `VTERM_PROP_RESET` — which is §7.1 working as designed rather than a
 problem with either build.
 
-**And not in a tree where `tool/build-deps-android.sh` has run.**
-`fmake.toml` excludes `build-deps-android`, which keeps its sources out of
-the build — but the exclusion does not reach the include path. libssh's
-headers land on it and shadow the C library's `<string.h>`, and every file
-that includes a Qt header fails. The tree is untracked, so a fresh clone
-has nothing to shadow: measured both ways, a clean clone with the vterm
-step above builds, and the same clone with the dependency tree copied in
-does not. Signalled as fmake's §293; until it is settled, `make` is the
-way in a tree that has built the Android dependencies.
+**It works in a tree where `tool/build-deps-android.sh` has run, since
+fmake's §305.** It did not: `fmake.toml` excludes `build-deps-android`,
+which kept its sources out of the build while the exclusion did not reach
+the include path, so libssh's headers shadowed the C library's
+`<string.h>` and every file including a Qt header failed. Signalled as
+fmake's §293 and settled there on 2026-09-21 in `06d2c26`, which filters
+the include set the graph infers as well as the sources.
+
+**Measured here rather than taken on report**, in this tree with the
+dependency build present, by the method §293 itself used — a dry run,
+`python3 /home/funk/src/fmake/fmake -n -v`, counting `-I` directories
+under `build-deps-android`. **No compile line carries one.** §293 counted
+109; the compiler's include path is clean.
 
 `fmake.toml` says what fmake cannot read off the tree: the version, from
 `VERSION` rather than written a third time; `BSSH_TEST_FONT_DIR`, which

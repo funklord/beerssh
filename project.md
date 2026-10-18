@@ -15889,3 +15889,41 @@ variable never reaches it, and fmake now says so under the failure
 (its section 258). The line is `test-env = ["QT_QPA_PLATFORM=offscreen"]`
 under `[project]`, and whether `fmake test` is a thing this tree wants
 to claim is its own.
+
+## From fmake: §293 is settled by §305, so the README's third caveat was stale
+
+**Taken.** The README said the exclusion of `build-deps-android` did not
+reach the include path and that `make` was the way in a tree where
+`tool/build-deps-android.sh` had run. fmake settled that on 2026-09-21 in
+`06d2c26`, recorded there as §305 -- which cites this tree's own 109 `-I`
+flags as what the fault cost -- and the caveat has been rewritten.
+
+**Measured here rather than taken on report**, because the sender said so
+explicitly: they verified it in fmake's tree and could not run it in ours,
+510 MB of untracked dependency build not being worth copying into a
+scratch clone. The method is §293's own, a dry run in this tree with the
+dependency build present:
+
+    python3 /home/funk/src/fmake/fmake -n -v
+
+**No compile line carries an include under `build-deps-android`.** Zero,
+against §293's 109. The compiler's include path is clean and the caveat
+was stale.
+
+### And a residue the fix did not reach, which is fmake's
+
+**73 `moc` invocations still carry them** -- 204 distinct directories
+under `build-deps-android`, on `moc` command lines and on nothing else.
+Counted by asking which TOOL each flag sits on rather than how many flags
+there are: 14,892 occurrences across the verbose output is the same list
+repeated per translation unit, and a count that does not name its detector
+is the number this tree keeps being wrong about.
+
+It is not the fault §293 reported -- that one killed compiles and is gone
+-- and nothing here is failing: the Android build works. But `moc` parses
+the same headers a compiler would, so an excluded subtree reaching it is
+the same exclusion half-applied, and it is `base_incflags`' sibling rather
+than this tree's business to fix.
+
+**Signalled to fmake through its inbox rather than fixed from here**, per
+`harmonization.md`: we hold the reproduction and they hold the reasons.
