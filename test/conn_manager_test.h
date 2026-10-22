@@ -16,6 +16,7 @@ class conn_manager_test : public QObject {
 
 private slots:
 	void backoff_grows_and_then_stops_growing();
+	void a_network_change_does_not_dial_a_session_never_connected();
 	void backoff_is_jittered_within_bounds();
 	void jitter_separates_sessions_dropped_together();
 	void a_network_flap_staggers_the_sessions_rather_than_dialling_them();

@@ -6760,6 +6760,15 @@ window with no name is a blank row in the task switcher.
   must never teach is clicking through a warning to reach the thing you
   actually wanted -- and on a phone, connecting several hosts unasked wakes
   the radio for sessions nobody has looked at.
+  **[FIXED 2026-10-22] A network change broke this.** The reconnection
+  manager re-dials on a network change any session that is not live, and a
+  restored tab is not live -- so the first network change after a restore
+  dialled every remembered host. It now re-dials only a session something
+  asked to connect (`was_asked_to_connect()`: asked, not connected, so a
+  host tapped while offline is still retried when the network returns).
+  Found by the store screenshots below, whose demo sessions began connecting
+  to their made-up hosts the moment the emulator reported a network
+  (`a_network_change_does_not_dial_a_session_never_connected`).
   So the arrangement comes back and the connections wait. The saved split
   arrangement is restored too, bounded by what the window can show now
   (§8.2): reopened narrower, or on a smaller screen, it is tabs.

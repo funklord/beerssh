@@ -85,6 +85,20 @@ void bssh_conn_manager::note_network_changed() {
 	if (!m_auto_reconnect || m_user_disconnected) return;
 	if (!m_session || m_session->is_live()) return;
 
+	/*
+	 * Nothing to RE-connect in a session nothing ever asked to connect.
+	 * A restore reopens every remembered host and connects none of them
+	 * (sec 8.4) -- and the first network change dialled them all, since a
+	 * session never connected is not live either. Found by the store
+	 * screenshots (2026-10-22), whose demo sessions are never meant to
+	 * reach anything: the emulator reported a network at start-up and
+	 * they began connecting to build.example.com.
+	 *
+	 * ASKED, not connected: a host tapped while offline failed its first
+	 * attempt, and a network coming back is exactly when to try it again.
+	 */
+	if (!m_session->was_asked_to_connect()) return;
+
 	/* Nor does a new network make an exited shell worth reopening. */
 	if (m_session->exited_cleanly()) return;
 

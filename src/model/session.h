@@ -209,6 +209,14 @@ public:
 	QDateTime connected_at() const { return m_connected_at; }
 	int connections() const { return m_connections; }
 
+	/*
+	 * Whether anything has ever asked this session to connect. Not the
+	 * same as having connected: a host tapped while offline was asked and
+	 * failed, and is worth retrying when the network returns; a restored
+	 * tab was never asked, and is not (sec 8.4).
+	 */
+	bool was_asked_to_connect() const { return m_asked_to_connect; }
+
 	/* All of it as text, with every time measured against `now`. */
 	QString details(const QDateTime &now) const;
 
@@ -308,6 +316,7 @@ private:
 	QDateTime m_last_out;
 	QDateTime m_connected_at;
 	int m_connections = 0;
+	bool m_asked_to_connect = false;
 };
 
 /*

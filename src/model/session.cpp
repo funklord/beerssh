@@ -192,6 +192,8 @@ bool bssh_session::is_live() const {
 void bssh_session::connect_to_host() {
 	if (m_transport) return;
 
+	m_asked_to_connect = true;
+
 	m_user_disconnected = false;
 	m_remote_exited = false;
 	m_exit_status = 0;

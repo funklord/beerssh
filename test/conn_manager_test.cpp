@@ -150,13 +150,24 @@ void conn_manager_test::a_network_flap_staggers_the_sessions_rather_than_diallin
 	 * already safe. This asserts on the manager rather than on the pure
 	 * function, which is the difference.
 	 */
+	/*
+	 * Connected first, as a real drop is: a network change dials only a
+	 * session something asked to connect (sec 8.4's restored tabs).
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
 	bssh_session session(host(QStringLiteral("flapping")));
 	bssh_conn_manager manager(&session);
 
 	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
 	QSignalSpy started(&manager, &bssh_conn_manager::reconnect_started);
 
-	session.note_connection_lost();
+	session.connect_to_host();
+	fake->simulate_connection_lost();
 	QCOMPARE(scheduled.count(), 1);
 
 	manager.note_network_changed();
@@ -190,7 +201,8 @@ void conn_manager_test::a_network_flap_staggers_the_sessions_rather_than_diallin
 		bssh_conn_manager one(&dropped);
 		QSignalSpy spy(&one, &bssh_conn_manager::reconnect_scheduled);
 
-		dropped.note_connection_lost();
+		dropped.connect_to_host();
+		fake->simulate_connection_lost();
 		one.note_network_changed();
 
 		QVERIFY(spy.count() >= 1);
@@ -198,6 +210,8 @@ void conn_manager_test::a_network_flap_staggers_the_sessions_rather_than_diallin
 	}
 
 	QVERIFY2(delays.size() > 1, "every session would come back in the same millisecond");
+
+	bssh_ssh_session::set_factory(nullptr);
 }
 
 void conn_manager_test::an_exited_shell_is_not_reopened() {
@@ -480,6 +494,41 @@ void conn_manager_test::a_password_never_answered_is_not_replayed() {
 	fakes.last()->simulate_password_required();
 	QCOMPARE(fakes.last()->passwords_offered(), QStringList());
 	QCOMPARE(asked.count(), 2);
+
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void conn_manager_test::a_network_change_does_not_dial_a_session_never_connected() {
+	/*
+	 * sec 8.4: a restored tab connects when the user asks, and not before.
+	 * A network change scheduled a reconnect for any session that was not
+	 * live -- which a session nobody asked to connect is not -- so the
+	 * first one dialled every restored host. Found by the store screenshots,
+	 * whose demo sessions began connecting to their made-up hosts.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("restored")));
+	bssh_conn_manager manager(&session);
+	manager.set_auto_reconnect(true);
+	QSignalSpy scheduled(&manager, &bssh_conn_manager::reconnect_scheduled);
+
+	manager.note_network_changed();
+	QCOMPARE(scheduled.count(), 0);
+	QVERIFY2(!fake, "a network change opened a connection nobody asked for");
+
+	/* Once it HAS been connected and dropped, a new network is worth a try. */
+	session.connect_to_host();
+	QVERIFY(fake);
+	fake->simulate_key_auth_success();
+	fake->simulate_connection_lost();
+	const int after_drop = scheduled.count();
+	manager.note_network_changed();
+	QVERIFY(scheduled.count() > after_drop);
 
 	bssh_ssh_session::set_factory(nullptr);
 }
