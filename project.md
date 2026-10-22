@@ -12276,6 +12276,17 @@ mid-line. **Unexplained:** the emulator alone shrinks such a screen
 correctly (probed: the last rows kept, the cursor right), so it is between
 the emulator and the pixels, and not established where. The status bar is
 hidden by this app's own choice, so the target's demo clock never shows.
+**`make store-screenshots` (2026-10-23)** runs it on an emulator this starts
+and stops itself (`tool/store-screenshots.sh`, `STORE_AVD`, default
+`bssh_api34`, on port 5584, refused if taken), so the pictures no longer
+depend on whose phone is plugged in -- the holder's phone meant a lock, a
+PIN, the camera's band, One UI ignoring demo mode, and the real app
+restarted under its owner. It builds the x86_64 kit, settles the cold
+boot's "System UI isn't responding" before capturing, and its EXIT trap
+stops the emulator, falling back to SIGKILL on its own process group:
+`emulator` execs into qemu, which starts a netsimd child, so killing the
+pid alone would orphan that. Seen both ways: a full run left no emulator,
+and a SIGTERM during boot took it down with the script.
 
 ### 12.2b The keyboard lives in `keyboard/` — **[DONE 2026-09-06]**
 

@@ -70,6 +70,9 @@
 #                        targetSdk, versionCode, 16 KB alignment
 #   make android-screenshots -- the store listing's pictures from this
 #                        build, on an attached device or emulator
+#   make store-screenshots -- the same, on an emulator this starts and
+#                        stops itself (STORE_AVD, default bssh_api34), so
+#                        the pictures do not depend on whose phone is in
 #   make android-run  -- install and launch on the attached device
 #   make install      -- install the app, its desktop entry, icon,
 #                        AppStream metadata and bundled fonts
@@ -1573,7 +1576,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style sabotage check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
+.PHONY: all run test bench style sabotage store-screenshots check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check
@@ -1588,6 +1591,12 @@ check: style test
 SPECS ?=
 sabotage:
 	python3 tool/sabotage.py $(SPECS)
+
+# The store screenshots on an emulator rather than an attached phone: the
+# phone's lock, PIN, camera cutout and One UI's ignored demo mode all
+# change the pictures, and the run restarts the real app under its owner.
+store-screenshots:
+	./tool/store-screenshots.sh
 
 # The commit-msg hook lives in the tree so it is reviewable, survives a
 # clone, and can be kept in sync. .git/hooks is untracked, so a hook that
