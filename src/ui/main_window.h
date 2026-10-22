@@ -1096,8 +1096,13 @@ private:
 	sk_keyboard_switch *m_keyboard_switch = nullptr;
 	sk_focus_target m_form_target;
 
-	/* Chosen with the switch, for this run; see use_softkeys_in_forms. */
+	/*
+	 * Which keyboard the forms and the password prompt use: the settings'
+	 * choice, then the switch for this run (use_softkeys_in_forms), reset
+	 * to the setting when the setting changes.
+	 */
 	bool m_forms_use_softkeys = false;
+	int m_forms_keyboard_setting = -1;
 	void use_softkeys_in_forms(bool use);
 	void update_form_keyboard();
 	QString m_error;

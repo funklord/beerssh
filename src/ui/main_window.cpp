@@ -1867,6 +1867,21 @@ void bssh_main_window::apply_device_settings() {
 	const int brightness = settings.text_brightness();
 
 	/*
+	 * The forms -- and so the password prompt -- start on the keyboard the
+	 * settings chose: BeerSSH's own unless the system's was picked. They
+	 * started on the system's whatever the setting said, so a phone set to
+	 * BeerSSH's own still brought up Android's for the password (the
+	 * holder, 2026-10-22: "we should be consistent with the chosen
+	 * keyboard"). Reset only when the SETTING changes, since this runs on
+	 * every settings pass and the switch is still the user's for the run.
+	 */
+	if (int(settings.keyboard()) != m_forms_keyboard_setting) {
+		m_forms_keyboard_setting = int(settings.keyboard());
+		m_forms_use_softkeys = settings.keyboard() != bssh_app_settings::KEYBOARD_SYSTEM;
+		if (m_form_keyboard) update_form_keyboard();
+	}
+
+	/*
 	 * The custom palette, pushed into the catalog before anything reads a
 	 * scheme out of it. term/ does not reach into the settings store --
 	 * the dependency would run the wrong way -- so whoever owns the

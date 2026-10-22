@@ -4732,9 +4732,82 @@ void layout_test::turning_the_device_rearranges_the_window() {
 	          "an unfolded screen is still stacking its terminals in a column");
 }
 
+void layout_test::the_forms_start_on_the_chosen_keyboard() {
+	/*
+	 * The holder, 2026-10-22: "for the password it always brings up the
+	 * android keyboard, we should be consistent with the chosen keyboard".
+	 * The forms -- which the password prompt follows -- started on the
+	 * system keyboard whatever the settings said. Both settings, so a
+	 * forms keyboard that never followed the setting fails one of them.
+	 */
+	const forced_touch_t touch(1);
+	forced_screen_t held(QSize(360, 740));
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	struct restore_t {
+		bssh_app_settings::keyboard_t was;
+		~restore_t() { bssh_app_settings().set_keyboard(was); }
+	} restore{before};
+
+	for (const bool built_in : { true, false }) {
+		settings.set_keyboard(built_in ? bssh_app_settings::KEYBOARD_BUILT_IN
+		                               : bssh_app_settings::KEYBOARD_SYSTEM);
+
+		bssh_main_window window;
+		window.resize(360, 700);
+		window.show();
+		window.activateWindow();
+		QVERIFY(QTest::qWaitForWindowActive(&window));
+
+		sk_keyboard *ours = window.findChild<sk_keyboard *>(QStringLiteral("form-keyboard"));
+		sk_keyboard_switch *toggle = window.findChild<sk_keyboard_switch *>();
+		QVERIFY(ours && toggle);
+		toggle->set_panel_probe([] { return true; });
+
+		QStackedWidget *pages = window.findChild<QStackedWidget *>();
+		bssh_host_editor *editor = window.findChild<bssh_host_editor *>();
+		QVERIFY(pages && editor);
+		QWidget *page = editor;
+		while (page && page->parentWidget() != pages) page = page->parentWidget();
+		QVERIFY(page);
+		pages->setCurrentWidget(page);
+		QCoreApplication::processEvents();
+
+		QLineEdit *field = nullptr;
+		for (QLineEdit *each : editor->findChildren<QLineEdit *>())
+			if (!field && each->isVisible() && !each->isReadOnly()) field = each;
+		QVERIFY(field);
+		field->setFocus();
+
+		if (built_in) {
+			QTRY_VERIFY2(ours->isVisible(), "BeerSSH's own keyboard was chosen and a form did not get it");
+			QVERIFY2(!qApp->autoSipEnabled(), "the system keyboard is still asked for");
+		} else {
+			QTRY_VERIFY2(toggle->isVisible(), "the system keyboard was chosen and a form did not get it");
+			QVERIFY(!ours->isVisible());
+		}
+		pages->setCurrentWidget(pages->widget(pages->count() - 1));
+		QCoreApplication::processEvents();
+	}
+	QVERIFY(qApp->autoSipEnabled());
+}
+
 void layout_test::a_form_switches_to_softkeys_and_back() {
 	const forced_touch_t touch(1);
 	forced_screen_t held(QSize(360, 740));
+
+	/*
+	 * Starting from the system keyboard, set rather than assumed: the forms
+	 * begin on the keyboard the settings chose (2026-10-22), and on touch
+	 * the default is BeerSSH's own, so the switch would not be showing.
+	 */
+	bssh_app_settings settings;
+	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	settings.set_keyboard(bssh_app_settings::KEYBOARD_SYSTEM);
+	struct restore_t {
+		bssh_app_settings::keyboard_t was;
+		~restore_t() { bssh_app_settings().set_keyboard(was); }
+	} restore{before};
 
 	bssh_main_window window;
 	window.resize(360, 700);
@@ -4858,6 +4931,26 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	QVERIFY2(prompt.height() < room.height(),
 	          qPrintable(QStringLiteral("the prompt is %1 tall on a %2 screen")
 	                             .arg(prompt.height()).arg(room.height())));
+
+	/*
+	 * And still whole when a margin arrives after it was sized. On the
+	 * phone OK and Cancel were cut off at the bottom (2026-10-22), taken to
+	 * be Android's safe area arriving late. NOTE what this does not prove:
+	 * offscreen the layout grows the window to its new minimum by itself,
+	 * so this passes with or without the prompt's own re-fit -- a sabotage
+	 * removing it stayed green. The phone is the check for that.
+	 */
+	QPushButton *cancel = nullptr;
+	for (QPushButton *button : prompt.findChildren<QPushButton *>())
+		if (button->text().remove(QLatin1Char('&')) == QStringLiteral("Cancel")) cancel = button;
+	QVERIFY(cancel);
+	prompt.setContentsMargins(0, 80, 0, 0);
+	QCoreApplication::processEvents();
+	QVERIFY2(cancel->geometry().bottom() < prompt.height(),
+	          qPrintable(QStringLiteral("Cancel ends at %1 in a prompt %2 tall")
+	                             .arg(cancel->geometry().bottom()).arg(prompt.height())));
+	prompt.setContentsMargins(0, 0, 0, 0);
+	QCoreApplication::processEvents();
 
 	/*
 	 * And OK works the first time. Pressing it took the focus from the

@@ -6889,10 +6889,19 @@ window with no name is a blank row in the task switcher.
   handoff **must not straddle a rekey**.
   Kept runnable rather than written up once, because the finding depends on
   libssh internals that move: this is 0.11.5, and a result about 0.11.5 is
-  not a result about whatever Debian ships next. **[OPEN]** whether to build
+  not a result about whatever Debian ships next. **[OPEN]** when to build
   any of it, and where the emulator would live if so — in the UI, and only
   emulator state needs exporting; in a per-session process, and nothing does
   but the terminal never moves.
+  **The holder's direction, 2026-10-22: modify libssh, with the intent to
+  upstream the changes**, rather than walking `ssh_session_struct` and
+  `ssh_crypto_struct` from outside them. So the serialising half becomes an
+  export/import of a session's transport state -- keys, IVs, sequence
+  numbers, channel ids and windows, the unread input -- inside libssh, where
+  its own structures are known, carried here as numbered patches against a
+  vendored libssh the way `vterm-patch/` is against libvterm, and offered
+  upstream whole. The two measured constraints become the API's
+  preconditions: no zlib stream, and no rekey in flight.
 - **A window shows its OWN tabs, not the registry's.** The tab bar was built
   from every session in the process, which was indistinguishable from correct
   while there could be only one window and wrong the moment there could be two:
@@ -11653,6 +11662,22 @@ store is a no-op rather than a silent loss.
   width, a height short of the screen, and -- on the mechanism -- that after
   pressing OK the field still has the focus, the keyboard is up and OK has
   not moved; two specs in `tool/sabotage/form-keyboard.toml` break each.
+  On the phone the same evening: top, full width, compact, the terminal's
+  keyboard gone, and Cancel answered the first tap with the system keyboard
+  up. Two faults found there. OK and Cancel were cut off at the bottom:
+  Qt applies Android's safe area (the camera's band) as a top margin after
+  the dialog has sized itself -- the reading, not yet confirmed -- so it
+  re-fits on `ContentsRectChange`. **Unproven by the suite**: offscreen a
+  late margin grows the window through its layout's minimum anyway, and a
+  sabotage removing the re-fit stayed green, so the spec was dropped and
+  the phone is the check. And no keyboard came up until the field was
+  tapped; the prompt now asks for the system one once shown -- no test,
+  offscreen has no input method. **And it was always Android's keyboard**
+  (the holder: "we should be consistent with the chosen keyboard"): the
+  forms, which the prompt follows, started on the system keyboard whatever
+  the settings said. They start on the chosen one now, the switch still
+  overriding it for the run, reset when the setting changes
+  (`the_forms_start_on_the_chosen_keyboard`, with a spec).
   **Redundant widgets, the same evening, from the holder's review of every
   screen (`make shots`):** the session dialog's "Connection type" row (SSH,
   greyed out, nothing to choose) and its box titled "Load, save or delete a

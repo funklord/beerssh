@@ -275,6 +275,7 @@ private slots:
 	 * and keeps the system one down, its keys type into the field, and
 	 * its system key undoes all of it. The terminal's page has neither.
 	 */
+	void the_forms_start_on_the_chosen_keyboard();
 	void a_form_switches_to_softkeys_and_back();
 
 	/*

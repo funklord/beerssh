@@ -12,6 +12,7 @@
 #include "ui/wrapped_note.h"
 #include <QLineEdit>
 #include <QScreen>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
@@ -236,6 +237,32 @@ void bssh_password_prompt::fit_to_screen() {
 void bssh_password_prompt::showEvent(QShowEvent *event) {
 	QDialog::showEvent(event);
 	update_keyboard();
+
+	/*
+	 * The system keyboard, asked for: the field had the focus and no
+	 * keyboard came up until it was tapped (seen on the phone,
+	 * 2026-10-22). A dialog's focus is not a request for the input panel
+	 * on Android; a tap is, and the first one should not have to be.
+	 * Once the window is up, which is when Android will listen.
+	 */
+	if (m_keyboard && !m_softkeys) {
+		QTimer::singleShot(0, this, [this] {
+			if (isVisible() && m_field->hasFocus()) QGuiApplication::inputMethod()->show();
+		});
+	}
+}
+
+/*
+ * Re-fitted when the content area moves. On Android Qt applies the safe
+ * area -- the camera's band at the top, the system keyboard at the
+ * bottom -- as contents margins AFTER the dialog has sized itself, so the
+ * size taken in showEvent left out the top margin and OK and Cancel were
+ * cut off at the bottom (seen on the phone, 2026-10-22).
+ */
+bool bssh_password_prompt::event(QEvent *event) {
+	const bool handled = QDialog::event(event);
+	if (event->type() == QEvent::ContentsRectChange) fit_to_screen();
+	return handled;
 }
 
 /* After closing, since closing moves the focus and that re-applies it. */
