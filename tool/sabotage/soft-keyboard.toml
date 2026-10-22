@@ -120,11 +120,11 @@ find = "\tif (event->key() == Qt::Key_Back && m_host_list && m_pages\n\t    && m
 replace = "\tif (false) {"
 expect = "backing_out_of_a_session_reaches_the_host_list"
 
-# The host list is never told sessions are open, so the way back from it
-# stays hidden and the only route to a running session is a new one.
+# The host list is never told which sessions are open, so it lists none
+# and the only route to a running session is a new one.
 [[sabotage]]
-name = "the host list is not told how many sessions are open"
+name = "the host list is not told which sessions are open"
 file = "src/ui/main_window.cpp"
-find = "\tif (m_host_list) m_host_list->set_open_sessions(m_shown.size());"
+find = "\tif (m_host_list) m_host_list->set_open_sessions(m_shown);"
 replace = ""
 expect = "the_host_list_leads_back_to_open_sessions"
