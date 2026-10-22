@@ -183,6 +183,16 @@ void bssh_profile_store::migrate_hosts_if_needed() {
 QString bssh_profile_store::hosts_path() const {
 	if (!m_uses_default_location) return m_directory + QStringLiteral("/hosts.ini");
 
+	/*
+	 * Nor under Qt's test mode, which is how the store screenshots keep
+	 * the user's data out of the picture (ui/store_view.h): it moves every
+	 * QStandardPaths location and NOT ~/.ssh, so the shared host list
+	 * would have been the one real file left in reach -- read into the
+	 * listing, and written with the demo hosts. Found by running it in a
+	 * throwaway HOME, where the file appeared.
+	 */
+	if (QStandardPaths::isTestModeEnabled()) return m_directory + QStringLiteral("/hosts.ini");
+
 	const bssh_platform *platform = bssh_platform::instance();
 	const QString ssh_dir = platform ? platform->openssh_directory() : QString();
 

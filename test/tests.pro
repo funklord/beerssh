@@ -144,6 +144,7 @@ SOURCES += \
     ../src/ui/touch_metrics.cpp \
     ../src/platform/platform_desktop.cpp \
     ../src/ui/app_settings_view.cpp \
+    ../src/ui/store_view.cpp \
     ../src/ui/colour_editor.cpp \
     ../src/ui/term_features_editor.cpp \
     ../src/ui/key_row_editor.cpp \
@@ -243,6 +244,7 @@ HEADERS += \
     ../src/ui/tab_status.h \
     ../src/ui/touch_metrics.h \
     ../src/ui/app_settings_view.h \
+    ../src/ui/store_view.h \
     ../src/ui/colour_editor.h \
     ../src/ui/term_features_editor.h \
     ../src/ui/key_row_editor.h \

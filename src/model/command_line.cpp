@@ -124,6 +124,13 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 			"Build the window, run one turn of the event loop and exit. "
 			"What CI runs to check that a headless build comes up at "
 			"all." },
+		{ "store-view", "", "view",
+			"Open one of the store listing's screenshot views -- hosts, "
+			"terminal, split or settings -- filled with made-up hosts "
+			"and sessions, in a data directory of its own so nothing of "
+			"yours is shown or changed. What `make android-screenshots` "
+			"asks for; on Android it arrives as the intent extra "
+			"store_view." },
 		{ "man", "", "",
 			"Write this program's manual page to stdout and exit. It is "
 			"generated from the same table these options are read from, so "
@@ -541,6 +548,7 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 	line.help = parser.isSet(QStringLiteral("help"));
 	line.version = parser.isSet(QStringLiteral("version"));
 	line.self_test = parser.isSet(QStringLiteral("self-test"));
+	line.store_view = parser.value(QStringLiteral("store-view"));
 	line.hold = parser.isSet(QStringLiteral("hold"));
 
 	if (parser.isSet(QStringLiteral("term-features"))) {

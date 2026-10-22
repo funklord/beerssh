@@ -385,6 +385,17 @@ public:
 	virtual QString launch_document() const = 0;
 
 	/*
+	 * A string extra from the launching intent, or empty -- what the
+	 * store screenshots name their view with (ui/store_view.h). Android
+	 * only; a desktop is launched with a command line, which says the
+	 * same thing as --store-view.
+	 */
+	virtual QString launch_extra(const QString &key) const {
+		Q_UNUSED(key);
+		return QString();
+	}
+
+	/*
 	 * Whether the system is asking for a light or dark interface, or
 	 * Unknown when nothing will say (project.md sec 6.2).
 	 *

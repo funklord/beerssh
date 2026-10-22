@@ -12152,6 +12152,33 @@ without an icon is defective, so there is a plain one meant to be replaced.
 - **macOS/Windows:** `.dmg` / installer, best-effort per §1, unsigned until
   someone actually wants them (code signing on both is a cost, not a checkbox).
 
+### 12.2h Store screenshots from the build — **[BUILT 2026-10-22]**
+`make android-screenshots` (the shared `tool/android.mk`, play-store skill)
+starts the app once per name in `STORE_VIEWS` -- `hosts terminal split
+settings`, the holder's choice -- with the intent extra `store_view`, and
+captures each once the app logs `store-view-ready <name>`. The app's half
+is `src/ui/store_view.cpp`, also reachable on a desktop as
+`--store-view=NAME`. What the pictures show is made up: documentation-only
+hosts (RFC 2606/5737) and sessions that never dial, their screens filled
+in directly -- no pretend transport, for the reason
+`test/fake_ssh_session.h` gives. The stores are moved out of the way with
+Qt's test mode, verified to have MOVED before anything opens (or the app
+refuses to start), and emptied each run. **Test mode does not move
+`~/.ssh`**, where the desktop keeps its host list: the first version
+created `~/.ssh/beerssh_hosts` in a throwaway HOME, and on a real one
+would have shown the user's hosts and saved the demo ones among them. The
+store keeps to its config directory under test mode now
+(`a_store_view_touches_nothing_of_the_users`).
+First device-side run of the target anywhere, on `bssh_api34`: four
+captures at 1080x1920, and the display size and SystemUI demo mode put
+back afterwards. The first attempt was refused at the focus check, right:
+the emulator's own "System UI isn't responding" dialog had the focus.
+**Open, and the holder's:** the status line reads "disconnected", which is
+true; the status bar is hidden by this app's own choice, so the target's
+demo clock never shows; and `split` is two TABS on a 16:9 phone with the
+keyboard up, because the layout fits one pane there -- two panes need the
+keyboard down, landscape, or a larger screen.
+
 ### 12.2b The keyboard lives in `keyboard/` — **[DONE 2026-09-06]**
 
 Asked for by the copyright holder, who expects to want these routines in

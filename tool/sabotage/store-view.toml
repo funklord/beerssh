@@ -1,0 +1,23 @@
+# Sabotages for the store screenshots (src/ui/store_view.cpp, the
+# play-store skill): what they show is made up, so nothing of the user's
+# may be read, written or dialled while taking them.
+
+# Test mode moves every QStandardPaths location and not ~/.ssh, where the
+# desktop keeps its host list -- so without this the demo hosts land in
+# the user's file and theirs in the picture.
+[[sabotage]]
+name = "test mode keeps the host list in ~/.ssh"
+file = "src/model/profile_store.cpp"
+find = "\tif (QStandardPaths::isTestModeEnabled()) return m_directory + QStringLiteral(\"/hosts.ini\");\n"
+replace = ""
+expect = "a_store_view_touches_nothing_of_the_users"
+
+# A network change dials every session that is not live, and a session
+# nobody asked to connect is not live: restored tabs (sec 8.4), and the
+# demo sessions, which began connecting to their made-up hosts.
+[[sabotage]]
+name = "a network change dials a session nobody asked to connect"
+file = "src/model/conn_manager.cpp"
+find = "\tif (!m_session->was_asked_to_connect()) return;\n"
+replace = ""
+expect = "a_network_change_does_not_dial_a_session_never_connected"

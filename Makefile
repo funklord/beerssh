@@ -351,6 +351,11 @@ all: $(ARTIFACTS)
 # a `?=` after that would find it already set.
 ANDROID_AAB ?= $(ANDROID_BUILD_DIR)/beerssh-$(VERSION).aab
 
+# The listing's screenshots, in listing order (`make android-screenshots`,
+# the play-store skill). Each is a view src/ui/store_view.cpp builds from
+# made-up hosts and sessions, never the user's.
+STORE_VIEWS ?= hosts terminal split settings
+
 include tool/android.mk
 
 # The NDK triple for the ABI, chosen BELOW the include because that is

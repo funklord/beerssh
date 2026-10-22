@@ -238,6 +238,23 @@ public:
 	void hide_front_door();
 
 	/*
+	 * One page of the touch front door's settings, by the name its row
+	 * shows -- as a tap on that row would. False where there is no such
+	 * row, which includes a desktop's front door, which has none.
+	 */
+	bool open_settings_section(const QString &name);
+
+	/*
+	 * Adds a session to the visible panes rather than replacing them
+	 * (sec 8.3's "move to split"). Separate from show_session because a
+	 * tab click that silently split the window would be one click doing
+	 * two things. Public because it is the tab menu's Show beside current,
+	 * a window action -- and the store screenshots' split view is that
+	 * action, taken the way the phone takes it.
+	 */
+	void split_with(bssh_session *session);
+
+	/*
 	 * Imports the preset file this app was launched to open, if any
 	 * (sec 10.5). Called by main() rather than from the constructor, and
 	 * deliberately: it can put a modal dialog on screen, and --self-test
@@ -477,13 +494,6 @@ private:
 	void update_find_status();
 
 
-	/*
-	 * Adds a session to the visible panes rather than replacing them
-	 * (sec 8.3's "move to split"). Separate from show_session because a
-	 * tab click that silently split the window would be one click doing
-	 * two things.
-	 */
-	void split_with(bssh_session *session);
 
 
 	/*

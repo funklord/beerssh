@@ -1,7 +1,9 @@
+#include <QFile>
 #include <QPointer>
 #include <QSignalSpy>
 #include <QtTest>
 
+#include <QStandardPaths>
 #include <QTemporaryDir>
 
 #include "model/conn_manager.h"
@@ -15,6 +17,7 @@
 #include "fake_ssh_session.h"
 #include "term/emulator.h"
 #include "ui/terminal_view.h"
+#include "ui/store_view.h"
 
 static bssh_profile_t profile_for(const QString &name, const QString &host) {
 	bssh_profile_t profile;
@@ -617,6 +620,42 @@ void session_registry_test::connection_details_say_what_the_link_carried() {
 	QCOMPARE(session.bytes_in(), qint64(0));
 
 	bssh_ssh_session::set_factory(nullptr);
+}
+
+void session_registry_test::a_store_view_touches_nothing_of_the_users() {
+	/*
+	 * The store screenshots are published, so they must show nothing of
+	 * the user's and write nothing into it (ui/store_view.h). Test mode
+	 * moves every QStandardPaths location -- and the desktop's host list
+	 * lives in ~/.ssh, which it does not move: run in a throwaway HOME,
+	 * the first version created ~/.ssh/beerssh_hosts there, and on a real
+	 * one would have shown the user's hosts and saved the demo ones among
+	 * them. Asserted on the file, which is what was found.
+	 */
+	const QString home = QStandardPaths::writableLocation(QStandardPaths::HomeLocation);
+	const QString shared = home + QStringLiteral("/.ssh/beerssh_hosts");
+	const bool shared_before = QFile::exists(shared);
+
+	QVERIFY(bssh_store_view_isolate());
+	struct leave_test_mode_t {
+		~leave_test_mode_t() { QStandardPaths::setTestModeEnabled(false); }
+	} leave;
+
+	const QString config = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
+	QVERIFY2(config.contains(QStringLiteral("qttest")), qPrintable(config));
+
+	bssh_profile_store store;
+	QVERIFY(store.is_open());
+
+	bssh_profile_t demo;
+	demo.name = QStringLiteral("store-demo");
+	demo.host = QStringLiteral("demo.example.com");
+	QVERIFY(store.save(demo) != 0);
+
+	QVERIFY2(QFile::exists(config + QStringLiteral("/hosts.ini")),
+	          "the demo host did not land in test mode's own directory");
+	QVERIFY2(QFile::exists(shared) == shared_before,
+	          "a store screenshot touched ~/.ssh/beerssh_hosts");
 }
 
 void session_registry_test::editing_a_host_reaches_the_session_already_open_on_it() {

@@ -534,6 +534,20 @@ public:
 		return QStringLiteral("assets:/fonts");
 	}
 
+	QString launch_extra(const QString &key) const override {
+		QJniObject activity = QNativeInterface::QAndroidApplication::context();
+		if (!activity.isValid()) return QString();
+
+		QJniObject intent = activity.callObjectMethod(
+		        "getIntent", "()Landroid/content/Intent;");
+		if (!intent.isValid()) return QString();
+
+		QJniObject name = QJniObject::fromString(key);
+		return intent.callObjectMethod("getStringExtra",
+		                                "(Ljava/lang/String;)Ljava/lang/String;",
+		                                name.object<jstring>()).toString();
+	}
+
 	QString launch_document() const override {
 		/*
 		 * The URI the activity was started with, straight out of the

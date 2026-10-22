@@ -6396,3 +6396,14 @@ void bssh_main_window::offer_to_remember(bssh_session *session, const QString &p
 	                      QStringLiteral("The password for %1 was not saved.\n\n%2")
 	                              .arg(session->profile().target(), reason));
 }
+
+bool bssh_main_window::open_settings_section(const QString &name) {
+	if (!m_settings_sections) return false;
+
+	const QList<QListWidgetItem *> rows =
+	        m_settings_sections->findItems(name, Qt::MatchExactly);
+	if (rows.isEmpty()) return false;
+
+	emit m_settings_sections->itemClicked(rows.first());
+	return true;
+}

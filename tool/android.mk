@@ -46,6 +46,16 @@
 #   android-build       a rule that produces the APK, however this project
 #                       builds; qmake and CMake differ and neither belongs here
 #
+# NOTHING HERE DEFAULTS A VARIABLE TO EMPTY, and that is deliberate.
+#
+# `X ?=` with nothing after it still DEFINES X, so a project writing its
+# own `X ?= value` below the include finds X already set and keeps the
+# empty one: no error, and the setting silently does nothing. beerssh met
+# it 2026-10-22 with ANDROID_AAB, and seven variables here had the shape.
+# An unset variable expands to empty anyway, so the line bought nothing.
+# The variables with real defaults still take `?=`; to override one of
+# those, set it above the include or with a plain `=`.
+#
 # WHAT THIS FILE SUPPLIES
 #   The variable names, the preflight, the versionCode, the adb plumbing,
 #   and the signature check that beerssh learned the hard way.
@@ -262,8 +272,6 @@ ANDROID_VERSION_CODE ?= $(shell echo $(VERSION) | awk -F. \
 #
 # A keystore committed anywhere is a keystore that has to be replaced, and
 # the upload key is the one thing a store account cannot regenerate for you.
-ANDROID_KEYSTORE  ?=
-ANDROID_KEY_ALIAS ?=
 
 # A project's own preflight runs as part of this one, not instead of it.
 #
@@ -308,7 +316,6 @@ ANDROID_KEY_ALIAS ?=
 # Invoked with $(MAKE) at the end of the recipe rather than ordered among
 # prerequisites, because prerequisite order is not guaranteed under `make
 # -j`. A recursive call is sequenced by construction.
-ANDROID_CHECK_LOCAL ?=
 
 # The activity `android-run` starts. Three of the four adopters declare Qt's
 # own class in their manifests and never touch this; hydra subclasses it and
@@ -356,7 +363,6 @@ ANDROID_ACTIVITY ?= org.qtproject.qt.android.bindings.QtActivity
 # it -- an allowlist of what Android provides is a waiver list, and goes
 # stale silently when ANDROID_API moves. The fragment supplies the place to
 # attach, not the policy.
-ANDROID_ARTIFACT_CHECK ?=
 
 android-check:
 	@# ANDROID_API must not exceed what the app declares.
@@ -594,9 +600,7 @@ endef
 # cross-compiled OpenSSL was 0x1000, because NDK r27 links at 4 KB unless
 # told -Wl,-z,max-page-size=16384. A library that is not aligned also fails
 # to load on a 16 KB device, which is why this is an error and not advice.
-ANDROID_AAB             ?=
 ANDROID_PLAY_TARGET_API ?= 36
-ANDROID_PLAY_ALLOW_4K   ?=
 
 android-play-check:
 	@aab="$(ANDROID_AAB)"; \
@@ -761,7 +765,6 @@ android-uninstall:
 #
 # Each PNG's size is read back from its header and held to Play's rules:
 # 320 to 3840 px a side, long side at most twice the short.
-STORE_VIEWS         ?=
 STORE_SCREEN_SIZE   ?= 1080x1920
 STORE_SHOT_DIR      ?= $(ANDROID_BUILD_DIR)/store/$(VERSION)
 STORE_READY_TIMEOUT ?= 30

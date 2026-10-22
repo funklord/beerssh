@@ -20,6 +20,7 @@
 #include "term/picture_spill.h"
 #include "hang_watchdog.h"
 #include "ui/main_window.h"
+#include "ui/store_view.h"
 #include "ui/theme.h"
 
 /*
@@ -163,6 +164,18 @@ int main(int argc, char *argv[]) {
 		return 0;
 	}
 
+	/*
+	 * A store screenshot (ui/store_view.h): named on the command line, or
+	 * on Android by the launching intent once there is an application to
+	 * ask. Checked against the names here, so a misspelt view is a refused
+	 * start rather than a real window photographed in its place.
+	 */
+	if (!line.store_view.isEmpty() && !bssh_store_view_names().contains(line.store_view)) {
+		err << "beerssh: no store view named \"" << line.store_view << "\"; there are "
+		     << bssh_store_view_names().join(QStringLiteral(", ")) << Qt::endl;
+		return 2;
+	}
+
 	int qt_argc = 1;
 	char *qt_argv[] = { argv[0], nullptr };
 	bssh_drop_theme_when_offscreen();
@@ -175,6 +188,24 @@ int main(int argc, char *argv[]) {
 	QCoreApplication::setApplicationVersion(QStringLiteral(BSSH_VERSION_STRING));
 	/* Freedesktop app ID, so the window matches its .desktop entry (sec 0.1). */
 	QGuiApplication::setDesktopFileName(QStringLiteral("se.vibes.beerssh"));
+
+	if (line.store_view.isEmpty()) {
+		if (bssh_platform *platform = bssh_platform::instance())
+			line.store_view = platform->launch_extra(QStringLiteral("store_view"));
+	}
+
+	/*
+	 * Isolated before ANY store is opened -- the settings read just below
+	 * included -- and refused outright if it cannot be: a store screenshot
+	 * of the real data is the one outcome this must never produce.
+	 */
+	if (!line.store_view.isEmpty()) {
+		if (!bssh_store_view_names().contains(line.store_view)) {
+			qWarning("store view: no view named %s", qPrintable(line.store_view));
+			return 2;
+		}
+		if (!bssh_store_view_isolate()) return 1;
+	}
 
 	/*
 	 * And the icon explicitly. setDesktopFileName is enough on Wayland,
@@ -340,7 +371,7 @@ int main(int argc, char *argv[]) {
 	 * --geometry be measured against the terminal that will actually be
 	 * on screen rather than against a guess.
 	 */
-	if (!line.self_test && !launch.is_valid()) {
+	if (!line.self_test && !launch.is_valid() && line.store_view.isEmpty()) {
 		window.restore_layout();
 		window.open_default_session();
 	}
@@ -373,6 +404,8 @@ int main(int argc, char *argv[]) {
 
 	/* After show(): the bar belongs to the window the app now has. */
 	if (bssh_platform *platform = bssh_platform::instance()) platform->hide_status_bar();
+
+	if (!line.store_view.isEmpty()) bssh_store_view_show(&window, line.store_view);
 
 	if (line.self_test) {
 		QTimer::singleShot(0, &app, &QCoreApplication::quit);

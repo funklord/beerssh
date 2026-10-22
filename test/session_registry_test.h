@@ -36,6 +36,7 @@ private slots:
 	void editing_a_host_reaches_the_session_already_open_on_it();
 	void a_reconnected_session_shows_and_takes_the_new_shell();
 	void connection_details_say_what_the_link_carried();
+	void a_store_view_touches_nothing_of_the_users();
 	void a_silenced_bell_does_not_mark_the_tab();
 	void turning_scrollback_off_actually_turns_it_off();
 

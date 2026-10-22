@@ -118,6 +118,9 @@ struct bssh_command_line_t {
 	/* CI's headless smoke test (sec 12.4). */
 	bool self_test;
 
+	/* A store screenshot's view (ui/store_view.h); validated by main. */
+	QString store_view;
+
 	/* Printing one of these is all the program does. */
 	bool help;
 	bool version;
