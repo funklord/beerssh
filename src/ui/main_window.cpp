@@ -1130,12 +1130,15 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		});
 
 		/*
-		 * Back to the open sessions, the way up from a terminal reversed
-		 * (decided 2026-10-07, sec 8.5).
+		 * Down to the session tapped, the way up from a terminal reversed
+		 * (decided 2026-10-07, sec 8.5) -- to THAT one since 2026-10-22,
+		 * when the list started naming them.
 		 */
-		connect(m_host_list, &bssh_host_list::sessions_requested, this, [this] {
-			if (m_shown.isEmpty()) return;
+		connect(m_host_list, &bssh_host_list::session_picked, this,
+		         [this](bssh_session *session) {
+			if (!session || !m_shown.contains(session)) return;
 			m_pages->setCurrentWidget(m_terminal_page);
+			show_session(session);
 			if (m_terminal_view) m_terminal_view->setFocus();
 		});
 	} else {
@@ -4343,7 +4346,7 @@ void bssh_main_window::on_registry_changed() {
 	refresh_tab_bar();
 
 	/* The host list's way back to them, counted from the same list. */
-	if (m_host_list) m_host_list->set_open_sessions(m_shown.size());
+	if (m_host_list) m_host_list->set_open_sessions(m_shown);
 
 	/* Detach needs more than one tab, and this is where that changed. */
 	refresh_menu_bar();
@@ -5272,6 +5275,17 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 		connect_now->setObjectName(QStringLiteral("terminal_connect"));
 	}
 
+	/*
+	 * The open sessions and the hosts, one page (sec 8.5): where the
+	 * front door is a host list, which is touch. Before this the only way
+	 * there from a terminal was Back, a key whose meaning a user has to
+	 * guess (the holder, 2026-10-22).
+	 */
+	if (m_host_list) {
+		QAction *sessions = session_menu->addAction(QStringLiteral("&Sessions"));
+		sessions->setObjectName(QStringLiteral("terminal_sessions"));
+	}
+
 	QAction *new_tab = session_menu->addAction(QStringLiteral("New &Tab"));
 	new_tab->setObjectName(QStringLiteral("terminal_new_tab"));
 	new_tab->setShortcut(
@@ -5568,6 +5582,12 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	const QAction *new_tab = menu->findChild<QAction *>(QStringLiteral("terminal_new_tab"));
 	if (chosen == new_tab) {
 		open_another_session(false);
+		return;
+	}
+
+	const QAction *sessions = menu->findChild<QAction *>(QStringLiteral("terminal_sessions"));
+	if (sessions && chosen == sessions) {
+		show_front_door();
 		return;
 	}
 

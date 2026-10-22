@@ -6192,6 +6192,11 @@ void layout_test::the_built_in_keyboard_declines_the_system_one_in_every_pane() 
  * 2026-10-07). Back at a terminal goes up to the list; without a way back
  * down, the Fold showed what that costs -- the only route to a running
  * session was to open another one.
+ *
+ * Since 2026-10-22 (the holder) the list NAMES them: one row per open
+ * session above the hosts, and a tap goes back to that session. The single
+ * "N sessions open" button it replaced named none, so a phone with two
+ * went Back, the button, then the tab bar.
  */
 void layout_test::the_host_list_leads_back_to_open_sessions() {
 	const forced_touch_t arrangement(1);
@@ -6204,11 +6209,19 @@ void layout_test::the_host_list_leads_back_to_open_sessions() {
 	bssh_session_registry *registry = window.registry();
 	const registry_left_as_found_t tidy(registry);
 
-	QPushButton *sessions = window.findChild<QPushButton *>(QStringLiteral("host-list-sessions"));
-	QVERIFY2(sessions, "the host list must carry a way back to open sessions");
-	QVERIFY2(sessions->isHidden(), "with nothing open there is nothing to go back to");
+	QListWidget *list = window.findChild<QListWidget *>(QStringLiteral("host_list"));
+	QVERIFY(list);
+	const auto row_named = [list](const QString &text) -> QListWidgetItem * {
+		for (int i = 0; i < list->count(); ++i)
+			if (list->item(i)->text().startsWith(text)) return list->item(i);
+		return nullptr;
+	};
+	QVERIFY2(!row_named(QStringLiteral("Sessions")), "with nothing open there is nothing to list");
 
-	window.adopt_session(registry->create(named(QStringLiteral("first"))));
+	bssh_session *first = registry->create(named(QStringLiteral("first")));
+	bssh_session *second = registry->create(named(QStringLiteral("second")));
+	window.adopt_session(first);
+	window.adopt_session(second);
 	QCoreApplication::processEvents();
 	QVERIFY(!window.showing_front_door());
 
@@ -6217,14 +6230,29 @@ void layout_test::the_host_list_leads_back_to_open_sessions() {
 	QApplication::sendEvent(&window, &back);
 	QVERIFY(window.showing_front_door());
 
-	QVERIFY2(!sessions->isHidden(), "the host list shows no way back to the open session");
-	QVERIFY2(sessions->text().startsWith(QStringLiteral("1 session")), qPrintable(sessions->text()));
+	QVERIFY2(row_named(QStringLiteral("Sessions")) && row_named(QStringLiteral("Hosts")),
+	          "the open sessions are not listed above the hosts");
+	QListWidgetItem *first_row = row_named(first->title());
+	QVERIFY2(first_row, "an open session has no row of its own");
+	QVERIFY2(list->row(first_row) < list->row(row_named(QStringLiteral("Hosts"))),
+	          "the sessions must come before the hosts");
 
-	/* And down again, to the same session rather than a new one. */
+	/* Down again, to THAT session rather than a new one or the last one. */
 	const int before = registry->count();
-	sessions->click();
+	list->setCurrentItem(first_row);
+	emit list->itemClicked(first_row);
+	QCoreApplication::processEvents();
 	QVERIFY(!window.showing_front_door());
 	QCOMPARE(registry->count(), before);
+	QCOMPARE(window.layout_manager()->front_of(first), first);
+	QVERIFY(window.layout_manager()->visible_panes().contains(first));
+
+	/* And the terminal's own menu leads up there too, not only Back. */
+	QMenu *menu = window.build_terminal_menu(&window, QString());
+	QVERIFY(menu);
+	QAction *sessions = menu->findChild<QAction *>(QStringLiteral("terminal_sessions"));
+	QVERIFY2(sessions, "the touch terminal menu has no way to the sessions");
+	delete menu;
 }
 
 /*

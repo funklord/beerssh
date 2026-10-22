@@ -7728,13 +7728,25 @@ the focused terminal view, and a sabotage leaving it to Android is
 caught. **And the way back down -- decided by the holder the same day.**
 Going up made the host list the page a user is left on, and it had no way
 back to running sessions: tapping a host opens another, and reopening the
-app shows the page it was left on. While this window has sessions open,
+app shows the page it was left on. ~~While this window has sessions open,
 the list carries a row above the hosts -- "1 session open -- back to it"
--- that shows the terminals. A button rather than a list row, because it
-is not a host and every gesture on the list (edit, delete, fold) would
-reach it. `the_host_list_leads_back_to_open_sessions` goes up by the key
-and down by the row, to the same session; a sabotage that never tells the
-list the count is caught.
+-- that shows the terminals.~~ **Superseded by the holder 2026-10-22: the
+host list lists the open sessions, by name, above the hosts.** The button
+named none, so a phone went Back, the button, then the tab bar to move
+between two, and with one session open Back was the only way to a
+second -- a key whose meaning has to be guessed. Now a "Sessions" heading,
+a row per session (title, target, status dot; a tap goes to THAT one), a
+"Hosts" heading, and the hosts as before; with nothing open the page is
+unchanged. The rows carry host id 0, which the list's edit, delete and
+fold gestures ignore -- the reason the button was a button, met without
+it -- and the list is rebuilt only when a row would read differently,
+since the status update that feeds it runs on every state change. The
+terminal's long-press menu gains **Sessions** (Session group, touch only)
+as a way there besides Back; a Sessions entry in the settings index was
+the alternative offered and not chosen, since that page is configuration
+and this is navigation. `the_host_list_leads_back_to_open_sessions` goes
+up by the key, down by a tapped row to that session, and finds the menu
+entry; `tool/sabotage/open-sessions.toml` holds both halves.
 
 **And Back returns to the page it came FROM, which was a second fault in
 the same place.** Every sub-page returned to the host list whatever

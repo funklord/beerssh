@@ -1,0 +1,20 @@
+# Sabotages for the open sessions listed on the touch host list (sec 8.5,
+# the holder 2026-10-22): a row per session above the hosts, a tap back to
+# THAT session, and the terminal menu's way there besides Back. Held by
+# the_host_list_leads_back_to_open_sessions.
+
+# A tap goes back to "the sessions" rather than the one tapped -- what the
+# single button it replaced did.
+[[sabotage]]
+name = "a tapped session row shows another session"
+file = "src/ui/host_list.cpp"
+find = "\t\t\t\temit session_picked(session);\n"
+replace = "\t\t\t\temit session_picked(m_open.last());\n"
+expect = "the_host_list_leads_back_to_open_sessions"
+
+[[sabotage]]
+name = "the touch terminal menu has no way to the sessions"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_host_list) {\n\t\tQAction *sessions = session_menu->addAction(QStringLiteral(\"&Sessions\"));\n"
+replace = "\tif (false) {\n\t\tQAction *sessions = session_menu->addAction(QStringLiteral(\"&Sessions\"));\n"
+expect = "the_host_list_leads_back_to_open_sessions"

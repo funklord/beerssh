@@ -14,11 +14,14 @@
 #include <QPushButton>
 #include <QToolButton>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QVBoxLayout>
 
 #include "term/font_catalog.h"
 
 #include "model/profile_store.h"
+#include "model/session.h"
+#include "ui/tab_status.h"
 
 /*
  * Every pointer member starts null. resizeEvent() dereferences m_add
@@ -139,19 +142,6 @@ bssh_host_list::bssh_host_list(bssh_profile_store *store, QWidget *parent)
 
 	layout->addWidget(heading);
 
-	/*
-	 * The way back to open sessions, hidden while there are none. A
-	 * button rather than a list row: it is not a host, and a row would
-	 * be edited, deleted and folded with the hosts by every gesture the
-	 * list carries.
-	 */
-	m_sessions = new QPushButton(this);
-	m_sessions->setObjectName(QStringLiteral("host-list-sessions"));
-	m_sessions->setMinimumHeight(48);
-	m_sessions->hide();
-	connect(m_sessions, &QPushButton::clicked, this, &bssh_host_list::sessions_requested);
-	layout->addWidget(m_sessions);
-
 	m_list = new QListWidget(this);
 
 	/* By name: findChild order is not a contract, and this widget holds
@@ -265,9 +255,48 @@ static const int BSSH_LOCAL_SHELL_ROW = -1;
 /* A folder heading's name, which a host row does not have (sec 10.5). */
 static const int BSSH_FOLDER_ROLE = Qt::UserRole + 1;
 
+/* An open session's row: the session, which a host row does not have. */
+static const int BSSH_SESSION_ROLE = Qt::UserRole + 2;
+
 void bssh_host_list::reload() {
 	m_list->clear();
 	if (!m_store) return;
+
+	/*
+	 * Open sessions first, under a heading, then the hosts under theirs.
+	 * Rows rather than the button this replaced, which kept them out of
+	 * the list because "a row would be edited, deleted and folded with
+	 * the hosts by every gesture the list carries": these carry host id 0,
+	 * which the row menu ignores and a tap does not open as a host, and
+	 * no folder role, so nothing folds them. With nothing open the
+	 * headings are not drawn and the list is what it always was.
+	 */
+	m_open.removeAll(nullptr);
+	m_open_drawn = open_signature();
+	if (!m_open.isEmpty()) {
+		const auto heading = [this](const QString &text) {
+			QListWidgetItem *row = new QListWidgetItem(text, m_list);
+			row->setFlags(Qt::NoItemFlags);
+			QFont bold = row->font();
+			bold.setBold(true);
+			row->setFont(bold);
+			row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		};
+		heading(QStringLiteral("Sessions"));
+		const int dot = fontMetrics().height() / 2;
+		for (const QPointer<bssh_session> &session : m_open) {
+			QListWidgetItem *row = new QListWidgetItem(m_list);
+			const QString target = session->profile().target();
+			const QString title = session->title();
+			row->setText(title == target || target.isEmpty() ? title
+			                                                 : title + QLatin1Char('\n') + target);
+			row->setIcon(QIcon(bssh_tab_status::dot(dot, bssh_tab_status::state_for(session))));
+			row->setData(Qt::UserRole, 0);
+			row->setData(BSSH_SESSION_ROLE, QVariant::fromValue<void *>(session.data()));
+			row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		}
+		heading(QStringLiteral("Hosts"));
+	}
 
 	/*
 	 * The local shell first, and always present (sec 2).
@@ -459,6 +488,17 @@ void bssh_host_list::on_row_activated() {
 	const QListWidgetItem *item = m_list->currentItem();
 	if (!item || !m_store) return;
 
+	/* An open session: back to it, never a new one. */
+	if (void *raw = item->data(BSSH_SESSION_ROLE).value<void *>()) {
+		for (const QPointer<bssh_session> &session : m_open) {
+			if (session && session.data() == raw) {
+				emit session_picked(session);
+				return;
+			}
+		}
+		return;
+	}
+
 	/* A folder heading opens or shuts its folder. */
 	const QString folder = item->data(BSSH_FOLDER_ROLE).toString();
 	if (!folder.isEmpty()) {
@@ -479,9 +519,27 @@ void bssh_host_list::on_row_activated() {
 	emit open_requested(m_store->profile(id));
 }
 
-void bssh_host_list::set_open_sessions(int count) {
-	if (!m_sessions) return;
-	m_sessions->setText(count == 1 ? QStringLiteral("1 session open -- back to it")
-	                               : QStringLiteral("%1 sessions open -- back to them").arg(count));
-	m_sessions->setVisible(count > 0);
+void bssh_host_list::set_open_sessions(const QList<bssh_session *> &sessions) {
+	m_open.clear();
+	for (bssh_session *session : sessions) m_open.append(session);
+
+	/*
+	 * Rebuilt only when what it would draw changed. This is called from
+	 * the window's status update, which runs on every state change and
+	 * resize; rebuilding each time would lose the list's scroll position
+	 * and selection under the user's thumb.
+	 */
+	if (open_signature() != m_open_drawn) reload();
+}
+
+/* Each open session's row as drawn: which session, its title and its dot. */
+QString bssh_host_list::open_signature() const {
+	QString text;
+	for (const QPointer<bssh_session> &session : m_open) {
+		if (!session) continue;
+		text += QString::number(quintptr(session.data())) + QLatin1Char(' ')
+		        + session->title() + QLatin1Char(' ')
+		        + QString::number(int(bssh_tab_status::state_for(session))) + QLatin1Char('\n');
+	}
+	return text;
 }

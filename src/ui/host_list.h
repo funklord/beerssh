@@ -1,7 +1,9 @@
 #ifndef BSSH_HOST_LIST_H
 #define BSSH_HOST_LIST_H
 
+#include <QList>
 #include <QPoint>
+#include <QPointer>
 #include <QStringList>
 #include <QWidget>
 
@@ -15,6 +17,7 @@ class QEvent;
 class QResizeEvent;
 class QToolButton;
 class bssh_profile_store;
+class bssh_session;
 
 /*
  * bssh_host_list -- the touch front door (project.md sec 8.5).
@@ -42,13 +45,14 @@ public:
 	void reload();
 
 	/*
-	 * How many sessions this window has open. Above zero, a row at the top
-	 * of the list says so and leads back to them -- the way back from the
-	 * host list, which Back now goes UP to from a terminal (sec 8.5).
-	 * Without it a user who went up could only reach their sessions by
-	 * opening another.
+	 * The sessions this window has open, listed above the hosts: a tap
+	 * goes back to THAT session, a host below opens a new one (sec 8.5,
+	 * the holder's choice 2026-10-22). It replaced a single "N sessions
+	 * open -- back to them" button, which named no session -- so going
+	 * from one terminal to another meant Back, the button, then the tab
+	 * bar, and a phone with one session had no visible way to a second.
 	 */
-	void set_open_sessions(int count);
+	void set_open_sessions(const QList<bssh_session *> &sessions);
 
 protected:
 	void resizeEvent(QResizeEvent *event) override;
@@ -75,8 +79,8 @@ signals:
 	 */
 	void settings_requested();
 
-	/* The sessions row was tapped: show the terminals. */
-	void sessions_requested();
+	/* An open session's row was tapped: show that one. */
+	void session_picked(bssh_session *session);
 
 private slots:
 	void on_row_activated();
@@ -88,7 +92,10 @@ private:
 
 	bssh_profile_store *m_store;
 	QListWidget *m_list;
-	QPushButton *m_sessions = nullptr;
+	/* What set_open_sessions() was last given, listed by reload(). */
+	QList<QPointer<bssh_session>> m_open;
+	QString m_open_drawn;
+	QString open_signature() const;
 
 	/* Folders folded shut, by name (sec 10.5); for as long as the list lives. */
 	QStringList m_collapsed;
