@@ -16087,3 +16087,18 @@ than this tree's business to fix.
 
 **Signalled to fmake through its inbox rather than fixed from here**, per
 `harmonization.md`: we hold the reproduction and they hold the reasons.
+
+**Fixed in fmake `d3388fd`, and measured here 2026-10-23.** fmake's
+answer: `exclude_pattern` already said an excluded subtree is not to be
+moc'd, so this needed no decision -- `moc_cflags` built its include path
+from every header while the moc plan beside it used the excluded list,
+and now both use the excluded one. The same dry run, by the same tally:
+**0 of 73 `moc` lines name `build-deps-android`**, and still 0 compile
+lines.
+
+One residue is left, and it is not on any command line. fmake's lint for
+doxygen directives still reads sources inside the excluded subtree: six
+warnings, all about OpenSSL's `ssl/statem/statem_lib.c`, three per ABI
+build. That is the exclusion half-applied a third time, to what fmake
+*reads* rather than what it builds. It costs nothing but noise, and is
+reported to fmake's inbox rather than fixed from here.
