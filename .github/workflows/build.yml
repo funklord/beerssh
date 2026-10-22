@@ -111,11 +111,14 @@ jobs:
           host: linux
           target: desktop
 
+      # host all_os, not linux: from Qt 6.7 the Android packages are
+      # published under all_os, and asking for linux finds no version at
+      # all ("No available Qt version found", 2026-10-22).
       - name: Install Qt for Android (arm64)
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.12.0'
-          host: linux
+          host: all_os
           target: android
           arch: android_arm64_v8a
 
