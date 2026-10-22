@@ -5,6 +5,7 @@
 #include <QApplication>
 #include <QGuiApplication>
 #include <QInputMethod>
+#include <QKeyEvent>
 #include <QCheckBox>
 #include <QDialogButtonBox>
 #include <QLabel>
@@ -230,7 +231,19 @@ void bssh_password_prompt::fit_to_screen() {
 		const QSize dp = platform->screen_size();
 		if (dp.isValid() && dp.width() > 0) wide = qMin(wide, dp.width());
 	}
-	resize(wide, qMin(sizeHint().height(), room.height()));
+	/*
+	 * The margins added by hand. Measured on the Fold (2026-10-23): the
+	 * safe area arrived as a 31dp top margin after the prompt had sized
+	 * itself, and sizeHint() stayed 444 with it -- it does not count
+	 * the widget's own contents margins -- so the content moved down by
+	 * 31 and the bottom 31 were cut off: the buttons, or the keyboard's
+	 * last row. Re-fitting on ContentsRectChange was right and had
+	 * nothing to add until this did.
+	 */
+	const QMargins margins = contentsMargins();
+	const int tall = qMax(sizeHint().height(), minimumSizeHint().height())
+	                 + margins.top() + margins.bottom();
+	resize(wide, qMin(tall, room.height()));
 	move(room.topLeft());
 }
 
@@ -259,6 +272,21 @@ void bssh_password_prompt::showEvent(QShowEvent *event) {
  * size taken in showEvent left out the top margin and OK and Cancel were
  * cut off at the bottom (seen on the phone, 2026-10-22).
  */
+/*
+ * Android's Back is Cancel here, as it leaves every other page. The prompt
+ * ignored it, so Android took it and sent the app to the background with
+ * the prompt still open and the connection waiting (seen on the Fold,
+ * 2026-10-23).
+ */
+void bssh_password_prompt::keyPressEvent(QKeyEvent *event) {
+	if (event->key() == Qt::Key_Back) {
+		reject();
+		event->accept();
+		return;
+	}
+	QDialog::keyPressEvent(event);
+}
+
 bool bssh_password_prompt::event(QEvent *event) {
 	const bool handled = QDialog::event(event);
 	if (event->type() == QEvent::ContentsRectChange) fit_to_screen();

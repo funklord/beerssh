@@ -2,6 +2,7 @@
 #include "platform/range_source_android.h"
 
 #include <QGuiApplication>
+#include <QTimer>
 #include <QInputMethod>
 #include <QScreen>
 #include <QPalette>
@@ -345,8 +346,17 @@ public:
 		 * the Fold, 2026-10-23) -- a dialog is a window of its own, and
 		 * neither of the two moments above happens when one closes.
 		 */
-		connect(qGuiApp, &QGuiApplication::focusWindowChanged,
-		         this, [this](QWindow *) { apply_status_bar(); });
+		connect(qGuiApp, &QGuiApplication::focusWindowChanged, this, [this](QWindow *) {
+			apply_status_bar();
+
+			/*
+			 * And again a moment later. Applied only at once, the bar
+			 * still came back: Qt's own full-screen restore runs from
+			 * Android's window-focus callback, which arrives AFTER Qt's
+			 * focus change -- so the hide went first and was undone.
+			 */
+			QTimer::singleShot(300, this, [] { apply_status_bar(); });
+		});
 	}
 
 	void set_hide_from_screenshots(bool hide) override {

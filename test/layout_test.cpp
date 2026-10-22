@@ -4994,8 +4994,18 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	QTRY_VERIFY(keys->isVisible());
 	QVERIFY(!qApp->autoSipEnabled());
 
+	/*
+	 * Android's Back is Cancel. The prompt ignored it, so Android took it
+	 * and sent the app to the background with the prompt still open
+	 * (seen on the Fold, 2026-10-23). Sent to the field, where it lands.
+	 */
+	QKeyEvent back(QEvent::KeyPress, Qt::Key_Back, Qt::NoModifier);
+	QApplication::sendEvent(field, &back);
+	QCoreApplication::processEvents();
+	QCOMPARE(prompt.result(), int(QDialog::Rejected));
+	QVERIFY2(!prompt.isVisible(), "Back left the prompt open");
+
 	/* Closing gives the system keyboard back to everything else. */
-	prompt.reject();
 	QVERIFY(qApp->autoSipEnabled());
 }
 

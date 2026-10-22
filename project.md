@@ -11666,13 +11666,24 @@ store is a no-op rather than a silent loss.
   keyboard gone, and Cancel answered the first tap with the system keyboard
   up. Two faults found there. OK and Cancel were cut off at the bottom:
   Qt applies Android's safe area (the camera's band) as a top margin after
-  the dialog has sized itself -- the reading, not yet confirmed -- so it
-  re-fits on `ContentsRectChange`. **Unproven by the suite**: offscreen a
-  late margin grows the window through its layout's minimum anyway, and a
-  sabotage removing the re-fit stayed green, so the spec was dropped and
-  the phone is the check. And no keyboard came up until the field was
-  tapped; the prompt now asks for the system one once shown -- no test,
-  offscreen has no input method. **And it was always Android's keyboard**
+  the dialog has sized itself. **Measured on the Fold (2026-10-23), with a
+  build logging every re-fit:** the prompt sized itself to 456dp, then the
+  safe area arrived as a 31dp top margin and `sizeHint()` stayed 444 -- it
+  does not count the widget's own contents margins -- so the content moved
+  down 31dp and the bottom was cut off. The height now adds the margins,
+  and the re-fit on `ContentsRectChange` makes it stick. The suite cannot
+  show this (offscreen a late margin grows the window through its layout
+  anyway), so the device is the evidence: buttons and keyboard whole.
+  **Back left the app** with the prompt open and the connection waiting;
+  it cancels the prompt now (tested, with a spec). **And closing the
+  prompt left the status bar showing** over the terminal: the hide was
+  re-applied on app-active and keyboard changes, and a dialog closing is
+  neither. Re-applying on `focusWindowChanged` alone did not hold -- Qt's
+  own full-screen restore runs from Android's window-focus callback, which
+  comes after -- so it is applied then and again 300ms later; seen hidden
+  five seconds after Back closed the prompt. No keyboard came up until the
+  field was tapped; the prompt now asks for the system one once shown -- no
+  test, offscreen has no input method. **And it was always Android's keyboard**
   (the holder: "we should be consistent with the chosen keyboard"): the
   forms, which the prompt follows, started on the system keyboard whatever
   the settings said. They start on the chosen one now, the switch still

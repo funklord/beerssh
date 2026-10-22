@@ -8,6 +8,7 @@
 class QCheckBox;
 class QLabel;
 class QLineEdit;
+class QKeyEvent;
 class QShowEvent;
 class sk_keyboard;
 class sk_keyboard_switch;
@@ -59,6 +60,7 @@ public:
 protected:
 	void showEvent(QShowEvent *event) override;
 	bool event(QEvent *event) override;
+	void keyPressEvent(QKeyEvent *event) override;
 	void done(int result) override;
 
 private:

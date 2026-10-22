@@ -54,8 +54,8 @@ expect = "a_form_switches_to_softkeys_and_back"
 [[sabotage]]
 name = "the password prompt is not the screen's width"
 file = "src/ui/password_prompt.cpp"
-find = "\tresize(wide, qMin(sizeHint().height(), room.height()));\n"
-replace = "\tresize(sizeHint().width(), qMin(sizeHint().height(), room.height()));\n"
+find = "\tresize(wide, qMin(tall, room.height()));\n"
+replace = "\tresize(sizeHint().width(), qMin(tall, room.height()));\n"
 expect = "the_password_prompt_types_with_softkeys"
 
 # OK takes the focus from the field: the keyboard goes on the press, the
@@ -75,3 +75,12 @@ file = "src/ui/main_window.cpp"
 find = "\t\tm_forms_use_softkeys = settings.keyboard() != bssh_app_settings::KEYBOARD_SYSTEM;\n"
 replace = "\t\tm_forms_use_softkeys = false;\n"
 expect = "the_forms_start_on_the_chosen_keyboard"
+
+# The prompt ignores Back, and Android backgrounds the app with the
+# prompt open and the connection waiting.
+[[sabotage]]
+name = "Back does not cancel the password prompt"
+file = "src/ui/password_prompt.cpp"
+find = "\tif (event->key() == Qt::Key_Back) {\n\t\treject();\n"
+replace = "\tif (false) {\n\t\treject();\n"
+expect = "the_password_prompt_types_with_softkeys"
