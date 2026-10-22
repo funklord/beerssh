@@ -338,6 +338,15 @@ public:
 		});
 		connect(QGuiApplication::inputMethod(), &QInputMethod::visibleChanged,
 		         this, [this] { apply_status_bar(); });
+
+		/*
+		 * And when focus moves between windows: closing the password
+		 * prompt left the status bar showing over the terminal (seen on
+		 * the Fold, 2026-10-23) -- a dialog is a window of its own, and
+		 * neither of the two moments above happens when one closes.
+		 */
+		connect(qGuiApp, &QGuiApplication::focusWindowChanged,
+		         this, [this](QWindow *) { apply_status_bar(); });
 	}
 
 	void set_hide_from_screenshots(bool hide) override {
