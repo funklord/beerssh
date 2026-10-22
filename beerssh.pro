@@ -265,9 +265,10 @@ android {
     # Set here rather than as <uses-sdk> in the manifest: the Gradle
     # plugin takes these from the build file and warns about (or
     # overrides) a manifest that also declares them. project.md sec 2:
-    # minSdk 26, targetSdk 35 for Play.
+    # minSdk 26, targetSdk 36 -- Play's floor for new apps and updates
+    # since 2026-08-31, and android-play-check refuses a bundle below it.
     ANDROID_MIN_SDK_VERSION = 26
-    ANDROID_TARGET_SDK_VERSION = 35
+    ANDROID_TARGET_SDK_VERSION = 36
 
     # Deploy exactly these, and nothing else.
     #

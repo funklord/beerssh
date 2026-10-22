@@ -346,6 +346,11 @@ all: $(ARTIFACTS)
 # a plain `make` would run the preflight, fail for want of QT_ANDROID_ROOT,
 # and build nothing. bbq-predictor did exactly that and did not notice for
 # four sessions.
+# The bundle android-play-check reads (play-store skill). Named before the
+# include, because the fragment's own `ANDROID_AAB ?=` defines it empty and
+# a `?=` after that would find it already set.
+ANDROID_AAB ?= $(ANDROID_BUILD_DIR)/beerssh-$(VERSION).aab
+
 include tool/android.mk
 
 # The NDK triple for the ABI, chosen BELOW the include because that is
@@ -1123,7 +1128,7 @@ android-fonts:
 # that does not exceed the last one it accepted, and finding that out
 # from the Console after a twenty-minute upload is a poor way to learn
 # what number you built.
-AAB_NAME = beerssh-$(VERSION).aab
+AAB_NAME = $(notdir $(ANDROID_AAB))
 
 android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts android-terminfo
 	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
@@ -1133,7 +1138,9 @@ android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts android-terminfo
 	echo "android-aab: $(ANDROID_BUILD_DIR)/$(AAB_NAME)  ($$(du -h $(ANDROID_BUILD_DIR)/$(AAB_NAME) | cut -f1))"
 	@echo "android-aab: versionName $(VERSION), versionCode $(ANDROID_VERSION_CODE)"
 	@if [ -z "$(ANDROID_KEYSTORE)" ]; then \
-		echo "android-aab: DEBUG-SIGNED, which Play will not accept." >&2; \
+		echo "android-aab: UNSIGNED, which Play will not accept -- Gradle signs a" >&2; \
+		echo "android-aab:   release bundle with nothing when no key is given;" >&2; \
+		echo "android-aab:   keytool and jarsigner both read it so (2026-10-22)." >&2; \
 		echo "android-aab:   Set ANDROID_KEYSTORE and ANDROID_KEY_ALIAS to sign it with your" >&2; \
 		echo "android-aab:   upload key. Play App Signing holds the key that actually" >&2; \
 		echo "android-aab:   signs what users install; this one only proves the upload" >&2; \
@@ -1141,6 +1148,9 @@ android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts android-terminfo
 		echo "android-aab:   other once was not." >&2; \
 		exit 1; \
 	fi
+	@# And read back as Play would, so a bundle nobody has checked is not
+	@# what this leaves behind: signer, targetSdk, versionCode, alignment.
+	$(MAKE) --no-print-directory android-play-check ANDROID_AAB=$(ANDROID_BUILD_DIR)/$(AAB_NAME)
 
 # The installable artifact, under a name that says what it is (sec 12.2).
 #

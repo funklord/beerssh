@@ -69,7 +69,7 @@ android {
     # permission, and below it shared storage is a different permission
     # model this app would need a second path for.
     ANDROID_MIN_SDK_VERSION = 30
-    ANDROID_TARGET_SDK_VERSION = 35
+    ANDROID_TARGET_SDK_VERSION = 36
 
     # Exactly these, for beerssh.pro's reason: left to scan, androiddeployqt
     # bundles Qt's virtual keyboard and the QML runtime under it.
