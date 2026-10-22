@@ -11637,6 +11637,31 @@ store is a no-op rather than a silent loss.
   question the key row and the front door ask. Found by rendering it:
   fixing a surface's width and calling the surface done is the shape of
   this one.
+  **Its size and its OK, 2026-10-22 (the holder: "fills the entire screen
+  and the ok button doesn't react the first time").** It had been maximized
+  on touch because, as a small box over the terminal, its keyboard read as
+  a second, smaller one beside the terminal's. Now it is the screen's width
+  -- so its keyboard is the terminal's width -- as tall as what it holds, at
+  the top, and the window puts the terminal's keyboard away while it is
+  open, which is what made the second one. The width is the platform's
+  screen size, as every other sizing decision takes it, capped at the real
+  screen's. **OK missed the first tap because pressing it took the focus
+  from the field**: the keyboard went on the press, the dialog shrank under
+  the finger, and the release landed off the button; the second tap worked
+  because nothing was left to move. OK, Cancel and the checkbox take no
+  focus on touch now. `the_password_prompt_types_with_softkeys` asserts the
+  width, a height short of the screen, and -- on the mechanism -- that after
+  pressing OK the field still has the focus, the keyboard is up and OK has
+  not moved; two specs in `tool/sabotage/form-keyboard.toml` break each.
+  **Redundant widgets, the same evening, from the holder's review of every
+  screen (`make shots`):** the session dialog's "Connection type" row (SSH,
+  greyed out, nothing to choose) and its box titled "Load, save or delete a
+  stored session" with a "Saved Sessions" label inside it are gone -- one
+  title, "Saved Sessions"; the keyboard page's "Unset, this device uses ..."
+  line went, the combo already showing it; and the touch Session submenu
+  has no New Tab, which on a phone opened the page Sessions and Hosts
+  already opens. `the_session_dialog_says_each_thing_once` holds the first
+  two.
   **Built**, and it was the last piece: `backend_name()` and
   `is_hardware_backed()` existed from the start and nothing showed them. The one
   place the name appeared was the unlock prompt — which the keyring backend

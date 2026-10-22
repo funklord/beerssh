@@ -120,9 +120,9 @@ public:
 	};
 
 	/*
-	 * What an installation that has never been asked gets. Public because
-	 * the settings page shows which one that is, and a second copy of the
-	 * rule would be a second thing to be wrong.
+	 * What an installation that has never been asked gets, which differs
+	 * by device: the built-in board on a phone, the system one on a
+	 * desktop. keyboard() answers with it when nothing is stored.
 	 */
 	static keyboard_t default_keyboard();
 

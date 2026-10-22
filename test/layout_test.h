@@ -473,9 +473,9 @@ private slots:
 	void a_rebuilt_pane_keeps_the_sessions_zoom();
 	void ctrl_wheel_in_a_pane_zooms_that_panes_session();
 	void the_touch_terminal_menu_fits_a_phone();
-	void the_settings_page_says_what_unset_gives_you();
 	void a_desktop_can_be_asked_for_the_column();
 	void the_divider_magnet_is_the_users_to_set_or_switch_off();
+	void the_session_dialog_says_each_thing_once();
 	void a_host_can_be_given_a_reduced_terminal_without_a_text_editor();
 };
 

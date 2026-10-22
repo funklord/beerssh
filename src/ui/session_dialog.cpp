@@ -28,7 +28,6 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QPushButton>
-#include <QRadioButton>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QTreeWidget>
@@ -341,24 +340,15 @@ QWidget *bssh_session_dialog::build_session_page() {
 	layout->addLayout(destination);
 
 	/*
-	 * PuTTY offers Raw/Telnet/Rlogin/SSH/Serial here. This is an SSH
-	 * client and sec 1 says so, so the row exists to sit where the eye
-	 * expects it and to say what it is, with nothing to choose.
+	 * No "Connection type" row: PuTTY's offers Raw/Telnet/Rlogin/SSH/Serial,
+	 * and this one offered SSH, greyed out, with nothing to choose -- a
+	 * widget that only restated what the app is (the holder, 2026-10-22).
+	 * And one title on the saved sessions' box, not a group title and a
+	 * label inside it saying the same thing.
 	 */
-	QHBoxLayout *type_row = new QHBoxLayout();
-	type_row->addWidget(new QLabel(QStringLiteral("Connection type:"), page));
-	QRadioButton *ssh = new QRadioButton(QStringLiteral("SSH"), page);
-	ssh->setChecked(true);
-	ssh->setEnabled(false);
-	type_row->addWidget(ssh);
-	type_row->addStretch(1);
-	layout->addLayout(type_row);
-
-	QGroupBox *saved = new QGroupBox(
-	        QStringLiteral("Load, save or delete a stored session"), page);
+	QGroupBox *saved = new QGroupBox(QStringLiteral("Saved Sessions"), page);
 	QVBoxLayout *saved_layout = new QVBoxLayout(saved);
 
-	saved_layout->addWidget(new QLabel(QStringLiteral("Saved Sessions"), saved));
 	m_session_name = new QLineEdit(saved);
 	m_session_name->setAccessibleName(QStringLiteral("Saved session name"));
 

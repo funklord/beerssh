@@ -11,6 +11,7 @@
 
 #include "ui/wrapped_note.h"
 #include <QLineEdit>
+#include <QScreen>
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
@@ -124,13 +125,27 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 		outer->addWidget(m_keyboard);
 
 		/*
-		 * The whole screen, like the forms' pages. As a dialog sized to
-		 * its contents it sat over the terminal with the terminal's own
-		 * keyboard showing beside and below it, so its keyboard read as a
-		 * second, smaller one -- reported from the phone. Filling the
-		 * screen makes this the only keyboard and gives it the width.
+		 * The screen's width and its own height, at the top -- placed in
+		 * showEvent, where the screen is known. It was maximized, because
+		 * as a small dialog over the terminal its keyboard read as a
+		 * second, smaller one beside the terminal's (reported from the
+		 * phone). The holder found a whole screen for one field too much
+		 * (2026-10-22), so the width stays -- the keyboard is the
+		 * terminal's width -- and the window puts the terminal's keyboard
+		 * away while this is open (ask_for_password), which is what made
+		 * it the second one.
 		 */
-		setWindowState(windowState() | Qt::WindowMaximized);
+
+		/*
+		 * OK, Cancel and the checkbox take no focus on touch. Taking it
+		 * from the field hid the keyboard -- ours, or the system's -- on
+		 * the PRESS, the dialog shrank under the finger, and the release
+		 * landed off the button: OK did nothing the first time and worked
+		 * the second, when nothing was left to move (the holder,
+		 * 2026-10-22). The field keeps the focus, so nothing moves.
+		 */
+		for (QAbstractButton *button : buttons->buttons()) button->setFocusPolicy(Qt::NoFocus);
+		m_remember->setFocusPolicy(Qt::NoFocus);
 
 		m_switch = new sk_keyboard_switch(this);
 		connect(m_switch, &sk_keyboard_switch::switch_requested,
@@ -186,6 +201,36 @@ void bssh_password_prompt::update_keyboard() {
 	if (isVisible()) qApp->setAutoSipEnabled(!m_softkeys);
 	m_keyboard->setVisible(ours && m_field->hasFocus());
 	m_switch->set_offered(isVisible() && !m_softkeys);
+	fit_to_screen();
+}
+
+/*
+ * The screen's full width, as tall as what it holds, at the top: below
+ * it the system keyboard comes up without covering the field, and its
+ * own keyboard is the width the terminal's is. Re-fitted as that
+ * keyboard comes and goes.
+ */
+void bssh_password_prompt::fit_to_screen() {
+	if (!m_keyboard || !isVisible() || !screen()) return;
+
+	/*
+	 * Resized, not given a minimum: a minimum outlives the screen it was
+	 * measured on, and a fold or a turn changes the width.
+	 */
+	const QRect room = screen()->availableGeometry();
+	int wide = room.width();
+
+	/*
+	 * The platform's screen size where it has one, as every other sizing
+	 * decision in the app takes it -- so a test that sets a phone's gets
+	 * a phone's prompt -- and never past the real screen.
+	 */
+	if (const bssh_platform *platform = bssh_platform::instance()) {
+		const QSize dp = platform->screen_size();
+		if (dp.isValid() && dp.width() > 0) wide = qMin(wide, dp.width());
+	}
+	resize(wide, qMin(sizeHint().height(), room.height()));
+	move(room.topLeft());
 }
 
 void bssh_password_prompt::showEvent(QShowEvent *event) {

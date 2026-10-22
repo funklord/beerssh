@@ -276,36 +276,10 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (on_this_page(SECTION_KEYBOARD, m_keyboard)) form->addRow(QStringLiteral("Keyboard"), m_keyboard);
 
 	/*
-	 * What an installation that has never been asked gets, which differs
-	 * by device -- a phone opens with the built-in board and a desktop
-	 * with the system one. bssh_app_settings::default_keyboard()'s own
-	 * header says it is public "because the settings page shows which
-	 * one that is, and a second copy of the rule would be a second thing
-	 * to be wrong", and the page did not show it: the rule was public
-	 * for a consumer that was never written.
-	 *
-	 * A wrapped note rather than a suffix on the combo item, because the
-	 * combo's width is load-bearing on this page -- sec 12.3l records
-	 * "BeerSSH's own keyboard (full size)" wanting 373px of the 346 a
-	 * 320dp screen leaves. A note wraps; an item does not.
+	 * No "Unset, this device uses ..." line under the combo any more: the
+	 * combo already shows what this device uses, so the line said it a
+	 * second time (the holder, 2026-10-22).
 	 */
-	/*
-	 * The NAME is read back out of the combo rather than written again
-	 * here. Two lists of the same three names is the second copy this
-	 * whole arrangement exists to avoid, and it would drift the first
-	 * time somebody reworded an item.
-	 */
-	const int default_row =
-	        m_keyboard->findData(int(bssh_app_settings::default_keyboard()));
-	if (default_row >= 0) {
-		QLabel *keyboard_default = bssh_wrapped_note(
-		        QStringLiteral("Unset, this device uses %1.")
-		                .arg(m_keyboard->itemText(default_row)),
-		        this);
-		keyboard_default->setObjectName(QStringLiteral("keyboard_default_note"));
-		if (on_this_page(SECTION_KEYBOARD, keyboard_default))
-			body->addWidget(keyboard_default);
-	}
 
 	/*
 	 * Which layout the built-in keyboard draws (sec 6.2).

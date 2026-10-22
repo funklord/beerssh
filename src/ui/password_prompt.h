@@ -62,6 +62,7 @@ protected:
 
 private:
 	void update_keyboard();
+	void fit_to_screen();
 
 	QLineEdit *m_field;
 	QCheckBox *m_remember;

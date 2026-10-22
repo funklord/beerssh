@@ -1,6 +1,8 @@
 #include <QApplication>
 #include <QAbstractButton>
+#include <QGroupBox>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QAbstractItemView>
 #include <QAbstractSpinBox>
 #include <QLineEdit>
@@ -1591,15 +1593,14 @@ void layout_test::every_touch_surface_fits_a_phone()
 		check_fits(QStringLiteral("font picker"), &picker);
 	}
 	{
+		/*
+		 * The prompt sizes itself to the screen's width when shown, so the
+		 * screen is a phone's here; offscreen it would be the test
+		 * screen's, and the measurement would be of an 800px prompt.
+		 */
+		const forced_screen_t phone(QSize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP));
 		bssh_password_prompt prompt(QStringLiteral("nabbe.testing@build.internal.example.com:2299"),
 		                             true);
-
-		/*
-		 * Maximised on a touch screen, which on a phone IS the phone's
-		 * width; offscreen it is the test screen's, and a maximised
-		 * window ignores the resize that measures it at a phone's.
-		 */
-		prompt.setWindowState(Qt::WindowNoState);
 		check_fits(QStringLiteral("password prompt"), &prompt);
 	}
 	{
@@ -4832,8 +4833,6 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	QVERIFY(field);
 	toggle->set_panel_probe([] { return true; });
 
-	/* A screen of its own, not a box over the terminal and its keyboard. */
-	QVERIFY(prompt.windowState() & Qt::WindowMaximized);
 
 	QVERIFY(note->isHidden());
 	prompt.set_note(QStringLiteral("The server did not accept that password."));
@@ -4847,6 +4846,42 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	QTRY_VERIFY(keys->isVisible());
 	QVERIFY(!toggle->isVisible());
 	QVERIFY2(!qApp->autoSipEnabled(), "the system keyboard is still asked for");
+
+	/*
+	 * The screen's width, so its keyboard is the terminal's width, and
+	 * not the whole screen: a field, a box and two buttons needed no more
+	 * (the holder, 2026-10-22). It was maximized.
+	 */
+	const QRect room = prompt.screen()->availableGeometry();
+	QVERIFY2(!(prompt.windowState() & Qt::WindowMaximized), "the prompt fills the screen again");
+	QCOMPARE(prompt.width(), qMin(room.width(), 360));
+	QVERIFY2(prompt.height() < room.height(),
+	          qPrintable(QStringLiteral("the prompt is %1 tall on a %2 screen")
+	                             .arg(prompt.height()).arg(room.height())));
+
+	/*
+	 * And OK works the first time. Pressing it took the focus from the
+	 * field, which hid the keyboard on the press, so the dialog shrank
+	 * under the finger and the release landed off the button. Asserted on
+	 * the mechanism: after the press, the field still has the focus, the
+	 * keyboard is still up, and OK has not moved.
+	 */
+	QPushButton *ok = nullptr;
+	for (QPushButton *button : prompt.findChildren<QPushButton *>())
+		if (button->text().remove(QLatin1Char('&')) == QStringLiteral("OK")) ok = button;
+	QVERIFY(ok);
+	const QPoint ok_at = ok->mapToGlobal(QPoint(0, 0));
+	QTest::mousePress(ok, Qt::LeftButton);
+	QCoreApplication::processEvents();
+	QVERIFY2(field->hasFocus(), "pressing OK took the focus from the field");
+	QVERIFY2(keys->isVisible(), "pressing OK put the keyboard away under the finger");
+	QCOMPARE(ok->mapToGlobal(QPoint(0, 0)), ok_at);
+	QTest::mouseRelease(ok, Qt::LeftButton);
+	QCOMPARE(prompt.result(), int(QDialog::Accepted));
+	prompt.show();
+	QVERIFY(QTest::qWaitForWindowActive(&prompt));
+	field->setFocus();
+	QTRY_VERIFY(keys->isVisible());
 
 	QAbstractButton *a = nullptr;
 	for (QAbstractButton *button : keys->findChildren<QAbstractButton *>()) {
@@ -6281,6 +6316,8 @@ void layout_test::the_host_list_leads_back_to_open_sessions() {
 	QCOMPARE(door->text(), QStringLiteral("&Sessions and Hosts"));
 	QVERIFY2(!menu->findChild<QAction *>(QStringLiteral("terminal_sessions")),
 	          "the sessions are offered twice in one menu");
+	QVERIFY2(!menu->findChild<QAction *>(QStringLiteral("terminal_new_tab")),
+	          "New Tab opens the same page on touch, a third door to it");
 	delete menu;
 }
 
@@ -12191,37 +12228,27 @@ void layout_test::the_touch_terminal_menu_fits_a_phone() {
 	delete menu;
 }
 
-void layout_test::the_settings_page_says_what_unset_gives_you() {
+void layout_test::the_session_dialog_says_each_thing_once() {
 	/*
-	 * bssh_app_settings::default_keyboard() decides what an installation
-	 * that has never been asked gets, and it differs by device: a phone
-	 * opens with the built-in board, a desktop with the system one. Its
-	 * header says it is public "because the settings page shows which one
-	 * that is, and a second copy of the rule would be a second thing to
-	 * be wrong" -- and nothing on that page called it, so the rule was
-	 * public for a consumer nobody had written.
-	 *
-	 * Asserted on BOTH devices, because one of them would pass against a
-	 * note that named a constant: the answer has to move with the device
-	 * or it is not reporting the rule at all.
+	 * The holder's review of the GUI for redundant widgets (2026-10-22):
+	 * a "Connection type" row offering SSH, greyed out, with nothing to
+	 * choose; and a box titled "Load, save or delete a stored session"
+	 * with a "Saved Sessions" label inside it.
 	 */
-	for (int touch = 0; touch <= 1; ++touch) {
-		const forced_touch_t arrangement(touch);
-
-		bssh_app_settings_view page;
-		QLabel *note = page.findChild<QLabel *>(QStringLiteral("keyboard_default_note"));
-		QVERIFY2(note, "the settings page never says what an unset keyboard gives");
-
-		QComboBox *choices = page.findChild<QComboBox *>(QStringLiteral("keyboard"));
-		QVERIFY(choices);
-
-		const int row = choices->findData(int(bssh_app_settings::default_keyboard()));
-		QVERIFY2(row >= 0, "the default keyboard is not among the offered ones");
-
-		QVERIFY2(note->text().contains(choices->itemText(row)),
-		          qPrintable(QStringLiteral("the note says %1, the default is %2")
-		                             .arg(note->text(), choices->itemText(row))));
+	bssh_profile_store store;
+	bssh_session_dialog dialog(&store);
+	QVERIFY2(dialog.findChildren<QRadioButton *>().isEmpty(),
+	          "a radio button with nothing to choose between");
+	int saved_labels = 0;
+	for (QLabel *label : dialog.findChildren<QLabel *>()) {
+		QVERIFY2(!label->text().startsWith(QStringLiteral("Connection type")),
+		          "the Connection type row is back");
+		if (label->text() == QStringLiteral("Saved Sessions")) ++saved_labels;
 	}
+	int saved_boxes = 0;
+	for (QGroupBox *box : dialog.findChildren<QGroupBox *>())
+		if (box->title() == QStringLiteral("Saved Sessions")) ++saved_boxes;
+	QCOMPARE(saved_boxes + saved_labels, 1);
 }
 
 void layout_test::a_host_can_be_given_a_reduced_terminal_without_a_text_editor() {

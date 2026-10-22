@@ -2615,8 +2615,17 @@ void bssh_main_window::ask_for_password(bssh_session *session) {
 	/* The forms' choice of keyboard, and a switch made here is kept. */
 	dialog.use_softkeys(m_forms_use_softkeys);
 
+	/*
+	 * The terminal's keyboard goes while the prompt is open: the prompt
+	 * no longer fills the screen (2026-10-22), and with this one showing
+	 * below it, the prompt's own keyboard read as a second, smaller one.
+	 * Put back by the window's own rule afterwards.
+	 */
+	if (m_keyboard) m_keyboard->hide();
+
 	m_remember_once_in.remove(session);
 	const int answer = dialog.exec();
+	apply_key_row_visibility();
 	if (m_form_keyboard) {
 		m_forms_use_softkeys = dialog.uses_softkeys();
 		update_form_keyboard();
@@ -5275,10 +5284,17 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 		connect_now->setObjectName(QStringLiteral("terminal_connect"));
 	}
 
-	QAction *new_tab = session_menu->addAction(QStringLiteral("New &Tab"));
-	new_tab->setObjectName(QStringLiteral("terminal_new_tab"));
-	new_tab->setShortcut(
-	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("new-tab"))));
+	/*
+	 * Not on touch: there New Tab opens the host list, which the menu's
+	 * own Sessions and Hosts entry already does -- the same door twice
+	 * (the holder, 2026-10-22).
+	 */
+	if (!m_host_list) {
+		QAction *new_tab = session_menu->addAction(QStringLiteral("New &Tab"));
+		new_tab->setObjectName(QStringLiteral("terminal_new_tab"));
+		new_tab->setShortcut(
+		        QKeySequence(bssh_input_router::binding_for(QStringLiteral("new-tab"))));
+	}
 
 	QAction *new_window = session_menu->addAction(QStringLiteral("New &Window"));
 	new_window->setObjectName(QStringLiteral("terminal_new_window"));
@@ -5576,8 +5592,9 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 		return;
 	}
 
+	/* Null-checked: absent on touch, and a dismissed menu answers null too. */
 	const QAction *new_tab = menu->findChild<QAction *>(QStringLiteral("terminal_new_tab"));
-	if (chosen == new_tab) {
+	if (new_tab && chosen == new_tab) {
 		open_another_session(false);
 		return;
 	}
