@@ -18,7 +18,13 @@ jobs:
   style:
     runs-on: ubuntu-latest
     steps:
+      # Submodules too: the sabotage specs' anchors include softkeys/, and
+      # without it every one of them reads as naming a file that is not
+      # there (first seen 2026-10-22, the workflow's first run since
+      # softkeys became a submodule).
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - name: Indentation gate
         run: make style
 
@@ -101,28 +107,50 @@ jobs:
       - name: Install host Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.11.1'
+          version: '6.12.0'
           host: linux
           target: desktop
 
       - name: Install Qt for Android (arm64)
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.11.1'
+          version: '6.12.0'
           host: linux
           target: android
           arch: android_arm64_v8a
 
+      # The NDK the Qt kit was built with, which is the one its
+      # mkspecs/qdevice.pri names: r27c for 6.12.0. Not the runner's
+      # default or newest -- libraries cross-compiled with another NDK
+      # build and then fail to dlopen on a device, which reads as a missing
+      # library rather than a toolchain mismatch (the android-build skill),
+      # and a build-only job would never see it. Installed when the image
+      # lacks it, and exported for every step after this one.
+      - name: Use the NDK the Qt kit names
+        run: |
+          ndk=27.2.12479018
+          grep -q 'android-ndk-r27c' "$QT_ROOT_DIR/mkspecs/qdevice.pri" || {
+            echo "::error::the kit no longer names r27c; update the NDK pinned here"
+            grep NDK "$QT_ROOT_DIR/mkspecs/qdevice.pri"
+            exit 1
+          }
+          if [ ! -d "$ANDROID_HOME/ndk/$ndk" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;$ndk" > /dev/null
+          fi
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/$ndk" >> "$GITHUB_ENV"
+          echo "BSSH_NDK_VERSION=$ndk" >> "$GITHUB_ENV"
+
       # libssh and OpenSSL have to be cross-compiled; there is no such
       # thing as a system libssh in an NDK sysroot. Cached because it is
       # several minutes of work that only changes when the pinned
-      # versions do.
+      # versions do -- and the NDK is one of them: keyed on the script
+      # alone, a new NDK would have reused libraries the old one built.
       - name: Cache cross-compiled dependencies
         id: deps-cache
         uses: actions/cache@v4
         with:
           path: deps/android
-          key: android-deps-${{ runner.os }}-${{ hashFiles('tool/build-deps-android.sh') }}
+          key: android-deps-${{ runner.os }}-ndk${{ env.BSSH_NDK_VERSION }}-${{ hashFiles('tool/build-deps-android.sh') }}
 
       # ANDROID_NDK_ROOT comes from the RUNNER, and is read in the shell
       # rather than through ${{ env.* }}.
