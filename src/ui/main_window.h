@@ -255,6 +255,14 @@ public:
 	void split_with(bssh_session *session);
 
 	/*
+	 * The on-screen keyboard's own hide key: put away, and remembered as
+	 * the user's choice so the next settings pass does not bring it back.
+	 * Public for the store screenshots' split view, which is two panes
+	 * on a phone only with the keyboard down.
+	 */
+	void hide_keyboard();
+
+	/*
 	 * Imports the preset file this app was launched to open, if any
 	 * (sec 10.5). Called by main() rather than from the constructor, and
 	 * deliberately: it can put a modal dialog on screen, and --self-test

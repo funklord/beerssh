@@ -12173,11 +12173,20 @@ First device-side run of the target anywhere, on `bssh_api34`: four
 captures at 1080x1920, and the display size and SystemUI demo mode put
 back afterwards. The first attempt was refused at the focus check, right:
 the emulator's own "System UI isn't responding" dialog had the focus.
-**Open, and the holder's:** the status line reads "disconnected", which is
-true; the status bar is hidden by this app's own choice, so the target's
-demo clock never shows; and `split` is two TABS on a 16:9 phone with the
-keyboard up, because the layout fits one pane there -- two panes need the
-keyboard down, landscape, or a larger screen.
+**Settled by the holder the same day:** no status line in the store views
+(it could only say "disconnected", true and beside the point, and nothing
+may claim otherwise), and `split` shows two panes with the keyboard down --
+with it up, a 16:9 phone fits one pane and the second became a tab. The
+keyboard is put away after the sessions open, since a terminal asking for
+input brings it back (the Hide key's own rule); the second session, in
+front, is split off its own pane by an edge, since `split_with()` takes
+only a session no pane fronts; and the screens are filled in only once the
+panes have their size. Fed first and then shrunk, each pane came out with a
+garbled top -- the prompt line repeated on a dark band, the cursor
+mid-line. **Unexplained:** the emulator alone shrinks such a screen
+correctly (probed: the last rows kept, the cursor right), so it is between
+the emulator and the pixels, and not established where. The status bar is
+hidden by this app's own choice, so the target's demo clock never shows.
 
 ### 12.2b The keyboard lives in `keyboard/` — **[DONE 2026-09-06]**
 

@@ -1304,10 +1304,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * only called hide() would come back on the next one, which from the
 	 * user's side is a key that does not work.
 	 */
-	connect(m_keyboard, &sk_keyboard::hide_requested, this, [this] {
-		m_keyboard_hidden_by_user = true;
-		m_keyboard->hide();
-	});
+	connect(m_keyboard, &sk_keyboard::hide_requested, this, &bssh_main_window::hide_keyboard);
 
 	/*
 	 * Cfg goes to the same page the front door's menu opens, rather than
@@ -6406,4 +6403,10 @@ bool bssh_main_window::open_settings_section(const QString &name) {
 
 	emit m_settings_sections->itemClicked(rows.first());
 	return true;
+}
+
+void bssh_main_window::hide_keyboard() {
+	if (!m_keyboard) return;
+	m_keyboard_hidden_by_user = true;
+	m_keyboard->hide();
 }

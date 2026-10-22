@@ -7,11 +7,13 @@
 #include <QTimer>
 #include <QWindow>
 
+#include "model/app_settings.h"
 #include "model/profile.h"
 #include "model/profile_store.h"
 #include "model/session.h"
 #include "model/session_registry.h"
 #include "term/emulator.h"
+#include "ui/layout_manager.h"
 #include "ui/main_window.h"
 
 namespace {
@@ -73,8 +75,18 @@ QByteArray demo_shell(const char *user, const char *host) {
 bssh_session *open_demo(bssh_main_window *window, const demo_host_t &host) {
 	bssh_session *session = window->registry()->create(demo_profile(host));
 	window->adopt_session(session);
-	session->emulator()->feed(demo_shell(host.user, host.name));
 	return session;
+}
+
+/*
+ * Filled in once the panes have their final size. A shell redraws on a
+ * resize and these have none, so text fed into a full-height screen and
+ * then shrunk into a pane came out reflowed and cut -- seen on the
+ * emulator as a garbled top half of each pane.
+ */
+void fill_demo(bssh_session *session, const demo_host_t &host) {
+	QCoreApplication::processEvents();
+	session->emulator()->feed(demo_shell(host.user, host.name));
 }
 
 /*
@@ -139,6 +151,14 @@ bool bssh_store_view_isolate() {
 	 * just checked to be test mode's own rather than the app's.
 	 */
 	for (const QString &path : isolated) QDir(path).removeRecursively();
+
+	/*
+	 * No status line (the holder, 2026-10-22). The demo sessions never
+	 * connect, so it could only say "disconnected" -- true, and not what
+	 * the listing is about -- and nothing here may claim the opposite.
+	 * Written to the settings just isolated, so it is this run's alone.
+	 */
+	bssh_app_settings().set_status_line(bssh_app_settings::STATUS_LINE_OFF);
 	return true;
 }
 
@@ -150,7 +170,7 @@ void bssh_store_view_show(bssh_main_window *window, const QString &name) {
 			window->profile_store()->save(demo_profile(host));
 		window->show_front_door();
 	} else if (name == QStringLiteral("terminal")) {
-		open_demo(window, DEMO_HOSTS[0]);
+		fill_demo(open_demo(window, DEMO_HOSTS[0]), DEMO_HOSTS[0]);
 	} else if (name == QStringLiteral("split")) {
 		/*
 		 * Show beside current, as the tab menu offers it: side by side
@@ -158,8 +178,31 @@ void bssh_store_view_show(bssh_main_window *window, const QString &name) {
 		 * upright. An edge drop made the second a TAB on a phone, whose
 		 * layout keeps new sessions as tabs until asked otherwise.
 		 */
-		open_demo(window, DEMO_HOSTS[0]);
-		window->split_with(open_demo(window, DEMO_HOSTS[2]));
+		/*
+		 * Keyboard down (the holder, 2026-10-22): with it up, a 16:9
+		 * phone has room for one pane and the second became a tab. After
+		 * the sessions open, because a terminal asking for input brings
+		 * the keyboard back -- the Hide key's own rule -- and opening one
+		 * asks; events processed between, so the layout has the height
+		 * back before it is asked for a second pane; and again after the
+		 * split, whose focus asks once more.
+		 */
+		bssh_session *first = open_demo(window, DEMO_HOSTS[0]);
+		bssh_session *second = open_demo(window, DEMO_HOSTS[2]);
+		QCoreApplication::processEvents();
+		window->hide_keyboard();
+		QCoreApplication::processEvents();
+
+		/*
+		 * The second opened in FRONT of the one pane, which is what New
+		 * Tab means, so it is split off its own pane by an edge -- as a
+		 * drag does. split_with() takes only a session no pane fronts.
+		 */
+		window->drop_session_on(first, second, bssh_layout_manager::EDGE_BOTTOM);
+		QCoreApplication::processEvents();
+		window->hide_keyboard();
+		fill_demo(first, DEMO_HOSTS[0]);
+		fill_demo(second, DEMO_HOSTS[2]);
 	} else if (name == QStringLiteral("settings")) {
 		window->open_settings_section(QStringLiteral("Appearance"));
 	} else {
