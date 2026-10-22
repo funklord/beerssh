@@ -6,9 +6,8 @@
 # to be continue-on-error for that reason -- a job whose failure is ignored
 # is a job that is not checking anything.
 #
-# NOTE: the android job has never run. It was written without a Qt-for-
-# Android kit or an NDK available, so treat its first run as part of the
-# work, not as a regression.
+# The android job first ran, and passed, on 2026-09-01 -- the last day the
+# workflow ran before it was switched off while the repository was private.
 name: build
 
 on:

@@ -14325,6 +14325,21 @@ The desktop build is what makes this project testable at all — use it.
   path never asks `is_touch_primary()`.** The document and the code
   contradict each other; flagged, not resolved.
 ### 12.4 CI
+- **[DECIDED 2026-10-22] `check-ci` is kept and no longer run as a gate.**
+  The repository went public that day, so GitHub Actions is free again and
+  the `build` workflow was switched back on (`gh workflow enable build`):
+  its `linux` job on `ubuntu-latest` is the Ubuntu 24.04 build -- Qt 6.4,
+  libssh 0.10 -- that `check-ci` existed to reproduce. The holder's words:
+  "keep the check but stop running it. We should have every test available
+  for manual invocation." So the pre-push hook (a receipt for HEAD or no
+  push) and the pre-commit hook (no commit while a run is writing one) are
+  gone, with the marker and receipt `check-ci.sh` wrote for them; `make
+  hooks` removes old installed copies. `make check-ci` remains, for
+  reproducing a CI failure locally or hearing about a newer-only API before
+  CI does. A break now reaches GitHub and is reported there within minutes
+  rather than refused before the push. The entries below are the gate's
+  history and stay as its record. Every check is a make target, listed at
+  the top of the Makefile; `make sabotage` was added for the full run.
 - **The receipt binds HEAD-at-archive; the hook compares HEAD-at-push, and
   between them sits a thirteen-minute window.** `check-ci` resolves HEAD
   once, beside the `git archive` that consumes it — 5e9b540's fix, and right

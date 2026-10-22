@@ -15,8 +15,12 @@
 # copy of the list would be a second thing to be wrong. It has already
 # caught one -- libsecret-1-dev was satisfied for months by luck.
 #
-# Not run by `make test`: it needs docker and pulls an image. Run it
-# before pushing anything that touches a platform or a library API.
+# Run by hand, `make check-ci`, and by nothing else. It gated every push
+# until 2026-10-22, when the repository went public, GitHub's own linux job
+# -- the thing this reproduces -- became free and was switched back on, and
+# the holder decided: keep the check, stop running it (project.md sec 12.4).
+# Use it to reproduce a CI failure locally, or before pushing something that
+# leans on a platform or library API, to hear about it before CI does.
 
 set -eu
 
@@ -93,8 +97,7 @@ CONTAINER=bssh-check-ci-$$
 # `docker kill` on an already-exited container returns non-zero, so the
 # status is discarded: under `set -e` a failing trap command should not
 # get to decide this script's exit code.
-MARKER="$(git rev-parse --git-dir)/check-ci-running"
-trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"; rm -f "$MARKER"' EXIT
+trap 'docker kill "$CONTAINER" >/dev/null 2>&1 || true; rm -rf "$STAGE"' EXIT
 # INT and TERM only exit; `exit` runs the EXIT trap above, so the
 # cleanup lives in exactly one place.
 trap 'exit 130' INT TERM
@@ -127,19 +130,6 @@ trap 'exit 130' INT TERM
 # had never been inside it. The pre-push hook would then have passed it as
 # verified. One resolution, used twice.
 STAGED=$(git rev-parse HEAD)
-
-# Tell any other session in this clone that a build is in flight, so its
-# pre-commit hook can refuse rather than silently invalidating the receipt
-# this run is about to write. commit, pid, epoch seconds; removed by the
-# EXIT trap above, and ignored by the hook once the pid is gone, so a
-# killed run cannot wedge the tree.
-#
-# In .git for the same reason the receipt is: it describes THIS clone on
-# THIS machine and must never be committed or survive one. It follows that
-# it says nothing to a session on another computer -- those are kept in
-# step by fetching and pushing often, which is the only channel that
-# crosses machines.
-printf '%s %s %s\n' "$STAGED" "$$" "$(date +%s)" > "$MARKER"
 
 git archive --format=tar HEAD > "$STAGE/src.tar"
 
@@ -265,20 +255,4 @@ fi
 # kill the container by the name above -- which is what the name is for.
 wait "$!"
 
-echo "check-ci: the linux job passes on $IMAGE"
-
-# The receipt the pre-push hook reads, naming the commit this run actually
-# built -- which is HEAD, because that is what git archive staged above.
-#
-# The check writes its own receipt rather than the hook running the check,
-# and that is not a preference. The hook used to run this script, and a
-# push to GitHub then died with SIGPIPE while reporting that the check had
-# passed: git opens the connection to the remote BEFORE running pre-push
-# and sends the pack after, so five minutes of hook holds an idle socket
-# that the far end closes. Measured -- the same push to a local bare repo
-# succeeds with the same hook and the same run, twice, so it is the remote
-# that goes away and not the check that breaks anything.
-#
-# In .git, so it is local to the clone and never committed: a receipt that
-# survived a clone would vouch for a build that machine never did.
-printf '%s\n' "$STAGED" > "$(git rev-parse --git-dir)/check-ci-passed"
+echo "check-ci: the linux job passes on $IMAGE, for $(git rev-parse --short "$STAGED")"

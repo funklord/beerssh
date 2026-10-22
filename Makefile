@@ -34,8 +34,17 @@
 #   make check-deb    -- build the .debs, then install and run them in a
 #                        clean container (needs docker; sec 12.2)
 #   make style        -- gate the tree's indentation (tool/check-indent.sh)
+#   make check        -- style and test, the pair to run before any commit
 #   make check-ci     -- run the Linux CI job in the runner's own image
-#                        (needs docker; sec 12.4)
+#                        (needs docker; sec 12.4). By hand only: GitHub
+#                        runs the real job on every push
+#   make check-startup -- start the packaged binary as a user would, on
+#                        Xvfb, and see it come up
+#   make check-x11-drag -- a pane dropped on another BeerSSH is refused on
+#                        X11 (needs Xvfb, xdotool; sec 8.4)
+#   make sabotage     -- break the code on purpose and see each named test
+#                        fail (tool/sabotage.py). Every spec by default,
+#                        which is hours; SPECS=tool/sabotage/x.toml for some
 #   make check-ssh    -- the SSH transport against a throwaway sshd
 #   make check-handoff -- can a live session move between processes
 #                        (needs sshd; sec 12.3)
@@ -56,6 +65,11 @@
 #                        starts (needs adb; sec 12.2)
 #   make android-aab  -- the Android App Bundle Play takes, named and with
 #                        its versionCode reported; needs ANDROID_KEYSTORE
+#   make android-check -- the Android preflight: kit, NDK, SDK, JDK
+#   make android-play-check -- read the bundle as Play would: signer,
+#                        targetSdk, versionCode, 16 KB alignment
+#   make android-screenshots -- the store listing's pictures from this
+#                        build, on an attached device or emulator
 #   make android-run  -- install and launch on the attached device
 #   make install      -- install the app, its desktop entry, icon,
 #                        AppStream metadata and bundled fonts
@@ -1559,7 +1573,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
+.PHONY: all run test bench style sabotage check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check
@@ -1567,6 +1581,13 @@ help:
 # `check` is everything that must pass before committing; `test` is the suite
 # alone. GNU's meaning of check, and what most of these projects already did.
 check: style test
+
+# The full sabotage run: each spec's edit applied, the suite run, the edit
+# reverted. `make style` only checks the specs' anchors; this is the run
+# that says the tests still catch what they claim to. Manual and long.
+SPECS ?=
+sabotage:
+	python3 tool/sabotage.py $(SPECS)
 
 # The commit-msg hook lives in the tree so it is reviewable, survives a
 # clone, and can be kept in sync. .git/hooks is untracked, so a hook that
@@ -1602,6 +1623,10 @@ hooks:
 	fi; \
 	mkdir -p "$$dir/hooks"; \
 	install -m 0755 tool/hooks/commit-msg "$$dir/hooks/commit-msg"; \
-	install -m 0755 tool/hooks/pre-push "$$dir/hooks/pre-push"; \
-	install -m 0755 tool/hooks/pre-commit "$$dir/hooks/pre-commit"; \
-	echo "hooks: commit-msg, pre-commit and pre-push installed from tool/hooks/ into $$dir/hooks/"
+	for old in pre-push pre-commit; do \
+		if grep -q 'check-ci' "$$dir/hooks/$$old" 2>/dev/null; then \
+			rm -f "$$dir/hooks/$$old"; \
+			echo "hooks: removed $$dir/hooks/$$old, the retired check-ci gate (sec 12.4)"; \
+		fi; \
+	done; \
+	echo "hooks: commit-msg installed from tool/hooks/ into $$dir/hooks/"
