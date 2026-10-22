@@ -2509,9 +2509,11 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 */
 	const QList<QAction *> sizes = actions.at(7)->menu()->actions();
 	QCOMPARE(sizes.size(), 3);
-	QCOMPARE(sizes.at(0)->text(), QStringLiteral("Zoom &In"));
-	QCOMPARE(sizes.at(1)->text(), QStringLiteral("Zoom &Out"));
-	QCOMPARE(sizes.at(2)->text(), QStringLiteral("&Reset Zoom"));
+	/* Plain words under "Text Size" (the holder, 2026-10-22): "Zoom In"
+	 * under a menu already called Text Size said it twice and less clearly. */
+	QCOMPARE(sizes.at(0)->text(), QStringLiteral("&Bigger"));
+	QCOMPARE(sizes.at(1)->text(), QStringLiteral("&Smaller"));
+	QCOMPARE(sizes.at(2)->text(), QStringLiteral("&Normal"));
 
 	/*
 	 * Five since 2026-09-22: Detach sits beside Split, where the menu bar
@@ -2636,17 +2638,33 @@ void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() 
 
 	QVERIFY2(inner->shortcut().isEmpty(),
 	          "a row inside a group kept its chord: the layout did not recurse");
-	QVERIFY2(group->styleSheet().contains(QStringLiteral("min-height: 48px")),
+	/* Measured, not read out of the stylesheet: the floor is content plus
+	 * padding, split since 2026-10-22 so a row is 48dp and not 64. */
+	group->sizeHint();
+	const int row = group->actionGeometry(inner).height();
+	QVERIFY2(row >= 48,
 	          qPrintable(QStringLiteral("a group's own rows must reach the 48dp floor, "
-	                                     "got: ") + group->styleSheet()));
+	                                     "a row is %1: ").arg(row) + group->styleSheet()));
 
 	/*
 	 * And the row reaches sec 6.2's floor. Asserted on the number, not
 	 * merely on the stylesheet being non-empty: 48 is the whole point.
 	 */
-	QVERIFY2(menu.styleSheet().contains(QStringLiteral("min-height: 48px")),
-	          qPrintable(QStringLiteral("touch rows must reach the 48dp floor, got: ")
-	                             + menu.styleSheet()));
+	menu.sizeHint();
+	const int verb_row = menu.actionGeometry(verb).height();
+	QVERIFY2(verb_row >= 48,
+	          qPrintable(QStringLiteral("touch rows must reach the 48dp floor, a row is %1: ")
+	                             .arg(verb_row) + menu.styleSheet()));
+
+	/*
+	 * And not much past it. Rows were 64dp -- the floor as min-height with
+	 * padding on top -- which the holder saw as tiny text in a lot of
+	 * empty space, in a menu likely to run off a phone (2026-10-22). The
+	 * ceiling leaves room for the larger text and keeps the old height out.
+	 */
+	QVERIFY2(verb_row <= 56,
+	          qPrintable(QStringLiteral("a touch row is %1dp, padding rather than text")
+	                             .arg(verb_row)));
 }
 
 void terminal_view_test::the_scrollbar_takes_its_width_from_the_grid() {

@@ -1,5 +1,6 @@
 #include "ui/touch_metrics.h"
 
+#include <QFont>
 #include <QMenu>
 
 #include <QAbstractButton>
@@ -69,11 +70,24 @@ void bssh_apply_touch_menu(QMenu *menu, bool touch) {
 	/*
 	 * A stylesheet rather than a walk, because a menu's items are
 	 * QActions and not widgets -- there is nothing for findChildren to
-	 * find. The padding is what makes the row taller than its text; the
-	 * min-height is what makes it a target.
+	 * find.
+	 *
+	 * The ROW is the 48dp target: min-height plus the padding above and
+	 * below. It was min-height 48 with the padding on top, 64dp rows
+	 * around ordinary text, which the holder saw as tiny text in a lot of
+	 * empty space and a menu likely to run off the screen (2026-10-22).
+	 * The text is made a little larger with the same change, so the row
+	 * reads as full rather than as padding.
 	 */
+	/* Once per menu: applied again, it would grow the text again. */
+	if (!menu->property("bssh_touch_font").toBool()) {
+		QFont larger = menu->font();
+		larger.setPointSizeF(larger.pointSizeF() * 1.15);
+		menu->setFont(larger);
+		menu->setProperty("bssh_touch_font", true);
+	}
 	menu->setStyleSheet(QStringLiteral("QMenu::item { min-height: %1px; padding: 8px 24px; }")
-	                            .arg(BSSH_TOUCH_TARGET_DP));
+	                            .arg(BSSH_TOUCH_TARGET_DP - 16));
 }
 
 void bssh_apply_touch_heights(QWidget *root, bool touch) {

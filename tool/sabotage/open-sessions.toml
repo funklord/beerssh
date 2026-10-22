@@ -12,9 +12,27 @@ find = "\t\t\t\temit session_picked(session);\n"
 replace = "\t\t\t\temit session_picked(m_open.last());\n"
 expect = "the_host_list_leads_back_to_open_sessions"
 
+# The terminal menu's front door is named for the desktop's page on a
+# phone, where it opens the sessions and hosts.
 [[sabotage]]
-name = "the touch terminal menu has no way to the sessions"
+name = "the touch front door is called Hosts and Settings"
 file = "src/ui/main_window.cpp"
-find = "\tif (m_host_list) {\n\t\tQAction *sessions = session_menu->addAction(QStringLiteral(\"&Sessions\"));\n"
-replace = "\tif (false) {\n\t\tQAction *sessions = session_menu->addAction(QStringLiteral(\"&Sessions\"));\n"
+find = "\tQAction *front_door = menu->addAction(m_host_list ? QStringLiteral(\"&Sessions and Hosts\")\n"
+replace = "\tQAction *front_door = menu->addAction(false ? QStringLiteral(\"&Sessions and Hosts\")\n"
+expect = "the_host_list_leads_back_to_open_sessions"
+
+# The first row comes back drawn as chosen after Back.
+[[sabotage]]
+name = "a row nobody tapped stays highlighted"
+file = "src/ui/host_list.cpp"
+find = "\tm_list->clearSelection();\n\tm_list->setCurrentRow(-1);\n}"
+replace = "\tif (m_list->count() > 1) m_list->setCurrentRow(1);\n}"
+expect = "the_host_list_leads_back_to_open_sessions"
+
+# The page's title said twice, as a heading under it.
+[[sabotage]]
+name = "a Hosts heading under the page titled Hosts"
+file = "src/ui/host_list.cpp"
+find = "\t\t\trow->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));\n\t\t}\n\t}"
+replace = "\t\t\trow->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));\n\t\t}\n\t\tnew QListWidgetItem(QStringLiteral(\"Hosts\"), m_list);\n\t}"
 expect = "the_host_list_leads_back_to_open_sessions"

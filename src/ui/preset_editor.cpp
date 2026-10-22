@@ -398,7 +398,9 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 		 * but a gesture is not something a person can see, and this is the
 		 * way out that is on the screen.
 		 */
-		QPushButton *back = new QPushButton(QStringLiteral("Back to hosts"), this);
+		/* "Back", as every other page says: it returns to the page it
+		 * came from -- the settings -- and "Back to hosts" said otherwise. */
+		QPushButton *back = new QPushButton(QStringLiteral("Back"), this);
 		back->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
 		connect(back, &QPushButton::clicked, this, &bssh_preset_editor::back_requested);
 		right->addWidget(back);

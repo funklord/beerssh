@@ -2368,17 +2368,28 @@ void layout_test::the_front_door_overflow_menu_reaches_the_touch_floor() {
 	 * callers cross, and the arm that could silently pass is the one
 	 * where a pointer keeps its own metrics.
 	 */
-	const QString floor = QStringLiteral("min-height: %1px").arg(BSSH_TOUCH_TARGET_DP);
+	/* The touch rows' style at all, for the desktop arm below: a literal
+	 * "min-height: 48px" stopped matching when the floor was split into
+	 * content and padding, and absence of it would then prove nothing. */
+	const QString floor = QStringLiteral("QMenu::item");
 
 	{
 		const forced_touch_t thumb(1);
 		bssh_host_list list(&store);
 		QMenu *overflow = list.findChild<QMenu *>();
 		QVERIFY2(overflow, "the front door must carry an overflow menu");
-		QVERIFY2(overflow->styleSheet().contains(floor),
+		/*
+		 * The ROW's height, measured, rather than a min-height read out of
+		 * the stylesheet: the floor is the content plus its padding, and
+		 * since 2026-10-22 the two are split so a row is 48dp rather than
+		 * 48 plus padding. Laid out by sizeHint(), which computes the rows.
+		 */
+		overflow->sizeHint();
+		const int row = overflow->actionGeometry(overflow->actions().first()).height();
+		QVERIFY2(row >= BSSH_TOUCH_TARGET_DP,
 		          qPrintable(QStringLiteral("touch rows must reach the %1dp floor, "
-		                                     "stylesheet is: \"%2\"")
-		                             .arg(BSSH_TOUCH_TARGET_DP)
+		                                     "a row is %2 (stylesheet \"%3\")")
+		                             .arg(BSSH_TOUCH_TARGET_DP).arg(row)
 		                             .arg(overflow->styleSheet())));
 	}
 
@@ -6230,12 +6241,23 @@ void layout_test::the_host_list_leads_back_to_open_sessions() {
 	QApplication::sendEvent(&window, &back);
 	QVERIFY(window.showing_front_door());
 
-	QVERIFY2(row_named(QStringLiteral("Sessions")) && row_named(QStringLiteral("Hosts")),
-	          "the open sessions are not listed above the hosts");
+	QVERIFY2(row_named(QStringLiteral("Sessions")), "the open sessions are not listed");
 	QListWidgetItem *first_row = row_named(first->title());
 	QVERIFY2(first_row, "an open session has no row of its own");
-	QVERIFY2(list->row(first_row) < list->row(row_named(QStringLiteral("Hosts"))),
+	QVERIFY2(list->row(first_row) < list->row(row_named(QStringLiteral("Local shell"))),
 	          "the sessions must come before the hosts");
+
+	/*
+	 * One heading, not two: the page is titled Hosts, and a "Hosts" row
+	 * under it was the same word twice (the holder, 2026-10-22).
+	 */
+	for (int i = 0; i < list->count(); ++i)
+		QVERIFY2(list->item(i)->text() != QStringLiteral("Hosts"),
+		          "a Hosts heading under a page titled Hosts");
+
+	/* And nothing drawn as chosen that nobody chose. */
+	QVERIFY2(list->selectedItems().isEmpty() && list->currentRow() == -1,
+	          "a row comes back highlighted though nothing tapped it");
 
 	/* Down again, to THAT session rather than a new one or the last one. */
 	const int before = registry->count();
@@ -6247,11 +6269,18 @@ void layout_test::the_host_list_leads_back_to_open_sessions() {
 	QCOMPARE(window.layout_manager()->front_of(first), first);
 	QVERIFY(window.layout_manager()->visible_panes().contains(first));
 
-	/* And the terminal's own menu leads up there too, not only Back. */
+	/*
+	 * And the terminal's own menu leads up there too, not only Back --
+	 * by its one front-door entry, named for the page it opens here. A
+	 * second entry (Session > Sessions) was the same door twice.
+	 */
 	QMenu *menu = window.build_terminal_menu(&window, QString());
 	QVERIFY(menu);
-	QAction *sessions = menu->findChild<QAction *>(QStringLiteral("terminal_sessions"));
-	QVERIFY2(sessions, "the touch terminal menu has no way to the sessions");
+	QAction *door = menu->findChild<QAction *>(QStringLiteral("terminal_front_door"));
+	QVERIFY2(door, "the touch terminal menu has no way to the sessions");
+	QCOMPARE(door->text(), QStringLiteral("&Sessions and Hosts"));
+	QVERIFY2(!menu->findChild<QAction *>(QStringLiteral("terminal_sessions")),
+	          "the sessions are offered twice in one menu");
 	delete menu;
 }
 
@@ -7328,7 +7357,7 @@ void layout_test::the_desktop_front_door_uses_the_desktop_preset_editor()
 	 * the system back gesture is not wired to that stack -- and a dialog
 	 * with a category tree down its left-hand side does not.
 	 */
-	const QString exit_button = QStringLiteral("Back to hosts");
+	const QString exit_button = QStringLiteral("Back");
 
 	bssh_preset_editor touch(&store, bssh_preset_editor::TOUCH);
 	bssh_preset_editor desktop(&store, bssh_preset_editor::DESKTOP);

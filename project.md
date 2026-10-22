@@ -7734,19 +7734,35 @@ the list carries a row above the hosts -- "1 session open -- back to it"
 host list lists the open sessions, by name, above the hosts.** The button
 named none, so a phone went Back, the button, then the tab bar to move
 between two, and with one session open Back was the only way to a
-second -- a key whose meaning has to be guessed. Now a "Sessions" heading,
-a row per session (title, target, status dot; a tap goes to THAT one), a
-"Hosts" heading, and the hosts as before; with nothing open the page is
-unchanged. The rows carry host id 0, which the list's edit, delete and
-fold gestures ignore -- the reason the button was a button, met without
-it -- and the list is rebuilt only when a row would read differently,
-since the status update that feeds it runs on every state change. The
-terminal's long-press menu gains **Sessions** (Session group, touch only)
-as a way there besides Back; a Sessions entry in the settings index was
-the alternative offered and not chosen, since that page is configuration
-and this is navigation. `the_host_list_leads_back_to_open_sessions` goes
-up by the key, down by a tapped row to that session, and finds the menu
-entry; `tool/sabotage/open-sessions.toml` holds both halves.
+second -- a key whose meaning has to be guessed. Now a small "Sessions"
+heading -- a label, its text's height, not a row -- a row per session
+(title, target, status dot; a tap goes to THAT one), and the hosts as
+before; with nothing open the page is unchanged. No "Hosts" heading: the
+page is titled Hosts, and the first version said it twice (the holder,
+the same evening). The rows carry host id 0, which the list's edit,
+delete and fold gestures ignore -- the reason the button was a button,
+met without it -- and the list is rebuilt only when a row would read
+differently, since the status update that feeds it runs on every state
+change. Nothing is drawn as chosen after a rebuild: the first row came
+back highlighted after Back, as if selected. The terminal menu's front-door
+entry is the way there besides Back, and on touch it is called **Sessions
+and Hosts**; a Session > Sessions entry added first was the same door
+twice and went. A Sessions entry in the settings index was offered and not
+chosen, since that page is configuration and this is navigation.
+`the_host_list_leads_back_to_open_sessions` holds all of it and
+`tool/sabotage/open-sessions.toml` breaks each part.
+
+**Touch menus and rows, the same evening (the holder: "tiny text but
+surrounded by a lot of empty space", likely to run off the screen).** A
+touch menu row was min-height 48 with 8px padding on top, so 64dp around
+ordinary text; it is the 48dp floor in all now, with the text 15% larger,
+and `the_touch_layout_grows_the_rows_and_drops_the_chords` measures a row
+between 48 and 56. The settings index's one-line rows used the host list's
+two-line height (64dp) and take the floor too. Text Size's verbs are
+**Bigger, Smaller, Normal** (the menu bar's: Bigger Text, Smaller Text,
+Normal Text Size): "Zoom In" under a menu already called Text Size said it
+twice, less plainly. The preset page's "Back to hosts" says Back -- it
+returns to the settings it was opened from.
 
 **And Back returns to the page it came FROM, which was a second fault in
 the same place.** Every sub-page returned to the host list whatever

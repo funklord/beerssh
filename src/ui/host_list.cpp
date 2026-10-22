@@ -13,6 +13,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QToolButton>
+#include <QFontMetrics>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QVBoxLayout>
@@ -274,15 +275,19 @@ void bssh_host_list::reload() {
 	m_open.removeAll(nullptr);
 	m_open_drawn = open_signature();
 	if (!m_open.isEmpty()) {
-		const auto heading = [this](const QString &text) {
-			QListWidgetItem *row = new QListWidgetItem(text, m_list);
-			row->setFlags(Qt::NoItemFlags);
-			QFont bold = row->font();
-			bold.setBold(true);
-			row->setFont(bold);
-			row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
-		};
-		heading(QStringLiteral("Sessions"));
+		/*
+		 * One heading, and a small one (the holder, 2026-10-22): it is a
+		 * label, not a target, so it takes its text's height rather than
+		 * a row's. No "Hosts" heading below it -- the page's own title
+		 * already says Hosts, and a second one was the same word twice.
+		 */
+		QListWidgetItem *heading = new QListWidgetItem(QStringLiteral("Sessions"), m_list);
+		heading->setFlags(Qt::NoItemFlags);
+		QFont small = heading->font();
+		small.setBold(true);
+		small.setPointSizeF(small.pointSizeF() * 0.85);
+		heading->setFont(small);
+		heading->setSizeHint(QSize(0, QFontMetrics(small).height() + 8));
 		const int dot = fontMetrics().height() / 2;
 		for (const QPointer<bssh_session> &session : m_open) {
 			QListWidgetItem *row = new QListWidgetItem(m_list);
@@ -295,7 +300,6 @@ void bssh_host_list::reload() {
 			row->setData(BSSH_SESSION_ROLE, QVariant::fromValue<void *>(session.data()));
 			row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
 		}
-		heading(QStringLiteral("Hosts"));
 	}
 
 	/*
@@ -370,6 +374,15 @@ void bssh_host_list::reload() {
 		item->setFlags(Qt::NoItemFlags);
 		item->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
 	}
+
+	/*
+	 * Nothing drawn as chosen until a finger chooses it. The first row
+	 * came back highlighted after Back -- the list giving its first
+	 * selectable row the focus it got -- which read as "this one is
+	 * selected" about a row nobody had touched (the holder, 2026-10-22).
+	 */
+	m_list->clearSelection();
+	m_list->setCurrentRow(-1);
 }
 
 /*

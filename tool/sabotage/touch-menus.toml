@@ -1,0 +1,10 @@
+# Sabotages for the touch menus' row height (the holder, 2026-10-22: tiny
+# text in a lot of empty space, likely to run off a phone). A row is the
+# 48dp floor in all -- content plus padding -- not 48 plus the padding.
+
+[[sabotage]]
+name = "touch menu rows go back to the floor plus padding"
+file = "src/ui/touch_metrics.cpp"
+find = "\t                            .arg(BSSH_TOUCH_TARGET_DP - 16));"
+replace = "\t                            .arg(BSSH_TOUCH_TARGET_DP));"
+expect = "the_touch_layout_grows_the_rows_and_drops_the_chords"

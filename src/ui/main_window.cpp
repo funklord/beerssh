@@ -1072,7 +1072,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 */
 		QListWidgetItem *presets_row =
 		        new QListWidgetItem(QStringLiteral("Presets"), sections);
-		presets_row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		presets_row->setSizeHint(QSize(0, BSSH_TOUCH_TARGET_DP));
 		section_pages.append(m_preset_editor);
 
 		for (bssh_app_settings_view::section_t which : order) {
@@ -1086,7 +1086,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 			QListWidgetItem *row = new QListWidgetItem(
 			        bssh_app_settings_view::section_name(which), sections);
-			row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+			row->setSizeHint(QSize(0, BSSH_TOUCH_TARGET_DP));
 			section_pages.append(page);
 		}
 
@@ -1094,7 +1094,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 * person looks for under settings. */
 		QListWidgetItem *licences_row =
 		        new QListWidgetItem(QStringLiteral("Licences"), sections);
-		licences_row->setSizeHint(QSize(0, BSSH_TOUCH_ROW_DP));
+		licences_row->setSizeHint(QSize(0, BSSH_TOUCH_TARGET_DP));
 		section_pages.append(licences);
 
 		connect(sections, &QListWidget::itemClicked, this,
@@ -4859,19 +4859,19 @@ void bssh_main_window::build_menu_bar() {
 	 */
 	view->addSeparator();
 
-	QAction *zoom_in = view->addAction(QStringLiteral("Zoom &In"));
+	QAction *zoom_in = view->addAction(QStringLiteral("&Bigger Text"));
 	zoom_in->setObjectName(QStringLiteral("menu_zoom_in"));
 	zoom_in->setShortcut(chord("zoom-in"));
 	connect(zoom_in, &QAction::triggered, this, [this] { zoom_current(1); });
 	m_session_actions.append(zoom_in);
 
-	QAction *zoom_out = view->addAction(QStringLiteral("Zoom &Out"));
+	QAction *zoom_out = view->addAction(QStringLiteral("&Smaller Text"));
 	zoom_out->setObjectName(QStringLiteral("menu_zoom_out"));
 	zoom_out->setShortcut(chord("zoom-out"));
 	connect(zoom_out, &QAction::triggered, this, [this] { zoom_current(-1); });
 	m_session_actions.append(zoom_out);
 
-	QAction *zoom_reset = view->addAction(QStringLiteral("&Reset Zoom"));
+	QAction *zoom_reset = view->addAction(QStringLiteral("&Normal Text Size"));
 	zoom_reset->setObjectName(QStringLiteral("menu_zoom_reset"));
 	zoom_reset->setShortcut(chord("zoom-reset"));
 	connect(zoom_reset, &QAction::triggered, this, [this] { reset_zoom_current(); });
@@ -5135,17 +5135,17 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	QMenu *text_size = menu->addMenu(QStringLiteral("Text &Size"));
 	text_size->setObjectName(QStringLiteral("terminal_text_size"));
 
-	QAction *zoom_in = text_size->addAction(QStringLiteral("Zoom &In"));
+	QAction *zoom_in = text_size->addAction(QStringLiteral("&Bigger"));
 	zoom_in->setObjectName(QStringLiteral("terminal_zoom_in"));
 	zoom_in->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-in"))));
 
-	QAction *zoom_out = text_size->addAction(QStringLiteral("Zoom &Out"));
+	QAction *zoom_out = text_size->addAction(QStringLiteral("&Smaller"));
 	zoom_out->setObjectName(QStringLiteral("terminal_zoom_out"));
 	zoom_out->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-out"))));
 
-	QAction *zoom_reset = text_size->addAction(QStringLiteral("&Reset Zoom"));
+	QAction *zoom_reset = text_size->addAction(QStringLiteral("&Normal"));
 	zoom_reset->setObjectName(QStringLiteral("terminal_zoom_reset"));
 	zoom_reset->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("zoom-reset"))));
@@ -5275,17 +5275,6 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 		connect_now->setObjectName(QStringLiteral("terminal_connect"));
 	}
 
-	/*
-	 * The open sessions and the hosts, one page (sec 8.5): where the
-	 * front door is a host list, which is touch. Before this the only way
-	 * there from a terminal was Back, a key whose meaning a user has to
-	 * guess (the holder, 2026-10-22).
-	 */
-	if (m_host_list) {
-		QAction *sessions = session_menu->addAction(QStringLiteral("&Sessions"));
-		sessions->setObjectName(QStringLiteral("terminal_sessions"));
-	}
-
 	QAction *new_tab = session_menu->addAction(QStringLiteral("New &Tab"));
 	new_tab->setObjectName(QStringLiteral("terminal_new_tab"));
 	new_tab->setShortcut(
@@ -5331,7 +5320,15 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	 * page with Back (sec 8.3); this is what a pointer uses, and it works
 	 * on both.
 	 */
-	QAction *front_door = menu->addAction(QStringLiteral("&Hosts and Settings"));
+	/*
+	 * Named for what that page is on this device. On touch it is the
+	 * host list, which lists the open sessions above the hosts since
+	 * 2026-10-22 -- and this entry is the way there besides Back, so a
+	 * Session > Sessions entry added that day was the same door twice
+	 * and was taken out again (the holder).
+	 */
+	QAction *front_door = menu->addAction(m_host_list ? QStringLiteral("&Sessions and Hosts")
+	                                                  : QStringLiteral("&Hosts and Settings"));
 	front_door->setObjectName(QStringLiteral("terminal_front_door"));
 
 	apply_menu_layout(menu, layout);
@@ -5585,11 +5582,6 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 		return;
 	}
 
-	const QAction *sessions = menu->findChild<QAction *>(QStringLiteral("terminal_sessions"));
-	if (sessions && chosen == sessions) {
-		show_front_door();
-		return;
-	}
 
 	const QAction *new_window =
 	        menu->findChild<QAction *>(QStringLiteral("terminal_new_window"));
