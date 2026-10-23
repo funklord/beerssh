@@ -1,7 +1,9 @@
 #include "term/emulator.h"
 #include "term/colour_scheme.h"
 
+#include <QDataStream>
 #include <QHash>
+#include <QIODevice>
 #include <QTimer>
 
 #include <vterm.h>
@@ -148,6 +150,17 @@ struct bssh_emulator_private {
 	 * back to it as a real CUD once the current write has finished.
 	 */
 	int pending_cursor_advance;
+
+	/*
+	 * The cursor shape and blink the REMOTE asked for, kept so an
+	 * imported terminal can say them again (export_state). Only after
+	 * construction: libvterm reports its defaults once from the initial
+	 * reset, before any view listens, and repeating those would override
+	 * the preset's shape, which stands until the remote asks.
+	 */
+	bool constructed = false;
+	QString cursor_style;
+	int cursor_blink = -1;
 
 	void apply_graphics(const bssh_graphics_result_t &result);
 
@@ -484,10 +497,12 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 			style = QStringLiteral("block");
 			break;
 		}
+		if (self->constructed) self->cursor_style = style;
 		emit self->owner->cursor_shape_changed(style);
 		return 1;
 	}
 	case VTERM_PROP_CURSORBLINK:
+		if (self->constructed) self->cursor_blink = value->boolean ? 1 : 0;
 		emit self->owner->cursor_blink_changed(value->boolean);
 		return 1;
 	case VTERM_PROP_REVERSE:
@@ -1806,6 +1821,7 @@ bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
 	                                     m_private->selection_storage,
 	                                     sizeof(m_private->selection_storage));
 	vterm_output_set_callback(m_private->vt, on_output, m_private);
+	m_private->constructed = true;
 }
 
 bssh_emulator::~bssh_emulator() {
@@ -2789,4 +2805,328 @@ QByteArray bssh_emulator::take_output() {
 	QByteArray out;
 	out.swap(m_private->pending_output);
 	return out;
+}
+
+/* ---- moving a terminal to another process (sec 8.4) --------------------- */
+
+namespace {
+
+const char BSSH_EMULATOR_STATE_MAGIC[] = "bssh-emulator-state";
+const quint32 BSSH_EMULATOR_STATE_FORMAT = 1;
+
+void write_colour(QDataStream &out, const bssh_color_t &colour) {
+	out << quint8(colour.kind) << colour.index << quint32(colour.rgb);
+}
+
+void read_colour(QDataStream &in, bssh_color_t &colour) {
+	quint8 kind = 0;
+	quint32 rgb = 0;
+	in >> kind >> colour.index >> rgb;
+	if (kind > bssh_color_t::RGB) in.setStatus(QDataStream::ReadCorruptData);
+	colour.kind = bssh_color_t::kind_t(kind);
+	colour.rgb = rgb;
+}
+
+void write_cell(QDataStream &out, const bssh_cell_t &cell) {
+	out << quint32(cell.ch);
+	write_colour(out, cell.fg);
+	write_colour(out, cell.bg);
+	out << cell.attrs << cell.width << cell.link;
+}
+
+void read_cell(QDataStream &in, bssh_cell_t &cell) {
+	quint32 ch = 0;
+	in >> ch;
+	cell.ch = char32_t(ch);
+	read_colour(in, cell.fg);
+	read_colour(in, cell.bg);
+	in >> cell.attrs >> cell.width >> cell.link;
+}
+
+/* A line of cells, length first. Bounded on the way in: a count is read
+ * from the stream, and a damaged one must not become an allocation. */
+void write_line(QDataStream &out, const QList<bssh_cell_t> &line) {
+	out << qint32(line.size());
+	for (const bssh_cell_t &cell : line) write_cell(out, cell);
+}
+
+void read_line(QDataStream &in, QList<bssh_cell_t> &line) {
+	qint32 count = 0;
+	in >> count;
+	if (count < 0 || count > 100000) {
+		in.setStatus(QDataStream::ReadCorruptData);
+		return;
+	}
+	line.resize(count);
+	for (bssh_cell_t &cell : line) read_cell(in, cell);
+}
+
+/*
+ * A picture exactly as held: its format, size and pixels. QDataStream's
+ * own QImage operator writes a PNG, which reads back in another format
+ * (RGB888 came back RGB32), and the image store counts its budget by
+ * the bytes a picture takes -- so the receiver would account the same
+ * pictures differently.
+ */
+void write_image(QDataStream &out, const QImage &image) {
+	out << qint32(image.format()) << qint32(image.width()) << qint32(image.height())
+	    << image.colorTable() << qint32(image.bytesPerLine())
+	    << QByteArray::fromRawData(reinterpret_cast<const char *>(image.constBits()),
+	                               int(image.sizeInBytes()));
+}
+
+void read_image(QDataStream &in, QImage &image) {
+	qint32 format = 0, width = 0, height = 0, stride = 0;
+	QList<QRgb> colours;
+	QByteArray bits;
+	in >> format >> width >> height >> colours >> stride >> bits;
+	if (in.status() != QDataStream::Ok || width < 0 || height < 0 ||
+	    format <= QImage::Format_Invalid || format >= QImage::NImageFormats) {
+		in.setStatus(QDataStream::ReadCorruptData);
+		return;
+	}
+	if (width == 0 || height == 0) {
+		image = QImage();
+		return;
+	}
+	QImage made(width, height, QImage::Format(format));
+	if (made.isNull() || stride < made.bytesPerLine() ||
+	    qint64(bits.size()) < qint64(stride) * height) {
+		in.setStatus(QDataStream::ReadCorruptData);
+		return;
+	}
+	for (int row = 0; row < height; ++row)
+		memcpy(made.scanLine(row), bits.constData() + qint64(row) * stride, size_t(made.bytesPerLine()));
+	made.setColorTable(colours);
+	image = made;
+}
+
+}  // namespace
+
+QByteArray bssh_emulator::export_state() {
+	bssh_emulator_private *p = m_private;
+
+	/* The mirror brought up to date first, so the cells written below are
+	 * the ones libvterm's screen holds. */
+	vterm_screen_flush_damage(p->vts);
+
+	const size_t vterm_size = vterm_export_state(p->vt, nullptr, 0);
+	QByteArray vterm(int(vterm_size), Qt::Uninitialized);
+	vterm_export_state(p->vt, vterm.data(), vterm_size);
+
+	QByteArray state;
+	QDataStream out(&state, QIODevice::WriteOnly);
+	out.setVersion(QDataStream::Qt_6_0);
+	out << QByteArray(BSSH_EMULATOR_STATE_MAGIC) << BSSH_EMULATOR_STATE_FORMAT;
+	out << qint32(p->screen.cols()) << qint32(p->screen.rows()) << vterm;
+
+	/* The cells as shown, which carry the hyperlinks libvterm knows
+	 * nothing of. */
+	for (int row = 0; row < p->screen.rows(); ++row) {
+		for (int col = 0; col < p->screen.cols(); ++col) write_cell(out, p->screen.cell(row, col));
+	}
+	out << qint32(p->screen.cursor_row()) << qint32(p->screen.cursor_col())
+	    << p->screen.cursor_visible();
+
+	out << qint64(p->scrollback.base()) << qint32(p->scrollback.count());
+	for (int i = 0; i < p->scrollback.count(); ++i) {
+		write_line(out, p->scrollback.line(i));
+		out << p->scrollback.is_continuation(i);
+	}
+
+	out << p->pending_output << p->pending_input << p->title;
+	out << p->kitty_stacks[0] << p->kitty_stacks[1];
+	out << qint32(p->modify_other_keys) << p->mouse_reporting << qint32(p->mouse_mode)
+	    << p->alt_screen << p->sync_output;
+	out << p->graphics.data << p->graphics.controls << p->graphics.abandoned;
+	out << p->apc_buffer << p->osc_buffer << p->apc_oversized << p->osc_oversized
+	    << p->dcs_oversized << p->selection_buffer << p->selection_oversized << p->dcs_buffer;
+
+	out << p->links << p->link_bytes << qint32(p->pending_links.size());
+	for (const bssh_emulator_private::link_range_t &range : p->pending_links)
+		out << qint32(range.row) << qint32(range.from) << qint32(range.to) << range.id;
+	out << p->next_link_id << p->open_link_id << qint32(p->link_start_row)
+	    << qint32(p->link_start_col);
+
+	out << quint32(p->foreground_rgb) << quint32(p->background_rgb);
+	for (QRgb colour : p->ansi) out << quint32(colour);
+	out << qint32(p->pending_cursor_advance) << p->cursor_style << qint32(p->cursor_blink);
+
+	/* The pictures, decoded: a spilled one is read back here, since its
+	 * sealed file and key belong to this process. */
+	const QList<bssh_image_placement_t> &placements = p->images.placements();
+	out << qint32(placements.size());
+	for (const bssh_image_placement_t &placement : placements) {
+		out << qint32(placement.id) << qint32(placement.row) << qint32(placement.col)
+		    << qint32(placement.cols) << qint32(placement.rows) << qint32(placement.z);
+		write_image(out, p->images.image_now(placement));
+	}
+	return state;
+}
+
+bool bssh_emulator::import_state(const QByteArray &state) {
+	bssh_emulator_private *p = m_private;
+	QDataStream in(state);
+	in.setVersion(QDataStream::Qt_6_0);
+
+	QByteArray magic, vterm;
+	quint32 format = 0;
+	qint32 cols = 0, rows = 0;
+	in >> magic >> format >> cols >> rows >> vterm;
+	if (in.status() != QDataStream::Ok || magic != BSSH_EMULATOR_STATE_MAGIC ||
+	    format != BSSH_EMULATOR_STATE_FORMAT || cols != p->screen.cols() ||
+	    rows != p->screen.rows())
+		return false;
+
+	/* Everything is read into locals and checked before anything here
+	 * changes, so a refusal leaves this terminal as it was. */
+	bssh_screen mirror(cols, rows);
+	for (int row = 0; row < rows; ++row) {
+		for (int col = 0; col < cols; ++col) {
+			bssh_cell_t cell;
+			read_cell(in, cell);
+			mirror.set_cell(row, col, cell);
+		}
+	}
+	qint32 cursor_row = 0, cursor_col = 0;
+	bool cursor_visible = true;
+	in >> cursor_row >> cursor_col >> cursor_visible;
+	mirror.set_cursor(cursor_row, cursor_col);
+	mirror.set_cursor_visible(cursor_visible);
+
+	qint64 base = 0;
+	qint32 history = 0;
+	in >> base >> history;
+	if (history < 0 || history > 10000000) return false;
+	QList<QList<bssh_cell_t> > lines;
+	QList<bool> continuations;
+	for (int i = 0; i < history && in.status() == QDataStream::Ok; ++i) {
+		QList<bssh_cell_t> line;
+		bool continuation = false;
+		read_line(in, line);
+		in >> continuation;
+		lines.append(line);
+		continuations.append(continuation);
+	}
+
+	QByteArray pending_output, pending_input, graphics_data;
+	QByteArray apc_buffer, osc_buffer, selection_buffer, dcs_buffer;
+	QString title, cursor_style;
+	QList<int> kitty_stacks[2];
+	qint32 modify_other_keys = 0, mouse_mode = 0, cursor_blink = -1, cursor_advance = 0;
+	bool mouse_reporting = false, alt_screen = false, sync_output = false;
+	bool graphics_abandoned = false, apc_oversized = false, osc_oversized = false;
+	bool dcs_oversized = false, selection_oversized = false;
+	QMap<QString, QString> graphics_controls;
+	in >> pending_output >> pending_input >> title >> kitty_stacks[0] >> kitty_stacks[1];
+	in >> modify_other_keys >> mouse_reporting >> mouse_mode >> alt_screen >> sync_output;
+	in >> graphics_data >> graphics_controls >> graphics_abandoned;
+	in >> apc_buffer >> osc_buffer >> apc_oversized >> osc_oversized >> dcs_oversized
+	   >> selection_buffer >> selection_oversized >> dcs_buffer;
+	/* A keyboard stack is never empty: kitty_flags() reads its last. */
+	if (kitty_stacks[0].isEmpty() || kitty_stacks[1].isEmpty()) return false;
+
+	QHash<quint16, QString> links;
+	qint64 link_bytes = 0;
+	qint32 pending_count = 0;
+	in >> links >> link_bytes >> pending_count;
+	if (pending_count < 0 || pending_count > 1000000) return false;
+	QList<bssh_emulator_private::link_range_t> pending_links;
+	for (int i = 0; i < pending_count && in.status() == QDataStream::Ok; ++i) {
+		qint32 row = 0, from = 0, to = 0;
+		quint16 id = 0;
+		in >> row >> from >> to >> id;
+		pending_links.append({ row, from, to, id });
+	}
+	quint16 next_link_id = 0, open_link_id = 0;
+	qint32 link_start_row = 0, link_start_col = 0;
+	in >> next_link_id >> open_link_id >> link_start_row >> link_start_col;
+
+	quint32 foreground = 0, background = 0;
+	QRgb ansi[16];
+	in >> foreground >> background;
+	for (QRgb &colour : ansi) {
+		quint32 value = 0;
+		in >> value;
+		colour = value;
+	}
+	in >> cursor_advance >> cursor_style >> cursor_blink;
+
+	qint32 picture_count = 0;
+	in >> picture_count;
+	if (picture_count < 0 || picture_count > 100000) return false;
+	QList<bssh_image_placement_t> pictures;
+	for (int i = 0; i < picture_count && in.status() == QDataStream::Ok; ++i) {
+		bssh_image_placement_t placement;
+		qint32 id = 0, row = 0, col = 0, width = 0, height = 0, z = 0;
+		in >> id >> row >> col >> width >> height >> z;
+		read_image(in, placement.image);
+		placement.id = id;
+		placement.row = row;
+		placement.col = col;
+		placement.cols = width;
+		placement.rows = height;
+		placement.z = z;
+		pictures.append(placement);
+	}
+	if (in.status() != QDataStream::Ok || !in.atEnd()) return false;
+
+	/* libvterm last of the checks: it commits when it accepts. */
+	if (!vterm_import_state(p->vt, vterm.constData(), size_t(vterm.size()))) return false;
+
+	p->screen = mirror;
+	p->scrollback.clear();
+	for (int i = 0; i < lines.size(); ++i) p->scrollback.push(lines.at(i), continuations.at(i));
+	p->scrollback.set_base(base);
+
+	p->pending_output = pending_output;
+	p->pending_input = pending_input;
+	p->title = title;
+	p->kitty_stacks[0] = kitty_stacks[0];
+	p->kitty_stacks[1] = kitty_stacks[1];
+	p->modify_other_keys = modify_other_keys;
+	p->mouse_reporting = mouse_reporting;
+	p->mouse_mode = mouse_mode;
+	p->alt_screen = alt_screen;
+	p->graphics.data = graphics_data;
+	p->graphics.controls = graphics_controls;
+	p->graphics.abandoned = graphics_abandoned;
+	p->apc_buffer = apc_buffer;
+	p->osc_buffer = osc_buffer;
+	p->apc_oversized = apc_oversized;
+	p->osc_oversized = osc_oversized;
+	p->dcs_oversized = dcs_oversized;
+	p->selection_buffer = selection_buffer;
+	p->selection_oversized = selection_oversized;
+	p->dcs_buffer = dcs_buffer;
+	p->links = links;
+	p->link_bytes = link_bytes;
+	p->pending_links = pending_links;
+	p->next_link_id = next_link_id;
+	p->open_link_id = open_link_id;
+	p->link_start_row = link_start_row;
+	p->link_start_col = link_start_col;
+	p->foreground_rgb = foreground;
+	p->background_rgb = background;
+	for (int i = 0; i < 16; ++i) p->ansi[i] = ansi[i];
+	p->pending_cursor_advance = cursor_advance;
+	p->cursor_style = cursor_style;
+	p->cursor_blink = cursor_blink;
+
+	p->images.clear();
+	for (const bssh_image_placement_t &placement : pictures) p->images.place(placement);
+
+	/* A synchronised frame in progress keeps its hold, and its timeout. */
+	if (sync_output) p->begin_sync();
+	else p->sync_output = false;
+
+	/* And say it all again to whoever is watching. */
+	if (!title.isEmpty()) emit title_changed(title);
+	emit alternate_screen_changed(alt_screen);
+	if (!cursor_style.isEmpty()) emit cursor_shape_changed(cursor_style);
+	if (cursor_blink >= 0) emit cursor_blink_changed(cursor_blink != 0);
+	emit scrollback_changed();
+	emit images_changed();
+	emit damaged();
+	return true;
 }

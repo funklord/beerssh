@@ -6999,9 +6999,34 @@ window with no name is a blank row in the task switcher.
      refused as a patch that no longer applies. Specs for
      `tool/sabotage.py` arrive with step 4's QtTest, which the harness
      can name.
-  3. The libvterm patch, tested by a round trip: export, import into a
-     fresh emulator, compare the screens, then feed both the same bytes,
-     including a sequence split across the move.
+  3. **[DONE 2026-10-23]** `vterm-patch/0008-export-and-import-the-whole-terminal.patch`:
+     `vterm_export_state`/`vterm_import_state`, the parser, the state
+     and both screens as raw copies of their plain-data structures, with
+     the structures' sizes in a header so another build is refused; a
+     refused import changes nothing. Encodings travel by their place in
+     libvterm's table. The code sits in `vterm.c` and `screen.c` rather
+     than a new file, because the Makefile lists libvterm's sources by
+     wildcard before patching. Above it, `bssh_emulator::export_state`/
+     `import_state` carry what is this tree's own: the cells as shown
+     (hyperlink ids exist only there), the history and its numbering,
+     the pictures as raw pixels (QDataStream's PNG came back in another
+     format and the image budget would have counted it differently), the
+     held-back UTF-8 tail, the partial OSC/APC/DCS and kitty
+     transmissions, the modes, the colours the remote set, and the
+     cursor shape the remote asked for, repeated after the import.
+     `a_terminal_moves_whole_into_another_emulator` compares every
+     observable after the move, after the same input into both, and
+     after leaving the alternate screen, over two moves: one stopped
+     inside a CSI, one inside a UTF-8 character.
+     `tool/sabotage/terminal-move.toml` holds eight specs, all caught,
+     but only on the test's third version. The first left a CSI and a
+     UTF-8 tail at once, which garbled the continuation identically on
+     both sides, so dropping the parser's place passed. The second kept
+     the default 5000-line history, so the base never moved, and its only
+     link was on the screen hidden behind the alternate one. The partial
+     restore of one file of a multi-file patch is detected but cannot
+     re-apply; the loop now says so and names `git checkout` as the fix,
+     rather than blaming upstream.
   4. The handoff in the app: the socket, the commit, and the abandon paths
      in the session and the pty.
   5. The UI: a drop on another BeerSSH process moves the session, which

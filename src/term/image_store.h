@@ -164,6 +164,13 @@ public:
 	bool is_spilled(const bssh_image_placement_t &placement) const;
 
 	/*
+	 * The picture NOW, read back from its spill on this thread if it must
+	 * be -- for exporting a terminal (bssh_emulator::export_state), which
+	 * cannot wait for image()'s worker. Not for drawing: it blocks.
+	 */
+	QImage image_now(const bssh_image_placement_t &placement) const;
+
+	/*
 	 * Whether a spill is still being sealed on the worker. The picture
 	 * stays in memory, and drawable, until it lands; a test waits on this
 	 * rather than on time.

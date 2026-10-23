@@ -1,0 +1,77 @@
+# Sabotages for moving a terminal to another process (project.md sec 8.4,
+# step 3): vterm-patch/0008's export and import of libvterm, and
+# bssh_emulator::export_state/import_state above it. Every edit leaves
+# the move "working" -- import_state still answers true -- and loses one
+# thing the receiving terminal needed, which only a comparison of the two
+# terminals, before and after the same input, can see.
+
+# libvterm keeps its own parser: a CSI the stream stopped in the middle
+# of is finished by the next read as if it had never started.
+[[sabotage]]
+name = "the parser's place is not imported"
+file = "vterm/src/vterm.c"
+find = "  vt->parser.state = copy.parser.state;\n"
+replace = ""
+expect = "a_terminal_moves_whole_into_another_emulator"
+
+# The alternate screen shown, but libvterm writing into the primary one:
+# right until the program draws again.
+[[sabotage]]
+name = "the screen in use is not imported"
+file = "vterm/src/screen.c"
+find = "  screen->buffer = on_alt ? alt : primary;\n"
+replace = "  screen->buffer = primary;\n"
+expect = "a_terminal_moves_whole_into_another_emulator"
+
+# The cells as shown are this layer's, with the hyperlink ids libvterm
+# never sees: without them the moved terminal is blank until redrawn.
+[[sabotage]]
+name = "the cells as shown are not imported"
+file = "src/term/emulator_vterm.cpp"
+find = "\tp->screen = mirror;\n"
+replace = ""
+expect = "a_terminal_moves_whole_into_another_emulator"
+
+# History renumbered from zero: a selection or search anchored by line
+# number lands on another line.
+[[sabotage]]
+name = "the history keeps its lines but not their numbering"
+file = "src/term/emulator_vterm.cpp"
+find = "\tp->scrollback.set_base(base);\n"
+replace = ""
+expect = "a_terminal_moves_whole_into_another_emulator"
+
+# The first bytes of a UTF-8 character held back between reads, lost: the
+# character the stream stopped in the middle of never appears.
+[[sabotage]]
+name = "a character split across the move is dropped"
+file = "src/term/emulator_vterm.cpp"
+find = "\tp->pending_input = pending_input;\n"
+replace = ""
+expect = "a_terminal_moves_whole_into_another_emulator"
+
+# The cells keep their link ids and the ids name nothing.
+[[sabotage]]
+name = "the hyperlinks are not imported"
+file = "src/term/emulator_vterm.cpp"
+find = "\tp->links = links;\n"
+replace = ""
+expect = "a_terminal_moves_whole_into_another_emulator"
+
+# The cursor the program asked for, not said again: the view keeps the
+# preset's shape over a moved vim.
+[[sabotage]]
+name = "the remote's cursor shape is not repeated"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (!cursor_style.isEmpty()) emit cursor_shape_changed(cursor_style);\n"
+replace = ""
+expect = "a_terminal_moves_whole_into_another_emulator"
+
+# A picture rebuilt in another format: drawn the same, counted against the
+# budget differently -- which is why pictures are not carried as PNG.
+[[sabotage]]
+name = "a picture comes back in another format"
+file = "src/term/emulator_vterm.cpp"
+find = "\tQImage made(width, height, QImage::Format(format));\n"
+replace = "\tQImage made(width, height, QImage::Format_ARGB32);\n"
+expect = "a_terminal_moves_whole_into_another_emulator"

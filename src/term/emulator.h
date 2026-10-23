@@ -460,6 +460,24 @@ public:
 	 */
 	QByteArray take_output();
 
+	/*
+	 * The whole terminal as bytes, for moving a session to another
+	 * process (project.md sec 8.4): libvterm's parser, state and both
+	 * screens (vterm-patch/0008), and this layer's own -- the cells as
+	 * shown with their hyperlinks, the scrollback, the pictures (decoded,
+	 * spilled ones read back), the modes it tracks, the colours the remote
+	 * set, and any sequence split across reads.
+	 *
+	 * The receiving emulator must be the same size and the same build:
+	 * import_state() refuses anything else and changes nothing when it
+	 * does. Settings the receiver applies itself -- the terminal name,
+	 * the features, the cell size, the scrollback length -- are not
+	 * carried. On success it repaints and repeats the title, the screen
+	 * in use and the cursor the remote asked for.
+	 */
+	QByteArray export_state();
+	bool import_state(const QByteArray &state);
+
 signals:
 	/* The screen changed; repaint. Coalesced by the view, not here. */
 	void damaged();

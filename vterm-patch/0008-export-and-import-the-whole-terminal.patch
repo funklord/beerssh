@@ -1,0 +1,475 @@
+Export and import the whole terminal
+
+A live session moving to another process (BeerSSH's project.md
+sec 8.4) has to take its terminal with it: what is on both screens,
+and where the parser is -- part-way through an escape sequence or a
+UTF-8 character if the stream stopped in one. libvterm keeps all of
+it in plain-data structures that no API exposes.
+
+vterm_export_state() writes the parser, the state (cursor, scroll
+regions, tab stops, line info, modes, charsets, pen, palette, saved
+cursor, mouse and DECRQSS state) and the screen's two buffers into a
+caller's buffer, sizing it on a first call with no buffer.
+vterm_import_state() takes it into a terminal of the same size. The
+format is this build's own -- raw copies, with the sizes of the
+structures in a header -- so an import from another build or another
+size is refused, and a refused import changes nothing: everything is
+read into new allocations first and committed only when whole.
+Encodings travel as their index in encoding.c's table, never as
+pointers. Callbacks are not carried; the target keeps its own.
+
+The code lives in vterm.c and screen.c, whose ScreenCell and
+VTermScreen are private to it, rather than in a file of its own:
+BeerSSH's Makefile lists libvterm's sources by wildcard before it
+applies the patches, so a file a patch adds would be missing from a
+fresh tree's first build.
+
+---
+diff --git a/include/vterm.h b/include/vterm.h
+index 378441e..47cffa9 100644
+--- a/include/vterm.h
++++ b/include/vterm.h
+@@ -581,6 +581,16 @@ typedef enum {
+ } VTermDamageSize;
+ 
+ void vterm_screen_flush_damage(VTermScreen *screen);
++
++/* Moving a whole terminal -- parser, state and both screens -- into another
++ * VTerm of the same size, for instance in another process. Writes at most
++ * cap bytes to out and returns the size needed, so a first call with
++ * cap 0 sizes the buffer. The import refuses (returns 0) state from a
++ * terminal of another size or another build of this library, and leaves
++ * the target untouched when it does. Callbacks are not carried: the
++ * target keeps its own. Pending damage is flushed before exporting. */
++size_t vterm_export_state(VTerm *vt, void *out, size_t cap);
++int    vterm_import_state(VTerm *vt, const void *in, size_t len);
+ void vterm_screen_set_damage_merge(VTermScreen *screen, VTermDamageSize size);
+ 
+ void   vterm_screen_reset(VTermScreen *screen, int hard);
+diff --git a/src/vterm_internal.h b/src/vterm_internal.h
+index 4761063..4732e69 100644
+--- a/src/vterm_internal.h
++++ b/src/vterm_internal.h
+@@ -292,6 +292,30 @@ void vterm_screen_free(VTermScreen *screen);
+ 
+ VTermEncoding *vterm_lookup_encoding(VTermEncodingType type, char designation);
+ 
++/* Moving a terminal's state to another VTerm (vterm_export_state). An
++ * encoding travels as its place in encoding.c's table, -1 for none. */
++int vterm_encoding_index(const VTermEncoding *enc);
++VTermEncoding *vterm_encoding_at(int index);
++
++typedef struct {
++  char  *buf;
++  size_t len;
++  size_t cap;
++} VTermWriter;
++
++typedef struct {
++  const char *buf;
++  size_t len;
++  size_t at;
++  int ok;
++} VTermReader;
++
++void vterm_writer_put(VTermWriter *w, const void *data, size_t n);
++int  vterm_reader_get(VTermReader *r, void *data, size_t n);
++
++void vterm_screen_export_internal(const VTermScreen *screen, VTermWriter *w);
++int  vterm_screen_import_internal(VTermScreen *screen, VTermReader *r);
++
+ int vterm_unicode_width(uint32_t codepoint);
+ int vterm_unicode_is_combining(uint32_t codepoint);
+ 
+diff --git a/src/encoding.c b/src/encoding.c
+index 434ac3f..4cb9c02 100644
+--- a/src/encoding.c
++++ b/src/encoding.c
+@@ -228,3 +228,21 @@ VTermEncoding *vterm_lookup_encoding(VTermEncodingType type, char designation)
+       return encodings[i].enc;
+   return NULL;
+ }
++
++int vterm_encoding_index(const VTermEncoding *enc)
++{
++  if(!enc)
++    return -1;
++  for(int i = 0; encodings[i].designation; i++)
++    if(encodings[i].enc == enc)
++      return i;
++  return -1;
++}
++
++VTermEncoding *vterm_encoding_at(int index)
++{
++  for(int i = 0; encodings[i].designation; i++)
++    if(i == index)
++      return encodings[i].enc;
++  return NULL;
++}
+diff --git a/src/vterm.c b/src/vterm.c
+index e1f676f..811a09c 100644
+--- a/src/vterm.c
++++ b/src/vterm.c
+@@ -428,3 +428,286 @@ void vterm_check_version(int major, int minor)
+ 
+   // Happy
+ }
++
++/*
++ * Moving a whole terminal into another VTerm (vterm_export_state). Raw
++ * copies of the plain-data structures, so the format is this build's:
++ * the header carries their sizes, and an import from a build where any
++ * differs refuses rather than misreading. Pointers never travel -- the
++ * encodings go by their table index, the arrays by their contents.
++ */
++
++void vterm_writer_put(VTermWriter *w, const void *data, size_t n)
++{
++  if(w->buf && w->len + n <= w->cap)
++    memcpy(w->buf + w->len, data, n);
++  w->len += n;
++}
++
++int vterm_reader_get(VTermReader *r, void *data, size_t n)
++{
++  if(!r->ok || n > r->len - r->at) {
++    r->ok = 0;
++    return 0;
++  }
++  memcpy(data, r->buf + r->at, n);
++  r->at += n;
++  return 1;
++}
++
++#define PUT(w, v)  vterm_writer_put((w), &(v), sizeof(v))
++#define GET(r, v)  vterm_reader_get((r), &(v), sizeof(v))
++
++static const char export_magic[4] = { 'V', 'T', 'X', '1' };
++
++static void export_encoding(VTermWriter *w, const VTermEncodingInstance *e)
++{
++  int index = vterm_encoding_index(e->enc);
++  PUT(w, index);
++  vterm_writer_put(w, e->data, sizeof(e->data));
++}
++
++static int import_encoding(VTermReader *r, VTermEncodingInstance *e)
++{
++  int index;
++  if(!GET(r, index) || !vterm_reader_get(r, e->data, sizeof(e->data)))
++    return 0;
++  e->enc = vterm_encoding_at(index);
++  return index < 0 || e->enc != NULL;
++}
++
++size_t vterm_export_state(VTerm *vt, void *out, size_t cap)
++{
++  VTermWriter w = { .buf = out, .len = 0, .cap = cap };
++  VTermState *state = vt->state;
++  uint32_t sizes[4] = {
++    sizeof(*vt), sizeof(*state), sizeof(struct VTermPen), sizeof(VTermLineInfo),
++  };
++  int has_state = state != NULL;
++  int has_screen = vt->screen != NULL;
++
++  if(vt->screen)
++    vterm_screen_flush_damage(vt->screen);
++
++  vterm_writer_put(&w, export_magic, sizeof(export_magic));
++  vterm_writer_put(&w, sizes, sizeof(sizes));
++  PUT(&w, vt->rows);
++  PUT(&w, vt->cols);
++
++  /* The terminal: its modes and the parser, part-way through a sequence
++   * if the stream stopped in one. */
++  PUT(&w, vt->mode);
++  PUT(&w, vt->parser.state);
++  int in_esc = vt->parser.in_esc;
++  PUT(&w, in_esc);
++  PUT(&w, vt->parser.intermedlen);
++  PUT(&w, vt->parser.intermed);
++  PUT(&w, vt->parser.v);
++  int string_initial = vt->parser.string_initial;
++  int emit_nul = vt->parser.emit_nul;
++  PUT(&w, string_initial);
++  PUT(&w, emit_nul);
++  PUT(&w, vt->outbuffer_cur);
++  vterm_writer_put(&w, vt->outbuffer, vt->outbuffer_cur);
++
++  PUT(&w, has_state);
++  if(has_state) {
++    PUT(&w, state->pos);
++    PUT(&w, state->at_phantom);
++    PUT(&w, state->scrollregion_top);
++    PUT(&w, state->scrollregion_bottom);
++    PUT(&w, state->scrollregion_left);
++    PUT(&w, state->scrollregion_right);
++    vterm_writer_put(&w, state->tabstops, (state->cols + 7) / 8);
++    vterm_writer_put(&w, state->lineinfos[0], state->rows * sizeof(VTermLineInfo));
++    int has_alt = state->lineinfos[1] != NULL;
++    PUT(&w, has_alt);
++    if(has_alt)
++      vterm_writer_put(&w, state->lineinfos[1], state->rows * sizeof(VTermLineInfo));
++    int on_alt = state->lineinfo == state->lineinfos[1] && has_alt;
++    PUT(&w, on_alt);
++    PUT(&w, state->mouse_col);
++    PUT(&w, state->mouse_row);
++    PUT(&w, state->mouse_buttons);
++    PUT(&w, state->mouse_flags);
++    int protocol = state->mouse_protocol;
++    PUT(&w, protocol);
++    PUT(&w, state->combine_chars_size);
++    vterm_writer_put(&w, state->combine_chars,
++                     state->combine_chars_size * sizeof(state->combine_chars[0]));
++    PUT(&w, state->combine_width);
++    PUT(&w, state->combine_pos);
++    PUT(&w, state->mode);
++    for(int i = 0; i < 4; i++)
++      export_encoding(&w, &state->encoding[i]);
++    export_encoding(&w, &state->encoding_utf8);
++    PUT(&w, state->gl_set);
++    PUT(&w, state->gr_set);
++    PUT(&w, state->gsingle_set);
++    PUT(&w, state->pen);
++    PUT(&w, state->default_fg);
++    PUT(&w, state->default_bg);
++    PUT(&w, state->colors);
++    PUT(&w, state->bold_is_highbright);
++    int protected_cell = state->protected_cell;
++    PUT(&w, protected_cell);
++    PUT(&w, state->saved);
++    PUT(&w, state->tmp);
++  }
++
++  PUT(&w, has_screen);
++  if(has_screen)
++    vterm_screen_export_internal(vt->screen, &w);
++
++  return w.len;
++}
++
++int vterm_import_state(VTerm *vt, const void *in, size_t len)
++{
++  VTermReader r = { .buf = in, .len = len, .at = 0, .ok = 1 };
++  VTermState *state = vt->state;
++  char magic[4];
++  uint32_t sizes[4];
++  uint32_t want[4] = {
++    sizeof(*vt), sizeof(*state), sizeof(struct VTermPen), sizeof(VTermLineInfo),
++  };
++  int rows, cols;
++
++  /* Everything is read and checked against copies before anything is
++   * written, so a refused import leaves the terminal as it was. */
++  if(!vterm_reader_get(&r, magic, sizeof(magic)) ||
++     memcmp(magic, export_magic, sizeof(magic)) != 0 ||
++     !vterm_reader_get(&r, sizes, sizeof(sizes)) ||
++     memcmp(sizes, want, sizeof(sizes)) != 0 ||
++     !GET(&r, rows) || !GET(&r, cols) ||
++     rows != vt->rows || cols != vt->cols)
++    return 0;
++
++  VTerm copy = *vt;
++  int in_esc, string_initial, emit_nul;
++  size_t outlen;
++  GET(&r, copy.mode);
++  GET(&r, copy.parser.state);
++  GET(&r, in_esc);
++  GET(&r, copy.parser.intermedlen);
++  GET(&r, copy.parser.intermed);
++  GET(&r, copy.parser.v);
++  GET(&r, string_initial);
++  GET(&r, emit_nul);
++  GET(&r, outlen);
++  if(!r.ok || outlen > vt->outbuffer_len || outlen > r.len - r.at)
++    return 0;
++  const char *outbytes = r.buf + r.at;
++  r.at += outlen;
++
++  int has_state;
++  if(!GET(&r, has_state) || has_state != (state != NULL))
++    return 0;
++
++  VTermState st;
++  unsigned char *tabstops = NULL;
++  VTermLineInfo *lineinfo0 = NULL, *lineinfo1 = NULL;
++  uint32_t *combine = NULL;
++  int has_alt = 0, on_alt = 0, protocol = 0, protected_cell = 0;
++  if(state) {
++    size_t tablen = (state->cols + 7) / 8;
++    size_t linelen = state->rows * sizeof(VTermLineInfo);
++
++    st = *state;
++    tabstops = vterm_allocator_malloc(vt, tablen);
++    lineinfo0 = vterm_allocator_malloc(vt, linelen);
++    lineinfo1 = vterm_allocator_malloc(vt, linelen);
++    if(!tabstops || !lineinfo0 || !lineinfo1)
++      goto refuse;
++
++    GET(&r, st.pos);
++    GET(&r, st.at_phantom);
++    GET(&r, st.scrollregion_top);
++    GET(&r, st.scrollregion_bottom);
++    GET(&r, st.scrollregion_left);
++    GET(&r, st.scrollregion_right);
++    vterm_reader_get(&r, tabstops, tablen);
++    vterm_reader_get(&r, lineinfo0, linelen);
++    GET(&r, has_alt);
++    if(has_alt)
++      vterm_reader_get(&r, lineinfo1, linelen);
++    GET(&r, on_alt);
++    GET(&r, st.mouse_col);
++    GET(&r, st.mouse_row);
++    GET(&r, st.mouse_buttons);
++    GET(&r, st.mouse_flags);
++    GET(&r, protocol);
++    GET(&r, st.combine_chars_size);
++    if(!r.ok || st.combine_chars_size == 0 || st.combine_chars_size > 1024)
++      goto refuse;
++    combine = vterm_allocator_malloc(vt, st.combine_chars_size * sizeof(uint32_t));
++    if(!combine)
++      goto refuse;
++    vterm_reader_get(&r, combine, st.combine_chars_size * sizeof(uint32_t));
++    GET(&r, st.combine_width);
++    GET(&r, st.combine_pos);
++    GET(&r, st.mode);
++    for(int i = 0; i < 4; i++)
++      if(!import_encoding(&r, &st.encoding[i]))
++        r.ok = 0;
++    if(!import_encoding(&r, &st.encoding_utf8))
++      r.ok = 0;
++    GET(&r, st.gl_set);
++    GET(&r, st.gr_set);
++    GET(&r, st.gsingle_set);
++    GET(&r, st.pen);
++    GET(&r, st.default_fg);
++    GET(&r, st.default_bg);
++    GET(&r, st.colors);
++    GET(&r, st.bold_is_highbright);
++    GET(&r, protected_cell);
++    GET(&r, st.saved);
++    GET(&r, st.tmp);
++    if(!r.ok)
++      goto refuse;
++  }
++
++  int has_screen;
++  if(!GET(&r, has_screen) || has_screen != (vt->screen != NULL))
++    goto refuse;
++  /* The screen reads into its own copies and commits only when whole. */
++  if(has_screen && !vterm_screen_import_internal(vt->screen, &r))
++    goto refuse;
++  if(!r.ok || r.at != r.len)
++    goto refuse;
++
++  /* Commit. */
++  vt->mode = copy.mode;
++  vt->parser.state = copy.parser.state;
++  vt->parser.in_esc = in_esc;
++  vt->parser.intermedlen = copy.parser.intermedlen;
++  memcpy(vt->parser.intermed, copy.parser.intermed, sizeof(vt->parser.intermed));
++  vt->parser.v = copy.parser.v;
++  vt->parser.string_initial = string_initial;
++  vt->parser.emit_nul = emit_nul;
++  memcpy(vt->outbuffer, outbytes, outlen);
++  vt->outbuffer_cur = outlen;
++
++  if(state) {
++    vterm_allocator_free(vt, state->tabstops);
++    vterm_allocator_free(vt, state->lineinfos[0]);
++    vterm_allocator_free(vt, state->lineinfos[1]);
++    vterm_allocator_free(vt, state->combine_chars);
++    st.tabstops = tabstops;
++    st.lineinfos[0] = lineinfo0;
++    st.lineinfos[1] = lineinfo1;
++    st.lineinfo = on_alt ? lineinfo1 : lineinfo0;
++    st.combine_chars = combine;
++    st.mouse_protocol = protocol;
++    st.protected_cell = protected_cell;
++    *state = st;
++  }
++  return 1;
++
++refuse:
++  vterm_allocator_free(vt, tabstops);
++  vterm_allocator_free(vt, lineinfo0);
++  vterm_allocator_free(vt, lineinfo1);
++  vterm_allocator_free(vt, combine);
++  return 0;
++}
+diff --git a/src/screen.c b/src/screen.c
+index 55e4987..4039747 100644
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -1232,3 +1232,70 @@ void vterm_screen_set_default_colors(VTermScreen *screen, const VTermColor *defa
+   if(screen->buffers[1])
+     reset_default_colours(screen, screen->buffers[1]);
+ }
++
++/* The screen's half of vterm_export_state(): both buffers, which one is
++ * shown, and the pen. Damage is flushed by the caller; reflow and the
++ * damage merge are this terminal's settings and stay. */
++void vterm_screen_export_internal(const VTermScreen *screen, VTermWriter *w)
++{
++  uint32_t cell_size = sizeof(ScreenCell);
++  size_t cells = (size_t)screen->rows * screen->cols;
++  int has_alt = screen->buffers[1] != NULL;
++  int on_alt = has_alt && screen->buffer == screen->buffers[1];
++  int global_reverse = screen->global_reverse;
++
++  vterm_writer_put(w, &cell_size, sizeof(cell_size));
++  vterm_writer_put(w, screen->buffers[0], cells * sizeof(ScreenCell));
++  vterm_writer_put(w, &has_alt, sizeof(has_alt));
++  if(has_alt)
++    vterm_writer_put(w, screen->buffers[1], cells * sizeof(ScreenCell));
++  vterm_writer_put(w, &on_alt, sizeof(on_alt));
++  vterm_writer_put(w, &global_reverse, sizeof(global_reverse));
++  vterm_writer_put(w, &screen->pen, sizeof(screen->pen));
++}
++
++/* Reads into new buffers and commits only once the whole of the state has
++ * been read -- the screen comes last, so that is the end of the input. */
++int vterm_screen_import_internal(VTermScreen *screen, VTermReader *r)
++{
++  uint32_t cell_size;
++  size_t cells = (size_t)screen->rows * screen->cols;
++  int has_alt = 0, on_alt = 0, global_reverse = 0;
++  ScreenPen pen;
++  ScreenCell *primary = NULL, *alt = NULL;
++
++  if(!vterm_reader_get(r, &cell_size, sizeof(cell_size)) ||
++     cell_size != sizeof(ScreenCell))
++    return 0;
++  primary = alloc_buffer(screen, screen->rows, screen->cols);
++  if(!primary)
++    return 0;
++  vterm_reader_get(r, primary, cells * sizeof(ScreenCell));
++  vterm_reader_get(r, &has_alt, sizeof(has_alt));
++  if(r->ok && has_alt) {
++    alt = alloc_buffer(screen, screen->rows, screen->cols);
++    if(!alt)
++      r->ok = 0;
++    else
++      vterm_reader_get(r, alt, cells * sizeof(ScreenCell));
++  }
++  vterm_reader_get(r, &on_alt, sizeof(on_alt));
++  vterm_reader_get(r, &global_reverse, sizeof(global_reverse));
++  vterm_reader_get(r, &pen, sizeof(pen));
++  if(!r->ok || r->at != r->len || (on_alt && !alt)) {
++    vterm_allocator_free(screen->vt, primary);
++    vterm_allocator_free(screen->vt, alt);
++    return 0;
++  }
++
++  vterm_allocator_free(screen->vt, screen->buffers[0]);
++  vterm_allocator_free(screen->vt, screen->buffers[1]);
++  screen->buffers[0] = primary;
++  screen->buffers[1] = alt;
++  screen->buffer = on_alt ? alt : primary;
++  screen->global_reverse = global_reverse;
++  screen->pen = pen;
++  screen->damaged.start_row = -1;
++  screen->pending_scrollrect.start_row = -1;
++  return 1;
++}

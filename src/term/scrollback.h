@@ -75,6 +75,11 @@ public:
 	 */
 	qint64 base() const { return m_base; }
 
+	/* How many lines have left the top, carried when a terminal moves to
+	 * another process (bssh_emulator::import_state) so positions counted
+	 * from it keep meaning the same lines. */
+	void set_base(qint64 base) { m_base = base; }
+
 private:
 	QList<QList<bssh_cell_t> > m_lines;
 

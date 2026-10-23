@@ -248,6 +248,12 @@ bool bssh_image_store::is_spilled(const bssh_image_placement_t &placement) const
 	return placement.image.isNull() && m_spill && m_spill->contains(placement.serial);
 }
 
+QImage bssh_image_store::image_now(const bssh_image_placement_t &placement) const {
+	if (!placement.image.isNull()) return placement.image;
+	if (m_spill && m_spill->contains(placement.serial)) return m_spill->read(placement.serial);
+	return QImage();
+}
+
 QImage bssh_image_store::image(const bssh_image_placement_t &placement) const {
 	if (!placement.image.isNull()) return placement.image;
 

@@ -315,8 +315,10 @@ VTERM_ANDROID_STAMP = $(VTERM_ANDROID_DIR)/.patched
 # considered: one grep per patched file for a token only the patches put
 # there (XTQMODKEYS arrives in state.c with the same edit whose
 # four-wide leader check is the `0xfc` mask in the compiled object;
-# "pre-scroll rectangle" is 0003's comment in screen.c, and
-# pushline_without_cells is 0007's declaration in vterm.h). Per file rather
+# "pre-scroll rectangle" is 0003's comment in screen.c,
+# pushline_without_cells is 0007's declaration in vterm.h, and 0008's
+# export puts vterm_export_state in vterm.c, vterm_encoding_index in
+# encoding.c and VTermWriter in vterm_internal.h). Per file rather
 # than one marker for both, so a partial restore cannot hide behind the
 # file that kept its patch. A marker missing while any stamp exists
 # means the sources were restored out of band: every stamp goes -- all
@@ -331,7 +333,10 @@ BSSH_VTERM_WITNESS := $(shell \
 	          && grep -q 'pre-scroll rectangle' $(VTERM_DIR)/src/screen.c \
 	             2>/dev/null \
 	          && grep -q pushline_without_cells $(VTERM_DIR)/include/vterm.h \
-	             2>/dev/null; }; then \
+	             2>/dev/null \
+	          && grep -q vterm_export_state $(VTERM_DIR)/src/vterm.c 2>/dev/null \
+	          && grep -q vterm_encoding_index $(VTERM_DIR)/src/encoding.c 2>/dev/null \
+	          && grep -q VTermWriter $(VTERM_DIR)/src/vterm_internal.h 2>/dev/null; }; then \
 		echo "make: vterm sources were restored under their patch stamps;" >&2; \
 		echo "make:   discarding the stamps so the patches re-apply." >&2; \
 		rm -f $$stamps; \
@@ -418,8 +423,10 @@ $(LIBSSH_STAMP): $(LIBSSH_PATCHES)
 		elif git -C $(LIBSSH_DIR) apply --reverse --check "$(CURDIR)/$$patch" 2>/dev/null; then \
 			echo "  $$patch: already applied"; \
 		else \
-			echo "  $$patch: DOES NOT APPLY -- upstream changed under it." >&2; \
-			echo "  Rebase the patch against the current submodule before building." >&2; \
+			echo "  $$patch: DOES NOT APPLY, and is not already applied. Either" >&2; \
+			echo "  upstream changed under it -- rebase the patch -- or the submodule" >&2; \
+			echo "  was partly restored, leaving some of the patch's files patched:" >&2; \
+			echo "  git -C $(LIBSSH_DIR) checkout -- . and build again." >&2; \
 			exit 1; \
 		fi; \
 	done
@@ -572,8 +579,10 @@ $(VTERM_STAMP) $(VTERM_ANDROID_STAMP): $(VTERM_PATCHES)
 				echo "  $$patch: already applied"; \
 				continue; \
 			fi; \
-			echo "  $$patch: DOES NOT APPLY -- upstream changed under it."; \
-			echo "  Rebase the patch against the current submodule before building."; \
+			echo "  $$patch: DOES NOT APPLY, and is not already applied. Either"; \
+			echo "  upstream changed under it -- rebase the patch -- or the submodule"; \
+			echo "  was partly restored, leaving some of the patch's files patched:"; \
+			echo "  git -C $(VTERM_DIR) checkout -- . and build again."; \
 			exit 1; \
 		fi; \
 		git -C $(VTERM_DIR) apply "$(CURDIR)/$$patch" || exit 1; \

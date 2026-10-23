@@ -2130,3 +2130,186 @@ void emulator_test::the_kitty_query_reports_only_the_flags_in_force() {
 	emulator.send_key(bssh_emulator::KEY_ESCAPE, 0);
 	QCOMPARE(emulator.take_output(), QByteArrayLiteral("\x1b"));
 }
+
+/*
+ * Moving a session to another process (project.md sec 8.4) carries the
+ * terminal as bytes: export_state() in one emulator, import_state() into a
+ * fresh one of the same size. The second must be indistinguishable from
+ * the first -- the same cells, hyperlinks, history, picture and modes --
+ * and must then react to the same input the same way, including a
+ * sequence and a character the stream stopped in the middle of.
+ */
+namespace {
+
+/* Every observable of two terminals, compared; a description of the first
+ * difference, or empty when there is none. */
+QString first_difference(const bssh_emulator &a, const bssh_emulator &b) {
+	const bssh_screen &one = a.screen();
+	const bssh_screen &two = b.screen();
+	if (one.cursor_row() != two.cursor_row() || one.cursor_col() != two.cursor_col())
+		return QStringLiteral("cursor %1,%2 against %3,%4").arg(one.cursor_row())
+		        .arg(one.cursor_col()).arg(two.cursor_row()).arg(two.cursor_col());
+	if (one.cursor_visible() != two.cursor_visible()) return QStringLiteral("cursor visibility");
+	for (int row = 0; row < one.rows(); ++row) {
+		for (int col = 0; col < one.cols(); ++col) {
+			const bssh_cell_t &x = one.cell(row, col);
+			const bssh_cell_t &y = two.cell(row, col);
+			if (x.ch != y.ch || !(x.fg == y.fg) || !(x.bg == y.bg) || x.attrs != y.attrs ||
+			    x.width != y.width || x.link != y.link)
+				return QStringLiteral("cell %1,%2: '%3' against '%4'").arg(row).arg(col)
+				        .arg(QString::fromUcs4(&x.ch, 1)).arg(QString::fromUcs4(&y.ch, 1));
+			if (x.link && a.link_uri(x.link) != b.link_uri(y.link)) return QStringLiteral("link uri");
+		}
+	}
+	if (a.scrollback().count() != b.scrollback().count()) return QStringLiteral("history length");
+	if (a.scrollback().base() != b.scrollback().base()) return QStringLiteral("history base");
+	for (int i = 0; i < a.scrollback().count(); ++i) {
+		const QList<bssh_cell_t> &x = a.scrollback().line(i);
+		const QList<bssh_cell_t> &y = b.scrollback().line(i);
+		if (x.size() != y.size()) return QStringLiteral("history line %1 length").arg(i);
+		for (int j = 0; j < x.size(); ++j)
+			if (x.at(j).ch != y.at(j).ch || !(x.at(j).fg == y.at(j).fg))
+				return QStringLiteral("history line %1 cell %2").arg(i).arg(j);
+	}
+	if (a.alternate_screen() != b.alternate_screen()) return QStringLiteral("alternate screen");
+	if (a.mouse_reporting() != b.mouse_reporting()) return QStringLiteral("mouse reporting");
+	if (a.kitty_keyboard_flags() != b.kitty_keyboard_flags()) return QStringLiteral("kitty flags");
+	if (a.kitty_stack_depth() != b.kitty_stack_depth()) return QStringLiteral("kitty stack");
+	if (a.link_count() != b.link_count())
+		return QStringLiteral("%1 links against %2").arg(a.link_count()).arg(b.link_count());
+	if (a.images().count() != b.images().count()) return QStringLiteral("picture count");
+	for (int i = 0; i < a.images().count(); ++i) {
+		const bssh_image_placement_t &x = a.images().placements().at(i);
+		const bssh_image_placement_t &y = b.images().placements().at(i);
+		if (x.id != y.id || x.row != y.row || x.col != y.col || x.cols != y.cols ||
+		    x.rows != y.rows || a.images().image(x) != b.images().image(y))
+			return QStringLiteral("picture %1").arg(i);
+	}
+	if (a.images().memory_used() != b.images().memory_used()) {
+		return QStringLiteral("pictures take %1 bytes against %2")
+		        .arg(a.images().memory_used()).arg(b.images().memory_used());
+	}
+	return QString();
+}
+
+}  // namespace
+
+void emulator_test::a_terminal_moves_whole_into_another_emulator() {
+	bssh_emulator from(40, 10);
+	/* A short history, so lines leave its top and its numbering moves:
+	 * at the default 5000 the base stays 0 on both sides and a move that
+	 * dropped it passed. */
+	from.set_scrollback_lines(10);
+	QString title;
+	connect(&from, &bssh_emulator::title_changed, this, [&title](const QString &t) { title = t; });
+
+	/* History, colours, a hyperlink and a title on the primary screen. */
+	for (int i = 0; i < 25; ++i) from.feed(QByteArray("\x1b[3") + char('1' + i % 7) + "mline " + QByteArray::number(i) + "\r\n");
+	from.feed(QByteArrayLiteral("\x1b[0m\x1b]8;;https://example.org/moved\x1b\\a link\x1b]8;;\x1b\\ \x1b]2;moved title\x1b\\"));
+	/* A picture, by kitty's protocol: 2x2 raw RGB. */
+	from.feed(QByteArrayLiteral("\x1b_Ga=T,f=24,s=2,v=2,i=7;/wAAAP8AAAD/////\x1b\\"));
+	/* Modes a program leaves set: cursor keys, mouse, a kitty keyboard
+	 * push, a cursor shape, then the alternate screen with text on it. */
+	from.feed(QByteArrayLiteral("\x1b[?1h\x1b[?1000h\x1b[?1006h\x1b[>1u\x1b[5 q"));
+	from.feed(QByteArrayLiteral("\x1b[?1049h\x1b[2;3Hon the alternate screen \x1b[1;4mbold"));
+	/* A link where it is SEEN: the primary screen's is behind the
+	 * alternate one, and a move that dropped the links passed. */
+	from.feed(QByteArrayLiteral("\x1b[0m\x1b[4;1H\x1b]8;;https://example.org/alt\x1b\\alt link\x1b]8;;\x1b\\"));
+	/*
+	 * And the stream stopped part-way through a CSI. libvterm holds that
+	 * one itself -- this layer holds back only a UTF-8 tail and a lone
+	 * ESC -- so it is libvterm's parser that has to arrive mid-sequence.
+	 * The character split is a move of its own, below: both at once
+	 * garble the continuation identically on both sides, and the first
+	 * version of this test passed with the parser's place thrown away.
+	 */
+	from.feed(QByteArrayLiteral("\x1b[3"));
+	from.take_output();
+	QVERIFY2(from.images().count() == 1, "the picture never landed, so it would not be tested");
+	QVERIFY(from.alternate_screen());
+	QVERIFY(from.mouse_reporting());
+	QVERIFY(from.scrollback().count() > 0);
+	QVERIFY2(from.scrollback().base() > 0, "no line left the history, so its numbering is untested");
+	QVERIFY2(from.screen().cell(3, 0).link != 0, "the link on the alternate screen is not there to test");
+
+	const QByteArray state = from.export_state();
+	QVERIFY(!state.isEmpty());
+
+	bssh_emulator to(40, 10);
+	to.set_scrollback_lines(10);
+	QString to_title, to_cursor;
+	bool to_alternate = false;
+	connect(&to, &bssh_emulator::title_changed, this, [&to_title](const QString &t) { to_title = t; });
+	connect(&to, &bssh_emulator::cursor_shape_changed, this, [&to_cursor](const QString &s) { to_cursor = s; });
+	connect(&to, &bssh_emulator::alternate_screen_changed, this, [&to_alternate](bool on) { to_alternate = on; });
+	QVERIFY(to.import_state(state));
+
+	const QString moved = first_difference(from, to);
+	QVERIFY2(moved.isEmpty(), qPrintable(QStringLiteral("after the move: ") + moved));
+	QCOMPARE(to_title, QStringLiteral("moved title"));
+	QCOMPARE(to_title, title);
+	QVERIFY(to_alternate);
+	QCOMPARE(to_cursor, QStringLiteral("bar"));
+
+	/* The same continuation into both: the rest of the CSI, which makes it
+	 * SGR 31 -- red -- rather than text, then more text. */
+	const QByteArray rest = QByteArrayLiteral("1mred \x1b[0mafter");
+	from.feed(rest);
+	to.feed(rest);
+	const QString continued = first_difference(from, to);
+	QVERIFY2(continued.isEmpty(), qPrintable(QStringLiteral("after the same input: ") + continued));
+	QVERIFY2(to.screen().to_text().contains(QStringLiteral("red after")),
+	          "the CSI's tail was printed rather than finishing the sequence");
+
+	/* Cursor-key mode moved too: Up is ESC O A in both, not ESC [ A. */
+	from.take_output();
+	to.take_output();
+	from.send_key(bssh_emulator::KEY_UP, 0);
+	to.send_key(bssh_emulator::KEY_UP, 0);
+	const QByteArray up = from.take_output();
+	QCOMPARE(to.take_output(), up);
+	QCOMPARE(up, QByteArrayLiteral("\x1bOA"));
+
+	/* And leaving the alternate screen finds the primary one intact. */
+	from.feed(QByteArrayLiteral("\x1b[?1049l"));
+	to.feed(QByteArrayLiteral("\x1b[?1049l"));
+	const QString primary = first_difference(from, to);
+	QVERIFY2(primary.isEmpty(), qPrintable(QStringLiteral("back on the primary screen: ") + primary));
+
+	/* A second move, stopped in the middle of a euro sign's three bytes. */
+	from.feed(QByteArray("cost \xe2\x82", 7));
+	bssh_emulator again(40, 10);
+	again.set_scrollback_lines(10);
+	QVERIFY(again.import_state(from.export_state()));
+	from.feed(QByteArray("\xac", 1));
+	again.feed(QByteArray("\xac", 1));
+	const QString split = first_difference(from, again);
+	QVERIFY2(split.isEmpty(), qPrintable(QStringLiteral("after a split character: ") + split));
+	QVERIFY2(again.screen().to_text().contains(QString::fromUtf8("cost \xe2\x82\xac")),
+	          "the character split across the move did not arrive whole");
+}
+
+void emulator_test::a_moved_terminal_refuses_what_it_cannot_take() {
+	bssh_emulator from(40, 10);
+	from.feed(QByteArrayLiteral("kept text"));
+	const QByteArray state = from.export_state();
+
+	/* Another size: refused, and the terminal untouched. */
+	bssh_emulator other(41, 10);
+	other.feed(QByteArrayLiteral("mine"));
+	QVERIFY(!other.import_state(state));
+	QCOMPARE(other.screen().cell(0, 0).ch, U'm');
+
+	/* Damaged at either end, or not a terminal's state at all. */
+	bssh_emulator same(40, 10);
+	same.feed(QByteArrayLiteral("mine"));
+	QVERIFY(!same.import_state(state.left(state.size() / 2)));
+	QVERIFY(!same.import_state(state + QByteArray("x")));
+	QVERIFY(!same.import_state(QByteArrayLiteral("not a terminal")));
+	QCOMPARE(same.screen().cell(0, 0).ch, U'm');
+	QCOMPARE(same.screen().cell(0, 3).ch, U'e');
+
+	/* And the whole of it is still taken afterwards. */
+	QVERIFY(same.import_state(state));
+	QCOMPARE(same.screen().cell(0, 0).ch, U'k');
+}
