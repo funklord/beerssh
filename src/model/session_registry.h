@@ -61,6 +61,11 @@ public:
 	/* Destroys the session and its connection. */
 	void close(bssh_session *session);
 
+	/* Moving sessions between processes (sec 8.4): an imported session
+	 * joins, a given one leaves without being disconnected. */
+	void adopt(bssh_session *session);
+	void release(bssh_session *session);
+
 	const QList<bssh_session *> &sessions() const { return m_sessions; }
 	int count() const { return m_sessions.size(); }
 	int live_count() const;
@@ -130,6 +135,9 @@ signals:
 	void changed();
 
 private:
+	/* What create() and adopt() share: registered, and wired. */
+	void attach(bssh_session *session);
+
 	QList<bssh_session *> m_sessions;
 	QHash<bssh_session *, bssh_conn_manager *> m_managers;
 };

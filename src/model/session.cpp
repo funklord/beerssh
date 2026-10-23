@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QStringList>
+#include <QUuid>
 
 #include "input/input_router.h"
 #include "term/emulator.h"
@@ -33,6 +34,7 @@ bssh_session::bssh_session(const bssh_profile_t &profile, QObject *parent)
 	 * somewhere to land from the first byte -- and so a session that
 	 * never connects still has a screen to show its error on.
 	 */
+	m_handoff_id = QUuid::createUuid().toString(QUuid::WithoutBraces);
 	m_emulator = new bssh_emulator(m_cols, m_rows, this);
 	m_input_router = new bssh_input_router(m_emulator, this);
 

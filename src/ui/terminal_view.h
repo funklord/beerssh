@@ -30,13 +30,25 @@ class QMimeData;
 QString bssh_session_mime_type();
 
 /*
- * The payload a session drag carries: "<pid>:<registry index>" (sec 8.4).
+ * The payload a session drag carries: "<pid>:<registry index>", and after
+ * them, when the session can be asked for from another process, its
+ * handoff id and where this process listens: ":<id>:<path>" (sec 8.4).
+ *
  * The process is part of it because an index means something only in the
  * registry that issued it -- a bare index, dropped on another BeerSSH,
- * named one of THAT process's sessions and moved it. A live session cannot
- * cross processes, so a payload from another one is refused.
+ * named one of THAT process's sessions and moved it. The id and the path
+ * are what that other BeerSSH needs instead: whom to ask, and for what.
+ * The path goes last because it is the one part that might hold a colon.
  */
-QByteArray bssh_session_payload(int registry_index);
+QByteArray bssh_session_payload(int registry_index, const QString &handoff_id = QString(),
+                                const QString &handoff_path = QString());
+
+/*
+ * For a session drag from ANOTHER process that can be asked for: where it
+ * listens and the session's handoff id. False for this process's own
+ * payloads, and for another's that carry neither.
+ */
+bool bssh_session_payload_handoff(const QMimeData *mime, QString *path, QString *handoff_id);
 
 /*
  * The registry index a payload names in THIS process, or -1. `foreign` is

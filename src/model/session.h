@@ -245,6 +245,11 @@ public:
 	                                    QObject *parent, QString *why);
 	bool is_moving() const { return m_moving; }
 
+	/* What another process names this session by when it asks for it: a
+	 * random id fixed for the session's life, unlike its registry index,
+	 * which shifts as tabs close. */
+	QString handoff_id() const { return m_handoff_id; }
+
 signals:
 	/*
 	 * A bell rang while nothing was showing this session (sec 5.5).
@@ -345,6 +350,7 @@ private:
 
 	/* A move in progress (export_handoff): output held, not sent. */
 	bool m_moving = false;
+	QString m_handoff_id;
 	QByteArray m_held_output;
 	void wire_transport();
 };

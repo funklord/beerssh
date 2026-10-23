@@ -131,6 +131,13 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 			"yours is shown or changed. What `make android-screenshots` "
 			"asks for; on Android it arrives as the intent extra "
 			"store_view." },
+		{ "adopt-from", "", "socket",
+			"Take every live session of the BeerSSH listening at socket "
+			"and show them here, then ask it to quit: what restarting "
+			"BeerSSH with its sessions passes to the new program, so an "
+			"upgrade keeps every connection and every screen. Sessions "
+			"the old program cannot give stay with it, and it keeps "
+			"running for them." },
 		{ "man", "", "",
 			"Write this program's manual page to stdout and exit. It is "
 			"generated from the same table these options are read from, so "
@@ -549,6 +556,7 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 	line.version = parser.isSet(QStringLiteral("version"));
 	line.self_test = parser.isSet(QStringLiteral("self-test"));
 	line.store_view = parser.value(QStringLiteral("store-view"));
+	line.adopt_from = parser.value(QStringLiteral("adopt-from"));
 	line.hold = parser.isSet(QStringLiteral("hold"));
 
 	if (parser.isSet(QStringLiteral("term-features"))) {

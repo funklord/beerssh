@@ -2,7 +2,9 @@
 #define BSSH_HANDOFF_POINT_H
 
 #include <QObject>
+#include <QPoint>
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 
@@ -40,11 +42,24 @@ public:
 	 */
 	using finder_t = std::function<bssh_session *(const QString &handoff_id)>;
 
+	/* The handoff ids of every session this process would give, for a new
+	 * version taking them all. */
+	using lister_t = std::function<QStringList()>;
+
 	explicit bssh_handoff_point(finder_t finder, QObject *parent = nullptr);
 	~bssh_handoff_point() override;
 
+	void set_lister(lister_t lister) { m_lister = std::move(lister); }
+
 	/* Starts listening. False, with why, when the socket cannot be made. */
 	bool listen(QString *why = nullptr);
+
+	/* The one this process listens with, or null: what a drag payload
+	 * names, so the process it is dropped on can come and take it. */
+	static bssh_handoff_point *instance();
+
+	/* Where the BeerSSH process with that pid would listen. */
+	static QString path_for(qint64 pid);
 
 	/* Where this process listens, for a drag payload or a new version to
 	 * find it. Empty until listen() succeeds. */
@@ -62,6 +77,21 @@ public:
 	static bssh_session *take(const QString &path, const QString &handoff_id, QObject *parent,
 	                          QString *why, int timeout_ms = 10000);
 
+	/*
+	 * Tells the process at target that a session of the process at source
+	 * was let go over it, at global (X11's own drag: the source knows where
+	 * it was released, the target does not). The target answers at once
+	 * and takes the session from source after, so the source must return
+	 * to its event loop to serve that.
+	 */
+	static bool offer(const QString &target, const QString &source, const QString &handoff_id,
+	                  const QPoint &global, QString *why = nullptr);
+
+	/* The ids the process at path would give a new version, and the
+	 * request, once it has given them, that it quit. */
+	static QStringList list(const QString &path, QString *why = nullptr);
+	static bool request_quit(const QString &path, QString *why = nullptr);
+
 signals:
 	/*
 	 * A session has been given away and is inert: the caller removes it
@@ -70,11 +100,18 @@ signals:
 	 */
 	void session_given(bssh_session *session);
 
+	/* Another process let a session go over this one; see offer(). */
+	void offered(const QString &source, const QString &handoff_id, const QPoint &global);
+
+	/* A new version has taken everything it could, and asks this to go. */
+	void quit_requested();
+
 private:
 	void on_connection();
 	void serve(int socket);
 
 	finder_t m_finder;
+	lister_t m_lister;
 	QString m_path;
 	int m_listener = -1;
 	QSocketNotifier *m_notifier = nullptr;

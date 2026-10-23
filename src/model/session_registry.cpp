@@ -86,7 +86,6 @@ void keep(bssh_session *session) {
 
 bssh_session *bssh_session_registry::create(const bssh_profile_t &profile) {
 	bssh_session *session = new bssh_session(profile, this);
-	m_sessions.append(session);
 
 	/*
 	 * A host that keeps its scrollback gets it back before anything else
@@ -103,6 +102,39 @@ bssh_session *bssh_session_registry::create(const bssh_profile_t &profile) {
 			session->emulator()->restore_history(kept);
 		}
 	}
+
+	attach(session);
+	return session;
+}
+
+/*
+ * A session that arrived from another process (sec 8.4), already connected:
+ * the same wiring a new one gets, and no kept scrollback -- it brought its
+ * own history with it.
+ */
+void bssh_session_registry::adopt(bssh_session *session) {
+	if (!session || m_sessions.contains(session)) return;
+	session->setParent(this);
+	attach(session);
+}
+
+/*
+ * A session given to another process (sec 8.4): gone from here, and alive
+ * there. Not close(): nothing is disconnected -- the transport already let
+ * go without a word -- and the kept scrollback is not written, since the
+ * history it would record has moved on with the session.
+ */
+void bssh_session_registry::release(bssh_session *session) {
+	if (!session || !m_sessions.contains(session)) return;
+	emit session_closing(session);
+	m_sessions.removeAll(session);
+	if (bssh_conn_manager *manager = m_managers.take(session)) manager->deleteLater();
+	session->deleteLater();
+	emit changed();
+}
+
+void bssh_session_registry::attach(bssh_session *session) {
+	m_sessions.append(session);
 
 	/*
 	 * A title or state change is a registry change, because both are
@@ -211,7 +243,6 @@ bssh_session *bssh_session_registry::create(const bssh_profile_t &profile) {
 
 	emit session_added(session);
 	emit changed();
-	return session;
 }
 
 void bssh_session_registry::close(bssh_session *session) {

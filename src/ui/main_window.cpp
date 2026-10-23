@@ -39,6 +39,7 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QShowEvent>
+#include <QProcess>
 #include <QTimer>
 #include <QWindow>
 #include <QScreen>
@@ -63,11 +64,13 @@
 
 /* Defined beside drop_spot_at(), which it serves. */
 static bool another_beerssh_under_pointer(const QWidget *ours);
+static qint64 other_beerssh_pid_under_pointer(const QWidget *ours);
 
 #include "model/profile_store.h"
 #include "model/session.h"
 #include "model/conn_manager.h"
 #include "model/session_registry.h"
+#include "model/handoff_point.h"
 #include "model/app_settings.h"
 #include "model/command_line.h"
 #include "model/window_title.h"
@@ -3462,7 +3465,10 @@ QMimeData *bssh_main_window::session_drag_mime(bssh_session *session) const {
 	if (index < 0) return nullptr;
 
 	QMimeData *mime = new QMimeData;
-	mime->setData(session_mime_type(), bssh_session_payload(index));
+	const bssh_handoff_point *point = bssh_handoff_point::instance();
+	mime->setData(session_mime_type(),
+	              bssh_session_payload(index, point ? session->handoff_id() : QString(),
+	                                   point ? point->path() : QString()));
 	return mime;
 }
 
@@ -3659,7 +3665,10 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 		if (view) view->show_drop_zone(spot.window->drop_zone_for(carried, spot.target, spot.edge));
 		lit = view;
 
-		ghost.set_refused(!spot.window && another_beerssh_under_pointer(this));
+		/* Another BeerSSH takes it when this process can be asked
+		 * (sec 8.4); without a handoff point it is still refused. */
+		ghost.set_refused(!spot.window && !bssh_handoff_point::instance() &&
+		                  another_beerssh_under_pointer(this));
 
 		bssh_main_window *row = spot.on_tab_row ? spot.window : nullptr;
 		for (bssh_main_window *each : { lit_row.data(), row }) {
@@ -3740,14 +3749,19 @@ qint64 x11_window_pid(xcb_connection_t *connection, xcb_window_t window) {
  * cannot be asked, which is every platform but X11.
  */
 static bool another_beerssh_under_pointer(const QWidget *ours) {
+	return other_beerssh_pid_under_pointer(ours) > 0;
+}
+
+/* The pid of the BeerSSH under the pointer when it is another one, or 0. */
+static qint64 other_beerssh_pid_under_pointer(const QWidget *ours) {
 #ifdef BSSH_ASK_X11
-	if (!ours || QGuiApplication::platformName() != QStringLiteral("xcb")) return false;
+	if (!ours || QGuiApplication::platformName() != QStringLiteral("xcb")) return 0;
 	auto *x11 = qApp->nativeInterface<QNativeInterface::QX11Application>();
 	xcb_connection_t *connection = x11 ? x11->connection() : nullptr;
-	if (!connection) return false;
+	if (!connection) return 0;
 
 	const QByteArray own_class = x11_wm_class(connection, xcb_window_t(ours->window()->winId()));
-	if (own_class.isEmpty()) return false;
+	if (own_class.isEmpty()) return 0;
 
 	const xcb_setup_t *setup = xcb_get_setup(connection);
 	xcb_window_t at = xcb_setup_roots_iterator(setup).data->root;
@@ -3765,14 +3779,14 @@ static bool another_beerssh_under_pointer(const QWidget *ours) {
 	for (const xcb_window_t window : chain) {
 		const QByteArray cls = x11_wm_class(connection, window);
 		if (cls.isEmpty()) continue;
-		if (cls != own_class) return false;
+		if (cls != own_class) return 0;
 		const qint64 pid = x11_window_pid(connection, window);
-		return pid > 0 && pid != QCoreApplication::applicationPid();
+		return pid > 0 && pid != QCoreApplication::applicationPid() ? pid : 0;
 	}
 #else
 	Q_UNUSED(ours);
 #endif
-	return false;
+	return 0;
 }
 
 bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &global,
@@ -3836,11 +3850,22 @@ void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &
 	 */
 	if (!spot.window) {
 		/*
-		 * Over another BeerSSH: refused, as under QDrag -- the session
-		 * stays where it was rather than tearing out on top of a window
-		 * that will not take it (the holder's choice, 2026-10-09).
+		 * Over another BeerSSH: offered to it (sec 8.4), and it comes and
+		 * takes the session -- after this returns, since taking needs this
+		 * process's event loop to answer. Without a handoff point here, or
+		 * if the offer cannot be made, the session stays where it was
+		 * rather than tearing out on top of a window that will not take it
+		 * (the holder's choice, 2026-10-09).
 		 */
-		if (another_beerssh_under_pointer(this)) return;
+		if (const qint64 pid = other_beerssh_pid_under_pointer(this)) {
+			if (const bssh_handoff_point *point = bssh_handoff_point::instance()) {
+				QString why;
+				if (!bssh_handoff_point::offer(bssh_handoff_point::path_for(pid), point->path(),
+				                               session->handoff_id(), global, &why))
+					qWarning("handoff: could not offer the session: %s", qPrintable(why));
+			}
+			return;
+		}
 		if (bssh_main_window *window = tear_out(session)) {
 			window->move(global - QPoint(40, 20));
 		}
@@ -3854,6 +3879,62 @@ void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &
 	 */
 	if (spot.on_tab_row) spot.window->drop_session_as_tab(session, spot.front, spot.slot);
 	else if (spot.target) spot.window->drop_session_on(session, spot.target, spot.edge);
+}
+
+/*
+ * A session that another BeerSSH let go over this process (sec 8.4): taken
+ * from it and put where it landed, as a drop from this process would be.
+ * Anywhere that would place nothing -- the status line, say -- makes it a
+ * tab in the window it landed on, or a window of its own: a session that
+ * arrives and is shown nowhere would be a running terminal no window can
+ * reach.
+ */
+void bssh_main_window::take_from_another_process(const QString &path, const QString &handoff_id,
+                                                 const QPoint &global) {
+	bssh_session_registry *registry = bssh_session_registry::shared();
+	QString why;
+	bssh_session *session = bssh_handoff_point::take(path, handoff_id, registry, &why);
+	if (!session) {
+		qWarning("handoff: could not take the session: %s", qPrintable(why));
+		return;
+	}
+	registry->adopt(session);
+
+	const drop_spot_t spot = drop_spot_at(global, session);
+	if (spot.on_tab_row && spot.front) spot.window->drop_session_as_tab(session, spot.front, spot.slot);
+	else if (spot.window && spot.target) spot.window->drop_session_on(session, spot.target, spot.edge);
+	else if (spot.window) spot.window->adopt_session(session);
+	else {
+		bssh_main_window *window = new bssh_main_window;
+		window->setAttribute(Qt::WA_DeleteOnClose);
+		window->show();
+		window->adopt_session(session);
+		window->move(global - QPoint(40, 20));
+	}
+	if (bssh_main_window *window = window_showing(session)) {
+		window->raise();
+		window->activateWindow();
+	}
+}
+
+/*
+ * A session drag from ANOTHER BeerSSH that can be asked for: accepted as a
+ * move, and taken a turn later, outside the drop -- the source's drag runs
+ * its own loop until this returns, and that loop is what answers the take.
+ */
+static bool take_foreign_drag(QDropEvent *event, bool dropping) {
+	QString path, id;
+	if (!bssh_session_payload_handoff(event->mimeData(), &path, &id)) return false;
+	if (!(event->possibleActions() & Qt::MoveAction)) return false;
+	event->setDropAction(Qt::MoveAction);
+	event->accept();
+	if (dropping) {
+		const QPoint global = QCursor::pos();
+		QTimer::singleShot(0, qApp, [path, id, global] {
+			bssh_main_window::take_from_another_process(path, id, global);
+		});
+	}
+	return true;
 }
 
 /*
@@ -3872,6 +3953,7 @@ static bool answer_foreign_drag(QDropEvent *event) {
 }
 
 void bssh_main_window::dragEnterEvent(QDragEnterEvent *event) {
+	if (take_foreign_drag(event, false)) return;
 	if (answer_foreign_drag(event)) return;
 	if (session_from_mime(event->mimeData())) event->acceptProposedAction();
 }
@@ -3891,6 +3973,7 @@ bssh_session *bssh_main_window::tab_row_at(const QPoint &at) const {
 }
 
 void bssh_main_window::dropEvent(QDropEvent *event) {
+	if (take_foreign_drag(event, true)) return;
 	if (answer_foreign_drag(event)) return;
 	bssh_session *session = session_from_mime(event->mimeData());
 	if (!session) return;
@@ -4783,6 +4866,18 @@ void bssh_main_window::build_menu_bar() {
 	m_session_actions.append(close_tab);
 
 	file->addSeparator();
+
+	/*
+	 * A new BeerSSH, taking every live session from this one (sec 8.4):
+	 * what an upgrade needs, so that installing a new version does not
+	 * end every connection and every screen. Offered only where this
+	 * process can hand sessions over.
+	 */
+	if (bssh_handoff_point::instance()) {
+		QAction *restart = file->addAction(QStringLiteral("&Restart, Keeping Sessions"));
+		restart->setObjectName(QStringLiteral("menu_restart_keeping_sessions"));
+		connect(restart, &QAction::triggered, this, [] { restart_keeping_sessions(); });
+	}
 
 	QAction *quit = file->addAction(QStringLiteral("E&xit"));
 	connect(quit, &QAction::triggered, this, &QWidget::close);
@@ -6460,4 +6555,26 @@ void bssh_main_window::hide_keyboard() {
 	if (!m_keyboard) return;
 	m_keyboard_hidden_by_user = true;
 	m_keyboard->hide();
+}
+
+bool bssh_main_window::restart_keeping_sessions(QString *why) {
+	const bssh_handoff_point *point = bssh_handoff_point::instance();
+	if (!point) {
+		if (why) *why = QStringLiteral("this BeerSSH cannot hand its sessions over");
+		return false;
+	}
+	/*
+	 * The program as it is on disk now. An upgrade replaced the file this
+	 * process was started from, and Linux names a running program whose
+	 * file is gone with " (deleted)" after its path -- the new one is at
+	 * the same path without it.
+	 */
+	QString program = QCoreApplication::applicationFilePath();
+	const QString deleted = QStringLiteral(" (deleted)");
+	if (program.endsWith(deleted)) program.chop(deleted.size());
+	if (!QProcess::startDetached(program, { QStringLiteral("--adopt-from"), point->path() })) {
+		if (why) *why = QStringLiteral("could not start %1").arg(program);
+		return false;
+	}
+	return true;
 }

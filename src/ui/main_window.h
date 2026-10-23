@@ -675,6 +675,20 @@ public:
 	static int session_drags_started();
 
 	/*
+	 * Takes a session another BeerSSH process let go over this one, from
+	 * the handoff point at path, and puts it where it landed (sec 8.4).
+	 */
+	static void take_from_another_process(const QString &path, const QString &handoff_id,
+	                                      const QPoint &global);
+
+	/*
+	 * Starts this program again with --adopt-from, so the new one takes
+	 * every live session from this one; this one quits once it has given
+	 * them, or keeps running for any it could not give (sec 8.4).
+	 */
+	static bool restart_keeping_sessions(QString *why = nullptr);
+
+	/*
 	 * A session dropped on the pane showing `target`, at `edge` (a
 	 * bssh_layout_manager::drop_edge_t) -- sec 8.3's placing drop, doing
 	 * exactly what drop_zone_for() says it will. Public for the reason

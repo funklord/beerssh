@@ -25,7 +25,8 @@ expect = "the_last_tab_does_not_tear_out"
 [[sabotage]]
 name = "a torn-out tab is not adopted"
 file = "src/ui/main_window.cpp"
-find = "\twindow->adopt_session(session);"
+find = "\twindow->adopt_session(session);\n\n\treturn window;"
+replace = "\n\n\treturn window;"
 expect = "a_torn_out_tab_becomes_a_window"
 
 [[sabotage]]

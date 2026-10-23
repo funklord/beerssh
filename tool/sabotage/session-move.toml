@@ -39,3 +39,33 @@ file = "src/model/handoff_point.cpp"
 find = "\tconst bool taken = sent &&\n"
 replace = "\tconst bool taken = true ||\n"
 expect = "a_taker_that_vanishes_leaves_the_session_running"
+
+# A session that lands on none of this process's windows -- let go over the
+# status line, or over the desktop beside it -- is taken and shown nowhere:
+# a running terminal no window can reach.
+[[sabotage]]
+name = "a session landing on no window gets none"
+file = "src/ui/main_window.cpp"
+find = "\telse {\n\t\tbssh_main_window *window = new bssh_main_window;\n\t\twindow->setAttribute(Qt::WA_DeleteOnClose);\n\t\twindow->show();\n\t\twindow->adopt_session(session);\n\t\twindow->move(global - QPoint(40, 20));\n\t}\n"
+replace = ""
+expect = "a_dropped_session_lands_in_this_process"
+
+# The payload's path read up to its first colon, as if it were one more
+# field: a runtime directory with a colon in it names a socket that is not
+# there, and the drop takes nothing.
+[[sabotage]]
+name = "the payload's path stops at a colon"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (path) *path = QString::fromUtf8(data.mid(at + 1));\n"
+replace = "\tif (path) *path = QString::fromUtf8(data.mid(at + 1).split(':').first());\n"
+expect = "a_drag_payload_names_where_to_ask"
+
+# The new version takes the sessions and never says it is done: the old
+# one, emptied, runs on with no window to close it from. The app binary is
+# what the test runs, so this needs `make test`, which rebuilds it.
+[[sabotage]]
+name = "the new version never asks the old one to quit"
+file = "src/main.cpp"
+find = "\t\t\tbssh_handoff_point::request_quit(line.adopt_from);\n"
+replace = ""
+expect = "a_new_version_takes_every_session"

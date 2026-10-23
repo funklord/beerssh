@@ -121,6 +121,9 @@ struct bssh_command_line_t {
 	/* A store screenshot's view (ui/store_view.h); validated by main. */
 	QString store_view;
 
+	/* Another BeerSSH's handoff socket to take every session from (sec 8.4). */
+	QString adopt_from;
+
 	/* Printing one of these is all the program does. */
 	bool help;
 	bool version;

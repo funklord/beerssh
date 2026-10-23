@@ -2,6 +2,8 @@
 
 #include <QCoreApplication>
 #include <QElapsedTimer>
+#include <QFileInfo>
+#include <QMimeData>
 #include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -15,6 +17,9 @@
 #include "model/handoff_point.h"
 #include "model/profile.h"
 #include "model/session.h"
+#include "model/session_registry.h"
+#include "ui/main_window.h"
+#include "ui/terminal_view.h"
 #include "term/emulator.h"
 
 namespace {
@@ -191,4 +196,201 @@ void handoff_test::a_taker_that_vanishes_leaves_the_session_running() {
 	          qPrintable(session->emulator()->screen().to_text()));
 	session->disconnect_from_host();
 	delete session;
+}
+
+int bssh_handoff_give_mode() {
+	bssh_session *session = new bssh_session(local_shell_profile());
+	session->resize(60, 12);
+	session->connect_to_host();
+	QElapsedTimer up;
+	up.start();
+	while (session->state() != bssh_ssh_session::CONNECTED && up.elapsed() < 10000)
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+	session->input_router()->send_text(QStringLiteral("echo given-$((3*5))\n"));
+	screen_shows(session, QStringLiteral("given-15"));
+
+	bool given = false;
+	bssh_handoff_point point([session](const QString &id) {
+		return id == session->handoff_id() ? session : nullptr;
+	});
+	QObject::connect(&point, &bssh_handoff_point::session_given,
+	                 [&given](bssh_session *) { given = true; });
+	QString why;
+	if (!point.listen(&why)) {
+		printf("cannot listen: %s\n", qPrintable(why));
+		return 2;
+	}
+	printf("%s %s\n", qPrintable(point.path()), qPrintable(session->handoff_id()));
+	fflush(stdout);
+
+	QElapsedTimer serving;
+	serving.start();
+	while (!given && serving.elapsed() < 60000)
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+	delete session;
+	return given ? 0 : 1;
+}
+
+/*
+ * What a session drag carries to another BeerSSH: who to ask, and for
+ * what. The path goes last because it is the one part that can hold a
+ * colon, and a payload from this process is not a foreign one whatever it
+ * carries.
+ */
+void handoff_test::a_drag_payload_names_where_to_ask() {
+	QMimeData mime;
+	mime.setData(bssh_session_mime_type(), QByteArray("1:4:abc-def:/run/user/1000/bee:ssh/handoff-1.sock"));
+	QString path, id;
+	QVERIFY(bssh_session_payload_handoff(&mime, &path, &id));
+	QCOMPARE(id, QStringLiteral("abc-def"));
+	QCOMPARE(path, QStringLiteral("/run/user/1000/bee:ssh/handoff-1.sock"));
+
+	/* The older, shorter form from another process: foreign, and nothing
+	 * to ask. */
+	mime.setData(bssh_session_mime_type(), QByteArray("1:4"));
+	QVERIFY(!bssh_session_payload_handoff(&mime, &path, &id));
+
+	/* This process's own, however much it says. */
+	mime.setData(bssh_session_mime_type(), bssh_session_payload(4, QStringLiteral("x"), QStringLiteral("/p")));
+	QVERIFY(!bssh_session_payload_handoff(&mime, &path, &id));
+	bool foreign = true;
+	QCOMPARE(bssh_session_payload_index(&mime, &foreign), 4);
+	QVERIFY(!foreign);
+}
+
+/*
+ * A session another BeerSSH let go over this one: taken, joined to the
+ * registry, shown in a window -- a new one, since it landed on none of
+ * ours -- and answering.
+ */
+void handoff_test::a_dropped_session_lands_in_this_process() {
+	runtime_dir_t runtime;
+	QProcess giver;
+	giver.start(QCoreApplication::applicationFilePath(), { QStringLiteral("--handoff-give") });
+	QVERIFY(giver.waitForStarted(10000));
+	QElapsedTimer ready;
+	ready.start();
+	QByteArray line;
+	while (!line.contains('\n') && ready.elapsed() < 30000 && giver.state() == QProcess::Running) {
+		giver.waitForReadyRead(100);
+		line += giver.readAllStandardOutput();
+	}
+	const QList<QByteArray> fields = line.trimmed().split(' ');
+	QVERIFY2(fields.size() == 2, line.constData());
+
+	bssh_session_registry *registry = bssh_session_registry::shared();
+	const int before = registry->count();
+	bssh_main_window::take_from_another_process(QString::fromUtf8(fields.at(0)),
+	                                            QString::fromUtf8(fields.at(1)),
+	                                            QPoint(-10000, -10000));
+	QCOMPARE(registry->count(), before + 1);
+	bssh_session *session = registry->at(registry->count() - 1);
+	QVERIFY(session);
+	QVERIFY2(session->emulator()->screen().to_text().contains(QStringLiteral("given-15")),
+	          "the screen from the other process did not come along");
+	bssh_main_window *window = nullptr;
+	for (QWidget *widget : QApplication::topLevelWidgets()) {
+		if (auto *each = qobject_cast<bssh_main_window *>(widget))
+			if (each->registry() && each->isVisible() && each->shown_sessions().contains(session)) window = each;
+	}
+	QVERIFY2(window, "the session arrived and no window shows it");
+
+	session->input_router()->send_text(QStringLiteral("echo landed-$((4*4))\n"));
+	QVERIFY2(screen_shows(session, QStringLiteral("landed-16")),
+	          qPrintable(session->emulator()->screen().to_text()));
+
+	/* Exited already, as likely as not: it stops serving once taken, and
+	 * waitForFinished() is false for a process that is not running. */
+	if (giver.state() != QProcess::NotRunning) QVERIFY(giver.waitForFinished(30000));
+	QCOMPARE(giver.exitStatus(), QProcess::NormalExit);
+	QCOMPARE(giver.exitCode(), 0);
+	registry->close(session);
+	window->close();
+	QCoreApplication::processEvents();
+}
+
+/*
+ * An upgrade: the real program, started with --adopt-from, takes every
+ * live session from this process and asks it to quit. Each shell writes a
+ * file between lines of output; nobody reading its terminal would block
+ * it within a second, so a file still changing well after the move is the
+ * new program holding the session, not a session left to nobody.
+ */
+void handoff_test::a_new_version_takes_every_session() {
+	const QString program = QFileInfo(QCoreApplication::applicationDirPath() +
+	                                  QStringLiteral("/../beerssh")).absoluteFilePath();
+	if (!QFileInfo(program).isExecutable()) QSKIP("the app is not built beside the tests; run make");
+
+	runtime_dir_t runtime;
+	QTemporaryDir files;
+	QList<bssh_session *> sessions;
+	QStringList beats;
+	for (int i = 0; i < 2; ++i) {
+		bssh_profile_t profile = local_shell_profile();
+		const QString beat = files.filePath(QStringLiteral("beat-%1").arg(i));
+		beats.append(beat);
+		profile.command = { QStringLiteral("/bin/sh"), QStringLiteral("-c"),
+		                    QStringLiteral("while :; do date +%s%N > %1; "
+		                                   "head -c 1024 /dev/zero | tr '\\\\0' x; echo; "
+		                                   "sleep 0.1; done").arg(beat) };
+		bssh_session *session = new bssh_session(profile);
+		session->resize(60, 12);
+		session->connect_to_host();
+		QTRY_COMPARE(session->state(), bssh_ssh_session::CONNECTED);
+		sessions.append(session);
+	}
+
+	bssh_handoff_point point([&sessions](const QString &id) -> bssh_session * {
+		for (bssh_session *s : sessions)
+			if (s->handoff_id() == id && !s->is_moving()) return s;
+		return nullptr;
+	});
+	point.set_lister([&sessions] {
+		QStringList ids;
+		for (bssh_session *s : sessions) ids.append(s->handoff_id());
+		return ids;
+	});
+	QString why;
+	QVERIFY2(point.listen(&why), qPrintable(why));
+	int given = 0;
+	bool asked_to_quit = false;
+	connect(&point, &bssh_handoff_point::session_given, this, [&given](bssh_session *) { ++given; });
+	connect(&point, &bssh_handoff_point::quit_requested, this, [&asked_to_quit] { asked_to_quit = true; });
+
+	QProcess app;
+	QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+	environment.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("offscreen"));
+	app.setProcessEnvironment(environment);
+	app.setProcessChannelMode(QProcess::MergedChannels);
+	app.start(program, { QStringLiteral("--adopt-from"), point.path() });
+	QVERIFY(app.waitForStarted(10000));
+
+	QElapsedTimer timer;
+	timer.start();
+	while (!(given == 2 && asked_to_quit) && timer.elapsed() < 60000 &&
+	       app.state() == QProcess::Running)
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+	QVERIFY2(given == 2, qPrintable(QStringLiteral("%1 of 2 given; the app said: %2")
+	                                        .arg(given).arg(QString::fromLocal8Bit(app.readAll()))));
+	QVERIFY(asked_to_quit);
+	for (bssh_session *session : sessions) delete session;
+
+	/* Well after the move, and with this process holding nothing: the
+	 * shells still running means the new program is reading them. */
+	QMap<QString, QByteArray> first;
+	for (const QString &beat : beats) {
+		QFile file(beat);
+		QVERIFY(file.open(QIODevice::ReadOnly));
+		first.insert(beat, file.readAll());
+	}
+	QTest::qWait(3000);
+	for (const QString &beat : beats) {
+		QFile file(beat);
+		QVERIFY(file.open(QIODevice::ReadOnly));
+		QVERIFY2(file.readAll() != first.value(beat),
+		         qPrintable(QStringLiteral("%1 stopped: nobody is reading that shell").arg(beat)));
+	}
+
+	app.kill();
+	app.waitForFinished(10000);
 }

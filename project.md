@@ -7068,21 +7068,57 @@ window with no name is a blank row in the task switcher.
      models the realistic mistake, releasing through `teardown()`.
      **Still open here:** a session through a jump host is refused with
      a reason; its tunnel's session and socketpair have to move too.
-  5. The UI: a drop on another BeerSSH process moves the session, which
-     replaces defect 1's planned refusal below. Handing every session to
-     a newer BeerSSH on upgrade comes after, as a second user of the same
-     handoff.
+  5. **[DONE 2026-10-23]** The UI. Every desktop BeerSSH listens at its
+     handoff point from start-up (not under `--store-view`); a session
+     carries a random `handoff_id()`, and a session drag's payload now
+     says where to ask and for what, `pid:index:id:path`, the path last
+     because it is the one part that can hold a colon. Defect 1's
+     refusal is gone wherever the asking can be done:
+     - **Qt's drag (Wayland, the tests):** the receiving window accepts
+       a foreign payload as a move and takes the session a turn later,
+       outside its `dropEvent`, while the source's `QDrag::exec` loop
+       answers the take.
+     - **X11's own drag:** the source knows where it let go and the
+       target does not, so the source sends an "offer" -- the session's
+       id, where to ask, the point -- to the BeerSSH whose window was
+       under the pointer (`_NET_WM_PID`, then `path_for(pid)`), returns
+       to its event loop, and serves the take that follows. The ghost
+       is no longer drawn refused over another BeerSSH that can take it.
+     Either way the taker places the session where it landed, as a drop
+     from its own process would; landing on none of its windows makes a
+     window of its own, so an arrival is never shown nowhere. The giver
+     drops the given session from its registry through
+     `bssh_session_registry::release()`, which disconnects nothing and
+     writes no kept scrollback -- the history went with the session.
+     **Upgrades:** File > Restart, Keeping Sessions starts this program
+     again with `--adopt-from <socket>`; the new one lists the old one's
+     connected sessions, takes each, shows them as tabs, and asks it to
+     quit. The old one quits only once nothing live is left in it, so a
+     session it could not give -- through a jump host, for now -- keeps
+     it running. The program is restarted from its path on disk with a
+     trailing " (deleted)" removed, which is how Linux names a running
+     program whose file an upgrade replaced.
+     Tests: the payload round trip; a session given by another process
+     (the test binary as `--handoff-give`) landing in this one, shown in
+     a new window and answering; and the real program, started with
+     `--adopt-from`, taking two live shells. Each shell writes a file
+     between kilobytes of output, which would block within a second if
+     nobody read its terminal, and the files still change three seconds
+     after this process let go. Three more specs in
+     `tool/sabotage/session-move.toml`; the one in `src/main.cpp` needs
+     `make test`, which rebuilds the program the test runs.
+     **Not covered by a test:** the X11 offer and the QDrag accept are
+     gestures; what they call is tested, the gestures are not.
   6. Upstream: libssh will want the gcrypt and mbedTLS backends too, and
      this tree builds only OpenSSL. Acceptance is not assured, which is a
      risk rather than a stopper: the patches are carried here either way.
 
-  **[OPEN] for the holder:** which desktop cases to build -- moving a
-  session to another process by drag, handing all sessions to a new
-  version, or both; whether the .deb may carry a static libssh; and
-  whether the client/server split (a session server, sec 8.4) comes
-  first. That split turns a drag into a message with nothing serialised,
-  but restarting the server itself on an upgrade still needs this
-  handoff, so it changes the order and not the need.
+  **Decided by the holder, 2026-10-23:** both desktop cases (a drag
+  into another process, and an upgrade handing every session over), and
+  a static libssh in the .deb is fine. Built in the order above.
+  **Still open:** sessions through a jump host, refused with a reason,
+  since the tunnel's session and socketpair have to move too; and
+  offering the libssh patch upstream, which is the holder's to send.
 - **A window shows its OWN tabs, not the registry's.** The tab bar was built
   from every session in the process, which was indistinguishable from correct
   while there could be only one window and wrong the moment there could be two:
@@ -7170,8 +7206,8 @@ window with no name is a blank row in the task switcher.
                                          own pane: nothing
       outside every window               a new window, same         the drag pixmap
                                          process (sec 8.4)          only
-      another BeerSSH PROCESS's window   X11: treated as outside;   --
-                                         QDrag: see defect 1
+      another BeerSSH PROCESS's window   the session MOVES there    --
+                                         (step 5 above, 2026-10-23)
       another application                refused -> a new window    --
       Escape mid-drag                    X11: cancelled;            --
                                          QDrag: a new window
@@ -7184,7 +7220,9 @@ window with no name is a blank row in the task switcher.
      source keeps its session and nobody sees an error. A live session
      cannot cross processes today (the migration probe above), so the
      right answer is to stamp the process into the payload and refuse a
-     foreign one with the no-drop cursor.
+     foreign one with the no-drop cursor. **Superseded 2026-10-23:** the
+     stamp stays and the refusal does not -- the payload now says where
+     to ask, and the session moves (step 5 of the migration plan above).
   2. **Escape tears out a window under QDrag.** `exec()` returns
      IgnoreAction for a cancel exactly as for a release over nothing, and
      both are read as "nobody wanted it". The X11 ghost tells them apart.
@@ -7213,9 +7251,8 @@ window with no name is a blank row in the task switcher.
     decided (one process-wide registry). A new PROCESS would need the
     session to migrate, probed above and not built.
   - **Into another window**: built, same process. **Into another
-    process**: refused, per defect 1, unless the holder wants something
-    else there -- the nearest honest thing would be opening the same host
-    afresh in that process, which is a new session rather than a move.
+    process**: the session moves, since 2026-10-23 (step 5 above). It was
+    refused per defect 1 until a live session could cross processes.
 
   *Decided by the holder, 2026-10-09:*
   - **The rest of a window does nothing.** Status line, keyboard, the
@@ -7230,6 +7267,8 @@ window with no name is a blank row in the task switcher.
     among the tabs, and the slot is drawn before release; without one, the
     strip where it would appear takes the drop.
   - **Another process: refused**, the no-drop cursor and nothing moved.
+    **Superseded by the holder 2026-10-23**, who asked for the move: the
+    session goes to that process (step 5 of the migration plan).
   So a full window's side zones fold into the swap, which the holder's
   model already says, and a drop that cannot be a split, a swap or a tab
   is a cancel rather than a tab.

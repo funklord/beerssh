@@ -13,6 +13,8 @@
 #include "model/profile.h"
 #include "model/profile_store.h"
 #include "model/session_registry.h"
+#include "model/handoff_point.h"
+#include "model/session.h"
 #include "model/font_download.h"
 #include "platform/platform.h"
 #include "term/font_catalog.h"
@@ -371,7 +373,8 @@ int main(int argc, char *argv[]) {
 	 * --geometry be measured against the terminal that will actually be
 	 * on screen rather than against a guess.
 	 */
-	if (!line.self_test && !launch.is_valid() && line.store_view.isEmpty()) {
+	if (!line.self_test && !launch.is_valid() && line.store_view.isEmpty() &&
+	    line.adopt_from.isEmpty()) {
 		window.restore_layout();
 		window.open_default_session();
 	}
@@ -433,6 +436,72 @@ int main(int argc, char *argv[]) {
 	 * without a word.
 	 */
 	bssh_session_registry *registry = bssh_session_registry::shared();
+
+#ifndef Q_OS_ANDROID
+	/*
+	 * Where another BeerSSH asks this one for a live session (sec 8.4): a
+	 * tab dropped on one of its windows, or a new version taking every
+	 * session over. Desktop only -- on Android an app is one process, and
+	 * an update or a process death ends all of it at once. Not for a
+	 * store screenshot, whose sessions are made up and never connect.
+	 */
+	if (line.store_view.isEmpty()) {
+		auto *handoff = new bssh_handoff_point([registry](const QString &id) -> bssh_session * {
+			for (bssh_session *session : registry->sessions()) {
+				if (session->handoff_id() == id &&
+				    session->state() == bssh_ssh_session::CONNECTED)
+					return session;
+			}
+			return nullptr;
+		}, &app);
+		handoff->set_lister([registry] {
+			QStringList ids;
+			for (bssh_session *session : registry->sessions()) {
+				if (session->state() == bssh_ssh_session::CONNECTED)
+					ids.append(session->handoff_id());
+			}
+			return ids;
+		});
+		QString why;
+		if (!handoff->listen(&why)) qWarning("handoff: %s", qPrintable(why));
+		QObject::connect(handoff, &bssh_handoff_point::session_given,
+		                  registry, &bssh_session_registry::release);
+		QObject::connect(handoff, &bssh_handoff_point::offered, &app,
+		                  [](const QString &source, const QString &id, const QPoint &global) {
+			bssh_main_window::take_from_another_process(source, id, global);
+		});
+		/* A new version has everything it could take. Anything it could
+		 * not -- a session through a jump host, for now -- keeps this one
+		 * running, rather than ending with the program. */
+		QObject::connect(handoff, &bssh_handoff_point::quit_requested, &app, [registry] {
+			if (registry->live_count() == 0) QCoreApplication::quit();
+		});
+
+		/*
+		 * --adopt-from: this IS the new version. Every session the old one
+		 * will give, taken and shown here, and then it is asked to go.
+		 */
+		if (!line.adopt_from.isEmpty()) {
+			int taken = 0;
+			QString reason;
+			const QStringList ids = bssh_handoff_point::list(line.adopt_from, &reason);
+			for (const QString &id : ids) {
+				bssh_session *session =
+				        bssh_handoff_point::take(line.adopt_from, id, registry, &reason);
+				if (!session) {
+					qWarning("handoff: could not take a session: %s", qPrintable(reason));
+					continue;
+				}
+				registry->adopt(session);
+				window.adopt_session(session);
+				++taken;
+			}
+			if (taken == 0) window.open_default_session();
+			bssh_handoff_point::request_quit(line.adopt_from);
+		}
+	}
+#endif
+
 	QObject::connect(&app, &QCoreApplication::aboutToQuit, registry,
 	                  &bssh_session_registry::save_kept_scrollback);
 	QObject::connect(&app, &QGuiApplication::applicationStateChanged, registry,

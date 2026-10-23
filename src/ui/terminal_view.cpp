@@ -1185,9 +1185,31 @@ QString bssh_terminal_view::text_for_drop(const QMimeData *mime) {
 	return QString();
 }
 
-QByteArray bssh_session_payload(int registry_index) {
-	return QByteArray::number(QCoreApplication::applicationPid()) + ':'
+QByteArray bssh_session_payload(int registry_index, const QString &handoff_id,
+                                const QString &handoff_path) {
+	QByteArray payload = QByteArray::number(QCoreApplication::applicationPid()) + ':'
 	        + QByteArray::number(registry_index);
+	if (!handoff_id.isEmpty() && !handoff_path.isEmpty())
+		payload += ':' + handoff_id.toUtf8() + ':' + handoff_path.toUtf8();
+	return payload;
+}
+
+bool bssh_session_payload_handoff(const QMimeData *mime, QString *path, QString *handoff_id) {
+	bool foreign = false;
+	bssh_session_payload_index(mime, &foreign);
+	if (!foreign) return false;
+	const QByteArray data = mime->data(bssh_session_mime_type());
+	/* pid, index, id -- and the path, which is everything after. */
+	int at = -1;
+	for (int field = 0; field < 3; ++field) {
+		at = data.indexOf(':', at + 1);
+		if (at < 0) return false;
+	}
+	const QList<QByteArray> head = data.left(at).split(':');
+	if (head.size() != 3 || head.at(2).isEmpty() || at + 1 >= data.size()) return false;
+	if (handoff_id) *handoff_id = QString::fromUtf8(head.at(2));
+	if (path) *path = QString::fromUtf8(data.mid(at + 1));
+	return true;
 }
 
 int bssh_session_payload_index(const QMimeData *mime, bool *foreign) {
@@ -1196,8 +1218,8 @@ int bssh_session_payload_index(const QMimeData *mime, bool *foreign) {
 
 	const QList<QByteArray> parts = mime->data(bssh_session_mime_type()).split(':');
 	bool pid_ok = false, index_ok = false;
-	const qint64 pid = parts.size() == 2 ? parts.at(0).toLongLong(&pid_ok) : -1;
-	const int index = parts.size() == 2 ? parts.at(1).toInt(&index_ok) : -1;
+	const qint64 pid = parts.size() >= 2 ? parts.at(0).toLongLong(&pid_ok) : -1;
+	const int index = parts.size() >= 2 ? parts.at(1).toInt(&index_ok) : -1;
 	if (!pid_ok || !index_ok || pid != QCoreApplication::applicationPid()) {
 		if (foreign) *foreign = true;
 		return -1;
