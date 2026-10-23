@@ -6969,12 +6969,36 @@ window with no name is a blank row in the task switcher.
      what every build tests against. Found on the way: `make` had never
      built beersshd, because `SSHD_TARGET` was defined after
      `all: $(ARTIFACTS)` had expanded it.
-  2. The libssh patch: export and import, tested in `check-handoff`
-     across an `exec`, not a `fork`. Once each for chacha20-poly1305,
-     AES-GCM and AES-CTR with an ETM MAC, with data in flight both ways,
-     strict KEX on, and a server rekey forced just after the import.
-     Sabotage specs drop the sequence number, the IV and the unread input
-     in turn.
+  2. **[DONE 2026-10-23]** The libssh patch,
+     `libssh-patch/0001-add-a-transport-export-and-import.patch`:
+     `ssh_session_export_transport`, `ssh_session_import_transport`,
+     `ssh_session_detach_transport` and `ssh_session_get_channel`, in a
+     new `src/transport_export.c`. The import goes through the key
+     exchange's own machinery (`crypt_set_algorithms_client`, the
+     ciphers' `set_*_key` with the exporter's current IVs) rather than
+     writing the structures by hand. `check-handoff`'s `migrate.c` moves
+     a session into an exec'd process -- it gets neither the parent's
+     memory nor its socket except through the message -- for
+     chacha20-poly1305, aes256-gcm, aes128-ctr with an ETM MAC and
+     aes256-ctr with a plain one. It leaves one echo in libssh's channel
+     buffer and one in the kernel, then sends 128 KiB each way. sshd's
+     own log shows 11 to 18 key exchanges per moved connection, all but
+     the first after the move. Sabotaged by hand, each failure lands
+     where the cipher says it should. The IV left at its initial value
+     breaks GCM and CTR and not chacha, whose nonce is the sequence
+     number. The receive sequence number left unset breaks everything
+     but GCM, which uses it nowhere. Dropping the channel's unread
+     output breaks all four. Found on the way: libssh never clears
+     `SSH_SESSION_FLAG_KEXINIT_SENT` after the first exchange, so it
+     cannot mean "an exchange is in flight"; the handshake and session
+     state are what the export checks. Not exercised: the unconsumed
+     socket input is always under one block and was empty in every run,
+     and the rekey counters only move when a rekey happens. The patch
+     is stamped like vterm's, with a parse-time witness per patched
+     file, so a sabotage edit compiles as edited rather than being
+     refused as a patch that no longer applies. Specs for
+     `tool/sabotage.py` arrive with step 4's QtTest, which the harness
+     can name.
   3. The libvterm patch, tested by a round trip: export, import into a
      fresh emulator, compare the screens, then feed both the same bytes,
      including a sequence split across the move.

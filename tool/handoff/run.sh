@@ -45,7 +45,11 @@ UsePAM no
 PasswordAuthentication no
 PermitRootLogin no
 AuthorizedKeysFile $DIR/home/.ssh/authorized_keys
-LogLevel VERBOSE
+LogLevel DEBUG1
+# Rekeys every 16 KiB from the server's side, so migrate.c's traffic after
+# an import runs key exchanges on the imported state; the earlier probes
+# move far less than that and never meet one.
+RekeyLimit 16K
 EOF
 
 "$SSHD" -f "$DIR/sshd_config" -E "$DIR/sshd.log"
@@ -73,6 +77,8 @@ cc -O1 -Wall -Wextra -o "$DIR/plaintext" "$HERE/plaintext.c"
 LIBSSH_PREFIX=${LIBSSH_PREFIX:?run this through make check-handoff, which builds libssh first}
 cc -O1 -Wall -Wextra -DLIBSSH_STATIC -I"$LIBSSH_PREFIX/include" -o "$DIR/authenticated" \
 	"$HERE/authenticated.c" "$LIBSSH_PREFIX/lib/libssh.a" -lcrypto -lz -lpthread
+cc -O1 -Wall -Wextra -DLIBSSH_STATIC -I"$LIBSSH_PREFIX/include" -o "$DIR/migrate" \
+	"$HERE/migrate.c" "$LIBSSH_PREFIX/lib/libssh.a" -lcrypto -lz -lpthread
 
 # A key sshd will accept, and an authorized_keys naming it. Same shape as
 # tool/check-ssh.sh: its own HOME so nothing touches the real one.
@@ -121,6 +127,56 @@ for mode in clean doubleread; do
 		doubleread:passed) echo "!! doubleread was not detected under encryption" >&2; fails=$((fails+1)) ;;
 	esac
 done
+
+# ---- the real move: export, exec, import -----------------------------
+#
+# The session crosses as a blob and a descriptor into an exec'd process
+# (migrate.c), once per cipher family libssh treats differently: chacha's
+# nonce comes from the sequence number, GCM's counter lives in OpenSSL,
+# CTR with an ETM MAC sends its length in clear, and CTR with a plain MAC
+# decrypts a packet's first block before the rest arrives.
+newkeys_before=$(grep -c 'SSH2_MSG_NEWKEYS received' "$DIR/sshd.log" || true)
+for spec in "chacha20-poly1305@openssh.com -" \
+            "aes256-gcm@openssh.com -" \
+            "aes128-ctr hmac-sha2-256-etm@openssh.com" \
+            "aes256-ctr hmac-sha2-512"; do
+	set -- $spec
+	echo "--- moved by export and import: $1 ${2#-} ---"
+	if timeout 60 "$DIR/migrate" "$PORT" "$(id -un)" "$DIR/home/.ssh/id_probe" "$1" "$2" clean; then
+		verdict=passed
+	else
+		verdict=failed
+	fi
+	echo "migrate $1: $verdict"
+
+	# A pass is only evidence if the key exchanges really ran on the
+	# imported state. Counted from sshd's own log, the peer's word: each
+	# NEWKEYS it receives is one exchange completed. One is the initial
+	# exchange, before the move; 128 KiB after it, against a 16 KiB limit,
+	# has to bring several more.
+	newkeys=$(grep -c 'SSH2_MSG_NEWKEYS received' "$DIR/sshd.log" || true)
+	exchanges=$((newkeys - newkeys_before))
+	newkeys_before=$newkeys
+	echo "migrate $1: sshd completed $exchanges key exchange(s) on this connection"
+	echo
+	if [ "$verdict" = passed ] && [ "$exchanges" -lt 4 ]; then
+		echo "!! too few key exchanges to have rekeyed after the move ($1)" >&2
+		fails=$((fails+1))
+	fi
+	[ "$verdict" = passed ] || { echo "!! the session did not survive the move ($1)" >&2; fails=$((fails+1)); }
+done
+
+# And the commit point violated: the exporter reads on after the export.
+# This must fail, or the probe cannot see the fault.
+echo "--- moved by export and import, exporter keeps reading ---"
+if timeout 60 "$DIR/migrate" "$PORT" "$(id -un)" "$DIR/home/.ssh/id_probe" \
+	chacha20-poly1305@openssh.com - steal; then
+	echo "!! a read after the export was not detected" >&2
+	fails=$((fails+1))
+else
+	echo "migrate steal: failed, as it must"
+fi
+echo
 
 echo "=============================="
 if [ $fails -eq 0 ]; then

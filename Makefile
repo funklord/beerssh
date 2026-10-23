@@ -357,14 +357,45 @@ LIBSSH_LIB       = $(LIBSSH_PREFIX)/lib/libssh.a
 LIBSSH_PATCHES   = $(sort $(wildcard libssh-patch/*.patch))
 LIBSSH_JOBS     ?= $(shell nproc 2>/dev/null || echo 2)
 
+LIBSSH_STAMP     = $(LIBSSH_BUILD_DIR)/.patched
+
+# The stamp says the sources WERE patched, the way vterm's does, and is
+# witnessed at parse time the same way: `git -C libssh checkout -- .` or
+# `git submodule update` rewrites the sources under a stamp that
+# survives, and the next build would compile an unpatched libssh in
+# silence. One grep per patched file for a token only the patches put
+# there. A missing token discards the stamp, and the file the patch
+# CREATES goes with it -- a checkout leaves an untracked file alone, and
+# the patch cannot re-apply over one that is already there.
+#
+# A stamp rather than re-checking the patches on every build, so that a
+# sabotage edit to a patched file (tool/sabotage.py) is compiled as
+# edited instead of being refused as a patch that no longer applies.
+BSSH_LIBSSH_WITNESS := $(shell \
+	if [ -f $(LIBSSH_STAMP) ] \
+	   && ! { grep -q ssh_session_import_transport $(LIBSSH_DIR)/include/libssh/libssh.h 2>/dev/null \
+	          && grep -q ssh_socket_import_fd $(LIBSSH_DIR)/src/socket.c 2>/dev/null \
+	          && grep -q ssh_socket_import_fd $(LIBSSH_DIR)/include/libssh/socket.h 2>/dev/null \
+	          && grep -q '^void ssh_client_connection_callback' $(LIBSSH_DIR)/src/client.c 2>/dev/null \
+	          && grep -q ssh_client_connection_callback $(LIBSSH_DIR)/include/libssh/session.h 2>/dev/null \
+	          && grep -q transport_export.c $(LIBSSH_DIR)/src/CMakeLists.txt 2>/dev/null \
+	          && grep -q ssh_session_export_transport $(LIBSSH_DIR)/src/libssh.map 2>/dev/null \
+	          && [ -f $(LIBSSH_DIR)/src/transport_export.c ]; }; then \
+		echo "make: libssh sources were restored under their patch stamp;" >&2; \
+		echo "make:   discarding the stamp so the patches re-apply." >&2; \
+		rm -f $(LIBSSH_STAMP) $(LIBSSH_DIR)/src/transport_export.c; \
+	fi)
+
 # The sources, fetched and patched, and nothing built: shared by the
 # desktop archive below and tool/build-deps-android.sh, so the two cannot
-# build different libssh. Patching is idempotent -- a patch already in the
-# tree is recognised and left -- so it runs on every build, and a
-# submodule restored by `git checkout` or `git submodule update` is
-# re-patched rather than built bare. A patch that no longer applies fails
-# here, naming upstream, rather than compiling a libssh without it.
-libssh-source:
+# build different libssh.
+libssh-source: $(LIBSSH_STAMP)
+
+# Patching is idempotent -- a patch already in the tree is recognised and
+# left -- and a patch that no longer applies fails here, naming upstream,
+# rather than compiling a libssh without it. The proof that the set still
+# applies from clean is check-ci's, which builds from the gitlink.
+$(LIBSSH_STAMP): $(LIBSSH_PATCHES)
 	@if [ ! -f $(LIBSSH_DIR)/CMakeLists.txt ]; then \
 		if ! command -v git >/dev/null 2>&1; then \
 			echo "make: $(LIBSSH_DIR)/ is empty and git is not installed." >&2; exit 1; \
@@ -378,16 +409,21 @@ libssh-source:
 		[ -f $(LIBSSH_DIR)/CMakeLists.txt ] || { \
 			echo "make: the $(LIBSSH_DIR) submodule could not be fetched" >&2; exit 1; }; \
 	fi
+	@mkdir -p $(@D)
+	@echo "applying $(words $(LIBSSH_PATCHES)) patch(es) to vendored libssh"
 	@for patch in $(LIBSSH_PATCHES); do \
 		if git -C $(LIBSSH_DIR) apply --check "$(CURDIR)/$$patch" 2>/dev/null; then \
 			git -C $(LIBSSH_DIR) apply "$(CURDIR)/$$patch" || exit 1; \
 			echo "  $$patch: applied"; \
-		elif ! git -C $(LIBSSH_DIR) apply --reverse --check "$(CURDIR)/$$patch" 2>/dev/null; then \
+		elif git -C $(LIBSSH_DIR) apply --reverse --check "$(CURDIR)/$$patch" 2>/dev/null; then \
+			echo "  $$patch: already applied"; \
+		else \
 			echo "  $$patch: DOES NOT APPLY -- upstream changed under it." >&2; \
 			echo "  Rebase the patch against the current submodule before building." >&2; \
 			exit 1; \
 		fi; \
 	done
+	@touch $@
 
 # FORCE, because only cmake knows whether its sources moved; an unchanged
 # tree is a no-op build, and `cmake --install` leaves an unchanged archive
@@ -395,7 +431,7 @@ libssh-source:
 # build-and-commit.md (MinSizeRel). The options match
 # tool/build-deps-android.sh's: static, with the server half beersshd
 # needs, without examples or tests.
-$(LIBSSH_LIB): libssh-source FORCE
+$(LIBSSH_LIB): $(LIBSSH_STAMP) FORCE
 	@mkdir -p $(LIBSSH_BUILD_DIR)
 	@if [ ! -f $(LIBSSH_BUILD_DIR)/build/CMakeCache.txt ]; then \
 		cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD_DIR)/build \

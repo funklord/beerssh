@@ -1,0 +1,1111 @@
+Subject: [PATCH] session: export and import an authenticated client
+ transport
+
+Add ssh_session_export_transport(), ssh_session_import_transport(),
+ssh_session_detach_transport() and ssh_session_get_channel(), so an
+authenticated client session -- its keys, current IVs, sequence numbers,
+negotiated algorithms, unconsumed input and open channels -- can move to
+another process with its socket (passed separately, for instance by
+SCM_RIGHTS) and continue the same connection. The server sees nothing.
+OpenSSH's sshd moves the same packet state between its privilege-
+separated processes.
+
+The export reads the session and changes nothing, so a caller can resume
+if the receiver fails; the detach then closes the exporter's copy of the
+descriptor and marks the session dead, so ssh_disconnect() and
+ssh_channel_free() send nothing. The export refuses compression (a zlib
+stream has no serialisation) and answers SSH_AGAIN during a key exchange,
+a partly read packet, unsent output or a pending request.
+
+The import reuses the key exchange's own machinery: the negotiated names
+go through crypt_set_algorithms_client(), the keys and the exporter's
+current IVs through set_encrypt_key()/set_decrypt_key(), and the socket
+is adopted as connected by the new ssh_socket_import_fd().
+ssh_client_connection_callback() loses its static so the import can
+install it for later rekeys.
+
+Only the OpenSSL 3 backend is supported: EVP_CIPHER_CTX_get_updated_iv()
+reports where AES-GCM's invocation counter and AES-CTR's block counter
+stand. chacha20-poly1305 derives its nonce from the sequence number and
+needs no IV. The libgcrypt and mbedTLS backends refuse the export.
+
+Tested by moving a session into an exec'd process for chacha20-poly1305,
+aes256-gcm, aes128-ctr with an ETM MAC and aes256-ctr with a plain MAC,
+with data in flight in both libssh's channel buffer and the kernel, then
+128 KiB each way across 10+ rekeys from both ends.
+
+---
+diff --git a/include/libssh/libssh.h b/include/libssh/libssh.h
+index 3bddb019..93a267fa 100644
+--- a/include/libssh/libssh.h
++++ b/include/libssh/libssh.h
+@@ -559,6 +559,19 @@ LIBSSH_API char *ssh_get_issue_banner(ssh_session session);
+ LIBSSH_API int ssh_get_openssh_version(ssh_session session);
+ LIBSSH_API int ssh_request_no_more_sessions(ssh_session session);
+ 
++/*
++ * Moving an authenticated client session to another process: the
++ * transport's state -- keys, IVs, sequence numbers, the negotiated
++ * algorithms, the bytes read and not yet consumed -- and its open
++ * channels, as one opaque blob. The descriptor travels separately (for
++ * instance by SCM_RIGHTS). See ssh_session_export_transport().
++ */
++LIBSSH_API int ssh_session_export_transport(ssh_session session, ssh_string *state);
++LIBSSH_API int ssh_session_import_transport(ssh_session session, socket_t fd,
++                                            ssh_string state);
++LIBSSH_API void ssh_session_detach_transport(ssh_session session);
++LIBSSH_API ssh_channel ssh_session_get_channel(ssh_session session, size_t index);
++
+ LIBSSH_API int ssh_get_server_publickey(ssh_session session, ssh_key *key);
+ 
+ enum ssh_publickey_hash_type {
+diff --git a/include/libssh/session.h b/include/libssh/session.h
+index aed94072..5e0097f8 100644
+--- a/include/libssh/session.h
++++ b/include/libssh/session.h
+@@ -298,4 +298,7 @@ int ssh_handle_packets_termination(ssh_session session,
+                                    void *user);
+ void ssh_socket_exception_callback(int code, int errno_code, void *user);
+ 
++/* Drives a client's key exchange; also installed by a transport import */
++void ssh_client_connection_callback(ssh_session session);
++
+ #endif /* SESSION_H_ */
+diff --git a/include/libssh/socket.h b/include/libssh/socket.h
+index 50e7db75..3a011705 100644
+--- a/include/libssh/socket.h
++++ b/include/libssh/socket.h
+@@ -50,6 +50,9 @@ void ssh_socket_fd_set(ssh_socket s, fd_set *set, socket_t *max_fd);
+ void ssh_socket_set_fd_in(ssh_socket s, socket_t fd);
+ void ssh_socket_set_fd_out(ssh_socket s, socket_t fd);
+ int ssh_socket_nonblocking_flush(ssh_socket s);
++void ssh_socket_get_pending_input(ssh_socket s, const void **data, size_t *len);
++int ssh_socket_import_fd(ssh_socket s, socket_t fd, const void *pending,
++                         size_t len);
+ void ssh_socket_set_write_wontblock(ssh_socket s);
+ void ssh_socket_set_read_wontblock(ssh_socket s);
+ void ssh_socket_set_except(ssh_socket s);
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index e0243bb0..b4783120 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -111,6 +111,7 @@ set(libssh_SRCS
+   pki_container_openssh.c
+   poll.c
+   session.c
++  transport_export.c
+   scp.c
+   socket.c
+   string.c
+diff --git a/src/client.c b/src/client.c
+index 2d6cafa0..73f0b61d 100644
+--- a/src/client.c
++++ b/src/client.c
+@@ -396,7 +396,7 @@ pending:
+  * @brief A function to be called each time a step has been done in the
+  * connection.
+  */
+-static void ssh_client_connection_callback(ssh_session session)
++void ssh_client_connection_callback(ssh_session session)
+ {
+     int rc;
+ 
+diff --git a/src/libssh.map b/src/libssh.map
+index 02f5f683..78eb9d31 100644
+--- a/src/libssh.map
++++ b/src/libssh.map
+@@ -481,3 +481,12 @@ LIBSSH_4_10_0    # Released
+         ssh_pki_export_privkey_file_format;
+         ssh_request_no_more_sessions;
+ } LIBSSH_4_9_0;
++
++LIBSSH_AFTER_4_10_0
++{
++    global:
++        ssh_session_detach_transport;
++        ssh_session_export_transport;
++        ssh_session_get_channel;
++        ssh_session_import_transport;
++} LIBSSH_4_10_0;
+diff --git a/src/socket.c b/src/socket.c
+index 15ee6ab6..d1dac935 100644
+--- a/src/socket.c
++++ b/src/socket.c
+@@ -541,6 +541,54 @@ void ssh_socket_set_fd(ssh_socket s, socket_t fd)
+     }
+ }
+ 
++/** \internal
++ * \brief The bytes read from the socket and not yet consumed, for a
++ * transport export (transport_export.c). The pointer is valid until the
++ * socket is next read.
++ */
++void ssh_socket_get_pending_input(ssh_socket s, const void **data, size_t *len)
++{
++    *data = ssh_buffer_get(s->in_buffer);
++    *len = ssh_buffer_get_len(s->in_buffer);
++}
++
++/** \internal
++ * \brief Adopt a descriptor that is already connected, with the bytes
++ * another process had read from it and not consumed.
++ *
++ * Unlike ssh_socket_set_fd(), which waits for a nonblocking connect to
++ * finish, this takes the socket as connected and waits for input.
++ */
++int ssh_socket_import_fd(ssh_socket s, socket_t fd, const void *pending,
++                         size_t len)
++{
++    ssh_poll_handle h = NULL;
++    int rc;
++
++    s->fd = fd;
++    s->fd_is_socket = 1;
++    s->state = SSH_SOCKET_CONNECTED;
++    s->read_wontblock = 0;
++    s->write_wontblock = 1;
++    s->data_except = 0;
++
++    if (len > 0) {
++        rc = ssh_buffer_add_data(s->in_buffer, pending, (uint32_t)len);
++        if (rc < 0) {
++            return SSH_ERROR;
++        }
++    }
++
++    h = ssh_socket_get_poll_handle(s);
++    if (h == NULL) {
++        return SSH_ERROR;
++    }
++    ssh_poll_set_fd(h, fd);
++    ssh_poll_set_events(h, POLLIN);
++
++    return SSH_OK;
++}
++
+ /** \internal
+  * \brief returns the input file descriptor of the socket
+  */
+diff --git a/src/transport_export.c b/src/transport_export.c
+new file mode 100644
+index 00000000..474bd786
+--- /dev/null
++++ b/src/transport_export.c
+@@ -0,0 +1,917 @@
++/*
++ * transport_export.c - move an authenticated client session between
++ * processes.
++ *
++ * An SSH connection is a TCP socket plus the transport state both ends
++ * agree on: the keys, the IVs, the sequence numbers, the negotiated
++ * algorithms, and the channels open over it. The socket can be handed to
++ * another process (SCM_RIGHTS); this file hands over the rest, so the
++ * receiving process continues the same connection and the server sees
++ * nothing at all. OpenSSH's sshd moves the same state between its
++ * privilege-separated processes.
++ *
++ * Three calls:
++ *
++ *   ssh_session_export_transport()  in the process giving the session up;
++ *                                   reads, changes nothing
++ *   ssh_session_import_transport()  in the receiving process, into a fresh
++ *                                   session from ssh_new()
++ *   ssh_session_detach_transport()  in the giving process, once the
++ *                                   receiver has the session: it closes
++ *                                   this copy of the descriptor and makes
++ *                                   ssh_disconnect() and ssh_channel_free()
++ *                                   send nothing
++ *
++ * Until the detach, the exporter can carry on as if nothing happened --
++ * the export reads no bytes and sends none -- which is what lets a caller
++ * cancel a move the receiver could not complete.
++ *
++ * The preconditions, each of which the export checks:
++ *
++ *   - a client session, authenticated;
++ *   - no compression: a zlib stream has no serialisation;
++ *   - no key exchange in progress (SSH_AGAIN until it finishes);
++ *   - not part-way through reading a packet (SSH_AGAIN): libssh decrypts
++ *     a packet's first block as soon as it arrives, and a half-read
++ *     packet would have to be carried decrypted;
++ *   - nothing left unsent (SSH_AGAIN after one flush);
++ *   - no channel or global request awaiting its reply (SSH_AGAIN);
++ *   - the OpenSSL 3 backend, whose cipher contexts report their current
++ *     IV (EVP_CIPHER_CTX_get_updated_iv). Other backends refuse.
++ *
++ * Channel callbacks are not carried: the receiver installs its own.
++ */
++
++#include "config.h"
++
++#include <string.h>
++
++#include "libssh/priv.h"
++#include "libssh/buffer.h"
++#include "libssh/channels.h"
++#include "libssh/crypto.h"
++#include "libssh/misc.h"
++#include "libssh/packet.h"
++#include "libssh/pki.h"
++#include "libssh/session.h"
++#include "libssh/socket.h"
++#include "libssh/wrapper.h"
++
++#ifdef HAVE_LIBCRYPTO
++#include <openssl/evp.h>
++#include <openssl/opensslv.h>
++#endif
++
++#define EXPORT_MAGIC "libssh-transport-export"
++#define EXPORT_VERSION 1
++
++/* A byte string as an ssh_string; an empty one for no data. */
++static ssh_string bytes_string(const void *data, size_t len)
++{
++    ssh_string s = ssh_string_new(len);
++
++    if (s == NULL) {
++        return NULL;
++    }
++    if (len > 0 && ssh_string_fill(s, data, len) < 0) {
++        SSH_STRING_FREE(s);
++        return NULL;
++    }
++    return s;
++}
++
++static const char *or_empty(const char *s)
++{
++    return s != NULL ? s : "";
++}
++
++/* A copy of a string, or NULL for an empty one. */
++static char *or_null(const char *s)
++{
++    return (s != NULL && s[0] != '\0') ? strdup(s) : NULL;
++}
++
++/*
++ * The IV this cipher will use for its NEXT packet, in a buffer as long as
++ * the key derivation's (digest_len), so the import can hand it to
++ * set_encrypt_key() exactly as a key exchange would.
++ *
++ * chacha20-poly1305 takes its nonce from the sequence number and needs
++ * none. AES-GCM keeps its invocation counter inside the OpenSSL context
++ * (EVP_CTRL_GCM_IV_GEN), CTR its block counter, CBC its last ciphertext
++ * block; OpenSSL 3 reports each as the "updated IV". SSH packets are whole
++ * blocks, so no partial keystream is left over.
++ */
++static ssh_string current_iv(ssh_session session,
++                             struct ssh_cipher_struct *cipher,
++                             const unsigned char *initial,
++                             size_t len)
++{
++    unsigned char iv[DIGEST_MAX_LEN];
++
++    if (len > sizeof(iv)) {
++        ssh_set_error(session, SSH_FATAL, "transport export: IV too long");
++        return NULL;
++    }
++    memcpy(iv, initial, len);
++
++    if (cipher->ciphertype != SSH_AEAD_CHACHA20_POLY1305) {
++#if defined(HAVE_LIBCRYPTO) && OPENSSL_VERSION_NUMBER >= 0x30000000L
++        int iv_len;
++
++        if (cipher->ctx == NULL) {
++            ssh_set_error(session, SSH_FATAL,
++                          "transport export: %s has no cipher context",
++                          cipher->name);
++            return NULL;
++        }
++        iv_len = EVP_CIPHER_CTX_get_iv_length(cipher->ctx);
++        if (iv_len <= 0 || (size_t)iv_len > len ||
++            EVP_CIPHER_CTX_get_updated_iv(cipher->ctx, iv, iv_len) != 1) {
++            ssh_set_error(session, SSH_FATAL,
++                          "transport export: cannot read the IV of %s",
++                          cipher->name);
++            return NULL;
++        }
++#else
++        ssh_set_error(session, SSH_FATAL,
++                      "transport export: %s needs the OpenSSL 3 backend",
++                      cipher->name);
++        return NULL;
++#endif
++    }
++
++    return bytes_string(iv, len);
++}
++
++/* One direction's keys and counters. */
++static int pack_direction(ssh_session session,
++                          ssh_buffer buf,
++                          struct ssh_cipher_struct *cipher,
++                          const unsigned char *key,
++                          const unsigned char *iv,
++                          const unsigned char *mac,
++                          enum ssh_hmac_e hmac)
++{
++    struct ssh_crypto_struct *crypto = session->current_crypto;
++    ssh_string key_s = NULL, iv_s = NULL, mac_s = NULL;
++    size_t mac_len = hmac_digest_len(hmac);
++    int rc = SSH_ERROR;
++
++    key_s = bytes_string(key, cipher->keysize / 8);
++    iv_s = current_iv(session, cipher, iv, crypto->digest_len);
++    mac_s = bytes_string(mac, mac != NULL ? mac_len : 0);
++    if (key_s == NULL || iv_s == NULL || mac_s == NULL) {
++        goto out;
++    }
++
++    rc = ssh_buffer_pack(buf, "SSSdq",
++                         key_s, iv_s, mac_s,
++                         cipher->packets, cipher->blocks);
++out:
++    if (key_s != NULL) {
++        ssh_string_burn(key_s);
++    }
++    if (iv_s != NULL) {
++        ssh_string_burn(iv_s);
++    }
++    if (mac_s != NULL) {
++        ssh_string_burn(mac_s);
++    }
++    SSH_STRING_FREE(key_s);
++    SSH_STRING_FREE(iv_s);
++    SSH_STRING_FREE(mac_s);
++    return rc;
++}
++
++static int pack_channel(ssh_buffer buf, ssh_channel channel)
++{
++    ssh_string out = NULL, err = NULL;
++    int rc = SSH_ERROR;
++
++    out = bytes_string(ssh_buffer_get(channel->stdout_buffer),
++                       ssh_buffer_get_len(channel->stdout_buffer));
++    err = bytes_string(ssh_buffer_get(channel->stderr_buffer),
++                       ssh_buffer_get_len(channel->stderr_buffer));
++    if (out == NULL || err == NULL) {
++        goto out;
++    }
++
++    rc = ssh_buffer_pack(buf, "dddddddddddbdsbSS",
++                         channel->local_channel,
++                         channel->local_window,
++                         (uint32_t)channel->local_eof,
++                         channel->local_maxpacket,
++                         channel->remote_channel,
++                         channel->remote_window,
++                         (uint32_t)channel->remote_eof,
++                         channel->remote_maxpacket,
++                         (uint32_t)channel->state,
++                         (uint32_t)channel->delayed_close,
++                         (uint32_t)channel->flags,
++                         (uint8_t)channel->exit.status,
++                         channel->exit.code,
++                         or_empty(channel->exit.signal),
++                         (uint8_t)channel->exit.core_dumped,
++                         out, err);
++out:
++    SSH_STRING_FREE(out);
++    SSH_STRING_FREE(err);
++    return rc;
++}
++
++/**
++ * @brief Serialise an authenticated client session's transport and its
++ * channels, for ssh_session_import_transport() in another process.
++ *
++ * Reads the session and changes nothing in it: the caller can go on using
++ * it if the move does not complete. Once the receiver has the session,
++ * call ssh_session_detach_transport() here and never use this one again.
++ *
++ * The blob holds the session keys. Keep it off disk, pass it only to a
++ * process of the same user, and burn it (ssh_string_burn()) once sent.
++ *
++ * @param[in]  session  The session to export.
++ * @param[out] state    The serialised state, to free with ssh_string_free().
++ *
++ * @return SSH_OK; SSH_AGAIN when a key exchange, a packet read, a write or
++ *         a request is in progress, to retry once the session has been
++ *         polled; SSH_ERROR when the session cannot be exported at all,
++ *         with ssh_get_error() saying why.
++ */
++int ssh_session_export_transport(ssh_session session, ssh_string *state)
++{
++    struct ssh_crypto_struct *crypto = NULL;
++    struct ssh_iterator *it = NULL;
++    ssh_buffer buf = NULL;
++    ssh_string session_id = NULL, secret_hash = NULL, pubkey = NULL;
++    ssh_string pending = NULL;
++    const void *pending_data = NULL;
++    size_t pending_len = 0;
++    uint32_t channels = 0;
++    int rc;
++    int i;
++
++    if (session == NULL || state == NULL) {
++        return SSH_ERROR;
++    }
++    *state = NULL;
++
++    if (!session->client) {
++        ssh_set_error(session, SSH_REQUEST_DENIED,
++                      "transport export: only a client session can be moved");
++        return SSH_ERROR;
++    }
++    if (session->session_state == SSH_SESSION_STATE_KEXINIT_RECEIVED ||
++        session->session_state == SSH_SESSION_STATE_DH) {
++        ssh_set_error(session, SSH_REQUEST_DENIED,
++                      "transport export: a key exchange is in progress");
++        return SSH_AGAIN;
++    }
++    if (session->session_state != SSH_SESSION_STATE_AUTHENTICATED) {
++        ssh_set_error(session, SSH_REQUEST_DENIED,
++                      "transport export: the session is not authenticated");
++        return SSH_ERROR;
++    }
++
++    crypto = session->current_crypto;
++    if (crypto == NULL || crypto->in_cipher == NULL ||
++        crypto->out_cipher == NULL) {
++        ssh_set_error(session, SSH_FATAL,
++                      "transport export: no keys in use");
++        return SSH_ERROR;
++    }
++    if (crypto->do_compress_in || crypto->do_compress_out ||
++        crypto->delayed_compress_in || crypto->delayed_compress_out) {
++        ssh_set_error(session, SSH_REQUEST_DENIED,
++                      "transport export: compression is on, and a zlib "
++                      "stream cannot be moved");
++        return SSH_ERROR;
++    }
++
++    /*
++     * A key exchange we started (a rekey on a data or time limit) leaves
++     * the session AUTHENTICATED with the handshake back at its start, and
++     * holds packets in out_queue until it completes.
++     */
++    if (session->dh_handshake_state != DH_STATE_FINISHED ||
++        (session->next_crypto != NULL && session->next_crypto->used != 0) ||
++        ssh_list_count(session->out_queue) > 0) {
++        ssh_set_error(session, SSH_REQUEST_DENIED,
++                      "transport export: a key exchange is in progress");
++        return SSH_AGAIN;
++    }
++    if (session->packet_state != PACKET_STATE_INIT) {
++        ssh_set_error(session, SSH_REQUEST_DENIED,
++                      "transport export: part of a packet has been read");
++        return SSH_AGAIN;
++    }
++    if (ssh_socket_buffered_write_bytes(session->socket) > 0) {
++        ssh_socket_nonblocking_flush(session->socket);
++        if (ssh_socket_buffered_write_bytes(session->socket) > 0) {
++            ssh_set_error(session, SSH_REQUEST_DENIED,
++                          "transport export: output is still being sent");
++            return SSH_AGAIN;
++        }
++    }
++    if (session->global_req_state == SSH_CHANNEL_REQ_STATE_PENDING) {
++        ssh_set_error(session, SSH_REQUEST_DENIED,
++                      "transport export: a global request awaits its reply");
++        return SSH_AGAIN;
++    }
++    for (it = ssh_list_get_iterator(session->channels);
++         it != NULL;
++         it = it->next) {
++        ssh_channel channel = ssh_iterator_value(ssh_channel, it);
++
++        if (channel->request_state == SSH_CHANNEL_REQ_STATE_PENDING ||
++            channel->state == SSH_CHANNEL_STATE_OPENING) {
++            ssh_set_error(session, SSH_REQUEST_DENIED,
++                          "transport export: a channel request awaits "
++                          "its reply");
++            return SSH_AGAIN;
++        }
++        channels++;
++    }
++
++    buf = ssh_buffer_new();
++    if (buf == NULL) {
++        ssh_set_error_oom(session);
++        return SSH_ERROR;
++    }
++    /* It carries the keys: burned when freed. */
++    ssh_buffer_set_secure(buf);
++
++    rc = ssh_buffer_pack(buf, "sdssddddd",
++                         EXPORT_MAGIC,
++                         (uint32_t)EXPORT_VERSION,
++                         or_empty(session->serverbanner),
++                         or_empty(session->clientbanner),
++                         session->send_seq,
++                         session->recv_seq,
++                         (uint32_t)(session->flags & ~SSH_SESSION_FLAG_BLOCKING),
++                         session->extensions,
++                         session->maxchannel);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++
++    rc = ssh_buffer_pack(buf, "ssdqd",
++                         or_empty(session->opts.host),
++                         or_empty(session->opts.username),
++                         (uint32_t)session->opts.port,
++                         session->opts.rekey_data,
++                         session->opts.rekey_time);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++    for (i = 0; i < SSH_KEX_METHODS; i++) {
++        rc = ssh_buffer_pack(buf, "ss",
++                             or_empty(session->opts.wanted_methods[i]),
++                             or_empty(crypto->kex_methods[i]));
++        if (rc != SSH_OK) {
++            goto error;
++        }
++    }
++
++    session_id = bytes_string(crypto->session_id, crypto->session_id_len);
++    secret_hash = bytes_string(crypto->secret_hash, crypto->digest_len);
++    if (session_id == NULL || secret_hash == NULL) {
++        goto oom;
++    }
++    if (crypto->server_pubkey != NULL) {
++        rc = ssh_pki_export_pubkey_blob(crypto->server_pubkey, &pubkey);
++        if (rc != SSH_OK) {
++            goto error;
++        }
++    } else {
++        pubkey = bytes_string(NULL, 0);
++        if (pubkey == NULL) {
++            goto oom;
++        }
++    }
++    rc = ssh_buffer_pack(buf, "dddSSS",
++                         (uint32_t)crypto->kex_type,
++                         (uint32_t)crypto->digest_type,
++                         (uint32_t)crypto->digest_len,
++                         session_id, secret_hash, pubkey);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++
++    rc = pack_direction(session, buf, crypto->out_cipher,
++                        crypto->encryptkey, crypto->encryptIV,
++                        crypto->encryptMAC, crypto->out_hmac);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++    rc = pack_direction(session, buf, crypto->in_cipher,
++                        crypto->decryptkey, crypto->decryptIV,
++                        crypto->decryptMAC, crypto->in_hmac);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++
++    /* Read from the socket and not consumed: less than a packet's first
++     * block, since the packet layer is between packets. */
++    ssh_socket_get_pending_input(session->socket, &pending_data, &pending_len);
++    pending = bytes_string(pending_data, pending_len);
++    if (pending == NULL) {
++        goto oom;
++    }
++    rc = ssh_buffer_pack(buf, "Sd", pending, channels);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++
++    for (it = ssh_list_get_iterator(session->channels);
++         it != NULL;
++         it = it->next) {
++        rc = pack_channel(buf, ssh_iterator_value(ssh_channel, it));
++        if (rc != SSH_OK) {
++            goto error;
++        }
++    }
++
++    *state = bytes_string(ssh_buffer_get(buf), ssh_buffer_get_len(buf));
++    if (*state == NULL) {
++        goto oom;
++    }
++    rc = SSH_OK;
++    goto out;
++
++oom:
++    ssh_set_error_oom(session);
++error:
++    rc = SSH_ERROR;
++out:
++    if (secret_hash != NULL) {
++        ssh_string_burn(secret_hash);
++    }
++    SSH_STRING_FREE(session_id);
++    SSH_STRING_FREE(secret_hash);
++    SSH_STRING_FREE(pubkey);
++    SSH_STRING_FREE(pending);
++    SSH_BUFFER_FREE(buf);
++    return rc;
++}
++
++/* A malloc'd copy of a string's bytes, or NULL for an empty one. */
++static unsigned char *bytes_copy(ssh_string s, size_t *len)
++{
++    size_t n = ssh_string_len(s);
++    unsigned char *copy = NULL;
++
++    if (len != NULL) {
++        *len = n;
++    }
++    if (n == 0) {
++        return NULL;
++    }
++    copy = malloc(n);
++    if (copy != NULL) {
++        memcpy(copy, ssh_string_data(s), n);
++    }
++    return copy;
++}
++
++/* One direction's keys, as a key exchange would have left them. */
++static int unpack_direction(ssh_session session,
++                            ssh_buffer buf,
++                            unsigned char **key,
++                            unsigned char **iv,
++                            unsigned char **mac,
++                            uint32_t *packets,
++                            uint64_t *blocks)
++{
++    ssh_string key_s = NULL, iv_s = NULL, mac_s = NULL;
++    int rc;
++
++    rc = ssh_buffer_unpack(buf, "SSSdq", &key_s, &iv_s, &mac_s,
++                           packets, blocks);
++    if (rc != SSH_OK) {
++        ssh_set_error(session, SSH_FATAL, "transport import: truncated keys");
++        return SSH_ERROR;
++    }
++    *key = bytes_copy(key_s, NULL);
++    *iv = bytes_copy(iv_s, NULL);
++    *mac = bytes_copy(mac_s, NULL);
++    ssh_string_burn(key_s);
++    ssh_string_burn(iv_s);
++    ssh_string_burn(mac_s);
++    SSH_STRING_FREE(key_s);
++    SSH_STRING_FREE(iv_s);
++    SSH_STRING_FREE(mac_s);
++    if (*key == NULL || *iv == NULL) {
++        ssh_set_error(session, SSH_FATAL, "transport import: missing keys");
++        return SSH_ERROR;
++    }
++    return SSH_OK;
++}
++
++/* The rekey limits a key exchange would set, then the counters carried. */
++static void restore_rekey_state(ssh_session session,
++                                struct ssh_cipher_struct *cipher,
++                                uint32_t packets,
++                                uint64_t blocks)
++{
++    if (cipher->blocksize >= 16) {
++        cipher->max_blocks = (uint64_t)1 << (cipher->blocksize * 2);
++    } else {
++        cipher->max_blocks = ((uint64_t)1 << 30) / cipher->blocksize;
++    }
++    if (session->opts.rekey_data != 0) {
++        cipher->max_blocks = MIN(cipher->max_blocks,
++                                 session->opts.rekey_data / cipher->blocksize);
++    }
++    cipher->packets = packets;
++    cipher->blocks = blocks;
++}
++
++static int unpack_channel(ssh_session session, ssh_buffer buf)
++{
++    uint32_t local_channel, local_window, local_eof, local_maxpacket;
++    uint32_t remote_channel, remote_window, remote_eof, remote_maxpacket;
++    uint32_t state, delayed_close, flags, exit_code;
++    uint8_t exit_status, core_dumped;
++    char *signal = NULL;
++    ssh_string out = NULL, err = NULL;
++    ssh_channel channel = NULL;
++    int rc;
++
++    rc = ssh_buffer_unpack(buf, "dddddddddddbdsbSS",
++                           &local_channel, &local_window, &local_eof,
++                           &local_maxpacket, &remote_channel,
++                           &remote_window, &remote_eof, &remote_maxpacket,
++                           &state, &delayed_close, &flags,
++                           &exit_status, &exit_code, &signal, &core_dumped,
++                           &out, &err);
++    if (rc != SSH_OK) {
++        ssh_set_error(session, SSH_FATAL,
++                      "transport import: truncated channel");
++        return SSH_ERROR;
++    }
++
++    channel = ssh_channel_new(session);
++    if (channel == NULL) {
++        rc = SSH_ERROR;
++        goto out;
++    }
++    channel->local_channel = local_channel;
++    channel->local_window = local_window;
++    channel->local_eof = (int)local_eof;
++    channel->local_maxpacket = local_maxpacket;
++    channel->remote_channel = remote_channel;
++    channel->remote_window = remote_window;
++    channel->remote_eof = (int)remote_eof;
++    channel->remote_maxpacket = remote_maxpacket;
++    channel->state = (enum ssh_channel_state_e)state;
++    channel->delayed_close = (int)delayed_close;
++    channel->flags = (int)flags;
++    channel->exit.status = exit_status != 0;
++    channel->exit.code = exit_code;
++    channel->exit.signal = or_null(signal);
++    channel->exit.core_dumped = core_dumped != 0;
++
++    rc = SSH_OK;
++    if (ssh_string_len(out) > 0) {
++        rc = ssh_buffer_add_data(channel->stdout_buffer,
++                                 ssh_string_data(out),
++                                 (uint32_t)ssh_string_len(out));
++    }
++    if (rc == SSH_OK && ssh_string_len(err) > 0) {
++        rc = ssh_buffer_add_data(channel->stderr_buffer,
++                                 ssh_string_data(err),
++                                 (uint32_t)ssh_string_len(err));
++    }
++    if (rc != SSH_OK) {
++        ssh_set_error_oom(session);
++        rc = SSH_ERROR;
++    }
++out:
++    SAFE_FREE(signal);
++    SSH_STRING_FREE(out);
++    SSH_STRING_FREE(err);
++    return rc;
++}
++
++/**
++ * @brief Continue, in this process, a session another process exported
++ * with ssh_session_export_transport().
++ *
++ * @param[in] session  A fresh session from ssh_new(), never connected.
++ *                     Options set on it beforehand are overwritten by the
++ *                     exported host, user, port, algorithm preferences and
++ *                     rekey limits, so the next key exchange offers what
++ *                     the first one did.
++ * @param[in] fd       The connected socket, received from the exporter.
++ *                     On success the session owns it; on failure it is
++ *                     still the caller's.
++ * @param[in] state    The exported state.
++ *
++ * @return SSH_OK, or SSH_ERROR with ssh_get_error() saying why. After a
++ *         failure the session is unusable and should be freed; nothing
++ *         has been sent.
++ */
++int ssh_session_import_transport(ssh_session session,
++                                 socket_t fd,
++                                 ssh_string state)
++{
++    struct ssh_crypto_struct *crypto = NULL;
++    ssh_buffer buf = NULL;
++    char *magic = NULL, *serverbanner = NULL, *clientbanner = NULL;
++    char *host = NULL, *username = NULL;
++    ssh_string session_id = NULL, secret_hash = NULL, pubkey = NULL;
++    ssh_string pending = NULL;
++    uint32_t version, send_seq, recv_seq, flags, extensions, maxchannel;
++    uint32_t port, rekey_time, kex_type, digest_type, digest_len, channels;
++    uint32_t out_packets, in_packets;
++    uint64_t rekey_data, out_blocks, in_blocks;
++    uint32_t i;
++    int rc;
++
++    if (session == NULL || state == NULL) {
++        return SSH_ERROR;
++    }
++    if (session->session_state != SSH_SESSION_STATE_NONE ||
++        session->current_crypto != NULL ||
++        ssh_socket_is_open(session->socket)) {
++        ssh_set_error(session, SSH_REQUEST_DENIED,
++                      "transport import: the session is not fresh");
++        return SSH_ERROR;
++    }
++    crypto = session->next_crypto;
++
++    buf = ssh_buffer_new();
++    if (buf == NULL) {
++        ssh_set_error_oom(session);
++        return SSH_ERROR;
++    }
++    ssh_buffer_set_secure(buf);
++    rc = ssh_buffer_add_data(buf, ssh_string_data(state),
++                             (uint32_t)ssh_string_len(state));
++    if (rc != SSH_OK) {
++        goto oom;
++    }
++
++    rc = ssh_buffer_unpack(buf, "sd", &magic, &version);
++    if (rc != SSH_OK || strcmp(magic, EXPORT_MAGIC) != 0) {
++        ssh_set_error(session, SSH_FATAL,
++                      "transport import: not an exported transport");
++        goto error;
++    }
++    if (version != EXPORT_VERSION) {
++        ssh_set_error(session, SSH_FATAL,
++                      "transport import: format %u, this libssh reads %u",
++                      version, (uint32_t)EXPORT_VERSION);
++        goto error;
++    }
++
++    rc = ssh_buffer_unpack(buf, "ssddddd",
++                           &serverbanner, &clientbanner,
++                           &send_seq, &recv_seq, &flags, &extensions,
++                           &maxchannel);
++    if (rc != SSH_OK) {
++        goto truncated;
++    }
++    rc = ssh_buffer_unpack(buf, "ssdqd",
++                           &host, &username, &port, &rekey_data, &rekey_time);
++    if (rc != SSH_OK) {
++        goto truncated;
++    }
++
++    SAFE_FREE(session->opts.host);
++    session->opts.host = or_null(host);
++    SAFE_FREE(session->opts.username);
++    session->opts.username = or_null(username);
++    session->opts.port = (uint16_t)port;
++    session->opts.rekey_data = rekey_data;
++    session->opts.rekey_time = rekey_time;
++
++    for (i = 0; i < SSH_KEX_METHODS; i++) {
++        char *wanted = NULL, *method = NULL;
++
++        rc = ssh_buffer_unpack(buf, "ss", &wanted, &method);
++        if (rc != SSH_OK) {
++            goto truncated;
++        }
++        SAFE_FREE(session->opts.wanted_methods[i]);
++        session->opts.wanted_methods[i] = or_null(wanted);
++        SAFE_FREE(crypto->kex_methods[i]);
++        crypto->kex_methods[i] = or_null(method);
++        SAFE_FREE(wanted);
++        SAFE_FREE(method);
++    }
++
++    rc = ssh_buffer_unpack(buf, "dddSSS",
++                           &kex_type, &digest_type, &digest_len,
++                           &session_id, &secret_hash, &pubkey);
++    if (rc != SSH_OK) {
++        goto truncated;
++    }
++    crypto->kex_type = (enum ssh_key_exchange_e)kex_type;
++    crypto->digest_type = (enum ssh_kdf_digest)digest_type;
++    crypto->digest_len = digest_len;
++    SAFE_FREE(crypto->session_id);
++    crypto->session_id = bytes_copy(session_id, &crypto->session_id_len);
++    SAFE_FREE(crypto->secret_hash);
++    crypto->secret_hash = bytes_copy(secret_hash, NULL);
++    if (crypto->session_id == NULL || crypto->secret_hash == NULL) {
++        ssh_set_error(session, SSH_FATAL,
++                      "transport import: no session identifier");
++        goto error;
++    }
++    if (ssh_string_len(pubkey) > 0) {
++        rc = ssh_pki_import_pubkey_blob(pubkey, &crypto->server_pubkey);
++        if (rc != SSH_OK) {
++            goto error;
++        }
++    }
++
++    /*
++     * The ciphers and MACs, chosen from the negotiated names exactly as a
++     * key exchange chooses them -- including "none" for compression, which
++     * the export required.
++     */
++    session->client = 1;
++    rc = crypt_set_algorithms_client(session);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++    if (crypto->do_compress_in || crypto->do_compress_out ||
++        crypto->delayed_compress_in || crypto->delayed_compress_out) {
++        ssh_set_error(session, SSH_FATAL,
++                      "transport import: the state names compression");
++        goto error;
++    }
++
++    rc = unpack_direction(session, buf, &crypto->encryptkey,
++                          &crypto->encryptIV, &crypto->encryptMAC,
++                          &out_packets, &out_blocks);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++    rc = unpack_direction(session, buf, &crypto->decryptkey,
++                          &crypto->decryptIV, &crypto->decryptMAC,
++                          &in_packets, &in_blocks);
++    if (rc != SSH_OK) {
++        goto error;
++    }
++
++    /* Keys and IVs into the cipher contexts, as ssh_packet_set_newkeys()
++     * would put them; the IVs are the exporter's current ones. */
++    if (crypto->in_cipher->set_decrypt_key != NULL &&
++        crypto->in_cipher->set_decrypt_key(crypto->in_cipher,
++                                           crypto->decryptkey,
++                                           crypto->decryptIV) < 0) {
++        ssh_set_error(session, SSH_FATAL,
++                      "transport import: cannot set the decryption key");
++        goto error;
++    }
++    if (crypto->out_cipher->set_encrypt_key != NULL &&
++        crypto->out_cipher->set_encrypt_key(crypto->out_cipher,
++                                            crypto->encryptkey,
++                                            crypto->encryptIV) < 0) {
++        ssh_set_error(session, SSH_FATAL,
++                      "transport import: cannot set the encryption key");
++        goto error;
++    }
++    restore_rekey_state(session, crypto->out_cipher, out_packets, out_blocks);
++    restore_rekey_state(session, crypto->in_cipher, in_packets, in_blocks);
++
++    /* In use both ways, and a fresh next_crypto for the next key
++     * exchange, carrying the session identifier it derives from. */
++    crypto->used = SSH_DIRECTION_BOTH;
++    session->current_crypto = crypto;
++    session->next_crypto = crypto_new();
++    if (session->next_crypto == NULL) {
++        goto oom;
++    }
++    session->next_crypto->session_id = malloc(crypto->session_id_len);
++    if (session->next_crypto->session_id == NULL) {
++        goto oom;
++    }
++    memcpy(session->next_crypto->session_id, crypto->session_id,
++           crypto->session_id_len);
++    session->next_crypto->session_id_len = crypto->session_id_len;
++
++    SAFE_FREE(session->serverbanner);
++    session->serverbanner = or_null(serverbanner);
++    SAFE_FREE(session->clientbanner);
++    session->clientbanner = or_null(clientbanner);
++    if (session->serverbanner != NULL) {
++        ssh_analyze_banner(session, 0);
++    }
++
++    session->send_seq = send_seq;
++    session->recv_seq = recv_seq;
++    session->flags = (session->flags & SSH_SESSION_FLAG_BLOCKING) |
++                     (int)(flags & ~SSH_SESSION_FLAG_BLOCKING);
++    session->extensions = extensions;
++    session->auth.state = SSH_AUTH_STATE_SUCCESS;
++    session->auth.service_state = SSH_AUTH_SERVICE_ACCEPTED;
++    session->dh_handshake_state = DH_STATE_FINISHED;
++    session->packet_state = PACKET_STATE_INIT;
++    if (session->opts.rekey_time != 0) {
++        ssh_timestamp_init(&session->last_rekey_time);
++    }
++
++    rc = ssh_buffer_unpack(buf, "Sd", &pending, &channels);
++    if (rc != SSH_OK) {
++        goto truncated;
++    }
++    for (i = 0; i < channels; i++) {
++        rc = unpack_channel(session, buf);
++        if (rc != SSH_OK) {
++            goto error;
++        }
++    }
++    session->maxchannel = maxchannel;
++
++    /* The socket last: until here a failure leaves the descriptor the
++     * caller's, and nothing has been sent. */
++    session->ssh_connection_callback = ssh_client_connection_callback;
++    ssh_packet_register_socket_callback(session, session->socket);
++    ssh_packet_set_default_callbacks(session);
++    rc = ssh_socket_import_fd(session->socket, fd,
++                              ssh_string_data(pending),
++                              ssh_string_len(pending));
++    if (rc != SSH_OK) {
++        goto error;
++    }
++
++    session->session_state = SSH_SESSION_STATE_AUTHENTICATED;
++    session->connected = 1;
++    session->alive = 1;
++    rc = SSH_OK;
++    goto out;
++
++truncated:
++    ssh_set_error(session, SSH_FATAL, "transport import: truncated state");
++    goto error;
++oom:
++    ssh_set_error_oom(session);
++error:
++    rc = SSH_ERROR;
++out:
++    SAFE_FREE(magic);
++    SAFE_FREE(serverbanner);
++    SAFE_FREE(clientbanner);
++    SAFE_FREE(host);
++    SAFE_FREE(username);
++    if (secret_hash != NULL) {
++        ssh_string_burn(secret_hash);
++    }
++    SSH_STRING_FREE(session_id);
++    SSH_STRING_FREE(secret_hash);
++    SSH_STRING_FREE(pubkey);
++    SSH_STRING_FREE(pending);
++    SSH_BUFFER_FREE(buf);
++    return rc;
++}
++
++/**
++ * @brief Let go of a session another process has taken over.
++ *
++ * Closes this process's copy of the descriptor -- close() only, never
++ * shutdown(), which would end the connection for the new owner too --
++ * and marks the session dead, so ssh_disconnect(), ssh_channel_free() and
++ * ssh_free() send nothing. Call it once the receiver has confirmed its
++ * import, then free the session as usual.
++ */
++void ssh_session_detach_transport(ssh_session session)
++{
++    if (session == NULL) {
++        return;
++    }
++    session->alive = 0;
++    session->connected = 0;
++    session->session_state = SSH_SESSION_STATE_DISCONNECTED;
++    if (session->socket != NULL) {
++        ssh_socket_close(session->socket);
++    }
++}
++
++/**
++ * @brief A session's channel by its position, in the order the exporting
++ * session held them: how an importer finds the channels it was given.
++ *
++ * @return The channel, or NULL past the end.
++ */
++ssh_channel ssh_session_get_channel(ssh_session session, size_t index)
++{
++    struct ssh_iterator *it = NULL;
++
++    if (session == NULL) {
++        return NULL;
++    }
++    for (it = ssh_list_get_iterator(session->channels);
++         it != NULL;
++         it = it->next) {
++        if (index == 0) {
++            return ssh_iterator_value(ssh_channel, it);
++        }
++        index--;
++    }
++    return NULL;
++}
