@@ -73,8 +73,10 @@ jobs:
         run: |
           sudo apt-get update
           # Every -dev here answers a PKGCONFIG line in beerssh.pro, named
-          # explicitly even where something else would drag it in. libssl-dev
-          # currently arrives as a dependency of libssh-dev, and libsecret-1-dev
+          # explicitly even where something else would drag it in. libssh is
+          # not among them: it is the vendored libssh/ submodule, built static
+          # by cmake with libssh-patch/ applied (sec 8.4), so cmake, libssl-dev
+          # and zlib1g-dev are what it needs instead. libsecret-1-dev
           # arrived only because the runner image happened to carry it -- a
           # build that depends on a package nobody declared fails one image
           # update later, with a pkg-config error that names the library and
@@ -83,7 +85,7 @@ jobs:
           # not built against: it is the witness the beersshd tests drive
           # (sec 19), and without it they skip -- a green run that tested
           # nothing about the server.
-          sudo apt-get install -y qt6-base-dev libgl1-mesa-dev libssh-dev \
+          sudo apt-get install -y qt6-base-dev libgl1-mesa-dev cmake \
                                   libsixel-dev libssl-dev libsecret-1-dev \
                                   zlib1g-dev libxcb1-dev openssh-client
       - name: Build
@@ -153,7 +155,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: deps/android
-          key: android-deps-${{ runner.os }}-ndk${{ env.BSSH_NDK_VERSION }}-${{ hashFiles('tool/build-deps-android.sh') }}
+          key: android-deps-${{ runner.os }}-ndk${{ env.BSSH_NDK_VERSION }}-${{ hashFiles('tool/build-deps-android.sh', 'libssh-patch/**') }}
 
       # ANDROID_NDK_ROOT comes from the RUNNER, and is read in the shell
       # rather than through ${{ env.* }}.
@@ -164,8 +166,14 @@ jobs:
       # image provides. The script said "ANDROID_NDK_ROOT is not set" and
       # exited 1, which reads as a missing NDK rather than as a workflow
       # overwriting a variable with an empty string.
+      #
+      # Run on a cache hit too. libssh is the patched submodule (sec 8.4),
+      # and the script compares the pinned commit and the patches against
+      # what the cached archive was built from, rebuilding only on a
+      # difference -- skipping the step on a hit would have linked an
+      # archive from before a patch, or before a submodule bump the key
+      # cannot see.
       - name: Cross-compile libssh + OpenSSL
-        if: steps.deps-cache.outputs.cache-hit != 'true'
         run: |
           : "${ANDROID_NDK_ROOT:=$ANDROID_NDK_LATEST_HOME}"
           export ANDROID_NDK_ROOT

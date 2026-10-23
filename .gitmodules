@@ -4,3 +4,6 @@
 [submodule "softkeys"]
 	path = softkeys
 	url = https://github.com/funklord/softkeys
+[submodule "libssh"]
+	path = libssh
+	url = https://git.libssh.org/projects/libssh.git

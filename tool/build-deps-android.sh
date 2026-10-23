@@ -57,7 +57,6 @@ work="$root/build-deps-android/$abi"
 # Pinned. An unpinned dependency makes a build that worked yesterday a
 # build that cannot be reproduced tomorrow (sec 12.4).
 openssl_version=3.5.4
-libssh_version=0.11.5
 
 # And checksummed, which the version pin alone does not do: a pinned
 # version says WHICH artifact was wanted, not that the bytes that arrived
@@ -71,14 +70,13 @@ libssh_version=0.11.5
 #
 #   OpenSSL  publishes openssl-<version>.tar.gz.sha256 beside the tarball.
 #            The download matched it.
-#   libssh   publishes a detached GPG signature instead of a sum. Its
-#            signing key 88A228D89B07C2C77D0C780903D5DF8CFDD3E8E7 is named
-#            on libssh.org/get-it/ -- which is what stops the check being
-#            circular, the signature naming its own key otherwise. The key
-#            with that fingerprint verifies the .asc as "libssh release
-#            key", and this is the sha256 of the tarball it covers.
+#   libssh   is no longer downloaded here: it is the libssh/ submodule,
+#            pinned by its gitlink, with libssh-patch/ applied (project.md
+#            sec 8.4). The tarball this script used to fetch -- verified by
+#            the release key 88A228D89B07C2C77D0C780903D5DF8CFDD3E8E7,
+#            sha256 6898ba9d...ea30c -- was compared against the pinned tag
+#            when the submodule went in: all 477 files identical.
 openssl_sha256=967311f84955316969bdb1d8d4b983718ef42338639c621ec4c34fddef355e99
-libssh_sha256=6898ba9dd836d618b71dc7a4bb786a502c173cef5cafbf20fe5e0567ba4ea30c
 
 # sha256sum on Linux, shasum -a 256 on the BSDs and macOS -- the same split
 # fetch-fonts.sh handles, for the same reason.
@@ -152,16 +150,20 @@ fi
 # "Skip when libssh.a exists" alone would keep an archive built WITHOUT
 # the server for ever -- the flag below changes and nothing rebuilds, and
 # the failure arrives later as undefined ssh_bind_* in beersshd's link.
-libssh_config="version=$libssh_version server=on"
+# The same holds for the source: the pinned commit and the patches are in
+# the comparison, so a new patch in libssh-patch/ rebuilds every ABI's
+# archive rather than leaving the phone on a libssh without it.
+#
+# The source is the desktop build's: `make libssh-source` fetches the
+# submodule if it is missing and applies the patches, so the two cannot
+# build different libssh.
+make -C "$root" --no-print-directory libssh-source
+libssh_commit=$(git -C "$root/libssh" rev-parse HEAD)
+libssh_patches=$(cat "$root"/libssh-patch/*.patch 2>/dev/null | checksum /dev/stdin)
+libssh_config="commit=$libssh_commit patches=$libssh_patches server=on"
 if [ ! -f "$prefix/lib/libssh.a" ] ||
    [ "$(cat "$prefix/lib/libssh.config" 2>/dev/null)" != "$libssh_config" ]; then
-	echo "==> libssh $libssh_version for $abi"
-
-	[ -f "libssh-$libssh_version.tar.xz" ] ||
-		curl -fsSLO "https://www.libssh.org/files/0.11/libssh-$libssh_version.tar.xz"
-	verify "libssh-$libssh_version.tar.xz" "$libssh_sha256"
-	rm -rf "libssh-$libssh_version"
-	tar xf "libssh-$libssh_version.tar.xz"
+	echo "==> libssh $libssh_commit for $abi"
 
 	# CMAKE_FIND_ROOT_PATH is not redundant with OPENSSL_ROOT_DIR, and
 	# leaving it out is how the first attempt at this failed. The NDK
@@ -175,7 +177,7 @@ if [ ! -f "$prefix/lib/libssh.a" ] ||
 	# 0.11.5 has it too). Supplied as a define rather than a patch to
 	# their source, so it survives the next version bump.
 	rm -rf libssh-build
-	cmake -S "libssh-$libssh_version" -B libssh-build \
+	cmake -S "$root/libssh" -B libssh-build \
 		-DCMAKE_C_FLAGS="-DS_IWRITE=S_IWUSR" \
 		-DCMAKE_TOOLCHAIN_FILE="$toolchain" \
 		-DANDROID_ABI="$abi" \

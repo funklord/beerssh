@@ -272,12 +272,12 @@ paragraphs above put them.
 
 ## Build (desktop)
 
-Needs Qt 6 (6.8 LTS or newer), libssh, and a C++17 compiler. On
+Needs Qt 6 (6.8 LTS or newer), CMake, and a C++17 compiler. On
 Debian/Ubuntu that is:
 
 ```sh
-sudo apt install build-essential pkgconf qt6-base-dev \
-                 libssh-dev libssl-dev libsixel-dev libsecret-1-dev zlib1g-dev
+sudo apt install build-essential pkgconf cmake qt6-base-dev \
+                 libssl-dev libsixel-dev libsecret-1-dev zlib1g-dev
 ```
 
 **One Qt package covers it.** The app asks for `widgets network dbus` and
@@ -290,16 +290,19 @@ is.
 The rest answer the `PKGCONFIG` and `LIBS` lines in `beerssh.pro` one
 for one:
 
-- `libssh-dev` — the SSH transport.
-- `libssl-dev` — `libcrypto`, for the passphrase-encrypted secret file and
-  for sealing pictures spilled to disk (`project.md` §7.1).
+- `cmake` — builds libssh, which is not a system package here: it is the
+  `libssh/` submodule, linked statically with this tree's patches applied
+  (`project.md` §8.4), and `make` fetches and builds it.
+- `libssl-dev` — `libcrypto`, libssh's crypto backend, and for the
+  passphrase-encrypted secret file and for sealing pictures spilled to
+  disk (`project.md` §7.1).
 - `libsixel-dev` — sixel images (`project.md` §7.2).
 - `libsecret-1-dev` — the Secret Service keyring.
-- `zlib1g-dev` — `-lz`, for the zip reader that fetches a font on a phone
+- `zlib1g-dev` — `-lz`, for libssh, for the zip reader that fetches a font on a phone
   file by file (`project.md` §9.4), and for compressing spilled pictures.
 
 Two of these are worth naming even though a build often works without
-naming them. `libssl-dev` arrives today as a dependency of `libssh-dev`,
+naming them. `libssl-dev` used to arrive as a dependency of `libssh-dev`,
 and **nothing at all pulls in `libsecret-1-dev`** — it was satisfied here
 for months only because the CI runner image happened to carry it, which
 `project.md` §18 records. A build that leans on a package no file names

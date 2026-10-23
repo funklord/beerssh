@@ -131,6 +131,13 @@ QMAKE ?= qmake6
 
 TARGET = beerssh
 
+# beersshd, the SFTP-only server (sec 19), named HERE rather than beside
+# its rules below: `all: $(ARTIFACTS)` expands its prerequisites as make
+# reads that line, and with the name defined after it `all` never built
+# beersshd at all -- `make -pn all` listed beerssh, its manual page and
+# its completion, and nothing else (found 2026-10-23).
+SSHD_TARGET = beersshd
+
 # The app id from sec 0.1. Every packaging file is named after it, and a
 # mismatch shows up as an app that installs, runs, and cannot be found.
 APP_ID = se.vibes.beerssh
@@ -329,6 +336,86 @@ BSSH_VTERM_WITNESS := $(shell \
 		echo "make:   discarding the stamps so the patches re-apply." >&2; \
 		rm -f $$stamps; \
 	fi)
+
+# --- vendored libssh ---------------------------------------------------------
+# A submodule pinned to the libssh-0.11.5 tag, built static by its own
+# cmake, with this tree's patches (libssh-patch/) applied first. Vendored
+# rather than Debian's because a live session moving between processes
+# (project.md sec 8.4) needs a transport export and import that libssh
+# does not have, carried here as patches the way vterm-patch/ is and
+# offered upstream whole -- the holder's direction, 2026-10-22, and a
+# static libssh in the .deb is fine by them (2026-10-23). Every build --
+# beerssh, beersshd, the tests, Android -- links this one copy.
+#
+# The tag was checked against the release tarball that
+# tool/build-deps-android.sh verified by checksum and signature: all 477
+# files identical, the tag adding only its git and CI metadata.
+LIBSSH_DIR       = libssh
+LIBSSH_BUILD_DIR = build-libssh
+LIBSSH_PREFIX    = $(LIBSSH_BUILD_DIR)/prefix
+LIBSSH_LIB       = $(LIBSSH_PREFIX)/lib/libssh.a
+LIBSSH_PATCHES   = $(sort $(wildcard libssh-patch/*.patch))
+LIBSSH_JOBS     ?= $(shell nproc 2>/dev/null || echo 2)
+
+# The sources, fetched and patched, and nothing built: shared by the
+# desktop archive below and tool/build-deps-android.sh, so the two cannot
+# build different libssh. Patching is idempotent -- a patch already in the
+# tree is recognised and left -- so it runs on every build, and a
+# submodule restored by `git checkout` or `git submodule update` is
+# re-patched rather than built bare. A patch that no longer applies fails
+# here, naming upstream, rather than compiling a libssh without it.
+libssh-source:
+	@if [ ! -f $(LIBSSH_DIR)/CMakeLists.txt ]; then \
+		if ! command -v git >/dev/null 2>&1; then \
+			echo "make: $(LIBSSH_DIR)/ is empty and git is not installed." >&2; exit 1; \
+		fi; \
+		if ! git rev-parse --git-dir >/dev/null 2>&1; then \
+			echo "make: $(LIBSSH_DIR)/ is empty and this is not a git checkout," >&2; \
+			echo "make:   so there is nothing to fetch it from." >&2; exit 1; \
+		fi; \
+		echo "make: fetching the $(LIBSSH_DIR) submodule" >&2; \
+		git submodule update --init $(LIBSSH_DIR) >&2 || exit 1; \
+		[ -f $(LIBSSH_DIR)/CMakeLists.txt ] || { \
+			echo "make: the $(LIBSSH_DIR) submodule could not be fetched" >&2; exit 1; }; \
+	fi
+	@for patch in $(LIBSSH_PATCHES); do \
+		if git -C $(LIBSSH_DIR) apply --check "$(CURDIR)/$$patch" 2>/dev/null; then \
+			git -C $(LIBSSH_DIR) apply "$(CURDIR)/$$patch" || exit 1; \
+			echo "  $$patch: applied"; \
+		elif ! git -C $(LIBSSH_DIR) apply --reverse --check "$(CURDIR)/$$patch" 2>/dev/null; then \
+			echo "  $$patch: DOES NOT APPLY -- upstream changed under it." >&2; \
+			echo "  Rebase the patch against the current submodule before building." >&2; \
+			exit 1; \
+		fi; \
+	done
+
+# FORCE, because only cmake knows whether its sources moved; an unchanged
+# tree is a no-op build, and `cmake --install` leaves an unchanged archive
+# alone, so nothing downstream relinks for nothing. -Os per
+# build-and-commit.md (MinSizeRel). The options match
+# tool/build-deps-android.sh's: static, with the server half beersshd
+# needs, without examples or tests.
+$(LIBSSH_LIB): libssh-source FORCE
+	@mkdir -p $(LIBSSH_BUILD_DIR)
+	@if [ ! -f $(LIBSSH_BUILD_DIR)/build/CMakeCache.txt ]; then \
+		cmake -S $(LIBSSH_DIR) -B $(LIBSSH_BUILD_DIR)/build \
+			-DCMAKE_INSTALL_PREFIX="$(CURDIR)/$(LIBSSH_PREFIX)" \
+			-DCMAKE_INSTALL_LIBDIR=lib \
+			-DCMAKE_BUILD_TYPE=MinSizeRel \
+			-DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+			-DBUILD_SHARED_LIBS=OFF \
+			-DWITH_EXAMPLES=OFF \
+			-DWITH_SERVER=ON \
+			-DWITH_GSSAPI=OFF \
+			-DUNIT_TESTING=OFF \
+			-DCLIENT_TESTING=OFF \
+			-DSERVER_TESTING=OFF > $(LIBSSH_BUILD_DIR)/configure.log 2>&1 \
+		|| { cat $(LIBSSH_BUILD_DIR)/configure.log >&2; rm -f $(LIBSSH_BUILD_DIR)/build/CMakeCache.txt; exit 1; }; \
+	fi
+	@cmake --build $(LIBSSH_BUILD_DIR)/build --parallel $(LIBSSH_JOBS) > $(LIBSSH_BUILD_DIR)/build.log 2>&1 \
+		|| { tail -40 $(LIBSSH_BUILD_DIR)/build.log >&2; exit 1; }
+	@cmake --install $(LIBSSH_BUILD_DIR)/build > $(LIBSSH_BUILD_DIR)/install.log 2>&1 \
+		|| { cat $(LIBSSH_BUILD_DIR)/install.log >&2; exit 1; }
 
 ifdef DEBUG
     QMAKE_CONFIG = CONFIG+=debug CONFIG-=release
@@ -529,7 +616,7 @@ $(BUILD_DIR)/Makefile: beerssh.pro
 	cd $(BUILD_DIR) && $(QMAKE) ../beerssh.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
 	        BSSH_VERSION=$(VERSION)
 
-$(TARGET): $(VTERM_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
+$(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
 	$(MAKE) -C $(BUILD_DIR)
 	cp $(BUILD_DIR)/$(TARGET) $(TARGET)
 
@@ -540,7 +627,6 @@ run: $(TARGET)
 # its own .pro, sharing the libssh build and none of the terminal. In the
 # default build so check-ci compiles it against the runner's older Qt and
 # libssh, which is where an API it leans on would first be missing.
-SSHD_TARGET    = beersshd
 SSHD_BUILD_DIR = build-sshd
 SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.h)
 
@@ -550,7 +636,7 @@ $(SSHD_BUILD_DIR)/Makefile: beersshd.pro \
 	cd $(SSHD_BUILD_DIR) && $(QMAKE) ../beersshd.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
 	        BSSH_VERSION=$(VERSION)
 
-$(SSHD_TARGET): $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
+$(SSHD_TARGET): $(LIBSSH_LIB) $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
 	$(MAKE) -C $(SSHD_BUILD_DIR)
 	cp $(SSHD_BUILD_DIR)/$(SSHD_TARGET) $(SSHD_TARGET)
 
@@ -568,7 +654,7 @@ $(TEST_BUILD_DIR)/Makefile: test/tests.pro \
 	cd $(TEST_BUILD_DIR) && $(QMAKE) ../test/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
 	        BSSH_VERSION=$(VERSION)
 
-$(TEST_BIN): $(VTERM_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
+$(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
 	$(MAKE) -C $(TEST_BUILD_DIR)
 
 # The offscreen QPA plugin is what makes both of these runnable in CI at
@@ -870,8 +956,8 @@ check-ssh: $(TEST_BIN)
 # runnable because what it measures depends on libssh internals that will
 # move under it -- a finding about 0.11.5 is not a finding about whatever
 # Debian ships next, and the only honest way to know is to run it again.
-check-handoff:
-	./tool/handoff/run.sh
+check-handoff: $(LIBSSH_LIB)
+	LIBSSH_PREFIX=$(CURDIR)/$(LIBSSH_PREFIX) ./tool/handoff/run.sh
 
 # sec 11's startup without a keyring: the first window within 5 seconds with
 # no session bus, and with one whose secrets service never comes up. Both
@@ -1555,9 +1641,12 @@ endef
 veryclean: clean
 	$(call bssh_remove_tree,$(BUILD_DIR) $(ANDROID_BUILD_DIR) build-android-* build-sshd-android-* \
 	        $(TEST_BUILD_DIR) $(SSHD_BUILD_DIR) $(VTERM_BUILD_DIR) $(VTERM_ANDROID_BASE) \
-	        $(SHOT_DIR))
+	        $(LIBSSH_BUILD_DIR) $(SHOT_DIR))
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
+	fi
+	@if [ -d $(LIBSSH_DIR)/.git ] || [ -f $(LIBSSH_DIR)/.git ]; then \
+		git -C $(LIBSSH_DIR) checkout -- . && echo "libssh: patches reverted"; \
 	fi
 
 # `distclean` removes what the build generated and `veryclean` does not.
@@ -1576,7 +1665,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test bench style sabotage check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
+.PHONY: all run test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check

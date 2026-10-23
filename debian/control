@@ -3,7 +3,7 @@ Section: net
 Priority: optional
 Maintainer: Nabeel Sowan <nabeel@vibes.se>
 Build-Depends: debhelper-compat (= 13), qt6-base-dev, qt6-base-dev-tools,
-               libssh-dev, libssl-dev, libsecret-1-dev, libsixel-dev,
+               cmake, libssl-dev, libsecret-1-dev, libsixel-dev,
                zlib1g-dev, libxcb1-dev, pkgconf
 Rules-Requires-Root: no
 

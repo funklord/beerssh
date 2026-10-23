@@ -183,10 +183,16 @@ if [ "$WANTS_SUBMODULES" = yes ]; then
 	git -C vterm archive --format=tar --prefix=vterm/ HEAD > "$STAGE/vterm.tar"
 	git -C softkeys archive --format=tar --prefix=softkeys/ \
 		"$(git rev-parse "$STAGED:softkeys")" > "$STAGE/softkeys.tar"
+	# libssh by its gitlink too, unpatched, so the container applies
+	# libssh-patch/ itself -- the proof the patches still apply from
+	# clean, which the working tree cannot give (sec 8.4).
+	git -C libssh archive --format=tar --prefix=libssh/ \
+		"$(git rev-parse "$STAGED:libssh")" > "$STAGE/libssh.tar"
 else
 	echo "check-ci: the linux job does not ask for submodules, so neither does this"
 	tar -cf "$STAGE/vterm.tar" --files-from /dev/null
 	tar -cf "$STAGE/softkeys.tar" --files-from /dev/null
+	tar -cf "$STAGE/libssh.tar" --files-from /dev/null
 fi
 
 docker run --rm --name "$CONTAINER" -v "$STAGE":/in:ro "$IMAGE" sh -c "
@@ -195,12 +201,13 @@ apt-get update -qq >/dev/null 2>&1
 DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $PACKAGES \
 	build-essential pkg-config python3 git >/dev/null 2>&1
 
-echo \"check-ci: Qt \$(pkg-config --modversion Qt6Core), libssh \$(pkg-config --modversion libssh)\"
+echo \"check-ci: Qt \$(pkg-config --modversion Qt6Core), libssh vendored (libssh/)\"
 
 mkdir -p /build && cd /build
 tar xf /in/src.tar
 tar xf /in/vterm.tar
 tar xf /in/softkeys.tar
+tar xf /in/libssh.tar
 # No patch stamp here any more. vterm.tar is the submodule at its gitlink
 # commit, so the patches are NOT applied and make has to apply them --
 # which is the point, since that is what the runner does too. git is

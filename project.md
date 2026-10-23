@@ -6957,10 +6957,18 @@ window with no name is a blank row in the task switcher.
 
   *The order to build it in*, each step with a test that runs against a
   real sshd rather than a fake:
-  1. Vendor libssh 0.11.5 as a submodule with a `libssh-patch/`
-     directory, linked statically. The desktop links Debian's today. The
-     cost is libssh carried in the .deb, and check-ci and the GitHub
-     runner building 0.11.5 instead of their own older version.
+  1. **[DONE 2026-10-23]** Vendor libssh 0.11.5 as a submodule (`libssh/`,
+     the `libssh-0.11.5` tag, compared file by file against the release
+     tarball the Android script had verified by signature), with a
+     `libssh-patch/` directory, linked statically. `make` builds it by
+     cmake into `build-libssh/`; `libssh.pri` links beerssh, beersshd
+     and the tests against it; `tool/build-deps-android.sh` builds the
+     same patched source for each ABI and rebuilds when the pinned commit
+     or the patches change; the Android app relinks on a new archive.
+     check-ci, the GitHub runner and the .deb build it too, so 0.11.5 is
+     what every build tests against. Found on the way: `make` had never
+     built beersshd, because `SSHD_TARGET` was defined after
+     `all: $(ARTIFACTS)` had expanded it.
   2. The libssh patch: export and import, tested in `check-handoff`
      across an `exec`, not a `fork`. Once each for chacha20-poly1305,
      AES-GCM and AES-CTR with an ETM MAC, with data in flight both ways,

@@ -55,6 +55,10 @@ android {
     BSSH_ANDROID_DEPS = $$PWD/deps/android/$$QT_ARCH
     INCLUDEPATH += $$BSSH_ANDROID_DEPS/include
     LIBS += -L$$BSSH_ANDROID_DEPS/lib -lssh -lssl -lcrypto
+    # A rebuilt libssh relinks the app: libssh carries this tree's patches
+    # (sec 8.4), and an app linked against the archive before a patch
+    # landed would run without it and say nothing.
+    PRE_TARGETDEPS += $$BSSH_ANDROID_DEPS/lib/libssh.a
     !exists($$BSSH_ANDROID_DEPS/lib/libssh.a) {
         error("Android dependencies are missing. Run: tool/build-deps-android.sh $$QT_ARCH")
     }
@@ -91,5 +95,6 @@ android {
     CONFIG += link_pkgconfig
     # libcrypto for the password's PBKDF2 (project.md sec 19); Android links
     # it with libssh above.
-    PKGCONFIG += libssh libcrypto
+    PKGCONFIG += libcrypto
+    include($$PWD/libssh.pri)
 }

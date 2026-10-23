@@ -67,7 +67,12 @@ echo "probe: sshd on 127.0.0.1:$PORT"
 echo
 
 cc -O1 -Wall -Wextra -o "$DIR/plaintext" "$HERE/plaintext.c"
-cc -O1 -Wall -Wextra -o "$DIR/authenticated" "$HERE/authenticated.c" -lssh
+# The vendored libssh (project.md sec 8.4), which `make check-handoff`
+# builds first and names here: the export this probe grows into lives in
+# its patches, and Debian's libssh has none of them.
+LIBSSH_PREFIX=${LIBSSH_PREFIX:?run this through make check-handoff, which builds libssh first}
+cc -O1 -Wall -Wextra -DLIBSSH_STATIC -I"$LIBSSH_PREFIX/include" -o "$DIR/authenticated" \
+	"$HERE/authenticated.c" "$LIBSSH_PREFIX/lib/libssh.a" -lcrypto -lz -lpthread
 
 # A key sshd will accept, and an authorized_keys naming it. Same shape as
 # tool/check-ssh.sh: its own HOME so nothing touches the real one.

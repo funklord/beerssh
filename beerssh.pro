@@ -230,6 +230,10 @@ android {
     BSSH_ANDROID_DEPS = $$PWD/deps/android/$$QT_ARCH
     INCLUDEPATH += $$BSSH_ANDROID_DEPS/include
     LIBS += -L$$BSSH_ANDROID_DEPS/lib -lssh -lssl -lcrypto
+    # A rebuilt libssh relinks the app: libssh carries this tree's patches
+    # (sec 8.4), and an app linked against the archive before a patch
+    # landed would run without it and say nothing.
+    PRE_TARGETDEPS += $$BSSH_ANDROID_DEPS/lib/libssh.a
 
     # Fails HERE, naming the fix, rather than as a pile of missing symbols
     # at link time -- which is what the first Android build would otherwise
@@ -330,7 +334,8 @@ android {
         src/platform/secret_store_select_desktop.cpp
 
     CONFIG += link_pkgconfig
-    PKGCONFIG += libssh libsixel libcrypto libsecret-1
+    PKGCONFIG += libsixel libcrypto libsecret-1
+    include($$PWD/libssh.pri)
 
     # The X server, asked which window is under the pointer during the
     # app's own session drag (project.md sec 8.4): the one way to tell a
