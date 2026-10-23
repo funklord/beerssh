@@ -6889,19 +6889,104 @@ window with no name is a blank row in the task switcher.
   handoff **must not straddle a rekey**.
   Kept runnable rather than written up once, because the finding depends on
   libssh internals that move: this is 0.11.5, and a result about 0.11.5 is
-  not a result about whatever Debian ships next. **[OPEN]** when to build
-  any of it, and where the emulator would live if so — in the UI, and only
-  emulator state needs exporting; in a per-session process, and nothing does
-  but the terminal never moves.
+  not a result about whatever Debian ships next.
   **The holder's direction, 2026-10-22: modify libssh, with the intent to
   upstream the changes**, rather than walking `ssh_session_struct` and
-  `ssh_crypto_struct` from outside them. So the serialising half becomes an
-  export/import of a session's transport state -- keys, IVs, sequence
-  numbers, channel ids and windows, the unread input -- inside libssh, where
-  its own structures are known, carried here as numbered patches against a
-  vendored libssh the way `vterm-patch/` is against libvterm, and offered
-  upstream whole. The two measured constraints become the API's
-  preconditions: no zlib stream, and no rekey in flight.
+  `ssh_crypto_struct` from outside them -- numbered patches against a
+  vendored libssh, the way `vterm-patch/` is against libvterm, offered
+  upstream whole.
+
+  **The plan, 2026-10-23 (the holder: "plan it to make sure there are no
+  stoppers"). None was found on the desktop; Android has one real limit.**
+  Each piece below was checked against libssh 0.11.5's source (the one in
+  `build-deps-android/`, the same version Debian ships), libvterm and this
+  tree, not argued from memory.
+
+  *What has to move, and why each is possible:*
+  - **The socket**: `SCM_RIGHTS`, measured by `check-handoff`. TCP
+    options travel with the descriptor; the kernel holds whatever the
+    server sends meanwhile.
+  - **The transport state, in a libssh patch**: keys, sequence numbers,
+    the rekey byte and packet counters, the strict-KEX flag, the server's
+    host key (a later rekey verifies against it), the session and auth
+    state, and the bytes read from the socket but not yet consumed. The
+    ciphers reduce to bytes. chacha20-poly1305 takes its nonce from the
+    sequence number, so keys alone suffice. AES-GCM keeps its invocation
+    counter inside OpenSSL (`EVP_CTRL_GCM_IV_GEN`), so the patch tracks
+    the current IV and imports it as the fixed one. AES-CTR and CBC read
+    their position back with OpenSSL 3's updated-IV query, and SSH packets
+    are whole blocks, so no partial keystream is left. **The precedent is
+    OpenSSH's own sshd**, which serialises exactly this (its packet state)
+    between processes for privilege separation in production.
+  - **Quiescing**: only between packets. libssh decrypts a packet's first
+    block on arrival (`PACKET_STATE_SIZEREAD`) and then waits for the rest,
+    so an export there would have to carry a half-read packet. Instead the
+    export waits, bounded, for the packet the server is part-way through
+    sending, and the move is cancelled on timeout, the session untouched.
+    The output buffer is flushed first. The two measured preconditions
+    stand: no zlib stream, no rekey in flight.
+  - **The channel**: one per session -- this client opens no forwards and
+    forwards no agent -- so its ids, windows, maximum packet, state and
+    unread output.
+  - **A jump host**: the jump session, the target session riding over its
+    socketpair, and both socketpair ends, with the tunnel's pump quiesced
+    and restarted on the other side.
+  - **A local shell**: the pty master is a descriptor too, so the shell
+    keeps running. The new process sees it end by EIO on the master; it
+    cannot collect the exit code, since the shell is not its child.
+  - **The emulator**: a `vterm-patch/` patch exporting and importing
+    `VTermState` (about 113 lines of fields, including a half-parsed
+    escape sequence) and both screens. The scrollback, the images, the
+    title, the zoom and the settings are this tree's own to serialise.
+
+  *How a move commits.* A unix socket in a 0700 directory under
+  `$XDG_RUNTIME_DIR`, peers checked to be the same uid (`SO_PEERCRED`).
+  The exporter quiesces, then sends the state and the descriptors. The
+  importer builds the session and acknowledges. Only then does the
+  exporter let go, by `close()` alone, never `ssh_disconnect()`,
+  `shutdown()` or a SIGHUP (the two faults `check-handoff` keeps
+  failing). Before the acknowledgement the exporter can simply resume,
+  having read nothing since it quiesced. The state carries a format
+  version and the libssh and libvterm patch revisions, and a mismatch
+  refuses the move rather than guessing. Keys never touch the disk.
+
+  *Android cannot use it.* An app is one process, and an update or a
+  process death kills every process of the package with no callback, so
+  nothing is left running to hand a session to. Android keeps
+  reconnecting (sec 8.4's network-change rules) as its answer.
+
+  *The order to build it in*, each step with a test that runs against a
+  real sshd rather than a fake:
+  1. Vendor libssh 0.11.5 as a submodule with a `libssh-patch/`
+     directory, linked statically. The desktop links Debian's today. The
+     cost is libssh carried in the .deb, and check-ci and the GitHub
+     runner building 0.11.5 instead of their own older version.
+  2. The libssh patch: export and import, tested in `check-handoff`
+     across an `exec`, not a `fork`. Once each for chacha20-poly1305,
+     AES-GCM and AES-CTR with an ETM MAC, with data in flight both ways,
+     strict KEX on, and a server rekey forced just after the import.
+     Sabotage specs drop the sequence number, the IV and the unread input
+     in turn.
+  3. The libvterm patch, tested by a round trip: export, import into a
+     fresh emulator, compare the screens, then feed both the same bytes,
+     including a sequence split across the move.
+  4. The handoff in the app: the socket, the commit, and the abandon paths
+     in the session and the pty.
+  5. The UI: a drop on another BeerSSH process moves the session, which
+     replaces defect 1's planned refusal below. Handing every session to
+     a newer BeerSSH on upgrade comes after, as a second user of the same
+     handoff.
+  6. Upstream: libssh will want the gcrypt and mbedTLS backends too, and
+     this tree builds only OpenSSL. Acceptance is not assured, which is a
+     risk rather than a stopper: the patches are carried here either way.
+
+  **[OPEN] for the holder:** which desktop cases to build -- moving a
+  session to another process by drag, handing all sessions to a new
+  version, or both; whether the .deb may carry a static libssh; and
+  whether the client/server split (a session server, sec 8.4) comes
+  first. That split turns a drag into a message with nothing serialised,
+  but restarting the server itself on an upgrade still needs this
+  handoff, so it changes the order and not the need.
 - **A window shows its OWN tabs, not the registry's.** The tab bar was built
   from every session in the process, which was indistinguishable from correct
   while there could be only one window and wrong the moment there could be two:
