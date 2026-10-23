@@ -29,6 +29,7 @@ class live_ssh_test : public QObject {
 
 private slots:
 	void a_live_ssh_session_moves_to_another_session();
+	void a_session_through_a_jump_host_moves_too();
 	void a_named_key_authenticates();
 	void the_same_key_works_through_a_tilde();
 	void without_the_key_it_does_not_get_in();

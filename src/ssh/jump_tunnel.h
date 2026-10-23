@@ -2,6 +2,7 @@
 #define BSSH_JUMP_TUNNEL_H
 
 #include <QByteArray>
+#include <QList>
 #include <QString>
 #include <QThread>
 
@@ -69,6 +70,26 @@ public:
 
 	void close();
 
+	/*
+	 * Moving the tunnel with its session to another process (sec 8.4).
+	 *
+	 * pause() stops the pump between transfers -- never part-way through
+	 * one -- and leaves the socket pair alone: what is in it stays in the
+	 * kernel and travels with the descriptors. resume() starts it again
+	 * when the move is called off. export_state() then hands back the
+	 * jump host's transport and the two descriptors this side holds: the
+	 * jump host's socket and the pump's end of the pair. release() lets go
+	 * without a word to the jump host. adopt() is the receiving side:
+	 * the jump host's session imported, the pump left stopped until
+	 * resume() -- which the caller calls once nothing else can fail. The target session's end of the pair is its own, not the
+	 * tunnel's, and is never closed here once handed over.
+	 */
+	bool pause();
+	void resume();
+	bool export_state(QByteArray &state, QList<int> &fds, QString &why);
+	void release();
+	bool adopt(const QByteArray &state, int jump_fd, int ours_fd, int theirs_fd, QString &why);
+
 	QString why() const { return m_why; }
 
 protected:
@@ -85,6 +106,7 @@ private:
 	int m_theirs = -1;    /* the end the target session is given */
 	QString m_why;
 	volatile bool m_stop = false;
+	volatile bool m_pause = false;
 };
 
 #endif /* BSSH_JUMP_TUNNEL_H */

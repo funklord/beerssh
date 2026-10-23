@@ -1,5 +1,8 @@
 #include "ssh/jump_tunnel.h"
 
+#include <QDataStream>
+#include <QIODevice>
+
 #include "ssh/ssh_session_libssh.h"
 
 #include <errno.h>
@@ -247,7 +250,12 @@ void bssh_jump_tunnel::run() {
 	 * backgrounded phone holding a session under the foreground service
 	 * (sec 5.1) is a battery cost with nothing to show for it.
 	 */
-	while (!m_stop) {
+	/*
+	 * A pause is honoured here, between transfers, and nowhere else: a
+	 * transfer stopped part-way would lose what was read and not yet
+	 * written, which on a moving session is bytes of a packet.
+	 */
+	while (!m_stop && !m_pause) {
 		struct pollfd fds[2];
 		fds[0].fd = m_ours;
 		fds[0].events = POLLIN;
@@ -295,7 +303,8 @@ void bssh_jump_tunnel::run() {
 	 * anything had happened. Shutting down here turns every one of those
 	 * into the ordinary drop it already handles.
 	 */
-	if (m_ours >= 0) ::shutdown(m_ours, SHUT_RDWR);
+	/* Paused, the pair is left exactly as it is: it is about to move. */
+	if (m_ours >= 0 && !m_pause) ::shutdown(m_ours, SHUT_RDWR);
 }
 
 bool bssh_jump_tunnel::write_to_channel(const char *data, int size) {
@@ -405,4 +414,136 @@ void bssh_jump_tunnel::close() {
 		::close(m_theirs);
 		m_theirs = -1;
 	}
+}
+
+/* ---- moving the tunnel with its session (sec 8.4) --------------------- */
+
+namespace {
+
+const char BSSH_JUMP_HANDOFF_MAGIC[] = "bssh-jump-tunnel";
+const quint32 BSSH_JUMP_HANDOFF_FORMAT = 1;
+const int BSSH_JUMP_EXPORT_TRIES = 100;
+const int BSSH_JUMP_EXPORT_POLL_MS = 20;
+
+}  // namespace
+
+bool bssh_jump_tunnel::pause() {
+	if (!m_session || !m_channel) return false;
+	m_pause = true;
+	/* The pump's poll waits at most 200ms, and a transfer in progress
+	 * finishes first: bounded, and generously. */
+	if (isRunning() && !wait(10000)) {
+		m_pause = false;
+		return false;
+	}
+	return true;
+}
+
+void bssh_jump_tunnel::resume() {
+	if (!m_session || !m_channel || isRunning()) return;
+	m_pause = false;
+	m_stop = false;
+	start();
+}
+
+bool bssh_jump_tunnel::export_state(QByteArray &state, QList<int> &fds, QString &why) {
+	if (!m_session || !m_channel || isRunning()) {
+		why = QStringLiteral("the jump host's tunnel is not paused");
+		return false;
+	}
+	ssh_string exported = nullptr;
+	int rc = SSH_AGAIN;
+	for (int tries = 0; tries < BSSH_JUMP_EXPORT_TRIES; ++tries) {
+		rc = ssh_session_export_transport(m_session, &exported);
+		if (rc != SSH_AGAIN) break;
+		/* Lets libssh read what completes a packet or a rekey, into the
+		 * channel's buffer, which travels. */
+		ssh_channel_poll_timeout(m_channel, BSSH_JUMP_EXPORT_POLL_MS, 0);
+	}
+	if (rc != SSH_OK) {
+		why = QStringLiteral("the jump host's connection could not be stopped: %1")
+		              .arg(QString::fromUtf8(ssh_get_error(m_session)));
+		return false;
+	}
+	state.clear();
+	QDataStream out(&state, QIODevice::WriteOnly);
+	out.setVersion(QDataStream::Qt_6_0);
+	out << QByteArray(BSSH_JUMP_HANDOFF_MAGIC) << BSSH_JUMP_HANDOFF_FORMAT
+	    << QByteArray(static_cast<const char *>(ssh_string_data(exported)),
+	                  int(ssh_string_len(exported)));
+	ssh_string_burn(exported);
+	ssh_string_free(exported);
+	fds = { ssh_get_fd(m_session), m_ours };
+	return true;
+}
+
+void bssh_jump_tunnel::release() {
+	m_stop = true;
+	if (isRunning()) wait(10000);
+	if (m_session) ssh_session_detach_transport(m_session);
+	if (m_channel) {
+		ssh_channel_free(m_channel);
+		m_channel = nullptr;
+	}
+	if (m_session) {
+		ssh_free(m_session);
+		m_session = nullptr;
+	}
+	if (m_ours >= 0) ::close(m_ours);
+	m_ours = -1;
+	/* The target session's end, and its to close. */
+	m_theirs = -1;
+}
+
+bool bssh_jump_tunnel::adopt(const QByteArray &state, int jump_fd, int ours_fd, int theirs_fd,
+                             QString &why) {
+	if (m_session) {
+		why = QStringLiteral("this tunnel is already open");
+		return false;
+	}
+	QDataStream in(state);
+	in.setVersion(QDataStream::Qt_6_0);
+	QByteArray magic, transport;
+	quint32 format = 0;
+	in >> magic >> format >> transport;
+	if (in.status() != QDataStream::Ok || !in.atEnd() || magic != BSSH_JUMP_HANDOFF_MAGIC ||
+	    format != BSSH_JUMP_HANDOFF_FORMAT) {
+		why = QStringLiteral("the jump host's tunnel is not one this BeerSSH reads");
+		return false;
+	}
+	ssh_session session = ssh_new();
+	ssh_string blob = ssh_string_new(size_t(transport.size()));
+	if (!session || !blob ||
+	    ssh_string_fill(blob, transport.constData(), size_t(transport.size())) != 0) {
+		if (blob) ssh_string_free(blob);
+		if (session) ssh_free(session);
+		why = QStringLiteral("out of memory");
+		return false;
+	}
+	const int rc = ssh_session_import_transport(session, jump_fd, blob);
+	ssh_string_burn(blob);
+	ssh_string_free(blob);
+	ssh_channel channel = rc == SSH_OK ? ssh_session_get_channel(session, 0) : nullptr;
+	if (!channel) {
+		why = rc == SSH_OK ? QStringLiteral("the jump host's tunnel arrived without its channel")
+		                   : QString::fromUtf8(ssh_get_error(session));
+		if (rc == SSH_OK) ssh_session_detach_transport(session);
+		ssh_free(session);
+		return false;
+	}
+	ssh_set_blocking(session, 0);
+	m_session = session;
+	m_channel = channel;
+	m_ours = ours_fd;
+	m_theirs = theirs_fd;
+	/*
+	 * Paused, not started: the caller starts it (resume()) once the
+	 * target session has been imported too. A pump running while that
+	 * could still fail would read the jump host's packets with these
+	 * keys, and the giver -- resuming the same connection -- would then
+	 * be a packet behind.
+	 */
+	m_stop = false;
+	m_pause = true;
+	return true;
 }

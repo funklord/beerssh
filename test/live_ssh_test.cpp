@@ -1354,3 +1354,71 @@ void live_ssh_test::a_live_ssh_session_moves_to_another_session() {
 	to->disconnect_from_host();
 	delete to;
 }
+
+/*
+ * The same move through a jump host (sec 8.4): two libssh sessions and the
+ * pump between them, the tunnel's session to the bastion carrying the
+ * target's inside one of its channels, and a socket pair joining the two.
+ * All of it moves -- both transports, three descriptors, and whatever the
+ * pair held -- and the moved session answers through the tunnel, with
+ * more than one packet's worth each way.
+ */
+void live_ssh_test::a_session_through_a_jump_host_moves_too() {
+	if (!test_port()) QSKIP("no test server; run make check-ssh");
+	if (!ordinary_phase()) QSKIP("the host key has been swapped; authentication is refused by design here");
+
+	/* The bastion is verified, never prompted about: recorded first, by
+	 * connecting to it directly, as a_host_is_reachable_through_a_jump_host
+	 * does. */
+	QVERIFY2(attempt(test_key()).connected, "the server has to be reachable directly first");
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("jump-move-test");
+	profile.host = QStringLiteral("127.0.0.1");
+	profile.port = test_port();
+	profile.user = qEnvironmentVariable("USER");
+	profile.identity_file = test_key();
+	profile.proxy_jump = QStringLiteral("%1@127.0.0.1:%2").arg(qEnvironmentVariable("USER")).arg(test_port());
+
+	auto shows = [](bssh_session *session, const QString &wanted) {
+		QElapsedTimer timer;
+		timer.start();
+		while (timer.elapsed() < 15000) {
+			if (session->emulator()->screen().to_text().contains(wanted)) return true;
+			QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+		}
+		return false;
+	};
+
+	bssh_session *from = new bssh_session(profile);
+	from->resize(80, 12);
+	QObject::connect(from, &bssh_session::host_key_unknown, from, [from] { from->accept_host_key(); });
+	from->connect_to_host();
+	QTRY_COMPARE_WITH_TIMEOUT(from->state(), bssh_ssh_session::CONNECTED, 15000);
+	from->input_router()->send_text(QStringLiteral("echo tunnelled-$((2+3))\n"));
+	QVERIFY2(shows(from, QStringLiteral("tunnelled-5")), "the tunnelled session never ran a command");
+
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	QVERIFY2(from->export_handoff(state, fds, &why), qPrintable(why));
+	QCOMPARE(fds.size(), 3);
+	QList<int> received;
+	for (int fd : fds) received.append(::dup(fd));
+
+	bssh_session *to = bssh_session::import_handoff(state, received, nullptr, &why);
+	QVERIFY2(to, qPrintable(why));
+	QCOMPARE(to->state(), bssh_ssh_session::CONNECTED);
+	from->release_handoff();
+	delete from;
+
+	QVERIFY2(to->emulator()->screen().to_text().contains(QStringLiteral("tunnelled-5")),
+	          "the screen from before the move did not come along");
+	to->input_router()->send_text(QStringLiteral(
+	        "seq 1 3000 | tr '\\n' ' ' | wc -c; echo through-$((6*7))\n"));
+	QVERIFY2(shows(to, QStringLiteral("through-42")),
+	          qPrintable(to->emulator()->screen().to_text()));
+
+	to->disconnect_from_host();
+	delete to;
+}

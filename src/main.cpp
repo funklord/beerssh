@@ -471,8 +471,9 @@ int main(int argc, char *argv[]) {
 			bssh_main_window::take_from_another_process(source, id, global);
 		});
 		/* A new version has everything it could take. Anything it could
-		 * not -- a session through a jump host, for now -- keeps this one
-		 * running, rather than ending with the program. */
+		 * not -- a session reconnecting, say, or one too busy to stop in
+		 * time -- keeps this one running, rather than ending with the
+		 * program. */
 		QObject::connect(handoff, &bssh_handoff_point::quit_requested, &app, [registry] {
 			if (registry->live_count() == 0) QCoreApplication::quit();
 		});

@@ -18,3 +18,32 @@ file = "src/ssh/ssh_session_libssh.cpp"
 find = "void bssh_libssh_worker::do_release() {\n"
 replace = "void bssh_libssh_worker::do_release() {\n\tteardown();\n\treturn;\n"
 expect = "a_live_ssh_session_moves_to_another_session"
+
+# Through a jump host (sec 8.4). The pump, paused for the move, shuts the
+# socket pair the way it does when the tunnel ends: the moved target
+# session's end of it reads EOF and the session is dead on arrival.
+[[sabotage]]
+name = "a paused pump shuts the pair it is handing over"
+file = "src/ssh/jump_tunnel.cpp"
+find = "\tif (m_ours >= 0 && !m_pause) ::shutdown(m_ours, SHUT_RDWR);\n"
+replace = "\tif (m_ours >= 0) ::shutdown(m_ours, SHUT_RDWR);\n"
+expect = "a_session_through_a_jump_host_moves_too"
+
+# The adopted tunnel's pump never started: the target session is imported
+# and connected, and nothing carries its bytes to the jump host.
+[[sabotage]]
+name = "the adopted tunnel never pumps"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\tm_jump->resume();\n\t}\n"
+replace = "\t}\n"
+expect = "a_session_through_a_jump_host_moves_too"
+
+# The giving side lets go of the tunnel by closing it, which disconnects
+# from the jump host and shuts the pair: the bastion drops the forwarded
+# connection under the session that moved.
+[[sabotage]]
+name = "the giving side closes the tunnel it gave away"
+file = "src/ssh/jump_tunnel.cpp"
+find = "void bssh_jump_tunnel::release() {\n"
+replace = "void bssh_jump_tunnel::release() {\n\tclose();\n\treturn;\n"
+expect = "a_session_through_a_jump_host_moves_too"

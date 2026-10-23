@@ -7066,8 +7066,26 @@ window with no name is a blank row in the task switcher.
      `ssh_disconnect()`, which crashed instead of failing -- libssh frees
      the channels itself and the release freed one again -- so it now
      models the realistic mistake, releasing through `teardown()`.
-     **Still open here:** a session through a jump host is refused with
-     a reason; its tunnel's session and socketpair have to move too.
+     **Through a jump host too, since later the same day.** Two libssh
+     sessions and a pump: the tunnel's session to the bastion carries
+     the target's inside a forwarding channel, joined by a socketpair.
+     The target is exported first, with the pump still running -- it is
+     what brings the rest of a packet the target is part-way through --
+     and only then is the pump paused, between transfers and never
+     part-way through one, without shutting the pair; then the tunnel's
+     own session is exported. Three descriptors travel (the target's end
+     of the pair, the bastion's socket, the pump's end), and whatever the
+     pair held goes with them in the kernel. The receiver adopts the
+     tunnel with its pump STOPPED and starts it only once the target has
+     imported too: a pump running while that could still fail would read
+     the bastion's packets with the imported keys and leave the resuming
+     giver a packet behind. Descriptors are duplicated as the import
+     takes them, so a failure part-way leaves the caller every one it
+     gave. `a_session_through_a_jump_host_moves_too` (check-ssh) moves
+     one and sends output both ways through it; three more specs in
+     `session-move-ssh.toml` -- the paused pump shutting the pair, the
+     adopted pump never started, the tunnel let go through `close()` --
+     are all caught.
   5. **[DONE 2026-10-23]** The UI. Every desktop BeerSSH listens at its
      handoff point from start-up (not under `--store-view`); a session
      carries a random `handoff_id()`, and a session drag's payload now
@@ -7094,8 +7112,8 @@ window with no name is a blank row in the task switcher.
      again with `--adopt-from <socket>`; the new one lists the old one's
      connected sessions, takes each, shows them as tabs, and asks it to
      quit. The old one quits only once nothing live is left in it, so a
-     session it could not give -- through a jump host, for now -- keeps
-     it running. The program is restarted from its path on disk with a
+     session it could not give -- one reconnecting, or too busy to stop
+     in time -- keeps it running. The program is restarted from its path on disk with a
      trailing " (deleted)" removed, which is how Linux names a running
      program whose file an upgrade replaced.
      Tests: the payload round trip; a session given by another process
@@ -7116,8 +7134,7 @@ window with no name is a blank row in the task switcher.
   **Decided by the holder, 2026-10-23:** both desktop cases (a drag
   into another process, and an upgrade handing every session over), and
   a static libssh in the .deb is fine. Built in the order above.
-  **Still open:** sessions through a jump host, refused with a reason,
-  since the tunnel's session and socketpair have to move too; and
+  Sessions through a jump host move too (step 4). **Still open:**
   offering the libssh patch upstream, which is the holder's to send.
 - **A window shows its OWN tabs, not the registry's.** The tab bar was built
   from every session in the process, which was indistinguishable from correct

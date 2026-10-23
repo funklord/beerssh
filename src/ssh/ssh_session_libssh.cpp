@@ -1439,7 +1439,8 @@ void bssh_libssh_worker::start_polling() {
 namespace {
 
 const char BSSH_SSH_HANDOFF_MAGIC[] = "bssh-ssh-transport";
-const quint32 BSSH_SSH_HANDOFF_FORMAT = 1;
+/* 2: a session through a jump host carries its tunnel too. */
+const quint32 BSSH_SSH_HANDOFF_FORMAT = 2;
 
 /* How often, and how far apart, an export is retried while libssh is
  * between a packet's first block and its last, or inside a rekey: the
@@ -1455,11 +1456,6 @@ bool bssh_libssh_worker::do_export(QByteArray &state, QList<int> &fds, QString &
 		why = QStringLiteral("the connection is not open");
 		return false;
 	}
-	if (m_jump) {
-		why = QStringLiteral("a session through a jump host cannot move yet");
-		return false;
-	}
-
 	/* Stopped: nothing reads the channel from here until the release or
 	 * the resume. What libssh reads while the export waits stays in its
 	 * channel buffer and travels with the state. */
@@ -1486,17 +1482,36 @@ bool bssh_libssh_worker::do_export(QByteArray &state, QList<int> &fds, QString &
 		return false;
 	}
 
+	/*
+	 * Through a jump host, the tunnel goes too -- stopped only now, after
+	 * the target session: while that one was finishing a packet, the pump
+	 * was what brought the rest of it. Paused between transfers, the pair
+	 * keeps whatever is in flight, and it travels with the descriptors.
+	 */
+	QByteArray tunnel;
+	QList<int> tunnel_fds;
+	if (m_jump) {
+		if (!m_jump->pause() || !m_jump->export_state(tunnel, tunnel_fds, why)) {
+			if (why.isEmpty()) why = QStringLiteral("the jump host's tunnel would not stop");
+			ssh_string_burn(exported);
+			ssh_string_free(exported);
+			do_resume();
+			return false;
+		}
+	}
+
 	QDataStream out(&state, QIODevice::WriteOnly);
 	out.setVersion(QDataStream::Qt_6_0);
 	out << QByteArray(BSSH_SSH_HANDOFF_MAGIC) << BSSH_SSH_HANDOFF_FORMAT
 	    << QByteArray(static_cast<const char *>(ssh_string_data(exported)),
 	                  int(ssh_string_len(exported)))
 	    << m_term << m_command << m_identity_file << m_host << m_port
-	    << qint32(m_keepalive_seconds) << m_compression << m_pending;
+	    << qint32(m_keepalive_seconds) << m_compression << m_pending
+	    << bool(m_jump) << m_proxy_jump << tunnel;
 	ssh_string_burn(exported);
 	ssh_string_free(exported);
 
-	fds = { ssh_get_fd(m_session) };
+	fds = QList<int>{ ssh_get_fd(m_session) } + tunnel_fds;
 	return true;
 }
 
@@ -1518,11 +1533,18 @@ void bssh_libssh_worker::do_release() {
 		ssh_free(m_session);
 		m_session = nullptr;
 	}
+	/* After the target session, whose end of the pair it was. */
+	if (m_jump) {
+		m_jump->release();
+		delete m_jump;
+		m_jump = nullptr;
+	}
 }
 
 /* The move did not happen: carry on exactly where it stopped. */
 void bssh_libssh_worker::do_resume() {
 	if (!m_session || !m_channel) return;
+	if (m_jump) m_jump->resume();
 	start_polling();
 	if (m_keepalive) m_keepalive->start();
 	drain();
@@ -1530,7 +1552,7 @@ void bssh_libssh_worker::do_resume() {
 
 bool bssh_libssh_worker::do_import(const QByteArray &state, const QList<int> &fds,
                                    QString &why) {
-	if (m_session || fds.size() != 1) {
+	if (m_session || fds.isEmpty()) {
 		why = QStringLiteral("the connection arrived without its socket");
 		return false;
 	}
@@ -1542,13 +1564,43 @@ bool bssh_libssh_worker::do_import(const QByteArray &state, const QList<int> &fd
 	QString term, command, identity, host;
 	quint16 port = 22;
 	qint32 keepalive = 0;
-	bool compression = false;
+	bool compression = false, through_jump = false;
+	QString proxy_jump;
+	QByteArray tunnel;
 	in >> magic >> format >> transport >> term >> command >> identity >> host >> port
-	   >> keepalive >> compression >> pending;
+	   >> keepalive >> compression >> pending >> through_jump >> proxy_jump >> tunnel;
 	if (in.status() != QDataStream::Ok || !in.atEnd() || magic != BSSH_SSH_HANDOFF_MAGIC ||
 	    format != BSSH_SSH_HANDOFF_FORMAT) {
 		why = QStringLiteral("the connection's state is not one this BeerSSH reads");
 		return false;
+	}
+	if (fds.size() != (through_jump ? 3 : 1)) {
+		why = QStringLiteral("the connection arrived without all of its sockets");
+		return false;
+	}
+
+	/*
+	 * Duplicates, through a jump host: two sessions and a pump take them
+	 * one at a time, and a failure part-way must leave the caller holding
+	 * every descriptor it gave -- its contract -- rather than some of them
+	 * already closed by a half-built tunnel. On success the originals are
+	 * closed, being the session's now.
+	 */
+	bssh_jump_tunnel *jump = nullptr;
+	int target_fd = fds.first();
+	if (through_jump) {
+		const int jump_fd = ::dup(fds.at(1));
+		const int ours_fd = ::dup(fds.at(2));
+		target_fd = ::dup(fds.at(0));
+		jump = new bssh_jump_tunnel;
+		if (jump_fd < 0 || ours_fd < 0 || target_fd < 0 ||
+		    !jump->adopt(tunnel, jump_fd, ours_fd, target_fd, why)) {
+			for (int fd : { jump_fd, ours_fd, target_fd })
+				if (fd >= 0) ::close(fd);
+			if (why.isEmpty()) why = QStringLiteral("the jump host's tunnel could not be taken");
+			delete jump;
+			return false;
+		}
 	}
 
 	ssh_session session = ssh_new();
@@ -1560,7 +1612,7 @@ bool bssh_libssh_worker::do_import(const QByteArray &state, const QList<int> &fd
 		why = QStringLiteral("out of memory");
 		return false;
 	}
-	const int rc = ssh_session_import_transport(session, fds.first(), blob);
+	const int rc = ssh_session_import_transport(session, target_fd, blob);
 	ssh_string_burn(blob);
 	ssh_string_free(blob);
 	ssh_channel channel = rc == SSH_OK ? ssh_session_get_channel(session, 0) : nullptr;
@@ -1572,7 +1624,21 @@ bool bssh_libssh_worker::do_import(const QByteArray &state, const QList<int> &fd
 		 * a detached session closes it without a word to the server. */
 		if (rc == SSH_OK) ssh_session_detach_transport(session);
 		ssh_free(session);
+		if (jump) {
+			/* Its own duplicates, and the target's, which the failed
+			 * import left open. */
+			jump->release();
+			delete jump;
+			if (rc != SSH_OK) ::close(target_fd);
+		}
 		return false;
+	}
+	if (jump) {
+		for (int fd : fds) ::close(fd);
+		m_jump = jump;
+		m_proxy_jump = proxy_jump;
+		/* Only now: see bssh_jump_tunnel::adopt(). */
+		m_jump->resume();
 	}
 
 	m_session = session;
