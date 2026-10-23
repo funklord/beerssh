@@ -12293,17 +12293,33 @@ mid-line. **Unexplained:** the emulator alone shrinks such a screen
 correctly (probed: the last rows kept, the cursor right), so it is between
 the emulator and the pixels, and not established where. The status bar is
 hidden by this app's own choice, so the target's demo clock never shows.
-**`make store-screenshots` (2026-10-23)** runs it on an emulator this starts
-and stops itself (`tool/store-screenshots.sh`, `STORE_AVD`, default
-`bssh_api34`, on port 5584, refused if taken), so the pictures no longer
-depend on whose phone is plugged in -- the holder's phone meant a lock, a
-PIN, the camera's band, One UI ignoring demo mode, and the real app
-restarted under its owner. It builds the x86_64 kit, settles the cold
-boot's "System UI isn't responding" before capturing, and its EXIT trap
-stops the emulator, falling back to SIGKILL on its own process group:
-`emulator` execs into qemu, which starts a netsimd child, so killing the
-pid alone would orphan that. Seen both ways: a full run left no emulator,
-and a SIGTERM during boot took it down with the script.
+**On an emulator, `make android-store-screenshots` (2026-10-23).** The
+holder wanted the pictures independent of whose phone is plugged in --
+the phone meant a lock, a PIN, the camera's band, One UI ignoring demo
+mode, and the real app restarted under its owner. This tree's
+tool/store-screenshots.sh (0334c62) did it first and was taken into the shared
+`tool/android.mk` the same day, on one AVD named `store` for every app;
+the script and its `store-screenshots` target went, so there is one way
+to do it. Putting it under make found two faults in the script. Its
+group kill, `kill -9 -- -PGID`, is refused by dash, and the refusal fell
+through to killing qemu alone, which orphans netsimd; `kill -9 -PGID` is
+the form dash takes. And a second TERM cut the cleanup short; the
+fragment's cleanup ignores INT and TERM once it starts. Its comment
+records both.
+
+**The band at the top of every capture is the camera cutout's**, 102px:
+the `pixel_6` device profile both AVDs use declares a hole-punch cutout
+(`cutout hole` in the SDK's `skins/pixel_6/layout`), so the app keeps
+the same safe-area band it keeps on the Fold. Whether to draw into that
+band is the holder's open decision, and the AVD is the shared one.
+
+**Readiness timed out intermittently on the `store` AVD** at a machine
+load near 175: of five runs, two captured all four views and three timed
+out on `terminal` (twice) or `split`, never on `hosts` or `settings`.
+Load and the hook are both still candidates. The app now also logs
+`store-view-start <name>` when it begins building the view, so a failed
+view's saved `<view>.logcat` shows whether the app got that far
+(startup slow) or never reported the window drawn (exposure).
 
 ### 12.2b The keyboard lives in `keyboard/` — **[DONE 2026-09-06]**
 

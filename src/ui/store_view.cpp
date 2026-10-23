@@ -165,6 +165,15 @@ bool bssh_store_view_isolate() {
 void bssh_store_view_show(bssh_main_window *window, const QString &name) {
 	if (!window) return;
 
+	/*
+	 * Logged before any of the view is built, so a view that never
+	 * reports drawn says how far it got: no start line is an app that
+	 * was still starting, a start line alone is a window never exposed.
+	 * Asked for after intermittent timeouts on the terminal and split
+	 * views at a high machine load (2026-10-23).
+	 */
+	qInfo("store-view-start %s", qPrintable(name));
+
 	if (name == QStringLiteral("hosts")) {
 		for (const demo_host_t &host : DEMO_HOSTS)
 			window->profile_store()->save(demo_profile(host));
