@@ -87,6 +87,11 @@ else
 		| tar -xf - -C "$STAGE"
 	git -C softkeys archive --format=tar --prefix=src/softkeys/ \
 		"$(git rev-parse HEAD:softkeys)" | tar -xf - -C "$STAGE"
+	# libssh by its gitlink, unpatched, as check-ci stages it: the build
+	# applies libssh-patch/ itself, and an export is not a git checkout,
+	# so a missing submodule could not be fetched there (project.md 8.4).
+	git -C libssh archive --format=tar --prefix=src/libssh/ \
+		"$(git rev-parse HEAD:libssh)" | tar -xf - -C "$STAGE"
 	ln -s "$PWD/fonts" "$STAGE/src/fonts"
 
 	echo "check-deb: building $(git rev-parse --short HEAD) in a throwaway export"

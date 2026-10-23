@@ -6969,6 +6969,16 @@ window with no name is a blank row in the task switcher.
      what every build tests against. Found on the way: `make` had never
      built beersshd, because `SSHD_TARGET` was defined after
      `all: $(ARTIFACTS)` had expanded it.
+     Three faults it left for `make deb`, fixed the same day: a plain
+     `make` built only libssh's patches (`libssh-source` above `all` was
+     the default goal, now named); `make install`'s exported DESTDIR sent
+     the private archive into the package's staging tree; and
+     `veryclean`'s checkout left the file the patch creates, so the patch
+     could not re-apply. And `tool/check-deb.sh` builds in an export it
+     stocks with each submodule by hand, and was not given libssh: the
+     export is no git checkout, so the build stopped at
+     "libssh/ is empty". With libssh staged from its gitlink, check-deb
+     passes on a clean debian:trixie.
   2. **[DONE 2026-10-23]** The libssh patch,
      `libssh-patch/0001-add-a-transport-export-and-import.patch`:
      `ssh_session_export_transport`, `ssh_session_import_transport`,
@@ -16052,9 +16062,15 @@ is reachable by neither route, nor by anything short of root.
 
 - **Same repository, second program — [DECIDED].** `beersshd.pro` beside
   `beerssh.pro`, sources in `src/sshd/`, built by plain `make` (so check-ci
-  compiles it against the runner's Qt 6.4 and libssh 0.10) and by fmake
-  (`fmake.toml` names the target, which would otherwise be `sshd` after its
-  directory). It links Qt Core and libssh and **nothing of the terminal**.
+  compiles it against the runner's Qt 6.4) and by fmake (`fmake.toml`
+  names the target, which would otherwise be `sshd` after its
+  directory). It links Qt Core and libssh -- the vendored one since
+  2026-10-23 -- and **nothing of the terminal**. **That "built by plain
+  `make`" was not true until 2026-10-23:** `SSHD_TARGET` was defined
+  after `all: $(ARTIFACTS)` had expanded it, so `make` never built
+  beersshd and check-ci never compiled it against the runner's Qt; only
+  `make test`, through the tests that link its sources, did. Fixed in
+  f6a3525.
 - **Storage: all-files access — [DECIDED].** The served root is a path;
   libssh's own handlers are not used (below), but ours are plain POSIX
   calls on paths, which is what all-files access makes work on shared
