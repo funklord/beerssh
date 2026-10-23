@@ -16420,9 +16420,15 @@ and now both use the excluded one. The same dry run, by the same tally:
 **0 of 73 `moc` lines name `build-deps-android`**, and still 0 compile
 lines.
 
-One residue is left, and it is not on any command line. fmake's lint for
-doxygen directives still reads sources inside the excluded subtree: six
-warnings, all about OpenSSL's `ssl/statem/statem_lib.c`, three per ABI
-build. That is the exclusion half-applied a third time, to what fmake
-*reads* rather than what it builds. It costs nothing but noise, and is
-reported to fmake's inbox rather than fixed from here.
+**And the lint residue is gone too: fixed in fmake `52f1a4c`, measured
+here 2026-10-23.** fmake's lint for doxygen directives had gone on
+reading the excluded subtree -- six warnings, all about OpenSSL's
+`ssl/statem/statem_lib.c`, three per ABI build -- because the lint
+walked every file fmake had READ while exclusion removed only from the
+sources it builds. fmake took the reading that `exclude_pattern`
+promises no work at all on an excluded subtree, and gated headers on
+the pattern as well as sources, since a header is in neither set. The
+same dry run with a control: **6 warnings from fmake at `52f1a4c^`,
+exported to a scratch directory, and 0 from fmake at its HEAD**, the
+tree and the dependency build unchanged between the two. fmake asked to
+hear if any survived; none did.
