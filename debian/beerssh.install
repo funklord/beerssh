@@ -1,5 +1,5 @@
 usr/bin/beerssh
-usr/share/man
+usr/share/man/man1/beerssh.1
 usr/share/bash-completion
 usr/share/applications
 usr/share/icons

@@ -137,6 +137,7 @@ TARGET = beerssh
 # beersshd at all -- `make -pn all` listed beerssh, its manual page and
 # its completion, and nothing else (found 2026-10-23).
 SSHD_TARGET = beersshd
+SSHD_MAN_PAGE = $(SSHD_TARGET).1
 
 # The app id from sec 0.1. Every packaging file is named after it, and a
 # mismatch shows up as an app that installs, runs, and cannot be found.
@@ -490,7 +491,7 @@ endif
 # is what it is for -- and it can only promise that if it removes
 # everything the default build produces. Adding a product to `all` now
 # makes clean remove it, without anybody remembering to.
-ARTIFACTS = $(TARGET) $(MAN_PAGE) $(COMPLETION) $(SSHD_TARGET)
+ARTIFACTS = $(TARGET) $(MAN_PAGE) $(COMPLETION) $(SSHD_TARGET) $(SSHD_MAN_PAGE)
 
 all: $(ARTIFACTS)
 
@@ -560,6 +561,13 @@ endif
 # before QApplication is built), so this works in a build chroot.
 $(MAN_PAGE): $(TARGET)
 	./$(TARGET) --man > $@
+
+# beersshd's, on the same argument: its --help and this page are written
+# from one option table in src/sshd/main.cpp. It is a package of its own
+# (sec 19), and a package's command without a page is what lintian warns
+# about.
+$(SSHD_MAN_PAGE): $(SSHD_TARGET)
+	./$(SSHD_TARGET) --man > $@
 
 # The same argument one file over, and the same rule shape. `bash -n`
 # because a completion that does not parse is sourced by every new shell
@@ -1470,6 +1478,10 @@ install: all
 	mkdir -p $(DESTDIR)$(PREFIX)/share/man/man1
 	install -m 0644 $(MAN_PAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(MAN_PAGE)
 
+	# beersshd, which debian/ packages apart from beerssh (sec 19).
+	install -m 0755 $(SSHD_TARGET) $(DESTDIR)$(PREFIX)/bin/$(SSHD_TARGET)
+	install -m 0644 $(SSHD_MAN_PAGE) $(DESTDIR)$(PREFIX)/share/man/man1/$(SSHD_MAN_PAGE)
+
 	# Where bash-completion looks for a per-command file, and it loads it
 	# on demand rather than at every shell start -- which is why the name
 	# is the command's and carries no suffix.
@@ -1566,6 +1578,7 @@ deb: version-check fonts
 	@mkdir -p $(DEB_DIR)
 	@for f in ../beerssh_$(VERSION)_*.deb ../beerssh-fonts_$(VERSION)_all.deb \
 	          ../beerssh-dbgsym_$(VERSION)_*.deb \
+	          ../beersshd_$(VERSION)_*.deb ../beersshd-dbgsym_$(VERSION)_*.deb \
 	          ../beerssh_$(VERSION)_*.buildinfo ../beerssh_$(VERSION)_*.changes; do \
 		[ -e "$$f" ] && mv -f "$$f" $(DEB_DIR)/ || true; \
 	done
@@ -1621,6 +1634,8 @@ version-check:
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/$(TARGET)
 	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/$(MAN_PAGE)
+	rm -f $(DESTDIR)$(PREFIX)/bin/$(SSHD_TARGET)
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man1/$(SSHD_MAN_PAGE)
 	rm -f $(DESTDIR)$(PREFIX)/share/bash-completion/completions/$(TARGET)
 	rm -f $(DESTDIR)$(PREFIX)/share/applications/$(APP_ID).desktop
 	rm -f $(DESTDIR)$(PREFIX)/share/metainfo/$(APP_ID).metainfo.xml

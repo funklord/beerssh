@@ -330,6 +330,21 @@ if ! ls /usr/share/icons/hicolor/*/apps/"$icon".* >/dev/null 2>&1; then
 fi
 echo "check-deb: the icon it names is installed"
 
+# beersshd, the SFTP server, packaged apart from the terminal (sec 19).
+# --help and its manual page come from one option table, so both are read
+# here: --host-key is in the options and nowhere else on the page, where
+# --root is in the synopsis too and would pass an empty OPTIONS section.
+if ! beersshd --version > /tmp/sshd.log 2>&1; then
+	echo "check-deb: the installed beersshd did not run" >&2
+	cat /tmp/sshd.log >&2
+	exit 1
+fi
+if ! zcat -f /usr/share/man/man1/beersshd.1* 2>/dev/null | grep -q "host.-key"; then
+	echo "check-deb: beersshd has no manual page documenting its options" >&2
+	exit 1
+fi
+echo "check-deb: beersshd runs and its manual page is installed"
+
 # And removing it leaves nothing behind, which is the other half of what a
 # package is for.
 apt-get remove -y -qq beerssh beerssh-fonts >/dev/null 2>&1
@@ -341,7 +356,20 @@ if [ -e /usr/bin/beerssh ]; then
 	echo "check-deb: uninstalling left the binary behind" >&2
 	exit 1
 fi
-echo "check-deb: it uninstalls cleanly"
+
+# Separate packages means neither needs the other: with the terminal gone
+# the server is still installed and still runs. A Depends on beerssh would
+# have taken it out with the remove above.
+if ! /usr/bin/beersshd --version >/dev/null 2>&1; then
+	echo "check-deb: removing beerssh took beersshd with it" >&2
+	exit 1
+fi
+apt-get remove -y -qq beersshd >/dev/null 2>&1
+if [ -e /usr/bin/beersshd ]; then
+	echo "check-deb: uninstalling left beersshd behind" >&2
+	exit 1
+fi
+echo "check-deb: both uninstall cleanly, and neither needs the other"
 ' &
 # `wait` rather than a plain call, because a shell trap CANNOT preempt a
 # foreground command -- it runs only once that command returns. Measured:

@@ -24,3 +24,13 @@ Description: curated terminal fonts for BeerSSH
  The terminal fonts BeerSSH ships with, each vetted for the
  properties a character grid needs, with their licence texts.
  Without this package BeerSSH uses the system monospace fonts.
+
+Package: beersshd
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: SFTP-only server for one folder
+ Serves one folder over SFTP, and nothing else, to the keys in an
+ authorized keys file and to a password once one is set. It runs
+ no shell and no commands, forwards nothing, and keeps every path
+ inside the folder. Modern scp works; the legacy scp protocol
+ does not. Independent of the BeerSSH terminal.

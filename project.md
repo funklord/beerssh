@@ -16071,6 +16071,19 @@ is reachable by neither route, nor by anything short of root.
   beersshd and check-ci never compiled it against the runner's Qt; only
   `make test`, through the tests that link its sources, did. Fixed in
   f6a3525.
+- **Its own Debian package too — [DECIDED 2026-10-23, the holder:
+  "beersshd and beerssh are separate packages"].** `make deb` builds
+  `beersshd` beside `beerssh` and `beerssh-fonts`, from the same source
+  package, and neither depends on the other. Until then the desktop
+  server was in no package at all: `make install` installed only the
+  terminal. Its `--help` and `beersshd.1` are generated from one option
+  table in `src/sshd/main.cpp`, as beerssh's are (sec 8.6). `check-deb`
+  removes `beerssh` and then runs `beersshd` -- a `Depends` on the
+  terminal would have taken it along -- and finds its page by
+  `host\-key`, which a page with an empty OPTIONS section would not
+  carry (measured: 1 hit, and 0 with the section cut). The `deb`
+  target names each package it collects, and missed this one on the
+  first build.
 - **Storage: all-files access — [DECIDED].** The served root is a path;
   libssh's own handlers are not used (below), but ours are plain POSIX
   calls on paths, which is what all-files access makes work on shared

@@ -60,4 +60,5 @@ debian/debhelper-build-stamp
 # committing a copy of the parser that is free to disagree with it.
 beerssh.1
 beerssh.bash
+beersshd.1
 .fmake/

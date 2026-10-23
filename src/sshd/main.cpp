@@ -29,6 +29,39 @@ void on_signal(int) {
 	(void)!::write(g_signal_pipe[1], &byte, 1);
 }
 
+/*
+ * The options, once: --help and the manual page are both written from this
+ * table, the way beerssh's are from its own (command_line.cpp), so the page
+ * cannot document a flag the program does not take. The parsing below
+ * matches on the same names.
+ */
+struct sshd_option_t {
+	const char *name;
+	const char *value;
+	const char *help;
+};
+
+const sshd_option_t SSHD_OPTIONS[] = {
+	{ "root", "DIR", "The folder served as /. Required: there is no default, because "
+	                 "serving the current directory when the flag is forgotten is how "
+	                 "a home directory ends up on the network." },
+	{ "port", "N", "The port to listen on; 8022 by default, and 0 picks a free one." },
+	{ "bind", "ADDRESS", "The address to listen on; 0.0.0.0 by default." },
+	{ "host-key", "FILE", "The server's ed25519 host key, created if missing; by default "
+	                      "host_ed25519_key in ~/.config/beersshd." },
+	{ "authorized-keys", "FILE", "The keys allowed in, in OpenSSH's format, re-read at "
+	                             "every login; by default authorized_keys in "
+	                             "~/.config/beersshd." },
+	{ "password-file", "FILE", "Where the password's hash is kept, re-read at every "
+	                           "login; by default password in ~/.config/beersshd." },
+	{ "set-password", nullptr, "Read a password from standard input, without echoing "
+	                           "it at a terminal, and store its salted hash; an empty "
+	                           "line removes the password. Serves nothing." },
+	{ "version", nullptr, "Print the version and exit." },
+	{ "help", nullptr, "Print a summary of the options and exit." },
+	{ "man", nullptr, "Write this manual page to standard output and exit." },
+};
+
 void usage(QTextStream &out) {
 	out << "usage: beersshd --root DIR [--port N] [--bind ADDRESS]\n"
 	       "                [--host-key FILE] [--authorized-keys FILE]\n"
@@ -38,16 +71,70 @@ void usage(QTextStream &out) {
 	       "Serves DIR over SFTP, and nothing else, to the keys in the\n"
 	       "authorized keys file and to the password, if one is set.\n"
 	       "Modern scp works; scp -O does not.\n"
-	       "\n"
-	       "  --root DIR             the folder served as /; required\n"
-	       "  --port N               default 8022; 0 picks a free one\n"
-	       "  --bind ADDRESS         default 0.0.0.0\n"
-	       "  --host-key FILE        created if missing\n"
-	       "  --authorized-keys FILE OpenSSH format, re-read at each login\n"
-	       "  --password-file FILE   the password's hash, re-read at each login\n"
-	       "  --set-password         read a password from standard input and\n"
-	       "                         store its hash; an empty line removes it\n"
-	       "  --version\n";
+	       "\n";
+	for (const sshd_option_t &option : SSHD_OPTIONS) {
+		QString head = QStringLiteral("--") + QLatin1String(option.name);
+		if (option.value) head += QLatin1Char(' ') + QLatin1String(option.value);
+		/* The first sentence of the help, which is the summary. */
+		QString summary = QString::fromLatin1(option.help);
+		const int stop = summary.indexOf(QStringLiteral(". "));
+		if (stop > 0) summary.truncate(stop);
+		else if (summary.endsWith(QLatin1Char('.'))) summary.chop(1);
+		out << "  " << head.leftJustified(23) << ' ' << summary << "\n";
+	}
+}
+
+/* Text for roff: a backslash escaped, and a leading dot or quote kept from
+ * being read as a request. */
+QString roff(const QString &text) {
+	QString escaped = text;
+	escaped.replace(QLatin1Char('\\'), QStringLiteral("\\e"));
+	if (escaped.startsWith(QLatin1Char('.')) || escaped.startsWith(QLatin1Char('\'')))
+		escaped.prepend(QStringLiteral("\\&"));
+	return escaped;
+}
+
+void man_page(QTextStream &out) {
+	out << ".TH BEERSSHD 1 \"\" \"beersshd " << BSSH_VERSION_STRING << "\" \"User Commands\"\n"
+	       ".SH NAME\n"
+	       "beersshd \\- serve one folder over SFTP, and nothing else\n"
+	       ".SH SYNOPSIS\n"
+	       ".B beersshd\n"
+	       ".B \\-\\-root\n"
+	       ".I DIR\n"
+	       ".RI [ options ]\n"
+	       ".br\n"
+	       ".B beersshd \\-\\-set\\-password\n"
+	       ".RB [ \\-\\-password\\-file\n"
+	       ".IR FILE ]\n"
+	       ".SH DESCRIPTION\n"
+	    << roff(QStringLiteral(
+	               "beersshd serves one folder over SFTP to the keys in its authorized "
+	               "keys file and, once one is set, to a password. It runs no shell and "
+	               "no commands, forwards nothing, and keeps every path inside the "
+	               "folder. Modern scp works, being SFTP underneath; scp -O, the old "
+	               "protocol, does not.")) << "\n.PP\n"
+	    << roff(QStringLiteral(
+	               "The same server runs on Android as an app of its own. It writes a "
+	               "line to standard output for each login and each refusal, and "
+	               "SIGINT and SIGTERM stop it cleanly.")) << "\n"
+	       ".SH OPTIONS\n";
+	for (const sshd_option_t &option : SSHD_OPTIONS) {
+		const QString name = QString::fromLatin1(option.name).replace(
+		        QLatin1Char('-'), QStringLiteral("\\-"));
+		if (option.value)
+			out << ".TP\n.BI \"\\-\\-" << name << " \" " << option.value << "\n";
+		else
+			out << ".TP\n.B \\-\\-" << name << "\n";
+		out << roff(QString::fromLatin1(option.help)) << "\n";
+	}
+	out << ".SH FILES\n"
+	       ".TP\n.I ~/.config/beersshd/\n"
+	    << roff(QStringLiteral("The host key, the authorized keys and the password's hash, "
+	                           "unless the options above name others.")) << "\n"
+	       ".SH SEE ALSO\n"
+	       ".BR beerssh (1),\n"
+	       ".BR sftp (1)\n";
 }
 
 } /* namespace */
@@ -80,6 +167,9 @@ int main(int argc, char *argv[]) {
 			return 0;
 		} else if (arg == QStringLiteral("--help") || arg == QStringLiteral("-h")) {
 			usage(out);
+			return 0;
+		} else if (arg == QStringLiteral("--man")) {
+			man_page(out);
 			return 0;
 		} else if (arg == QStringLiteral("--root") && has_value) {
 			config.root = QFile::encodeName(args.at(++i));
