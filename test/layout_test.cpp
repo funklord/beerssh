@@ -4940,21 +4940,33 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	QCOMPARE(prompt.frameGeometry().bottom(), room.bottom());
 
 	/*
-	 * And only as tall as it is at that width. The destination line was
-	 * measured at a narrower default, and the height it asked for and
-	 * did not use stood empty between the checkbox and the buttons (seen
-	 * on the Fold, 2026-10-23). The two spacings either side of the
-	 * stretch are all that may separate them.
+	 * The checkbox on the buttons' row, at its left: on a row of its own
+	 * its 48dp touch height read as a gap above the buttons (the holder,
+	 * 2026-10-23).
 	 */
+	QCheckBox *box = prompt.findChild<QCheckBox *>();
+	QDialogButtonBox *button_box = prompt.findChild<QDialogButtonBox *>();
+	QVERIFY(box);
+	QVERIFY(button_box);
 	{
-		QCheckBox *box = prompt.findChild<QCheckBox *>();
-		QDialogButtonBox *row = prompt.findChild<QDialogButtonBox *>();
-		QVERIFY(box);
-		QVERIFY(row);
-		const int gap = row->geometry().top() - box->geometry().bottom() - 1;
+		const QRect at(box->mapTo(&prompt, QPoint(0, 0)), box->size());
+		const QRect row(button_box->mapTo(&prompt, QPoint(0, 0)), button_box->size());
+		QVERIFY2(at.center().y() >= row.top() && at.center().y() <= row.bottom(),
+		          qPrintable(QStringLiteral("the checkbox at %1-%2, the buttons at %3-%4")
+		                             .arg(at.top()).arg(at.bottom()).arg(row.top()).arg(row.bottom())));
+		QVERIFY(at.right() < row.left());
+		QVERIFY(row.right() < prompt.width());
+
+		/*
+		 * And only as tall as it is at that width. The destination line
+		 * was measured at a narrower default, and the height it asked for
+		 * and did not use stood empty above the buttons (seen on the
+		 * Fold, 2026-10-23). The two spacings either side of the stretch
+		 * are all that may separate the field from them.
+		 */
+		const int gap = row.top() - field->mapTo(&prompt, QPoint(0, field->height())).y();
 		QVERIFY2(gap <= 2 * prompt.layout()->spacing(),
-		          qPrintable(QStringLiteral("%1px between the checkbox and the buttons")
-		                             .arg(gap)));
+		          qPrintable(QStringLiteral("%1px between the field and the buttons").arg(gap)));
 	}
 
 	/*
@@ -5035,6 +5047,26 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 
 	/* Closing gives the system keyboard back to everything else. */
 	QVERIFY(qApp->autoSipEnabled());
+
+	/*
+	 * Too narrow for the checkbox beside both buttons, it takes a row of
+	 * its own above them: it does not wrap, and a row that did not fit
+	 * pushed the prompt past the screen's edge once before (sec 11).
+	 */
+	{
+		forced_screen_t narrow(QSize(200, 640));
+		bssh_password_prompt small(QStringLiteral("nabbe@example.com"), true);
+		small.use_softkeys(true);
+		small.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&small));
+		QCheckBox *alone = small.findChild<QCheckBox *>();
+		QDialogButtonBox *under = small.findChild<QDialogButtonBox *>();
+		QVERIFY(alone);
+		QVERIFY(under);
+		QTRY_VERIFY(alone->mapTo(&small, QPoint(0, alone->height())).y()
+		            <= under->mapTo(&small, QPoint(0, 0)).y());
+		QCOMPARE(small.width(), 200);
+	}
 }
 
 void layout_test::a_column_shows_the_count_and_scrolls_to_the_rest() {

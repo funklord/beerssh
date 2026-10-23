@@ -14,6 +14,7 @@
 #include <QLineEdit>
 #include <QScreen>
 #include <QTimer>
+#include <QHBoxLayout>
 #include <QVBoxLayout>
 
 #include "platform/platform.h"
@@ -24,7 +25,7 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
                                             QWidget *parent)
     : QDialog(parent),
       m_field(new QLineEdit(this)),
-      m_remember(new QCheckBox(QStringLiteral("Remember this password"), this)) {
+      m_remember(new QCheckBox(QStringLiteral("Remember password"), this)) {
 	setWindowTitle(QStringLiteral("BeerSSH"));
 
 	QVBoxLayout *outer = new QVBoxLayout(this);
@@ -82,6 +83,8 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 
 	QDialogButtonBox *buttons = new QDialogButtonBox(
 	        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
+	m_buttons = buttons;
+	m_outer = outer;
 	outer->addWidget(buttons);
 
 	connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
@@ -156,6 +159,27 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 		 */
 		for (QAbstractButton *button : buttons->buttons()) button->setFocusPolicy(Qt::NoFocus);
 		m_remember->setFocusPolicy(Qt::NoFocus);
+
+		/*
+		 * The checkbox at the left of the buttons' row rather than a row
+		 * of its own: its 48dp row stood between the field and the
+		 * buttons with its text centred in it, and read as a gap (the
+		 * holder, 2026-10-23). The buttons are taken out of the outer
+		 * layout into a row with it; place_remember() puts it back on a
+		 * row of its own where a screen is too narrow for both.
+		 * "Remember password" rather than "Remember this password", so
+		 * the row fits a 360dp phone: the longer label needed 363.
+		 */
+		const int at = outer->indexOf(buttons);
+		outer->removeWidget(buttons);
+		outer->removeWidget(m_remember);
+		m_button_row = new QHBoxLayout();
+		m_button_row->setContentsMargins(0, 0, 0, 0);
+		m_button_row->addWidget(m_remember);
+		m_button_row->addStretch(1);
+		m_button_row->addWidget(buttons);
+		/* Where the buttons were, one place up: the checkbox left. */
+		outer->insertLayout(at - 1, m_button_row);
 
 		m_switch = new sk_keyboard_switch(this);
 		connect(m_switch, &sk_keyboard_switch::switch_requested,
@@ -247,6 +271,8 @@ void bssh_password_prompt::fit_to_screen() {
 	 * last row. Re-fitting on ContentsRectChange was right and had
 	 * nothing to add until this did.
 	 */
+	place_remember(wide);
+
 	const QMargins margins = contentsMargins();
 	int tall = qMax(sizeHint().height(), minimumSizeHint().height())
 	           + margins.top() + margins.bottom();
@@ -273,6 +299,36 @@ void bssh_password_prompt::fit_to_screen() {
 	 */
 	if (m_keyboard->isVisible()) move(room.left(), room.bottom() + 1 - frameGeometry().height());
 	else move(room.topLeft());
+}
+
+/*
+ * Beside the buttons where the row has room for the checkbox's whole
+ * label and both buttons; on a row of its own above them where it does
+ * not, as on a screen narrower than the Fold's cover. A checkbox does
+ * not wrap, so a row that did not fit would push the prompt past the
+ * screen's edge -- which is how OK went off it once before (sec 11).
+ */
+void bssh_password_prompt::place_remember(int wide) {
+	if (!m_button_row) return;
+
+	int left = 0, top = 0, right = 0, bottom = 0;
+	m_outer->getContentsMargins(&left, &top, &right, &bottom);
+	const QMargins margins = contentsMargins();
+	const int need = m_remember->sizeHint().width() + m_button_row->spacing()
+	                 + m_buttons->sizeHint().width() + left + right
+	                 + margins.left() + margins.right();
+	const bool beside = need <= wide;
+	const bool is_beside = m_button_row->indexOf(m_remember) >= 0;
+	if (beside == is_beside) return;
+
+	if (beside) {
+		m_outer->removeWidget(m_remember);
+		m_button_row->insertWidget(0, m_remember);
+	} else {
+		m_button_row->removeWidget(m_remember);
+		/* Under the field, above the stretch, as the desktop has it. */
+		m_outer->insertWidget(m_outer->indexOf(m_field) + 1, m_remember);
+	}
 }
 
 void bssh_password_prompt::showEvent(QShowEvent *event) {

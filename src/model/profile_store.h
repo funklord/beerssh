@@ -287,7 +287,7 @@ struct bssh_folder_group_t {
 QList<bssh_folder_group_t> bssh_group_by_folder(const QList<bssh_profile_t> &profiles);
 
 /*
- * "Remember this password" -- the credential and the flag that says it is
+ * "Remember password" -- the credential and the flag that says it is
  * there, written as one act (sec 11).
  *
  * Two stores have to agree: the secret goes into bssh_secret_store, and

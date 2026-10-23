@@ -5,7 +5,10 @@
 
 #include "softkeys/focus_target.h"
 
+class QBoxLayout;
 class QCheckBox;
+class QDialogButtonBox;
+class QHBoxLayout;
 class QLabel;
 class QLineEdit;
 class QKeyEvent;
@@ -66,9 +69,13 @@ protected:
 private:
 	void update_keyboard();
 	void fit_to_screen();
+	void place_remember(int wide);
 
 	QLineEdit *m_field;
 	QCheckBox *m_remember;
+	QDialogButtonBox *m_buttons = nullptr;
+	QBoxLayout *m_outer = nullptr;
+	QHBoxLayout *m_button_row = nullptr;
 	QLabel *m_note;
 	sk_keyboard *m_keyboard = nullptr;
 	sk_keyboard_switch *m_switch = nullptr;

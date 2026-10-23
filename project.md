@@ -11718,6 +11718,15 @@ store is a no-op rather than a silent loss.
   checkbox and the buttons, and two specs restore each half. The late
   margin's re-fit is still not visible offscreen: a sabotage removing it
   stayed green again, so the phone remains that check.
+  **The checkbox is on the buttons' row now**, at its left (the holder,
+  the same night): on a row of its own, its 48dp touch height with the
+  text centred in it still read as a gap above the buttons. Where the
+  screen is too narrow for its label and both buttons it goes back to its
+  own row, since a checkbox does not wrap and an overfull row would push
+  the prompt past the screen's edge. Its label is "Remember password"
+  rather than "Remember this password", because the longer one needed
+  363px of a 360dp phone. The test asserts both placements, and two specs
+  each pin one.
   **Redundant widgets, the same evening, from the holder's review of every
   screen (`make shots`):** the session dialog's "Connection type" row (SSH,
   greyed out, nothing to choose) and its box titled "Load, save or delete a

@@ -1875,7 +1875,7 @@ void profile_store_test::a_sweep_does_not_erase_a_password_a_live_host_now_owns(
 }
 
 /*
- * "Remember this password" is two writes -- the secret, and the flag that
+ * "Remember password" is two writes -- the secret, and the flag that
  * says a secret exists -- and the three tests below hold the three ways
  * they can come apart. All of them go through
  * bssh_remember_profile_password(), which is where the ordering lives,

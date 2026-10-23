@@ -113,3 +113,21 @@ file = "src/ui/password_prompt.cpp"
 find = "\t\touter->setSizeConstraint(QLayout::SetNoConstraint);\n"
 replace = ""
 expect = "the_password_prompt_types_with_softkeys"
+
+# The checkbox kept on a row of its own, whose 48dp height read as a gap
+# above the buttons (the holder, 2026-10-23).
+[[sabotage]]
+name = "the checkbox never joins the buttons' row"
+file = "src/ui/password_prompt.cpp"
+find = "\tconst bool beside = need <= wide;\n"
+replace = "\tconst bool beside = false;\n"
+expect = "the_password_prompt_types_with_softkeys"
+
+# Beside the buttons however narrow the screen: a checkbox does not wrap,
+# so the row pushes the prompt past the screen's edge.
+[[sabotage]]
+name = "the checkbox stays beside the buttons on a narrow screen"
+file = "src/ui/password_prompt.cpp"
+find = "\tconst bool beside = need <= wide;\n"
+replace = "\tconst bool beside = true;\n"
+expect = "the_password_prompt_types_with_softkeys"
