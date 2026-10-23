@@ -342,6 +342,13 @@ BSSH_VTERM_WITNESS := $(shell \
 		rm -f $$stamps; \
 	fi)
 
+# The default goal, named rather than left to whichever rule comes first.
+# libssh-source below is a real rule ABOVE `all`, and make takes the first
+# one it reads: from f6a3525 until this line, a plain `make` patched libssh
+# and built nothing else -- unnoticed because every build here named its
+# target, and found when dpkg-buildpackage's `make` produced no program.
+.DEFAULT_GOAL := all
+
 # --- vendored libssh ---------------------------------------------------------
 # A submodule pinned to the libssh-0.11.5 tag, built static by its own
 # cmake, with this tree's patches (libssh-patch/) applied first. Vendored
@@ -457,7 +464,10 @@ $(LIBSSH_LIB): $(LIBSSH_STAMP) FORCE
 	fi
 	@cmake --build $(LIBSSH_BUILD_DIR)/build --parallel $(LIBSSH_JOBS) > $(LIBSSH_BUILD_DIR)/build.log 2>&1 \
 		|| { tail -40 $(LIBSSH_BUILD_DIR)/build.log >&2; exit 1; }
-	@cmake --install $(LIBSSH_BUILD_DIR)/build > $(LIBSSH_BUILD_DIR)/install.log 2>&1 \
+	@# DESTDIR unset: `make install DESTDIR=...` exports it, cmake honours
+	@# it, and the private archive went into the package's staging tree
+	@# instead of build-libssh/prefix, where the link looks for it.
+	@env -u DESTDIR cmake --install $(LIBSSH_BUILD_DIR)/build > $(LIBSSH_BUILD_DIR)/install.log 2>&1 \
 		|| { cat $(LIBSSH_BUILD_DIR)/install.log >&2; exit 1; }
 
 ifdef DEBUG
@@ -1693,6 +1703,11 @@ veryclean: clean
 	@if [ -d $(LIBSSH_DIR)/.git ] || [ -f $(LIBSSH_DIR)/.git ]; then \
 		git -C $(LIBSSH_DIR) checkout -- . && echo "libssh: patches reverted"; \
 	fi
+	@# The file libssh-patch/0001 creates, by name: checkout restores
+	@# tracked files and leaves an untracked one, and the patch cannot be
+	@# applied again over a file that is already there -- which is what
+	@# `make deb` met, dh_auto_clean running this before the build.
+	@rm -f $(LIBSSH_DIR)/src/transport_export.c
 
 # `distclean` removes what the build generated and `veryclean` does not.
 # `.qmake.stash` is qmake's, is named, and is disposable by construction.
