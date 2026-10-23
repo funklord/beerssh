@@ -33,6 +33,7 @@
 #include "layout_test.h"
 #include "font_catalog_test.h"
 #include "font_download_test.h"
+#include "handoff_test.h"
 #include "font_picker_test.h"
 #include "preset_editor_test.h"
 #include "screen_test.h"
@@ -294,6 +295,16 @@ int main(int argc, char *argv[]) {
 	bool live_ssh = false;
 	bool shots = false;
 	for (int i = 0; i < argc; ++i) {
+		/*
+		 * The taking side of a session moving between processes (sec
+		 * 8.4): handoff_test runs this binary again with it, so the move
+		 * really crosses a process boundary. Answered here, before the
+		 * suite, and nothing else runs.
+		 */
+		if (qstrcmp(argv[i], "--handoff-take") == 0 && i + 2 < argc) {
+			return bssh_handoff_take_mode(QString::fromLocal8Bit(argv[i + 1]),
+			                              QString::fromLocal8Bit(argv[i + 2]));
+		}
 		if (qstrcmp(argv[i], "--bench") == 0) {
 			bench = true;
 			continue;
@@ -360,6 +371,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<tab_status_test>(argc, argv);
 	failures += run_test<host_key_test>(argc, argv);
 	failures += run_test<pty_session_test>(argc, argv);
+	failures += run_test<handoff_test>(argc, argv);
 	failures += run_test<input_router_test>(argc, argv);
 	failures += run_test<layout_test>(argc, argv);
 	failures += run_test<terminal_view_test>(argc, argv);

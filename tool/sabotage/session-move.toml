@@ -1,0 +1,41 @@
+# Sabotages for moving a live session to another process (project.md
+# sec 8.4, step 4): bssh_session's export_handoff/import_handoff and the
+# local shell's transport handoff. Each leaves the move answering success
+# and the moved session broken, which only using it afterwards can show.
+# The SSH transport's own spec needs a server: session-move-ssh.toml.
+
+# Letting go of the shell by hanging it up, as closing a tab does: the
+# moved session's shell dies the moment the old one is freed.
+[[sabotage]]
+name = "the giving side hangs up the shell it gave away"
+file = "src/ssh/pty_session.cpp"
+find = "\tif (m_master >= 0) ::close(m_master);\n\tm_master = -1;\n\tm_child = -1;\n"
+replace = "\tif (m_child > 0) ::kill(pid_t(m_child), SIGHUP);\n\tif (m_master >= 0) ::close(m_master);\n\tm_master = -1;\n\tm_child = -1;\n"
+expect = "a_live_local_session_moves_to_another_session"
+
+# The imported transport never wired to the session: the connection is
+# alive and what it says reaches nobody.
+[[sabotage]]
+name = "an imported session does not listen to its transport"
+file = "src/model/session.cpp"
+find = "\tsession->wire_transport();\n\tsession->send_out(held);\n"
+replace = "\tsession->send_out(held);\n"
+expect = "a_live_local_session_moves_to_another_session"
+
+# A move called off, and the session left stopped: it answers nothing.
+[[sabotage]]
+name = "a refused move does not resume the session"
+file = "src/model/session.cpp"
+find = "\tif (m_transport) m_transport->resume_transport();\n"
+replace = ""
+expect = "a_refused_move_leaves_the_session_running"
+
+# The giver commits as soon as the state is sent, without waiting for the
+# taker's "taken": a taker that vanishes takes the session with it, and
+# the giver has released a shell nobody holds.
+[[sabotage]]
+name = "the giver lets go before the taker has the session"
+file = "src/model/handoff_point.cpp"
+find = "\tconst bool taken = sent &&\n"
+replace = "\tconst bool taken = true ||\n"
+expect = "a_taker_that_vanishes_leaves_the_session_running"

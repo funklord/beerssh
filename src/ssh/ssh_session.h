@@ -2,6 +2,7 @@
 #define BSSH_SSH_SESSION_H
 
 #include <QByteArray>
+#include <QList>
 #include <QStringList>
 
 #include <functional>
@@ -191,6 +192,33 @@ public:
 
 	/* Answers key_passphrase_required. */
 	virtual void supply_key_passphrase(const QString &passphrase) = 0;
+
+	/*
+	 * Moving this live connection to another process (project.md sec 8.4).
+	 *
+	 * The giving side calls export_transport(), which stops the connection
+	 * between packets and hands back its state and the descriptors that
+	 * carry it -- the SSH socket, or the pty master. Nothing is sent and
+	 * nothing is consumed, so if the move does not happen,
+	 * resume_transport() carries on as before. Once the receiver has it,
+	 * release_transport() lets go without sending anything: no
+	 * disconnect, no channel close, no SIGHUP. The connection is the
+	 * receiver's now.
+	 *
+	 * The receiving side makes an empty transport of the same kind() with
+	 * create_for_import() and calls import_transport() before anything
+	 * else. On success it is CONNECTED and the descriptors are its own; on
+	 * failure they are still the caller's to close.
+	 *
+	 * A kind() of "" cannot move: the default for a transport that has
+	 * not been taught to, which says so rather than pretending.
+	 */
+	virtual QString kind() const { return QString(); }
+	virtual bool export_transport(QByteArray &state, QList<int> &fds, QString *why);
+	virtual void release_transport() {}
+	virtual void resume_transport() {}
+	virtual bool import_transport(const QByteArray &state, const QList<int> &fds, QString *why);
+	static bssh_ssh_session *create_for_import(const QString &kind, QObject *parent = nullptr);
 
 signals:
 	void bytes_received(const QByteArray &bytes);

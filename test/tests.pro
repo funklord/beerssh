@@ -57,6 +57,7 @@ SOURCES += \
     conn_manager_test.cpp \
     emulator_bench.cpp \
     live_ssh_test.cpp \
+    handoff_test.cpp \
     emulator_test.cpp \
     graphics_test.cpp \
     platform_test.cpp \
@@ -114,6 +115,8 @@ SOURCES += \
     ../src/model/settings_resolver.cpp \
     ../src/model/window_title.cpp \
     ../src/model/session.cpp \
+    ../src/model/handoff_wire.cpp \
+    ../src/model/handoff_point.cpp \
     ../src/model/session_registry.cpp \
     ../src/model/kept_scrollback.cpp \
     ../src/model/font_sources.cpp \
@@ -161,6 +164,7 @@ HEADERS += \
     conn_manager_test.h \
     emulator_bench.h \
     live_ssh_test.h \
+    handoff_test.h \
     emulator_test.h \
     graphics_test.h \
     platform_test.h \
@@ -212,6 +216,8 @@ HEADERS += \
     ../src/model/settings_resolver.h \
     ../src/model/window_title.h \
     ../src/model/session.h \
+    ../src/model/handoff_wire.h \
+    ../src/model/handoff_point.h \
     ../src/model/session_registry.h \
     ../src/model/kept_scrollback.h \
     ../src/model/font_sources.h \

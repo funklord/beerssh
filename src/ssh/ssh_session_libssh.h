@@ -116,6 +116,12 @@ public:
 	void accept_host_key() override;
 	void supply_key_passphrase(const QString &passphrase) override;
 
+	QString kind() const override;
+	bool export_transport(QByteArray &state, QList<int> &fds, QString *why) override;
+	void release_transport() override;
+	void resume_transport() override;
+	bool import_transport(const QByteArray &state, const QList<int> &fds, QString *why) override;
+
 private:
 	QThread m_thread;
 	bssh_libssh_worker *m_worker;

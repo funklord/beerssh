@@ -220,6 +220,31 @@ public:
 	/* All of it as text, with every time measured against `now`. */
 	QString details(const QDateTime &now) const;
 
+	/*
+	 * Moving this session to another process (project.md sec 8.4).
+	 *
+	 * export_handoff() stops the connection between packets, delivers what
+	 * had already arrived into the terminal, and returns the whole session
+	 * -- the profile and settings, the connection's state, the terminal
+	 * -- with the descriptors that carry it. Nothing is sent and nothing is
+	 * consumed: until release_handoff() the session is still this
+	 * process's, and resume_handoff() carries on as if nothing happened.
+	 * Output the terminal produces in between is held, and travels.
+	 *
+	 * release_handoff() lets the connection go without a word to the far
+	 * end; the session is then inert, and the caller removes it.
+	 *
+	 * import_handoff() is the other side: a session continuing the same
+	 * connection, already CONNECTED. Null on failure, with why saying why,
+	 * and the descriptors still the caller's.
+	 */
+	bool export_handoff(QByteArray &state, QList<int> &fds, QString *why);
+	void release_handoff();
+	void resume_handoff();
+	static bssh_session *import_handoff(const QByteArray &state, const QList<int> &fds,
+	                                    QObject *parent, QString *why);
+	bool is_moving() const { return m_moving; }
+
 signals:
 	/*
 	 * A bell rang while nothing was showing this session (sec 5.5).
@@ -317,6 +342,11 @@ private:
 	QDateTime m_connected_at;
 	int m_connections = 0;
 	bool m_asked_to_connect = false;
+
+	/* A move in progress (export_handoff): output held, not sent. */
+	bool m_moving = false;
+	QByteArray m_held_output;
+	void wire_transport();
 };
 
 /*

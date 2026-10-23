@@ -1,10 +1,13 @@
 #include "ssh/ssh_session_libssh.h"
 
 #include "ssh/jump_tunnel.h"
+#include "ssh/pty_session.h"
 
 #include "platform/platform.h"
 
+#include <QDataStream>
 #include <QDir>
+#include <QIODevice>
 #include <QFileInfo>
 #include <openssl/rand.h>
 #include <openssl/hmac.h>
@@ -220,6 +223,13 @@ public slots:
 	void apply_identity_file();
 	void drain();
 
+	/* Moving the connection to another process (sec 8.4); see the
+	 * interface. Run on this thread through blocking calls. */
+	bool do_export(QByteArray &state, QList<int> &fds, QString &why);
+	void do_release();
+	void do_resume();
+	bool do_import(const QByteArray &state, const QList<int> &fds, QString &why);
+
 	/* See do_send: what the channel window could not take yet. */
 	void flush_pending();
 
@@ -245,6 +255,7 @@ private:
 	void fail(const QString &reason);
 	bool set_option(int option, const void *value, const char *what);
 	QString session_error() const;
+	void start_polling();
 	bool verify_host_key();
 	bool server_key_is_revoked() const;
 	QStringList known_hosts_files() const;
@@ -1112,14 +1123,7 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 		return;
 	}
 
-	m_notifier = new QSocketNotifier(ssh_get_fd(m_session), QSocketNotifier::Read, this);
-	connect(m_notifier, &QSocketNotifier::activated, this, &bssh_libssh_worker::drain);
-
-	m_poll = new QTimer(this);
-	m_poll->setInterval(BSSH_POLL_INTERVAL_MS);
-	connect(m_poll, &QTimer::timeout, this, &bssh_libssh_worker::drain);
-	m_poll->start();
-
+	start_polling();
 	bssh_configure_tcp_keepalive(ssh_get_fd(m_session));
 
 	/*
@@ -1417,6 +1421,181 @@ void bssh_libssh_worker::do_disconnect() {
 	emit state_changed(bssh_ssh_session::DISCONNECTED);
 }
 
+/* The read notifier and the poll that drain the channel. */
+void bssh_libssh_worker::start_polling() {
+	delete m_notifier;
+	delete m_poll;
+	m_notifier = new QSocketNotifier(ssh_get_fd(m_session), QSocketNotifier::Read, this);
+	connect(m_notifier, &QSocketNotifier::activated, this, &bssh_libssh_worker::drain);
+
+	m_poll = new QTimer(this);
+	m_poll->setInterval(BSSH_POLL_INTERVAL_MS);
+	connect(m_poll, &QTimer::timeout, this, &bssh_libssh_worker::drain);
+	m_poll->start();
+}
+
+/* ---- moving the connection to another process (sec 8.4) ----------- */
+
+namespace {
+
+const char BSSH_SSH_HANDOFF_MAGIC[] = "bssh-ssh-transport";
+const quint32 BSSH_SSH_HANDOFF_FORMAT = 1;
+
+/* How often, and how far apart, an export is retried while libssh is
+ * between a packet's first block and its last, or inside a rekey: the
+ * server is already sending what completes either, so a second or two
+ * is generous. Past it the move is called off and the session goes on. */
+const int BSSH_EXPORT_TRIES = 100;
+const int BSSH_EXPORT_POLL_MS = 20;
+
+}  // namespace
+
+bool bssh_libssh_worker::do_export(QByteArray &state, QList<int> &fds, QString &why) {
+	if (!m_session || !m_channel) {
+		why = QStringLiteral("the connection is not open");
+		return false;
+	}
+	if (m_jump) {
+		why = QStringLiteral("a session through a jump host cannot move yet");
+		return false;
+	}
+
+	/* Stopped: nothing reads the channel from here until the release or
+	 * the resume. What libssh reads while the export waits stays in its
+	 * channel buffer and travels with the state. */
+	delete m_notifier;
+	m_notifier = nullptr;
+	delete m_poll;
+	m_poll = nullptr;
+	if (m_keepalive) m_keepalive->stop();
+
+	ssh_string exported = nullptr;
+	int rc = SSH_AGAIN;
+	for (int tries = 0; tries < BSSH_EXPORT_TRIES; ++tries) {
+		rc = ssh_session_export_transport(m_session, &exported);
+		if (rc != SSH_AGAIN) break;
+		/* Lets libssh read the rest of a packet or a key exchange without
+		 * taking anything off the channel. */
+		ssh_channel_poll_timeout(m_channel, BSSH_EXPORT_POLL_MS, 0);
+	}
+	if (rc != SSH_OK) {
+		why = rc == SSH_AGAIN
+		        ? QStringLiteral("the connection was busy for too long to stop: %1").arg(session_error())
+		        : session_error();
+		do_resume();
+		return false;
+	}
+
+	QDataStream out(&state, QIODevice::WriteOnly);
+	out.setVersion(QDataStream::Qt_6_0);
+	out << QByteArray(BSSH_SSH_HANDOFF_MAGIC) << BSSH_SSH_HANDOFF_FORMAT
+	    << QByteArray(static_cast<const char *>(ssh_string_data(exported)),
+	                  int(ssh_string_len(exported)))
+	    << m_term << m_command << m_identity_file << m_host << m_port
+	    << qint32(m_keepalive_seconds) << m_compression << m_pending;
+	ssh_string_burn(exported);
+	ssh_string_free(exported);
+
+	fds = { ssh_get_fd(m_session) };
+	return true;
+}
+
+/* The receiver has it: let go, sending nothing. */
+void bssh_libssh_worker::do_release() {
+	delete m_notifier;
+	m_notifier = nullptr;
+	delete m_poll;
+	m_poll = nullptr;
+	delete m_keepalive;
+	m_keepalive = nullptr;
+	m_pending.clear();
+	if (m_session) ssh_session_detach_transport(m_session);
+	if (m_channel) {
+		ssh_channel_free(m_channel);
+		m_channel = nullptr;
+	}
+	if (m_session) {
+		ssh_free(m_session);
+		m_session = nullptr;
+	}
+}
+
+/* The move did not happen: carry on exactly where it stopped. */
+void bssh_libssh_worker::do_resume() {
+	if (!m_session || !m_channel) return;
+	start_polling();
+	if (m_keepalive) m_keepalive->start();
+	drain();
+}
+
+bool bssh_libssh_worker::do_import(const QByteArray &state, const QList<int> &fds,
+                                   QString &why) {
+	if (m_session || fds.size() != 1) {
+		why = QStringLiteral("the connection arrived without its socket");
+		return false;
+	}
+
+	QDataStream in(state);
+	in.setVersion(QDataStream::Qt_6_0);
+	QByteArray magic, transport, pending;
+	quint32 format = 0;
+	QString term, command, identity, host;
+	quint16 port = 22;
+	qint32 keepalive = 0;
+	bool compression = false;
+	in >> magic >> format >> transport >> term >> command >> identity >> host >> port
+	   >> keepalive >> compression >> pending;
+	if (in.status() != QDataStream::Ok || !in.atEnd() || magic != BSSH_SSH_HANDOFF_MAGIC ||
+	    format != BSSH_SSH_HANDOFF_FORMAT) {
+		why = QStringLiteral("the connection's state is not one this BeerSSH reads");
+		return false;
+	}
+
+	ssh_session session = ssh_new();
+	ssh_string blob = ssh_string_new(size_t(transport.size()));
+	if (!session || !blob ||
+	    ssh_string_fill(blob, transport.constData(), size_t(transport.size())) != 0) {
+		if (blob) ssh_string_free(blob);
+		if (session) ssh_free(session);
+		why = QStringLiteral("out of memory");
+		return false;
+	}
+	const int rc = ssh_session_import_transport(session, fds.first(), blob);
+	ssh_string_burn(blob);
+	ssh_string_free(blob);
+	ssh_channel channel = rc == SSH_OK ? ssh_session_get_channel(session, 0) : nullptr;
+	if (!channel) {
+		why = rc == SSH_OK ? QStringLiteral("the connection arrived without its channel")
+		                   : QString::fromUtf8(ssh_get_error(session));
+		/* On a failed import the descriptor is still the caller's; on a
+		 * channel missing from a good one it is the session's, and freeing
+		 * a detached session closes it without a word to the server. */
+		if (rc == SSH_OK) ssh_session_detach_transport(session);
+		ssh_free(session);
+		return false;
+	}
+
+	m_session = session;
+	m_channel = channel;
+	m_term = term;
+	m_command = command;
+	m_identity_file = identity;
+	m_host = host;
+	m_port = port;
+	m_compression = compression;
+	m_pending = pending;
+
+	start_polling();
+	bssh_configure_tcp_keepalive(ssh_get_fd(m_session));
+	do_set_keepalive(keepalive);
+	/* No state_changed: it would arrive queued, after the session has
+	 * wired a handler that opens a shell on CONNECTED. The facade sets the
+	 * state itself before returning. The drain is queued for the same
+	 * reason -- what it reads must reach a session that is listening. */
+	QMetaObject::invokeMethod(this, &bssh_libssh_worker::drain, Qt::QueuedConnection);
+	return true;
+}
+
 /* ---- facade, GUI thread ------------------------------------------- */
 
 bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
@@ -1539,6 +1718,52 @@ void bssh_ssh_session_libssh::supply_key_passphrase(const QString &passphrase) {
 	QMetaObject::invokeMethod(m_worker, [this, passphrase] {
 		m_worker->do_key_passphrase(passphrase);
 	}, Qt::QueuedConnection);
+}
+
+QString bssh_ssh_session_libssh::kind() const {
+	return QStringLiteral("ssh");
+}
+
+/*
+ * Blocking calls into the worker's thread: the caller has stopped its side
+ * of the session for the length of a move, and wants the answer now.
+ */
+bool bssh_ssh_session_libssh::export_transport(QByteArray &state, QList<int> &fds, QString *why) {
+	bool ok = false;
+	QString reason;
+	QMetaObject::invokeMethod(m_worker, [this, &state, &fds, &reason, &ok] {
+		ok = m_worker->do_export(state, fds, reason);
+	}, Qt::BlockingQueuedConnection);
+	if (!ok && why) *why = reason;
+	return ok;
+}
+
+void bssh_ssh_session_libssh::release_transport() {
+	QMetaObject::invokeMethod(m_worker, [this] { m_worker->do_release(); },
+	                          Qt::BlockingQueuedConnection);
+}
+
+void bssh_ssh_session_libssh::resume_transport() {
+	QMetaObject::invokeMethod(m_worker, [this] { m_worker->do_resume(); },
+	                          Qt::BlockingQueuedConnection);
+}
+
+bool bssh_ssh_session_libssh::import_transport(const QByteArray &state, const QList<int> &fds,
+                                               QString *why) {
+	bool ok = false;
+	QString reason;
+	QMetaObject::invokeMethod(m_worker, [this, &state, &fds, &reason, &ok] {
+		ok = m_worker->do_import(state, fds, reason);
+	}, Qt::BlockingQueuedConnection);
+	if (!ok && why) *why = reason;
+	if (ok) set_state(CONNECTED);
+	return ok;
+}
+
+bssh_ssh_session *bssh_ssh_session::create_for_import(const QString &kind, QObject *parent) {
+	if (kind == QStringLiteral("ssh")) return new bssh_ssh_session_libssh(parent);
+	if (kind == QStringLiteral("local")) return new bssh_pty_session(parent);
+	return nullptr;
 }
 
 bssh_ssh_session *bssh_ssh_session::create(QObject *parent) {

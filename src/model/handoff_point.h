@@ -1,0 +1,86 @@
+#ifndef BSSH_HANDOFF_POINT_H
+#define BSSH_HANDOFF_POINT_H
+
+#include <QObject>
+#include <QString>
+
+#include <functional>
+
+class QSocketNotifier;
+class bssh_session;
+
+/*
+ * Where another BeerSSH process asks this one for a live session (project.md
+ * sec 8.4): a unix socket in a directory only this user can enter, one per
+ * process, named for the process.
+ *
+ * The exchange, each message bounded in time (bssh_handoff_wire):
+ *
+ *   taker  -> giver   "take" and the session's handoff id
+ *   giver  -> taker   the session's state, with its descriptors -- or a
+ *                     refusal saying why
+ *   taker  -> giver   "taken", or "refused" and why
+ *   giver  -> taker   "released", after which the session is the taker's
+ *
+ * The giver commits only on "taken": until then its session is stopped but
+ * still its own, and anything else -- a refusal, a timeout, a taker that
+ * vanished -- resumes it as if nothing had been asked. A peer of another
+ * uid is refused before it is read: the state carries the session's keys.
+ *
+ * Desktop only. Android runs one process per app, and an update or a
+ * process death takes all of them at once.
+ */
+class bssh_handoff_point : public QObject {
+	Q_OBJECT
+
+public:
+	/*
+	 * Finds the session a taker names, or null. The callee decides what
+	 * may be given: a session that is not connected answers a refusal.
+	 */
+	using finder_t = std::function<bssh_session *(const QString &handoff_id)>;
+
+	explicit bssh_handoff_point(finder_t finder, QObject *parent = nullptr);
+	~bssh_handoff_point() override;
+
+	/* Starts listening. False, with why, when the socket cannot be made. */
+	bool listen(QString *why = nullptr);
+
+	/* Where this process listens, for a drag payload or a new version to
+	 * find it. Empty until listen() succeeds. */
+	QString path() const { return m_path; }
+
+	/* The directory every BeerSSH of this user listens in. */
+	static QString directory();
+
+	/*
+	 * The taking side, run in the process that wants the session: asks the
+	 * process listening at path for the session with that handoff id, and
+	 * returns it imported and CONNECTED, or null with why. Blocks for at
+	 * most timeout_ms.
+	 */
+	static bssh_session *take(const QString &path, const QString &handoff_id, QObject *parent,
+	                          QString *why, int timeout_ms = 10000);
+
+signals:
+	/*
+	 * A session has been given away and is inert: the caller removes it
+	 * from whatever shows it and deletes it. Emitted after the taker has
+	 * confirmed, never before.
+	 */
+	void session_given(bssh_session *session);
+
+private:
+	void on_connection();
+	void serve(int socket);
+
+	finder_t m_finder;
+	QString m_path;
+	int m_listener = -1;
+	QSocketNotifier *m_notifier = nullptr;
+};
+
+/* How long the giving side waits for each message of an exchange. */
+const int BSSH_HANDOFF_STEP_MS = 10000;
+
+#endif /* BSSH_HANDOFF_POINT_H */

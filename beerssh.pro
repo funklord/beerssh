@@ -59,6 +59,8 @@ SOURCES += \
     src/model/settings_resolver.cpp \
     src/model/window_title.cpp \
     src/model/session.cpp \
+    src/model/handoff_wire.cpp \
+    src/model/handoff_point.cpp \
     src/model/session_registry.cpp \
     src/model/kept_scrollback.cpp \
     src/model/font_sources.cpp \
@@ -126,6 +128,8 @@ HEADERS += \
     src/model/settings_resolver.h \
     src/model/window_title.h \
     src/model/session.h \
+    src/model/handoff_wire.h \
+    src/model/handoff_point.h \
     src/model/session_registry.h \
     src/model/kept_scrollback.h \
     src/model/font_sources.h \

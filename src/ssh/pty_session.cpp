@@ -2,6 +2,8 @@
 
 #include "platform/platform.h"
 
+#include <QDataStream>
+#include <QIODevice>
 #include <QList>
 #include <QProcessEnvironment>
 #include <QSocketNotifier>
@@ -318,17 +320,7 @@ void bssh_pty_session::open_shell(int cols, int rows) {
 		return;
 	}
 
-	m_notifier = new QSocketNotifier(m_master, QSocketNotifier::Read, this);
-	connect(m_notifier, &QSocketNotifier::activated, this, [this] { on_readable(); });
-
-	/*
-	 * Disabled until there is something waiting: an always-on write
-	 * notifier fires continuously while the pty has room, which is
-	 * almost always.
-	 */
-	m_write_notifier = new QSocketNotifier(m_master, QSocketNotifier::Write, this);
-	m_write_notifier->setEnabled(false);
-	connect(m_write_notifier, &QSocketNotifier::activated, this, [this] { on_writable(); });
+	install_notifiers();
 }
 
 void bssh_pty_session::on_readable() {
@@ -499,4 +491,120 @@ bssh_ssh_session *bssh_ssh_session::create_local(const QString &shell,
 		session->set_terminfo_directory(platform->terminfo_directory());
 
 	return session;
+}
+
+/* The master's read notifier, and the write one that waits for room. */
+void bssh_pty_session::install_notifiers() {
+	m_notifier = new QSocketNotifier(m_master, QSocketNotifier::Read, this);
+	connect(m_notifier, &QSocketNotifier::activated, this, [this] { on_readable(); });
+
+	/*
+	 * Disabled until there is something waiting: an always-on write
+	 * notifier fires continuously while the pty has room, which is
+	 * almost always.
+	 */
+	m_write_notifier = new QSocketNotifier(m_master, QSocketNotifier::Write, this);
+	m_write_notifier->setEnabled(false);
+	connect(m_write_notifier, &QSocketNotifier::activated, this, [this] { on_writable(); });
+}
+
+/* ---- moving the shell to another process (sec 8.4) ---------------- */
+
+namespace {
+
+const char BSSH_PTY_HANDOFF_MAGIC[] = "bssh-pty-transport";
+const quint32 BSSH_PTY_HANDOFF_FORMAT = 1;
+
+}  // namespace
+
+QString bssh_pty_session::kind() const {
+	return QStringLiteral("local");
+}
+
+/*
+ * The pty master is a descriptor like a socket, so the shell keeps
+ * running on the far side of the move and never notices. What the
+ * receiver cannot have is the shell as its CHILD: it learns of the exit
+ * by the master reading EOF, and collect() answers 0 at once for a
+ * process that was never its own, so the exit code is lost. That is the
+ * whole cost.
+ */
+bool bssh_pty_session::export_transport(QByteArray &state, QList<int> &fds, QString *why) {
+	if (m_master < 0) {
+		if (why) *why = QStringLiteral("the shell is not running");
+		return false;
+	}
+	if (m_notifier) m_notifier->setEnabled(false);
+	if (m_write_notifier) m_write_notifier->setEnabled(false);
+
+	state.clear();
+	QDataStream out(&state, QIODevice::WriteOnly);
+	out.setVersion(QDataStream::Qt_6_0);
+	out << QByteArray(BSSH_PTY_HANDOFF_MAGIC) << BSSH_PTY_HANDOFF_FORMAT << m_shell << m_command
+	    << m_working_directory << m_terminfo_directory << m_term << m_child << m_pending;
+	fds = { m_master };
+	return true;
+}
+
+/* The receiver has it: close this copy, and no SIGHUP -- the shell is
+ * still somebody's. */
+void bssh_pty_session::release_transport() {
+	delete m_notifier;
+	m_notifier = nullptr;
+	delete m_write_notifier;
+	m_write_notifier = nullptr;
+	m_pending.clear();
+	if (m_master >= 0) ::close(m_master);
+	m_master = -1;
+	m_child = -1;
+}
+
+void bssh_pty_session::resume_transport() {
+	if (m_master < 0) return;
+	if (m_notifier) m_notifier->setEnabled(true);
+	if (m_write_notifier && !m_pending.isEmpty()) m_write_notifier->setEnabled(true);
+	on_readable();
+}
+
+bool bssh_pty_session::import_transport(const QByteArray &state, const QList<int> &fds,
+                                        QString *why) {
+	if (m_master >= 0 || fds.size() != 1) {
+		if (why) *why = QStringLiteral("the shell arrived without its terminal");
+		return false;
+	}
+	QDataStream in(state);
+	in.setVersion(QDataStream::Qt_6_0);
+	QByteArray magic, pending;
+	quint32 format = 0;
+	QString shell, working_directory, terminfo_directory, term;
+	QStringList command;
+	qint64 child = -1;
+	in >> magic >> format >> shell >> command >> working_directory >> terminfo_directory >> term
+	   >> child >> pending;
+	if (in.status() != QDataStream::Ok || !in.atEnd() || magic != BSSH_PTY_HANDOFF_MAGIC ||
+	    format != BSSH_PTY_HANDOFF_FORMAT) {
+		if (why) *why = QStringLiteral("the shell's state is not one this BeerSSH reads");
+		return false;
+	}
+
+	const int flags = fcntl(fds.first(), F_GETFL, 0);
+	if (flags < 0 || fcntl(fds.first(), F_SETFL, flags | O_NONBLOCK) < 0) {
+		if (why) *why = QStringLiteral("the shell's terminal could not be made non-blocking");
+		return false;
+	}
+
+	m_shell = shell;
+	m_command = command;
+	m_working_directory = working_directory;
+	m_terminfo_directory = terminfo_directory;
+	m_term = term;
+	m_child = child;
+	m_pending = pending;
+	m_master = fds.first();
+	install_notifiers();
+	if (!m_pending.isEmpty()) flush_pending();
+	set_state(CONNECTED);
+	/* Read once the session is listening, not now: see wire_transport. */
+	QMetaObject::invokeMethod(this, [this] { on_readable(); }, Qt::QueuedConnection);
+	return true;
 }

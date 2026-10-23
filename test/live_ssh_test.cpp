@@ -10,6 +10,10 @@
 #include "ssh/ssh_session.h"
 #include "model/session.h"
 #include "model/conn_manager.h"
+#include "input/input_router.h"
+#include "term/emulator.h"
+
+#include <unistd.h>
 
 namespace {
 
@@ -1286,4 +1290,67 @@ void live_ssh_test::a_black_holed_jump_host_is_noticed()
 	QVERIFY2(took < 150000,
 	          qPrintable(QStringLiteral("noticed after %1ms, which is past sec 5.3's budget")
 	                             .arg(took)));
+}
+
+/*
+ * A live SSH session moved to another session object the way it moves to
+ * another process (project.md sec 8.4): stopped between packets, its
+ * socket duplicated as SCM_RIGHTS would, imported, and released without a
+ * word to the server. The proof is the server's: the moved session runs a
+ * command and gets the answer, over the connection the first one made,
+ * with sshd none the wiser -- and enough output to cross several packets.
+ */
+void live_ssh_test::a_live_ssh_session_moves_to_another_session() {
+	if (!test_port()) QSKIP("no test server; run make check-ssh");
+	if (!ordinary_phase()) QSKIP("the host key has been swapped; authentication is refused by design here");
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("move-test");
+	profile.host = QStringLiteral("127.0.0.1");
+	profile.port = test_port();
+	profile.user = qEnvironmentVariable("USER");
+	profile.identity_file = test_key();
+
+	auto shows = [](bssh_session *session, const QString &wanted) {
+		QElapsedTimer timer;
+		timer.start();
+		while (timer.elapsed() < 15000) {
+			if (session->emulator()->screen().to_text().contains(wanted)) return true;
+			QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+		}
+		return false;
+	};
+
+	bssh_session *from = new bssh_session(profile);
+	from->resize(80, 12);
+	QObject::connect(from, &bssh_session::host_key_unknown, from, [from] { from->accept_host_key(); });
+	from->connect_to_host();
+	QTRY_COMPARE_WITH_TIMEOUT(from->state(), bssh_ssh_session::CONNECTED, 15000);
+	from->input_router()->send_text(QStringLiteral("echo before-$((1+1))\n"));
+	QVERIFY2(shows(from, QStringLiteral("before-2")), "the session never ran a command");
+
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	QVERIFY2(from->export_handoff(state, fds, &why), qPrintable(why));
+	QCOMPARE(from->transport()->kind(), QStringLiteral("ssh"));
+	QCOMPARE(fds.size(), 1);
+	QList<int> received = { ::dup(fds.first()) };
+
+	bssh_session *to = bssh_session::import_handoff(state, received, nullptr, &why);
+	QVERIFY2(to, qPrintable(why));
+	QCOMPARE(to->state(), bssh_ssh_session::CONNECTED);
+	from->release_handoff();
+	delete from;
+
+	QVERIFY2(to->emulator()->screen().to_text().contains(QStringLiteral("before-2")),
+	          "the screen from before the move did not come along");
+	/* Several packets' worth, then a marker after it. */
+	to->input_router()->send_text(QStringLiteral(
+	        "seq 1 3000 | tr '\\n' ' ' | wc -c; echo after-$((6*7))\n"));
+	QVERIFY2(shows(to, QStringLiteral("after-42")),
+	          qPrintable(to->emulator()->screen().to_text()));
+
+	to->disconnect_from_host();
+	delete to;
 }

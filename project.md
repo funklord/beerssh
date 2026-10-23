@@ -7027,8 +7027,47 @@ window with no name is a blank row in the task switcher.
      restore of one file of a multi-file patch is detected but cannot
      re-apply; the loop now says so and names `git checkout` as the fix,
      rather than blaming upstream.
-  4. The handoff in the app: the socket, the commit, and the abandon paths
-     in the session and the pty.
+  4. **[DONE 2026-10-23, jump hosts excepted]** The handoff in the app.
+     Each transport says its `kind()` and can export (stop between
+     packets, hand back its state and descriptors), resume (the move
+     called off), release (let go without a disconnect, a channel close
+     or a SIGHUP) and import. The libssh one runs these on its worker
+     through blocking calls; its export retries SSH_AGAIN with
+     `ssh_channel_poll_timeout`, which lets libssh finish a packet or a
+     rekey without the app consuming the channel. An imported transport
+     is CONNECTED synchronously, before the session wires it -- the
+     session opens a shell on CONNECTED, and a queued state change would
+     have opened a second one over the shell that moved, which is why
+     `wire_transport()` was split out of `connect_to_host()`.
+     `bssh_session::export_handoff`/`import_handoff` carry the profile,
+     settings, counters, password, transport and terminal; output the
+     terminal makes mid-move is held and travels, since a write then
+     would advance a sequence number the receiver also holds. A moved
+     local shell is not the receiver's child: it learns of the exit by
+     EOF on the master and loses the exit code.
+     Between processes, `bssh_handoff_point` listens on
+     `handoff-<pid>.sock` in a 0700 directory under the runtime
+     directory (checked, not assumed), refuses a peer of another uid
+     (`SO_PEERCRED`), and runs take, state, taken, released, each step
+     bounded. The giver commits only on "taken", shutting the socket
+     before it resumes otherwise, and the taker uses the session only on
+     "released": without that last step a "taken" landing at the giver's
+     deadline would leave two writers. At that edge the worst case is a
+     session neither keeps. `bssh_handoff_wire` carries the messages and
+     descriptors by `SCM_RIGHTS`.
+     Tests: a local shell moved between session objects and, by
+     `handoff_test`, into another process (the test binary run again
+     with `--handoff-take`), answering a command there; a live SSH
+     session moved against a real sshd (`check-ssh`); a refused import
+     and a taker that vanishes both leave the giver running.
+     `tool/sabotage/session-move.toml` (four specs) and
+     `session-move-ssh.toml` (one, run under `make check-ssh`) are all
+     caught. The SSH spec first swapped the detach for a bare
+     `ssh_disconnect()`, which crashed instead of failing -- libssh frees
+     the channels itself and the release freed one again -- so it now
+     models the realistic mistake, releasing through `teardown()`.
+     **Still open here:** a session through a jump host is refused with
+     a reason; its tunnel's session and socketpair have to move too.
   5. The UI: a drop on another BeerSSH process moves the session, which
      replaces defect 1's planned refusal below. Handing every session to
      a newer BeerSSH on upgrade comes after, as a second user of the same

@@ -1,0 +1,20 @@
+# The SSH half of session-move.toml, which needs a real server:
+#
+#   BSSH_SABOTAGE_SUITE="make check-ssh" tool/sabotage.py \
+#           tool/sabotage/session-move-ssh.toml
+#
+# Under `make test` live_ssh_test skips without a server and this reports
+# MISSED, which is the suite not running rather than the guard missing.
+
+# Letting go the ordinary way: the worker's teardown(), which is what
+# closing a tab runs, closes the channel and sends sshd a disconnect, and
+# the moved session is talking to a server that has hung up. (Swapping
+# the detach for a bare ssh_disconnect() instead crashes -- libssh frees
+# the channels itself and the release frees one again -- which the runner
+# reports as no verdict rather than as the mistake being caught.)
+[[sabotage]]
+name = "the giving side tears down the connection it gave away"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "void bssh_libssh_worker::do_release() {\n"
+replace = "void bssh_libssh_worker::do_release() {\n\tteardown();\n\treturn;\n"
+expect = "a_live_ssh_session_moves_to_another_session"

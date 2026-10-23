@@ -1,6 +1,10 @@
 #include "model/session.h"
 
+#include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QDataStream>
+#include <QIODevice>
+#include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QStringList>
 
@@ -282,6 +286,18 @@ void bssh_session::connect_to_host() {
 	m_last_in = QDateTime();
 	m_last_out = QDateTime();
 	m_connected_at = QDateTime();
+	wire_transport();
+	m_transport->connect_to_host(m_profile.host, m_profile.port, m_profile.user);
+}
+
+/*
+ * What the session hears from its transport, and what its emulator sends
+ * back. Shared by connect_to_host() and import_handoff(): an imported
+ * transport arrives CONNECTED already, before this is wired, so the
+ * handler below that opens a shell on CONNECTED does not open a second
+ * one over the shell that moved.
+ */
+void bssh_session::wire_transport() {
 
 	connect(m_transport, &bssh_ssh_session::bytes_received,
 	         this, [this](const QByteArray &bytes) {
@@ -405,7 +421,6 @@ void bssh_session::connect_to_host() {
 		emit state_changed();
 	});
 
-	m_transport->connect_to_host(m_profile.host, m_profile.port, m_profile.user);
 }
 
 void bssh_session::disconnect_from_host() {
@@ -538,6 +553,14 @@ void bssh_session::resize(int cols, int rows) {
 
 void bssh_session::send_out(const QByteArray &bytes) {
 	if (!m_transport || bytes.isEmpty()) return;
+
+	/* Mid-move the connection is stopped and belongs to nobody for a
+	 * moment: a write now would advance a sequence number the receiver
+	 * also holds. Held, and carried (export_handoff). */
+	if (m_moving) {
+		m_held_output.append(bytes);
+		return;
+	}
 	m_bytes_out += bytes.size();
 	m_last_out = QDateTime::currentDateTimeUtc();
 	m_transport->send(bytes);
@@ -614,4 +637,166 @@ QString bssh_session::details(const QDateTime &now) const {
 	                 .arg(keys.isEmpty() ? QStringLiteral("plain") : keys.join(QStringLiteral(", ")));
 
 	return lines.join(QLatin1Char('\n'));
+}
+
+/* ---- moving a session to another process (sec 8.4) -------------------- */
+
+namespace {
+
+const char BSSH_SESSION_HANDOFF_MAGIC[] = "bssh-session";
+const quint32 BSSH_SESSION_HANDOFF_FORMAT = 1;
+
+void write_profile(QDataStream &out, const bssh_profile_t &profile) {
+	out << qint32(profile.id) << profile.name << profile.host << profile.user << profile.port
+	    << profile.identity_file << profile.proxy_jump << profile.has_stored_password
+	    << profile.require_biometric << qint32(profile.font_zoom) << profile.keep_scrollback
+	    << profile.keep_awake << profile.folder << qint32(profile.preset_id)
+	    << QJsonDocument(profile.overrides).toJson(QJsonDocument::Compact) << profile.local
+	    << profile.shell << profile.command << profile.working_directory << profile.hold;
+}
+
+void read_profile(QDataStream &in, bssh_profile_t &profile) {
+	qint32 id = 0, font_zoom = 0, preset_id = 0;
+	QByteArray overrides;
+	in >> id >> profile.name >> profile.host >> profile.user >> profile.port
+	   >> profile.identity_file >> profile.proxy_jump >> profile.has_stored_password
+	   >> profile.require_biometric >> font_zoom >> profile.keep_scrollback
+	   >> profile.keep_awake >> profile.folder >> preset_id >> overrides >> profile.local
+	   >> profile.shell >> profile.command >> profile.working_directory >> profile.hold;
+	profile.id = id;
+	profile.font_zoom = font_zoom;
+	profile.preset_id = preset_id;
+	profile.overrides = QJsonDocument::fromJson(overrides).object();
+}
+
+}  // namespace
+
+bool bssh_session::export_handoff(QByteArray &state, QList<int> &fds, QString *why) {
+	state.clear();
+	fds.clear();
+	if (!m_transport || m_transport->state() != bssh_ssh_session::CONNECTED) {
+		if (why) *why = QStringLiteral("the session is not connected");
+		return false;
+	}
+
+	m_moving = true;
+	QByteArray transport;
+	if (!m_transport->export_transport(transport, fds, why)) {
+		m_moving = false;
+		const QByteArray held = m_held_output;
+		m_held_output.clear();
+		send_out(held);
+		return false;
+	}
+
+	/*
+	 * What the transport had already read and queued for this thread, into
+	 * the terminal now: the stop was between packets on the connection,
+	 * and those bytes are on this side of it.
+	 */
+	QCoreApplication::sendPostedEvents(m_transport, QEvent::MetaCall);
+
+	QDataStream out(&state, QIODevice::WriteOnly);
+	out.setVersion(QDataStream::Qt_6_0);
+	out << QByteArray(BSSH_SESSION_HANDOFF_MAGIC) << BSSH_SESSION_HANDOFF_FORMAT;
+	write_profile(out, m_profile);
+	out << QJsonDocument(m_settings).toJson(QJsonDocument::Compact) << qint32(m_font_zoom)
+	    << qint32(m_cols) << qint32(m_rows) << m_remote_title << m_password
+	    << m_used_key_auth << m_password_requested << m_unseen_bell
+	    << m_bytes_in << m_bytes_out << m_last_in << m_last_out << m_connected_at
+	    << qint32(m_connections);
+	out << m_transport->kind() << transport << m_emulator->export_state();
+	/* Last, after the terminal's export, which can itself produce output
+	 * that is held. */
+	out << m_held_output;
+	return true;
+}
+
+void bssh_session::release_handoff() {
+	if (!m_moving || !m_transport) return;
+	m_transport->release_transport();
+	m_held_output.clear();
+	/* Inert from here. Not DISCONNECTED by request: nobody asked for the
+	 * connection to end, and it has not. */
+	m_user_disconnected = true;
+}
+
+void bssh_session::resume_handoff() {
+	if (!m_moving) return;
+	m_moving = false;
+	if (m_transport) m_transport->resume_transport();
+	const QByteArray held = m_held_output;
+	m_held_output.clear();
+	send_out(held);
+}
+
+bssh_session *bssh_session::import_handoff(const QByteArray &state, const QList<int> &fds,
+                                           QObject *parent, QString *why) {
+	QDataStream in(state);
+	in.setVersion(QDataStream::Qt_6_0);
+	QByteArray magic;
+	quint32 format = 0;
+	in >> magic >> format;
+	if (in.status() != QDataStream::Ok || magic != BSSH_SESSION_HANDOFF_MAGIC ||
+	    format != BSSH_SESSION_HANDOFF_FORMAT) {
+		if (why) *why = QStringLiteral("the session's state is not one this BeerSSH reads");
+		return nullptr;
+	}
+
+	bssh_profile_t profile;
+	read_profile(in, profile);
+	QByteArray settings, transport, terminal, held;
+	qint32 font_zoom = 0, cols = 0, rows = 0, connections = 0;
+	QString title, password, kind;
+	bool used_key_auth = false, password_requested = false, unseen_bell = false;
+	qint64 bytes_in = 0, bytes_out = 0;
+	QDateTime last_in, last_out, connected_at;
+	in >> settings >> font_zoom >> cols >> rows >> title >> password >> used_key_auth
+	   >> password_requested >> unseen_bell >> bytes_in >> bytes_out >> last_in >> last_out
+	   >> connected_at >> connections;
+	in >> kind >> transport >> terminal >> held;
+	if (in.status() != QDataStream::Ok || !in.atEnd() || cols <= 0 || rows <= 0) {
+		if (why) *why = QStringLiteral("the session's state is damaged");
+		return nullptr;
+	}
+
+	bssh_session *session = new bssh_session(profile, parent);
+	session->set_settings(QJsonDocument::fromJson(settings).object());
+	session->set_font_zoom(font_zoom);
+	session->resize(cols, rows);
+	if (!session->m_emulator->import_state(terminal)) {
+		if (why) *why = QStringLiteral("the terminal's state does not fit this BeerSSH");
+		delete session;
+		return nullptr;
+	}
+
+	bssh_ssh_session *carried = bssh_ssh_session::create_for_import(kind, session);
+	if (!carried || !carried->import_transport(transport, fds, why)) {
+		if (why && !carried) *why = QStringLiteral("this BeerSSH cannot take a %1 connection").arg(kind);
+		delete session;
+		return nullptr;
+	}
+
+	session->m_transport = carried;
+	session->m_transport->set_keepalive(
+	        session->m_settings.value(QStringLiteral("keepalive_seconds")).toInt());
+	session->m_transport->set_term(session->m_settings.value(QStringLiteral("term")).toString());
+	session->m_transport->set_identity_file(profile.identity_file);
+	session->m_transport->set_proxy_jump(profile.proxy_jump);
+	session->m_transport->set_command(profile.command);
+	session->m_asked_to_connect = true;
+	session->m_remote_title = title;
+	session->m_password = password;
+	session->m_used_key_auth = used_key_auth;
+	session->m_password_requested = password_requested;
+	session->m_unseen_bell = unseen_bell;
+	session->m_bytes_in = bytes_in;
+	session->m_bytes_out = bytes_out;
+	session->m_last_in = last_in;
+	session->m_last_out = last_out;
+	session->m_connected_at = connected_at;
+	session->m_connections = connections;
+	session->wire_transport();
+	session->send_out(held);
+	return session;
 }

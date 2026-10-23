@@ -34,3 +34,18 @@ void bssh_ssh_session::set_factory(std::function<bssh_ssh_session *(QObject *)> 
 bssh_ssh_session *bssh_ssh_session::create_from_factory(QObject *parent) {
 	return g_factory ? g_factory(parent) : nullptr;
 }
+
+bool bssh_ssh_session::export_transport(QByteArray &state, QList<int> &fds, QString *why) {
+	state.clear();
+	fds.clear();
+	if (why) *why = QStringLiteral("this connection cannot move to another process");
+	return false;
+}
+
+bool bssh_ssh_session::import_transport(const QByteArray &state, const QList<int> &fds,
+                                        QString *why) {
+	Q_UNUSED(state);
+	Q_UNUSED(fds);
+	if (why) *why = QStringLiteral("this connection cannot move to another process");
+	return false;
+}

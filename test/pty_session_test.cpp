@@ -5,12 +5,15 @@
 #include <QTemporaryDir>
 
 #include "model/profile.h"
+#include "model/session.h"
 #include "term/emulator.h"
 #include "platform/platform.h"
 #include "ssh/pty_session.h"
 #include "input/input_router.h"
 
 #include <QKeyEvent>
+#include <fcntl.h>
+#include <unistd.h>
 #include <QRegularExpression>
 #include "pty_session_test.h"
 
@@ -593,4 +596,103 @@ void pty_session_test::kitty_itself_decodes_what_the_router_sends() {
 	QVERIFY2(decoded(QStringLiteral("ENTER PRESS")), seen.right(400).constData());
 
 	session.disconnect_from_host();
+}
+
+/*
+ * A live session moved to another session object (project.md sec 8.4),
+ * the way it moves to another process: export, the descriptor duplicated
+ * as SCM_RIGHTS would, import, release. The shell keeps running -- the
+ * moved session runs a command in it and sees the answer, and the screen
+ * from before the move came along.
+ */
+namespace {
+
+bssh_profile_t local_shell_profile() {
+	bssh_profile_t profile = bssh_profile_t::local_shell();
+	profile.shell = QStringLiteral("/bin/sh");
+	return profile;
+}
+
+bool screen_shows(bssh_session *session, const QString &wanted, int timeout_ms = 5000) {
+	QElapsedTimer timer;
+	timer.start();
+	while (timer.elapsed() < timeout_ms) {
+		if (session->emulator()->screen().to_text().contains(wanted)) return true;
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+	}
+	return session->emulator()->screen().to_text().contains(wanted);
+}
+
+}  // namespace
+
+void pty_session_test::a_live_local_session_moves_to_another_session() {
+	bssh_session *from = new bssh_session(local_shell_profile());
+	from->resize(60, 12);
+	from->connect_to_host();
+	QTRY_COMPARE(from->state(), bssh_ssh_session::CONNECTED);
+	from->input_router()->send_text(QStringLiteral("echo before-move\n"));
+	QVERIFY(screen_shows(from, QStringLiteral("before-move")));
+	QVERIFY(from->transport());
+	QCOMPARE(from->transport()->kind(), QStringLiteral("local"));
+
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	QVERIFY2(from->export_handoff(state, fds, &why), qPrintable(why));
+	QCOMPARE(fds.size(), 1);
+	QVERIFY(from->is_moving());
+
+	/* What SCM_RIGHTS would have done: a descriptor of the receiver's own. */
+	QList<int> received = { ::dup(fds.first()) };
+	QVERIFY(received.first() >= 0);
+
+	bssh_session *to = bssh_session::import_handoff(state, received, nullptr, &why);
+	QVERIFY2(to, qPrintable(why));
+	QCOMPARE(to->state(), bssh_ssh_session::CONNECTED);
+
+	/* The giving side lets go without a hangup -- the shell answering
+	 * below, after this session is gone, is the proof it got none. */
+	from->release_handoff();
+	delete from;
+
+	/* The terminal came with it, and the shell answers the new owner. */
+	QVERIFY2(to->emulator()->screen().to_text().contains(QStringLiteral("before-move")),
+	          "the screen from before the move did not come along");
+	to->input_router()->send_text(QStringLiteral("echo after-$((6*7))\n"));
+	QVERIFY2(screen_shows(to, QStringLiteral("after-42")),
+	          qPrintable(to->emulator()->screen().to_text()));
+
+	to->disconnect_from_host();
+	delete to;
+}
+
+void pty_session_test::a_refused_move_leaves_the_session_running() {
+	bssh_session *from = new bssh_session(local_shell_profile());
+	from->resize(60, 12);
+	from->connect_to_host();
+	QTRY_COMPARE(from->state(), bssh_ssh_session::CONNECTED);
+
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	QVERIFY2(from->export_handoff(state, fds, &why), qPrintable(why));
+
+	/* A receiver that cannot read it: refused, and the descriptor still
+	 * the caller's to close. */
+	QList<int> received = { ::dup(fds.first()) };
+	state.chop(state.size() / 2);
+	QVERIFY(!bssh_session::import_handoff(state, received, nullptr, &why));
+	QVERIFY(!why.isEmpty());
+	QVERIFY(::fcntl(received.first(), F_GETFD) >= 0);
+	::close(received.first());
+
+	/* The move called off: the session carries on as before. */
+	from->resume_handoff();
+	QVERIFY(!from->is_moving());
+	from->input_router()->send_text(QStringLiteral("echo still-$((2*3))\n"));
+	QVERIFY2(screen_shows(from, QStringLiteral("still-6")),
+	          qPrintable(from->emulator()->screen().to_text()));
+
+	from->disconnect_from_host();
+	delete from;
 }
