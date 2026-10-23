@@ -4940,6 +4940,24 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	QCOMPARE(prompt.frameGeometry().bottom(), room.bottom());
 
 	/*
+	 * And only as tall as it is at that width. The destination line was
+	 * measured at a narrower default, and the height it asked for and
+	 * did not use stood empty between the checkbox and the buttons (seen
+	 * on the Fold, 2026-10-23). The two spacings either side of the
+	 * stretch are all that may separate them.
+	 */
+	{
+		QCheckBox *box = prompt.findChild<QCheckBox *>();
+		QDialogButtonBox *row = prompt.findChild<QDialogButtonBox *>();
+		QVERIFY(box);
+		QVERIFY(row);
+		const int gap = row->geometry().top() - box->geometry().bottom() - 1;
+		QVERIFY2(gap <= 2 * prompt.layout()->spacing(),
+		          qPrintable(QStringLiteral("%1px between the checkbox and the buttons")
+		                             .arg(gap)));
+	}
+
+	/*
 	 * And still whole when a margin arrives after it was sized. On the
 	 * phone OK and Cancel were cut off at the bottom (2026-10-22), taken to
 	 * be Android's safe area arriving late. NOTE what this does not prove:

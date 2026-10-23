@@ -93,3 +93,23 @@ file = "src/ui/password_prompt.cpp"
 find = "\tif (m_keyboard->isVisible()) move(room.left(),"
 replace = "\tif (false) move(room.left(),"
 expect = "the_password_prompt_types_with_softkeys"
+
+# The prompt sized from its hints again: the wrapped destination line is
+# measured at a narrower default width, and the height it does not use
+# stands empty between the checkbox and the buttons (seen on the Fold,
+# 2026-10-23).
+[[sabotage]]
+name = "the prompt's height is not measured at its width"
+file = "src/ui/password_prompt.cpp"
+find = "\tif (layout() && layout()->hasHeightForWidth()) tall = layout()->totalHeightForWidth(wide);\n"
+replace = ""
+expect = "the_password_prompt_types_with_softkeys"
+
+# The layout's minimum kept: taken from the same narrow measurement, it
+# holds the window at the taller height whatever fit_to_screen asks.
+[[sabotage]]
+name = "the layout's minimum holds the prompt too tall"
+file = "src/ui/password_prompt.cpp"
+find = "\t\touter->setSizeConstraint(QLayout::SetNoConstraint);\n"
+replace = ""
+expect = "the_password_prompt_types_with_softkeys"

@@ -118,6 +118,14 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 		 * phone: this prompt could only be typed with Android's keyboard,
 		 * the forms' keyboard living in another window.
 		 */
+		/*
+		 * No minimum from the layout: it is taken from the wrapped lines'
+		 * heights at a narrower width than the prompt gets, and held the
+		 * window taller than its contents (2026-10-23). fit_to_screen()
+		 * sizes it to what the layout needs at its real width.
+		 */
+		outer->setSizeConstraint(QLayout::SetNoConstraint);
+
 		m_keyboard = new sk_keyboard(&m_target, this);
 		m_keyboard->setObjectName(QStringLiteral("prompt-keyboard"));
 		m_keyboard->set_pages({ QStringLiteral("letters"), QStringLiteral("numbers"),
@@ -240,8 +248,20 @@ void bssh_password_prompt::fit_to_screen() {
 	 * nothing to add until this did.
 	 */
 	const QMargins margins = contentsMargins();
-	const int tall = qMax(sizeHint().height(), minimumSizeHint().height())
-	                 + margins.top() + margins.bottom();
+	int tall = qMax(sizeHint().height(), minimumSizeHint().height())
+	           + margins.top() + margins.bottom();
+
+	/*
+	 * At the width it is about to have. The destination line wraps, and
+	 * sizeHint() and minimumSizeHint() measure it at a default width
+	 * narrower than a phone's, so they ask for lines it does not use; the
+	 * spare height went to the stretch, an empty band between the checkbox
+	 * and the buttons (seen on the Fold, 2026-10-23). totalHeightForWidth
+	 * counts the widget's own margins too, which the margin fix above had
+	 * to add by hand. The layout's own minimum is lifted on touch, below,
+	 * or it would hold the window at the wrong height anyway.
+	 */
+	if (layout() && layout()->hasHeightForWidth()) tall = layout()->totalHeightForWidth(wide);
 	resize(wide, qMin(tall, room.height()));
 
 	/*

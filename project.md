@@ -11706,6 +11706,18 @@ store is a no-op rather than a silent loss.
   is what `move()` positions. The prompt test asserts the bottom edge with
   the keys up and the top without them; a spec in
   `tool/sabotage/form-keyboard.toml` puts it back at the top.
+  **And an empty band between the checkbox and the buttons**, seen there
+  once it sat on the bottom edge: 40px where the layout's spacing is 6.
+  The destination line and the note wrap, and both `sizeHint()` and the
+  layout's own minimum measure them at a default width narrower than the
+  phone's, asking for two lines each and getting one. The spare height
+  went to the stretch, and the layout's minimum held the window there
+  whatever the prompt asked. On touch the prompt now takes its height
+  from `totalHeightForWidth` at the width it is given, with the layout's
+  minimum lifted. The test asserts at most the two spacings between the
+  checkbox and the buttons, and two specs restore each half. The late
+  margin's re-fit is still not visible offscreen: a sabotage removing it
+  stayed green again, so the phone remains that check.
   **Redundant widgets, the same evening, from the holder's review of every
   screen (`make shots`):** the session dialog's "Connection type" row (SSH,
   greyed out, nothing to choose) and its box titled "Load, save or delete a
