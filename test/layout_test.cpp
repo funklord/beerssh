@@ -67,6 +67,7 @@
 #include "ui/session_dialog.h"
 #include "ui/ssh_config_import.h"
 #include <QCheckBox>
+#include <QDialogButtonBox>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
