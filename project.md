@@ -12307,11 +12307,15 @@ the form dash takes. And a second TERM cut the cleanup short; the
 fragment's cleanup ignores INT and TERM once it starts. Its comment
 records both.
 
-**The band at the top of every capture is the camera cutout's**, 102px:
-the `pixel_6` device profile both AVDs use declares a hole-punch cutout
-(`cutout hole` in the SDK's `skins/pixel_6/layout`), so the app keeps
-the same safe-area band it keeps on the Fold. Whether to draw into that
-band is the holder's open decision, and the AVD is the shared one.
+**The band at the top of the 01:28 captures was the camera cutout's**,
+102px: they came from `bssh_api34`, whose `pixel_6` device profile
+declares a hole-punch cutout (`cutout hole` in the SDK's
+`skins/pixel_6/layout`), so the app kept the same safe-area band it keeps
+on the Fold. On that finding the holder had the shared `store` AVD rebuilt
+on the Nexus 5X profile, with no cutout and a native 1080x1920 panel. On
+it the same APK passed all four views on the first run, and the terminal
+starts at the top edge. Whether the app should draw into a real cutout's
+band is still the holder's open decision.
 
 **Readiness timed out intermittently on the `store` AVD** at a machine
 load near 175: of five runs, two captured all four views and three timed
