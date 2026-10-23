@@ -1266,7 +1266,14 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_key_row->set_touch_primary([] {
 		return bssh_platform::instance() && bssh_platform::instance()->is_touch_primary();
 	});
-	layout->insertWidget(2, m_key_row);
+	/*
+	 * Last in the page, under the status line, the input selector and the
+	 * find bar: the keys are the bottom edge, where Android puts its own,
+	 * and the key row sits directly on whichever keyboard is up. They were
+	 * inserted under the status line instead, which left the selector's
+	 * five buttons below the keyboard (the holder, 2026-10-23).
+	 */
+	layout->addWidget(m_key_row, 0);
 
 	/*
 	 * And the built-in keyboard, in the same slot, for the same session.
@@ -1281,7 +1288,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 */
 	m_keyboard = new sk_keyboard(nullptr, this);
 	m_keyboard->setObjectName(QStringLiteral("terminal-keyboard"));
-	layout->insertWidget(3, m_keyboard);
+	layout->addWidget(m_keyboard, 0);
 	m_keyboard->hide();
 
 	/*

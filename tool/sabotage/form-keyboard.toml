@@ -84,3 +84,12 @@ file = "src/ui/password_prompt.cpp"
 find = "\tif (event->key() == Qt::Key_Back) {\n\t\treject();\n"
 replace = "\tif (false) {\n\t\treject();\n"
 expect = "the_password_prompt_types_with_softkeys"
+
+# The prompt at the top with its keys up, so they jump up the screen from
+# where the terminal's were (the holder, 2026-10-23).
+[[sabotage]]
+name = "the prompt's keys come up at the top of the screen"
+file = "src/ui/password_prompt.cpp"
+find = "\tif (m_keyboard->isVisible()) move(room.left(),"
+replace = "\tif (false) move(room.left(),"
+expect = "the_password_prompt_types_with_softkeys"

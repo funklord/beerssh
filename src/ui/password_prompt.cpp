@@ -127,8 +127,8 @@ bssh_password_prompt::bssh_password_prompt(const QString &target, bool allow_rem
 		outer->addWidget(m_keyboard);
 
 		/*
-		 * The screen's width and its own height, at the top -- placed in
-		 * showEvent, where the screen is known. It was maximized, because
+		 * The screen's width and its own height, at the bottom while its
+		 * keys are up -- placed in showEvent, where the screen is known. It was maximized, because
 		 * as a small dialog over the terminal its keyboard read as a
 		 * second, smaller one beside the terminal's (reported from the
 		 * phone). The holder found a whole screen for one field too much
@@ -207,10 +207,9 @@ void bssh_password_prompt::update_keyboard() {
 }
 
 /*
- * The screen's full width, as tall as what it holds, at the top: below
- * it the system keyboard comes up without covering the field, and its
- * own keyboard is the width the terminal's is. Re-fitted as that
- * keyboard comes and goes.
+ * The screen's full width, as tall as what it holds: at the bottom with
+ * its own keyboard, at the top with the system's, which comes up below
+ * it without covering the field. Re-fitted as either comes and goes.
  */
 void bssh_password_prompt::fit_to_screen() {
 	if (!m_keyboard || !isVisible() || !screen()) return;
@@ -244,7 +243,16 @@ void bssh_password_prompt::fit_to_screen() {
 	const int tall = qMax(sizeHint().height(), minimumSizeHint().height())
 	                 + margins.top() + margins.bottom();
 	resize(wide, qMin(tall, room.height()));
-	move(room.topLeft());
+
+	/*
+	 * With its own keys up, on the bottom edge, so they come up where the
+	 * terminal's were rather than jumping to the top of the screen with
+	 * the prompt (the holder, 2026-10-23) -- the field just above them, as
+	 * Android puts a field above its keyboard. With Android's keyboard it
+	 * stays at the top, where that keyboard cannot cover it.
+	 */
+	if (m_keyboard->isVisible()) move(room.left(), room.bottom() + 1 - frameGeometry().height());
+	else move(room.topLeft());
 }
 
 void bssh_password_prompt::showEvent(QShowEvent *event) {

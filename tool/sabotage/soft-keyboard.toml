@@ -128,3 +128,13 @@ file = "src/ui/main_window.cpp"
 find = "\tif (m_host_list) m_host_list->set_open_sessions(m_shown);"
 replace = ""
 expect = "the_host_list_leads_back_to_open_sessions"
+
+# The keyboard back under the status line, as it was inserted until
+# 2026-10-23: the input selector's row then sits below the keys, which
+# Android's own keyboard never has under it (the holder).
+[[sabotage]]
+name = "the input selector sits under the keyboard"
+file = "src/ui/main_window.cpp"
+find = "\tlayout->addWidget(m_keyboard, 0);\n"
+replace = "\tlayout->insertWidget(2, m_keyboard);\n"
+expect = "the_input_selector_joins_the_status_line_when_wide"

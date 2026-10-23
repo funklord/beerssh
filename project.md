@@ -8414,6 +8414,14 @@ a row the terminal, already sharing its width with the split keyboard,
 could not spare; the holder chose the status line over a corner on its
 own row, because only the status line gives the height back. Heights stay
 at 48dp either way. `the_input_selector_joins_the_status_line_when_wide`.
+**Above the keyboard, which is the bottom edge — [FIXED 2026-10-23].** The
+key row and the built-in keyboard were inserted under the status line,
+so on a narrow screen the selector's own row sat BELOW the keys. The
+holder: nothing should be under the keyboard, as nothing of an app's is
+under Android's. Both are the page's last rows now, under the status
+line, the selector and the find bar. The same test asserts the selector
+above the keys and the keys at the window's bottom, and a spec in
+`tool/sabotage/soft-keyboard.toml` restores the old slot.
 
 **And off the bottom again after TURNING — [FIXED 2026-10-09].** Seen on
 the Fold's cover screen once softkeys was in: opened upright and turned,
@@ -11689,6 +11697,15 @@ store is a no-op rather than a silent loss.
   the settings said. They start on the chosen one now, the switch still
   overriding it for the run, reset when the setting changes
   (`the_forms_start_on_the_chosen_keyboard`, with a spec).
+  **Its keys jumped up the screen (the holder, 2026-10-23).** With softkeys
+  chosen, the prompt at the top carried its keyboard at the top too, so
+  the keys left the bottom edge where the terminal's had been. While its own
+  keys are up it now sits on the bottom edge, the field just above them, as
+  Android puts a field above its keyboard; with the system keyboard it stays
+  at the top, which that keyboard cannot cover. Placed by its frame, which
+  is what `move()` positions. The prompt test asserts the bottom edge with
+  the keys up and the top without them; a spec in
+  `tool/sabotage/form-keyboard.toml` puts it back at the top.
   **Redundant widgets, the same evening, from the holder's review of every
   screen (`make shots`):** the session dialog's "Connection type" row (SSH,
   greyed out, nothing to choose) and its box titled "Load, save or delete a

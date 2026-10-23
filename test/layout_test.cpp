@@ -4933,6 +4933,13 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	                             .arg(prompt.height()).arg(room.height())));
 
 	/*
+	 * On the screen's bottom edge while its keys are up, so they come up
+	 * where the terminal's were; it sat at the top and the keys jumped up
+	 * with it (the holder, 2026-10-23).
+	 */
+	QCOMPARE(prompt.frameGeometry().bottom(), room.bottom());
+
+	/*
 	 * And still whole when a margin arrives after it was sized. On the
 	 * phone OK and Cancel were cut off at the bottom (2026-10-22), taken to
 	 * be Android's safe area arriving late. NOTE what this does not prove:
@@ -4988,6 +4995,9 @@ void layout_test::the_password_prompt_types_with_softkeys() {
 	QTRY_VERIFY(!keys->isVisible());
 	QVERIFY(!prompt.uses_softkeys());
 	QVERIFY(qApp->autoSipEnabled());
+
+	/* And at the top with Android's, which comes up below it. */
+	QTRY_COMPARE(prompt.frameGeometry().top(), room.top());
 	QTRY_VERIFY(toggle->isVisible());
 
 	toggle->click();
@@ -7081,6 +7091,23 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 			          qPrintable(QStringLiteral("%1 of %2 wide").arg(at.width()).arg(window.width())));
 		}
 		QVERIFY(at.height() >= BSSH_TOUCH_TARGET_DP);
+
+		/*
+		 * Under the terminal, the keys are the bottom edge and the
+		 * selector is above them, as nothing of an app's sits under
+		 * Android's keyboard. The selector's row was under the keys
+		 * (the holder, 2026-10-23).
+		 */
+		if (where != OVER_HALVES) {
+			QTRY_VERIFY(keyboard->isVisible());
+			const QRect keys(keyboard->mapTo(&window, QPoint(0, 0)), keyboard->size());
+			QVERIFY2(at.bottom() < keys.top(),
+			          qPrintable(QStringLiteral("the selector ends at %1, the keys start at %2")
+			                             .arg(at.bottom()).arg(keys.top())));
+			QVERIFY2(keys.bottom() + 1 == window.height(),
+			          qPrintable(QStringLiteral("the keys end at %1 of %2")
+			                             .arg(keys.bottom() + 1).arg(window.height())));
+		}
 	};
 
 	/*
