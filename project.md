@@ -10270,6 +10270,62 @@ once and never refreshed. The second is the subtler of the two -- it
 leaves a session that changes font wearing the note it had, including
 an empty one forever, which is the silent case again by a quieter road.
 
+### 9.5a Painting once output pauses, and a cursor that holds still — **[BUILT 2026-10-23]**
+
+**The holder asked why beerssh felt "slightly off" beside TDE Konsole** --
+how it draws, how responsive, how it takes keys -- without being able to
+name it. Measured rather than guessed, on a private Xvfb at the holder's
+109 dpi and Xft settings, each terminal in its own scratch `HOME`. The
+probe presses a key through XTest and reads the window back through
+MIT-SHM until it changes; a helper inside the terminal answers each key
+by redrawing the whole screen in four writes 3 ms apart, which is the
+shape a full-screen program's redraw has when it arrives in packets.
+
+**The finding: beerssh showed half-drawn screens and Konsole never did.**
+Konsole showed one finished frame for 119 of 120 redraws; beerssh showed
+two or three for all 120, the first part old screen and part new for
+about 17 ms. Konsole waits 10 ms after output, restarting while more
+comes, at most 40, and paints once; beerssh painted whatever had arrived
+at the next turn of the event loop. Seen as a faint tear whenever vim,
+less or htop redraws -- the "how it draws" the holder could not place.
+
+**Now: damage paints once output pauses 4 ms, and never later than 16 ms
+after the first change** (`schedule_paint()` in
+`src/ui/terminal_view.cpp`). Everything else a change does -- the
+revision, the scrollbar, the accessibility events -- still happens at
+once; only the paint waits. Re-measured interleaved with Konsole at load
+7-10: **160 of 160 redraws in one frame** (Konsole 160 of 160, beerssh
+with the pause off 0 of 160, three or four frames each), finished at
+21.5 ms against Konsole's 22.2. **Echo pays the pause:** a typed
+character shows at a median 9 ms against 4.7 without it, still under
+Konsole's 11.9. `BSSH_PAINT_COALESCE_MS` sets the pause (cap four times
+it, never under 16 ms; 0 is the old behaviour) so the two can be compared
+by feel. It is not a setting, and whether it stays is the holder's call
+once they have typed in both.
+
+**And the blink ran on its own clock.** Half of all typing landed in the
+off half: the character appeared with no cursor after it, and the cursor
+came back when the 500 ms timer said. Every keystroke, input-method
+commit and piece of output now turns it on and restarts the blink;
+Konsole's cursor, in the holder's configuration, does not blink at all.
+
+**Ruled out on the way, so nobody re-asks:** typing latency was never
+worse than Konsole's (median 9.7 ms against 12.5 before this change),
+and the text renders crisply in both -- Konsole in DejaVu Sans Mono 8
+with full hinting, beerssh in its bundled face at 11. **Timings taken at
+load 70-140 were worthless**: the same build measured 26 ms and 8 ms in
+consecutive runs. The frame counts did not move with load, which is why
+they are the claim; every millisecond figure above was taken at load
+under 10.
+
+**Four edits in `tool/sabotage/paint-and-cursor.toml`, all caught** from 802
+passing: painting at once, the pause with no cap, and the cursor not held
+on for typing and for output. The cap's first edit MISSED, and it was
+the edit that was wrong: switching off only the cap check left a
+negative interval, which a QTimer fires at once, so the stream was
+painted anyway. Removing the cap whole is what forgetting it looks like,
+and `output_that_never_pauses_is_still_painted` catches that.
+
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every
 bundled font it asserts uniform advance width, presence of the required

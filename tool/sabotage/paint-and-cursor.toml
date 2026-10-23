@@ -1,0 +1,39 @@
+# Sabotages for how output reaches the screen and the cursor's blink
+# (src/ui/terminal_view.cpp, project.md sec 9.5): each one is the
+# behaviour from before the change, so each test must fail on it.
+
+# Painting as each piece of a redraw arrives: the frame shown first is
+# part old screen and part new.
+[[sabotage]]
+name = "output is painted as it arrives, not once it pauses"
+file = "src/ui/terminal_view.cpp"
+find = "\tsync_scrollbar();\n\tschedule_paint();\n"
+replace = "\tsync_scrollbar();\n\tupdate();\n"
+expect = "a_redraw_in_pieces_is_painted_once"
+
+# The pause restarted by every piece with no cap: a program writing
+# without a break would never be painted. Restarted at its full length,
+# which is what forgetting the cap looks like. Switching off only the
+# check was tried and missed: it leaves a negative interval, which fires
+# at once and paints anyway.
+[[sabotage]]
+name = "the pause has no cap"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst qint64 left = m_paint_cap_ms - m_paint_waiting.elapsed();\n\tif (left <= 0) {\n\t\tm_paint_timer->stop();\n\t\tupdate();\n\t\treturn;\n\t}\n\tm_paint_timer->start(int(qMin<qint64>(m_paint_quiet_ms, left)));\n"
+replace = "\tm_paint_timer->start(m_paint_quiet_ms);\n"
+expect = "output_that_never_pauses_is_still_painted"
+
+# The blink on its own clock: a keystroke in the off half shows no cursor.
+[[sabotage]]
+name = "typing does not bring the cursor back"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tscroll_to_live();\n\t\thold_cursor_on();\n"
+replace = "\t\tscroll_to_live();\n"
+expect = "typing_and_output_bring_the_cursor_back_on"
+
+[[sabotage]]
+name = "output does not bring the cursor back"
+file = "src/ui/terminal_view.cpp"
+find = "\tnote_content_changed();\n\thold_cursor_on();\n"
+replace = "\tnote_content_changed();\n"
+expect = "typing_and_output_bring_the_cursor_back_on"

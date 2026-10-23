@@ -3049,6 +3049,143 @@ void terminal_view_test::only_the_focused_pane_blinks() {
 	QVERIFY2(!left->cursor_blinks(), "and leaves the pane it came from");
 }
 
+void terminal_view_test::typing_and_output_bring_the_cursor_back_on() {
+	/*
+	 * The blink ran on its own clock, so half of all typing landed while
+	 * the cursor was off: the character appeared with nothing after it,
+	 * and the cursor came back when the timer said, not the typist.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 400, 200);
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	view.activateWindow();
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	bssh_input_router router(&emulator);
+	view.attach_screen(&emulator.screen());
+	view.attach_input_router(&router);
+	connect(&emulator, &bssh_emulator::damaged, &view, &bssh_terminal_view::on_screen_damaged);
+
+	QJsonObject settings;
+	settings.insert(QStringLiteral("cursor_blink"), true);
+	bssh_apply_appearance(&view, settings);
+	view.setFocus();
+	QTRY_VERIFY(view.hasFocus());
+	QVERIFY(view.cursor_blinks());
+
+	/* A key, caught in the off half. */
+	QTRY_VERIFY_WITH_TIMEOUT(!view.cursor_shown(), 2000);
+	QTest::keyClick(&view, Qt::Key_A);
+	QVERIFY2(view.cursor_shown(), "a keystroke shows the cursor");
+	QCOMPARE(emulator.take_output(), QByteArrayLiteral("a"));
+
+	/* And output, which is how a remote's echo arrives. */
+	QTRY_VERIFY_WITH_TIMEOUT(!view.cursor_shown(), 2000);
+	emulator.feed(QByteArrayLiteral("a"));
+	QVERIFY2(view.cursor_shown(), "output shows the cursor");
+}
+
+namespace {
+
+/* Counts the paints a widget receives. */
+class paint_counter : public QObject {
+public:
+	int paints = 0;
+
+	bool eventFilter(QObject *watched, QEvent *event) override {
+		if (event->type() == QEvent::Paint) ++paints;
+		return QObject::eventFilter(watched, event);
+	}
+};
+
+}
+
+void terminal_view_test::a_redraw_in_pieces_is_painted_once() {
+	/*
+	 * A program's redraw reaches the terminal in several reads -- over
+	 * SSH, several packets -- and painting each one shows a frame that is
+	 * part old screen and part new. TDE Konsole showed one finished frame
+	 * for 119 of 120 such redraws, this showed two or three for all 120.
+	 *
+	 * The pieces are fed with an event-loop turn between them, as reads
+	 * are. The pause is long here so that a stall on a loaded machine
+	 * cannot fire it early; its length in the program is a separate
+	 * question from whether the paint waits for it at all.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 600, 300);
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	connect(&emulator, &bssh_emulator::damaged, &view, &bssh_terminal_view::on_screen_damaged);
+
+	paint_counter counter;
+	view.installEventFilter(&counter);
+
+	const auto redraw_in_pieces = [&](char fill) {
+		for (int piece = 0; piece < 4; ++piece) {
+			QByteArray bytes = piece == 0 ? QByteArrayLiteral("\033[H") : QByteArray();
+			for (int row = 0; row < view.rows() / 4; ++row)
+				bytes += QByteArray(view.cols() - 1, fill) + "\r\n";
+			emulator.feed(bytes);
+			QTest::qWait(5);
+		}
+	};
+
+	/* Painting at once, the counter sees a paint per piece: it can see
+	 * them at all, which is what the assertion below rests on. */
+	view.set_paint_coalescing(0, 0);
+	QTest::qWait(50);
+	counter.paints = 0;
+	redraw_in_pieces('.');
+	QVERIFY2(counter.paints >= 2, qPrintable(QString::number(counter.paints)));
+
+	view.set_paint_coalescing(200, 1000);
+	QTest::qWait(50);
+	counter.paints = 0;
+	redraw_in_pieces('#');
+	QCOMPARE(counter.paints, 0);
+	QTRY_COMPARE(counter.paints, 1);
+	QTest::qWait(250);
+	QCOMPARE(counter.paints, 1);
+}
+
+void terminal_view_test::output_that_never_pauses_is_still_painted() {
+	/*
+	 * The other half of waiting for a pause: a program that writes
+	 * without one -- a build log, `yes` -- must still be painted. The
+	 * pause restarts with every read, so only the cap stands between a
+	 * busy stream and a screen that never changes until it stops.
+	 *
+	 * Reads every 20 ms for 600 ms against a 60 ms pause, so the pause
+	 * never ends by itself while the stream runs, and a 150 ms cap.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 600, 300);
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	connect(&emulator, &bssh_emulator::damaged, &view, &bssh_terminal_view::on_screen_damaged);
+
+	paint_counter counter;
+	view.installEventFilter(&counter);
+
+	view.set_paint_coalescing(60, 150);
+	QTest::qWait(50);
+	counter.paints = 0;
+
+	QElapsedTimer running;
+	running.start();
+	for (int line = 0; running.elapsed() < 600; ++line) {
+		emulator.feed(QByteArray("line ") + QByteArray::number(line) + "\r\n");
+		QTest::qWait(20);
+	}
+	QVERIFY2(counter.paints >= 2,
+	         qPrintable(QStringLiteral("%1 paint(s) in 600 ms of output").arg(counter.paints)));
+}
+
 void terminal_view_test::alt_drag_asks_for_the_pane_to_be_moved() {
 	/*
 	 * sec 8.4's pane drag. A tab could always be pulled out of the bar,

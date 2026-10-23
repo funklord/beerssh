@@ -398,6 +398,16 @@ public:
 	/* What the settings asked for, regardless of where focus is. */
 	bool cursor_blink_wanted() const { return m_cursor_blink_wanted; }
 
+	/* Whether the cursor is in the ON half of its blink right now. */
+	bool cursor_shown() const { return m_cursor_on; }
+
+	/*
+	 * How long output must pause before it is painted, and the most a
+	 * paint may wait while it keeps coming; see schedule_paint(). Zero
+	 * paints at once, as this did before.
+	 */
+	void set_paint_coalescing(int quiet_ms, int cap_ms);
+
 private:
 	/*
 	 * The font to draw one cell in, cached. Returned by reference because
@@ -1203,6 +1213,28 @@ private:
 	 * decides rather than two setters each doing half of it.
 	 */
 	void sync_blink_timer();
+
+	/*
+	 * Typing or output shows the cursor and starts its blink over, so it
+	 * is never caught in the off half of a blink just as something
+	 * happens where it is.
+	 */
+	void hold_cursor_on();
+
+	/* Where the cursor cell is drawn, in widget coordinates. */
+	QRect cursor_cell_rect() const;
+
+	/*
+	 * Output is painted once it pauses rather than as each piece arrives,
+	 * so a full-screen redraw that comes in several reads is shown as one
+	 * finished frame, not a half-old, half-new one first.
+	 */
+	void schedule_paint();
+
+	QTimer *m_paint_timer = nullptr;
+	QElapsedTimer m_paint_waiting;
+	int m_paint_quiet_ms;
+	int m_paint_cap_ms;
 
 	QColor m_background;
 	QColor m_foreground;

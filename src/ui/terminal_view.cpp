@@ -59,6 +59,34 @@ static const int BSSH_DEFAULT_POINT_SIZE = 11;
 static const int BSSH_CURSOR_BLINK_MS = 500;
 
 /*
+ * How long output must pause before it is painted, and the most a paint
+ * waits while output keeps coming. A screen that a program redraws arrives
+ * in several reads -- over SSH, in several packets -- and painting each one
+ * shows a frame that is part old screen and part new for a moment. Measured
+ * against TDE Konsole on Xvfb, a full-screen redraw written in four pieces
+ * 3 ms apart: Konsole showed one finished frame for 119 of 120 redraws,
+ * this showed two or three for all 120. That is the flicker people feel and
+ * cannot name.
+ *
+ * Konsole waits 10 ms after output, restarting while more comes, and at
+ * most 40. Echo pays the pause, so this pauses less: 4 ms covers pieces
+ * that follow each other closely, and 16 ms -- one frame at 60 Hz -- is the
+ * longest a stream of output goes unpainted.
+ *
+ * BSSH_PAINT_COALESCE_MS sets the pause, with the cap four times it and
+ * never under 16 ms; 0 paints at once, as before. It is there to compare
+ * the two by feel, not as a setting.
+ */
+static const int BSSH_PAINT_QUIET_MS = 4;
+static const int BSSH_PAINT_CAP_MS = 16;
+
+static int paint_quiet_ms() {
+	bool given = false;
+	const int wanted = qEnvironmentVariableIntValue("BSSH_PAINT_COALESCE_MS", &given);
+	return given ? qBound(0, wanted, 100) : BSSH_PAINT_QUIET_MS;
+}
+
+/*
  * Space kept clear at the edges for the focused-pane border (sec 8.3).
  * Without it the border is drawn over the first column and the last, and
  * the leftmost pixel of every line in the focused pane is clipped -- which
@@ -117,6 +145,8 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_colscroll_dragging(false),
       m_colscroll_moved(false),
       m_blink_timer(nullptr),
+      m_paint_quiet_ms(paint_quiet_ms()),
+      m_paint_cap_ms(qMax(BSSH_PAINT_CAP_MS, m_paint_quiet_ms * 4)),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_reverse_video(false),
@@ -448,17 +478,77 @@ void bssh_terminal_view::sync_blink_timer() {
 		 * cell is exactly the kind of idle wakeup sec 5.1 cares about.
 		 */
 		if (!m_screen) return;
-		/*
-		 * In the same coordinates the cursor is drawn in. This is the
-		 * only partial update in the class, so a region that did not
-		 * match left a band of the cursor cell never repainted while
-		 * it blinked -- twice a second, until a full update came.
-		 */
-		update(grid_origin_x() + m_screen->cursor_col() * m_cell_width,
-		        BSSH_GRID_INSET_PX + m_screen->cursor_row() * m_cell_height,
-		        m_cell_width, m_cell_height);
+		update(cursor_cell_rect());
 	});
 	m_blink_timer->start();
+}
+
+QRect bssh_terminal_view::cursor_cell_rect() const {
+	if (!m_screen) return QRect();
+
+	/*
+	 * In the same coordinates the cursor is drawn in. A region that did
+	 * not match left a band of the cursor cell never repainted while it
+	 * blinked -- twice a second, until a full update came.
+	 */
+	return QRect(grid_origin_x() + m_screen->cursor_col() * m_cell_width,
+	             BSSH_GRID_INSET_PX + m_screen->cursor_row() * m_cell_height,
+	             m_cell_width, m_cell_height);
+}
+
+void bssh_terminal_view::hold_cursor_on() {
+	/*
+	 * The blink restarts from ON at every keystroke and every piece of
+	 * output. It ran on its own clock before, so half of all typing
+	 * landed while the cursor was off: the character appeared with no
+	 * cursor after it, and the cursor came back on the timer's schedule
+	 * rather than the typist's. Editors and other terminals hold it
+	 * solid while something is happening for that reason.
+	 */
+	if (!m_blink_timer) return;
+
+	m_blink_timer->start();
+	if (m_cursor_on) return;
+
+	m_cursor_on = true;
+
+	/* A paint already waiting for output to pause covers the cell, and
+	 * painting the cell now would show one cell of the new screen early. */
+	if (m_paint_timer && m_paint_timer->isActive()) return;
+	update(cursor_cell_rect());
+}
+
+void bssh_terminal_view::set_paint_coalescing(int quiet_ms, int cap_ms) {
+	m_paint_quiet_ms = qMax(0, quiet_ms);
+	m_paint_cap_ms = qMax(m_paint_quiet_ms, cap_ms);
+}
+
+void bssh_terminal_view::schedule_paint() {
+	if (m_paint_quiet_ms == 0) {
+		update();
+		return;
+	}
+
+	if (!m_paint_timer) {
+		m_paint_timer = new QTimer(this);
+		m_paint_timer->setSingleShot(true);
+		/* Precise: a coarse timer may fire 5% late, on a budget this small
+		 * that is the difference between one frame and two. */
+		m_paint_timer->setTimerType(Qt::PreciseTimer);
+		connect(m_paint_timer, &QTimer::timeout, this, [this] { update(); });
+	}
+
+	/* The first change since the last paint starts the cap's clock; every
+	 * change restarts the pause, but never past the cap. */
+	if (!m_paint_timer->isActive()) m_paint_waiting.start();
+
+	const qint64 left = m_paint_cap_ms - m_paint_waiting.elapsed();
+	if (left <= 0) {
+		m_paint_timer->stop();
+		update();
+		return;
+	}
+	m_paint_timer->start(int(qMin<qint64>(m_paint_quiet_ms, left)));
 }
 
 QString bssh_terminal_view::font_substitution_note() const {
@@ -1466,6 +1556,7 @@ void bssh_terminal_view::keyPressEvent(QKeyEvent *event) {
 	 */
 	if (m_input_router && m_input_router->handle_key(event)) {
 		scroll_to_live();
+		hold_cursor_on();
 		event->accept();
 		return;
 	}
@@ -1499,6 +1590,7 @@ void bssh_terminal_view::inputMethodEvent(QInputMethodEvent *event) {
 	 */
 	if (m_input_router && !event->commitString().isEmpty()) {
 		m_input_router->send_text(event->commitString());
+		hold_cursor_on();
 		event->accept();
 		return;
 	}
@@ -3381,7 +3473,7 @@ void bssh_terminal_view::note_content_changed() {
 
 	/* Output scrolling off the top is more history to point at. */
 	sync_scrollbar();
-	update();
+	schedule_paint();
 
 	/*
 	 * Only when something is listening. QAccessible::isActive() is false
@@ -3436,6 +3528,7 @@ void bssh_terminal_view::note_content_changed() {
 
 void bssh_terminal_view::on_screen_damaged() {
 	note_content_changed();
+	hold_cursor_on();
 }
 
 void bssh_terminal_view::note_selection_changed() {
