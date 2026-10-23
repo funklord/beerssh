@@ -58,33 +58,6 @@ static const int BSSH_DEFAULT_POINT_SIZE = 11;
  */
 static const int BSSH_CURSOR_BLINK_MS = 500;
 
-/*
- * How long output must pause before it is painted, and the most a paint
- * waits while output keeps coming. A screen that a program redraws arrives
- * in several reads -- over SSH, in several packets -- and painting each one
- * shows a frame that is part old screen and part new for a moment. Measured
- * against TDE Konsole on Xvfb, a full-screen redraw written in four pieces
- * 3 ms apart: Konsole showed one finished frame for 119 of 120 redraws,
- * this showed two or three for all 120. That is the flicker people feel and
- * cannot name.
- *
- * Konsole waits 10 ms after output, restarting while more comes, and at
- * most 40. Echo pays the pause, so this pauses less: 4 ms covers pieces
- * that follow each other closely, and 16 ms -- one frame at 60 Hz -- is the
- * longest a stream of output goes unpainted.
- *
- * BSSH_PAINT_COALESCE_MS sets the pause, with the cap four times it and
- * never under 16 ms; 0 paints at once, as before. It is there to compare
- * the two by feel, not as a setting.
- */
-static const int BSSH_PAINT_QUIET_MS = 4;
-static const int BSSH_PAINT_CAP_MS = 16;
-
-static int paint_quiet_ms() {
-	bool given = false;
-	const int wanted = qEnvironmentVariableIntValue("BSSH_PAINT_COALESCE_MS", &given);
-	return given ? qBound(0, wanted, 100) : BSSH_PAINT_QUIET_MS;
-}
 
 /*
  * Space kept clear at the edges for the focused-pane border (sec 8.3).
@@ -145,8 +118,6 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_colscroll_dragging(false),
       m_colscroll_moved(false),
       m_blink_timer(nullptr),
-      m_paint_quiet_ms(paint_quiet_ms()),
-      m_paint_cap_ms(qMax(BSSH_PAINT_CAP_MS, m_paint_quiet_ms * 4)),
       m_background(QColor(0x1c, 0x1c, 0x1c)),
       m_foreground(QColor(0xd0, 0xd0, 0xd0)),
       m_reverse_video(false),
@@ -511,44 +482,7 @@ void bssh_terminal_view::hold_cursor_on() {
 	if (m_cursor_on) return;
 
 	m_cursor_on = true;
-
-	/* A paint already waiting for output to pause covers the cell, and
-	 * painting the cell now would show one cell of the new screen early. */
-	if (m_paint_timer && m_paint_timer->isActive()) return;
 	update(cursor_cell_rect());
-}
-
-void bssh_terminal_view::set_paint_coalescing(int quiet_ms, int cap_ms) {
-	m_paint_quiet_ms = qMax(0, quiet_ms);
-	m_paint_cap_ms = qMax(m_paint_quiet_ms, cap_ms);
-}
-
-void bssh_terminal_view::schedule_paint() {
-	if (m_paint_quiet_ms == 0) {
-		update();
-		return;
-	}
-
-	if (!m_paint_timer) {
-		m_paint_timer = new QTimer(this);
-		m_paint_timer->setSingleShot(true);
-		/* Precise: a coarse timer may fire 5% late, on a budget this small
-		 * that is the difference between one frame and two. */
-		m_paint_timer->setTimerType(Qt::PreciseTimer);
-		connect(m_paint_timer, &QTimer::timeout, this, [this] { update(); });
-	}
-
-	/* The first change since the last paint starts the cap's clock; every
-	 * change restarts the pause, but never past the cap. */
-	if (!m_paint_timer->isActive()) m_paint_waiting.start();
-
-	const qint64 left = m_paint_cap_ms - m_paint_waiting.elapsed();
-	if (left <= 0) {
-		m_paint_timer->stop();
-		update();
-		return;
-	}
-	m_paint_timer->start(int(qMin<qint64>(m_paint_quiet_ms, left)));
 }
 
 QString bssh_terminal_view::font_substitution_note() const {
@@ -1655,8 +1589,6 @@ QRect bssh_terminal_view::pane_grip_rect() const {
 }
 
 void bssh_terminal_view::paintEvent(QPaintEvent *event) {
-	Q_UNUSED(event);
-
 	QPainter painter(this);
 	painter.fillRect(rect(), effective_background());
 	painter.setFont(m_font);
@@ -1715,7 +1647,19 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	 * font pipeline exists and before there is anything to profile --
 	 * would be a cache written to be thrown away.
 	 */
-	for (int row = 0; row < rows; ++row) {
+	/*
+	 * Only the rows the paint was asked for (update_rows()): the painter
+	 * clips to them anyway, so drawing the rest is work nobody sees. One
+	 * row more on each side, because a glyph can reach into the next row
+	 * -- an accent above, a descender below -- and its part inside the
+	 * repainted band has to be drawn again over the background that was
+	 * just filled there.
+	 */
+	const QRect asked = event->rect();
+	const int first_row = qMax(0, (asked.top() - BSSH_GRID_INSET_PX) / qMax(1, m_cell_height) - 1);
+	const int last_row = qMin(rows - 1, (asked.bottom() - BSSH_GRID_INSET_PX) / qMax(1, m_cell_height) + 1);
+
+	for (int row = first_row; row <= last_row; ++row) {
 		const qreal baseline = m_baseline + row * m_cell_height;
 
 		/*
@@ -3446,7 +3390,7 @@ void bssh_apply_appearance(bssh_terminal_view *view, const QJsonObject &settings
 	view->set_font_id(family, size);
 }
 
-void bssh_terminal_view::note_content_changed() {
+void bssh_terminal_view::note_content_changed(int first_row, int last_row) {
 	/*
 	 * The revision the accessibility layer caches its flattened text
 	 * against. It was bumped here and nowhere else, so the one content
@@ -3473,7 +3417,7 @@ void bssh_terminal_view::note_content_changed() {
 
 	/* Output scrolling off the top is more history to point at. */
 	sync_scrollbar();
-	schedule_paint();
+	update_rows(first_row, last_row);
 
 	/*
 	 * Only when something is listening. QAccessible::isActive() is false
@@ -3529,6 +3473,41 @@ void bssh_terminal_view::note_content_changed() {
 void bssh_terminal_view::on_screen_damaged() {
 	note_content_changed();
 	hold_cursor_on();
+}
+
+void bssh_terminal_view::on_rows_damaged(int first_row, int last_row) {
+	note_content_changed(first_row, last_row);
+	hold_cursor_on();
+}
+
+void bssh_terminal_view::update_rows(int first_row, int last_row) {
+	/*
+	 * Only the rows that changed. A whole-view update for every keystroke
+	 * repainted every cell and handed the X server the whole window
+	 * again, where TDE Konsole sends the cells that changed -- and the
+	 * difference is felt. Measured on the holder's NVIDIA X server: an
+	 * upload of a 1700x1000 terminal costs 2.3 ms at the median and up to
+	 * 8 under load, one 18-pixel row 0.1 ms, before counting the paint.
+	 *
+	 * Scrolled back, the screen's rows are not where the view draws
+	 * them, so that case repaints everything; so does a change to half
+	 * the screen or more, where the saving is gone anyway.
+	 */
+	if (!m_screen || m_scroll_offset != 0 || m_cell_height <= 0) {
+		update();
+		return;
+	}
+
+	const int first = qMax(0, first_row);
+	const int last = qMin(m_rows - 1, last_row);
+	if (last < first) return;
+	if ((last - first + 1) * 2 >= m_rows) {
+		update();
+		return;
+	}
+
+	update(0, BSSH_GRID_INSET_PX + first * m_cell_height,
+	       width(), (last - first + 1) * m_cell_height);
 }
 
 void bssh_terminal_view::note_selection_changed() {

@@ -614,6 +614,54 @@ void emulator_test::synchronised_output_holds_the_repaint() {
 	QVERIFY(emulator.screen().to_text().contains(QStringLiteral("half a frame and the rest")));
 }
 
+/* Every rows_damaged() since the spy was cleared, as one range. */
+static QPair<int, int> damaged_rows(const QSignalSpy &spy) {
+	int first = INT_MAX;
+	int last = -1;
+	for (const QList<QVariant> &call : spy) {
+		first = qMin(first, call.at(0).toInt());
+		last = qMax(last, call.at(1).toInt());
+	}
+	return qMakePair(first, last);
+}
+
+void emulator_test::damage_names_the_rows_it_touched() {
+	/*
+	 * A view repaints only the rows this names (project.md sec 9.5a), so
+	 * a row it leaves out keeps what it showed before: a character typed
+	 * and never drawn, or a cursor drawn in two places.
+	 */
+	bssh_emulator emulator(20, 10);
+	QSignalSpy rows(&emulator, &bssh_emulator::rows_damaged);
+
+	emulator.feed(QByteArrayLiteral("\x1b[3;1H"));
+	rows.clear();
+
+	/* Text on row 2, and the cursor moving along it. */
+	emulator.feed(QByteArrayLiteral("ab"));
+	QCOMPARE(damaged_rows(rows), qMakePair(2, 2));
+
+	/* The cursor moving down names the row it LEFT as well, or the old
+	 * cursor stays drawn there. */
+	rows.clear();
+	emulator.feed(QByteArrayLiteral("\x1b[6;1H"));
+	QCOMPARE(damaged_rows(rows), qMakePair(2, 5));
+
+	/* Held across synchronised output, and released as the union. */
+	rows.clear();
+	emulator.feed(QByteArrayLiteral("\x1b[?2026h\x1b[1;1Hx\x1b[9;1Hy"));
+	QCOMPARE(rows.count(), 0);
+	emulator.feed(QByteArrayLiteral("\x1b[?2026l"));
+	QCOMPARE(rows.count(), 1);
+	QCOMPARE(damaged_rows(rows), qMakePair(0, 8));
+
+	/* What is not a run of rows reports all of them. */
+	rows.clear();
+	emulator.reset_modes();
+	QVERIFY(damaged_rows(rows).first <= 0);
+	QVERIFY(damaged_rows(rows).second >= 9);
+}
+
 void emulator_test::synchronised_output_releases_itself_if_abandoned() {
 	bssh_emulator emulator(20, 5);
 	QSignalSpy damaged(&emulator, &bssh_emulator::damaged);

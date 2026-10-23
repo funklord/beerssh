@@ -3087,103 +3087,72 @@ void terminal_view_test::typing_and_output_bring_the_cursor_back_on() {
 
 namespace {
 
-/* Counts the paints a widget receives. */
-class paint_counter : public QObject {
+/* Gathers the area of every paint a widget receives. */
+class paint_recorder : public QObject {
 public:
-	int paints = 0;
+	QRegion painted;
 
 	bool eventFilter(QObject *watched, QEvent *event) override {
-		if (event->type() == QEvent::Paint) ++paints;
+		if (event->type() == QEvent::Paint)
+			painted += static_cast<QPaintEvent *>(event)->region();
 		return QObject::eventFilter(watched, event);
 	}
 };
 
 }
 
-void terminal_view_test::a_redraw_in_pieces_is_painted_once() {
+void terminal_view_test::a_keystroke_repaints_only_its_row() {
 	/*
-	 * A program's redraw reaches the terminal in several reads -- over
-	 * SSH, several packets -- and painting each one shows a frame that is
-	 * part old screen and part new. TDE Konsole showed one finished frame
-	 * for 119 of 120 such redraws, this showed two or three for all 120.
-	 *
-	 * The pieces are fed with an event-loop turn between them, as reads
-	 * are. The pause is long here so that a stall on a loaded machine
-	 * cannot fire it early; its length in the program is a separate
-	 * question from whether the paint waits for it at all.
+	 * Every change used to repaint the whole view, so each keystroke
+	 * redrew every cell and handed the X server the whole window -- 2.3 ms
+	 * for a 1700x1000 upload on the holder's NVIDIA server against 0.1 ms
+	 * for a row. TDE Konsole sends the cells that changed, and felt
+	 * snappier for it (project.md sec 9.5a).
 	 */
 	bssh_terminal_view view;
-	show_and_resize(view, 600, 300);
+	show_and_resize(view, 600, 400);
 	QVERIFY(QTest::qWaitForWindowExposed(&view));
 
 	bssh_emulator emulator(view.cols(), view.rows());
 	view.attach_screen(&emulator.screen());
-	connect(&emulator, &bssh_emulator::damaged, &view, &bssh_terminal_view::on_screen_damaged);
+	view.attach_scrollback(&emulator.scrollback());
+	connect(&emulator, &bssh_emulator::rows_damaged, &view, &bssh_terminal_view::on_rows_damaged);
 
-	paint_counter counter;
-	view.installEventFilter(&counter);
+	paint_recorder recorder;
+	view.installEventFilter(&recorder);
 
-	const auto redraw_in_pieces = [&](char fill) {
-		for (int piece = 0; piece < 4; ++piece) {
-			QByteArray bytes = piece == 0 ? QByteArrayLiteral("\033[H") : QByteArray();
-			for (int row = 0; row < view.rows() / 4; ++row)
-				bytes += QByteArray(view.cols() - 1, fill) + "\r\n";
-			emulator.feed(bytes);
-			QTest::qWait(5);
-		}
+	const auto painted_after = [&](const QByteArray &bytes) {
+		QTest::qWait(30);
+		recorder.painted = QRegion();
+		emulator.feed(bytes);
+		/* Empty, and failing the comparison it is used in, if no paint
+		 * came at all. */
+		if (!QTest::qWaitFor([&] { return !recorder.painted.isEmpty(); }, 5000)) return QRect();
+		QTest::qWait(30);
+		return recorder.painted.boundingRect();
 	};
 
-	/* Painting at once, the counter sees a paint per piece: it can see
-	 * them at all, which is what the assertion below rests on. */
-	view.set_paint_coalescing(0, 0);
-	QTest::qWait(50);
-	counter.paints = 0;
-	redraw_in_pieces('.');
-	QVERIFY2(counter.paints >= 2, qPrintable(QString::number(counter.paints)));
+	emulator.feed(QByteArrayLiteral("\x1b[4;1H"));
 
-	view.set_paint_coalescing(200, 1000);
-	QTest::qWait(50);
-	counter.paints = 0;
-	redraw_in_pieces('#');
-	QCOMPARE(counter.paints, 0);
-	QTRY_COMPARE(counter.paints, 1);
-	QTest::qWait(250);
-	QCOMPARE(counter.paints, 1);
-}
+	/* A character typed on row 3: that row and nothing else. */
+	const QRect typed = painted_after(QByteArrayLiteral("x"));
+	QCOMPARE(typed.height(), view.cell_height());
+	QVERIFY(typed.top() >= 3 * view.cell_height());
 
-void terminal_view_test::output_that_never_pauses_is_still_painted() {
-	/*
-	 * The other half of waiting for a pause: a program that writes
-	 * without one -- a build log, `yes` -- must still be painted. The
-	 * pause restarts with every read, so only the cap stands between a
-	 * busy stream and a screen that never changes until it stops.
-	 *
-	 * Reads every 20 ms for 600 ms against a 60 ms pause, so the pause
-	 * never ends by itself while the stream runs, and a 150 ms cap.
-	 */
-	bssh_terminal_view view;
-	show_and_resize(view, 600, 300);
-	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	/* A newline moves the cursor down a row: the row it left and the row
+	 * it is on, so the old cursor is erased. */
+	const QRect moved = painted_after(QByteArrayLiteral("\r\n"));
+	QCOMPARE(moved.height(), 2 * view.cell_height());
 
-	bssh_emulator emulator(view.cols(), view.rows());
-	view.attach_screen(&emulator.screen());
-	connect(&emulator, &bssh_emulator::damaged, &view, &bssh_terminal_view::on_screen_damaged);
+	/* A clear is most of the screen: the whole view. */
+	QCOMPARE(painted_after(QByteArrayLiteral("\x1b[2J")), view.rect());
 
-	paint_counter counter;
-	view.installEventFilter(&counter);
-
-	view.set_paint_coalescing(60, 150);
-	QTest::qWait(50);
-	counter.paints = 0;
-
-	QElapsedTimer running;
-	running.start();
-	for (int line = 0; running.elapsed() < 600; ++line) {
-		emulator.feed(QByteArray("line ") + QByteArray::number(line) + "\r\n");
-		QTest::qWait(20);
-	}
-	QVERIFY2(counter.paints >= 2,
-	         qPrintable(QStringLiteral("%1 paint(s) in 600 ms of output").arg(counter.paints)));
+	/* Scrolled back, the screen's rows are not where they are drawn, so a
+	 * change repaints the whole view rather than a band of history. */
+	for (int line = 0; line < view.rows() * 2; ++line) emulator.feed(QByteArrayLiteral("line\r\n"));
+	view.set_scroll_offset(3);
+	QVERIFY(view.scroll_offset() > 0);
+	QCOMPARE(painted_after(QByteArrayLiteral("y")), view.rect());
 }
 
 void terminal_view_test::alt_drag_asks_for_the_pane_to_be_moved() {

@@ -401,13 +401,6 @@ public:
 	/* Whether the cursor is in the ON half of its blink right now. */
 	bool cursor_shown() const { return m_cursor_on; }
 
-	/*
-	 * How long output must pause before it is painted, and the most a
-	 * paint may wait while it keeps coming; see schedule_paint(). Zero
-	 * paints at once, as this did before.
-	 */
-	void set_paint_coalescing(int quiet_ms, int cap_ms);
-
 private:
 	/*
 	 * The font to draw one cell in, cached. Returned by reference because
@@ -644,8 +637,11 @@ public slots:
 	 *
 	 * Damage is one cause and a scrollback trim is another, and only the
 	 * first used to do all of it -- see the definition.
+	 *
+	 * Only the screen rows first_row..last_row are repainted; the
+	 * defaults are the whole view.
 	 */
-	void note_content_changed();
+	void note_content_changed(int first_row = 0, int last_row = INT_MAX);
 
 	/*
 	 * The same, for the selection. Emits selection_changed() AND tells
@@ -656,6 +652,9 @@ public slots:
 	void note_selection_changed();
 
 	void on_screen_damaged();
+
+	/* The emulator's rows_damaged(): repaints only those rows. */
+	void on_rows_damaged(int first_row, int last_row);
 
 signals:
 	/*
@@ -1225,16 +1224,11 @@ private:
 	QRect cursor_cell_rect() const;
 
 	/*
-	 * Output is painted once it pauses rather than as each piece arrives,
-	 * so a full-screen redraw that comes in several reads is shown as one
-	 * finished frame, not a half-old, half-new one first.
+	 * Repaints screen rows first_row..last_row, or the whole view when
+	 * the rows are not where the screen has them -- scrolled back into
+	 * history -- or are most of it anyway.
 	 */
-	void schedule_paint();
-
-	QTimer *m_paint_timer = nullptr;
-	QElapsedTimer m_paint_waiting;
-	int m_paint_quiet_ms;
-	int m_paint_cap_ms;
+	void update_rows(int first_row, int last_row);
 
 	QColor m_background;
 	QColor m_foreground;

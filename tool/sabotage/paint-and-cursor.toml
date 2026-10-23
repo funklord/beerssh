@@ -1,29 +1,53 @@
-# Sabotages for how output reaches the screen and the cursor's blink
-# (src/ui/terminal_view.cpp, project.md sec 9.5): each one is the
-# behaviour from before the change, so each test must fail on it.
+# Sabotages for which rows a change repaints, and the cursor's blink
+# (src/ui/terminal_view.cpp, src/term/emulator_vterm.cpp, project.md
+# sec 9.5a). Each one is a way the partial repaint could go wrong without
+# anything looking broken in a screenshot taken after the fact.
 
-# Painting as each piece of a redraw arrives: the frame shown first is
-# part old screen and part new.
+# Every change repaints the whole view again: correct, and the cost the
+# change exists to remove.
 [[sabotage]]
-name = "output is painted as it arrives, not once it pauses"
+name = "every change repaints the whole view"
 file = "src/ui/terminal_view.cpp"
-find = "\tsync_scrollbar();\n\tschedule_paint();\n"
-replace = "\tsync_scrollbar();\n\tupdate();\n"
-expect = "a_redraw_in_pieces_is_painted_once"
+find = "\tupdate(0, BSSH_GRID_INSET_PX + first * m_cell_height,\n\t       width(), (last - first + 1) * m_cell_height);\n"
+replace = "\tupdate();\n"
+expect = "a_keystroke_repaints_only_its_row"
 
-# The pause restarted by every piece with no cap: a program writing
-# without a break would never be painted. Restarted at its full length,
-# which is what forgetting the cap looks like. Switching off only the
-# check was tried and missed: it leaves a negative interval, which fires
-# at once and paints anyway.
+# The cursor's move names only the row it reaches: the old cursor stays
+# drawn on the row it left.
 [[sabotage]]
-name = "the pause has no cap"
-file = "src/ui/terminal_view.cpp"
-find = "\tconst qint64 left = m_paint_cap_ms - m_paint_waiting.elapsed();\n\tif (left <= 0) {\n\t\tm_paint_timer->stop();\n\t\tupdate();\n\t\treturn;\n\t}\n\tm_paint_timer->start(int(qMin<qint64>(m_paint_quiet_ms, left)));\n"
-replace = "\tm_paint_timer->start(m_paint_quiet_ms);\n"
-expect = "output_that_never_pauses_is_still_painted"
+name = "a cursor move does not name the row it left"
+file = "src/term/emulator_vterm.cpp"
+find = "\tself->notify_damaged(qMin(pos.row, oldpos.row), qMax(pos.row, oldpos.row));\n"
+replace = "\tself->notify_damaged(pos.row, pos.row);\n"
+expect = "damage_names_the_rows_it_touched"
 
-# The blink on its own clock: a keystroke in the off half shows no cursor.
+# Rows held during synchronised output forgotten: the frame is released
+# naming only what came after.
+[[sabotage]]
+name = "synchronised output forgets the rows it held"
+file = "src/term/emulator_vterm.cpp"
+find = "\tdamaged_first = qMin(damaged_first, first_row);\n\tdamaged_last = qMax(damaged_last, last_row);\n\n\tif (sync_output) {\n"
+replace = "\tif (sync_output) {\n"
+expect = "damage_names_the_rows_it_touched"
+
+# A change that is not a run of rows announced without any: a view
+# listening for rows never repaints after a reset.
+[[sabotage]]
+name = "a reset names no rows"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->graphics = bssh_graphics_transmission_t();\n\n\tm_private->notify_damaged();\n"
+replace = "\tm_private->graphics = bssh_graphics_transmission_t();\n\n\temit damaged();\n"
+expect = "damage_names_the_rows_it_touched"
+
+# Scrolled back, the screen's rows repainted where the screen has them:
+# a band of history that never changed is redrawn and the row that did
+# is not.
+[[sabotage]]
+name = "scrolled back, a change repaints the screen's rows"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (!m_screen || m_scroll_offset != 0 || m_cell_height <= 0) {\n"
+replace = "\tif (!m_screen || m_cell_height <= 0) {\n"
+expect = "a_keystroke_repaints_only_its_row"
 [[sabotage]]
 name = "typing does not bring the cursor back"
 file = "src/ui/terminal_view.cpp"

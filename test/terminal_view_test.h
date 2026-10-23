@@ -22,8 +22,7 @@ private slots:
 	void an_unfocused_cursor_is_hollow();
 	void only_the_focused_pane_blinks();
 	void typing_and_output_bring_the_cursor_back_on();
-	void a_redraw_in_pieces_is_painted_once();
-	void output_that_never_pauses_is_still_painted();
+	void a_keystroke_repaints_only_its_row();
 	void alt_drag_asks_for_the_pane_to_be_moved();
 	/*
 	 * The scrollbar's default position is process-wide, and a window

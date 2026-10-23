@@ -80,6 +80,13 @@ struct bssh_emulator_private {
 	QString term_name;
 	bool sync_output;
 	bool sync_damage_pending;
+
+	/*
+	 * The rows changed since damage was last announced, for a view that
+	 * repaints only those. Empty while first > last.
+	 */
+	int damaged_first = INT_MAX;
+	int damaged_last = -1;
 	QTimer *sync_timeout;
 
 	bssh_image_store images;
@@ -172,7 +179,13 @@ struct bssh_emulator_private {
 	 * makes the synchronised-output hold possible at all: a hold spread
 	 * across the six places that emit damage would leak one of them.
 	 */
-	void notify_damaged();
+	/* Rows first_row..last_row changed; the defaults are all of them. */
+	void notify_damaged(int first_row = 0, int last_row = INT_MAX);
+
+	/* Announces what notify_damaged() gathered: rows_damaged(), then
+	 * damaged(). The one place either is emitted, so a view listening to
+	 * the rows cannot miss a change that skipped them. */
+	void emit_damage();
 	void begin_sync();
 	void end_sync();
 
@@ -331,16 +344,17 @@ quint8 to_bssh_attrs(const VTermScreenCellAttrs &attrs) {
 int on_damage(VTermRect rect, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	self->copy_rect(rect);
-	self->notify_damaged();
+	self->notify_damaged(rect.start_row, rect.end_row - 1);
 	return 1;
 }
 
 int on_move_cursor(VTermPos pos, VTermPos oldpos, int visible, void *user) {
-	Q_UNUSED(oldpos);
 	Q_UNUSED(visible);
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	self->screen.set_cursor(pos.row, pos.col);
-	self->notify_damaged();
+
+	/* The row it left, to erase it there, and the row it is on now. */
+	self->notify_damaged(qMin(pos.row, oldpos.row), qMax(pos.row, oldpos.row));
 	return 1;
 }
 
@@ -385,7 +399,8 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 		emit self->owner->images_changed();
 	}
 
-	self->notify_damaged();
+	self->notify_damaged(qMin(dest.start_row, src.start_row),
+	                     qMax(dest.end_row, src.end_row) - 1);
 	return 1;
 }
 
@@ -472,7 +487,7 @@ int on_set_term_prop(VTermProp prop, VTermValue *value, void *user) {
 		return 1;
 	case VTERM_PROP_CURSORVISIBLE:
 		self->screen.set_cursor_visible(value->boolean);
-		self->notify_damaged();
+		self->notify_damaged(self->screen.cursor_row(), self->screen.cursor_row());
 		return 1;
 	case VTERM_PROP_CURSORSHAPE: {
 		/*
@@ -2049,7 +2064,10 @@ bool bssh_emulator_private::encode_modern_key(char32_t ch, quint8 modifiers) {
 	return true;
 }
 
-void bssh_emulator_private::notify_damaged() {
+void bssh_emulator_private::notify_damaged(int first_row, int last_row) {
+	damaged_first = qMin(damaged_first, first_row);
+	damaged_last = qMax(damaged_last, last_row);
+
 	if (sync_output) {
 		/*
 		 * Held, not dropped: the repaint happens when the remote says
@@ -2061,6 +2079,16 @@ void bssh_emulator_private::notify_damaged() {
 		return;
 	}
 
+	emit_damage();
+}
+
+void bssh_emulator_private::emit_damage() {
+	const int first = damaged_first;
+	const int last = damaged_last;
+	damaged_first = INT_MAX;
+	damaged_last = -1;
+
+	if (first <= last) emit owner->rows_damaged(first, last);
 	emit owner->damaged();
 }
 
@@ -2091,7 +2119,7 @@ void bssh_emulator_private::end_sync() {
 
 	if (sync_damage_pending) {
 		sync_damage_pending = false;
-		emit owner->damaged();
+		emit_damage();
 	}
 }
 
@@ -2417,7 +2445,7 @@ void bssh_emulator::reset_modes() {
 	 */
 	m_private->graphics = bssh_graphics_transmission_t();
 
-	emit damaged();
+	m_private->notify_damaged();
 }
 
 bool bssh_emulator::alternate_screen() const {
@@ -3127,6 +3155,6 @@ bool bssh_emulator::import_state(const QByteArray &state) {
 	if (cursor_blink >= 0) emit cursor_blink_changed(cursor_blink != 0);
 	emit scrollback_changed();
 	emit images_changed();
-	emit damaged();
+	p->notify_damaged();
 	return true;
 }

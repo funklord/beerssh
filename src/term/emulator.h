@@ -482,6 +482,14 @@ signals:
 	/* The screen changed; repaint. Coalesced by the view, not here. */
 	void damaged();
 
+	/*
+	 * Which rows changed, emitted just before each damaged(): a view
+	 * repaints those rather than everything (sec 9.5a). Anything that
+	 * is not a run of rows -- a resize, a reset, a picture -- reports
+	 * them all.
+	 */
+	void rows_damaged(int first_row, int last_row);
+
 	/* OSC 0/2. Feeds the tab label and, on desktop, the window title. */
 	void title_changed(const QString &title);
 
