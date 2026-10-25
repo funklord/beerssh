@@ -1,5 +1,6 @@
 #include "handoff_test.h"
 
+#include <QAction>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -393,4 +394,149 @@ void handoff_test::a_new_version_takes_every_session() {
 
 	app.kill();
 	app.waitForFinished(10000);
+}
+
+void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own() {
+	/*
+	 * One process per window, as TDE Konsole's are, so ending one window's
+	 * process ends no other (the holder, 2026-10-25, sec 8.4). Seen here
+	 * as what would be started -- the starter is replaced, so nothing is
+	 * -- and the next test runs the program it names.
+	 */
+	runtime_dir_t runtime;
+	QList<QStringList> started;
+	bssh_main_window::set_process_starter([&started](const QString &, const QStringList &arguments) {
+		started.append(arguments);
+		return true;
+	});
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	bssh_session_registry *registry = window.registry();
+
+	QList<bssh_session *> sessions;
+	for (int i = 0; i < 2; ++i) {
+		bssh_session *session = registry->create(local_shell_profile());
+		window.adopt_session(session);
+		session->connect_to_host();
+		QTRY_COMPARE(session->state(), bssh_ssh_session::CONNECTED);
+		sessions.append(session);
+	}
+
+	bssh_handoff_point point([registry](const QString &id) -> bssh_session * {
+		for (bssh_session *s : registry->sessions())
+			if (s->handoff_id() == id) return s;
+		return nullptr;
+	});
+	QString why;
+	QVERIFY2(point.listen(&why), qPrintable(why));
+	QCOMPARE(bssh_handoff_point::instance(), &point);
+
+	/* Torn out: a program that takes this one session, at its size. */
+	bssh_session *torn = sessions.last();
+	QVERIFY2(!window.tear_out_tab(torn), "the tab became a window in this process");
+	QCOMPARE(started.size(), 1);
+	const QStringList &arguments = started.first();
+	QCOMPARE(arguments.value(arguments.indexOf(QStringLiteral("--adopt-from")) + 1), point.path());
+	QCOMPARE(arguments.value(arguments.indexOf(QStringLiteral("--adopt-session")) + 1),
+	         torn->handoff_id());
+	QCOMPARE(arguments.value(arguments.indexOf(QStringLiteral("--geometry")) + 1),
+	         QStringLiteral("%1x%2").arg(torn->emulator()->screen().cols())
+	                 .arg(torn->emulator()->screen().rows()));
+	QVERIFY2(registry->sessions().contains(torn), "let go before anything took it");
+
+	/* New Window: a program of its own, which opens its own shell. */
+	QAction *new_window = nullptr;
+	for (QAction *action : window.findChildren<QAction *>())
+		if (action->text() == QStringLiteral("New &Window")) new_window = action;
+	QVERIFY(new_window);
+	new_window->trigger();
+	QCOMPARE(started.size(), 2);
+	QCOMPARE(started.last().value(0), QStringLiteral("--geometry"));
+	QVERIFY(!started.last().contains(QStringLiteral("--adopt-from")));
+
+	bssh_main_window::set_process_starter(nullptr);
+	for (bssh_session *session : sessions) registry->close(session);
+}
+
+void handoff_test::a_torn_out_tab_arrives_in_a_process_of_its_own() {
+	/*
+	 * What the tear-out starts, run: --adopt-session takes the one
+	 * session it names and leaves the other program running with the
+	 * rest -- not asked to quit, as a restart's --adopt-from alone is.
+	 */
+	const QString program = QFileInfo(QCoreApplication::applicationDirPath() +
+	                                  QStringLiteral("/../beerssh")).absoluteFilePath();
+	if (!QFileInfo(program).isExecutable()) QSKIP("the app is not built beside the tests; run make");
+
+	runtime_dir_t runtime;
+	QTemporaryDir files;
+	QList<bssh_session *> sessions;
+	QStringList beats;
+	for (int i = 0; i < 2; ++i) {
+		bssh_profile_t profile = local_shell_profile();
+		const QString beat = files.filePath(QStringLiteral("beat-%1").arg(i));
+		beats.append(beat);
+		profile.command = { QStringLiteral("/bin/sh"), QStringLiteral("-c"),
+		                    QStringLiteral("while :; do date +%s%N > %1; echo tick; "
+		                                   "sleep 0.1; done").arg(beat) };
+		bssh_session *session = new bssh_session(profile);
+		session->resize(60, 12);
+		session->connect_to_host();
+		QTRY_COMPARE(session->state(), bssh_ssh_session::CONNECTED);
+		sessions.append(session);
+	}
+
+	bssh_handoff_point point([&sessions](const QString &id) -> bssh_session * {
+		for (bssh_session *s : sessions)
+			if (s->handoff_id() == id && !s->is_moving()) return s;
+		return nullptr;
+	});
+	QString why;
+	QVERIFY2(point.listen(&why), qPrintable(why));
+	QList<bssh_session *> given;
+	bool asked_to_quit = false;
+	connect(&point, &bssh_handoff_point::session_given, this,
+	        [&given](bssh_session *s) { given.append(s); });
+	connect(&point, &bssh_handoff_point::quit_requested, this, [&asked_to_quit] { asked_to_quit = true; });
+
+	QProcess app;
+	QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+	environment.insert(QStringLiteral("QT_QPA_PLATFORM"), QStringLiteral("offscreen"));
+	app.setProcessEnvironment(environment);
+	app.setProcessChannelMode(QProcess::MergedChannels);
+	app.start(program, { QStringLiteral("--adopt-from"), point.path(),
+	                     QStringLiteral("--adopt-session"), sessions.first()->handoff_id() });
+	QVERIFY(app.waitForStarted(10000));
+
+	QElapsedTimer timer;
+	timer.start();
+	while (given.isEmpty() && timer.elapsed() < 60000 && app.state() == QProcess::Running)
+		QCoreApplication::processEvents(QEventLoop::WaitForMoreEvents, 50);
+	QVERIFY2(given.size() == 1, qPrintable(QStringLiteral("nothing given; the app said: %1")
+	                                       .arg(QString::fromLocal8Bit(app.readAll()))));
+	QCOMPARE(given.first(), sessions.first());
+
+	/* A while longer: nothing else is asked for, and nobody asks us to go. */
+	QTest::qWait(1500);
+	QCOMPARE(given.size(), 1);
+	QVERIFY2(!asked_to_quit, "a torn-out tab asked the program it left to quit");
+	QCOMPARE(sessions.last()->state(), bssh_ssh_session::CONNECTED);
+	QVERIFY(app.state() == QProcess::Running);
+
+	/* The taken shell goes on being read with this process holding none of it. */
+	delete sessions.takeFirst();
+	QFile file(beats.first());
+	QVERIFY(file.open(QIODevice::ReadOnly));
+	const QByteArray first = file.readAll();
+	file.close();
+	QTest::qWait(2000);
+	QVERIFY(file.open(QIODevice::ReadOnly));
+	QVERIFY2(file.readAll() != first, "the torn-out shell stopped: nobody is reading it");
+
+	app.kill();
+	app.waitForFinished(10000);
+	for (bssh_session *session : sessions) delete session;
 }

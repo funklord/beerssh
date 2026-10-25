@@ -124,6 +124,9 @@ struct bssh_command_line_t {
 	/* Another BeerSSH's handoff socket to take every session from (sec 8.4). */
 	QString adopt_from;
 
+	/* With adopt_from: take only this session, and leave the other running. */
+	QString adopt_session;
+
 	/* Printing one of these is all the program does. */
 	bool help;
 	bool version;

@@ -138,6 +138,12 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 			"upgrade keeps every connection and every screen. Sessions "
 			"the old program cannot give stay with it, and it keeps "
 			"running for them." },
+		{ "adopt-session", "", "id",
+			"With --adopt-from, take only the session with this hand-off "
+			"id into a window of this program's own, and leave the other "
+			"program running: how a tab torn out of a window becomes a "
+			"window in a process of its own, so that ending one window's "
+			"process ends no other window." },
 		{ "man", "", "",
 			"Write this program's manual page to stdout and exit. It is "
 			"generated from the same table these options are read from, so "
@@ -557,6 +563,7 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 	line.self_test = parser.isSet(QStringLiteral("self-test"));
 	line.store_view = parser.value(QStringLiteral("store-view"));
 	line.adopt_from = parser.value(QStringLiteral("adopt-from"));
+	line.adopt_session = parser.value(QStringLiteral("adopt-session"));
 	line.hold = parser.isSet(QStringLiteral("hold"));
 
 	if (parser.isSet(QStringLiteral("term-features"))) {

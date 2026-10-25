@@ -2,10 +2,13 @@
 #define BSSH_MAIN_WINDOW_H
 
 #include <QHash>
+#include <QPoint>
 #include <QSizePolicy>
 #include <QString>
 #include <QPointer>
 #include <QWidget>
+
+#include <functional>
 
 #include "model/app_settings.h"
 #include "ui/long_press.h"
@@ -796,8 +799,23 @@ public:
 	void finish_session_drag(bssh_session *session, const QPoint &global);
 
 
-	/* The session into a window of its own; nullptr if it will not go. */
-	bssh_main_window *tear_out(bssh_session *session);
+	/*
+	 * The session into a window of its own; nullptr if it will not go, or
+	 * if it went to a window in another process. `at` places the window.
+	 */
+	bssh_main_window *tear_out(bssh_session *session, const QPoint &at = QPoint(),
+	                           bool placed = false);
+
+	/*
+	 * How a window in a process of its own is started (sec 8.4), and the
+	 * way a test sees what would have been started without starting it.
+	 * Answers whether it started. An empty starter is the real one.
+	 */
+	using process_starter_t = std::function<bool(const QString &program, const QStringList &arguments)>;
+	static void set_process_starter(process_starter_t starter);
+
+	/* Starts this program again with arguments; false, with why, if not. */
+	static bool start_this_program(const QStringList &arguments, QString *why = nullptr);
 
 	/*
 	 * Move a pane one place earlier or later in the arrangement.

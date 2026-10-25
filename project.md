@@ -7964,6 +7964,28 @@ thing is the discoverable half.
 session refuses, because a window will not empty itself, and more than
 one does not — across a tabbed window and a split one.
 
+**One process per window on a desktop — [DECIDED and BUILT 2026-10-25, the
+holder].** "Are the windows separate processes now? Will killing one not
+kill another?" They were not: New Window and a torn-out tab both built a
+`bssh_main_window` in the same process, so a crash or a kill ended every
+window, where TDE Konsole runs one process per window. Now **New Window**
+starts the program again with the same `--geometry`, and it opens its own
+shell; a **torn-out tab** -- the menu's Detach, or a drag let go over
+nothing -- starts `beerssh --adopt-from <this process's socket>
+--adopt-session <id> --geometry COLSxROWS+X+Y`, which takes that one
+session live over the hand-off (steps 1-5 above) and leaves this program
+running, where `--adopt-from` alone would have taken every session and
+asked it to quit. A take that fails leaves the session where it was and
+the new program exits. Without a hand-off point -- Android, or one that
+would not listen -- and when the program cannot be started, the window
+opens in this process as before. The starter is replaceable
+(`set_process_starter`), which is how
+`a_torn_out_tab_and_a_new_window_start_processes_of_their_own` sees what
+would be started without starting it;
+`a_torn_out_tab_arrives_in_a_process_of_its_own` runs the real program and
+checks that it took one session of two, went on reading it, and asked
+nobody to quit. `tool/sabotage/window-processes.toml`, four edits.
+
 ### 8.5 The front door — **[DECIDED]**
 
 **Android's Back leaves the PAGE, not the app — [FIXED 2026-09-06].**

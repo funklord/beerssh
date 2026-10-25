@@ -17,6 +17,8 @@ private slots:
 	void a_drag_payload_names_where_to_ask();
 	void a_dropped_session_lands_in_this_process();
 	void a_new_version_takes_every_session();
+	void a_torn_out_tab_and_a_new_window_start_processes_of_their_own();
+	void a_torn_out_tab_arrives_in_a_process_of_its_own();
 };
 
 /*

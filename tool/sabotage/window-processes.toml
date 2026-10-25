@@ -1,0 +1,40 @@
+# Sabotages for one process per window (project.md sec 8.4, the holder's
+# answer of 2026-10-25): New Window and a torn-out tab each start a program
+# of their own, and --adopt-session takes the one session it names.
+#
+# The last edit is in src/main.cpp, which the test reaches through the
+# built app, so run this spec with a suite that builds the app too:
+#   BSSH_SABOTAGE_SUITE="sh -c 'make beerssh build-tests/beerssh_test && ...'"
+
+# A torn-out tab becomes a window in this process again.
+[[sabotage]]
+name = "a torn-out tab stays in this process"
+file = "src/ui/main_window.cpp"
+find = "\tif (point && session->emulator()) {\n"
+replace = "\tif (false) {\n"
+expect = "a_torn_out_tab_and_a_new_window_start_processes_of_their_own"
+
+# The new program is started without saying which session to take.
+[[sabotage]]
+name = "a torn-out tab does not name its session"
+file = "src/ui/main_window.cpp"
+find = "\t\t                         QStringLiteral(\"--adopt-session\"), session->handoff_id(),\n"
+replace = ""
+expect = "a_torn_out_tab_and_a_new_window_start_processes_of_their_own"
+
+# New Window opens in this process again.
+[[sabotage]]
+name = "a new window stays in this process"
+file = "src/ui/main_window.cpp"
+find = "\tif (bssh_handoff_point::instance() && m_terminal_view) {\n"
+replace = "\tif (false) {\n"
+expect = "a_torn_out_tab_and_a_new_window_start_processes_of_their_own"
+
+# --adopt-session ignored: the new program takes every session and asks
+# the one the tab left to quit, which closes every other window there.
+[[sabotage]]
+name = "adopting one session takes them all"
+file = "src/main.cpp"
+find = "\t\tif (!line.adopt_from.isEmpty() && !line.adopt_session.isEmpty()) {\n"
+replace = "\t\tif (false) {\n"
+expect = "a_torn_out_tab_arrives_in_a_process_of_its_own"

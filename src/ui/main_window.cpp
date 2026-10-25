@@ -3866,9 +3866,7 @@ void bssh_main_window::finish_session_drag(bssh_session *session, const QPoint &
 			}
 			return;
 		}
-		if (bssh_main_window *window = tear_out(session)) {
-			window->move(global - QPoint(40, 20));
-		}
+		tear_out(session, global - QPoint(40, 20), true);
 		return;
 	}
 
@@ -4024,9 +4022,25 @@ void bssh_main_window::open_another_session(bool in_a_window) {
 	}
 
 	/*
-	 * A second window is a second VIEW, never a second registry
-	 * (sec 8.4) -- which is what bssh_main_window already arranges, so
-	 * this is the tear-out gesture's window without the tearing.
+	 * A window in a process of its own, as TDE Konsole's are, so ending
+	 * one -- a crash, a kill -- ends no other window (the holder,
+	 * 2026-10-25, sec 8.4). Desktop only, where the hand-off point that
+	 * marks a multi-process desktop exists; the same grid as this one.
+	 */
+	if (bssh_handoff_point::instance() && m_terminal_view) {
+		const QStringList arguments = {
+			QStringLiteral("--geometry"),
+			QStringLiteral("%1x%2").arg(m_terminal_view->cols()).arg(m_terminal_view->rows())
+		};
+		QString why;
+		if (start_this_program(arguments, &why)) return;
+		qWarning("window: %s, so it opens in this process", qPrintable(why));
+	}
+
+	/*
+	 * Otherwise a second window is a second VIEW in this process, never a
+	 * second registry (sec 8.4) -- the tear-out gesture's window without
+	 * the tearing.
 	 */
 	bssh_main_window *window = new bssh_main_window;
 	window->setAttribute(Qt::WA_DeleteOnClose);
@@ -4093,7 +4107,8 @@ void bssh_main_window::move_pane(bssh_session *session, int direction) {
 	update_status();
 }
 
-bssh_main_window *bssh_main_window::tear_out(bssh_session *session) {
+bssh_main_window *bssh_main_window::tear_out(bssh_session *session, const QPoint &at,
+                                             bool placed) {
 	if (!session || !m_shown.contains(session)) return nullptr;
 
 	/*
@@ -4104,9 +4119,33 @@ bssh_main_window *bssh_main_window::tear_out(bssh_session *session) {
 	 */
 	if (m_shown.size() < 2) return nullptr;
 
+	/*
+	 * Into a process of its own (sec 8.4): a new program takes the
+	 * session live over the hand-off socket, as a drag into another
+	 * BeerSSH does, and this window lets it go once it is taken. Its
+	 * grid stays the size it was, and the window lands where it was let
+	 * go.
+	 */
+	const bssh_handoff_point *point = bssh_handoff_point::instance();
+	if (point && session->emulator()) {
+		QString geometry = QStringLiteral("%1x%2")
+		                           .arg(session->emulator()->screen().cols())
+		                           .arg(session->emulator()->screen().rows());
+		if (placed) geometry += QStringLiteral("+%1+%2").arg(at.x()).arg(at.y());
+
+		QString why;
+		if (start_this_program({ QStringLiteral("--adopt-from"), point->path(),
+		                         QStringLiteral("--adopt-session"), session->handoff_id(),
+		                         QStringLiteral("--geometry"), geometry },
+		                       &why))
+			return nullptr;
+		qWarning("tear-out: %s, so it opens in this process", qPrintable(why));
+	}
+
 	bssh_main_window *window = new bssh_main_window;
 	window->setAttribute(Qt::WA_DeleteOnClose);
 	window->resize(size());
+	if (placed) window->move(at);
 	window->show();
 	window->adopt_session(session);
 
@@ -6573,6 +6612,19 @@ bool bssh_main_window::restart_keeping_sessions(QString *why) {
 		if (why) *why = QStringLiteral("this BeerSSH cannot hand its sessions over");
 		return false;
 	}
+	return start_this_program({ QStringLiteral("--adopt-from"), point->path() }, why);
+}
+
+static bssh_main_window::process_starter_t &process_starter() {
+	static bssh_main_window::process_starter_t starter;
+	return starter;
+}
+
+void bssh_main_window::set_process_starter(process_starter_t starter) {
+	process_starter() = std::move(starter);
+}
+
+bool bssh_main_window::start_this_program(const QStringList &arguments, QString *why) {
 	/*
 	 * The program as it is on disk now. An upgrade replaced the file this
 	 * process was started from, and Linux names a running program whose
@@ -6582,9 +6634,9 @@ bool bssh_main_window::restart_keeping_sessions(QString *why) {
 	QString program = QCoreApplication::applicationFilePath();
 	const QString deleted = QStringLiteral(" (deleted)");
 	if (program.endsWith(deleted)) program.chop(deleted.size());
-	if (!QProcess::startDetached(program, { QStringLiteral("--adopt-from"), point->path() })) {
-		if (why) *why = QStringLiteral("could not start %1").arg(program);
-		return false;
-	}
-	return true;
+
+	const bool started = process_starter() ? process_starter()(program, arguments)
+	                                       : QProcess::startDetached(program, arguments);
+	if (!started && why) *why = QStringLiteral("could not start %1").arg(program);
+	return started;
 }

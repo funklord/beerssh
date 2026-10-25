@@ -482,7 +482,24 @@ int main(int argc, char *argv[]) {
 		 * --adopt-from: this IS the new version. Every session the old one
 		 * will give, taken and shown here, and then it is asked to go.
 		 */
-		if (!line.adopt_from.isEmpty()) {
+		if (!line.adopt_from.isEmpty() && !line.adopt_session.isEmpty()) {
+			/*
+			 * --adopt-session: a tab torn out of a window in another
+			 * process, arriving in a process of its own (sec 8.4). Only
+			 * that session, and the other program keeps running. A take
+			 * that fails leaves the session where it was, so this window
+			 * has nothing to be and goes.
+			 */
+			QString reason;
+			bssh_session *session = bssh_handoff_point::take(line.adopt_from, line.adopt_session,
+			                                                  registry, &reason);
+			if (!session) {
+				qWarning("handoff: could not take the session: %s", qPrintable(reason));
+				return 1;
+			}
+			registry->adopt(session);
+			window.adopt_session(session);
+		} else if (!line.adopt_from.isEmpty()) {
 			int taken = 0;
 			QString reason;
 			const QStringList ids = bssh_handoff_point::list(line.adopt_from, &reason);
