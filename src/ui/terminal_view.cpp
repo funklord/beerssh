@@ -3532,6 +3532,41 @@ void bssh_terminal_view::on_rows_damaged(int first_row, int last_row) {
 	hold_cursor_on();
 }
 
+void bssh_terminal_view::on_rows_scrolled(int first_row, int last_row, int delta) {
+	/*
+	 * Output scrolling moves what is on screen up, and painting every row
+	 * of it again is the cost update_rows() exists to avoid, met at its
+	 * largest: a build log redraws the whole terminal per chunk. So the
+	 * pixels already painted are moved instead -- QWidget::scroll, which
+	 * on X moves them in the server's copy, the blit TDE Konsole does --
+	 * and only the rows the emulator damaged, which come next, are
+	 * painted. Measured as the window's own pixels against a full repaint
+	 * in a_scrolled_terminal_matches_a_full_repaint.
+	 *
+	 * Not while scrolled back into history, where the screen's rows are
+	 * not where the view draws them, nor during a drag, whose overlays sit
+	 * over the grid at fixed places: those repaint everything, as before.
+	 */
+	if (!m_screen || m_scroll_offset != 0 || m_cell_height <= 0 || m_cell_width <= 0 ||
+	    m_being_dragged || m_drop_edge != -1) {
+		update();
+		return;
+	}
+
+	const int first = qMax(0, first_row);
+	const int last = qMin(qMin(m_rows, m_screen->rows()) - 1, last_row);
+	if (last < first || delta == 0) return;
+
+	const QRect rows(grid_origin_x(), BSSH_GRID_INSET_PX + first * m_cell_height,
+	                 qMin(m_cols, m_screen->cols()) * m_cell_width,
+	                 (last - first + 1) * m_cell_height);
+	scroll(0, delta * m_cell_height, rows);
+
+	/* The grip is drawn over the grid's corner and must not travel with
+	 * the text: painted again where it belongs. */
+	if (grip_visible()) update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+}
+
 void bssh_terminal_view::update_rows(int first_row, int last_row) {
 	/*
 	 * Only the rows that changed. A whole-view update for every keystroke

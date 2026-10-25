@@ -490,6 +490,14 @@ signals:
 	 */
 	void rows_damaged(int first_row, int last_row);
 
+	/*
+	 * Rows first..last moved by delta, every column, emitted before the
+	 * rows_damaged() of the same change, whose rows are already in the
+	 * coordinates after it. A view moves the pixels it has and repaints
+	 * only the damaged rows (sec 9.5a). Never inside a synchronised frame.
+	 */
+	void rows_scrolled(int first_row, int last_row, int delta);
+
 	/* OSC 0/2. Feeds the tab label and, on desktop, the window title. */
 	void title_changed(const QString &title);
 

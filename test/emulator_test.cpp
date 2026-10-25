@@ -1121,8 +1121,57 @@ void emulator_test::damage_is_reported_per_row_not_per_cell() {
 	                         .arg(damaged.count()).arg(lines)));
 
 	/* And it did not get "efficient" by not reporting the output at all. */
-	QVERIFY(damaged.count() >= lines / 4);
+	/*
+	 * One announcement for the whole read since sec 9.5a: damage and
+	 * scrolls are gathered and said once at the end of feed(), so five
+	 * hundred lines in one read are one repaint. The lower bound this
+	 * used to set -- a request per four lines -- guarded against damage
+	 * being lost; that it arrives at all is what is asserted now.
+	 */
+	QCOMPARE(damaged.count(), 1);
 	QCOMPARE(row(emulator, 22), QString(width, QLatin1Char('x')));
+}
+
+void emulator_test::scrolling_output_is_one_scroll_and_the_rows_it_exposed() {
+	/*
+	 * sec 9.5a: lines scrolling up are announced as one scroll of the rows
+	 * that moved, and only the rows the scroll exposed are damage -- in
+	 * the coordinates after it -- so a view moves its pixels and paints
+	 * those few rows rather than the whole terminal.
+	 */
+	bssh_emulator emulator(20, 6);
+	for (int line = 0; line < 6; ++line)
+		emulator.feed(QByteArray("line ") + QByteArray::number(line) + (line < 5 ? "\r\n" : ""));
+
+	QSignalSpy scrolled(&emulator, &bssh_emulator::rows_scrolled);
+	QSignalSpy rows(&emulator, &bssh_emulator::rows_damaged);
+	emulator.feed(QByteArrayLiteral("\r\nA\r\nB\r\nC"));
+
+	QCOMPARE(scrolled.count(), 1);
+	QCOMPARE(scrolled.first().at(0).toInt(), 0);
+	QCOMPARE(scrolled.first().at(1).toInt(), 5);
+	QCOMPARE(scrolled.first().at(2).toInt(), -3);
+	QCOMPARE(rows.count(), 1);
+	QVERIFY2(rows.first().at(0).toInt() >= 2,
+	         qPrintable(QStringLiteral("damage from row %1: rows that only moved were repainted")
+	                            .arg(rows.first().at(0).toInt())));
+	QCOMPARE(rows.first().at(1).toInt(), 5);
+	QCOMPARE(row(emulator, 0), QStringLiteral("line 3"));
+	QCOMPARE(row(emulator, 5), QStringLiteral("C"));
+
+	/* Further than the screen is tall: nothing left to move, all damage. */
+	scrolled.clear();
+	rows.clear();
+	QByteArray many;
+	for (int line = 0; line < 10; ++line) many += "\r\nmore";
+	emulator.feed(many);
+	QCOMPARE(scrolled.count(), 0);
+	QCOMPARE(rows.first().at(0).toInt(), 0);
+
+	/* Inside a synchronised frame: damage, released whole with the frame. */
+	scrolled.clear();
+	emulator.feed(QByteArrayLiteral("\x1b[?2026h\r\nx\r\ny\x1b[?2026l"));
+	QCOMPARE(scrolled.count(), 0);
 }
 
 void emulator_test::scrollback_drops_trailing_blanks_but_not_blank_colour() {

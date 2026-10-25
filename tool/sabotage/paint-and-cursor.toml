@@ -61,3 +61,40 @@ file = "src/ui/terminal_view.cpp"
 find = "\tnote_content_changed();\n\thold_cursor_on();\n"
 replace = "\tnote_content_changed();\n"
 expect = "typing_and_output_bring_the_cursor_back_on"
+
+# Scrolling (sec 9.5a): output that scrolls moves the pixels already
+# painted and repaints only the rows the scroll exposed. Every edit below
+# leaves the screen's text right; the pixel comparison is what sees them.
+
+# A scroll repaints the whole view again.
+[[sabotage]]
+name = "a scroll repaints everything"
+file = "src/ui/terminal_view.cpp"
+find = "\tscroll(0, delta * m_cell_height, rows);\n"
+replace = "\tupdate();\n"
+expect = "a_scrolled_terminal_matches_a_full_repaint"
+
+# Damage gathered before a scroll left where it was, so a line written
+# and then scrolled up is painted at the row it left.
+[[sabotage]]
+name = "damage is not moved with the scroll"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tconst int in_first = qMax(damaged_first, first) + delta;\n\t\tconst int in_last = qMin(damaged_last, last) + delta;\n"
+replace = "\t\tconst int in_first = qMax(damaged_first, first);\n\t\tconst int in_last = qMin(damaged_last, last);\n"
+expect = "a_scrolled_terminal_matches_a_full_repaint"
+
+# Not sabotaged: announcing the damage before the scroll it follows. It
+# looks like an ordering bug and is not one. Qt moves a pending repaint
+# that lies inside the scrolled rectangle along with the pixels, and the
+# damage always includes the rows the scroll exposed, which are repainted
+# either way -- so the shifted range plus the exposed rows always cover at
+# least the rows that needed painting, up or down. Probed: the pixel
+# comparison stayed green with it, because the screen was right.
+
+# A scroll inside a synchronised frame announced as one.
+[[sabotage]]
+name = "a synchronised scroll is announced as a scroll"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (whole_rows && !self->sync_output)\n"
+replace = "\tif (whole_rows)\n"
+expect = "scrolling_output_is_one_scroll_and_the_rows_it_exposed"

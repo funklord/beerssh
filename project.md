@@ -10341,6 +10341,45 @@ a resize, a reset, a picture, a moved session -- names them all. Scrolled
 back, or a change to half the screen or more, the whole view is repainted
 as before.
 
+**Scrolling moves pixels rather than painting them — [BUILT 2026-10-25].**
+Row damage left the largest repaint standing: output that scrolls changes
+every row, so a build log still repainted and re-sent the whole terminal
+per chunk -- the case that matters most over VNC, as the holder put it,
+where every repainted pixel crosses the network. Now the emulator says a
+scroll of whole rows as one, `rows_scrolled(first, last, delta)`, and the
+view moves the pixels it already painted with `QWidget::scroll` -- on X,
+in the server's copy of the window, the blit TQt3 Konsole does -- and
+paints only the rows the scroll exposed.
+
+- **Announced once per read.** `feed()` gathers its scrolls and damage and
+  says them at its end: one scroll of every line that moved, then the
+  damaged rows, already in the coordinates after the scroll -- damage from
+  before a scroll moves with it (`note_scroll()`). A scroll further than
+  the rows are tall, or over rows already wholly damaged, is damage
+  instead, since nothing is left worth moving. A synchronised frame
+  (DEC 2026) is damage too, repainted whole when it is released.
+- **Not while scrolled back** into history, and not during a drag, whose
+  overlays sit over the grid at fixed places; the pane grip, drawn over
+  the grid's corner, is repainted after each scroll so it does not travel.
+- **`images_changed()` fires only when there are pictures to move.** It
+  fired on every scroll, and the view answers it with a whole repaint,
+  which would have undone all of this for terminals with no images at all.
+- **Proved on the window's own pixels.** `a_scrolled_terminal_matches_a_full_repaint`
+  scrolls output through a view, then compares what the incremental
+  updates left in its backing store with a fresh repaint of the whole
+  view, pixel for pixel, and checks a two-line scroll painted at most five
+  rows. `scrolling_output_is_one_scroll_and_the_rows_it_exposed` holds the
+  emulator's half. The damage-count test's lower bound, one request per
+  four lines, guarded against damage being lost; with one announcement
+  per read it asserts exactly one. A second scene scrolls a DECSTBM region
+  while a status line below it changes, and must match too.
+- **Announcing the damage before the scroll is not a bug**, though it
+  looks like one and was written as a sabotage: Qt moves a pending repaint
+  inside the scrolled rectangle along with the pixels, and the damage
+  always includes the rows the scroll exposed, so the shifted range and
+  the exposed rows still cover every row that needed painting. Probed,
+  and the screen was right; the spec records why it is not an edit.
+
 **And the blink ran on its own clock.** Half of all typing landed in the
 off half: the character appeared with no cursor after it, and the cursor
 came back when the 500 ms timer said. Every keystroke, input-method

@@ -87,6 +87,20 @@ struct bssh_emulator_private {
 	 */
 	int damaged_first = INT_MAX;
 	int damaged_last = -1;
+
+	/*
+	 * A scroll since damage was last announced: rows first..last moved by
+	 * delta (negative is up), announced as rows_scrolled() so a view can
+	 * move the pixels it has rather than paint every row again. None while
+	 * scroll_last < scroll_first. Damage gathered meanwhile is kept in the
+	 * coordinates after the scroll -- see note_scroll().
+	 */
+	int scroll_first = 0;
+	int scroll_last = -1;
+	int scroll_delta = 0;
+
+	/* Inside feed(): announced once at its end, not per callback. */
+	bool in_feed = false;
 	QTimer *sync_timeout;
 
 	bssh_image_store images;
@@ -181,6 +195,9 @@ struct bssh_emulator_private {
 	 */
 	/* Rows first_row..last_row changed; the defaults are all of them. */
 	void notify_damaged(int first_row = 0, int last_row = INT_MAX);
+
+	/* Rows first..last moved by delta, every column of them. */
+	void note_scroll(int first, int last, int delta);
 
 	/* Announces what notify_damaged() gathered: rows_damaged(), then
 	 * damaged(). The one place either is emitted, so a view listening to
@@ -384,7 +401,8 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 	 * to its original row while everything around it scrolls looks like
 	 * the terminal has come apart.
 	 */
-	if (dest.start_col == src.start_col && dest.start_row != src.start_row) {
+	if (dest.start_col == src.start_col && dest.start_row != src.start_row &&
+	    self->images.count() > 0) {
 		self->images.scrolled(qMin(dest.start_row, src.start_row),
 		                       qMax(dest.end_row, src.end_row),
 		                       src.start_row - dest.start_row);
@@ -399,8 +417,23 @@ int on_move_rect(VTermRect dest, VTermRect src, void *user) {
 		emit self->owner->images_changed();
 	}
 
-	self->notify_damaged(qMin(dest.start_row, src.start_row),
-	                     qMax(dest.end_row, src.end_row) - 1);
+	/*
+	 * A scroll of whole rows is announced as one, so a view moves the
+	 * pixels it already has -- the copy TDE Konsole's blit does -- instead
+	 * of painting and re-sending every row (sec 9.5a). Anything else is
+	 * damage, as is a scroll inside a synchronised frame, which is
+	 * repainted whole when it is released anyway.
+	 */
+	const int cols = self->screen.cols();
+	const bool whole_rows = dest.start_col == 0 && src.start_col == 0 &&
+	                        dest.end_col >= cols && src.end_col >= cols &&
+	                        dest.start_row != src.start_row;
+	const int first = qMin(dest.start_row, src.start_row);
+	const int last = qMax(dest.end_row, src.end_row) - 1;
+	if (whole_rows && !self->sync_output)
+		self->note_scroll(first, last, dest.start_row - src.start_row);
+	else
+		self->notify_damaged(first, last);
 	return 1;
 }
 
@@ -1881,6 +1914,13 @@ void bssh_emulator::feed(const QByteArray &bytes) {
 	 * decoded to nothing, and the image never appeared -- two of five on
 	 * an emulator, one of five here.
 	 */
+	/*
+	 * Announced once, at the end: a chunk of output is one repaint, and a
+	 * view hears one scroll of every line it moved rather than one per
+	 * line (sec 9.5a).
+	 */
+	m_private->in_feed = true;
+
 	const char *data = buffer.constData();
 	const qsizetype size = buffer.size();
 	qsizetype at = 0;
@@ -1918,6 +1958,11 @@ void bssh_emulator::feed(const QByteArray &bytes) {
 	 */
 	m_private->apply_pending_links();
 	m_private->settle_cursor_advance();
+
+	m_private->in_feed = false;
+	const bool owed = m_private->damaged_first <= m_private->damaged_last ||
+	                  m_private->scroll_last >= m_private->scroll_first;
+	if (owed && !m_private->sync_output) m_private->emit_damage();
 }
 
 /*
@@ -2079,10 +2124,85 @@ void bssh_emulator_private::notify_damaged(int first_row, int last_row) {
 		return;
 	}
 
-	emit_damage();
+	if (!in_feed) emit_damage();
+}
+
+void bssh_emulator_private::note_scroll(int first, int last, int delta) {
+	/* A scroll of other rows than the one pending: the pending one is
+	 * repainted as damage instead, and this one is pending. */
+	if (scroll_last >= scroll_first && (first != scroll_first || last != scroll_last)) {
+		damaged_first = qMin(damaged_first, scroll_first);
+		damaged_last = qMax(damaged_last, scroll_last);
+		scroll_first = 0;
+		scroll_last = -1;
+		scroll_delta = 0;
+	}
+
+	/*
+	 * Everything in these rows is to be repainted already -- a scroll
+	 * further than they are tall, earlier in the same read -- so there is
+	 * nothing left worth moving: the damage stands, and the scroll is not
+	 * recorded, or the view would move pixels it then paints over.
+	 */
+	if (scroll_last < scroll_first && damaged_first <= first && damaged_last >= last) {
+		if (!in_feed) emit_damage();
+		return;
+	}
+
+	/*
+	 * Damage gathered before this scroll moves with it, so that what is
+	 * announced is all in the coordinates after every scroll: the view
+	 * moves its pixels first and then repaints these rows. The part inside
+	 * the scrolled rows shifts, clipped to them -- a row moved out of them
+	 * has nothing left to repaint -- and the part outside stays. A range
+	 * is kept, so the two are joined; repainting a row too many is safe.
+	 */
+	if (damaged_first <= damaged_last) {
+		int lo = INT_MAX;
+		int hi = -1;
+		if (damaged_first < first) {
+			lo = damaged_first;
+			hi = qMin(damaged_last, first - 1);
+		}
+		if (damaged_last > last) {
+			lo = qMin(lo, last + 1);
+			hi = qMax(hi, damaged_last);
+		}
+		const int in_first = qMax(damaged_first, first) + delta;
+		const int in_last = qMin(damaged_last, last) + delta;
+		if (qMax(damaged_first, first) <= qMin(damaged_last, last) &&
+		    qMax(in_first, first) <= qMin(in_last, last)) {
+			lo = qMin(lo, qMax(in_first, first));
+			hi = qMax(hi, qMin(in_last, last));
+		}
+		damaged_first = lo;
+		damaged_last = hi;
+	}
+
+	scroll_first = first;
+	scroll_last = last;
+	scroll_delta += delta;
+
+	/* Moved further than the rows are tall: nothing of the old pixels is
+	 * left in them, so it is all repainted rather than moved. */
+	if (qAbs(scroll_delta) > last - first) {
+		damaged_first = qMin(damaged_first, first);
+		damaged_last = qMax(damaged_last, last);
+		scroll_first = 0;
+		scroll_last = -1;
+		scroll_delta = 0;
+	}
+
+	if (!in_feed) emit_damage();
 }
 
 void bssh_emulator_private::emit_damage() {
+	if (scroll_last >= scroll_first && scroll_delta != 0)
+		emit owner->rows_scrolled(scroll_first, scroll_last, scroll_delta);
+	scroll_first = 0;
+	scroll_last = -1;
+	scroll_delta = 0;
+
 	const int first = damaged_first;
 	const int last = damaged_last;
 	damaged_first = INT_MAX;

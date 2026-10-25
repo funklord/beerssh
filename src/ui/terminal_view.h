@@ -662,6 +662,9 @@ public slots:
 	/* The emulator's rows_damaged(): repaints only those rows. */
 	void on_rows_damaged(int first_row, int last_row);
 
+	/* The emulator's rows_scrolled(): moves the pixels it has by delta rows. */
+	void on_rows_scrolled(int first_row, int last_row, int delta);
+
 	/*
 	 * The tmux and screen drawer on this terminal's edge (sec 10.2a),
 	 * shown while the session's offer stands and gone once it is

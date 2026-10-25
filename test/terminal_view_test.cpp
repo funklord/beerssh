@@ -5,6 +5,8 @@
 #include <QDropEvent>
 #include <QSignalSpy>
 #include <QtTest>
+#include <QScreen>
+#include <QWindow>
 
 #include <QAccessible>
 #include <QGesture>
@@ -3157,6 +3159,70 @@ void terminal_view_test::a_keystroke_repaints_only_its_row() {
 	view.set_scroll_offset(3);
 	QVERIFY(view.scroll_offset() > 0);
 	QCOMPARE(painted_after(QByteArrayLiteral("y")), view.rect());
+}
+
+void terminal_view_test::a_scrolled_terminal_matches_a_full_repaint() {
+	/*
+	 * sec 9.5a: output scrolling moves the pixels already painted and
+	 * paints only the rows it exposed. Moved pixels are only right if
+	 * everything else is, so what is checked is the window's own picture
+	 * -- what the incremental updates left in its backing store -- against
+	 * a fresh repaint of the whole view, pixel for pixel. And that the
+	 * scroll painted much less than the view, or nothing was saved.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 600, 400);
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	connect(&emulator, &bssh_emulator::rows_scrolled, &view, &bssh_terminal_view::on_rows_scrolled);
+	connect(&emulator, &bssh_emulator::rows_damaged, &view, &bssh_terminal_view::on_rows_damaged);
+
+	/* Every row different, so a row in the wrong place shows. */
+	for (int line = 0; line < view.rows() + 3; ++line) {
+		emulator.feed(QByteArray("row ") + QByteArray::number(line) + ' ' +
+		              QByteArray(line % 7 + 1, char('a' + line % 26)) + "\r\n");
+		QTest::qWait(5);
+	}
+	QTest::qWait(50);
+
+	paint_recorder recorder;
+	view.installEventFilter(&recorder);
+	emulator.feed(QByteArrayLiteral("one more\r\nand another\r\n\x1b[31mred\x1b[0m"));
+	QTRY_VERIFY(!recorder.painted.isEmpty());
+	QTest::qWait(50);
+
+	const int painted_rows = recorder.painted.boundingRect().height() / view.cell_height();
+	QVERIFY2(painted_rows <= 5,
+	         qPrintable(QStringLiteral("a scroll of two lines painted %1 rows of %2")
+	                            .arg(painted_rows).arg(view.rows())));
+
+	const auto matches_a_full_repaint = [&view](const char *what) {
+		const QImage incremental = view.windowHandle()->screen()->grabWindow(view.winId())
+		                                   .toImage().convertToFormat(QImage::Format_RGB32);
+		const QImage full = view.grab().toImage().convertToFormat(QImage::Format_RGB32);
+		if (incremental.size() == full.size() && incremental == full) return true;
+		incremental.save(QStringLiteral("scroll-incremental.png"));
+		full.save(QStringLiteral("scroll-full.png"));
+		qWarning("%s: the window differs from a full repaint; both saved as scroll-*.png", what);
+		return false;
+	};
+	QVERIFY(matches_a_full_repaint("two lines scrolled"));
+
+	/*
+	 * A scroll region (DECSTBM) scrolling while a status line below it
+	 * changes in the same read -- what a pager or an editor with a status
+	 * bar does. The changed row is apart from the rows the scroll exposed,
+	 * so it is repainted only if its damage is in the right coordinates and
+	 * announced after the scroll it follows; next to the exposed rows the
+	 * exposed area would have covered it either way.
+	 */
+	emulator.feed(QByteArrayLiteral("\x1b[1;12r\x1b[12;1Hscrolled a\r\nscrolled b\r\n"
+	                                "\x1b[20;1Hstatus line\x1b[12;1H"));
+	QTest::qWait(80);
+	QVERIFY(matches_a_full_repaint("a scroll region with a status line below it"));
 }
 
 void terminal_view_test::alt_drag_asks_for_the_pane_to_be_moved() {

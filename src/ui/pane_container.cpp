@@ -431,6 +431,8 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 		if (session->emulator()) session->emulator()->set_focused(false);
 	});
 
+	connect(session->emulator(), &bssh_emulator::rows_scrolled,
+	         view, &bssh_terminal_view::on_rows_scrolled);
 	connect(session->emulator(), &bssh_emulator::rows_damaged,
 	         view, &bssh_terminal_view::on_rows_damaged);
 
