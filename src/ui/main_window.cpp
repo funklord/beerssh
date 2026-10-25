@@ -4133,12 +4133,13 @@ bssh_main_window *bssh_main_window::tear_out(bssh_session *session, const QPoint
 		                           .arg(session->emulator()->screen().rows());
 		if (placed) geometry += QStringLiteral("+%1+%2").arg(at.x()).arg(at.y());
 
+		const QStringList arguments = {
+			QStringLiteral("--adopt-from"), point->path(),
+			QStringLiteral("--adopt-session"), session->handoff_id(),
+			QStringLiteral("--geometry"), geometry
+		};
 		QString why;
-		if (start_this_program({ QStringLiteral("--adopt-from"), point->path(),
-		                         QStringLiteral("--adopt-session"), session->handoff_id(),
-		                         QStringLiteral("--geometry"), geometry },
-		                       &why))
-			return nullptr;
+		if (start_this_program(arguments, &why)) return nullptr;
 		qWarning("tear-out: %s, so it opens in this process", qPrintable(why));
 	}
 

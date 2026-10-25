@@ -18,7 +18,7 @@ expect = "a_torn_out_tab_and_a_new_window_start_processes_of_their_own"
 [[sabotage]]
 name = "a torn-out tab does not name its session"
 file = "src/ui/main_window.cpp"
-find = "\t\t                         QStringLiteral(\"--adopt-session\"), session->handoff_id(),\n"
+find = "\t\t\tQStringLiteral(\"--adopt-session\"), session->handoff_id(),\n"
 replace = ""
 expect = "a_torn_out_tab_and_a_new_window_start_processes_of_their_own"
 

@@ -12,15 +12,15 @@
 [[sabotage]]
 name = "a drag released outside every window does not tear out"
 file = "src/ui/main_window.cpp"
-find = "\t\tif (bssh_main_window *window = tear_out(session)) {"
-replace = "\t\tif (bssh_main_window *window = nullptr) {"
+find = "\t\ttear_out(session, global - QPoint(40, 20), true);"
+replace = ""
 expect = "a_drag_released_outside_every_window_tears_out"
 
 # It tears out, but wherever a new window lands by default.
 [[sabotage]]
 name = "a torn-out window ignores where the pointer let go"
 file = "src/ui/main_window.cpp"
-find = "\t\t\twindow->move(global - QPoint(40, 20));"
+find = "\tif (placed) window->move(at);"
 replace = ""
 expect = "a_drag_released_outside_every_window_tears_out"
 
