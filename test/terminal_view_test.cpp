@@ -2553,13 +2553,16 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * level, because a fourteenth top-level row does not fit a 640dp
 	 * cover screen. The third says what the connection has carried and
 	 * whether a mode is changing the keys -- what tells a user whether
-	 * Reset above is the cure.
+	 * Reset above is the cure. The fourth brings back the tmux and screen
+	 * drawer (sec 10.2a), here disabled: there is no session to list for.
 	 */
 	const QList<QAction *> state = actions.at(5)->menu()->actions();
-	QCOMPARE(state.size(), 3);
+	QCOMPARE(state.size(), 4);
 	QCOMPARE(state.at(0)->text(), QStringLiteral("Clear Scroll&back"));
 	QCOMPARE(state.at(1)->text(), QStringLiteral("&Reset Terminal"));
 	QCOMPARE(state.at(2)->text(), QStringLiteral("Connection &Details"));
+	QCOMPARE(state.at(3)->text(), QStringLiteral("tmux and screen &Sessions"));
+	QVERIFY(!state.at(3)->isEnabled());
 
 	const QList<QAction *> sessions = actions.at(10)->menu()->actions();
 	QCOMPARE(sessions.size(), 5);

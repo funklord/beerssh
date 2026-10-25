@@ -1155,6 +1155,13 @@ void session_registry_test::tmux_and_screen_are_offered_on_connect() {
 	fakes.last()->simulate_key_auth_success();
 	QCOMPARE(fakes.last()->side_commands().size(), 1);
 
+	/* Asked for again from the menu: listed, and offered once more. */
+	declined->offer_multiplexers_again();
+	QCOMPARE(fakes.last()->side_commands().size(), 2);
+	fakes.last()->simulate_side_output(sample_listing);
+	QCOMPARE(asked.count(), 2);
+	QCOMPARE(declined->pending_multiplexers().size(), 4);
+
 	/* A command of its own (sec 8.6's -e): nothing to offer it into. */
 	bssh_profile_t with_command = profile_for(QStringLiteral("htop"), QStringLiteral("h.example"));
 	with_command.command = { QStringLiteral("htop") };

@@ -264,6 +264,17 @@ public:
 	void choose_multiplexer(const bssh_mux_session_t &chosen);
 	void decline_multiplexers();
 
+	/*
+	 * Asked for again from the terminal's menu: what is running is listed
+	 * now and offered if there is any, after a dismissal or with the
+	 * setting off -- the way back from the drawer's x.
+	 */
+	void offer_multiplexers_again();
+
+	/* Whether this tab can be offered them at all: live, and a shell
+	 * rather than a command of the profile's own. */
+	bool can_offer_multiplexers() const;
+
 	/* What is on offer, with the one shown marked current, for a view
 	 * built later. Empty once declined. */
 	QList<bssh_mux_session_t> pending_multiplexers() const { return m_mux_pending; }
@@ -365,8 +376,9 @@ private:
 	bool m_mux_answered = false;
 	bool m_mux_listing = false;
 
-	/* Lists what is running beside the shell, if it should. */
-	void list_multiplexers();
+	/* Lists what is running beside the shell, if it should; asked, even
+	 * with the setting off. */
+	void list_multiplexers(bool asked = false);
 
 	bool m_unseen_bell;
 	bool m_remote_exited;

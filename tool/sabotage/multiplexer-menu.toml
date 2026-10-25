@@ -44,16 +44,16 @@ expect = "tmux_and_screen_are_offered_on_connect"
 [[sabotage]]
 name = "the setting is not consulted"
 file = "src/model/session.cpp"
-find = "\tif (!m_profile.command.isEmpty() || !bssh_app_settings().offer_multiplexer_sessions()) return;\n"
-replace = "\tif (!m_profile.command.isEmpty()) return;\n"
+find = "\tif (!asked && !bssh_app_settings().offer_multiplexer_sessions()) return;\n"
+replace = ""
 expect = "tmux_and_screen_are_offered_on_connect"
 
 # Offered into a session running a command of its own.
 [[sabotage]]
 name = "a session running a command is offered sessions"
 file = "src/model/session.cpp"
-find = "\tif (!m_profile.command.isEmpty() || !bssh_app_settings().offer_multiplexer_sessions()) return;\n"
-replace = "\tif (!bssh_app_settings().offer_multiplexer_sessions()) return;\n"
+find = "\treturn m_transport && is_live() && m_profile.command.isEmpty();\n"
+replace = "\treturn m_transport && is_live();\n"
 expect = "tmux_and_screen_are_offered_on_connect"
 
 [[sabotage]]
@@ -133,3 +133,11 @@ file = "src/ssh/pty_session.cpp"
 find = "\topen_shell(size.ws_col, size.ws_row);\n"
 replace = "\topen_shell(80, 24);\n"
 expect = "a_restarted_shell_is_replaced_without_an_exit"
+
+# Closed with x and gone for good: the menu entry does nothing.
+[[sabotage]]
+name = "the drawer cannot be brought back"
+file = "src/model/session.cpp"
+find = "\tm_mux_answered = false;\n\tlist_multiplexers(true);\n"
+replace = "\tlist_multiplexers(true);\n"
+expect = "the_tmux_drawer_switches_on_a_click"

@@ -4622,6 +4622,18 @@ void layout_test::the_tmux_drawer_switches_on_a_click() {
 		QTRY_VERIFY2(!drawer_in(window), "the drawer stayed after it was closed");
 		QVERIFY(fakes.last()->written().isEmpty());
 		QVERIFY(session->pending_multiplexers().isEmpty());
+
+		/* And back: the terminal menu lists them again and the drawer returns. */
+		QMenu *menu = window.build_terminal_menu(&window);
+		QAction *again = menu->findChild<QAction *>(QStringLiteral("terminal_multiplexers"));
+		QVERIFY2(again, "no way back to the drawer once it is closed");
+		QVERIFY(again->isEnabled());
+		const int listed = fakes.last()->side_commands().size();
+		window.act_on_terminal_menu(menu, again);
+		QCOMPARE(fakes.last()->side_commands().size(), listed + 1);
+		fakes.last()->simulate_side_output("work\t3\t1\n@@bssh-screen@@\n");
+		QVERIFY2(drawer_in(window), "the menu did not bring the drawer back");
+		delete menu;
 	}
 
 }

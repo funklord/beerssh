@@ -10568,6 +10568,13 @@ question over the prompt the user was about to type at. Now:
   should be able to switch to others." Choosing several at once, a tab
   each, was built and taken out on the same word ("lets delay multiple
   activation, if we even need it at all").
+- **× is not for good.** The terminal menu's Terminal group has "tmux and
+  screen Sessions", which lists what is running now and brings the drawer
+  back -- after ×, after everything there had ended and something has
+  started since, and with the setting off. The holder, the same day: "If
+  I close the button on the X, I can't get it back." In the Terminal group
+  rather than a row of its own because the menu has no row to spare on a
+  phone's cover screen.
 - **It belongs to the pane**, as a child of its terminal view, so a split
   shows one per pane that has an offer. A view is rebuilt on every layout
   change, so the offer lives on the session (`pending_multiplexers`) and
@@ -14948,8 +14955,10 @@ ran, and the harness reported a WRONG TEST that was really a crash.
 "Received signal 11" 39 million times, which the suite's own 1 MB output
 cap would have stopped -- but that cap engages only when stdout is a
 regular file, and the run was piped through `tee` to keep its output.
-`running-code.md` names exactly this: a bound that depends on the shape of
-stdout is one an investigation removes by accident. Redirect to a file.
+**A bound that depends on the shape of stdout is one an investigation
+removes by accident**: piping the suite to read it is the natural thing to
+do while something is going wrong, and it is exactly what switches the cap
+off. Redirect the suite's output to a file and read the file.
 
 **`bssh_factory_reset_t`** (`test/fake_ssh_session.h`) puts the factory
 back however a test leaves; the tmux tests and the close test use it.

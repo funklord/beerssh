@@ -884,9 +884,18 @@ void bssh_session::decline_multiplexers() {
 	}
 }
 
-void bssh_session::list_multiplexers() {
-	if (!m_transport || !is_live() || m_mux_answered || m_mux_listing) return;
-	if (!m_profile.command.isEmpty() || !bssh_app_settings().offer_multiplexer_sessions()) return;
+void bssh_session::offer_multiplexers_again() {
+	m_mux_answered = false;
+	list_multiplexers(true);
+}
+
+bool bssh_session::can_offer_multiplexers() const {
+	return m_transport && is_live() && m_profile.command.isEmpty();
+}
+
+void bssh_session::list_multiplexers(bool asked) {
+	if (!can_offer_multiplexers() || m_mux_answered || m_mux_listing) return;
+	if (!asked && !bssh_app_settings().offer_multiplexer_sessions()) return;
 	m_mux_listing = true;
 	m_transport->run_on_the_side(bssh_mux_listing_command());
 }

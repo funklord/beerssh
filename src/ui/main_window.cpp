@@ -5276,6 +5276,16 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	details->setObjectName(QStringLiteral("terminal_details"));
 	details->setEnabled(m_current != nullptr);
 
+	/*
+	 * The tmux and screen drawer back (sec 10.2a): listed now, and offered
+	 * if anything is running. The way back after its x, and what to reach
+	 * for with the setting off. In this group for the reason above: the
+	 * menu has no row to spare.
+	 */
+	QAction *multiplexers = terminal_menu->addAction(QStringLiteral("tmux and screen &Sessions"));
+	multiplexers->setObjectName(QStringLiteral("terminal_multiplexers"));
+	multiplexers->setEnabled(m_current && m_current->can_offer_multiplexers());
+
 	menu->addSeparator();
 
 	/*
@@ -5653,6 +5663,13 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 		box.setText(m_current->profile().target());
 		box.setInformativeText(m_current->details(QDateTime::currentDateTimeUtc()));
 		box.exec();
+		return;
+	}
+
+	const QAction *multiplexers =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_multiplexers"));
+	if (chosen == multiplexers) {
+		if (m_current) m_current->offer_multiplexers_again();
 		return;
 	}
 
