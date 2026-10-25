@@ -152,7 +152,7 @@ public:
 	QString effective_id(const QString &stored) const;
 
 	/*
-	 * The out-of-the-box choice: JetBrains Mono on every form factor
+	 * The out-of-the-box choice: DejaVu Sans Mono on every form factor
 	 * (sec 9.2), or the first of the set that is installed.
 	 */
 	QString default_id() const;

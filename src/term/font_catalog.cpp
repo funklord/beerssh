@@ -165,13 +165,15 @@ QString bssh_font_catalog::effective_id(const QString &stored) const {
 
 QString bssh_font_catalog::default_id() const {
 	/*
-	 * JetBrains Mono on every form factor, the holder's answer of
-	 * 2026-09-29. The phone was to get condensed Iosevka once it was
-	 * installed, and with the download built that became a trap: fetching
-	 * it for one host changed the font of every host that had never
-	 * chosen one. Iosevka is one pick and a download away instead.
+	 * DejaVu Sans Mono on every form factor, the holder's answer of
+	 * 2026-10-25 (sec 9.2): it is what TDE Konsole's "Monospace" draws, and
+	 * with full hinting it stays crisp at the small sizes JetBrains Mono
+	 * went soft at, while still scaling as an outline does. One default
+	 * everywhere, as before: the phone was to get condensed Iosevka once
+	 * installed, and fetching it for one host then changed the font of
+	 * every host that had never chosen one.
 	 */
-	const QString preferred = QStringLiteral("jetbrains-mono");
+	const QString preferred = QStringLiteral("dejavu-sans-mono");
 	if (is_available(preferred)) return preferred;
 
 	/*

@@ -123,16 +123,16 @@ void font_catalog_test::a_downloaded_font_does_not_become_the_default() {
 	/*
 	 * The phone's default was condensed Iosevka whenever it was installed.
 	 * With the download built, fetching it for one host then changed the
-	 * font of every host that never chose one -- so the default is
-	 * JetBrains Mono on every form factor (the holder, 2026-09-29), and
-	 * Iosevka being present must not move it. Asserted where Iosevka is
+	 * font of every host that never chose one -- so the default is one
+	 * font on every form factor, DejaVu Sans Mono since the holder's
+	 * answer of 2026-10-25, and Iosevka being present must not move it. Asserted where Iosevka is
 	 * installed, which is the case the old rule changed.
 	 */
 	if (!catalog.is_available(QStringLiteral("iosevka-term")))
 		QSKIP("Iosevka is not installed here, so there is nothing to move the default");
 
-	QVERIFY(catalog.is_available(QStringLiteral("jetbrains-mono")));
-	QCOMPARE(catalog.default_id(), QStringLiteral("jetbrains-mono"));
+	QVERIFY(catalog.is_available(QStringLiteral("dejavu-sans-mono")));
+	QCOMPARE(catalog.default_id(), QStringLiteral("dejavu-sans-mono"));
 	QVERIFY(!catalog.by_id(catalog.default_id())->condensed);
 	QVERIFY(catalog.by_id(catalog.default_id())->selectable);
 }

@@ -9359,8 +9359,8 @@ in a character-cell grid confuse column alignment for many users).
 
 | Font | Licence | Why it's in the set |
 |---|---|---|
-| **JetBrains Mono** | OFL 1.1 | **Default.** Tall x-height, excellent legibility at small sizes — ideal for phones. Ligatures present; ship them **disabled by default**. |
-| **DejaVu Sans Mono** | DejaVu / Bitstream Vera (permissive) | The box-drawing and broad-Unicode workhorse. Also the **fallback** in the chain (§9.3). |
+| **JetBrains Mono** | OFL 1.1 | Tall x-height, good legibility at ordinary sizes, but soft at small ones (§9.2's default note). Ligatures present; ship them **disabled by default**. The default until 2026-10-25. |
+| **DejaVu Sans Mono** | DejaVu / Bitstream Vera (permissive) | **Default since 2026-10-25.** What TDE Konsole's "Monospace" draws, crisp at small sizes with full hinting. The box-drawing and broad-Unicode workhorse, and the **fallback** in the chain (§9.3). |
 | **Iosevka** (narrow/term variant) | OFL 1.1 | **Condensed** — fits noticeably more columns on a phone screen. Genuinely valuable on mobile; offered on the phone as a download, not the default (§16). |
 | **Hack** | MIT-derived (Hack Open Font Licence) | Classic, workmanlike terminal font with deliberate disambiguation. |
 | **Fira Mono / Fira Code** | OFL 1.1 | Popular; Code variant for users who want ligatures. |
@@ -9392,8 +9392,21 @@ that wins on a 5-inch screen is not the obvious choice on a 27-inch monitor, so
 picking a different out-of-the-box default per platform is reasonable — but it
 must be a member of the same shared set (§9.4), so that a profile carrying an
 explicit font choice resolves identically everywhere. **As built, it does not
-differ** (the holder, 2026-09-29, §16): JetBrains Mono everywhere, because a
-default that changed when a font was downloaded changed hosts nobody touched.
+differ** (the holder, 2026-09-29, §16), because a default that changed when a
+font was downloaded changed hosts nobody touched.
+
+**The default is DejaVu Sans Mono, on every form factor — [DECIDED
+2026-10-25, the holder].** It was JetBrains Mono, and the holder found it
+"isn't very good in small sizes" beside TDE Konsole, asking for something
+like Konsole's bitmap font. Konsole's font turned out not to be a bitmap:
+its `Monospace 8` resolves to DejaVu Sans Mono, about 12 px at the holder's
+109 dpi, drawn with full hinting. Rendered through Qt 6 at 10-14 px with
+full hinting, DejaVu was crisp at 11-12 px where JetBrains Mono was thinner
+and softer. **Rejected: a real bitmap face.** Terminus (OTB) and X's `fixed`
+6x13 both draw pixel-perfect in Qt 6, but only at their built-in sizes --
+Terminus drew identically from 10 to 14 px -- so zoom and pinch jump between
+strikes, and on a phone's density they are tiny or scaled. Hosts that chose a
+font keep it; only hosts that never chose one change.
 
 **Explicitly excluded:** proprietary/non-redistributable fonts (Menlo, SF Mono,
 Consolas, Operator Mono), and any proportional font regardless of popularity.
@@ -15622,8 +15635,9 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   it -- adding a key to the running agent once its passphrase is typed -- the
   holder declined for now on 2026-09-26: `ssh-add` and the desktop keep that.
 - ~~Which font is the **phone** default (JetBrains Mono vs condensed
-  Iosevka)?~~ **DECIDED 2026-09-29 by the holder: JetBrains Mono on every
-  form factor -- and BUILT.** The code already preferred condensed Iosevka on
+  Iosevka)?~~ **DECIDED 2026-09-29 by the holder: one default on every
+  form factor -- and BUILT.** It was JetBrains Mono; since 2026-10-25 it
+  is DejaVu Sans Mono (§9.2). The code already preferred condensed Iosevka on
   a touch-primary device whenever it was installed, and with the download
   built (§9.4) that turned into a trap: fetching Iosevka for one host
   changed the font of every host that had never chosen one. Rejected with
