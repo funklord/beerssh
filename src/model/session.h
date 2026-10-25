@@ -253,39 +253,30 @@ public:
 
 	/*
 	 * tmux and screen on connect (model/multiplexer.h, sec 10.2a). The
-	 * session lists them beside its shell when it connects, and says what
-	 * it found with multiplexers_found(); the window asks, and answers
-	 * with one of these. A choice is typed into the shell now and again on
-	 * every reconnect; declining means this session is not asked again.
+	 * session lists them beside its shell when it connects and says what
+	 * it found with multiplexers_found(); the drawer offers them.
+	 *
+	 * Choosing one switches this tab to it: the shell is replaced by a
+	 * command that attaches (restart_shell()), and that command is the
+	 * shell of every reconnect. The offer stays, refreshed, so another can
+	 * be chosen after. Declining takes the offer away for this session.
 	 */
 	void choose_multiplexer(const bssh_mux_session_t &chosen);
 	void decline_multiplexers();
 
-	/*
-	 * The drawer's answer: the first attaches here, the rest are asked
-	 * for as tabs of their own with more_multiplexers_wanted(). Empty is
-	 * declining.
-	 */
-	void choose_multiplexers(const QList<bssh_mux_session_t> &chosen);
-
-	/* What is on offer and not yet answered, for a view built later. */
+	/* What is on offer, with the one shown marked current, for a view
+	 * built later. Empty once declined. */
 	QList<bssh_mux_session_t> pending_multiplexers() const { return m_mux_pending; }
 
-	/* Chosen before it connects: a further tab ticked in the same menu. */
-	void preset_multiplexer(const bssh_mux_session_t &chosen);
-
-	/* What it attaches to on each connect, if anything was chosen. */
-	QString multiplexer_attach() const { return m_mux_attach; }
+	/* The tab's command since a choice, its words joined; empty before. */
+	QString multiplexer_attach() const { return m_mux_command.join(QLatin1Char(' ')); }
 
 signals:
 	/* Sessions are running there; the window offers them. Never empty. */
 	void multiplexers_found(const QList<bssh_mux_session_t> &found);
 
-	/* The offer was answered, either way: whatever shows it goes. */
+	/* The offer was declined, or nothing is running any more: it goes. */
 	void multiplexers_settled();
-
-	/* Ticked beside the one attached here: a tab each, on the same host. */
-	void more_multiplexers_wanted(const QList<bssh_mux_session_t> &more);
 
 	/*
 	 * A bell rang while nothing was showing this session (sec 5.5).
@@ -365,12 +356,17 @@ private:
 	QByteArray refused_key(const QString &password) const;
 	bool m_user_disconnected;
 
-	/* tmux and screen: the line typed on connect, whether the question has
-	 * been answered, and whether a listing is out. */
-	QString m_mux_attach;
+	/* tmux and screen: the tab's command since a choice, the one chosen,
+	 * what is on offer, whether it was declined, and whether a listing is
+	 * out. */
+	QStringList m_mux_command;
+	bssh_mux_session_t m_mux_current;
 	QList<bssh_mux_session_t> m_mux_pending;
 	bool m_mux_answered = false;
 	bool m_mux_listing = false;
+
+	/* Lists what is running beside the shell, if it should. */
+	void list_multiplexers();
 
 	bool m_unseen_bell;
 	bool m_remote_exited;

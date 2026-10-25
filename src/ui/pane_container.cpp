@@ -446,8 +446,8 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	         view, &bssh_terminal_view::offer_multiplexers);
 	connect(session, &bssh_session::multiplexers_settled,
 	         view, &bssh_terminal_view::withdraw_multiplexers);
-	connect(view, &bssh_terminal_view::multiplexers_chosen,
-	         session, &bssh_session::choose_multiplexers);
+	connect(view, &bssh_terminal_view::multiplexer_chosen,
+	         session, &bssh_session::choose_multiplexer);
 	connect(view, &bssh_terminal_view::multiplexers_declined,
 	         session, &bssh_session::decline_multiplexers);
 	connect(session->emulator(), &bssh_emulator::images_changed,

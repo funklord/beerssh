@@ -3,10 +3,11 @@
 # drawer on the terminal's edge, and the choice is typed into the shell on
 # every connect.
 #
-# The SSH side channel itself (drain_side in ssh_session_libssh.cpp) is
-# exercised only against a real sshd, by
-# a_command_runs_beside_the_shell_without_disturbing_it under
-# `make check-ssh`; break it with BSSH_SABOTAGE_SUITE="make check-ssh".
+# The SSH side channel and the SSH restart (drain_side and
+# do_restart_shell in ssh_session_libssh.cpp) are exercised only against a
+# real sshd, by a_command_runs_beside_the_shell_without_disturbing_it and
+# a_restarted_shell_runs_its_command_on_the_same_connection under
+# `make check-ssh`; break them with BSSH_SABOTAGE_SUITE="make check-ssh".
 
 # Nobody is ever shown as attached, so the menu cannot say so.
 [[sabotage]]
@@ -32,15 +33,6 @@ find = "quoted(QLatin1Char('=') + session.name)"
 replace = "quoted(session.name)"
 expect = "tmux_and_screen_listings_are_read"
 
-# A reconnect lists and asks again instead of re-attaching.
-[[sabotage]]
-name = "a reconnect forgets what was chosen"
-file = "src/model/session.cpp"
-find = "\t\t\t\tif (!m_mux_attach.isEmpty()) {\n"
-replace = "\t\t\t\tif (false) {\n"
-expect = "tmux_and_screen_are_offered_on_connect"
-
-# "Shell only" is asked again on the next connect.
 [[sabotage]]
 name = "declining is not remembered"
 file = "src/model/session.cpp"
@@ -52,61 +44,31 @@ expect = "tmux_and_screen_are_offered_on_connect"
 [[sabotage]]
 name = "the setting is not consulted"
 file = "src/model/session.cpp"
-find = "\t\t\t\t} else if (!m_mux_answered && !m_mux_listing &&\n\t\t\t\t           bssh_app_settings().offer_multiplexer_sessions()) {\n"
-replace = "\t\t\t\t} else if (!m_mux_answered && !m_mux_listing) {\n"
+find = "\tif (!m_profile.command.isEmpty() || !bssh_app_settings().offer_multiplexer_sessions()) return;\n"
+replace = "\tif (!m_profile.command.isEmpty()) return;\n"
 expect = "tmux_and_screen_are_offered_on_connect"
 
 # Offered into a session running a command of its own.
 [[sabotage]]
 name = "a session running a command is offered sessions"
 file = "src/model/session.cpp"
-find = "\t\t\tif (m_profile.command.isEmpty()) {\n\t\t\t\tif (!m_mux_attach.isEmpty()) {\n"
-replace = "\t\t\tif (true) {\n\t\t\t\tif (!m_mux_attach.isEmpty()) {\n"
+find = "\tif (!m_profile.command.isEmpty() || !bssh_app_settings().offer_multiplexer_sessions()) return;\n"
+replace = "\tif (!bssh_app_settings().offer_multiplexer_sessions()) return;\n"
 expect = "tmux_and_screen_are_offered_on_connect"
 
-# Only the first ticked session opens.
-[[sabotage]]
-name = "further ticked sessions do not open"
-file = "src/model/session.cpp"
-find = "\tif (chosen.size() > 1) emit more_multiplexers_wanted(chosen.mid(1));\n"
-replace = ""
-expect = "tmux_and_screen_are_offered_on_connect"
-
-# The second tab connects knowing nothing, and asks all over again.
-[[sabotage]]
-name = "a further tab is not told what to attach to"
-file = "src/ui/main_window.cpp"
-find = "\t\t\ttab->preset_multiplexer(chosen);\n"
-replace = ""
-expect = "the_tmux_menu_opens_what_is_ticked"
-
-# A listing that never answers -- its connection dropped -- keeps every
-# later connection of that session from listing.
 [[sabotage]]
 name = "a listing lost with its connection blocks the next"
 file = "src/model/session.cpp"
-find = "\t\t\tm_mux_listing = false;\n\n\t\t\tif (m_profile.command.isEmpty()) {\n"
-replace = "\t\t\tif (m_profile.command.isEmpty()) {\n"
+find = "\t\t\tm_mux_listing = false;\n\n\t\t\t/*\n\t\t\t * tmux and screen (sec 10.2a): what is running"
+replace = "\t\t\t/*\n\t\t\t * tmux and screen (sec 10.2a): what is running"
 expect = "tmux_and_screen_are_offered_on_connect"
 
-# A choice made, and the drawer stays on the terminal's edge offering it.
-# Caught where the settling is asserted: in the window test the second
-# tab's rebuild withdraws the drawer anyway, the offer being cleared.
-[[sabotage]]
-name = "the drawer stays after a choice"
-file = "src/model/session.cpp"
-find = "\tif (m_transport && is_live()) send_out(m_mux_attach.toUtf8() + '\\n');\n\tif (!m_mux_pending.isEmpty()) {\n\t\tm_mux_pending.clear();\n\t\temit multiplexers_settled();\n"
-replace = "\tif (m_transport && is_live()) send_out(m_mux_attach.toUtf8() + '\\n');\n\tif (!m_mux_pending.isEmpty()) {\n\t\tm_mux_pending.clear();\n"
-expect = "tmux_and_screen_are_offered_on_connect"
-
-# A view built after the offer -- every layout change builds new ones --
-# is never handed it, so a split loses the drawer.
 [[sabotage]]
 name = "a rebuilt view is not handed the offer"
 file = "src/ui/pane_container.cpp"
 find = "\tview->offer_multiplexers(session->pending_multiplexers());\n"
 replace = ""
-expect = "the_tmux_menu_opens_what_is_ticked"
+expect = "the_tmux_drawer_switches_on_a_click"
 
 # The drawer opens over the terminal by itself, in the way of the prompt.
 [[sabotage]]
@@ -114,4 +76,60 @@ name = "the drawer opens by itself"
 file = "src/ui/multiplexer_drawer.h"
 find = "\tbool m_open = false;\n"
 replace = "\tbool m_open = true;\n"
-expect = "the_tmux_menu_opens_what_is_ticked"
+expect = "the_tmux_drawer_switches_on_a_click"
+
+# The choice typed into the terminal, where vim inside tmux would get it.
+[[sabotage]]
+name = "a choice is typed rather than replacing the shell"
+file = "src/model/session.cpp"
+find = "\tif (m_transport && is_live()) m_transport->restart_shell(m_mux_command);\n"
+replace = "\tif (m_transport && is_live()) send_out(bssh_mux_attach_command(chosen).toUtf8() + '\\n');\n"
+expect = "tmux_and_screen_are_offered_on_connect"
+
+# A reconnect opens a plain shell, and the tab is no longer attached.
+[[sabotage]]
+name = "a reconnect forgets what was chosen"
+file = "src/model/session.cpp"
+find = "\t\t\tif (!m_mux_command.isEmpty() && m_profile.command.isEmpty())\n"
+replace = "\t\t\tif (false)\n"
+expect = "tmux_and_screen_are_offered_on_connect"
+
+# A fresh listing, and the drawer no longer says which one the tab shows.
+[[sabotage]]
+name = "a listing forgets which one is shown"
+file = "src/model/session.cpp"
+find = "\t\t\teach.current = !m_mux_command.isEmpty() && each == m_mux_current;\n"
+replace = "\t\t\teach.current = false;\n"
+expect = "tmux_and_screen_are_offered_on_connect"
+
+# A choice takes the drawer away, so nothing else can be switched to.
+[[sabotage]]
+name = "a choice withdraws the offer"
+file = "src/model/session.cpp"
+find = "\tfor (bssh_mux_session_t &each : m_mux_pending) each.current = each == chosen;\n"
+replace = "\tm_mux_pending.clear();\n\temit multiplexers_settled();\n"
+expect = "the_tmux_drawer_switches_on_a_click"
+
+# The drawer stays open over the terminal after a click.
+[[sabotage]]
+name = "the drawer stays open after a click"
+file = "src/ui/multiplexer_drawer.cpp"
+find = "\t\tset_open(false);\n\t\tif (row < 0 || row >= m_found.size() || m_found.at(row).current) return;\n"
+replace = "\t\tif (row < 0 || row >= m_found.size() || m_found.at(row).current) return;\n"
+expect = "the_tmux_drawer_switches_on_a_click"
+
+# A local restart announced as the shell exiting, which closes the tab.
+[[sabotage]]
+name = "a local restart is announced as an exit"
+file = "src/ssh/pty_session.cpp"
+find = "\trelease_child();\n\n\tset_command(command);\n"
+replace = "\treap();\n\n\tset_command(command);\n"
+expect = "a_restarted_shell_is_replaced_without_an_exit"
+
+# A local restart at a default size rather than the terminal's.
+[[sabotage]]
+name = "a local restart forgets the size"
+file = "src/ssh/pty_session.cpp"
+find = "\topen_shell(size.ws_col, size.ws_row);\n"
+replace = "\topen_shell(80, 24);\n"
+expect = "a_restarted_shell_is_replaced_without_an_exit"

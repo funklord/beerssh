@@ -1011,6 +1011,16 @@ void session_registry_test::tmux_and_screen_listings_are_read() {
 	quote.name = QStringLiteral("it's");
 	QCOMPARE(bssh_mux_attach_command(quote), QStringLiteral("tmux attach -t '=it'\\''s'"));
 
+	/* The tab's command: attach, then a login shell once detached; through
+	 * sh -c over SSH, where the account's own shell may not be POSIX. */
+	QCOMPARE(bssh_mux_switch_script(found.at(0)),
+	         QStringLiteral("tmux attach -t '=work'; exec \"${SHELL:-/bin/sh}\" -l"));
+	QCOMPARE(bssh_mux_switch_command(found.at(0), true),
+	         (QStringList{ QStringLiteral("/bin/sh"), QStringLiteral("-c"),
+	                       bssh_mux_switch_script(found.at(0)) }));
+	QCOMPARE(bssh_mux_switch_command(found.at(0), false).size(), 1);
+	QVERIFY(bssh_mux_switch_command(found.at(0), false).first().startsWith(QStringLiteral("sh -c '")));
+
 	/* Neither one there, and lines that are not sessions, are nothing. */
 	QVERIFY(bssh_mux_parse("@@bssh-screen@@\nNo Sockets found in /run/screen/S-funk.\n").isEmpty());
 	QVERIFY(bssh_mux_parse("").isEmpty());
@@ -1030,12 +1040,15 @@ struct offer_multiplexers_t {
 
 void session_registry_test::tmux_and_screen_are_offered_on_connect() {
 	/*
-	 * sec 10.2a: listed beside the shell once it is open, offered when
-	 * there are any, and the choice typed into the shell -- and typed
-	 * again on a reconnect, without asking or listing again.
+	 * sec 10.2a: listed beside the shell once it is open and offered when
+	 * there are any. Choosing one switches the tab to it by replacing the
+	 * shell -- nothing is typed, since whatever runs there once attached
+	 * would get the keystrokes -- and the offer stays, so another can be
+	 * chosen after. A reconnect opens with the chosen command.
 	 */
 	const offer_multiplexers_t offer;
 	QList<bssh_fake_ssh_session *> fakes;
+	const bssh_factory_reset_t factory_reset;
 	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
 		fakes.append(new bssh_fake_ssh_session(parent));
 		return fakes.last();
@@ -1055,30 +1068,57 @@ void session_registry_test::tmux_and_screen_are_offered_on_connect() {
 	const auto offered = found.first().first().value<QList<bssh_mux_session_t>>();
 	QCOMPARE(offered.size(), 4);
 
-	/* Held until answered, for a view built after it was found. */
+	/* Held for a view built after it was found. */
 	QCOMPARE(session->pending_multiplexers(), offered);
 	QSignalSpy settled(session, &bssh_session::multiplexers_settled);
-	QSignalSpy more(session, &bssh_session::more_multiplexers_wanted);
 
-	session->choose_multiplexers({ offered.at(1), offered.at(2) });
-	QCOMPARE(settled.count(), 1);
-	QVERIFY(session->pending_multiplexers().isEmpty());
-	QCOMPARE(more.count(), 1);
-	QCOMPARE(more.first().first().value<QList<bssh_mux_session_t>>(),
-	         QList<bssh_mux_session_t>{ offered.at(2) });
-	QCOMPARE(fakes.last()->written(), QByteArrayLiteral("tmux attach -t '=build'\n"));
+	/* Switched: the shell replaced by an attach, and nothing typed. */
+	const QStringList build = bssh_mux_switch_command(offered.at(1), false);
+	session->choose_multiplexer(offered.at(1));
+	QCOMPARE(fakes.last()->restarts(), QStringList{ build.join(QLatin1Char(' ')) });
+	QVERIFY2(fakes.last()->written().isEmpty(), fakes.last()->written().constData());
+	QCOMPARE(session->multiplexer_attach(), build.join(QLatin1Char(' ')));
 
-	/* Reconnected: typed again, not asked and not listed again. The
-	 * transport is the same object across a reconnect, so what is
-	 * counted is listings added since. */
+	/* The offer stays, with the one shown marked, for the next switch. */
+	QCOMPARE(settled.count(), 0);
+	QCOMPARE(found.count(), 2);
+	const auto marked = session->pending_multiplexers();
+	QCOMPARE(marked.size(), 4);
+	QVERIFY(marked.at(1).current);
+	QVERIFY(!marked.at(0).current && !marked.at(2).current);
+
+	/* And another: the shell replaced again. */
+	session->choose_multiplexer(offered.at(2));
+	QCOMPARE(fakes.last()->restarts().size(), 2);
+	QVERIFY(session->pending_multiplexers().at(2).current);
+	QVERIFY(!session->pending_multiplexers().at(1).current);
+
+	/* Reconnected: the chosen command is the shell it opens with, and what
+	 * is running is listed again so the drawer is current. The transport
+	 * is the same object across a reconnect, so listings are counted
+	 * from here. */
 	const int listed = fakes.last()->side_commands().size();
 	session->disconnect_from_host();
+	/* A real reconnect builds a fresh transport with no command of its
+	 * own; the fake is kept, so its command is cleared to match, or the
+	 * switch above would still be there to be found. */
+	fakes.last()->set_command(QStringList());
 	session->connect_to_host();
 	fakes.last()->clear_written();
 	fakes.last()->simulate_key_auth_success();
-	QCOMPARE(fakes.last()->written(), QByteArrayLiteral("tmux attach -t '=build'\n"));
-	QCOMPARE(fakes.last()->side_commands().size(), listed);
-	QCOMPARE(found.count(), 1);
+	QCOMPARE(fakes.last()->command(), bssh_mux_switch_command(offered.at(2), false));
+	QVERIFY(fakes.last()->written().isEmpty());
+	QCOMPARE(fakes.last()->side_commands().size(), listed + 1);
+	fakes.last()->simulate_side_output(sample_listing);
+	QVERIFY2(session->pending_multiplexers().at(2).current,
+	         "a fresh listing forgot which one this tab shows");
+
+	/* Everything there ended: the offer goes. */
+	session->choose_multiplexer(offered.at(2));
+	QTest::qWait(900);
+	fakes.last()->simulate_side_output("@@bssh-screen@@\nNo Sockets found.\n");
+	QCOMPARE(settled.count(), 1);
+	QVERIFY(session->pending_multiplexers().isEmpty());
 
 	/* Nothing running there: nothing offered. */
 	bssh_session *empty = registry.create(profile_for(QStringLiteral("none"),

@@ -4448,6 +4448,7 @@ void layout_test::closing_a_window_closes_its_sessions_without_asking() {
 		fake = new bssh_fake_ssh_session(parent);
 		return fake;
 	});
+	const bssh_factory_reset_t factory_reset;
 	bssh_platform::force_way_back(1);
 	const keep_sessions_on_close_t keep(false);
 
@@ -4499,20 +4500,24 @@ bssh_multiplexer_drawer *drawer_in(const QWidget &window) {
 
 }
 
-void layout_test::the_tmux_menu_opens_what_is_ticked() {
+void layout_test::the_tmux_drawer_switches_on_a_click() {
 	/*
 	 * sec 10.2a: sessions found running when a shell connects are offered
-	 * from a drawer on the terminal's edge -- a handle closed, a list open
-	 * -- until one is chosen or the drawer is dismissed. One ticked
-	 * attaches in this tab; a second ticked opens another tab on the same
-	 * host, attaching as it connects.
+	 * from a drawer on the terminal's edge -- a handle closed, a list open.
+	 * A click switches the tab to one, and the drawer stays to switch to
+	 * another, until it is dismissed.
 	 */
 	QList<bssh_fake_ssh_session *> fakes;
+	const bssh_factory_reset_t factory_reset;
 	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
 		fakes.append(new bssh_fake_ssh_session(parent));
 		return fakes.last();
 	});
-	bssh_app_settings().set_offer_multiplexer_sessions(true);
+	/* On for this test, and off again however it ends (test/main.cpp). */
+	struct offer_t {
+		offer_t() { bssh_app_settings().set_offer_multiplexer_sessions(true); }
+		~offer_t() { bssh_app_settings().set_offer_multiplexer_sessions(false); }
+	} const offer;
 
 	{
 		bssh_main_window window;
@@ -4560,26 +4565,35 @@ void layout_test::the_tmux_menu_opens_what_is_ticked() {
 		QVERIFY(drawer->is_open());
 		QVERIFY(drawer->width() > closed_width);
 
-		/* The first is ticked already; tick the second too, and Open. */
+		/* One click switches: the shell replaced by an attach to it. */
 		QListWidget *list = drawer->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
 		QVERIFY(list);
 		QCOMPARE(list->count(), 2);
-		list->item(1)->setCheckState(Qt::Checked);
-		QPushButton *open = drawer->findChild<QPushButton *>(QStringLiteral("multiplexer_open"));
-		QVERIFY(open);
-		open->click();
+		QVERIFY2(list->item(0)->flags() & Qt::ItemIsEnabled, "an entry cannot be clicked");
+		QVERIFY2(!(list->item(0)->flags() & Qt::ItemIsUserCheckable), "entries still carry ticks");
+		emit list->itemClicked(list->item(1));
 		QCoreApplication::processEvents();
 
-		QCOMPARE(session->multiplexer_attach(), QStringLiteral("tmux attach -t '=work'"));
-		QVERIFY(muxed_transport->written().endsWith("tmux attach -t '=work'\n"));
-		QTRY_VERIFY2(!drawer_in(window), "the drawer stayed after a choice was made");
-		QCOMPARE(registry->count(), before + 1);
-		bssh_session *more = registry->sessions().last();
-		QCOMPARE(more->multiplexer_attach(), QStringLiteral("tmux attach -t '=build'"));
-		fakes.last()->simulate_key_auth_success();
-		QVERIFY2(fakes.last()->written().endsWith("tmux attach -t '=build'\n"),
-		         "the second tab did not attach to the second session");
-		QVERIFY2(fakes.last()->side_commands().isEmpty(), "the second tab asked again");
+		const QStringList build = bssh_mux_switch_command(session->pending_multiplexers().at(1), false);
+		QCOMPARE(muxed_transport->restarts(), QStringList{ build.join(QLatin1Char(' ')) });
+		QVERIFY2(!muxed_transport->written().contains("tmux attach"), "the switch was typed");
+		QCOMPARE(registry->count(), before);
+
+		/* And the drawer stays, closed to its handle, saying which it shows. */
+		drawer = drawer_in(window);
+		QVERIFY2(drawer, "the drawer went once a session was chosen");
+		QVERIFY(!drawer->is_open());
+		list = drawer->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
+		QVERIFY(list->item(1)->text().contains(QStringLiteral("build")));
+		QVERIFY2(list->item(1)->font().bold(), "the one shown is not marked");
+		QVERIFY(!list->item(0)->font().bold());
+
+		/* So another can be switched to after it. */
+		drawer->set_open(true);
+		emit list->itemClicked(list->item(0));
+		QCoreApplication::processEvents();
+		QCOMPARE(muxed_transport->restarts().size(), 2);
+		QVERIFY(muxed_transport->restarts().last().contains(QStringLiteral("=work")));
 	}
 
 	{
@@ -4610,8 +4624,6 @@ void layout_test::the_tmux_menu_opens_what_is_ticked() {
 		QVERIFY(session->pending_multiplexers().isEmpty());
 	}
 
-	bssh_app_settings().set_offer_multiplexer_sessions(false);
-	bssh_ssh_session::set_factory(nullptr);
 }
 
 void layout_test::with_no_tray_a_window_is_not_kept_running() {

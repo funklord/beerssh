@@ -350,6 +350,33 @@ void bssh_pty_session::on_readable() {
 }
 
 void bssh_pty_session::reap() {
+	const int code = release_child();
+	emit shell_exited(code);
+	set_state(DISCONNECTED);
+}
+
+void bssh_pty_session::restart_shell(const QStringList &command) {
+	if (m_master < 0) return;
+
+	/* The size it has now, asked of the pty rather than remembered. */
+	struct winsize size;
+	std::memset(&size, 0, sizeof(size));
+	::ioctl(m_master, TIOCGWINSZ, &size);
+
+	/*
+	 * SIGHUP, as closing the terminal would send: a tmux or screen client
+	 * detaches and leaves its session running. Released without the
+	 * exit reap() announces, because the session has not ended -- the
+	 * next command starts in its place at once.
+	 */
+	if (m_child > 0) ::kill(pid_t(m_child), SIGHUP);
+	release_child();
+
+	set_command(command);
+	open_shell(size.ws_col, size.ws_row);
+}
+
+int bssh_pty_session::release_child() {
 	if (m_notifier) {
 		m_notifier->setEnabled(false);
 		m_notifier->deleteLater();
@@ -374,9 +401,7 @@ void bssh_pty_session::reap() {
 		code = collect(pid_t(m_child));
 		m_child = -1;
 	}
-
-	emit shell_exited(code);
-	set_state(DISCONNECTED);
+	return code;
 }
 
 void bssh_pty_session::resize(int cols, int rows) {

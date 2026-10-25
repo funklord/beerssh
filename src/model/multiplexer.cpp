@@ -117,3 +117,13 @@ QString bssh_mux_label(const bssh_mux_session_t &session) {
 	return detail.isEmpty() ? QStringLiteral("%1  %2").arg(kind, session.name)
 	                        : QStringLiteral("%1  %2  (%3)").arg(kind, session.name, detail);
 }
+
+QString bssh_mux_switch_script(const bssh_mux_session_t &session) {
+	return bssh_mux_attach_command(session) + QStringLiteral("; exec \"${SHELL:-/bin/sh}\" -l");
+}
+
+QStringList bssh_mux_switch_command(const bssh_mux_session_t &session, bool local) {
+	const QString script = bssh_mux_switch_script(session);
+	if (local) return { QStringLiteral("/bin/sh"), QStringLiteral("-c"), script };
+	return { QStringLiteral("sh -c ") + quoted(script) };
+}

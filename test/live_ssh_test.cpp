@@ -1011,6 +1011,67 @@ void live_ssh_test::a_command_runs_beside_the_shell_without_disturbing_it()
 	delete session;
 }
 
+void live_ssh_test::a_restarted_shell_runs_its_command_on_the_same_connection()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * How a tab switches to another tmux or screen session (sec 10.2a):
+	 * the shell's channel closed and a new one opened on the same
+	 * connection running the command, at the same size. The close must
+	 * not be taken for the shell exiting -- that closes the tab -- and
+	 * the new command's output must arrive where the shell's did.
+	 */
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	QByteArray received;
+	int exits = 0;
+	bool restarted = false;
+
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed, &loop, &QEventLoop::quit);
+	QObject::connect(session, &bssh_ssh_session::shell_exited, [&exits](int) { ++exits; });
+	QObject::connect(session, &bssh_ssh_session::bytes_received, [&](const QByteArray &bytes) {
+		received += bytes;
+		if (!restarted && received.contains("BSSH_FIRST_OK")) {
+			restarted = true;
+			received.clear();
+			session->restart_shell({ QStringLiteral("echo BSSH_RESTARTED $(stty size); sleep 3") });
+		}
+		if (restarted && received.contains("BSSH_RESTARTED 33 77")) loop.quit();
+	});
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [session](bssh_ssh_session::state_t state) {
+		if (state != bssh_ssh_session::CONNECTED) return;
+		session->open_shell(77, 33);
+		session->send(QByteArrayLiteral("echo BSSH_FIRST_\"OK\"\n"));
+	});
+
+	session->set_identity_file(test_key());
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
+	                          qEnvironmentVariable("USER"));
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(15000);
+	loop.exec();
+
+	QVERIFY2(restarted, "the first shell never answered");
+	QVERIFY2(received.contains("BSSH_RESTARTED 33 77"),
+	         qPrintable(QStringLiteral("the restarted command did not run at the old size; saw: %1")
+	                            .arg(QString::fromLocal8Bit(received.right(200)))));
+	QCOMPARE(exits, 0);
+	QCOMPARE(session->state(), bssh_ssh_session::CONNECTED);
+
+	session->disconnect_from_host();
+	delete session;
+}
+
 void live_ssh_test::the_remote_is_told_the_size_it_was_given()
 {
 	if (!server_available()) return;

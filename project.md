@@ -10558,18 +10558,37 @@ question over the prompt the user was about to type at. Now:
   "tmux/screen · 3" -- so it costs a sliver of width and none of the
   prompt. It starts closed: nothing covers the terminal unasked.
 - **Open, a panel over the terminal**, at most three quarters of the
-  pane, with a tick per session (the first ticked), Open, and × for
-  "Shell only". The handle closes it again. Typing goes to the terminal
-  throughout, and focus returns there once it is answered.
-- **It stays until answered.** One ticked attaches in this tab; more open
-  a tab each on the same host, attached as they connect
-  (`more_multiplexers_wanted`, which only the window showing the session
-  acts on). Answered either way, the session says so
-  (`multiplexers_settled`) and the drawer goes.
+  pane, listing them -- the one this tab shows marked ▸ and bold -- with
+  × to take the drawer away ("Shell only"). The handle closes it again.
+  Typing goes to the terminal throughout.
+- **One click switches** to a session, and the drawer closes to its
+  handle and **stays**, so another can be switched to after: the
+  holder's correction of the same day -- "normally you should be able to
+  just click on one of the entries to switch to it … after switching you
+  should be able to switch to others." Choosing several at once, a tab
+  each, was built and taken out on the same word ("lets delay multiple
+  activation, if we even need it at all").
 - **It belongs to the pane**, as a child of its terminal view, so a split
   shows one per pane that has an offer. A view is rebuilt on every layout
   change, so the offer lives on the session (`pending_multiplexers`) and
   each new view is handed it -- a split with the drawer showing keeps it.
+
+**A switch replaces the shell; nothing is typed.** The first version typed
+`tmux attach -t …` into the shell, which works exactly once: after that
+the terminal is tmux, and whatever runs inside it -- vim, say -- would get
+the next attach as keystrokes, or a shell inside tmux would nest a second
+client. So `restart_shell()` on the transport ends the tab's shell and
+starts the attach in its place, at the same size and without announcing
+an exit (an announced exit closes the tab): over SSH a new channel on the
+same connection, the old one closed; locally a new child, the old one
+sent SIGHUP. A tmux or screen client whose terminal hangs up detaches and
+its session runs on, so switching away loses nothing. The command is
+`tmux attach -t '=name'` (or `screen -x 'pid.name'`) followed by
+`exec "${SHELL:-/bin/sh}" -l`, so detaching leaves a prompt rather than
+closing the tab -- through `sh -c` over SSH, where the account's shell may
+not be POSIX. The same command is the shell of every reconnect, and the
+listing runs again after each switch and each connect, so the drawer's
+marks are current.
 
 **Tried first and dropped the same day: a preset field** ("Sessions on
 connect": off / ask / tmux / screen, overridable per host). The holder
@@ -10589,16 +10608,14 @@ its on-connect command.
   such option and is parsed. Wrapped in `sh -c '…'` because an exec
   request runs in the account's own shell, which may be fish or csh; only
   the wrapper has to read in every shell.
-- **The choice is typed into the shell**, like the on-connect command:
-  `tmux attach -t '=name'` (exact match, so `work` is not `workshop`) or
-  `screen -x 'pid.name'` (joins even while attached elsewhere, which a
-  reconnect needs before the old connection has noticed it is gone).
-  Typed again on every reconnect, without listing or asking again --
-  which is what makes a dropped connection come back to the work.
-  Detaching leaves a shell rather than closing the tab.
+- **Attached by exact name**: `tmux attach -t '=name'`, so `work` is not
+  `workshop`, and `screen -x 'pid.name'`, which joins even while attached
+  elsewhere -- what a reconnect needs before the old connection has
+  noticed it is gone.
 - **Not offered** to a session running a command of its own (§8.6's
   `-e`), after "Shell only" for that session, or with the setting off.
-  Nothing found leaves the question open, so a reconnect lists again.
+  Nothing running any more takes the drawer away; a later connect lists
+  again.
 - **A listing lost with its connection is forgotten** at the next
   CONNECTED. Over SSH its channel goes with the connection and never
   answers; the flag saying one was out was cleared only by an answer, so a
@@ -10617,8 +10634,12 @@ noise (`tmux_and_screen_listings_are_read`); the session's flow with the
 fake transport (`tmux_and_screen_are_offered_on_connect`); the local path
 through `/bin/sh` with stand-in `tmux` and `screen` on `PATH`
 (`a_local_shell_lists_tmux_and_screen_beside_itself`); the drawer --
-closed at first, opened by its handle, kept across a split, two ticked
-sessions opened, and dismissed by × (`the_tmux_menu_opens_what_is_ticked`);
+closed at first, opened by its handle, kept across a split, a click
+switching and the drawer staying with the shown one marked, a second
+switch, and × (`the_tmux_drawer_switches_on_a_click`); a local restart
+replacing the shell at its size with no exit announced
+(`a_restarted_shell_is_replaced_without_an_exit`); the SSH restart against
+a real sshd (`a_restarted_shell_runs_its_command_on_the_same_connection`);
 and
 the SSH side channel against a real sshd, its output whole and the shell
 answering after it (`a_command_runs_beside_the_shell_without_disturbing_it`,
@@ -14913,6 +14934,31 @@ The desktop build is what makes this project testable at all — use it.
   **sec 6.4 says "on touch, keep local selection winning" and the pointer
   path never asks `is_touch_primary()`.** The document and the code
   contradict each other; flagged, not resolved.
+### 12.3v A fake factory left installed crashed a later test — **[2026-10-25, part fixed]**
+
+**The finding:** a sabotage that failed the tmux session test mid-way left
+`bssh_ssh_session::set_factory()` pointing at a lambda over that test's
+locals -- QtTest returns from a failed QVERIFY, and the reset sat on the
+last line. The next test to create a session called it: a SIGSEGV in
+`a_live_local_session_moves_to_another_session`, which had nothing to do
+with the edit. The run died there, so the window test the edit named never
+ran, and the harness reported a WRONG TEST that was really a crash.
+
+**And the crash produced 6.7 GB.** QtTest's fatal-signal handler printed
+"Received signal 11" 39 million times, which the suite's own 1 MB output
+cap would have stopped -- but that cap engages only when stdout is a
+regular file, and the run was piped through `tee` to keep its output.
+`running-code.md` names exactly this: a bound that depends on the shape of
+stdout is one an investigation removes by accident. Redirect to a file.
+
+**`bssh_factory_reset_t`** (`test/fake_ssh_session.h`) puts the factory
+back however a test leaves; the tmux tests and the close test use it.
+**Still open:** about thirty older tests in `layout_test.cpp` and
+`session_registry_test.cpp` reset the factory on their last line and have
+the same exposure -- harmless while they pass, and the first sabotage that
+fails one mid-way will crash whatever runs next. One line each; not done
+here, since it is a sweep rather than this change.
+
 ### 12.4 CI
 - **[DECIDED 2026-10-22] `check-ci` is kept and no longer run as a gate.**
   The repository went public that day, so GitHub Actions is free again and

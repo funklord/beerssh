@@ -105,6 +105,13 @@ public:
 	void run_on_the_side(const QString &command) override { m_side_commands.append(command); }
 	QStringList side_commands() const { return m_side_commands; }
 	void simulate_side_output(const QByteArray &output) { emit side_output_ready(output); }
+
+	/* Every restart_shell(), its words joined by spaces. */
+	void restart_shell(const QStringList &command) override {
+		m_restarts.append(command.join(QLatin1Char(' ')));
+		m_command = command;
+	}
+	QStringList restarts() const { return m_restarts; }
 	QStringList command() const { return m_command; }
 
 	void set_compression(bool compression) override { m_compression = compression; }
@@ -131,6 +138,7 @@ private:
 	QList<QByteArray> m_script;
 	QByteArray m_written;
 	QStringList m_side_commands;
+	QStringList m_restarts;
 	QString m_fail_reason;
 	int m_cols;
 	int m_rows;
@@ -144,6 +152,20 @@ private:
 	QString m_accepted_password;
 	QStringList m_passwords_offered;
 	bool m_answers_held = false;
+};
+
+/*
+ * Puts the transport factory back however a test leaves -- a QVERIFY that
+ * fails returns from the middle of it. The factories capture the test's
+ * locals, so one left installed hands the next test to create a session a
+ * lambda over a dead stack frame: a crash there, blamed on the wrong test.
+ * Measured: a sabotage failing one tmux test segfaulted a later move test,
+ * and QtTest's handler then printed "Received signal 11" 39 million times.
+ */
+struct bssh_factory_reset_t {
+	bssh_factory_reset_t() = default;
+	bssh_factory_reset_t(const bssh_factory_reset_t &) = delete;
+	~bssh_factory_reset_t() { bssh_ssh_session::set_factory(nullptr); }
 };
 
 #endif /* BSSH_FAKE_SSH_SESSION_H */

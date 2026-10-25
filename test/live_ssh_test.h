@@ -92,6 +92,7 @@ private slots:
 	 */
 	void a_remote_command_runs_instead_of_a_shell();
 	void a_command_runs_beside_the_shell_without_disturbing_it();
+	void a_restarted_shell_runs_its_command_on_the_same_connection();
 
 	void the_remote_is_told_the_size_it_was_given();
 	void a_resize_reaches_the_remote();

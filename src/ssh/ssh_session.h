@@ -232,6 +232,19 @@ public:
 	 */
 	virtual void run_on_the_side(const QString &command);
 
+	/*
+	 * Ends the shell and starts this command in its place, on the same
+	 * connection, at the same size -- without announcing an exit, since
+	 * nothing ended as far as the session is concerned. How a tab
+	 * switches to another tmux or screen session (sec 10.2a): the old
+	 * client sees its terminal hang up and detaches, and the new command
+	 * attaches. Words as set_command() takes them.
+	 *
+	 * The default does nothing: a transport that cannot is one where the
+	 * drawer's choice has no effect, which is better than a guess.
+	 */
+	virtual void restart_shell(const QStringList &command) { Q_UNUSED(command); }
+
 signals:
 	/* What run_on_the_side() printed; empty when it printed nothing or failed. */
 	void side_output_ready(const QByteArray &output);

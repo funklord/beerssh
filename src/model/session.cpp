@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QRandomGenerator>
 #include <QStringList>
+#include <QTimer>
 #include <QUuid>
 
 #include "input/input_router.h"
@@ -393,9 +394,19 @@ void bssh_session::wire_transport() {
 	         [this](const QByteArray &output) {
 		if (!m_mux_listing) return;
 		m_mux_listing = false;
-		if (m_mux_answered || !m_mux_attach.isEmpty()) return;
-		const QList<bssh_mux_session_t> found = bssh_mux_parse(output);
-		if (found.isEmpty()) return;
+		if (m_mux_answered) return;
+
+		QList<bssh_mux_session_t> found = bssh_mux_parse(output);
+		if (found.isEmpty()) {
+			/* Nothing left running there: the drawer has nothing to offer. */
+			if (!m_mux_pending.isEmpty()) {
+				m_mux_pending.clear();
+				emit multiplexers_settled();
+			}
+			return;
+		}
+		for (bssh_mux_session_t &each : found)
+			each.current = !m_mux_command.isEmpty() && each == m_mux_current;
 		m_mux_pending = found;
 		emit multiplexers_found(found);
 	});
@@ -418,6 +429,14 @@ void bssh_session::wire_transport() {
 			if (!m_offered.isEmpty()) m_password = m_offered;
 			m_offered.clear();
 			m_password_refused = false;
+
+			/*
+			 * The tmux or screen session this tab switched to (sec 10.2a)
+			 * is its shell on every connect, so a reconnect comes back
+			 * attached to it. Never over a command of the profile's own.
+			 */
+			if (!m_mux_command.isEmpty() && m_profile.command.isEmpty())
+				m_transport->set_command(m_mux_command);
 			m_transport->open_shell(m_cols, m_rows);
 
 			/*
@@ -437,13 +456,6 @@ void bssh_session::wire_transport() {
 			}
 
 			/*
-			 * tmux and screen (sec 10.2a), only into a shell: a session
-			 * running a command of its own (sec 8.6's -e) has nothing to
-			 * type into. A choice made is typed again on every connect;
-			 * until one is, what is there is listed beside the shell,
-			 * which opened above, so the prompt is not kept waiting.
-			 */
-			/*
 			 * A listing still out belongs to the connection before this
 			 * one. Over SSH its channel went with that connection and will
 			 * never answer, and left set this would keep every connection
@@ -451,15 +463,13 @@ void bssh_session::wire_transport() {
 			 */
 			m_mux_listing = false;
 
-			if (m_profile.command.isEmpty()) {
-				if (!m_mux_attach.isEmpty()) {
-					send_out(m_mux_attach.toUtf8() + '\n');
-				} else if (!m_mux_answered && !m_mux_listing &&
-				           bssh_app_settings().offer_multiplexer_sessions()) {
-					m_mux_listing = true;
-					m_transport->run_on_the_side(bssh_mux_listing_command());
-				}
-			}
+			/*
+			 * tmux and screen (sec 10.2a): what is running is listed
+			 * beside the shell, which opened above, so the prompt is not
+			 * kept waiting for it -- on every connect, so the drawer is
+			 * current after a reconnect too.
+			 */
+			list_multiplexers();
 		}
 		emit state_changed();
 	});
@@ -845,13 +855,25 @@ bssh_session *bssh_session::import_handoff(const QByteArray &state, const QList<
 }
 
 void bssh_session::choose_multiplexer(const bssh_mux_session_t &chosen) {
-	m_mux_answered = true;
-	m_mux_attach = bssh_mux_attach_command(chosen);
-	if (m_transport && is_live()) send_out(m_mux_attach.toUtf8() + '\n');
-	if (!m_mux_pending.isEmpty()) {
-		m_mux_pending.clear();
-		emit multiplexers_settled();
-	}
+	if (!m_profile.command.isEmpty()) return;
+
+	m_mux_current = chosen;
+	m_mux_command = bssh_mux_switch_command(chosen, m_profile.local);
+
+	/*
+	 * The shell replaced rather than typed at: once attached, whatever runs
+	 * in the terminal -- vim inside tmux -- is what keystrokes would reach.
+	 * The old client's terminal hangs up and it detaches; its session runs
+	 * on and is still offered.
+	 */
+	if (m_transport && is_live()) m_transport->restart_shell(m_mux_command);
+
+	for (bssh_mux_session_t &each : m_mux_pending) each.current = each == chosen;
+	if (!m_mux_pending.isEmpty()) emit multiplexers_found(m_mux_pending);
+
+	/* And listed again once it has attached, so who is attached where is
+	 * what the drawer says. */
+	QTimer::singleShot(800, this, [this] { list_multiplexers(); });
 }
 
 void bssh_session::decline_multiplexers() {
@@ -862,16 +884,9 @@ void bssh_session::decline_multiplexers() {
 	}
 }
 
-void bssh_session::choose_multiplexers(const QList<bssh_mux_session_t> &chosen) {
-	if (chosen.isEmpty()) {
-		decline_multiplexers();
-		return;
-	}
-	choose_multiplexer(chosen.first());
-	if (chosen.size() > 1) emit more_multiplexers_wanted(chosen.mid(1));
-}
-
-void bssh_session::preset_multiplexer(const bssh_mux_session_t &chosen) {
-	m_mux_answered = true;
-	m_mux_attach = bssh_mux_attach_command(chosen);
+void bssh_session::list_multiplexers() {
+	if (!m_transport || !is_live() || m_mux_answered || m_mux_listing) return;
+	if (!m_profile.command.isEmpty() || !bssh_app_settings().offer_multiplexer_sessions()) return;
+	m_mux_listing = true;
+	m_transport->run_on_the_side(bssh_mux_listing_command());
 }

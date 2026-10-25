@@ -3486,9 +3486,9 @@ void bssh_terminal_view::offer_multiplexers(const QList<bssh_mux_session_t> &fou
 		m_mux_drawer = new bssh_multiplexer_drawer(this);
 		connect(m_mux_drawer, &bssh_multiplexer_drawer::open_changed, this,
 		         [this] { place_multiplexer_drawer(); });
-		connect(m_mux_drawer, &bssh_multiplexer_drawer::sessions_chosen, this,
-		         [this](const QList<bssh_mux_session_t> &chosen) {
-			emit multiplexers_chosen(chosen);
+		connect(m_mux_drawer, &bssh_multiplexer_drawer::session_chosen, this,
+		         [this](const bssh_mux_session_t &chosen) {
+			emit multiplexer_chosen(chosen);
 			setFocus();
 		});
 		connect(m_mux_drawer, &bssh_multiplexer_drawer::declined, this, [this] {

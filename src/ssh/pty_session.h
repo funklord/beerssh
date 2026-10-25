@@ -116,6 +116,7 @@ public:
 
 	QString kind() const override;
 	void run_on_the_side(const QString &command) override;
+	void restart_shell(const QStringList &command) override;
 	bool export_transport(QByteArray &state, QList<int> &fds, QString *why) override;
 	void release_transport() override;
 	void resume_transport() override;
@@ -127,6 +128,10 @@ private:
 	void on_writable();
 	void flush_pending();
 	void reap();
+
+	/* reap() without its announcement: the child and the pty let go, and
+	 * the exit code returned. */
+	int release_child();
 
 	QString m_shell;
 	QStringList m_command;

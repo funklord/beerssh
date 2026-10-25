@@ -9,7 +9,6 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QPainter>
-#include <QPushButton>
 #include <QToolButton>
 #include <QVBoxLayout>
 
@@ -89,8 +88,7 @@ bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(pare
 	top->addWidget(close);
 	column->addLayout(top);
 
-	QLabel *note = new QLabel(QStringLiteral("Tick what to open; more than one opens a tab each."),
-	                          m_panel);
+	QLabel *note = new QLabel(QStringLiteral("Click one to switch this tab to it."), m_panel);
 	note->setWordWrap(true);
 	column->addWidget(note);
 
@@ -98,21 +96,22 @@ bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(pare
 	m_list->setObjectName(QStringLiteral("multiplexer_sessions"));
 	column->addWidget(m_list, 1);
 
-	m_choose = new QPushButton(QStringLiteral("Open"), m_panel);
-	m_choose->setObjectName(QStringLiteral("multiplexer_open"));
-	column->addWidget(m_choose);
-
 	connect(close, &QToolButton::clicked, this, [this] { emit declined(); });
-	connect(m_choose, &QPushButton::clicked, this, [this] {
-		const QList<bssh_mux_session_t> ticked = chosen();
-		if (!ticked.isEmpty()) emit sessions_chosen(ticked);
-	});
-	connect(m_list, &QListWidget::itemChanged, this, [this] { sync_open_button(); });
-	connect(m_list, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *clicked) {
-		const int row_clicked = m_list->row(clicked);
-		if (row_clicked >= 0 && row_clicked < m_found.size())
-			emit sessions_chosen({ m_found.at(row_clicked) });
-	});
+
+	/*
+	 * One click switches, as choosing from a list does everywhere else;
+	 * itemActivated as well so Enter on a highlighted row does it. The
+	 * drawer closes to its handle either way, where it stays for the next
+	 * switch. The one already shown just closes it.
+	 */
+	const auto choose_row = [this](QListWidgetItem *item) {
+		const int row = m_list->row(item);
+		set_open(false);
+		if (row < 0 || row >= m_found.size() || m_found.at(row).current) return;
+		emit session_chosen(m_found.at(row));
+	};
+	connect(m_list, &QListWidget::itemClicked, this, choose_row);
+	connect(m_list, &QListWidget::itemActivated, this, choose_row);
 
 	m_panel->hide();
 }
@@ -121,15 +120,22 @@ void bssh_multiplexer_drawer::set_sessions(const QList<bssh_mux_session_t> &foun
 	m_found = found;
 	m_list->clear();
 	for (const bssh_mux_session_t &session : m_found) {
-		QListWidgetItem *item = new QListWidgetItem(bssh_mux_label(session), m_list);
-		item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
-		item->setCheckState(Qt::Unchecked);
+		/* The one this tab shows, marked and bold. */
+		QListWidgetItem *item = new QListWidgetItem(
+		        (session.current ? QStringLiteral("\u25b8 ") : QStringLiteral("   "))
+		                + bssh_mux_label(session),
+		        m_list);
+		/* Clicked, not ticked: Qt makes an item checkable by default. */
+		item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
+		if (session.current) {
+			QFont bold = item->font();
+			bold.setBold(true);
+			item->setFont(bold);
+			item->setToolTip(QStringLiteral("This tab is showing it"));
+		}
 	}
-	/* The first ticked: one is what most people want. */
-	if (m_list->count() > 0) m_list->item(0)->setCheckState(Qt::Checked);
 	m_handle->setText(handle_text());
 	m_handle->updateGeometry();
-	sync_open_button();
 }
 
 void bssh_multiplexer_drawer::set_open(bool open) {
@@ -138,13 +144,6 @@ void bssh_multiplexer_drawer::set_open(bool open) {
 	m_panel->setVisible(open);
 	updateGeometry();
 	emit open_changed(open);
-}
-
-QList<bssh_mux_session_t> bssh_multiplexer_drawer::chosen() const {
-	QList<bssh_mux_session_t> ticked;
-	for (int row = 0; row < m_list->count() && row < m_found.size(); ++row)
-		if (m_list->item(row)->checkState() == Qt::Checked) ticked.append(m_found.at(row));
-	return ticked;
 }
 
 QString bssh_multiplexer_drawer::handle_text() const {
@@ -163,9 +162,4 @@ QSize bssh_multiplexer_drawer::sizeHint() const {
 	if (!m_open) return handle;
 	const QSize panel = m_panel->sizeHint();
 	return QSize(handle.width() + qMax(panel.width(), 280), qMax(handle.height(), panel.height()));
-}
-
-void bssh_multiplexer_drawer::sync_open_button() {
-	/* Open with nothing ticked would be Shell only by another name. */
-	m_choose->setEnabled(!chosen().isEmpty());
 }

@@ -219,6 +219,7 @@ public slots:
 	void do_set_term(const QString &term);
 	void do_set_command(const QStringList &command);
 	void do_run_on_the_side(const QString &command);
+	void do_restart_shell(const QStringList &command);
 	void do_set_compression(bool compression);
 	void do_set_identity_file(const QString &path);
 	void do_set_proxy_jump(const QString &spec);
@@ -295,6 +296,10 @@ private:
 	 * answered once it ends, overflows or runs out of time.
 	 */
 	ssh_channel m_side_channel = nullptr;
+
+	/* The grid the shell was opened or last resized to, for a restart. */
+	int m_cols = 80;
+	int m_rows = 24;
 	QByteArray m_side_output;
 	QElapsedTimer m_side_started;
 	void drain_side();
@@ -1097,6 +1102,8 @@ void bssh_libssh_worker::do_authenticate_password(const QString &password) {
 }
 
 void bssh_libssh_worker::do_open_shell(int cols, int rows) {
+	m_cols = cols;
+	m_rows = rows;
 	if (!m_session) {
 		fail(QStringLiteral("not connected"));
 		return;
@@ -1153,6 +1160,24 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 	do_set_keepalive(m_keepalive_seconds);
 
 	drain();
+}
+
+void bssh_libssh_worker::do_restart_shell(const QStringList &command) {
+	if (!m_session || !m_channel) return;
+
+	/*
+	 * The old channel closed rather than left: the far end hangs up its
+	 * pty, and a tmux or screen client on it detaches, leaving its session
+	 * running. Freed here, before anything reads its end-of-file, so the
+	 * close is not taken for the shell exiting.
+	 */
+	m_pending.clear();
+	if (ssh_channel_is_open(m_channel)) ssh_channel_close(m_channel);
+	ssh_channel_free(m_channel);
+	m_channel = nullptr;
+
+	do_set_command(command);
+	do_open_shell(m_cols, m_rows);
 }
 
 void bssh_libssh_worker::do_run_on_the_side(const QString &command) {
@@ -1399,6 +1424,8 @@ void bssh_libssh_worker::drain() {
 }
 
 void bssh_libssh_worker::do_resize(int cols, int rows) {
+	m_cols = cols;
+	m_rows = rows;
 	if (!m_channel) return;
 
 	/*
@@ -1830,6 +1857,12 @@ void bssh_ssh_session_libssh::set_keepalive(int seconds) {
 void bssh_ssh_session_libssh::set_term(const QString &term) {
 	QMetaObject::invokeMethod(m_worker, [this, term] {
 		m_worker->do_set_term(term);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::restart_shell(const QStringList &command) {
+	QMetaObject::invokeMethod(m_worker, [this, command] {
+		m_worker->do_restart_shell(command);
 	}, Qt::QueuedConnection);
 }
 

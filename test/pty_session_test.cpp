@@ -733,3 +733,35 @@ void pty_session_test::a_local_shell_lists_tmux_and_screen_beside_itself() {
 	QCOMPARE(found.at(0).name, QStringLiteral("dev"));
 	QCOMPARE(found.at(1).name, QStringLiteral("4242.notes"));
 }
+
+void pty_session_test::a_restarted_shell_is_replaced_without_an_exit() {
+	/*
+	 * How a tab switches to another tmux or screen session (sec 10.2a):
+	 * the shell is ended and a command started in its place, at the same
+	 * size. No exit is announced, because an announced exit closes the
+	 * tab -- and the new command's output arrives through the same
+	 * session. The size is checked from inside, by stty.
+	 */
+	bssh_pty_session session;
+	session.set_shell(QStringLiteral("/bin/sh"));
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(91, 27);
+	session.send(QByteArrayLiteral("echo bssh-before\n"));
+	QByteArray seen;
+	QVERIFY(wait_for_output(&session, QByteArrayLiteral("bssh-before"), &seen));
+
+	QSignalSpy exited(&session, &bssh_ssh_session::shell_exited);
+	QSignalSpy states(&session, &bssh_ssh_session::state_changed);
+	session.restart_shell({ QStringLiteral("/bin/sh"), QStringLiteral("-c"),
+	                        QStringLiteral("echo bssh-switched $(stty size); exec sleep 30") });
+
+	seen.clear();
+	QVERIFY2(wait_for_output(&session, QByteArrayLiteral("bssh-switched 27 91"), &seen),
+	         qPrintable(QStringLiteral("the new command did not run at the old size; saw: %1")
+	                            .arg(QString::fromLocal8Bit(seen.left(200)))));
+	QCOMPARE(exited.count(), 0);
+	QCOMPARE(states.count(), 0);
+	QCOMPARE(session.state(), bssh_ssh_session::CONNECTED);
+
+	session.disconnect_from_host();
+}

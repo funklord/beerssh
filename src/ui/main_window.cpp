@@ -2857,22 +2857,6 @@ void bssh_main_window::wire_session(bssh_session *session) {
 		session->supply_key_passphrase(ok ? passphrase : QString());
 	});
 
-	/*
-	 * tmux and screen sessions ticked beside the one attached in the
-	 * drawer (sec 10.2a): a tab each on the same host, attached as it
-	 * connects. Only the window showing it opens them, as for a password.
-	 */
-	connect(session, &bssh_session::more_multiplexers_wanted, this,
-	         [this, session](const QList<bssh_mux_session_t> &more) {
-		if (!m_shown.contains(session)) return;
-		for (const bssh_mux_session_t &chosen : more) {
-			bssh_session *tab = prepare_profile(session->profile());
-			if (!tab) continue;
-			tab->preset_multiplexer(chosen);
-			tab->connect_to_host();
-		}
-	});
-
 	connect(session, &bssh_session::needs_password, this, [this, session] {
 		/* Only the window showing it may ask; see wire_session. */
 		if (!m_shown.contains(session)) return;

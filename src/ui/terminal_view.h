@@ -673,7 +673,7 @@ public slots:
 
 signals:
 	/* The drawer's answer (sec 10.2a); see offer_multiplexers(). */
-	void multiplexers_chosen(const QList<bssh_mux_session_t> &chosen);
+	void multiplexer_chosen(const bssh_mux_session_t &chosen);
 	void multiplexers_declined();
 
 	/*
