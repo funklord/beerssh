@@ -87,7 +87,7 @@
 #include "layout_test.h"
 #include "input/input_router.h"
 #include "model/app_settings.h"
-#include "ui/multiplexer_menu.h"
+#include "ui/multiplexer_drawer.h"
 #include "model/session.h"
 #include "model/session_registry.h"
 #include "term/emulator.h"
@@ -4488,11 +4488,24 @@ void layout_test::closing_a_window_closes_its_sessions_without_asking() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+namespace {
+
+/* The drawer on whichever view in the window is offering one. */
+bssh_multiplexer_drawer *drawer_in(const QWidget &window) {
+	for (bssh_terminal_view *view : window.findChildren<bssh_terminal_view *>())
+		if (view->multiplexer_drawer()) return view->multiplexer_drawer();
+	return nullptr;
+}
+
+}
+
 void layout_test::the_tmux_menu_opens_what_is_ticked() {
 	/*
 	 * sec 10.2a: sessions found running when a shell connects are offered
-	 * by the window showing it. One ticked attaches in this tab; a second
-	 * ticked opens another tab on the same host, attaching as it connects.
+	 * from a drawer on the terminal's edge -- a handle closed, a list open
+	 * -- until one is chosen or the drawer is dismissed. One ticked
+	 * attaches in this tab; a second ticked opens another tab on the same
+	 * host, attaching as it connects.
 	 */
 	QList<bssh_fake_ssh_session *> fakes;
 	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
@@ -4515,23 +4528,51 @@ void layout_test::the_tmux_menu_opens_what_is_ticked() {
 		window.adopt_session(session);
 		session->connect_to_host();
 		fakes.last()->simulate_key_auth_success();
+		QVERIFY2(!drawer_in(window), "a drawer before anything was found");
+		bssh_fake_ssh_session *muxed_transport = fakes.last();
+
+		muxed_transport->simulate_side_output("work\t3\t1\nbuild\t1\t0\n@@bssh-screen@@\n");
+		QVERIFY2(drawer_in(window), "no drawer for sessions that are running");
+
+		/*
+		 * A split rebuilds every pane's view, and the offer outlives the
+		 * view it first appeared on: the session's new view has it too.
+		 */
+		bssh_profile_t other = named(QStringLiteral("beside"));
+		other.host = QStringLiteral("beside.example");
+		bssh_session *beside = registry->create(other);
+		window.adopt_session(beside);
+		window.split_with(session);
+		QCoreApplication::processEvents();
 		const int before = registry->count();
 
-		fakes.last()->simulate_side_output("work\t3\t1\nbuild\t1\t0\n@@bssh-screen@@\n");
-		bssh_multiplexer_menu *menu = window.findChild<bssh_multiplexer_menu *>();
-		QVERIFY2(menu, "no menu for sessions that are running");
-		QVERIFY(menu->isVisible());
+		bssh_multiplexer_drawer *drawer = drawer_in(window);
+		QVERIFY2(drawer, "the drawer was lost when the panes were rebuilt");
+		QVERIFY(drawer->isVisible());
+		QVERIFY2(!drawer->is_open(), "the drawer opened over the terminal by itself");
+		QCOMPARE(drawer->handle_text(), QString::fromUtf8("tmux · 2"));
+
+		/* Its handle opens it over the terminal, wider than the handle. */
+		const int closed_width = drawer->width();
+		QAbstractButton *handle = drawer->findChild<QAbstractButton *>(QStringLiteral("multiplexer_handle"));
+		QVERIFY(handle);
+		handle->click();
+		QVERIFY(drawer->is_open());
+		QVERIFY(drawer->width() > closed_width);
 
 		/* The first is ticked already; tick the second too, and Open. */
-		QListWidget *list = menu->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
+		QListWidget *list = drawer->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
 		QVERIFY(list);
 		QCOMPARE(list->count(), 2);
 		list->item(1)->setCheckState(Qt::Checked);
-		menu->accept();
+		QPushButton *open = drawer->findChild<QPushButton *>(QStringLiteral("multiplexer_open"));
+		QVERIFY(open);
+		open->click();
 		QCoreApplication::processEvents();
 
 		QCOMPARE(session->multiplexer_attach(), QStringLiteral("tmux attach -t '=work'"));
-		QVERIFY(fakes.at(0)->written().endsWith("tmux attach -t '=work'\n"));
+		QVERIFY(muxed_transport->written().endsWith("tmux attach -t '=work'\n"));
+		QTRY_VERIFY2(!drawer_in(window), "the drawer stayed after a choice was made");
 		QCOMPARE(registry->count(), before + 1);
 		bssh_session *more = registry->sessions().last();
 		QCOMPARE(more->multiplexer_attach(), QStringLiteral("tmux attach -t '=build'"));
@@ -4539,6 +4580,34 @@ void layout_test::the_tmux_menu_opens_what_is_ticked() {
 		QVERIFY2(fakes.last()->written().endsWith("tmux attach -t '=build'\n"),
 		         "the second tab did not attach to the second session");
 		QVERIFY2(fakes.last()->side_commands().isEmpty(), "the second tab asked again");
+	}
+
+	{
+		/* Dismissed: the drawer goes, and the shell is left as it is. */
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_profile_t host = named(QStringLiteral("declined"));
+		host.host = QStringLiteral("declined.example");
+		bssh_session *session = registry->create(host);
+		window.adopt_session(session);
+		session->connect_to_host();
+		fakes.last()->simulate_key_auth_success();
+		fakes.last()->clear_written();
+		fakes.last()->simulate_side_output("work\t3\t1\n@@bssh-screen@@\n");
+		bssh_multiplexer_drawer *drawer = drawer_in(window);
+		QVERIFY(drawer);
+		drawer->set_open(true);
+		QToolButton *close = drawer->findChild<QToolButton *>(QStringLiteral("multiplexer_close"));
+		QVERIFY(close);
+		close->click();
+		QTRY_VERIFY2(!drawer_in(window), "the drawer stayed after it was closed");
+		QVERIFY(fakes.last()->written().isEmpty());
+		QVERIFY(session->pending_multiplexers().isEmpty());
 	}
 
 	bssh_app_settings().set_offer_multiplexer_sessions(false);

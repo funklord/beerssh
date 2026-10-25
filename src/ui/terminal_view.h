@@ -10,6 +10,7 @@
 
 #include <functional>
 
+#include "model/multiplexer.h"
 #include "term/colour_scheme.h"
 #include "term/image_store.h"
 #include "term/screen.h"
@@ -105,6 +106,8 @@ class bssh_input_router;
  * the registry, never in a widget (sec 3, core principle 2), which is
  * what lets this view be destroyed and recreated freely at M7/M8.
  */
+class bssh_multiplexer_drawer;
+
 class bssh_terminal_view : public QWidget {
 	Q_OBJECT
 
@@ -401,6 +404,9 @@ public:
 	/* Whether the cursor is in the ON half of its blink right now. */
 	bool cursor_shown() const { return m_cursor_on; }
 
+	/* The tmux and screen drawer, while one is offered. */
+	bssh_multiplexer_drawer *multiplexer_drawer() const { return m_mux_drawer; }
+
 private:
 	/*
 	 * The font to draw one cell in, cached. Returned by reference because
@@ -656,7 +662,20 @@ public slots:
 	/* The emulator's rows_damaged(): repaints only those rows. */
 	void on_rows_damaged(int first_row, int last_row);
 
+	/*
+	 * The tmux and screen drawer on this terminal's edge (sec 10.2a),
+	 * shown while the session's offer stands and gone once it is
+	 * answered. A view is rebuilt with every layout change, so the
+	 * session keeps the offer and each new view is handed it again.
+	 */
+	void offer_multiplexers(const QList<bssh_mux_session_t> &found);
+	void withdraw_multiplexers();
+
 signals:
+	/* The drawer's answer (sec 10.2a); see offer_multiplexers(). */
+	void multiplexers_chosen(const QList<bssh_mux_session_t> &chosen);
+	void multiplexers_declined();
+
 	/*
 	 * Ctrl+wheel (sec 9.5): zoom this pane by the given number of steps.
 	 * A request rather than an action, for the same reason as the drag
@@ -1222,6 +1241,11 @@ private:
 
 	/* Where the cursor cell is drawn, in widget coordinates. */
 	QRect cursor_cell_rect() const;
+
+	/* The drawer on the right edge, inside the scrollbar: a handle closed,
+	 * the height of the terminal open. */
+	void place_multiplexer_drawer();
+	bssh_multiplexer_drawer *m_mux_drawer = nullptr;
 
 	/*
 	 * Repaints screen rows first_row..last_row, or the whole view when

@@ -10542,12 +10542,34 @@ if a field can't satisfy that, it belongs in local settings, not in a preset.
 **The holder: "a screen/tmux menu used all the time (that can be
 deactivated in config) … brings up a menu to choose the screen if any
 exist or hides if none do."** When a shell connects, the tmux and screen
-sessions already running there are listed beside it; if there are any, a
-menu offers them, each with a tick, and if there are none nothing is
-shown. One ticked attaches in this tab; more open a tab each on the same
-host, each attached as it connects. "Shell only" leaves the shell alone.
-**Settings → Terminal → "Offer tmux and screen sessions"**, on by default
-(`terminal/offer_multiplexer_sessions`).
+sessions already running there are listed beside it; if there are any,
+**a drawer on the terminal's right edge** offers them, and if there are
+none nothing is shown. **Settings → Terminal → "Offer tmux and screen
+sessions"**, on by default (`terminal/offer_multiplexer_sessions`).
+
+**A drawer, not a dialog — the holder, the same day:** "an on-screen side
+drawer widget if there are screens, and it could expand/close into the
+terminal until a choice is made or it is closed." The first version asked
+in a window-modal dialog the moment the listing came back, which put a
+question over the prompt the user was about to type at. Now:
+
+- **Closed, it is a handle** inside the scrollbar, a third of the way
+  down, its label running up it -- "tmux · 2", "screen · 1",
+  "tmux/screen · 3" -- so it costs a sliver of width and none of the
+  prompt. It starts closed: nothing covers the terminal unasked.
+- **Open, a panel over the terminal**, at most three quarters of the
+  pane, with a tick per session (the first ticked), Open, and × for
+  "Shell only". The handle closes it again. Typing goes to the terminal
+  throughout, and focus returns there once it is answered.
+- **It stays until answered.** One ticked attaches in this tab; more open
+  a tab each on the same host, attached as they connect
+  (`more_multiplexers_wanted`, which only the window showing the session
+  acts on). Answered either way, the session says so
+  (`multiplexers_settled`) and the drawer goes.
+- **It belongs to the pane**, as a child of its terminal view, so a split
+  shows one per pane that has an offer. A view is rebuilt on every layout
+  change, so the offer lives on the session (`pending_multiplexers`) and
+  each new view is handed it -- a split with the drawer showing keeps it.
 
 **Tried first and dropped the same day: a preset field** ("Sessions on
 connect": off / ask / tmux / screen, overridable per host). The holder
@@ -10594,8 +10616,10 @@ Tests: the parser on real tmux and screen output, a quoted name, and
 noise (`tmux_and_screen_listings_are_read`); the session's flow with the
 fake transport (`tmux_and_screen_are_offered_on_connect`); the local path
 through `/bin/sh` with stand-in `tmux` and `screen` on `PATH`
-(`a_local_shell_lists_tmux_and_screen_beside_itself`); the window's menu
-opening two ticked sessions (`the_tmux_menu_opens_what_is_ticked`); and
+(`a_local_shell_lists_tmux_and_screen_beside_itself`); the drawer --
+closed at first, opened by its handle, kept across a split, two ticked
+sessions opened, and dismissed by × (`the_tmux_menu_opens_what_is_ticked`);
+and
 the SSH side channel against a real sshd, its output whole and the shell
 answering after it (`a_command_runs_beside_the_shell_without_disturbing_it`,
 `make check-ssh`). `tool/sabotage/multiplexer-menu.toml`.

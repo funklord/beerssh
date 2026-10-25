@@ -433,6 +433,23 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 
 	connect(session->emulator(), &bssh_emulator::rows_damaged,
 	         view, &bssh_terminal_view::on_rows_damaged);
+
+	/*
+	 * The tmux and screen drawer (sec 10.2a). The session holds the offer
+	 * and this view is new on every layout change, so it is handed what
+	 * is still pending as well as told of what is found later; the answer
+	 * goes to the session, and the session settling takes the drawer away
+	 * from whichever view is showing it.
+	 */
+	view->offer_multiplexers(session->pending_multiplexers());
+	connect(session, &bssh_session::multiplexers_found,
+	         view, &bssh_terminal_view::offer_multiplexers);
+	connect(session, &bssh_session::multiplexers_settled,
+	         view, &bssh_terminal_view::withdraw_multiplexers);
+	connect(view, &bssh_terminal_view::multiplexers_chosen,
+	         session, &bssh_session::choose_multiplexers);
+	connect(view, &bssh_terminal_view::multiplexers_declined,
+	         session, &bssh_session::decline_multiplexers);
 	connect(session->emulator(), &bssh_emulator::images_changed,
 	         view, QOverload<>::of(&QWidget::update));
 

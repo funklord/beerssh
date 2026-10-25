@@ -111,7 +111,7 @@ SOURCES += \
     ../src/model/document_path.cpp \
     ../src/model/preset.cpp \
     ../src/model/multiplexer.cpp \
-    ../src/ui/multiplexer_menu.cpp \
+    ../src/ui/multiplexer_drawer.cpp \
     ../src/model/ssh_config.cpp \
     ../src/model/profile_store.cpp \
     ../src/model/settings_resolver.cpp \
@@ -214,7 +214,7 @@ HEADERS += \
     ../src/model/document_path.h \
     ../src/model/preset.h \
     ../src/model/multiplexer.h \
-    ../src/ui/multiplexer_menu.h \
+    ../src/ui/multiplexer_drawer.h \
     ../src/model/ssh_config.h \
     ../src/model/profile_store.h \
     ../src/model/settings_resolver.h \

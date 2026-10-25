@@ -3,6 +3,7 @@
 #include <QScrollPrepareEvent>
 #include "ui/touch_metrics.h"
 #include "ui/terminal_view.h"
+#include "ui/multiplexer_drawer.h"
 #include "ui/theme.h"
 #include "ui/layout_manager.h"
 
@@ -1539,6 +1540,7 @@ void bssh_terminal_view::resizeEvent(QResizeEvent *event) {
 	 * the arithmetic, not a decoration applied afterwards. */
 	place_scrollbar();
 	recompute_grid();
+	place_multiplexer_drawer();
 }
 
 void bssh_terminal_view::leaveEvent(QEvent *event) {
@@ -3473,6 +3475,56 @@ void bssh_terminal_view::note_content_changed(int first_row, int last_row) {
 void bssh_terminal_view::on_screen_damaged() {
 	note_content_changed();
 	hold_cursor_on();
+}
+
+void bssh_terminal_view::offer_multiplexers(const QList<bssh_mux_session_t> &found) {
+	if (found.isEmpty()) {
+		withdraw_multiplexers();
+		return;
+	}
+	if (!m_mux_drawer) {
+		m_mux_drawer = new bssh_multiplexer_drawer(this);
+		connect(m_mux_drawer, &bssh_multiplexer_drawer::open_changed, this,
+		         [this] { place_multiplexer_drawer(); });
+		connect(m_mux_drawer, &bssh_multiplexer_drawer::sessions_chosen, this,
+		         [this](const QList<bssh_mux_session_t> &chosen) {
+			emit multiplexers_chosen(chosen);
+			setFocus();
+		});
+		connect(m_mux_drawer, &bssh_multiplexer_drawer::declined, this, [this] {
+			emit multiplexers_declined();
+			setFocus();
+		});
+	}
+	m_mux_drawer->set_sessions(found);
+	m_mux_drawer->show();
+	place_multiplexer_drawer();
+}
+
+void bssh_terminal_view::withdraw_multiplexers() {
+	if (!m_mux_drawer) return;
+	m_mux_drawer->deleteLater();
+	m_mux_drawer = nullptr;
+}
+
+void bssh_terminal_view::place_multiplexer_drawer() {
+	if (!m_mux_drawer) return;
+
+	const int right = width() - (m_scrollbar && m_scrollbar->isVisible() ? m_scrollbar->width() : 0);
+	const QSize hint = m_mux_drawer->sizeHint();
+	if (m_mux_drawer->is_open()) {
+		/* Over the terminal, as wide as it asks and never wider than most of
+		 * the pane, so the text behind stays in sight beside it. */
+		const int wide = qMin(hint.width(), qMax(hint.width() / 2, right * 3 / 4));
+		const int high = height() - 2 * BSSH_GRID_INSET_PX;
+		m_mux_drawer->setGeometry(right - wide, BSSH_GRID_INSET_PX, wide, high);
+	} else {
+		/* A handle at the edge, a third of the way down, out of the prompt's way. */
+		const int high = qMin(hint.height(), height() - 2 * BSSH_GRID_INSET_PX);
+		m_mux_drawer->setGeometry(right - hint.width(), qMax(BSSH_GRID_INSET_PX, height() / 3 - high / 2),
+		                          hint.width(), high);
+	}
+	m_mux_drawer->raise();
 }
 
 void bssh_terminal_view::on_rows_damaged(int first_row, int last_row) {

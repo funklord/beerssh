@@ -261,6 +261,16 @@ public:
 	void choose_multiplexer(const bssh_mux_session_t &chosen);
 	void decline_multiplexers();
 
+	/*
+	 * The drawer's answer: the first attaches here, the rest are asked
+	 * for as tabs of their own with more_multiplexers_wanted(). Empty is
+	 * declining.
+	 */
+	void choose_multiplexers(const QList<bssh_mux_session_t> &chosen);
+
+	/* What is on offer and not yet answered, for a view built later. */
+	QList<bssh_mux_session_t> pending_multiplexers() const { return m_mux_pending; }
+
 	/* Chosen before it connects: a further tab ticked in the same menu. */
 	void preset_multiplexer(const bssh_mux_session_t &chosen);
 
@@ -270,6 +280,12 @@ public:
 signals:
 	/* Sessions are running there; the window offers them. Never empty. */
 	void multiplexers_found(const QList<bssh_mux_session_t> &found);
+
+	/* The offer was answered, either way: whatever shows it goes. */
+	void multiplexers_settled();
+
+	/* Ticked beside the one attached here: a tab each, on the same host. */
+	void more_multiplexers_wanted(const QList<bssh_mux_session_t> &more);
 
 	/*
 	 * A bell rang while nothing was showing this session (sec 5.5).
@@ -352,6 +368,7 @@ private:
 	/* tmux and screen: the line typed on connect, whether the question has
 	 * been answered, and whether a listing is out. */
 	QString m_mux_attach;
+	QList<bssh_mux_session_t> m_mux_pending;
 	bool m_mux_answered = false;
 	bool m_mux_listing = false;
 

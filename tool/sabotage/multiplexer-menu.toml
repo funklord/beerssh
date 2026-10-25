@@ -1,6 +1,7 @@
-# Sabotages for the tmux and screen menu (project.md sec 10.2a): sessions
-# running where a shell connects are listed beside it and offered, and the
-# choice is typed into the shell on every connect.
+# Sabotages for the tmux and screen drawer (project.md sec 10.2a): sessions
+# running where a shell connects are listed beside it and offered from a
+# drawer on the terminal's edge, and the choice is typed into the shell on
+# every connect.
 #
 # The SSH side channel itself (drain_side in ssh_session_libssh.cpp) is
 # exercised only against a real sshd, by
@@ -66,16 +67,16 @@ expect = "tmux_and_screen_are_offered_on_connect"
 # Only the first ticked session opens.
 [[sabotage]]
 name = "further ticked sessions do not open"
-file = "src/ui/main_window.cpp"
-find = "\t\t\tfor (int i = 1; i < chosen.size(); ++i) {\n"
-replace = "\t\t\tfor (int i = 1; i < 1; ++i) {\n"
-expect = "the_tmux_menu_opens_what_is_ticked"
+file = "src/model/session.cpp"
+find = "\tif (chosen.size() > 1) emit more_multiplexers_wanted(chosen.mid(1));\n"
+replace = ""
+expect = "tmux_and_screen_are_offered_on_connect"
 
 # The second tab connects knowing nothing, and asks all over again.
 [[sabotage]]
 name = "a further tab is not told what to attach to"
 file = "src/ui/main_window.cpp"
-find = "\t\t\t\tmore->preset_multiplexer(chosen.at(i));\n"
+find = "\t\t\ttab->preset_multiplexer(chosen);\n"
 replace = ""
 expect = "the_tmux_menu_opens_what_is_ticked"
 
@@ -87,3 +88,30 @@ file = "src/model/session.cpp"
 find = "\t\t\tm_mux_listing = false;\n\n\t\t\tif (m_profile.command.isEmpty()) {\n"
 replace = "\t\t\tif (m_profile.command.isEmpty()) {\n"
 expect = "tmux_and_screen_are_offered_on_connect"
+
+# A choice made, and the drawer stays on the terminal's edge offering it.
+# Caught where the settling is asserted: in the window test the second
+# tab's rebuild withdraws the drawer anyway, the offer being cleared.
+[[sabotage]]
+name = "the drawer stays after a choice"
+file = "src/model/session.cpp"
+find = "\tif (m_transport && is_live()) send_out(m_mux_attach.toUtf8() + '\\n');\n\tif (!m_mux_pending.isEmpty()) {\n\t\tm_mux_pending.clear();\n\t\temit multiplexers_settled();\n"
+replace = "\tif (m_transport && is_live()) send_out(m_mux_attach.toUtf8() + '\\n');\n\tif (!m_mux_pending.isEmpty()) {\n\t\tm_mux_pending.clear();\n"
+expect = "tmux_and_screen_are_offered_on_connect"
+
+# A view built after the offer -- every layout change builds new ones --
+# is never handed it, so a split loses the drawer.
+[[sabotage]]
+name = "a rebuilt view is not handed the offer"
+file = "src/ui/pane_container.cpp"
+find = "\tview->offer_multiplexers(session->pending_multiplexers());\n"
+replace = ""
+expect = "the_tmux_menu_opens_what_is_ticked"
+
+# The drawer opens over the terminal by itself, in the way of the prompt.
+[[sabotage]]
+name = "the drawer opens by itself"
+file = "src/ui/multiplexer_drawer.h"
+find = "\tbool m_open = false;\n"
+replace = "\tbool m_open = true;\n"
+expect = "the_tmux_menu_opens_what_is_ticked"

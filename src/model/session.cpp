@@ -395,7 +395,9 @@ void bssh_session::wire_transport() {
 		m_mux_listing = false;
 		if (m_mux_answered || !m_mux_attach.isEmpty()) return;
 		const QList<bssh_mux_session_t> found = bssh_mux_parse(output);
-		if (!found.isEmpty()) emit multiplexers_found(found);
+		if (found.isEmpty()) return;
+		m_mux_pending = found;
+		emit multiplexers_found(found);
 	});
 
 	connect(m_transport, &bssh_ssh_session::state_changed,
@@ -846,10 +848,27 @@ void bssh_session::choose_multiplexer(const bssh_mux_session_t &chosen) {
 	m_mux_answered = true;
 	m_mux_attach = bssh_mux_attach_command(chosen);
 	if (m_transport && is_live()) send_out(m_mux_attach.toUtf8() + '\n');
+	if (!m_mux_pending.isEmpty()) {
+		m_mux_pending.clear();
+		emit multiplexers_settled();
+	}
 }
 
 void bssh_session::decline_multiplexers() {
 	m_mux_answered = true;
+	if (!m_mux_pending.isEmpty()) {
+		m_mux_pending.clear();
+		emit multiplexers_settled();
+	}
+}
+
+void bssh_session::choose_multiplexers(const QList<bssh_mux_session_t> &chosen) {
+	if (chosen.isEmpty()) {
+		decline_multiplexers();
+		return;
+	}
+	choose_multiplexer(chosen.first());
+	if (chosen.size() > 1) emit more_multiplexers_wanted(chosen.mid(1));
 }
 
 void bssh_session::preset_multiplexer(const bssh_mux_session_t &chosen) {

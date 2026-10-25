@@ -1055,7 +1055,17 @@ void session_registry_test::tmux_and_screen_are_offered_on_connect() {
 	const auto offered = found.first().first().value<QList<bssh_mux_session_t>>();
 	QCOMPARE(offered.size(), 4);
 
-	session->choose_multiplexer(offered.at(1));
+	/* Held until answered, for a view built after it was found. */
+	QCOMPARE(session->pending_multiplexers(), offered);
+	QSignalSpy settled(session, &bssh_session::multiplexers_settled);
+	QSignalSpy more(session, &bssh_session::more_multiplexers_wanted);
+
+	session->choose_multiplexers({ offered.at(1), offered.at(2) });
+	QCOMPARE(settled.count(), 1);
+	QVERIFY(session->pending_multiplexers().isEmpty());
+	QCOMPARE(more.count(), 1);
+	QCOMPARE(more.first().first().value<QList<bssh_mux_session_t>>(),
+	         QList<bssh_mux_session_t>{ offered.at(2) });
 	QCOMPARE(fakes.last()->written(), QByteArrayLiteral("tmux attach -t '=build'\n"));
 
 	/* Reconnected: typed again, not asked and not listed again. The
