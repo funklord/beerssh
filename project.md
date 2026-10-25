@@ -14941,7 +14941,7 @@ The desktop build is what makes this project testable at all — use it.
   **sec 6.4 says "on touch, keep local selection winning" and the pointer
   path never asks `is_touch_primary()`.** The document and the code
   contradict each other; flagged, not resolved.
-### 12.3v A fake factory left installed crashed a later test — **[2026-10-25, part fixed]**
+### 12.3v A fake factory left installed crashed a later test — **[FIXED 2026-10-25]**
 
 **The finding:** a sabotage that failed the tmux session test mid-way left
 `bssh_ssh_session::set_factory()` pointing at a lambda over that test's
@@ -14961,12 +14961,13 @@ do while something is going wrong, and it is exactly what switches the cap
 off. Redirect the suite's output to a file and read the file.
 
 **`bssh_factory_reset_t`** (`test/fake_ssh_session.h`) puts the factory
-back however a test leaves; the tmux tests and the close test use it.
-**Still open:** about thirty older tests in `layout_test.cpp` and
-`session_registry_test.cpp` reset the factory on their last line and have
-the same exposure -- harmless while they pass, and the first sabotage that
-fails one mid-way will crash whatever runs next. One line each; not done
-here, since it is a sweep rather than this change.
+back however a test leaves, and every test function that installs one now
+opens with it: the tmux and close tests first, then the 37 others across
+five files in one mechanical pass. That pass was proved rather than
+trusted: 37 insertions and no deletions, every added line the same
+`const bssh_factory_reset_t factory_reset;`, the script finding nothing
+left on a second run, and the suite passing after. The resets on the
+tests' last lines stay; they are now redundant, not wrong.
 
 ### 12.4 CI
 - **[DECIDED 2026-10-22] `check-ci` is kept and no longer run as a gate.**

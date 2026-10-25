@@ -4335,6 +4335,7 @@ struct keep_sessions_on_close_t {
 }
 
 void layout_test::a_window_kept_running_comes_back_from_the_tray() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * sec 5.5: the tray icon is the way back to a window kept running.
 	 * It was not -- its menu held Quit and nothing else, and a click on
@@ -4639,6 +4640,7 @@ void layout_test::the_tmux_drawer_switches_on_a_click() {
 }
 
 void layout_test::with_no_tray_a_window_is_not_kept_running() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * No notification area, so no icon to come back from: a window hidden
 	 * there is a live shell in a process nobody can reach. Not offered;
@@ -5986,6 +5988,7 @@ void layout_test::a_host_remembers_its_zoom() {
 }
 
 void layout_test::a_connected_keep_awake_host_holds_off_sleep() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;
 	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
 		fake = new bssh_fake_ssh_session(parent);
@@ -6467,6 +6470,7 @@ void layout_test::shift_reaches_every_character_a_real_keyboard_has() {
  * of that wired.
  */
 void layout_test::the_hide_key_is_remembered_and_a_tap_undoes_it() {
+	const bssh_factory_reset_t factory_reset;
 	const forced_touch_t arrangement(1);
 
 	bssh_app_settings settings;
@@ -6535,6 +6539,7 @@ void layout_test::the_hide_key_is_remembered_and_a_tap_undoes_it() {
  * one setting cost when only one of them was kept in step.
  */
 void layout_test::the_keyboard_config_key_opens_the_settings_page() {
+	const bssh_factory_reset_t factory_reset;
 	const forced_touch_t arrangement(1);
 
 	bssh_app_settings settings;
@@ -6726,6 +6731,7 @@ void layout_test::the_host_list_leads_back_to_open_sessions() {
  * strand a user pressing a key that does nothing.
  */
 void layout_test::the_back_key_leaves_the_page_not_the_app() {
+	const bssh_factory_reset_t factory_reset;
 	const forced_touch_t arrangement(1);
 
 	bssh_app_settings settings;
@@ -7865,6 +7871,7 @@ void layout_test::the_tab_menu_is_reachable_by_both_gestures() {
 }
 
 void layout_test::backing_out_of_a_session_reaches_the_host_list() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * The tab bar can only appear if a SECOND session can be opened, and
 	 * on the touch front door the only place to open one from is the host
@@ -7952,6 +7959,7 @@ void layout_test::backing_out_of_a_session_reaches_the_host_list() {
  * rebuilding every view per pixel by the same route.
  */
 void layout_test::a_resize_that_keeps_the_size_class_keeps_the_views() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
 		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
 		fake->set_fail_on_connect(QStringLiteral("no network in a test"));
@@ -8863,6 +8871,7 @@ void layout_test::narrowing_a_window_turns_its_extra_panes_into_tabs() {
 }
 
 void layout_test::what_the_terminal_reports_is_what_it_paints() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * sec 7.1's colour and metric answers, asserted as a RELATIONSHIP
 	 * between what this terminal says and what it actually draws --
@@ -9008,6 +9017,7 @@ void layout_test::what_the_terminal_reports_is_what_it_paints() {
 }
 
 void layout_test::a_keystroke_in_a_pane_reaches_the_wire() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * The most fundamental thing a terminal does, and nothing asserted
 	 * it end to end.
@@ -9109,6 +9119,7 @@ void layout_test::a_keystroke_in_a_pane_reaches_the_wire() {
 }
 
 void layout_test::a_mouse_report_reaches_the_wire() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * The other half of the gap the keystroke test exposed. Every
 	 * mouse-report test in this tree reads the emulator's own output
@@ -9193,6 +9204,7 @@ void layout_test::a_mouse_report_reaches_the_wire() {
 }
 
 void layout_test::a_resized_pane_tells_the_remote_its_size() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * A window-change is what stops a remote laying out for a terminal
 	 * that is no longer that shape, and nothing in this suite asserted
@@ -10125,6 +10137,7 @@ void layout_test::two_windows_write_to_one_host_list() {
 }
 
 void layout_test::a_moved_session_asks_the_window_it_is_in() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * A password prompt belongs to the window the session is IN, not the
 	 * one it was opened in.
@@ -11014,6 +11027,7 @@ void layout_test::a_drop_naming_no_session_is_declined() {
 }
 
 void layout_test::a_live_tab_is_not_offered_connect() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * Connect exists for the tab a restore leaves disconnected (sec 8.4),
 	 * and it must go away once the session is live. This is the half that
@@ -11369,6 +11383,7 @@ void layout_test::a_session_adopted_from_another_window_is_wired_to_this_one() {
 }
 
 void layout_test::a_shortcut_acts_only_on_the_window_it_was_typed_in() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * A chord belongs to the pane it was typed into (sec 8.3, sec 8.4).
 	 *
@@ -11467,6 +11482,7 @@ void layout_test::a_shortcut_acts_only_on_the_window_it_was_typed_in() {
 }
 
 void layout_test::a_failure_is_reported_against_the_session_it_came_from() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * The status line composes ONE sentence out of two sources: the
 	 * current session's target and state, and m_error -- which any session
@@ -11586,6 +11602,7 @@ void layout_test::a_failure_is_reported_against_the_session_it_came_from() {
 }
 
 void layout_test::closing_a_window_leaves_the_other_windows_sessions_alone() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));
 

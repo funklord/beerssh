@@ -2840,6 +2840,7 @@ void terminal_view_test::a_dropped_file_arrives_as_a_path_a_shell_can_read() {
 }
 
 void terminal_view_test::a_drop_asks_the_window_to_paste_rather_than_pasting_itself() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_terminal_view view;
 
 	/*

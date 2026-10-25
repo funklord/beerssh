@@ -505,6 +505,7 @@ void bssh_ui_shots::render_touch_surfaces() {
 }
 
 void bssh_ui_shots::render_desktop_surfaces() {
+	const bssh_factory_reset_t factory_reset;
 	/* And the desktop arrangement, said rather than assumed. */
 	const forced_touch_t arrangement(0);
 

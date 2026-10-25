@@ -72,6 +72,7 @@ void conn_manager_test::jitter_separates_sessions_dropped_together() {
 }
 
 void conn_manager_test::a_failing_reconnect_does_not_reset_its_own_backoff() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * Sec 5.3's backoff, on the path a real outage takes.
 	 *
@@ -136,6 +137,7 @@ void conn_manager_test::a_failing_reconnect_does_not_reset_its_own_backoff() {
 }
 
 void conn_manager_test::a_network_flap_staggers_the_sessions_rather_than_dialling_them() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * The storm the test above is NAMED for, by the route that actually
 	 * causes one. That test measures backoff_delay_ms and proves the
@@ -291,6 +293,7 @@ void conn_manager_test::a_user_disconnect_is_not_retried() {
 }
 
 void conn_manager_test::a_user_disconnect_is_not_retried_when_nobody_calls_the_setter() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * PRODUCTION'S WIRING, which is the difference between this and the
 	 * test above it.
@@ -352,6 +355,7 @@ void conn_manager_test::auto_reconnect_can_be_switched_off() {
 }
 
 void conn_manager_test::a_refused_password_is_never_offered_again() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;
 	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
 		fake = new bssh_fake_ssh_session(parent);
@@ -387,6 +391,7 @@ void conn_manager_test::a_refused_password_is_never_offered_again() {
 }
 
 void conn_manager_test::a_refused_password_is_not_reconnected() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;
 	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
 		fake = new bssh_fake_ssh_session(parent);
@@ -419,6 +424,7 @@ void conn_manager_test::a_refused_password_is_not_reconnected() {
 }
 
 void conn_manager_test::a_reconnect_offers_only_the_password_that_got_in() {
+	const bssh_factory_reset_t factory_reset;
 	QList<bssh_fake_ssh_session *> fakes;
 	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
 		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
@@ -465,6 +471,7 @@ void conn_manager_test::a_reconnect_offers_only_the_password_that_got_in() {
  * one that got in, so the reconnect asks rather than replaying it.
  */
 void conn_manager_test::a_password_never_answered_is_not_replayed() {
+	const bssh_factory_reset_t factory_reset;
 	QList<bssh_fake_ssh_session *> fakes;
 	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
 		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
@@ -499,6 +506,7 @@ void conn_manager_test::a_password_never_answered_is_not_replayed() {
 }
 
 void conn_manager_test::a_network_change_does_not_dial_a_session_never_connected() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * sec 8.4: a restored tab connects when the user asks, and not before.
 	 * A network change scheduled a reconnect for any session that was not

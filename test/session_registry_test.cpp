@@ -109,6 +109,7 @@ void session_registry_test::closing_announces_before_destroying() {
 }
 
 void session_registry_test::only_a_connected_keep_awake_host_keeps_the_computer_awake() {
+	const bssh_factory_reset_t factory_reset;
 	QList<bssh_fake_ssh_session *> fakes;
 	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
 		bssh_fake_ssh_session *fake = new bssh_fake_ssh_session(parent);
@@ -218,6 +219,7 @@ void session_registry_test::the_transport_reports_which_kind_of_ending_it_was() 
 }
 
 void session_registry_test::a_shell_that_ends_closes_its_session() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * sec 8.6: a terminal whose program has finished closes, which is
 	 * what every terminal since xterm does and what this did NOT do --
@@ -252,6 +254,7 @@ void session_registry_test::a_shell_that_ends_closes_its_session() {
 }
 
 void session_registry_test::a_held_session_stays_when_its_shell_ends() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * --hold, and the reason it exists: a command that fails prints why
 	 * and exits, and closing the pane takes the message with it.
@@ -354,6 +357,7 @@ void session_registry_test::an_encrypted_key_is_offered_before_a_password() {
 }
 
 void session_registry_test::a_hosts_keepalive_interval_reaches_its_transport() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * sec 5.3 wants a keepalive so a dead socket is noticed rather than
 	 * typed into. It is only worth anything if the host's interval
@@ -399,6 +403,7 @@ void session_registry_test::a_hosts_keepalive_interval_reaches_its_transport() {
 }
 
 void session_registry_test::every_resolved_setting_reaches_something_that_uses_it() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * The gap this test exists to close: bssh_preset_t had nine settable
 	 * fields, a three-layer resolver, an editor and a config file, and
@@ -469,6 +474,7 @@ void session_registry_test::every_resolved_setting_reaches_something_that_uses_i
 }
 
 void session_registry_test::the_on_connect_command_runs_on_every_connect() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;
 	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
 		fake = new bssh_fake_ssh_session(parent);
@@ -522,6 +528,7 @@ QString screen_text(const bssh_emulator *emulator) {
 } /* namespace */
 
 void session_registry_test::a_reconnected_session_shows_and_takes_the_new_shell() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * Reported from the phone 2026-10-12: a session that dropped and
 	 * reconnected said "connected" and then showed nothing of the new
@@ -570,6 +577,7 @@ void session_registry_test::a_reconnected_session_shows_and_takes_the_new_shell(
 }
 
 void session_registry_test::connection_details_say_what_the_link_carried() {
+	const bssh_factory_reset_t factory_reset;
 	/*
 	 * Connection Details exists to tell three things apart from the
 	 * session's own menu: a server that went quiet, keys that never left,
@@ -661,6 +669,7 @@ void session_registry_test::a_store_view_touches_nothing_of_the_users() {
 }
 
 void session_registry_test::editing_a_host_reaches_the_session_already_open_on_it() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;
 	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
 		fake = new bssh_fake_ssh_session(parent);
@@ -719,6 +728,7 @@ void session_registry_test::editing_a_host_reaches_the_session_already_open_on_i
 }
 
 void session_registry_test::a_reconnect_hands_the_new_shell_a_clean_terminal() {
+	const bssh_factory_reset_t factory_reset;
 	bssh_fake_ssh_session *fake = nullptr;
 	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
 		fake = new bssh_fake_ssh_session(parent);
