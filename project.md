@@ -10537,6 +10537,69 @@ key row layout it carries is simply ignored where no key row is shown (§6.2). A
 preset exported from a phone must import unchanged on a desktop and vice versa;
 if a field can't satisfy that, it belongs in local settings, not in a preset.
 
+### 10.2a tmux and screen, offered on connect — **[BUILT 2026-10-25]**
+
+**The holder: "a screen/tmux menu used all the time (that can be
+deactivated in config) … brings up a menu to choose the screen if any
+exist or hides if none do."** When a shell connects, the tmux and screen
+sessions already running there are listed beside it; if there are any, a
+menu offers them, each with a tick, and if there are none nothing is
+shown. One ticked attaches in this tab; more open a tab each on the same
+host, each attached as it connects. "Shell only" leaves the shell alone.
+**Settings → Terminal → "Offer tmux and screen sessions"**, on by default
+(`terminal/offer_multiplexer_sessions`).
+
+**Tried first and dropped the same day: a preset field** ("Sessions on
+connect": off / ask / tmux / screen, overridable per host). The holder
+asked for the menu everywhere instead, and a field per preset was a
+question nobody needed answering per host. The tmux-first preset keeps
+its on-connect command.
+
+- **Listed beside the shell, never in it** (`run_on_the_side()` on the
+  transport). Over SSH a second channel of the same connection, read by
+  `drain()` beside the shell's; locally a `/bin/sh -c` process. Both
+  bounded: five seconds, 64 KiB. The shell opens first, so the prompt is
+  never kept waiting for the listing. A transport that cannot answers
+  empty, and empty is "nothing to offer".
+- **One command line for both**, `bssh_mux_listing_command()`: tmux in a
+  format of our own (name, windows, attached, tab-separated) so no default
+  wording is relied on, a marker line, then `screen -ls`, which has no
+  such option and is parsed. Wrapped in `sh -c '…'` because an exec
+  request runs in the account's own shell, which may be fish or csh; only
+  the wrapper has to read in every shell.
+- **The choice is typed into the shell**, like the on-connect command:
+  `tmux attach -t '=name'` (exact match, so `work` is not `workshop`) or
+  `screen -x 'pid.name'` (joins even while attached elsewhere, which a
+  reconnect needs before the old connection has noticed it is gone).
+  Typed again on every reconnect, without listing or asking again --
+  which is what makes a dropped connection come back to the work.
+  Detaching leaves a shell rather than closing the tab.
+- **Not offered** to a session running a command of its own (§8.6's
+  `-e`), after "Shell only" for that session, or with the setting off.
+  Nothing found leaves the question open, so a reconnect lists again.
+- **A listing lost with its connection is forgotten** at the next
+  CONNECTED. Over SSH its channel goes with the connection and never
+  answers; the flag saying one was out was cleared only by an answer, so a
+  connection dropped mid-listing kept that session from ever listing
+  again. Found by sabotage: the edit breaking "Shell only" was MISSED,
+  because the test declined without answering the listing, and the flag
+  alone stopped the next one.
+- **A session move waits for the listing**: the export carries one
+  channel, the shell's, and refuses while the side channel is open.
+- **The suite turns it off** (`test/main.cpp`), or its local shells would
+  list the sessions of whoever runs it and menus would appear on one
+  machine and not another; the tests that cover it turn it on.
+
+Tests: the parser on real tmux and screen output, a quoted name, and
+noise (`tmux_and_screen_listings_are_read`); the session's flow with the
+fake transport (`tmux_and_screen_are_offered_on_connect`); the local path
+through `/bin/sh` with stand-in `tmux` and `screen` on `PATH`
+(`a_local_shell_lists_tmux_and_screen_beside_itself`); the window's menu
+opening two ticked sessions (`the_tmux_menu_opens_what_is_ticked`); and
+the SSH side channel against a real sshd, its output whole and the shell
+answering after it (`a_command_runs_beside_the_shell_without_disturbing_it`,
+`make check-ssh`). `tool/sabotage/multiplexer-menu.toml`.
+
 ### 10.3 What must NOT live in a preset
 **Hostname, port, username, passwords, private keys, key references, known-host
 entries.** These stay on the host profile and in the secret store (§11).

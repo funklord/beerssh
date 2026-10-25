@@ -434,6 +434,14 @@ public:
 	void set_keep_sessions_on_close(bool keep);
 
 	/*
+	 * List tmux and screen sessions when a shell connects and offer them
+	 * (sec 10.2a). ON by default: nothing is shown where there are none,
+	 * so it costs nobody who does not use them anything but a listing.
+	 */
+	bool offer_multiplexer_sessions() const;
+	void set_offer_multiplexer_sessions(bool offer);
+
+	/*
 	 * Whether the interface follows the system font-scale accessibility
 	 * setting (sec 9.5). On by default, because a user who enlarged their
 	 * device's text meant it; off is for someone who wants this app's

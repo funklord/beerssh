@@ -14,6 +14,7 @@
 #include <QFile>
 #include <QSocketNotifier>
 #include <QStandardPaths>
+#include <QElapsedTimer>
 #include <QTimer>
 
 #include <netinet/in.h>
@@ -217,6 +218,7 @@ public slots:
 	void do_set_keepalive(int seconds);
 	void do_set_term(const QString &term);
 	void do_set_command(const QStringList &command);
+	void do_run_on_the_side(const QString &command);
 	void do_set_compression(bool compression);
 	void do_set_identity_file(const QString &path);
 	void do_set_proxy_jump(const QString &spec);
@@ -241,6 +243,7 @@ signals:
 	 */
 	void state_changed(int state);
 	void bytes_received(const QByteArray &bytes);
+	void side_output_ready(const QByteArray &output);
 	void failed(const QString &reason);
 	void exited(int exit_status);
 	void password_required();
@@ -287,6 +290,16 @@ private:
 	/* Empty asks for a shell; anything else is an exec request (sec 8.6). */
 	QString m_command;
 
+	/*
+	 * run_on_the_side()'s channel, read by drain() beside the shell's and
+	 * answered once it ends, overflows or runs out of time.
+	 */
+	ssh_channel m_side_channel = nullptr;
+	QByteArray m_side_output;
+	QElapsedTimer m_side_started;
+	void drain_side();
+	void finish_side();
+
 	/* Empty means the default identities; see set_identity_file. */
 	QString m_identity_file;
 
@@ -331,6 +344,12 @@ void bssh_libssh_worker::teardown() {
 
 	/* Nothing to flush into a channel that is going. */
 	m_pending.clear();
+
+	if (m_side_channel) {
+		ssh_channel_free(m_side_channel);
+		m_side_channel = nullptr;
+		m_side_output.clear();
+	}
 
 	if (m_channel) {
 		if (ssh_channel_is_open(m_channel)) ssh_channel_close(m_channel);
@@ -1136,6 +1155,60 @@ void bssh_libssh_worker::do_open_shell(int cols, int rows) {
 	drain();
 }
 
+void bssh_libssh_worker::do_run_on_the_side(const QString &command) {
+	/* One at a time, and only on a connection that is up. */
+	if (!m_session || m_side_channel) {
+		emit side_output_ready(QByteArray());
+		return;
+	}
+
+	m_side_channel = ssh_channel_new(m_session);
+	if (!m_side_channel || ssh_channel_open_session(m_side_channel) != SSH_OK ||
+	    ssh_channel_request_exec(m_side_channel, command.toUtf8().constData()) != SSH_OK) {
+		/* A server that refuses a second channel or an exec is a server
+		 * where nothing gets listed -- not a broken connection. */
+		if (m_side_channel) ssh_channel_free(m_side_channel);
+		m_side_channel = nullptr;
+		emit side_output_ready(QByteArray());
+		return;
+	}
+	m_side_output.clear();
+	m_side_started.start();
+	drain_side();
+}
+
+void bssh_libssh_worker::drain_side() {
+	if (!m_side_channel) return;
+
+	const int cap = 64 * 1024;
+	char buffer[4096];
+	for (;;) {
+		const int n = ssh_channel_read_nonblocking(m_side_channel, buffer, sizeof(buffer), 0);
+		if (n == SSH_ERROR) {
+			finish_side();
+			return;
+		}
+		if (n <= 0) break;
+		m_side_output.append(buffer, qMin(n, cap - int(m_side_output.size())));
+		if (m_side_output.size() >= cap) {
+			finish_side();
+			return;
+		}
+	}
+	if (ssh_channel_is_eof(m_side_channel) || !ssh_channel_is_open(m_side_channel) ||
+	    m_side_started.elapsed() > 5000)
+		finish_side();
+}
+
+void bssh_libssh_worker::finish_side() {
+	const QByteArray output = m_side_output;
+	if (ssh_channel_is_open(m_side_channel)) ssh_channel_close(m_side_channel);
+	ssh_channel_free(m_side_channel);
+	m_side_channel = nullptr;
+	m_side_output.clear();
+	emit side_output_ready(output);
+}
+
 void bssh_libssh_worker::do_set_command(const QStringList &command) {
 	/*
 	 * Joined with spaces, which is what the protocol can carry and what
@@ -1253,6 +1326,10 @@ void bssh_libssh_worker::do_set_keepalive(int seconds) {
 
 void bssh_libssh_worker::drain() {
 	if (!m_channel) return;
+
+	/* The side channel first: it is short, and the shell's loop below can
+	 * end the session. */
+	drain_side();
 
 	/*
 	 * Anything the window had no room for last time. This runs from the
@@ -1454,6 +1531,12 @@ const int BSSH_EXPORT_POLL_MS = 20;
 bool bssh_libssh_worker::do_export(QByteArray &state, QList<int> &fds, QString &why) {
 	if (!m_session || !m_channel) {
 		why = QStringLiteral("the connection is not open");
+		return false;
+	}
+	/* The export carries one channel, the shell's. A second one open would
+	 * be left behind half-read, so it waits for the listing to end. */
+	if (m_side_channel) {
+		why = QStringLiteral("the connection is still listing its tmux and screen sessions");
 		return false;
 	}
 	/* Stopped: nothing reads the channel from here until the release or
@@ -1671,6 +1754,8 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 
 	connect(m_worker, &bssh_libssh_worker::bytes_received,
 	         this, &bssh_ssh_session::bytes_received);
+	connect(m_worker, &bssh_libssh_worker::side_output_ready,
+	         this, &bssh_ssh_session::side_output_ready);
 	connect(m_worker, &bssh_libssh_worker::failed,
 	         this, &bssh_ssh_session::failed);
 	connect(m_worker, &bssh_libssh_worker::exited,
@@ -1745,6 +1830,12 @@ void bssh_ssh_session_libssh::set_keepalive(int seconds) {
 void bssh_ssh_session_libssh::set_term(const QString &term) {
 	QMetaObject::invokeMethod(m_worker, [this, term] {
 		m_worker->do_set_term(term);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::run_on_the_side(const QString &command) {
+	QMetaObject::invokeMethod(m_worker, [this, command] {
+		m_worker->do_run_on_the_side(command);
 	}, Qt::QueuedConnection);
 }
 

@@ -5,7 +5,9 @@
 #include <QDataStream>
 #include <QIODevice>
 #include <QList>
+#include <QProcess>
 #include <QProcessEnvironment>
+#include <QTimer>
 #include <QSocketNotifier>
 
 #include <cerrno>
@@ -516,6 +518,36 @@ const char BSSH_PTY_HANDOFF_MAGIC[] = "bssh-pty-transport";
 const quint32 BSSH_PTY_HANDOFF_FORMAT = 1;
 
 }  // namespace
+
+void bssh_pty_session::run_on_the_side(const QString &command) {
+	/*
+	 * A process beside the shell, through /bin/sh as an SSH exec request
+	 * goes through the account's shell, so one command line serves both.
+	 * Bounded like the SSH side: five seconds, then it is killed and what
+	 * it printed so far is the answer, and at most 64 KiB of that.
+	 */
+	QProcess *process = new QProcess(this);
+	process->setProcessChannelMode(QProcess::SeparateChannels);
+	process->setStandardInputFile(QProcess::nullDevice());
+	process->setStandardErrorFile(QProcess::nullDevice());
+
+	QTimer *deadline = new QTimer(process);
+	deadline->setSingleShot(true);
+	connect(deadline, &QTimer::timeout, process, [process] { process->kill(); });
+
+	connect(process, &QProcess::finished, this, [this, process] {
+		emit side_output_ready(process->readAllStandardOutput().left(64 * 1024));
+		process->deleteLater();
+	});
+	connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
+		if (error != QProcess::FailedToStart) return;
+		emit side_output_ready(QByteArray());
+		process->deleteLater();
+	});
+
+	deadline->start(5000);
+	process->start(QStringLiteral("/bin/sh"), { QStringLiteral("-c"), command });
+}
 
 QString bssh_pty_session::kind() const {
 	return QStringLiteral("local");

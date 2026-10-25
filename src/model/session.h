@@ -7,6 +7,7 @@
 #include <QSet>
 #include <QString>
 
+#include "model/multiplexer.h"
 #include "model/profile.h"
 #include "ssh/ssh_session.h"
 
@@ -250,7 +251,26 @@ public:
 	 * which shifts as tabs close. */
 	QString handoff_id() const { return m_handoff_id; }
 
+	/*
+	 * tmux and screen on connect (model/multiplexer.h, sec 10.2a). The
+	 * session lists them beside its shell when it connects, and says what
+	 * it found with multiplexers_found(); the window asks, and answers
+	 * with one of these. A choice is typed into the shell now and again on
+	 * every reconnect; declining means this session is not asked again.
+	 */
+	void choose_multiplexer(const bssh_mux_session_t &chosen);
+	void decline_multiplexers();
+
+	/* Chosen before it connects: a further tab ticked in the same menu. */
+	void preset_multiplexer(const bssh_mux_session_t &chosen);
+
+	/* What it attaches to on each connect, if anything was chosen. */
+	QString multiplexer_attach() const { return m_mux_attach; }
+
 signals:
+	/* Sessions are running there; the window offers them. Never empty. */
+	void multiplexers_found(const QList<bssh_mux_session_t> &found);
+
 	/*
 	 * A bell rang while nothing was showing this session (sec 5.5).
 	 *
@@ -328,6 +348,13 @@ private:
 	bool m_password_refused = false;
 	QByteArray refused_key(const QString &password) const;
 	bool m_user_disconnected;
+
+	/* tmux and screen: the line typed on connect, whether the question has
+	 * been answered, and whether a listing is out. */
+	QString m_mux_attach;
+	bool m_mux_answered = false;
+	bool m_mux_listing = false;
+
 	bool m_unseen_bell;
 	bool m_remote_exited;
 	int m_exit_status;

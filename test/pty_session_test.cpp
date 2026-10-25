@@ -1,9 +1,11 @@
 #include <QSignalSpy>
 #include <QtTest>
+#include <QTemporaryDir>
 
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
+#include "model/multiplexer.h"
 #include "model/profile.h"
 #include "model/session.h"
 #include "term/emulator.h"
@@ -695,4 +697,39 @@ void pty_session_test::a_refused_move_leaves_the_session_running() {
 
 	from->disconnect_from_host();
 	delete from;
+}
+
+void pty_session_test::a_local_shell_lists_tmux_and_screen_beside_itself() {
+	/*
+	 * sec 10.2a, locally: the listing runs as a process through /bin/sh,
+	 * the same command line an SSH exec request carries. tmux and screen
+	 * here are stand-ins on PATH printing what the real ones print, so
+	 * the test does not depend on what is installed or running.
+	 */
+	QTemporaryDir bin;
+	QVERIFY(bin.isValid());
+	const auto stand_in = [&bin](const QString &name, const QByteArray &body) {
+		QFile file(bin.filePath(name));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("#!/bin/sh\n" + body);
+		file.close();
+		file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+	};
+	stand_in(QStringLiteral("tmux"), "[ \"$1\" = list-sessions ] && printf 'dev\\t2\\t0\\n'\n");
+	stand_in(QStringLiteral("screen"), "printf 'There is a screen on:\\n\\t4242.notes\\t(Detached)\\n'\n");
+
+	const QByteArray path = qgetenv("PATH");
+	qputenv("PATH", bin.path().toUtf8() + ':' + path);
+
+	bssh_pty_session session;
+	QSignalSpy listed(&session, &bssh_ssh_session::side_output_ready);
+	session.run_on_the_side(bssh_mux_listing_command());
+	QVERIFY(listed.wait(10000));
+	qputenv("PATH", path);
+
+	const QList<bssh_mux_session_t> found =
+	        bssh_mux_parse(listed.first().first().toByteArray());
+	QCOMPARE(found.size(), 2);
+	QCOMPARE(found.at(0).name, QStringLiteral("dev"));
+	QCOMPARE(found.at(1).name, QStringLiteral("4242.notes"));
 }

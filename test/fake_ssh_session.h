@@ -100,6 +100,11 @@ public:
 
 	/* Recorded rather than run, so a test can ask what -e reached (sec 8.6). */
 	void set_command(const QStringList &command) override { m_command = command; }
+
+	/* Recorded, and answered only when the test says what it printed. */
+	void run_on_the_side(const QString &command) override { m_side_commands.append(command); }
+	QStringList side_commands() const { return m_side_commands; }
+	void simulate_side_output(const QByteArray &output) { emit side_output_ready(output); }
 	QStringList command() const { return m_command; }
 
 	void set_compression(bool compression) override { m_compression = compression; }
@@ -125,6 +130,7 @@ private:
 	QString m_proxy_jump;
 	QList<QByteArray> m_script;
 	QByteArray m_written;
+	QStringList m_side_commands;
 	QString m_fail_reason;
 	int m_cols;
 	int m_rows;

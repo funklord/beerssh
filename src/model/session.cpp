@@ -384,6 +384,20 @@ void bssh_session::wire_transport() {
 		if (!reply.isEmpty()) send_out(reply);
 	});
 
+	/*
+	 * The tmux and screen listing coming back. Nothing found is nothing
+	 * shown, and the question stays open: a reconnect lists again, in case
+	 * one has been started there since.
+	 */
+	connect(m_transport, &bssh_ssh_session::side_output_ready, this,
+	         [this](const QByteArray &output) {
+		if (!m_mux_listing) return;
+		m_mux_listing = false;
+		if (m_mux_answered || !m_mux_attach.isEmpty()) return;
+		const QList<bssh_mux_session_t> found = bssh_mux_parse(output);
+		if (!found.isEmpty()) emit multiplexers_found(found);
+	});
+
 	connect(m_transport, &bssh_ssh_session::state_changed,
 	         this, [this](bssh_ssh_session::state_t state) {
 		if (state == bssh_ssh_session::CONNECTED) {
@@ -418,6 +432,31 @@ void bssh_session::wire_transport() {
 			        m_settings.value(QStringLiteral("on_connect_command")).toString();
 			if (!command.isEmpty()) {
 				send_out(command.toUtf8() + '\n');
+			}
+
+			/*
+			 * tmux and screen (sec 10.2a), only into a shell: a session
+			 * running a command of its own (sec 8.6's -e) has nothing to
+			 * type into. A choice made is typed again on every connect;
+			 * until one is, what is there is listed beside the shell,
+			 * which opened above, so the prompt is not kept waiting.
+			 */
+			/*
+			 * A listing still out belongs to the connection before this
+			 * one. Over SSH its channel went with that connection and will
+			 * never answer, and left set this would keep every connection
+			 * after it from listing.
+			 */
+			m_mux_listing = false;
+
+			if (m_profile.command.isEmpty()) {
+				if (!m_mux_attach.isEmpty()) {
+					send_out(m_mux_attach.toUtf8() + '\n');
+				} else if (!m_mux_answered && !m_mux_listing &&
+				           bssh_app_settings().offer_multiplexer_sessions()) {
+					m_mux_listing = true;
+					m_transport->run_on_the_side(bssh_mux_listing_command());
+				}
 			}
 		}
 		emit state_changed();
@@ -801,4 +840,19 @@ bssh_session *bssh_session::import_handoff(const QByteArray &state, const QList<
 	session->wire_transport();
 	session->send_out(held);
 	return session;
+}
+
+void bssh_session::choose_multiplexer(const bssh_mux_session_t &chosen) {
+	m_mux_answered = true;
+	m_mux_attach = bssh_mux_attach_command(chosen);
+	if (m_transport && is_live()) send_out(m_mux_attach.toUtf8() + '\n');
+}
+
+void bssh_session::decline_multiplexers() {
+	m_mux_answered = true;
+}
+
+void bssh_session::preset_multiplexer(const bssh_mux_session_t &chosen) {
+	m_mux_answered = true;
+	m_mux_attach = bssh_mux_attach_command(chosen);
 }

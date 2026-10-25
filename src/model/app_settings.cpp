@@ -614,6 +614,14 @@ void bssh_app_settings::set_keep_sessions_on_close(bool keep) {
 	store(QStringLiteral("window/keep_sessions_on_close"), keep);
 }
 
+bool bssh_app_settings::offer_multiplexer_sessions() const {
+	return value(QStringLiteral("terminal/offer_multiplexer_sessions"), true).toBool();
+}
+
+void bssh_app_settings::set_offer_multiplexer_sessions(bool offer) {
+	store(QStringLiteral("terminal/offer_multiplexer_sessions"), offer);
+}
+
 bool bssh_app_settings::honour_system_font_scale() const {
 	return value(QStringLiteral("appearance/honour_system_font_scale"), true).toBool();
 }

@@ -220,7 +220,22 @@ public:
 	virtual bool import_transport(const QByteArray &state, const QList<int> &fds, QString *why);
 	static bssh_ssh_session *create_for_import(const QString &kind, QObject *parent = nullptr);
 
+	/*
+	 * Runs a short command beside the shell, never in it, and answers with
+	 * side_output_ready(): what it printed on stdout, at most 64 KiB, after
+	 * it ends or after five seconds. Over SSH a second channel of the same
+	 * connection; locally a process. What lists tmux and screen sessions
+	 * on connect (model/multiplexer.h).
+	 *
+	 * The default answers empty, a turn of the event loop later: a
+	 * transport that cannot run one says nothing ran, not something did.
+	 */
+	virtual void run_on_the_side(const QString &command);
+
 signals:
+	/* What run_on_the_side() printed; empty when it printed nothing or failed. */
+	void side_output_ready(const QByteArray &output);
+
 	void bytes_received(const QByteArray &bytes);
 	void state_changed(bssh_ssh_session::state_t state);
 	void failed(const QString &reason);

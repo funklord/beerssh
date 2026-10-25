@@ -49,3 +49,9 @@ bool bssh_ssh_session::import_transport(const QByteArray &state, const QList<int
 	if (why) *why = QStringLiteral("this connection cannot move to another process");
 	return false;
 }
+
+void bssh_ssh_session::run_on_the_side(const QString &command) {
+	Q_UNUSED(command);
+	QMetaObject::invokeMethod(this, [this] { emit side_output_ready(QByteArray()); },
+	                          Qt::QueuedConnection);
+}

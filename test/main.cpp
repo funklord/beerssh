@@ -12,6 +12,7 @@
 #include <string>
 #include <thread>
 
+#include "model/app_settings.h"
 #include "platform/headless.h"
 #include "platform/platform.h"
 #include "command_line_test.h"
@@ -270,6 +271,14 @@ int main(int argc, char *argv[]) {
 	 * The one test about that answer changes it and puts it back.
 	 */
 	bssh_platform::force_application_active(1);
+
+	/*
+	 * No tmux or screen menus (sec 10.2a) unless a test asks for one: the
+	 * suite's local shells would otherwise list whatever sessions the
+	 * person running it has, and a menu would appear in some windows and
+	 * not others depending on whose machine it is.
+	 */
+	bssh_app_settings().set_offer_multiplexer_sessions(false);
 
 	/*
 	 * Before any test runs and after QApplication, which is the only

@@ -7,6 +7,8 @@
 #include <QTemporaryDir>
 
 #include "model/conn_manager.h"
+#include "model/app_settings.h"
+#include "model/multiplexer.h"
 #include "platform/platform.h"
 #include "model/session.h"
 #include "model/profile_store.h"
@@ -974,4 +976,147 @@ void session_registry_test::the_three_events_sec_5_5_names_reach_the_platform() 
 	session->set_on_screen(true);
 	session->emulator()->feed(QByteArrayLiteral("\a"));
 	QCOMPARE(titles.size(), 3);
+}
+
+static const QByteArray sample_listing =
+        "work\t3\t1\n"
+        "build\t1\t0\n"
+        "@@bssh-screen@@\n"
+        "There are screens on:\n"
+        "\t12345.pts-0.host\t(10/23/2026 09:17:00 AM)\t(Detached)\n"
+        "\t678.logs\t(Attached)\n"
+        "2 Sockets in /run/screen/S-funk.\n";
+
+void session_registry_test::tmux_and_screen_listings_are_read() {
+	/* What the listing prints (model/multiplexer.h), read back. */
+	const QList<bssh_mux_session_t> found = bssh_mux_parse(sample_listing);
+	QCOMPARE(found.size(), 4);
+
+	QCOMPARE(found.at(0).kind, bssh_mux_session_t::TMUX);
+	QCOMPARE(found.at(0).name, QStringLiteral("work"));
+	QVERIFY(found.at(0).attached);
+	QCOMPARE(bssh_mux_label(found.at(0)), QStringLiteral("tmux  work  (3 windows, attached)"));
+	QCOMPARE(bssh_mux_label(found.at(1)), QStringLiteral("tmux  build  (1 window)"));
+
+	QCOMPARE(found.at(2).kind, bssh_mux_session_t::SCREEN);
+	QCOMPARE(found.at(2).name, QStringLiteral("12345.pts-0.host"));
+	QVERIFY(!found.at(2).attached);
+	QCOMPARE(found.at(3).name, QStringLiteral("678.logs"));
+	QVERIFY(found.at(3).attached);
+
+	/* Attached by exact name, quoted for the shell it is typed into. */
+	QCOMPARE(bssh_mux_attach_command(found.at(0)), QStringLiteral("tmux attach -t '=work'"));
+	QCOMPARE(bssh_mux_attach_command(found.at(2)), QStringLiteral("screen -x '12345.pts-0.host'"));
+	bssh_mux_session_t quote;
+	quote.name = QStringLiteral("it's");
+	QCOMPARE(bssh_mux_attach_command(quote), QStringLiteral("tmux attach -t '=it'\\''s'"));
+
+	/* Neither one there, and lines that are not sessions, are nothing. */
+	QVERIFY(bssh_mux_parse("@@bssh-screen@@\nNo Sockets found in /run/screen/S-funk.\n").isEmpty());
+	QVERIFY(bssh_mux_parse("").isEmpty());
+	QVERIFY(bssh_mux_parse("odd\tline\n\t12345.x\t(Detached)\n@@bssh-screen@@\nx\ty\n\tnot.a.pid\t(Detached)\n")
+	                .isEmpty());
+}
+
+namespace {
+
+/* Offering tmux and screen is off for the suite (test/main.cpp). */
+struct offer_multiplexers_t {
+	offer_multiplexers_t() { bssh_app_settings().set_offer_multiplexer_sessions(true); }
+	~offer_multiplexers_t() { bssh_app_settings().set_offer_multiplexer_sessions(false); }
+};
+
+}
+
+void session_registry_test::tmux_and_screen_are_offered_on_connect() {
+	/*
+	 * sec 10.2a: listed beside the shell once it is open, offered when
+	 * there are any, and the choice typed into the shell -- and typed
+	 * again on a reconnect, without asking or listing again.
+	 */
+	const offer_multiplexers_t offer;
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		fakes.append(new bssh_fake_ssh_session(parent));
+		return fakes.last();
+	});
+
+	bssh_session_registry registry;
+	bssh_session *session = registry.create(profile_for(QStringLiteral("mux"),
+	                                                     QStringLiteral("m.example")));
+	QSignalSpy found(session, &bssh_session::multiplexers_found);
+	session->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	QCOMPARE(fakes.last()->side_commands(), QStringList{ bssh_mux_listing_command() });
+	QVERIFY2(fakes.last()->written().isEmpty(), "something was typed before anything was chosen");
+
+	fakes.last()->simulate_side_output(sample_listing);
+	QCOMPARE(found.count(), 1);
+	const auto offered = found.first().first().value<QList<bssh_mux_session_t>>();
+	QCOMPARE(offered.size(), 4);
+
+	session->choose_multiplexer(offered.at(1));
+	QCOMPARE(fakes.last()->written(), QByteArrayLiteral("tmux attach -t '=build'\n"));
+
+	/* Reconnected: typed again, not asked and not listed again. The
+	 * transport is the same object across a reconnect, so what is
+	 * counted is listings added since. */
+	const int listed = fakes.last()->side_commands().size();
+	session->disconnect_from_host();
+	session->connect_to_host();
+	fakes.last()->clear_written();
+	fakes.last()->simulate_key_auth_success();
+	QCOMPARE(fakes.last()->written(), QByteArrayLiteral("tmux attach -t '=build'\n"));
+	QCOMPARE(fakes.last()->side_commands().size(), listed);
+	QCOMPARE(found.count(), 1);
+
+	/* Nothing running there: nothing offered. */
+	bssh_session *empty = registry.create(profile_for(QStringLiteral("none"),
+	                                                   QStringLiteral("n.example")));
+	QSignalSpy none(empty, &bssh_session::multiplexers_found);
+	empty->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	fakes.last()->simulate_side_output("@@bssh-screen@@\nNo Sockets found.\n");
+	QCOMPARE(none.count(), 0);
+
+	/* A listing lost with its connection does not stop the next one. */
+	bssh_session *dropped = registry.create(profile_for(QStringLiteral("drop"),
+	                                                     QStringLiteral("r.example")));
+	dropped->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	QCOMPARE(fakes.last()->side_commands().size(), 1);
+	dropped->disconnect_from_host();
+	dropped->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	QCOMPARE(fakes.last()->side_commands().size(), 2);
+
+	/* Declined: "Shell only" is not asked again on the next connect. */
+	bssh_session *declined = registry.create(profile_for(QStringLiteral("no"),
+	                                                      QStringLiteral("d.example")));
+	QSignalSpy asked(declined, &bssh_session::multiplexers_found);
+	declined->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	QCOMPARE(fakes.last()->side_commands().size(), 1);
+	fakes.last()->simulate_side_output(sample_listing);
+	QCOMPARE(asked.count(), 1);
+	declined->decline_multiplexers();
+	declined->disconnect_from_host();
+	declined->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	QCOMPARE(fakes.last()->side_commands().size(), 1);
+
+	/* A command of its own (sec 8.6's -e): nothing to offer it into. */
+	bssh_profile_t with_command = profile_for(QStringLiteral("htop"), QStringLiteral("h.example"));
+	with_command.command = { QStringLiteral("htop") };
+	registry.create(with_command)->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	QVERIFY(fakes.last()->side_commands().isEmpty());
+
+	/* And with the setting off, nothing is listed at all. */
+	bssh_app_settings().set_offer_multiplexer_sessions(false);
+	registry.create(profile_for(QStringLiteral("off"), QStringLiteral("o.example")))->connect_to_host();
+	fakes.last()->simulate_key_auth_success();
+	QVERIFY(fakes.last()->side_commands().isEmpty());
+
+	bssh_ssh_session::set_factory(nullptr);
 }

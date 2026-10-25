@@ -43,6 +43,8 @@ private slots:
 	/* sec 8.3's window title, which is a format rather than a choice. */
 	void the_window_title_expands_what_the_session_knows();
 	void the_three_events_sec_5_5_names_reach_the_platform();
+	void tmux_and_screen_listings_are_read();
+	void tmux_and_screen_are_offered_on_connect();
 };
 
 #endif /* BSSH_SESSION_REGISTRY_TEST_H */

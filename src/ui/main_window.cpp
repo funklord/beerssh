@@ -10,6 +10,7 @@
 #include <QScroller>
 #include <QListWidgetItem>
 #include "ui/main_window.h"
+#include "ui/multiplexer_menu.h"
 
 #include <QCloseEvent>
 #include <QResizeEvent>
@@ -2855,6 +2856,40 @@ void bssh_main_window::wire_session(bssh_session *session) {
 		 * than dropping the connection.
 		 */
 		session->supply_key_passphrase(ok ? passphrase : QString());
+	});
+
+	/*
+	 * tmux and screen found running when the shell connected (sec 10.2a).
+	 * Only the window showing it asks, as for a password. Window-modal and
+	 * opened rather than exec'd, so the terminal behind it goes on
+	 * updating while the menu is up.
+	 */
+	connect(session, &bssh_session::multiplexers_found, this,
+	         [this, session](const QList<bssh_mux_session_t> &found) {
+		if (!m_shown.contains(session)) return;
+		auto *menu = new bssh_multiplexer_menu(session->title(), found, this);
+		menu->setAttribute(Qt::WA_DeleteOnClose);
+		menu->setWindowModality(Qt::WindowModal);
+		const QPointer<bssh_session> asked(session);
+		connect(menu, &QDialog::finished, this, [this, menu, asked](int result) {
+			if (!asked) return;
+			const QList<bssh_mux_session_t> chosen =
+			        result == QDialog::Accepted ? menu->chosen() : QList<bssh_mux_session_t>();
+			if (chosen.isEmpty()) {
+				asked->decline_multiplexers();
+				return;
+			}
+			asked->choose_multiplexer(chosen.first());
+
+			/* The rest a tab each, on the same host, attached as they connect. */
+			for (int i = 1; i < chosen.size(); ++i) {
+				bssh_session *more = prepare_profile(asked->profile());
+				if (!more) continue;
+				more->preset_multiplexer(chosen.at(i));
+				more->connect_to_host();
+			}
+		});
+		menu->open();
 	});
 
 	connect(session, &bssh_session::needs_password, this, [this, session] {

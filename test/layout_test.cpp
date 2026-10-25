@@ -87,6 +87,7 @@
 #include "layout_test.h"
 #include "input/input_router.h"
 #include "model/app_settings.h"
+#include "ui/multiplexer_menu.h"
 #include "model/session.h"
 #include "model/session_registry.h"
 #include "term/emulator.h"
@@ -4484,6 +4485,63 @@ void layout_test::closing_a_window_closes_its_sessions_without_asking() {
 	}
 
 	bssh_platform::force_way_back(-1);
+	bssh_ssh_session::set_factory(nullptr);
+}
+
+void layout_test::the_tmux_menu_opens_what_is_ticked() {
+	/*
+	 * sec 10.2a: sessions found running when a shell connects are offered
+	 * by the window showing it. One ticked attaches in this tab; a second
+	 * ticked opens another tab on the same host, attaching as it connects.
+	 */
+	QList<bssh_fake_ssh_session *> fakes;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		fakes.append(new bssh_fake_ssh_session(parent));
+		return fakes.last();
+	});
+	bssh_app_settings().set_offer_multiplexer_sessions(true);
+
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_profile_t host = named(QStringLiteral("muxed"));
+		host.host = QStringLiteral("muxed.example");
+		bssh_session *session = registry->create(host);
+		window.adopt_session(session);
+		session->connect_to_host();
+		fakes.last()->simulate_key_auth_success();
+		const int before = registry->count();
+
+		fakes.last()->simulate_side_output("work\t3\t1\nbuild\t1\t0\n@@bssh-screen@@\n");
+		bssh_multiplexer_menu *menu = window.findChild<bssh_multiplexer_menu *>();
+		QVERIFY2(menu, "no menu for sessions that are running");
+		QVERIFY(menu->isVisible());
+
+		/* The first is ticked already; tick the second too, and Open. */
+		QListWidget *list = menu->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
+		QVERIFY(list);
+		QCOMPARE(list->count(), 2);
+		list->item(1)->setCheckState(Qt::Checked);
+		menu->accept();
+		QCoreApplication::processEvents();
+
+		QCOMPARE(session->multiplexer_attach(), QStringLiteral("tmux attach -t '=work'"));
+		QVERIFY(fakes.at(0)->written().endsWith("tmux attach -t '=work'\n"));
+		QCOMPARE(registry->count(), before + 1);
+		bssh_session *more = registry->sessions().last();
+		QCOMPARE(more->multiplexer_attach(), QStringLiteral("tmux attach -t '=build'"));
+		fakes.last()->simulate_key_auth_success();
+		QVERIFY2(fakes.last()->written().endsWith("tmux attach -t '=build'\n"),
+		         "the second tab did not attach to the second session");
+		QVERIFY2(fakes.last()->side_commands().isEmpty(), "the second tab asked again");
+	}
+
+	bssh_app_settings().set_offer_multiplexer_sessions(false);
 	bssh_ssh_session::set_factory(nullptr);
 }
 

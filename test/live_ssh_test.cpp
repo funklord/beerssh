@@ -951,6 +951,66 @@ void live_ssh_test::a_remote_command_runs_instead_of_a_shell()
 	QCOMPARE(out.exit_status, 0);
 }
 
+void live_ssh_test::a_command_runs_beside_the_shell_without_disturbing_it()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * sec 10.2a's listing of tmux and screen sessions: a second channel
+	 * on the connection the shell is using, read beside it. Its output
+	 * comes back whole, and the shell answers afterwards as it did
+	 * before -- one channel must not starve or swallow the other.
+	 */
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	QByteArray shell;
+	QByteArray side;
+	bool side_done = false;
+
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed, &loop, &QEventLoop::quit);
+	QObject::connect(session, &bssh_ssh_session::bytes_received,
+	                  [&shell, &loop](const QByteArray &bytes) {
+		shell += bytes;
+		if (shell.contains("BSSH_AFTER_OK")) loop.quit();
+	});
+	QObject::connect(session, &bssh_ssh_session::side_output_ready,
+	                  [&](const QByteArray &output) {
+		side = output;
+		side_done = true;
+		session->send(QByteArrayLiteral("echo BSSH_AFTER_\"OK\"\n"));
+	});
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [session](bssh_ssh_session::state_t state) {
+		if (state != bssh_ssh_session::CONNECTED) return;
+		session->open_shell(80, 24);
+		session->run_on_the_side(QStringLiteral("echo side-one; echo side-two"));
+	});
+
+	session->set_identity_file(test_key());
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(),
+	                          qEnvironmentVariable("USER"));
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(15000);
+	loop.exec();
+
+	QVERIFY2(side_done, "the command beside the shell never answered");
+	QCOMPARE(side, QByteArrayLiteral("side-one\nside-two\n"));
+	QVERIFY2(shell.contains("BSSH_AFTER_OK"),
+	         qPrintable(QStringLiteral("the shell did not answer after it; saw: %1")
+	                            .arg(QString::fromLocal8Bit(shell.right(200)))));
+
+	session->disconnect_from_host();
+	delete session;
+}
+
 void live_ssh_test::the_remote_is_told_the_size_it_was_given()
 {
 	if (!server_available()) return;

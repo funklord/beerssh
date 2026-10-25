@@ -115,6 +115,7 @@ public:
 	void supply_key_passphrase(const QString &passphrase) override { Q_UNUSED(passphrase); }
 
 	QString kind() const override;
+	void run_on_the_side(const QString &command) override;
 	bool export_transport(QByteArray &state, QList<int> &fds, QString *why) override;
 	void release_transport() override;
 	void resume_transport() override;

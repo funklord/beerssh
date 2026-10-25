@@ -118,6 +118,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
       m_keyboard_reset(nullptr),
       m_warn_multiline_paste(nullptr),
       m_keep_sessions_on_close(nullptr),
+      m_offer_multiplexers(nullptr),
       m_honour_font_scale(nullptr),
       m_font_ligatures(nullptr),
       m_honour_remote_cursor(nullptr),
@@ -661,6 +662,17 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	        this);
 	if (on_this_page(SECTION_TERMINAL, close_note)) form->addRow(close_note);
 
+	/* sec 10.2a: tmux and screen sessions offered when a shell connects. */
+	m_offer_multiplexers = new QCheckBox(QStringLiteral("Offer tmux and screen sessions"), this);
+	if (on_this_page(SECTION_TERMINAL, m_offer_multiplexers)) form->addRow(m_offer_multiplexers);
+
+	QLabel *multiplexer_note = bssh_wrapped_note(
+	        QStringLiteral("When a shell connects, the tmux and screen sessions already "
+	                        "running there are listed, and a menu asks which to open. "
+	                        "Nothing is shown when there are none."),
+	        this);
+	if (on_this_page(SECTION_TERMINAL, multiplexer_note)) form->addRow(multiplexer_note);
+
 	/*
 	 * How much picture history each terminal keeps IN MEMORY (sec 7.1); past
 	 * it pictures are spilled to disk. A number the user sets, per
@@ -1102,6 +1114,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_keyboard_grips->setChecked(settings.keyboard_grips());
 	m_warn_multiline_paste->setChecked(settings.warn_multiline_paste());
 	m_keep_sessions_on_close->setChecked(settings.keep_sessions_on_close());
+	m_offer_multiplexers->setChecked(settings.offer_multiplexer_sessions());
 	m_honour_font_scale->setChecked(settings.honour_system_font_scale());
 	m_font_ligatures->setChecked(settings.font_ligatures());
 	m_honour_remote_cursor->setChecked(settings.honour_remote_cursor_shape());
@@ -1242,6 +1255,11 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	connect(m_keep_sessions_on_close, &QCheckBox::toggled, this, [this] {
 		commit([this](bssh_app_settings &s) {
 			s.set_keep_sessions_on_close(m_keep_sessions_on_close->isChecked());
+		});
+	});
+	connect(m_offer_multiplexers, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_offer_multiplexer_sessions(m_offer_multiplexers->isChecked());
 		});
 	});
 	connect(m_honour_font_scale, &QCheckBox::toggled, this, [this] {

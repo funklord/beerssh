@@ -1,0 +1,89 @@
+# Sabotages for the tmux and screen menu (project.md sec 10.2a): sessions
+# running where a shell connects are listed beside it and offered, and the
+# choice is typed into the shell on every connect.
+#
+# The SSH side channel itself (drain_side in ssh_session_libssh.cpp) is
+# exercised only against a real sshd, by
+# a_command_runs_beside_the_shell_without_disturbing_it under
+# `make check-ssh`; break it with BSSH_SABOTAGE_SUITE="make check-ssh".
+
+# Nobody is ever shown as attached, so the menu cannot say so.
+[[sabotage]]
+name = "tmux's attached count is ignored"
+file = "src/model/multiplexer.cpp"
+find = "\t\t\tsession.attached = attached > 0;\n"
+replace = "\t\t\tsession.attached = false;\n"
+expect = "tmux_and_screen_listings_are_read"
+
+# Any indented line under screen's heading is a session.
+[[sabotage]]
+name = "a screen line with no pid is a session"
+file = "src/model/multiplexer.cpp"
+find = "\t\tif (!pid_ok) continue;\n"
+replace = ""
+expect = "tmux_and_screen_listings_are_read"
+
+# tmux matches a prefix: "work" attaches to "workshop".
+[[sabotage]]
+name = "tmux is attached by prefix, not by exact name"
+file = "src/model/multiplexer.cpp"
+find = "quoted(QLatin1Char('=') + session.name)"
+replace = "quoted(session.name)"
+expect = "tmux_and_screen_listings_are_read"
+
+# A reconnect lists and asks again instead of re-attaching.
+[[sabotage]]
+name = "a reconnect forgets what was chosen"
+file = "src/model/session.cpp"
+find = "\t\t\t\tif (!m_mux_attach.isEmpty()) {\n"
+replace = "\t\t\t\tif (false) {\n"
+expect = "tmux_and_screen_are_offered_on_connect"
+
+# "Shell only" is asked again on the next connect.
+[[sabotage]]
+name = "declining is not remembered"
+file = "src/model/session.cpp"
+find = "void bssh_session::decline_multiplexers() {\n\tm_mux_answered = true;\n"
+replace = "void bssh_session::decline_multiplexers() {\n"
+expect = "tmux_and_screen_are_offered_on_connect"
+
+# Listed whatever the setting says.
+[[sabotage]]
+name = "the setting is not consulted"
+file = "src/model/session.cpp"
+find = "\t\t\t\t} else if (!m_mux_answered && !m_mux_listing &&\n\t\t\t\t           bssh_app_settings().offer_multiplexer_sessions()) {\n"
+replace = "\t\t\t\t} else if (!m_mux_answered && !m_mux_listing) {\n"
+expect = "tmux_and_screen_are_offered_on_connect"
+
+# Offered into a session running a command of its own.
+[[sabotage]]
+name = "a session running a command is offered sessions"
+file = "src/model/session.cpp"
+find = "\t\t\tif (m_profile.command.isEmpty()) {\n\t\t\t\tif (!m_mux_attach.isEmpty()) {\n"
+replace = "\t\t\tif (true) {\n\t\t\t\tif (!m_mux_attach.isEmpty()) {\n"
+expect = "tmux_and_screen_are_offered_on_connect"
+
+# Only the first ticked session opens.
+[[sabotage]]
+name = "further ticked sessions do not open"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tfor (int i = 1; i < chosen.size(); ++i) {\n"
+replace = "\t\t\tfor (int i = 1; i < 1; ++i) {\n"
+expect = "the_tmux_menu_opens_what_is_ticked"
+
+# The second tab connects knowing nothing, and asks all over again.
+[[sabotage]]
+name = "a further tab is not told what to attach to"
+file = "src/ui/main_window.cpp"
+find = "\t\t\t\tmore->preset_multiplexer(chosen.at(i));\n"
+replace = ""
+expect = "the_tmux_menu_opens_what_is_ticked"
+
+# A listing that never answers -- its connection dropped -- keeps every
+# later connection of that session from listing.
+[[sabotage]]
+name = "a listing lost with its connection blocks the next"
+file = "src/model/session.cpp"
+find = "\t\t\tm_mux_listing = false;\n\n\t\t\tif (m_profile.command.isEmpty()) {\n"
+replace = "\t\t\tif (m_profile.command.isEmpty()) {\n"
+expect = "tmux_and_screen_are_offered_on_connect"

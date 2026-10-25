@@ -19,6 +19,7 @@ private slots:
 	void a_refused_move_leaves_the_session_running();
 	void kitty_itself_decodes_what_the_router_sends();
 	void a_shell_starts_and_echoes_what_it_is_given();
+	void a_local_shell_lists_tmux_and_screen_beside_itself();
 	void exiting_the_shell_is_not_a_dropped_connection();
 	void a_resize_reaches_the_shell();
 	void a_command_runs_instead_of_the_shell();
