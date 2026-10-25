@@ -1178,11 +1178,20 @@ holds a socket open simply keeps holding it. What still needs deciding is what
   registry, not to a window (§3), so closing the window must not touch them —
   the same rule Android's activity recreation forces, arriving here as a
   deliberate choice rather than an OS requirement.
-- **Closing the last window with sessions still connected must be a prompt**,
+- **On a desktop, closing a window closes its sessions — [DECIDED 2026-10-25,
+  the holder]**, as TDE Konsole's does, with no question. The prompt below
+  became an opt-in setting, "Offer to keep sessions running when a window
+  closes" (`window/keep_sessions_on_close`), for whoever wants to manage
+  hidden terminals; it stays ON on a touch device, where Back at the host list
+  puts the app away and its sessions are expected to live. The holder's
+  question that settled it: why a window asks to keep a terminal that, once
+  hidden, only a tray icon could ever bring back. `close_action()` answers
+  CLOSE_AND_QUIT for live sessions while the setting is off.
+- **With the setting on, closing with sessions still connected is a prompt**,
   not a silent background residency: "3 sessions still connected — keep running
   in the tray / disconnect and quit". A terminal that vanishes into the tray
-  unannounced is how users lose work they thought they'd closed. Remember the
-  answer as a setting.
+  unannounced is how users lose work they thought they'd closed. The answer is
+  remembered for the window.
 - **"Out of sight" is not the same operation on the two platforms**, and
   assuming it was cost the Android build its way back in. Hiding the window is
   the *desktop's* mechanism — the tray icon is the route back. On Android a

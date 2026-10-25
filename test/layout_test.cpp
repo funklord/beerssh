@@ -4316,6 +4316,23 @@ void answer_next_box(const QString &button, QString *offered = nullptr) {
 
 } /* namespace */
 
+namespace {
+
+/*
+ * Keeping sessions past their window is opt-in on a desktop since
+ * 2026-10-25 (sec 5.5), so a test of the keep-running prompt turns it on,
+ * and puts back what it found: settings outlive a test in this run.
+ */
+struct keep_sessions_on_close_t {
+	bool was = bssh_app_settings().keep_sessions_on_close();
+	explicit keep_sessions_on_close_t(bool keep = true) {
+		bssh_app_settings().set_keep_sessions_on_close(keep);
+	}
+	~keep_sessions_on_close_t() { bssh_app_settings().set_keep_sessions_on_close(was); }
+};
+
+}
+
 void layout_test::a_window_kept_running_comes_back_from_the_tray() {
 	/*
 	 * sec 5.5: the tray icon is the way back to a window kept running.
@@ -4331,6 +4348,7 @@ void layout_test::a_window_kept_running_comes_back_from_the_tray() {
 	});
 	bssh_platform::force_way_back(1);
 	bssh_platform *platform = bssh_platform::instance();
+	const keep_sessions_on_close_t keep;
 
 	{
 		bssh_main_window window;
@@ -4415,6 +4433,60 @@ void layout_test::a_window_kept_running_comes_back_from_the_tray() {
 	bssh_ssh_session::set_factory(nullptr);
 }
 
+void layout_test::closing_a_window_closes_its_sessions_without_asking() {
+	/*
+	 * The desktop default since 2026-10-25 (sec 5.5): a window closes
+	 * what it shows, as TDE Konsole's does. It used to ask whether to
+	 * keep a live session running hidden, which only a tray icon could
+	 * ever bring back -- a question the holder asked why it was being
+	 * asked at all. Tested with a tray, where the old prompt would have
+	 * offered exactly that.
+	 */
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+	bssh_platform::force_way_back(1);
+	const keep_sessions_on_close_t keep(false);
+
+	QPointer<bssh_session> shown;
+	{
+		bssh_main_window window;
+		window.resize(1000, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session_registry *registry = window.registry();
+		const registry_left_as_found_t tidy(registry);
+
+		bssh_profile_t host = named(QStringLiteral("closing"));
+		host.host = QStringLiteral("closing.example");
+		bssh_session *session = registry->create(host);
+		shown = session;
+		window.adopt_session(session);
+		session->connect_to_host();
+		QVERIFY(fake);
+		fake->simulate_key_auth_success();
+		QCoreApplication::processEvents();
+		QVERIFY(session->is_live());
+
+		/* A box, had one appeared, is recorded and dismissed rather than
+		 * left to hold the test. */
+		QString offered;
+		answer_next_box(QStringLiteral("Disconnect and quit"), &offered);
+		window.close();
+		QCoreApplication::processEvents();
+
+		QVERIFY2(offered.isEmpty(), qPrintable(QStringLiteral("it asked: ") + offered));
+		QVERIFY2(!window.isVisible() && !window.is_in_background(), "the window did not close");
+		QVERIFY2(!shown || !registry->sessions().contains(shown),
+		         "the session outlived its window");
+	}
+
+	bssh_platform::force_way_back(-1);
+	bssh_ssh_session::set_factory(nullptr);
+}
+
 void layout_test::with_no_tray_a_window_is_not_kept_running() {
 	/*
 	 * No notification area, so no icon to come back from: a window hidden
@@ -4428,6 +4500,7 @@ void layout_test::with_no_tray_a_window_is_not_kept_running() {
 		return fake;
 	});
 	bssh_platform::force_way_back(0);
+	const keep_sessions_on_close_t keep;
 
 	{
 		bssh_main_window window;

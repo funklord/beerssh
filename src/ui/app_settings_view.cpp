@@ -117,6 +117,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
       m_keyboard_grips(nullptr),
       m_keyboard_reset(nullptr),
       m_warn_multiline_paste(nullptr),
+      m_keep_sessions_on_close(nullptr),
       m_honour_font_scale(nullptr),
       m_font_ligatures(nullptr),
       m_honour_remote_cursor(nullptr),
@@ -647,6 +648,19 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	        this);
 	if (on_this_page(SECTION_TERMINAL, paste_note)) form->addRow(paste_note);
 
+	/* sec 5.5: what closing a window does to the sessions it shows. */
+	m_keep_sessions_on_close = new QCheckBox(
+	        QStringLiteral("Ask to keep sessions running on close"), this);
+	if (on_this_page(SECTION_TERMINAL, m_keep_sessions_on_close))
+		form->addRow(m_keep_sessions_on_close);
+
+	QLabel *close_note = bssh_wrapped_note(
+	        QStringLiteral("Off, closing a window closes its sessions. On, it asks, and "
+	                        "can hide the window with its sessions running, to bring back "
+	                        "from the tray."),
+	        this);
+	if (on_this_page(SECTION_TERMINAL, close_note)) form->addRow(close_note);
+
 	/*
 	 * How much picture history each terminal keeps IN MEMORY (sec 7.1); past
 	 * it pictures are spilled to disk. A number the user sets, per
@@ -1087,6 +1101,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_caps_as_ctrl->setChecked(settings.caps_as_ctrl());
 	m_keyboard_grips->setChecked(settings.keyboard_grips());
 	m_warn_multiline_paste->setChecked(settings.warn_multiline_paste());
+	m_keep_sessions_on_close->setChecked(settings.keep_sessions_on_close());
 	m_honour_font_scale->setChecked(settings.honour_system_font_scale());
 	m_font_ligatures->setChecked(settings.font_ligatures());
 	m_honour_remote_cursor->setChecked(settings.honour_remote_cursor_shape());
@@ -1222,6 +1237,11 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	connect(m_warn_multiline_paste, &QCheckBox::toggled, this, [this] {
 		commit([this](bssh_app_settings &s) {
 			s.set_warn_multiline_paste(m_warn_multiline_paste->isChecked());
+		});
+	});
+	connect(m_keep_sessions_on_close, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) {
+			s.set_keep_sessions_on_close(m_keep_sessions_on_close->isChecked());
 		});
 	});
 	connect(m_honour_font_scale, &QCheckBox::toggled, this, [this] {

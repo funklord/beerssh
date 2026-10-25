@@ -1,0 +1,28 @@
+# Sabotages for what closing a window does to its sessions (project.md
+# sec 5.5): on a desktop a window closes what it shows unless the user
+# turned on keeping sessions, the holder's answer of 2026-10-25.
+
+# Keeping sessions is the desktop default again: every close asks.
+[[sabotage]]
+name = "keeping sessions is on by default on a desktop"
+file = "src/model/app_settings.cpp"
+find = "\treturn value(QStringLiteral(\"window/keep_sessions_on_close\"), touch).toBool();\n"
+replace = "\treturn value(QStringLiteral(\"window/keep_sessions_on_close\"), true).toBool();\n"
+expect = "close_policy_asks_only_when_something_is_live"
+
+# The policy ignores the setting: live sessions are always asked about.
+[[sabotage]]
+name = "the close policy ignores the setting"
+file = "src/ui/main_window.cpp"
+find = "\tif (!keep_sessions) return CLOSE_AND_QUIT;\n"
+replace = ""
+expect = "close_policy_asks_only_when_something_is_live"
+
+# The window never hands the setting to the policy, so the policy is
+# right and the window still asks.
+[[sabotage]]
+name = "the window does not consult the setting"
+file = "src/ui/main_window.cpp"
+find = "\t                                      bssh_app_settings().keep_sessions_on_close());\n"
+replace = "\t                                      true);\n"
+expect = "closing_a_window_closes_its_sessions_without_asking"

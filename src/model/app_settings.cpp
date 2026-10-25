@@ -604,6 +604,16 @@ void bssh_app_settings::set_warn_multiline_paste(bool warn) {
 	store(QStringLiteral("input/warn_multiline_paste"), warn);
 }
 
+bool bssh_app_settings::keep_sessions_on_close() const {
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool touch = platform && platform->is_touch_primary();
+	return value(QStringLiteral("window/keep_sessions_on_close"), touch).toBool();
+}
+
+void bssh_app_settings::set_keep_sessions_on_close(bool keep) {
+	store(QStringLiteral("window/keep_sessions_on_close"), keep);
+}
+
 bool bssh_app_settings::honour_system_font_scale() const {
 	return value(QStringLiteral("appearance/honour_system_font_scale"), true).toBool();
 }

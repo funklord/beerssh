@@ -174,6 +174,26 @@ void platform_test::close_policy_asks_only_when_something_is_live() {
 
 	/* Asked once and told to keep running: do not ask again. */
 	QCOMPARE(bssh_main_window::close_action(true, true), bssh_main_window::CLOSE_TO_BACKGROUND);
+
+	/*
+	 * With keeping sessions off -- the desktop default since 2026-10-25 --
+	 * a window closes what it shows and does not ask, whatever was
+	 * remembered: nothing is left hidden for a tray to bring back.
+	 */
+	QCOMPARE(bssh_main_window::close_action(true, false, true, false),
+	         bssh_main_window::CLOSE_AND_QUIT);
+	QCOMPARE(bssh_main_window::close_action(true, true, true, false),
+	         bssh_main_window::CLOSE_AND_QUIT);
+
+	/* And the setting is off on a desktop until somebody turns it on. */
+	QTemporaryDir dir;
+	{
+		bssh_app_settings settings(dir.path());
+		QVERIFY2(!settings.keep_sessions_on_close(),
+		          "a desktop window closes its sessions unless told otherwise");
+		settings.set_keep_sessions_on_close(true);
+	}
+	QVERIFY(bssh_app_settings(dir.path()).keep_sessions_on_close());
 }
 
 void platform_test::the_window_opens_on_the_front_door() {

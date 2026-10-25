@@ -167,9 +167,12 @@ public:
 	 * way_back false -- no tray to come back from -- never answers
 	 * CLOSE_TO_BACKGROUND: a hidden window there is a process nobody can
 	 * reach, so it asks, and the prompt does not offer it.
+	 *
+	 * keep_sessions false -- the setting off, the desktop default -- closes
+	 * and does not ask: closing a window closes what it shows.
 	 */
 	static close_action_t close_action(bool sessions_live, bool remembered_background,
-	                                   bool way_back = true);
+	                                   bool way_back = true, bool keep_sessions = true);
 
 	/* Put out of sight by "Keep running", waiting for the way back (sec 5.5). */
 	bool is_in_background() const { return m_in_background; }

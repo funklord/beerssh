@@ -171,6 +171,7 @@ private:
 	QCheckBox *m_keyboard_grips;
 	QPushButton *m_keyboard_reset;
 	QCheckBox *m_warn_multiline_paste;
+	QCheckBox *m_keep_sessions_on_close;
 	QCheckBox *m_honour_font_scale;
 	QCheckBox *m_font_ligatures;
 	QCheckBox *m_honour_remote_cursor;

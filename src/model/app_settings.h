@@ -422,6 +422,18 @@ public:
 	void set_warn_multiline_paste(bool warn);
 
 	/*
+	 * Whether closing a window may keep its sessions running out of sight
+	 * (sec 5.5). OFF on a desktop, the holder's answer of 2026-10-25:
+	 * closing a window closes its sessions, as TDE Konsole does, and
+	 * nothing is left hidden for somebody to find later. ON, the window
+	 * asks, and "Keep running" hides it to the tray -- for those who want
+	 * to manage hidden terminals. ON on a touch device, where Back at the
+	 * host list puts the app away and the sessions are expected to live.
+	 */
+	bool keep_sessions_on_close() const;
+	void set_keep_sessions_on_close(bool keep);
+
+	/*
 	 * Whether the interface follows the system font-scale accessibility
 	 * setting (sec 9.5). On by default, because a user who enlarged their
 	 * device's text meant it; off is for someone who wants this app's

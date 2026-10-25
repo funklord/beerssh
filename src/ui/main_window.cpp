@@ -6074,13 +6074,22 @@ void bssh_main_window::elide_status() {
 
 bssh_main_window::close_action_t bssh_main_window::close_action(bool sessions_live,
                                                                  bool remembered_background,
-                                                                 bool way_back) {
+                                                                 bool way_back,
+                                                                 bool keep_sessions) {
 	/*
 	 * Nothing live: an ordinary close, and the process should go. Keeping
 	 * a terminal resident with no sessions would be a background process
 	 * doing nothing, which is the kind of thing users hunt down and kill.
 	 */
 	if (!sessions_live) return CLOSE_AND_QUIT;
+
+	/*
+	 * Not keeping sessions past their window, the desktop default: the
+	 * window closes what it shows, as a terminal's window does. Offering to
+	 * keep them was a question with an answer most people never want, and
+	 * the window it hid was one only a tray icon could bring back.
+	 */
+	if (!keep_sessions) return CLOSE_AND_QUIT;
 
 	/*
 	 * Live sessions and no answer on file: ASK. A terminal that vanishes
@@ -6150,7 +6159,8 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 	const bool way_back = bssh_platform::instance()->has_way_back();
 	close_action_t action = close_action(live_here > 0,
 	                                      m_asked_about_closing && m_background_on_close,
-	                                      way_back);
+	                                      way_back,
+	                                      bssh_app_settings().keep_sessions_on_close());
 
 	if (action == ASK_FIRST) {
 		QMessageBox box(this);
