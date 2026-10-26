@@ -1248,6 +1248,7 @@ private:
 	/* The drawer on the right edge, inside the scrollbar: a handle closed,
 	 * the height of the terminal open. */
 	void place_multiplexer_drawer();
+	void sync_multiplexer_drawer_shown();
 	bssh_multiplexer_drawer *m_mux_drawer = nullptr;
 
 	/*

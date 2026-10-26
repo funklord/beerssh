@@ -15134,17 +15134,15 @@ of features; a new sequence is a new row, not a new test.
 
 Folded at 97 per cent of the weekly window; what the next session picks up.
 
-- **In progress, uncommitted when this was written:** the tmux/screen
-  drawer's closed handle shows only while the pointer is over the
-  terminal on the desktop, as the pane grip does (always on touch, and
-  while open) -- the holder's request; `sync_multiplexer_drawer_shown()`
-  in `terminal_view.cpp`. With it, `pane_grip_rect()` places the grip left
-  of a visible scrollbar, which had covered part of it ("slightly hidden
-  on desktop"). Tests: `the_tmux_handle_shows_under_the_pointer_and_the_grip_clears_the_scrollbar`,
-  and `the_tmux_drawer_switches_on_a_click` now enters the pane first.
-  If the tree still has these changes uncommitted, build, run the suite,
-  add sabotage edits (handle shown with no hover; grip ignoring the bar)
-  and commit.
+- **Done since the fold:** the tmux/screen drawer's closed handle shows
+  only while the pointer is over the terminal on the desktop, as the pane
+  grip does -- always on touch, and while open (the holder's request;
+  `sync_multiplexer_drawer_shown()`). `pane_grip_rect()` places the grip
+  left of a visible scrollbar, which had covered part of it ("slightly
+  hidden on desktop"). `the_tmux_handle_shows_under_the_pointer_and_the_grip_clears_the_scrollbar`;
+  `tool/sabotage/drawer-hover.toml`, whose grip edit was MISSED until the
+  test made sure a scrollbar was showing instead of checking only if one
+  happened to be.
 - **Open, holder-reported, not reproduced:** "some colour coded text has
   no colour from the start" (sec 12.3w). The likeliest lead is dim (SGR 2),
   dropped by libvterm and absent from `bssh_cell_t`; a program and a

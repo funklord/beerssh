@@ -4554,7 +4554,12 @@ void layout_test::the_tmux_drawer_switches_on_a_click() {
 
 		bssh_multiplexer_drawer *drawer = drawer_in(window);
 		QVERIFY2(drawer, "the drawer was lost when the panes were rebuilt");
-		QVERIFY(drawer->isVisible());
+		/* On the desktop it shows under the pointer, as the drag grip does. */
+		bssh_terminal_view *pane = qobject_cast<bssh_terminal_view *>(drawer->parentWidget());
+		QVERIFY(pane);
+		QEnterEvent enter(QPointF(20, 20), QPointF(20, 20), QPointF(pane->mapToGlobal(QPoint(20, 20))));
+		QCoreApplication::sendEvent(pane, &enter);
+		QVERIFY2(drawer->isVisible(), "the handle did not show under the pointer");
 		QVERIFY2(!drawer->is_open(), "the drawer opened over the terminal by itself");
 		QCOMPARE(drawer->handle_text(), QString::fromUtf8("tmux · 2"));
 

@@ -5,6 +5,7 @@
 #include <QDropEvent>
 #include <QSignalSpy>
 #include <QtTest>
+#include <QEnterEvent>
 #include <QScreen>
 #include <QWindow>
 
@@ -34,6 +35,7 @@
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "platform/platform.h"
+#include "ui/multiplexer_drawer.h"
 #include "ui/interface_scale.h"
 #include "term/font_catalog.h"
 #include "ui/terminal_view.h"
@@ -3223,6 +3225,64 @@ void terminal_view_test::a_scrolled_terminal_matches_a_full_repaint() {
 	                                "\x1b[20;1Hstatus line\x1b[12;1H"));
 	QTest::qWait(80);
 	QVERIFY(matches_a_full_repaint("a scroll region with a status line below it"));
+}
+
+void terminal_view_test::the_tmux_handle_shows_under_the_pointer_and_the_grip_clears_the_scrollbar() {
+	/*
+	 * The holder: like the drag grip, the tmux and screen handle should not
+	 * show unless the terminal is being pointed at -- on the desktop. Open,
+	 * it stays; on a touch screen, with no pointer to hover, it always
+	 * shows. And the grip itself sat under the scrollbar, partly hidden.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 500, 300);
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+
+	/* The pointer away from the terminal, whatever showing the window did
+	 * with it: the offscreen platform may enter a window under its cursor. */
+	QEvent leave(QEvent::Leave);
+	QCoreApplication::sendEvent(&view, &leave);
+
+	bssh_mux_session_t work;
+	work.name = QStringLiteral("work");
+	view.offer_multiplexers({ work });
+	QVERIFY(view.multiplexer_drawer());
+	QVERIFY2(!view.multiplexer_drawer()->isVisible(), "the handle shows with no pointer over the terminal");
+
+	QEnterEvent enter(QPointF(20, 20), QPointF(20, 20), QPointF(view.mapToGlobal(QPoint(20, 20))));
+	QCoreApplication::sendEvent(&view, &enter);
+	QVERIFY(view.multiplexer_drawer()->isVisible());
+	QCoreApplication::sendEvent(&view, &leave);
+	QVERIFY(!view.multiplexer_drawer()->isVisible());
+
+	/* Open, it stays when the pointer leaves. */
+	QCoreApplication::sendEvent(&view, &enter);
+	view.multiplexer_drawer()->set_open(true);
+	QCoreApplication::sendEvent(&view, &leave);
+	QVERIFY2(view.multiplexer_drawer()->isVisible(), "an open drawer went when the pointer left");
+	view.multiplexer_drawer()->set_open(false);
+	QVERIFY(!view.multiplexer_drawer()->isVisible());
+
+	/* On a touch screen there is no hover: always shown. */
+	bssh_platform::force_touch_primary(1);
+	view.offer_multiplexers({ work });
+	QVERIFY2(view.multiplexer_drawer()->isVisible(), "hidden on a touch screen, where nothing can hover");
+	bssh_platform::force_touch_primary(-1);
+
+	/* The grip is clear of the scrollbar -- with one on the right made
+	 * certain, or this would pass by never meeting it. */
+	for (int line = 0; line < view.rows() * 3; ++line) emulator.feed("line\r\n");
+	view.attach_scrollback(&emulator.scrollback());
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_RIGHT);
+	view.set_pane_handle(true);
+	QCoreApplication::sendEvent(&view, &enter);
+	QTest::qWait(20);
+	const QScrollBar *bar = view.findChild<QScrollBar *>();
+	QVERIFY2(bar && bar->isVisible(), "no scrollbar to keep the grip clear of");
+	QVERIFY2(!view.pane_grip_rect().intersects(bar->geometry()),
+	         "the scrollbar covers part of the drag grip");
 }
 
 void terminal_view_test::alt_drag_asks_for_the_pane_to_be_moved() {

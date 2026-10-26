@@ -24,6 +24,7 @@ private slots:
 	void typing_and_output_bring_the_cursor_back_on();
 	void a_keystroke_repaints_only_its_row();
 	void a_scrolled_terminal_matches_a_full_repaint();
+	void the_tmux_handle_shows_under_the_pointer_and_the_grip_clears_the_scrollbar();
 	void alt_drag_asks_for_the_pane_to_be_moved();
 	/*
 	 * The scrollbar's default position is process-wide, and a window

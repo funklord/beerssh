@@ -1546,6 +1546,7 @@ void bssh_terminal_view::resizeEvent(QResizeEvent *event) {
 void bssh_terminal_view::leaveEvent(QEvent *event) {
 	m_pointer_inside = false;
 	update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+	sync_multiplexer_drawer_shown();
 	QWidget::leaveEvent(event);
 }
 
@@ -1587,7 +1588,13 @@ QRect bssh_terminal_view::pane_grip_rect() const {
 	 */
 	if (width() < side * 3 || height() < side * 2) return QRect();
 
-	return QRect(width() - side - 3, 3, side, side);
+	/*
+	 * Left of the scrollbar when there is one: placed against the view's
+	 * own edge, the bar -- a child, drawn over it -- covered part of the
+	 * grip on the desktop, which the holder saw as "slightly hidden".
+	 */
+	const int right = width() - (m_scrollbar && m_scrollbar->isVisible() ? m_scrollbar->width() : 0);
+	return QRect(right - side - 3, 3, side, side);
 }
 
 void bssh_terminal_view::paintEvent(QPaintEvent *event) {
@@ -2798,6 +2805,7 @@ void bssh_terminal_view::enterEvent(QEnterEvent *event) {
 	 */
 	m_pointer_inside = true;
 	update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+	sync_multiplexer_drawer_shown();
 
 	if (!m_focus_follows_mouse) return;
 
@@ -3484,8 +3492,10 @@ void bssh_terminal_view::offer_multiplexers(const QList<bssh_mux_session_t> &fou
 	}
 	if (!m_mux_drawer) {
 		m_mux_drawer = new bssh_multiplexer_drawer(this);
-		connect(m_mux_drawer, &bssh_multiplexer_drawer::open_changed, this,
-		         [this] { place_multiplexer_drawer(); });
+		connect(m_mux_drawer, &bssh_multiplexer_drawer::open_changed, this, [this] {
+			place_multiplexer_drawer();
+			sync_multiplexer_drawer_shown();
+		});
 		connect(m_mux_drawer, &bssh_multiplexer_drawer::session_chosen, this,
 		         [this](const bssh_mux_session_t &chosen) {
 			emit multiplexer_chosen(chosen);
@@ -3497,8 +3507,24 @@ void bssh_terminal_view::offer_multiplexers(const QList<bssh_mux_session_t> &fou
 		});
 	}
 	m_mux_drawer->set_sessions(found);
-	m_mux_drawer->show();
 	place_multiplexer_drawer();
+	sync_multiplexer_drawer_shown();
+}
+
+void bssh_terminal_view::sync_multiplexer_drawer_shown() {
+	if (!m_mux_drawer) return;
+
+	/*
+	 * Like the pane's drag grip: on the desktop the closed handle shows
+	 * only while the pointer is over the terminal -- the holder's "you
+	 * should maybe not show the screen/tmux button unless" it is being
+	 * pointed at -- so it is not on every terminal all the time. Open, it
+	 * stays until closed. A touch screen has no pointer to hover with, so
+	 * there it always shows.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool touch = platform && platform->is_touch_primary();
+	m_mux_drawer->setVisible(m_mux_drawer->is_open() || m_pointer_inside || touch);
 }
 
 void bssh_terminal_view::withdraw_multiplexers() {
