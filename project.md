@@ -15086,6 +15086,17 @@ of features; a new sequence is a new row, not a new test.
   full strength, which a program using it for de-emphasis would show as
   uncoloured. Open, and the next row to add once there is a program and
   a sequence that shows the first symptom.
+- **The holder's "no colour on the coloured prompt" was `TERM`, not the
+  renderer -- [DECIDED 2026-10-26, the holder: keep xterm-256color].**
+  Their `~/.bashrc` coloured the prompt (and set the window title) only
+  for `case $TERM in *term | rxvt )`; TDE Konsole sends `TERM=xterm`,
+  measured from a shell running in it, and beerssh `xterm-256color`, so
+  bash chose the plain prompt and no colour ever reached the terminal.
+  Lowering beerssh's default to `xterm` would have fixed that one file and
+  dropped every program to terminfo's 8 colours; the pattern in the
+  `.bashrc` gained `*term-256color` instead. A `.bashrc` written for an
+  older terminal is the likely cause next time a prompt is plain here and
+  coloured in Konsole -- check `TERM`'s cases before the renderer.
 
 ### 12.4 CI
 - **[DECIDED 2026-10-22] `check-ci` is kept and no longer run as a gate.**
