@@ -8,7 +8,7 @@
 [[sabotage]]
 name = "a restored row comes back black on black"
 file = "src/term/emulator_vterm.cpp"
-find = "\t\tcells[col].fg = default_fg;\n\t\tcells[col].bg = default_bg;\n"
+find = "\t\tcells[col].fg = colour(source.fg, default_fg);\n\t\tcells[col].bg = colour(source.bg, default_bg);\n"
 replace = ""
 expect = "growing_the_terminal_brings_back_scrollback_as_it_was"
 
@@ -36,3 +36,13 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tconst bssh_cell_t *row = cells ? converted.constData() : self->screen.row_data(0);\n"
 replace = "\tconst bssh_cell_t *row = self->screen.row_data(0);\n"
 expect = "a_terminal_resized_several_ways_keeps_its_lines_in_order"
+
+# Restored rows handed back as bare characters in the default colours:
+# libvterm's copy is what the mirror is rebuilt from after the resize, so
+# every colour and attribute of a line that had scrolled out was lost.
+[[sabotage]]
+name = "a restored row loses its colours and attributes"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tcells[col].fg = colour(source.fg, default_fg);\n\t\tcells[col].bg = colour(source.bg, default_bg);\n\t\tcells[col].attrs.bold = (source.attrs & bssh_cell_t::BOLD) ? 1 : 0;\n"
+replace = "\t\tcells[col].fg = default_fg;\n\t\tcells[col].bg = default_bg;\n"
+expect = "a_cell_keeps_what_it_is_through_scrollback_and_resize"

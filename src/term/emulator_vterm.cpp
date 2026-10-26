@@ -1689,16 +1689,34 @@ int on_sb_popline(int cols, VTermScreenCell *cells, void *user) {
 		const bssh_cell_t source = col < line.size() ? line.at(col) : bssh_cell_t();
 
 		/*
-		 * Only what libvterm needs to lay the line out again: the full
-		 * attribute round-trip would mean rebuilding VTermColor by hand,
-		 * and a wrong colour handed back to the parser is worse than a
-		 * default one.
+		 * Everything the cell was, because it is libvterm's copy that the
+		 * mirror is rebuilt from after the resize (copy_rect over the
+		 * whole screen): a line handed back as bare characters came back
+		 * on screen uncoloured and unstyled -- the holder's colour lost
+		 * on lines that had been scrolled out, measured for every SGR in
+		 * conformance_test. The colours are rebuilt as the kind they were:
+		 * default as libvterm's flagged default, a palette entry by its
+		 * index, truecolour by its value.
 		 */
+		const auto colour = [](const bssh_color_t &from, const VTermColor &fallback) {
+			VTermColor to = fallback;
+			if (from.kind == bssh_color_t::INDEXED) vterm_color_indexed(&to, from.index);
+			else if (from.kind == bssh_color_t::RGB)
+				vterm_color_rgb(&to, qRed(from.rgb), qGreen(from.rgb), qBlue(from.rgb));
+			return to;
+		};
+
 		cells[col] = VTermScreenCell();
 		cells[col].chars[0] = source.ch;
 		cells[col].width = source.width ? source.width : 1;
-		cells[col].fg = default_fg;
-		cells[col].bg = default_bg;
+		cells[col].fg = colour(source.fg, default_fg);
+		cells[col].bg = colour(source.bg, default_bg);
+		cells[col].attrs.bold = (source.attrs & bssh_cell_t::BOLD) ? 1 : 0;
+		cells[col].attrs.italic = (source.attrs & bssh_cell_t::ITALIC) ? 1 : 0;
+		cells[col].attrs.underline = (source.attrs & bssh_cell_t::UNDERLINE) ? 1 : 0;
+		cells[col].attrs.reverse = (source.attrs & bssh_cell_t::INVERSE) ? 1 : 0;
+		cells[col].attrs.blink = (source.attrs & bssh_cell_t::BLINK) ? 1 : 0;
+		cells[col].attrs.strike = (source.attrs & bssh_cell_t::STRIKE) ? 1 : 0;
 	}
 
 	emit self->owner->scrollback_changed();

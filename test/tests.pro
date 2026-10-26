@@ -59,6 +59,7 @@ SOURCES += \
     live_ssh_test.cpp \
     handoff_test.cpp \
     emulator_test.cpp \
+    conformance_test.cpp \
     graphics_test.cpp \
     platform_test.cpp \
     preset_test.cpp \
@@ -168,6 +169,7 @@ HEADERS += \
     live_ssh_test.h \
     handoff_test.h \
     emulator_test.h \
+    conformance_test.h \
     graphics_test.h \
     platform_test.h \
     preset_test.h \

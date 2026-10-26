@@ -98,3 +98,12 @@ file = "src/term/emulator_vterm.cpp"
 find = "\tif (whole_rows && !self->sync_output)\n"
 replace = "\tif (whole_rows)\n"
 expect = "scrolling_output_is_one_scroll_and_the_rows_it_exposed"
+
+# The cursor left where a scroll carried its pixels: deleting lines under
+# it moves the rows up without moving it, so nothing else repaints it.
+[[sabotage]]
+name = "a scroll leaves the cursor unpainted"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (cursor_row >= first && cursor_row <= last) update(cursor_cell_rect());\n"
+replace = ""
+expect = "the_screen_is_always_what_a_full_repaint_draws"

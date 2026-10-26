@@ -21,6 +21,7 @@
 #include "live_ssh_test.h"
 #include "ui_shots.h"
 #include "emulator_test.h"
+#include "conformance_test.h"
 #include "graphics_test.h"
 #include "platform_test.h"
 #include "preset_test.h"
@@ -371,6 +372,7 @@ int main(int argc, char *argv[]) {
 	failures += run_test<sshd_window_test>(argc, argv);
 	failures += run_test<command_line_test>(argc, argv);
 	failures += run_test<conn_manager_test>(argc, argv);
+	failures += run_test<conformance_test>(argc, argv);
 	failures += run_test<emulator_test>(argc, argv);
 	failures += run_test<graphics_test>(argc, argv);
 	failures += run_test<platform_test>(argc, argv);

@@ -3565,6 +3565,15 @@ void bssh_terminal_view::on_rows_scrolled(int first_row, int last_row, int delta
 	/* The grip is drawn over the grid's corner and must not travel with
 	 * the text: painted again where it belongs. */
 	if (grip_visible()) update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+
+	/*
+	 * And the cursor, which does not move with the text either. Deleting
+	 * lines under it scrolls the rows below up without the cursor moving,
+	 * so nothing damages its row -- the conformance test found the window
+	 * showing no cursor at all where a full repaint drew one.
+	 */
+	const int cursor_row = m_screen->cursor_row();
+	if (cursor_row >= first && cursor_row <= last) update(cursor_cell_rect());
 }
 
 void bssh_terminal_view::update_rows(int first_row, int last_row) {

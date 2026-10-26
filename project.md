@@ -15050,6 +15050,43 @@ trusted: 37 insertions and no deletions, every added line the same
 left on a second run, and the suite passing after. The resets on the
 tests' last lines stay; they are now redundant, not wrong.
 
+### 12.3w Conformance: one invariant, every feature — **[BUILT 2026-10-26]**
+
+**The holder, after colour defects found by eye twice in a day:** "if this
+still has issues I can't even begin to guess what problems exist with all
+the new terminal standards, we need to create better tests."
+`test/conformance_test.cpp` states an invariant once and feeds it a table
+of features; a new sequence is a new row, not a new test.
+
+- **A cell keeps what it is through the scrollback and a resize** --
+  character, both colours, every attribute -- for 16, bright, 256 and
+  truecolour foregrounds and backgrounds, bold, italic, underline, blink,
+  reverse, strike and all of them at once. **It failed on every row at
+  once, first run**: a line came out of the history on a resize as bare
+  characters in the default colours, because `on_sb_popline` gave
+  libvterm only the characters and the mirror is rebuilt from libvterm's
+  copy after `vterm_set_size`. The holder's "some lose their colour when
+  the text is scrolled out" -- and sec 9.5b's fix of the same morning had
+  only changed black-on-black into uncoloured. Restored cells now carry
+  their colours as the kind they were and every attribute.
+- **The window is always what a full repaint draws**, after every read,
+  for scrolling coloured output, a scroll region both ways, insert and
+  delete lines and characters, erases, the alternate screen, wide
+  characters, a synchronised frame and reverse video. **Found:** deleting
+  lines under the cursor scrolled the rows below up without moving the
+  cursor, so nothing damaged its row and the window showed no cursor
+  where a full repaint drew one; `on_rows_scrolled` now repaints the
+  cursor cell when it is inside the rows it moved. A synchronised frame is
+  compared only once released, since holding the old one is its purpose.
+- **Not reproduced: "some colour coded text has no colour from the
+  start".** Every SGR in the table styles its cell, and `less -R` paging
+  a file of them forward, back and by line kept every colour on Xvfb.
+  **Found while looking: dim (SGR 2) is dropped** -- libvterm reports no
+  faint attribute and `bssh_cell_t` has none -- so faint text draws at
+  full strength, which a program using it for de-emphasis would show as
+  uncoloured. Open, and the next row to add once there is a program and
+  a sequence that shows the first symptom.
+
 ### 12.4 CI
 - **[DECIDED 2026-10-22] `check-ci` is kept and no longer run as a gate.**
   The repository went public that day, so GitHub Actions is free again and
