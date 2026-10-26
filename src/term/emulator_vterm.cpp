@@ -1865,6 +1865,18 @@ bssh_emulator::bssh_emulator(int cols, int rows, QObject *parent)
 	vterm_screen_callbacks_has_pushline4(m_private->vts);
 
 	/*
+	 * Reflow on resize (project.md sec 9.5c): a narrower terminal rewraps
+	 * a line that had wrapped at the edge onto more rows rather than
+	 * cutting it at the new width, and a wider one joins the pieces again,
+	 * as VTE, kitty, foot, WezTerm and the current Konsole do. It was off
+	 * -- libvterm's default -- and the holder asked why a terminal made
+	 * smaller loses what was on it. Only soft wraps are joined, so lines a
+	 * program ended itself stay apart, and the alternate screen is not
+	 * reflowed, so a full-screen program redraws for the new size itself.
+	 */
+	vterm_screen_enable_reflow(m_private->vts, true);
+
+	/*
 	 * And spare libvterm converting the departing row for us: push_top_line
 	 * takes it from the mirror, so the cells libvterm built were thrown
 	 * away -- 12.6% of plain scrolling at 200x50 (vterm-patch/0007). The
@@ -2095,9 +2107,10 @@ void bssh_emulator::resize(int cols, int rows) {
 	m_private->images.forget_beyond(m_private->scrollback.count());
 
 	/*
-	 * Re-mirror everything: libvterm reflows on resize and does not
-	 * damage every cell it moved, so copying only what it reports would
-	 * leave the tail of a shrunk screen holding stale text.
+	 * Re-mirror everything: libvterm reflows on resize (enabled in the
+	 * constructor) and does not damage every cell it moved, so copying
+	 * only what it reports would leave the tail of a shrunk screen holding
+	 * stale text.
 	 */
 	VTermRect all;
 	all.start_row = 0;

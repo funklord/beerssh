@@ -1,0 +1,10 @@
+# Sabotage for reflow on resize (project.md sec 9.5c): narrowing rewraps a
+# line that wrapped at the edge rather than cutting it.
+
+# libvterm's default: lines cut at the new width, and lost.
+[[sabotage]]
+name = "reflow is off"
+file = "src/term/emulator_vterm.cpp"
+find = "\tvterm_screen_enable_reflow(m_private->vts, true);\n"
+replace = "\tvterm_screen_enable_reflow(m_private->vts, false);\n"
+expect = "a_narrowed_terminal_rewraps_and_a_widened_one_joins_again"

@@ -10448,6 +10448,38 @@ sequence: taller, then shorter and narrower, then taller and wider);
 vendored libvterm, which is the one that catches 0009 present in name
 only.
 
+### 9.5c Reflow: a smaller terminal rewraps rather than cutting — **[BUILT 2026-10-26]**
+
+**The holder: "When terminals resize into smaller terminals they lose
+information, is there any way to not lose that information and still
+retain full compatibility?"** They did: narrowing cut every line on screen
+at the new width, and widening could not bring the cut part back.
+libvterm can reflow -- rewrap a line that wrapped at the edge onto more
+rows, and join the pieces when there is room again -- and it was off,
+libvterm's default, never turned on here; a comment in
+`bssh_emulator::resize` said it reflowed, which it did not.
+
+`vterm_screen_enable_reflow` is on now, which is what VTE, kitty, foot,
+WezTerm, iTerm2 and the current Konsole do. **Compatibility:** only soft
+wraps are joined, so lines a program ended stay apart; the alternate
+screen is not reflowed, so vim, htop and less redraw for the new size as
+they always did; and a shell's prompt can show twice for a moment after
+narrowing, as it does in every reflowing terminal. Rows reflow builds
+were never in the mirror, which is what sec 9.5b's 0009 already made
+`push_top_line` take from libvterm during a resize.
+
+**Not reflowed: lines already in the history.** libvterm places a line
+it pulls back out of the scrollback as it was saved, without joining its
+pieces again; that is upstream's behaviour. Nothing of such a line is
+lost -- the history holds every line whole with its wrap marker -- but a
+line that scrolled out narrow comes back in its narrow pieces.
+
+`a_narrowed_terminal_rewraps_and_a_widened_one_joins_again` -- narrowed,
+the end of the line is on the next rows rather than gone; widened, the
+line is one again, in its colour, and a line the program ended is still
+its own. Seen in the real app on Xvfb as well: six coloured lines wrapped
+to three rows each at a narrow width and joined exactly on widening.
+
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every
 bundled font it asserts uniform advance width, presence of the required

@@ -2459,3 +2459,30 @@ void emulator_test::a_terminal_resized_several_ways_keeps_its_lines_in_order() {
 		                 .arg(60 - (rows - 1) + index));
 	}
 }
+
+void emulator_test::a_narrowed_terminal_rewraps_and_a_widened_one_joins_again() {
+	/*
+	 * Reflow (project.md sec 9.5c): narrowing used to cut every line at the
+	 * new width, and widening could not bring the cut part back. A line
+	 * that wrapped at the edge is rewrapped onto more rows instead, and
+	 * joined again when there is room -- with its colours. A line ended by
+	 * the program stays its own line.
+	 */
+	bssh_emulator emulator(40, 10);
+	const QByteArray long_line = "\x1b[32mgreen\x1b[0m and a line long enough to wrap twice when narrow";
+	emulator.feed("short one\r\n" + long_line + "\r\nlast");
+	QCOMPARE(row(emulator, 0), QStringLiteral("short one"));
+	const bssh_cell_t green = emulator.screen().cell(1, 0);
+
+	emulator.resize(20, 10);
+	QCOMPARE(row(emulator, 0), QStringLiteral("short one"));
+	QCOMPARE(row(emulator, 1), QStringLiteral("green and a line lon"));
+	QVERIFY2(!row(emulator, 2).isEmpty(), "the end of the line was cut off, not rewrapped");
+	QCOMPARE(emulator.screen().cell(1, 0).fg, green.fg);
+
+	emulator.resize(70, 10);
+	QCOMPARE(row(emulator, 0), QStringLiteral("short one"));
+	QCOMPARE(row(emulator, 1), QStringLiteral("green and a line long enough to wrap twice when narrow"));
+	QCOMPARE(row(emulator, 2), QStringLiteral("last"));
+	QCOMPARE(emulator.screen().cell(1, 0).fg, green.fg);
+}
