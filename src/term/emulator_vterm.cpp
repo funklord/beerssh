@@ -1540,7 +1540,8 @@ bool is_invisible_cell(const bssh_cell_t &cell) {
  * renderer, the selection, and the popline handler below all bound the
  * column against size()), so a trimmed line reads back identically.
  */
-void push_top_line(bssh_emulator_private *self, int cols, bool continuation) {
+void push_top_line(bssh_emulator_private *self, int cols, bool continuation,
+                   const VTermScreenCell *cells) {
 
 	/*
 	 * Taken from the MIRROR's top row, not converted from libvterm's
@@ -1575,8 +1576,23 @@ void push_top_line(bssh_emulator_private *self, int cols, bool continuation) {
 	 */
 	vterm_screen_flush_damage(self->vts);
 
-	const bssh_cell_t *row = self->screen.row_data(0);
-	int width = row ? qMin(cols, self->screen.cols()) : 0;
+	/*
+	 * Except across a resize, where libvterm gives its own cells
+	 * (vterm-patch/0009) and they are what is pushed: shrinking pushes
+	 * several rows with nothing moved between them, and reflowing builds
+	 * rows the mirror never held, so reading the mirror's row 0 there
+	 * pushed one line over and over -- and the window showed it a dozen
+	 * times when it grew again. convert_cell() makes a wide glyph's
+	 * second cell the continuation the mirror would hold.
+	 */
+	QList<bssh_cell_t> converted;
+	if (cells) {
+		converted.reserve(cols);
+		for (int col = 0; col < cols; ++col) converted.append(self->convert_cell(cells[col]));
+	}
+
+	const bssh_cell_t *row = cells ? converted.constData() : self->screen.row_data(0);
+	int width = row ? qMin(cols, cells ? int(converted.size()) : self->screen.cols()) : 0;
 	while (width > 0 && is_invisible_cell(row[width - 1])) --width;
 
 	/* One copy of the row, not a cell() and an append per column (sec 9.5). */
@@ -1605,8 +1621,7 @@ void push_top_line(bssh_emulator_private *self, int cols, bool continuation) {
  * than not at all. It simply cannot know about wrapping.
  */
 int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
-	Q_UNUSED(cells);
-	push_top_line(static_cast<bssh_emulator_private *>(user), cols, false);
+	push_top_line(static_cast<bssh_emulator_private *>(user), cols, false, cells);
 	return 1;
 }
 
@@ -1616,8 +1631,7 @@ int on_sb_pushline(int cols, const VTermScreenCell *cells, void *user) {
  * rather than a line of its own.
  */
 int on_sb_pushline4(int cols, const VTermScreenCell *cells, bool continuation, void *user) {
-	Q_UNUSED(cells);
-	push_top_line(static_cast<bssh_emulator_private *>(user), cols, continuation);
+	push_top_line(static_cast<bssh_emulator_private *>(user), cols, continuation, cells);
 	return 1;
 }
 
@@ -1660,6 +1674,17 @@ int on_sb_popline(int cols, VTermScreenCell *cells, void *user) {
 	QList<bssh_cell_t> line;
 	if (!self->scrollback.pop(line)) return 0;
 
+	/*
+	 * The default colours, as libvterm marks them. A zeroed cell is not
+	 * "default": its VTermColor is RGB black, for the text and the
+	 * background alike, so every line brought back by making the window
+	 * taller came back black on black -- the dark rows the holder saw,
+	 * lifted to grey by the contrast boost.
+	 */
+	VTermColor default_fg;
+	VTermColor default_bg;
+	vterm_state_get_default_colors(vterm_obtain_state(self->vt), &default_fg, &default_bg);
+
 	for (int col = 0; col < cols; ++col) {
 		const bssh_cell_t source = col < line.size() ? line.at(col) : bssh_cell_t();
 
@@ -1667,12 +1692,13 @@ int on_sb_popline(int cols, VTermScreenCell *cells, void *user) {
 		 * Only what libvterm needs to lay the line out again: the full
 		 * attribute round-trip would mean rebuilding VTermColor by hand,
 		 * and a wrong colour handed back to the parser is worse than a
-		 * default one. The cells the VIEW draws come from our own copy,
-		 * which kept everything.
+		 * default one.
 		 */
 		cells[col] = VTermScreenCell();
 		cells[col].chars[0] = source.ch;
 		cells[col].width = source.width ? source.width : 1;
+		cells[col].fg = default_fg;
+		cells[col].bg = default_bg;
 	}
 
 	emit self->owner->scrollback_changed();
@@ -2034,8 +2060,14 @@ void bssh_emulator::resize(int cols, int rows) {
 	const qint64 passed_before =
 	        m_private->scrollback.base() + m_private->scrollback.count();
 
+	/*
+	 * With the cells for every row pushed during it: the mirror is the
+	 * old size and is not moved between those pushes (push_top_line).
+	 */
 	m_private->resizing = true;
+	vterm_screen_callbacks_pushline_with_cells(m_private->vts);
 	vterm_set_size(m_private->vt, rows, cols);
+	vterm_screen_callbacks_pushline_without_cells(m_private->vts);
 	m_private->resizing = false;
 	m_private->screen.resize(cols, rows);
 

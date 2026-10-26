@@ -70,6 +70,8 @@ private slots:
 	void damage_is_reported_per_row_not_per_cell();
 	void damage_names_the_rows_it_touched();
 	void scrolling_output_is_one_scroll_and_the_rows_it_exposed();
+	void growing_the_terminal_brings_back_scrollback_as_it_was();
+	void a_terminal_resized_several_ways_keeps_its_lines_in_order();
 	void scrollback_drops_trailing_blanks_but_not_blank_colour();
 
 	/*

@@ -10406,6 +10406,48 @@ taken at load 70-150 were worthless**: one build measured 26 ms and 8 ms
 in consecutive runs, and every millisecond figure kept here was taken
 under load 10 or is a median of interleaved runs.
 
+### 9.5b Resizing lost the scrollback's colours and its order — **[FIXED 2026-10-26]**
+
+**The holder: "some weird bug with dark text and highlighting when the
+terminal has been resized and then try to select text."** Reproduced on
+Xvfb by resizing three ways and then dragging a selection, and the
+selection was innocent: the damage was done by the resize, two defects
+that showed together.
+
+- **Rows brought back from the scrollback came back black on black.**
+  Making the window taller has libvterm pull lines back out of the
+  scrollback (`sb_popline`), and `on_sb_popline` filled each cell from a
+  zeroed `VTermScreenCell` -- whose colour is not "default" but RGB black,
+  for the text and the background alike. The contrast boost lifted the
+  text to a dark grey, and a selection over it looked broken. The cells
+  now take libvterm's own default colours, flagged as defaults.
+- **A shrink pushed one line into the scrollback over and over.**
+  `push_top_line` reads the departing row from the mirror rather than
+  converting libvterm's cells (vterm-patch/0007, 12.6% of plain
+  scrolling). That holds for a scroll, where a moverect follows each push;
+  across `vterm_set_size` several rows are pushed with nothing moved
+  between them, and reflowing builds rows the mirror never held -- so row
+  0 went in each time, and the window showed "line 30" a dozen times when
+  it grew back. **vterm-patch/0009** adds
+  `vterm_screen_callbacks_pushline_with_cells()`, the way back from 0007's
+  opt-in; `bssh_emulator::resize` takes the cells for the length of
+  `vterm_set_size` and gives them up after, and `push_top_line` converts
+  them when they are given.
+- **0009 had to be placed away from 0007.** Written beside 0007's own
+  lines, it made 0007's reverse check fail -- the check that tells an
+  applied patch from a missing one reads the lines around it -- so the
+  build refused the stack. Moved clear of both 0007 and 0008, every patch
+  checks alone, and the set applied to libvterm's gitlink commit from
+  clean matches the working tree byte for byte.
+
+`growing_the_terminal_brings_back_scrollback_as_it_was` (order and default
+colours after one grow) and
+`a_terminal_resized_several_ways_keeps_its_lines_in_order` (the holder's
+sequence: taller, then shorter and narrower, then taller and wider);
+`tool/sabotage/resize-scrollback.toml`, one of whose edits is in the
+vendored libvterm, which is the one that catches 0009 present in name
+only.
+
 ### 9.6 CI font validation
 **Built** (`tool/check-fonts.py`, `make check-fonts`, run in CI): for every
 bundled font it asserts uniform advance width, presence of the required

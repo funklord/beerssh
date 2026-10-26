@@ -335,6 +335,8 @@ BSSH_VTERM_WITNESS := $(shell \
 	             2>/dev/null \
 	          && grep -q pushline_without_cells $(VTERM_DIR)/include/vterm.h \
 	             2>/dev/null \
+	          && grep -q pushline_with_cells $(VTERM_DIR)/include/vterm.h \
+	             2>/dev/null \
 	          && grep -q vterm_export_state $(VTERM_DIR)/src/vterm.c 2>/dev/null \
 	          && grep -q vterm_encoding_index $(VTERM_DIR)/src/encoding.c 2>/dev/null \
 	          && grep -q VTermWriter $(VTERM_DIR)/src/vterm_internal.h 2>/dev/null; }; then \

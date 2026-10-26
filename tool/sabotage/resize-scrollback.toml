@@ -1,0 +1,38 @@
+# Sabotages for lines going into the scrollback and coming back when the
+# terminal is resized (project.md sec 9.5b). The holder saw, after
+# resizing and selecting, rows restored dark and one line repeated a
+# dozen times; each edit brings one half of that back.
+
+# Restored rows in libvterm's zeroed colour, which is RGB black for the
+# text and the background: dark rows.
+[[sabotage]]
+name = "a restored row comes back black on black"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tcells[col].fg = default_fg;\n\t\tcells[col].bg = default_bg;\n"
+replace = ""
+expect = "growing_the_terminal_brings_back_scrollback_as_it_was"
+
+# The resize without libvterm's cells: the mirror's row 0, the same one
+# for every row a shrink pushes.
+[[sabotage]]
+name = "a resize pushes the mirror's top row each time"
+file = "src/term/emulator_vterm.cpp"
+find = "\tvterm_screen_callbacks_pushline_with_cells(m_private->vts);\n"
+replace = ""
+expect = "a_terminal_resized_several_ways_keeps_its_lines_in_order"
+
+# vterm-patch/0009 present in name only: the cells are still withheld.
+[[sabotage]]
+name = "libvterm's way back does not give the cells back"
+file = "vterm/src/screen.c"
+find = "void vterm_screen_callbacks_pushline_with_cells(VTermScreen *screen)\n{\n  screen->pushline_without_cells = false;\n"
+replace = "void vterm_screen_callbacks_pushline_with_cells(VTermScreen *screen)\n{\n  screen->pushline_without_cells = true;\n"
+expect = "a_terminal_resized_several_ways_keeps_its_lines_in_order"
+
+# Given the cells, and still reading the mirror.
+[[sabotage]]
+name = "the cells given are ignored"
+file = "src/term/emulator_vterm.cpp"
+find = "\tconst bssh_cell_t *row = cells ? converted.constData() : self->screen.row_data(0);\n"
+replace = "\tconst bssh_cell_t *row = self->screen.row_data(0);\n"
+expect = "a_terminal_resized_several_ways_keeps_its_lines_in_order"

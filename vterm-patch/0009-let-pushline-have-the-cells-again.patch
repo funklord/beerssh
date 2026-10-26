@@ -1,0 +1,41 @@
+Let pushline have the cells again
+
+0007 made the converted cells optional for a callback that keeps its own
+copy of the departing row. That copy is right for a scroll, where a
+moverect follows every push and keeps it in step, and wrong for a
+resize: shrinking pushes several rows with nothing moved between them,
+and reflowing builds rows the caller's copy never held. BeerSSH read its
+row 0 once per push there and filled the scrollback with one line
+repeated -- the window then showed it a dozen times over when it grew.
+
+Add vterm_screen_callbacks_pushline_with_cells(), the way back from
+0007's opt-in, so a caller can have the cells across vterm_set_size and
+go without them for ordinary scrolling.
+
+--- a/include/vterm.h
++++ b/include/vterm.h
+@@ -622,6 +622,10 @@
+ 
+ int vterm_screen_is_eol(const VTermScreen *screen, VTermPos pos);
+ 
++/* The way back from vterm_screen_callbacks_pushline_without_cells(): the
++ * pushline callbacks are given their cells again. */
++void vterm_screen_callbacks_pushline_with_cells(VTermScreen *screen);
++
+ /**
+  * Same as vterm_state_convert_color_to_rgb(), but takes a `screen` instead of a `state`
+  * instance.
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -1131,6 +1131,11 @@
+   }
+ }
+ 
++void vterm_screen_callbacks_pushline_with_cells(VTermScreen *screen)
++{
++  screen->pushline_without_cells = false;
++}
++
+ void vterm_screen_set_damage_merge(VTermScreen *screen, VTermDamageSize size)
+ {
+   vterm_screen_flush_damage(screen);

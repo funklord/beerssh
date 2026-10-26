@@ -2410,3 +2410,52 @@ void emulator_test::a_moved_terminal_refuses_what_it_cannot_take() {
 	QVERIFY(same.import_state(state));
 	QCOMPARE(same.screen().cell(0, 0).ch, U'k');
 }
+
+void emulator_test::growing_the_terminal_brings_back_scrollback_as_it_was() {
+	/*
+	 * Making the window taller brings lines back out of the scrollback to
+	 * fill the new rows (libvterm's sb_popline). The holder saw them come
+	 * back dark -- black on black, which the contrast boost lifts to grey
+	 * -- and wrong. Each restored row must be the line it was, in order,
+	 * in the default colours.
+	 */
+	bssh_emulator emulator(60, 10);
+	for (int line = 1; line <= 30; ++line) {
+		emulator.feed(QByteArray("line ") + QByteArray::number(line) + (line < 30 ? "\r\n" : ""));
+	}
+	QCOMPARE(row(emulator, 9), QStringLiteral("line 30"));
+
+	emulator.resize(60, 16);
+
+	for (int index = 0; index < 16; ++index) {
+		QCOMPARE(row(emulator, index), QStringLiteral("line %1").arg(15 + index));
+		const bssh_cell_t first = emulator.screen().cell(index, 0);
+		QVERIFY2(first.fg.kind == bssh_color_t::DEFAULT && first.bg.kind == bssh_color_t::DEFAULT,
+		         qPrintable(QStringLiteral("row %1 came back in colours of its own: fg %2, bg %3")
+		                            .arg(index).arg(int(first.fg.kind)).arg(int(first.bg.kind))));
+	}
+}
+
+void emulator_test::a_terminal_resized_several_ways_keeps_its_lines_in_order() {
+	/*
+	 * The holder's window, as it went: taller, then shorter and narrower,
+	 * then taller and wider than either. Lines went into the scrollback
+	 * and came back, and the window showed one line repeated where a dozen
+	 * different ones belonged. Every row must still be the line it was.
+	 */
+	bssh_emulator emulator(80, 24);
+	for (int line = 1; line <= 60; ++line) {
+		emulator.feed(QByteArray("line ") + QByteArray::number(line) +
+		              ": the quick brown fox jumps over the lazy dog" + (line < 60 ? "\r\n" : ""));
+	}
+
+	const QList<QPair<int, int>> sizes = { { 100, 31 }, { 67, 19 }, { 105, 33 } };
+	for (const auto &size : sizes) emulator.resize(size.first, size.second);
+
+	const int rows = 33;
+	for (int index = 0; index < rows; ++index) {
+		QCOMPARE(row(emulator, index),
+		         QStringLiteral("line %1: the quick brown fox jumps over the lazy dog")
+		                 .arg(60 - (rows - 1) + index));
+	}
+}
