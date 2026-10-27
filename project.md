@@ -15143,10 +15143,15 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   `tool/sabotage/drawer-hover.toml`, whose grip edit was MISSED until the
   test made sure a scrollbar was showing instead of checking only if one
   happened to be.
-- **Open, holder-reported, not reproduced:** "some colour coded text has
-  no colour from the start" (sec 12.3w). The likeliest lead is dim (SGR 2),
-  dropped by libvterm and absent from `bssh_cell_t`; a program and a
-  sequence that shows it would make a conformance row.
+- **Closed: "some colour coded text has no colour from the start"** --
+  the holder, 2026-10-27: it was the prompt, the `TERM` cases in their
+  `.bashrc` (sec 12.3w), fixed there. Dim (SGR 2) is still dropped.
+- **Open, holder-reported 2026-10-27:** "most lines are brought back now,
+  but when made really small the lines get slightly messed up." Not yet
+  reproduced. Suspects: at very narrow widths reflow splits a line into
+  many pieces, and pieces that went into the history come back unjoined
+  (next bullet); and a wide glyph split at a narrow edge. Start with a
+  narrow-then-widen row in `test/conformance_test.cpp`.
 - **Open:** lines brought back out of the history by a wider resize are
   not rejoined (sec 9.5c, upstream libvterm behaviour).
 - **Not started, offered:** an Android build with this week's changes
