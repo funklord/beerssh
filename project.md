@@ -10468,11 +10468,59 @@ narrowing, as it does in every reflowing terminal. Rows reflow builds
 were never in the mirror, which is what sec 9.5b's 0009 already made
 `push_top_line` take from libvterm during a resize.
 
-**Not reflowed: lines already in the history.** libvterm places a line
-it pulls back out of the scrollback as it was saved, without joining its
-pieces again; that is upstream's behaviour. Nothing of such a line is
-lost -- the history holds every line whole with its wrap marker -- but a
-line that scrolled out narrow comes back in its narrow pieces.
+**The history is reflowed too, since 2026-10-29.** The holder, after the
+above: "most lines are brought back now, but when made really small the
+lines get slightly messed up." Reproduced with
+`a_terminal_made_very_small_and_back_keeps_every_line`, which takes a
+screenful of lines through rows of sizes down to 3x2 and back and
+requires every line to come back whole, in order, with its colour, and
+with the cursor where it was. It found five faults, four of them
+libvterm's, fixed in `vterm-patch/0010` and in the scrollback:
+
+- **A line taller than the space left lost every row after its first.**
+  libvterm pushed only the first row of a line that did not fit and
+  dropped the rest -- the "messed up" lines -- and **aborted the whole
+  process** when the cursor was in such a line ("screen_resize failed to
+  update cursor position"; an ASan probe of 66 characters on a 10x5
+  screen narrowed to 7 columns). The line is split now: its tail fills
+  the top of the screen and its head goes to the history at the new
+  width.
+- **A line split between the history and the top of the screen was
+  reflowed as its tail alone**, leaving a hole where the head's last row
+  was short, and reading the row before the buffer when walking back.
+  libvterm now pulls the head back out of the history (`sb_popline4`,
+  which also says whether a line handed back is a continuation) and
+  reflows the line whole, bounded at 1000 rows.
+- **Lines brought back by a wider window were cut at the old width**,
+  and their row info was uninitialised memory.
+- **Text ending exactly at the new edge left the cursor ON its last
+  character**, so the next keystroke overwrote it. The pending wrap is
+  carried through the resize now; libvterm also cancelled it whenever
+  the cursor moved, which a reflow always does.
+- **The history itself is rewrapped to the new width**
+  (`bssh_scrollback::rewrap`), before libvterm pulls anything back and
+  again after, so scrolled-back output reads at any width the way the
+  screen does. The line whose tail is on screen is left as it is. And a
+  history line keeps its trailing blanks until the next line shows it
+  ended there: trimming each line as it arrived lost the space at a wrap
+  point whenever the tail had not scrolled out yet, which also broke
+  copying such a line.
+
+libvterm's own tests (`vterm/t`, under ASan and UBSan) give the same
+result with and without 0010: 42 of 43, the failing one
+`17state_mouse`, which fails identically without it. Pictures in the
+history keep their distance from the bottom of it across a rewrap, as
+they already did across a screen reflow; a picture beside text that
+rewraps onto a different number of rows is therefore approximate, as in
+every reflowing terminal that shows pictures. A selection anchored in
+the history may shift by the rows a rewrap adds.
+
+`tool/sabotage/narrow-resize.toml` breaks each of the five, four of the
+edits in the vendored library. Its first run MISSED one: without the
+rewrap after the resize the joined text was still right, so the test
+could not see rows left at the old width -- which is exactly the "lines
+cut at the edge" a narrow window would show when scrolled back. It now
+also requires every history row to fit the window, and catches it.
 
 `a_narrowed_terminal_rewraps_and_a_widened_one_joins_again` -- narrowed,
 the end of the line is on the next rows rather than gone; widened, the
@@ -15146,14 +15194,14 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
 - **Closed: "some colour coded text has no colour from the start"** --
   the holder, 2026-10-27: it was the prompt, the `TERM` cases in their
   `.bashrc` (sec 12.3w), fixed there. Dim (SGR 2) is still dropped.
-- **Open, holder-reported 2026-10-27:** "most lines are brought back now,
-  but when made really small the lines get slightly messed up." Not yet
-  reproduced. Suspects: at very narrow widths reflow splits a line into
-  many pieces, and pieces that went into the history come back unjoined
-  (next bullet); and a wide glyph split at a narrow edge. Start with a
-  narrow-then-widen row in `test/conformance_test.cpp`.
-- **Open:** lines brought back out of the history by a wider resize are
-  not rejoined (sec 9.5c, upstream libvterm behaviour).
+- **Fixed 2026-10-29: "when made really small the lines get slightly
+  messed up"** (holder, 2026-10-27), with the history-rejoin item that
+  stood beside it -- sec 9.5c. It was lost text, not a drawing fault, and
+  it included an abort of the whole process. Still open from it: libvterm's
+  on-screen reflow copies cells without checking for a wide glyph at the
+  new edge, so one may be drawn split across two rows -- read in the code,
+  not seen; the text survives (the test has wide glyphs) and the history
+  rewrap never splits one.
 - **Not started, offered:** an Android build with this week's changes
   (drawer, DejaVu, partial repaints, reflow) for the phone; the two
   older `project.md` entries that cite `running-code.md` rather than
@@ -16863,3 +16911,23 @@ same dry run with a control: **6 warnings from fmake at `52f1a4c^`,
 exported to a scratch directory, and 0 from fmake at its HEAD**, the
 tree and the dependency build unchanged between the two. fmake asked to
 hear if any survived; none did.
+
+**fmake's acknowledgement, 2026-10-23 (inbox 20261023T1620Z):** the
+before-and-after above is recorded as fmake's section 510, citing
+`5dad6fc`. Following the residue found two more of the same class in
+fmake, the worst an excluded header satisfying an include so a vendored
+file broke an unrelated target. Nothing is asked of this tree.
+
+## From hull: a chroot machine has its own NATed network now
+
+hull's inbox note 20261027T1808Z, for the check-ci-on-hull move the
+holder wants once hull matures. From hull `55f2beb` (2026-10-27), a
+chroot machine with no `(network ...)` key gets a network namespace of
+its own with pasta's NAT out -- `eth0` 10.0.2.15/24, gateway 10.0.2.2,
+resolver 10.0.2.3 -- instead of the host's network, and the host's
+loopback is not reachable from it. `(network nat)` names that default
+(`ccf44b0`); `host` and `none` are unchanged; `(network bridge)` exists
+as root only (`3b83027`). For check-ci's runner image as a chroot
+machine -- the untried case -- a build now reaches the network without
+`(network host)`. No hull spec is in this tree yet, so nothing changes
+here; hull's `project.md` section 4.8 is the record.

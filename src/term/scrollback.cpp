@@ -17,11 +17,31 @@ void bssh_scrollback::set_max_lines(int max_lines) {
 	m_max_lines = qMax(0, max_lines);
 
 	/* Shrinking drops the oldest, which is what "keep the last N" means. */
+	evict_beyond_cap();
+}
+
+void bssh_scrollback::evict_beyond_cap() {
 	while (m_lines.size() > m_max_lines) {
 		m_lines.removeFirst();
 		m_continuations.removeFirst();
 		++m_base;
 	}
+}
+
+bool bssh_scrollback::is_blank(const bssh_cell_t &cell) {
+	if (cell.ch != 0 && cell.ch != U' ') return false;
+	if (cell.width != 1) return false;
+	if (cell.attrs != bssh_cell_t::NONE) return false;
+	if (cell.fg.kind != bssh_color_t::DEFAULT) return false;
+	if (cell.bg.kind != bssh_color_t::DEFAULT) return false;
+	if (cell.link != 0) return false;
+	return true;
+}
+
+void bssh_scrollback::trim(QList<bssh_cell_t> &line) {
+	int width = line.size();
+	while (width > 0 && is_blank(line.at(width - 1))) --width;
+	if (width < line.size()) line.resize(width);
 }
 
 void bssh_scrollback::push(const QList<bssh_cell_t> &line, bool continuation) {
@@ -44,13 +64,11 @@ void bssh_scrollback::push(const QList<bssh_cell_t> &line, bool continuation) {
 		return;
 	}
 
+	if (!continuation && !m_lines.isEmpty()) trim(m_lines.last());
+
 	m_lines.append(line);
 	m_continuations.append(continuation);
-	while (m_lines.size() > m_max_lines) {
-		m_lines.removeFirst();
-		m_continuations.removeFirst();
-		++m_base;
-	}
+	evict_beyond_cap();
 }
 
 bool bssh_scrollback::is_continuation(int index) const {
@@ -58,12 +76,78 @@ bool bssh_scrollback::is_continuation(int index) const {
 	return m_continuations.at(index);
 }
 
-bool bssh_scrollback::pop(QList<bssh_cell_t> &line) {
+bool bssh_scrollback::pop(QList<bssh_cell_t> &line, bool *continuation) {
 	if (m_lines.isEmpty()) return false;
 
 	line = m_lines.takeLast();
-	m_continuations.removeLast();
+	const bool continued = m_continuations.takeLast();
+	if (continuation) *continuation = continued;
 	return true;
+}
+
+void bssh_scrollback::rewrap(int cols, bool keep_last) {
+	if (cols <= 0 || m_lines.isEmpty()) return;
+
+	int stop = m_lines.size();
+	if (keep_last) {
+		while (stop > 0 && m_continuations.at(stop - 1)) --stop;
+		stop = qMax(0, stop - 1);
+	}
+
+	QList<QList<bssh_cell_t> > lines;
+	QList<bool> continuations;
+	lines.reserve(m_lines.size());
+	continuations.reserve(m_lines.size());
+
+	int index = 0;
+	while (index < m_lines.size()) {
+		if (index >= stop) {
+			lines.append(m_lines.at(index));
+			continuations.append(m_continuations.at(index));
+			++index;
+			continue;
+		}
+		int end = index + 1;
+		while (end < m_lines.size() && m_continuations.at(end)) ++end;
+
+		/* A line of one row that fits is kept as it is, shared, not copied. */
+		if (end == index + 1 && m_lines.at(index).size() <= cols &&
+		    (m_lines.at(index).isEmpty() || !is_blank(m_lines.at(index).last()))) {
+			lines.append(m_lines.at(index));
+			continuations.append(m_continuations.at(index));
+			index = end;
+			continue;
+		}
+
+		QList<bssh_cell_t> joined;
+		for (int row = index; row < end; ++row) joined += m_lines.at(row);
+
+		/* The blanks after the last row are not text; the ones before a
+		 * continuation were (see push()). */
+		trim(joined);
+
+		bool first = true;
+		int at = 0;
+		do {
+			int take = qMin(cols, int(joined.size()) - at);
+			/*
+			 * Never end a row on the first half of a wide glyph. The row
+			 * is left a cell short rather than padded, because a blank
+			 * stored there would be joined back into the text as a space.
+			 */
+			if (take > 1 && at + take < joined.size() && joined.at(at + take).width == 0) --take;
+			lines.append(joined.mid(at, take));
+			at += take;
+			continuations.append(first ? m_continuations.at(index) : true);
+			first = false;
+		} while (at < joined.size());
+
+		index = end;
+	}
+
+	m_lines = lines;
+	m_continuations = continuations;
+	evict_beyond_cap();
 }
 
 void bssh_scrollback::clear() {

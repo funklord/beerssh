@@ -1500,28 +1500,6 @@ int on_dcs(const char *command, size_t commandlen, VTermStringFragment frag, voi
 }
 
 /*
- * Whether a cell would draw as nothing whatsoever, so that a run of them
- * at the end of a line can be left out of the scrollback entirely.
- *
- * Deliberately strict. A space carrying a background colour is a visible
- * thing -- half the TUIs in existence draw a bar that way -- and so is one
- * under a hyperlink, so only a cell that is blank in EVERY respect
- * qualifies. Note what the width test excludes: the continuation half of a
- * double-width glyph, which the mirror records with width 0 rather than
- * with libvterm's chars[0] == (uint32_t)-1 marker, so a trim stops there
- * and cannot cut a wide character in half.
- */
-bool is_invisible_cell(const bssh_cell_t &cell) {
-	if (cell.ch != 0 && cell.ch != U' ') return false;
-	if (cell.width != 1) return false;
-	if (cell.attrs != bssh_cell_t::NONE) return false;
-	if (cell.fg.kind != bssh_color_t::DEFAULT) return false;
-	if (cell.bg.kind != bssh_color_t::DEFAULT) return false;
-	if (cell.link != 0) return false;
-	return true;
-}
-
-/*
  * A line has scrolled off the top. libvterm hands over the cells rather
  * than the text, so colours and attributes survive being scrolled back
  * to -- which is the whole reason the scrollback stores cells.
@@ -1539,6 +1517,9 @@ bool is_invisible_cell(const bssh_cell_t &cell) {
  * Every reader already treats a short line as blank past its end (the
  * renderer, the selection, and the popline handler below all bound the
  * column against size()), so a trimmed line reads back identically.
+ *
+ * The store does the trimming, once the next line shows this one ended
+ * (bssh_scrollback::push): a line that ran to the edge keeps its blanks.
  */
 void push_top_line(bssh_emulator_private *self, int cols, bool continuation,
                    const VTermScreenCell *cells) {
@@ -1593,7 +1574,6 @@ void push_top_line(bssh_emulator_private *self, int cols, bool continuation,
 
 	const bssh_cell_t *row = cells ? converted.constData() : self->screen.row_data(0);
 	int width = row ? qMin(cols, cells ? int(converted.size()) : self->screen.cols()) : 0;
-	while (width > 0 && is_invisible_cell(row[width - 1])) --width;
 
 	/* One copy of the row, not a cell() and an append per column (sec 9.5). */
 	const QList<bssh_cell_t> line = width > 0 ? QList<bssh_cell_t>(row, row + width)
@@ -1668,11 +1648,9 @@ int on_sb_clear(void *user) {
  * -- leaving the alternate screen, or a resize pulling content back onto
  * the grid. Returning 0 tells it there is nothing, which it handles.
  */
-int on_sb_popline(int cols, VTermScreenCell *cells, void *user) {
-	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
-
+int pop_line(bssh_emulator_private *self, int cols, VTermScreenCell *cells, bool *continuation) {
 	QList<bssh_cell_t> line;
-	if (!self->scrollback.pop(line)) return 0;
+	if (!self->scrollback.pop(line, continuation)) return 0;
 
 	/*
 	 * The default colours, as libvterm marks them. A zeroed cell is not
@@ -1723,6 +1701,20 @@ int on_sb_popline(int cols, VTermScreenCell *cells, void *user) {
 	return 1;
 }
 
+int on_sb_popline(int cols, VTermScreenCell *cells, void *user) {
+	return pop_line(static_cast<bssh_emulator_private *>(user), cols, cells, nullptr);
+}
+
+/*
+ * The same, and whether the line continues the one above it
+ * (vterm-patch/0010): a wrapped line brought back by a resize is marked
+ * as one line again, so the next resize rewraps it whole instead of
+ * leaving it cut where the narrower window cut it.
+ */
+int on_sb_popline4(int cols, VTermScreenCell *cells, bool *continuation, void *user) {
+	return pop_line(static_cast<bssh_emulator_private *>(user), cols, cells, continuation);
+}
+
 int on_bell(void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	emit self->owner->bell();
@@ -1756,7 +1748,8 @@ const VTermScreenCallbacks screen_callbacks = {
 	.sb_popline  = on_sb_popline,
 	.sb_clear    = on_sb_clear,
 	/* Opt-in ABI extension; enabled by the has_pushline4 call at setup. */
-	.sb_pushline4 = on_sb_pushline4
+	.sb_pushline4 = on_sb_pushline4,
+	.sb_popline4 = on_sb_popline4
 	/*
 	 * Designated initialisers on purpose: libvterm has added callbacks
 	 * before (sb_pushline4 is newer than this list), and a positional
@@ -2059,6 +2052,16 @@ void bssh_emulator::resize(int cols, int rows) {
 	vterm_screen_flush_damage(m_private->vts);
 
 	/*
+	 * The history is rewrapped to the new width before libvterm pulls
+	 * any of it back, so what comes back fits (project.md sec 9.5c), and
+	 * again afterwards for the rows a shrink pushed at the old width.
+	 * Without it a narrowed window showed every history line cut at its
+	 * edge, and a widened one brought lines back at the width they left.
+	 */
+	const bool narrower_or_wider = cols != m_private->screen.cols();
+	if (narrower_or_wider) m_private->scrollback.rewrap(cols, row_is_continuation(0));
+
+	/*
 	 * How far the buffer moves past the screen, measured rather than
 	 * derived: a shrink pushes lines into the scrollback exactly as a
 	 * scroll does, but libvterm reports that through sb_pushline and
@@ -2099,6 +2102,7 @@ void bssh_emulator::resize(int cols, int rows) {
 	vterm_set_size(m_private->vt, rows, cols);
 	vterm_screen_callbacks_pushline_without_cells(m_private->vts);
 	m_private->resizing = false;
+	if (narrower_or_wider) m_private->scrollback.rewrap(cols, row_is_continuation(0));
 	m_private->screen.resize(cols, rows);
 
 	const qint64 passed_after =
@@ -2525,12 +2529,12 @@ void bssh_emulator::set_scrollback_lines(int lines) {
 }
 
 bool bssh_emulator::row_is_continuation(int row) const {
-	if (!m_private->vt || row <= 0 || row >= m_private->screen.rows()) return false;
+	if (!m_private->vt || row < 0 || row >= m_private->screen.rows()) return false;
 
 	/*
-	 * Row 0 is never a continuation of anything on this screen: whatever
-	 * it continued has already gone to the scrollback, and that half is
-	 * answered by bssh_scrollback::is_continuation.
+	 * Row 0 included: a line taller than the screen has its head in the
+	 * scrollback and its tail at the top, and copying across the two must
+	 * join them (vterm-patch/0010 keeps the mark through a resize).
 	 */
 	const VTermLineInfo *info =
 	        vterm_state_get_lineinfo(vterm_obtain_state(m_private->vt), row);

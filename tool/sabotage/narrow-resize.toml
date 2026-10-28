@@ -1,0 +1,74 @@
+# Sabotage for resizing a terminal very small and back (project.md sec
+# 9.5c, the holder's report of 2026-10-27): every line comes back whole,
+# in order, with the cursor where it was. Four edits in the vendored
+# library, which vterm-patch/0010 puts there, and four in ours.
+
+# The history kept at the width each line left at: lines pulled back
+# by a wider window came back as the narrow pieces they were.
+[[sabotage]]
+name = "history is not rewrapped after a resize"
+file = "src/term/emulator_vterm.cpp"
+find = "\tm_private->resizing = false;\n\tif (narrower_or_wider) m_private->scrollback.rewrap(cols, row_is_continuation(0));\n"
+replace = "\tm_private->resizing = false;\n"
+expect = "a_terminal_made_very_small_and_back_keeps_every_line"
+
+# A line handed back to libvterm without saying it continues the one
+# above: it is reflowed as a line of its own.
+[[sabotage]]
+name = "a popped line forgets it was a continuation"
+file = "src/term/emulator_vterm.cpp"
+find = "\treturn pop_line(static_cast<bssh_emulator_private *>(user), cols, cells, continuation);\n"
+replace = "\t*continuation = false;\n\treturn pop_line(static_cast<bssh_emulator_private *>(user), cols, cells, nullptr);\n"
+expect = "a_terminal_made_very_small_and_back_keeps_every_line"
+
+# Trailing blanks dropped before the next line shows whether they were
+# text: a space at a wrap point is lost.
+[[sabotage]]
+name = "a line is trimmed before its continuation arrives"
+file = "src/term/scrollback.cpp"
+find = "\tif (!continuation && !m_lines.isEmpty()) trim(m_lines.last());\n"
+replace = "\tif (!m_lines.isEmpty()) trim(m_lines.last());\n"
+expect = "a_terminal_made_very_small_and_back_keeps_every_line"
+
+# The newest line rewrapped while its tail is on the screen.
+[[sabotage]]
+name = "rewrap does not keep the line the screen continues"
+file = "src/term/scrollback.cpp"
+find = "\tif (keep_last) {\n"
+replace = "\tif (false) {\n"
+expect = "a_terminal_made_very_small_and_back_keeps_every_line"
+
+# The head of a line continued from the scrollback is not pulled back,
+# so the tail is reflowed alone and a hole is left where they meet.
+[[sabotage]]
+name = "the head of a split line is not pulled back"
+file = "vterm/src/screen.c"
+find = "    while(continuation && pulled < REFLOW_PULL_MAX) {"
+replace = "    while(continuation && pulled < 0) {"
+expect = "a_terminal_made_very_small_and_back_keeps_every_line"
+
+# The head of a line too tall for the screen pushed as lines of their
+# own rather than as one wrapped line.
+[[sabotage]]
+name = "the pushed head of a split line is not marked as wrapped"
+file = "vterm/src/screen.c"
+find = "(new_cols, screen->sb_buffer, head > 0 || head_continued, screen->cbdata);"
+replace = "(new_cols, screen->sb_buffer, false, screen->cbdata);"
+expect = "a_terminal_made_very_small_and_back_keeps_every_line"
+
+# Text ending exactly at the new edge: the cursor clamped onto its last
+# character, and the next one overwrites it.
+[[sabotage]]
+name = "no pending wrap at the new edge"
+file = "vterm/src/screen.c"
+find = "          statefields->at_phantom = 1;"
+replace = "          statefields->at_phantom = 0;"
+expect = "a_terminal_made_very_small_and_back_keeps_every_line"
+
+# The pending wrap set by the reflow, cancelled because the cursor moved.
+[[sabotage]]
+name = "the resize cancels the pending wrap"
+file = "vterm/src/state.c"
+find = "  updatecursor(state, &oldpos, 0);\n\n  return 1;\n}"
+replace = "  updatecursor(state, &oldpos, 1);\n\n  return 1;\n}"
+expect = "a_terminal_made_very_small_and_back_keeps_every_line"

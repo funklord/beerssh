@@ -518,7 +518,9 @@ void emulator_test::a_row_scrolled_off_before_its_damage_is_flushed_is_still_int
 	 */
 	emulator.feed(QByteArrayLiteral("HELLO\x1b[S"));
 
-	QCOMPARE(emulator.scrollback().count(), 1);
+	/* A second line, so the first has been trimmed (bssh_scrollback::push). */
+	emulator.feed(QByteArrayLiteral("\x1b[S"));
+	QCOMPARE(emulator.scrollback().count(), 2);
 
 	const QList<bssh_cell_t> &pushed = emulator.scrollback().line(0);
 	QString text;
@@ -1183,7 +1185,9 @@ void emulator_test::scrollback_drops_trailing_blanks_but_not_blank_colour() {
 	 */
 	{
 		bssh_emulator emulator(40, 2);
-		emulator.feed(QByteArrayLiteral("short\r\na\r\nb"));
+		/* The newest line keeps its blanks until the next one shows it
+		 * ended (bssh_scrollback::push), so there is a line after it. */
+		emulator.feed(QByteArrayLiteral("short\r\na\r\nb\r\nc"));
 
 		QVERIFY(emulator.scrollback().count() >= 1);
 		QCOMPARE(emulator.scrollback().line(0).size(), 5);
@@ -1197,7 +1201,7 @@ void emulator_test::scrollback_drops_trailing_blanks_but_not_blank_colour() {
 	 */
 	{
 		bssh_emulator emulator(10, 2);
-		emulator.feed(QByteArrayLiteral("\x1b[44m  \x1b[0m\r\na\r\nb"));
+		emulator.feed(QByteArrayLiteral("\x1b[44m  \x1b[0m\r\na\r\nb\r\nc"));
 
 		const QList<bssh_cell_t> line = emulator.scrollback().line(0);
 		QCOMPARE(line.size(), 2);
@@ -1215,7 +1219,7 @@ void emulator_test::scrollback_drops_trailing_blanks_but_not_blank_colour() {
 	 */
 	{
 		bssh_emulator emulator(4, 2);
-		emulator.feed(QByteArrayLiteral("ab\xe4\xb8\xad\r\nx\r\ny"));   /* ab U+4E2D */
+		emulator.feed(QByteArrayLiteral("ab\xe4\xb8\xad\r\nx\r\ny\r\nz"));   /* ab U+4E2D */
 
 		const QList<bssh_cell_t> line = emulator.scrollback().line(0);
 		QCOMPARE(line.size(), 4);
@@ -1244,7 +1248,7 @@ void emulator_test::a_wide_glyph_scrolls_back_the_way_it_was_on_screen() {
 	live.feed(text);
 
 	bssh_emulator scrolled(6, 2);
-	scrolled.feed(text + QByteArrayLiteral("\r\nx\r\ny"));
+	scrolled.feed(text + QByteArrayLiteral("\r\nx\r\ny\r\nz"));
 	const QList<bssh_cell_t> stored = scrolled.scrollback().line(0);
 
 	QCOMPARE(stored.size(), 4);
@@ -2457,6 +2461,119 @@ void emulator_test::a_terminal_resized_several_ways_keeps_its_lines_in_order() {
 		QCOMPARE(row(emulator, index),
 		         QStringLiteral("line %1: the quick brown fox jumps over the lazy dog")
 		                 .arg(60 - (rows - 1) + index));
+	}
+}
+
+namespace {
+
+/* A comma would split QFETCH's arguments. */
+using sizes_t = QList<QPair<int, int>>;
+
+/*
+ * The text a terminal holds, history and screen, as the lines the program
+ * wrote: a row that continues the one before it is joined to it, and
+ * trailing blanks are dropped, since a cell a resize cleared and a cell
+ * nobody wrote are the same thing.
+ */
+QStringList logical_lines(const bssh_emulator &emulator) {
+	QStringList out;
+	const auto take = [&out](const QString &text, bool continuation) {
+		if (continuation && !out.isEmpty()) out.last() += text;
+		else out.append(text);
+	};
+	const auto text_of = [](const QList<bssh_cell_t> &cells) {
+		QString text;
+		for (const bssh_cell_t &cell : cells)
+			if (cell.width != 0) text += QString::fromUcs4(&cell.ch, 1);
+		return text;
+	};
+	const bssh_scrollback &history = emulator.scrollback();
+	for (int index = 0; index < history.count(); ++index)
+		take(text_of(history.line(index)), history.is_continuation(index));
+	const bssh_screen &screen = emulator.screen();
+	for (int index = 0; index < screen.rows(); ++index) {
+		QList<bssh_cell_t> cells;
+		for (int col = 0; col < screen.cols(); ++col) cells.append(screen.cell(index, col));
+		take(text_of(cells), emulator.row_is_continuation(index));
+	}
+	for (QString &line : out) {
+		while (line.endsWith(QLatin1Char(' '))) line.chop(1);
+	}
+	while (!out.isEmpty() && out.last().isEmpty()) out.removeLast();
+	return out;
+}
+
+}
+
+void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line_data() {
+	QTest::addColumn<sizes_t>("sizes");
+
+	QTest::newRow("narrow") << sizes_t{ { 12, 10 } };
+	QTest::newRow("narrow and short") << sizes_t{ { 12, 4 } };
+	QTest::newRow("tiny") << sizes_t{ { 5, 3 } };
+	QTest::newRow("down in steps") << sizes_t{ { 30, 8 }, { 20, 6 }, { 10, 4 }, { 4, 2 } };
+	QTest::newRow("down and up in steps")
+	        << sizes_t{ { 20, 6 }, { 6, 3 }, { 25, 7 }, { 3, 2 }, { 35, 9 } };
+}
+
+void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line() {
+	/*
+	 * The holder, 2026-10-27, after reflow: "most lines are brought back
+	 * now, but when made really small the lines get slightly messed up."
+	 * Whatever sizes the window goes through, every line the program
+	 * wrote must still be there afterwards, whole and in order.
+	 */
+	QFETCH(sizes_t, sizes);
+
+	bssh_emulator emulator(40, 10);
+	QStringList written;
+	for (int line = 1; line <= 30; ++line) {
+		QString text = QStringLiteral("%1: ").arg(line);
+		const int repeat = (line % 4 == 0) ? 12 : (line % 3 == 0) ? 0 : 3;
+		text += QStringLiteral("word ").repeated(repeat) + QStringLiteral("end");
+		/* Wide glyphs, which a narrow edge must not cut in half. */
+		if (line == 10) text = QStringLiteral("10: \u4e2d\u6587 wide \u5b57 and \u6f22\u5b57 again");
+		/* Spaces where the narrow widths cut, which are text. */
+		if (line == 17) text = QStringLiteral("17:  a  b  c  d  e  f  g  h");
+		written << text;
+		const QByteArray bytes = text.toUtf8();
+		emulator.feed(line == 20 ? "\x1b[31m" + bytes + "\x1b[0m" : bytes);
+		if (line < 30) emulator.feed("\r\n");
+	}
+	/* The last line is longer than a small screen is tall, with the cursor
+	 * at its end: libvterm aborted the process resizing that. */
+	written.last() += QStringLiteral(" and the prompt line goes on long past the edge").repeated(3);
+	emulator.feed(QStringLiteral(" and the prompt line goes on long past the edge").repeated(3).toUtf8());
+	QCOMPARE(logical_lines(emulator), written);
+
+	for (const auto &size : sizes) {
+		emulator.resize(size.first, size.second);
+		QCOMPARE(logical_lines(emulator), written);
+
+		/* And the history reads at this width: a row wider than the
+		 * window is drawn cut at its edge when scrolled back to. */
+		const bssh_scrollback &history = emulator.scrollback();
+		for (int index = 0; index < history.count(); ++index)
+			QVERIFY2(history.line(index).size() <= size.first,
+			         qPrintable(QStringLiteral("history row %1 is %2 wide in a %3-column window")
+			                            .arg(index).arg(history.line(index).size()).arg(size.first)));
+	}
+	emulator.resize(40, 10);
+	QCOMPARE(logical_lines(emulator), written);
+
+	/* The cursor is still where the program left it. */
+	emulator.feed("!");
+	written.last() += QLatin1Char('!');
+	QCOMPARE(logical_lines(emulator), written);
+
+	/* And the colour went round with the text. */
+	const bssh_scrollback &history = emulator.scrollback();
+	for (int index = 0; index < history.count(); ++index) {
+		const QList<bssh_cell_t> &cells = history.line(index);
+		if (cells.size() > 1 && cells.at(0).ch == U'2' && cells.at(1).ch == U'0' && !history.is_continuation(index)) {
+			QCOMPARE(int(cells.at(0).fg.kind), int(bssh_color_t::INDEXED));
+			QCOMPARE(int(cells.at(0).fg.index), 1);
+		}
 	}
 }
 

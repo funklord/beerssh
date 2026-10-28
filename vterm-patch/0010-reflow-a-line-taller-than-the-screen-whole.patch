@@ -1,0 +1,417 @@
+Reflow a line taller than the screen whole, and keep its cursor
+
+Resizing with reflow on lost text and could abort the process. Five
+faults, all in resize_buffer() and its caller, and all reached once a
+line wraps over more rows than the screen has, which a small window
+makes ordinary:
+
+- A line that no longer fit above the rows already placed was pushed to
+  the scrollback by its first row only; every row after it was dropped.
+  With the cursor in that line, no position was found for it and the
+  process aborted ("screen_resize failed to update cursor position").
+  The line is split now: its tail fills the top of the screen and its
+  head goes to the scrollback, rewrapped at the new width.
+
+- A top row that continues a line whose head is in the scrollback made
+  the walk back over continuations run to row -1 and read before the
+  buffer. With sb_popline4 (below) the head is popped back first and the
+  whole line reflowed as one; without it the top row starts a line and
+  keeps its continuation mark.
+
+- Rows backfilled from the scrollback were asked for at the old width,
+  losing what lay past it when the screen grew, and kept whatever the
+  allocator left in their line info. They are asked for at the new width
+  and their line info is zeroed, or set from sb_popline4.
+
+- Cursor just past text that ends exactly at the new edge was clamped
+  onto the last character with no pending wrap, so the next character
+  overwrote it. The pending wrap is carried in VTermStateFields and set
+  there, and on_resize no longer cancels it when the cursor moves.
+
+- sb_popline4, beside sb_pushline4 and enabled by the same opt-in, tells
+  the caller's scrollback whether a line it hands back continues the one
+  before it, so a wrapped line brought back by a resize is marked as one
+  line again rather than rewrapped as pieces.
+
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -530,6 +530,60 @@
+   return col + 1;
+ }
+ 
++static void screencell_to_cell(const VTermScreen *screen, const ScreenCell *intcell, const ScreenCell *next, VTermScreenCell *cell);
++
++/* Push row `row` of a `cols`-wide buffer, which during a resize is not
++ * the screen's own: sb_pushline_from_row reads the screen, and a buffer
++ * with the scrollback's rows prepended has rows the screen does not. */
++static void sb_pushline_from_buffer(VTermScreen *screen, const ScreenCell *buffer, int row, int cols, bool continuation)
++{
++  VTermScreenCell *cells = NULL;
++
++  if(!screen->pushline_without_cells) {
++    for(int col = 0; col < cols; col++)
++      screencell_to_cell(screen, &buffer[row * cols + col],
++          col + 1 < cols ? &buffer[row * cols + col + 1] : NULL, &screen->sb_buffer[col]);
++    cells = screen->sb_buffer;
++  }
++
++  if(screen->callbacks_has_pushline4 && screen->callbacks->sb_pushline4)
++    (screen->callbacks->sb_pushline4)(cols, cells, continuation, screen->cbdata);
++  else
++    (screen->callbacks->sb_pushline)(cols, cells, screen->cbdata);
++}
++
++/* Copy a cell handed back by sb_popline into the screen's own form. */
++static void cell_to_screencell(VTermScreen *screen, const VTermScreenCell *src, ScreenCell *dst)
++{
++  for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL; i++) {
++    dst->chars[i] = src->chars[i];
++    if(!src->chars[i])
++      break;
++  }
++
++  dst->pen.bold      = src->attrs.bold;
++  dst->pen.underline = src->attrs.underline;
++  dst->pen.italic    = src->attrs.italic;
++  dst->pen.blink     = src->attrs.blink;
++  dst->pen.reverse   = src->attrs.reverse ^ screen->global_reverse;
++  dst->pen.conceal   = src->attrs.conceal;
++  dst->pen.strike    = src->attrs.strike;
++  dst->pen.font      = src->attrs.font;
++  dst->pen.small     = src->attrs.small;
++  dst->pen.baseline  = src->attrs.baseline;
++
++  dst->pen.fg = src->fg;
++  dst->pen.bg = src->bg;
++}
++
++/* A line whose head is in the scrollback and whose tail is on the screen
++ * cannot be reflowed from the screen alone: the tail alone is rewrapped,
++ * and joined to its head again it has a hole where the head's last row
++ * was short. So the head comes back first, at the old width, and the
++ * whole line is reflowed as one. Bounded, so a line the scrollback has
++ * been filled with cannot make a resize unbounded. */
++#define REFLOW_PULL_MAX 1000
++
+ static void resize_buffer(VTermScreen *screen, int bufidx, int new_rows, int new_cols, bool active, VTermStateFields *statefields)
+ {
+   int old_rows = screen->rows;
+@@ -538,13 +592,61 @@
+   ScreenCell *old_buffer = screen->buffers[bufidx];
+   VTermLineInfo *old_lineinfo = statefields->lineinfos[bufidx];
+ 
++  ScreenCell *const screen_buffer = old_buffer;
++  VTermLineInfo *const screen_lineinfo = old_lineinfo;
++  int pulled = 0;
++
++  if(bufidx == BUFIDX_PRIMARY && screen->reflow && old_lineinfo && old_lineinfo[0].continuation &&
++      screen->callbacks_has_pushline4 && screen->callbacks && screen->callbacks->sb_popline4) {
++    ScreenCell *rows = NULL;
++    bool continuation = true;
++    while(continuation && pulled < REFLOW_PULL_MAX) {
++      if(!(screen->callbacks->sb_popline4(old_cols, screen->sb_buffer, &continuation, screen->cbdata)))
++        break;
++      ScreenCell *grown = vterm_allocator_malloc(screen->vt, sizeof(ScreenCell) * (pulled + 1) * old_cols);
++      if(rows) {
++        memcpy(grown, rows, sizeof(ScreenCell) * pulled * old_cols);
++        vterm_allocator_free(screen->vt, rows);
++      }
++      rows = grown;
++      ScreenCell *row = &rows[pulled * old_cols];
++      for(int col = 0; col < old_cols; col++) {
++        clearcell(screen, &row[col]);
++        cell_to_screencell(screen, &screen->sb_buffer[col], &row[col]);
++        if(screen->sb_buffer[col].width == 2 && col + 1 < old_cols)
++          row[col + 1].chars[0] = (uint32_t)-1, col++;
++      }
++      pulled++;
++    }
++
++    if(pulled) {
++      /* Popped last-first; the buffer wants them first-last. */
++      old_buffer = vterm_allocator_malloc(screen->vt, sizeof(ScreenCell) * (pulled + old_rows) * old_cols);
++      old_lineinfo = vterm_allocator_malloc(screen->vt, sizeof(old_lineinfo[0]) * (pulled + old_rows));
++      memset(old_lineinfo, 0, sizeof(old_lineinfo[0]) * (pulled + old_rows));
++      for(int i = 0; i < pulled; i++) {
++        memcpy(&old_buffer[i * old_cols], &rows[(pulled - 1 - i) * old_cols], sizeof(ScreenCell) * old_cols);
++        old_lineinfo[i].continuation = i > 0 || continuation;
++      }
++      memcpy(&old_buffer[pulled * old_cols], screen_buffer, sizeof(ScreenCell) * old_rows * old_cols);
++      memcpy(&old_lineinfo[pulled], screen_lineinfo, sizeof(old_lineinfo[0]) * old_rows);
++      old_rows += pulled;
++    }
++    if(rows)
++      vterm_allocator_free(screen->vt, rows);
++  }
++
+   ScreenCell *new_buffer = vterm_allocator_malloc(screen->vt, sizeof(ScreenCell) * new_rows * new_cols);
+   VTermLineInfo *new_lineinfo = vterm_allocator_malloc(screen->vt, sizeof(new_lineinfo[0]) * new_rows);
++  /* Zeroed: a row the loops below never reach -- a backfilled one -- must
++   * not carry whatever the allocator left in its continuation bit. */
++  memset(new_lineinfo, 0, sizeof(new_lineinfo[0]) * new_rows);
+ 
+   int old_row = old_rows - 1;
+   int new_row = new_rows - 1;
+ 
+   VTermPos old_cursor = statefields->pos;
++  old_cursor.row += pulled;
+   VTermPos new_cursor = { -1, -1 };
+ 
+ #ifdef DEBUG_REFLOW
+@@ -560,9 +662,13 @@
+   while(old_row >= 0) {
+     int old_row_end = old_row;
+     /* TODO: Stop if dwl or dhl */
+-    while(screen->reflow && old_lineinfo && old_row >= 0 && old_lineinfo[old_row].continuation)
++    /* Not past row 0: a top row that continues a line whose head is
++     * already in the scrollback starts here, and remembers that it is a
++     * continuation. Walking on to -1 read the row before the buffer. */
++    while(screen->reflow && old_lineinfo && old_row > 0 && old_lineinfo[old_row].continuation)
+       old_row--;
+     int old_row_start = old_row;
++    bool head_continued = screen->reflow && old_lineinfo && old_lineinfo[old_row_start].continuation;
+ 
+     int width = 0;
+     for(int row = old_row_start; row <= old_row_end; row++) {
+@@ -621,17 +727,70 @@
+         new_row_start, new_row_end, old_row_start, old_row_end, width);
+ #endif
+ 
+-    if(new_row_start < 0) {
+-      if(old_row_start <= old_cursor.row && old_cursor.row < old_row_end) {
+-        new_cursor.row = 0;
+-        new_cursor.col = old_cursor.col;
+-        if(new_cursor.col >= new_cols)
+-          new_cursor.col = new_cols-1;
+-      }
++    if(new_row_start < 0 && new_row_end < 0) {
++      /* No room left at all: this line goes to the scrollback whole,
++       * with everything above it. Pushing only its first row lost the
++       * rest of a wrapped line. */
++      old_row = old_row_end;
+       break;
+     }
+ 
+-    for(new_row = new_row_start, old_row = old_row_start; new_row <= new_row_end; new_row++) {
++    bool pushing = bufidx == BUFIDX_PRIMARY &&
++      ((screen->callbacks && screen->callbacks->sb_pushline) ||
++       (screen->callbacks_has_pushline4 && screen->callbacks && screen->callbacks->sb_pushline4));
++    bool split = new_row_start < 0;
++
++    if(split) {
++      /* A line taller than the room left above it: its tail fills the
++       * top of the screen and its head goes to the scrollback, rewrapped
++       * at the new width. Breaking out here instead dropped every row of
++       * the line after its first, and when the cursor was in the line it
++       * aborted, finding no position for it. */
++      if(pushing)
++        for(int row = 0; row < old_row_start; row++)
++          sb_pushline_from_buffer(screen, old_buffer, row, old_cols, old_lineinfo[row].continuation);
++
++      for(int head = 0; head < -new_row_start; head++) {
++        int count = width >= new_cols ? new_cols : width;
++        width -= count;
++
++        for(int new_col = 0; new_col < new_cols; new_col++) {
++          ScreenCell blank;
++          ScreenCell *from = &blank;
++          if(new_col < count) {
++            from = &old_buffer[old_row * old_cols + old_col];
++            if(old_cursor.row == old_row && old_cursor.col == old_col)
++              new_cursor.row = 0, new_cursor.col = 0;
++            if(++old_col == old_cols)
++              old_row++, old_col = 0;
++          }
++          else
++            clearcell(screen, &blank);
++          ScreenCell *next = new_col + 1 < count ? &old_buffer[old_row * old_cols + old_col] : NULL;
++          screencell_to_cell(screen, from, next, &screen->sb_buffer[new_col]);
++        }
++
++        if(old_cursor.row == old_row && old_cursor.col >= old_col && new_cursor.row == -1)
++          new_cursor.row = 0, new_cursor.col = 0;
++
++        if(!pushing)
++          continue;
++        if(screen->callbacks_has_pushline4 && screen->callbacks->sb_pushline4)
++          (screen->callbacks->sb_pushline4)(new_cols, screen->sb_buffer, head > 0 || head_continued, screen->cbdata);
++        else
++          (screen->callbacks->sb_pushline)(new_cols, screen->sb_buffer, screen->cbdata);
++      }
++
++      new_row_start = 0;
++      head_continued = true;
++    }
++    else {
++      old_row = old_row_start;
++      old_col = 0;
++    }
++
++    /* old_row and old_col are where the line's head left them. */
++    for(new_row = new_row_start; new_row <= new_row_end; new_row++) {
+       int count = width >= new_cols ? new_cols : width;
+       width -= count;
+ 
+@@ -661,6 +820,11 @@
+ 
+       if(old_cursor.row == old_row && old_cursor.col >= old_col) {
+         new_cursor.row = new_row, new_cursor.col = (old_cursor.col - old_col + new_col);
++        /* Just past text that ends at the new edge is where a wrap is
++         * pending, not on the last character: clamped there without the
++         * flag, the next character overwrote the one before it. */
++        if(active && new_cursor.col == new_cols && new_col == new_cols)
++          statefields->at_phantom = 1;
+         if(new_cursor.col >= new_cols)
+           new_cursor.col = new_cols-1;
+       }
+@@ -670,7 +834,14 @@
+         new_col++;
+       }
+ 
+-      new_lineinfo[new_row].continuation = (new_row > new_row_start);
++      new_lineinfo[new_row].continuation = (new_row > new_row_start) || head_continued;
++    }
++
++    if(split) {
++      /* The screen is full and everything above was pushed. */
++      old_row = -1;
++      new_row = -1;
++      break;
+     }
+ 
+     old_row = old_row_start - 1;
+@@ -697,7 +868,7 @@
+           (screen->callbacks_has_pushline4 && screen->callbacks && screen->callbacks->sb_pushline4))
+       for(int row = 0; row <= old_row; row++) {
+         const VTermLineInfo *lineinfo = old_lineinfo + row;
+-        sb_pushline_from_row(screen, row, lineinfo->continuation);
++        sb_pushline_from_buffer(screen, old_buffer, row, old_cols, lineinfo->continuation);
+       }
+     if(active)
+       statefields->pos.row -= (old_row + 1);
+@@ -706,11 +877,21 @@
+       screen->callbacks && screen->callbacks->sb_popline) {
+     /* Try to backfill rows by popping scrollback buffer */
+     while(new_row >= 0) {
+-      if(!(screen->callbacks->sb_popline(old_cols, screen->sb_buffer, screen->cbdata)))
++      /* At the new width, which ->sb_buffer always has room for: a line
++       * asked for at the old width lost what lay past it when the screen
++       * grew wider. And with whether it continues the line above, so the
++       * next reflow joins it again rather than leaving it cut. */
++      bool continuation = false;
++      if(screen->callbacks_has_pushline4 && screen->callbacks->sb_popline4) {
++        if(!(screen->callbacks->sb_popline4(new_cols, screen->sb_buffer, &continuation, screen->cbdata)))
++          break;
++      }
++      else if(!(screen->callbacks->sb_popline(new_cols, screen->sb_buffer, screen->cbdata)))
+         break;
++      new_lineinfo[new_row] = (VTermLineInfo){ .continuation = continuation };
+ 
+       VTermPos pos = { .row = new_row };
+-      for(pos.col = 0; pos.col < old_cols && pos.col < new_cols; pos.col += screen->sb_buffer[pos.col].width) {
++      for(pos.col = 0; pos.col < new_cols; pos.col += screen->sb_buffer[pos.col].width) {
+         VTermScreenCell *src = &screen->sb_buffer[pos.col];
+         ScreenCell *dst = &new_buffer[pos.row * new_cols + pos.col];
+ 
+@@ -760,10 +941,14 @@
+     }
+   }
+ 
+-  vterm_allocator_free(screen->vt, old_buffer);
++  if(old_buffer != screen_buffer)
++    vterm_allocator_free(screen->vt, old_buffer);
++  vterm_allocator_free(screen->vt, screen_buffer);
+   screen->buffers[bufidx] = new_buffer;
+ 
+-  vterm_allocator_free(screen->vt, old_lineinfo);
++  if(old_lineinfo != screen_lineinfo)
++    vterm_allocator_free(screen->vt, old_lineinfo);
++  vterm_allocator_free(screen->vt, screen_lineinfo);
+   statefields->lineinfos[bufidx] = new_lineinfo;
+ 
+   if(active)
+@@ -1001,12 +1186,8 @@
+ }
+ 
+ /* Copy internal to external representation of a screen cell */
+-int vterm_screen_get_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCell *cell)
++static void screencell_to_cell(const VTermScreen *screen, const ScreenCell *intcell, const ScreenCell *next, VTermScreenCell *cell)
+ {
+-  ScreenCell *intcell = getcell(screen, pos.row, pos.col);
+-  if(!intcell)
+-    return 0;
+-
+   for(int i = 0; i < VTERM_MAX_CHARS_PER_CELL; i++) {
+     cell->chars[i] = intcell->chars[i];
+     if(!intcell->chars[i])
+@@ -1030,12 +1211,20 @@
+   cell->fg = intcell->pen.fg;
+   cell->bg = intcell->pen.bg;
+ 
+-  if(pos.col < (screen->cols - 1) &&
+-     getcell(screen, pos.row, pos.col + 1)->chars[0] == (uint32_t)-1)
++  if(next && next->chars[0] == (uint32_t)-1)
+     cell->width = 2;
+   else
+     cell->width = 1;
++}
++
++int vterm_screen_get_cell(const VTermScreen *screen, VTermPos pos, VTermScreenCell *cell)
++{
++  ScreenCell *intcell = getcell(screen, pos.row, pos.col);
++  if(!intcell)
++    return 0;
+ 
++  screencell_to_cell(screen, intcell,
++      pos.col < (screen->cols - 1) ? getcell(screen, pos.row, pos.col + 1) : NULL, cell);
+   return 1;
+ }
+ 
+--- a/src/state.c
++++ b/src/state.c
+@@ -2077,6 +2077,7 @@
+   VTermStateFields fields = {
+     .pos       = state->pos,
+     .lineinfos = { [0] = state->lineinfos[0], [1] = state->lineinfos[1] },
++    .at_phantom = state->at_phantom,
+   };
+ 
+   if(state->callbacks && state->callbacks->resize) {
+@@ -2085,6 +2086,7 @@
+ 
+     state->lineinfos[0] = fields.lineinfos[0];
+     state->lineinfos[1] = fields.lineinfos[1];
++    state->at_phantom = fields.at_phantom;
+   }
+   else {
+     if(rows != state->rows) {
+@@ -2128,7 +2130,9 @@
+   if(state->pos.col >= cols)
+     state->pos.col = cols - 1;
+ 
+-  updatecursor(state, &oldpos, 1);
++  /* Not cancelling the pending wrap: a reflow moves the cursor every
++   * time, and whether a wrap is pending was decided just above. */
++  updatecursor(state, &oldpos, 0);
+ 
+   return 1;
+ }
+--- a/include/vterm.h
++++ b/include/vterm.h
+@@ -312,6 +312,7 @@
+ typedef struct {
+   VTermPos pos;                /* current cursor position */
+   VTermLineInfo *lineinfos[2]; /* [1] may be NULL */
++  int at_phantom;              /* the cursor is past the last column, pending a wrap */
+ } VTermStateFields;
+ 
+ typedef struct {
+@@ -548,6 +549,8 @@
+   int (*sb_clear)(void* user);
+   /* ABI-compat this is only used if vterm_screen_callbacks_has_pushline4() is called */
+   int (*sb_pushline4)(int cols, const VTermScreenCell *cells, bool continuation, void *user);
++  /* Likewise: sb_popline, and whether the line continues the one above */
++  int (*sb_popline4)(int cols, VTermScreenCell *cells, bool *continuation, void *user);
+ } VTermScreenCallbacks;
+ 
+ VTermScreen *vterm_obtain_screen(VTerm *vt);

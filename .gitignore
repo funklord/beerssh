@@ -63,3 +63,6 @@ beerssh.1
 beerssh.bash
 beersshd.1
 .fmake/
+
+# The /go run's working state, rewritten every run and not a record.
+.claude/go.md

@@ -319,7 +319,9 @@ VTERM_ANDROID_STAMP = $(VTERM_ANDROID_DIR)/.patched
 # "pre-scroll rectangle" is 0003's comment in screen.c,
 # pushline_without_cells is 0007's declaration in vterm.h, and 0008's
 # export puts vterm_export_state in vterm.c, vterm_encoding_index in
-# encoding.c and VTermWriter in vterm_internal.h). Per file rather
+# encoding.c and VTermWriter in vterm_internal.h; 0010 puts sb_popline4
+# in vterm.h, REFLOW_PULL_MAX in screen.c and fields.at_phantom in
+# state.c). Per file rather
 # than one marker for both, so a partial restore cannot hide behind the
 # file that kept its patch. A marker missing while any stamp exists
 # means the sources were restored out of band: every stamp goes -- all
@@ -337,6 +339,9 @@ BSSH_VTERM_WITNESS := $(shell \
 	             2>/dev/null \
 	          && grep -q pushline_with_cells $(VTERM_DIR)/include/vterm.h \
 	             2>/dev/null \
+	          && grep -q sb_popline4 $(VTERM_DIR)/include/vterm.h 2>/dev/null \
+	          && grep -q REFLOW_PULL_MAX $(VTERM_DIR)/src/screen.c 2>/dev/null \
+	          && grep -q fields.at_phantom $(VTERM_DIR)/src/state.c 2>/dev/null \
 	          && grep -q vterm_export_state $(VTERM_DIR)/src/vterm.c 2>/dev/null \
 	          && grep -q vterm_encoding_index $(VTERM_DIR)/src/encoding.c 2>/dev/null \
 	          && grep -q VTermWriter $(VTERM_DIR)/src/vterm_internal.h 2>/dev/null; }; then \
