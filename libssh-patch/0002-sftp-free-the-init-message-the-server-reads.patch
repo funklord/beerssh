@@ -1,0 +1,29 @@
+Subject: [PATCH] sftp: free the INIT message sftp_server_init() reads
+
+sftp_server_init() reads the client's SSH_FXP_INIT with
+sftp_get_client_message() and never frees it, on success or on either
+error path: the message and its two buffers, about 190 bytes, for every
+SFTP session a server accepts. Found by LeakSanitizer in BeerSSH's
+SFTP-only server, which answers INIT this way because the callback
+server's handlers are the unconfined defaults it exists not to use.
+
+Free it once sftp_reply_version() has used it, and before returning on
+a packet of the wrong type.
+
+--- a/src/sftp.c
++++ b/src/sftp.c
+@@ -289,12 +289,14 @@
+                       SSH_FATAL,
+                       "Packet read of type %d instead of SSH_FXP_INIT",
+                       msg->type);
++        sftp_client_message_free(msg);
+         return -1;
+     }
+ 
+     SSH_LOG(SSH_LOG_PACKET, "Received SSH_FXP_INIT");
+ 
+     rc = sftp_reply_version(msg);
++    sftp_client_message_free(msg);
+     if (rc != SSH_OK) {
+         ssh_set_error(session,
+                       SSH_FATAL,

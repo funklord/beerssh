@@ -15276,7 +15276,8 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   make target; it is `make SANITIZE=1` with `VTERM_CFLAGS` carrying the
   same flags, in a copy of the tree, since `test/tests.pro` links
   `build-vterm/` by name. Its first finding was that the test program did
-  not link at all unoptimised (`ce6785e`).
+  not link at all in it -- a `static const` member used by reference,
+  which the ordinary build happened to fold away (`ce6785e`).
 - **Done 2026-10-29:** the Android build with this week's changes is
   installed on the Fold. And `make deb` no longer deletes the Android
   build: dh_auto_clean ran `make distclean`, which is veryclean, so
@@ -16887,6 +16888,15 @@ caught.
   spent; `onStartCommand` catches it and reports it as the time limit, still
   unseen on a device. The second run's Start after reopening was cut short
   when the phone was taken up, and its result is unknown.
+- **A leak per SFTP session, fixed 2026-10-29 in libssh.** LeakSanitizer
+  over the suite found libssh's `sftp_server_init()` never freeing the
+  INIT message it reads -- about 190 bytes for every session the server
+  accepts, 11 in the suite's run. `sftp_reply_version()`, which a server
+  would need to answer INIT itself, is private to libssh, so the fix is
+  `libssh-patch/0002` rather than a change here; 0 leaks in the same run
+  with it. The Android dependency build checksums `libssh-patch/`, so it
+  rebuilds libssh for every ABI the next time it runs. Not offered
+  upstream yet.
 - **The icon** is Android's default, with BeerSSH's (sec 0.1) undecided.
 - **Release:** a keystore, and Play's declarations for
   `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.
