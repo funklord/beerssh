@@ -1,0 +1,39 @@
+Reflow the saved cursor with the primary screen behind the alternate
+
+A full-screen program saves the cursor and takes the alternate screen.
+Resized while it runs, the primary screen behind it is reflowed as an
+inactive buffer, with no cursor moved along with its text -- and the
+cursor it returns to on leaving is the saved one, still at the old
+coordinates. The shell then went on writing in the middle of another
+line: in BeerSSH's test, "typed" after a "$ " prompt landed inside the
+wrapped line above it.
+
+Reflow the primary buffer with the saved cursor standing in for its
+cursor, and keep where that put it.
+
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -1033,7 +1033,22 @@
+     screen->sb_buffer = vterm_allocator_malloc(screen->vt, sizeof(VTermScreenCell) * new_cols);
+   }
+ 
+-  resize_buffer(screen, 0, new_rows, new_cols, !altscreen_active, fields);
++  if(altscreen_active) {
++    /* The primary buffer is reflowed while a full-screen program has the
++     * alternate one, and the cursor it will come back to is the one that
++     * program saved on entering it. Reflowed with that cursor as its own,
++     * so the position moves with the text it was at: left alone it came
++     * back at the old coordinates, and the shell went on writing in the
++     * middle of another line. */
++    VTermStateFields primary = *fields;
++    primary.pos = screen->state->saved.pos;
++    primary.at_phantom = 0;
++    resize_buffer(screen, 0, new_rows, new_cols, true, &primary);
++    fields->lineinfos[BUFIDX_PRIMARY] = primary.lineinfos[BUFIDX_PRIMARY];
++    screen->state->saved.pos = primary.pos;
++  }
++  else
++    resize_buffer(screen, 0, new_rows, new_cols, true, fields);
+   if(screen->buffers[BUFIDX_ALTSCREEN])
+     resize_buffer(screen, 1, new_rows, new_cols, altscreen_active, fields);
+   else if(new_rows != old_rows) {

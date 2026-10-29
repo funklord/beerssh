@@ -15335,9 +15335,14 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   top-left corner -- a fallback the fuzzing never reached once the
   per-line placement was in, so it is a guard rather than a fix;
   `a_resize_under_the_alternate_screen_keeps_a_cursor` aborts without it.
-  Still open: a resize under the alternate screen reflows the main screen
-  but not its saved cursor, so the cursor comes back clamped rather than
-  moved with its text.
+- **Leaving vim after a resize wrote over another line -- fixed
+  2026-10-29.** The main screen behind the alternate one was reflowed
+  with no cursor moved with its text, and the cursor the program returns
+  to is the one it saved on entry, still at the old coordinates: the
+  shell's next output landed in the middle of the line above its prompt.
+  `vterm-patch/0018` reflows the main screen with the saved cursor as its
+  cursor. `leaving_the_alternate_screen_after_a_resize_resumes_at_the_prompt`,
+  narrowed and widened.
 - **Done 2026-10-29:** the Android build with this week's changes is
   installed on the Fold. And `make deb` no longer deletes the Android
   build: dh_auto_clean ran `make distclean`, which is veryclean, so
@@ -16380,6 +16385,14 @@ They came from asking, of each primitive in the paint path, *what coordinate
 space is this in* — a question a screenshot cannot be asked.
 
 ### Driving the shared phones over adb, without landing in somebody else's app
+
+**Verify an Android change on an emulator; ask the holder for the phone
+only for what an emulator lacks** -- a camera, biometrics, NFC, sensors,
+One UI's own behaviour, arm64 hardware, how touch feels, a Play install --
+and say exactly what to look at (the holder, 2026-10-29: the phone had
+become the default, asked for far more often than anything needed). A
+phone run after a batch of changes or before a release is the exception
+worth keeping, since some faults show only there.
 
 The phones on this desk are shared -- with the holder, who may be holding
 one, and with hydra's and bbq-predictor's sessions, which launch their own

@@ -2603,6 +2603,36 @@ void emulator_test::a_saved_cursor_comes_back_inside_a_smaller_screen() {
 	QVERIFY(emulator.screen().cursor_row() < emulator.screen().rows());
 }
 
+void emulator_test::leaving_the_alternate_screen_after_a_resize_resumes_at_the_prompt() {
+	/*
+	 * vim, less and htop save the cursor and take the alternate screen;
+	 * resized while they run, the main screen behind them is reflowed --
+	 * and the cursor they saved was not, so on leaving it came back at
+	 * the old coordinates and the shell went on writing there, in the
+	 * middle of some other line.
+	 */
+	bssh_emulator emulator(40, 10);
+	emulator.feed("first line\r\n" + QByteArray("a long line that wraps past the edge of a narrow window") + "\r\n$ ");
+	emulator.feed("\x1b[?1049h\x1b[2J\x1b[Hfull screen program");
+	emulator.resize(20, 10);
+	emulator.feed("\x1b[?1049l");
+	emulator.feed("typed");
+	const QStringList lines = logical_lines(emulator);
+	QVERIFY2(lines.contains(QStringLiteral("$ typed")), qPrintable(lines.join(QLatin1Char('|'))));
+	QVERIFY2(lines.contains(QStringLiteral("a long line that wraps past the edge of a narrow window")),
+	         qPrintable(lines.join(QLatin1Char('|'))));
+
+	/* And growing back, the same. */
+	bssh_emulator grown(20, 10);
+	grown.feed("first line\r\n" + QByteArray("a long line that wraps past the edge") + "\r\n$ ");
+	grown.feed("\x1b[?1049h\x1b[2J\x1b[Hfull screen program");
+	grown.resize(60, 10);
+	grown.feed("\x1b[?1049l");
+	grown.feed("typed");
+	QVERIFY2(logical_lines(grown).contains(QStringLiteral("$ typed")),
+	         qPrintable(logical_lines(grown).join(QLatin1Char('|'))));
+}
+
 void emulator_test::a_resize_under_the_alternate_screen_keeps_a_cursor() {
 	/*
 	 * Wide glyphs on the main screen, the alternate screen up, a resize,

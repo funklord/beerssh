@@ -80,6 +80,7 @@ private slots:
 	void a_cursor_above_a_split_line_survives_a_resize();
 	void a_saved_cursor_comes_back_inside_a_smaller_screen();
 	void a_resize_under_the_alternate_screen_keeps_a_cursor();
+	void leaving_the_alternate_screen_after_a_resize_resumes_at_the_prompt();
 	void random_input_and_resizes_do_not_break_the_emulator();
 	void a_line_pulled_back_by_a_grow_narrows_without_blank_rows();
 	void a_narrowed_terminal_rewraps_and_a_widened_one_joins_again();
