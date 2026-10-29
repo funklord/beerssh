@@ -1,0 +1,38 @@
+Drop a scroll region a resize leaves no room for
+
+on_resize() clamps the scroll region's bottom (and right margin) to the
+new size and leaves its top (and left margin) where they were. Shrunk
+below the region's top, the region is upside down, and the next line
+feed calls scroll() with a negative height: memmove() takes it as an
+enormous size and the process crashes. Any program that scrolls part of
+the screen sets a region -- vim, less, tmux -- so making the window
+small under one was enough. Found by fuzzing BeerSSH's emulator under
+ASan.
+
+Reset a region with no room left to the whole screen, as before any was
+set; the program sets a new one for the size it now has.
+
+--- a/src/state.c
++++ b/src/state.c
+@@ -2074,6 +2074,21 @@
+   if(state->scrollregion_right > -1)
+     UBOUND(state->scrollregion_right, state->cols);
+ 
++  /* A region the new size leaves no room in is no region. Clamping its
++   * bottom alone left its top below it -- set by any program that scrolls
++   * part of the screen, vim, less, tmux -- and the next line feed moved a
++   * negative number of rows, which memmove() took as an enormous one.
++   * The whole screen scrolls instead until the program sets a region for
++   * the size it now has. */
++  if(state->scrollregion_top >= SCROLLREGION_BOTTOM(state)) {
++    state->scrollregion_top = 0;
++    state->scrollregion_bottom = -1;
++  }
++  if(state->scrollregion_left >= SCROLLREGION_RIGHT(state)) {
++    state->scrollregion_left = 0;
++    state->scrollregion_right = -1;
++  }
++
+   VTermStateFields fields = {
+     .pos       = state->pos,
+     .lineinfos = { [0] = state->lineinfos[0], [1] = state->lineinfos[1] },

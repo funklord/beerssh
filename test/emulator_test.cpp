@@ -2577,6 +2577,35 @@ void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line() {
 	}
 }
 
+void emulator_test::a_scroll_region_the_window_shrinks_past_is_dropped() {
+	/*
+	 * A program that scrolls part of the screen -- vim, less, tmux --
+	 * sets a region (DECSTBM). Shrunk below the region's top, libvterm
+	 * clamped its bottom and kept its top, and the next line feed moved
+	 * a negative number of rows: memmove() with an enormous size, and the
+	 * process gone (vterm-patch/0014). Found by fuzzing under ASan. The
+	 * same for left and right margins (DECSLRM).
+	 *
+	 * This fails only under the sanitizer build: the fault corrupts the
+	 * heap rather than failing where it happens, and the ordinary build
+	 * passed with the patch reverted. Proved instead by the same steps
+	 * against bare libvterm -- free(): invalid pointer without the patch,
+	 * clean with it.
+	 */
+	bssh_emulator emulator(72, 6);
+	emulator.feed("\x1b[4r");
+	emulator.resize(14, 1);
+	emulator.feed("x\n\n\x1b" "Dafter");
+	QVERIFY(row(emulator, 0).contains(QStringLiteral("after")));
+
+
+	bssh_emulator margins(72, 6);
+	margins.feed("\x1b[?69h\x1b[30;40s\x1b[3;5r");
+	margins.resize(10, 2);
+	margins.feed("x\n\n\x1b" "D\x1b[2 @\x1b[2 Aend");
+	QVERIFY(margins.screen().to_text().contains(QStringLiteral("end")));
+}
+
 void emulator_test::a_one_column_terminal_survives_a_wide_glyph() {
 	/*
 	 * A double-width glyph on a screen one column wide: libvterm marked

@@ -15288,6 +15288,19 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   column -- the view floors its grid there. `vterm-patch/0013`;
   `a_one_column_terminal_survives_a_wide_glyph` crashes with SIGSEGV on
   the ordinary build without it. The fuzzer is not in the tree yet.
+- **Also found by the fuzzer, fixed the same day: shrinking the window
+  under a program's scroll region corrupted the heap.** vim, less and
+  tmux set a region (DECSTBM); libvterm's resize clamped its bottom and
+  kept its top, so shrunk past the top the region was upside down and the
+  next line feed called `scroll()` with a negative height -- `memmove()`
+  of an enormous size. Bare libvterm with those steps aborts with
+  `free(): invalid pointer`. The holder's report was of a window made
+  really small, and this is a way that crashes or garbles a full-screen
+  program doing exactly that. `vterm-patch/0014` resets such a region to
+  the whole screen. `a_scroll_region_the_window_shrinks_past_is_dropped`
+  fails only under the sanitizer build -- the corruption does not fault
+  where it happens, and the ordinary build passed with the patch
+  reverted, which its own comment says.
 - **Done 2026-10-29:** the Android build with this week's changes is
   installed on the Fold. And `make deb` no longer deletes the Android
   build: dh_auto_clean ran `make distclean`, which is veryclean, so
