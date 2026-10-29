@@ -324,7 +324,8 @@ VTERM_ANDROID_STAMP = $(VTERM_ANDROID_DIR)/.patched
 # encoding.c and VTermWriter in vterm_internal.h; 0010 puts sb_popline4
 # in vterm.h, REFLOW_PULL_MAX in screen.c and fields.at_phantom in
 # state.c; 0011's SGR 2 is "Faint on" in pen.c; 0012 adds reflow_take
-# to screen.c). Per file rather
+# to screen.c, and 0013's comment there says a glyph has "no second"
+# cell). Per file rather
 # than one marker for both, so a partial restore cannot hide behind the
 # file that kept its patch. A marker missing while any stamp exists
 # means the sources were restored out of band: every stamp goes -- all
@@ -347,6 +348,7 @@ BSSH_VTERM_WITNESS := $(shell \
 	          && grep -q fields.at_phantom $(VTERM_DIR)/src/state.c 2>/dev/null \
 	          && grep -q 'Faint on' $(VTERM_DIR)/src/pen.c 2>/dev/null \
 	          && grep -q reflow_take $(VTERM_DIR)/src/screen.c 2>/dev/null \
+	          && grep -q 'no second' $(VTERM_DIR)/src/screen.c 2>/dev/null \
 	          && grep -q vterm_export_state $(VTERM_DIR)/src/vterm.c 2>/dev/null \
 	          && grep -q vterm_encoding_index $(VTERM_DIR)/src/encoding.c 2>/dev/null \
 	          && grep -q VTermWriter $(VTERM_DIR)/src/vterm_internal.h 2>/dev/null; }; then \

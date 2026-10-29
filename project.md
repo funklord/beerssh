@@ -15278,6 +15278,16 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   `build-vterm/` by name. Its first finding was that the test program did
   not link at all in it -- a `static const` member used by reference,
   which the ordinary build happened to fold away (`ce6785e`).
+- **Found by fuzzing, fixed 2026-10-29: a wide glyph on a one-column
+  screen crashed the process.** A structured fuzzer over the emulator
+  (CSI with random parameters, OSC, DCS sixel, kitty APCs, random UTF-8,
+  resizes interleaved), run under ASan in the sanitizer build, stopped
+  on a NULL write in libvterm's `putglyph()`: it marks a double-width
+  glyph's second cell without asking whether there is one. Every emoji
+  or CJK character on a one-column screen did it, and a pane can be one
+  column -- the view floors its grid there. `vterm-patch/0013`;
+  `a_one_column_terminal_survives_a_wide_glyph` crashes with SIGSEGV on
+  the ordinary build without it. The fuzzer is not in the tree yet.
 - **Done 2026-10-29:** the Android build with this week's changes is
   installed on the Fold. And `make deb` no longer deletes the Android
   build: dh_auto_clean ran `make distclean`, which is veryclean, so

@@ -1,0 +1,43 @@
+A wide glyph on a one-column screen has no second cell
+
+putglyph() marks the far half of a double-width glyph by writing through
+getcell() for each column after the first, and getcell() answers NULL
+past the screen's edge. On a screen one column wide that is every wide
+glyph -- an emoji, a CJK character -- and the write through NULL
+crashed. Found by fuzzing BeerSSH's emulator under ASan; a terminal pane
+can be squeezed to one column.
+
+Skip a far cell that does not exist, and end the damage rectangle where
+the screen does.
+
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -190,14 +190,25 @@
+   if(i < VTERM_MAX_CHARS_PER_CELL)
+     cell->chars[i] = 0;
+ 
+-  for(int col = 1; col < info->width; col++)
+-    getcell(screen, pos.row, pos.col + col)->chars[0] = (uint32_t)-1;
++  /* A double-width glyph on a screen one column wide has no second
++   * cell to mark: getcell() answers NULL there, and writing through it
++   * crashed. The glyph keeps its one cell, and the damage stays inside
++   * the screen. */
++  int end_col = pos.col + info->width;
++  for(int col = 1; col < info->width; col++) {
++    ScreenCell *far = getcell(screen, pos.row, pos.col + col);
++    if(!far) {
++      end_col = pos.col + col;
++      break;
++    }
++    far->chars[0] = (uint32_t)-1;
++  }
+ 
+   VTermRect rect = {
+     .start_row = pos.row,
+     .end_row   = pos.row+1,
+     .start_col = pos.col,
+-    .end_col   = pos.col+info->width,
++    .end_col   = end_col,
+   };
+ 
+   cell->pen.protected_cell = info->protected_cell;

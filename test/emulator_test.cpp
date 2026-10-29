@@ -2577,6 +2577,28 @@ void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line() {
 	}
 }
 
+void emulator_test::a_one_column_terminal_survives_a_wide_glyph() {
+	/*
+	 * A double-width glyph on a screen one column wide: libvterm marked
+	 * its second cell through a NULL getcell() and the process crashed
+	 * (vterm-patch/0013). Found by fuzzing under ASan. A pane can be
+	 * one column -- the view floors its grid there -- and an emoji in a
+	 * prompt is a double-width glyph.
+	 */
+	bssh_emulator emulator(1, 4);
+	emulator.feed("\xe4\xb8\xad\xf0\x9f\x8d\xba""a");   /* U+4E2D, U+1F37A, a */
+	emulator.feed("\x1b[?1049h\xe4\xb8\xad\x1b[?1049l");
+	QCOMPARE(emulator.screen().cols(), 1);
+
+	/* And narrowed to one column with wide text already on the screen. */
+	bssh_emulator wide(20, 4);
+	wide.feed("\xe4\xb8\xad\xe6\x96\x87 and \xf0\x9f\x8d\xba");
+	wide.resize(1, 4);
+	wide.feed("\xe5\xad\x97");
+	wide.resize(20, 4);
+	QVERIFY(row(wide, 0).contains(QStringLiteral("\u4e2d")));
+}
+
 void emulator_test::a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap() {
 	/*
 	 * A double-width glyph whose first half a reflow would put in the last
