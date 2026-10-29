@@ -2514,10 +2514,9 @@ QStringList logical_lines(const bssh_emulator &emulator) {
 namespace {
 
 /*
- * The shape GCC 14.2 got wrong at -Os with strict aliasing on: rows
- * joined into an empty list of cells came out empty. Out of line, as the
- * scrollback's rewrap was, since inlined into the test the fault did not
- * show.
+ * The shape that came out empty against Qt 6.8 with strict aliasing on:
+ * rows joined into an empty list of cells. Out of line, as the
+ * scrollback's rewrap is, since inlined into the test it did not show.
  */
 __attribute__((noinline)) QList<QList<bssh_cell_t> > join_continued(const QList<QList<bssh_cell_t> > &rows,
                                                                     const QList<bool> &continued) {
@@ -2537,9 +2536,10 @@ __attribute__((noinline)) QList<QList<bssh_cell_t> > join_continued(const QList<
 } /* namespace */
 
 /*
- * A compiler fault, not ours, and caught here rather than only by its
- * symptom: beerssh.pro builds with -fno-strict-aliasing because without
- * it this join was empty in the app's build (project.md sec 12.3x).
+ * Undefined behaviour in Qt's QArrayDataPointer, caught here rather than
+ * only by its symptom: beerssh.pro builds with -fno-strict-aliasing
+ * because without it this join was empty in the app's build (project.md
+ * sec 12.3x).
  */
 void emulator_test::joining_lists_of_cells_keeps_every_cell() {
 	const QList<QList<bssh_cell_t> > rows{QList<bssh_cell_t>(30), QList<bssh_cell_t>(20)};

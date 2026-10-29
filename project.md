@@ -15351,28 +15351,40 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   before `bssh_scrollback::rewrap` and empty after it. In the app's build
   -- `-Os` with `QT_NO_DEBUG` -- `joined += piece` left `joined` empty;
   the same file built with sanitizers, or at `-O2`, was correct. The join
-  appends cell by cell now. **The cause, measured the same evening: GCC
-  14.2 alone.** A 25-line program using only QtCore and a struct shaped
-  like `bssh_cell_t` (nested colour structs; an `int` or an 8-byte cell
-  does not do it) joins two rows into an empty list and gets 0 cells at
-  `-Os`; GCC 12, clang, `-O2`, and `-Os` with any of
-  `-fno-strict-aliasing`, `-fno-ipa-modref` or `-fno-tree-sra` all get
-  50. No type punning is in the code involved -- Qt copies the cells with
-  `memcpy` -- so it reads as a compiler fault, not proved one: the
-  program still goes through Qt's headers. Whether it shows depends on
-  the code around the append and on the flags -- the first small
-  programs missed it, and `-fPIC` hid it in the rewrap's own file -- which
-  is why it took the app's exact compile line to find.
-  Since a fault in GCC's alias analysis is not confined to one
-  function, every C++ file is built `-fno-strict-aliasing` (beerssh.pro,
-  beersshd.pro, test/tests.pro), which cost 217 bytes of the app's
-  2.1 MB, and the suite at `-Os` passes with the old join under it.
-  `joining_lists_of_cells_keeps_every_cell` is the program as a test,
-  failing without the flag; `tool/sabotage/strict-aliasing.toml`. The
-  Android build is clang and was never exposed. And a flag changed in a
-  `.pro` used to recompile nothing -- qmake's objects depend on sources,
-  not flags -- so the top-level Makefile now cleans a qmake tree whose
-  compile lines changed when qmake re-runs. **The suite missed it
+  appended cell by cell for a while. ~~The cause: GCC 14.2 alone~~ -- **that
+  was wrong, and the holder doubted it at once ("likely just masked by
+  the compiler switch"). The cause is undefined behaviour in Qt 6.8's
+  headers.** `QArrayDataPointer::operator->()` returns
+  `static_cast<QArrayDataOps<T> *>(this)` while the object is a plain
+  `QArrayDataPointer`, a base-to-derived cast to a type it is not. An
+  out-of-line `QGenericArrayOps<cell>::copyAppend()` then writes `size`
+  through that type, GCC's mod/ref summary records the store against it,
+  and type-based alias analysis decides the caller's `QList` -- which
+  holds no such object -- cannot have changed: the optimised code reads
+  the list's old size, 0, after the call. Read off GCC's own dumps (the
+  only difference between the bad and good builds is that reload), then
+  proved without Qt: the same downcast pattern in 40 lines gives 0 cells
+  at `-Os` and `-O2`, on GCC 12 as well as 14, and 50 at every level once
+  the list really holds the derived type. Qt's development list carries
+  the same diagnosis from May 2026 (GCC 14.3 exposing it in
+  `tst_qarraydata`), fixed on Qt's active branches; Qt 6.12, the Android
+  kit, returns the ops object by value instead. Earlier "GCC 12 and clang
+  are right" was luck of inlining, not evidence. Which element types
+  showed it was inlining too: an `int` or an 8-byte cell went through
+  code GCC inlined, so no cross-function summary was involved.
+  **So every C++ file is built `-fno-strict-aliasing`** (beerssh.pro,
+  beersshd.pro, test/tests.pro) for as long as the desktop Qt predates
+  the fix: every QList, QString and QByteArray operation goes through the
+  same cast, so it is the whole build and not the one call that showed
+  it. 217 bytes of the app's 2.1 MB. The cell-by-cell join that worked
+  around the symptom is gone again, back to `joined += piece`.
+  `joining_lists_of_cells_keeps_every_cell` fails without the flag;
+  `tool/sabotage/strict-aliasing.toml`. Our own code has no such cast
+  (searched: the one `static_cast` of `this` is an upcast to a real
+  base). The Android build is clang against the fixed Qt. And a flag
+  changed in a `.pro` used to recompile nothing -- qmake's objects
+  depend on sources, not flags -- so the top-level Makefile now cleans a
+  qmake tree whose compile lines changed when qmake re-runs. **The suite missed it
   because it was built at `-O2` while the app ships at `-Os`:** eight
   existing tests fail at `-Os` without the fix and pass with it, so
   `test/tests.pro` builds at `-Os` now too -- tested as shipped.

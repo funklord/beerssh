@@ -20,7 +20,7 @@ CONFIG -= app_bundle
 
 QMAKE_CXXFLAGS_RELEASE -= -O2
 QMAKE_CXXFLAGS_RELEASE += -Os
-# Strict aliasing off, as in beerssh.pro, which says why.
+# Strict aliasing off, for Qt 6.8's headers, as beerssh.pro explains.
 QMAKE_CXXFLAGS_RELEASE += -fno-strict-aliasing
 
 INCLUDEPATH += $$PWD/src

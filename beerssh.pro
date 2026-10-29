@@ -42,12 +42,17 @@ CONFIG -= app_bundle
 QMAKE_CXXFLAGS_RELEASE -= -O2
 QMAKE_CXXFLAGS_RELEASE += -Os
 
-# Strict aliasing off, for a fault GCC 14.2 shows and GCC 12 and clang do
-# not: at -Os, appending one QList of cells to an empty one left it empty
-# -- the scrollback rewrap that lost every long line (project.md sec
-# 12.3x). It needs both ipa-modref and SRA, and goes with either switched
-# off or with this flag; no type punning was found in the code involved.
-# The cost measured 217 bytes of the app's 2.1 MB.
+# Strict aliasing off, because Qt's headers before its 2026 fix have
+# undefined behaviour that GCC turns into wrong code. QArrayDataPointer's
+# operator->() static_casts itself to QArrayDataOps, a derived type it is
+# not, so an out-of-line QList append writes `size` through that type and
+# GCC's type-based alias analysis concludes the caller's list cannot have
+# changed. Built against Debian's Qt 6.8.2, appending one list of cells to
+# an empty one left it empty: the scrollback rewrap that lost every long
+# line (project.md sec 12.3x). Every QList, QString and QByteArray goes
+# through the same cast, so it is the whole build, not the one call that
+# showed it. It cost 217 bytes of the app's 2.1 MB. Qt 6.12 (the Android
+# kit) is fixed; drop this when the desktop Qt is too.
 QMAKE_CXXFLAGS_RELEASE += -fno-strict-aliasing
 QMAKE_CFLAGS_RELEASE   -= -O2
 QMAKE_CFLAGS_RELEASE   += -Os

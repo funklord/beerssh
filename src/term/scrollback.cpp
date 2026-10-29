@@ -132,20 +132,7 @@ void bssh_scrollback::rewrap(int cols, bool keep_last) {
 			if (row > index && !joined.isEmpty() && (joined.last().attrs & bssh_cell_t::UNWRITTEN) &&
 			    !piece.isEmpty() && piece.first().width == 2)
 				joined.removeLast();
-			/*
-			 * Cell by cell, not `joined += piece`. Built -Os with
-			 * QT_NO_DEBUG -- the app's flags -- GCC 14.2 left `joined`
-			 * empty after that append, here and in no smaller program we
-			 * could make, so every line longer than the new width went to
-			 * the history as an empty row: the holder's "almost
-			 * everything disappeared". The same file built with
-			 * sanitizers, or at -O2 as the tests were, was correct. GCC
-			 * 14.2's alone, measured since: GCC 12 and clang are right,
-			 * and so is GCC 14 with -fno-strict-aliasing, which the
-			 * build now passes everywhere (beerssh.pro).
-			 */
-			joined.reserve(joined.size() + piece.size());
-			for (const bssh_cell_t &cell : piece) joined.append(cell);
+			joined += piece;
 		}
 
 		/* The blanks after the last row are not text; the ones before a

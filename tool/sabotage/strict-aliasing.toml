@@ -1,7 +1,8 @@
 # Sabotage for -fno-strict-aliasing (beerssh.pro, test/tests.pro), which
-# a GCC 14.2 fault needs: at -Os it emptied a list of cells joined from
-# rows. A compiler without the fault -- GCC 12, clang -- passes either way,
-# so this is caught only where the fault is.
+# Qt's headers need before its 2026 fix: QArrayDataPointer downcasts itself
+# to QArrayDataOps, and GCC's alias analysis then emptied a list of cells
+# joined from rows. Against a fixed Qt this passes either way, so it is
+# caught only where the fault is.
 
 # Strict aliasing back on: the join in emulator_test comes out empty.
 [[sabotage]]
