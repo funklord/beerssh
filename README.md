@@ -59,10 +59,7 @@ OpenSSH. Against them, what BeerSSH brings:
 
 Qt Widgets, C++. A Debian package for the desktop, and an APK for Android.
 
-Status: **verified against a real host.** The app connects over SSH,
-authenticates with a password, opens a PTY channel, and renders the result
-through a real VT emulator — colours, attributes, cursor addressing,
-scrolling and CJK double-width cells all work:
+To open a shell on another machine, name it:
 
 ```sh
 ./beerssh user@host        # tries your SSH key, asks for a password only if it fails
