@@ -90,6 +90,10 @@ jobs:
                                   zlib1g-dev libxcb1-dev openssh-client
       - name: Build
         run: make
+      # The manual pages and completion are no longer part of a bare make;
+      # generating them runs both programs' --man and --completion.
+      - name: Manual pages and completion
+        run: make doc
       - name: Headless smoke test
         run: make test
 
