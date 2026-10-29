@@ -119,6 +119,7 @@ private slots:
 	void select_all_reaches_the_scrollback_and_the_screen();
 	void select_all_still_reaches_the_screen_once_the_ring_evicts();
 	void copying_a_wrapped_line_gives_back_one_line();
+	void a_squeezed_window_never_gives_the_shell_a_tiny_grid();
 	void copying_a_wide_glyph_wrapped_at_the_edge_adds_no_space();
 	void a_real_newline_still_separates_two_lines();
 	void a_wrapped_line_stays_one_line_after_it_scrolls_away();

@@ -1,0 +1,11 @@
+# Sabotage for the grid's minimum (project.md sec 9.5c): however small the
+# widget, the shell hears of a 20x4 grid at least.
+
+# The old floor of one cell: a squeezed window gave the shell a grid one
+# column wide, and readline's prompt redraw then went wrong.
+[[sabotage]]
+name = "the grid floors at one cell again"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst int cols = qMax(BSSH_MIN_GRID_COLS, grid_width() / m_cell_width);"
+replace = "\tconst int cols = qMax(1, grid_width() / m_cell_width);"
+expect = "a_squeezed_window_never_gives_the_shell_a_tiny_grid"

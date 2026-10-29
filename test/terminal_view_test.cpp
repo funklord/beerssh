@@ -2106,6 +2106,32 @@ void terminal_view_test::a_reader_counts_characters_where_the_grid_counts_cells(
 	QCOMPARE(text->offsetAtPoint(rect.center()), marker);
 }
 
+void terminal_view_test::a_squeezed_window_never_gives_the_shell_a_tiny_grid() {
+	/*
+	 * The 20x4 minimum is a size hint, and a window manager may not hold
+	 * it. Dragged to a few pixels, the view told the shell it was one or
+	 * two columns wide, and bash's readline -- which redraws its prompt
+	 * assuming the line it is editing is never rewrapped -- duplicated or
+	 * wrote over the prompt once the window grew back. However small the
+	 * widget, the grid the session hears about is the minimum.
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 200);
+	QSignalSpy resized(&view, &bssh_terminal_view::grid_resized);
+
+	for (const QSize &pixels : { QSize(12, 200), QSize(640, 8), QSize(3, 3) }) {
+		view.resize(pixels);
+		QCoreApplication::processEvents();
+		QVERIFY2(view.cols() >= 20 && view.rows() >= 4,
+		         qPrintable(QStringLiteral("%1x%2 px gave a %3x%4 grid").arg(pixels.width())
+		                            .arg(pixels.height()).arg(view.cols()).arg(view.rows())));
+	}
+	for (const QList<QVariant> &signal : resized) {
+		QVERIFY(signal.at(0).toInt() >= 20);
+		QVERIFY(signal.at(1).toInt() >= 4);
+	}
+}
+
 void terminal_view_test::copying_a_wrapped_line_gives_back_one_line() {
 	/*
 	 * A command too long for the window is ONE line that ran past the

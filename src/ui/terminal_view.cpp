@@ -1424,8 +1424,20 @@ void bssh_terminal_view::recompute_grid() {
 	 * remote every time the user clicked a different pane, and a reflow
 	 * of whatever they were reading.
 	 */
-	const int cols = qMax(1, grid_width() / m_cell_width);
-	const int rows = qMax(1, (height() - 2 * BSSH_GRID_INSET_PX) / m_cell_height);
+	/*
+	 * Never below the minimum, whatever the window manager allows. The
+	 * minimum is only a size hint, and a window dragged past it -- by a
+	 * window manager that does not hold it, or under none at all -- gave
+	 * the shell a grid one or two columns wide. There even its "> " wraps,
+	 * and readline, which redraws its prompt assuming the terminal never
+	 * rewraps the line it is editing, wrote over or duplicated the
+	 * prompt's other lines once the window grew again (the holder,
+	 * 2026-10-29: "duplication of a few lines at the bottom when the
+	 * terminal is made minimal"). Below the minimum the view now clips a
+	 * grid of the minimum size instead.
+	 */
+	const int cols = qMax(BSSH_MIN_GRID_COLS, grid_width() / m_cell_width);
+	const int rows = qMax(BSSH_MIN_GRID_ROWS, (height() - 2 * BSSH_GRID_INSET_PX) / m_cell_height);
 
 	if (cols == m_cols && rows == m_rows) return;
 

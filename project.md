@@ -15357,6 +15357,21 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   because it was built at `-O2` while the app ships at `-Os`:** eight
   existing tests fail at `-Os` without the fix and pass with it, so
   `test/tests.pro` builds at `-Os` now too -- tested as shipped.
+- **The prompt duplicated after a desktop window was dragged to its
+  minimum -- the holder, 2026-10-29, a local shell, an empty prompt.**
+  Not reproduced as a duplicate. What was reproduced, under Xvfb with
+  the holder's bash: a window squeezed below its 20x4 minimum -- which
+  is only a size hint, held by a window manager or not -- gave the shell
+  a grid one or two columns wide, where even the prompt's "> " wraps;
+  grown back, readline's redraw wrote over the prompt's first line. It
+  redraws assuming the terminal never rewraps the line it is editing,
+  which reflow does, and the same run with reflow switched off kept the
+  line. The grid now never goes below 20x4 however small the widget
+  (`a_squeezed_window_never_gives_the_shell_a_tiny_grid`,
+  `tool/sabotage/grid-floor.toml`), and the reproduction keeps both
+  prompt lines. Assumed, not established: that the holder's window
+  manager let the window past the hint, and that the duplicate is the
+  same fault. A drag held to the hint, 209x119, reproduced nothing.
 - **Nine bytes froze the terminal -- fixed 2026-10-29.** REP (`CSI b`)
   with nothing written yet to repeat looped forever in libvterm, advancing
   the column by a width of 0, and output is read on the UI thread, so the
