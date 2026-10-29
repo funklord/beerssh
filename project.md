@@ -15343,6 +15343,20 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   `vterm-patch/0018` reflows the main screen with the saved cursor as its
   cursor. `leaving_the_alternate_screen_after_a_resize_resumes_at_the_prompt`,
   narrowed and widened.
+- **"It's worse now, almost everything disappeared" -- the holder,
+  2026-10-29, after that day's phone install. Fixed the same day.** Made
+  small and grown back, every line longer than the small width came back
+  as an empty row. Reproduced on the desktop app under Xvfb with the
+  holder's own bash; with the emulator logging, the history was whole
+  before `bssh_scrollback::rewrap` and empty after it. In the app's build
+  -- `-Os` with `QT_NO_DEBUG` -- `joined += piece` left `joined` empty;
+  the same file built with sanitizers, or at `-O2`, was correct, and no
+  smaller program reproduced it, so whether GCC 14.2 miscompiles it or
+  the code has undefined behaviour neither sanitizer reports is not
+  established. The join appends cell by cell now. **The suite missed it
+  because it was built at `-O2` while the app ships at `-Os`:** eight
+  existing tests fail at `-Os` without the fix and pass with it, so
+  `test/tests.pro` builds at `-Os` now too -- tested as shipped.
 - **Nine bytes froze the terminal -- fixed 2026-10-29.** REP (`CSI b`)
   with nothing written yet to repeat looped forever in libvterm, advancing
   the column by a width of 0, and output is read on the UI thread, so the

@@ -132,7 +132,19 @@ void bssh_scrollback::rewrap(int cols, bool keep_last) {
 			if (row > index && !joined.isEmpty() && (joined.last().attrs & bssh_cell_t::UNWRITTEN) &&
 			    !piece.isEmpty() && piece.first().width == 2)
 				joined.removeLast();
-			joined += piece;
+			/*
+			 * Cell by cell, not `joined += piece`. Built -Os with
+			 * QT_NO_DEBUG -- the app's flags -- GCC 14.2 left `joined`
+			 * empty after that append, here and in no smaller program we
+			 * could make, so every line longer than the new width went to
+			 * the history as an empty row: the holder's "almost
+			 * everything disappeared". The same file built with
+			 * sanitizers, or at -O2 as the tests were, was correct. Not
+			 * established whether it is a compiler fault or undefined
+			 * behaviour neither sanitizer reports.
+			 */
+			joined.reserve(joined.size() + piece.size());
+			for (const bssh_cell_t &cell : piece) joined.append(cell);
 		}
 
 		/* The blanks after the last row are not text; the ones before a

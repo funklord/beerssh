@@ -18,6 +18,16 @@ QT += widgets network testlib dbus
 RESOURCES += ../resources.qrc
 LIBS += -lz
 
+# The level the app ships at (beerssh.pro): size over speed. The tests ran
+# at qmake's -O2 default and so tested code the app never runs -- the
+# scrollback rewrap emptied every long line in the -Os app and passed all
+# 860 tests at -O2 (2026-10-29, the holder's "almost everything
+# disappeared"). Tested as shipped, or not tested.
+QMAKE_CXXFLAGS_RELEASE -= -O2
+QMAKE_CXXFLAGS_RELEASE += -Os
+QMAKE_CFLAGS_RELEASE   -= -O2
+QMAKE_CFLAGS_RELEASE   += -Os
+
 # Same define as the app's, and passed in the same way by the top-level
 # Makefile. The emulator answers XTVERSION with the program's own name and
 # version (sec 7.1), so this file has to carry it or that source will not
