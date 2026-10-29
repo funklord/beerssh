@@ -10439,6 +10439,16 @@ that showed together.
   build refused the stack. Moved clear of both 0007 and 0008, every patch
   checks alone, and the set applied to libvterm's gitlink commit from
   clean matches the working tree byte for byte.
+  **Superseded 2026-10-29 by checking the series, not each patch.** 0011
+  (faint) had to edit lines 0010 added -- the cell conversions 0010
+  wrote -- and no placement avoids that, so the build reported a fully
+  patched tree as partly restored. `tool/apply-patches.sh` builds the
+  tree each prefix of the series would give from the submodule's own
+  commit, finds the prefix the working tree is at, and applies the rest;
+  a tree matching no prefix is refused and left alone. Tried in four
+  states: pristine (all eleven applied), ten applied (0011 applied),
+  hand-edited (refused, file untouched), and a plain extracted tree as
+  check-ci has (all applied). Patches may overlap now.
 
 `growing_the_terminal_brings_back_scrollback_as_it_was` (order and default
 colours after one grow) and
@@ -15167,9 +15177,15 @@ of features; a new sequence is a new row, not a new test.
   a file of them forward, back and by line kept every colour on Xvfb.
   **Found while looking: dim (SGR 2) is dropped** -- libvterm reports no
   faint attribute and `bssh_cell_t` has none -- so faint text draws at
-  full strength, which a program using it for de-emphasis would show as
-  uncoloured. Open, and the next row to add once there is a program and
-  a sequence that shows the first symptom.
+  full strength. **Built 2026-10-29:** `vterm-patch/0011` parses SGR 2
+  (cleared by 22 and 0, saved with the cursor, reported by DECRQSS),
+  `bssh_cell_t::DIM` carries it through the history, and the view draws
+  it halfway to its background after the contrast floor, as VTE does --
+  before the floor it would be lifted straight back. A blend rather than
+  a darkening, so it fades on a light scheme too. Each new libvterm bit
+  is last in its bitfield, so an exported terminal (0008) keeps its
+  layout. `faint_text_draws_fainter_than_plain_text` (pixels, floor on),
+  a `faint` row in the conformance table, `tool/sabotage/faint.toml`.
 - **The holder's "no colour on the coloured prompt" was `TERM`, not the
   renderer -- [DECIDED 2026-10-26, the holder: keep xterm-256color].**
   Their `~/.bashrc` coloured the prompt (and set the window title) only
@@ -15197,7 +15213,8 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   happened to be.
 - **Closed: "some colour coded text has no colour from the start"** --
   the holder, 2026-10-27: it was the prompt, the `TERM` cases in their
-  `.bashrc` (sec 12.3w), fixed there. Dim (SGR 2) is still dropped.
+  `.bashrc` (sec 12.3w), fixed there. Dim (SGR 2) is drawn since
+  2026-10-29 (sec 12.3w).
 - **Fixed 2026-10-29: "when made really small the lines get slightly
   messed up"** (holder, 2026-10-27), with the history-rejoin item that
   stood beside it -- sec 9.5c. It was lost text, not a drawing fault, and

@@ -321,7 +321,7 @@ VTERM_ANDROID_STAMP = $(VTERM_ANDROID_DIR)/.patched
 # export puts vterm_export_state in vterm.c, vterm_encoding_index in
 # encoding.c and VTermWriter in vterm_internal.h; 0010 puts sb_popline4
 # in vterm.h, REFLOW_PULL_MAX in screen.c and fields.at_phantom in
-# state.c). Per file rather
+# state.c; 0011's SGR 2 is "Faint on" in pen.c). Per file rather
 # than one marker for both, so a partial restore cannot hide behind the
 # file that kept its patch. A marker missing while any stamp exists
 # means the sources were restored out of band: every stamp goes -- all
@@ -342,6 +342,7 @@ BSSH_VTERM_WITNESS := $(shell \
 	          && grep -q sb_popline4 $(VTERM_DIR)/include/vterm.h 2>/dev/null \
 	          && grep -q REFLOW_PULL_MAX $(VTERM_DIR)/src/screen.c 2>/dev/null \
 	          && grep -q fields.at_phantom $(VTERM_DIR)/src/state.c 2>/dev/null \
+	          && grep -q 'Faint on' $(VTERM_DIR)/src/pen.c 2>/dev/null \
 	          && grep -q vterm_export_state $(VTERM_DIR)/src/vterm.c 2>/dev/null \
 	          && grep -q vterm_encoding_index $(VTERM_DIR)/src/encoding.c 2>/dev/null \
 	          && grep -q VTermWriter $(VTERM_DIR)/src/vterm_internal.h 2>/dev/null; }; then \
@@ -598,21 +599,11 @@ $(COMPLETION): $(TARGET)
 $(VTERM_STAMP) $(VTERM_ANDROID_STAMP): $(VTERM_PATCHES)
 	@mkdir -p $(@D)
 	@echo "applying $(words $(VTERM_PATCHES)) patch(es) to vendored libvterm"
-	@for patch in $(VTERM_PATCHES); do \
-		if ! git -C $(VTERM_DIR) apply --check "$(CURDIR)/$$patch" 2>/dev/null; then \
-			if git -C $(VTERM_DIR) apply --reverse --check "$(CURDIR)/$$patch" 2>/dev/null; then \
-				echo "  $$patch: already applied"; \
-				continue; \
-			fi; \
-			echo "  $$patch: DOES NOT APPLY, and is not already applied. Either"; \
-			echo "  upstream changed under it -- rebase the patch -- or the submodule"; \
-			echo "  was partly restored, leaving some of the patch's files patched:"; \
-			echo "  git -C $(VTERM_DIR) checkout -- . and build again."; \
-			exit 1; \
-		fi; \
-		git -C $(VTERM_DIR) apply "$(CURDIR)/$$patch" || exit 1; \
-		echo "  $$patch: applied"; \
-	done
+	@# As a series, not one patch at a time: two patches touching the
+	@# same lines defeat a per-patch "applies in reverse" check, which is
+	@# what reported a fully patched tree as partly restored once 0011
+	@# edited 0010's lines. tool/apply-patches.sh says how.
+	@sh tool/apply-patches.sh $(VTERM_DIR) $(addprefix $(CURDIR)/,$(VTERM_PATCHES))
 	@touch $@
 
 $(VTERM_BUILD_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_STAMP)

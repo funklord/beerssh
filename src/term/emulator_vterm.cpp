@@ -355,6 +355,7 @@ quint8 to_bssh_attrs(const VTermScreenCellAttrs &attrs) {
 	if (attrs.reverse) out |= bssh_cell_t::INVERSE;
 	if (attrs.blink) out |= bssh_cell_t::BLINK;
 	if (attrs.strike) out |= bssh_cell_t::STRIKE;
+	if (attrs.dim) out |= bssh_cell_t::DIM;
 	return out;
 }
 
@@ -1695,6 +1696,7 @@ int pop_line(bssh_emulator_private *self, int cols, VTermScreenCell *cells, bool
 		cells[col].attrs.reverse = (source.attrs & bssh_cell_t::INVERSE) ? 1 : 0;
 		cells[col].attrs.blink = (source.attrs & bssh_cell_t::BLINK) ? 1 : 0;
 		cells[col].attrs.strike = (source.attrs & bssh_cell_t::STRIKE) ? 1 : 0;
+		cells[col].attrs.dim = (source.attrs & bssh_cell_t::DIM) ? 1 : 0;
 	}
 
 	emit self->owner->scrollback_changed();

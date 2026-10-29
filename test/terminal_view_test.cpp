@@ -1654,6 +1654,46 @@ void terminal_view_test::dimming_takes_the_text_and_the_blocks_but_never_the_bac
 	QCOMPARE(view.grab().toImage(), full);
 }
 
+void terminal_view_test::faint_text_draws_fainter_than_plain_text() {
+	/*
+	 * SGR 2 was parsed by nobody: libvterm had no faint attribute, so
+	 * faint output drew at full strength (vterm-patch/0011). Asserted on
+	 * painted pixels, with the contrast floor on, since the floor lifting
+	 * faint text back to full strength is the way this most easily breaks.
+	 */
+	bssh_emulator emulator(24, 2);
+	emulator.feed(QByteArrayLiteral("\x1b[2mFAINT\x1b[22m PLAIN\r\n\x1b[2mX\x1b[0mPLAIN"));
+	QVERIFY(emulator.screen().cell(0, 0).attrs & bssh_cell_t::DIM);
+	QVERIFY(!(emulator.screen().cell(0, 6).attrs & bssh_cell_t::DIM));
+	QVERIFY(!(emulator.screen().cell(1, 1).attrs & bssh_cell_t::DIM));
+
+	bssh_terminal_view view;
+	view.attach_screen(&emulator.screen());
+	view.set_colour_scheme(QStringLiteral("default"));
+	view.set_raise_contrast(true);
+	view.resize(24 * 16, 2 * 32);
+
+	const QImage frame = view.grab().toImage();
+	const auto brightest = [&frame](int x0, int x1, int y0, int y1) {
+		int best = 0;
+		for (int y = y0; y < y1; ++y)
+			for (int x = x0; x < x1; ++x) {
+				const QRgb p = frame.pixel(x, y);
+				best = qMax(best, qRed(p) + qGreen(p) + qBlue(p));
+			}
+		return best;
+	};
+
+	const int cell = view.cell_width();
+	const int row = view.cell_height();
+	QVERIFY(cell > 0 && row > 0 && 11 * cell <= view.width());
+	const int faint = brightest(0, 5 * cell, 0, row);
+	const int plain = brightest(6 * cell, 11 * cell, 0, row);
+	QVERIFY2(faint > 0, "the faint run drew nothing at all");
+	QVERIFY2(faint * 4 < plain * 3,
+	         qPrintable(QStringLiteral("faint text is as bright as plain: %1 against %2").arg(faint).arg(plain)));
+}
+
 void terminal_view_test::the_floor_lifts_glyphs_and_leaves_backgrounds_faithful() {
 	/*
 	 * Order matters, and the first version had it wrong. The floor

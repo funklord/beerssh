@@ -1,0 +1,42 @@
+# Sabotage for faint text, SGR 2 (project.md sec 7, vterm-patch/0011):
+# parsed, kept through the history, and drawn fainter than plain text.
+
+# libvterm ignoring SGR 2 again, which it did upstream.
+[[sabotage]]
+name = "SGR 2 is ignored"
+file = "vterm/src/pen.c"
+find = "      state->pen.dim = 1;\n      setpenattr_bool(state, VTERM_ATTR_DIM, 1);"
+replace = "      break;"
+expect = "faint_text_draws_fainter_than_plain_text"
+
+# SGR 22 ending bold only, as upstream: faint never switches off.
+[[sabotage]]
+name = "SGR 22 leaves faint on"
+file = "vterm/src/pen.c"
+find = "      state->pen.dim = 0;\n      setpenattr_bool(state, VTERM_ATTR_DIM, 0);"
+replace = ""
+expect = "faint_text_draws_fainter_than_plain_text"
+
+# Parsed, but never reaches the cell.
+[[sabotage]]
+name = "the cell is not told it is faint"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (attrs.dim) out |= bssh_cell_t::DIM;\n"
+replace = ""
+expect = "faint_text_draws_fainter_than_plain_text"
+
+# Lost on its way back out of the history.
+[[sabotage]]
+name = "a line pulled back from the history loses faint"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tcells[col].attrs.dim = (source.attrs & bssh_cell_t::DIM) ? 1 : 0;\n"
+replace = ""
+expect = "a_cell_keeps_what_it_is_through_scrollback_and_resize"
+
+# Faint in the cell and drawn at full strength.
+[[sabotage]]
+name = "faint is not drawn"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\tif (cell.attrs & bssh_cell_t::DIM) {\n"
+replace = "\t\t\tif (false) {\n"
+expect = "faint_text_draws_fainter_than_plain_text"

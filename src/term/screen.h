@@ -58,7 +58,8 @@ struct bssh_cell_t {
 		UNDERLINE = 0x04,
 		INVERSE   = 0x08,
 		BLINK     = 0x10,
-		STRIKE    = 0x20
+		STRIKE    = 0x20,
+		DIM       = 0x40   /* SGR 2, faint (vterm-patch/0011) */
 	};
 
 	char32_t ch;

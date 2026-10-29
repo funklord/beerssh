@@ -44,6 +44,7 @@ void conformance_test::a_cell_keeps_what_it_is_through_scrollback_and_resize_dat
 	QTest::newRow("truecolour") << QByteArray("\x1b[38;2;200;10;150m");
 	QTest::newRow("truecolour background") << QByteArray("\x1b[48;2;5;80;160m");
 	QTest::newRow("bold") << QByteArray("\x1b[1m");
+	QTest::newRow("faint") << QByteArray("\x1b[2m");
 	QTest::newRow("italic") << QByteArray("\x1b[3m");
 	QTest::newRow("underline") << QByteArray("\x1b[4m");
 	QTest::newRow("blink") << QByteArray("\x1b[5m");

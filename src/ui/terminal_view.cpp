@@ -1757,6 +1757,20 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 			if (m_raise_contrast) fg = QColor(bssh_raise_contrast(fg.rgb(), bg.rgb()));
 
 			/*
+			 * Faint text (SGR 2) halfway to what is behind it, as VTE
+			 * draws it. After the floor, which would otherwise lift it
+			 * straight back to full strength, and a blend rather than a
+			 * darkening so it fades on a light scheme as on a dark one.
+			 * Drawn at full strength before, faint output -- the grey
+			 * half of a modern tool's status line -- had no emphasis
+			 * left to lose.
+			 */
+			if (cell.attrs & bssh_cell_t::DIM) {
+				fg = QColor((fg.red() + bg.red()) / 2, (fg.green() + bg.green()) / 2,
+				            (fg.blue() + bg.blue()) / 2);
+			}
+
+			/*
 			 * And dimmed after the floor, never before: the floor
 			 * lifts until it clears, so a dim applied first is simply
 			 * undone. Text only -- the background keeps its pure
