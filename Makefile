@@ -332,8 +332,8 @@ VTERM_ANDROID_STAMP = $(VTERM_ANDROID_DIR)/.patched
 # in screen.c names the "rows pushed above"; 0016 clamps "And the saved
 # cursor" in state.c; 0017 places a cursor "rather than nowhere" in
 # screen.c; 0018 reflows "the cursor it will come back to"; 0019 has
-# "Nothing to repeat" in state.c; 0020 adds reflow_next to screen.c).
-# Per file rather
+# "Nothing to repeat" in state.c; 0020 adds reflow_next to screen.c;
+# 0021 cursor_line_start). Per file rather
 # than one marker for both, so a partial restore cannot hide behind the
 # file that kept its patch. A marker missing while any stamp exists
 # means the sources were restored out of band: every stamp goes -- all
@@ -364,6 +364,7 @@ BSSH_VTERM_WITNESS := $(shell \
 	          && grep -q 'the cursor it will come back to' $(VTERM_DIR)/src/screen.c 2>/dev/null \
 	          && grep -q 'Nothing to repeat' $(VTERM_DIR)/src/state.c 2>/dev/null \
 	          && grep -q reflow_next $(VTERM_DIR)/src/screen.c 2>/dev/null \
+	          && grep -q cursor_line_start $(VTERM_DIR)/src/screen.c 2>/dev/null \
 	          && grep -q vterm_export_state $(VTERM_DIR)/src/vterm.c 2>/dev/null \
 	          && grep -q vterm_encoding_index $(VTERM_DIR)/src/encoding.c 2>/dev/null \
 	          && grep -q VTermWriter $(VTERM_DIR)/src/vterm_internal.h 2>/dev/null; }; then \

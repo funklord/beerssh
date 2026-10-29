@@ -82,6 +82,8 @@ private slots:
 	void a_resize_under_the_alternate_screen_keeps_a_cursor();
 	void leaving_the_alternate_screen_after_a_resize_resumes_at_the_prompt();
 	void repeating_nothing_does_not_hang();
+	void a_typed_command_survives_resizing_under_a_real_shell();
+	void the_cursors_line_keeps_its_rows_for_the_shell_to_redraw();
 	void narrowing_past_the_prompt_keeps_the_cursor_on_it();
 	void the_cursor_follows_the_prompt_when_rows_come_back();
 	void random_input_and_resizes_do_not_break_the_emulator();

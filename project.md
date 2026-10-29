@@ -15385,6 +15385,24 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   `narrowing_past_the_prompt_keeps_the_cursor_on_it` replays bash's
   redraw at every width from 79 to 20 and fails at 44 without it; the
   same narrowing in the app under Xvfb keeps one prompt.
+- **A long typed command, resized -- the holder: "test how it handles
+  a long typed line first, if we can't solve this we add an option".**
+  Under a real bash in the suite, a 125-character command after the
+  two-line prompt, narrowed 79 to 30 and widened back, came back with
+  partial copies in front of it and the prompt's first line written
+  over. readline redraws the line it is editing by moving up the rows
+  it last drew it in, which holds only if the terminal left those rows
+  alone; xterm does, by not reflowing at all. `vterm-patch/0021` leaves
+  the cursor's logical line unwrapped -- each row stays a row, cut when
+  narrowing, joined to nothing when widening -- and rewraps every other
+  line as before, so no option was needed.
+  **The cost, chosen:** output still being written on the cursor's line
+  (a program's partial line, a `read -p` prompt) loses what a narrowing
+  cuts, as in xterm; a shell redraws its own. libvterm's own
+  `69screen_reflow` asserted the old behaviour and is changed in the
+  patch. `a_typed_command_survives_resizing_under_a_real_shell`,
+  `the_cursors_line_keeps_its_rows_for_the_shell_to_redraw` and
+  `tool/sabotage/shell-redraw.toml`; both tests fail without it.
 - **Nine bytes froze the terminal -- fixed 2026-10-29.** REP (`CSI b`)
   with nothing written yet to repeat looped forever in libvterm, advancing
   the column by a width of 0, and output is read on the UI thread, so the

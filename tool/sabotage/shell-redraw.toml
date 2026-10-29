@@ -1,0 +1,12 @@
+# Sabotage for the cursor's line left for the shell to redraw
+# (vterm-patch/0021), project.md sec 9.5c. The anchor is a line 0021
+# adds, so a pristine checkout can check it.
+
+# Rewrap the cursor's line like any other: readline's redraw after the
+# resize then lands rows away from the line it last drew.
+[[sabotage]]
+name = "the cursor's line is rewrapped under the shell"
+file = "vterm/src/screen.c"
+find = "    bool unwrapped = old_row_end >= cursor_line_start && old_row_end <= cursor_line_end;"
+replace = "    bool unwrapped = false && old_row_end >= cursor_line_start;"
+expect = "the_cursors_line_keeps_its_rows_for_the_shell_to_redraw"

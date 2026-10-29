@@ -1,0 +1,150 @@
+Leave the cursor's line for the shell to redraw
+
+A shell's line editor redraws the line being edited after every
+resize, on the assumption that the terminal left its rows alone: readline
+moves up by the rows it last drew the line in and writes it again at the
+new width. Reflow breaks that assumption. A typed command longer than a
+row, narrowed one column at a time, came back with four partial copies
+of itself in front of it, and widened, the redraw wrote over the line
+above -- the first line of a two-line prompt. Measured against a real
+bash in BeerSSH's suite.
+
+Do not rewrap the logical line holding the cursor. Each of its rows
+stays a row, cut at the new width when narrowing and joined to nothing
+when widening, with its continuation marks kept, so a copy still reads
+it as one line. Every other line is rewrapped as before.
+
+The cost, chosen: output still being written on the cursor's line loses
+what a narrowing cuts, as it would in a terminal that does not reflow.
+
+t/69screen_reflow.test moves the cursor off the lines its two reflow
+cases resize, and adds a case for the line that keeps its rows.
+
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -714,13 +714,32 @@
+    */
+   int final_blank_row = new_rows;
+ 
++  /* The line the cursor is on is not rewrapped: each of its rows stays a
++   * row, cut at the new width rather than wrapped, and none is joined to
++   * the next. It is a shell's line editor's line, and readline redraws it
++   * after every resize on the assumption that the terminal left its rows
++   * alone -- it moves up by the rows it drew it in and writes it again.
++   * Rewrapped under it, a typed command narrowed one column at a time
++   * came back with four partial copies of itself in front, and widened,
++   * the prompt line above it was written over. Every other line is
++   * still rewrapped. */
++  int cursor_line_start = -1, cursor_line_end = -1;
++  if(active && screen->reflow && old_lineinfo && old_cursor.row >= 0 && old_cursor.row < old_rows) {
++    cursor_line_start = cursor_line_end = old_cursor.row;
++    while(cursor_line_start > 0 && old_lineinfo[cursor_line_start].continuation)
++      cursor_line_start--;
++    while(cursor_line_end + 1 < old_rows && old_lineinfo[cursor_line_end + 1].continuation)
++      cursor_line_end++;
++  }
++
+   while(old_row >= 0) {
+     int old_row_end = old_row;
+     /* TODO: Stop if dwl or dhl */
+     /* Not past row 0: a top row that continues a line whose head is
+      * already in the scrollback starts here, and remembers that it is a
+      * continuation. Walking on to -1 read the row before the buffer. */
+-    while(screen->reflow && old_lineinfo && old_row > 0 && old_lineinfo[old_row].continuation)
++    bool unwrapped = old_row_end >= cursor_line_start && old_row_end <= cursor_line_end;
++    while(!unwrapped && screen->reflow && old_lineinfo && old_row > 0 && old_lineinfo[old_row].continuation)
+       old_row--;
+     int old_row_start = old_row;
+     bool head_continued = screen->reflow && old_lineinfo && old_lineinfo[old_row_start].continuation;
+@@ -733,8 +752,10 @@
+     int *cells = vterm_allocator_malloc(screen->vt, sizeof(int) * (old_row_end - old_row_start + 1) * old_cols);
+     int width = 0;
+     for(int row = old_row_start; row <= old_row_end; row++) {
+-      bool continued = screen->reflow && row < (old_rows - 1) && old_lineinfo[row + 1].continuation;
++      bool continued = !unwrapped && screen->reflow && row < (old_rows - 1) && old_lineinfo[row + 1].continuation;
+       int n = continued ? old_cols : line_popcount(old_buffer, row, old_rows, old_cols);
++      if(unwrapped && n > new_cols)
++        n = new_cols;
+       if(continued && old_cols > 1 &&
+           old_buffer[row * old_cols + old_cols - 1].chars[0] == 0 &&
+           old_buffer[(row + 1) * old_cols + 1].chars[0] == (uint32_t)-1)
+@@ -748,7 +769,7 @@
+       final_blank_row = new_row;
+ 
+     int new_height = 1;
+-    if(screen->reflow && width) {
++    if(screen->reflow && width && !unwrapped) {
+       new_height = 0;
+       for(int offset = 0; offset < width; new_height++)
+         offset += reflow_take(old_buffer, cells, offset, width, new_cols);
+--- a/t/69screen_reflow.test
++++ b/t/69screen_reflow.test
+@@ -9,39 +9,61 @@
+ !Resize wider reflows wide lines
+ RESET
+ PUSH "A"x12
++PUSH "\r\n"
+   ?screen_row 0 = "AAAAAAAAAA"
+   ?screen_row 1 = "AA"
+   ?lineinfo 1 = cont
+-  ?cursor = 1,2
++  ?cursor = 2,0
+ RESIZE 5,15
+   ?screen_row 0 = "AAAAAAAAAAAA"
+   ?screen_row 1 = 
+   ?lineinfo 1 =
+-  ?cursor = 0,12
++  ?cursor = 1,0
+ RESIZE 5,20
+   ?screen_row 0 = "AAAAAAAAAAAA"
+   ?screen_row 1 = 
+   ?lineinfo 1 =
+-  ?cursor = 0,12
++  ?cursor = 1,0
+ 
+ !Resize narrower can create continuation lines
+ RESET
+ RESIZE 5,10
+-PUSH "ABCDEFGHI"
++PUSH "ABCDEFGHI\r\n"
+   ?screen_row 0 = "ABCDEFGHI"
+   ?screen_row 1 = ""
+   ?lineinfo 1 =
+-  ?cursor = 0,9
++  ?cursor = 1,0
+ RESIZE 5,8
+   ?screen_row 0 = "ABCDEFGH"
+   ?screen_row 1 = "I"
+   ?lineinfo 1 = cont
+-  ?cursor = 1,1
++  ?cursor = 2,0
+ RESIZE 5,6
+   ?screen_row 0 = "ABCDEF"
+   ?screen_row 1 = "GHI"
+   ?lineinfo 1 = cont
+-  ?cursor = 1,3
++  ?cursor = 2,0
++
++# A shell redraws the line being edited after a resize, assuming its
++# rows were left alone, so the cursor's line is not rewrapped
++!The cursor's line keeps its rows
++RESET
++RESIZE 5,10
++PUSH "ABCDEFGHIJKL"
++  ?screen_row 0 = "ABCDEFGHIJ"
++  ?screen_row 1 = "KL"
++  ?lineinfo 1 = cont
++  ?cursor = 1,2
++RESIZE 5,15
++  ?screen_row 0 = "ABCDEFGHIJ"
++  ?screen_row 1 = "KL"
++  ?lineinfo 1 = cont
++  ?cursor = 1,2
++RESIZE 5,6
++  ?screen_row 0 = "ABCDEF"
++  ?screen_row 1 = "KL"
++  ?lineinfo 1 = cont
++  ?cursor = 1,2
+ 
+ !Shell wrapped prompt behaviour
+ RESET

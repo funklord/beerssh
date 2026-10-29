@@ -1,11 +1,14 @@
 #include <memory>
 
 #include <QFile>
+#include <QFileInfo>
 #include <QSignalSpy>
 #include <QtTest>
 
 #include "emulator_test.h"
 #include "term/emulator.h"
+#include "ssh/pty_session.h"
+#include <QElapsedTimer>
 #include "term/term_features.h"
 #include "term/colour_scheme.h"
 
@@ -2543,10 +2546,14 @@ void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line() {
 		emulator.feed(line == 20 ? "\x1b[31m" + bytes + "\x1b[0m" : bytes);
 		if (line < 30) emulator.feed("\r\n");
 	}
-	/* The last line is longer than a small screen is tall, with the cursor
-	 * at its end: libvterm aborted the process resizing that. */
+	/* The last line is longer than a small screen is tall: libvterm
+	 * aborted the process resizing that with the cursor in it. The cursor
+	 * is on the prompt after it now, as in a shell -- the cursor's own
+	 * line is not rewrapped (vterm-patch/0021, and
+	 * the_cursors_line_keeps_its_rows_for_the_shell_to_redraw). */
 	written.last() += QStringLiteral(" and the prompt line goes on long past the edge").repeated(3);
-	emulator.feed(QStringLiteral(" and the prompt line goes on long past the edge").repeated(3).toUtf8());
+	emulator.feed(QStringLiteral(" and the prompt line goes on long past the edge").repeated(3).toUtf8() + "\r\n$ ");
+	written << QStringLiteral("$");
 	QCOMPARE(logical_lines(emulator), written);
 
 	for (const auto &size : sizes) {
@@ -2566,7 +2573,7 @@ void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line() {
 
 	/* The cursor is still where the program left it. */
 	emulator.feed("!");
-	written.last() += QLatin1Char('!');
+	written.last() = QStringLiteral("$ !");
 	QCOMPARE(logical_lines(emulator), written);
 
 	/* And the colour went round with the text. */
@@ -2649,6 +2656,85 @@ void emulator_test::narrowing_past_the_prompt_keeps_the_cursor_on_it() {
 		QVERIFY2(lines.size() >= 3 && lines.at(lines.size() - 2) == first && lines.last() == QStringLiteral(">"),
 		         qPrintable(QStringLiteral("at %1 columns: %2").arg(cols).arg(lines.join(QLatin1Char('|')))));
 	}
+}
+
+void emulator_test::a_typed_command_survives_resizing_under_a_real_shell() {
+	/*
+	 * A real bash, a two-line prompt like the holder's, and a command
+	 * typed but not entered, longer than a row: then the window narrowed
+	 * one column at a time and widened back, the pty and the emulator
+	 * resized together as the app resizes them. readline redraws its
+	 * line after every resize assuming the terminal did not rewrap it;
+	 * with the line rewrapped, narrowing left four partial copies of the
+	 * command in front of it and widening wrote over the prompt's first
+	 * line. The cursor's line keeps its rows now (vterm-patch/0021).
+	 */
+	if (!QFileInfo::exists(QStringLiteral("/bin/bash"))) QSKIP("no /bin/bash");
+	bssh_pty_session session;
+	session.set_shell(QStringLiteral("/bin/bash"));
+	session.set_command({ QStringLiteral("/bin/bash"), QStringLiteral("--norc"), QStringLiteral("--noprofile"), QStringLiteral("-i") });
+	bssh_emulator emulator(80, 24);
+	connect(&session, &bssh_ssh_session::bytes_received, &emulator, [&emulator](const QByteArray &bytes) { emulator.feed(bytes); });
+	connect(&emulator, &bssh_emulator::output_ready, &session, [&]() { session.send(emulator.take_output()); });
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(80, 24);
+	const auto settle = [](int ms) {
+		QElapsedTimer timer;
+		timer.start();
+		while (timer.elapsed() < ms) QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+	};
+	settle(500);
+	const QString first = QStringLiteral("[15:54:51-5.59][funk@ml350g6-01]~/src/beerssh");
+	session.send("PS1='" + first.toUtf8() + "\\n> '\nclear\n");
+	settle(500);
+	const QString typed = QStringLiteral("echo ") + QStringLiteral("abcdefghij").repeated(12);
+	session.send(typed.toUtf8());
+	settle(300);
+
+	const auto check = [&](const char *when) {
+		const QStringList lines = logical_lines(emulator);
+		QVERIFY2(lines.count(first) == 1 && lines.count(QStringLiteral("> ") + typed) == 1 && lines.size() == 2,
+		         qPrintable(QStringLiteral("%1: %2").arg(QLatin1String(when), lines.join(QLatin1Char('|')))));
+	};
+	check("typed");
+	for (int cols = 79; cols >= 30; --cols) {
+		session.resize(cols, 24);
+		emulator.resize(cols, 24);
+		settle(40);
+	}
+	settle(300);
+	check("narrowed");
+	for (int cols = 31; cols <= 80; ++cols) {
+		session.resize(cols, 24);
+		emulator.resize(cols, 24);
+		settle(40);
+	}
+	settle(300);
+	check("widened");
+	session.disconnect_from_host();
+}
+
+void emulator_test::the_cursors_line_keeps_its_rows_for_the_shell_to_redraw() {
+	/*
+	 * The rule a_typed_command_survives_resizing_under_a_real_shell needs,
+	 * stated without a shell: the line with the cursor is not rewrapped --
+	 * narrowed, each of its rows is cut at the edge; widened, none is
+	 * joined to the next -- while every other line is. The cost, chosen:
+	 * output still being written on the cursor's line loses what a
+	 * narrowing cuts, as in xterm, where a shell would have redrawn it.
+	 */
+	bssh_emulator emulator(20, 6);
+	emulator.feed(QByteArray("an earlier line that wraps twice over") + "\r\n" + QByteArray("the cursor's own line, wrapped"));
+	emulator.resize(10, 6);
+	const QStringList narrowed = logical_lines(emulator);
+	QCOMPARE(narrowed.first(), QStringLiteral("an earlier line that wraps twice over"));
+	/* Its rows were "the cursor's own lin" and "e, wrapped"; each is cut
+	 * to ten, and the two still read as one line. */
+	QCOMPARE(narrowed.last(), QStringLiteral("the cursore, wrapped"));
+
+	emulator.resize(40, 6);
+	QCOMPARE(row(emulator, 0), QStringLiteral("an earlier line that wraps twice over"));
+	QCOMPARE(emulator.screen().cursor_row(), 2);
 }
 
 void emulator_test::repeating_nothing_does_not_hang() {
@@ -2963,7 +3049,7 @@ void emulator_test::a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_
 	 * not text: joined back by a wider window, it became a space.
 	 */
 	bssh_emulator emulator(10, 4);
-	emulator.feed("abc\xe4\xb8\xad""def");   /* abc U+4E2D def */
+	emulator.feed("abc\xe4\xb8\xad""def\r\n");   /* abc U+4E2D def; the cursor below */
 	emulator.resize(4, 4);
 	QCOMPARE(emulator.screen().cell(1, 0).ch, U'\u4e2d');
 	QCOMPARE(int(emulator.screen().cell(1, 0).width), 2);
@@ -2974,7 +3060,7 @@ void emulator_test::a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_
 
 	/* The same through the history: narrow, scrolled out, widened. */
 	emulator.resize(4, 4);
-	emulator.feed("\r\n1\r\n2\r\n3\r\n4");
+	emulator.feed("1\r\n2\r\n3\r\n4");
 	QVERIFY(emulator.scrollback().count() >= 3);
 	emulator.resize(10, 4);
 	QStringList lines = logical_lines(emulator);
