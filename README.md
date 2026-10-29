@@ -2,9 +2,62 @@
 
 Copyright (C) 2026 Nabeel Sowan <nabeel@vibes.se>
 
-An SSH terminal for **Android and desktop** — background sessions, tabs,
-adaptive splits, and a real keyboard. Qt Widgets, C++, one codebase for
-both platforms.
+SSH is how most people reach a server: an encrypted connection that carries
+a remote shell, the text console of another machine. The program on your
+side of it is a terminal emulator -- it draws what the remote programs send,
+from plain lines of output to full-screen editors, and turns your keys into
+what those programs expect. On a desktop that is a solved problem, as long as
+nothing moves: a window holds a connection for as long as it stays open and
+the network stays put. On a phone almost everything works against it. The
+system suspends an app the moment it leaves the screen, the network changes
+between Wi-Fi and mobile data, the screen is narrow and changes size every
+time the keyboard opens, and the on-screen keyboard has no Ctrl, Alt, Esc or
+function keys, which is most of what a shell needs.
+
+BeerSSH is one terminal for both, built from one codebase: the same
+emulator, keyboard handling and connection logic on an Android phone and a
+Linux desktop. On the phone it keeps sessions running in the background, in
+the foreground service Android requires for it, and a session that logged in
+with a key reconnects by itself when the network comes back, since it holds
+no password it would have to ask for. A dropped connection still starts a new
+remote shell, as plain SSH must -- Mosh's UDP protocol, which avoids that, is
+not implemented. It rewraps text when the screen changes size rather than
+cutting it, and its keyboard carries the keys a shell needs, with Ctrl and Alt
+held by one finger while another types. On the desktop it is an ordinary
+terminal that also opens SSH sessions directly and takes xterm's and
+Konsole's command-line arguments. Both have tabs, and splits that become a
+scrolling column on a phone held upright.
+
+Its neighbours are the Android SSH clients -- JuiceSSH, which is no longer
+maintained, ConnectBot and Termius -- Termux, which runs a Linux userland on
+the phone, and on a desktop a terminal such as Konsole or xterm running
+OpenSSH. Against them, what BeerSSH brings:
+
+- **A live session moves without reconnecting.** A tab dragged out becomes a
+  window of its own, which is a process of its own, and the authenticated
+  SSH connection goes with it -- keys, sequence numbers and open channels
+  handed over, so the server never sees a disconnect and the shell keeps
+  running. A desktop terminal that moves a tab keeps it in one process; an
+  SSH connection that changes process anywhere else is a new login.
+- **It knows the host's tmux and screen sessions.** A drawer at the side of
+  the terminal lists them and switches between them in one tap, so keeping
+  work in tmux -- the usual way to survive a dropped connection -- is
+  something you can see rather than a command you have to remember.
+- **The terminal of a current desktop emulator, on the phone too.** The kitty
+  keyboard protocol and xterm's modifyOtherKeys, so a program can tell Ctrl+I
+  from Tab; kitty and iTerm2 inline images, and sixel on the desktop; OSC 8
+  hyperlinks, which ask before opening an address the host chose;
+  synchronised output, so a full-screen redraw arrives as one frame; and
+  reflow, with the scrollback history rewrapped as well as the screen. On
+  the desktop these are what kitty, foot and WezTerm offer; BeerSSH brings
+  the same set to the phone.
+- **A file server for the phone, beersshd**: an SFTP-only server that makes
+  one folder on the phone reachable from a desktop with `sftp` or `scp`,
+  logging in with a listed key or a salted password, and nothing outside
+  that folder reachable at all -- where the usual way is a full SSH server
+  under Termux, which gives whoever logs in a shell.
+
+Qt Widgets, C++. A Debian package for the desktop, and an APK for Android.
 
 Status: **verified against a real host.** The app connects over SSH,
 authenticates with a password, opens a PTY channel, and renders the result
