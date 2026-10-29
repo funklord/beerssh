@@ -2639,7 +2639,7 @@ void emulator_test::random_input_and_resizes_do_not_break_the_emulator() {
 	 *                                         fails is what is left
 	 *   BSSH_FUZZ_REPLAY=file                 run a trace instead
 	 *
-	 * It found seven faults in its first afternoon, vterm-patch/0013 to
+	 * It found five faults in its first afternoon, vterm-patch/0013 to
 	 * 0017, among them three ways to abort the process and one a fault
 	 * of this project's own reflow.
 	 */
