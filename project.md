@@ -15287,7 +15287,21 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   or CJK character on a one-column screen did it, and a pane can be one
   column -- the view floors its grid there. `vterm-patch/0013`;
   `a_one_column_terminal_survives_a_wide_glyph` crashes with SIGSEGV on
-  the ordinary build without it. The fuzzer is not in the tree yet.
+  the ordinary build without it.
+- **The fuzzer is `random_input_and_resizes_do_not_break_the_emulator`**,
+  skipped unless `BSSH_FUZZ_ITER` gives a round count; `BSSH_FUZZ_SEED`
+  picks the start, `BSSH_FUZZ_TRACE=file` keeps each round's steps
+  (rewritten per round, so a failing round leaves its own), and
+  `BSSH_FUZZ_REPLAY=file` runs a trace. It is worth running under the
+  sanitizer build, which is how it was run: a copy of the tree with
+  `build*`, `deps` and `.git` left out, `vterm/.git` and `libssh/.git`
+  removed so they read as plain trees, `build-vterm/.patched` and
+  `build-libssh/.patched` touched since the copied sources are already
+  patched, and then
+  `make SANITIZE=1 VTERM_CFLAGS="-std=c99 -O1 -g -fsanitize=address,undefined -fno-omit-frame-pointer -w -Ivterm/include -Ivterm/src" build-tests/beerssh_test`.
+  A copy because `test/tests.pro` links `build-vterm/` by name. A trace
+  shrinks by deleting steps while the fault still shows. About 300
+  rounds take four minutes under ASan.
 - **Also found by the fuzzer, fixed the same day: shrinking the window
   under a program's scroll region corrupted the heap.** vim, less and
   tmux set a region (DECSTBM); libvterm's resize clamped its bottom and

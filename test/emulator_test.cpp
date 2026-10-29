@@ -1,3 +1,6 @@
+#include <memory>
+
+#include <QFile>
 #include <QSignalSpy>
 #include <QtTest>
 
@@ -2618,6 +2621,167 @@ void emulator_test::a_resize_under_the_alternate_screen_keeps_a_cursor() {
 	emulator.feed("\x1b[?1049l\x1b[?2026h");
 	emulator.resize(45, 29);
 	QVERIFY(emulator.screen().cursor_row() < emulator.screen().rows());
+}
+
+void emulator_test::random_input_and_resizes_do_not_break_the_emulator() {
+	/*
+	 * The fuzzer (project.md sec 12.3x): skipped unless asked for, since
+	 * what it finds it finds under ASan and UBSan, and its worth is in
+	 * running long. Each round is a terminal of random size fed sixty
+	 * pieces -- CSI with random and extreme parameters, OSC (titles,
+	 * colours, the clipboard, links, iTerm2 pictures), DCS sixel, kitty
+	 * graphics, random UTF-8 and raw bytes, scroll regions, the alternate
+	 * screen -- each split at a random point, with resizes between.
+	 *
+	 *   BSSH_FUZZ_ITER=300 BSSH_FUZZ_SEED=1   rounds, and where they start
+	 *   BSSH_FUZZ_TRACE=file                  each round's steps, rewritten
+	 *                                         per round, so the round that
+	 *                                         fails is what is left
+	 *   BSSH_FUZZ_REPLAY=file                 run a trace instead
+	 *
+	 * It found seven faults in its first afternoon, vterm-patch/0013 to
+	 * 0017, among them three ways to abort the process and one a fault
+	 * of this project's own reflow.
+	 */
+	const QString replay = qEnvironmentVariable("BSSH_FUZZ_REPLAY");
+	if (!replay.isEmpty()) {
+		QFile in(replay);
+		QVERIFY(in.open(QIODevice::ReadOnly));
+		std::unique_ptr<bssh_emulator> emulator;
+		for (const QByteArray &line : in.readAll().split('\n')) {
+			const QList<QByteArray> words = line.split(' ');
+			if (words.size() < 2) continue;
+			if (words.at(0) == "new" && words.size() > 2) {
+				emulator = std::make_unique<bssh_emulator>(words.at(1).toInt(), words.at(2).toInt());
+				emulator->set_cell_pixels(8, 16);
+			} else if (words.at(0) == "resize" && words.size() > 2 && emulator) {
+				emulator->resize(words.at(1).toInt(), words.at(2).toInt());
+			} else if (words.at(0) == "feed" && emulator) {
+				emulator->feed(QByteArray::fromHex(words.at(1)));
+			}
+		}
+		return;
+	}
+
+	const int rounds = qEnvironmentVariableIntValue("BSSH_FUZZ_ITER");
+	if (rounds <= 0) QSKIP("the fuzzer runs when BSSH_FUZZ_ITER says how many rounds");
+	quint32 seed = quint32(qEnvironmentVariableIntValue("BSSH_FUZZ_SEED"));
+	const auto next = [&seed]() { seed = seed * 1664525u + 1013904223u; return seed >> 8; };
+	const auto pick = [&next](int most) { return int(next() % quint32(most + 1)); };
+	const auto parameters = [&pick]() {
+		QByteArray out;
+		for (int index = 0, count = pick(5); index < count; ++index) {
+			if (index) out += pick(6) == 0 ? ':' : ';';
+			const int kind = pick(10);
+			out += QByteArray::number(kind < 6 ? pick(9) : kind < 8 ? pick(300)
+			                          : kind < 9 ? pick(70000) : 2147483647);
+		}
+		return out;
+	};
+	const char finals[] = "@ABCDEFGHIJKLMPSTXZ`abcdefghlmnpqrstuxz{|}~";
+	const char *const intermediates[] = { "", "?", ">", "<", "=", " ", "!", "$", "'", "\"" };
+
+	QFile trace(qEnvironmentVariable("BSSH_FUZZ_TRACE"));
+	const bool tracing = !trace.fileName().isEmpty();
+	const auto note = [&trace, tracing](const QByteArray &step) {
+		if (!tracing) return;
+		trace.write(step + '\n');
+		trace.flush();
+	};
+
+	for (int round = 0; round < rounds; ++round) {
+		if (tracing) {
+			trace.close();
+			QVERIFY(trace.open(QIODevice::WriteOnly | QIODevice::Truncate));
+		}
+		const int cols = 1 + pick(100), rows = 1 + pick(40);
+		note("new " + QByteArray::number(cols) + ' ' + QByteArray::number(rows));
+		bssh_emulator emulator(cols, rows);
+		emulator.set_cell_pixels(1 + pick(20), 1 + pick(40));
+		emulator.set_image_budget(qint64(1) << 22);
+
+		for (int piece = 0; piece < 60; ++piece) {
+			QByteArray bytes;
+			switch (pick(12)) {
+			case 0:
+				bytes = "\x1b[" + QByteArray(intermediates[pick(9)]) + parameters() +
+				        finals[pick(int(sizeof finals) - 2)];
+				break;
+			case 1:
+				bytes = "\x1b[?" + parameters() + (pick(1) ? "h" : "l");
+				break;
+			case 2: {
+				const int codes[] = { 0, 2, 4, 8, 10, 11, 52, 1337, 133 };
+				const int code = codes[pick(8)];
+				bytes = "\x1b]" + QByteArray::number(code) + ';' + parameters() + ';';
+				if (code == 8) bytes += "https://x/" + QByteArray::number(pick(9999));
+				if (code == 52) bytes += "c;" + QByteArray("aGVsbG8=").repeated(pick(4));
+				if (code == 1337)
+					bytes += "File=inline=1;size=" + QByteArray::number(pick(100)) + ':' +
+					         QByteArray("AAAAQUFB").repeated(pick(8));
+				bytes += pick(1) ? "\x07" : "\x1b\\";
+				break;
+			}
+			case 3:
+				bytes = "\x1bP" + parameters() + 'q';
+				for (int index = 0, count = pick(60); index < count; ++index) {
+					const int kind = pick(6);
+					if (kind == 0) bytes += '#' + parameters();
+					else if (kind == 1) bytes += '!' + QByteArray::number(pick(5000));
+					else if (kind == 2) bytes += pick(1) ? '-' : '$';
+					else if (kind == 3) bytes += '"' + parameters();
+					else bytes += char('?' + pick(63));
+				}
+				bytes += "\x1b\\";
+				break;
+			case 4:
+				bytes = "\x1b_Ga=" + QByteArray(1, "tTpdq"[pick(4)]) +
+				        ",f=" + QByteArray::number(pick(1) ? 24 : pick(1) ? 32 : 100) +
+				        ",s=" + QByteArray::number(pick(70)) + ",v=" + QByteArray::number(pick(70)) +
+				        ",i=" + QByteArray::number(pick(5)) + ",m=" + QByteArray::number(pick(1)) +
+				        ",c=" + QByteArray::number(pick(90)) + ",r=" + QByteArray::number(pick(50)) +
+				        ';' + QByteArray("AAAAAP8A").repeated(pick(40)) + "\x1b\\";
+				break;
+			case 5:
+				for (int index = 0, count = pick(30); index < count; ++index) {
+					const char32_t code_point = pick(3) ? 0x20 + pick(0x5f)
+					                          : pick(1) ? 0x4e00 + pick(2000) : 0x80 + pick(0x10ff00);
+					bytes += QString::fromUcs4(&code_point, 1).toUtf8();
+				}
+				break;
+			case 6:
+				for (int index = 0, count = pick(20); index < count; ++index) bytes += char(next());
+				break;
+			case 7:
+				bytes = "\r\n" + QByteArray("line text ").repeated(pick(20));
+				break;
+			case 8: {
+				const int to_cols = 1 + pick(100), to_rows = 1 + pick(40);
+				note("resize " + QByteArray::number(to_cols) + ' ' + QByteArray::number(to_rows));
+				emulator.resize(to_cols, to_rows);
+				break;
+			}
+			case 9:
+				bytes = "\x1b" + QByteArray(1, "78cDEHMNOZ=>()*+#%"[pick(17)]) +
+				        QByteArray(1, char('0' + pick(40)));
+				break;
+			case 10:
+				bytes = "\x1b[" + parameters() + "r\x1b[" + parameters() + 'H' +
+				        QByteArray("\x1b[L\x1b[M\x1b[S\x1b[T\x1b[@\x1b[P").left(4 * (1 + pick(5)));
+				break;
+			default:
+				bytes = "\x1b[?1049" + QByteArray(pick(1) ? "h" : "l") +
+				        "\x1b[?2026" + QByteArray(pick(1) ? "h" : "l");
+				break;
+			}
+			if (bytes.isEmpty()) continue;
+			note("feed " + bytes.toHex());
+			const int split = pick(int(bytes.size()));
+			emulator.feed(bytes.left(split));
+			emulator.feed(bytes.mid(split));
+		}
+		QVERIFY(emulator.screen().cursor_row() < emulator.screen().rows());
+	}
 }
 
 void emulator_test::a_cursor_above_a_split_line_survives_a_resize() {
