@@ -15369,9 +15369,22 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   line. The grid now never goes below 20x4 however small the widget
   (`a_squeezed_window_never_gives_the_shell_a_tiny_grid`,
   `tool/sabotage/grid-floor.toml`), and the reproduction keeps both
-  prompt lines. Assumed, not established: that the holder's window
-  manager let the window past the hint, and that the duplicate is the
-  same fault. A drag held to the hint, 209x119, reproduced nothing.
+  prompt lines. That was a real fault but **not the holder's**, which
+  the next entry found: the holder's trigger was narrowing below the
+  prompt's first line, well above the minimum.
+- **The duplicated prompt, found -- the holder: "as soon as I resize
+  the prompt too small it duplicates the lower prompt line".**
+  Reproduced by narrowing one column at a time. When the prompt's first
+  line came to fill a row exactly, the reflow named the place just past
+  it as column 0 of the row below -- the "> " row -- and gave the cursor
+  to the line above, one row too high; bash's redraw on SIGWINCH ("\r> ",
+  erase to end of line) then wrote "> " over the first line's tail and
+  left the real one below. In this session's own 0010/0012, which kept
+  the arithmetic of the upstream loop they replaced. `vterm-patch/0020`
+  keeps the place past a line on its own row.
+  `narrowing_past_the_prompt_keeps_the_cursor_on_it` replays bash's
+  redraw at every width from 79 to 20 and fails at 44 without it; the
+  same narrowing in the app under Xvfb keeps one prompt.
 - **Nine bytes froze the terminal -- fixed 2026-10-29.** REP (`CSI b`)
   with nothing written yet to repeat looped forever in libvterm, advancing
   the column by a width of 0, and output is read on the UI thread, so the

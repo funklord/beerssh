@@ -2628,6 +2628,29 @@ void emulator_test::the_cursor_follows_the_prompt_when_rows_come_back() {
 	QCOMPARE(row(emulator, 11), QStringLiteral("$ ls"));
 }
 
+void emulator_test::narrowing_past_the_prompt_keeps_the_cursor_on_it() {
+	/*
+	 * The holder, 2026-10-29: "as soon as I resize the prompt too small it
+	 * duplicates the lower prompt line". A two-line prompt, narrowed one
+	 * column at a time: when the first line came to fill a row exactly,
+	 * the reflow named the place just past it as column 0 of the row
+	 * below -- the "> " row -- and gave the cursor to the line above, one
+	 * row too high (vterm-patch/0020). bash's redraw on each SIGWINCH,
+	 * "\r> " and erase to the end of the line, then wrote "> " over the
+	 * first line's tail and left the real one below it.
+	 */
+	const QString first = QStringLiteral("[15:54:51-5.59][funk@ml350g6-01]~/src/beerssh");
+	bssh_emulator emulator(80, 24);
+	emulator.feed("line one\r\n" + first.toUtf8() + "\r\n> ");
+	for (int cols = 79; cols >= 20; --cols) {
+		emulator.resize(cols, 24);
+		emulator.feed("\r> \x1b[K");   /* what readline does on SIGWINCH */
+		const QStringList lines = logical_lines(emulator);
+		QVERIFY2(lines.size() >= 3 && lines.at(lines.size() - 2) == first && lines.last() == QStringLiteral(">"),
+		         qPrintable(QStringLiteral("at %1 columns: %2").arg(cols).arg(lines.join(QLatin1Char('|')))));
+	}
+}
+
 void emulator_test::repeating_nothing_does_not_hang() {
 	/*
 	 * REP repeats the last character written; before any, libvterm's

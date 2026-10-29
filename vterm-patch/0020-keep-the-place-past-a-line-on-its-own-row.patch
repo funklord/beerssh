@@ -1,0 +1,91 @@
+Keep the place past a reflowed line on the line's own row
+
+After placing each line, resize_buffer() looks at the position just past
+its last cell for a cursor that sits after the text. Computed as one
+position after that cell, a line whose last cell was in the last column
+named column 0 of the row below -- the next line's row -- so a cursor
+there was claimed by the line above it and placed one row too high.
+
+A shell prompt of two lines shows it. Narrowed until the first line
+fills a row exactly, the cursor moved onto that row, and the shell's
+redraw on SIGWINCH (CR, "> ", erase to end of line) wrote over the
+first line's tail and left the real "> " below: the prompt's last line
+duplicated. Found from a BeerSSH user's report; 0010 and 0012 inherited
+the arithmetic from the loop they replaced.
+
+Keep the place past the end on the last cell's row, with a column that
+may equal the row's width.
+
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -553,6 +553,29 @@
+   return take;
+ }
+ 
++/* Where the cell at `offset` of a reflowed line was, or the place just
++ * past its last cell. Past the end stays on the last cell's row, with a
++ * column that may equal the row's width: computed as one position after
++ * it, a line whose last cell is in the last column named column 0 of the
++ * row BELOW -- the next line's row -- and claimed a cursor that was on
++ * it, one row too high. A narrowed prompt then had its "> " redrawn over
++ * the tail of the line above and left the real one below it. */
++static void reflow_next(const int *cells, int offset, int width, int start_row, int old_cols, int *row, int *col)
++{
++  if(offset < width) {
++    *row = cells[offset] / old_cols;
++    *col = cells[offset] % old_cols;
++  }
++  else if(width) {
++    *row = cells[width - 1] / old_cols;
++    *col = cells[width - 1] % old_cols + 1;
++  }
++  else {
++    *row = start_row;
++    *col = 0;
++  }
++}
++
+ static int line_popcount(ScreenCell *buffer, int row, int rows, int cols)
+ {
+   int col = cols - 1;
+@@ -720,9 +743,6 @@
+         cells[width++] = row * old_cols + col;
+     }
+     const int line_width = width;
+-    /* Where the cell at `offset` is, or the one past the last. */
+-#define REFLOW_AT(offset) ((offset) < line_width ? cells[offset] \
+-    : line_width ? cells[line_width - 1] + 1 : old_row_start * old_cols)
+ 
+     if(final_blank_row == (new_row + 1) && width == 0)
+       final_blank_row = new_row;
+@@ -826,8 +846,9 @@
+           screencell_to_cell(screen, from, next, &screen->sb_buffer[new_col]);
+         }
+ 
+-        int next_at = REFLOW_AT(offset);
+-        if(old_cursor.row == next_at / old_cols && old_cursor.col >= next_at % old_cols && new_cursor.row == -1)
++        int next_row, next_col;
++        reflow_next(cells, offset, line_width, old_row_start, old_cols, &next_row, &next_col);
++        if(old_cursor.row == next_row && old_cursor.col >= next_col && new_cursor.row == -1)
+           new_cursor.row = 0, new_cursor.col = 0;
+ 
+         if(!pushing)
+@@ -858,8 +879,8 @@
+           new_cursor.row = new_row, new_cursor.col = new_col;
+       }
+ 
+-      int next_at = REFLOW_AT(offset);
+-      int next_row = next_at / old_cols, next_col = next_at % old_cols;
++      int next_row, next_col;
++      reflow_next(cells, offset, line_width, old_row_start, old_cols, &next_row, &next_col);
+       if(old_cursor.row == next_row && old_cursor.col >= next_col) {
+         new_cursor.row = new_row, new_cursor.col = (old_cursor.col - next_col + new_col);
+         /* Just past text that ends at the new edge is where a wrap is
+@@ -888,7 +909,6 @@
+       new_cursor.col = old_cursor.col < new_cols ? old_cursor.col : new_cols - 1;
+     }
+ 
+-#undef REFLOW_AT
+     vterm_allocator_free(screen->vt, cells);
+ 
+     if(split) {
