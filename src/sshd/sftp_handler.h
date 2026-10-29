@@ -44,7 +44,7 @@ public:
 	bool handle(sftp_client_message msg);
 
 	/* Largest data reply to a read: a client asking for more gets less, which SFTP allows. */
-	static const int READ_LIMIT = 64 * 1024;
+	static constexpr int READ_LIMIT = 64 * 1024;
 
 private:
 	struct open_t;

@@ -484,7 +484,7 @@ public:
 	 * hand-typed; a rule whose target this app steals as a chord is left
 	 * to the chord, which is checked first.
 	 */
-	static const int BSSH_KEY_REMAP_SLOTS = 8;
+	static constexpr int BSSH_KEY_REMAP_SLOTS = 8;
 	QList<QPair<QString, QString>> key_remaps() const;
 	void set_key_remaps(const QList<QPair<QString, QString>> &remaps);
 

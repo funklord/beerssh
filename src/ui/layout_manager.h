@@ -100,7 +100,7 @@ public:
 	 * (sec 8.7), and this only stops a runaway from stacking an absurd
 	 * number. The common case is one or two.
 	 */
-	static const int BSSH_COLUMN_PANE_LIMIT = 64;
+	static constexpr int BSSH_COLUMN_PANE_LIMIT = 64;
 
 	/*
 	 * Which arrangement a window takes, and how many terminals a column
