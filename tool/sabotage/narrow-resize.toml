@@ -69,6 +69,7 @@ expect = "a_terminal_made_very_small_and_back_keeps_every_line"
 [[sabotage]]
 name = "the resize cancels the pending wrap"
 file = "vterm/src/state.c"
-find = "  updatecursor(state, &oldpos, 0);\n\n  return 1;\n}"
-replace = "  updatecursor(state, &oldpos, 1);\n\n  return 1;\n}"
+# Anchored on the lines 0010 adds, so a pristine checkout can check it.
+find = "   * time, and whether a wrap is pending was decided just above. */\n  updatecursor(state, &oldpos, 0);"
+replace = "   * time, and whether a wrap is pending was decided just above. */\n  updatecursor(state, &oldpos, 1);"
 expect = "a_terminal_made_very_small_and_back_keeps_every_line"

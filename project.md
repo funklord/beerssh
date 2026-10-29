@@ -10521,6 +10521,10 @@ rewrap after the resize the joined text was still right, so the test
 could not see rows left at the old width -- which is exactly the "lines
 cut at the edge" a narrow window would show when scrolled back. It now
 also requires every history row to fit the window, and catches it.
+And CI's style job failed on `c766842`: one anchor in `state.c` ran on
+into lines 0010 does not add, and CI checks anchors against a pristine
+`vterm/`, where only the runs a patch adds can supply one. A sabotage
+anchor in vendored code is made of added lines only.
 
 `a_narrowed_terminal_rewraps_and_a_widened_one_joins_again` -- narrowed,
 the end of the line is on the next rows rather than gone; widened, the
