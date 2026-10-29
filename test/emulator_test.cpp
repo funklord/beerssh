@@ -2511,6 +2511,43 @@ QStringList logical_lines(const bssh_emulator &emulator) {
 
 }
 
+namespace {
+
+/*
+ * The shape GCC 14.2 got wrong at -Os with strict aliasing on: rows
+ * joined into an empty list of cells came out empty. Out of line, as the
+ * scrollback's rewrap was, since inlined into the test the fault did not
+ * show.
+ */
+__attribute__((noinline)) QList<QList<bssh_cell_t> > join_continued(const QList<QList<bssh_cell_t> > &rows,
+                                                                    const QList<bool> &continued) {
+	QList<QList<bssh_cell_t> > lines;
+	int index = 0;
+	while (index < rows.size()) {
+		int end = index + 1;
+		while (end < rows.size() && continued.at(end)) ++end;
+		QList<bssh_cell_t> joined;
+		for (int row = index; row < end; ++row) joined += rows.at(row);
+		lines.append(joined);
+		index = end;
+	}
+	return lines;
+}
+
+} /* namespace */
+
+/*
+ * A compiler fault, not ours, and caught here rather than only by its
+ * symptom: beerssh.pro builds with -fno-strict-aliasing because without
+ * it this join was empty in the app's build (project.md sec 12.3x).
+ */
+void emulator_test::joining_lists_of_cells_keeps_every_cell() {
+	const QList<QList<bssh_cell_t> > rows{QList<bssh_cell_t>(30), QList<bssh_cell_t>(20)};
+	const QList<QList<bssh_cell_t> > lines = join_continued(rows, QList<bool>{false, true});
+	QCOMPARE(lines.size(), 1);
+	QCOMPARE(lines.at(0).size(), 50);
+}
+
 void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line_data() {
 	QTest::addColumn<sizes_t>("sizes");
 

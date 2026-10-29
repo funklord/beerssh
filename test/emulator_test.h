@@ -72,6 +72,7 @@ private slots:
 	void scrolling_output_is_one_scroll_and_the_rows_it_exposed();
 	void growing_the_terminal_brings_back_scrollback_as_it_was();
 	void a_terminal_resized_several_ways_keeps_its_lines_in_order();
+	void joining_lists_of_cells_keeps_every_cell();
 	void a_terminal_made_very_small_and_back_keeps_every_line_data();
 	void a_terminal_made_very_small_and_back_keeps_every_line();
 	void a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap();

@@ -41,6 +41,14 @@ CONFIG -= app_bundle
 # generated Makefile, so saying it here is the only place it takes effect.
 QMAKE_CXXFLAGS_RELEASE -= -O2
 QMAKE_CXXFLAGS_RELEASE += -Os
+
+# Strict aliasing off, for a fault GCC 14.2 shows and GCC 12 and clang do
+# not: at -Os, appending one QList of cells to an empty one left it empty
+# -- the scrollback rewrap that lost every long line (project.md sec
+# 12.3x). It needs both ipa-modref and SRA, and goes with either switched
+# off or with this flag; no type punning was found in the code involved.
+# The cost measured 217 bytes of the app's 2.1 MB.
+QMAKE_CXXFLAGS_RELEASE += -fno-strict-aliasing
 QMAKE_CFLAGS_RELEASE   -= -O2
 QMAKE_CFLAGS_RELEASE   += -Os
 

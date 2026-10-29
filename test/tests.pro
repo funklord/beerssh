@@ -25,6 +25,8 @@ LIBS += -lz
 # disappeared"). Tested as shipped, or not tested.
 QMAKE_CXXFLAGS_RELEASE -= -O2
 QMAKE_CXXFLAGS_RELEASE += -Os
+# Strict aliasing off, as in beerssh.pro, which says why.
+QMAKE_CXXFLAGS_RELEASE += -fno-strict-aliasing
 QMAKE_CFLAGS_RELEASE   -= -O2
 QMAKE_CFLAGS_RELEASE   += -Os
 

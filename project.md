@@ -15350,10 +15350,29 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   holder's own bash; with the emulator logging, the history was whole
   before `bssh_scrollback::rewrap` and empty after it. In the app's build
   -- `-Os` with `QT_NO_DEBUG` -- `joined += piece` left `joined` empty;
-  the same file built with sanitizers, or at `-O2`, was correct, and no
-  smaller program reproduced it, so whether GCC 14.2 miscompiles it or
-  the code has undefined behaviour neither sanitizer reports is not
-  established. The join appends cell by cell now. **The suite missed it
+  the same file built with sanitizers, or at `-O2`, was correct. The join
+  appends cell by cell now. **The cause, measured the same evening: GCC
+  14.2 alone.** A 25-line program using only QtCore and a struct shaped
+  like `bssh_cell_t` (nested colour structs; an `int` or an 8-byte cell
+  does not do it) joins two rows into an empty list and gets 0 cells at
+  `-Os`; GCC 12, clang, `-O2`, and `-Os` with any of
+  `-fno-strict-aliasing`, `-fno-ipa-modref` or `-fno-tree-sra` all get
+  50. No type punning is in the code involved -- Qt copies the cells with
+  `memcpy` -- so it reads as a compiler fault, not proved one: the
+  program still goes through Qt's headers. Whether it shows depends on
+  the code around the append and on the flags -- the first small
+  programs missed it, and `-fPIC` hid it in the rewrap's own file -- which
+  is why it took the app's exact compile line to find.
+  Since a fault in GCC's alias analysis is not confined to one
+  function, every C++ file is built `-fno-strict-aliasing` (beerssh.pro,
+  beersshd.pro, test/tests.pro), which cost 217 bytes of the app's
+  2.1 MB, and the suite at `-Os` passes with the old join under it.
+  `joining_lists_of_cells_keeps_every_cell` is the program as a test,
+  failing without the flag; `tool/sabotage/strict-aliasing.toml`. The
+  Android build is clang and was never exposed. And a flag changed in a
+  `.pro` used to recompile nothing -- qmake's objects depend on sources,
+  not flags -- so the top-level Makefile now cleans a qmake tree whose
+  compile lines changed when qmake re-runs. **The suite missed it
   because it was built at `-O2` while the app ships at `-Os`:** eight
   existing tests fail at `-Os` without the fix and pass with it, so
   `test/tests.pro` builds at `-Os` now too -- tested as shipped.

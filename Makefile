@@ -704,10 +704,26 @@ bssh_qmake_orphaned = $(shell \
 
 FORCE:
 
+# qmake's object rules depend on sources, not on flags, so a flag changed in
+# a .pro regenerated the Makefile and recompiled nothing: every existing
+# build kept objects built the old way. That is how -fno-strict-aliasing,
+# which a GCC 14 fault needs (beerssh.pro), would have reached a fresh
+# build and no other. So when re-running qmake changes the compile lines,
+# the tree's objects go -- by qmake's own `clean`, which removes the files
+# it names.
+bssh_qmake_flags = grep -sE '^(CFLAGS|CXXFLAGS|DEFINES|LFLAGS)[[:space:]]*=' Makefile
+define bssh_qmake
+	mkdir -p $(1)
+	cd $(1) && before=$$($(bssh_qmake_flags)); \
+	$(QMAKE) ../$(2) $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) BSSH_VERSION=$(VERSION) && \
+	if [ -n "$$before" ] && [ "$$before" != "$$($(bssh_qmake_flags))" ]; then \
+		echo "make: $(2) changed the compile flags; rebuilding $(1) from clean" >&2; \
+		$(MAKE) clean; \
+	fi
+endef
+
 $(BUILD_DIR)/Makefile: beerssh.pro
-	mkdir -p $(BUILD_DIR)
-	cd $(BUILD_DIR) && $(QMAKE) ../beerssh.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
-	        BSSH_VERSION=$(VERSION)
+	$(call bssh_qmake,$(BUILD_DIR),beerssh.pro)
 
 $(TARGET): $(VTERM_LIB) $(LIBSSH_LIB) $(BUILD_DIR)/Makefile $(SOURCES) $(HEADERS)
 	$(MAKE) -C $(BUILD_DIR)
@@ -725,9 +741,7 @@ SSHD_SOURCES   = $(wildcard src/sshd/*.cpp src/sshd/*.h)
 
 $(SSHD_BUILD_DIR)/Makefile: beersshd.pro \
                             $(if $(call bssh_qmake_orphaned,$(SSHD_BUILD_DIR)),FORCE)
-	mkdir -p $(SSHD_BUILD_DIR)
-	cd $(SSHD_BUILD_DIR) && $(QMAKE) ../beersshd.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
-	        BSSH_VERSION=$(VERSION)
+	$(call bssh_qmake,$(SSHD_BUILD_DIR),beersshd.pro)
 
 $(SSHD_TARGET): $(LIBSSH_LIB) $(SSHD_BUILD_DIR)/Makefile $(SSHD_SOURCES)
 	$(MAKE) -C $(SSHD_BUILD_DIR)
@@ -743,9 +757,7 @@ TEST_BIN       = $(TEST_BUILD_DIR)/beerssh_test
 # newer than test/tests.pro, so the timestamp alone never would.
 $(TEST_BUILD_DIR)/Makefile: test/tests.pro \
                             $(if $(call bssh_qmake_orphaned,$(TEST_BUILD_DIR)),FORCE)
-	mkdir -p $(TEST_BUILD_DIR)
-	cd $(TEST_BUILD_DIR) && $(QMAKE) ../test/tests.pro $(QMAKE_CONFIG) QMAKE_CXX=$(CXX) \
-	        BSSH_VERSION=$(VERSION)
+	$(call bssh_qmake,$(TEST_BUILD_DIR),test/tests.pro)
 
 $(TEST_BIN): $(VTERM_LIB) $(LIBSSH_LIB) $(TEST_BUILD_DIR)/Makefile $(SOURCES) $(HEADERS) $(wildcard test/*.cpp test/*.h)
 	$(MAKE) -C $(TEST_BUILD_DIR)

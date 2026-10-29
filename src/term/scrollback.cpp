@@ -139,9 +139,10 @@ void bssh_scrollback::rewrap(int cols, bool keep_last) {
 			 * could make, so every line longer than the new width went to
 			 * the history as an empty row: the holder's "almost
 			 * everything disappeared". The same file built with
-			 * sanitizers, or at -O2 as the tests were, was correct. Not
-			 * established whether it is a compiler fault or undefined
-			 * behaviour neither sanitizer reports.
+			 * sanitizers, or at -O2 as the tests were, was correct. GCC
+			 * 14.2's alone, measured since: GCC 12 and clang are right,
+			 * and so is GCC 14 with -fno-strict-aliasing, which the
+			 * build now passes everywhere (beerssh.pro).
 			 */
 			joined.reserve(joined.size() + piece.size());
 			for (const bssh_cell_t &cell : piece) joined.append(cell);
