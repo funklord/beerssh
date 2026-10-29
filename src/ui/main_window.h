@@ -1058,8 +1058,13 @@ private:
 	 * The FOCUSED pane's view, owned by the container rather than by this
 	 * window, and null while no pane exists. Everything acting on "the
 	 * terminal" means the focused one.
+	 *
+	 * A QPointer because the container deletes its views while it
+	 * rebuilds, before it says which one has focus: a raw pointer read
+	 * in between was a use-after-free, found under ASan while a pane was
+	 * being closed (on_grid_resized).
 	 */
-	bssh_terminal_view *m_terminal_view;
+	QPointer<bssh_terminal_view> m_terminal_view;
 	bssh_pane_container *m_panes;
 
 	/*

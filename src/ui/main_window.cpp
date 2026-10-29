@@ -4805,7 +4805,16 @@ void bssh_main_window::on_grid_resized(int cols, int rows) {
 	 * window-change for the session on screen only (sec 7). With panes at
 	 * M8 each computes its own geometry, so this stays per-session rather
 	 * than becoming a window-wide broadcast.
+	 *
+	 * From the focused view only. Every view that has ever had focus is
+	 * still connected here (they are wired once each), so an unfocused
+	 * pane's resize gave the FOCUSED session that pane's size -- the
+	 * wrong window size for the remote -- and, while the container
+	 * rebuilt, read a focused view it had already deleted. The pane's own
+	 * session is resized by the container's connection either way.
 	 */
+	if (!m_terminal_view || sender() != m_terminal_view) return;
+
 	if (m_current) {
 		m_current->emulator()->set_cell_pixels(m_terminal_view->cell_width(),
 		                                        m_terminal_view->cell_height());

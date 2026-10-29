@@ -15260,6 +15260,23 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
 - **Done 2026-10-29: faint text** (SGR 2, sec 12.3w), and the four
   entries that sent the reader to `running-code.md` now state the rule
   they relied on (the standalone rule of 2026-10-25).
+- **Found by ASan, fixed 2026-10-29: closing a pane read a deleted
+  view, and an unfocused pane could resize the focused session.** The
+  suite under ASan and UBSan, libvterm included, stopped in
+  `the_zone_drawn_is_what_the_drop_does` with a heap-use-after-free:
+  every view that has had focus stays connected to the window's
+  `on_grid_resized` (views are wired once each), the container deletes
+  the focused view while it rebuilds, and a surviving view's resize then
+  read it. The same handler resized the FOCUSED session to whichever
+  pane had resized, so in a split the focused remote could be told
+  another pane's window size. It acts for the focused view only now, and
+  `m_terminal_view` is a `QPointer`.
+  `an_unfocused_pane_resizing_leaves_the_focused_session_its_size`,
+  `tool/sabotage/focused-resize.toml`. The sanitizer build is not a
+  make target; it is `make SANITIZE=1` with `VTERM_CFLAGS` carrying the
+  same flags, in a copy of the tree, since `test/tests.pro` links
+  `build-vterm/` by name. Its first finding was that the test program did
+  not link at all unoptimised (`ce6785e`).
 - **Done 2026-10-29:** the Android build with this week's changes is
   installed on the Fold. And `make deb` no longer deletes the Android
   build: dh_auto_clean ran `make distclean`, which is veryclean, so

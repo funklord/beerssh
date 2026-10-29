@@ -3784,6 +3784,48 @@ bool near(const QRect &a, const QRect &b) {
 
 } /* namespace */
 
+void layout_test::an_unfocused_pane_resizing_leaves_the_focused_session_its_size() {
+	/*
+	 * Every view that has had focus stays connected to the window's
+	 * grid_resized handler, which resized the FOCUSED session -- so a
+	 * pane that once had focus, resizing later, gave the focused
+	 * session its own size, the wrong window size for that remote. The
+	 * same path read a focused view the container had already deleted
+	 * while it rebuilt, a use-after-free found under ASan in
+	 * the_zone_drawn_is_what_the_drop_does.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window window;
+	window.resize(1400, 700);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(a);
+	bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+	window.drop_session_on(b, a, bssh_layout_manager::EDGE_RIGHT);
+	QCoreApplication::processEvents();
+	QCOMPARE(window.panes()->views().size(), 2);
+
+	/* Both views wired: a had focus, then b has it. */
+	window.panes()->focus_session(a);
+	QCoreApplication::processEvents();
+	window.panes()->focus_session(b);
+	QCoreApplication::processEvents();
+	bssh_terminal_view *view_a = window.panes()->view_for(a);
+	QVERIFY(view_a);
+
+	const int cols = b->emulator()->screen().cols();
+	const int rows = b->emulator()->screen().rows();
+	QVERIFY(cols != 7 || rows != 5);
+	emit view_a->grid_resized(7, 5);
+	QCoreApplication::processEvents();
+	QCOMPARE(b->emulator()->screen().cols(), cols);
+	QCOMPARE(b->emulator()->screen().rows(), rows);
+}
+
 void layout_test::the_zone_drawn_is_what_the_drop_does() {
 	/*
 	 * The relationship, not a value: whatever a pane draws while a drag

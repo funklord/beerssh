@@ -1,0 +1,11 @@
+# Sabotage for the window's grid_resized handler (project.md sec 8.4): only
+# the focused pane's view may resize the focused session.
+
+# Every once-focused view is still connected: without the check, an
+# unfocused pane's resize gave the focused session its size.
+[[sabotage]]
+name = "any pane's resize resizes the focused session"
+file = "src/ui/main_window.cpp"
+find = "\tif (!m_terminal_view || sender() != m_terminal_view) return;\n"
+replace = "\tif (!m_terminal_view) return;\n"
+expect = "an_unfocused_pane_resizing_leaves_the_focused_session_its_size"
