@@ -2577,6 +2577,27 @@ void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line() {
 	}
 }
 
+void emulator_test::a_cursor_above_a_split_line_survives_a_resize() {
+	/*
+	 * The cursor at the top -- homed by a program, or restored by one
+	 * leaving the alternate screen -- and below it wrapped lines a short
+	 * window cannot hold. The upper one is split between the history and
+	 * the screen (vterm-patch/0010), and the rows above it, the cursor's
+	 * among them, go to the history; that path ended the reflow before
+	 * the check that places a cursor gone off the top, so the cursor had
+	 * no position and libvterm aborted the process (vterm-patch/0015).
+	 * Found by fuzzing; every seed reached it within seconds.
+	 */
+	bssh_emulator emulator(62, 39);
+	emulator.feed("\x1b[4;1H" + QByteArray(72, 'a') + "\r\n" + QByteArray(120, 'b') + "\x1b[H");
+	QCOMPARE(emulator.screen().cursor_row(), 0);
+	emulator.resize(46, 4);
+	QCOMPARE(emulator.screen().cursor_row(), 0);
+	emulator.resize(62, 39);
+	QVERIFY2(logical_lines(emulator).contains(QString(120, QLatin1Char('b'))),
+	         qPrintable(logical_lines(emulator).join(QLatin1Char('|'))));
+}
+
 void emulator_test::a_scroll_region_the_window_shrinks_past_is_dropped() {
 	/*
 	 * A program that scrolls part of the screen -- vim, less, tmux --

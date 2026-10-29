@@ -1,0 +1,31 @@
+Place a cursor in the rows pushed above a split line
+
+0010 splits a line too tall for the room left above it, pushing every
+row above it to the scrollback and ending the reflow there. Ending it
+also passed by the check after the loop that puts a cursor which went
+off the top at row 0, so with the cursor in those rows -- homed by a
+program, or restored on leaving the alternate screen -- it got no
+position and the process aborted ("screen_resize failed to update
+cursor position"). Found by fuzzing BeerSSH's emulator; every seed
+reached it within seconds.
+
+Place such a cursor where that check would: row 0, its column clamped.
+
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -799,6 +799,15 @@
+         for(int row = 0; row < old_row_start; row++)
+           sb_pushline_from_buffer(screen, old_buffer, row, old_cols, old_lineinfo[row].continuation);
+ 
++      /* A cursor in the rows pushed above goes to the top, as one that
++       * moves off the top always has: the check after the loop that
++       * does that is passed by, since this ends the loop. Missed, the
++       * cursor had no position and the process aborted. */
++      if(old_cursor.row < old_row_start && new_cursor.row == -1) {
++        new_cursor.row = 0;
++        new_cursor.col = old_cursor.col < new_cols ? old_cursor.col : new_cols - 1;
++      }
++
+       for(int head = 0; head < -new_row_start; head++) {
+         int count = reflow_take(old_buffer, cells, offset, line_width, new_cols);
+ 

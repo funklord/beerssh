@@ -77,6 +77,7 @@ private slots:
 	void a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap();
 	void a_one_column_terminal_survives_a_wide_glyph();
 	void a_scroll_region_the_window_shrinks_past_is_dropped();
+	void a_cursor_above_a_split_line_survives_a_resize();
 	void a_line_pulled_back_by_a_grow_narrows_without_blank_rows();
 	void a_narrowed_terminal_rewraps_and_a_widened_one_joins_again();
 	void scrollback_drops_trailing_blanks_but_not_blank_colour();

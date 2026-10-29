@@ -15301,6 +15301,15 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   fails only under the sanitizer build -- the corruption does not fault
   where it happens, and the ordinary build passed with the patch
   reverted, which its own comment says.
+- **And a crash this session's own 0010 introduced, fixed the same
+  day.** 0010 splits a line too tall for the room left above it and
+  ends the reflow there, which passed by the check that puts a cursor
+  gone off the top at row 0; with the cursor in the rows pushed above --
+  homed by a program, or restored on leaving the alternate screen --
+  libvterm found no position for it and aborted. Every fuzzing seed
+  reached it within seconds, where the hand-written resize tests never
+  had. `vterm-patch/0015`; `a_cursor_above_a_split_line_survives_a_resize`
+  aborts the ordinary build without it.
 - **Done 2026-10-29:** the Android build with this week's changes is
   installed on the Fold. And `make deb` no longer deletes the Android
   build: dh_auto_clean ran `make distclean`, which is veryclean, so
