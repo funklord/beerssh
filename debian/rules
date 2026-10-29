@@ -31,5 +31,12 @@
 # default worth having.
 override_dh_auto_test:
 
+# Clean with deb-clean, not the distclean debhelper picks by default:
+# distclean is veryclean, which removes the Android build too, so building
+# the desktop package deleted the APK (holder, 2026-10-29). deb-clean
+# removes every tree the package is built in and leaves the Android ones.
+override_dh_auto_clean:
+	$(MAKE) deb-clean
+
 override_dh_auto_install:
 	$(MAKE) install DESTDIR=$(CURDIR)/debian/tmp PREFIX=/usr

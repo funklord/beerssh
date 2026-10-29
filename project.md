@@ -15260,8 +15260,16 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
 - **Done 2026-10-29: faint text** (SGR 2, sec 12.3w), and the four
   entries that sent the reader to `running-code.md` now state the rule
   they relied on (the standalone rule of 2026-10-25).
-- **Not started, offered:** an Android build with this week's changes
-  (drawer, DejaVu, partial repaints, reflow, faint) for the phone.
+- **Done 2026-10-29:** the Android build with this week's changes is
+  installed on the Fold. And `make deb` no longer deletes the Android
+  build: dh_auto_clean ran `make distclean`, which is veryclean, so
+  building the desktop package removed `build-android-*` and the APK
+  with it (the holder: "make deb shouldn't wipe the android build").
+  `debian/rules` cleans with `make deb-clean` now -- every tree the
+  package is built in, the vendored sources put back and re-patched, and
+  no Android tree -- and veryclean is deb-clean plus the Android trees.
+  Measured: the APK's SHA-256 and the tree's 179 files are unchanged
+  across a full `make deb`.
 
 ### 12.4 CI
 - **[DECIDED 2026-10-22] `check-ci` is kept and no longer run as a gate.**

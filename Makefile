@@ -81,6 +81,8 @@
 #   make clean        -- remove compilation intermediates only; the built
 #                        binary is left in place, so `make install` stays
 #                        possible without a rebuild
+#   make deb-clean    -- the desktop build dirs only; what `make deb`
+#                        cleans with, so the Android build survives it
 #   make veryclean    -- clean, plus the built binary and the build dirs
 #   make distclean    -- veryclean, plus stray editor files
 #
@@ -223,7 +225,7 @@ VTERM_DIR  = vterm
 # has no business reaching the network. Goals not on this list are
 # assumed to need it, which is the safe direction: the cost of being
 # wrong is one unnecessary fetch, against a build that fails.
-BSSH_VTERM_FREE_GOALS = help style hooks clean veryclean version-check
+BSSH_VTERM_FREE_GOALS = help style hooks clean deb-clean veryclean version-check
 
 ifneq ($(filter-out $(BSSH_VTERM_FREE_GOALS),$(or $(MAKECMDGOALS),all)),)
 ifeq ($(wildcard $(VTERM_DIR)/src/vterm.c),)
@@ -1704,14 +1706,22 @@ define bssh_remove_tree
 	done
 endef
 
-# `build-android-*` beside $(ANDROID_BUILD_DIR): the variable names only
-# the current ABI's tree, and which other ABIs were built is exactly the
-# unknowable-names case -- the same shape .gitignore already declares as
-# this build's own. Each expansion still goes through the checks above.
-veryclean: clean
-	$(call bssh_remove_tree,$(BUILD_DIR) $(ANDROID_BUILD_DIR) build-android-* build-sshd-android-* \
-	        $(TEST_BUILD_DIR) $(SSHD_BUILD_DIR) $(VTERM_BUILD_DIR) $(VTERM_ANDROID_BASE) \
-	        $(LIBSSH_BUILD_DIR) $(SHOT_DIR))
+# What the package build cleans with (debian/rules: dh_auto_clean runs
+# this rather than distclean). Everything veryclean removes except the
+# Android trees: `make deb` ran distclean, so building the desktop package
+# deleted the APK and the whole Android build with it (holder, 2026-10-29:
+# "make deb shouldn't wipe the android build"). Nothing in the package is
+# built there, so nothing in it can be stale from there.
+#
+# Not by way of `clean`, which runs qmake's own clean in the Android tree
+# too and would leave it to rebuild every object. The vendored sources are
+# still put back and re-patched, so the package is built from exactly the
+# committed patches; the Android build then recompiles only what includes
+# them.
+deb-clean:
+	rm -f $(ARTIFACTS)
+	$(call bssh_remove_tree,$(BUILD_DIR) $(TEST_BUILD_DIR) $(SSHD_BUILD_DIR) \
+	        $(VTERM_BUILD_DIR) $(LIBSSH_BUILD_DIR) $(SHOT_DIR))
 	@if [ -d $(VTERM_DIR)/.git ] || [ -f $(VTERM_DIR)/.git ]; then \
 		git -C $(VTERM_DIR) checkout -- . && echo "vterm: patches reverted"; \
 	fi
@@ -1723,6 +1733,15 @@ veryclean: clean
 	@# applied again over a file that is already there -- which is what
 	@# `make deb` met, dh_auto_clean running this before the build.
 	@rm -f $(LIBSSH_DIR)/src/transport_export.c
+	rm -f .qmake.stash
+
+# `build-android-*` beside $(ANDROID_BUILD_DIR): the variable names only
+# the current ABI's tree, and which other ABIs were built is exactly the
+# unknowable-names case -- the same shape .gitignore already declares as
+# this build's own. Each expansion still goes through the checks above.
+veryclean: clean deb-clean
+	$(call bssh_remove_tree,$(ANDROID_BUILD_DIR) build-android-* build-sshd-android-* \
+	        $(VTERM_ANDROID_BASE))
 
 # `distclean` removes what the build generated and `veryclean` does not.
 # `.qmake.stash` is qmake's, is named, and is disposable by construction.
@@ -1740,7 +1759,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: all run test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
+.PHONY: deb-clean all run test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check
