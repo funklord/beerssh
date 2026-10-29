@@ -2248,7 +2248,12 @@ qint64 bssh_terminal_view::line_for_row(int row) const {
 }
 
 const bssh_cell_t &bssh_terminal_view::cell_for_line(qint64 line, int col) const {
-	static const bssh_cell_t blank;
+	/* Nothing wrote it, which selection_text() tells from a typed space. */
+	static const bssh_cell_t blank = [] {
+		bssh_cell_t cell;
+		cell.attrs = bssh_cell_t::UNWRITTEN;
+		return cell;
+	}();
 
 	const qint64 history = m_scrollback ? m_scrollback->count() : 0;
 
@@ -2414,10 +2419,12 @@ QString bssh_terminal_view::selection_text() const {
 		const int to = line == last_line ? last_col : m_cols - 1;
 
 		QString text;
+		int unwritten_tail = 0;
 		for (int col = from; col <= to; ++col) {
 			const bssh_cell_t &cell = cell_for_line(line, col);
 			if (cell.width == 0) continue;
 			text.append(QString::fromUcs4(&cell.ch, 1));
+			unwritten_tail = (cell.attrs & bssh_cell_t::UNWRITTEN) ? unwritten_tail + 1 : 0;
 		}
 
 		/*
@@ -2441,6 +2448,13 @@ QString bssh_terminal_view::selection_text() const {
 		 */
 		if (!continued) {
 			while (text.endsWith(QLatin1Char(' '))) text.chop(1);
+		} else {
+			/*
+			 * Except cells nothing wrote: the gap a double-width glyph
+			 * leaves at the edge when it wraps to the next row, which
+			 * copied as a space inside the word (bssh_cell_t::UNWRITTEN).
+			 */
+			text.chop(unwritten_tail);
 		}
 
 		if (!out.isEmpty() || line != first_line) {

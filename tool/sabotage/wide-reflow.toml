@@ -42,3 +42,19 @@ file = "src/term/emulator_vterm.cpp"
 find = "\t\tif (col >= line.size() || (source.attrs & bssh_cell_t::UNWRITTEN))\n"
 replace = "\t\tif (false)\n"
 expect = "a_line_pulled_back_by_a_grow_narrows_without_blank_rows"
+
+# Copied, the gap a wrapped wide glyph left comes back as a space.
+[[sabotage]]
+name = "copying keeps the gap before a wrapped wide glyph"
+file = "src/ui/terminal_view.cpp"
+find = "\t\t\ttext.chop(unwritten_tail);\n"
+replace = ""
+expect = "copying_a_wide_glyph_wrapped_at_the_edge_adds_no_space"
+
+# Past a history row's stored end, a blank that reads as typed.
+[[sabotage]]
+name = "a history row's missing cells read as typed spaces"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tcell.attrs = bssh_cell_t::UNWRITTEN;\n\t\treturn cell;\n"
+replace = "\t\treturn cell;\n"
+expect = "copying_a_wide_glyph_wrapped_at_the_edge_adds_no_space"

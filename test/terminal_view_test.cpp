@@ -2143,6 +2143,60 @@ void terminal_view_test::copying_a_wrapped_line_gives_back_one_line() {
 	QCOMPARE(text, QString::fromLatin1(typed));
 }
 
+void terminal_view_test::copying_a_wide_glyph_wrapped_at_the_edge_adds_no_space() {
+	/*
+	 * A double-width glyph that does not fit in the last column wraps to
+	 * the next row and leaves that column empty. The copy took a row that
+	 * continues to its full width, so the empty cell came back as a space
+	 * inside the word. A space somebody typed there is kept: only a cell
+	 * nothing wrote is left out (bssh_cell_t::UNWRITTEN).
+	 */
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 96);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	/* Text up to the last column but one, then a wide glyph. */
+	const QByteArray lead(view.cols() - 1, 'a');
+	const QByteArray typed = lead + "\xe4\xb8\xad""end";   /* ... U+4E2D end */
+	emulator.feed(typed);
+	QVERIFY(emulator.row_is_continuation(1));
+
+	view.select_all();
+	QCOMPARE(view.selection_text().trimmed(), QString::fromUtf8(typed));
+
+	/* And from the history, once it has scrolled away. */
+	emulator.feed("\r\n");
+	for (int i = 0; i < view.rows() + 2; ++i) emulator.feed("filler\r\n");
+	QVERIFY(emulator.scrollback().count() > 1);
+	view.select_all();
+	QVERIFY2(view.selection_text().contains(QString::fromUtf8(typed)),
+	         qPrintable(view.selection_text().left(200)));
+
+	/*
+	 * And once the history is rewrapped at a width that puts the glyph's
+	 * first half in the last column: the row before it is stored a cell
+	 * short rather than padded, so the copy reads past its end.
+	 */
+	show_and_resize(view, 320, 96);
+	const int narrow = view.cols();
+	show_and_resize(view, 640, 96);
+	emulator.resize(view.cols(), view.rows());
+	const QByteArray rewrapped = QByteArray(narrow - 1, 'b') + "\xe4\xb8\xad""end";
+	QVERIFY(rewrapped.size() < view.cols());
+	emulator.feed(rewrapped + "\r\n");
+	for (int i = 0; i < view.rows() + 2; ++i) emulator.feed("filler\r\n");
+	show_and_resize(view, 320, 96);
+	QCOMPARE(view.cols(), narrow);
+	emulator.resize(view.cols(), view.rows());
+	view.select_all();
+	QVERIFY2(view.selection_text().contains(QString::fromUtf8(rewrapped)),
+	         qPrintable(view.selection_text().right(400)));
+}
+
 void terminal_view_test::a_real_newline_still_separates_two_lines() {
 	/*
 	 * The other direction, and the reason the fix cannot simply drop

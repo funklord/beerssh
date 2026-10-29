@@ -10554,6 +10554,23 @@ records (both read as ' ' and draw as nothing).
 `a_line_pulled_back_by_a_grow_narrows_without_blank_rows`,
 `tool/sabotage/wide-reflow.toml`.
 
+**Not a drawing fault, measured.** A conformance test that resized the
+window through six sizes down to a few cells, comparing its pixels with
+a full repaint after each, passed -- and still passed with the
+emulator's post-resize damage removed, because Qt repaints the whole
+widget on a resize, after the emulator has reflowed. So a resize cannot
+leave stale pixels, the test could not fail on the path it named, and it
+was not kept. Everything the holder saw was in the text.
+
+**Copying had the same gap.** A row that continues was copied to its
+full width, so the empty cell before a wrapped wide glyph pasted as a
+space inside the word; it is left out now, from the screen and from a
+history row stored a cell short by a rewrap, while a space somebody
+typed at the edge is kept.
+`copying_a_wide_glyph_wrapped_at_the_edge_adds_no_space`, whose first
+version reached only the screen and stored history rows, so the edit
+that broke the rewrapped case was MISSED until the test rewrapped.
+
 `a_narrowed_terminal_rewraps_and_a_widened_one_joins_again` -- narrowed,
 the end of the line is on the next rows rather than gone; widened, the
 line is one again, in its colour, and a line the program ended is still
