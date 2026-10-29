@@ -2120,6 +2120,18 @@ void bssh_emulator::resize(int cols, int rows) {
 	if (narrower_or_wider) m_private->scrollback.rewrap(cols, row_is_continuation(0));
 	m_private->screen.resize(cols, rows);
 
+	/*
+	 * The cursor again, now the mirror is the new size. libvterm moves it
+	 * during vterm_set_size, while the mirror is still the old size, and
+	 * set_cursor() clamps to that: grown from 6 rows to 12 with the
+	 * prompt at the bottom, the cursor stayed on row 5 while the prompt
+	 * was drawn on row 11, and the shell's next erase-below wiped most of
+	 * the screen (the holder, 2026-10-29: "almost everything
+	 * disappeared").
+	 */
+	const VTermPos cursor = m_private->cursor_position();
+	m_private->screen.set_cursor(cursor.row, cursor.col);
+
 	const qint64 passed_after =
 	        m_private->scrollback.base() + m_private->scrollback.count();
 	m_private->images.shift_rows(int(passed_after - passed_before));

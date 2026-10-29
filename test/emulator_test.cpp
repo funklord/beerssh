@@ -2603,6 +2603,31 @@ void emulator_test::a_saved_cursor_comes_back_inside_a_smaller_screen() {
 	QVERIFY(emulator.screen().cursor_row() < emulator.screen().rows());
 }
 
+void emulator_test::the_cursor_follows_the_prompt_when_rows_come_back() {
+	/*
+	 * The phone's keyboard takes rows and gives them back, so a terminal
+	 * shrinks and grows all the time. Grown, libvterm pulls lines back
+	 * from the history and moves the cursor down with the prompt -- but
+	 * it reports the move while the mirror is still the old size, and the
+	 * mirror clamped it: the prompt on row 11, the cursor on row 5, and
+	 * the shell's next erase-below wiped most of the screen. The holder,
+	 * 2026-10-29: "almost everything disappeared".
+	 */
+	bssh_emulator emulator(50, 12);
+	for (int line = 1; line <= 30; ++line) emulator.feed("line " + QByteArray::number(line) + "\r\n");
+	emulator.feed("$ ");
+	emulator.resize(50, 6);
+	emulator.resize(50, 12);
+	QCOMPARE(emulator.screen().cursor_row(), 11);
+	QCOMPARE(emulator.screen().cursor_col(), 2);
+
+	/* What a shell then does, and what was lost when it did it. */
+	emulator.feed("\r\x1b[J$ ls");
+	QCOMPARE(row(emulator, 0), QStringLiteral("line 20"));
+	QCOMPARE(row(emulator, 10), QStringLiteral("line 30"));
+	QCOMPARE(row(emulator, 11), QStringLiteral("$ ls"));
+}
+
 void emulator_test::repeating_nothing_does_not_hang() {
 	/*
 	 * REP repeats the last character written; before any, libvterm's
