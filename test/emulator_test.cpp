@@ -2577,6 +2577,54 @@ void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line() {
 	}
 }
 
+void emulator_test::a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap() {
+	/*
+	 * A double-width glyph whose first half a reflow would put in the last
+	 * column starts the next row instead (vterm-patch/0012). Cut there, its
+	 * halves landed on two rows -- one cell of a glyph at the edge and a
+	 * blank starting the next. And the empty cell it leaves at the edge is
+	 * not text: joined back by a wider window, it became a space.
+	 */
+	bssh_emulator emulator(10, 4);
+	emulator.feed("abc\xe4\xb8\xad""def");   /* abc U+4E2D def */
+	emulator.resize(4, 4);
+	QCOMPARE(emulator.screen().cell(1, 0).ch, U'\u4e2d');
+	QCOMPARE(int(emulator.screen().cell(1, 0).width), 2);
+	QCOMPARE(int(emulator.screen().cell(1, 1).width), 0);
+
+	emulator.resize(10, 4);
+	QCOMPARE(row(emulator, 0), QStringLiteral("abc\u4e2d""def"));
+
+	/* The same through the history: narrow, scrolled out, widened. */
+	emulator.resize(4, 4);
+	emulator.feed("\r\n1\r\n2\r\n3\r\n4");
+	QVERIFY(emulator.scrollback().count() >= 3);
+	emulator.resize(10, 4);
+	QStringList lines = logical_lines(emulator);
+	QVERIFY2(lines.contains(QStringLiteral("abc\u4e2d""def")), qPrintable(lines.join(QLatin1Char('|'))));
+}
+
+void emulator_test::a_line_pulled_back_by_a_grow_narrows_without_blank_rows() {
+	/*
+	 * A line a grow pulled back out of the history went back to libvterm
+	 * padded with typed spaces, so its reflow counted it the full width:
+	 * narrowed from 40 columns to 10, "hello" took four rows, three of
+	 * them blank, and the top of the screen was a blank row continuing a
+	 * line in the history. Cells nothing wrote go back as empty now
+	 * (bssh_cell_t::UNWRITTEN).
+	 */
+	bssh_emulator emulator(40, 3);
+	emulator.feed("hello\r\na\r\nb\r\nc");
+	emulator.resize(40, 6);
+	QCOMPARE(row(emulator, 0), QStringLiteral("hello"));
+
+	emulator.resize(10, 6);
+	QCOMPARE(emulator.screen().to_text().section(QLatin1Char('\n'), 0, 3),
+	         QStringLiteral("hello\na\nb\nc"));
+	QVERIFY(!emulator.row_is_continuation(0));
+	QCOMPARE(emulator.scrollback().count(), 0);
+}
+
 void emulator_test::a_narrowed_terminal_rewraps_and_a_widened_one_joins_again() {
 	/*
 	 * Reflow (project.md sec 9.5c): narrowing used to cut every line at the

@@ -31,7 +31,7 @@ void bssh_scrollback::evict_beyond_cap() {
 bool bssh_scrollback::is_blank(const bssh_cell_t &cell) {
 	if (cell.ch != 0 && cell.ch != U' ') return false;
 	if (cell.width != 1) return false;
-	if (cell.attrs != bssh_cell_t::NONE) return false;
+	if ((cell.attrs & ~bssh_cell_t::UNWRITTEN) != bssh_cell_t::NONE) return false;
 	if (cell.fg.kind != bssh_color_t::DEFAULT) return false;
 	if (cell.bg.kind != bssh_color_t::DEFAULT) return false;
 	if (cell.link != 0) return false;
@@ -119,8 +119,21 @@ void bssh_scrollback::rewrap(int cols, bool keep_last) {
 			continue;
 		}
 
+		/*
+		 * The empty cell a double-width glyph left at the edge when it
+		 * wrapped is not text, and joined in it became a space: dropped
+		 * where a row ends in an UNWRITTEN cell and the next starts with a
+		 * wide glyph, as libvterm's reflow drops it on the screen
+		 * (vterm-patch/0012). A space typed there is kept.
+		 */
 		QList<bssh_cell_t> joined;
-		for (int row = index; row < end; ++row) joined += m_lines.at(row);
+		for (int row = index; row < end; ++row) {
+			const QList<bssh_cell_t> &piece = m_lines.at(row);
+			if (row > index && !joined.isEmpty() && (joined.last().attrs & bssh_cell_t::UNWRITTEN) &&
+			    !piece.isEmpty() && piece.first().width == 2)
+				joined.removeLast();
+			joined += piece;
+		}
 
 		/* The blanks after the last row are not text; the ones before a
 		 * continuation were (see push()). */

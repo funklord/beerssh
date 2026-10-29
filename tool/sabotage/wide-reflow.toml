@@ -1,0 +1,44 @@
+# Sabotage for a wide glyph at the edge of a reflow (vterm-patch/0012)
+# and for cells nothing wrote (bssh_cell_t::UNWRITTEN), project.md sec
+# 9.5c. Anchors in the vendored library are lines 0012 adds, so a
+# pristine checkout can check them.
+
+# Cut every new_cols cells again: the glyph's halves on two rows.
+[[sabotage]]
+name = "a wide glyph is cut at the new edge"
+file = "vterm/src/screen.c"
+find = "      buffer[cells[offset + take]].chars[0] == (uint32_t)-1)\n    take--;"
+replace = "      0)\n    take--;"
+expect = "a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap"
+
+# The gap a wrapped wide glyph left counted as text: a space on joining.
+[[sabotage]]
+name = "the screen's reflow joins the gap before a wide glyph"
+file = "vterm/src/screen.c"
+find = "          old_buffer[(row + 1) * old_cols + 1].chars[0] == (uint32_t)-1)\n        n--;"
+replace = "          0)\n        n--;"
+expect = "a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap"
+
+# The same gap, joined by the history's rewrap.
+[[sabotage]]
+name = "the history's rewrap joins the gap before a wide glyph"
+file = "src/term/scrollback.cpp"
+find = "\t\t\t\tjoined.removeLast();\n\t\t\tjoined += piece;\n"
+replace = "\t\t\tjoined += piece;\n"
+expect = "a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap"
+
+# A cell nothing wrote recorded as a typed space.
+[[sabotage]]
+name = "unwritten cells are not marked"
+file = "src/term/emulator_vterm.cpp"
+find = "\tif (!source.chars[0]) cell.attrs |= bssh_cell_t::UNWRITTEN;\n"
+replace = ""
+expect = "a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap"
+
+# A line handed back padded with spaces: blank rows when narrowed.
+[[sabotage]]
+name = "a line pulled back is padded with typed spaces"
+file = "src/term/emulator_vterm.cpp"
+find = "\t\tif (col >= line.size() || (source.attrs & bssh_cell_t::UNWRITTEN))\n"
+replace = "\t\tif (false)\n"
+expect = "a_line_pulled_back_by_a_grow_narrows_without_blank_rows"

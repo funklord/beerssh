@@ -1766,9 +1766,9 @@ up, a strip of modifiers has nothing to modify.
   reads the env rather than calling `sessionBus()`, guarding both the portal
   read (`portal_appearance`) and the `SettingChanged` connect
   (`watch_colour_scheme`): with no bus configured the tier abstains, which is
-  what it did already, only now without forking one to find out. It is the
-  running-code.md "a daemon that outlives the shell — ask what kills it" case,
-  and every project that consults the portal has the same leak to close (a
+  what it did already, only now without forking one to find out. A daemon
+  that outlives the program that started it needs something that kills it,
+  and nothing did here; every project that consults the portal has the same leak to close (a
   cross-project signal, since the guidelines session is aware). **Not asserted
   in the suite**: the autolaunch needs an X display to succeed, `--self-test`
   does not reach the portal tier, and the platform is a singleton built once,
@@ -3811,8 +3811,9 @@ model on a finger.
   read buffer, stops reading its own stdin, and the pty never empties.
   Confirmed by sabotage under an external `timeout -s KILL 40` — the old loop
   is killed at 40s where the fix passes in under one. **Run once, outside the
-  suite**: putting a known-unbounded loop into `make check` is the thing
-  `running-code.md` exists to prevent, so the suite gets the positive test and
+  suite**: a check everybody runs unattended must terminate, and a
+  known-unbounded loop in `make check` would make the suite the hazard, so
+  the suite gets the positive test and
   the negative evidence is taken separately.
   The fix queues what will not fit and installs a write notifier, disabled
   unless something is pending — an always-on one fires continuously while the
@@ -4809,9 +4810,9 @@ best one it can:
     `send_text` carried the plain letter. Both fixed in the router;
     `input_router_test::kitty_reaches_the_on_screen_keyboard_too` failed on
     the old code, and two sabotages are caught. **The harness itself went
-    wrong first**, and is recorded because it is `running-code.md`'s hazard
-    met in person: `timeout 25 cat` under toybox left `cat` STOPPED (state
-    T) reading the tty, so the timeout never ended it; the working form is
+    wrong first**, and is recorded because a timeout bounds nothing once
+    its process is stopped: `timeout 25 cat` under toybox left `cat`
+    STOPPED (state T) reading the tty, so the timeout never ended it; the working form is
     `stty raw -echo min 0 time 100; cat`, which the tty itself ends.
 - **xterm `modifyOtherKeys`** (`CSI > 4 ; 2 m`, queried with `CSI ? 4 m`).
   The middle tier, and what a terminal that predates kitty's protocol
@@ -10536,6 +10537,23 @@ into lines 0010 does not add, and CI checks anchors against a pristine
 `vterm/`, where only the runs a patch adds can supply one. A sabotage
 anchor in vendored code is made of added lines only.
 
+**And two more, found by measuring what the note above had only read
+(2026-10-29).** A double-width glyph whose first half a reflow put in
+the last column was split -- one cell of it at the edge, a blank
+starting the next row -- and the empty cell such a glyph leaves at the
+edge was joined back as a space. `vterm-patch/0012` walks each line as
+a list of its cells, leaving that cell out, and ends a row a cell early
+rather than cut a glyph; the history's rewrap drops the same cell. And
+a line a grow pulled back from the history went to libvterm padded with
+typed spaces, so a later narrowing counted it the full width: "hello"
+narrowed from 40 columns to 10 took four rows, three blank, and the top
+of the screen was a blank row continuing it. Both need to know a cell
+nothing wrote from a typed space, which `bssh_cell_t::UNWRITTEN` now
+records (both read as ' ' and draw as nothing).
+`a_wide_glyph_at_the_edge_moves_whole_and_joins_back_without_a_gap`,
+`a_line_pulled_back_by_a_grow_narrows_without_blank_rows`,
+`tool/sabotage/wide-reflow.toml`.
+
 `a_narrowed_terminal_rewraps_and_a_widened_one_joins_again` -- narrowed,
 the end of the line is on the next rows rather than gone; widened, the
 line is one again, in its colour, and a line the program ended is still
@@ -11643,8 +11661,9 @@ Restoring the 32-bit arithmetic makes that test segfault rather than
 report, which is the honest shape of the defect. It also attached
 `gdb --batch` through the suite's crash handler, and a stopped-traced
 process ignores `timeout`'s SIGTERM, so a debugger sat resident for an
-hour with two zombies beside it — exactly the incident
-`running-code.md` records. Cleaned up and verified empty. Worth knowing
+hour with two zombies beside it -- a crash handler that attaches a
+debugger leaves a stopped, traced process no signal ends, which is why
+the suite disables QtTest's stack dump. Cleaned up and verified empty. Worth knowing
 before anyone re-runs that sabotage.
 
 **Four more buffers had the same fault, and a switched-off protocol still
@@ -15218,15 +15237,14 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
 - **Fixed 2026-10-29: "when made really small the lines get slightly
   messed up"** (holder, 2026-10-27), with the history-rejoin item that
   stood beside it -- sec 9.5c. It was lost text, not a drawing fault, and
-  it included an abort of the whole process. Still open from it: libvterm's
-  on-screen reflow copies cells without checking for a wide glyph at the
-  new edge, so one may be drawn split across two rows -- read in the code,
-  not seen; the text survives (the test has wide glyphs) and the history
-  rewrap never splits one.
+  it included an abort of the whole process. The wide-glyph split it
+  left open was measured and fixed the same day, with blank rows under
+  a line a grow had pulled back (sec 9.5c).
+- **Done 2026-10-29: faint text** (SGR 2, sec 12.3w), and the four
+  entries that sent the reader to `running-code.md` now state the rule
+  they relied on (the standalone rule of 2026-10-25).
 - **Not started, offered:** an Android build with this week's changes
-  (drawer, DejaVu, partial repaints, reflow) for the phone; the two
-  older `project.md` entries that cite `running-code.md` rather than
-  stating its rule (the standalone rule of 2026-10-25).
+  (drawer, DejaVu, partial repaints, reflow, faint) for the phone.
 
 ### 12.4 CI
 - **[DECIDED 2026-10-22] `check-ci` is kept and no longer run as a gate.**

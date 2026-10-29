@@ -1685,8 +1685,20 @@ int pop_line(bssh_emulator_private *self, int cols, VTermScreenCell *cells, bool
 			return to;
 		};
 
+		/*
+		 * Past the line's end, and a cell nothing wrote, go back as
+		 * libvterm's empty cell rather than a space: its reflow counts a
+		 * row's width to the last non-empty cell, so a short line handed
+		 * back padded with spaces counted as the full width (UNWRITTEN).
+		 * The far half of a wide glyph goes back as libvterm's marker.
+		 */
 		cells[col] = VTermScreenCell();
-		cells[col].chars[0] = source.ch;
+		if (col >= line.size() || (source.attrs & bssh_cell_t::UNWRITTEN))
+			cells[col].chars[0] = 0;
+		else if (source.width == 0)
+			cells[col].chars[0] = static_cast<uint32_t>(-1);
+		else
+			cells[col].chars[0] = source.ch;
 		cells[col].width = source.width ? source.width : 1;
 		cells[col].fg = colour(source.fg, default_fg);
 		cells[col].bg = colour(source.bg, default_bg);
@@ -1784,6 +1796,7 @@ bssh_cell_t bssh_emulator_private::convert_cell(const VTermScreenCell &source) c
 	cell.ch = source.chars[0] ? source.chars[0] : U' ';
 	cell.width = static_cast<quint8>(source.width);
 	cell.attrs = to_bssh_attrs(source.attrs);
+	if (!source.chars[0]) cell.attrs |= bssh_cell_t::UNWRITTEN;
 	cell.fg = to_bssh_color(source.fg, true);
 	cell.bg = to_bssh_color(source.bg, false);
 	return cell;

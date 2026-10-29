@@ -59,7 +59,19 @@ struct bssh_cell_t {
 		INVERSE   = 0x08,
 		BLINK     = 0x10,
 		STRIKE    = 0x20,
-		DIM       = 0x40   /* SGR 2, faint (vterm-patch/0011) */
+		DIM       = 0x40,  /* SGR 2, faint (vterm-patch/0011) */
+
+		/*
+		 * Not an SGR: a cell nothing has written, as libvterm keeps it,
+		 * against a space somebody typed. Both draw as nothing and both
+		 * read as ' ', and the difference matters only when a line is
+		 * rewrapped: an unwritten cell after a line's text is not text,
+		 * and nor is the one a wide glyph left at the edge when it
+		 * wrapped. Handed back to libvterm as a typed space, a short line
+		 * counted as the full width and narrowing wrapped blank rows
+		 * under it.
+		 */
+		UNWRITTEN = 0x80
 	};
 
 	char32_t ch;

@@ -1,0 +1,198 @@
+Reflow keeps a wide glyph whole, and drops the gap it left
+
+Reflow cut a line every new_cols cells, so a double-width glyph whose
+first half fell in the last column was split across two rows: one cell
+of it at the edge and a blank starting the next. And the empty cell a
+wide glyph leaves at the edge when it wraps -- by the program's output
+or by an earlier reflow -- was counted as part of the line, so joining
+the rows again put a space into the text.
+
+Walk each line as a list of its cells rather than by row arithmetic,
+leaving out an empty last cell before a row that starts with a wide
+glyph, and end a row one cell early where the next cell would be the
+far half of a wide glyph. Line heights are counted the same way, so the
+rows a line needs and the rows it gets agree.
+
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -527,6 +527,21 @@
+ 
+ /* How many cells are non-blank
+  * Returns the position of the first blank cell in the trailing blank end */
++/* How many of a reflowed line's cells go on its next row, from `offset`
++ * of `width`: as many as fit, less one where the last would be the first
++ * half of a double-width glyph, which then starts the row after instead.
++ * Cut there, its halves landed on two rows -- the first drawn one cell
++ * wide in the last column, the second a blank starting the next.
++ * `cells` holds the line's cells as positions in `buffer`. */
++static int reflow_take(const ScreenCell *buffer, const int *cells, int offset, int width, int new_cols)
++{
++  int take = width - offset < new_cols ? width - offset : new_cols;
++  if(take == new_cols && take > 1 && offset + take < width &&
++      buffer[cells[offset + take]].chars[0] == (uint32_t)-1)
++    take--;
++  return take;
++}
++
+ static int line_popcount(ScreenCell *buffer, int row, int rows, int cols)
+ {
+   int col = cols - 1;
+@@ -676,26 +691,42 @@
+     int old_row_start = old_row;
+     bool head_continued = screen->reflow && old_lineinfo && old_lineinfo[old_row_start].continuation;
+ 
++    /* The line's cells in order, as positions in old_buffer. A list
++     * rather than arithmetic on rows, because a row is not always all
++     * text: the empty cell a wide glyph left at the edge when it wrapped
++     * -- by the program's output or by the reflow before this one -- is
++     * not part of the line, and joined back in it became a space. */
++    int *cells = vterm_allocator_malloc(screen->vt, sizeof(int) * (old_row_end - old_row_start + 1) * old_cols);
+     int width = 0;
+     for(int row = old_row_start; row <= old_row_end; row++) {
+-      if(screen->reflow && row < (old_rows - 1) && old_lineinfo[row + 1].continuation)
+-        width += old_cols;
+-      else
+-        width += line_popcount(old_buffer, row, old_rows, old_cols);
++      bool continued = screen->reflow && row < (old_rows - 1) && old_lineinfo[row + 1].continuation;
++      int n = continued ? old_cols : line_popcount(old_buffer, row, old_rows, old_cols);
++      if(continued && old_cols > 1 &&
++          old_buffer[row * old_cols + old_cols - 1].chars[0] == 0 &&
++          old_buffer[(row + 1) * old_cols + 1].chars[0] == (uint32_t)-1)
++        n--;
++      for(int col = 0; col < n; col++)
++        cells[width++] = row * old_cols + col;
+     }
++    const int line_width = width;
++    /* Where the cell at `offset` is, or the one past the last. */
++#define REFLOW_AT(offset) ((offset) < line_width ? cells[offset] \
++    : line_width ? cells[line_width - 1] + 1 : old_row_start * old_cols)
+ 
+     if(final_blank_row == (new_row + 1) && width == 0)
+       final_blank_row = new_row;
+ 
+-    int new_height = screen->reflow
+-      ? width ? (width + new_cols - 1) / new_cols : 1
+-      : 1;
++    int new_height = 1;
++    if(screen->reflow && width) {
++      new_height = 0;
++      for(int offset = 0; offset < width; new_height++)
++        offset += reflow_take(old_buffer, cells, offset, width, new_cols);
++    }
+ 
+     int new_row_end = new_row;
+     int new_row_start = new_row - new_height + 1;
+ 
+-    old_row = old_row_start;
+-    int old_col = 0;
++    int offset = 0;
+ 
+     int spare_rows = new_rows - final_blank_row;
+ 
+@@ -738,6 +769,7 @@
+        * with everything above it. Pushing only its first row lost the
+        * rest of a wrapped line. */
+       old_row = old_row_end;
++      vterm_allocator_free(screen->vt, cells);
+       break;
+     }
+ 
+@@ -757,26 +789,25 @@
+           sb_pushline_from_buffer(screen, old_buffer, row, old_cols, old_lineinfo[row].continuation);
+ 
+       for(int head = 0; head < -new_row_start; head++) {
+-        int count = width >= new_cols ? new_cols : width;
+-        width -= count;
++        int count = reflow_take(old_buffer, cells, offset, line_width, new_cols);
+ 
+         for(int new_col = 0; new_col < new_cols; new_col++) {
+           ScreenCell blank;
+           ScreenCell *from = &blank;
+           if(new_col < count) {
+-            from = &old_buffer[old_row * old_cols + old_col];
+-            if(old_cursor.row == old_row && old_cursor.col == old_col)
++            int at = cells[offset++];
++            from = &old_buffer[at];
++            if(old_cursor.row == at / old_cols && old_cursor.col == at % old_cols)
+               new_cursor.row = 0, new_cursor.col = 0;
+-            if(++old_col == old_cols)
+-              old_row++, old_col = 0;
+           }
+           else
+             clearcell(screen, &blank);
+-          ScreenCell *next = new_col + 1 < count ? &old_buffer[old_row * old_cols + old_col] : NULL;
++          ScreenCell *next = new_col + 1 < count ? &old_buffer[cells[offset]] : NULL;
+           screencell_to_cell(screen, from, next, &screen->sb_buffer[new_col]);
+         }
+ 
+-        if(old_cursor.row == old_row && old_cursor.col >= old_col && new_cursor.row == -1)
++        int next_at = REFLOW_AT(offset);
++        if(old_cursor.row == next_at / old_cols && old_cursor.col >= next_at % old_cols && new_cursor.row == -1)
+           new_cursor.row = 0, new_cursor.col = 0;
+ 
+         if(!pushing)
+@@ -790,42 +821,27 @@
+       new_row_start = 0;
+       head_continued = true;
+     }
+-    else {
+-      old_row = old_row_start;
+-      old_col = 0;
+-    }
+ 
+-    /* old_row and old_col are where the line's head left them. */
++    /* offset is where the line's head left it. */
+     for(new_row = new_row_start; new_row <= new_row_end; new_row++) {
+-      int count = width >= new_cols ? new_cols : width;
+-      width -= count;
++      int count = screen->reflow
++        ? reflow_take(old_buffer, cells, offset, line_width, new_cols)
++        : line_width - offset >= new_cols ? new_cols : line_width - offset;
+ 
+       int new_col = 0;
+ 
+-      while(count) {
+-        /* TODO: This could surely be done a lot faster by memcpy()'ing the entire range */
+-        new_buffer[new_row * new_cols + new_col] = old_buffer[old_row * old_cols + old_col];
++      for(; new_col < count; new_col++) {
++        int at = cells[offset++];
++        new_buffer[new_row * new_cols + new_col] = old_buffer[at];
+ 
+-        if(old_cursor.row == old_row && old_cursor.col == old_col)
++        if(old_cursor.row == at / old_cols && old_cursor.col == at % old_cols)
+           new_cursor.row = new_row, new_cursor.col = new_col;
+-
+-        old_col++;
+-        if(old_col == old_cols) {
+-          old_row++;
+-
+-          if(!screen->reflow) {
+-            new_col++;
+-            break;
+-          }
+-          old_col = 0;
+-        }
+-
+-        new_col++;
+-        count--;
+       }
+ 
+-      if(old_cursor.row == old_row && old_cursor.col >= old_col) {
+-        new_cursor.row = new_row, new_cursor.col = (old_cursor.col - old_col + new_col);
++      int next_at = REFLOW_AT(offset);
++      int next_row = next_at / old_cols, next_col = next_at % old_cols;
++      if(old_cursor.row == next_row && old_cursor.col >= next_col) {
++        new_cursor.row = new_row, new_cursor.col = (old_cursor.col - next_col + new_col);
+         /* Just past text that ends at the new edge is where a wrap is
+          * pending, not on the last character: clamped there without the
+          * flag, the next character overwrote the one before it. */
+@@ -843,6 +859,9 @@
+       new_lineinfo[new_row].continuation = (new_row > new_row_start) || head_continued;
+     }
+ 
++#undef REFLOW_AT
++    vterm_allocator_free(screen->vt, cells);
++
+     if(split) {
+       /* The screen is full and everything above was pushed. */
+       old_row = -1;
