@@ -15343,6 +15343,14 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   `vterm-patch/0018` reflows the main screen with the saved cursor as its
   cursor. `leaving_the_alternate_screen_after_a_resize_resumes_at_the_prompt`,
   narrowed and widened.
+- **Nine bytes froze the terminal -- fixed 2026-10-29.** REP (`CSI b`)
+  with nothing written yet to repeat looped forever in libvterm, advancing
+  the column by a width of 0, and output is read on the UI thread, so the
+  whole window hung. Found by the in-tree fuzzer, run without the
+  sanitizers, as a test-function timeout. `vterm-patch/0019` ignores it as
+  xterm does; `repeating_nothing_does_not_hang`. Proved unfixed by bare
+  libvterm with those bytes, which hangs, since an unfixed build cannot
+  be made in place: the Makefile's witness re-applies a missing patch.
 - **Done 2026-10-29:** the Android build with this week's changes is
   installed on the Fold. And `make deb` no longer deletes the Android
   build: dh_auto_clean ran `make distclean`, which is veryclean, so

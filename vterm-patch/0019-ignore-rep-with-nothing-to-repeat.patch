@@ -1,0 +1,26 @@
+Ignore REP with nothing to repeat
+
+REP (CSI b) repeats the last graphic character by advancing the column
+by its width until the count is used up. Before any character has been
+written that width is 0, the column never advances, and the loop never
+ends: nine bytes, "ESC [ 4 ; 57 b", hang the terminal for good. Found by
+fuzzing BeerSSH's emulator, which reads output on its UI thread, so the
+whole window froze.
+
+Ignore the sequence when there is nothing to repeat, as xterm does.
+
+--- a/src/state.c
++++ b/src/state.c
+@@ -1291,6 +1291,12 @@
+     break;
+ 
+   case 0x62: { // REP - ECMA-48 8.3.103
++    /* Nothing to repeat -- no character yet, or one with no width -- is
++     * ignored, as xterm ignores it. The loop below advances by the
++     * character's width, so with none it never ended: nine bytes from
++     * any host froze the terminal for good. */
++    if(state->combine_width <= 0)
++      break;
+     const int row_width = THISROWWIDTH(state);
+     count = CSI_ARG_COUNT(args[0]);
+     col = state->pos.col + count;

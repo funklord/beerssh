@@ -2603,6 +2603,26 @@ void emulator_test::a_saved_cursor_comes_back_inside_a_smaller_screen() {
 	QVERIFY(emulator.screen().cursor_row() < emulator.screen().rows());
 }
 
+void emulator_test::repeating_nothing_does_not_hang() {
+	/*
+	 * REP repeats the last character written; before any, libvterm's
+	 * loop advanced the column by a width of nothing and never ended, so
+	 * any host could freeze the terminal -- and the window, since output
+	 * is read on the UI thread -- with nine bytes (vterm-patch/0019).
+	 * Found by fuzzing. A hang is a timeout rather than a failure here,
+	 * so the test is bounded by QtTest's own function timeout.
+	 */
+	bssh_emulator fresh(36, 13);
+	fresh.feed("\x1b[4;57b");
+	fresh.feed("after");
+	QCOMPARE(row(fresh, 0), QStringLiteral("after"));
+
+	/* And still repeats when there is something to repeat. */
+	bssh_emulator emulator(20, 2);
+	emulator.feed("x\x1b[3b");
+	QCOMPARE(row(emulator, 0), QStringLiteral("xxxx"));
+}
+
 void emulator_test::leaving_the_alternate_screen_after_a_resize_resumes_at_the_prompt() {
 	/*
 	 * vim, less and htop save the cursor and take the alternate screen;
