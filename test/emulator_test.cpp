@@ -2577,6 +2577,49 @@ void emulator_test::a_terminal_made_very_small_and_back_keeps_every_line() {
 	}
 }
 
+void emulator_test::a_saved_cursor_comes_back_inside_a_smaller_screen() {
+	/*
+	 * DECSC, and entering the alternate screen, save the cursor; a resize
+	 * clamped the cursor and not the copy, so DECRC on a shorter screen
+	 * put it on a row that no longer existed and the next character
+	 * wrote past the end of libvterm's row information
+	 * (vterm-patch/0016). Found by fuzzing under ASan.
+	 *
+	 * Like the scroll-region test above, this fails only under the
+	 * sanitizer build: the overrun reads and writes a byte past an array
+	 * without faulting, and the emulator's own cursor is clamped, so the
+	 * ordinary build passed with the patch reverted.
+	 */
+	bssh_emulator emulator(44, 14);
+	emulator.feed("\r\n" + QByteArray("line text ").repeated(10) + "\x1b[?1049h");
+	emulator.resize(62, 1);
+	emulator.feed("\x1b" "8");
+	QVERIFY(emulator.screen().cursor_row() < emulator.screen().rows());
+	QVERIFY(emulator.screen().cursor_col() < emulator.screen().cols());
+	emulator.feed("K\x1b[?1049l");
+	QVERIFY(emulator.screen().cursor_row() < emulator.screen().rows());
+}
+
+void emulator_test::a_resize_under_the_alternate_screen_keeps_a_cursor() {
+	/*
+	 * Wide glyphs on the main screen, the alternate screen up, a resize,
+	 * back to the main screen -- whose cursor is restored as saved -- and
+	 * a resize: the restored cursor matched no cell of its line, and
+	 * libvterm aborted the process for want of a position. It goes to the
+	 * line's last row now, and the abort is gone (vterm-patch/0017).
+	 * Found by fuzzing, as these bytes.
+	 */
+	bssh_emulator emulator(39, 25);
+	emulator.feed(QByteArray::fromHex("e368ae4500d3"));
+	emulator.feed("\x1b[?1049l\x1b[?2026l");
+	emulator.feed(QByteArray::fromHex("f38d9a9cf2a3ac8e487d79f3af8b967be58c952d4cf28eb19c2a6ff3a0bfaff3bb8fa873e4bea4e5859b4d4d5c32f1b4b1a0353c"));
+	emulator.feed("\x1b[?1049h\x1b[?2026h");
+	emulator.resize(19, 32);
+	emulator.feed("\x1b[?1049l\x1b[?2026h");
+	emulator.resize(45, 29);
+	QVERIFY(emulator.screen().cursor_row() < emulator.screen().rows());
+}
+
 void emulator_test::a_cursor_above_a_split_line_survives_a_resize() {
 	/*
 	 * The cursor at the top -- homed by a program, or restored by one

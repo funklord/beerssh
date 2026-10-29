@@ -15310,6 +15310,20 @@ Folded at 97 per cent of the weekly window; what the next session picks up.
   reached it within seconds, where the hand-written resize tests never
   had. `vterm-patch/0015`; `a_cursor_above_a_split_line_survives_a_resize`
   aborts the ordinary build without it.
+- **Two more from longer fuzzing, the same day.** A saved cursor (DECSC,
+  or entering the alternate screen) was never clamped on resize, so a
+  restore on a shorter screen wrote past libvterm's row information --
+  `vterm-patch/0016`, `a_saved_cursor_comes_back_inside_a_smaller_screen`,
+  which fails only under the sanitizer build. And a third route to the
+  cursor abort: a restored cursor on the empty cell a wrapped wide glyph
+  leaves, which 0012's cell list skips. `vterm-patch/0017` gives a cursor
+  no cell matched its line's last row, and replaces the abort with the
+  top-left corner -- a fallback the fuzzing never reached once the
+  per-line placement was in, so it is a guard rather than a fix;
+  `a_resize_under_the_alternate_screen_keeps_a_cursor` aborts without it.
+  Still open: a resize under the alternate screen reflows the main screen
+  but not its saved cursor, so the cursor comes back clamped rather than
+  moved with its text.
 - **Done 2026-10-29:** the Android build with this week's changes is
   installed on the Fold. And `make deb` no longer deletes the Android
   build: dh_auto_clean ran `make distclean`, which is veryclean, so

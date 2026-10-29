@@ -1,0 +1,29 @@
+Clamp the saved cursor on resize
+
+on_resize() brings the cursor inside the new size and leaves the saved
+cursor -- the one DECSC and entering the alternate screen keep, and DECRC
+and leaving it put back -- where it was. Restored on a smaller screen it
+lands on a row that no longer exists, and the next character reads and
+writes lineinfo past its end. Found by fuzzing BeerSSH's emulator under
+ASan: four steps, a save, a resize to one row, a restore and a letter.
+
+Clamp the saved position the way the live one is clamped.
+
+--- a/src/state.c
++++ b/src/state.c
+@@ -2145,6 +2145,15 @@
+   if(state->pos.col >= cols)
+     state->pos.col = cols - 1;
+ 
++  /* And the saved cursor, which DECRC and leaving the alternate screen
++   * put back as it was: saved on a taller screen, it came back on a row
++   * this one no longer has, and the next character wrote past the end of
++   * the row information. */
++  if(state->saved.pos.row >= rows)
++    state->saved.pos.row = rows - 1;
++  if(state->saved.pos.col >= cols)
++    state->saved.pos.col = cols - 1;
++
+   /* Not cancelling the pending wrap: a reflow moves the cursor every
+    * time, and whether a wrap is pending was decided just above. */
+   updatecursor(state, &oldpos, 0);

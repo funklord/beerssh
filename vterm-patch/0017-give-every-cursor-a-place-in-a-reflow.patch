@@ -1,0 +1,50 @@
+Give every cursor a place in a reflow, and never abort for one
+
+resize_buffer() aborts when it ends without having placed the cursor.
+Fuzzing BeerSSH's emulator found the cursor reaching that state through
+a line's cells missing it: on the empty cell a wide glyph leaves at the
+edge, which 0012 leaves out of the line, or restored on leaving the
+alternate screen from a save the reflow of an inactive buffer does not
+move. Anything that can steer the cursor and the window size -- a
+remote program and a resize -- could end the process.
+
+Place a cursor that was in a line's rows and that no cell matched on
+the line's last row, and where one still has no place at the end, put
+it in the top-left corner instead of aborting.
+
+--- a/src/screen.c
++++ b/src/screen.c
+@@ -879,6 +879,15 @@
+       new_lineinfo[new_row].continuation = (new_row > new_row_start) || head_continued;
+     }
+ 
++    /* A cursor in this line's rows that no cell of it matched -- on the
++     * empty cell a wide glyph left at the edge, which the line's cells
++     * leave out, or restored from a save made at another size -- goes
++     * to the line's last row rather than nowhere. */
++    if(old_cursor.row >= old_row_start && old_cursor.row <= old_row_end && new_cursor.row == -1) {
++      new_cursor.row = new_row_end;
++      new_cursor.col = old_cursor.col < new_cols ? old_cursor.col : new_cols - 1;
++    }
++
+ #undef REFLOW_AT
+     vterm_allocator_free(screen->vt, cells);
+ 
+@@ -901,10 +910,14 @@
+       new_cursor.col = new_cols-1;
+   }
+ 
+-  /* We really expect the cursor position to be set by now */
++  /* The cursor should have a position by now. Where it does not, it
++   * goes to the top-left corner: aborting here let anything that could
++   * steer the cursor and the window size -- a remote program and a
++   * resize -- end the process, and three ways to do it were found by
++   * fuzzing. */
+   if(active && (new_cursor.row == -1 || new_cursor.col == -1)) {
+-    fprintf(stderr, "screen_resize failed to update cursor position\n");
+-    abort();
++    new_cursor.row = 0;
++    new_cursor.col = 0;
+   }
+ 
+   if(old_row >= 0 && bufidx == BUFIDX_PRIMARY) {
