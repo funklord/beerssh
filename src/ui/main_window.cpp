@@ -612,6 +612,10 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 	connect(m_panes, &bssh_pane_container::input_mode_chosen,
 	         this, &bssh_main_window::set_input_mode);
+	connect(m_panes, &bssh_pane_container::corner_tabs_requested,
+	         this, &bssh_main_window::show_corner_tabs);
+	connect(m_panes, &bssh_pane_container::corner_menu_requested,
+	         this, &bssh_main_window::show_corner_menu);
 
 	/*
 	 * The find bar (sec 6.4) lives at the bottom too, below the selector,
@@ -1677,6 +1681,18 @@ void bssh_main_window::apply_tab_position(int position) {
 	if (position == m_tab_position) return;
 	m_tab_position = position;
 
+	/*
+	 * Hidden: every bar is built and kept -- refresh_tab_bar compares a
+	 * pane's tabs against its bar -- and none is shown; a pane's tabs are
+	 * in its corner instead (sec 8.7a). The rebuild is what makes
+	 * make_pane_bar decide again.
+	 */
+	const bool hidden = position == bssh_app_settings::TABS_HIDDEN;
+	if (hidden != m_tabs_hidden) {
+		m_tabs_hidden = hidden;
+		m_panes->rebuild();
+	}
+
 	/* Every pane's bar on that side of its pane (sec 8.3's bar per pane). */
 	Qt::Edge edge = Qt::TopEdge;
 	switch (position) {
@@ -1838,6 +1854,7 @@ void bssh_main_window::apply_device_settings() {
 	bssh_apply_interface_scale();
 
 	apply_key_row_visibility();
+	apply_menu_bar();
 
 	const bssh_app_settings settings;
 	const bool raise = settings.raise_contrast();
@@ -4345,7 +4362,86 @@ void bssh_main_window::refresh_tab_bar() {
 		}
 		bar->refresh();
 	}
-	if (stale) m_panes->rebuild();
+	if (stale) {
+		m_panes->rebuild();
+		return;
+	}
+	sync_corner_buttons();
+}
+
+void bssh_main_window::sync_corner_buttons() {
+	if (!m_panes || !m_layout) return;
+
+	const bool menus = m_menu_bar && m_menu_bar->isHidden();
+	for (bssh_session *front : m_layout->visible_panes()) {
+		bssh_terminal_view *view = m_panes->view_for(front);
+		if (!view) continue;
+		const int tabs = int(m_layout->bar_tabs(front).size());
+		view->set_corner_tabs(m_tabs_hidden && tabs > 1 ? QStringLiteral("tabs %1").arg(tabs)
+		                                                 : QString());
+		view->set_corner_menu(menus);
+	}
+}
+
+/*
+ * The pane's tabs as a list, from its corner while the tab bar is hidden
+ * (sec 8.7a): the one in front marked, a pick bringing it there, and a new
+ * tab -- what the bar's own tabs and its + do.
+ */
+void bssh_main_window::show_corner_tabs(bssh_session *front, const QPoint &global) {
+	if (!m_layout) return;
+
+	QMenu menu(this);
+	menu.setObjectName(QStringLiteral("corner_tabs_menu"));
+	for (bssh_session *session : m_layout->bar_tabs(front)) {
+		QAction *pick = menu.addAction(session->title());
+		pick->setCheckable(true);
+		pick->setChecked(session == front);
+		const QPointer<bssh_session> held = session;
+		connect(pick, &QAction::triggered, this, [this, held] {
+			if (held) QMetaObject::invokeMethod(this, [this, held] {
+				if (held) show_session(held);
+			}, Qt::QueuedConnection);
+		});
+	}
+	menu.addSeparator();
+	QAction *add = menu.addAction(QStringLiteral("New Tab"));
+	const QPointer<bssh_session> pane = front;
+	connect(add, &QAction::triggered, this, [this, pane] {
+		QMetaObject::invokeMethod(this, [this, pane] {
+			if (pane && m_panes) m_panes->focus_session(pane);
+			open_another_session(false);
+		}, Qt::QueuedConnection);
+	});
+	menu.exec(global);
+}
+
+/*
+ * The menu bar's menus, from the corner while the bar is hidden (sec
+ * 8.7a), and the way back to the bar. The same menus, not copies, so an
+ * item enabled or disabled there is the same here.
+ */
+void bssh_main_window::show_corner_menu(const QPoint &global) {
+	if (!m_menu_bar) return;
+
+	QMenu menu(this);
+	menu.setObjectName(QStringLiteral("corner_menus"));
+	for (QAction *each : m_menu_bar->actions()) menu.addAction(each);
+	if (m_menu_bar_action) {
+		menu.addSeparator();
+		menu.addAction(m_menu_bar_action);
+	}
+	menu.exec(global);
+}
+
+void bssh_main_window::apply_menu_bar() {
+	if (!m_menu_bar) return;
+
+	const bool shown = bssh_app_settings().menu_bar_shown();
+	if (shown == !m_menu_bar->isHidden()) return;
+	m_menu_bar->setVisible(shown);
+	if (m_menu_bar_action) m_menu_bar_action->setChecked(shown);
+	sync_corner_buttons();
 }
 
 /*
@@ -4392,8 +4488,9 @@ QWidget *bssh_main_window::make_pane_bar(bssh_session *front, QWidget *parent) {
 	                     && !bssh_platform::instance()->is_touch_primary();
 	bssh_pane_bar *bar = new bssh_pane_bar(front, tabs, m_panes->bar_edge(), pointer, parent);
 
-	/* No bar for a pane of one: the bar appears with the second tab (sec 8.3). */
-	bar->setVisible(tabs.size() > 1);
+	/* No bar for a pane of one: the bar appears with the second tab (sec 8.3);
+	 * and none at all while bars are hidden (sec 8.7a). */
+	bar->setVisible(tabs.size() > 1 && !m_tabs_hidden);
 
 	/*
 	 * Queued, each of these: what they do rebuilds the panes, and with
@@ -4955,6 +5052,20 @@ void bssh_main_window::build_menu_bar() {
 	m_session_actions.append(reset_terminal);
 
 	QMenu *view = m_menu_bar->addMenu(QStringLiteral("&View"));
+
+	/*
+	 * The menu bar itself (sec 8.7a). Hidden, this item is still in the
+	 * corner's menus, under the bar's own -- the way back.
+	 */
+	m_menu_bar_action = view->addAction(QStringLiteral("Show &Menu Bar"));
+	m_menu_bar_action->setObjectName(QStringLiteral("show_menu_bar"));
+	m_menu_bar_action->setCheckable(true);
+	m_menu_bar_action->setChecked(bssh_app_settings().menu_bar_shown());
+	connect(m_menu_bar_action, &QAction::toggled, this, [this](bool shown) {
+		bssh_app_settings().set_menu_bar_shown(shown);
+		apply_menu_bar();
+	});
+	view->addSeparator();
 
 	m_split_action = view->addAction(QStringLiteral("Split &Beside Current"));
 	connect(m_split_action, &QAction::triggered, this, [this] {

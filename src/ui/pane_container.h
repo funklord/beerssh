@@ -197,6 +197,13 @@ signals:
 	void input_mode_chosen(bssh_input_mode_t mode);
 
 	/*
+	 * A pane's corner asked for the tabs of the pane showing `front`, or
+	 * for the menus (sec 8.7a). The window builds both.
+	 */
+	void corner_tabs_requested(bssh_session *front, const QPoint &global);
+	void corner_menu_requested(const QPoint &global);
+
+	/*
 	 * A pane or tab was dropped on the pane showing `target`, at `edge`
 	 * (a bssh_layout_manager::drop_edge_t). Direct, not queued: the drop's
 	 * data is valid only while the drop is being delivered, so whoever

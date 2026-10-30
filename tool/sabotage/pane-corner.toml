@@ -67,3 +67,35 @@ file = "src/ui/input_selector.cpp"
 find = "\tif (n <= 3) return modes.at(qBound(0, row, n - 1));"
 replace = ""
 expect = "the_input_selector_defaults_by_platform_and_reports_changes"
+
+# The tab bar shows although the setting hides it.
+[[sabotage]]
+name = "a hidden tab bar shows"
+file = "src/ui/main_window.cpp"
+find = "\tbar->setVisible(tabs.size() > 1 && !m_tabs_hidden);"
+replace = "\tbar->setVisible(tabs.size() > 1);"
+expect = "hidden_bars_are_reached_from_the_corner"
+
+# Hidden, and no stand-in: the pane's other tabs are unreachable.
+[[sabotage]]
+name = "the corner never counts the tabs"
+file = "src/ui/main_window.cpp"
+find = "\t\tview->set_corner_tabs(m_tabs_hidden && tabs > 1 ? QStringLiteral(\"tabs %1\").arg(tabs)"
+replace = "\t\tview->set_corner_tabs(false && tabs > 1 ? QStringLiteral(\"tabs %1\").arg(tabs)"
+expect = "hidden_bars_are_reached_from_the_corner"
+
+# The setting is stored and nothing hides the bar.
+[[sabotage]]
+name = "the menu bar ignores its setting"
+file = "src/ui/main_window.cpp"
+find = "\tm_menu_bar->setVisible(shown);\n\tif (m_menu_bar_action)"
+replace = "\tif (m_menu_bar_action)"
+expect = "hidden_bars_are_reached_from_the_corner"
+
+# The corner's menus with no way back to the bar.
+[[sabotage]]
+name = "the corner's menus lose the way back"
+file = "src/ui/main_window.cpp"
+find = "\t\tmenu.addAction(m_menu_bar_action);"
+replace = "\t\t;"
+expect = "hidden_bars_are_reached_from_the_corner"

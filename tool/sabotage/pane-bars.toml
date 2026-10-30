@@ -6,8 +6,8 @@
 [[sabotage]]
 name = "a pane of one shows a bar"
 file = "src/ui/main_window.cpp"
-find = "\tbar->setVisible(tabs.size() > 1);\n"
-replace = "\tbar->setVisible(true);\n"
+find = "\tbar->setVisible(tabs.size() > 1 && !m_tabs_hidden);\n"
+replace = "\tbar->setVisible(!m_tabs_hidden);\n"
 expect = "each_pane_keeps_its_own_tabs"
 
 [[sabotage]]

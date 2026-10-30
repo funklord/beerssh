@@ -176,6 +176,7 @@ private:
 	QCheckBox *m_honour_font_scale;
 	QCheckBox *m_font_ligatures;
 	QCheckBox *m_honour_remote_cursor;
+	QCheckBox *m_menu_bar_shown = nullptr;
 
 	/*
 	 * The general key-remap slots (sec 6.1), a from/to QKeySequenceEdit

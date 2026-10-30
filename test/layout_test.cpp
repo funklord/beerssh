@@ -72,6 +72,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
 #include <QSettings>
 #include <QSplitter>
@@ -842,6 +843,121 @@ void layout_test::the_selector_pushes_its_mode_to_every_pane() {
 	/* Shared registry: leave it as it was found (sec 8.4). */
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::hidden_bars_are_reached_from_the_corner() {
+	/*
+	 * The holder: "if we hide the tab bar or the top menu bar they also
+	 * get buttons there?" (sec 8.7a). Hiding a bar must not hide what it
+	 * reached: the pane's tabs and the menus are in the focused pane's
+	 * corner while their bars are hidden.
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		bool menu = bssh_app_settings().menu_bar_shown();
+		~restore_t() {
+			bssh_app_settings().set_tab_position(tabs);
+			bssh_app_settings().set_menu_bar_shown(menu);
+		}
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_HIDDEN);
+	bssh_app_settings().set_menu_bar_shown(false);
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	window.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_session *a = window.registry()->create(named(QStringLiteral("alpha")));
+	bssh_session *b = window.registry()->create(named(QStringLiteral("beta")));
+	window.adopt_session(a);
+	window.adopt_session(b);
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QCOMPARE(panes->views().size(), 1);
+	bssh_terminal_view *view = panes->focused_view();
+	QVERIFY(view && view->corner());
+	QTRY_VERIFY(view->corner()->isVisible());
+	bssh_session *front = panes->focused_session();
+	bssh_session *behind = front == a ? b : a;
+
+	/* No bar on screen, and the corner counts the tabs instead. */
+	QWidget *bar = panes->bar_for(front);
+	QVERIFY2(!bar || !bar->isVisible(), "the tab bar shows while hidden");
+	QToolButton *tabs = view->corner()->tabs_button();
+	QVERIFY(tabs);
+	QVERIFY2(tabs->isVisible(), "no tabs button with the tab bar hidden");
+	QCOMPARE(tabs->text(), QStringLiteral("tabs 2"));
+
+	/* Its list names both, the one in front marked, and a pick brings the
+	 * other one there. */
+	QStringList listed;
+	bool front_marked = false;
+	QTimer::singleShot(0, [&] {
+		QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+		if (!menu) return;
+		QAction *pick = nullptr;
+		for (QAction *action : menu->actions()) {
+			if (action->isSeparator()) continue;
+			listed << action->text();
+			if (action->text() == front->title()) front_marked = action->isChecked();
+			if (action->text() == behind->title()) pick = action;
+		}
+		if (pick) pick->trigger();
+		menu->close();
+	});
+	tabs->click();
+	QCoreApplication::processEvents();
+	QVERIFY2(listed.contains(front->title()) && listed.contains(behind->title()),
+	          qPrintable(listed.join(QStringLiteral(", "))));
+	QVERIFY(listed.contains(QStringLiteral("New Tab")));
+	QVERIFY2(front_marked, "the tab in front is not marked");
+	QTRY_COMPARE(panes->focused_session(), behind);
+
+	/* The menu bar hidden: its menus are behind the corner's button, and
+	 * so is the way back to it. */
+	QMenuBar *menu_bar = window.findChild<QMenuBar *>();
+	QVERIFY(menu_bar);
+	QVERIFY2(menu_bar->isHidden(), "the menu bar shows while hidden");
+	/*
+	 * The offscreen platform leaves no window active once a popup has
+	 * closed, where a desktop's window manager keeps it so (seen under
+	 * twin); the corner shows only on an active window, so it is made
+	 * active again here.
+	 */
+	window.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&window));
+	view = panes->focused_view();
+	QTRY_VERIFY(view->corner() && view->corner()->isVisible());
+	QToolButton *menus = view->corner()->menu_button();
+	QVERIFY2(menus->isVisible(), "no menu button with the menu bar hidden");
+
+	QStringList titles;
+	QTimer::singleShot(0, [&] {
+		QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+		if (!menu) return;
+		QAction *back = nullptr;
+		for (QAction *action : menu->actions()) {
+			if (action->menu()) titles << action->text();
+			if (action->objectName() == QStringLiteral("show_menu_bar")) back = action;
+		}
+		if (back) back->trigger();
+		menu->close();
+	});
+	menus->click();
+	QCoreApplication::processEvents();
+	QVERIFY2(titles.contains(QStringLiteral("&File")) && titles.contains(QStringLiteral("&View")),
+	          qPrintable(titles.join(QStringLiteral(", "))));
+	QVERIFY2(!menu_bar->isHidden(), "Show Menu Bar did not bring it back");
+	QVERIFY(bssh_app_settings().menu_bar_shown());
+	window.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&window));
+	QTRY_VERIFY2(!view->corner()->menu_button()->isVisible(),
+	              "the menu button stayed with the menu bar shown");
 }
 
 void layout_test::only_the_focused_pane_shows_its_corner() {

@@ -76,6 +76,7 @@ private slots:
 	void the_input_selector_defaults_by_platform_and_reports_changes();
 	void the_selector_pushes_its_mode_to_every_pane();
 	void only_the_focused_pane_shows_its_corner();
+	void hidden_bars_are_reached_from_the_corner();
 	void the_drum_steps_with_the_wheel_and_a_drag_and_wraps();
 
 	/*

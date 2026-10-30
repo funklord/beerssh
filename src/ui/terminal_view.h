@@ -486,6 +486,14 @@ public:
 	void set_corner_active(bool active);
 
 	/*
+	 * The hidden bars' stand-ins in the corner (sec 8.7a): this pane's
+	 * tab count while the tab bar is hidden (empty for none), and the
+	 * menus while the menu bar is. Set by the window, which knows both.
+	 */
+	void set_corner_tabs(const QString &text);
+	void set_corner_menu(bool shown);
+
+	/*
 	 * Draws the focused-pane border (sec 8.3). Owned by the view because
 	 * it is painted with the grid, but decided by the pane container --
 	 * a view has no idea whether it has siblings.
@@ -709,6 +717,10 @@ signals:
 
 	/* The corner's drum chose a mode; the window applies it everywhere. */
 	void input_mode_chosen(bssh_input_mode_t mode);
+
+	/* The corner's tabs or menu button: pop the list or the menus here. */
+	void corner_tabs_requested(const QPoint &global);
+	void corner_menu_requested(const QPoint &global);
 
 	/*
 	 * A body drag in Move mode (sec 8.7): reorder this pane within the
@@ -1263,6 +1275,8 @@ private:
 	void sync_corner();
 	bssh_pane_corner *m_corner = nullptr;
 	bool m_corner_active = false;
+	QString m_corner_tabs;
+	bool m_corner_menu = false;
 	bool m_column_available = false;
 
 	/*

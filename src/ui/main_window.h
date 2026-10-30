@@ -1075,6 +1075,18 @@ private:
 	bssh_input_mode_t m_input_mode;
 	bool m_column_available = false;
 	void set_input_mode(bssh_input_mode_t mode);
+
+	/*
+	 * The bars that can be hidden, and their stand-ins in the focused
+	 * pane's corner (sec 8.7a): a pane's tabs while the tab bar is hidden,
+	 * the menu bar's menus while it is.
+	 */
+	bool m_tabs_hidden = false;
+	void apply_menu_bar();
+	void sync_corner_buttons();
+	void show_corner_tabs(bssh_session *front, const QPoint &global);
+	void show_corner_menu(const QPoint &global);
+	QAction *m_menu_bar_action = nullptr;
 	bssh_find_bar *m_find_bar;
 
 	/*

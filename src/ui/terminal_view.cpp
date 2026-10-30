@@ -1611,6 +1611,10 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 		connect(m_corner, &bssh_pane_corner::multiplexer_clicked, this, [this] {
 			if (m_mux_drawer) m_mux_drawer->set_open(!m_mux_drawer->is_open());
 		});
+		connect(m_corner, &bssh_pane_corner::tabs_clicked,
+		         this, &bssh_terminal_view::corner_tabs_requested);
+		connect(m_corner, &bssh_pane_corner::menu_clicked,
+		         this, &bssh_terminal_view::corner_menu_requested);
 	} else if (!handle && m_corner) {
 		m_corner->deleteLater();
 		m_corner = nullptr;
@@ -1626,6 +1630,18 @@ void bssh_terminal_view::set_input_mode(bssh_input_mode_t mode) {
 void bssh_terminal_view::set_column_available(bool available) {
 	m_column_available = available;
 	if (m_corner) m_corner->selector()->set_column_available(available);
+}
+
+void bssh_terminal_view::set_corner_tabs(const QString &text) {
+	if (text == m_corner_tabs) return;
+	m_corner_tabs = text;
+	sync_corner();
+}
+
+void bssh_terminal_view::set_corner_menu(bool shown) {
+	if (shown == m_corner_menu) return;
+	m_corner_menu = shown;
+	sync_corner();
 }
 
 void bssh_terminal_view::set_corner_active(bool active) {
@@ -1654,6 +1670,8 @@ void bssh_terminal_view::sync_corner() {
 	m_corner->set_faint_when_idle(!touch);
 	m_corner->set_multiplexer_text(m_mux_drawer ? m_mux_drawer->button_text() : QString());
 	m_corner->multiplexer_button()->setToolTip(m_mux_drawer ? m_mux_drawer->handle_text() : QString());
+	m_corner->set_tabs_text(m_corner_tabs);
+	m_corner->set_menu_shown(m_corner_menu);
 	m_corner->selector()->set_program_listening(m_emulator && m_emulator->mouse_reporting());
 
 	/* A view too small to spare the corner has none, rather than one

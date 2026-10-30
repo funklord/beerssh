@@ -40,6 +40,16 @@ public:
 	QToolButton *multiplexer_button() const { return m_multiplexer; }
 
 	/*
+	 * The bars that are hidden, reached from here instead (sec 8.7a): the
+	 * pane's tabs while the tab bar is hidden ("tabs 3"; empty hides the
+	 * button), and the menu bar's menus while it is.
+	 */
+	void set_tabs_text(const QString &text);
+	QToolButton *tabs_button() const { return m_tabs; }
+	void set_menu_shown(bool shown);
+	QToolButton *menu_button() const { return m_menu; }
+
+	/*
 	 * Faint until the pointer is over it -- the desktop's, where the
 	 * holder asked for it "transparent until the mouse is over it". Touch
 	 * has nothing that hovers, so there it is always solid.
@@ -55,6 +65,10 @@ signals:
 
 	void multiplexer_clicked();
 
+	/* Where to put the popup: under the button, in global coordinates. */
+	void tabs_clicked(const QPoint &global);
+	void menu_clicked(const QPoint &global);
+
 protected:
 	void paintEvent(QPaintEvent *event) override;
 	void resizeEvent(QResizeEvent *event) override;
@@ -68,6 +82,8 @@ private:
 	QWidget *m_grip;
 	bssh_input_selector *m_selector;
 	QToolButton *m_multiplexer;
+	QToolButton *m_tabs;
+	QToolButton *m_menu;
 	int m_grip_side = 18;
 	bool m_faint_when_idle = false;
 	bool m_hovered = false;

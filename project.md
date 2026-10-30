@@ -9113,7 +9113,7 @@ aimed anywhere down that side is a drop on the bar: the hit test runs
 across the strip whichever way it lies. Guarded by
 `tool/sabotage/tab-position.toml`, three edits.
 
-### 8.7a The pane corner: grip, mode and multiplexer in one place — **[AGREED 2026-10-29, BUILT EXCEPT THE BAR BUTTONS]**
+### 8.7a The pane corner: grip, mode and multiplexer in one place — **[AGREED 2026-10-29, BUILT]**
 
 The holder, 2026-10-29: the input modes "should get their own more
 compact widget", useful "for desktop as well as it isn't always clear
@@ -9175,8 +9175,18 @@ were found (sec 10.2a); it opens the same drawer.
 or the top menu bar they also get buttons there?"): options to hide the
 tab bar and the desktop menu bar, each adding a button to the corner
 while hidden -- the menu bar's menus in one popup, and the window's tabs
-in a list -- so hiding a bar never hides what it reached. **Not built
-yet.**
+in a list -- so hiding a bar never hides what it reached. **Built
+2026-10-30:** "Hidden" is a fifth choice beside Top, Bottom, Left and
+Right for the tabs side by side, and "Show the menu bar" a check box on
+the desktop's Appearance page and an item in View. A hidden tab bar is
+still built and kept -- `refresh_tab_bar` compares a pane's tabs against
+its bar -- and never shown; the corner reads "tabs 2" and lists the
+pane's tabs, the front one marked, with New Tab. The menus are behind a
+vertical ellipsis, not three lines, since the grip above is three lines
+already; they are the menu bar's own menus rather than copies, with Show
+Menu Bar under them as the way back. Seen under twin with both hidden.
+`hidden_bars_are_reached_from_the_corner`; four edits in
+`tool/sabotage/pane-corner.toml`.
 
 **Also queued, the holder 2026-10-29: moving the tab bar by dragging
 it.** "I want the tab bar to have a handle so it can be drag n dropped

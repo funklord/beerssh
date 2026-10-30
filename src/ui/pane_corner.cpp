@@ -87,6 +87,8 @@ bssh_pane_corner::bssh_pane_corner(QWidget *parent)
       m_grip(new corner_grip(this)),
       m_selector(new bssh_input_selector(this)),
       m_multiplexer(new QToolButton(this)),
+      m_tabs(new QToolButton(this)),
+      m_menu(new QToolButton(this)),
       m_opacity(new QGraphicsOpacityEffect(this)) {
 	setObjectName(QStringLiteral("pane_corner"));
 	m_opacity->setOpacity(1.0);
@@ -99,7 +101,43 @@ bssh_pane_corner::bssh_pane_corner(QWidget *parent)
 	m_multiplexer->hide();
 	connect(m_multiplexer, &QToolButton::clicked, this, &bssh_pane_corner::multiplexer_clicked);
 
+	/*
+	 * The two bars' stand-ins, each there only while its bar is hidden.
+	 * The menu's is a vertical ellipsis, not three lines: the grip above
+	 * is already drawn as three lines, and two of them stacked would be
+	 * one control twice.
+	 */
+	m_tabs->setObjectName(QStringLiteral("corner_tabs"));
+	m_tabs->setToolTip(QStringLiteral("This pane's tabs"));
+	m_menu->setObjectName(QStringLiteral("corner_menu"));
+	m_menu->setText(QString::fromUtf8("\u22ee"));
+	m_menu->setToolTip(QStringLiteral("Menus"));
+	m_menu->setAccessibleName(QStringLiteral("Menus"));
+	for (QToolButton *button : { m_tabs, m_menu }) {
+		button->setAutoRaise(true);
+		button->setFocusPolicy(Qt::NoFocus);
+		button->hide();
+	}
+	connect(m_tabs, &QToolButton::clicked, this, [this] {
+		emit tabs_clicked(m_tabs->mapToGlobal(QPoint(0, m_tabs->height())));
+	});
+	connect(m_menu, &QToolButton::clicked, this, [this] {
+		emit menu_clicked(m_menu->mapToGlobal(QPoint(0, m_menu->height())));
+	});
+
 	m_grip->hide();
+	relayout();
+}
+
+void bssh_pane_corner::set_tabs_text(const QString &text) {
+	m_tabs->setText(text);
+	m_tabs->setVisible(!text.isEmpty());
+	relayout();
+}
+
+void bssh_pane_corner::set_menu_shown(bool shown) {
+	if (shown == !m_menu->isHidden()) return;
+	m_menu->setVisible(shown);
 	relayout();
 }
 
@@ -162,9 +200,10 @@ QSize bssh_pane_corner::sizeHint() const {
 		wide = qMax(wide, m_grip_side);
 		high += m_grip_side;
 	}
-	if (!m_multiplexer->isHidden()) {
-		wide = qMax(wide, m_multiplexer->sizeHint().width());
-		high += m_multiplexer->sizeHint().height();
+	for (const QToolButton *button : { m_multiplexer, m_tabs, m_menu }) {
+		if (button->isHidden()) continue;
+		wide = qMax(wide, button->sizeHint().width());
+		high += button->sizeHint().height();
 	}
 	return QSize(wide + 2 * PAD, high + 2 * PAD);
 }
@@ -180,9 +219,12 @@ void bssh_pane_corner::relayout() {
 	const int drum = m_selector->sizeHint().height();
 	m_selector->setGeometry(PAD, y, inner, drum);
 	y += drum;
-	if (!m_multiplexer->isHidden()) {
-		const int high = m_multiplexer->sizeHint().height();
-		m_multiplexer->setGeometry(PAD, y, inner, high);
+	/* Under the drum: the tmux picker, then the hidden bars' stand-ins. */
+	for (QToolButton *button : { m_multiplexer, m_tabs, m_menu }) {
+		if (button->isHidden()) continue;
+		const int high = button->sizeHint().height();
+		button->setGeometry(PAD, y, inner, high);
+		y += high;
 	}
 	updateGeometry();
 	if (size != this->size()) resize(size);

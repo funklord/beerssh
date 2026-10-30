@@ -174,9 +174,20 @@ public:
 	int image_history_mb() const;
 	void set_image_history_mb(int megabytes);
 
-	enum tab_position_t { TABS_TOP, TABS_BOTTOM, TABS_LEFT, TABS_RIGHT };
+	/*
+	 * Which side of a pane its tab bar is on, side by side -- or none:
+	 * hidden, the pane's tabs are reached from its corner (sec 8.7a).
+	 */
+	enum tab_position_t { TABS_TOP, TABS_BOTTOM, TABS_LEFT, TABS_RIGHT, TABS_HIDDEN };
 	tab_position_t tab_position() const;
 	void set_tab_position(tab_position_t position);
+
+	/*
+	 * The desktop's menu bar. Hidden, its menus are in the focused pane's
+	 * corner (sec 8.7a), so hiding it never hides what it reached.
+	 */
+	bool menu_bar_shown() const;
+	void set_menu_bar_shown(bool shown);
 
 	/*
 	 * How close to the halfway line the column's divider is pulled onto

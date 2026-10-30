@@ -467,9 +467,25 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_tab_position->addItem(QStringLiteral("Bottom"), int(bssh_app_settings::TABS_BOTTOM));
 	m_tab_position->addItem(QStringLiteral("Left"), int(bssh_app_settings::TABS_LEFT));
 	m_tab_position->addItem(QStringLiteral("Right"), int(bssh_app_settings::TABS_RIGHT));
+	/* None: a pane's tabs are then in its corner (sec 8.7a). */
+	m_tab_position->addItem(QStringLiteral("Hidden"), int(bssh_app_settings::TABS_HIDDEN));
 	bssh_fit_items(m_tab_position);
 	if (on_this_page(SECTION_APPEARANCE, m_tab_position))
 		form->addRow(QStringLiteral("Tabs, side by side"), m_tab_position);
+
+	/*
+	 * The desktop's menu bar (sec 8.7a). Hidden, its menus are behind the
+	 * focused pane's corner, so nothing it reached becomes unreachable. A
+	 * phone has no menu bar to hide.
+	 */
+	m_menu_bar_shown = new QCheckBox(QStringLiteral("Show the menu bar"), this);
+	m_menu_bar_shown->setObjectName(QStringLiteral("menu_bar_shown"));
+	m_menu_bar_shown->setToolTip(
+	        QStringLiteral("Hidden, its menus are in the corner of the terminal you are using."));
+	if (!touch && on_this_page(SECTION_APPEARANCE, m_menu_bar_shown))
+		form->addRow(m_menu_bar_shown);
+	else
+		m_menu_bar_shown->hide();
 
 	/*
 	 * How far the stacked divider is pulled onto the halfway line (sec
@@ -1117,6 +1133,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_offer_multiplexers->setChecked(settings.offer_multiplexer_sessions());
 	m_honour_font_scale->setChecked(settings.honour_system_font_scale());
 	m_font_ligatures->setChecked(settings.font_ligatures());
+	m_menu_bar_shown->setChecked(settings.menu_bar_shown());
 	m_honour_remote_cursor->setChecked(settings.honour_remote_cursor_shape());
 	m_raise_contrast->setChecked(settings.raise_contrast());
 	m_text_brightness->setValue(settings.text_brightness());
@@ -1266,6 +1283,9 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		commit([this](bssh_app_settings &s) {
 			s.set_honour_system_font_scale(m_honour_font_scale->isChecked());
 		});
+	});
+	connect(m_menu_bar_shown, &QCheckBox::toggled, this, [this] {
+		commit([this](bssh_app_settings &s) { s.set_menu_bar_shown(m_menu_bar_shown->isChecked()); });
 	});
 	connect(m_font_ligatures, &QCheckBox::toggled, this, [this] {
 		commit([this](bssh_app_settings &s) {
