@@ -1996,9 +1996,18 @@ void bssh_main_window::apply_device_settings() {
 	 * read each time, and they change when somebody edits them -- which
 	 * is exactly when this function runs.
 	 */
-	m_status_line = settings.status_line();
+	const bssh_app_settings::status_line_t status_line = settings.status_line();
+	const bool status_line_changed = status_line != m_status_line;
+	m_status_line = status_line;
 	m_window_title_format = settings.window_title();
 	update_window_title();
+
+	/*
+	 * Kept is not shown: the line takes the setting when it is next
+	 * written, and nothing writes it on a settings edit -- so turning it
+	 * off left it until a restart (the holder, 2026-10-30).
+	 */
+	if (status_line_changed) update_status();
 
 	/*
 	 * The scrollbar is a view's shape rather than one of its properties,

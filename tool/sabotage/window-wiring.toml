@@ -23,3 +23,12 @@ expect = "a_session_adopted_from_another_window_is_wired_to_this_one"
 # -- so a test for it would pass whether or not the pruning were there.
 # Recorded as unpinned at the call site rather than guarded by a check
 # that cannot fail.
+
+# The status line setting kept and not shown: turning the line off left
+# it on screen until a restart (the holder, 2026-10-30).
+[[sabotage]]
+name = "the status line takes its setting only at the next start"
+file = "src/ui/main_window.cpp"
+find = "\tif (status_line_changed) update_status();\n"
+replace = "\t(void) status_line_changed;\n"
+expect = "a_sessions_trouble_is_written_over_its_pane"

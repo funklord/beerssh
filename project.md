@@ -9264,6 +9264,11 @@ such as copy and scroll on a dead terminal".
   drawn the same way, smaller, for four seconds.
 - **And sizing a window in cells** stopped counting the hidden line: it
   had made a window asked for 30 rows 31 tall.
+- **And the setting takes effect in the window it is changed in, fixed
+  2026-10-30.** The holder: "status line only goes away after restarting
+  when changing config". `apply_device_settings` kept the new value and
+  nothing redrew the line, which takes it only when written; a changed
+  setting now writes it. Caught in `window-wiring.toml`.
 - Seen under twin: an SSH target that does not resolve shows "Connection
   failed: Failed to resolve hostname ..." over the middle of the pane.
   `a_sessions_trouble_is_written_over_its_pane`,

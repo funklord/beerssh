@@ -1141,6 +1141,21 @@ void layout_test::a_sessions_trouble_is_written_over_its_pane() {
 	QVERIFY(status);
 	QVERIFY2(!status->isVisible(), "the status line shows by default");
 
+	/* And it follows the setting in the window it was changed in, not
+	 * only after a restart -- the holder found it did not. */
+	{
+		struct restore_t {
+			bssh_app_settings::status_line_t status = bssh_app_settings().status_line();
+			~restore_t() { bssh_app_settings().set_status_line(status); }
+		} restore;
+		bssh_app_settings().set_status_line(bssh_app_settings::STATUS_LINE_SESSION);
+		window.apply_device_settings();
+		QVERIFY2(status->isVisible(), "turning the status line on shows nothing until a restart");
+		bssh_app_settings().set_status_line(bssh_app_settings::STATUS_LINE_OFF);
+		window.apply_device_settings();
+		QVERIFY2(!status->isVisible(), "turning the status line off leaves it until a restart");
+	}
+
 	/* A local shell: nothing over its pane, whatever its state. */
 	bssh_session *local = window.registry()->create(bssh_profile_t::local_shell());
 	window.adopt_session(local);
