@@ -306,6 +306,7 @@ private slots:
 	void a_wide_window_tiles_as_many_as_fit();
 	void moving_a_pane_where_it_does_not_fit_folds_no_other();
 	void tabs_down_the_side_scroll_and_read_across();
+	void side_tabs_take_a_tap_and_a_swipe_on_touch();
 	void a_shape_survives_being_written_down();
 
 	/*

@@ -9368,7 +9368,10 @@ tab bar there in addition to the other drop zones we already have."
   twin: fifteen tabs down the left, the window 736x456 before and
   after, the list scrolled by the wheel.
   `tabs_down_the_side_scroll_and_read_across`; three edits in
-  `tab-position.toml`.
+  `tab-position.toml`. On touch, where a tablet or an unfolded Fold tiles,
+  a tap still picks a tab through the scroller and a swipe scrolls the
+  list: `side_tabs_take_a_tap_and_a_swipe_on_touch`, and a fourth edit
+  there removing the scroller is caught.
 
 **Terminals that vanished from a split -- fixed 2026-10-30.** The
 holder: "There are many bugs when creating and moving around tiled

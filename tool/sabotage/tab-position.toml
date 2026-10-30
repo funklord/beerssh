@@ -49,3 +49,12 @@ file = "src/ui/pane_bar.cpp"
 find = "\tif (type == QEvent::Wheel && m_scroll) {"
 replace = "\tif (false) {"
 expect = "tabs_down_the_side_scroll_and_read_across"
+
+# No scroller on touch: the side tabs past the pane's height cannot be
+# reached by a thumb.
+[[sabotage]]
+name = "a thumb cannot scroll the side tabs"
+file = "src/ui/pane_bar.cpp"
+find = "\t\tif (!pointer) QScroller::grabGesture(m_scroll->viewport(), QScroller::LeftMouseButtonGesture);\n"
+replace = ""
+expect = "side_tabs_take_a_tap_and_a_swipe_on_touch"

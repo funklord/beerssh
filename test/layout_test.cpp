@@ -6589,6 +6589,75 @@ void layout_test::tabs_down_the_side_scroll_and_read_across() {
 	QCOMPARE(bar->currentIndex(), current);
 }
 
+void layout_test::side_tabs_take_a_tap_and_a_swipe_on_touch() {
+	/*
+	 * Down the side the tabs sit in a scroll area a thumb drags (sec
+	 * 8.7a), over a tab bar with its own long press. A scroller that
+	 * swallowed the press would leave the tabs untappable on a tablet or
+	 * an unfolded Fold -- the places a touch window tiles.
+	 */
+	const forced_touch_t touch(1);
+	const forced_screen_t screen(QSize(1800, 1200));
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		bssh_app_settings::arrangement_t arrangement = bssh_app_settings().arrangement();
+		~restore_t() {
+			bssh_app_settings().set_tab_position(tabs);
+			bssh_app_settings().set_arrangement(arrangement);
+		}
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_LEFT);
+	bssh_app_settings().set_arrangement(bssh_app_settings::ARRANGEMENT_TILED);
+
+	bssh_main_window window;
+	window.resize(780, 500);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	QCOMPARE(window.layout_manager()->arrangement(), bssh_layout_manager::TILED);
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral("t0")));
+	window.adopt_session(first);
+	for (int i = 1; i < 30; ++i)
+		window.adopt_session(window.registry()->create(named(QStringLiteral("t%1").arg(i))));
+	QTest::qWait(50);
+
+	const auto bar_now = [&window, first]() -> bssh_pane_bar * {
+		return window.bar_for(window.layout_manager()->front_of(first));
+	};
+	bssh_pane_bar *row = bar_now();
+	QVERIFY(row && row->isVisible());
+	QTabBar *bar = row->tab_bar();
+	QCOMPARE(bar->shape(), QTabBar::RoundedWest);
+
+	/* A tap on a tab that is not in front brings it forward. */
+	bssh_session *wanted = row->session_at(2);
+	QVERIFY(wanted && wanted != window.layout_manager()->front_of(first));
+	const QPoint on_tab = bar->tabRect(2).center();
+	QTest::mousePress(bar, Qt::LeftButton, Qt::NoModifier, on_tab);
+	QTest::qWait(20);
+	QTest::mouseRelease(bar, Qt::LeftButton, Qt::NoModifier, on_tab);
+	QTRY_COMPARE(window.layout_manager()->front_of(first), wanted);
+
+	/* A thumb dragged up the list scrolls it. */
+	row = bar_now();
+	QVERIFY(row);
+	bar = row->tab_bar();
+	QScrollArea *scroll = row->findChild<QScrollArea *>(QStringLiteral("pane-bar-scroll"));
+	QVERIFY(scroll && scroll->verticalScrollBar()->maximum() > 0);
+	QWidget *viewport = scroll->viewport();
+	const QPoint low(viewport->width() / 2, viewport->height() - 20);
+	QTest::mousePress(viewport, Qt::LeftButton, Qt::NoModifier, low);
+	for (int step = 1; step <= 12; ++step) {
+		QTest::qWait(16);
+		QMouseEvent move(QEvent::MouseMove, low - QPoint(0, step * 20), viewport->mapToGlobal(low - QPoint(0, step * 20)),
+		                 Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+		QCoreApplication::sendEvent(viewport, &move);
+	}
+	QTest::mouseRelease(viewport, Qt::LeftButton, Qt::NoModifier, low - QPoint(0, 240));
+	QTRY_VERIFY2(scroll->verticalScrollBar()->value() > 0, "a swipe up the side tabs did not scroll them");
+}
+
 void layout_test::a_shape_survives_being_written_down() {
 	bssh_session_registry registry;
 	bssh_layout_manager layout;
