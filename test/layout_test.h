@@ -302,6 +302,7 @@ private slots:
 	void the_tab_bar_goes_where_it_is_set();
 
 	/* The shape saved to layout.ini, and a window restored into it (sec 8.4). */
+	void tabs_down_the_side_scroll_and_read_across();
 	void a_shape_survives_being_written_down();
 
 	/*

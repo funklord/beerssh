@@ -6111,6 +6111,68 @@ void layout_test::the_tab_bar_goes_where_it_is_set() {
 	bssh_app_settings().set_tab_position(was);
 }
 
+void layout_test::tabs_down_the_side_scroll_and_read_across() {
+	/*
+	 * The holder: "When tabs are on left or right they force the terminal
+	 * longer, and they should be like browser tabs horizontal and scroll
+	 * up and down, not stretch the window" (sec 8.7a).
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_LEFT);
+
+	bssh_main_window window;
+	window.resize(900, 500);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral(
+	        "a title far longer than any tab down the side should be as wide as")));
+	window.adopt_session(first);
+	for (int i = 0; i < 30; ++i)
+		window.adopt_session(window.registry()->create(named(QStringLiteral("tab %1").arg(i))));
+	QCoreApplication::processEvents();
+
+	bssh_pane_bar *row = window.bar_for(window.layout_manager()->front_of(first));
+	QVERIFY(row && row->isVisible());
+	QTabBar *bar = row->tab_bar();
+	QCOMPARE(bar->shape(), QTabBar::RoundedWest);
+	QVERIFY2(bar->count() > 20, qPrintable(QString::number(bar->count())));
+
+	/* Thirty tabs are taller than the window: it is not made taller. */
+	QVERIFY2(bar->sizeHint().height() > 500, qPrintable(QString::number(bar->sizeHint().height())));
+	QVERIFY2(window.height() <= 500 && window.minimumSizeHint().height() <= 500,
+	          qPrintable(QStringLiteral("%1, wanting %2").arg(window.height())
+	                             .arg(window.minimumSizeHint().height())));
+
+	/* Across, not on their side: a short title is wider than it is tall. */
+	const QRect tab = bar->tabRect(bar->count() - 1);
+	QVERIFY2(tab.width() > tab.height(),
+	          qPrintable(QStringLiteral("%1x%2").arg(tab.width()).arg(tab.height())));
+
+	/* And a long one does not make the bar as wide as itself. */
+	const int widest = bar->fontMetrics().averageCharWidth() * 30;
+	QVERIFY2(row->width() < widest,
+	          qPrintable(QStringLiteral("%1 wide").arg(row->width())));
+
+	/* The wheel scrolls the tabs rather than switching them. */
+	QScrollArea *scroll = row->findChild<QScrollArea *>(QStringLiteral("pane-bar-scroll"));
+	QVERIFY(scroll);
+	QScrollBar *slider = scroll->verticalScrollBar();
+	QVERIFY2(slider->maximum() > 0, "thirty tabs and nothing to scroll");
+	const int current = bar->currentIndex();
+	const QPoint over = bar->tabRect(0).center();
+	QWheelEvent wheel(over, bar->mapToGlobal(over), QPoint(), QPoint(0, -120), Qt::NoButton,
+	                  Qt::NoModifier, Qt::NoScrollPhase, false);
+	QCoreApplication::sendEvent(bar, &wheel);
+	QVERIFY2(slider->value() > 0, "the wheel did not scroll the tabs");
+	QCOMPARE(bar->currentIndex(), current);
+}
+
 void layout_test::a_shape_survives_being_written_down() {
 	bssh_session_registry registry;
 	bssh_layout_manager layout;

@@ -5,6 +5,11 @@
 #include <QApplication>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QProxyStyle>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QScroller>
+#include <QStyleOptionTab>
 #include <QTabBar>
 #include <QToolButton>
 
@@ -106,6 +111,58 @@ private:
 namespace {
 
 /*
+ * A bar down the side lays its tabs out as a browser's vertical tabs do:
+ * one under the next, each label written across (sec 8.7a). QTabBar's own
+ * West and East turn the label on its side -- read by tilting your head --
+ * and size a tab by its whole title, so a long OSC title made a bar as
+ * wide as the title was long.
+ *
+ * So the bar keeps its West or East shape, which is what everything else
+ * reads to know it runs down the side (the drop slots, the tear-out), and
+ * this style lays each tab out as a North one in the rectangle the bar
+ * gives it: across, the label and its close button where they sit on a
+ * bar along the top. A tab is as wide as its title up to WIDEST_CHARS,
+ * and elided past that.
+ */
+class sideways_tabs : public QProxyStyle {
+public:
+	static const int WIDEST_CHARS = 24;
+
+	QSize sizeFromContents(ContentsType type, const QStyleOption *option,
+	                       const QSize &size, const QWidget *widget) const override {
+		QSize out = QProxyStyle::sizeFromContents(type, option, size, widget);
+		if (type != CT_TabBarTab) return out;
+		out.transpose();
+		out.setWidth(qMin(out.width(), option->fontMetrics.averageCharWidth() * WIDEST_CHARS));
+		return out;
+	}
+
+	void drawControl(ControlElement element, const QStyleOption *option,
+	                 QPainter *painter, const QWidget *widget) const override {
+		const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option);
+		if (element == CE_TabBarTabLabel && tab) {
+			QStyleOptionTab across(*tab);
+			across.shape = QTabBar::RoundedNorth;
+			QProxyStyle::drawControl(element, &across, painter, widget);
+			return;
+		}
+		QProxyStyle::drawControl(element, option, painter, widget);
+	}
+
+	QRect subElementRect(SubElement element, const QStyleOption *option,
+	                     const QWidget *widget) const override {
+		const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option);
+		if (tab && (element == SE_TabBarTabText || element == SE_TabBarTabLeftButton
+		            || element == SE_TabBarTabRightButton)) {
+			QStyleOptionTab across(*tab);
+			across.shape = QTabBar::RoundedNorth;
+			return QProxyStyle::subElementRect(element, &across, widget);
+		}
+		return QProxyStyle::subElementRect(element, option, widget);
+	}
+};
+
+/*
  * How far past the bar a tab has to be dragged before it tears out
  * (sec 8.3, 8.4). Generous on purpose: a bar is thin and a pointer
  * reordering tabs crosses its edge constantly, so tearing out on "left
@@ -163,9 +220,47 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 
 	m_handle = new bar_handle(this, vertical);
 	row->addWidget(m_handle, 0);
-	row->addWidget(m_bar, 0);
-	row->addWidget(m_add, 0);
-	row->addStretch(1);
+	if (vertical) {
+		/*
+		 * Down the side, the tabs scroll rather than stretch (sec 8.7a).
+		 * A bar's height was the sum of its tabs', and the pane under it
+		 * could be no shorter -- so a dozen tabs pushed the terminal, and
+		 * then the window, taller than the screen. In a scroll area the
+		 * pane decides the height, and the tabs past it are a wheel or a
+		 * thumb away; the "+" follows the last tab, as in a browser.
+		 */
+		QWidget *list = new QWidget;
+		QVBoxLayout *column = new QVBoxLayout(list);
+		column->setContentsMargins(0, 0, 0, 0);
+		column->setSpacing(0);
+		column->addWidget(m_bar, 0);
+		column->addWidget(m_add, 0, Qt::AlignLeft);
+		column->addStretch(1);
+
+		/*
+		 * Owned by the list, and made its child AFTER the bar: children
+		 * go in the order they came, so the bar is gone before the style
+		 * it paints with is.
+		 */
+		m_side_style = new sideways_tabs;
+		m_side_style->setParent(list);
+		m_bar->setStyle(m_side_style);
+		m_bar->setUsesScrollButtons(false);
+
+		m_scroll = new QScrollArea(this);
+		m_scroll->setObjectName(QStringLiteral("pane-bar-scroll"));
+		m_scroll->setFrameShape(QFrame::NoFrame);
+		m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+		m_scroll->setWidgetResizable(true);
+		m_scroll->setWidget(list);
+		if (!pointer) QScroller::grabGesture(m_scroll->viewport(), QScroller::LeftMouseButtonGesture);
+		row->addWidget(m_scroll, 1);
+		fit_side();
+	} else {
+		row->addWidget(m_bar, 0);
+		row->addWidget(m_add, 0);
+		row->addStretch(1);
+	}
 
 	connect(m_add, &QToolButton::clicked, this, &bssh_pane_bar::new_tab_requested);
 	connect(m_bar, &QTabBar::currentChanged, this, [this](int index) {
@@ -231,11 +326,33 @@ void bssh_pane_bar::refresh() {
 		m_bar->setTabToolTip(i, session->profile().target());
 		m_bar->setTabIcon(i, QIcon(bssh_tab_status::dot(size, bssh_tab_status::state_for(session))));
 	}
+	fit_side();
+}
+
+void bssh_pane_bar::fit_side() {
+	/*
+	 * As wide as the widest tab, plus the scrollbar's width whether or
+	 * not it shows, so the tabs do not shrink under it when one more tab
+	 * makes the list scroll.
+	 */
+	if (!m_scroll) return;
+	const int wide = qMax(m_bar->sizeHint().width(), m_add->sizeHint().width());
+	m_scroll->setFixedWidth(wide + m_scroll->verticalScrollBar()->sizeHint().width());
 }
 
 bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
 	if (watched != m_bar) return QWidget::eventFilter(watched, event);
 	const QEvent::Type type = event->type();
+
+	/*
+	 * Down the side the wheel scrolls the tabs, as it does a browser's.
+	 * QTabBar's own use of it is to switch tabs, which here would bring
+	 * a different terminal forward under a pointer that meant to look.
+	 */
+	if (type == QEvent::Wheel && m_scroll) {
+		QCoreApplication::sendEvent(m_scroll->verticalScrollBar(), event);
+		return true;
+	}
 
 	if (type == QEvent::MouseButtonPress
 	    && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {

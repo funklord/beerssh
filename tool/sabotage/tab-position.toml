@@ -24,3 +24,28 @@ file = "src/ui/main_window.cpp"
 find = "\t\tif (bar->rect().contains(bar->mapFrom(this, at))) return bar->front();\n"
 replace = "\t\tif (bar->tab_bar()->rect().contains(bar->tab_bar()->mapFrom(this, at))) return bar->front();\n"
 expect = "the_tab_bar_goes_where_it_is_set"
+
+# Down the side, the tabs straight in the bar again, not in the scroll
+# area: thirty tabs make the pane, and so the window, taller than itself.
+[[sabotage]]
+name = "tabs down the side stretch the window"
+file = "src/ui/pane_bar.cpp"
+find = "\t\trow->addWidget(m_scroll, 1);\n"
+replace = "\t\trow->addWidget(m_bar, 0);\n"
+expect = "tabs_down_the_side_scroll_and_read_across"
+
+# The label laid out on its side again, as QTabBar's West draws it.
+[[sabotage]]
+name = "tabs down the side are written on their side"
+file = "src/ui/pane_bar.cpp"
+find = "\t\tout.transpose();\n"
+replace = ""
+expect = "tabs_down_the_side_scroll_and_read_across"
+
+# The wheel left to QTabBar, which switches tabs with it.
+[[sabotage]]
+name = "the wheel switches side tabs instead of scrolling them"
+file = "src/ui/pane_bar.cpp"
+find = "\tif (type == QEvent::Wheel && m_scroll) {"
+replace = "\tif (false) {"
+expect = "tabs_down_the_side_scroll_and_read_across"

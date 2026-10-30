@@ -9320,6 +9320,25 @@ tab bar there in addition to the other drop zones we already have."
   `the_tab_bar_is_dragged_to_another_side`,
   `a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there`; four edits
   in `tool/sabotage/pane-corner.toml`.
+- **Down the side, browser tabs, 2026-10-30.** The holder: "When tabs
+  are on left or right they force the terminal longer, and they should
+  be like browser tabs horizontal and scroll up and down, not stretch
+  the window." QTabBar's West and East turn each label on its side and
+  ask for the height of every tab together, which the pane, and so the
+  window, could not be shorter than. A side bar now sits in a scroll
+  area, the "+" after the last tab, and the wheel over the tabs scrolls
+  them rather than switching (a thumb drags them on touch). Its labels
+  are written across by a proxy style that lays each tab out as a North
+  one in the rectangle the bar gives it, up to 24 characters wide and
+  elided past that. The bar keeps its West or East shape, which the drop
+  slots and the tear-out read to know which way it runs. Rejected: a
+  list widget of our own, which would have rebuilt reordering, closing,
+  tearing out and the drop slots that QTabBar already does. Seen under
+  twin: fifteen tabs down the left, the window 736x456 before and
+  after, the list scrolled by the wheel.
+  `tabs_down_the_side_scroll_and_read_across`; three edits in
+  `tab-position.toml`.
+
 
 **As built (`bssh_pane_corner`, `bssh_input_selector`).**
 

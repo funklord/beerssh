@@ -5,6 +5,8 @@
 #include <QPointer>
 #include <QWidget>
 
+class QProxyStyle;
+class QScrollArea;
 class QTabBar;
 class QToolButton;
 class bssh_long_press;
@@ -76,6 +78,9 @@ protected:
 	bool eventFilter(QObject *watched, QEvent *event) override;
 
 private:
+	/* Down the side: wide enough for the tabs and the scrollbar. */
+	void fit_side();
+
 	bssh_session *m_front;
 	QTabBar *m_bar;
 
@@ -94,6 +99,11 @@ private:
 	QToolButton *m_add;
 	QWidget *m_handle;
 	bssh_long_press *m_long_press;
+
+	/* Only down the side (sec 8.7a): the tabs' scroll area, and the
+	 * style that writes their labels across. */
+	QScrollArea *m_scroll = nullptr;
+	QProxyStyle *m_side_style = nullptr;
 };
 
 #endif /* BSSH_PANE_BAR_H */
