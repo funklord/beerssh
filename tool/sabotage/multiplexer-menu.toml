@@ -141,3 +141,20 @@ file = "src/model/session.cpp"
 find = "\tm_mux_answered = false;\n\tlist_multiplexers(true);\n"
 replace = "\tlist_multiplexers(true);\n"
 expect = "the_tmux_drawer_switches_on_a_click"
+
+# The drawer's sessions at their own 17dp on touch: the rows a thumb taps
+# to switch tmux session.
+[[sabotage]]
+name = "the drawer's sessions are short on touch"
+file = "src/ui/multiplexer_drawer.cpp"
+find = "\t\tif (touch_primary()) item->setSizeHint(QSize(0, BSSH_TOUCH_TARGET_DP));\n"
+replace = ""
+expect = "a_touch_windows_pane_controls_reach_the_floor"
+
+# And its x at 24dp.
+[[sabotage]]
+name = "the drawer's close is short on touch"
+file = "src/ui/multiplexer_drawer.cpp"
+find = "\tif (touch_primary()) close->setMinimumSize(BSSH_TOUCH_TARGET_DP, BSSH_TOUCH_TARGET_DP);\n"
+replace = ""
+expect = "a_touch_windows_pane_controls_reach_the_floor"

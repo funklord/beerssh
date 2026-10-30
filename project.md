@@ -9399,8 +9399,13 @@ tab bar there in addition to the other drop zones we already have."
     buttons (24dp, under drum rows that were already 48). Sec 6.2's sweep
     never saw any of these: it opens surfaces from a list, and the bars
     and the corner are built inside a window at run time.
+    The same was true of the tmux drawer, on phones as well: its
+    sessions -- the rows a thumb taps to switch -- were 17dp and its x
+    24dp; both are 48 on touch now, and the find bar was already.
     `a_touch_windows_pane_controls_reach_the_floor` asks the sweep's
-    question of a real touch window.
+    question of a real touch window: the bars, the corner, the drawer and
+    find, buttons and list rows; caught in `multiplexer-menu.toml` for
+    the drawer.
   `side_tabs_take_a_tap_and_a_swipe_on_touch` and the rest of
   `tabs_down_the_side_scroll_and_read_across`; nine more edits in
   `tab-position.toml`, all caught.

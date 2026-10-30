@@ -7,6 +7,24 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
+#include "platform/platform.h"
+#include "ui/touch_metrics.h"
+
+namespace {
+
+/*
+ * On touch the sessions and the x are a thumb's targets (sec 6.2's 48dp):
+ * at their own size the rows were 17dp and the x 24, and this panel is
+ * built inside a pane at run time, where the sweep that holds the app's
+ * surfaces to the floor never opened it.
+ */
+bool touch_primary() {
+	const bssh_platform *platform = bssh_platform::instance();
+	return platform && platform->is_touch_primary();
+}
+
+} /* namespace */
+
 bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(parent) {
 	setObjectName(QStringLiteral("multiplexer_drawer"));
 
@@ -33,6 +51,7 @@ bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(pare
 	close->setText(QStringLiteral("×"));
 	close->setToolTip(QStringLiteral("Close"));
 	close->setAutoRaise(true);
+	if (touch_primary()) close->setMinimumSize(BSSH_TOUCH_TARGET_DP, BSSH_TOUCH_TARGET_DP);
 	top->addWidget(close);
 	column->addLayout(top);
 
@@ -81,6 +100,7 @@ void bssh_multiplexer_drawer::set_sessions(const QList<bssh_mux_session_t> &foun
 		        m_list);
 		/* Clicked, not ticked: Qt makes an item checkable by default. */
 		item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
+		if (touch_primary()) item->setSizeHint(QSize(0, BSSH_TOUCH_TARGET_DP));
 		if (session.current) {
 			QFont bold = item->font();
 			bold.setBold(true);

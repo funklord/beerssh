@@ -6798,14 +6798,40 @@ void layout_test::a_touch_windows_pane_controls_reach_the_floor() {
 		view->corner()->set_menu_shown(true);
 		QCoreApplication::processEvents();
 
+		/* And the two panels a pane opens: the tmux drawer and find. */
+		bssh_mux_session_t one;
+		one.kind = bssh_mux_session_t::TMUX;
+		one.name = QStringLiteral("main");
+		bssh_mux_session_t two = one;
+		two.name = QStringLiteral("build");
+		view->offer_multiplexers({ one, two });
+		bssh_multiplexer_drawer *drawer = view->findChild<bssh_multiplexer_drawer *>();
+		QVERIFY(drawer);
+		drawer->set_open(true);
+		/* Find by its chord: a touch window has no menu bar to find it in. */
+		view->setFocus();
+		QTest::keyClick(view, Qt::Key_F, Qt::ControlModifier | Qt::ShiftModifier);
+		QCoreApplication::processEvents();
+		bssh_find_bar *find = window.findChild<bssh_find_bar *>();
+		QVERIFY(find && find->isVisible() && drawer->isVisible());
+
 		QList<QWidget *> surfaces;
 		for (bssh_pane_bar *bar : window.pane_bars())
 			if (bar && bar->isVisible()) surfaces << bar;
-		surfaces << view->corner();
+		surfaces << view->corner() << drawer << find;
 		QVERIFY2(surfaces.size() >= 2, "no bar showing, so measuring it proves nothing");
 
 		QStringList short_ones;
 		for (QWidget *surface : surfaces) {
+			for (QAbstractItemView *list : surface->findChildren<QAbstractItemView *>()) {
+				if (!list->isVisibleTo(surface) || !list->model() || list->model()->rowCount() == 0)
+					continue;
+				if (list->sizeHintForRow(0) >= BSSH_TOUCH_TARGET_DP) continue;
+				short_ones << QStringLiteral("%1 %2 rows %3dp").arg(
+				        QString::fromLatin1(surface->metaObject()->className()),
+				        QString::fromLatin1(list->metaObject()->className()))
+				                .arg(list->sizeHintForRow(0));
+			}
 			for (QAbstractButton *button : surface->findChildren<QAbstractButton *>()) {
 				if (!button->isVisibleTo(surface)) continue;
 				if (button->height() >= BSSH_TOUCH_TARGET_DP) continue;
