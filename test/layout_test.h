@@ -73,8 +73,10 @@ private slots:
 	 * without emitting; and the window pushes its mode to every pane,
 	 * including a pane built after the mode was chosen.
 	 */
-	void the_input_selector_defaults_to_scroll_and_reports_changes();
+	void the_input_selector_defaults_by_platform_and_reports_changes();
 	void the_selector_pushes_its_mode_to_every_pane();
+	void only_the_focused_pane_shows_its_corner();
+	void the_drum_steps_with_the_wheel_and_a_drag_and_wraps();
 
 	/*
 	 * The Move state (sec 8.7), which reorders the portrait column: the
@@ -213,7 +215,7 @@ private slots:
 	void the_split_keyboard_sits_beside_the_terminal();
 	void dragging_a_bar_resizes_the_keyboard();
 	void a_dragged_keyboard_size_is_kept();
-	void the_input_selector_joins_the_status_line_when_wide();
+	void the_status_line_keeps_its_place_and_the_drum_its_corner();
 	void both_keyboards_read_one_layout();
 	void every_slot_the_geometry_names_exists();
 	void a_keypad_key_sends_only_its_digit();

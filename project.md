@@ -8681,7 +8681,10 @@ gesture.
 
 **One global input selector, visible at all times, five states.** Global
 rather than per terminal, and in every arrangement rather than portrait
-only. **Where it sits follows the screen — [BUILT 2026-10-08]:** a row of
+only. ~~**Where it sits follows the screen**~~ **-- superseded 2026-10-29
+by sec 8.7a: the selector is the drum in the focused pane's corner and
+no longer a row. Kept for the history of the row it replaced. [BUILT
+2026-10-08]:** a row of
 its own under the status line, five equal buttons, on a narrow upright
 screen; on one that is wide (600dp+) or lying sideways, at the status
 line's right end with each button its label's width
@@ -9109,6 +9112,142 @@ right put the bar in the panes' own row, drawn facing them, and a drop
 aimed anywhere down that side is a drop on the bar: the hit test runs
 across the strip whichever way it lies. Guarded by
 `tool/sabotage/tab-position.toml`, three edits.
+
+### 8.7a The pane corner: grip, mode and multiplexer in one place — **[AGREED 2026-10-29, BUILT EXCEPT THE BAR BUTTONS]**
+
+The holder, 2026-10-29: the input modes "should get their own more
+compact widget", useful "for desktop as well as it isn't always clear
+what the mouse should be doing", with the screen/tmux picker beside it,
+stacked top to bottom: "starting with the drag/drop thing, then a
+scrollable picker for the mode, and then a button for the screen". In
+the **top-right corner**, "the corner that is the least likely to
+contain important text", and on a principle worth more than the
+placement: **"we keep all of the annoying things that can cover the
+terminal in one place, and hidden while that window is inactive."**
+
+**What it replaces.** Three controls in three places: the five-button
+selector row under the status line (a whole 48dp row on a narrow phone,
+the status line's end on a wide one; the desktop had none), the pane
+grip painted by the view and hover-only, and the multiplexer drawer's
+handle on the right edge a third of the way down.
+
+**Where it sits, and the option rejected.** An overlay anchored to the
+**grid's** top-right corner -- left of a right-hand scrollbar, never in
+its column. Building it into the scrollbar's column was proposed and the
+holder rejected it: "the scrollbar, if there is one, will make the
+terminal smaller, this widget doesn't". A scrollbar takes a column; the
+corner takes nothing, so it covers the same few top-right cells whatever
+the scrollbar setting, and showing or hiding it never resizes the grid
+or sends the remote a window-change.
+
+**Only on the focused pane.** Every other pane shows its text whole.
+
+**The mode picker scrolls, three options tall.** The holder: "we can
+scroll between the modes easily as that is a very common need, so that
+part needs to be at least the height of 3 options." A drum: the current
+mode in the middle with its neighbours above and below, wrapping, so any
+of the five is at most two steps away; a wheel notch or a drag of one
+row steps it, and a tap on a neighbour chooses that one. Move and Pan
+appear only in the column arrangement, as before.
+
+**The mode stays global** (sec 8.7's "one global input selector"),
+shown in whichever corner is visible. Per-pane modes were weighed and
+not taken: hiding the corner on inactive panes leaves one visible
+anyway, and Move and Pan act on the column, not on a pane.
+
+**The desktop gets the mode too.** Until now a desktop click went to the
+program whenever it asked for the mouse, Shift keeping it local, and
+nothing on screen said which would happen. The desktop's default is
+Click, which is exactly that behaviour; Select and Scroll keep the
+pointer local even inside a program that grabbed the mouse (Shift still
+works in any mode). Click shows a mark while the program is listening,
+so the corner answers "what will my mouse do here".
+
+**The grip** is the corner's top slot on the desktop, starting the same
+pane drag as before (sec 8.4). Touch keeps no grip -- a drag there hands
+the whole window to Android's split-screen (sec 8.4, measured) -- and
+reorders with Move instead.
+
+**The multiplexer button** is the bottom slot, there only while sessions
+were found (sec 10.2a); it opens the same drawer.
+
+**Next, on the holder's question the same day** ("if we hide the tab bar
+or the top menu bar they also get buttons there?"): options to hide the
+tab bar and the desktop menu bar, each adding a button to the corner
+while hidden -- the menu bar's menus in one popup, and the window's tabs
+in a list -- so hiding a bar never hides what it reached. **Not built
+yet.**
+
+**Also queued, the holder 2026-10-29: moving the tab bar by dragging
+it.** "I want the tab bar to have a handle so it can be drag n dropped
+to move to one of the 3 other sides. And if there is no tab bar then a
+terminal should be droppable on any one of the four sides to create a
+tab bar there in addition to the other drop zones we already have."
+Today the side is a setting (Top, Bottom, Left, Right) and nothing on
+screen moves it. **Not built yet.**
+
+**As built (`bssh_pane_corner`, `bssh_input_selector`).**
+
+- **Rows are 48dp on touch.** 36 was tried first, to keep three rows off
+  half a landscape phone's height, and the sweep holding every touch
+  surface to sec 6.2's floor refused it -- a row a thumb taps is a
+  target. So the drum is 144dp tall on a phone; it covers columns at
+  the corner, not whole rows. With a pointer a row is the text and a
+  margin.
+- **Stepping:** a wheel notch (accumulated, so a touchpad's small deltas
+  make steps rather than each being one), a drag of one row -- down
+  brings the mode above into the middle -- or a tap on the top or bottom
+  row. The buttons are real buttons for the accessibility tree and for
+  `click()`, transparent to the pointer so a drag that starts on one
+  turns the drum.
+- **The desktop mode, measured:** in Click a drag in a program that has
+  turned on mouse reporting reaches the program and selects nothing; in
+  Select it sends nothing and selects; the wheel follows the same split
+  (`the_desktop_mode_decides_where_the_pointer_goes`). Touch keeps the
+  wheel the program's in every mode, as before. Click shows a dot while
+  the program listens, refreshed on paint, since a program turns
+  reporting on by writing output and output repaints.
+- **The tmux drawer** is only its panel now, opened beside the corner by
+  the corner's button; its old edge handle and hover rule are gone.
+- **The status line** keeps its own row under the terminal, or the band
+  over the split keyboard's left half (`place_status_line`). The band
+  over the right half, where the selector used to go, is empty.
+- **Changed the same evening, after the holder used it on the desktop**
+  ("the widget doesn't hide when no focus, it should probably be
+  transparent until the mouse is over it too. The screen button
+  disappears when X is pressed in the window, that is now unexpected.
+  and about the scrollwheel With only three options all on the screen,
+  why would we scroll? also the widget is wider than i expected"):
+  - hidden while its **window** is not the active one, as well as on an
+    inactive pane -- on the desktop; a phone shows one app. Watched with
+    `WindowActivate`, which reaches every child; `ActivationChange`,
+    tried first, reached only the window itself, and the corner stayed
+    hidden for good under twin;
+  - **faint (30%) until the pointer is over it** on the desktop, solid on
+    touch, which has no hover;
+  - the drawer's **x closes the panel and nothing more**. It used to
+    decline the offer and take the handle with it, which suited a handle
+    on the text's edge; the session's decline and the terminal menu's
+    "list again" are still there;
+  - **three modes stay put**, in their order with the current one marked;
+    the wheel and a drag move the mark and stop at the ends. Only the
+    column's five turn as a drum;
+  - **narrower**: the tmux button reads "tmux 2", "scr 17" or "mux 3",
+    the full "screen · 17" in its tooltip, and the drum's margin is
+    10px. Measured under twin, TDE's window manager, on Xvfb.
+- **A sabotage gap found on the way, not of this work's making:**
+  `arrangement-states.toml`'s "the bar is not rebuilt when a collapse
+  changes what is on screen" is MISSED -- and equally MISSED at the
+  commit before this work, measured in a clean copy of it, so
+  `narrowing_a_window_turns_its_extra_panes_into_tabs` does not see the
+  `refresh_tab_bar()` it was named for. **[OPEN]**
+- Guarded by `the_corner_sits_on_the_grid_and_takes_none_of_it`,
+  `the_corner_hides_with_its_window_and_is_faint_until_pointed_at`,
+  `only_the_focused_pane_shows_its_corner`,
+  `the_drum_steps_with_the_wheel_and_a_drag_and_wraps`,
+  `touch_gets_no_grip_in_the_corner` and
+  `the_status_line_keeps_its_place_and_the_drum_its_corner`;
+  `tool/sabotage/pane-corner.toml` and `input-selector.toml`.
 
 ### 8.6 The command line — **[DECIDED]**
 

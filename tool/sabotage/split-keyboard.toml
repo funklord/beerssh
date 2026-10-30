@@ -112,7 +112,7 @@ name = "the split keyboard keeps the digit row"
 file = "softkeys/src/keyboard.cpp"
 find = "\tconst int skip = group.digit_row_first ? 1 : 0;"
 replace = "\tconst int skip = 0;"
-expect = "the_input_selector_joins_the_status_line_when_wide"
+expect = "the_status_line_keeps_its_place_and_the_drum_its_corner"
 
 # A phone arrives in landscape by turning, and the upright layout's minimum
 # height was still on the window when the new height came: clamped to 395dp
@@ -126,7 +126,7 @@ find = '''
 		outer->setSizeConstraint(QLayout::SetNoConstraint);'''
 replace = '''
 		outer->setSizeConstraint(QLayout::SetDefaultConstraint);'''
-expect = "the_input_selector_joins_the_status_line_when_wide"
+expect = "the_status_line_keeps_its_place_and_the_drum_its_corner"
 
 # The status line and the selector stay in their row under the terminal
 # with the split keyboard showing: the band above the halves' keys stays
@@ -140,7 +140,7 @@ find = '''
 replace = '''
 	if (false) {
 		QLayout *left'''
-expect = "the_input_selector_joins_the_status_line_when_wide"
+expect = "the_status_line_keeps_its_place_and_the_drum_its_corner"
 
 # Nothing watches the halves' own show and hide: putting the keyboard away
 # resizes nothing, so the status line and the selector leave with it.
@@ -148,8 +148,8 @@ expect = "the_input_selector_joins_the_status_line_when_wide"
 name = "hiding the split keyboard takes the status line with it"
 file = "src/ui/main_window.cpp"
 find = '''
-		QTimer::singleShot(0, this, [this] { place_input_selector(); });
+		QTimer::singleShot(0, this, [this] { place_status_line(); });
 		return false;'''
 replace = '''
 		return false;'''
-expect = "the_input_selector_joins_the_status_line_when_wide"
+expect = "the_status_line_keeps_its_place_and_the_drum_its_corner"

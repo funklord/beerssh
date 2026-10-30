@@ -1,57 +1,11 @@
 #include "ui/multiplexer_drawer.h"
 
-#include "platform/platform.h"
-#include "ui/touch_metrics.h"
-
-#include <QAbstractButton>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
-#include <QPainter>
 #include <QToolButton>
 #include <QVBoxLayout>
-
-namespace {
-
-/*
- * The closed drawer: a tab on the terminal's edge with its label running
- * up it, as a tab on the side of a binder does, so it takes a sliver of
- * width rather than a corner of the text.
- */
-class drawer_handle : public QAbstractButton {
-public:
-	explicit drawer_handle(QWidget *parent) : QAbstractButton(parent) {
-		setFocusPolicy(Qt::NoFocus);
-		setCursor(Qt::PointingHandCursor);
-	}
-
-	QSize sizeHint() const override {
-		const QFontMetrics metrics(font());
-		const bssh_platform *platform = bssh_platform::instance();
-		const bool touch = platform && platform->is_touch_primary();
-		const int thick = qMax(metrics.height() + 10, touch ? BSSH_TOUCH_TARGET_DP / 2 + 8 : 0);
-		return QSize(thick, metrics.horizontalAdvance(text()) + 24);
-	}
-
-protected:
-	void paintEvent(QPaintEvent *) override {
-		QPainter painter(this);
-		painter.setRenderHint(QPainter::Antialiasing);
-		const QPalette &colours = palette();
-		painter.setPen(colours.color(QPalette::Mid));
-		painter.setBrush(isDown() ? colours.color(QPalette::Midlight)
-		                          : colours.color(QPalette::Button));
-		painter.drawRoundedRect(QRectF(rect()).adjusted(0.5, 0.5, 4, -0.5), 5, 5);
-
-		painter.setPen(colours.color(QPalette::ButtonText));
-		painter.translate(0, height());
-		painter.rotate(-90);
-		painter.drawText(QRect(0, 0, height(), width()), Qt::AlignCenter, text());
-	}
-};
-
-} /* namespace */
 
 bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(parent) {
 	setObjectName(QStringLiteral("multiplexer_drawer"));
@@ -59,12 +13,6 @@ bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(pare
 	QHBoxLayout *row = new QHBoxLayout(this);
 	row->setContentsMargins(0, 0, 0, 0);
 	row->setSpacing(0);
-
-	m_handle = new drawer_handle(this);
-	m_handle->setObjectName(QStringLiteral("multiplexer_handle"));
-	m_handle->setToolTip(QStringLiteral("tmux and screen sessions running here"));
-	row->addWidget(m_handle, 0, Qt::AlignTop);
-	connect(m_handle, &QAbstractButton::clicked, this, [this] { set_open(!m_open); });
 
 	m_panel = new QFrame(this);
 	m_panel->setFrameShape(QFrame::StyledPanel);
@@ -83,7 +31,7 @@ bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(pare
 	QToolButton *close = new QToolButton(m_panel);
 	close->setObjectName(QStringLiteral("multiplexer_close"));
 	close->setText(QStringLiteral("×"));
-	close->setToolTip(QStringLiteral("Shell only: leave the shell as it is"));
+	close->setToolTip(QStringLiteral("Close"));
 	close->setAutoRaise(true);
 	top->addWidget(close);
 	column->addLayout(top);
@@ -96,7 +44,13 @@ bssh_multiplexer_drawer::bssh_multiplexer_drawer(QWidget *parent) : QWidget(pare
 	m_list->setObjectName(QStringLiteral("multiplexer_sessions"));
 	column->addWidget(m_list, 1);
 
-	connect(close, &QToolButton::clicked, this, [this] { emit declined(); });
+	/*
+	 * Closes the panel, and nothing more. It used to decline the offer and
+	 * take the handle with it, which suited a handle on the text's edge;
+	 * with the button in the pane's corner (sec 8.7a), where it is hidden
+	 * anyway, the holder found the button going "now unexpected".
+	 */
+	connect(close, &QToolButton::clicked, this, [this] { set_open(false); });
 
 	/*
 	 * One click switches, as choosing from a list does everywhere else;
@@ -134,8 +88,7 @@ void bssh_multiplexer_drawer::set_sessions(const QList<bssh_mux_session_t> &foun
 			item->setToolTip(QStringLiteral("This tab is showing it"));
 		}
 	}
-	m_handle->setText(handle_text());
-	m_handle->updateGeometry();
+	updateGeometry();
 }
 
 void bssh_multiplexer_drawer::set_open(bool open) {
@@ -157,9 +110,18 @@ QString bssh_multiplexer_drawer::handle_text() const {
 	return QStringLiteral("%1 · %2").arg(kind).arg(m_found.size());
 }
 
+QString bssh_multiplexer_drawer::button_text() const {
+	bool tmux = false;
+	bool screen = false;
+	for (const bssh_mux_session_t &session : m_found)
+		(session.kind == bssh_mux_session_t::TMUX ? tmux : screen) = true;
+	const QString kind = tmux && screen ? QStringLiteral("mux")
+	                     : screen      ? QStringLiteral("scr")
+	                                   : QStringLiteral("tmux");
+	return QStringLiteral("%1 %2").arg(kind).arg(m_found.size());
+}
+
 QSize bssh_multiplexer_drawer::sizeHint() const {
-	const QSize handle = m_handle->sizeHint();
-	if (!m_open) return handle;
 	const QSize panel = m_panel->sizeHint();
-	return QSize(handle.width() + qMax(panel.width(), 280), qMax(handle.height(), panel.height()));
+	return QSize(qMax(panel.width(), 280), panel.height());
 }

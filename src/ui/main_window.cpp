@@ -77,7 +77,6 @@ static qint64 other_beerssh_pid_under_pointer(const QWidget *ours);
 #include "model/settings_resolver.h"
 #include "ui/layout_manager.h"
 #include "ui/find_bar.h"
-#include "ui/input_selector.h"
 #include "ui/pane_bar.h"
 #include "ui/pane_container.h"
 #include "input/input_router.h"
@@ -424,7 +423,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_preset_editor(nullptr),
       m_terminal_view(nullptr),
       m_panes(nullptr),
-      m_input_selector(nullptr),
+      m_input_mode(bssh_default_input_mode()),
       m_find_bar(nullptr),
       m_wired_view(nullptr),
       m_status_label(new QLabel(this)),
@@ -588,11 +587,8 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_body->addWidget(m_panes, 1);
 	layout->addLayout(m_body, 1);
 	/*
-	 * The status line is a row with room at its right end for the input
-	 * selector (sec 8.7), which moves there on a wide screen -- see
-	 * place_input_selector. Both rows are always in the layout, so code
-	 * that inserts into it by index finds the same slots either way; an
-	 * empty one takes no height.
+	 * The status line's row. It moves into the split keyboard's left half
+	 * while the halves show -- see place_status_line.
 	 */
 	QWidget *status_row = new QWidget(m_terminal_page);
 	m_status_row = new QHBoxLayout(status_row);
@@ -602,25 +598,10 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	layout->addWidget(status_row, 0);
 
 	/*
-	 * The input selector (sec 8.7), at the bottom edge where a thumb
-	 * reaches without stretching, and beneath the status line so it does
-	 * not push the terminal around as the status text changes. Shown only
-	 * where a thumb is the pointer: a desktop keeps Shift, the wheel and
-	 * drag-select, so the control there would be chrome doing nothing.
-	 *
-	 * Where it finally lives is sec 8.7's open question, resolved here to
-	 * the bottom bar on the holder's go-ahead 2026-09-18; it is one
-	 * addWidget to move.
+	 * The input selector (sec 8.7) is not a row of the window any more:
+	 * it is the drum in the focused pane's corner (sec 8.7a), which gave
+	 * a narrow phone's 48dp row back to the terminal.
 	 */
-	m_input_selector = new bssh_input_selector(m_terminal_page);
-	QWidget *selector_row = new QWidget(m_terminal_page);
-	m_selector_row = new QHBoxLayout(selector_row);
-	m_selector_row->setContentsMargins(0, 0, 0, 0);
-	m_selector_row->setSpacing(0);
-	m_selector_row->addWidget(m_input_selector, 1);
-	layout->addWidget(selector_row, 0);
-	m_input_selector->setVisible(bssh_platform::instance()
-	                              && bssh_platform::instance()->is_touch_primary());
 
 	/*
 	 * The arrangement's other two halves -- how many terminals a column
@@ -629,8 +610,8 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 */
 	apply_arrangement();
 
-	connect(m_input_selector, &bssh_input_selector::mode_changed,
-	         this, [this] { apply_input_mode(); });
+	connect(m_panes, &bssh_pane_container::input_mode_chosen,
+	         this, &bssh_main_window::set_input_mode);
 
 	/*
 	 * The find bar (sec 6.4) lives at the bottom too, below the selector,
@@ -1227,6 +1208,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, [this](int) { keep_the_minimum_to_the_shown_page(); });
 	keep_the_minimum_to_the_shown_page();
 
+	m_status_label->setObjectName(QStringLiteral("status_line"));
 	m_status_label->setContentsMargins(6, 3, 6, 3);
 
 	/*
@@ -1305,7 +1287,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 	/*
 	 * Whether the halves show decides where the status line goes (see
-	 * place_input_selector), and showing or hiding the keyboard changes
+	 * place_status_line), and showing or hiding the keyboard changes
 	 * no size the window is told about -- so their own show and hide.
 	 */
 	m_keyboard->half(1)->installEventFilter(this);
@@ -1732,65 +1714,44 @@ bool bssh_main_window::apply_arrangement() {
 	 * in the settings, or turned into one by being folded, offered no way
 	 * to reorder it.
 	 */
-	if (m_input_selector)
-		m_input_selector->set_column_available(choice.arrangement
-		                                        == bssh_layout_manager::COLUMN);
+	m_column_available = choice.arrangement == bssh_layout_manager::COLUMN;
+	if (!m_column_available && is_column_mode(m_input_mode))
+		m_input_mode = bssh_default_input_mode();
+	apply_input_mode();
 	return changed;
 }
 
 /*
- * The input selector's row (sec 8.7): under the status line on a narrow
- * upright screen, where five equal buttons are a thumb's width each, and
- * at the status line's right end, each button its label's width, on a
- * screen that is wide or lying sideways. Reported from the Fold in
- * landscape, where five buttons across the whole screen took a row the
- * terminal -- already sharing the width with the split keyboard -- could
- * not spare. Moved only when the answer changes, since this runs on every
- * frame of a system keyboard opening.
+ * Where the status line goes. With the split keyboard showing, into the
+ * band above the left half's keys: the keys sit at the bottom where thumbs
+ * are, so that band was empty, while the status line's row under the
+ * terminal cost it 48dp of a landscape phone's 296 -- the holder asked for
+ * it back (2026-10-09). Otherwise its own row under the terminal. Moved
+ * only when the answer changes, since this runs on every frame of a system
+ * keyboard opening.
+ *
+ * The input selector used to be placed here too, in a row of its own or at
+ * the status line's end; it is the drum in the focused pane's corner now
+ * (sec 8.7a).
  */
-void bssh_main_window::place_input_selector() {
-	if (!m_input_selector || !m_status_row || !m_selector_row) return;
+void bssh_main_window::place_status_line() {
+	if (!m_status_row) return;
 
-	/*
-	 * With the split keyboard showing, into the band above each half's
-	 * keys: the status text over the left half, the selector over the
-	 * right. The keys sit at the bottom where thumbs are, so that band was
-	 * empty, while the status line's row under the terminal cost it 48dp
-	 * of a landscape phone's 296 -- moving the buttons to that row's end
-	 * had saved only the status text's height, and the holder asked for
-	 * the rest back (2026-10-09).
-	 */
 	const bool halves = m_keyboard
 	                    && m_keyboard->style() == sk_catalog::STYLE_SPLIT
 	                    && m_keyboard->half(1)->isVisibleTo(this);
 	if (halves) {
 		QLayout *left = m_keyboard->half_header(0)->layout();
-		QLayout *right = m_keyboard->half_header(1)->layout();
 		if (left->indexOf(m_status_label) < 0) left->addWidget(m_status_label);
-		if (right->indexOf(m_input_selector) < 0) right->addWidget(m_input_selector);
 		return;
 	}
 	if (m_status_row->indexOf(m_status_label) < 0) m_status_row->insertWidget(0, m_status_label, 1);
-
-	const bool wide = width() > height()
-	                  || width() >= SK_FULL_KEYBOARD_MIN_DP;
-	QHBoxLayout *target = wide ? m_status_row : m_selector_row;
-
-	/*
-	 * Stretch 0 beside the status text's 1 is what holds the buttons to
-	 * their labels' width: the text takes the rest of the row. A size
-	 * policy on the selector was tried as well and a sabotage showed it
-	 * changed nothing, so the layout's own answer is the only one.
-	 */
-	if (target->indexOf(m_input_selector) < 0) {
-		target->addWidget(m_input_selector, wide ? 0 : 1);
-	}
 }
 
 void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
 
-	place_input_selector();
+	place_status_line();
 
 	/* Re-shortened from the original: what fits changed. */
 	elide_status();
@@ -1854,12 +1815,18 @@ void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	apply_keyboard_style();
 }
 
-void bssh_main_window::apply_input_mode() {
-	if (!m_panes || !m_input_selector) return;
+void bssh_main_window::set_input_mode(bssh_input_mode_t mode) {
+	m_input_mode = mode;
+	apply_input_mode();
+}
 
-	const bssh_input_mode_t mode = m_input_selector->mode();
+void bssh_main_window::apply_input_mode() {
+	if (!m_panes) return;
+
 	for (bssh_terminal_view *view : m_panes->views()) {
-		if (view) view->set_input_mode(mode);
+		if (!view) continue;
+		view->set_column_available(m_column_available);
+		view->set_input_mode(m_input_mode);
 	}
 }
 
@@ -4161,7 +4128,7 @@ bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
 	 */
 	if (m_keyboard && watched == m_keyboard->half(1)
 	    && (event->type() == QEvent::Show || event->type() == QEvent::Hide)) {
-		QTimer::singleShot(0, this, [this] { place_input_selector(); });
+		QTimer::singleShot(0, this, [this] { place_status_line(); });
 		return false;
 	}
 

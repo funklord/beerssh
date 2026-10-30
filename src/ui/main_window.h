@@ -11,6 +11,7 @@
 #include <functional>
 
 #include "model/app_settings.h"
+#include "ui/input_mode.h"
 #include "ui/long_press.h"
 
 #include "input/input_router.h"
@@ -39,7 +40,6 @@ class bssh_layout_manager;
 class bssh_pane_container;
 class bssh_tab_drop;
 class bssh_pane_bar;
-class bssh_input_selector;
 class bssh_find_bar;
 class sk_key_row;
 class sk_keyboard;
@@ -454,7 +454,7 @@ private:
 	 */
 	void apply_keyboard_choice();
 	void apply_keyboard_style();
-	void place_input_selector();
+	void place_status_line();
 
 	/*
 	 * Set by the keyboard's own Hide key and cleared by a tap in the
@@ -475,7 +475,7 @@ private:
 	void style_settings_index();
 
 	/*
-	 * Pushes the selector's mode to every pane (sec 8.7). Called when the
+	 * Pushes the window's mode to every pane (sec 8.7). Called when the
 	 * user changes it and after a rebuild, because a freshly built view
 	 * starts from its own default and would otherwise ignore a mode set
 	 * before it existed -- the same shape as the device settings above.
@@ -1068,11 +1068,13 @@ private:
 	bssh_pane_container *m_panes;
 
 	/*
-	 * The one input selector for this window (sec 8.7): the always-visible
-	 * control that says what a touch body-drag does, and the window pushes
-	 * its state to every pane. Present only where a thumb is the pointer.
+	 * The window's one input mode (sec 8.7), shown in the focused pane's
+	 * corner (sec 8.7a) and pushed to every pane; and whether the column
+	 * modes are on offer, which only a column arrangement has.
 	 */
-	bssh_input_selector *m_input_selector;
+	bssh_input_mode_t m_input_mode;
+	bool m_column_available = false;
+	void set_input_mode(bssh_input_mode_t mode);
 	bssh_find_bar *m_find_bar;
 
 	/*
@@ -1098,9 +1100,8 @@ private:
 	QPointer<bssh_terminal_view> m_wired_view;
 	QLabel *m_status_label;
 
-	/* The status line's row and the selector's own; see place_input_selector. */
+	/* The status line's row; see place_status_line. */
 	QHBoxLayout *m_status_row = nullptr;
-	QHBoxLayout *m_selector_row = nullptr;
 	bssh_session_registry *m_registry;
 
 	/*

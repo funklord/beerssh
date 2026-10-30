@@ -1,0 +1,69 @@
+# Sabotages for the pane corner (project.md sec 8.7a): the grip, the mode
+# drum and the tmux button over the grid's top-right corner, on the
+# focused pane only, taking nothing from the grid.
+
+# The closed drawer covers the text again, where the corner's button is
+# meant to stand for it.
+[[sabotage]]
+name = "the closed drawer covers the text"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_mux_drawer->setVisible(m_mux_drawer->is_open());\n"
+replace = "\tm_mux_drawer->setVisible(true);\n"
+expect = "the_corner_sits_on_the_grid_and_takes_none_of_it"
+
+# Placed against the view's edge, under a right-hand scrollbar.
+[[sabotage]]
+name = "the corner sits under the scrollbar"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst int right = grid_origin_x() + grid_width();\n\tm_corner->setGeometry("
+replace = "\tconst int right = width();\n\tm_corner->setGeometry("
+expect = "the_corner_sits_on_the_grid_and_takes_none_of_it"
+
+# Every pane shows its corner, the inactive ones covering their text.
+[[sabotage]]
+name = "every pane shows its corner"
+file = "src/ui/pane_container.cpp"
+find = "\t\tview->set_corner_active(focused);"
+replace = "\t\tview->set_corner_active(true);"
+expect = "only_the_focused_pane_shows_its_corner"
+
+# Touch gets a grip, which hands the window to Android's split-screen.
+[[sabotage]]
+name = "touch gets a grip"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_corner->set_grip_shown(!touch);"
+replace = "\tm_corner->set_grip_shown(true);"
+expect = "touch_gets_no_grip_in_the_corner"
+
+# The tmux button stays with nothing to open.
+[[sabotage]]
+name = "the tmux button outlives the drawer"
+file = "src/ui/pane_corner.cpp"
+find = "\tm_multiplexer->setVisible(!text.isEmpty());"
+replace = "\tm_multiplexer->setVisible(true);"
+expect = "the_corner_sits_on_the_grid_and_takes_none_of_it"
+
+# Shown over a window nobody is using (the holder: "the widget doesn't
+# hide when no focus").
+[[sabotage]]
+name = "the corner shows on an inactive window"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst bool window_active = touch || (window() && window()->isActiveWindow());"
+replace = "\tconst bool window_active = true;"
+expect = "the_corner_hides_with_its_window_and_is_faint_until_pointed_at"
+
+# Solid over the text whether or not anything points at it.
+[[sabotage]]
+name = "the idle corner is solid"
+file = "src/ui/pane_corner.cpp"
+find = "\tm_opacity->setOpacity(m_faint_when_idle && !m_hovered ? IDLE_OPACITY : 1.0);"
+replace = "\tm_opacity->setOpacity(1.0);"
+expect = "the_corner_hides_with_its_window_and_is_faint_until_pointed_at"
+
+# Three modes turn as a drum again, all on screen and rotating anyway.
+[[sabotage]]
+name = "three modes rotate"
+file = "src/ui/input_selector.cpp"
+find = "\tif (n <= 3) return modes.at(qBound(0, row, n - 1));"
+replace = ""
+expect = "the_input_selector_defaults_by_platform_and_reports_changes"

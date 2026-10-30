@@ -4,6 +4,8 @@
 #include <QList>
 #include <QWidget>
 
+#include "ui/input_mode.h"
+
 #include <functional>
 
 class QMimeData;
@@ -187,6 +189,12 @@ signals:
 	void input_panel_requested();
 
 	void pane_drag_requested(bssh_session *session);
+
+	/*
+	 * A pane's corner chose an input mode (sec 8.7a). The mode is the
+	 * window's, one for every pane, so the window applies it to all.
+	 */
+	void input_mode_chosen(bssh_input_mode_t mode);
 
 	/*
 	 * A pane or tab was dropped on the pane showing `target`, at `edge`

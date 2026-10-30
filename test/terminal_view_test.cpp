@@ -1,5 +1,6 @@
 #include <QHBoxLayout>
 #include <QScrollBar>
+#include <QToolButton>
 #include <QUrl>
 #include <QMimeData>
 #include <QDropEvent>
@@ -39,6 +40,7 @@
 #include "ui/interface_scale.h"
 #include "term/font_catalog.h"
 #include "ui/terminal_view.h"
+#include "ui/pane_corner.h"
 #include "model/session_registry.h"
 #include "ui/pane_container.h"
 #include "ui/find_bar.h"
@@ -721,6 +723,53 @@ void terminal_view_test::click_mode_lets_the_remote_have_the_touch() {
 	QVERIFY(!emulator.take_output().isEmpty());
 	QVERIFY(!view.has_selection());
 	QCOMPARE(view.scroll_offset(), 0);
+}
+
+void terminal_view_test::the_desktop_mode_decides_where_the_pointer_goes() {
+	/*
+	 * Sec 8.7a: the desktop has the mode too. Click, its default, is the
+	 * old behaviour -- a program that asked for the mouse gets it. Select
+	 * keeps the pointer local inside that program, which only Shift could
+	 * do before and nothing on screen said.
+	 */
+	forced_touch_t desktop(0);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+
+	emulator.feed(QByteArrayLiteral("some text here"));
+	emulator.feed(QByteArrayLiteral("\x1b[?1000h\x1b[?1006h"));
+	QVERIFY(emulator.mouse_reporting());
+	emulator.take_output();
+
+	QCOMPARE(view.input_mode(), BSSH_INPUT_CLICK);
+	drag(view, 1, 0, 6, 0);
+	QVERIFY2(!emulator.take_output().isEmpty(), "Click did not give the program the mouse");
+	QVERIFY(!view.has_selection());
+
+	view.set_input_mode(BSSH_INPUT_SELECT);
+	drag(view, 1, 0, 6, 0);
+	QVERIFY2(emulator.take_output().isEmpty(), "Select sent the drag to the program");
+	QVERIFY2(view.has_selection(), "Select did not select inside a program that grabbed the mouse");
+
+	/* And the wheel: the program's in Click, the history's in Select. */
+	const QPoint middle(view.width() / 2, view.height() / 2);
+	view.set_input_mode(BSSH_INPUT_CLICK);
+	QWheelEvent click_wheel(middle, view.mapToGlobal(middle), QPoint(), QPoint(0, 120),
+	                         Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+	QCoreApplication::sendEvent(&view, &click_wheel);
+	QVERIFY2(!emulator.take_output().isEmpty(), "Click kept the wheel from the program");
+
+	view.set_input_mode(BSSH_INPUT_SELECT);
+	QWheelEvent select_wheel(middle, view.mapToGlobal(middle), QPoint(), QPoint(0, 120),
+	                          Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+	QCoreApplication::sendEvent(&view, &select_wheel);
+	QVERIFY2(emulator.take_output().isEmpty(), "Select sent the wheel to the program");
 }
 
 void terminal_view_test::the_interface_font_scales_and_no_ops_at_one() {
@@ -3347,62 +3396,162 @@ void terminal_view_test::a_scrolled_terminal_matches_a_full_repaint() {
 	QVERIFY(matches_a_full_repaint("a scroll region with a status line below it"));
 }
 
-void terminal_view_test::the_tmux_handle_shows_under_the_pointer_and_the_grip_clears_the_scrollbar() {
+void terminal_view_test::the_corner_sits_on_the_grid_and_takes_none_of_it() {
 	/*
-	 * The holder: like the drag grip, the tmux and screen handle should not
-	 * show unless the terminal is being pointed at -- on the desktop. Open,
-	 * it stays; on a touch screen, with no pointer to hover, it always
-	 * shows. And the grip itself sat under the scrollbar, partly hidden.
+	 * Sec 8.7a. The holder put everything that covers a pane's text --
+	 * grip, mode drum, tmux button -- in one corner, "hidden while that
+	 * window is inactive", and turned down building it into the
+	 * scrollbar's column: "the scrollbar, if there is one, will make the
+	 * terminal smaller, this widget doesn't".
 	 */
+	const forced_touch_t desktop(0);
+
+	/* The grid's inset from the view's edge is a pixel or two; this is
+	 * how far from an edge still counts as against it. */
+	const int slack = 4;
+
 	bssh_terminal_view view;
 	show_and_resize(view, 500, 300);
 	QVERIFY(QTest::qWaitForWindowExposed(&view));
 	bssh_emulator emulator(view.cols(), view.rows());
 	view.attach_screen(&emulator.screen());
-
-	/* The pointer away from the terminal, whatever showing the window did
-	 * with it: the offscreen platform may enter a window under its cursor. */
-	QEvent leave(QEvent::Leave);
-	QCoreApplication::sendEvent(&view, &leave);
+	for (int line = 0; line < view.rows() * 3; ++line) emulator.feed("line\r\n");
+	view.attach_scrollback(&emulator.scrollback());
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_RIGHT);
+	view.set_pane_handle(true);
+	QVERIFY(view.corner());
 
 	bssh_mux_session_t work;
 	work.name = QStringLiteral("work");
 	view.offer_multiplexers({ work });
 	QVERIFY(view.multiplexer_drawer());
-	QVERIFY2(!view.multiplexer_drawer()->isVisible(), "the handle shows with no pointer over the terminal");
 
-	QEnterEvent enter(QPointF(20, 20), QPointF(20, 20), QPointF(view.mapToGlobal(QPoint(20, 20))));
-	QCoreApplication::sendEvent(&view, &enter);
-	QVERIFY(view.multiplexer_drawer()->isVisible());
-	QCoreApplication::sendEvent(&view, &leave);
-	QVERIFY(!view.multiplexer_drawer()->isVisible());
+	/* Inactive: nothing of it covers the text. */
+	QVERIFY2(!view.corner()->isVisible(), "the corner shows on an inactive pane");
+	QVERIFY2(!view.multiplexer_drawer()->isVisible(), "the closed drawer covers the text");
 
-	/* Open, it stays when the pointer leaves. */
-	QCoreApplication::sendEvent(&view, &enter);
-	view.multiplexer_drawer()->set_open(true);
-	QCoreApplication::sendEvent(&view, &leave);
-	QVERIFY2(view.multiplexer_drawer()->isVisible(), "an open drawer went when the pointer left");
-	view.multiplexer_drawer()->set_open(false);
-	QVERIFY(!view.multiplexer_drawer()->isVisible());
-
-	/* On a touch screen there is no hover: always shown. */
-	bssh_platform::force_touch_primary(1);
-	view.offer_multiplexers({ work });
-	QVERIFY2(view.multiplexer_drawer()->isVisible(), "hidden on a touch screen, where nothing can hover");
-	bssh_platform::force_touch_primary(-1);
-
-	/* The grip is clear of the scrollbar -- with one on the right made
-	 * certain, or this would pass by never meeting it. */
-	for (int line = 0; line < view.rows() * 3; ++line) emulator.feed("line\r\n");
-	view.attach_scrollback(&emulator.scrollback());
-	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_RIGHT);
-	view.set_pane_handle(true);
-	QCoreApplication::sendEvent(&view, &enter);
+	/* Shown, and the grid exactly the size it was. */
+	const int cols = view.cols();
+	const int rows = view.rows();
+	QSignalSpy resized(&view, &bssh_terminal_view::grid_resized);
+	view.set_corner_active(true);
 	QTest::qWait(20);
+	QVERIFY(view.corner()->isVisible());
+	QCOMPARE(view.cols(), cols);
+	QCOMPARE(view.rows(), rows);
+	QCOMPARE(resized.count(), 0);
+
+	/*
+	 * Over the grid's top-right corner, left of the scrollbar -- with one
+	 * made certain, or this would pass by never meeting it -- and against
+	 * the grid's edge, not floating somewhere inside it.
+	 */
 	const QScrollBar *bar = view.findChild<QScrollBar *>();
-	QVERIFY2(bar && bar->isVisible(), "no scrollbar to keep the grip clear of");
-	QVERIFY2(!view.pane_grip_rect().intersects(bar->geometry()),
-	         "the scrollbar covers part of the drag grip");
+	QVERIFY2(bar && bar->isVisible(), "no scrollbar to keep the corner clear of");
+	const QRect corner = view.corner()->geometry();
+	QVERIFY2(!corner.intersects(bar->geometry()), "the scrollbar covers part of the corner");
+	QVERIFY2(bar->x() - (corner.right() + 1) <= slack,
+	          qPrintable(QStringLiteral("the corner ends at %1, the bar starts at %2")
+	                             .arg(corner.right() + 1).arg(bar->x())));
+	QVERIFY(corner.top() <= slack);
+	QVERIFY2(!view.pane_grip_rect().isNull(), "no grip on the desktop");
+	QVERIFY(corner.contains(view.pane_grip_rect()));
+
+	/* The scrollbar on the left: the corner stays at the grid's right. */
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_LEFT);
+	QTest::qWait(20);
+	QVERIFY2(view.width() - (view.corner()->geometry().right() + 1) <= slack,
+	          "the corner left the grid's right edge with the scrollbar");
+
+	/* Closed, the drawer is the corner's button; it opens and closes it. */
+	QToolButton *button = view.corner()->multiplexer_button();
+	QVERIFY(button);
+	QVERIFY2(button->isVisible(), "the corner has no tmux button");
+	QCOMPARE(button->text(), QStringLiteral("tmux 1"));
+	button->click();
+	QVERIFY(view.multiplexer_drawer()->is_open());
+	QVERIFY(view.multiplexer_drawer()->isVisible());
+	button->click();
+	QVERIFY(!view.multiplexer_drawer()->is_open());
+	QVERIFY(!view.multiplexer_drawer()->isVisible());
+
+	/*
+	 * The drawer's x closes it and leaves the button: the holder found the
+	 * button going with it "now unexpected", once it lived in the corner.
+	 */
+	button->click();
+	QToolButton *x = view.multiplexer_drawer()->findChild<QToolButton *>(QStringLiteral("multiplexer_close"));
+	QVERIFY(x);
+	x->click();
+	QVERIFY(!view.multiplexer_drawer()->is_open());
+	QVERIFY2(button->isVisible(), "the x took the tmux button away");
+
+	/* Withdrawn, the button goes. */
+	view.withdraw_multiplexers();
+	QVERIFY2(!button->isVisible(), "the tmux button stayed with nothing to open");
+
+	/* Inactive again: gone. */
+	view.set_corner_active(false);
+	QVERIFY(!view.corner()->isVisible());
+}
+
+void terminal_view_test::the_corner_hides_with_its_window_and_is_faint_until_pointed_at() {
+	/*
+	 * The holder, on the desktop: "the widget doesn't hide when no focus,
+	 * it should probably be transparent until the mouse is over it too".
+	 */
+	const forced_touch_t desktop(0);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 500, 300);
+	view.set_pane_handle(true);
+	view.set_corner_active(true);
+	view.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&view));
+	QTRY_VERIFY(view.corner()->isVisible());
+
+	/* Faint until the pointer is over it, then solid, then faint again. */
+	QVERIFY2(view.corner()->is_faint(), "the idle corner is solid over the text");
+	const QPointF inside(5, 5);
+	QEnterEvent enter(inside, inside, view.corner()->mapToGlobal(inside));
+	QCoreApplication::sendEvent(view.corner(), &enter);
+	QVERIFY2(!view.corner()->is_faint(), "the corner stays faint under the pointer");
+	QEvent leave(QEvent::Leave);
+	QCoreApplication::sendEvent(view.corner(), &leave);
+	QVERIFY(view.corner()->is_faint());
+
+	/* Another window active: gone, and back when this one is again. */
+	QWidget other;
+	other.resize(200, 100);
+	other.show();
+	other.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&other));
+	QTRY_VERIFY2(!view.corner()->isVisible(), "the corner shows on an inactive window");
+
+	view.activateWindow();
+	QVERIFY(QTest::qWaitForWindowActive(&view));
+	QTRY_VERIFY2(view.corner()->isVisible(), "the corner did not come back with its window");
+}
+
+void terminal_view_test::touch_gets_no_grip_in_the_corner() {
+	/*
+	 * A grip on touch hands the whole window to Android's split-screen
+	 * (sec 8.4, measured on a Fold): the corner has the drum and the tmux
+	 * button there, and no grip.
+	 */
+	const forced_touch_t touch(1);
+
+	bssh_terminal_view view;
+	show_and_resize(view, 500, 400);
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	view.set_pane_handle(true);
+	view.set_corner_active(true);
+	QTest::qWait(20);
+	QVERIFY(view.corner());
+	QVERIFY(view.corner()->isVisible());
+	QVERIFY2(!view.corner()->grip_shown(), "touch has a grip");
+	QVERIFY(view.pane_grip_rect().isNull());
+	QVERIFY(!view.grip_visible());
 }
 
 void terminal_view_test::alt_drag_asks_for_the_pane_to_be_moved() {

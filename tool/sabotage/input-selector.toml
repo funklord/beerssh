@@ -27,8 +27,8 @@ expect = "a_touch_body_drag_scrolls_in_scroll_mode"
 [[sabotage]]
 name = "select mode stops overriding mouse reporting"
 file = "src/ui/terminal_view.cpp"
-find = "\tconst bool keep_local = touch ? (m_input_mode != BSSH_INPUT_CLICK) : shift;"
-replace = "\tconst bool keep_local = touch ? false : shift;"
+find = "\tconst bool keep_local = shift || m_input_mode != BSSH_INPUT_CLICK;"
+replace = "\tconst bool keep_local = shift;"
 expect = "select_mode_is_the_touch_shift_override"
 
 # Click mode no longer reaches the remote.
@@ -40,8 +40,8 @@ expect = "select_mode_is_the_touch_shift_override"
 [[sabotage]]
 name = "click mode stops forwarding to the remote"
 file = "src/ui/terminal_view.cpp"
-find = "\tconst bool keep_local = touch ? (m_input_mode != BSSH_INPUT_CLICK) : shift;"
-replace = "\tconst bool keep_local = touch ? true : shift;"
+find = "\tconst bool keep_local = shift || m_input_mode != BSSH_INPUT_CLICK;"
+replace = "\tconst bool keep_local = true;"
 expect = "click_mode_lets_the_remote_have_the_touch"
 
 # The window stops telling the panes the mode.
@@ -54,8 +54,8 @@ expect = "click_mode_lets_the_remote_have_the_touch"
 [[sabotage]]
 name = "the selector's mode never reaches the panes"
 file = "src/ui/main_window.cpp"
-find = "\t\tif (view) view->set_input_mode(mode);"
-replace = "\t\tif (view) (void) mode;"
+find = "\t\tview->set_input_mode(m_input_mode);"
+replace = "\t\t(void) m_input_mode;"
 expect = "the_selector_pushes_its_mode_to_every_pane"
 
 # The control opens on the wrong state.
@@ -67,6 +67,41 @@ expect = "the_selector_pushes_its_mode_to_every_pane"
 [[sabotage]]
 name = "the selector defaults to select rather than scroll"
 file = "src/ui/input_selector.cpp"
-find = "      m_mode(BSSH_INPUT_SCROLL),"
-replace = "      m_mode(BSSH_INPUT_SELECT),"
-expect = "the_input_selector_defaults_to_scroll_and_reports_changes"
+find = "\treturn touch_primary() ? BSSH_INPUT_SCROLL : BSSH_INPUT_CLICK;"
+replace = "\treturn BSSH_INPUT_SELECT;"
+expect = "the_input_selector_defaults_by_platform_and_reports_changes"
+
+# The desktop ignores the mode again (sec 8.7a): a program that grabbed
+# the mouse gets every click whatever the corner says, and Select only
+# works with Shift held, which is what nothing on screen told anybody.
+[[sabotage]]
+name = "the desktop ignores the mode"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst bool keep_local = shift || m_input_mode != BSSH_INPUT_CLICK;"
+replace = "\tconst bool keep_local = bssh_platform::instance() && bssh_platform::instance()->is_touch_primary() ? m_input_mode != BSSH_INPUT_CLICK : shift;"
+expect = "the_desktop_mode_decides_where_the_pointer_goes"
+
+# The wheel goes to the program in every mode on the desktop.
+[[sabotage]]
+name = "the desktop wheel ignores the mode"
+file = "src/ui/terminal_view.cpp"
+find = "\tconst bool wheel_local = !wheel_touch && m_input_mode != BSSH_INPUT_CLICK;"
+replace = "\tconst bool wheel_local = false;"
+expect = "the_desktop_mode_decides_where_the_pointer_goes"
+
+# The drum stops wrapping: the first and last modes have nothing on one
+# side, and the mode two steps round is four steps the other way.
+[[sabotage]]
+name = "the drum does not wrap"
+file = "src/ui/input_selector.cpp"
+find = "\treturn modes.at(((at + row - 1) % n + n) % n);"
+replace = "\treturn modes.at(qBound(0, at + row - 1, n - 1));"
+expect = "the_drum_steps_with_the_wheel_and_a_drag_and_wraps"
+
+# Half a wheel notch is a whole step: a touchpad races through the modes.
+[[sabotage]]
+name = "every wheel delta steps the drum"
+file = "src/ui/input_selector.cpp"
+find = "\twhile (m_wheel >= 120) {"
+replace = "\twhile (m_wheel >= 60) {"
+expect = "the_drum_steps_with_the_wheel_and_a_drag_and_wraps"

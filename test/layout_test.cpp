@@ -52,6 +52,7 @@
 #include "softkeys/keyboard_layout.h"
 #include "softkeys/resize_grip.h"
 #include "ui/input_selector.h"
+#include "ui/pane_corner.h"
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include "ui/host_list.h"
@@ -740,11 +741,32 @@ void layout_test::an_overflowing_column_keeps_every_pane_reachable() {
 	          "scrolling, so its panes are below a usable size");
 }
 
-void layout_test::the_input_selector_defaults_to_scroll_and_reports_changes() {
+void layout_test::the_input_selector_defaults_by_platform_and_reports_changes() {
+	/*
+	 * Scroll is touch's default (sec 8.7): a body drag is the only way a
+	 * thumb reaches the history. Click is the desktop's (sec 8.7a), which
+	 * is how the desktop always behaved -- the program gets the mouse
+	 * when it asks.
+	 */
+	{
+		const forced_touch_t touch(1);
+		bssh_input_selector touch_selector;
+		QCOMPARE(touch_selector.mode(), BSSH_INPUT_SCROLL);
+	}
+	const forced_touch_t desktop(0);
 	bssh_input_selector selector;
+	QCOMPARE(selector.mode(), BSSH_INPUT_CLICK);
 
-	/* Scroll is sec 8.7's default, and the control opens on it. */
-	QCOMPARE(selector.mode(), BSSH_INPUT_SCROLL);
+	/*
+	 * Three rows tall (the holder: "at least the height of 3 options").
+	 * Three modes are all on it, in their order, whichever is current --
+	 * "with only three options all on the screen, why would we scroll?"
+	 */
+	QCOMPARE(selector.sizeHint().height(), 3 * selector.row_height());
+	QVERIFY(!selector.rotates());
+	QCOMPARE(selector.shown(0), BSSH_INPUT_SCROLL);
+	QCOMPARE(selector.shown(1), BSSH_INPUT_SELECT);
+	QCOMPARE(selector.shown(2), BSSH_INPUT_CLICK);
 
 	QSignalSpy spy(&selector, &bssh_input_selector::mode_changed);
 
@@ -776,32 +798,161 @@ void layout_test::the_selector_pushes_its_mode_to_every_pane() {
 	forced_touch_t touch(1);
 
 	bssh_main_window window;
-	window.adopt_session(window.registry()->create(named(QStringLiteral("a"))));
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+	bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+	window.adopt_session(a);
+	window.adopt_session(b);
+	window.split_with(a);
+	QCoreApplication::processEvents();
 
-	bssh_input_selector *selector = window.findChild<bssh_input_selector *>();
-	QVERIFY(selector);
-	bssh_terminal_view *view = window.findChild<bssh_terminal_view *>();
-	QVERIFY(view);
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QCOMPARE(panes->views().size(), 2);
 
 	/*
-	 * The default reached the pane without anyone touching the selector:
-	 * a freshly built view starts from its own default, so the window has
+	 * The default reached both panes without anyone touching a drum: a
+	 * freshly built view starts from its own default, so the window has
 	 * to tell it the window's mode after every rebuild (sec 8.7).
 	 */
-	QCOMPARE(view->input_mode(), BSSH_INPUT_SCROLL);
+	for (bssh_terminal_view *view : panes->views()) QCOMPARE(view->input_mode(), BSSH_INPUT_SCROLL);
 
-	QAbstractButton *select =
-	        selector->findChild<QAbstractButton *>(QStringLiteral("input_select"));
+	/*
+	 * Chosen on the focused pane's drum, it reaches the OTHER pane too:
+	 * the mode is the window's (sec 8.7a), and the corner that chose it
+	 * is only where it is shown.
+	 */
+	bssh_terminal_view *focused = panes->focused_view();
+	QVERIFY(focused && focused->corner());
+	bssh_terminal_view *other = panes->views().first() == focused ? panes->views().last()
+	                                                                : panes->views().first();
+	QAbstractButton *select = focused->corner()->selector()
+	        ->findChild<QAbstractButton *>(QStringLiteral("input_select"));
 	QVERIFY(select);
 	select->click();
 
-	QCOMPARE(selector->mode(), BSSH_INPUT_SELECT);
-	QVERIFY2(view->input_mode() == BSSH_INPUT_SELECT,
-	          "the selector's mode never reached the pane");
+	QCOMPARE(focused->input_mode(), BSSH_INPUT_SELECT);
+	QVERIFY2(other->input_mode() == BSSH_INPUT_SELECT,
+	          "the mode chosen in one pane never reached the other");
+	QVERIFY2(other->corner()->selector()->mode() == BSSH_INPUT_SELECT,
+	          "the other pane's drum still shows the old mode");
 
 	/* Shared registry: leave it as it was found (sec 8.4). */
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
+void layout_test::only_the_focused_pane_shows_its_corner() {
+	/*
+	 * The holder: "we keep all of the annoying things that can cover the
+	 * terminal in one place, and hidden while that window is inactive"
+	 * (sec 8.7a). Every other pane shows its text whole.
+	 */
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+	bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+	window.adopt_session(a);
+	window.adopt_session(b);
+	window.split_with(a);
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QCOMPARE(panes->views().size(), 2);
+
+	for (bssh_session *focus : { a, b, a }) {
+		panes->focus_session(focus);
+		QCoreApplication::processEvents();
+		int shown = 0;
+		for (bssh_terminal_view *view : panes->views()) {
+			QVERIFY(view->corner());
+			const bool expected = view == panes->focused_view();
+			QVERIFY2(view->corner()->isVisible() == expected,
+			          expected ? "the focused pane has no corner"
+			                   : "an inactive pane shows its corner");
+			shown += view->corner()->isVisible() ? 1 : 0;
+		}
+		QCOMPARE(shown, 1);
+	}
+}
+
+void layout_test::the_drum_steps_with_the_wheel_and_a_drag_and_wraps() {
+	/*
+	 * "We can scroll between the modes easily as that is a very common
+	 * need" (sec 8.7a). Three modes stay put in their order and the wheel
+	 * moves the mark along them, stopping at the ends; the column's five
+	 * turn the drum, wrapping, so every mode is two steps away.
+	 */
+	const forced_touch_t desktop(0);
+	bssh_input_selector drum;
+	drum.resize(drum.sizeHint());
+	drum.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&drum));
+	QCOMPARE(drum.mode(), BSSH_INPUT_CLICK);
+	QSignalSpy spy(&drum, &bssh_input_selector::mode_changed);
+
+	const QPoint middle(drum.width() / 2, drum.height() / 2);
+	const auto wheel = [&](int delta) {
+		QWheelEvent event(middle, drum.mapToGlobal(middle), QPoint(), QPoint(0, delta),
+		                  Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+		QCoreApplication::sendEvent(&drum, &event);
+	};
+	const int row = drum.row_height();
+
+	/* Fixed: toward you goes up the list, and the top is the end. */
+	wheel(120);
+	QCOMPARE(drum.mode(), BSSH_INPUT_SELECT);
+	wheel(120);
+	QCOMPARE(drum.mode(), BSSH_INPUT_SCROLL);
+	wheel(120);
+	QCOMPARE(drum.mode(), BSSH_INPUT_SCROLL);
+	QCOMPARE(drum.shown(0), BSSH_INPUT_SCROLL);
+	QCOMPARE(spy.count(), 2);
+
+	/*
+	 * Half a notch twice is one step, not none and not two -- both ways,
+	 * since a threshold is kept per direction.
+	 */
+	wheel(-60);
+	QCOMPARE(drum.mode(), BSSH_INPUT_SCROLL);
+	wheel(-60);
+	QCOMPARE(drum.mode(), BSSH_INPUT_SELECT);
+	wheel(60);
+	QCOMPARE(drum.mode(), BSSH_INPUT_SELECT);
+	wheel(60);
+	QCOMPARE(drum.mode(), BSSH_INPUT_SCROLL);
+	wheel(-120);
+	QCOMPARE(drum.mode(), BSSH_INPUT_SELECT);
+
+	/* A tap on any row chooses it, the middle one included. */
+	QTest::mouseClick(&drum, Qt::LeftButton, Qt::NoModifier, QPoint(middle.x(), row * 5 / 2));
+	QCOMPARE(drum.mode(), BSSH_INPUT_CLICK);
+	QTest::mouseClick(&drum, Qt::LeftButton, Qt::NoModifier, QPoint(middle.x(), row * 3 / 2));
+	QCOMPARE(drum.mode(), BSSH_INPUT_SELECT);
+
+	/* Five: the drum turns, the current one in the middle, wrapping. */
+	drum.set_column_available(true);
+	QVERIFY(drum.rotates());
+	QCOMPARE(drum.shown(1), BSSH_INPUT_SELECT);
+	drum.set_mode(BSSH_INPUT_SCROLL);
+	QCOMPARE(drum.shown(0), BSSH_INPUT_COLUMN_SCROLL);
+	QCOMPARE(drum.shown(1), BSSH_INPUT_SCROLL);
+	QCOMPARE(drum.shown(2), BSSH_INPUT_SELECT);
+	wheel(120);
+	QCOMPARE(drum.mode(), BSSH_INPUT_COLUMN_SCROLL);
+
+	/* A drag down by one row brings the mode above into the middle. */
+	const bssh_input_mode_t above = drum.shown(0);
+	QTest::mousePress(&drum, Qt::LeftButton, Qt::NoModifier, middle);
+	QTest::mouseMove(&drum, middle + QPoint(0, row + 1));
+	QTest::mouseRelease(&drum, Qt::LeftButton, Qt::NoModifier, middle + QPoint(0, row + 1));
+	QCOMPARE(drum.mode(), above);
 }
 
 void layout_test::the_move_state_is_offered_only_in_a_column() {
@@ -812,11 +963,12 @@ void layout_test::the_move_state_is_offered_only_in_a_column() {
 	QVERIFY(move);
 
 	/* No column to reorder yet, so the state is not offered. */
-	QVERIFY2(move->isHidden(),
+	QVERIFY2(!selector.available().contains(BSSH_INPUT_MOVE),
 	          "Move is offered before there is a column to reorder");
 
 	selector.set_column_available(true);
-	QVERIFY2(!move->isHidden(), "Move is not offered once a column exists");
+	QVERIFY2(selector.available().contains(BSSH_INPUT_MOVE),
+	          "Move is not offered once a column exists");
 
 	/*
 	 * Select Move, then lose the column. The mode must not be stranded on
@@ -829,8 +981,10 @@ void layout_test::the_move_state_is_offered_only_in_a_column() {
 
 	QSignalSpy spy(&selector, &bssh_input_selector::mode_changed);
 	selector.set_column_available(false);
-	QVERIFY2(move->isHidden(), "the Move button stayed after its column went");
-	QCOMPARE(selector.mode(), BSSH_INPUT_SCROLL);
+	QVERIFY2(!selector.available().contains(BSSH_INPUT_MOVE),
+	          "Move stayed on offer after its column went");
+	QVERIFY2(move->isHidden(), "the Move row is still on the drum");
+	QCOMPARE(selector.mode(), bssh_default_input_mode());
 	QCOMPARE(spy.count(), 1);
 }
 
@@ -949,17 +1103,21 @@ void layout_test::the_pan_state_is_offered_only_in_a_column() {
 	QVERIFY(pan);
 
 	/* Like Move, Pan acts on the column and is offered only where one is. */
-	QVERIFY2(pan->isHidden(), "Pan is offered before there is a column");
+	QVERIFY2(!selector.available().contains(BSSH_INPUT_COLUMN_SCROLL),
+	          "Pan is offered before there is a column");
 	selector.set_column_available(true);
-	QVERIFY2(!pan->isHidden(), "Pan is not offered once a column exists");
+	QVERIFY2(selector.available().contains(BSSH_INPUT_COLUMN_SCROLL),
+	          "Pan is not offered once a column exists");
 
 	pan->click();
 	QCOMPARE(selector.mode(), BSSH_INPUT_COLUMN_SCROLL);
 
 	QSignalSpy spy(&selector, &bssh_input_selector::mode_changed);
 	selector.set_column_available(false);
-	QVERIFY2(pan->isHidden(), "the Pan button stayed after its column went");
-	QCOMPARE(selector.mode(), BSSH_INPUT_SCROLL);
+	QVERIFY2(!selector.available().contains(BSSH_INPUT_COLUMN_SCROLL),
+	          "Pan stayed on offer after its column went");
+	QVERIFY2(pan->isHidden(), "the Pan row is still on the drum");
+	QCOMPARE(selector.mode(), bssh_default_input_mode());
 	QCOMPARE(spy.count(), 1);
 }
 
@@ -3489,30 +3647,40 @@ void layout_test::the_keyboard_side_icons_are_still_named() {
  * was careful to avoid and the handle must not reintroduce.
  */
 void layout_test::the_grip_asks_for_a_drag_once_the_pointer_moves() {
+	const forced_touch_t desktop(0);
+
 	bssh_terminal_view view;
 	view.set_pane_handle(true);
+	view.set_corner_active(true);
 	view.resize(600, 400);
 	view.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&view));
 
-	const QRect grip = view.pane_grip_rect();
-	QVERIFY2(!grip.isNull(), "a 600x400 pane should have room for a handle");
+	/*
+	 * The grip is the top slot of the pane's corner (sec 8.7a), a widget
+	 * of its own, so it is pressed where it is rather than on the view
+	 * under it.
+	 */
+	QVERIFY2(!view.pane_grip_rect().isNull(), "a 600x400 pane should have room for a handle");
+	QVERIFY(view.corner());
+	QWidget *grip = view.corner()->findChild<QWidget *>(QStringLiteral("pane_grip"));
+	QVERIFY(grip);
+	QVERIFY(grip->isVisible());
+	const QPoint at = grip->rect().center();
 
 	QSignalSpy asked(&view, &bssh_terminal_view::pane_drag_requested);
 
-	QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, grip.center());
+	QTest::mousePress(grip, Qt::LeftButton, Qt::NoModifier, at);
 	QCOMPARE(asked.count(), 0);
 
 	/* Short of the threshold: still not a drag. */
-	QTest::mouseMove(&view, grip.center() + QPoint(2, 0));
+	QTest::mouseMove(grip, at + QPoint(2, 0));
 	QCOMPARE(asked.count(), 0);
 
-	QTest::mouseMove(&view, grip.center()
-	                         + QPoint(QApplication::startDragDistance() * 3, 40));
+	QTest::mouseMove(grip, at + QPoint(QApplication::startDragDistance() * 3, 40));
 	QCOMPARE(asked.count(), 1);
 
-	QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier,
-	                     grip.center() + QPoint(60, 40));
+	QTest::mouseRelease(grip, Qt::LeftButton, Qt::NoModifier, at + QPoint(60, 40));
 }
 
 /*
@@ -4596,22 +4764,32 @@ void layout_test::the_tmux_drawer_switches_on_a_click() {
 
 		bssh_multiplexer_drawer *drawer = drawer_in(window);
 		QVERIFY2(drawer, "the drawer was lost when the panes were rebuilt");
-		/* On the desktop it shows under the pointer, as the drag grip does. */
+		/*
+		 * Closed, the drawer is a button in the focused pane's corner
+		 * (sec 8.7a) and shows nothing of its own over the text.
+		 */
 		bssh_terminal_view *pane = qobject_cast<bssh_terminal_view *>(drawer->parentWidget());
 		QVERIFY(pane);
-		QEnterEvent enter(QPointF(20, 20), QPointF(20, 20), QPointF(pane->mapToGlobal(QPoint(20, 20))));
-		QCoreApplication::sendEvent(pane, &enter);
-		QVERIFY2(drawer->isVisible(), "the handle did not show under the pointer");
+		bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+		QVERIFY(panes);
+		panes->focus_session(session);
+		QTRY_VERIFY2(pane->corner() && pane->corner()->isVisible(),
+		              "the focused pane shows no corner");
+		QToolButton *handle = pane->corner()->multiplexer_button();
+		QVERIFY(handle);
+		QVERIFY2(handle->isVisible(), "the corner has no tmux button");
+		QVERIFY2(!drawer->isVisible(), "the closed drawer covers the terminal");
 		QVERIFY2(!drawer->is_open(), "the drawer opened over the terminal by itself");
 		QCOMPARE(drawer->handle_text(), QString::fromUtf8("tmux · 2"));
+		QCOMPARE(handle->text(), QStringLiteral("tmux 2"));
+		QCOMPARE(handle->toolTip(), drawer->handle_text());
 
-		/* Its handle opens it over the terminal, wider than the handle. */
-		const int closed_width = drawer->width();
-		QAbstractButton *handle = drawer->findChild<QAbstractButton *>(QStringLiteral("multiplexer_handle"));
-		QVERIFY(handle);
+		/* The button opens it over the terminal, beside the corner. */
 		handle->click();
 		QVERIFY(drawer->is_open());
-		QVERIFY(drawer->width() > closed_width);
+		QVERIFY(drawer->isVisible());
+		QVERIFY2(drawer->geometry().right() < pane->corner()->x(),
+		          "the open drawer covers the corner that closes it");
 
 		/* One click switches: the shell replaced by an attach to it. */
 		QListWidget *list = drawer->findChild<QListWidget *>(QStringLiteral("multiplexer_sessions"));
@@ -4645,7 +4823,11 @@ void layout_test::the_tmux_drawer_switches_on_a_click() {
 	}
 
 	{
-		/* Dismissed: the drawer goes, and the shell is left as it is. */
+		/*
+		 * Closed with its x: the panel goes, the shell is left as it is,
+		 * and the offer stays -- the corner's button with it (sec 8.7a;
+		 * the holder found the button going "now unexpected").
+		 */
 		bssh_main_window window;
 		window.resize(1000, 700);
 		window.show();
@@ -4667,11 +4849,12 @@ void layout_test::the_tmux_drawer_switches_on_a_click() {
 		QToolButton *close = drawer->findChild<QToolButton *>(QStringLiteral("multiplexer_close"));
 		QVERIFY(close);
 		close->click();
-		QTRY_VERIFY2(!drawer_in(window), "the drawer stayed after it was closed");
+		QVERIFY2(!drawer->is_open(), "the x did not close the drawer");
+		QVERIFY2(drawer_in(window), "the x took the offer away");
 		QVERIFY(fakes.last()->written().isEmpty());
-		QVERIFY(session->pending_multiplexers().isEmpty());
+		QVERIFY(!session->pending_multiplexers().isEmpty());
 
-		/* And back: the terminal menu lists them again and the drawer returns. */
+		/* The terminal menu lists them again, refreshing what is offered. */
 		QMenu *menu = window.build_terminal_menu(&window);
 		QAction *again = menu->findChild<QAction *>(QStringLiteral("terminal_multiplexers"));
 		QVERIFY2(again, "no way back to the drawer once it is closed");
@@ -7299,7 +7482,7 @@ void layout_test::a_dragged_keyboard_size_is_kept() {
 	settings.set_keyboard(before);
 }
 
-void layout_test::the_input_selector_joins_the_status_line_when_wide() {
+void layout_test::the_status_line_keeps_its_place_and_the_drum_its_corner() {
 	const forced_touch_t touch(1);
 
 	/* The built-in keyboard, so a split is what shares the landscape height. */
@@ -7311,9 +7494,9 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 		~restore_t() { bssh_app_settings().set_keyboard(keyboard); }
 	} restore { before };
 
-	/* Where the selector belongs: its own row, the status line's end, or
-	 * the band above the split keyboard's right half. */
-	enum where_t { OWN_ROW, STATUS_END, OVER_HALVES };
+	/* Where the status line belongs: under the terminal, or over the
+	 * split keyboard's left half. */
+	enum where_t { UNDER, OVER_HALVES };
 	const auto check = [](int width, int height, where_t where, bool turned) {
 		const forced_screen_t held(QSize(width, height));
 		bssh_main_window window;
@@ -7340,98 +7523,80 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 		}
 		QCOMPARE(window.size(), QSize(width, height));
 
+		/*
+		 * The mode drum is in the focused pane's corner (sec 8.7a), not a
+		 * row of the window: it gave a narrow phone's 48dp row back to the
+		 * terminal. One selector, and it is the corner's.
+		 */
+		bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+		QVERIFY(panes);
+		bssh_terminal_view *view = panes->focused_view();
+		QVERIFY(view);
+		QVERIFY(view->corner());
+		QCOMPARE(window.findChildren<bssh_input_selector *>().size(), 1);
 		bssh_input_selector *selector = window.findChild<bssh_input_selector *>();
-		QVERIFY(selector);
+		QVERIFY2(view->corner()->isAncestorOf(selector), "the drum is not in the pane's corner");
 		QTRY_VERIFY(selector->isVisible());
-
-		/* The status text, wherever the status line is. */
-		QLabel *status = nullptr;
-		for (QLabel *label : window.findChildren<QLabel *>()) {
-			if (label->parentWidget() && label->parentWidget()->layout()
-			     && label->parentWidget()->layout()->indexOf(selector) >= 0) {
-				status = label;
-			}
-		}
-
 		const QRect at(selector->mapTo(&window, QPoint(0, 0)), selector->size());
+		QVERIFY2(at.bottom() < height,
+		          qPrintable(QStringLiteral("the drum ends at %1 on a screen %2 tall")
+		                             .arg(at.bottom()).arg(height)));
+		QVERIFY(at.height() >= 3 * BSSH_TOUCH_TARGET_DP);
+
+		QLabel *status = window.findChild<QLabel *>(QStringLiteral("status_line"));
+		QVERIFY(status);
+		const QRect said(status->mapTo(&window, QPoint(0, 0)), status->size());
+		QVERIFY2(said.bottom() < height,
+		          qPrintable(QStringLiteral("the status line ends at %1 on a screen %2 tall")
+		                             .arg(said.bottom()).arg(height)));
+
 		sk_keyboard *keyboard = window.findChild<sk_keyboard *>(QStringLiteral("terminal-keyboard"));
 		QVERIFY(keyboard);
 		if (where == OVER_HALVES) {
 			/*
 			 * Over the split halves, where the keys leave a band empty:
-			 * the selector over the right half, the status text over the
-			 * left. The point is the height: under the terminal, their
-			 * row cost 48dp of a landscape phone's 296, and the holder
-			 * asked for it back (2026-10-09).
+			 * the status text over the left half. The point is the height:
+			 * under the terminal, its row cost 48dp of a landscape phone's
+			 * 296, and the holder asked for it back (2026-10-09).
 			 */
-			QTRY_VERIFY(keyboard->half_header(1)->isAncestorOf(selector));
-			QLabel *left = keyboard->half_header(0)->findChild<QLabel *>();
-			QVERIFY2(left, "the status text sits over the left half");
-			QVERIFY(!status);
-
-			bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
-			QVERIFY(panes);
+			QTRY_VERIFY(keyboard->half_header(0)->isAncestorOf(status));
+			/*
+			 * The status line's emptied row gives its height back when the
+			 * outer layout next runs -- a posted request, so this waits for
+			 * it rather than reading the frame the label left in.
+			 */
+			QTRY_VERIFY(panes->mapTo(&window, QPoint(0, panes->height())).y() == window.height());
 			const int panes_bottom = panes->mapTo(&window, QPoint(0, panes->height())).y();
 			QVERIFY2(panes_bottom == window.height(),
 			          qPrintable(QStringLiteral("the terminal ends at %1 of %2")
 			                             .arg(panes_bottom).arg(window.height())));
-			QVERIFY2(at.bottom() < height,
-			          qPrintable(QStringLiteral("the selector ends at %1 on a screen %2 tall")
-			                             .arg(at.bottom()).arg(height)));
 
 			/*
 			 * And back under the terminal when the keyboard is put away,
-			 * or hiding it would take the status line and the selector
-			 * with it. Hiding resizes nothing, so this is what the
-			 * window's watch on the halves' own show and hide is for.
+			 * or hiding it would take the status line with it. Hiding
+			 * resizes nothing, so this is what the window's watch on the
+			 * halves' own show and hide is for.
 			 */
 			QToolButton *hide = window.findChild<QToolButton *>(QStringLiteral("keyboard-hide"));
 			QVERIFY(hide);
 			hide->click();
 			QTRY_VERIFY(!keyboard->half(1)->isVisible());
-			QTRY_VERIFY(!keyboard->half_header(1)->isAncestorOf(selector));
-			QTRY_VERIFY(selector->isVisible());
-			QVERIFY(!keyboard->half_header(0)->findChild<QLabel *>());
-		} else if (where == STATUS_END) {
-			/*
-			 * On the status line's row and at its right end, as narrow as
-			 * its labels: reported from the Fold in landscape, where five
-			 * buttons across the screen took a row the terminal needed.
-			 */
-			QVERIFY2(status, "the selector shares a row with the status text");
-			QVERIFY2(at.width() < window.width() / 2,
-			          qPrintable(QStringLiteral("%1 of %2 wide").arg(at.width()).arg(window.width())));
-			QVERIFY(at.right() >= window.width() - 2);
-
-			/*
-			 * And on screen at all: with the digit row in the split
-			 * halves, five rows of keys pushed the status line and these
-			 * buttons off the bottom of the Fold in landscape.
-			 */
-			QVERIFY2(at.bottom() < height,
-			          qPrintable(QStringLiteral("the selector ends at %1 on a screen %2 tall "
-			                                     "(the window asked for %3)")
-			                             .arg(at.bottom()).arg(height).arg(window.height())));
+			QTRY_VERIFY(!keyboard->half_header(0)->isAncestorOf(status));
+			QTRY_VERIFY(status->isVisible());
 		} else {
-			/* Upright and narrow, a row of its own, a fifth each. */
-			QVERIFY2(!status, "the selector has a row of its own");
-			QVERIFY2(at.width() > window.width() * 9 / 10,
-			          qPrintable(QStringLiteral("%1 of %2 wide").arg(at.width()).arg(window.width())));
-		}
-		QVERIFY(at.height() >= BSSH_TOUCH_TARGET_DP);
+			QVERIFY2(!keyboard->half_header(0)->isAncestorOf(status),
+			          "the status line is over a keyboard half that is not there");
 
-		/*
-		 * Under the terminal, the keys are the bottom edge and the
-		 * selector is above them, as nothing of an app's sits under
-		 * Android's keyboard. The selector's row was under the keys
-		 * (the holder, 2026-10-23).
-		 */
-		if (where != OVER_HALVES) {
+			/*
+			 * Under the terminal, the keys are the bottom edge and the
+			 * status line above them, as nothing of an app's sits under
+			 * Android's keyboard (the holder, 2026-10-23).
+			 */
 			QTRY_VERIFY(keyboard->isVisible());
 			const QRect keys(keyboard->mapTo(&window, QPoint(0, 0)), keyboard->size());
-			QVERIFY2(at.bottom() < keys.top(),
-			          qPrintable(QStringLiteral("the selector ends at %1, the keys start at %2")
-			                             .arg(at.bottom()).arg(keys.top())));
+			QVERIFY2(said.bottom() < keys.top(),
+			          qPrintable(QStringLiteral("the status line ends at %1, the keys start at %2")
+			                             .arg(said.bottom()).arg(keys.top())));
 			QVERIFY2(keys.bottom() + 1 == window.height(),
 			          qPrintable(QStringLiteral("the keys end at %1 of %2")
 			                             .arg(keys.bottom() + 1).arg(window.height())));
@@ -7447,11 +7612,10 @@ void layout_test::the_input_selector_joins_the_status_line_when_wide() {
 	for (const bool turned : { false, true }) {
 		check(822, 290, OVER_HALVES, turned);
 		check(860, 320, OVER_HALVES, turned);
-		check(320, 860, OWN_ROW, turned);
+		check(320, 860, UNDER, turned);
 
-		/* Wide but tall enough to keep the keyboard under the terminal:
-		 * no halves, so the status line's right end. */
-		check(1000, 700, STATUS_END, turned);
+		/* Wide but tall enough to keep the keyboard under the terminal. */
+		check(1000, 700, UNDER, turned);
 	}
 }
 

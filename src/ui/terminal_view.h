@@ -107,6 +107,7 @@ class bssh_input_router;
  * what lets this view be destroyed and recreated freely at M7/M8.
  */
 class bssh_multiplexer_drawer;
+class bssh_pane_corner;
 
 class bssh_terminal_view : public QWidget {
 	Q_OBJECT
@@ -464,14 +465,25 @@ public:
 	void scroll_to_live();
 
 	/*
-	 * What a touch body-drag does here (sec 8.7). Set from the window's
-	 * one selector, the same value for every pane, and read only where a
-	 * thumb is the pointer -- on a desktop the mouse keeps Shift, the
-	 * wheel and drag-select, so the mode is left out of the mouse handlers
-	 * entirely.
+	 * What a drag or a click does here (sec 8.7, 8.7a). The window's one
+	 * mode, the same for every pane, shown in the focused pane's corner.
+	 * On touch it is the override Shift is on a desktop; on the desktop
+	 * Click is the old behaviour, and Select and Scroll keep the pointer
+	 * local inside a program that grabbed the mouse.
 	 */
-	void set_input_mode(bssh_input_mode_t mode) { m_input_mode = mode; }
+	void set_input_mode(bssh_input_mode_t mode);
 	bssh_input_mode_t input_mode() const { return m_input_mode; }
+
+	/* Move and Pan are offered: the window is a column (sec 8.7). */
+	void set_column_available(bool available);
+
+	/*
+	 * The corner (sec 8.7a): grip, mode drum and multiplexer button over
+	 * the grid's top-right corner. A pane has one; it shows while this is
+	 * the focused pane -- "hidden while that window is inactive".
+	 */
+	bssh_pane_corner *corner() const { return m_corner; }
+	void set_corner_active(bool active);
 
 	/*
 	 * Draws the focused-pane border (sec 8.3). Owned by the view because
@@ -677,7 +689,6 @@ public slots:
 signals:
 	/* The drawer's answer (sec 10.2a); see offer_multiplexers(). */
 	void multiplexer_chosen(const bssh_mux_session_t &chosen);
-	void multiplexers_declined();
 
 	/*
 	 * Ctrl+wheel (sec 9.5): zoom this pane by the given number of steps.
@@ -695,6 +706,9 @@ signals:
 	 * that the gesture happened and lets the container name it.
 	 */
 	void pane_drag_requested();
+
+	/* The corner's drum chose a mode; the window applies it everywhere. */
+	void input_mode_chosen(bssh_input_mode_t mode);
 
 	/*
 	 * A body drag in Move mode (sec 8.7): reorder this pane within the
@@ -824,7 +838,9 @@ public:
 	 * the only way out was an Alt+drag nobody finds.
 	 *
 	 * Top RIGHT rather than top left, where a prompt and its command
-	 * live. Public so a test can press it where a thumb would.
+	 * live. It is the top slot of the pane's corner now (sec 8.7a), so
+	 * this is the corner's grip mapped into the view, and empty while the
+	 * corner or its grip is hidden.
 	 */
 	QRect pane_grip_rect() const;
 
@@ -858,28 +874,19 @@ public:
 	void set_drop_planner(bssh_drop_planner_t planner) { m_drop_planner = std::move(planner); }
 
 	/*
-	 * Whether the grip is drawn right now.
+	 * Whether the grip shows right now: in the focused pane's corner
+	 * (sec 8.7a), on the desktop.
 	 *
-	 * Only under the pointer. It has to be, and two pixel tests proved
-	 * it rather than an opinion: drawn always, the grip put ink at
-	 * x=590 y=9 in a run-of-text check and made a 13-pixel underline in
-	 * a 21-pixel cell. The terminal's pixels are the terminal's, and a
-	 * control that occludes cells is not a cosmetic cost -- so it
-	 * appears where the pointer is and nowhere else.
-	 *
-	 * TOUCH never hovers, so a phone gets no grip -- and a grip it could
-	 * reach would be worse than none, which was measured rather than
-	 * assumed. Drawing one for touch and dragging it hands the gesture to
-	 * QDrag, Android gives the whole window to the platform's
-	 * drag-and-drop, and this device's window manager claims it as
-	 * drag-to-split-screen: the app is halved and an app picker appears,
-	 * and dropEvent never runs. Confirmed by hand on a Fold, at two drag
-	 * distances. Touch reorders panes through the context menu instead
-	 * (sec 8.4), which nothing can intercept.
+	 * TOUCH gets no grip, and a grip it could reach would be worse than
+	 * none, which was measured rather than assumed. Dragging one hands
+	 * the gesture to QDrag, Android gives the whole window to the
+	 * platform's drag-and-drop, and this device's window manager claims
+	 * it as drag-to-split-screen: the app is halved and an app picker
+	 * appears, and dropEvent never runs. Confirmed by hand on a Fold, at
+	 * two drag distances. Touch reorders panes with the Move mode and the
+	 * context menu instead (sec 8.4), which nothing can intercept.
 	 */
-	bool grip_visible() const {
-		return m_pane_handle && (m_pointer_inside || m_being_dragged);
-	}
+	bool grip_visible() const;
 
 	/*
 	 * Whether this view is a PANE, and so has a handle at all.
@@ -1250,6 +1257,13 @@ private:
 	void place_multiplexer_drawer();
 	void sync_multiplexer_drawer_shown();
 	bssh_multiplexer_drawer *m_mux_drawer = nullptr;
+
+	/* The corner over the grid's top-right (sec 8.7a). */
+	void place_corner();
+	void sync_corner();
+	bssh_pane_corner *m_corner = nullptr;
+	bool m_corner_active = false;
+	bool m_column_available = false;
 
 	/*
 	 * Repaints screen rows first_row..last_row, or the whole view when

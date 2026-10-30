@@ -17,8 +17,8 @@
 [[sabotage]]
 name = "the Move state ignores whether a column exists"
 file = "src/ui/input_selector.cpp"
-find = "\t\t\tbutton->setVisible(available);"
-replace = "\t\t\tbutton->setVisible(!available);"
+find = "\t\tif (state.column_only && !m_column_available) continue;"
+replace = "\t\tif (state.column_only && m_column_available) continue;"
 expect = "the_move_state_is_offered_only_in_a_column"
 
 # A reorder touches only the intent, not the column's order of record.

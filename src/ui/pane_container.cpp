@@ -394,6 +394,8 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	 */
 	connect(view, &bssh_terminal_view::input_panel_requested,
 	         this, &bssh_pane_container::input_panel_requested);
+	connect(view, &bssh_terminal_view::input_mode_chosen,
+	         this, &bssh_pane_container::input_mode_chosen);
 
 	connect(view, &bssh_terminal_view::pane_drag_requested, this,
 	         [this, alive = QPointer<bssh_session>(session)] {
@@ -450,8 +452,6 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	         view, &bssh_terminal_view::withdraw_multiplexers);
 	connect(view, &bssh_terminal_view::multiplexer_chosen,
 	         session, &bssh_session::choose_multiplexer);
-	connect(view, &bssh_terminal_view::multiplexers_declined,
-	         session, &bssh_session::decline_multiplexers);
 	connect(session->emulator(), &bssh_emulator::images_changed,
 	         view, QOverload<>::of(&QWidget::update));
 
@@ -706,6 +706,13 @@ void bssh_pane_container::apply_focus_styling() {
 
 		view->setProperty("bssh_focused", many && focused);
 		view->set_focus_border(many && focused);
+
+		/*
+		 * The corner -- grip, mode and multiplexer -- only on the
+		 * focused pane: "hidden while that window is inactive" (sec
+		 * 8.7a). Every other pane shows its text whole.
+		 */
+		view->set_corner_active(focused);
 	}
 }
 

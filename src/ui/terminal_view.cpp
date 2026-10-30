@@ -4,6 +4,8 @@
 #include "ui/touch_metrics.h"
 #include "ui/terminal_view.h"
 #include "ui/multiplexer_drawer.h"
+#include "ui/pane_corner.h"
+#include "ui/input_selector.h"
 #include "ui/theme.h"
 #include "ui/layout_manager.h"
 
@@ -13,6 +15,7 @@
 #include <QDropEvent>
 #include <QMimeData>
 #include <QScrollBar>
+#include <QToolButton>
 #include <QUrl>
 
 #include "ui/terminal_accessible.h"
@@ -110,7 +113,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_cursor_on(true),
       m_cursor_blink_wanted(false),
       m_maybe_pane_drag(false),
-      m_input_mode(BSSH_INPUT_SCROLL),
+      m_input_mode(bssh_default_input_mode()),
       m_scroll_dragging(false),
       m_scroll_drag_moved(false),
       m_scroll_drag_start_offset(0),
@@ -671,6 +674,14 @@ void bssh_terminal_view::scroll_to_live() {
 
 bool bssh_terminal_view::event(QEvent *event) {
 	/*
+	 * The window became, or stopped being, the active one: the corner
+	 * shows only on an active window (sec 8.7a). These reach every child;
+	 * ActivationChange, tried first, reached only the window itself.
+	 */
+	if (event->type() == QEvent::WindowActivate || event->type() == QEvent::WindowDeactivate)
+		sync_corner();
+
+	/*
 	 * Pinch-to-zoom (sec 9.5). Qt recognises the gesture from the touch
 	 * points and delivers it here; there is no pinchEvent() to override.
 	 *
@@ -769,7 +780,16 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 	 * told about, so a wheel with no move ahead of it lands wherever the
 	 * previous click did.
 	 */
-	if (m_emulator && m_emulator->mouse_reporting()
+	/*
+	 * On the desktop the mode decides too (sec 8.7a): Select and Scroll
+	 * keep the wheel on this terminal's history, as they keep a drag
+	 * local. Touch keeps the wheel the program's whatever the mode -- a
+	 * mouse plugged into a phone scrolls vim, as it always has.
+	 */
+	const bool wheel_touch = bssh_platform::instance()
+	                          && bssh_platform::instance()->is_touch_primary();
+	const bool wheel_local = !wheel_touch && m_input_mode != BSSH_INPUT_CLICK;
+	if (m_emulator && m_emulator->mouse_reporting() && !wheel_local
 	     && !event->modifiers().testFlag(Qt::ShiftModifier)) {
 		qint64 line = 0;
 		int col = 0;
@@ -1439,6 +1459,10 @@ void bssh_terminal_view::recompute_grid() {
 	const int cols = qMax(BSSH_MIN_GRID_COLS, grid_width() / m_cell_width);
 	const int rows = qMax(BSSH_MIN_GRID_ROWS, (height() - 2 * BSSH_GRID_INSET_PX) / m_cell_height);
 
+	/* The corner follows the grid's edge, which moves with the cell, the
+	 * width and the scrollbar whether or not the count changes. */
+	sync_corner();
+
 	if (cols == m_cols && rows == m_rows) return;
 
 	m_cols = cols;
@@ -1552,6 +1576,7 @@ void bssh_terminal_view::resizeEvent(QResizeEvent *event) {
 	 * the arithmetic, not a decoration applied afterwards. */
 	place_scrollbar();
 	recompute_grid();
+	sync_corner();
 	place_multiplexer_drawer();
 }
 
@@ -1566,7 +1591,101 @@ void bssh_terminal_view::set_pane_handle(bool handle) {
 	if (m_pane_handle == handle) return;
 
 	m_pane_handle = handle;
-	update(pane_grip_rect().adjusted(-2, -2, 2, 2));
+
+	/*
+	 * A pane gets the corner (sec 8.7a); a bare view -- a preview, a
+	 * test -- has none, so nothing covers its text.
+	 */
+	if (handle && !m_corner) {
+		m_corner = new bssh_pane_corner(this);
+		m_corner->selector()->set_mode(m_input_mode);
+		m_corner->selector()->set_column_available(m_column_available);
+		connect(m_corner, &bssh_pane_corner::drag_requested,
+		         this, &bssh_terminal_view::pane_drag_requested);
+		connect(m_corner->selector(), &bssh_input_selector::mode_changed, this,
+		         [this](bssh_input_mode_t mode) {
+			m_input_mode = mode;
+			emit input_mode_chosen(mode);
+			setFocus();
+		});
+		connect(m_corner, &bssh_pane_corner::multiplexer_clicked, this, [this] {
+			if (m_mux_drawer) m_mux_drawer->set_open(!m_mux_drawer->is_open());
+		});
+	} else if (!handle && m_corner) {
+		m_corner->deleteLater();
+		m_corner = nullptr;
+	}
+	sync_corner();
+}
+
+void bssh_terminal_view::set_input_mode(bssh_input_mode_t mode) {
+	m_input_mode = mode;
+	if (m_corner) m_corner->selector()->set_mode(mode);
+}
+
+void bssh_terminal_view::set_column_available(bool available) {
+	m_column_available = available;
+	if (m_corner) m_corner->selector()->set_column_available(available);
+}
+
+void bssh_terminal_view::set_corner_active(bool active) {
+	if (active == m_corner_active) return;
+	m_corner_active = active;
+	sync_corner();
+}
+
+bool bssh_terminal_view::grip_visible() const {
+	return m_corner && m_corner->isVisible() && m_corner->grip_shown();
+}
+
+void bssh_terminal_view::sync_corner() {
+	if (!m_corner) return;
+
+	const bssh_platform *platform = bssh_platform::instance();
+	const bool touch = platform && platform->is_touch_primary();
+
+	/*
+	 * The grip in proportion to the text, clamped so it is neither a
+	 * speck on a tiny font nor a slab on a huge one; and none on touch,
+	 * where a drag would hand the window to the platform (sec 8.4).
+	 */
+	m_corner->set_grip_side(qBound(14, int(m_cell_height * 1.1), 26));
+	m_corner->set_grip_shown(!touch);
+	m_corner->set_faint_when_idle(!touch);
+	m_corner->set_multiplexer_text(m_mux_drawer ? m_mux_drawer->button_text() : QString());
+	m_corner->multiplexer_button()->setToolTip(m_mux_drawer ? m_mux_drawer->handle_text() : QString());
+	m_corner->selector()->set_program_listening(m_emulator && m_emulator->mouse_reporting());
+
+	/* A view too small to spare the corner has none, rather than one
+	 * hanging off its edge. */
+	const QSize size = m_corner->sizeHint();
+	const bool fits = width() >= size.width() * 2 && height() >= size.height() + 2 * BSSH_GRID_INSET_PX;
+
+	/*
+	 * And none while its window is not the active one, on the desktop:
+	 * the holder found it showing over a window nobody was using. A phone
+	 * shows one app, and whether Android calls it active is not a
+	 * question its user is asking.
+	 */
+	const bool window_active = touch || (window() && window()->isActiveWindow());
+	m_corner->setVisible(m_corner_active && fits && window_active);
+	place_corner();
+}
+
+void bssh_terminal_view::place_corner() {
+	if (!m_corner) return;
+
+	/*
+	 * Against the GRID's right edge, not the view's: a right-hand
+	 * scrollbar is a column the grid gave up, and the corner is an
+	 * overlay that takes nothing, so it sits left of the bar over the
+	 * same cells whatever the scrollbar setting (sec 8.7a).
+	 */
+	const QSize size = m_corner->sizeHint();
+	const int right = grid_origin_x() + grid_width();
+	m_corner->setGeometry(right - size.width(), BSSH_GRID_INSET_PX, size.width(), size.height());
+	m_corner->raise();
+	if (m_mux_drawer && m_mux_drawer->is_open()) m_mux_drawer->raise();
 }
 
 
@@ -1584,29 +1703,9 @@ void bssh_terminal_view::set_being_dragged(bool dragged) {
 }
 
 QRect bssh_terminal_view::pane_grip_rect() const {
-	/*
-	 * Sized from the CELL rather than from a constant, so it stays in
-	 * proportion to the text at any font size, and clamped so it is
-	 * neither a speck on a tiny font nor a slab on a huge one.
-	 */
-	const int side = qBound(14, int(m_cell_height * 1.1), 26);
-
-	/*
-	 * A pane too narrow to spare the corner has no handle, rather than
-	 * one hanging off its left edge. Measured in a test that asked for
-	 * the rect before the splitter had given the pane any width: the
-	 * arithmetic happily returned x = -25 in a view 0 wide, which draws
-	 * nothing and would still have answered contains() for a press.
-	 */
-	if (width() < side * 3 || height() < side * 2) return QRect();
-
-	/*
-	 * Left of the scrollbar when there is one: placed against the view's
-	 * own edge, the bar -- a child, drawn over it -- covered part of the
-	 * grip on the desktop, which the holder saw as "slightly hidden".
-	 */
-	const int right = width() - (m_scrollbar && m_scrollbar->isVisible() ? m_scrollbar->width() : 0);
-	return QRect(right - side - 3, 3, side, side);
+	if (!m_corner || !m_corner->isVisible()) return QRect();
+	const QRect grip = m_corner->grip_rect();
+	return grip.isNull() ? QRect() : grip.translated(m_corner->pos());
 }
 
 void bssh_terminal_view::paintEvent(QPaintEvent *event) {
@@ -2057,32 +2156,13 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	}
 
 	/*
-	 * The pane's drag handle, under the pointer only.
-	 *
-	 * Filled with the terminal's own background rather than blended,
-	 * because a grip half-showing the character underneath reads as a
-	 * rendering fault rather than as a control -- so while it is up it
-	 * occludes those cells, and that is why it is up only while the
-	 * pointer is in this pane. Two pixel tests made that decision: drawn
-	 * always, it put ink in a run-of-text check and swallowed a cursor.
+	 * The pane's drag handle is the corner's top slot now (sec 8.7a), a
+	 * child widget over this one -- not painted here. While it shows,
+	 * Click marks whether the program here is listening to the mouse,
+	 * which a program changes by writing output, and output repaints.
 	 */
-	if (grip_visible()) {
-		const QRect grip = pane_grip_rect();
-		painter.fillRect(grip, m_background);
-
-		QColor ink(bssh_raise_contrast(m_foreground.rgb(), m_background.rgb()));
-		ink.setAlphaF(0.45);
-		QPen grip_pen(ink);
-		grip_pen.setWidthF(qMax(1.0, grip.height() / 12.0));
-		grip_pen.setCapStyle(Qt::RoundCap);
-		painter.setPen(grip_pen);
-
-		for (int i = 0; i < 3; ++i) {
-			const qreal y = grip.top() + grip.height() * (0.32 + i * 0.18);
-			painter.drawLine(QPointF(grip.left() + grip.width() * 0.24, y),
-			                  QPointF(grip.left() + grip.width() * 0.76, y));
-		}
-	}
+	if (m_corner && m_corner->isVisible())
+		m_corner->selector()->set_program_listening(m_emulator && m_emulator->mouse_reporting());
 
 	/*
 	 * And, while a drag is carrying this pane, a net over the whole of
@@ -2886,17 +2966,11 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	 */
 	/*
 	 * The handle does the same thing without the modifier, which is the
-	 * whole reason it exists: Alt+drag works and nobody discovers it.
-	 * Checked first, and with a touch-sized reach around the drawn grip
-	 * so a thumb does not have to be accurate to the pixel.
+	 * whole reason it exists: Alt+drag works and nobody discovers it. It
+	 * is the corner's grip (sec 8.7a), a widget of its own, so its press
+	 * never arrives here.
 	 */
-	const QRect grip = pane_grip_rect();
-	const bool on_grip = event->button() == Qt::LeftButton && grip_visible()
-	        && !grip.isNull()
-	        && grip.adjusted(-8, -8, 4, 8).contains(event->pos());
-
-	if (on_grip || (event->button() == Qt::LeftButton
-	                 && (event->modifiers() & Qt::AltModifier))) {
+	if (event->button() == Qt::LeftButton && (event->modifiers() & Qt::AltModifier)) {
 		m_pane_drag_from = event->pos();
 		m_maybe_pane_drag = true;
 		event->accept();
@@ -2929,13 +3003,15 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 	const bool shift = take_shift_override(event->modifiers());
 
 	/*
-	 * On touch the input mode is the override that Shift is on a desktop
-	 * (sec 8.7): scroll and select keep the gesture local, click lets the
-	 * remote have it. A phone has no Shift, so without this a full-screen
-	 * program that grabbed the mouse could be neither scrolled nor
-	 * selected out of -- the defect sec 8.7 answers.
+	 * The input mode is the override that Shift is (sec 8.7): scroll and
+	 * select keep the gesture local, click lets the remote have it. A
+	 * phone has no Shift, so without this a full-screen program that
+	 * grabbed the mouse could be neither scrolled nor selected out of --
+	 * the defect sec 8.7 answers. On the desktop Shift still works in any
+	 * mode, and Click, the desktop's default, is exactly the old
+	 * behaviour (sec 8.7a).
 	 */
-	const bool keep_local = touch ? (m_input_mode != BSSH_INPUT_CLICK) : shift;
+	const bool keep_local = shift || m_input_mode != BSSH_INPUT_CLICK;
 
 	if (m_emulator && m_emulator->mouse_reporting() && !keep_local) {
 		qint64 line = 0;
@@ -2998,7 +3074,11 @@ void bssh_terminal_view::mousePressEvent(QMouseEvent *event) {
 		}
 	}
 
-	if (touch) {
+	/*
+	 * Touch in every mode; the desktop in the ones that are not Click,
+	 * whose drag selects as it always did (sec 8.7a).
+	 */
+	if (touch || m_input_mode != BSSH_INPUT_CLICK) {
 		/*
 		 * A body drag scrolls this terminal's scrollback (sec 8.7's
 		 * default), captured absolutely from the press so the offset
@@ -3541,55 +3621,44 @@ void bssh_terminal_view::offer_multiplexers(const QList<bssh_mux_session_t> &fou
 			emit multiplexer_chosen(chosen);
 			setFocus();
 		});
-		connect(m_mux_drawer, &bssh_multiplexer_drawer::declined, this, [this] {
-			emit multiplexers_declined();
-			setFocus();
-		});
 	}
 	m_mux_drawer->set_sessions(found);
 	place_multiplexer_drawer();
 	sync_multiplexer_drawer_shown();
+	sync_corner();
 }
 
 void bssh_terminal_view::sync_multiplexer_drawer_shown() {
 	if (!m_mux_drawer) return;
 
 	/*
-	 * Like the pane's drag grip: on the desktop the closed handle shows
-	 * only while the pointer is over the terminal -- the holder's "you
-	 * should maybe not show the screen/tmux button unless" it is being
-	 * pointed at -- so it is not on every terminal all the time. Open, it
-	 * stays until closed. A touch screen has no pointer to hover with, so
-	 * there it always shows.
+	 * Closed, the drawer is the corner's button (sec 8.7a) and shows
+	 * nothing of its own; open, it stays until closed or chosen from.
 	 */
-	const bssh_platform *platform = bssh_platform::instance();
-	const bool touch = platform && platform->is_touch_primary();
-	m_mux_drawer->setVisible(m_mux_drawer->is_open() || m_pointer_inside || touch);
+	m_mux_drawer->setVisible(m_mux_drawer->is_open());
 }
 
 void bssh_terminal_view::withdraw_multiplexers() {
 	if (!m_mux_drawer) return;
 	m_mux_drawer->deleteLater();
 	m_mux_drawer = nullptr;
+	sync_corner();
 }
 
 void bssh_terminal_view::place_multiplexer_drawer() {
-	if (!m_mux_drawer) return;
+	if (!m_mux_drawer || !m_mux_drawer->is_open()) return;
 
-	const int right = width() - (m_scrollbar && m_scrollbar->isVisible() ? m_scrollbar->width() : 0);
+	/*
+	 * Over the terminal, beside the corner that opened it, as wide as it
+	 * asks and never wider than most of the pane, so the text behind
+	 * stays in sight beside it.
+	 */
+	int right = grid_origin_x() + grid_width();
+	if (m_corner && m_corner->isVisible()) right = m_corner->x() - 2;
 	const QSize hint = m_mux_drawer->sizeHint();
-	if (m_mux_drawer->is_open()) {
-		/* Over the terminal, as wide as it asks and never wider than most of
-		 * the pane, so the text behind stays in sight beside it. */
-		const int wide = qMin(hint.width(), qMax(hint.width() / 2, right * 3 / 4));
-		const int high = height() - 2 * BSSH_GRID_INSET_PX;
-		m_mux_drawer->setGeometry(right - wide, BSSH_GRID_INSET_PX, wide, high);
-	} else {
-		/* A handle at the edge, a third of the way down, out of the prompt's way. */
-		const int high = qMin(hint.height(), height() - 2 * BSSH_GRID_INSET_PX);
-		m_mux_drawer->setGeometry(right - hint.width(), qMax(BSSH_GRID_INSET_PX, height() / 3 - high / 2),
-		                          hint.width(), high);
-	}
+	const int wide = qMin(hint.width(), qMax(hint.width() / 2, right * 3 / 4));
+	const int high = height() - 2 * BSSH_GRID_INSET_PX;
+	m_mux_drawer->setGeometry(qMax(0, right - wide), BSSH_GRID_INSET_PX, wide, high);
 	m_mux_drawer->raise();
 }
 

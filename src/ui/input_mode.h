@@ -47,6 +47,15 @@ inline bool is_column_mode(bssh_input_mode_t mode) {
  * QSignalSpy -- an enum in a signal is not a metatype until it is said to
  * be one.
  */
+/*
+ * The mode a window starts in, and falls back to when a column-only mode
+ * loses its column (sec 8.7a). Scroll on touch, where a body drag is the
+ * only way to reach the history. Click on the desktop, which is how the
+ * desktop has always behaved: the program gets the mouse when it asks,
+ * Shift keeps it local, and nothing asked for drags select.
+ */
+bssh_input_mode_t bssh_default_input_mode();
+
 Q_DECLARE_METATYPE(bssh_input_mode_t)
 
 #endif /* BSSH_INPUT_MODE_H */
