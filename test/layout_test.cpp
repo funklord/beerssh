@@ -935,6 +935,10 @@ void layout_test::hidden_bars_are_reached_from_the_corner() {
 	QTRY_VERIFY(view->corner() && view->corner()->isVisible());
 	QToolButton *menus = view->corner()->menu_button();
 	QVERIFY2(menus->isVisible(), "no menu button with the menu bar hidden");
+	/* At the top, just under the grip -- the holder's placement -- not
+	 * under the drum and the tmux button. */
+	QVERIFY2(menus->geometry().top() < view->corner()->selector()->geometry().top(),
+	          "the menu button is under the drum, not under the grip");
 
 	QStringList titles;
 	QTimer::singleShot(0, [&] {

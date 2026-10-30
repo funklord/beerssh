@@ -9186,7 +9186,11 @@ vertical ellipsis, not three lines, since the grip above is three lines
 already; they are the menu bar's own menus rather than copies, with Show
 Menu Bar under them as the way back. Seen under twin with both hidden.
 `hidden_bars_are_reached_from_the_corner`; four edits in
-`tool/sabotage/pane-corner.toml`.
+`tool/sabotage/pane-corner.toml`. **The menus button moved to the top,
+2026-10-30**, under the grip and above the drum -- the holder: "The
+menus button should be at the top just below the drag button" -- since
+the top of the corner is where the menu bar it stands in for would be.
+The tabs and tmux buttons stay under the drum; a fifth edit there.
 
 **A window whose last terminal goes to another process closes --
 fixed 2026-10-30.** The holder: "when moving the last terminal out of a

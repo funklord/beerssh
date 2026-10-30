@@ -213,3 +213,26 @@ file = "src/ui/main_window.cpp"
 find = "\t\tif (g_arrival_lit) g_arrival_lit->show_drop_zone(-1);\n\t\tif (g_arrival_row) {"
 replace = "\t\tif (g_arrival_row) {"
 expect = "another_processs_drag_is_previewed_here"
+
+# The menu button back under the drum and the tmux button, rather than at
+# the top under the grip where the holder put it: the layout as it was.
+[[sabotage]]
+name = "the menu button sits under the drum"
+file = "src/ui/pane_corner.cpp"
+find = """
+	if (!m_menu->isHidden()) {
+		const int high = m_menu->sizeHint().height();
+		m_menu->setGeometry(PAD, y, inner, high);
+		y += high;
+	}
+	const int drum = m_selector->sizeHint().height();
+	m_selector->setGeometry(PAD, y, inner, drum);
+	y += drum;
+	/* Under the drum: the tmux picker, then the tab bar's stand-in. */
+	for (QToolButton *button : { m_multiplexer, m_tabs }) {"""
+replace = """
+	const int drum = m_selector->sizeHint().height();
+	m_selector->setGeometry(PAD, y, inner, drum);
+	y += drum;
+	for (QToolButton *button : { m_multiplexer, m_tabs, m_menu }) {"""
+expect = "hidden_bars_are_reached_from_the_corner"

@@ -222,11 +222,18 @@ void bssh_pane_corner::relayout() {
 		m_grip->setGeometry(PAD, y, inner, m_grip_side);
 		y += m_grip_side;
 	}
+	/* The menus first, under the grip: the top of the corner is where
+	 * the menu bar they stand in for would be (the holder's placement). */
+	if (!m_menu->isHidden()) {
+		const int high = m_menu->sizeHint().height();
+		m_menu->setGeometry(PAD, y, inner, high);
+		y += high;
+	}
 	const int drum = m_selector->sizeHint().height();
 	m_selector->setGeometry(PAD, y, inner, drum);
 	y += drum;
-	/* Under the drum: the tmux picker, then the hidden bars' stand-ins. */
-	for (QToolButton *button : { m_multiplexer, m_tabs, m_menu }) {
+	/* Under the drum: the tmux picker, then the tab bar's stand-in. */
+	for (QToolButton *button : { m_multiplexer, m_tabs }) {
 		if (button->isHidden()) continue;
 		const int high = button->sizeHint().height();
 		button->setGeometry(PAD, y, inner, high);
