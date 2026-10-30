@@ -9203,6 +9203,17 @@ under twin: the source window and its process went, and the terminal
 arrived. `a_window_whose_last_session_goes_to_another_process_closes`;
 caught in `arrangement.toml`.
 
+**A terminal moved in from another process lists tmux and screen again
+-- fixed 2026-10-30.** The holder: "there are two terminals in the same
+place, but only one of them currently shows the screen button". A
+session lists them on connecting (sec 10.2a); one taken from another
+process arrives connected, never connects there, and the list stayed
+behind. `import_handoff` queues a listing once the taker has wired the
+session up. `a_live_session_moves_to_another_process` runs the taker
+with a fake `tmux` first on its PATH and asks for the offer back through
+`BSSH_TEST_OFFER_MULTIPLEXERS`, since the suite turns it off in every
+process it starts; caught in `session-move.toml`.
+
 **Also queued, the holder 2026-10-29: moving the tab bar by dragging
 it.** "I want the tab bar to have a handle so it can be drag n dropped
 to move to one of the 3 other sides. And if there is no tab bar then a

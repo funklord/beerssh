@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "input/input_router.h"
+#include "model/app_settings.h"
 #include "model/handoff_point.h"
 #include "model/profile.h"
 #include "model/session.h"
@@ -89,6 +90,8 @@ struct taker_t {
 }  // namespace
 
 int bssh_handoff_take_mode(const QString &path, const QString &handoff_id) {
+	if (qEnvironmentVariableIsSet("BSSH_TEST_OFFER_MULTIPLEXERS"))
+		bssh_app_settings().set_offer_multiplexer_sessions(true);
 	QString why;
 	bssh_session *session = bssh_handoff_point::take(path, handoff_id, nullptr, &why);
 	if (!session) {
@@ -96,6 +99,16 @@ int bssh_handoff_take_mode(const QString &path, const QString &handoff_id) {
 		return 3;
 	}
 	const bool came = session->emulator()->screen().to_text().contains(QStringLiteral("before-move"));
+
+	/* What tmux and screen are running, listed again on arrival. */
+	int multiplexers = -1;
+	QObject::connect(session, &bssh_session::multiplexers_found,
+	                 [&multiplexers](const QList<bssh_mux_session_t> &found) { multiplexers = int(found.size()); });
+	QElapsedTimer waited;
+	waited.start();
+	while (multiplexers < 0 && waited.elapsed() < 3000) QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+	printf("multiplexers: %d\n", multiplexers);
+
 	session->input_router()->send_text(QStringLiteral("echo after-$((6*7))\n"));
 	const bool answered = screen_shows(session, QStringLiteral("after-42"));
 	printf("screen came along: %s\nanswered: %s\n%s\n", came ? "yes" : "no",
@@ -131,9 +144,31 @@ void handoff_test::a_live_session_moves_to_another_process() {
 	connect(&point, &bssh_handoff_point::session_given, this,
 	        [&given](bssh_session *s) { given.append(s); });
 
+	/*
+	 * A tmux that reports one session, first on the taker's PATH, so what
+	 * it finds on arrival is known: a session taken from another process
+	 * never connects there, and it is listed again rather than arriving
+	 * with no tmux button (sec 10.2a, sec 8.7a).
+	 */
+	QTemporaryDir fakes;
+	QVERIFY(fakes.isValid());
+	QFile tmux(fakes.filePath(QStringLiteral("tmux")));
+	QVERIFY(tmux.open(QIODevice::WriteOnly));
+	tmux.write("#!/bin/sh\nprintf 'work\\t1\\t0\\n'\n");
+	tmux.close();
+	tmux.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+	const QByteArray path_before = qgetenv("PATH");
+	qputenv("PATH", fakes.path().toLocal8Bit() + ':' + path_before);
+	/* The suite turns the offer off in every process it starts, the taker
+	 * included; this one asks for it back, with the fake tmux in front. */
+	qputenv("BSSH_TEST_OFFER_MULTIPLEXERS", "1");
+
 	taker_t taker;
 	taker.run(point.path(), QStringLiteral("the-one"));
+	qputenv("PATH", path_before);
+	qunsetenv("BSSH_TEST_OFFER_MULTIPLEXERS");
 	QVERIFY2(taker.finished && taker.exit_code == 0, taker.output.constData());
+	QVERIFY2(taker.output.contains("multiplexers: 1"), taker.output.constData());
 	QCOMPARE(given.size(), 1);
 	QCOMPARE(given.first(), session);
 	QVERIFY(session->is_moving());

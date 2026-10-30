@@ -69,3 +69,12 @@ file = "src/main.cpp"
 find = "\t\t\tbssh_handoff_point::request_quit(line.adopt_from);\n"
 replace = ""
 expect = "a_new_version_takes_every_session"
+
+# A session taken from another process arrives with no tmux and screen
+# listed: it never connects there, and the list stayed behind.
+[[sabotage]]
+name = "a moved session is not listed again"
+file = "src/model/session.cpp"
+find = "\tQTimer::singleShot(0, session, [session] { session->list_multiplexers(); });"
+replace = ""
+expect = "a_live_session_moves_to_another_process"

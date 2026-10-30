@@ -851,6 +851,15 @@ bssh_session *bssh_session::import_handoff(const QByteArray &state, const QList<
 	session->m_connections = connections;
 	session->wire_transport();
 	session->send_out(held);
+
+	/*
+	 * tmux and screen are listed on connecting (sec 10.2a), and a session
+	 * taken from another process never connects here -- it arrives
+	 * connected, and what was listed stayed behind. So the holder saw two
+	 * tabs side by side and the screen button on only one of them. Listed
+	 * again once the taker has wired it up.
+	 */
+	QTimer::singleShot(0, session, [session] { session->list_multiplexers(); });
 	return session;
 }
 
