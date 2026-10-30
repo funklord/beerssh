@@ -100,3 +100,13 @@ file = "src/ui/main_window.cpp"
 find = "\t\tif (!m_shown.contains(session) || m_shown.size() != 1) return;\n\t\tQTimer::singleShot(0, this, [this] {\n\t\t\tif (!m_shown.isEmpty()) return;\n\t\t\tclose();\n\t\t});"
 replace = "\t\t(void) session;"
 expect = "a_window_whose_last_session_goes_to_another_process_closes"
+
+# A nested splitter left to show itself when polished: built into a
+# splitter already on screen, it stayed hidden with every pane in it --
+# terminals in the layout and nowhere on screen (the holder, 2026-10-30).
+[[sabotage]]
+name = "a nested split's panes stay hidden"
+file = "src/ui/pane_container.cpp"
+find = "\t\tinto->addWidget(nested);\n"
+replace = ""
+expect = "no_terminal_is_lost_however_the_panes_are_moved"

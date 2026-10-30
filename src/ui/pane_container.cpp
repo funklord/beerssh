@@ -139,7 +139,16 @@ void bssh_pane_container::add_split_children(const bssh_pane_node &node, QSplitt
 			continue;
 		}
 
+		/*
+		 * Added explicitly, as a frame is in add_pane_view and for its
+		 * reason: a splitter shows a new child only once it is polished,
+		 * and a nested one built into a splitter already on screen could
+		 * stay hidden with every pane in it -- terminals that were in the
+		 * layout and nowhere on screen (the holder: "terminals disappear",
+		 * 2026-10-30).
+		 */
 		QSplitter *nested = new QSplitter(child.orientation, into);
+		into->addWidget(nested);
 		configure_splitter(nested);
 		add_split_children(child, nested);
 	}

@@ -9339,6 +9339,29 @@ tab bar there in addition to the other drop zones we already have."
   `tabs_down_the_side_scroll_and_read_across`; three edits in
   `tab-position.toml`.
 
+**Terminals that vanished from a split -- fixed 2026-10-30.** The
+holder: "There are many bugs when creating and moving around tiled
+terminals. terminals disappear etc." A random walk of what a user does
+to panes -- open, split, drop on an edge or the middle, tab, pick, move,
+close, narrow and widen -- checked after every step that each session is
+shown in a pane with a view on screen or is a tab in a shown pane's bar,
+that the window's views match its panes, and that the window holds what
+its layout does. Seed 1 broke at step 29: after "split beside the
+current one", the tree `H(V(s3|s4|*s5,s0),new)` had three views and the
+two on the left were hidden. A nested splitter was made as a child of a
+splitter already on screen and left to show itself when polished, which
+nothing did -- the fault `add_pane_view` had already fixed for a pane's
+frame, one level down. It is added explicitly now. Twelve seeds of sixty
+steps run in the suite and forty passed by hand
+(`BSSH_WALK_SEEDS=40`; `BSSH_WALK_TRACE=1` prints each step).
+`no_terminal_is_lost_however_the_panes_are_moved`; caught in
+`arrangement.toml`. **Open: one SIGSEGV, seen once.** The walk's first
+run died about eleven seconds in, before the splitter fix. It did not
+recur in three runs without the fix, in a run forced to fail at step 1,
+in forty seeds with the fix, or in the full suite. The handler names the
+function given on the command line, and every class after
+`layout_test` runs under that name too, so it is not even known that the
+crash was in this test. Unexplained rather than attributed.
 
 **As built (`bssh_pane_corner`, `bssh_input_selector`).**
 

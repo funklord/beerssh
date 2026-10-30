@@ -1,3 +1,5 @@
+#include <cstdio>
+
 #include <QApplication>
 #include <QAbstractButton>
 #include <QGroupBox>
@@ -16,6 +18,7 @@
 #include <QClipboard>
 #include <QJsonObject>
 #include <QAbstractScrollArea>
+#include <QRandomGenerator>
 #include <QScrollArea>
 #include <QKeyCombination>
 #include <QKeyEvent>
@@ -6109,6 +6112,182 @@ void layout_test::the_tab_bar_goes_where_it_is_set() {
 	}
 
 	bssh_app_settings().set_tab_position(was);
+}
+
+void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
+	/*
+	 * The holder: "There are many bugs when creating and moving around
+	 * tiled terminals. terminals disappear etc." (2026-10-30). A walk of
+	 * what a user does to panes -- open, split, drop on an edge or the
+	 * middle, tab, pick, move, close, narrow and widen -- asking after
+	 * every step whether each session can still be reached: shown in a
+	 * pane with a view, or a tab in a shown pane's bar. Seeded, and each
+	 * failure prints the steps that led to it.
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+
+	const int seeds = qEnvironmentVariableIntValue("BSSH_WALK_SEEDS") > 0
+	        ? qEnvironmentVariableIntValue("BSSH_WALK_SEEDS") : 12;
+	for (int seed = 1; seed <= seeds; ++seed) {
+		bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+		bssh_main_window window;
+		window.resize(1400, 800);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		const registry_left_as_found_t tidy(window.registry());
+		bssh_session_registry *registry = window.registry();
+		bssh_layout_manager *layout = window.layout_manager();
+
+		QRandomGenerator random { quint32(seed) };
+		QStringList steps;
+		QHash<bssh_session *, QString> names;
+		int made = 0;
+		const auto make = [&]() {
+			bssh_session *session = registry->create(named(QStringLiteral("s%1").arg(made)));
+			names.insert(session, QStringLiteral("s%1").arg(made++));
+			return session;
+		};
+		const auto name = [&names](bssh_session *session) {
+			return session ? names.value(session, QStringLiteral("?")) : QStringLiteral("null");
+		};
+		const auto any = [&random](const QList<bssh_session *> &from) -> bssh_session * {
+			return from.isEmpty() ? nullptr : from.at(int(random.bounded(quint32(from.size()))));
+		};
+		const auto settle = [] {
+			for (int i = 0; i < 3; ++i) QCoreApplication::processEvents();
+		};
+
+		/* Every session reachable, and what is drawn is what the model says. */
+		const auto lost = [&]() -> QString {
+			const QList<bssh_session *> visible = layout->visible_panes();
+			for (bssh_session *session : registry->sessions()) {
+				if (!layout->sessions().contains(session))
+					return QStringLiteral("%1 is in no pane and no tab").arg(name(session));
+				bool reached = visible.contains(session);
+				for (bssh_session *front : visible)
+					reached = reached || layout->bar_tabs(front).contains(session);
+				if (!reached)
+					return QStringLiteral("%1 is neither shown nor a shown pane's tab").arg(name(session));
+			}
+			if (window.panes()->views().size() != visible.size())
+				return QStringLiteral("%1 views for %2 panes").arg(window.panes()->views().size())
+				        .arg(visible.size());
+			for (bssh_session *front : visible) {
+				bssh_terminal_view *view = window.panes()->view_for(front);
+				if (!view || !view->isVisible())
+					return QStringLiteral("%1 has no view on screen").arg(name(front));
+				const QList<bssh_session *> tabs = layout->bar_tabs(front);
+				bssh_pane_bar *bar = window.bar_for(front);
+				if (tabs.size() > 1 && (!bar || !bar->isVisible() || bar->sessions() != tabs))
+					return QStringLiteral("%1's bar does not list its %2 tabs").arg(name(front))
+					        .arg(tabs.size());
+			}
+			const QList<bssh_session *> held = window.shown_sessions();
+			const QList<bssh_session *> placed = layout->sessions();
+			if (QSet<bssh_session *>(held.begin(), held.end())
+			    != QSet<bssh_session *>(placed.begin(), placed.end()))
+				return QStringLiteral("the window holds %1 terminals and its panes %2")
+				        .arg(held.size()).arg(placed.size());
+			return QString();
+		};
+
+		window.adopt_session(make());
+		settle();
+		for (int step = 0; step < 60; ++step) {
+			const QList<bssh_session *> all = registry->sessions();
+			const QList<bssh_session *> visible = layout->visible_panes();
+			bssh_session *session = any(all);
+			bssh_session *target = any(visible);
+			QString did;
+			const bool trace = qEnvironmentVariableIsSet("BSSH_WALK_TRACE");
+			if (trace) fprintf(stderr, "walk: seed %d step %d\n", seed, step);
+			switch (random.bounded(10)) {
+			case 0: {
+				bssh_session *fresh = make();
+				window.adopt_session(fresh);
+				did = QStringLiteral("open %1").arg(name(fresh));
+				break;
+			}
+			case 1: {
+				bssh_session *fresh = make();
+				window.adopt_session(fresh);
+				window.split_with(fresh);
+				did = QStringLiteral("open %1 and split").arg(name(fresh));
+				break;
+			}
+			case 2:
+			case 3: {
+				const int edge = int(random.bounded(5));
+				did = QStringLiteral("drop %1 on %2 at %3").arg(name(session), name(target)).arg(edge);
+				window.drop_session_on(session, target, edge);
+				break;
+			}
+			case 4: {
+				const int slot = int(random.bounded(4));
+				did = QStringLiteral("tab %1 into %2 at %3").arg(name(session), name(target)).arg(slot);
+				window.drop_session_as_tab(session, target, slot);
+				break;
+			}
+			case 5: {
+				/* As a click on its tab does, through the bar. */
+				did = QStringLiteral("pick %1").arg(name(session));
+				for (bssh_session *front : visible) {
+					bssh_pane_bar *bar = window.bar_for(front);
+					const int at = bar && bar->isVisible() ? bar->sessions().indexOf(session) : -1;
+					if (at >= 0) bar->tab_bar()->setCurrentIndex(at);
+				}
+				break;
+			}
+			case 6: {
+				const int direction = random.bounded(2) ? 1 : -1;
+				did = QStringLiteral("move pane %1 by %2").arg(name(target)).arg(direction);
+				window.move_pane(target, direction);
+				break;
+			}
+			case 7:
+				if (all.size() < 3) continue;
+				did = QStringLiteral("close %1").arg(name(session));
+				registry->close(session);
+				break;
+			case 8: {
+				const int width = random.bounded(2) ? 500 : 1400;
+				did = QStringLiteral("width %1").arg(width);
+				window.resize(width, 800);
+				break;
+			}
+			default:
+				did = QStringLiteral("split beside the current one");
+				window.split_beside_current();
+				break;
+			}
+			if (trace) fprintf(stderr, "walk:   %s\n", qPrintable(did));
+			settle();
+			steps << did;
+			/* Only what lasts: a pane is allowed a moment to come up. */
+			QString why = lost();
+			if (!why.isEmpty()) {
+				QTest::qWait(300);
+				why = lost();
+			}
+			if (!why.isEmpty()) {
+				QStringList visible_names, intent_names, view_names;
+				for (bssh_session *front : layout->visible_panes()) visible_names << name(front);
+				for (bssh_session *pane : layout->intent()) intent_names << name(pane);
+				for (bssh_terminal_view *view : window.panes()->views())
+					view_names << (view && view->isVisible() ? QStringLiteral("shown") : QStringLiteral("hidden"));
+				why += QStringLiteral("\n  tree %1\n  visible %2 (max %3), intent %4, views %5")
+				        .arg(bssh_layout_manager::shape_text(layout->tree(), name),
+				             visible_names.join(QLatin1Char(','))).arg(layout->max_panes())
+				        .arg(intent_names.join(QLatin1Char(',')), view_names.join(QLatin1Char(',')));
+			}
+			QVERIFY2(why.isEmpty(), qPrintable(QStringLiteral("seed %1: %2\n  after: %3")
+			                                           .arg(seed).arg(why, steps.join(QStringLiteral("\n         ")))));
+		}
+	}
 }
 
 void layout_test::tabs_down_the_side_scroll_and_read_across() {
