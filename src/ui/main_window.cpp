@@ -3303,6 +3303,26 @@ void bssh_main_window::swap_sessions(bssh_session *session, bssh_session *target
 	update_status();
 }
 
+int bssh_main_window::arrival_zone_for(bssh_session *target, int edge) const {
+	typedef bssh_layout_manager layout;
+	if (!target || !m_layout || !m_layout->intent().contains(target)) return BSSH_DROP_CANCEL;
+
+	/* drop_zone_for()'s rules for a session that is no tab here and no
+	 * pane: a new arrival, every time. */
+	if (bssh_is_tab_drop(edge)) {
+		const bool shows_a_bar = !m_tabs_hidden && m_layout->bar_tabs(target).size() > 1;
+		if (!shows_a_bar && m_layout->arrangement() == layout::TILED) return edge;
+		edge -= BSSH_DROP_TAB_BASE;
+	}
+	if (edge < layout::EDGE_LEFT || edge > layout::EDGE_MIDDLE) return BSSH_DROP_CANCEL;
+	if (edge == layout::EDGE_MIDDLE) return edge;
+	if (m_layout->intent().size() >= m_layout->max_panes()) return layout::EDGE_MIDDLE;
+	if (m_layout->arrangement() == layout::COLUMN
+	    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))
+		return layout::EDGE_MIDDLE;
+	return edge;
+}
+
 void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *target,
                                         int edge) {
 	if (!session || !target || !m_layout || !m_panes) return;
@@ -3393,11 +3413,12 @@ void bssh_main_window::drop_session_as_tab(bssh_session *session, bssh_session *
 int bssh_main_window::tab_drop_slot(bssh_session *session, bssh_session *front,
                                     const QPoint &at, int *mark) const {
 	if (mark) *mark = -1;
-	if (!session || !front || !m_layout || !m_panes) return -1;
+	/* No session: one arriving from another process (preview_arrival). */
+	if (!front || !m_layout || !m_panes) return -1;
 
 	/* A pane's only tab dropped on its own bar or strip: nothing to do. */
 	const QList<bssh_session *> tabs = m_layout->bar_tabs(front);
-	if (tabs == QList<bssh_session *>{ session }) return -1;
+	if (session && tabs == QList<bssh_session *>{ session }) return -1;
 
 	/* No bar: the strip is the one slot, after the pane's own, and lights whole. */
 	bssh_pane_bar *row = bar_for(front);
@@ -3535,6 +3556,64 @@ static void set_session_drag_active_everywhere(bool active) {
 		if (bssh_main_window *window = qobject_cast<bssh_main_window *>(widget))
 			window->set_session_drag_active(active);
 	}
+}
+
+/*
+ * What preview_arrival() lit, so the next hover clears it, and the timer
+ * that clears everything if the other process goes quiet mid-drag -- it
+ * may have been killed, and a lit zone nobody will ever end would stay.
+ */
+namespace {
+QPointer<bssh_terminal_view> g_arrival_lit;
+QPointer<bssh_main_window> g_arrival_row;
+bool g_arrival_active = false;
+QTimer *g_arrival_quiet = nullptr;
+}
+
+void bssh_main_window::preview_arrival(const QPoint &global, bool active) {
+	if (!active) {
+		if (g_arrival_lit) g_arrival_lit->show_drop_zone(-1);
+		if (g_arrival_row) {
+			for (const QPointer<bssh_tab_drop> &overlay : g_arrival_row->m_tab_drops)
+				if (overlay) overlay->hover(-1, -1);
+		}
+		g_arrival_lit.clear();
+		g_arrival_row.clear();
+		if (g_arrival_active) set_session_drag_active_everywhere(false);
+		g_arrival_active = false;
+		if (g_arrival_quiet) g_arrival_quiet->stop();
+		return;
+	}
+
+	/* The tab strips a drag of this process's own would put up. */
+	if (!g_arrival_active) {
+		set_session_drag_active_everywhere(true);
+		g_arrival_active = true;
+	}
+	if (!g_arrival_quiet) {
+		g_arrival_quiet = new QTimer(qApp);
+		g_arrival_quiet->setSingleShot(true);
+		QObject::connect(g_arrival_quiet, &QTimer::timeout, qApp, [] { preview_arrival(QPoint(), false); });
+	}
+	g_arrival_quiet->start(1500);
+
+	const drop_spot_t spot = drop_spot_at(global, nullptr);
+	bssh_terminal_view *view = spot.window && spot.target && !spot.on_tab_row
+	        ? spot.window->panes()->view_for(spot.target) : nullptr;
+	if (g_arrival_lit && g_arrival_lit != view) g_arrival_lit->show_drop_zone(-1);
+	if (view) view->show_drop_zone(spot.window->arrival_zone_for(spot.target, spot.edge));
+	g_arrival_lit = view;
+
+	bssh_main_window *row = spot.on_tab_row ? spot.window : nullptr;
+	for (bssh_main_window *each : { g_arrival_row.data(), row }) {
+		if (!each) continue;
+		for (const QPointer<bssh_tab_drop> &overlay : each->m_tab_drops) {
+			if (!overlay) continue;
+			const bool lit = each == row && overlay->front == spot.front;
+			overlay->hover(lit ? spot.slot : -1, lit ? spot.mark : -1);
+		}
+	}
+	g_arrival_row = row;
 }
 
 QString bssh_main_window::session_mime_type() {
@@ -3738,8 +3817,12 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 
 	set_session_drag_active_everywhere(true);
 
+	/* The other BeerSSH told about this drag, and when it last was. */
+	qint64 hovered_pid = 0;
+	QElapsedTimer hover_clock;
+
 	session_drag_ghost ghost(session_drag_pixmap(session));
-	ghost.moved = [this, &ghost, &lit, &lit_row, carried](const QPoint &at) {
+	ghost.moved = [this, &ghost, &lit, &lit_row, carried, &hovered_pid, &hover_clock](const QPoint &at) {
 		const drop_spot_t spot = drop_spot_at(at, carried);
 		bssh_terminal_view *view = spot.window && spot.target
 		        ? spot.window->panes()->view_for(spot.target) : nullptr;
@@ -3752,6 +3835,22 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 		 * (sec 8.4); without a handoff point it is still refused. */
 		ghost.set_refused(!spot.window && !bssh_handoff_point::instance() &&
 		                  another_beerssh_under_pointer(this));
+
+		/*
+		 * Over another BeerSSH, it is told where, so it can draw the zone
+		 * a drop would land in -- it could not see this drag otherwise
+		 * (sec 8.7a). At most every 30 ms, and told when the pointer
+		 * leaves it.
+		 */
+		const qint64 over = !spot.window && bssh_handoff_point::instance()
+		                            ? other_beerssh_pid_under_pointer(this) : 0;
+		if (hovered_pid && hovered_pid != over)
+			bssh_handoff_point::hover(bssh_handoff_point::path_for(hovered_pid), QPoint(), false);
+		if (over && (over != hovered_pid || !hover_clock.isValid() || hover_clock.elapsed() >= 30)) {
+			bssh_handoff_point::hover(bssh_handoff_point::path_for(over), at, true);
+			hover_clock.restart();
+		}
+		hovered_pid = over;
 
 		bssh_main_window *row = spot.on_tab_row ? spot.window : nullptr;
 		for (bssh_main_window *each : { lit_row.data(), row }) {
@@ -3767,6 +3866,15 @@ void bssh_main_window::run_own_session_drag(bssh_session *session) {
 
 	QPoint released;
 	const bool dropped = ghost.run(&released);
+
+	/*
+	 * Released over the other BeerSSH it was showing: the offer that
+	 * follows ends its preview, after placing (take_from_another_process).
+	 * Anything else -- cancelled, or released over nothing of theirs --
+	 * ends it here.
+	 */
+	if (hovered_pid && !(dropped && other_beerssh_pid_under_pointer(this) == hovered_pid))
+		bssh_handoff_point::hover(bssh_handoff_point::path_for(hovered_pid), QPoint(), false);
 
 	if (lit) lit->show_drop_zone(-1);
 	if (source) source->set_being_dragged(false);
@@ -3977,11 +4085,18 @@ void bssh_main_window::take_from_another_process(const QString &path, const QStr
 	bssh_session *session = bssh_handoff_point::take(path, handoff_id, registry, &why);
 	if (!session) {
 		qWarning("handoff: could not take the session: %s", qPrintable(why));
+		preview_arrival(QPoint(), false);
 		return;
 	}
 	registry->adopt(session);
 
 	const drop_spot_t spot = drop_spot_at(global, session);
+	/*
+	 * Placed while the preview's tab strips are still up, as a drag of
+	 * this process's own is (see run_own_session_drag), and only then
+	 * taken down.
+	 */
+	const auto end_preview = qScopeGuard([] { preview_arrival(QPoint(), false); });
 	if (spot.on_tab_row && spot.front) spot.window->drop_session_as_tab(session, spot.front, spot.slot);
 	else if (spot.window && spot.target) spot.window->drop_session_on(session, spot.target, spot.edge);
 	else if (spot.window) spot.window->adopt_session(session);

@@ -684,6 +684,13 @@ public:
 	 * Takes a session another BeerSSH process let go over this one, from
 	 * the handoff point at path, and puts it where it landed (sec 8.4).
 	 */
+	/*
+	 * Another BeerSSH's drag is over this process at global, or has left
+	 * (active false): this process's windows draw the zone a drop would
+	 * land in, as they do for a drag of their own (sec 8.7a).
+	 */
+	static void preview_arrival(const QPoint &global, bool active);
+
 	static void take_from_another_process(const QString &path, const QString &handoff_id,
 	                                      const QPoint &global);
 
@@ -715,6 +722,10 @@ public:
 	 * so what is shown before the release is what the release does.
 	 */
 	int drop_zone_for(bssh_session *session, bssh_session *target, int edge) const;
+
+	/* The same for a session arriving from another process, which this
+	 * window does not hold yet: what take_from_another_process() will do. */
+	int arrival_zone_for(bssh_session *target, int edge) const;
 
 	/*
 	 * The payload a drag of `session` carries, built in one place so that

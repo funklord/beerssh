@@ -188,3 +188,28 @@ file = "src/ui/main_window.cpp"
 find = "\tif (m_status_label && m_status_line != bssh_app_settings::STATUS_LINE_OFF)\n\t\twanted.rheight()"
 replace = "\tif (m_status_label)\n\t\twanted.rheight()"
 expect = "a_window_can_be_sized_in_cells"
+
+# The hover never reaches the windows: another process's drag shows
+# nothing here, which is what the holder saw.
+[[sabotage]]
+name = "a hover from another process is dropped"
+file = "src/model/handoff_point.cpp"
+find = "\t\t\temit hovered(global, active);"
+replace = "\t\t\t(void) global; (void) active;"
+expect = "a_hover_says_where_and_then_that_it_left"
+
+# The zone is not drawn for an arrival.
+[[sabotage]]
+name = "an arrival's zone is not lit"
+file = "src/ui/main_window.cpp"
+find = "\tif (view) view->show_drop_zone(spot.window->arrival_zone_for(spot.target, spot.edge));"
+replace = ""
+expect = "another_processs_drag_is_previewed_here"
+
+# Ended, and the zone stays lit.
+[[sabotage]]
+name = "an ended arrival stays lit"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (g_arrival_lit) g_arrival_lit->show_drop_zone(-1);\n\t\tif (g_arrival_row) {"
+replace = "\t\tif (g_arrival_row) {"
+expect = "another_processs_drag_is_previewed_here"

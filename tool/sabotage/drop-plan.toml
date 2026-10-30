@@ -91,7 +91,7 @@ expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 [[sabotage]]
 name = "the only pane is offered a tab slot"
 file = "src/ui/main_window.cpp"
-find = "\tif (tabs == QList<bssh_session *>{ session }) return -1;\n"
+find = "\tif (session && tabs == QList<bssh_session *>{ session }) return -1;\n"
 replace = ""
 expect = "the_tab_row_takes_a_drop_at_the_slot_it_marks"
 

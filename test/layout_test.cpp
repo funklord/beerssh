@@ -1155,6 +1155,47 @@ void layout_test::a_sessions_trouble_is_written_over_its_pane() {
 	local->disconnect_from_host();
 }
 
+void layout_test::another_processs_drag_is_previewed_here() {
+	/*
+	 * Every window is its own process (sec 8.4), so a terminal dragged from
+	 * one is over another's windows, which could not see the drag and drew
+	 * nothing -- the holder: "there are some issues with the visual
+	 * indicators for the drag and drop of new tab bars". The dragging
+	 * process says where it is; this one draws the zone, as for a drag of
+	 * its own, and takes it down when told (sec 8.7a).
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_session *only = window.registry()->create(named(QStringLiteral("only")));
+	window.adopt_session(only);
+	QCoreApplication::processEvents();
+	bssh_terminal_view *view = window.panes()->view_for(only);
+	QVERIFY(view);
+
+	/* Over the left band of a pane with no bar: the tab zone, lit. */
+	const QPoint band = view->mapToGlobal(QPoint(3, view->height() / 2));
+	bssh_main_window::preview_arrival(band, true);
+	QCOMPARE(view->drop_zone(), BSSH_DROP_TAB_BASE + int(bssh_layout_manager::EDGE_LEFT));
+
+	/* Over the middle: the middle -- a swap -- lit instead. */
+	bssh_main_window::preview_arrival(view->mapToGlobal(view->rect().center()), true);
+	QCOMPARE(view->drop_zone(), int(bssh_layout_manager::EDGE_MIDDLE));
+
+	/* Left, or ended without a drop: nothing lit. */
+	bssh_main_window::preview_arrival(QPoint(), false);
+	QCOMPARE(view->drop_zone(), -1);
+}
+
 void layout_test::only_the_focused_pane_shows_its_corner() {
 	/*
 	 * The holder: "we keep all of the annoying things that can cover the

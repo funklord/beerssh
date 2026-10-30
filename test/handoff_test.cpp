@@ -14,6 +14,9 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <atomic>
+#include <thread>
+
 #include "input/input_router.h"
 #include "model/app_settings.h"
 #include "model/handoff_point.h"
@@ -173,6 +176,41 @@ void handoff_test::a_live_session_moves_to_another_process() {
 	QCOMPARE(given.first(), session);
 	QVERIFY(session->is_moving());
 	delete session;
+}
+
+/* A drag from another process is over this one, and then is not: the
+ * hover message carries the point, and the empty one ends it (sec 8.7a). */
+void handoff_test::a_hover_says_where_and_then_that_it_left() {
+	runtime_dir_t runtime;
+	bssh_handoff_point point([](const QString &) -> bssh_session * { return nullptr; });
+	QString why;
+	QVERIFY2(point.listen(&why), qPrintable(why));
+	QSignalSpy hovered(&point, &bssh_handoff_point::hovered);
+
+	/*
+	 * Sent from a thread of its own: hover() waits for the answer, and the
+	 * point answering it is this process's, served from the event loop
+	 * that has to keep turning meanwhile. In use the two are different
+	 * processes.
+	 */
+	const auto send = [&point](const QPoint &at, bool active) {
+		std::atomic<int> result { -1 };
+		std::thread sender([&] { result = bssh_handoff_point::hover(point.path(), at, active) ? 1 : 0; });
+		QElapsedTimer waited;
+		waited.start();
+		while (result < 0 && waited.elapsed() < 5000) QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+		sender.join();
+		return result == 1;
+	};
+
+	QVERIFY(send(QPoint(120, 340), true));
+	QTRY_COMPARE(hovered.count(), 1);
+	QCOMPARE(hovered.at(0).at(0).toPoint(), QPoint(120, 340));
+	QCOMPARE(hovered.at(0).at(1).toBool(), true);
+
+	QVERIFY(send(QPoint(), false));
+	QTRY_COMPARE(hovered.count(), 2);
+	QCOMPARE(hovered.at(1).at(1).toBool(), false);
 }
 
 /* Asked for a session it does not have, the giver says so, and the taker

@@ -30,6 +30,7 @@ const char BSSH_HANDOFF_OFFER[] = "offer";
 const char BSSH_HANDOFF_LIST[] = "list";
 const char BSSH_HANDOFF_IDS[] = "ids";
 const char BSSH_HANDOFF_QUIT[] = "quit";
+const char BSSH_HANDOFF_HOVER[] = "hover";
 const char BSSH_HANDOFF_OK[] = "ok";
 
 bssh_handoff_point *g_instance = nullptr;
@@ -183,6 +184,17 @@ void bssh_handoff_point::serve(int socket) {
 				emit offered(source, offered_id, global);
 			}, Qt::QueuedConnection);
 		}
+		return;
+	}
+	if (verb == BSSH_HANDOFF_HOVER) {
+		/* "x,y" while over this process; empty when the drag left it. */
+		bssh_handoff_wire::send(socket, word(BSSH_HANDOFF_OK), {}, BSSH_HANDOFF_STEP_MS);
+		const QStringList at = id.split(QLatin1Char(','));
+		const bool active = at.size() == 2;
+		const QPoint global = active ? QPoint(at.at(0).toInt(), at.at(1).toInt()) : QPoint();
+		QMetaObject::invokeMethod(this, [this, global, active] {
+			emit hovered(global, active);
+		}, Qt::QueuedConnection);
 		return;
 	}
 	if (verb == BSSH_HANDOFF_LIST) {
@@ -364,6 +376,15 @@ QStringList bssh_handoff_point::list(const QString &path, QString *why) {
 	if (!ask(path, word(BSSH_HANDOFF_LIST), verb, text, why) || verb != BSSH_HANDOFF_IDS)
 		return QStringList();
 	return text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+}
+
+bool bssh_handoff_point::hover(const QString &path, const QPoint &global, bool active,
+                               QString *why) {
+	QByteArray verb;
+	QString text;
+	const QString what = active ? QString::number(global.x()) + QLatin1Char(',') + QString::number(global.y())
+	                            : QString();
+	return ask(path, word(BSSH_HANDOFF_HOVER, what), verb, text, why) && verb == BSSH_HANDOFF_OK;
 }
 
 bool bssh_handoff_point::request_quit(const QString &path, QString *why) {

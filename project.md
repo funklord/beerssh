@@ -9203,6 +9203,29 @@ under twin: the source window and its process went, and the terminal
 arrived. `a_window_whose_last_session_goes_to_another_process_closes`;
 caught in `arrangement.toml`.
 
+**A drag from another process is previewed here -- 2026-10-30.** The
+holder: "there are some issues with the visual indicators for the drag
+and drop of new tab bars". With every window its own process (sec 8.4),
+a terminal dragged from one window is over another process's windows,
+and the drag is the dragging process's own pointer tracking: the other
+saw nothing of it, and drew no zone, band or tab strip until the drop
+had already happened. Now the dragging process tells the one under the
+pointer where it is -- a `hover` message over the hand-off socket, at
+most every 30 ms, and an empty one when the pointer leaves or the drag
+ends without a drop there -- and that process draws what a drag of its
+own would: its tab strips, and the zone the drop will take
+(`preview_arrival`, judging with `arrival_zone_for`, the same rules as
+`drop_zone_for` for a session it does not yet hold). The take places the
+session while the strips are still up, as a drop of its own does, and
+only then takes them down; a preview the sender stops feeding clears
+itself after 1.5 s, the sender being killable mid-drag. Seen with two
+processes under twin: over the other window's left band the band lit,
+over its middle the swap; released on the band, the terminal arrived as
+a tab with the bar on the left, listing its screens.
+`a_hover_says_where_and_then_that_it_left`,
+`another_processs_drag_is_previewed_here`; three edits in
+`pane-corner.toml`.
+
 **The status line is hidden by default; a session's trouble is written
 over its pane -- 2026-10-30.** The holder: "the status bar showing
 connected makes no sense on a local terminal, and even with ssh, maybe

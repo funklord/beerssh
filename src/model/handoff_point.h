@@ -92,6 +92,15 @@ public:
 	static QStringList list(const QString &path, QString *why = nullptr);
 	static bool request_quit(const QString &path, QString *why = nullptr);
 
+	/*
+	 * A drag from another BeerSSH is over the process at path, at global
+	 * -- or, with active false, has left it or ended without a drop
+	 * (sec 8.7a). The target draws where a drop would land; a drag shows
+	 * its zones only in the process that started it otherwise.
+	 */
+	static bool hover(const QString &path, const QPoint &global, bool active,
+	                  QString *why = nullptr);
+
 signals:
 	/*
 	 * A session has been given away and is inert: the caller removes it
@@ -102,6 +111,9 @@ signals:
 
 	/* Another process let a session go over this one; see offer(). */
 	void offered(const QString &source, const QString &handoff_id, const QPoint &global);
+
+	/* Another process's drag is over this one, or no longer; see hover(). */
+	void hovered(const QPoint &global, bool active);
 
 	/* A new version has taken everything it could, and asks this to go. */
 	void quit_requested();
