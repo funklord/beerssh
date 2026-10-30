@@ -81,6 +81,9 @@ private:
 	/* Down the side: wide enough for the tabs and the scrollbar. */
 	void fit_side();
 
+	/* The tab style on the bar and on the close buttons inside it. */
+	void use_tab_style();
+
 	/* Down the side on touch: a thumb drags the list (sec 8.7a). */
 	bool scroll_by_touch(QObject *watched, QEvent *event);
 

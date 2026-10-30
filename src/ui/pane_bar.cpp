@@ -150,6 +150,18 @@ public:
 		return out;
 	}
 
+	/*
+	 * A tab's close button is a target too, and Qt sizes it from these:
+	 * 20dp at the style's own, so on touch the floor's width and height.
+	 */
+	int pixelMetric(PixelMetric metric, const QStyleOption *option,
+	                const QWidget *widget) const override {
+		if (m_least_height > 0
+		    && (metric == PM_TabCloseIndicatorWidth || metric == PM_TabCloseIndicatorHeight))
+			return m_least_height;
+		return QProxyStyle::pixelMetric(metric, option, widget);
+	}
+
 	void drawControl(ControlElement element, const QStyleOption *option,
 	                 QPainter *painter, const QWidget *widget) const override {
 		const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option);
@@ -230,6 +242,7 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 	m_bar->setCurrentIndex(qMax(0, int(tabs.indexOf(front))));
 	refresh();
 
+
 	m_add->setText(QStringLiteral("+"));
 	m_add->setAutoRaise(true);
 	m_add->setToolTip(QStringLiteral("Open another session in this pane"));
@@ -261,7 +274,7 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 		 */
 		m_tab_style = new pane_tab_style(true, pointer ? 0 : BSSH_TOUCH_TARGET_DP);
 		m_tab_style->setParent(list);
-		m_bar->setStyle(m_tab_style);
+		use_tab_style();
 		m_bar->setUsesScrollButtons(false);
 
 		m_scroll = new QScrollArea(this);
@@ -293,7 +306,7 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 		if (!pointer) {
 			m_tab_style = new pane_tab_style(false, BSSH_TOUCH_TARGET_DP);
 			m_tab_style->setParent(this);
-			m_bar->setStyle(m_tab_style);
+			use_tab_style();
 		}
 	}
 	if (!pointer) m_add->setMinimumSize(BSSH_TOUCH_TARGET_DP, BSSH_TOUCH_TARGET_DP);
@@ -363,6 +376,25 @@ void bssh_pane_bar::refresh() {
 		m_bar->setTabIcon(i, QIcon(bssh_tab_status::dot(size, bssh_tab_status::state_for(session))));
 	}
 	fit_side();
+}
+
+void bssh_pane_bar::use_tab_style() {
+	/*
+	 * The close buttons first. QWidget::setStyle reaches the bar and not
+	 * the buttons Qt has already made inside it -- a widget with no style
+	 * of its own takes the application's, not its parent's -- so on touch
+	 * they stayed 20dp while the tabs around them grew. Styled and sized
+	 * here, they are what the bar measures when its own style changes.
+	 */
+	for (int i = 0; i < m_bar->count(); ++i) {
+		for (const QTabBar::ButtonPosition side : { QTabBar::LeftSide, QTabBar::RightSide }) {
+			if (QWidget *button = m_bar->tabButton(i, side)) {
+				button->setStyle(m_tab_style);
+				button->resize(button->sizeHint());
+			}
+		}
+	}
+	m_bar->setStyle(m_tab_style);
 }
 
 void bssh_pane_bar::fit_side() {

@@ -7,7 +7,9 @@
 #include <QPainter>
 #include <QToolButton>
 
+#include "platform/platform.h"
 #include "ui/input_selector.h"
+#include "ui/touch_metrics.h"
 
 namespace {
 
@@ -118,6 +120,18 @@ bssh_pane_corner::bssh_pane_corner(QWidget *parent)
 		button->setFocusPolicy(Qt::NoFocus);
 		button->hide();
 	}
+
+	/*
+	 * On touch each is a thumb's target, held to sec 6.2's 48dp as the
+	 * drum's rows above them are: at their own height they were 24dp,
+	 * which the sweep never saw, the corner being built inside a window
+	 * rather than opened as a surface of its own.
+	 */
+	const bssh_platform *platform = bssh_platform::instance();
+	if (platform && platform->is_touch_primary()) {
+		for (QToolButton *button : { m_multiplexer, m_tabs, m_menu })
+			button->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	}
 	connect(m_tabs, &QToolButton::clicked, this, [this] {
 		emit tabs_clicked(m_tabs->mapToGlobal(QPoint(0, m_tabs->height())));
 	});
@@ -209,7 +223,7 @@ QSize bssh_pane_corner::sizeHint() const {
 	for (const QToolButton *button : { m_multiplexer, m_tabs, m_menu }) {
 		if (button->isHidden()) continue;
 		wide = qMax(wide, button->sizeHint().width());
-		high += button->sizeHint().height();
+		high += qMax(button->sizeHint().height(), button->minimumHeight());
 	}
 	return QSize(wide + 2 * PAD, high + 2 * PAD);
 }
@@ -225,7 +239,7 @@ void bssh_pane_corner::relayout() {
 	/* The menus first, under the grip: the top of the corner is where
 	 * the menu bar they stand in for would be (the holder's placement). */
 	if (!m_menu->isHidden()) {
-		const int high = m_menu->sizeHint().height();
+		const int high = qMax(m_menu->sizeHint().height(), m_menu->minimumHeight());
 		m_menu->setGeometry(PAD, y, inner, high);
 		y += high;
 	}
@@ -235,7 +249,7 @@ void bssh_pane_corner::relayout() {
 	/* Under the drum: the tmux picker, then the tab bar's stand-in. */
 	for (QToolButton *button : { m_multiplexer, m_tabs }) {
 		if (button->isHidden()) continue;
-		const int high = button->sizeHint().height();
+		const int high = qMax(button->sizeHint().height(), button->minimumHeight());
 		button->setGeometry(PAD, y, inner, high);
 		y += high;
 	}

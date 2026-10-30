@@ -6756,6 +6756,71 @@ void layout_test::side_tabs_take_a_tap_and_a_swipe_on_touch() {
 	          qPrintable(QStringLiteral("a top tab %1 tall").arg(bar->tabRect(0).height())));
 }
 
+void layout_test::a_touch_windows_pane_controls_reach_the_floor() {
+	/*
+	 * Sec 6.2's sweep holds every touch surface on its list to 48dp, and
+	 * the pane's own controls were not on it: the tab bars and the corner
+	 * are built inside a window, at run time, rather than being a dialog
+	 * the sweep can open. Their tabs measured about 27dp and their buttons
+	 * less. Asked here of a real touch window: every button in a pane bar
+	 * or a pane corner that shows.
+	 */
+	const forced_touch_t touch(1);
+	const forced_screen_t screen(QSize(1800, 1200));
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		bssh_app_settings::arrangement_t arrangement = bssh_app_settings().arrangement();
+		~restore_t() {
+			bssh_app_settings().set_tab_position(tabs);
+			bssh_app_settings().set_arrangement(arrangement);
+		}
+	} restore;
+	bssh_app_settings().set_arrangement(bssh_app_settings::ARRANGEMENT_TILED);
+
+	for (const bssh_app_settings::tab_position_t side : { bssh_app_settings::TABS_TOP,
+	                                                       bssh_app_settings::TABS_LEFT }) {
+		bssh_app_settings().set_tab_position(side);
+		bssh_main_window window;
+		window.resize(1200, 800);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		const registry_left_as_found_t tidy(window.registry());
+		bssh_session *first = window.registry()->create(named(QStringLiteral("a")));
+		window.adopt_session(first);
+		window.adopt_session(window.registry()->create(named(QStringLiteral("b"))));
+		QTest::qWait(50);
+
+		/* The corner's buttons, all of them showing. */
+		bssh_terminal_view *view = window.panes()->view_for(window.layout_manager()->front_of(first));
+		QVERIFY(view && view->corner());
+		view->corner()->set_multiplexer_text(QStringLiteral("tmux 2"));
+		view->corner()->set_tabs_text(QStringLiteral("tabs 2"));
+		view->corner()->set_menu_shown(true);
+		QCoreApplication::processEvents();
+
+		QList<QWidget *> surfaces;
+		for (bssh_pane_bar *bar : window.pane_bars())
+			if (bar && bar->isVisible()) surfaces << bar;
+		surfaces << view->corner();
+		QVERIFY2(surfaces.size() >= 2, "no bar showing, so measuring it proves nothing");
+
+		QStringList short_ones;
+		for (QWidget *surface : surfaces) {
+			for (QAbstractButton *button : surface->findChildren<QAbstractButton *>()) {
+				if (!button->isVisibleTo(surface)) continue;
+				if (button->height() >= BSSH_TOUCH_TARGET_DP) continue;
+				short_ones << QStringLiteral("%1 %2 '%3' %4dp").arg(
+				        QString::fromLatin1(surface->metaObject()->className()),
+				        QString::fromLatin1(button->metaObject()->className()),
+				        button->objectName().isEmpty() ? button->text() : button->objectName())
+				                .arg(button->height());
+			}
+		}
+		QVERIFY2(short_ones.isEmpty(),
+		          qPrintable(QStringLiteral("side %1: ").arg(int(side)) + short_ones.join(QStringLiteral("; "))));
+	}
+}
+
 void layout_test::a_shape_survives_being_written_down() {
 	bssh_session_registry registry;
 	bssh_layout_manager layout;

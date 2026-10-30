@@ -9392,8 +9392,17 @@ tab bar there in addition to the other drop zones we already have."
     rebuilt by a pick, or shrunk by a keyboard coming up -- until it is
     scrolled by hand. A tab picked far down used to come back scrolled
     out of sight.
+  - **and the rest of the pane's controls reach the floor too**: each
+    tab's close button (20dp; Qt makes those buttons itself and they take
+    the application's style rather than the bar's, so the tab style is
+    set on each of them by hand), and the corner's tmux, tabs and menus
+    buttons (24dp, under drum rows that were already 48). Sec 6.2's sweep
+    never saw any of these: it opens surfaces from a list, and the bars
+    and the corner are built inside a window at run time.
+    `a_touch_windows_pane_controls_reach_the_floor` asks the sweep's
+    question of a real touch window.
   `side_tabs_take_a_tap_and_a_swipe_on_touch` and the rest of
-  `tabs_down_the_side_scroll_and_read_across`; six more edits in
+  `tabs_down_the_side_scroll_and_read_across`; nine more edits in
   `tab-position.toml`, all caught.
 
 **Terminals that vanished from a split -- fixed 2026-10-30.** The

@@ -221,7 +221,7 @@ name = "the menu button sits under the drum"
 file = "src/ui/pane_corner.cpp"
 find = """
 	if (!m_menu->isHidden()) {
-		const int high = m_menu->sizeHint().height();
+		const int high = qMax(m_menu->sizeHint().height(), m_menu->minimumHeight());
 		m_menu->setGeometry(PAD, y, inner, high);
 		y += high;
 	}

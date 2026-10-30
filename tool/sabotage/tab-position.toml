@@ -102,3 +102,28 @@ file = "src/ui/pane_bar.cpp"
 find = "\t    && !m_scrolled_by_hand) {\n"
 replace = "\t    && !m_scrolled_by_hand) {\n\t\tm_scrolled_by_hand = true;\n"
 expect = "tabs_down_the_side_scroll_and_read_across"
+
+# The corner's tmux, tabs and menus buttons at their own height on touch:
+# 24dp, short of a thumb.
+[[sabotage]]
+name = "the corner's buttons are short on touch"
+file = "src/ui/pane_corner.cpp"
+find = "\t\t\tbutton->setMinimumHeight(BSSH_TOUCH_TARGET_DP);\n"
+replace = "\t\t\t(void) button;\n"
+expect = "a_touch_windows_pane_controls_reach_the_floor"
+
+# A tab's close button at the style's own 20dp on touch.
+[[sabotage]]
+name = "a tab's close button is short on touch"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\treturn m_least_height;\n"
+replace = "\t\t\treturn QProxyStyle::pixelMetric(metric, option, widget);\n"
+expect = "a_touch_windows_pane_controls_reach_the_floor"
+
+# The style on the bar only: the close buttons Qt made keep the app's.
+[[sabotage]]
+name = "the close buttons miss the tab style"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\t\tbutton->setStyle(m_tab_style);\n"
+replace = ""
+expect = "a_touch_windows_pane_controls_reach_the_floor"

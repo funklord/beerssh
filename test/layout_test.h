@@ -307,6 +307,7 @@ private slots:
 	void moving_a_pane_where_it_does_not_fit_folds_no_other();
 	void tabs_down_the_side_scroll_and_read_across();
 	void side_tabs_take_a_tap_and_a_swipe_on_touch();
+	void a_touch_windows_pane_controls_reach_the_floor();
 	void a_shape_survives_being_written_down();
 
 	/*
