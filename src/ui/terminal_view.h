@@ -77,6 +77,27 @@ const int BSSH_DROP_CANCEL = -2;
 const int BSSH_DROP_REFUSED = -3;
 
 /*
+ * A thin band along each edge of a pane that shows no tab bar: a terminal
+ * dropped there joins the pane as a tab and the tab bar is put on that side
+ * -- the holder, 2026-10-29: "if there is no tab bar then a terminal should
+ * be droppable on any one of the four sides to create a tab bar there in
+ * addition to the other drop zones we already have" (sec 8.7a). BASE plus
+ * the drop_edge_t of the side.
+ */
+const int BSSH_DROP_TAB_BASE = 10;
+inline bool bssh_is_tab_drop(int zone) { return zone >= BSSH_DROP_TAB_BASE && zone < BSSH_DROP_TAB_BASE + 4; }
+
+/*
+ * The zone under `at`: bssh_drop_edge_at's five, or a tab zone where the
+ * point is within `band` pixels of the edge it is nearest. Whether a tab
+ * zone is honoured is the planner's to say.
+ */
+int bssh_drop_zone_at(const QPoint &at, const QSize &pane, int band);
+
+/* The tab zones' width for a pane whose text is `cell_height` tall. */
+int bssh_drop_band(int cell_height);
+
+/*
  * The window's answer to "dropped here, at this zone, what happens": a
  * drop_edge_t, BSSH_DROP_CANCEL or BSSH_DROP_REFUSED. The pane draws what
  * this says and the window does what it says, so the two cannot disagree.

@@ -960,6 +960,140 @@ void layout_test::hidden_bars_are_reached_from_the_corner() {
 	              "the menu button stayed with the menu bar shown");
 }
 
+void layout_test::the_bar_side_and_the_tab_bands_are_where_the_pointer_is() {
+	/* The handle: whichever side is nearest, as a share of the area. */
+	const QSize area(800, 400);
+	QCOMPARE(bssh_bar_side_at(QPoint(10, 200), area), Qt::LeftEdge);
+	QCOMPARE(bssh_bar_side_at(QPoint(790, 200), area), Qt::RightEdge);
+	QCOMPARE(bssh_bar_side_at(QPoint(400, 10), area), Qt::TopEdge);
+	QCOMPARE(bssh_bar_side_at(QPoint(400, 390), area), Qt::BottomEdge);
+	QCOMPARE(bssh_bar_side_at(QPoint(300, 370), area), Qt::BottomEdge);
+
+	/*
+	 * The drop: a band along the edge is a tab zone, the rest of the edge
+	 * zone splits as before, and the middle is the middle.
+	 */
+	typedef bssh_layout_manager layout;
+	const int band = 20;
+	QCOMPARE(bssh_drop_zone_at(QPoint(5, 200), area, band), BSSH_DROP_TAB_BASE + layout::EDGE_LEFT);
+	QCOMPARE(bssh_drop_zone_at(QPoint(60, 200), area, band), int(layout::EDGE_LEFT));
+	QCOMPARE(bssh_drop_zone_at(QPoint(795, 200), area, band), BSSH_DROP_TAB_BASE + layout::EDGE_RIGHT);
+	QCOMPARE(bssh_drop_zone_at(QPoint(400, 3), area, band), BSSH_DROP_TAB_BASE + layout::EDGE_TOP);
+	QCOMPARE(bssh_drop_zone_at(QPoint(400, 398), area, band), BSSH_DROP_TAB_BASE + layout::EDGE_BOTTOM);
+	QCOMPARE(bssh_drop_zone_at(QPoint(400, 200), area, band), int(layout::EDGE_MIDDLE));
+}
+
+void layout_test::the_tab_bar_is_dragged_to_another_side() {
+	/*
+	 * The holder: "i want the tab bar to have a handle so it can be drag n
+	 * dropped to move to one of the 3 other sides" (sec 8.7a).
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	window.adopt_session(window.registry()->create(named(QStringLiteral("alpha"))));
+	window.adopt_session(window.registry()->create(named(QStringLiteral("beta"))));
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QCOMPARE(panes->bar_edge(), Qt::TopEdge);
+	QWidget *handle = window.findChild<QWidget *>(QStringLiteral("pane_bar_handle"));
+	QVERIFY(handle);
+	QTRY_VERIFY(handle->isVisible());
+
+	/* Pressed, and moved toward the middle of the panes' left edge. */
+	const QPoint start = handle->rect().center();
+	const QPoint left_middle = handle->mapFromGlobal(
+	        panes->mapToGlobal(QPoint(8, panes->height() / 2)));
+	QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, start);
+	QTest::mouseMove(handle, start + QPoint(QApplication::startDragDistance() * 2, 0));
+	QTest::mouseMove(handle, left_middle);
+
+	/* The side it would go to is lit, along the left of the pane there. */
+	bssh_terminal_view *view = panes->views().first();
+	QVERIFY(view);
+	QCOMPARE(view->drop_zone(), BSSH_DROP_TAB_BASE + int(bssh_layout_manager::EDGE_LEFT));
+
+	QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, left_middle);
+	QTRY_COMPARE(panes->bar_edge(), Qt::LeftEdge);
+	QCOMPARE(bssh_app_settings().tab_position(), bssh_app_settings::TABS_LEFT);
+	for (bssh_terminal_view *after : panes->views())
+		QVERIFY2(after->drop_zone() == -1, "a pane stayed lit after the drop");
+}
+
+void layout_test::a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there() {
+	/*
+	 * The holder: "if there is no tab bar then a terminal should be
+	 * droppable on any one of the four sides to create a tab bar there in
+	 * addition to the other drop zones we already have" (sec 8.7a).
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+
+	bssh_main_window window;
+	window.resize(1000, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_session *a = window.registry()->create(named(QStringLiteral("alpha")));
+	bssh_session *b = window.registry()->create(named(QStringLiteral("beta")));
+	window.adopt_session(a);
+	window.adopt_session(b);
+	window.split_with(a);
+	QCoreApplication::processEvents();
+
+	bssh_layout_manager *layout = window.findChild<bssh_layout_manager *>();
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(layout && panes);
+	QCOMPARE(layout->intent().size(), 2);
+	QCOMPARE(layout->tabs(a).size(), 1);
+
+	/* a's pane shows no bar, so its right band is a tab zone. */
+	const int right_band = BSSH_DROP_TAB_BASE + bssh_layout_manager::EDGE_RIGHT;
+	QCOMPARE(window.drop_zone_for(b, a, right_band), right_band);
+
+	window.drop_session_on(b, a, right_band);
+	QCoreApplication::processEvents();
+	QCOMPARE(layout->intent().size(), 1);
+	QCOMPARE(layout->tabs(layout->intent().first()).size(), 2);
+	QTRY_COMPARE(panes->bar_edge(), Qt::RightEdge);
+	QCOMPARE(bssh_app_settings().tab_position(), bssh_app_settings::TABS_RIGHT);
+
+	/*
+	 * Now the pane HAS a bar: a band there is just the edge it lies on, a
+	 * split, as it was before bands existed.
+	 */
+	bssh_session *c = window.registry()->create(named(QStringLiteral("gamma")));
+	window.adopt_session(c);
+	QCoreApplication::processEvents();
+
+	/* c arrives as a third tab of that pane; an edge drop of it on its own
+	 * pane splits it off into a pane of its own, beside the barred one. */
+	window.drop_session_on(c, c, bssh_layout_manager::EDGE_RIGHT);
+	QCoreApplication::processEvents();
+	QCOMPARE(layout->intent().size(), 2);
+	bssh_session *front = layout->front_of(a);
+	QVERIFY(front);
+	QVERIFY2(!layout->tabs(front).contains(c), "c is still one of the barred pane's tabs");
+	QCOMPARE(layout->bar_tabs(front).size(), 2);
+	const int top_band = BSSH_DROP_TAB_BASE + bssh_layout_manager::EDGE_TOP;
+	QCOMPARE(window.drop_zone_for(c, front, top_band), int(bssh_layout_manager::EDGE_TOP));
+}
+
 void layout_test::only_the_focused_pane_shows_its_corner() {
 	/*
 	 * The holder: "we keep all of the annoying things that can cover the
@@ -4003,12 +4137,18 @@ void layout_test::a_pane_dropped_in_the_middle_swaps() {
 namespace {
 
 /* A point well inside the zone `edge` of a pane this size. */
+/*
+ * A point in an edge's split zone, which reaches a quarter of the pane in:
+ * a fifth in, clear of the band along the very edge that is a tab zone on
+ * a pane with no bar (sec 8.7a). A tenth in, as it was, fell inside that
+ * band on a narrow pane.
+ */
 QPoint zone_point(const QSize &size, int edge) {
 	switch (edge) {
-	case bssh_layout_manager::EDGE_LEFT:   return QPoint(size.width() / 10, size.height() / 2);
-	case bssh_layout_manager::EDGE_RIGHT:  return QPoint(size.width() * 9 / 10, size.height() / 2);
-	case bssh_layout_manager::EDGE_TOP:    return QPoint(size.width() / 2, size.height() / 10);
-	case bssh_layout_manager::EDGE_BOTTOM: return QPoint(size.width() / 2, size.height() * 9 / 10);
+	case bssh_layout_manager::EDGE_LEFT:   return QPoint(size.width() / 5, size.height() / 2);
+	case bssh_layout_manager::EDGE_RIGHT:  return QPoint(size.width() * 4 / 5, size.height() / 2);
+	case bssh_layout_manager::EDGE_TOP:    return QPoint(size.width() / 2, size.height() / 5);
+	case bssh_layout_manager::EDGE_BOTTOM: return QPoint(size.width() / 2, size.height() * 4 / 5);
 	default:                               return QPoint(size.width() / 2, size.height() / 2);
 	}
 }
@@ -4562,7 +4702,9 @@ void layout_test::a_drop_on_a_pane_that_is_not_focused_places_the_pane() {
 	 * only to the widget the drag is over, and the move is what lights
 	 * the zone.
 	 */
-	const QPoint at(onto->width() / 2, onto->height() - 4);
+	/* In the bottom zone, clear of the band along the very edge, which on
+	 * a pane with no bar is a tab zone now (sec 8.7a). */
+	const QPoint at(onto->width() / 2, onto->height() * 4 / 5);
 	QDragEnterEvent enter(at, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
 	QApplication::sendEvent(onto, &enter);
 	QDragMoveEvent move(at, Qt::MoveAction, &mime, Qt::LeftButton, Qt::NoModifier);
@@ -5215,7 +5357,8 @@ void layout_test::a_drag_released_on_another_windows_pane_places_it() {
 	 * gives the same order as a drop that found no pane and fell back to
 	 * "beside" -- and a test that the fallback also passes asks nothing.
 	 */
-	const QPoint at = pane->mapToGlobal(QPoint(6, pane->height() / 2));
+	/* The left zone, clear of the tab band along the very edge (sec 8.7a). */
+	const QPoint at = pane->mapToGlobal(QPoint(pane->width() / 5, pane->height() / 2));
 	QCOMPARE(QApplication::topLevelAt(at), &onto);
 
 	from.finish_session_drag(moving, at);
@@ -11495,7 +11638,8 @@ void layout_test::a_tab_dropped_on_a_pane_reaches_the_window() {
 	 * middle is a swap now, which leaves one pane -- this is about the
 	 * ROUTE a drop takes, and an edge is the drop that makes it visible.
 	 */
-	const QPoint at(pane->width() - 8, pane->height() / 2);
+	/* The right zone, clear of the tab band along the very edge (sec 8.7a). */
+	const QPoint at(pane->width() * 4 / 5, pane->height() / 2);
 	QDragEnterEvent enter(at, Qt::MoveAction, mime, Qt::LeftButton, Qt::NoModifier);
 
 	/*

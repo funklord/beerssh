@@ -1087,6 +1087,15 @@ private:
 	void show_corner_tabs(bssh_session *front, const QPoint &global);
 	void show_corner_menu(const QPoint &global);
 	QAction *m_menu_bar_action = nullptr;
+
+	/*
+	 * The tab bar's handle dragged (sec 8.7a): the side the pointer is
+	 * nearest is lit along the panes on it, and letting go puts every bar
+	 * there -- the tabs-side-by-side setting, moved by hand.
+	 */
+	void preview_bar_side(const QPoint &global);
+	void finish_bar_side(const QPoint &global);
+	bool m_bar_side_previewed = false;
 	bssh_find_bar *m_find_bar;
 
 	/*

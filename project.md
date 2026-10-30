@@ -9193,8 +9193,31 @@ it.** "I want the tab bar to have a handle so it can be drag n dropped
 to move to one of the 3 other sides. And if there is no tab bar then a
 terminal should be droppable on any one of the four sides to create a
 tab bar there in addition to the other drop zones we already have."
-Today the side is a setting (Top, Bottom, Left, Right) and nothing on
-screen moves it. **Not built yet.**
+**Built 2026-10-30.**
+
+- **The bar's handle** is a block of dots at the bar's start -- not three
+  lines, which is the pane grip's, since the two move different things.
+  Dragged, the side of the panes' area nearest the pointer is lit along
+  the panes on it, and letting go puts every bar there, as the "Tabs,
+  side by side" setting would (`bssh_bar_side_at`; no middle -- every
+  point is nearest some side). The light is each pane's own painting, as
+  a drop zone is: an overlay widget over the panes was tried first, and
+  was laid out, shown and rendered by `grab()`, yet twin's screen never
+  had it on.
+- **A band along each edge of a pane that shows no bar** -- a line of text
+  wide (`bssh_drop_band`) -- is a tab zone: a terminal dropped there joins
+  the pane as a tab and the bar goes on that side
+  (`BSSH_DROP_TAB_BASE` plus the edge, `bssh_drop_zone_at`). The rest of
+  the edge zone splits as before. Offered only side by side, where the
+  pane shows no bar (one tab, or bars hidden) and the session is not
+  already one of its tabs; anywhere else the band is part of the edge it
+  lies on, so every drop that worked before does the same.
+- Seen under twin on Xvfb: the handle dragged to the left lit the pane's
+  left band and moved the tabs there.
+  `the_bar_side_and_the_tab_bands_are_where_the_pointer_is`,
+  `the_tab_bar_is_dragged_to_another_side`,
+  `a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there`; four edits
+  in `tool/sabotage/pane-corner.toml`.
 
 **As built (`bssh_pane_corner`, `bssh_input_selector`).**
 
@@ -9251,6 +9274,11 @@ screen moves it. **Not built yet.**
   commit before this work, measured in a clean copy of it, so
   `narrowing_a_window_turns_its_extra_panes_into_tabs` does not see the
   `refresh_tab_bar()` it was named for. **[OPEN]**
+  Likewise `arrangement.toml`'s "a drop with no room collapses the
+  split": MISSED at `811122c` and at `b3d79fb`, before the corner, each
+  measured in a clean copy, so
+  `a_drop_with_no_room_keeps_an_arrangement_it_cannot_join` does not
+  reach the `take_session` fallback it was named for. **[OPEN]**
 - Guarded by `the_corner_sits_on_the_grid_and_takes_none_of_it`,
   `the_corner_hides_with_its_window_and_is_faint_until_pointed_at`,
   `only_the_focused_pane_shows_its_corner`,

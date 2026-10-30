@@ -2,13 +2,106 @@
 
 #include <QBoxLayout>
 #include <QIcon>
+#include <QApplication>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QTabBar>
 #include <QToolButton>
 
 #include "model/session.h"
 #include "ui/long_press.h"
 #include "ui/tab_status.h"
+
+Qt::Edge bssh_bar_side_at(const QPoint &at, const QSize &area) {
+	if (area.width() <= 0 || area.height() <= 0) return Qt::TopEdge;
+	const double left = double(at.x()) / area.width();
+	const double top = double(at.y()) / area.height();
+	const double nearest = qMin(qMin(left, 1.0 - left), qMin(top, 1.0 - top));
+	if (nearest == left) return Qt::LeftEdge;
+	if (nearest == 1.0 - left) return Qt::RightEdge;
+	if (nearest == top) return Qt::TopEdge;
+	return Qt::BottomEdge;
+}
+
+namespace {
+
+/*
+ * The bar's handle: a block of dots, not the three lines of a pane's grip
+ * (sec 8.7a), since the two move different things. A drag starts once the
+ * pointer has gone as far as the platform says a drag must, so a click on
+ * it is not a gesture; the bar reports where the pointer is and the window
+ * decides which side that means.
+ */
+class bar_handle : public QWidget {
+public:
+	bar_handle(bssh_pane_bar *bar, bool vertical) : QWidget(bar), m_bar(bar), m_vertical(vertical) {
+		setObjectName(QStringLiteral("pane_bar_handle"));
+		setToolTip(QStringLiteral("Drag to put the tabs on another side"));
+		setAccessibleName(QStringLiteral("Move the tab bar"));
+		setCursor(Qt::SizeAllCursor);
+	}
+
+	QSize sizeHint() const override {
+		const int side = fontMetrics().height();
+		return m_vertical ? QSize(side + 6, side) : QSize(side, side + 6);
+	}
+
+protected:
+	void paintEvent(QPaintEvent *) override {
+		QPainter painter(this);
+		painter.setRenderHint(QPainter::Antialiasing);
+		QColor ink = palette().color(QPalette::WindowText);
+		ink.setAlphaF(0.55);
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(ink);
+		const qreal dot = qMax(1.5, qMin(width(), height()) / 10.0);
+		const QPointF centre = QRectF(rect()).center();
+		for (int row = -1; row <= 1; ++row) {
+			for (int col = 0; col < 2; ++col) {
+				const qreal along = row * dot * 3;
+				const qreal across = (col - 0.5) * dot * 3;
+				const QPointF at = m_vertical ? QPointF(centre.x() + along, centre.y() + across)
+				                              : QPointF(centre.x() + across, centre.y() + along);
+				painter.drawEllipse(at, dot, dot);
+			}
+		}
+	}
+
+	void mousePressEvent(QMouseEvent *event) override {
+		if (event->button() != Qt::LeftButton) return;
+		m_from = event->position().toPoint();
+		m_armed = true;
+		m_dragging = false;
+		event->accept();
+	}
+
+	void mouseMoveEvent(QMouseEvent *event) override {
+		if (!m_armed) return;
+		if (!m_dragging && (event->position().toPoint() - m_from).manhattanLength()
+		                           < QApplication::startDragDistance())
+			return;
+		m_dragging = true;
+		emit m_bar->side_drag_moved(event->globalPosition().toPoint());
+		event->accept();
+	}
+
+	void mouseReleaseEvent(QMouseEvent *event) override {
+		const bool dragged = m_armed && m_dragging;
+		m_armed = false;
+		m_dragging = false;
+		if (dragged) emit m_bar->side_drag_finished(event->globalPosition().toPoint());
+		event->accept();
+	}
+
+private:
+	bssh_pane_bar *m_bar;
+	bool m_vertical;
+	QPoint m_from;
+	bool m_armed = false;
+	bool m_dragging = false;
+};
+
+} /* namespace */
 
 namespace {
 
@@ -68,6 +161,8 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 	m_add->setToolTip(QStringLiteral("Open another session in this pane"));
 	m_add->setAccessibleName(QStringLiteral("New tab"));
 
+	m_handle = new bar_handle(this, vertical);
+	row->addWidget(m_handle, 0);
 	row->addWidget(m_bar, 0);
 	row->addWidget(m_add, 0);
 	row->addStretch(1);

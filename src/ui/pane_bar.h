@@ -11,6 +11,14 @@ class bssh_long_press;
 class bssh_session;
 
 /*
+ * The side of an area nearest `at`, for the tab bar's handle (sec 8.7a):
+ * the edge a bar dragged there would move to. Measured as a share of the
+ * area, as the pane's own drop zones are, so a wide area and a tall one are
+ * divided alike; there is no middle -- every point is nearest some side.
+ */
+Qt::Edge bssh_bar_side_at(const QPoint &at, const QSize &area);
+
+/*
  * bssh_pane_bar -- one pane's tab bar and its "+" (project.md sec 8.3,
  * the bar per pane agreed 2026-10-10).
  *
@@ -57,6 +65,13 @@ signals:
 	/* The "+": another session, in this pane. */
 	void new_tab_requested();
 
+	/*
+	 * The bar's own handle dragged (sec 8.7a): where the pointer is, in
+	 * global coordinates, as it moves, and where it was let go.
+	 */
+	void side_drag_moved(const QPoint &global);
+	void side_drag_finished(const QPoint &global);
+
 protected:
 	bool eventFilter(QObject *watched, QEvent *event) override;
 
@@ -77,6 +92,7 @@ private:
 	QPointer<bssh_session> m_moved;
 	int m_moved_to = 0;
 	QToolButton *m_add;
+	QWidget *m_handle;
 	bssh_long_press *m_long_press;
 };
 

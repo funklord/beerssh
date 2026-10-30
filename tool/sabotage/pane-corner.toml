@@ -99,3 +99,36 @@ file = "src/ui/main_window.cpp"
 find = "\t\tmenu.addAction(m_menu_bar_action);"
 replace = "\t\t;"
 expect = "hidden_bars_are_reached_from_the_corner"
+
+# A band offered on a pane that already shows a bar: the drop that should
+# split it makes it a tab instead.
+[[sabotage]]
+name = "a band is a tab zone on a pane with a bar"
+file = "src/ui/main_window.cpp"
+find = "\t\tconst bool bar_shown = !m_tabs_hidden && m_layout->bar_tabs(target).size() > 1;"
+replace = "\t\tconst bool bar_shown = false;"
+expect = "a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there"
+
+# A band drop that tabs the session and leaves the bar where it was.
+[[sabotage]]
+name = "a band drop does not move the bar"
+file = "src/ui/main_window.cpp"
+find = "\t\tbssh_app_settings().set_tab_position(side);\n\t\tapply_tab_position(int(side));\n\t\tdrop_session_as_tab(session, target, INT_MAX);"
+replace = "\t\tdrop_session_as_tab(session, target, INT_MAX);"
+expect = "a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there"
+
+# The handle moves the bar but nothing shows where it will go.
+[[sabotage]]
+name = "the bar side is not previewed"
+file = "src/ui/main_window.cpp"
+find = "\t\tview->show_drop_zone(touches ? BSSH_DROP_TAB_BASE + panes_edge_for(side) : -1);"
+replace = "\t\t(void) touches;"
+expect = "the_tab_bar_is_dragged_to_another_side"
+
+# No band at all: the edge zone reaches the pane's very edge again.
+[[sabotage]]
+name = "there is no band at the edge"
+file = "src/ui/terminal_view.cpp"
+find = "\treturn distance < band ? BSSH_DROP_TAB_BASE + edge : edge;"
+replace = "\treturn edge;"
+expect = "the_bar_side_and_the_tab_bands_are_where_the_pointer_is"

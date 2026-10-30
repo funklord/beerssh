@@ -3106,6 +3106,21 @@ int bssh_main_window::drop_zone_for(bssh_session *session, bssh_session *target,
 	if (own && m_layout->tabs(session).size() < 2) return BSSH_DROP_CANCEL;
 
 	typedef bssh_layout_manager layout;
+
+	/*
+	 * A band along a side (sec 8.7a): a tab of this pane, with the tab bar
+	 * put on that side -- where the pane shows no bar for the drop to land
+	 * on, side by side, and the dropped session is not already one of its
+	 * tabs. Anywhere else the band is just part of the edge it lies on.
+	 */
+	if (bssh_is_tab_drop(edge)) {
+		const bool bar_shown = !m_tabs_hidden && m_layout->bar_tabs(target).size() > 1;
+		if (!own && !bar_shown && m_layout->arrangement() == layout::TILED
+		    && !m_layout->tabs(target).contains(session))
+			return edge;
+		edge -= BSSH_DROP_TAB_BASE;
+	}
+
 	if (edge < layout::EDGE_LEFT || edge > layout::EDGE_MIDDLE) return BSSH_DROP_CANCEL;
 	if (edge == layout::EDGE_MIDDLE) return own ? BSSH_DROP_CANCEL : edge;
 
@@ -3228,6 +3243,24 @@ void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *targ
 
 	const int plan = drop_zone_for(session, target, edge);
 	if (plan < 0) return;
+
+	/*
+	 * A band: the bar goes on that side, for every pane as the setting
+	 * says, and the session joins the target's pane as a tab there.
+	 */
+	if (bssh_is_tab_drop(plan)) {
+		bssh_app_settings::tab_position_t side = bssh_app_settings::TABS_TOP;
+		switch (plan - BSSH_DROP_TAB_BASE) {
+		case bssh_layout_manager::EDGE_LEFT:   side = bssh_app_settings::TABS_LEFT; break;
+		case bssh_layout_manager::EDGE_RIGHT:  side = bssh_app_settings::TABS_RIGHT; break;
+		case bssh_layout_manager::EDGE_BOTTOM: side = bssh_app_settings::TABS_BOTTOM; break;
+		default:                               break;
+		}
+		bssh_app_settings().set_tab_position(side);
+		apply_tab_position(int(side));
+		drop_session_as_tab(session, target, INT_MAX);
+		return;
+	}
 
 	const auto where = bssh_layout_manager::drop_edge_t(plan);
 	if (where == bssh_layout_manager::EDGE_MIDDLE) {
@@ -3816,7 +3849,7 @@ bssh_main_window::drop_spot_t bssh_main_window::drop_spot_at(const QPoint &globa
 		if (!view->rect().contains(local)) continue;
 
 		spot.target = each;
-		spot.edge = bssh_drop_edge_at(local, view->size());
+		spot.edge = bssh_drop_zone_at(local, view->size(), bssh_drop_band(view->cell_height()));
 		break;
 	}
 	return spot;
@@ -4434,6 +4467,60 @@ void bssh_main_window::show_corner_menu(const QPoint &global) {
 	menu.exec(global);
 }
 
+/*
+ * Drawn by the panes themselves, as a drop zone is: every pane whose edge
+ * lies on that side of the panes' area shows a bar's band along it. An
+ * overlay widget over the panes was tried first; it was laid out and
+ * shown, and twin's screen never had it on, where the panes' own painting
+ * is what the drop zones already use.
+ */
+static int panes_edge_for(Qt::Edge side) {
+	switch (side) {
+	case Qt::LeftEdge:   return bssh_layout_manager::EDGE_LEFT;
+	case Qt::RightEdge:  return bssh_layout_manager::EDGE_RIGHT;
+	case Qt::BottomEdge: return bssh_layout_manager::EDGE_BOTTOM;
+	default:             return bssh_layout_manager::EDGE_TOP;
+	}
+}
+
+void bssh_main_window::preview_bar_side(const QPoint &global) {
+	if (!m_panes) return;
+
+	const Qt::Edge side = bssh_bar_side_at(m_panes->mapFromGlobal(global), m_panes->size());
+	const QRect area = m_panes->rect();
+	for (bssh_terminal_view *view : m_panes->views()) {
+		if (!view) continue;
+		const QRect at(view->mapTo(m_panes, QPoint(0, 0)), view->size());
+		const int slack = 8;
+		bool touches = false;
+		switch (side) {
+		case Qt::LeftEdge:   touches = at.left() - area.left() <= slack; break;
+		case Qt::RightEdge:  touches = area.right() - at.right() <= slack; break;
+		case Qt::BottomEdge: touches = area.bottom() - at.bottom() <= slack; break;
+		default:             touches = at.top() - area.top() <= slack; break;
+		}
+		view->show_drop_zone(touches ? BSSH_DROP_TAB_BASE + panes_edge_for(side) : -1);
+	}
+	m_bar_side_previewed = true;
+}
+
+void bssh_main_window::finish_bar_side(const QPoint &global) {
+	if (!m_panes) return;
+	for (bssh_terminal_view *view : m_panes->views())
+		if (view) view->show_drop_zone(-1);
+	m_bar_side_previewed = false;
+
+	bssh_app_settings::tab_position_t side = bssh_app_settings::TABS_TOP;
+	switch (bssh_bar_side_at(m_panes->mapFromGlobal(global), m_panes->size())) {
+	case Qt::LeftEdge:   side = bssh_app_settings::TABS_LEFT; break;
+	case Qt::RightEdge:  side = bssh_app_settings::TABS_RIGHT; break;
+	case Qt::BottomEdge: side = bssh_app_settings::TABS_BOTTOM; break;
+	default:             break;
+	}
+	bssh_app_settings().set_tab_position(side);
+	apply_tab_position(int(side));
+}
+
 void bssh_main_window::apply_menu_bar() {
 	if (!m_menu_bar) return;
 
@@ -4528,6 +4615,11 @@ QWidget *bssh_main_window::make_pane_bar(bssh_session *front, QWidget *parent) {
 	});
 	connect(bar, &bssh_pane_bar::drag_requested, this,
 	        [this](bssh_session *session) { start_session_drag(session); });
+	connect(bar, &bssh_pane_bar::side_drag_moved, this, &bssh_main_window::preview_bar_side);
+	connect(bar, &bssh_pane_bar::side_drag_finished, this, [this, later](const QPoint &global) {
+		/* Queued: moving the bars rebuilds the panes, this bar with them. */
+		later([this, global] { finish_bar_side(global); });
+	});
 	connect(bar, &bssh_pane_bar::new_tab_requested, this, [this, later, front] {
 		QPointer<bssh_session> pane = front;
 		later([this, pane] {

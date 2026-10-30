@@ -1295,6 +1295,28 @@ int bssh_drop_edge_at(const QPoint &at, const QSize &pane) {
 	return bssh_layout_manager::EDGE_BOTTOM;
 }
 
+int bssh_drop_zone_at(const QPoint &at, const QSize &pane, int band) {
+	const int edge = bssh_drop_edge_at(at, pane);
+	if (edge == bssh_layout_manager::EDGE_MIDDLE || band <= 0) return edge;
+
+	int distance = 0;
+	switch (edge) {
+	case bssh_layout_manager::EDGE_LEFT:   distance = at.x(); break;
+	case bssh_layout_manager::EDGE_RIGHT:  distance = pane.width() - 1 - at.x(); break;
+	case bssh_layout_manager::EDGE_TOP:    distance = at.y(); break;
+	default:                               distance = pane.height() - 1 - at.y(); break;
+	}
+	return distance < band ? BSSH_DROP_TAB_BASE + edge : edge;
+}
+
+/*
+ * The tab zones' width: a line of text, so the band reads as a bar's
+ * height, and never so thin a pointer cannot stay in it.
+ */
+int bssh_drop_band(int cell_height) {
+	return qMax(12, cell_height + 4);
+}
+
 void bssh_terminal_view::dragEnterEvent(QDragEnterEvent *event) {
 	/*
 	 * Text this view can paste, OR a session for the window to adopt.
@@ -1318,7 +1340,7 @@ void bssh_terminal_view::dragEnterEvent(QDragEnterEvent *event) {
 	 * that gets the window the drop.
 	 */
 	if (event->mimeData()->hasFormat(bssh_session_mime_type())) {
-		const int edge = bssh_drop_edge_at(event->position().toPoint(), size());
+		const int edge = bssh_drop_zone_at(event->position().toPoint(), size(), bssh_drop_band(m_cell_height));
 		if (m_drop_planner && m_drop_planner(event->mimeData(), edge) == BSSH_DROP_REFUSED) {
 			event->ignore();
 			return;
@@ -1345,7 +1367,7 @@ void bssh_terminal_view::dragMoveEvent(QDragMoveEvent *event) {
 	 * pointer is in: a side that does not fit is drawn as the swap it
 	 * would become, and the pane being carried as a cancel.
 	 */
-	const int edge = bssh_drop_edge_at(event->position().toPoint(), size());
+	const int edge = bssh_drop_zone_at(event->position().toPoint(), size(), bssh_drop_band(m_cell_height));
 	const int plan = m_drop_planner ? m_drop_planner(event->mimeData(), edge) : edge;
 	if (plan == BSSH_DROP_REFUSED) {
 		if (m_drop_edge != -1) {
@@ -1378,7 +1400,7 @@ void bssh_terminal_view::dropEvent(QDropEvent *event) {
 	 * all -- refusing meant nobody was delivered anything.
 	 */
 	if (event->mimeData()->hasFormat(bssh_session_mime_type())) {
-		const int edge = bssh_drop_edge_at(event->position().toPoint(), size());
+		const int edge = bssh_drop_zone_at(event->position().toPoint(), size(), bssh_drop_band(m_cell_height));
 		m_drop_edge = -1;
 		update();
 
@@ -2215,6 +2237,22 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		const qreal reach = radius * 0.7071;
 		painter.drawLine(QPointF(centre) + QPointF(-reach, -reach),
 		                 QPointF(centre) + QPointF(reach, reach));
+	} else if (bssh_is_tab_drop(m_drop_edge)) {
+		/*
+		 * A tab bar made by the drop: a bar's thickness along that side,
+		 * solid enough to read as a bar rather than as a split's half.
+		 */
+		const int band = bssh_drop_band(m_cell_height);
+		QRect strip = rect();
+		switch (m_drop_edge - BSSH_DROP_TAB_BASE) {
+		case bssh_layout_manager::EDGE_LEFT:   strip.setWidth(band); break;
+		case bssh_layout_manager::EDGE_RIGHT:  strip.setLeft(width() - band); break;
+		case bssh_layout_manager::EDGE_TOP:    strip.setHeight(band); break;
+		default:                               strip.setTop(height() - band); break;
+		}
+		QColor fill(palette().color(QPalette::Highlight));
+		fill.setAlphaF(0.75);
+		painter.fillRect(strip, fill);
 	} else if (m_drop_edge >= 0) {
 		QRect zone = rect();
 		switch (m_drop_edge) {
