@@ -9384,7 +9384,18 @@ splitter already on screen and left to show itself when polished, which
 nothing did -- the fault `add_pane_view` had already fixed for a pane's
 frame, one level down. It is added explicitly now. Twelve seeds of sixty
 steps run in the suite and forty passed by hand
-(`BSSH_WALK_SEEDS=40`; `BSSH_WALK_TRACE=1` prints each step).
+(`BSSH_WALK_SEEDS=40`; `BSSH_WALK_TRACE=1` prints each step). Since
+widened: four window widths rather than two, the tab bars moved to a
+random side, a terminal given to another process, and a check that the
+window is no wider than it was asked to be -- tabs down a side and the
+panes' summed minimums each once held it wider (the panes' sabotage is
+caught by the walk too). And a real drag's release at a random point: the
+same resolution a QDrag ends in (`finish_session_drag`), with the tab
+rows up as a drag puts them -- the route the holder's gestures take,
+which the model steps go round. Its first failure was the test platform,
+not the program: the offscreen screen is 800x600, `topLevelAt()` finds no
+window past it, and a release there is a tear-out into a window the walk
+does not watch. Releases stay where the window is on its screen.
 `no_terminal_is_lost_however_the_panes_are_moved`; caught in
 `arrangement.toml`. **Open: one SIGSEGV, seen once.** The walk's first
 run died about eleven seconds in, before the splitter fix. It did not

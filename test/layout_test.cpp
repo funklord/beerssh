@@ -6182,6 +6182,7 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 		bssh_layout_manager *layout = window.layout_manager();
 
 		QRandomGenerator random { quint32(seed) };
+		int asked_width = 1400;
 		QStringList steps;
 		QHash<bssh_session *, QString> names;
 		int made = 0;
@@ -6190,8 +6191,14 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 			names.insert(session, QStringLiteral("s%1").arg(made++));
 			return session;
 		};
-		const auto name = [&names](bssh_session *session) {
-			return session ? names.value(session, QStringLiteral("?")) : QStringLiteral("null");
+		/* Sessions the walk did not make itself -- "split beside" opens
+		 * one -- are named as they are first met, so a trace can tell
+		 * them apart. */
+		int met = 0;
+		const auto name = [&names, &met](bssh_session *session) {
+			if (!session) return QStringLiteral("null");
+			if (!names.contains(session)) names.insert(session, QStringLiteral("n%1").arg(met++));
+			return names.value(session);
 		};
 		const auto any = [&random](const QList<bssh_session *> &from) -> bssh_session * {
 			return from.isEmpty() ? nullptr : from.at(int(random.bounded(quint32(from.size()))));
@@ -6212,6 +6219,11 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 				if (!reached)
 					return QStringLiteral("%1 is neither shown nor a shown pane's tab").arg(name(session));
 			}
+			/* Nothing in it holds the window wider than it was asked to be:
+			 * tabs down a side and panes' minimums both once did. */
+			if (window.width() > asked_width)
+				return QStringLiteral("held at %1 wide when asked for %2").arg(window.width())
+				        .arg(asked_width);
 			if (window.panes()->views().size() != visible.size())
 				return QStringLiteral("%1 views for %2 panes").arg(window.panes()->views().size())
 				        .arg(visible.size());
@@ -6244,7 +6256,7 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 			QString did;
 			const bool trace = qEnvironmentVariableIsSet("BSSH_WALK_TRACE");
 			if (trace) fprintf(stderr, "walk: seed %d step %d\n", seed, step);
-			switch (random.bounded(11)) {
+			switch (random.bounded(14)) {
 			case 0: {
 				bssh_session *fresh = make();
 				window.adopt_session(fresh);
@@ -6292,6 +6304,45 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 				did = QStringLiteral("close %1").arg(name(session));
 				registry->close(session);
 				break;
+			case 11: {
+				/* The bars to another side, as the handle or the setting does. */
+				static const bssh_app_settings::tab_position_t sides[] = {
+					bssh_app_settings::TABS_TOP, bssh_app_settings::TABS_BOTTOM,
+					bssh_app_settings::TABS_LEFT, bssh_app_settings::TABS_RIGHT };
+				const bssh_app_settings::tab_position_t side = sides[random.bounded(4)];
+				did = QStringLiteral("tabs to side %1").arg(int(side));
+				bssh_app_settings().set_tab_position(side);
+				window.apply_device_settings();
+				break;
+			}
+			case 12:
+			case 13: {
+				/*
+				 * A real drag's release, anywhere in the window: what is
+				 * under the point decides -- a pane's edge or middle, a
+				 * tab row, or nothing -- through the same resolution a
+				 * QDrag ends in. The tab rows exist only while a drag is
+				 * on, so it is turned on as a drag does.
+				 */
+				/*
+				 * Only where the window is on its screen: the offscreen
+				 * platform's is 800x600, and a point past it is outside
+				 * every window to topLevelAt() -- a tear-out, which takes
+				 * the terminal into a window this walk does not watch.
+				 */
+				const QRect seen = QRect(window.mapToGlobal(QPoint(0, 0)), window.size())
+				                   & window.screen()->geometry();
+				if (seen.isEmpty()) continue;
+				const QPoint at = window.mapFromGlobal(
+				        seen.topLeft() + QPoint(int(random.bounded(quint32(seen.width()))),
+				                                int(random.bounded(quint32(seen.height())))));
+				did = QStringLiteral("release %1 at %2,%3").arg(name(session)).arg(at.x()).arg(at.y());
+				window.set_session_drag_active(true);
+				QCoreApplication::processEvents();
+				window.finish_session_drag(session, window.mapToGlobal(at));
+				window.set_session_drag_active(false);
+				break;
+			}
 			case 10:
 				/* As the drag to another BeerSSH ends here (sec 8.4). */
 				if (all.size() < 3) continue;
@@ -6299,8 +6350,10 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 				registry->give_away(session);
 				break;
 			case 8: {
-				const int width = random.bounded(2) ? 500 : 1400;
+				static const int widths[] = { 500, 1000, 1400, 2000 };
+				const int width = widths[random.bounded(4)];
 				did = QStringLiteral("width %1").arg(width);
+				asked_width = width;
 				window.resize(width, 800);
 				break;
 			}
@@ -6310,6 +6363,11 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 				break;
 			}
 			if (trace) fprintf(stderr, "walk:   %s\n", qPrintable(did));
+			if (trace) {
+				settle();
+				fprintf(stderr, "walk:   tree %s\n",
+				        qPrintable(bssh_layout_manager::shape_text(layout->tree(), name)));
+			}
 			settle();
 			steps << did;
 			/* Only what lasts: a pane is allowed a moment to come up. */
