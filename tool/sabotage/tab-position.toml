@@ -127,3 +127,11 @@ file = "src/ui/pane_bar.cpp"
 find = "\t\t\t\tbutton->setStyle(m_tab_style);\n"
 replace = ""
 expect = "a_touch_windows_pane_controls_reach_the_floor"
+
+# The bar's handle at its own size on touch: about 22dp across.
+[[sabotage]]
+name = "the bar's handle is small on touch"
+file = "src/ui/pane_bar.cpp"
+find = "new bar_handle(this, vertical, pointer ? 0 : BSSH_TOUCH_TARGET_DP)"
+replace = "new bar_handle(this, vertical, 0)"
+expect = "a_touch_windows_pane_controls_reach_the_floor"

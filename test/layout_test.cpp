@@ -6842,6 +6842,13 @@ void layout_test::a_touch_windows_pane_controls_reach_the_floor() {
 				                .arg(button->height());
 			}
 		}
+		/* The bar's handle is grabbed before it is dragged. */
+		for (bssh_pane_bar *bar : window.pane_bars()) {
+			if (!bar || !bar->isVisible()) continue;
+			QWidget *handle = bar->findChild<QWidget *>(QStringLiteral("pane_bar_handle"));
+			if (handle && (handle->width() < BSSH_TOUCH_TARGET_DP || handle->height() < BSSH_TOUCH_TARGET_DP))
+				short_ones << QStringLiteral("bar handle %1x%2dp").arg(handle->width()).arg(handle->height());
+		}
 		QVERIFY2(short_ones.isEmpty(),
 		          qPrintable(QStringLiteral("side %1: ").arg(int(side)) + short_ones.join(QStringLiteral("; "))));
 	}

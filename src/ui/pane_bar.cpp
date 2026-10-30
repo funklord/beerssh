@@ -39,16 +39,20 @@ namespace {
  */
 class bar_handle : public QWidget {
 public:
-	bar_handle(bssh_pane_bar *bar, bool vertical) : QWidget(bar), m_bar(bar), m_vertical(vertical) {
+	bar_handle(bssh_pane_bar *bar, bool vertical, int least)
+	    : QWidget(bar), m_bar(bar), m_vertical(vertical), m_least(least) {
 		setObjectName(QStringLiteral("pane_bar_handle"));
 		setToolTip(QStringLiteral("Drag to put the tabs on another side"));
 		setAccessibleName(QStringLiteral("Move the tab bar"));
 		setCursor(Qt::SizeAllCursor);
 	}
 
+	/* On touch at least a thumb's 48dp each way (sec 6.2): a handle is
+	 * grabbed before it is dragged. */
 	QSize sizeHint() const override {
 		const int side = fontMetrics().height();
-		return m_vertical ? QSize(side + 6, side) : QSize(side, side + 6);
+		const QSize own = m_vertical ? QSize(side + 6, side) : QSize(side, side + 6);
+		return own.expandedTo(QSize(m_least, m_least));
 	}
 
 protected:
@@ -101,6 +105,7 @@ protected:
 private:
 	bssh_pane_bar *m_bar;
 	bool m_vertical;
+	int m_least;
 	QPoint m_from;
 	bool m_armed = false;
 	bool m_dragging = false;
@@ -248,7 +253,7 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 	m_add->setToolTip(QStringLiteral("Open another session in this pane"));
 	m_add->setAccessibleName(QStringLiteral("New tab"));
 
-	m_handle = new bar_handle(this, vertical);
+	m_handle = new bar_handle(this, vertical, pointer ? 0 : BSSH_TOUCH_TARGET_DP);
 	row->addWidget(m_handle, 0);
 	if (vertical) {
 		/*
