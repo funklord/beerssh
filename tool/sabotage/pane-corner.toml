@@ -149,3 +149,11 @@ file = "src/ui/pane_container.cpp"
 find = "\tif (best >= 0 && best < m_sessions.size()) focus_session(m_sessions.at(best));"
 replace = ""
 expect = "the_focused_pane_stays_on_screen_in_a_column"
+
+# A short pane loses its corner again, and a phone its only mode control.
+[[sabotage]]
+name = "a short pane has no drum"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (!fits_in(m_corner->sizeHint())) m_corner->set_drum_rows(1);"
+replace = ""
+expect = "a_short_pane_gets_a_one_row_drum_not_none"

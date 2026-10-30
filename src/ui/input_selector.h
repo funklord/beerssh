@@ -72,6 +72,16 @@ public:
 	/* One row's height; the drum is three of them. */
 	int row_height() const;
 
+	/*
+	 * Three rows, or one where three do not fit -- a phone held sideways
+	 * with its keyboard up leaves a pane shorter than the drum, and a
+	 * corner too tall for its pane is hidden, which took the only mode
+	 * control a phone has with it. One row shows the current mode; a tap
+	 * moves to the next, wrapping, and a swipe or the wheel steps.
+	 */
+	void set_rows(int rows);
+	int rows() const { return m_rows; }
+
 	QSize sizeHint() const override;
 	QSize minimumSizeHint() const override { return sizeHint(); }
 
@@ -101,6 +111,7 @@ private:
 	bool m_dragged = false;
 	int m_drag_y = 0;
 	int m_wheel = 0;
+	int m_rows = 3;
 };
 
 #endif /* BSSH_INPUT_SELECTOR_H */

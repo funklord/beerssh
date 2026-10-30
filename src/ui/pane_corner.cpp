@@ -151,6 +151,12 @@ bool bssh_pane_corner::grip_shown() const {
 	return !m_grip->isHidden();
 }
 
+void bssh_pane_corner::set_drum_rows(int rows) {
+	if (rows == m_selector->rows()) return;
+	m_selector->set_rows(rows);
+	relayout();
+}
+
 void bssh_pane_corner::set_grip_side(int side) {
 	if (side == m_grip_side) return;
 	m_grip_side = side;

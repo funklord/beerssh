@@ -29,6 +29,9 @@ public:
 	void set_grip_shown(bool shown);
 	bool grip_shown() const;
 
+	/* The drum's rows, three or one (bssh_input_selector::set_rows). */
+	void set_drum_rows(int rows);
+
 	/* Its side, in proportion to the text it sits over. */
 	void set_grip_side(int side);
 

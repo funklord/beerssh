@@ -116,6 +116,7 @@ bssh_input_mode_t bssh_input_selector::shown(int row) const {
 	 * more does the drum turn, keeping the current mode in the middle and
 	 * wrapping so every mode is two steps away.
 	 */
+	if (m_rows == 1) return m_mode;
 	if (n <= 3) return modes.at(qBound(0, row, n - 1));
 	const int at = qMax(0, int(modes.indexOf(m_mode)));
 	return modes.at(((at + row - 1) % n + n) % n);
@@ -152,7 +153,7 @@ QSize bssh_input_selector::sizeHint() const {
 		wide = qMax(wide, fontMetrics().horizontalAdvance(label));
 	}
 	/* The labels and a small margin, no more: it sits over the text. */
-	return QSize(wide + 10, 3 * row_height());
+	return QSize(wide + 10, m_rows * row_height());
 }
 
 void bssh_input_selector::relayout() {
@@ -164,7 +165,7 @@ void bssh_input_selector::relayout() {
 		button->setChecked(state.mode == m_mode);
 		button->setText(label_for(state.mode));
 	}
-	for (int r = 0; r < 3; ++r) {
+	for (int r = 0; r < m_rows; ++r) {
 		QAbstractButton *button = m_group->button(int(shown(r)));
 		if (!button) continue;
 		button->setGeometry(0, r * row, width(), row);
@@ -184,6 +185,14 @@ void bssh_input_selector::choose(bssh_input_mode_t mode) {
 }
 
 void bssh_input_selector::step(int direction) {
+	/* One row: every mode in turn, wrapping, since there is no list to see. */
+	if (m_rows == 1) {
+		const QList<bssh_input_mode_t> modes = available();
+		const int n = int(modes.size());
+		const int at = qMax(0, int(modes.indexOf(m_mode)));
+		choose(modes.at(((at + (direction > 0 ? 1 : -1)) % n + n) % n));
+		return;
+	}
 	if (rotates()) {
 		choose(shown(direction > 0 ? 2 : 0));
 		return;
@@ -193,6 +202,14 @@ void bssh_input_selector::step(int direction) {
 	const QList<bssh_input_mode_t> modes = available();
 	const int at = qMax(0, int(modes.indexOf(m_mode)));
 	choose(modes.at(qBound(0, at + (direction > 0 ? 1 : -1), int(modes.size()) - 1)));
+}
+
+void bssh_input_selector::set_rows(int rows) {
+	rows = rows <= 1 ? 1 : 3;
+	if (rows == m_rows) return;
+	m_rows = rows;
+	updateGeometry();
+	relayout();
 }
 
 void bssh_input_selector::set_mode(bssh_input_mode_t mode) {
@@ -274,10 +291,15 @@ void bssh_input_selector::mouseReleaseEvent(QMouseEvent *event) {
 	if (!m_pressed) return;
 	m_pressed = false;
 
-	/* A tap: the row under it. Choosing the current one changes nothing. */
+	/* A tap: the row under it, or with one row the next mode. Choosing
+	 * the current one changes nothing. */
 	if (!m_dragged) {
-		const int r = event->position().toPoint().y() / qMax(1, row_height());
-		if (r >= 0 && r <= 2) choose(shown(r));
+		if (m_rows == 1) {
+			step(1);
+		} else {
+			const int r = event->position().toPoint().y() / qMax(1, row_height());
+			if (r >= 0 && r < m_rows) choose(shown(r));
+		}
 	}
 	event->accept();
 }

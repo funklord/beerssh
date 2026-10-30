@@ -41,6 +41,7 @@
 #include "term/font_catalog.h"
 #include "ui/terminal_view.h"
 #include "ui/pane_corner.h"
+#include "ui/input_selector.h"
 #include "model/session_registry.h"
 #include "ui/pane_container.h"
 #include "ui/find_bar.h"
@@ -3531,6 +3532,43 @@ void terminal_view_test::the_corner_hides_with_its_window_and_is_faint_until_poi
 	view.activateWindow();
 	QVERIFY(QTest::qWaitForWindowActive(&view));
 	QTRY_VERIFY2(view.corner()->isVisible(), "the corner did not come back with its window");
+}
+
+void terminal_view_test::a_short_pane_gets_a_one_row_drum_not_none() {
+	/*
+	 * A phone held sideways with its keyboard up leaves a pane shorter
+	 * than three 48dp rows, and a corner too tall for its pane was hidden
+	 * -- measured on a 600x140 pane: no corner, and so no mode control on
+	 * screen at all (sec 8.7a). One row instead, the current mode, a tap
+	 * moving to the next.
+	 */
+	const forced_touch_t touch(1);
+	bssh_terminal_view view;
+	show_and_resize(view, 600, 140);
+	view.set_pane_handle(true);
+	view.set_corner_active(true);
+	QTest::qWait(20);
+	QVERIFY(view.corner());
+	QVERIFY2(view.corner()->isVisible(), "a short pane has no corner, and so no mode control");
+	bssh_input_selector *drum = view.corner()->selector();
+	QCOMPARE(drum->rows(), 1);
+	QVERIFY(view.corner()->height() <= view.height());
+
+	/* A tap goes round every mode and back. */
+	const bssh_input_mode_t start = drum->mode();
+	QList<bssh_input_mode_t> seen;
+	for (int i = 0; i < int(drum->available().size()); ++i) {
+		QTest::mouseClick(drum, Qt::LeftButton, Qt::NoModifier, drum->rect().center());
+		seen << drum->mode();
+	}
+	QCOMPARE(seen.last(), start);
+	QCOMPARE(QSet<bssh_input_mode_t>(seen.begin(), seen.end()).size(), int(drum->available().size()));
+
+	/* Room again: three rows. */
+	view.resize(600, 500);
+	QTest::qWait(20);
+	QCOMPARE(drum->rows(), 3);
+	QVERIFY(view.corner()->isVisible());
 }
 
 void terminal_view_test::touch_gets_no_grip_in_the_corner() {

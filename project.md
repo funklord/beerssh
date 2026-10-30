@@ -9283,6 +9283,15 @@ tab bar there in addition to the other drop zones we already have."
   five modes in the column. **On the phone it is 144dp tall** -- three
   48dp rows -- and covers the right end of the top six lines; whether
   that is small enough is the holder's to see on the Fold.
+- **And on a short pane, 2026-10-30: one row, not none.** The corner
+  hid itself on a pane too short for it, which on touch is 148dp -- and
+  a phone held sideways with its keyboard up leaves about that. Measured
+  on a 600x140 touch pane: no corner, so no mode control on screen. The
+  drum now drops to one row there, the current mode, a tap moving to the
+  next and wrapping, a swipe stepping; only a pane too short for one row
+  has none. The holder's three rows stand wherever they fit.
+  `a_short_pane_gets_a_one_row_drum_not_none`; caught in
+  `pane-corner.toml`.
 - **A sabotage gap found on the way, not of this work's making:**
   `arrangement-states.toml`'s "the bar is not rebuilt when a collapse
   changes what is on screen" is MISSED -- and equally MISSED at the

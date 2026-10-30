@@ -1696,10 +1696,19 @@ void bssh_terminal_view::sync_corner() {
 	m_corner->set_menu_shown(m_corner_menu);
 	m_corner->selector()->set_program_listening(m_emulator && m_emulator->mouse_reporting());
 
-	/* A view too small to spare the corner has none, rather than one
-	 * hanging off its edge. */
+	/*
+	 * Three rows of drum where they fit, one where they do not (sec 8.7a)
+	 * -- the corner is the only mode control a phone has, so a short pane
+	 * gets a smaller one rather than none -- and none only where even one
+	 * row would hang off the view's edge.
+	 */
+	const auto fits_in = [this](const QSize &size) {
+		return width() >= size.width() * 2 && height() >= size.height() + 2 * BSSH_GRID_INSET_PX;
+	};
+	m_corner->set_drum_rows(3);
+	if (!fits_in(m_corner->sizeHint())) m_corner->set_drum_rows(1);
 	const QSize size = m_corner->sizeHint();
-	const bool fits = width() >= size.width() * 2 && height() >= size.height() + 2 * BSSH_GRID_INSET_PX;
+	const bool fits = fits_in(size);
 
 	/*
 	 * And none while its window is not the active one, on the desktop:
