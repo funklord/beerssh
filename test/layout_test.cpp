@@ -1371,6 +1371,61 @@ void layout_test::the_pan_state_is_offered_only_in_a_column() {
 	QCOMPARE(spy.count(), 1);
 }
 
+void layout_test::the_focused_pane_stays_on_screen_in_a_column() {
+	/*
+	 * Sec 8.7a: the mode drum is in the focused pane's corner, so in a
+	 * scrolling column the focused pane must not be off screen. Seen on an
+	 * emulator turned sideways: the column showed the top pane, focus was
+	 * on the one below, and no mode was on screen anywhere.
+	 */
+	const forced_touch_t touch(1);
+
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(400);
+	layout.set_arrangement(bssh_layout_manager::COLUMN);
+	QList<bssh_session *> many;
+	for (int i = 0; i < 6; ++i)
+		many.append(registry.create(named(QStringLiteral("s%1").arg(i))));
+
+	bssh_pane_container container(&layout);
+	container.show();
+	container.resize(400, 400);
+	container.set_column_visible(2);
+	layout.set_intent(many);
+	QCoreApplication::processEvents();
+	QVERIFY(QTest::qWaitForWindowExposed(&container));
+
+	QScrollArea *scroll = container.findChild<QScrollArea *>();
+	QVERIFY(scroll);
+	QScrollBar *bar = scroll->verticalScrollBar();
+	QVERIFY2(bar->maximum() > 0, "the column does not overflow");
+
+	/* Focus the first pane, then pan to the bottom and let it settle:
+	 * focus follows to a pane that is on screen. */
+	container.focus_session(many.first());
+	bar->setValue(0);
+	QCoreApplication::processEvents();
+	bar->setValue(bar->maximum());
+	container.settle_column_scroll();
+	QCoreApplication::processEvents();
+	QVERIFY2(container.focused_session() != many.first(),
+	          "focus stayed on a pane panned out of view");
+	bssh_terminal_view *focused = container.focused_view();
+	QVERIFY(focused);
+	const QRect seen(QPoint(0, bar->value()), scroll->viewport()->size());
+	QVERIFY2(seen.intersects(QRect(focused->mapTo(scroll->widget(), QPoint(0, 0)), focused->size())),
+	          "the pane focus went to is not on screen either");
+
+	/* Fewer on screen -- turned, or shrunk -- with the focused pane out of
+	 * view: brought back once the layout settles. */
+	container.focus_session(many.first());
+	QCoreApplication::processEvents();
+	bar->setValue(bar->maximum());
+	container.set_column_visible(1);
+	QTRY_VERIFY2(container.focused_in_view(), "the focused pane was left off screen");
+}
+
 void layout_test::a_pan_gesture_scrolls_the_column() {
 	/* The body-drag path is the touch one, so the gesture needs a thumb. */
 	const forced_touch_t touch(1);

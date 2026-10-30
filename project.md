@@ -9268,6 +9268,21 @@ tab bar there in addition to the other drop zones we already have."
   - **narrower**: the tmux button reads "tmux 2", "scr 17" or "mux 3",
     the full "screen · 17" in its tooltip, and the drum's margin is
     10px. Measured under twin, TDE's window manager, on Xvfb.
+- **Seen on an emulator, 2026-10-30, and fixed: in a scrolling column
+  the drum could be off screen.** Turned sideways, the column showed its
+  top pane while focus was on the one below -- and with the selector row
+  gone, the corner on the focused pane was the only mode control there
+  was. Sec 8.7 already brings a pane into view when focus moves to it;
+  the other two ways in now hold too. A relayout (turned, shrunk) brings
+  the focused pane back once it settles, and a pan that leaves it out of
+  view moves focus to the pane most on screen -- panning to a pane is
+  looking at it, and the pane looked at is the one typed in.
+  `the_focused_pane_stays_on_screen_in_a_column`; two edits in
+  `pane-corner.toml`. Upright, split and turned on `bssh_api34`: the
+  corner on the focused pane each time, no grip, the drum turning all
+  five modes in the column. **On the phone it is 144dp tall** -- three
+  48dp rows -- and covers the right end of the top six lines; whether
+  that is small enough is the holder's to see on the Fold.
 - **A sabotage gap found on the way, not of this work's making:**
   `arrangement-states.toml`'s "the bar is not rebuilt when a collapse
   changes what is on screen" is MISSED -- and equally MISSED at the

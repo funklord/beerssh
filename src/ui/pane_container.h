@@ -107,6 +107,17 @@ public:
 	void settle_column_scroll();
 
 	/*
+	 * In a scrolling column, the focused pane and the panes on screen are
+	 * kept the same (sec 8.7a): the corner -- and with it the only way to
+	 * change the input mode on a phone -- is on the focused pane, so a
+	 * focused pane scrolled out of view leaves no mode on screen at all.
+	 * Seen on an emulator turned sideways, where the column showed the top
+	 * pane and the focused one was below it.
+	 */
+	bool focused_in_view() const;
+	void bring_focus_into_view();
+
+	/*
 	 * Who decides what a session dropped on a pane does (sec 8.4): given
 	 * the payload, the pane's own session and the zone, a drop_edge_t,
 	 * BSSH_DROP_CANCEL or BSSH_DROP_REFUSED. Handed to every pane built
@@ -254,6 +265,7 @@ private:
 
 	/* Sizes the column for m_column_visible; again whenever the viewport moves. */
 	void apply_column_visible();
+
 	int m_column_visible = 0;
 
 	bssh_layout_manager *m_layout;

@@ -132,3 +132,20 @@ file = "src/ui/terminal_view.cpp"
 find = "\treturn distance < band ? BSSH_DROP_TAB_BASE + edge : edge;"
 replace = "\treturn edge;"
 expect = "the_bar_side_and_the_tab_bands_are_where_the_pointer_is"
+
+# Turned or shrunk, the column leaves the focused pane -- and the mode
+# drum on it -- off screen.
+[[sabotage]]
+name = "a relayout leaves the focused pane off screen"
+file = "src/ui/pane_container.cpp"
+find = "\tQMetaObject::invokeMethod(this, [this] { bring_focus_into_view(); }, Qt::QueuedConnection);"
+replace = ""
+expect = "the_focused_pane_stays_on_screen_in_a_column"
+
+# Panned away, focus stays on a pane nobody can see.
+[[sabotage]]
+name = "focus stays on a pane panned out of view"
+file = "src/ui/pane_container.cpp"
+find = "\tif (best >= 0 && best < m_sessions.size()) focus_session(m_sessions.at(best));"
+replace = ""
+expect = "the_focused_pane_stays_on_screen_in_a_column"

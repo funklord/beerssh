@@ -98,6 +98,7 @@ private slots:
 	 * viewport under the finger.
 	 */
 	void the_pan_state_is_offered_only_in_a_column();
+	void the_focused_pane_stays_on_screen_in_a_column();
 	void a_pan_gesture_scrolls_the_column();
 
 	/*

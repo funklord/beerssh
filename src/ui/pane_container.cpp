@@ -773,6 +773,29 @@ void bssh_pane_container::settle_column_scroll() {
 
 	bar->setValue(bssh_settle_column_scroll(bar->value(), tops.constData(),
 	                                         int(tops.size()), bar->maximum()));
+
+	/*
+	 * Panned so the focused pane is out of view: focus goes to the pane
+	 * most on screen, so the corner, and the mode drum in it, stays where
+	 * it can be reached (sec 8.7a). Panning there is choosing to look at
+	 * it, and the pane looked at is the one typed in, as sec 8.7 already
+	 * has it the other way round for moving focus.
+	 */
+	if (focused_in_view()) return;
+	const QRect seen(QPoint(0, bar->value()), m_scroll->viewport()->size());
+	int best = -1;
+	int most = 0;
+	for (int i = 0; i < m_views.size(); ++i) {
+		bssh_terminal_view *view = m_views.at(i);
+		if (!view) continue;
+		const QRect shown = seen.intersected(QRect(view->mapTo(m_splitter, QPoint(0, 0)), view->size()));
+		const int area = shown.isEmpty() ? 0 : shown.width() * shown.height();
+		if (area > most) {
+			most = area;
+			best = i;
+		}
+	}
+	if (best >= 0 && best < m_sessions.size()) focus_session(m_sessions.at(best));
 }
 
 void bssh_pane_container::equalize_panes() {
@@ -822,6 +845,26 @@ void bssh_pane_container::apply_column_visible() {
 
 	const int viewport = m_scroll->viewport()->height();
 	m_splitter->setMinimumHeight(viewport * panes / m_column_visible);
+
+	/*
+	 * Fewer panes on screen than before -- the window turned or shrank --
+	 * may have left the focused one out of view; once the layout has
+	 * settled, bring it back, as moving focus does.
+	 */
+	QMetaObject::invokeMethod(this, [this] { bring_focus_into_view(); }, Qt::QueuedConnection);
+}
+
+bool bssh_pane_container::focused_in_view() const {
+	bssh_terminal_view *view = focused_view();
+	if (!view || !m_scroll || m_scroll->widget() != m_splitter) return true;
+	const QRect seen(QPoint(0, m_scroll->verticalScrollBar()->value()), m_scroll->viewport()->size());
+	return seen.intersects(QRect(view->mapTo(m_splitter, QPoint(0, 0)), view->size()));
+}
+
+void bssh_pane_container::bring_focus_into_view() {
+	bssh_terminal_view *view = focused_view();
+	if (!view || !m_scroll || m_scroll->widget() != m_splitter) return;
+	if (!focused_in_view()) m_scroll->ensureWidgetVisible(view);
 }
 
 bool bssh_pane_container::eventFilter(QObject *watched, QEvent *event) {
