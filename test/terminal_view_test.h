@@ -27,6 +27,7 @@ private slots:
 	void the_corner_sits_on_the_grid_and_takes_none_of_it();
 	void the_desktop_mode_decides_where_the_pointer_goes();
 	void touch_gets_no_grip_in_the_corner();
+	void a_status_note_leaves_the_terminal_working();
 	void a_short_pane_gets_a_one_row_drum_not_none();
 	void the_corner_hides_with_its_window_and_is_faint_until_pointed_at();
 	void alt_drag_asks_for_the_pane_to_be_moved();

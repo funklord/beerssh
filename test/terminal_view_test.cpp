@@ -3571,6 +3571,48 @@ void terminal_view_test::a_short_pane_gets_a_one_row_drum_not_none() {
 	QVERIFY(view.corner()->isVisible());
 }
 
+void terminal_view_test::a_status_note_leaves_the_terminal_working() {
+	/*
+	 * The holder: "ensure that the text has no effect on the terminal
+	 * function as we still want to do other operations such as copy and
+	 * scroll on a dead terminal" (sec 8.7a). The note is painted, not a
+	 * widget, so a drag over it selects and the wheel scrolls.
+	 */
+	const forced_touch_t desktop(0);
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+	for (int line = 0; line < view.rows() * 3; ++line)
+		emulator.feed(QStringLiteral("line %1 of the history\r\n").arg(line).toUtf8());
+	QCoreApplication::processEvents();
+
+	const QImage before = view.grab().toImage();
+	view.set_status_note(QStringLiteral("Disconnected"));
+	QCOMPARE(view.status_note(), QStringLiteral("Disconnected"));
+	const QImage after = view.grab().toImage();
+	QVERIFY2(before != after, "the note was not drawn");
+	QVERIFY2(!view.childAt(view.rect().center()),
+	          "something is over the middle of the terminal to take the pointer");
+
+	/* A drag across the middle, where the note is, selects. */
+	const int middle = view.rows() / 2;
+	drag(view, 0, middle, 10, middle);
+	QVERIFY2(view.has_selection(), "a drag over the note did not select");
+
+	/* And the wheel scrolls the history. */
+	const QPoint centre = view.rect().center();
+	QWheelEvent wheel(centre, view.mapToGlobal(centre), QPoint(), QPoint(0, 120),
+	                  Qt::NoButton, Qt::NoModifier, Qt::NoScrollPhase, false);
+	QCoreApplication::sendEvent(&view, &wheel);
+	QVERIFY2(view.scroll_offset() > 0, "the wheel over the note did not scroll");
+
+	view.set_status_note(QString());
+	QVERIFY(view.grab().toImage() != after);
+}
+
 void terminal_view_test::touch_gets_no_grip_in_the_corner() {
 	/*
 	 * A grip on touch hands the whole window to Android's split-screen

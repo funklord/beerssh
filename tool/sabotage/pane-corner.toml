@@ -157,3 +157,34 @@ file = "src/ui/terminal_view.cpp"
 find = "\tif (!fits_in(m_corner->sizeHint())) m_corner->set_drum_rows(1);"
 replace = ""
 expect = "a_short_pane_gets_a_one_row_drum_not_none"
+
+# The note is kept and never drawn: a dead terminal looks alive.
+[[sabotage]]
+name = "the status note is not drawn"
+file = "src/ui/terminal_view.cpp"
+find = "\tpaint_notes(painter);\n"
+replace = ""
+expect = "a_status_note_leaves_the_terminal_working"
+
+# The state never reaches the pane: connecting, lost, all silent.
+[[sabotage]]
+name = "a session's state is not written over its pane"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tif (state != bssh_ssh_session::FAILED || m_notes.value(session).isEmpty())\n\t\t\t\tset_session_note(session, note);"
+replace = "\t\t\t(void) note;"
+expect = "a_sessions_trouble_is_written_over_its_pane"
+
+# The status line back on by default.
+[[sabotage]]
+name = "the status line shows by default"
+file = "src/model/app_settings.cpp"
+find = "\t                            QStringLiteral(\"off\")).toString();"
+replace = "\t                            QStringLiteral(\"session\")).toString();"
+expect = "a_sessions_trouble_is_written_over_its_pane"
+# A hidden status line still counted when a window is sized in cells.
+[[sabotage]]
+name = "a hidden status line takes a row from a window sized in cells"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_status_label && m_status_line != bssh_app_settings::STATUS_LINE_OFF)\n\t\twanted.rheight()"
+replace = "\tif (m_status_label)\n\t\twanted.rheight()"
+expect = "a_window_can_be_sized_in_cells"

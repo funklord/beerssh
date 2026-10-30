@@ -1654,6 +1654,62 @@ void bssh_terminal_view::set_column_available(bool available) {
 	if (m_corner) m_corner->selector()->set_column_available(available);
 }
 
+void bssh_terminal_view::set_status_note(const QString &text) {
+	if (text == m_status_note) return;
+	m_status_note = text;
+	update();
+}
+
+void bssh_terminal_view::flash_notice(const QString &text) {
+	m_notice = text;
+	if (!m_notice_timer) {
+		m_notice_timer = new QTimer(this);
+		m_notice_timer->setSingleShot(true);
+		connect(m_notice_timer, &QTimer::timeout, this, [this] {
+			m_notice.clear();
+			update();
+		});
+	}
+	m_notice_timer->start(4000);
+	update();
+}
+
+/*
+ * Over the text and see-through: a plate of the terminal's own background
+ * at half strength, the words in its foreground, so the screen behind still
+ * reads. Large in the middle for the state, smaller in the lower third for
+ * a notice. Nothing here takes the pointer -- it is paint, not a widget.
+ */
+void bssh_terminal_view::paint_notes(QPainter &painter) {
+	const auto plate = [this, &painter](const QString &text, qreal scale, int centre_y) {
+		QFont font = painter.font();
+		font.setBold(true);
+		font.setPointSizeF(qMax(8.0, font.pointSizeF() * scale));
+		const QFontMetrics metrics(font);
+		const int pad = metrics.height() / 2;
+		const int room = qMax(10, width() - 4 * pad);
+		QRect box = metrics.boundingRect(QRect(0, 0, room, height()), Qt::AlignCenter | Qt::TextWordWrap, text);
+		box.adjust(-pad, -pad / 2, pad, pad / 2);
+		box.moveCenter(QPoint(width() / 2, centre_y));
+
+		QColor fill = m_background;
+		fill.setAlphaF(0.55);
+		QColor ink(bssh_raise_contrast(m_foreground.rgb(), m_background.rgb()));
+		ink.setAlphaF(0.85);
+		painter.save();
+		painter.setRenderHint(QPainter::Antialiasing);
+		painter.setPen(Qt::NoPen);
+		painter.setBrush(fill);
+		painter.drawRoundedRect(box, pad / 2, pad / 2);
+		painter.setFont(font);
+		painter.setPen(ink);
+		painter.drawText(box, Qt::AlignCenter | Qt::TextWordWrap, text);
+		painter.restore();
+	};
+	if (!m_status_note.isEmpty()) plate(m_status_note, 1.6, height() / 2);
+	if (!m_notice.isEmpty()) plate(m_notice, 1.0, height() * 3 / 4);
+}
+
 void bssh_terminal_view::set_corner_tabs(const QString &text) {
 	if (text == m_corner_tabs) return;
 	m_corner_tabs = text;
@@ -2302,6 +2358,8 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 		const int inset = outline.width() / 2;
 		painter.drawRect(rect().adjusted(inset, inset, -inset - 1, -inset - 1));
 	}
+
+	paint_notes(painter);
 
 	/*
 	 * The selection handles, last so nothing draws over them (sec 6.4).

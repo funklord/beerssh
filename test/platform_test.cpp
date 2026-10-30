@@ -794,16 +794,18 @@ void platform_test::the_status_line_setting_survives_a_restart() {
 		bssh_app_settings settings(dir.path());
 
 		/*
-		 * The session and its state by default -- not the QPA platform
-		 * name, which is what this line used to open with and is a fact
-		 * only a developer wants (sec 8.4).
+		 * Hidden by default since 2026-10-30 (sec 8.7a): a session's
+		 * trouble is written over its own pane, and "connected" said
+		 * nothing worth a row. Before that it was the session and its
+		 * state -- not the QPA platform name, which is what this line
+		 * used to open with and is a fact only a developer wants (sec 8.4).
 		 */
-		QCOMPARE(settings.status_line(), bssh_app_settings::STATUS_LINE_SESSION);
-		settings.set_status_line(bssh_app_settings::STATUS_LINE_OFF);
+		QCOMPARE(settings.status_line(), bssh_app_settings::STATUS_LINE_OFF);
+		settings.set_status_line(bssh_app_settings::STATUS_LINE_SESSION);
 	}
 
 	bssh_app_settings reopened(dir.path());
-	QCOMPARE(reopened.status_line(), bssh_app_settings::STATUS_LINE_OFF);
+	QCOMPARE(reopened.status_line(), bssh_app_settings::STATUS_LINE_SESSION);
 }
 
 void platform_test::the_window_title_format_survives_a_restart() {

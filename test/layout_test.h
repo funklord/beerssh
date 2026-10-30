@@ -76,6 +76,7 @@ private slots:
 	void the_input_selector_defaults_by_platform_and_reports_changes();
 	void the_selector_pushes_its_mode_to_every_pane();
 	void only_the_focused_pane_shows_its_corner();
+	void a_sessions_trouble_is_written_over_its_pane();
 	void the_bar_side_and_the_tab_bands_are_where_the_pointer_is();
 	void the_tab_bar_is_dragged_to_another_side();
 	void a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there();

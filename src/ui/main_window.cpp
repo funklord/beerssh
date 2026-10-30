@@ -723,6 +723,12 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		/* The same for the input mode: a new pane starts from the view's
 		 * default and has to be told the window's current selection. */
 		apply_input_mode();
+
+		/* And each pane its session's note (sec 8.7a). */
+		for (bssh_session *front : m_layout->visible_panes()) {
+			if (bssh_terminal_view *view = m_panes->view_for(front))
+				view->set_status_note(m_notes.value(front));
+		}
 	});
 
 	/*
@@ -1933,6 +1939,7 @@ void bssh_main_window::apply_device_settings() {
 		if (!sk_set_custom_layout(settings.custom_keyboard_layout_name(),
 		                             sk_parse_layout_slots(layout_rows), &why)) {
 			m_error = QStringLiteral("custom keyboard layout refused: %1").arg(why);
+			if (m_terminal_view) m_terminal_view->flash_notice(QStringLiteral("Keyboard layout refused: %1").arg(why));
 			update_status();
 		}
 	}
@@ -2746,8 +2753,15 @@ void bssh_main_window::wire_session(bssh_session *session) {
 	 */
 	connect(session, &bssh_session::failed, this,
 	         [this, session](const QString &reason) {
+		if (!session->profile().local)
+			set_session_note(session, reason.isEmpty() ? QStringLiteral("Connection failed")
+			                                           : QStringLiteral("Connection failed: ") + reason);
 		if (session != m_current) return;
 		on_failed(reason);
+	});
+	connect(session, &QObject::destroyed, this, [this, session] {
+		m_notes.remove(session);
+		m_ended.remove(session);
 	});
 
 	/*
@@ -2935,6 +2949,10 @@ void bssh_main_window::wire_session(bssh_session *session) {
 	 * to read it -- the registry closes the rest (sec 8.6).
 	 */
 	connect(session, &bssh_session::shell_exited, this, [this, session](int status) {
+		/* Over the pane, which stays for a held shell or a remote one. */
+		m_ended.insert(session);
+		set_session_note(session, status == 0 ? QStringLiteral("Session ended")
+		                                      : QStringLiteral("Session ended (exit %1)").arg(status));
 		if (session != m_current) return;
 
 		m_error = status == 0
@@ -2943,6 +2961,29 @@ void bssh_main_window::wire_session(bssh_session *session) {
 		update_status();
 	});
 	connect(session, &bssh_session::state_changed, this, [this, session] {
+		/*
+		 * The note over the pane (sec 8.7a): nothing while connected, and
+		 * nothing for a local shell, whose connection is not a thing that
+		 * can go wrong; an ended session keeps saying so until it is live.
+		 */
+		const bssh_ssh_session::state_t state = session->state();
+		if (state == bssh_ssh_session::CONNECTED) m_ended.remove(session);
+		if (!m_ended.contains(session)) {
+			QString note;
+			if (!session->profile().local) {
+				switch (state) {
+				case bssh_ssh_session::RESOLVING:
+				case bssh_ssh_session::CONNECTING:     note = QStringLiteral("Connecting\u2026"); break;
+				case bssh_ssh_session::AUTHENTICATING: note = QStringLiteral("Signing in\u2026"); break;
+				case bssh_ssh_session::DISCONNECTED:   note = QStringLiteral("Disconnected"); break;
+				case bssh_ssh_session::FAILED:         note = QStringLiteral("Connection failed"); break;
+				default:                               break;
+				}
+			}
+			if (state != bssh_ssh_session::FAILED || m_notes.value(session).isEmpty())
+				set_session_note(session, note);
+		}
+
 		/* A successful (re)connect clears whatever the last message was. */
 		if (session == m_current && session->is_live()) {
 			m_error.clear();
@@ -2999,6 +3040,8 @@ void bssh_main_window::wire_session(bssh_session *session) {
 	if (bssh_conn_manager *manager = m_registry->conn_manager_for(session)) {
 		connect(manager, &bssh_conn_manager::reconnect_scheduled,
 		         this, [this, session](int delay_ms, int attempt) {
+			set_session_note(session, QStringLiteral("Reconnecting in %1 s (attempt %2)")
+			                                  .arg((delay_ms + 999) / 1000).arg(attempt));
 			if (session != m_current) return;
 			m_error = QStringLiteral("reconnecting in %1s (attempt %2)")
 			                  .arg((delay_ms + 999) / 1000)
@@ -3006,11 +3049,13 @@ void bssh_main_window::wire_session(bssh_session *session) {
 			update_status();
 		});
 		connect(manager, &bssh_conn_manager::reconnect_started, this, [this, session](int) {
+			set_session_note(session, QStringLiteral("Reconnecting\u2026"));
 			if (session != m_current) return;
 			m_error = QStringLiteral("reconnecting...");
 			update_status();
 		});
 		connect(manager, &bssh_conn_manager::gave_up, this, [this, session] {
+			set_session_note(session, QStringLiteral("Gave up reconnecting"));
 			if (session != m_current) return;
 			m_error = QStringLiteral("gave up reconnecting -- the shell is gone, "
 			                          "not suspended");
@@ -3074,6 +3119,8 @@ void bssh_main_window::wire_session(bssh_session *session) {
 		m_error = QStringLiteral("%1 set the clipboard (%2 characters)")
 		                  .arg(session->title())
 		                  .arg(text.size());
+		/* Told over the pane as well, the status line being hidden by default. */
+		flash_session_notice(session, QStringLiteral("Set the clipboard (%1 characters)").arg(text.size()));
 		update_status();
 	});
 
@@ -4970,6 +5017,19 @@ QJsonObject bssh_main_window::resolved_settings(const bssh_profile_t &profile) c
 	return bssh_settings_resolver::resolve(preset, profile.overrides);
 }
 
+void bssh_main_window::set_session_note(bssh_session *session, const QString &text) {
+	if (!session) return;
+	if (text.isEmpty()) m_notes.remove(session);
+	else m_notes.insert(session, text);
+	if (bssh_terminal_view *view = m_panes ? m_panes->view_for(session) : nullptr)
+		view->set_status_note(text);
+}
+
+void bssh_main_window::flash_session_notice(bssh_session *session, const QString &text) {
+	if (bssh_terminal_view *view = m_panes ? m_panes->view_for(session) : nullptr)
+		view->flash_notice(text);
+}
+
 void bssh_main_window::on_failed(const QString &reason) {
 	m_error = reason;
 	update_status();
@@ -6628,7 +6688,10 @@ QSize bssh_main_window::size_for_grid(int cols, int rows) {
 				wanted.rheight() += bar->sizeHint().height();
 		}
 	}
-	if (m_status_label) wanted.rheight() += m_status_label->sizeHint().height();
+	/* Only when it shows: hidden by default since sec 8.7a, and counted
+	 * anyway it made a window asked for 30 rows one row taller. */
+	if (m_status_label && m_status_line != bssh_app_settings::STATUS_LINE_OFF)
+		wanted.rheight() += m_status_label->sizeHint().height();
 	if (m_key_row && !m_key_row->isHidden()) wanted.rheight() += m_key_row->sizeHint().height();
 	if (m_keyboard && !m_keyboard->isHidden()) {
 		wanted.rheight() += m_keyboard->sizeHint().height();

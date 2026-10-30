@@ -1094,6 +1094,67 @@ void layout_test::a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there() {
 	QCOMPARE(window.drop_zone_for(c, front, top_band), int(bssh_layout_manager::EDGE_TOP));
 }
 
+void layout_test::a_sessions_trouble_is_written_over_its_pane() {
+	/*
+	 * The holder: "the status bar showing connected makes no sense on a
+	 * local terminal, and even with ssh, maybe we should only indicate on
+	 * the main terminal display that it is disconnected/retrying etc."
+	 * (sec 8.7a). Nothing while all is well; the trouble over the pane.
+	 */
+	QList<bssh_fake_ssh_session *> fakes;
+	const bssh_factory_reset_t factory_reset;
+	bssh_ssh_session::set_factory([&fakes](QObject *parent) -> bssh_ssh_session * {
+		fakes.append(new bssh_fake_ssh_session(parent));
+		return fakes.last();
+	});
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+
+	bssh_profile_t host = named(QStringLiteral("remote"));
+	host.host = QStringLiteral("remote.example");
+	bssh_session *session = window.registry()->create(host);
+	window.adopt_session(session);
+	QCoreApplication::processEvents();
+	bssh_terminal_view *view = window.panes()->view_for(session);
+	QVERIFY(view);
+
+	session->connect_to_host();
+	QTRY_VERIFY2(!view->status_note().isEmpty(), "nothing says the session is connecting");
+
+	fakes.last()->simulate_key_auth_success();
+	QTRY_VERIFY2(view->status_note().isEmpty(),
+	              qPrintable(QStringLiteral("a connected session still says \"%1\"").arg(view->status_note())));
+
+	fakes.last()->simulate_connection_lost();
+	QTRY_VERIFY2(!view->status_note().isEmpty(), "a lost connection says nothing over its pane");
+	const QString lost = view->status_note();
+	QVERIFY2(lost.contains(QStringLiteral("Reconnect")) || lost.contains(QStringLiteral("Disconnect"))
+	                 || lost.contains(QStringLiteral("failed")),
+	          qPrintable(lost));
+
+	/* The status line is hidden unless chosen. */
+	QLabel *status = window.findChild<QLabel *>(QStringLiteral("status_line"));
+	QVERIFY(status);
+	QVERIFY2(!status->isVisible(), "the status line shows by default");
+
+	/* A local shell: nothing over its pane, whatever its state. */
+	bssh_session *local = window.registry()->create(bssh_profile_t::local_shell());
+	window.adopt_session(local);
+	window.split_with(session);
+	QCoreApplication::processEvents();
+	local->connect_to_host();
+	QTest::qWait(100);
+	bssh_terminal_view *local_view = window.panes()->view_for(local);
+	if (local_view)
+		QVERIFY2(local_view->status_note().isEmpty(),
+		          qPrintable(QStringLiteral("a local shell says \"%1\"").arg(local_view->status_note())));
+	local->disconnect_from_host();
+}
+
 void layout_test::only_the_focused_pane_shows_its_corner() {
 	/*
 	 * The holder: "we keep all of the annoying things that can cover the
@@ -7844,8 +7905,16 @@ void layout_test::the_status_line_keeps_its_place_and_the_drum_its_corner() {
 	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN);
 	struct restore_t {
 		bssh_app_settings::keyboard_t keyboard;
-		~restore_t() { bssh_app_settings().set_keyboard(keyboard); }
-	} restore { before };
+		bssh_app_settings::status_line_t status;
+		~restore_t() {
+			bssh_app_settings().set_keyboard(keyboard);
+			bssh_app_settings().set_status_line(status);
+		}
+	} restore { before, settings.status_line() };
+
+	/* Shown, which is no longer the default (sec 8.7a): where it goes is
+	 * still the question for anyone who turns it on. */
+	settings.set_status_line(bssh_app_settings::STATUS_LINE_SESSION);
 
 	/* Where the status line belongs: under the terminal, or over the
 	 * split keyboard's left half. */

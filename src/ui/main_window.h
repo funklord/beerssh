@@ -1082,6 +1082,17 @@ private:
 	 * the menu bar's menus while it is.
 	 */
 	bool m_tabs_hidden = false;
+
+	/*
+	 * Each session's trouble, written over its own pane rather than on a
+	 * status line (sec 8.7a): connecting, disconnected, reconnecting, gave
+	 * up, ended. Empty for a session that is fine, and for a local shell
+	 * whatever its state, but for one that has ended and is held.
+	 */
+	QHash<bssh_session *, QString> m_notes;
+	QSet<bssh_session *> m_ended;
+	void set_session_note(bssh_session *session, const QString &text);
+	void flash_session_notice(bssh_session *session, const QString &text);
 	void apply_menu_bar();
 	void sync_corner_buttons();
 	void show_corner_tabs(bssh_session *front, const QPoint &global);

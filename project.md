@@ -9203,6 +9203,38 @@ under twin: the source window and its process went, and the terminal
 arrived. `a_window_whose_last_session_goes_to_another_process_closes`;
 caught in `arrangement.toml`.
 
+**The status line is hidden by default; a session's trouble is written
+over its pane -- 2026-10-30.** The holder: "the status bar showing
+connected makes no sense on a local terminal, and even with ssh, maybe
+we should only indicate on the main terminal display that it is
+disconnected/retrying etc. (with a transparent overlay text in the
+middle perhaps?)", and on the overlay: "ensure that the text has no
+effect on the terminal function as we still want to do other operations
+such as copy and scroll on a dead terminal".
+
+- **The setting stays**, with Hidden the new default: "Session and
+  state" and "Everything" are there for anyone who wants a line.
+- **The note** is the session's trouble in large type over the middle of
+  its own pane, on a half-strength plate of the terminal's background:
+  Connecting..., Signing in..., Disconnected, Connection failed: and the
+  reason, Reconnecting in N s (attempt M), Reconnecting..., Gave up
+  reconnecting, Session ended. Nothing while connected, and nothing for
+  a local shell but its ending, which a held one (`--hold`) shows. Each
+  pane shows its own session's, so a split shows which one dropped.
+- **Painted, never a widget** (`bssh_terminal_view::paint_notes`): it
+  takes no click, drag, wheel or focus, so a dead terminal selects,
+  copies and scrolls as before.
+- **One-off notices** that only the status line carried -- a program
+  setting the clipboard through OSC 52, a refused keyboard layout -- are
+  drawn the same way, smaller, for four seconds.
+- **And sizing a window in cells** stopped counting the hidden line: it
+  had made a window asked for 30 rows 31 tall.
+- Seen under twin: an SSH target that does not resolve shows "Connection
+  failed: Failed to resolve hostname ..." over the middle of the pane.
+  `a_sessions_trouble_is_written_over_its_pane`,
+  `a_status_note_leaves_the_terminal_working`; four edits in
+  `pane-corner.toml`.
+
 **A terminal moved in from another process lists tmux and screen again
 -- fixed 2026-10-30.** The holder: "there are two terminals in the same
 place, but only one of them currently shows the screen button". A

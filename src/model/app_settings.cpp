@@ -557,8 +557,14 @@ void bssh_app_settings::set_scrollbar(scrollbar_t where) {
 }
 
 bssh_app_settings::status_line_t bssh_app_settings::status_line() const {
+	/*
+	 * Hidden unless chosen (the holder, 2026-10-30): "connected" says
+	 * nothing on a local terminal and little on a healthy one, and what
+	 * matters -- disconnected, retrying -- is written over the terminal
+	 * it is about instead (sec 8.7a).
+	 */
 	const QString text = value(QStringLiteral("appearance/status_line"),
-	                            QStringLiteral("session")).toString();
+	                            QStringLiteral("off")).toString();
 
 	for (int i = 0; i < 3; ++i) {
 		if (text.compare(QLatin1String(BSSH_STATUS_LINE_KEYS[i]), Qt::CaseInsensitive) == 0) {

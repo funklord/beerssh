@@ -515,6 +515,23 @@ public:
 	void set_corner_menu(bool shown);
 
 	/*
+	 * The session's trouble, written over the middle of the terminal: the
+	 * holder, 2026-10-30, "maybe we should only indicate on the main
+	 * terminal display that it is disconnected/retrying etc. (with a
+	 * transparent overlay text in the middle perhaps?)", the status line
+	 * being hidden by default. Empty while all is well. Painted, never a
+	 * widget, so it has no effect on the terminal at all -- "we still want
+	 * to do other operations such as copy and scroll on a dead terminal".
+	 */
+	void set_status_note(const QString &text);
+	QString status_note() const { return m_status_note; }
+
+	/* A one-off notice drawn the same way, gone after a few seconds: a
+	 * program set the clipboard, say, which a user has to be told. */
+	void flash_notice(const QString &text);
+	QString notice() const { return m_notice; }
+
+	/*
 	 * Draws the focused-pane border (sec 8.3). Owned by the view because
 	 * it is painted with the grid, but decided by the pane container --
 	 * a view has no idea whether it has siblings.
@@ -1298,6 +1315,11 @@ private:
 	bool m_corner_active = false;
 	QString m_corner_tabs;
 	bool m_corner_menu = false;
+
+	QString m_status_note;
+	QString m_notice;
+	class QTimer *m_notice_timer = nullptr;
+	void paint_notes(QPainter &painter);
 	bool m_column_available = false;
 
 	/*
