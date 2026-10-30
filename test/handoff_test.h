@@ -13,6 +13,7 @@ class handoff_test : public QObject {
 private slots:
 	void a_live_session_moves_to_another_process();
 	void a_hover_says_where_and_then_that_it_left();
+	void only_sockets_nobody_listens_on_are_swept();
 	void a_session_nobody_has_is_refused_and_nothing_moves();
 	void a_taker_that_vanishes_leaves_the_session_running();
 	void a_drag_payload_names_where_to_ask();

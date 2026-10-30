@@ -69,6 +69,15 @@ public:
 	static QString directory();
 
 	/*
+	 * Removes the sockets in directory() that nobody listens on -- left by
+	 * processes ended by a signal, which run no destructor -- and returns
+	 * how many. Refusing a connection is the proof: a live process's
+	 * socket accepts, so it is never touched (the holder asked what the
+	 * processes share, 2026-10-30, and 66 of 67 found were such leftovers).
+	 */
+	static int sweep_stale();
+
+	/*
 	 * The taking side, run in the process that wants the session: asks the
 	 * process listening at path for the session with that handoff id, and
 	 * returns it imported and CONNECTED, or null with why. Blocks for at

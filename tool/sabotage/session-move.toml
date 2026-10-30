@@ -78,3 +78,12 @@ file = "src/model/session.cpp"
 find = "\tQTimer::singleShot(0, session, [session] { session->list_multiplexers(); });"
 replace = ""
 expect = "a_live_session_moves_to_another_process"
+
+# A sweep that removes live sockets too: another window can no longer be
+# offered a terminal.
+[[sabotage]]
+name = "the sweep removes sockets that answer"
+file = "src/model/handoff_point.cpp"
+find = "\t\tif (refused && ::unlink(address.sun_path) == 0) ++removed;"
+replace = "\t\t(void) refused;\n\t\tif (::unlink(address.sun_path) == 0) ++removed;"
+expect = "only_sockets_nobody_listens_on_are_swept"

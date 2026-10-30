@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include <atomic>
+#include <cstring>
 #include <thread>
 
 #include "input/input_router.h"
@@ -176,6 +177,31 @@ void handoff_test::a_live_session_moves_to_another_process() {
 	QCOMPARE(given.first(), session);
 	QVERIFY(session->is_moving());
 	delete session;
+}
+
+/* Sockets left by processes a signal ended are swept; a live one is not. */
+void handoff_test::only_sockets_nobody_listens_on_are_swept() {
+	runtime_dir_t runtime;
+	bssh_handoff_point live([](const QString &) -> bssh_session * { return nullptr; });
+	QString why;
+	QVERIFY2(live.listen(&why), qPrintable(why));
+
+	/* A socket bound and abandoned, as a killed process leaves it. */
+	const QString dead = bssh_handoff_point::path_for(999999);
+	sockaddr_un address = {};
+	address.sun_family = AF_UNIX;
+	const QByteArray encoded = QFile::encodeName(dead);
+	QVERIFY(encoded.size() < int(sizeof(address.sun_path)));
+	std::memcpy(address.sun_path, encoded.constData(), size_t(encoded.size()));
+	const int abandoned = ::socket(AF_UNIX, SOCK_STREAM, 0);
+	QVERIFY(abandoned >= 0);
+	QVERIFY(::bind(abandoned, reinterpret_cast<sockaddr *>(&address), sizeof(address)) == 0);
+	::close(abandoned);
+	QVERIFY(QFileInfo::exists(dead));
+
+	QCOMPARE(bssh_handoff_point::sweep_stale(), 1);
+	QVERIFY2(!QFileInfo::exists(dead), "the abandoned socket stayed");
+	QVERIFY2(QFileInfo::exists(live.path()), "the live socket was swept");
 }
 
 /* A drag from another process is over this one, and then is not: the

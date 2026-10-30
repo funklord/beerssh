@@ -9203,6 +9203,18 @@ under twin: the source window and its process went, and the terminal
 arrived. `a_window_whose_last_session_goes_to_another_process_closes`;
 caught in `arrangement.toml`.
 
+**Stale hand-off sockets are swept -- 2026-10-30.** Asked by the holder
+what the window processes share: no memory; each process's own Unix
+socket in `$XDG_RUNTIME_DIR/beerssh/` (0700), used only for offer, take,
+list, quit and now hover; and a new window's process is detached --
+parent 1, its own process group and session, measured -- so killing one
+kills no other, only its own shells. A process ended by a signal runs no
+destructor and left its socket: 66 of 67 found were such. Each process
+now sweeps, on listening, the sockets that refuse a connection, which
+is the proof nobody listens; a live one accepts and is never touched.
+`only_sockets_nobody_listens_on_are_swept`; caught in
+`session-move.toml`.
+
 **A drag from another process is previewed here -- 2026-10-30.** The
 holder: "there are some issues with the visual indicators for the drag
 and drop of new tab bars". With every window its own process (sec 8.4),

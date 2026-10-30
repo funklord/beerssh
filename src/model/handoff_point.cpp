@@ -124,6 +124,8 @@ bool bssh_handoff_point::listen(QString *why) {
 		return false;
 	}
 
+	sweep_stale();
+
 	m_path = path_for(QCoreApplication::applicationPid());
 	sockaddr_un address;
 	if (!fill_address(address, m_path, why)) {
@@ -376,6 +378,24 @@ QStringList bssh_handoff_point::list(const QString &path, QString *why) {
 	if (!ask(path, word(BSSH_HANDOFF_LIST), verb, text, why) || verb != BSSH_HANDOFF_IDS)
 		return QStringList();
 	return text.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+}
+
+int bssh_handoff_point::sweep_stale() {
+	int removed = 0;
+	const QDir dir(directory());
+	const QStringList names = dir.entryList({ QStringLiteral("handoff-*.sock") }, QDir::System);
+	for (const QString &name : names) {
+		const QString path = dir.filePath(name);
+		sockaddr_un address;
+		if (!fill_address(address, path, nullptr)) continue;
+		const int probe = ::socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+		if (probe < 0) continue;
+		const bool refused = ::connect(probe, reinterpret_cast<sockaddr *>(&address), sizeof(address)) != 0
+		                     && errno == ECONNREFUSED;
+		::close(probe);
+		if (refused && ::unlink(address.sun_path) == 0) ++removed;
+	}
+	return removed;
 }
 
 bool bssh_handoff_point::hover(const QString &path, const QPoint &global, bool active,
