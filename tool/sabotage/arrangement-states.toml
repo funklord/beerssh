@@ -15,22 +15,23 @@ find = "\t/* Whatever it was, it leaves its old place first, and that space clos
 replace = "\t/* Whatever it was, it leaves its old place first, and that space closes. */\n"
 expect = "a_tiled_session_leaves_the_tab_bar"
 
-# And the bar has to be rebuilt when the PANES change, not only when the
-# registry does.
+# What refresh_tab_bar() still does after a rebuild of the panes.
 #
-# The expect line names the COLLAPSE test rather than the split one, and
-# the sabotage runner is what worked that out: against the split test
-# this edit was MISSED, because splitting moves focus and the focus
-# handler refreshes the bar too. A window narrowing past its size class
-# (sec 8.2) changes what is on screen without changing the registry, the
-# window's session list, or which pane is focused -- so it is the one
-# path where this call is the only thing that notices.
+# This spec named the collapse test and was MISSED there, and was so
+# before the pane corner as well (measured 2026-10-30 in a clean copy):
+# a rebuild builds every bar afresh from the layout in make_pane_bar(),
+# so the bars come back right without this call, and "the bar is not
+# rebuilt" was never what removing it does. What it does do: bring each
+# bar's labels up to date, and -- since sec 8.7a -- give the rebuilt
+# panes' corners their stand-ins for hidden bars, which nothing else does
+# after a rebuild. So the edit is the same and it is named, and caught,
+# for that.
 [[sabotage]]
-name = "the bar is not rebuilt when a collapse changes what is on screen"
+name = "rebuilt panes' corners lose the hidden bars' buttons"
 file = "src/ui/main_window.cpp"
 find = "\t\trefresh_tab_bar();\n\n\t\t/*\n\t\t * A pane built after the setting was changed"
 replace = "\t\t/*\n\t\t * A pane built after the setting was changed"
-expect = "narrowing_a_window_turns_its_extra_panes_into_tabs"
+expect = "hidden_bars_are_reached_from_the_corner"
 
 # The un-split, which is what makes a split escapable.
 [[sabotage]]

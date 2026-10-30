@@ -9288,12 +9288,17 @@ tab bar there in addition to the other drop zones we already have."
   changes what is on screen" is MISSED -- and equally MISSED at the
   commit before this work, measured in a clean copy of it, so
   `narrowing_a_window_turns_its_extra_panes_into_tabs` does not see the
-  `refresh_tab_bar()` it was named for. **[OPEN]**
+  `refresh_tab_bar()` it was named for.
   Likewise `arrangement.toml`'s "a drop with no room collapses the
-  split": MISSED at `811122c` and at `b3d79fb`, before the corner, each
-  measured in a clean copy, so
-  `a_drop_with_no_room_keeps_an_arrangement_it_cannot_join` does not
-  reach the `take_session` fallback it was named for. **[OPEN]**
+  split", MISSED at `811122c` and at `b3d79fb`, before the corner.
+  **Both settled 2026-10-30.** The first edit's real effect after a
+  rebuild is the corners' hidden-bar buttons, which nothing else sets,
+  so it is renamed for that and caught by
+  `hidden_bars_are_reached_from_the_corner`. The second test does reach
+  its fallback; the edit has no visible effect there, because
+  `take_session()` has already made the session a tab of the target's
+  pane and `show_session()` no longer replaces the intent -- so the spec
+  is removed, with the reason left where it stood.
 - Guarded by `the_corner_sits_on_the_grid_and_takes_none_of_it`,
   `the_corner_hides_with_its_window_and_is_faint_until_pointed_at`,
   `only_the_focused_pane_shows_its_corner`,

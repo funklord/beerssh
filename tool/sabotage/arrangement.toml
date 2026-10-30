@@ -70,21 +70,18 @@ find = "\tconst bool changed = m_layout->arrangement() != choice.arrangement;"
 replace = "\tconst bool changed = false;"
 expect = "a_desktop_can_be_asked_for_the_column"
 
-# A drop with no room collapses an arrangement it cannot join.
-#
-# Restores the behaviour found 2026-09-22: show_session replaces the
-# intent with the dropped session alone, so two panes somebody arranged
-# become tabs and the newcomer takes the window. Nothing is closed, which
-# is why it went unnoticed -- what goes is the arrangement, and sec 8.2's
-# "remembered per tab-group" cannot survive the intent being overwritten.
-# Re-aimed 2026-10-09: a no-room arrival is a swap now (sec 8.4), and this
-# is the swap's fallback for a session no window shows.
-[[sabotage]]
-name = "a drop with no room collapses the split"
-file = "src/ui/main_window.cpp"
-find = "\ttake_session(session);\n\tm_layout->place(session, target, bssh_layout_manager::EDGE_MIDDLE);"
-replace = "\ttake_session(session);\n\tshow_session(session);"
-expect = "a_drop_with_no_room_keeps_an_arrangement_it_cannot_join"
+# "A drop with no room collapses the split" stood here, breaking the
+# no-window fallback of swap_sessions() by calling show_session() there
+# instead. Removed 2026-10-30: it was MISSED, and was already at b3d79fb,
+# because the two now end the same way: take_session() just before has
+# already put the session into the focused pane -- the target -- as a
+# tab, so place() and show_session() both leave it in front of that pane
+# with the target behind it (read, 2026-10-30; the tab order may differ).
+# Once show_session() replaced the whole intent, the collapse the name
+# described; it no longer does. An edit with no visible effect cannot be
+# caught, so it guarded nothing;
+# a_drop_with_no_room_keeps_an_arrangement_it_cannot_join still asserts
+# the outcome.
 
 # And the other half: a ONE-pane window must still hand the screen over,
 # or a drop onto a phone-width window changes nothing visible and reads
