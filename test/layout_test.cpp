@@ -6244,7 +6244,7 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 			QString did;
 			const bool trace = qEnvironmentVariableIsSet("BSSH_WALK_TRACE");
 			if (trace) fprintf(stderr, "walk: seed %d step %d\n", seed, step);
-			switch (random.bounded(10)) {
+			switch (random.bounded(11)) {
 			case 0: {
 				bssh_session *fresh = make();
 				window.adopt_session(fresh);
@@ -6291,6 +6291,12 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 				if (all.size() < 3) continue;
 				did = QStringLiteral("close %1").arg(name(session));
 				registry->close(session);
+				break;
+			case 10:
+				/* As the drag to another BeerSSH ends here (sec 8.4). */
+				if (all.size() < 3) continue;
+				did = QStringLiteral("give %1 to another process").arg(name(session));
+				registry->give_away(session);
 				break;
 			case 8: {
 				const int width = random.bounded(2) ? 500 : 1400;

@@ -9386,6 +9386,14 @@ function given on the command line, and every class after
 `layout_test` runs under that name too, so it is not even known that the
 crash was in this test. Unexplained rather than attributed.
 
+**Open: "tabs moved out don't disappear from the tab" (the holder,
+2026-10-30) -- not reproduced.** Tried under twin with three tabs: torn
+out onto the desktop, dropped on another window's terminal, and split off
+onto its own pane's edge; each time the source bar lost the tab. The walk
+gained a give-away step (a terminal handed to another process), and every
+bar still listed exactly its pane's tabs after it. The route the holder
+used is the missing fact.
+
 **As built (`bssh_pane_corner`, `bssh_input_selector`).**
 
 - **Rows are 48dp on touch.** 36 was tried first, to keep three rows off
