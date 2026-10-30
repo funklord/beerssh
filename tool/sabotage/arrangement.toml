@@ -145,3 +145,12 @@ file = "src/ui/layout_manager.cpp"
 find = "\tif (!fit_applies()) return true;\n\n\t/* The tree as shown"
 replace = "\treturn true;\n\n\t/* The tree as shown"
 expect = "a_wide_window_tiles_as_many_as_fit"
+
+# Only a new pane asks for room, as before: a pane moved out of a stack
+# into a full row is placed, and the fold makes another pane a tab.
+[[sabotage]]
+name = "a pane moved where it does not fit pushes another out"
+file = "src/ui/main_window.cpp"
+find = "\tif (!m_layout->room_to_split(target, edge, new_pane ? nullptr : session)) return folded;\n"
+replace = "\tif (new_pane && !m_layout->room_to_split(target, edge)) return folded;\n"
+expect = "moving_a_pane_where_it_does_not_fit_folds_no_other"

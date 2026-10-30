@@ -3209,14 +3209,16 @@ int bssh_main_window::drop_zone_for(bssh_session *session, bssh_session *target,
 	 * A side that cannot be honoured is the swap instead, drawn and done
 	 * as one (the holder's rule, 2026-10-09) -- or, for a pane's own
 	 * front, the cancel its own middle is. A new pane in a window at its
-	 * pane cap would make a pane there is no room for; and the portrait
+	 * pane cap would make a pane there is no room for, and a pane moved
+	 * where its new place does not fit would push another out into a tab
+	 * (room_to_split); and the portrait
 	 * column stacks its panes whatever the tree says, so left and right
 	 * have no meaning there -- they used to be drawn as halves and land
 	 * as above and below.
 	 */
 	const int folded = own ? BSSH_DROP_CANCEL : int(layout::EDGE_MIDDLE);
 	const bool new_pane = own || !m_layout->intent().contains(session);
-	if (new_pane && !m_layout->room_to_split(target, edge)) return folded;
+	if (!m_layout->room_to_split(target, edge, new_pane ? nullptr : session)) return folded;
 	if (m_layout->arrangement() == layout::COLUMN
 	    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))
 		return folded;

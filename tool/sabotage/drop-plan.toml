@@ -6,7 +6,7 @@
 [[sabotage]]
 name = "a side into a full window is drawn as a split"
 file = "src/ui/main_window.cpp"
-find = "\tif (new_pane && !m_layout->room_to_split(target, edge)) return folded;\n"
+find = "\tif (!m_layout->room_to_split(target, edge, new_pane ? nullptr : session)) return folded;\n"
 replace = ""
 expect = "the_zone_drawn_is_what_the_drop_does"
 

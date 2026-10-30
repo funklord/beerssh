@@ -6408,6 +6408,67 @@ void layout_test::a_wide_window_tiles_as_many_as_fit() {
 	QCOMPARE(layout->visible_panes().size(), wide);
 }
 
+void layout_test::moving_a_pane_where_it_does_not_fit_folds_no_other() {
+	/*
+	 * A row as full as it fits, and a pane stacked under its last one.
+	 * Moved beside the first, the stacked pane would need a column the
+	 * window has not got -- and the fold that keeps a tree within its
+	 * room would then turn the LAST pane into a tab: a drop on one
+	 * terminal making another disappear. The edge is drawn and done as
+	 * the swap instead, as it is for a new pane with no room.
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+
+	bssh_main_window window;
+	window.resize(1600, 1000);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_layout_manager *layout = window.layout_manager();
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral("p0")));
+	window.adopt_session(first);
+	QTest::qWait(50);
+	bssh_session *last = first;
+	for (int i = 1; i < 30; ++i) {
+		bssh_session *next = window.registry()->create(named(QStringLiteral("p%1").arg(i)));
+		window.adopt_session(next);
+		QTest::qWait(30);
+		bssh_session *pane = layout->front_of(next);
+		if (!layout->room_to_split(pane, bssh_layout_manager::EDGE_RIGHT)) {
+			window.registry()->close(next);
+			break;
+		}
+		window.drop_session_on(next, pane, bssh_layout_manager::EDGE_RIGHT);
+		QTest::qWait(30);
+		last = next;
+	}
+
+	bssh_session *under = window.registry()->create(named(QStringLiteral("under")));
+	window.adopt_session(under);
+	QTest::qWait(30);
+	QVERIFY(layout->room_to_split(layout->front_of(under), bssh_layout_manager::EDGE_BOTTOM));
+	window.drop_session_on(under, layout->front_of(under), bssh_layout_manager::EDGE_BOTTOM);
+	QTest::qWait(50);
+	const QList<bssh_session *> before = layout->visible_panes();
+	QVERIFY(before.contains(under) && before.contains(first) && before.contains(last));
+	QVERIFY2(before.size() > 4, qPrintable(QString::number(before.size())));
+
+	QCOMPARE(window.drop_zone_for(under, first, bssh_layout_manager::EDGE_LEFT),
+	         int(bssh_layout_manager::EDGE_MIDDLE));
+	window.drop_session_on(under, first, bssh_layout_manager::EDGE_LEFT);
+	QTest::qWait(50);
+	const QList<bssh_session *> after = layout->visible_panes();
+	QCOMPARE(after.size(), before.size());
+	for (bssh_session *pane : before)
+		QVERIFY2(after.contains(pane), "a pane that was not moved became a tab");
+}
+
 void layout_test::tabs_down_the_side_scroll_and_read_across() {
 	/*
 	 * The holder: "When tabs are on left or right they force the terminal

@@ -280,12 +280,19 @@ void bssh_layout_manager::set_room(const QSize &area, const QSize &least_pane, i
 	if (visible_panes() != before) emit layout_changed();
 }
 
-bool bssh_layout_manager::room_to_split(bssh_session *target, int edge) const {
-	if (m_intent.size() >= max_panes()) return false;
+bool bssh_layout_manager::room_to_split(bssh_session *target, int edge,
+                                        bssh_session *moving) const {
+	/* A pane that moves takes its place along: no new pane is made. */
+	const bssh_pane_node *from = moving ? find_pane(m_tree, moving) : nullptr;
+	const bool leaves = from && from->is_leaf() && from->pane_tabs().size() == 1
+	                    && m_intent.contains(moving);
+	if (!leaves && m_intent.size() >= max_panes()) return false;
 	if (!fit_applies()) return true;
 
-	/* The tree as shown, with the target's pane halved at that edge. */
+	/* The tree as shown, without the pane that moves, and with the
+	 * target's pane halved at that edge. */
 	bssh_pane_node tree = visible_tree();
+	if (leaves) prune(tree, [moving](bssh_session *session) { return session != moving; });
 	bssh_pane_node *leaf = find_pane(tree, target);
 	if (!leaf || !leaf->is_leaf()) return true;
 	bssh_pane_node half = *leaf;

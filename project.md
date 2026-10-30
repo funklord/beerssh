@@ -6070,6 +6070,14 @@ on every frame, and a rebuild per frame is what once made the app untypable.
 Under twin at 1880x1000: nine panes side by side and the tenth split refused;
 narrowed to 900, four panes and five tabs; widened, nine again.
 `a_wide_window_tiles_as_many_as_fit`; four edits in `arrangement.toml`.
+**A pane MOVED asks too.** Only a new pane did at first, and a pane moved
+out of a stack beside a full row needs a column the window has not got --
+placed anyway, the fold then made the LAST pane a tab, so a drop on one
+terminal made another disappear (measured: eight panes, seven after the
+drop). `room_to_split` takes the moving pane out of the tree before it
+measures, and an edge that does not fit is drawn and done as the swap.
+`moving_a_pane_where_it_does_not_fit_folds_no_other`; caught in
+`arrangement.toml`.
 
 The hard case: the user has a 2-pane split on an unfolded foldable, then folds it
 — or rotates to portrait, drags the app into a narrow split-window, or (on

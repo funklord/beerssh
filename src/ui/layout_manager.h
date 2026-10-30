@@ -200,8 +200,13 @@ public:
 	 * Whether `target`'s pane can be split at `edge` for a new pane: under
 	 * the ceiling, and where room is known, the tree with the new pane
 	 * still fits. Every split and every drop that makes a pane asks this.
+	 *
+	 * `moving` is a pane that leaves its place to go there. Moved out of
+	 * a stack into a full row it needs a column the window may not have,
+	 * and the fold that keeps a tree in its room would then make the LAST
+	 * pane a tab -- a drop on one terminal making another disappear.
 	 */
-	bool room_to_split(bssh_session *target, int edge) const;
+	bool room_to_split(bssh_session *target, int edge, bssh_session *moving = nullptr) const;
 	size_class_t size_class() const { return size_class_for(m_width_dp); }
 
 	void set_arrangement(arrangement_t arrangement);
