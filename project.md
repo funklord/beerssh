@@ -9314,6 +9314,12 @@ tab bar there in addition to the other drop zones we already have."
   pane shows no bar (one tab, or bars hidden) and the session is not
   already one of its tabs; anywhere else the band is part of the edge it
   lies on, so every drop that worked before does the same.
+- **The handle works on its own pane only, 2026-10-30.** The holder: "a
+  tab bar shouldn't be movable to other terminals". The side was read
+  from the whole panes area and lit every pane along it, so a handle
+  carried across the window looked like it was taking the bar to the
+  terminal under it. Now the side is the nearest of the bar's own pane,
+  only that pane lights, and letting go anywhere else does nothing.
 - Seen under twin on Xvfb: the handle dragged to the left lit the pane's
   left band and moved the tabs there.
   `the_bar_side_and_the_tab_bands_are_where_the_pointer_is`,

@@ -1007,29 +1007,68 @@ void layout_test::the_tab_bar_is_dragged_to_another_side() {
 	window.show();
 	QVERIFY(QTest::qWaitForWindowExposed(&window));
 	const registry_left_as_found_t tidy(window.registry());
-	window.adopt_session(window.registry()->create(named(QStringLiteral("alpha"))));
+	bssh_session *alpha = window.registry()->create(named(QStringLiteral("alpha")));
+	window.adopt_session(alpha);
 	window.adopt_session(window.registry()->create(named(QStringLiteral("beta"))));
+	QCoreApplication::processEvents();
+
+	/* And a terminal of its own beside the pane with the bar. */
+	bssh_session *gamma = window.registry()->create(named(QStringLiteral("gamma")));
+	window.adopt_session(gamma);
+	QCoreApplication::processEvents();
+	window.drop_session_on(gamma, window.layout_manager()->front_of(gamma), bssh_layout_manager::EDGE_RIGHT);
 	QCoreApplication::processEvents();
 
 	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
 	QVERIFY(panes);
 	QCOMPARE(panes->bar_edge(), Qt::TopEdge);
-	QWidget *handle = window.findChild<QWidget *>(QStringLiteral("pane_bar_handle"));
+	const auto handle_now = [&window, alpha]() -> QWidget * {
+		bssh_pane_bar *row = window.bar_for(window.layout_manager()->front_of(alpha));
+		return row ? row->findChild<QWidget *>(QStringLiteral("pane_bar_handle")) : nullptr;
+	};
+	QWidget *handle = handle_now();
 	QVERIFY(handle);
 	QTRY_VERIFY(handle->isVisible());
+	bssh_terminal_view *own = panes->view_for(window.layout_manager()->front_of(alpha));
+	bssh_terminal_view *other = panes->view_for(gamma);
+	QVERIFY(own && other && own != other);
 
-	/* Pressed, and moved toward the middle of the panes' left edge. */
+	/*
+	 * Over the other terminal: the bar is its own pane's, and nothing is
+	 * lit there or anywhere -- the holder: "a tab bar shouldn't be movable
+	 * to other terminals". Let go there, nothing moves.
+	 */
+	{
+		const QPoint start = handle->rect().center();
+		const QPoint over_other = handle->mapFromGlobal(
+		        other->mapToGlobal(QPoint(8, other->height() / 2)));
+		QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, start);
+		QTest::mouseMove(handle, start + QPoint(QApplication::startDragDistance() * 2, 0));
+		QTest::mouseMove(handle, over_other);
+		for (bssh_terminal_view *view : panes->views())
+			QVERIFY2(view->drop_zone() == -1, "a pane is lit by another pane's bar");
+		QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, over_other);
+		QCoreApplication::processEvents();
+		QCoreApplication::processEvents();
+		QCOMPARE(panes->bar_edge(), Qt::TopEdge);
+		handle = handle_now();
+		QVERIFY(handle);
+		own = panes->view_for(window.layout_manager()->front_of(alpha));
+		other = panes->view_for(gamma);
+		QVERIFY(own && other);
+	}
+
+	/* Pressed, and moved toward the middle of its own pane's left edge. */
 	const QPoint start = handle->rect().center();
 	const QPoint left_middle = handle->mapFromGlobal(
-	        panes->mapToGlobal(QPoint(8, panes->height() / 2)));
+	        own->mapToGlobal(QPoint(8, own->height() / 2)));
 	QTest::mousePress(handle, Qt::LeftButton, Qt::NoModifier, start);
 	QTest::mouseMove(handle, start + QPoint(QApplication::startDragDistance() * 2, 0));
 	QTest::mouseMove(handle, left_middle);
 
-	/* The side it would go to is lit, along the left of the pane there. */
-	bssh_terminal_view *view = panes->views().first();
-	QVERIFY(view);
-	QCOMPARE(view->drop_zone(), BSSH_DROP_TAB_BASE + int(bssh_layout_manager::EDGE_LEFT));
+	/* The side it would go to is lit, along the left of its own pane. */
+	QCOMPARE(own->drop_zone(), BSSH_DROP_TAB_BASE + int(bssh_layout_manager::EDGE_LEFT));
+	QCOMPARE(other->drop_zone(), -1);
 
 	QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, left_middle);
 	QTRY_COMPARE(panes->bar_edge(), Qt::LeftEdge);

@@ -1111,12 +1111,14 @@ private:
 	QAction *m_menu_bar_action = nullptr;
 
 	/*
-	 * The tab bar's handle dragged (sec 8.7a): the side the pointer is
-	 * nearest is lit along the panes on it, and letting go puts every bar
-	 * there -- the tabs-side-by-side setting, moved by hand.
+	 * The tab bar's handle dragged (sec 8.7a): the side of the bar's own
+	 * pane the pointer is nearest is lit on that pane, and letting go puts
+	 * every bar there -- the tabs-side-by-side setting, moved by hand.
+	 * Over another pane, or outside, nothing is lit and nothing moves.
 	 */
-	void preview_bar_side(const QPoint &global);
-	void finish_bar_side(const QPoint &global);
+	bool bar_side_in_own_pane(bssh_session *front, const QPoint &global, Qt::Edge *side) const;
+	void preview_bar_side(bssh_session *front, const QPoint &global);
+	void finish_bar_side(bssh_session *front, const QPoint &global);
 	bool m_bar_side_previewed = false;
 	bssh_find_bar *m_find_bar;
 

@@ -121,8 +121,8 @@ expect = "a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there"
 [[sabotage]]
 name = "the bar side is not previewed"
 file = "src/ui/main_window.cpp"
-find = "\t\tview->show_drop_zone(touches ? BSSH_DROP_TAB_BASE + panes_edge_for(side) : -1);"
-replace = "\t\t(void) touches;"
+find = "\t\tview->show_drop_zone(inside && view == own ? BSSH_DROP_TAB_BASE + panes_edge_for(side) : -1);"
+replace = "\t\tview->show_drop_zone(-1);"
 expect = "the_tab_bar_is_dragged_to_another_side"
 
 # No band at all: the edge zone reaches the pane's very edge again.
@@ -236,3 +236,13 @@ replace = """
 	y += drum;
 	for (QToolButton *button : { m_multiplexer, m_tabs, m_menu }) {"""
 expect = "hidden_bars_are_reached_from_the_corner"
+
+# The handle's side read wherever the pointer is, not only in its own
+# pane: carried over another terminal, it lights and moves there -- the
+# holder: "a tab bar shouldn't be movable to other terminals".
+[[sabotage]]
+name = "a bar's handle works over other terminals"
+file = "src/ui/main_window.cpp"
+find = "\tif (!view->rect().contains(at)) return false;\n"
+replace = ""
+expect = "the_tab_bar_is_dragged_to_another_side"

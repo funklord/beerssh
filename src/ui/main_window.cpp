@@ -4673,35 +4673,49 @@ static int panes_edge_for(Qt::Edge side) {
 	}
 }
 
-void bssh_main_window::preview_bar_side(const QPoint &global) {
+/*
+ * The side is read from the bar's OWN pane, and only that pane is lit:
+ * the bar is that terminal's, and dragging it over another one moves
+ * nothing there -- the holder, 2026-10-30: "a tab bar shouldn't be
+ * movable to other terminals". It was read from the whole panes area and
+ * lit every pane along that side, so a handle carried across the window
+ * looked like it was taking the bar to whichever terminal it was over.
+ * Outside its pane there is no side, and letting go there does nothing.
+ */
+bool bssh_main_window::bar_side_in_own_pane(bssh_session *front, const QPoint &global,
+                                            Qt::Edge *side) const {
+	bssh_terminal_view *view = m_panes ? m_panes->view_for(front) : nullptr;
+	if (!view) return false;
+	const QPoint at = view->mapFromGlobal(global);
+	if (!view->rect().contains(at)) return false;
+	*side = bssh_bar_side_at(at, view->size());
+	return true;
+}
+
+void bssh_main_window::preview_bar_side(bssh_session *front, const QPoint &global) {
 	if (!m_panes) return;
 
-	const Qt::Edge side = bssh_bar_side_at(m_panes->mapFromGlobal(global), m_panes->size());
-	const QRect area = m_panes->rect();
+	Qt::Edge side = Qt::TopEdge;
+	const bool inside = bar_side_in_own_pane(front, global, &side);
+	bssh_terminal_view *own = m_panes->view_for(front);
 	for (bssh_terminal_view *view : m_panes->views()) {
 		if (!view) continue;
-		const QRect at(view->mapTo(m_panes, QPoint(0, 0)), view->size());
-		const int slack = 8;
-		bool touches = false;
-		switch (side) {
-		case Qt::LeftEdge:   touches = at.left() - area.left() <= slack; break;
-		case Qt::RightEdge:  touches = area.right() - at.right() <= slack; break;
-		case Qt::BottomEdge: touches = area.bottom() - at.bottom() <= slack; break;
-		default:             touches = at.top() - area.top() <= slack; break;
-		}
-		view->show_drop_zone(touches ? BSSH_DROP_TAB_BASE + panes_edge_for(side) : -1);
+		view->show_drop_zone(inside && view == own ? BSSH_DROP_TAB_BASE + panes_edge_for(side) : -1);
 	}
 	m_bar_side_previewed = true;
 }
 
-void bssh_main_window::finish_bar_side(const QPoint &global) {
+void bssh_main_window::finish_bar_side(bssh_session *front, const QPoint &global) {
 	if (!m_panes) return;
 	for (bssh_terminal_view *view : m_panes->views())
 		if (view) view->show_drop_zone(-1);
 	m_bar_side_previewed = false;
 
+	Qt::Edge edge = Qt::TopEdge;
+	if (!bar_side_in_own_pane(front, global, &edge)) return;
+
 	bssh_app_settings::tab_position_t side = bssh_app_settings::TABS_TOP;
-	switch (bssh_bar_side_at(m_panes->mapFromGlobal(global), m_panes->size())) {
+	switch (edge) {
 	case Qt::LeftEdge:   side = bssh_app_settings::TABS_LEFT; break;
 	case Qt::RightEdge:  side = bssh_app_settings::TABS_RIGHT; break;
 	case Qt::BottomEdge: side = bssh_app_settings::TABS_BOTTOM; break;
@@ -4805,10 +4819,13 @@ QWidget *bssh_main_window::make_pane_bar(bssh_session *front, QWidget *parent) {
 	});
 	connect(bar, &bssh_pane_bar::drag_requested, this,
 	        [this](bssh_session *session) { start_session_drag(session); });
-	connect(bar, &bssh_pane_bar::side_drag_moved, this, &bssh_main_window::preview_bar_side);
-	connect(bar, &bssh_pane_bar::side_drag_finished, this, [this, later](const QPoint &global) {
+	connect(bar, &bssh_pane_bar::side_drag_moved, this, [this, front](const QPoint &global) {
+		preview_bar_side(front, global);
+	});
+	connect(bar, &bssh_pane_bar::side_drag_finished, this, [this, later, front](const QPoint &global) {
 		/* Queued: moving the bars rebuilds the panes, this bar with them. */
-		later([this, global] { finish_bar_side(global); });
+		QPointer<bssh_session> pane = front;
+		later([this, pane, global] { if (pane) finish_bar_side(pane, global); });
 	});
 	connect(bar, &bssh_pane_bar::new_tab_requested, this, [this, later, front] {
 		QPointer<bssh_session> pane = front;
