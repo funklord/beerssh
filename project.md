@@ -6050,9 +6050,26 @@ on top of each other, and a window manager honouring 77px is asking for it.
 **Twenty columns by four rows**, and both are arguments rather than taste.
 Twenty columns is about the narrowest that holds a prompt and a short command
 without wrapping mid-word; four rows shows the prompt, what was typed, and two
-lines of what came back. It constrains nothing real: four panes side by side
-only happen above this section's 840dp class, and four twenty-column grids fit
-inside that comfortably.
+lines of what came back.
+
+**[BUILT 2026-10-30] And on a desktop, that minimum is the pane limit.** A wide
+tiled window was capped at four panes; the holder: "there seems to be a limit
+of 4 terminals". Once a desktop window tells the layout its room
+(`bssh_layout_manager::set_room`: the panes' area, the least a pane can be --
+that 20x4 and its bar -- and a divider), the expanded class shows as many panes
+as FIT: a tree's least size is its panes added up across where they sit side by
+side and down where they are stacked. Past what fits, the last panes become
+tabs, exactly as the size classes have always folded them, and they come back
+when the window grows. A split or a drop that makes a pane asks
+`room_to_split`, so the menu greys out and an edge folds to the swap where the
+halves would not fit; 16 is a ceiling against a runaway. The tiled panes now
+ask the window for one pane's room rather than the sum of theirs -- the sum is
+what would have kept a window of nine panes from being narrowed at all. Touch
+never sets the room and keeps 1, 2 and 4: a keyboard opening resizes the window
+on every frame, and a rebuild per frame is what once made the app untypable.
+Under twin at 1880x1000: nine panes side by side and the tenth split refused;
+narrowed to 900, four panes and five tabs; widened, nine again.
+`a_wide_window_tiles_as_many_as_fit`; four edits in `arrangement.toml`.
 
 The hard case: the user has a 2-pane split on an unfolded foldable, then folds it
 — or rotates to portrait, drags the app into a narrow split-window, or (on

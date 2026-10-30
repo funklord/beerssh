@@ -110,3 +110,38 @@ file = "src/ui/pane_container.cpp"
 find = "\t\tinto->addWidget(nested);\n"
 replace = ""
 expect = "no_terminal_is_lost_however_the_panes_are_moved"
+
+# The desktop's ceiling gone: four panes again, however wide the window --
+# the holder: "there seems to be a limit of 4 terminals".
+[[sabotage]]
+name = "a wide desktop window stops at four panes"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (fit_applies()) return BSSH_TILED_PANE_LIMIT;\n"
+replace = ""
+expect = "a_wide_window_tiles_as_many_as_fit"
+
+# Nothing folds when the window narrows: the panes are squeezed past a
+# terminal's least.
+[[sabotage]]
+name = "narrowing a window folds no pane into a tab"
+file = "src/ui/layout_manager.cpp"
+find = "\t/* And on a desktop, the same from the end until what is left fits. */\n\tif (fit_applies()) {"
+replace = "\t/* And on a desktop, the same from the end until what is left fits. */\n\tif (false) {"
+expect = "a_wide_window_tiles_as_many_as_fit"
+
+# The panes ask the window for all their room again: a window of many
+# panes cannot be narrowed.
+[[sabotage]]
+name = "many panes hold a window wide"
+file = "src/ui/pane_container.cpp"
+find = "\tif (!column) m_splitter->setMinimumSize(least_pane().expandedTo(QSize(1, 1)));\n"
+replace = "\tif (!column) m_splitter->setMinimumSize(0, 0);\n"
+expect = "a_wide_window_tiles_as_many_as_fit"
+
+# A split asked only the ceiling: panes are made narrower than a terminal.
+[[sabotage]]
+name = "a split is offered where the halves do not fit"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (!fit_applies()) return true;\n\n\t/* The tree as shown"
+replace = "\treturn true;\n\n\t/* The tree as shown"
+expect = "a_wide_window_tiles_as_many_as_fit"

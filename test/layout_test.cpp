@@ -6329,6 +6329,79 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 	}
 }
 
+void layout_test::a_wide_window_tiles_as_many_as_fit() {
+	/*
+	 * The holder: "there seems to be a limit of 4 terminals" (2026-10-30).
+	 * A desktop's wide window shows as many panes as fit at a terminal's
+	 * least, the rest tabs until there is room (sec 8.2) -- and it can
+	 * still be made narrow, which a sum of the panes' minimums forbade.
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+
+	bssh_main_window window;
+	window.resize(1600, 1000);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_layout_manager *layout = window.layout_manager();
+	QCOMPARE(layout->arrangement(), bssh_layout_manager::TILED);
+
+	bssh_session *first = window.registry()->create(named(QStringLiteral("p0")));
+	window.adopt_session(first);
+	QTest::qWait(50);
+
+	/*
+	 * Each new terminal opens as a tab of the focused pane and is split
+	 * off its right edge until a split is refused -- by the width running
+	 * out, well short of the ceiling, so the refusal is the fit's.
+	 */
+	for (int i = 1; i < 30; ++i) {
+		const int edge = bssh_layout_manager::EDGE_RIGHT;
+		bssh_session *next = window.registry()->create(named(QStringLiteral("p%1").arg(i)));
+		window.adopt_session(next);
+		QTest::qWait(30);
+		bssh_session *pane = layout->front_of(next);
+		if (!layout->room_to_split(pane, edge)) break;
+		window.drop_session_on(next, pane, edge);
+		QTest::qWait(30);
+	}
+	const int wide = layout->visible_panes().size();
+	QVERIFY2(wide > 4 && wide < bssh_layout_manager::BSSH_TILED_PANE_LIMIT,
+	          qPrintable(QStringLiteral("%1 panes in a 1600x1000 window").arg(wide)));
+	/* Every split that was offered made a pane: none was offered that
+	 * could only become a tab. */
+	QCOMPARE(layout->intent().size(), wide);
+	QCOMPARE(window.panes()->views().size(), wide);
+	for (bssh_terminal_view *view : window.panes()->views()) {
+		QVERIFY(view->isVisible());
+		QVERIFY2(view->cols() >= 20 && view->rows() >= 4,
+		          qPrintable(QStringLiteral("a pane of %1x%2").arg(view->cols()).arg(view->rows())));
+	}
+
+	/* Narrowed: the window does narrow, fewer panes, nothing lost. */
+	window.resize(1000, 1000);
+	QTest::qWait(100);
+	QVERIFY2(window.width() <= 1000, qPrintable(QStringLiteral("held at %1 wide").arg(window.width())));
+	const int narrow = layout->visible_panes().size();
+	QVERIFY2(narrow < wide, qPrintable(QStringLiteral("%1 then %2").arg(wide).arg(narrow)));
+	for (bssh_terminal_view *view : window.panes()->views())
+		QVERIFY2(view->cols() >= 20, qPrintable(QStringLiteral("squeezed to %1 columns").arg(view->cols())));
+	QList<bssh_session *> reached = layout->visible_panes();
+	for (bssh_session *front : layout->visible_panes()) reached += layout->bar_tabs(front);
+	for (bssh_session *session : window.registry()->sessions())
+		QVERIFY2(reached.contains(session), "a terminal went with the room");
+
+	/* And back. */
+	window.resize(1600, 1000);
+	QTest::qWait(100);
+	QCOMPARE(layout->visible_panes().size(), wide);
+}
+
 void layout_test::tabs_down_the_side_scroll_and_read_across() {
 	/*
 	 * The holder: "When tabs are on left or right they force the terminal

@@ -103,6 +103,15 @@ public:
 	static constexpr int BSSH_COLUMN_PANE_LIMIT = 64;
 
 	/*
+	 * A desktop's tiled ceiling, once it has told the layout its room
+	 * (set_room): what limits it below this is whether the panes fit, not
+	 * a count -- the holder, 2026-10-30, of the old four: "there seems to
+	 * be a limit of 4 terminals". Like the column's, a ceiling against a
+	 * runaway rather than the answer.
+	 */
+	static constexpr int BSSH_TILED_PANE_LIMIT = 16;
+
+	/*
 	 * Which arrangement a window takes, and how many terminals a column
 	 * shows at once (sec 8.7) -- the holder's rule, answered 2026-09-25:
 	 * a screen at least 600dp both ways (a Fold unfolded, either way up)
@@ -170,6 +179,29 @@ public:
 
 	void set_width(int width_dp);
 	int width() const { return m_width_dp; }
+
+	/*
+	 * The room a desktop's tiled panes have, in pixels: the panes' area,
+	 * the least one pane can be (a terminal's 20x4 and its bar), and a
+	 * divider. Once set, a wide tiled window shows as many panes as FIT
+	 * rather than four: the panes past what fits become tabs, as a narrow
+	 * window's do (sec 8.2), and come back when the window grows. Touch
+	 * never sets it -- a keyboard opening resizes the window on every
+	 * frame, and a rebuild per frame is what made the app untypable once
+	 * (see resizeEvent) -- so a tablet keeps the count it had.
+	 */
+	void set_room(const QSize &area, const QSize &least_pane, int divider);
+
+	/* The least a tree can be laid out in: side by side adds up across,
+	 * stacked adds up down, each pane at least `least_pane`. */
+	static QSize least_size(const bssh_pane_node &node, const QSize &least_pane, int divider);
+
+	/*
+	 * Whether `target`'s pane can be split at `edge` for a new pane: under
+	 * the ceiling, and where room is known, the tree with the new pane
+	 * still fits. Every split and every drop that makes a pane asks this.
+	 */
+	bool room_to_split(bssh_session *target, int edge) const;
 	size_class_t size_class() const { return size_class_for(m_width_dp); }
 
 	void set_arrangement(arrangement_t arrangement);
@@ -292,7 +324,14 @@ signals:
 	void layout_changed();
 
 private:
+	/* Room is known and applies: a desktop's wide, tiled window. */
+	bool fit_applies() const;
+	bool fits(const bssh_pane_node &tree) const;
+
 	int m_width_dp;
+	QSize m_room_area;
+	QSize m_room_least;
+	int m_room_divider = 0;
 	arrangement_t m_arrangement;
 	QList<bssh_session *> m_intent;
 	bssh_pane_node m_tree;

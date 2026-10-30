@@ -303,6 +303,7 @@ private slots:
 
 	/* The shape saved to layout.ini, and a window restored into it (sec 8.4). */
 	void no_terminal_is_lost_however_the_panes_are_moved();
+	void a_wide_window_tiles_as_many_as_fit();
 	void tabs_down_the_side_scroll_and_read_across();
 	void a_shape_survives_being_written_down();
 

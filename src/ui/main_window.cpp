@@ -574,6 +574,9 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	m_layout->set_arrangement(chosen_arrangement().arrangement);
 
 	m_panes = new bssh_pane_container(m_layout, m_terminal_page);
+
+	/* Its size is the room a desktop's tiled panes have (queue_room). */
+	m_panes->installEventFilter(this);
 	m_panes->set_bar_factory([this](bssh_session *front, QWidget *parent) {
 		return make_pane_bar(front, parent);
 	});
@@ -700,6 +703,9 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 	connect(m_panes, &bssh_pane_container::panes_rebuilt, this, [this] {
 		on_pane_focus_changed(m_panes->focused_session());
+
+		/* What a pane can be shrunk to may have changed with its bar. */
+		queue_room();
 
 		/*
 		 * What is a pane just changed, so what is a TAB just changed
@@ -3210,7 +3216,7 @@ int bssh_main_window::drop_zone_for(bssh_session *session, bssh_session *target,
 	 */
 	const int folded = own ? BSSH_DROP_CANCEL : int(layout::EDGE_MIDDLE);
 	const bool new_pane = own || !m_layout->intent().contains(session);
-	if (new_pane && m_layout->intent().size() >= m_layout->max_panes()) return folded;
+	if (new_pane && !m_layout->room_to_split(target, edge)) return folded;
 	if (m_layout->arrangement() == layout::COLUMN
 	    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))
 		return folded;
@@ -3325,7 +3331,7 @@ int bssh_main_window::arrival_zone_for(bssh_session *target, int edge) const {
 	}
 	if (edge < layout::EDGE_LEFT || edge > layout::EDGE_MIDDLE) return BSSH_DROP_CANCEL;
 	if (edge == layout::EDGE_MIDDLE) return edge;
-	if (m_layout->intent().size() >= m_layout->max_panes()) return layout::EDGE_MIDDLE;
+	if (!m_layout->room_to_split(target, edge)) return layout::EDGE_MIDDLE;
 	if (m_layout->arrangement() == layout::COLUMN
 	    && (edge == layout::EDGE_LEFT || edge == layout::EDGE_RIGHT))
 		return layout::EDGE_MIDDLE;
@@ -4374,7 +4380,28 @@ bool bssh_main_window::eventFilter(QObject *watched, QEvent *event) {
 
 	/* Tearing a tab out and middle-click close are bssh_pane_bar's now. */
 
+	if (watched == m_panes && event->type() == QEvent::Resize) queue_room();
+
 	return QWidget::eventFilter(watched, event);
+}
+
+/*
+ * The room the tiled panes have, told to the layout (sec 8.2): how many
+ * panes a wide desktop window shows is how many fit, the rest tabs until
+ * there is room again. Queued and coalesced -- told from inside a resize
+ * or a rebuild, the rebuild it may cause would delete the frames that
+ * event is being delivered to -- and never on touch, whose window resizes
+ * on every frame of the keyboard opening.
+ */
+void bssh_main_window::queue_room() {
+	if (m_room_queued) return;
+	m_room_queued = true;
+	QTimer::singleShot(0, this, [this] {
+		m_room_queued = false;
+		if (!m_layout || !m_panes) return;
+		if (bssh_platform::instance() && bssh_platform::instance()->is_touch_primary()) return;
+		m_layout->set_room(m_panes->size(), m_panes->least_pane(), m_panes->divider());
+	});
 }
 
 /*
@@ -5548,8 +5575,7 @@ void bssh_main_window::refresh_menu_bar() {
 	 * no room, rather than doing something else instead.
 	 */
 	if (m_split_action) {
-		const bool room = m_layout
-		        && m_layout->intent().size() < m_layout->max_panes();
+		const bool room = m_layout && m_layout->room_to_split(m_current, bssh_layout_manager::EDGE_RIGHT);
 		m_split_action->setEnabled(has_session && room);
 	}
 
@@ -5757,7 +5783,7 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	QAction *split = pane_menu->addAction(QStringLiteral("Split &Beside Current"));
 	split->setObjectName(QStringLiteral("terminal_split"));
 	split->setEnabled(m_current && m_layout
-	                   && m_layout->intent().size() < m_layout->max_panes());
+	                   && m_layout->room_to_split(m_current, bssh_layout_manager::EDGE_RIGHT));
 
 	/*
 	 * The un-split, and the reason it is a menu entry as well as a
@@ -6276,9 +6302,8 @@ QMenu *bssh_main_window::build_tab_menu(bssh_session *session, QWidget *parent) 
 	 * it invites the user to conclude the feature is broken rather
 	 * than that their window is narrow.
 	 */
-	const int fits = m_layout->max_panes();
-	split->setEnabled(m_layout->intent().size() < fits &&
-	                   !m_layout->intent().contains(session));
+	split->setEnabled(m_layout->room_to_split(m_current, bssh_layout_manager::EDGE_RIGHT)
+	                   && !m_layout->intent().contains(session));
 
 	/*
 	 * Reordering, because the DRAG that does it is desktop-only and

@@ -49,8 +49,8 @@ expect = "reordering_the_panes_keeps_the_shape_they_are_in"
 [[sabotage]]
 name = "the shown tree is not cut to what fits"
 file = "src/ui/layout_manager.cpp"
-find = "\tprune(shown, [&visible](bssh_session *session) { return visible.contains(session); });"
-replace = ""
+find = "\tbssh_pane_node shown = m_tree;\n\tprune(shown, [&visible](bssh_session *session) { return visible.contains(session); });"
+replace = "\tbssh_pane_node shown = m_tree;"
 expect = "a_narrow_window_shows_the_first_panes_of_the_tree"
 
 # The edge bands swallow the whole pane, so there is no middle to swap in.

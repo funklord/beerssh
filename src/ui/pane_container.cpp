@@ -496,6 +496,18 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	return view;
 }
 
+QSize bssh_pane_container::least_pane() const {
+	QSize least;
+	for (const QWidget *frame : m_frames) {
+		if (frame) least = least.expandedTo(frame->minimumSizeHint());
+	}
+	return least;
+}
+
+int bssh_pane_container::divider() const {
+	return m_splitter->handleWidth();
+}
+
 void bssh_pane_container::rebuild() {
 	if (!m_layout) return;
 
@@ -592,6 +604,15 @@ void bssh_pane_container::rebuild() {
 
 	m_rebuilding = false;
 	if (!panes.contains(m_focused)) m_focused = panes.isEmpty() ? nullptr : panes.first();
+
+	/*
+	 * Tiled, the panes ask the window for one pane's room, not all of
+	 * theirs: the sum made a window with many panes impossible to shrink,
+	 * where the layout now turns the ones that no longer fit into tabs
+	 * (sec 8.2). A column's height is apply_column_visible's.
+	 */
+	if (!column) m_splitter->setMinimumSize(least_pane().expandedTo(QSize(1, 1)));
+	else m_splitter->setMinimumWidth(0);
 
 	apply_focus_styling();
 	apply_column_visible();
@@ -847,7 +868,8 @@ void bssh_pane_container::apply_column_visible() {
 	 * they share the viewport as they always have, so two panes held
 	 * upright are two halves and one is the whole screen.
 	 */
-	if (!column || m_column_visible <= 0 || panes <= m_column_visible) {
+	if (!column) return;
+	if (m_column_visible <= 0 || panes <= m_column_visible) {
 		m_splitter->setMinimumHeight(0);
 		return;
 	}

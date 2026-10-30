@@ -239,7 +239,62 @@ int bssh_layout_manager::max_panes() const {
 	 * width's question, and stays capped by what fits side by side.
 	 */
 	if (m_arrangement == COLUMN) return BSSH_COLUMN_PANE_LIMIT;
+	if (fit_applies()) return BSSH_TILED_PANE_LIMIT;
 	return max_panes_for(size_class());
+}
+
+bool bssh_layout_manager::fit_applies() const {
+	return m_arrangement == TILED && size_class() == EXPANDED
+	       && m_room_area.isValid() && !m_room_area.isEmpty() && m_room_least.isValid();
+}
+
+QSize bssh_layout_manager::least_size(const bssh_pane_node &node, const QSize &least_pane,
+                                      int divider) {
+	if (node.is_leaf()) return least_pane;
+	if (node.children.empty()) return QSize(0, 0);
+	const bool across = node.orientation == Qt::Horizontal;
+	int along = divider * int(node.children.size() - 1);
+	int thick = 0;
+	for (const bssh_pane_node &child : node.children) {
+		const QSize least = least_size(child, least_pane, divider);
+		along += across ? least.width() : least.height();
+		thick = qMax(thick, across ? least.height() : least.width());
+	}
+	return across ? QSize(along, thick) : QSize(thick, along);
+}
+
+bool bssh_layout_manager::fits(const bssh_pane_node &tree) const {
+	const QSize least = least_size(tree, m_room_least, m_room_divider);
+	return least.width() <= m_room_area.width() && least.height() <= m_room_area.height();
+}
+
+void bssh_layout_manager::set_room(const QSize &area, const QSize &least_pane, int divider) {
+	if (area == m_room_area && least_pane == m_room_least && divider == m_room_divider) return;
+	const QList<bssh_session *> before = visible_panes();
+	m_room_area = area;
+	m_room_least = least_pane;
+	m_room_divider = divider;
+
+	/* A rebuild only when what is shown changes: a drag of the window's
+	 * edge is a resize per pixel, and most of them fit as before. */
+	if (visible_panes() != before) emit layout_changed();
+}
+
+bool bssh_layout_manager::room_to_split(bssh_session *target, int edge) const {
+	if (m_intent.size() >= max_panes()) return false;
+	if (!fit_applies()) return true;
+
+	/* The tree as shown, with the target's pane halved at that edge. */
+	bssh_pane_node tree = visible_tree();
+	bssh_pane_node *leaf = find_pane(tree, target);
+	if (!leaf || !leaf->is_leaf()) return true;
+	bssh_pane_node half = *leaf;
+	bssh_pane_node split;
+	split.orientation = edge == EDGE_TOP || edge == EDGE_BOTTOM ? Qt::Vertical : Qt::Horizontal;
+	split.children.push_back(half);
+	split.children.push_back(half);
+	*leaf = split;
+	return fits(tree);
 }
 
 void bssh_layout_manager::set_arrangement(arrangement_t arrangement) {
@@ -515,6 +570,16 @@ QList<bssh_session *> bssh_layout_manager::visible_panes() const {
 		 * which is the whole of sec 8.2.
 		 */
 		visible.removeLast();
+	}
+
+	/* And on a desktop, the same from the end until what is left fits. */
+	if (fit_applies()) {
+		while (visible.size() > 1) {
+			bssh_pane_node shown = m_tree;
+			prune(shown, [&visible](bssh_session *session) { return visible.contains(session); });
+			if (fits(shown)) break;
+			visible.removeLast();
+		}
 	}
 	return visible;
 }

@@ -1120,6 +1120,9 @@ private:
 	void preview_bar_side(bssh_session *front, const QPoint &global);
 	void finish_bar_side(bssh_session *front, const QPoint &global);
 	bool m_bar_side_previewed = false;
+
+	void queue_room();
+	bool m_room_queued = false;
 	bssh_find_bar *m_find_bar;
 
 	/*

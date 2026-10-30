@@ -48,6 +48,15 @@ public:
 	 * rather than to the focused one (sec 6.2). */
 	const QList<bssh_terminal_view *> &views() const { return m_views; }
 
+	/*
+	 * The least a pane can be -- a terminal's 20x4 and its bar, the
+	 * largest of the panes built -- and the divider between two: the room
+	 * a tiled tree needs is these added up (bssh_layout_manager::set_room).
+	 * Invalid before any pane exists.
+	 */
+	QSize least_pane() const;
+	int divider() const;
+
 	int pane_count() const { return m_views.size(); }
 	bssh_terminal_view *view_at(int index) const;
 
