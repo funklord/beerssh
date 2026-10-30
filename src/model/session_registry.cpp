@@ -124,6 +124,12 @@ void bssh_session_registry::adopt(bssh_session *session) {
  * go without a word -- and the kept scrollback is not written, since the
  * history it would record has moved on with the session.
  */
+void bssh_session_registry::give_away(bssh_session *session) {
+	if (!session || !m_sessions.contains(session)) return;
+	emit session_given_away(session);
+	release(session);
+}
+
 void bssh_session_registry::release(bssh_session *session) {
 	if (!session || !m_sessions.contains(session)) return;
 	emit session_closing(session);

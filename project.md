@@ -9188,6 +9188,21 @@ Menu Bar under them as the way back. Seen under twin with both hidden.
 `hidden_bars_are_reached_from_the_corner`; four edits in
 `tool/sabotage/pane-corner.toml`.
 
+**A window whose last terminal goes to another process closes --
+fixed 2026-10-30.** The holder: "when moving the last terminal out of a
+process it stays". The empty-window rule spares a process's last window,
+since closing it would quit the program on a gesture about rearranging
+it; but every window is its own process now (sec 8.4), so a terminal
+dragged out of one always leaves the last window of its process -- and
+the terminal lives on in the other BeerSSH. A session given away through
+the hand-off now says so (`bssh_session_registry::give_away`, emitting
+`session_given_away` before the release), and a window left with nothing
+by that closes, which ends its process. A plain release, or a user
+closing their own last shell, still leaves it. Seen with two processes
+under twin: the source window and its process went, and the terminal
+arrived. `a_window_whose_last_session_goes_to_another_process_closes`;
+caught in `arrangement.toml`.
+
 **Also queued, the holder 2026-10-29: moving the tab bar by dragging
 it.** "I want the tab bar to have a handle so it can be drag n dropped
 to move to one of the 3 other sides. And if there is no tab bar then a

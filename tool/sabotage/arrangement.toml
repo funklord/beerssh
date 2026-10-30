@@ -92,3 +92,11 @@ file = "src/ui/main_window.cpp"
 find = "\ttake_session(session);\n\tm_layout->place(session, target, bssh_layout_manager::EDGE_MIDDLE);"
 replace = "\ttake_session(session);"
 expect = "a_drop_with_no_room_keeps_an_arrangement_it_cannot_join"
+
+# A window whose last terminal went to another BeerSSH stays, empty.
+[[sabotage]]
+name = "a window emptied by a hand-off stays"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (!m_shown.contains(session) || m_shown.size() != 1) return;\n\t\tQTimer::singleShot(0, this, [this] {\n\t\t\tif (!m_shown.isEmpty()) return;\n\t\t\tclose();\n\t\t});"
+replace = "\t\t(void) session;"
+expect = "a_window_whose_last_session_goes_to_another_process_closes"

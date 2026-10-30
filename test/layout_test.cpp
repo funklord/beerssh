@@ -4002,6 +4002,45 @@ void layout_test::the_grip_asks_for_a_drag_once_the_pointer_moves() {
  * The last window is exempt: closing it would quit the program on a
  * gesture that was about rearranging it.
  */
+void layout_test::a_window_whose_last_session_goes_to_another_process_closes() {
+	/*
+	 * The holder: "when moving the last terminal out of a process it
+	 * stays". Every window is its own process (sec 8.4), so the window a
+	 * terminal is dragged out of is the last of its process, which the
+	 * empty-window rule spares. Given to another BeerSSH, the terminal
+	 * lives on there, and this window goes.
+	 */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	{
+		bssh_main_window window;
+		window.resize(800, 500);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session *only = window.registry()->create(named(QStringLiteral("only")));
+		window.adopt_session(only);
+		QCoreApplication::processEvents();
+		QVERIFY(window.isVisible());
+
+		window.registry()->give_away(only);
+		QTRY_VERIFY2(!window.isVisible(), "a window emptied by a hand-off to another process stayed");
+	}
+
+	/* Released any other way, the last window stays, as it always has. */
+	bssh_main_window kept;
+	kept.resize(800, 500);
+	kept.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&kept));
+	bssh_session *other = kept.registry()->create(named(QStringLiteral("other")));
+	kept.adopt_session(other);
+	QCoreApplication::processEvents();
+	kept.registry()->release(other);
+	QTest::qWait(50);
+	QVERIFY2(kept.isVisible(), "a plain release closed the last window");
+	while (shared->count() > 0) shared->close(shared->at(0));
+}
+
 void layout_test::a_window_that_loses_its_last_session_closes() {
 	bssh_main_window keeper;
 	keeper.resize(900, 600);

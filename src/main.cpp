@@ -465,7 +465,7 @@ int main(int argc, char *argv[]) {
 		QString why;
 		if (!handoff->listen(&why)) qWarning("handoff: %s", qPrintable(why));
 		QObject::connect(handoff, &bssh_handoff_point::session_given,
-		                  registry, &bssh_session_registry::release);
+		                  registry, &bssh_session_registry::give_away);
 		QObject::connect(handoff, &bssh_handoff_point::offered, &app,
 		                  [](const QString &source, const QString &id, const QPoint &global) {
 			bssh_main_window::take_from_another_process(source, id, global);

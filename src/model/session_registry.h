@@ -66,6 +66,13 @@ public:
 	void adopt(bssh_session *session);
 	void release(bssh_session *session);
 
+	/*
+	 * Released because another BeerSSH took it (sec 8.4): the same as
+	 * release(), and says so first, so a window left with nothing can go
+	 * -- which a window emptied any other way must not, if it is the last.
+	 */
+	void give_away(bssh_session *session);
+
 	const QList<bssh_session *> &sessions() const { return m_sessions; }
 	int count() const { return m_sessions.size(); }
 	int live_count() const;
@@ -129,6 +136,9 @@ signals:
 	 * down the very session being handed to somebody else.
 	 */
 	void session_taken(bssh_session *session);
+
+	/* Another process has taken this session; see give_away(). */
+	void session_given_away(bssh_session *session);
 
 	/* Any add, close, title or state change -- for the tab bar and the
 	 * platform's session count. */

@@ -339,6 +339,7 @@ private slots:
 	void a_connected_keep_awake_host_holds_off_sleep();
 	void the_tab_bar_row_takes_a_drop_beyond_the_tabs();
 	void a_window_that_loses_its_last_session_closes();
+	void a_window_whose_last_session_goes_to_another_process_closes();
 	void the_pane_grip_arms_a_drag();
 	void the_grip_asks_for_a_drag_once_the_pointer_moves();
 	void the_brightness_slider_cannot_reach_unreadable();

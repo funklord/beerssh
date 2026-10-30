@@ -821,6 +821,25 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * (sec 8.4). Let go of it -- the session is untouched and is now
 	 * somebody else's to display.
 	 */
+	/*
+	 * Taken by another BeerSSH (sec 8.4): when it was the last thing this
+	 * window showed, the window goes, even as the last window of its
+	 * process. The holder: "when moving the last terminal out of a process
+	 * it stays". The rule below spares the last window because closing it
+	 * would quit the program on a gesture about rearranging it; with every
+	 * window its own process (sec 8.4), the terminal has gone on to another
+	 * BeerSSH, and what would stay is an empty window holding a process
+	 * that serves nothing. After the release, which empties the list.
+	 */
+	connect(m_registry, &bssh_session_registry::session_given_away,
+	         this, [this](bssh_session *session) {
+		if (!m_shown.contains(session) || m_shown.size() != 1) return;
+		QTimer::singleShot(0, this, [this] {
+			if (!m_shown.isEmpty()) return;
+			close();
+		});
+	});
+
 	connect(m_registry, &bssh_session_registry::session_taken,
 	         this, [this](bssh_session *session) {
 		if (!m_shown.contains(session)) return;
