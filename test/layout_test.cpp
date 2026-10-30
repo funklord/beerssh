@@ -6587,6 +6587,42 @@ void layout_test::tabs_down_the_side_scroll_and_read_across() {
 	QCoreApplication::sendEvent(bar, &wheel);
 	QVERIFY2(slider->value() > 0, "the wheel did not scroll the tabs");
 	QCOMPARE(bar->currentIndex(), current);
+
+	/*
+	 * Picking a tab far down rebuilds the panes and the bar with them; the
+	 * new list shows the tab picked, rather than starting at the top with
+	 * the current one scrolled out of sight.
+	 */
+	bssh_session *far = row->session_at(bar->count() - 2);
+	QVERIFY(far);
+	bar->setCurrentIndex(bar->count() - 2);
+	QTRY_COMPARE(window.layout_manager()->front_of(first), far);
+	QTest::qWait(50);
+	row = window.bar_for(far);
+	QVERIFY(row);
+	scroll = row->findChild<QScrollArea *>(QStringLiteral("pane-bar-scroll"));
+	QVERIFY(scroll);
+	const QRect picked = row->tab_bar()->tabRect(row->tab_bar()->currentIndex());
+	/* mapTo, from the tab bar up to its ancestor: mapFrom takes the
+	 * ancestor as its argument and reads nonsense the other way round. */
+	const QRect seen(row->tab_bar()->mapTo(scroll->viewport(), picked.topLeft()), picked.size());
+	QVERIFY2(seen.top() >= 0 && seen.bottom() <= scroll->viewport()->height(),
+	          qPrintable(QStringLiteral("the picked tab at %1,%2 is outside the %3-tall list")
+	                             .arg(seen.x()).arg(seen.y()).arg(scroll->viewport()->height())));
+
+	/* And when the list grows and shrinks again -- a keyboard opening --
+	 * the tab in front stays in sight. */
+	window.resize(900, 900);
+	QTest::qWait(50);
+	window.resize(900, 300);
+	QTest::qWait(50);
+	{
+		const QRect front = row->tab_bar()->tabRect(row->tab_bar()->currentIndex());
+		const QRect at(row->tab_bar()->mapTo(scroll->viewport(), front.topLeft()), front.size());
+		QVERIFY2(at.top() >= 0 && at.bottom() <= scroll->viewport()->height(),
+		          qPrintable(QStringLiteral("after a shrink the front tab is at %1 in a %2-tall list")
+		                             .arg(at.y()).arg(scroll->viewport()->height())));
+	}
 }
 
 void layout_test::side_tabs_take_a_tap_and_a_swipe_on_touch() {
@@ -6630,10 +6666,29 @@ void layout_test::side_tabs_take_a_tap_and_a_swipe_on_touch() {
 	QTabBar *bar = row->tab_bar();
 	QCOMPARE(bar->shape(), QTabBar::RoundedWest);
 
-	/* A tap on a tab that is not in front brings it forward. */
-	bssh_session *wanted = row->session_at(2);
+	/* Each tab at least sec 6.2's 48dp tall: the target a thumb picks. */
+	for (int i = 0; i < bar->count(); ++i)
+		QVERIFY2(bar->tabRect(i).height() >= BSSH_TOUCH_TARGET_DP,
+		          qPrintable(QStringLiteral("a side tab %1 tall").arg(bar->tabRect(i).height())));
+
+	/*
+	 * A tap on a tab that is not in front brings it forward -- one on
+	 * screen, since the list opens on the tab in front, the last.
+	 */
+	QScrollArea *list = row->findChild<QScrollArea *>(QStringLiteral("pane-bar-scroll"));
+	QVERIFY(list);
+	int shown = -1;
+	for (int i = bar->count() - 2; i >= 0; --i) {
+		const QPoint at = bar->mapTo(list->viewport(), bar->tabRect(i).center());
+		if (list->viewport()->rect().contains(at)) {
+			shown = i;
+			break;
+		}
+	}
+	QVERIFY2(shown >= 0, "no tab but the front one is on screen");
+	bssh_session *wanted = row->session_at(shown);
 	QVERIFY(wanted && wanted != window.layout_manager()->front_of(first));
-	const QPoint on_tab = bar->tabRect(2).center();
+	const QPoint on_tab = bar->tabRect(shown).center();
 	QTest::mousePress(bar, Qt::LeftButton, Qt::NoModifier, on_tab);
 	QTest::qWait(20);
 	QTest::mouseRelease(bar, Qt::LeftButton, Qt::NoModifier, on_tab);
@@ -6656,6 +6711,49 @@ void layout_test::side_tabs_take_a_tap_and_a_swipe_on_touch() {
 	}
 	QTest::mouseRelease(viewport, Qt::LeftButton, Qt::NoModifier, low - QPoint(0, 240));
 	QTRY_VERIFY2(scroll->verticalScrollBar()->value() > 0, "a swipe up the side tabs did not scroll them");
+
+	/* A swipe that starts ON a tab scrolls and picks nothing. */
+	{
+		bssh_session *front = window.layout_manager()->front_of(first);
+		scroll->verticalScrollBar()->setValue(scroll->verticalScrollBar()->maximum());
+		QCoreApplication::processEvents();
+		int on = -1;
+		for (int i = bar->count() - 1; i >= 0; --i) {
+			const QPoint at = bar->mapTo(scroll->viewport(), bar->tabRect(i).center());
+			if (scroll->viewport()->rect().contains(at) && row->session_at(i) != front) {
+				on = i;
+				break;
+			}
+		}
+		QVERIFY(on >= 0);
+		const int before = scroll->verticalScrollBar()->value();
+		const QPoint from = bar->tabRect(on).center();
+		QTest::mousePress(bar, Qt::LeftButton, Qt::NoModifier, from);
+		for (int step = 1; step <= 10; ++step) {
+			const QPoint to = from + QPoint(0, step * 20);
+			QMouseEvent move(QEvent::MouseMove, to, bar->mapToGlobal(to), Qt::NoButton, Qt::LeftButton,
+			                 Qt::NoModifier);
+			QCoreApplication::sendEvent(bar, &move);
+		}
+		QTest::mouseRelease(bar, Qt::LeftButton, Qt::NoModifier, from + QPoint(0, 200));
+		QTest::qWait(50);
+		QVERIFY2(scroll->verticalScrollBar()->value() < before, "a swipe down from a tab did not scroll");
+		QCOMPARE(window.layout_manager()->front_of(first), front);
+		/* And the bar still marks the tab in front, not the one the
+		 * swipe began on. */
+		QCOMPARE(row->session_at(bar->currentIndex()), front);
+	}
+
+	/* Along the top, the bar is as thick as a thumb needs too. */
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+	window.apply_device_settings();
+	QCoreApplication::processEvents();
+	row = bar_now();
+	QVERIFY(row && row->isVisible());
+	bar = row->tab_bar();
+	QCOMPARE(bar->shape(), QTabBar::RoundedNorth);
+	QVERIFY2(bar->tabRect(0).height() >= BSSH_TOUCH_TARGET_DP,
+	          qPrintable(QStringLiteral("a top tab %1 tall").arg(bar->tabRect(0).height())));
 }
 
 void layout_test::a_shape_survives_being_written_down() {

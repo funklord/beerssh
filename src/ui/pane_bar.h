@@ -81,6 +81,9 @@ private:
 	/* Down the side: wide enough for the tabs and the scrollbar. */
 	void fit_side();
 
+	/* Down the side on touch: a thumb drags the list (sec 8.7a). */
+	bool scroll_by_touch(QObject *watched, QEvent *event);
+
 	bssh_session *m_front;
 	QTabBar *m_bar;
 
@@ -100,10 +103,17 @@ private:
 	QWidget *m_handle;
 	bssh_long_press *m_long_press;
 
-	/* Only down the side (sec 8.7a): the tabs' scroll area, and the
-	 * style that writes their labels across. */
+	/* Down the side (sec 8.7a): the tabs' scroll area. And the style that
+	 * writes a side bar's labels across and gives a touch bar's tabs their
+	 * 48dp, where either applies. */
 	QScrollArea *m_scroll = nullptr;
-	QProxyStyle *m_side_style = nullptr;
+	bool m_scrolled_by_hand = false;
+	bool m_touch = false;
+	bool m_dragging = false;
+	QPoint m_drag_from;
+	int m_drag_value = 0;
+	int m_drag_front = -1;
+	QProxyStyle *m_tab_style = nullptr;
 };
 
 #endif /* BSSH_PANE_BAR_H */

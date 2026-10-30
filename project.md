@@ -9368,10 +9368,33 @@ tab bar there in addition to the other drop zones we already have."
   twin: fifteen tabs down the left, the window 736x456 before and
   after, the list scrolled by the wheel.
   `tabs_down_the_side_scroll_and_read_across`; three edits in
-  `tab-position.toml`. On touch, where a tablet or an unfolded Fold tiles,
-  a tap still picks a tab through the scroller and a swipe scrolls the
-  list: `side_tabs_take_a_tap_and_a_swipe_on_touch`, and a fourth edit
-  there removing the scroller is caught.
+  `tab-position.toml`.
+- **On touch, 2026-10-30** -- a tablet or an unfolded Fold tiles, so its
+  panes have bars. Seen on the emulator at 2400x1800 and 2400x1100,
+  density 240, with twelve local shells down the left:
+  - **every tab is 48dp tall** (sec 6.2's floor), side or top: at the
+    style's own height a tab was about 27dp, the target a thumb picks a
+    terminal with left off the list. The "+" is 48dp too;
+  - **a thumb drags the list**, and a swipe that starts on a tab scrolls
+    without picking it -- the press's pick is undone and the bar goes on
+    marking the tab in front. Not QScroller, which did it first: each
+    grab leaves Qt a 16-byte gesture recognizer it never frees -- a
+    standalone program measured 100 leaks for 100 grabs, ungrabbed first
+    or not -- and a touch bar is rebuilt with every pick and every change
+    of layout, so it was a leak that grew with use. Twenty lines of
+    press, move and release replace it, with no fling. **The suite's own
+    leak is not this one and is still there:** LeakSanitizer reports
+    about 1270 of these recognizers with or without the bar's grab,
+    because the host list, the editors and the licences view each grab
+    once per window and the suite builds hundreds of windows. One per
+    window in the app, so left as it is;
+  - **the tab in front stays in view** whenever the list changes size --
+    rebuilt by a pick, or shrunk by a keyboard coming up -- until it is
+    scrolled by hand. A tab picked far down used to come back scrolled
+    out of sight.
+  `side_tabs_take_a_tap_and_a_swipe_on_touch` and the rest of
+  `tabs_down_the_side_scroll_and_read_across`; six more edits in
+  `tab-position.toml`, all caught.
 
 **Terminals that vanished from a split -- fixed 2026-10-30.** The
 holder: "There are many bugs when creating and moving around tiled
@@ -9406,7 +9429,15 @@ recur in three runs without the fix, in a run forced to fail at step 1,
 in forty seeds with the fix, or in the full suite. The handler names the
 function given on the command line, and every class after
 `layout_test` runs under that name too, so it is not even known that the
-crash was in this test. Unexplained rather than attributed.
+crash was in this test. Unexplained rather than attributed. Since: forty
+seeds under ASan and UBSan, with the drag releases, the side steps and
+every width, ran clean. Two things to know before running the walk
+there. QtTest kills a function past five minutes, which forty seeds
+under ASan are, so `QTEST_FUNCTION_TIMEOUT` needs raising. And after that
+abort QtTest's fatal-signal handler reported the signal two million
+times in a loop under the sanitizer runtime until `BSSH_TEST_MAX_OUTPUT`
+stopped it at 270 MB -- the cap doing its job, and the reason not to
+lift it with `-maxwarnings 0` as one run here did.
 
 **Open: "tabs moved out don't disappear from the tab" (the holder,
 2026-10-30) -- not reproduced.** Tried under twin with three tabs: torn

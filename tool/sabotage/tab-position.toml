@@ -55,6 +55,50 @@ expect = "tabs_down_the_side_scroll_and_read_across"
 [[sabotage]]
 name = "a thumb cannot scroll the side tabs"
 file = "src/ui/pane_bar.cpp"
-find = "\t\tif (!pointer) QScroller::grabGesture(m_scroll->viewport(), QScroller::LeftMouseButtonGesture);\n"
+find = "\t\tif (m_dragging) m_scroll->verticalScrollBar()->setValue(m_drag_value - along);\n"
 replace = ""
 expect = "side_tabs_take_a_tap_and_a_swipe_on_touch"
+
+# Side tabs at the style's own height on touch: about 27dp, short of the
+# 48dp a thumb needs (sec 6.2).
+[[sabotage]]
+name = "side tabs are short on touch"
+file = "src/ui/pane_bar.cpp"
+find = "new pane_tab_style(true, pointer ? 0 : BSSH_TOUCH_TARGET_DP)"
+replace = "new pane_tab_style(true, 0)"
+expect = "side_tabs_take_a_tap_and_a_swipe_on_touch"
+
+# The same along the top.
+[[sabotage]]
+name = "top tabs are short on touch"
+file = "src/ui/pane_bar.cpp"
+find = "new pane_tab_style(false, BSSH_TOUCH_TARGET_DP)"
+replace = "new pane_tab_style(false, 0)"
+expect = "side_tabs_take_a_tap_and_a_swipe_on_touch"
+
+# A rebuilt side list left at its top: a tab picked far down comes back
+# scrolled out of sight.
+[[sabotage]]
+name = "a side list opens away from its front tab"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\tm_scroll->ensureVisible(centre.x(), centre.y(), 0, front.height() / 2 + 1);\n"
+replace = "\t\t\t(void) centre;\n"
+expect = "tabs_down_the_side_scroll_and_read_across"
+
+# A swipe that starts on a tab leaves the bar marking it: the press's pick is not
+# undone when the finger turns out to be scrolling.
+[[sabotage]]
+name = "a swipe from a side tab marks it"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\tif (m_bar->currentIndex() != m_drag_front) m_bar->setCurrentIndex(m_drag_front);\n\t\t\tm_pending.clear();\n"
+replace = ""
+expect = "side_tabs_take_a_tap_and_a_swipe_on_touch"
+
+# The front tab brought into view only once, at the list's first size: a
+# list that shrinks later -- the keyboard coming up -- loses it.
+[[sabotage]]
+name = "a side list keeps its front tab in view only once"
+file = "src/ui/pane_bar.cpp"
+find = "\t    && !m_scrolled_by_hand) {\n"
+replace = "\t    && !m_scrolled_by_hand) {\n\t\tm_scrolled_by_hand = true;\n"
+expect = "tabs_down_the_side_scroll_and_read_across"

@@ -8,7 +8,6 @@
 #include <QProxyStyle>
 #include <QScrollArea>
 #include <QScrollBar>
-#include <QScroller>
 #include <QStyleOptionTab>
 #include <QTabBar>
 #include <QToolButton>
@@ -16,6 +15,7 @@
 #include "model/session.h"
 #include "ui/long_press.h"
 #include "ui/tab_status.h"
+#include "ui/touch_metrics.h"
 
 Qt::Edge bssh_bar_side_at(const QPoint &at, const QSize &area) {
 	if (area.width() <= 0 || area.height() <= 0) return Qt::TopEdge;
@@ -123,24 +123,37 @@ namespace {
  * gives it: across, the label and its close button where they sit on a
  * bar along the top. A tab is as wide as its title up to WIDEST_CHARS,
  * and elided past that.
+ *
+ * And on touch every tab is at least sec 6.2's 48dp tall, whichever side
+ * the bar is on: a tab is what a thumb picks a terminal with, and at the
+ * style's own height it was about 27dp -- left off the list, as the
+ * preset editor's Import and Export once were. Down the side that is a
+ * row's height, along the top or bottom the bar's thickness; either way
+ * the axis a finger has to land within.
  */
-class sideways_tabs : public QProxyStyle {
+class pane_tab_style : public QProxyStyle {
 public:
 	static const int WIDEST_CHARS = 24;
+
+	pane_tab_style(bool sideways, int least_height)
+	    : m_sideways(sideways), m_least_height(least_height) {}
 
 	QSize sizeFromContents(ContentsType type, const QStyleOption *option,
 	                       const QSize &size, const QWidget *widget) const override {
 		QSize out = QProxyStyle::sizeFromContents(type, option, size, widget);
 		if (type != CT_TabBarTab) return out;
-		out.transpose();
-		out.setWidth(qMin(out.width(), option->fontMetrics.averageCharWidth() * WIDEST_CHARS));
+		if (m_sideways) {
+			out.transpose();
+			out.setWidth(qMin(out.width(), option->fontMetrics.averageCharWidth() * WIDEST_CHARS));
+		}
+		out.setHeight(qMax(out.height(), m_least_height));
 		return out;
 	}
 
 	void drawControl(ControlElement element, const QStyleOption *option,
 	                 QPainter *painter, const QWidget *widget) const override {
 		const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option);
-		if (element == CE_TabBarTabLabel && tab) {
+		if (m_sideways && element == CE_TabBarTabLabel && tab) {
 			QStyleOptionTab across(*tab);
 			across.shape = QTabBar::RoundedNorth;
 			QProxyStyle::drawControl(element, &across, painter, widget);
@@ -152,14 +165,18 @@ public:
 	QRect subElementRect(SubElement element, const QStyleOption *option,
 	                     const QWidget *widget) const override {
 		const QStyleOptionTab *tab = qstyleoption_cast<const QStyleOptionTab *>(option);
-		if (tab && (element == SE_TabBarTabText || element == SE_TabBarTabLeftButton
-		            || element == SE_TabBarTabRightButton)) {
+		if (m_sideways && tab && (element == SE_TabBarTabText || element == SE_TabBarTabLeftButton
+		                          || element == SE_TabBarTabRightButton)) {
 			QStyleOptionTab across(*tab);
 			across.shape = QTabBar::RoundedNorth;
 			return QProxyStyle::subElementRect(element, &across, widget);
 		}
 		return QProxyStyle::subElementRect(element, option, widget);
 	}
+
+private:
+	bool m_sideways;
+	int m_least_height;
 };
 
 /*
@@ -242,9 +259,9 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 		 * go in the order they came, so the bar is gone before the style
 		 * it paints with is.
 		 */
-		m_side_style = new sideways_tabs;
-		m_side_style->setParent(list);
-		m_bar->setStyle(m_side_style);
+		m_tab_style = new pane_tab_style(true, pointer ? 0 : BSSH_TOUCH_TARGET_DP);
+		m_tab_style->setParent(list);
+		m_bar->setStyle(m_tab_style);
 		m_bar->setUsesScrollButtons(false);
 
 		m_scroll = new QScrollArea(this);
@@ -253,14 +270,33 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 		m_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 		m_scroll->setWidgetResizable(true);
 		m_scroll->setWidget(list);
-		if (!pointer) QScroller::grabGesture(m_scroll->viewport(), QScroller::LeftMouseButtonGesture);
+		/*
+		 * A thumb drags the list (scroll_by_touch). Not QScroller, which
+		 * did it first: every grab registers a gesture recognizer Qt
+		 * never frees -- 16 bytes per bar, and the bar is rebuilt with
+		 * every change of layout -- measured on its own, 100 grabs and
+		 * 100 leaks, ungrabbed first or not.
+		 */
+		m_touch = !pointer;
+		m_scroll->viewport()->installEventFilter(this);
+		connect(m_scroll->verticalScrollBar(), &QAbstractSlider::actionTriggered, this,
+		        [this] { m_scrolled_by_hand = true; });
 		row->addWidget(m_scroll, 1);
 		fit_side();
 	} else {
 		row->addWidget(m_bar, 0);
 		row->addWidget(m_add, 0);
 		row->addStretch(1);
+
+		/* Along the top or bottom, the touch floor alone; owned after the
+		 * bar for the same reason as above. */
+		if (!pointer) {
+			m_tab_style = new pane_tab_style(false, BSSH_TOUCH_TARGET_DP);
+			m_tab_style->setParent(this);
+			m_bar->setStyle(m_tab_style);
+		}
 	}
+	if (!pointer) m_add->setMinimumSize(BSSH_TOUCH_TARGET_DP, BSSH_TOUCH_TARGET_DP);
 
 	connect(m_add, &QToolButton::clicked, this, &bssh_pane_bar::new_tab_requested);
 	connect(m_bar, &QTabBar::currentChanged, this, [this](int index) {
@@ -340,7 +376,73 @@ void bssh_pane_bar::fit_side() {
 	m_scroll->setFixedWidth(wide + m_scroll->verticalScrollBar()->sizeHint().width());
 }
 
+/*
+ * A thumb dragging the side list, on the tabs or the space below them.
+ * The press goes on to the tab bar as ever -- a tap still picks, a hold
+ * still opens the menu -- and once the finger has gone further than a
+ * hold's slop it is a scroll: the pick the press began is undone, and the
+ * rest of the gesture moves the list. Moves are never swallowed, so the
+ * long press sees the finger leave and stands down; the release of a
+ * scroll is, so it picks nothing.
+ */
+bool bssh_pane_bar::scroll_by_touch(QObject *watched, QEvent *event) {
+	if (!m_touch || !m_scroll || (watched != m_bar && watched != m_scroll->viewport())) return false;
+	const QEvent::Type type = event->type();
+	if (type != QEvent::MouseButtonPress && type != QEvent::MouseMove
+	    && type != QEvent::MouseButtonRelease)
+		return false;
+	const QMouseEvent *mouse = static_cast<QMouseEvent *>(event);
+
+	if (type == QEvent::MouseButtonPress && mouse->button() == Qt::LeftButton) {
+		m_drag_from = mouse->globalPosition().toPoint();
+		m_drag_value = m_scroll->verticalScrollBar()->value();
+		m_drag_front = m_bar->currentIndex();
+		m_dragging = false;
+		return false;
+	}
+	if (type == QEvent::MouseMove && mouse->buttons().testFlag(Qt::LeftButton)) {
+		const int along = mouse->globalPosition().toPoint().y() - m_drag_from.y();
+		if (!m_dragging && qAbs(along) > 2 * QApplication::startDragDistance()) {
+			m_dragging = true;
+			m_scrolled_by_hand = true;
+			if (m_bar->currentIndex() != m_drag_front) m_bar->setCurrentIndex(m_drag_front);
+			m_pending.clear();
+		}
+		if (m_dragging) m_scroll->verticalScrollBar()->setValue(m_drag_value - along);
+		return false;
+	}
+	if (type == QEvent::MouseButtonRelease && m_dragging) {
+		m_dragging = false;
+		m_pressed = false;
+		m_pending.clear();
+		return true;
+	}
+	return false;
+}
+
 bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
+	if (scroll_by_touch(watched, event)) return true;
+
+	/*
+	 * The tab in front kept in view whenever the list changes size. A pick
+	 * rebuilds the panes and this bar with them, and a new list starts at
+	 * the top -- so a tab picked far down came back scrolled out of sight,
+	 * the one tab the user had just chosen; and a list that shrinks -- the
+	 * keyboard coming up -- can lose it the same way. Until the list is
+	 * scrolled by hand, which then stays where it was put. Queued, because
+	 * the viewport hears of its size before the scroll area has laid the
+	 * list out in it, and scrolling then works from the old range.
+	 */
+	if (m_scroll && watched == m_scroll->viewport() && event->type() == QEvent::Resize
+	    && !m_scrolled_by_hand) {
+		QMetaObject::invokeMethod(this, [this] {
+			const QRect front = m_bar->tabRect(m_bar->currentIndex());
+			if (!front.isValid()) return;
+			const QPoint centre = m_bar->mapTo(m_scroll->widget(), front.center());
+			m_scroll->ensureVisible(centre.x(), centre.y(), 0, front.height() / 2 + 1);
+		}, Qt::QueuedConnection);
+		return false;
+	}
 	if (watched != m_bar) return QWidget::eventFilter(watched, event);
 	const QEvent::Type type = event->type();
 
@@ -350,6 +452,7 @@ bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
 	 * a different terminal forward under a pointer that meant to look.
 	 */
 	if (type == QEvent::Wheel && m_scroll) {
+		m_scrolled_by_hand = true;
 		QCoreApplication::sendEvent(m_scroll->verticalScrollBar(), event);
 		return true;
 	}
