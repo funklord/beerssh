@@ -148,6 +148,7 @@ private:
 	int m_master;
 	/* The copy under way, asked to stop between pieces. */
 	std::shared_ptr<std::atomic<bool>> m_copy_stop;
+	bool m_copying = false;
 	qint64 m_child;
 	QSocketNotifier *m_notifier;
 

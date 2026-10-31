@@ -55,3 +55,12 @@ file = "src/ssh/ssh_session_libssh.cpp"
 find = "\tif (m_upload) {\n\t\twhy = QStringLiteral(\"a copy is still running"
 replace = "\tif (false) {\n\t\twhy = QStringLiteral(\"a copy is still running"
 expect = "a_session_copying_a_file_is_not_moved_to_another_process"
+
+# The local shell moved with its copy still running on a thread of this
+# process, which may end once it has given the session away.
+[[sabotage]]
+name = "a local session is moved with a copy running"
+file = "src/ssh/pty_session.cpp"
+find = "\tif (m_copying) {\n"
+replace = "\tif (false) {\n"
+expect = "a_local_session_copying_a_file_is_not_moved"

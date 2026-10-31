@@ -887,6 +887,40 @@ void pty_session_test::a_local_copy_can_be_stopped() {
 	QVERIFY2(!QFileInfo::exists(into.filePath(QStringLiteral("big.bin"))), "a stopped copy left its file");
 }
 
+void pty_session_test::a_local_session_copying_a_file_is_not_moved() {
+	/*
+	 * The copy's end is reported on this thread, a turn after it is done,
+	 * so straight after upload() it is still under way whatever the
+	 * machine's speed: the move is refused, naming it, and allowed once
+	 * the copy has reported.
+	 */
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	{
+		QFile file(from.filePath(QStringLiteral("a.txt")));
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write("a");
+	}
+	bssh_pty_session session;
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(80, 24);
+	QTest::qWait(200);
+
+	QSignalSpy done(&session, &bssh_ssh_session::upload_finished);
+	session.upload({ from.filePath(QStringLiteral("a.txt")) }, into.path());
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	QVERIFY2(!session.export_transport(state, fds, &why), "moved with a copy running");
+	QVERIFY2(why.contains(QStringLiteral("copy")), qPrintable(why));
+
+	QVERIFY(done.wait(10000));
+	QVERIFY2(session.export_transport(state, fds, &why), qPrintable(why));
+	session.resume_transport();
+	session.disconnect_from_host();
+}
+
 void pty_session_test::a_restarted_shell_is_replaced_without_an_exit() {
 	/*
 	 * How a tab switches to another tmux or screen session (sec 10.2a):

@@ -564,6 +564,7 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 	const QPointer<bssh_pty_session> guard(this);
 	auto stop = std::make_shared<std::atomic<bool>>(false);
 	m_copy_stop = stop;
+	m_copying = true;
 	QThread *copier = QThread::create([guard, paths, directory, stop] {
 		QStringList written;
 		QString why;
@@ -579,7 +580,9 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 		}, [stop] { return stop->load(); });
 		const QString into = directory.isEmpty() ? QDir::homePath() : directory;
 		QMetaObject::invokeMethod(qApp, [guard, ok, into, written, why] {
-			if (guard) emit guard->upload_finished(ok, into, written, why);
+			if (!guard) return;
+			guard->m_copying = false;
+			emit guard->upload_finished(ok, into, written, why);
 		}, Qt::QueuedConnection);
 	});
 	QObject::connect(copier, &QThread::finished, copier, &QObject::deleteLater);
@@ -635,6 +638,17 @@ QString bssh_pty_session::kind() const {
 bool bssh_pty_session::export_transport(QByteArray &state, QList<int> &fds, QString *why) {
 	if (m_master < 0) {
 		if (why) *why = QStringLiteral("the shell is not running");
+		return false;
+	}
+	/*
+	 * Not while a dropped file is being copied (sec 6.4): the copy reports
+	 * to this object, which goes with the move, and runs on a thread of
+	 * this process, which may end once it has given its sessions away --
+	 * half a file left behind, and nobody told. As the SSH transport
+	 * refuses for its SFTP copy.
+	 */
+	if (m_copying) {
+		if (why) *why = QStringLiteral("a copy is still running; stop it or let it finish");
 		return false;
 	}
 	if (m_notifier) m_notifier->setEnabled(false);
