@@ -517,6 +517,18 @@ bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
 					m_pressed = false;
 					m_pending.clear();
 					m_moved.clear();
+					/*
+					 * And QTabBar told the press is over. The drag takes the
+					 * pointer from here, so the bar never sees the button
+					 * come up, and a tab it had begun moving along the row
+					 * stayed drawn where the pointer left it -- over the "+",
+					 * half a tab, for as long as nothing rebuilt the bar (seen
+					 * 2026-10-31, after a tab dropped back on its own pane).
+					 */
+					QMouseEvent up(QEvent::MouseButtonRelease, mouse->position(),
+					               mouse->globalPosition(), Qt::LeftButton, Qt::NoButton,
+					               mouse->modifiers());
+					QCoreApplication::sendEvent(m_bar, &up);
 					m_bar->releaseMouse();
 					emit drag_requested(session);
 					return true;

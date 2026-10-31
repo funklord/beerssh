@@ -6270,6 +6270,14 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 				bssh_terminal_view *view = window.panes()->view_for(front);
 				if (!view || !view->isVisible())
 					return QStringLiteral("%1 has no view on screen").arg(name(front));
+				/* Showing its own terminal, and its bar saying so: a pane
+				 * drawing one terminal under another's tab is the broken
+				 * state a later move out of it loses a terminal from. */
+				if (view->screen() != &front->emulator()->screen())
+					return QStringLiteral("%1's pane draws another terminal").arg(name(front));
+				if (bssh_pane_bar *shown = window.bar_for(front); shown && shown->isVisible()
+				    && shown->tab_bar()->currentIndex() != shown->sessions().indexOf(front))
+					return QStringLiteral("%1's bar has another tab current").arg(name(front));
 				const QList<bssh_session *> tabs = layout->bar_tabs(front);
 				bssh_pane_bar *bar = window.bar_for(front);
 				if (tabs.size() > 1 && (!bar || !bar->isVisible() || bar->sessions() != tabs))
@@ -6320,7 +6328,18 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 			QString did;
 			const bool trace = qEnvironmentVariableIsSet("BSSH_WALK_TRACE");
 			if (trace) fprintf(stderr, "walk: seed %d step %d\n", seed, step);
-			switch (random.bounded(14)) {
+			switch (random.bounded(15)) {
+			case 14: {
+				/* A tab dragged along its own bar, as QTabBar moves it. */
+				bssh_pane_bar *bar = window.bar_for(target);
+				if (!bar || !bar->isVisible() || bar->tab_bar()->count() < 2) continue;
+				const int count = bar->tab_bar()->count();
+				const int from = int(random.bounded(quint32(count)));
+				const int to = int(random.bounded(quint32(count)));
+				did = QStringLiteral("slide tab %1 to %2 in %3's bar").arg(from).arg(to).arg(name(target));
+				bar->tab_bar()->moveTab(from, to);
+				break;
+			}
 			case 0: {
 				bssh_session *fresh = make();
 				window.adopt_session(fresh);
@@ -14780,4 +14799,206 @@ void layout_test::switching_tabs_in_one_pane_leaves_the_others_alone() {
 		QVERIFY2(hints == 0 && window.minimumSizeHint() == least,
 		         where + ": the window's size limits moved, which a window manager may redraw it for");
 	}
+}
+
+void layout_test::a_tab_dropped_on_its_own_pane_stays() {
+	/*
+	 * The holder, 2026-10-31: "I now took one tab dropped it on the
+	 * terminal itself and it disappeared". A tab dragged out of a pane's
+	 * bar and released over that same pane's terminal, at its middle and
+	 * near each edge: wherever it lands, it is still in the window.
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+
+	const QList<QPointF> spots = { { 0.5, 0.5 }, { 0.05, 0.5 }, { 0.95, 0.5 }, { 0.5, 0.05 }, { 0.5, 0.95 } };
+	for (int panes = 1; panes <= 2; ++panes) {
+		for (const QPointF &spot : spots) {
+			bssh_session_registry *shared = bssh_session_registry::shared();
+			while (shared->count() > 0) shared->close(shared->at(0));
+			const registry_left_as_found_t tidy(shared);
+
+			/* Inside the offscreen screen (800x600), or a point near the
+			 * right edge is past it and reads as a tear-out. */
+			bssh_main_window window;
+			window.resize(760, 560);
+			window.show();
+			QVERIFY(QTest::qWaitForWindowExposed(&window));
+			bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+			window.adopt_session(a);
+			if (panes == 2) {
+				bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+				window.drop_session_on(b, a, bssh_layout_manager::EDGE_RIGHT);
+			}
+			bssh_session *t = window.registry()->create(named(QStringLiteral("t")));
+			window.drop_session_as_tab(t, a, -1);
+			bssh_session *u = window.registry()->create(named(QStringLiteral("u")));
+			window.drop_session_as_tab(u, a, -1);
+			window.layout_manager()->bring_to_front(a);
+			QTest::qWait(100);
+
+			/* t, a tab behind a, released over a's terminal. */
+			bssh_terminal_view *view = window.panes()->view_for(a);
+			QVERIFY(view);
+			const QPoint at(int(view->width() * spot.x()), int(view->height() * spot.y()));
+			window.set_session_drag_active(true);
+			QCoreApplication::processEvents();
+			window.finish_session_drag(t, view->mapToGlobal(at));
+			window.set_session_drag_active(false);
+			QTest::qWait(100);
+
+			const QByteArray where = QByteArray::number(panes) + " pane(s), released at "
+			        + QByteArray::number(spot.x()) + "," + QByteArray::number(spot.y());
+			bssh_layout_manager *layout = window.layout_manager();
+			QVERIFY2(window.registry()->sessions().contains(t), where + ": t was closed");
+			QVERIFY2(layout->sessions().contains(t), where + ": t is in no pane and no tab");
+			bool reached = layout->visible_panes().contains(t);
+			for (bssh_session *front : layout->visible_panes()) {
+				if (bssh_pane_bar *bar = window.bar_for(front); bar && bar->isVisible())
+					reached = reached || bar->sessions().contains(t);
+			}
+			QVERIFY2(reached, where + ": t is neither shown nor a tab on screen");
+			for (bssh_session *each : { a, t, u }) {
+				bool somewhere = layout->visible_panes().contains(each);
+				for (bssh_session *front : layout->visible_panes())
+					somewhere = somewhere || layout->bar_tabs(front).contains(each);
+				QVERIFY2(somewhere, where + ": a terminal was lost: " + each->title().toUtf8());
+			}
+		}
+	}
+}
+
+void layout_test::splitting_a_pane_keeps_what_its_terminals_show() {
+	/*
+	 * Seen driving the desktop build with a real pointer on 2026-10-31: a
+	 * tab dropped on its own pane's bottom edge, with a pane beside it,
+	 * split the pane, and both halves came up showing only a prompt -- the
+	 * lines above gone, and not in the scrollback. Qt laid the new nested
+	 * split out at a pane's minimum width first, the shell was told 20
+	 * columns and then 64, and bash, redrawing a prompt that had wrapped
+	 * at 20, moved up past it and cleared what was above. Reproduced with
+	 * real shells; held here as what makes it impossible: the remote is
+	 * told the size each terminal settles at and nothing on the way, and
+	 * what the screen showed is still there.
+	 */
+	const forced_touch_t desktop(0);
+	const bssh_factory_reset_t factory_reset;
+	QHash<QString, bssh_fake_ssh_session *> fakes;
+	QString naming;
+	bssh_ssh_session::set_factory([&fakes, &naming](QObject *parent) -> bssh_ssh_session * {
+		auto *fake = new bssh_fake_ssh_session(parent);
+		fakes.insert(naming, fake);
+		return fake;
+	});
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	/* Alone, and with a pane beside it, where the split is a nested one. */
+	for (int beside = 0; beside <= 1; ++beside) {
+		fakes.clear();
+		bssh_main_window window;
+		window.resize(1200, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		const auto make = [&](const QString &name) {
+			naming = name;
+			bssh_session *session = window.registry()->create(named(name));
+			session->connect_to_host();
+			return session;
+		};
+		bssh_session *a = make(QStringLiteral("a"));
+		window.adopt_session(a);
+		if (beside) window.drop_session_on(make(QStringLiteral("b")), a, bssh_layout_manager::EDGE_RIGHT);
+		bssh_session *t = make(QStringLiteral("t"));
+		window.drop_session_as_tab(t, a, -1);
+		window.layout_manager()->bring_to_front(a);
+		QTest::qWait(200);
+		a->emulator()->feed(QByteArrayLiteral("line-A1\r\nline-A2\r\nprompt-a$ "));
+		t->emulator()->feed(QByteArrayLiteral("line-T1\r\nline-T2\r\nprompt-t$ "));
+		QHash<QString, int> told_before;
+		for (auto it = fakes.cbegin(); it != fakes.cend(); ++it)
+			told_before.insert(it.key(), int(it.value()->sizes_told().size()));
+
+		window.drop_session_on(t, a, bssh_layout_manager::EDGE_BOTTOM);
+		QTest::qWait(300);
+
+		QVERIFY2(window.layout_manager()->visible_panes().size() == 2 + beside, "the drop did not split");
+		for (bssh_session *each : { a, t }) {
+			const QString name = each == a ? QStringLiteral("a") : QStringLiteral("t");
+			bssh_fake_ssh_session *fake = fakes.value(name);
+			QVERIFY(fake);
+			const QList<QSize> told = fake->sizes_told().mid(told_before.value(name));
+			bssh_terminal_view *view = window.panes()->view_for(each);
+			QVERIFY(view);
+			const QSize settled(view->cols(), view->rows());
+			QString seen;
+			for (const QSize &size : told) seen += QStringLiteral(" %1x%2").arg(size.width()).arg(size.height());
+			QVERIFY2(told.size() <= 1 && (told.isEmpty() || told.last() == settled),
+			         qPrintable(QStringLiteral("%1 (%2 pane beside) told the remote%3, settling at %4x%5")
+			                    .arg(name).arg(beside).arg(seen).arg(settled.width()).arg(settled.height())));
+			const QString want = each == a ? QStringLiteral("line-A1") : QStringLiteral("line-T1");
+			QVERIFY2(each->emulator()->screen().to_text().contains(want),
+			         qPrintable(QStringLiteral("%1 lost its lines in the split").arg(name)));
+		}
+	}
+}
+
+void layout_test::a_bar_a_tab_was_torn_from_is_left_drawn_as_it_is() {
+	/*
+	 * Driving the desktop build with a real pointer on 2026-10-31: a tab
+	 * slid along its bar and on out of it, then dropped back on its own
+	 * pane, left the bar drawing it half way along the row, over the "+",
+	 * until something rebuilt the bar -- QTabBar was mid-move when the
+	 * drag took the pointer, and never heard the button come up. The bar
+	 * afterwards is drawn exactly as a bar built fresh with the same tabs.
+	 */
+	bssh_session_registry registry;
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+
+	const auto host_with = [&](QWidget &host) {
+		QVBoxLayout *column = new QVBoxLayout(&host);
+		bssh_pane_bar *row = new bssh_pane_bar(c, { a, b, c }, Qt::TopEdge, true, &host);
+		column->addWidget(row);
+		column->addStretch(1);
+		host.resize(600, 300);
+		host.show();
+		return row;
+	};
+	QWidget host;
+	bssh_pane_bar *row = host_with(host);
+	QVERIFY(QTest::qWaitForWindowExposed(&host));
+	QTabBar *bar = row->tab_bar();
+	QSignalSpy dragged(row, &bssh_pane_bar::drag_requested);
+
+	const auto send = [bar](QEvent::Type type, const QPoint &at, Qt::MouseButton button,
+	                        Qt::MouseButtons held) {
+		QMouseEvent event(type, at, bar->mapToGlobal(at), button, held, Qt::NoModifier);
+		QApplication::sendEvent(bar, &event);
+	};
+	/* Pressed on the last tab, slid along the row so QTabBar starts moving
+	 * it, then pulled down until it leaves. */
+	const QPoint on_c = bar->tabRect(2).center();
+	send(QEvent::MouseButtonPress, on_c, Qt::LeftButton, Qt::LeftButton);
+	for (int step = 1; step <= 6; ++step)
+		send(QEvent::MouseMove, on_c + QPoint(step * 15, 0), Qt::NoButton, Qt::LeftButton);
+	for (int step = 1; step <= 4; ++step)
+		send(QEvent::MouseMove, on_c + QPoint(90, step * 40), Qt::NoButton, Qt::LeftButton);
+	QCOMPARE(dragged.count(), 1);
+	/* The drag owns the pointer now: the bar hears no release. */
+	QTest::qWait(400);
+
+	QWidget fresh_host;
+	bssh_pane_bar *fresh = host_with(fresh_host);
+	QVERIFY(QTest::qWaitForWindowExposed(&fresh_host));
+	QTest::qWait(100);
+	QCOMPARE(row->tab_bar()->currentIndex(), fresh->tab_bar()->currentIndex());
+	QVERIFY2(row->grab().toImage() == fresh->grab().toImage(),
+	         "the bar a tab was torn from is drawn otherwise than one built fresh");
 }

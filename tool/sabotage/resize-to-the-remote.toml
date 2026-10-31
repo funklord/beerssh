@@ -13,7 +13,7 @@
 [[sabotage]]
 name = "the remote is never told the new size"
 file = "src/model/session.cpp"
-find = "\tif (m_transport) m_transport->resize(cols, rows);"
+find = "\tm_transport->resize(m_cols, m_rows);"
 replace = "\t(void)0;"
 expect = "a_resized_pane_tells_the_remote_its_size"
 

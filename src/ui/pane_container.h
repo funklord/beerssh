@@ -5,6 +5,7 @@
 #include <QString>
 #include <QSet>
 #include <QHash>
+#include <QPointer>
 #include <QWidget>
 
 #include "ui/input_mode.h"
@@ -14,6 +15,7 @@
 class QMimeData;
 class QScrollArea;
 class QSplitter;
+class QTimer;
 class QVBoxLayout;
 class bssh_layout_manager;
 struct bssh_pane_node;
@@ -40,6 +42,7 @@ class bssh_pane_container : public QWidget {
 
 public:
 	explicit bssh_pane_container(bssh_layout_manager *layout, QWidget *parent = nullptr);
+	~bssh_pane_container() override;
 
 	/* Rebuilds the panes from the layout manager's current answer. */
 	void rebuild();
@@ -277,6 +280,8 @@ private:
 	bssh_terminal_view *add_pane_view(bssh_session *session, QSplitter *parent,
 	                                  QWidget *replacing = nullptr);
 	bool swap_one_pane(const QList<bssh_session *> &panes);
+	void hold_sizes(const QList<bssh_session *> &panes);
+	void release_sizes();
 	bool tabs_as_built(int except) const;
 	QString visible_shape(const QList<bssh_session *> &panes) const;
 
@@ -335,6 +340,9 @@ private:
 	/* What the last rebuild built, as structure alone: refresh() swaps
 	 * one pane only while the tree still has this shape. */
 	QString m_built_shape;
+	/* Sessions whose remote is not told sizes until the panes settle. */
+	QList<QPointer<bssh_session>> m_size_held;
+	QTimer *m_settle = nullptr;
 	Qt::Edge m_built_edge = Qt::TopEdge;
 	bool m_built_column = false;
 

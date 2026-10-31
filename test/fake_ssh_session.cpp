@@ -51,6 +51,7 @@ void bssh_fake_ssh_session::resize(int cols, int rows) {
 	m_cols = cols;
 	m_rows = rows;
 	++m_resize_count;
+	m_sizes_told.append(QSize(cols, rows));
 }
 
 void bssh_fake_ssh_session::send(const QByteArray &bytes) {

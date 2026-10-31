@@ -191,6 +191,14 @@ public:
 	/* Grid size for this session, from whichever view is showing it. */
 	void resize(int cols, int rows);
 
+	/*
+	 * While held -- by a pane container laying its panes out -- a resize
+	 * reaches the screen and not the remote, which is told the size in
+	 * force when the last hold goes, if it changed. Counted, so two
+	 * holders do not release each other's.
+	 */
+	void hold_size(bool held);
+
 	/* Shown or hidden -- drives whether a bell counts as unseen. */
 	void set_on_screen(bool on_screen);
 
@@ -410,6 +418,11 @@ private:
 	bool m_on_screen;
 	int m_cols;
 	int m_rows;
+	/* What the remote was last told, and the holds on telling it. */
+	int m_sent_cols = 0;
+	int m_sent_rows = 0;
+	int m_size_holds = 0;
+	void send_size();
 
 	/* Out through the transport, counted. */
 	void send_out(const QByteArray &bytes);

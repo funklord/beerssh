@@ -95,3 +95,12 @@ file = "src/ui/pane_bar.cpp"
 find = "\t\t\tm_moved.clear();\n\t\t\temit tab_moved(moved, m_moved_to);\n"
 replace = "\t\t\tm_moved.clear();\n"
 expect = "a_background_tab_can_be_dragged_out"
+
+# The tear-out takes the pointer without telling QTabBar the press is
+# over: a tab it had begun moving stays drawn where the pointer left it.
+[[sabotage]]
+name = "a torn-out tab is left drawn mid-move in its bar"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\t\t\tQCoreApplication::sendEvent(m_bar, &up);\n"
+replace = ""
+expect = "a_bar_a_tab_was_torn_from_is_left_drawn_as_it_is"

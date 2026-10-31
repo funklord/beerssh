@@ -6259,6 +6259,42 @@ limits through a switch, with bars on top and down a side and with the
 built-in keyboard showing; it was read on a real X server (Xvfb) as well as
 offscreen.
 
+**Two more found by driving the desktop build with a real pointer, the same
+day** -- `xdotool` against the app on Xvfb, after the holder: "when moving a
+tab out of an already bugged one it just vanishes" and "I took one tab
+dropped it on the terminal itself and it disappeared". Neither the walk nor
+any unit test could have shown either, since both live in what happens
+between a widget and the screen.
+
+- **A split erased what its terminals showed.** With a pane beside it, a
+  tab dropped on its own pane's bottom edge made a nested split, which Qt
+  lays out in steps: the first gave the new halves a pane's minimum width,
+  and each shell was told 20 columns, then 64. bash redrew its prompt for
+  20, where it wraps, then for 64 moved up as far as the wrapped prompt had
+  reached and cleared to the end of the screen, taking the lines above with
+  it: both halves came out showing a bare prompt, nothing in the scrollback.
+  A terminal that comes back blank reads as one that has gone. Now
+  `bssh_session::hold_size()` keeps the remote from being told while the
+  pane container lays out -- the screen still follows every size, since
+  what is drawn has to fit -- and the container releases it once the panes
+  have been still for 50 ms, sending each remote the size it settled at,
+  once. Reproduced with real shells (offscreen) as well as on screen;
+  `splitting_a_pane_keeps_what_its_terminals_show` holds the sizes told and
+  the screen's lines.
+- **A bar a tab was torn from stayed drawn mid-move.** A tab slid along its
+  bar and on out of it was left drawn half way along the row, over the "+",
+  once it was dropped somewhere that changed nothing: the tear-out takes the
+  pointer, QTabBar never saw the button come up, and nothing rebuilt the bar
+  any more to hide it. The bar now sends QTabBar the release it would have
+  had. `a_bar_a_tab_was_torn_from_is_left_drawn_as_it_is` compares the bar
+  with one built fresh.
+
+The holder's "it disappeared" is not reproduced as a terminal leaving the
+window: every drop of a tab on its own pane, at the middle and each edge,
+with one pane and with two, keeps it (`a_tab_dropped_on_its_own_pane_stays`).
+Both faults above make a terminal look gone, which is the best reading of the
+report until a sequence that loses one turns up.
+
 The benchmark asserts the pane count in both directions as well as timing it:
 a measurement that cannot tell "faster" from "stopped collapsing" would report
 the same number for a layout manager that had quietly stopped working.

@@ -10,8 +10,11 @@
 #include <QSplitter>
 #include <QSplitterHandle>
 #include <QPointer>
+#include <QTimer>
 #include <QBoxLayout>
 #include <QVBoxLayout>
+
+#include <utility>
 
 #include "model/session.h"
 #include "term/emulator.h"
@@ -640,6 +643,38 @@ QString bssh_pane_container::visible_shape(const QList<bssh_session *> &panes) c
 	});
 }
 
+bssh_pane_container::~bssh_pane_container() {
+	release_sizes();
+}
+
+/*
+ * The panes' sessions tell their remotes nothing until the layout has
+ * been quiet a moment: Qt lays a new nested split out in steps, the first
+ * of which gives a pane its minimum, and a shell told that redraws its
+ * prompt for it and erases what was above (bssh_session::hold_size).
+ */
+void bssh_pane_container::hold_sizes(const QList<bssh_session *> &panes) {
+	for (bssh_session *session : panes) {
+		if (!session || m_size_held.contains(session)) continue;
+		session->hold_size(true);
+		m_size_held.append(session);
+	}
+	if (!m_settle) {
+		m_settle = new QTimer(this);
+		m_settle->setSingleShot(true);
+		m_settle->setInterval(50);
+		connect(m_settle, &QTimer::timeout, this, &bssh_pane_container::release_sizes);
+	}
+	m_settle->start();
+}
+
+void bssh_pane_container::release_sizes() {
+	const QList<QPointer<bssh_session>> held = std::exchange(m_size_held, {});
+	for (const QPointer<bssh_session> &session : held) {
+		if (session) session->hold_size(false);
+	}
+}
+
 void bssh_pane_container::refresh() {
 	if (!m_layout) return;
 	if (!swap_one_pane(m_layout->visible_panes())) rebuild();
@@ -692,6 +727,7 @@ bool bssh_pane_container::swap_one_pane(const QList<bssh_session *> &panes) {
 	bssh_session *now = panes.at(at);
 
 	m_rebuilding = true;
+	hold_sizes({ now });
 	const QList<int> sizes = parent->sizes();
 	add_pane_view(now, parent, old_frame);
 	/* Built at the end of the lists; moved into the slot it took. */
@@ -798,6 +834,7 @@ void bssh_pane_container::rebuild() {
 	m_sessions = panes;
 	update_on_screen();
 
+	hold_sizes(panes);
 	build_panes(panes);
 	if (!column) restore_divisions(m_layout->visible_tree());
 	m_built_shape = visible_shape(panes);

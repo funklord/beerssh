@@ -204,3 +204,13 @@ file = "src/ui/main_window.cpp"
 find = "\tif (keys_for != m_keys_built_for) {\n"
 replace = "\tif (true) {\n"
 expect = "switching_tabs_in_one_pane_leaves_the_others_alone"
+
+# A rebuild tells each remote every size its pane passes through, the
+# minimum a new nested split gives it first included: bash then redraws
+# its prompt for 20 columns and erases the lines above it.
+[[sabotage]]
+name = "a rebuild tells the remote every passing size"
+file = "src/ui/pane_container.cpp"
+find = "\thold_sizes(panes);\n\tbuild_panes(panes);\n"
+replace = "\tbuild_panes(panes);\n"
+expect = "splitting_a_pane_keeps_what_its_terminals_show"

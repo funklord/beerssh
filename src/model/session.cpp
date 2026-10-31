@@ -454,6 +454,8 @@ void bssh_session::wire_transport() {
 			if (!m_mux_command.isEmpty() && m_profile.command.isEmpty())
 				m_transport->set_command(m_mux_command);
 			m_transport->open_shell(m_cols, m_rows);
+			m_sent_cols = m_cols;
+			m_sent_rows = m_rows;
 
 			/*
 			 * The on-connect command (sec 10.2), and sec 5.3's practical
@@ -645,7 +647,29 @@ void bssh_session::resize(int cols, int rows) {
 	m_rows = rows;
 
 	m_emulator->resize(cols, rows);
-	if (m_transport) m_transport->resize(cols, rows);
+	send_size();
+}
+
+/*
+ * The remote is told the size the terminal settles at, not every size it
+ * passes through while panes are rebuilt (2026-10-31): a split laid a new
+ * pane out at its minimum width for a moment, the shell was told 20
+ * columns and then 64, and bash, redrawing a prompt that had wrapped at
+ * 20, moved up past it and cleared the lines above -- the terminal came
+ * out of the split showing only a prompt. The screen here follows every
+ * size, since what is drawn has to fit; the remote waits while held.
+ */
+void bssh_session::hold_size(bool held) {
+	m_size_holds = qMax(0, m_size_holds + (held ? 1 : -1));
+	if (!m_size_holds) send_size();
+}
+
+void bssh_session::send_size() {
+	if (m_size_holds || !m_transport) return;
+	if (m_cols == m_sent_cols && m_rows == m_sent_rows) return;
+	m_sent_cols = m_cols;
+	m_sent_rows = m_rows;
+	m_transport->resize(m_cols, m_rows);
 }
 
 void bssh_session::send_out(const QByteArray &bytes) {

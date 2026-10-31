@@ -2,6 +2,7 @@
 #define BSSH_FAKE_SSH_SESSION_H
 
 #include <QList>
+#include <QSize>
 
 #include "ssh/ssh_session.h"
 
@@ -107,6 +108,8 @@ public:
 	int cols() const { return m_cols; }
 	int rows() const { return m_rows; }
 	int resize_count() const { return m_resize_count; }
+	/* Every size the remote was told, in order. */
+	QList<QSize> sizes_told() const { return m_sizes_told; }
 
 	/*
 	 * The one password this "server" takes; any other is refused with
@@ -189,6 +192,7 @@ private:
 	int m_cols;
 	int m_rows;
 	int m_resize_count;
+	QList<QSize> m_sizes_told;
 	bool m_host_key_accepted = false;
 	int m_keepalive_seconds = 0;
 	QString m_term;
