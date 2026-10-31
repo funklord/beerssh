@@ -226,6 +226,7 @@ public slots:
 	void do_run_on_the_side(const QString &command);
 	void do_find_working_directory();
 	void do_upload(const QStringList &paths, const QString &directory);
+	void do_cancel_upload();
 	void do_restart_shell(const QStringList &command);
 	void do_set_compression(bool compression);
 	void do_set_identity_file(const QString &path);
@@ -1443,6 +1444,18 @@ void bssh_libssh_worker::step_upload() {
 	QTimer::singleShot(0, this, &bssh_libssh_worker::step_upload);
 }
 
+void bssh_libssh_worker::do_cancel_upload() {
+	if (!m_upload) return;
+	upload_job &job = *m_upload;
+	/* The file half-written goes, as the local copy's does. */
+	if (job.file && job.at < job.items.size()) {
+		sftp_close(job.file);
+		job.file = nullptr;
+		sftp_unlink(job.sftp, job.items.at(job.at).remote.toUtf8().constData());
+	}
+	finish_upload(false, QString::fromLatin1(BSSH_COPY_STOPPED));
+}
+
 void bssh_libssh_worker::finish_upload(bool ok, const QString &why) {
 	if (!m_upload) return;
 	std::unique_ptr<upload_job> job = std::move(m_upload);
@@ -2134,6 +2147,10 @@ void bssh_ssh_session_libssh::upload(const QStringList &paths, const QString &di
 	QMetaObject::invokeMethod(m_worker, [this, paths, directory] {
 		m_worker->do_upload(paths, directory);
 	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::cancel_upload() {
+	QMetaObject::invokeMethod(m_worker, [this] { m_worker->do_cancel_upload(); }, Qt::QueuedConnection);
 }
 
 void bssh_ssh_session_libssh::run_on_the_side(const QString &command) {

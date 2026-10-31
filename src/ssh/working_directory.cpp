@@ -83,8 +83,11 @@ bssh_working_directory_t bssh_local_working_directory(qint64 shell) {
 	return parsed;
 }
 
+const char *const BSSH_COPY_STOPPED = "stopped";
+
 bool bssh_copy_into(const QStringList &paths, const QString &directory, QStringList &written,
-                    QString &why, const std::function<void(qint64, qint64)> &progress) {
+                    QString &why, const std::function<void(qint64, qint64)> &progress,
+                    const std::function<bool()> &stopped) {
 	const QDir into(directory.isEmpty() ? QDir::homePath() : directory);
 	struct item_t { QString from; QString to; bool directory; };
 	QList<item_t> items;
@@ -137,6 +140,13 @@ bool bssh_copy_into(const QStringList &paths, const QString &directory, QStringL
 			return false;
 		}
 		while (!from.atEnd()) {
+			/* Stopped between pieces, and the half-written file goes with
+			 * it: under a free name it would only be debris. */
+			if (stopped && stopped()) {
+				to.remove();
+				why = QString::fromLatin1(BSSH_COPY_STOPPED);
+				return false;
+			}
 			const QByteArray piece = from.read(1024 * 1024);
 			if (to.write(piece) != piece.size()) {
 				why = QStringLiteral("writing %1 failed").arg(item.to);

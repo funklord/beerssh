@@ -68,9 +68,22 @@ public:
 		m_uploaded_to = directory;
 		QStringList names;
 		for (const QString &path : paths) names << path.section(QLatin1Char('/'), -1);
+		if (m_upload_held) {
+			QMetaObject::invokeMethod(this, [this] { emit upload_progress(10, 100); },
+			                          Qt::QueuedConnection);
+			return;
+		}
 		QMetaObject::invokeMethod(this, [this, directory, names] {
 			emit upload_progress(50, 100);
 			emit upload_finished(true, directory, names, QString());
+		}, Qt::QueuedConnection);
+	}
+	/* A copy that runs until it is stopped. */
+	void set_upload_held(bool held) { m_upload_held = held; }
+	void cancel_upload() override {
+		const QString directory = m_uploaded_to;
+		QMetaObject::invokeMethod(this, [this, directory] {
+			emit upload_finished(false, directory, QStringList(), QString::fromLatin1(BSSH_COPY_STOPPED));
 		}, Qt::QueuedConnection);
 	}
 	QStringList uploaded() const { return m_uploaded; }
@@ -161,6 +174,7 @@ private:
 	bssh_working_directory_t m_found;
 	QStringList m_uploaded;
 	QString m_uploaded_to;
+	bool m_upload_held = false;
 	QStringList m_side_commands;
 	QStringList m_restarts;
 	QString m_fail_reason;

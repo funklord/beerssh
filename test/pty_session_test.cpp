@@ -863,6 +863,30 @@ void pty_session_test::a_local_copy_keeps_both_when_a_name_is_taken() {
 	QCOMPARE(read(into.filePath(QStringLiteral("tree/inner/leaf"))), QByteArray("leaf"));
 }
 
+void pty_session_test::a_local_copy_can_be_stopped() {
+	/*
+	 * Stopped before its first piece -- the check runs between every two
+	 * -- so the answer is the same however fast the machine is: stopped,
+	 * and nothing half-written left under the free name.
+	 */
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	{
+		QFile big(from.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		big.write(QByteArray(4 * 1024 * 1024, 'z'));
+	}
+	bssh_pty_session session;
+	QSignalSpy done(&session, &bssh_ssh_session::upload_finished);
+	session.upload({ from.filePath(QStringLiteral("big.bin")) }, into.path());
+	session.cancel_upload();
+	QVERIFY(done.wait(10000));
+	QVERIFY(!done.first().at(0).toBool());
+	QCOMPARE(done.first().at(3).toString(), QString::fromLatin1(BSSH_COPY_STOPPED));
+	QVERIFY2(!QFileInfo::exists(into.filePath(QStringLiteral("big.bin"))), "a stopped copy left its file");
+}
+
 void pty_session_test::a_restarted_shell_is_replaced_without_an_exit() {
 	/*
 	 * How a tab switches to another tmux or screen session (sec 10.2a):

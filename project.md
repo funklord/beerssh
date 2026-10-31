@@ -3452,6 +3452,15 @@ model on a finger.
   argued from their quoting rules, not measured.
   **A collision keeps both:** "notes (1).txt", the extension after the last
   dot, ".bashrc (1)" for a leading dot; the pane says the names written.
+  **A copy under way can be stopped**, from the terminal menu's "Stop the
+  Copy to host:/dir" while one runs: the file half-written is removed, by
+  SFTP or locally, and the pane says "Copy stopped". **A connection that
+  closes mid-copy** reports it cut off, once, with its reason; the file it
+  was writing may be left partly written there, since there is no
+  connection left to remove it over. Both measured against a real sshd
+  (`a_copy_can_be_stopped_and_leaves_nothing_half_written`,
+  `a_copy_cut_off_by_a_disconnect_says_so`), the stop also locally and
+  through the window (`a_local_copy_can_be_stopped`).
   `the_working_directory_rules_hold`,
   `the_probe_finds_the_shell_on_its_connections_terminal`,
   `a_local_shells_directory_is_read_from_proc`,

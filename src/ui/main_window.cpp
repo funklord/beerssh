@@ -5662,9 +5662,11 @@ void bssh_main_window::act_on_drop_menu(QMenu *menu, const QAction *chosen, bssh
 		if (!held) return;
 		QString names = written.mid(0, 3).join(QStringLiteral(", "));
 		if (written.size() > 3) names += QStringLiteral(" and %1 more").arg(written.size() - 3);
-		flash_session_notice(held, ok ? QStringLiteral("Copied %1 to %2")
-		                                        .arg(names, drop_destination(held, directory))
-		                              : QStringLiteral("Copy failed: %1").arg(why));
+		QString said;
+		if (ok) said = QStringLiteral("Copied %1 to %2").arg(names, drop_destination(held, directory));
+		else if (why == QLatin1String(BSSH_COPY_STOPPED)) said = QStringLiteral("Copy stopped");
+		else said = QStringLiteral("Copy failed: %1").arg(why);
+		flash_session_notice(held, said);
 	});
 	session->upload(paths, found.path);
 }
@@ -6049,6 +6051,17 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	 * and was taken out again (the holder).
 	 */
 	/*
+	 * A copy dropped on this terminal, stoppable while it runs (sec 6.4):
+	 * the note over the pane says how far it is and takes no click, so the
+	 * way to stop it is here, where the drop's own menu was.
+	 */
+	if (m_current && m_current->upload_in_progress()) {
+		QAction *stop = menu->addAction(QStringLiteral("&Stop the Copy to %1")
+		                                        .arg(drop_destination(m_current, m_current->upload_directory())));
+		stop->setObjectName(QStringLiteral("terminal_stop_copy"));
+	}
+
+	/*
 	 * The way back to a hidden menu bar from where the pointer already is
 	 * (the holder, 2026-10-31): View holds Show Menu Bar, and View is in
 	 * the bar that is hidden -- the corner's menus button reaches it, but
@@ -6177,6 +6190,12 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	        menu->findChild<QAction *>(QStringLiteral("terminal_open_link"));
 	if (open_link && chosen == open_link) {
 		open_remote_link(link);
+		return;
+	}
+
+	const QAction *stop_copy = menu->findChild<QAction *>(QStringLiteral("terminal_stop_copy"));
+	if (stop_copy && chosen == stop_copy) {
+		if (m_current) m_current->cancel_upload();
 		return;
 	}
 

@@ -3143,6 +3143,27 @@ void terminal_view_test::dropped_files_are_copied_where_the_shell_is() {
 	fake->set_working_directory(bare);
 	seen = drop(QStringLiteral("drop_none"));
 	QCOMPARE(seen.value(0), QStringLiteral("Copy to the home directory (host.example:~)"));
+
+	/* A copy under way can be stopped from the terminal menu. */
+	fake->set_working_directory(found = bssh_working_directory_t());
+	found.host = QStringLiteral("box");
+	found.proc = true;
+	found.path = QStringLiteral("/srv/work");
+	fake->set_working_directory(found);
+	fake->set_upload_held(true);
+	drop(QStringLiteral("drop_copy"));
+	QTRY_VERIFY(session->upload_in_progress());
+	QMenu *menu = window.build_terminal_menu(&window);
+	QAction *stop = menu->findChild<QAction *>(QStringLiteral("terminal_stop_copy"));
+	QVERIFY2(stop, "no way to stop a copy under way");
+	QCOMPARE(stop->text(), QStringLiteral("&Stop the Copy to host.example:/srv/work"));
+	window.act_on_terminal_menu(menu, stop);
+	delete menu;
+	QTRY_COMPARE(view->notice(), QStringLiteral("Copy stopped"));
+	QVERIFY(!session->upload_in_progress());
+	menu = window.build_terminal_menu(&window);
+	QVERIFY(!menu->findChild<QAction *>(QStringLiteral("terminal_stop_copy")));
+	delete menu;
 }
 
 void terminal_view_test::a_drop_asks_the_window_to_paste_rather_than_pasting_itself() {

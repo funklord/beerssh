@@ -1109,6 +1109,145 @@ void live_ssh_test::a_dropped_file_goes_to_the_shells_directory_by_sftp()
 	QCOMPARE(read(into.filePath(QStringLiteral("tree/inner/leaf"))), QByteArray("leaf"));
 }
 
+void live_ssh_test::a_copy_cut_off_by_a_disconnect_says_so()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * The connection closing during a copy (sec 6.4): the SFTP session and
+	 * the file open on it are freed by the teardown, a piece already
+	 * scheduled finds nothing to do, and the copy is reported as cut off
+	 * -- once, not never and not twice.
+	 */
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	{
+		QFile big(from.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		const QByteArray block(1024 * 1024, 'z');
+		for (int i = 0; i < 20; ++i) big.write(block);
+	}
+
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	int finished = 0;
+	bool finished_ok = true;
+	QString why;
+	bool cut = false;
+
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed, &loop, &QEventLoop::quit);
+	QObject::connect(session, &bssh_ssh_session::upload_progress, [&](qint64 done, qint64) {
+		if (done <= 0 || cut) return;
+		cut = true;
+		session->disconnect_from_host();
+	});
+	QObject::connect(session, &bssh_ssh_session::upload_finished,
+	                  [&](bool ok, const QString &, const QStringList &, const QString &reason) {
+		++finished;
+		finished_ok = ok;
+		why = reason;
+		QTimer::singleShot(500, &loop, &QEventLoop::quit);
+	});
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [&](bssh_ssh_session::state_t state) {
+		if (state != bssh_ssh_session::CONNECTED) return;
+		session->open_shell(80, 24);
+		session->upload({ from.filePath(QStringLiteral("big.bin")) }, into.path());
+	});
+
+	session->set_identity_file(test_key());
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(), qEnvironmentVariable("USER"));
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(20000);
+	loop.exec();
+	delete session;
+
+	QVERIFY2(cut, "the copy never reported a piece sent, so it was not cut off");
+	QCOMPARE(finished, 1);
+	QVERIFY2(!finished_ok, "a copy cut off by a disconnect reported success");
+	QVERIFY2(!why.isEmpty(), "and said nothing about why");
+}
+
+void live_ssh_test::a_copy_can_be_stopped_and_leaves_nothing_half_written()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/* Stopped mid-copy: reported as stopped, the half-written file gone,
+	 * and the shell on the same connection still answering. */
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	{
+		QFile big(from.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		const QByteArray block(1024 * 1024, 'z');
+		for (int i = 0; i < 20; ++i) big.write(block);
+	}
+
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	QByteArray shell;
+	bool stopped_once = false;
+	bool finished = false;
+	bool finished_ok = true;
+	QString why;
+
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed, &loop, &QEventLoop::quit);
+	QObject::connect(session, &bssh_ssh_session::bytes_received, [&](const QByteArray &bytes) {
+		shell += bytes;
+		if (shell.contains("BSSH_AFTER_OK")) loop.quit();
+	});
+	QObject::connect(session, &bssh_ssh_session::upload_progress, [&](qint64 done, qint64) {
+		if (done <= 0 || stopped_once) return;
+		stopped_once = true;
+		session->cancel_upload();
+	});
+	QObject::connect(session, &bssh_ssh_session::upload_finished,
+	                  [&](bool ok, const QString &, const QStringList &, const QString &reason) {
+		finished = true;
+		finished_ok = ok;
+		why = reason;
+		session->send(QByteArrayLiteral("echo BSSH_AFTER_\"OK\"\n"));
+	});
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [&](bssh_ssh_session::state_t state) {
+		if (state != bssh_ssh_session::CONNECTED) return;
+		session->open_shell(80, 24);
+		session->upload({ from.filePath(QStringLiteral("big.bin")) }, into.path());
+	});
+
+	session->set_identity_file(test_key());
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(), qEnvironmentVariable("USER"));
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(20000);
+	loop.exec();
+	session->disconnect_from_host();
+	delete session;
+
+	QVERIFY2(stopped_once, "the copy never reported a piece sent");
+	QVERIFY2(finished && !finished_ok, "a stopped copy did not say it stopped");
+	QCOMPARE(why, QString::fromLatin1(BSSH_COPY_STOPPED));
+	QVERIFY2(!QFileInfo::exists(into.filePath(QStringLiteral("big.bin"))), "a stopped copy left its file");
+	QVERIFY2(shell.contains("BSSH_AFTER_OK"), "the shell did not answer after the stop");
+}
+
 void live_ssh_test::a_restarted_shell_runs_its_command_on_the_same_connection()
 {
 	if (!server_available()) return;

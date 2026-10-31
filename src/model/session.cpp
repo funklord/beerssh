@@ -393,7 +393,12 @@ void bssh_session::wire_transport() {
 		emit working_directory_found(found);
 	});
 	connect(m_transport, &bssh_ssh_session::upload_progress, this, &bssh_session::upload_progress);
-	connect(m_transport, &bssh_ssh_session::upload_finished, this, &bssh_session::upload_finished);
+	connect(m_transport, &bssh_ssh_session::upload_finished, this,
+	         [this](bool ok, const QString &directory, const QStringList &written, const QString &why) {
+		m_uploading = false;
+		m_upload_directory.clear();
+		emit upload_finished(ok, directory, written, why);
+	});
 
 	/*
 	 * The tmux and screen listing coming back. Nothing found is nothing
@@ -917,8 +922,16 @@ void bssh_session::find_working_directory() {
 	else emit working_directory_found(bssh_working_directory_t());
 }
 
+void bssh_session::cancel_upload() {
+	if (m_transport && m_uploading) m_transport->cancel_upload();
+}
+
 void bssh_session::upload(const QStringList &paths, const QString &directory) {
-	if (m_transport) m_transport->upload(paths, directory);
+	if (m_transport) {
+		m_uploading = true;
+		m_upload_directory = directory;
+		m_transport->upload(paths, directory);
+	}
 	else emit upload_finished(false, directory, QStringList(), QStringLiteral("not connected"));
 }
 

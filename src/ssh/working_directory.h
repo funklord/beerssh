@@ -53,7 +53,11 @@ bssh_working_directory_t bssh_local_working_directory(qint64 shell);
  * Run on a thread of its own by the local transport.
  */
 bool bssh_copy_into(const QStringList &paths, const QString &directory, QStringList &written,
-                    QString &why, const std::function<void(qint64, qint64)> &progress);
+                    QString &why, const std::function<void(qint64, qint64)> &progress,
+                    const std::function<bool()> &stopped = {});
+
+/* What a copy says when it was stopped on purpose, not by a fault. */
+extern const char *const BSSH_COPY_STOPPED;
 
 /* A program that connects onward to another machine. */
 bool bssh_is_onward_program(const QString &name);

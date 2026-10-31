@@ -562,7 +562,9 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 	 * pointer, so a tab closed during the copy is simply not told.
 	 */
 	const QPointer<bssh_pty_session> guard(this);
-	QThread *copier = QThread::create([guard, paths, directory] {
+	auto stop = std::make_shared<std::atomic<bool>>(false);
+	m_copy_stop = stop;
+	QThread *copier = QThread::create([guard, paths, directory, stop] {
 		QStringList written;
 		QString why;
 		QElapsedTimer since;
@@ -574,7 +576,7 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 			QMetaObject::invokeMethod(qApp, [guard, done, total] {
 				if (guard) emit guard->upload_progress(done, total);
 			}, Qt::QueuedConnection);
-		});
+		}, [stop] { return stop->load(); });
 		const QString into = directory.isEmpty() ? QDir::homePath() : directory;
 		QMetaObject::invokeMethod(qApp, [guard, ok, into, written, why] {
 			if (guard) emit guard->upload_finished(ok, into, written, why);
@@ -582,6 +584,10 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 	});
 	QObject::connect(copier, &QThread::finished, copier, &QObject::deleteLater);
 	copier->start();
+}
+
+void bssh_pty_session::cancel_upload() {
+	if (m_copy_stop) m_copy_stop->store(true);
 }
 
 void bssh_pty_session::run_on_the_side(const QString &command) {

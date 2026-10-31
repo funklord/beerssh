@@ -267,6 +267,13 @@ public:
 	 */
 	virtual void upload(const QStringList &paths, const QString &directory);
 
+	/*
+	 * Stops the copy under way, removing the file it was half-way through
+	 * -- a dropped file too large, or dropped by mistake, need not be sat
+	 * out. upload_finished() follows with BSSH_COPY_STOPPED as the reason.
+	 */
+	virtual void cancel_upload() {}
+
 signals:
 	void working_directory_found(const bssh_working_directory_t &found);
 	void upload_progress(qint64 done, qint64 total);

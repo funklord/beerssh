@@ -29,3 +29,19 @@ file = "src/model/session.cpp"
 find = "\t\tif (found.path.isEmpty() && !found.elsewhere && m_emulator)\n"
 replace = "\t\tif (false)\n"
 expect = "dropped_files_are_copied_where_the_shell_is"
+
+# The local copy never checks whether it was asked to stop.
+[[sabotage]]
+name = "a local copy cannot be stopped"
+file = "src/ssh/working_directory.cpp"
+find = "\t\t\tif (stopped && stopped()) {\n"
+replace = "\t\t\tif (false) {\n"
+expect = "a_local_copy_can_be_stopped"
+
+# No way to stop a copy under way from the terminal menu.
+[[sabotage]]
+name = "the terminal menu offers no way to stop a copy"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_current && m_current->upload_in_progress()) {\n"
+replace = "\tif (false) {\n"
+expect = "dropped_files_are_copied_where_the_shell_is"

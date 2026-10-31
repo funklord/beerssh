@@ -291,6 +291,11 @@ public:
 	void find_working_directory();
 	void upload(const QStringList &paths, const QString &directory);
 
+	/* A copy under way: where to (empty for home), and stopping it. */
+	bool upload_in_progress() const { return m_uploading; }
+	QString upload_directory() const { return m_upload_directory; }
+	void cancel_upload();
+
 signals:
 	void working_directory_found(const bssh_working_directory_t &found);
 	void upload_progress(qint64 done, qint64 total);
@@ -389,6 +394,8 @@ private:
 	QList<bssh_mux_session_t> m_mux_pending;
 	bool m_mux_answered = false;
 	bool m_mux_listing = false;
+	bool m_uploading = false;
+	QString m_upload_directory;
 
 	/* Lists what is running beside the shell, if it should; asked, even
 	 * with the setting off. */

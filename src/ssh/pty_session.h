@@ -3,6 +3,9 @@
 
 #include <QStringList>
 
+#include <atomic>
+#include <memory>
+
 #include "ssh/ssh_session.h"
 
 class QSocketNotifier;
@@ -118,6 +121,7 @@ public:
 	void run_on_the_side(const QString &command) override;
 	void find_working_directory() override;
 	void upload(const QStringList &paths, const QString &directory) override;
+	void cancel_upload() override;
 	void restart_shell(const QStringList &command) override;
 	bool export_transport(QByteArray &state, QList<int> &fds, QString *why) override;
 	void release_transport() override;
@@ -142,6 +146,8 @@ private:
 	QString m_term;
 
 	int m_master;
+	/* The copy under way, asked to stop between pieces. */
+	std::shared_ptr<std::atomic<bool>> m_copy_stop;
 	qint64 m_child;
 	QSocketNotifier *m_notifier;
 
