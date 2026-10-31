@@ -31,6 +31,7 @@
 #include <algorithm>
 #include <QContextMenuEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QTimer>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -1845,6 +1846,12 @@ void bssh_terminal_view::show_drop_zone(int edge) {
 	update();
 }
 
+void bssh_terminal_view::show_tab_ring(bool shown) {
+	if (shown == m_tab_ring) return;
+	m_tab_ring = shown;
+	update();
+}
+
 void bssh_terminal_view::set_being_dragged(bool dragged) {
 	if (m_being_dragged == dragged) return;
 
@@ -1916,8 +1923,9 @@ void bssh_terminal_view::paint_over(QPainter &painter) {
 		 * solid enough to read as a bar rather than as a split's half.
 		 */
 		const int band = bssh_drop_band(m_cell_height);
+		const int side = m_drop_edge - BSSH_DROP_TAB_BASE;
 		QRect strip = rect();
-		switch (m_drop_edge - BSSH_DROP_TAB_BASE) {
+		switch (side) {
 		case bssh_layout_manager::EDGE_LEFT:   strip.setWidth(band); break;
 		case bssh_layout_manager::EDGE_RIGHT:  strip.setLeft(width() - band); break;
 		case bssh_layout_manager::EDGE_TOP:    strip.setHeight(band); break;
@@ -1926,6 +1934,20 @@ void bssh_terminal_view::paint_over(QPainter &painter) {
 		QColor fill(palette().color(QPalette::Highlight));
 		fill.setAlphaF(0.75);
 		painter.fillRect(strip, fill);
+
+		/* Said where it is lit, so the side reads as a choice of side. */
+		painter.save();
+		painter.setPen(palette().color(QPalette::HighlightedText));
+		const QString label = QStringLiteral("Tab bar here");
+		if (side == bssh_layout_manager::EDGE_LEFT || side == bssh_layout_manager::EDGE_RIGHT) {
+			painter.translate(strip.center());
+			painter.rotate(side == bssh_layout_manager::EDGE_LEFT ? -90 : 90);
+			painter.drawText(QRect(-strip.height() / 2, -strip.width() / 2, strip.height(), strip.width()),
+			                 Qt::AlignCenter, label);
+		} else {
+			painter.drawText(strip, Qt::AlignCenter, label);
+		}
+		painter.restore();
 	} else if (m_drop_edge >= 0) {
 		QRect zone = rect();
 		switch (m_drop_edge) {
@@ -1941,6 +1963,30 @@ void bssh_terminal_view::paint_over(QPainter &painter) {
 		QColor fill(palette().color(QPalette::Highlight));
 		fill.setAlphaF(0.35);
 		painter.fillRect(zone, fill);
+	}
+
+	/*
+	 * The ring: the four bands at once, faint, with a dashed line where
+	 * they end -- inside it a drop splits or swaps, on it a drop makes a
+	 * tab with its bar on that side.
+	 */
+	if (m_tab_ring && !m_being_dragged) {
+		const int band = bssh_drop_band(m_cell_height);
+		const QRect inner = rect().adjusted(band, band, -band, -band);
+		QColor faint(palette().color(QPalette::Highlight));
+		faint.setAlphaF(0.14);
+		QPainterPath ring;
+		ring.addRect(rect());
+		ring.addRect(inner);
+		ring.setFillRule(Qt::OddEvenFill);
+		painter.fillPath(ring, faint);
+		QPen line(palette().color(QPalette::Highlight));
+		line.setStyle(Qt::DashLine);
+		painter.save();
+		painter.setPen(line);
+		painter.setBrush(Qt::NoBrush);
+		painter.drawRect(inner.adjusted(0, 0, -1, -1));
+		painter.restore();
 	}
 
 	if (m_being_dragged) {

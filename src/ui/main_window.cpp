@@ -3548,6 +3548,10 @@ void bssh_main_window::set_session_drag_active(bool active) {
 		overlay->deleteLater();
 	}
 	m_tab_drops.clear();
+	if (m_panes) {
+		for (bssh_terminal_view *view : m_panes->views())
+			if (view) view->show_tab_ring(false);
+	}
 	if (!active || !m_terminal_page || !m_panes || !m_layout) return;
 
 	const bool vertical = m_tab_position == bssh_app_settings::TABS_LEFT
@@ -3566,6 +3570,19 @@ void bssh_main_window::set_session_drag_active(bool active) {
 		bssh_pane_bar *bar = bar_for(front);
 		const bool strip = !bar || bar->isHidden();
 		const QRect pane(frame->mapTo(m_terminal_page, QPoint(0, 0)), frame->size());
+
+		/*
+		 * Side by side, a pane with no bar takes a tab along any of its
+		 * four edges, the bar going to that side (drop_zone_for), so the
+		 * whole ring is shown rather than a strip on one side -- which
+		 * read as the only place, and labelled one arbitrary side of four
+		 * (the holder, 2026-10-31). The stacked column keeps the strip:
+		 * its bands split rather than make tabs.
+		 */
+		if (strip && m_layout->arrangement() == bssh_layout_manager::TILED) {
+			if (bssh_terminal_view *view = m_panes->view_for(front)) view->show_tab_ring(true);
+			continue;
+		}
 
 		QRect where;
 		if (!strip) {

@@ -4726,8 +4726,16 @@ void layout_test::the_tab_row_takes_a_drop_at_the_slot_it_marks() {
 	 * tab bar is, or would be, makes a tab; with a bar the drop position
 	 * picks the slot, marked before the release; without one, a strip
 	 * where the bar would appear takes the drop. Asserted as the relation
-	 * between the slot marked and where the tab lands.
+	 * between the slot marked and where the tab lands. In the stacked
+	 * column, which keeps the strip: side by side a pane with no bar shows
+	 * a ring on all four edges instead (a_release_on_a_strip_makes_a_tab).
 	 */
+	struct arrangement_restored_t {
+		const bssh_app_settings::arrangement_t was = bssh_app_settings().arrangement();
+		~arrangement_restored_t() { bssh_app_settings().set_arrangement(was); }
+	} arrangement_restored;
+	bssh_app_settings().set_arrangement(bssh_app_settings::ARRANGEMENT_COLUMN);
+
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));
 	const registry_left_as_found_t tidy(shared);
@@ -4860,10 +4868,19 @@ void layout_test::a_drop_from_another_process_is_refused() {
 		offer(pane, QPoint(pane->width() / 10, pane->height() / 2), "a terminal answers with a link");
 		QCOMPARE(pane->drop_zone(), -1);
 
+		/*
+		 * Where a tab would be made: the bar's row, or side by side with
+		 * no bar the band along the pane's edge, inside the ring.
+		 */
 		window.set_session_drag_active(true);
-		QWidget *row = window.tab_drop_target(b);
-		QVERIFY(row);
-		offer(row, row->rect().center(), "the tab row answers with a link");
+		if (QWidget *row = window.tab_drop_target(b)) {
+			offer(row, row->rect().center(), "the tab row answers with a link");
+		} else {
+			QVERIFY(pane->tab_ring_shown());
+			offer(pane, QPoint(pane->width() / 2, bssh_drop_band(pane->cell_height()) / 2),
+			      "the band of the ring answers with a link");
+			QCOMPARE(pane->drop_zone(), -1);
+		}
 		window.set_session_drag_active(false);
 
 		QCOMPARE(window.shown_sessions(), shown);
@@ -5021,39 +5038,68 @@ void layout_test::a_drop_on_a_pane_that_is_not_focused_places_the_pane() {
 void layout_test::a_release_on_a_strip_makes_a_tab() {
 	/*
 	 * BeerSSH's own drag (X11) places the release through
-	 * finish_session_drag(), and a pane of one tab has no bar -- only the
-	 * strip drawn while the drag is up. Released there, it is a tab, the
-	 * same as under QDrag. Found on Xvfb: the strips were taken down
-	 * before the release was placed, so it split the pane's top edge
-	 * instead. That ordering lives in the interactive drag loop, which
-	 * this cannot run; what it pins is that the placement reads the
-	 * strip while it is up.
+	 * finish_session_drag(), and a pane of one tab has no bar. Side by
+	 * side it shows a ring along all four edges while the drag is up --
+	 * one strip on one side read as the only place for a tab, labelled on
+	 * an arbitrary side of four (the holder, 2026-10-31) -- and a release
+	 * in the band on any side makes a tab with the bar on that side. Each
+	 * side, and the ring gone after.
 	 */
-	bssh_session_registry *shared = bssh_session_registry::shared();
-	while (shared->count() > 0) shared->close(shared->at(0));
-	const registry_left_as_found_t tidy(shared);
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	struct side_t { int edge; bssh_app_settings::tab_position_t bars; };
+	for (const side_t side : { side_t{ bssh_layout_manager::EDGE_TOP, bssh_app_settings::TABS_TOP },
+	                           side_t{ bssh_layout_manager::EDGE_LEFT, bssh_app_settings::TABS_LEFT },
+	                           side_t{ bssh_layout_manager::EDGE_BOTTOM, bssh_app_settings::TABS_BOTTOM },
+	                           side_t{ bssh_layout_manager::EDGE_RIGHT, bssh_app_settings::TABS_RIGHT } }) {
+		bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+		bssh_session_registry *shared = bssh_session_registry::shared();
+		while (shared->count() > 0) shared->close(shared->at(0));
+		const registry_left_as_found_t tidy(shared);
 
-	bssh_main_window window;
-	window.resize(1000, 700);
-	window.move(0, 0);
-	window.show();
-	QVERIFY(QTest::qWaitForWindowExposed(&window));
+		/* Inside the offscreen screen, so every edge is on it. */
+		bssh_main_window window;
+		window.resize(760, 560);
+		window.move(0, 0);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
-	window.adopt_session(a);
-	bssh_session *c = window.registry()->create(named(QStringLiteral("c")));
-	QCoreApplication::processEvents();
-	QVERIFY(window.bar_for(a) && window.bar_for(a)->isHidden());
+		bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+		window.adopt_session(a);
+		bssh_session *c = window.registry()->create(named(QStringLiteral("c")));
+		QCoreApplication::processEvents();
+		QVERIFY(window.bar_for(a) && window.bar_for(a)->isHidden());
 
-	window.set_session_drag_active(true);
-	QWidget *strip = window.tab_drop_target(a);
-	QVERIFY(strip && strip->isVisible());
-	window.finish_session_drag(c, strip->mapToGlobal(strip->rect().center()));
-	window.set_session_drag_active(false);
-	QCoreApplication::processEvents();
+		window.set_session_drag_active(true);
+		bssh_terminal_view *view = window.panes()->view_for(a);
+		QVERIFY(view);
+		QVERIFY2(view->tab_ring_shown(), "a pane with no bar shows no ring to make a tab on");
+		QVERIFY2(!window.tab_drop_target(a), "and a strip on one side as well as the ring");
 
-	QCOMPARE(window.panes()->pane_count(), 1);
-	QCOMPARE(tab_sessions(window, a), QList<bssh_session *>({ a, c }));
+		/* Half a band in from the side, half way along it. */
+		const int half = bssh_drop_band(view->cell_height()) / 2;
+		QPoint at;
+		switch (side.edge) {
+		case bssh_layout_manager::EDGE_LEFT:   at = QPoint(half, view->height() / 2); break;
+		case bssh_layout_manager::EDGE_RIGHT:  at = QPoint(view->width() - 1 - half, view->height() / 2); break;
+		case bssh_layout_manager::EDGE_TOP:    at = QPoint(view->width() / 2, half); break;
+		default:                               at = QPoint(view->width() / 2, view->height() - 1 - half); break;
+		}
+		window.finish_session_drag(c, view->mapToGlobal(at));
+		window.set_session_drag_active(false);
+		QCoreApplication::processEvents();
+
+		const QByteArray where = "released on side " + QByteArray::number(side.edge);
+		QVERIFY2(window.panes()->pane_count() == 1, where + ": split rather than made a tab");
+		QVERIFY2(tab_sessions(window, a).size() == 2 && tab_sessions(window, a).contains(c),
+		         where + ": not a tab");
+		QVERIFY2(bssh_app_settings().tab_position() == side.bars, where + ": the bar went elsewhere");
+		for (bssh_terminal_view *each : window.panes()->views())
+			QVERIFY2(!each->tab_ring_shown(), where + ": the ring outlived the drag");
+	}
 }
 
 namespace {

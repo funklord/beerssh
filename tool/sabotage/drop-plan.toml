@@ -153,3 +153,12 @@ replace = """
 	event->ignore();
 	return true;"""
 expect = "a_drop_from_another_process_is_refused"
+
+# Side by side, a pane with no bar shows no ring while a terminal is
+# dragged: its four tab bands work and nothing says so.
+[[sabotage]]
+name = "a pane with no bar shows no ring to make a tab on"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tif (bssh_terminal_view *view = m_panes->view_for(front)) view->show_tab_ring(true);\n"
+replace = ""
+expect = "a_release_on_a_strip_makes_a_tab"

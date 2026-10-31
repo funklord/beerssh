@@ -925,6 +925,16 @@ public:
 	int drop_zone() const { return m_drop_edge; }
 
 	/*
+	 * While a terminal is being dragged, the band along all four edges
+	 * where a drop makes it a tab here, drawn faintly as one ring -- the
+	 * side the bar would go on is the side it is dropped at, so no one
+	 * side is "the" place (the holder, 2026-10-31). The side under the
+	 * pointer is lit by show_drop_zone() as before.
+	 */
+	void show_tab_ring(bool shown);
+	bool tab_ring_shown() const { return m_tab_ring; }
+
+	/*
 	 * Who decides what a session dropped here does. Without one the zone
 	 * under the pointer is taken as it is, which is what a bare view in a
 	 * test wants; a window sets one on every pane it shows.
@@ -1170,6 +1180,7 @@ private:
 	 * letting go.
 	 */
 	int m_drop_edge;
+	bool m_tab_ring = false;
 	bssh_drop_planner_t m_drop_planner;
 	bool m_pointer_inside;
 	bool m_pane_handle;

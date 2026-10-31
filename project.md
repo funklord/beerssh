@@ -7557,6 +7557,18 @@ window with no name is a blank row in the task switcher.
   between them was wrong (the slot right, its mark drawn nowhere) and the
   mapping goes through global coordinates.
   `the_tab_row_takes_a_drop_at_the_slot_it_marks`.
+  **Side by side, a ring rather than a strip (2026-10-31).** The holder:
+  "it is a bit confusing that it says drop here for tabs, in one of the
+  arbitrary 4 sides of a terminal that could have a tab bar placed in any
+  side of them" -- a bar-less pane already took a tab along any of its
+  four edges, the bar going to that side, and the one labelled strip read
+  as the only place. While a terminal is dragged, a side-by-side pane with
+  no bar now shows the four bands at once, faintly, as one ring with a
+  dashed line where they end; the side under the pointer is lit and says
+  "Tab bar here", turned along the side. The strip is gone there. The
+  stacked column keeps it, since its bands split rather than make tabs.
+  `a_release_on_a_strip_makes_a_tab` releases on each side and asserts the
+  tab, the side the bar went to, and the ring gone after the drag.
   **Built, step 3: another process refused, and Escape.** The payload is
   `<pid>:<index>` (`bssh_session_payload`); one from another process --
   or a bare index, the format before -- names nothing here. Under QDrag
