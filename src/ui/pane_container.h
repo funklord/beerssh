@@ -2,6 +2,9 @@
 #define BSSH_PANE_CONTAINER_H
 
 #include <QList>
+#include <QString>
+#include <QSet>
+#include <QHash>
 #include <QWidget>
 
 #include "ui/input_mode.h"
@@ -263,7 +266,7 @@ private:
 	 * the i-th session.
 	 */
 	void build_panes(const QList<bssh_session *> &panes);
-	void add_split_children(const bssh_pane_node &node, QSplitter *into);
+	void add_split_children(const bssh_pane_node &node, QSplitter *into, const QString &path);
 	bssh_terminal_view *add_pane_view(bssh_session *session, QSplitter *parent);
 
 	/* Handle width, collapsing and the snap, the same for every splitter. */
@@ -271,6 +274,27 @@ private:
 	QList<QSplitter *> all_splitters() const;
 	void snap_splitter(QSplitter *splitter);
 	void equalize_splitter(QSplitter *splitter);
+
+	/*
+	 * The dividers kept across a rebuild (sec 8.3). Every layout change
+	 * builds the splitters afresh, and a new splitter starts at its own
+	 * default split -- so a divider dragged to a third went back towards
+	 * the middle when a tab was opened, picked or moved: the holder's
+	 * "springiness back to certain shape". Remembered before the old
+	 * splitters go, given back to the new ones: exactly, by position,
+	 * while the tree keeps its shape; by pane where it does not, each
+	 * pane keeping the room it had and a new one sharing its neighbour's.
+	 */
+	void remember_divisions();
+	void restore_divisions(const bssh_pane_node &tree);
+	int extent_of(QWidget *child, Qt::Orientation axis) const;
+
+	QHash<QSplitter *, QString> m_splitter_paths;
+	QHash<QWidget *, QList<bssh_session *>> m_frame_tabs;
+	QHash<QString, QList<int>> m_divisions;
+	QString m_division_shape;
+	QHash<bssh_session *, QSize> m_pane_sizes;
+	QSet<bssh_session *> m_last_fronts;
 
 	/* Sizes the column for m_column_visible; again whenever the viewport moves. */
 	void apply_column_visible();

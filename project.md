@@ -6446,6 +6446,21 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   inputs because Qt synthesises a double-click from a double tap. Equalizing
   re-snaps to cells afterwards, or it would undo the rule the drag handler
   exists to enforce.
+  **A divider stays where it was put -- 2026-10-31.** The holder: "can we stop
+  the dividers from resizing and jumbling everything so much after a change in
+  layout? It seems to have a preference or a springiness back to certain
+  shape." Every layout change rebuilds the splitters, and a new splitter starts
+  at its own default split: a divider dragged to a quarter came back at 0.46
+  when a tab was opened and at 0.86 when the other pane was split. Before the
+  old splitters go, `remember_divisions()` keeps each one's sizes under its
+  place in the tree and each pane's size under its front; after the new ones
+  are built, `restore_divisions()` gives them back -- exactly, by place, while
+  the tree keeps its shape (a tab opened or picked, a swap, the bars moved),
+  and by pane where it does not, each pane keeping the room it had and a new
+  one sharing its neighbour's, which halves the pane it was split from. A pane
+  is found through any of its tabs that was in front, since picking a tab
+  changes a pane's front. Tiled only; the column's sizing is its own (sec 8.7).
+  `a_dragged_divider_stays_where_it_was_put`; caught in `arrangement.toml`.
   **And the touch target was 8dp, under a comment claiming it honoured the
   48.** A splitter's grab area *is* its handle width — Qt has no separate hit
   region — so the number is the target, and 8 is six times too small for a

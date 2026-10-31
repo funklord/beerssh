@@ -6854,6 +6854,80 @@ void layout_test::a_touch_windows_pane_controls_reach_the_floor() {
 	}
 }
 
+void layout_test::a_dragged_divider_stays_where_it_was_put() {
+	/*
+	 * The holder: "can we stop the dividers from resizing and jumbling
+	 * everything so much after a change in layout? It seems to have a
+	 * preference or a springiness back to certain shape." Every layout
+	 * change rebuilds the splitters, and a new splitter starts at its
+	 * default split -- so a divider dragged to a third went back to the
+	 * middle when a tab was opened, picked or moved (sec 8.3).
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
+
+	bssh_main_window window;
+	window.resize(1500, 800);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_layout_manager *layout = window.layout_manager();
+
+	bssh_session *left = window.registry()->create(named(QStringLiteral("left")));
+	bssh_session *right = window.registry()->create(named(QStringLiteral("right")));
+	window.adopt_session(left);
+	window.adopt_session(right);
+	QTest::qWait(30);
+	window.drop_session_on(right, layout->front_of(right), bssh_layout_manager::EDGE_RIGHT);
+	QTest::qWait(50);
+	QCOMPARE(layout->visible_panes().size(), 2);
+
+	/* The split put at a quarter, as a drag of the divider would. */
+	const auto root = [&window]() {
+		return window.panes()->findChild<QSplitter *>(QString(), Qt::FindDirectChildrenOnly);
+	};
+	const auto share = [&window, layout](bssh_session *pane) {
+		bssh_terminal_view *view = window.panes()->view_for(layout->front_of(pane));
+		return view ? double(view->parentWidget()->width()) / window.panes()->width() : -1.0;
+	};
+	QSplitter *splitter = root();
+	QVERIFY(splitter && splitter->count() == 2);
+	const int total = splitter->sizes().at(0) + splitter->sizes().at(1);
+	splitter->setSizes({ total / 4, total - total / 4 });
+	QTest::qWait(50);
+	QVERIFY2(qAbs(share(left) - 0.25) < 0.05, qPrintable(QString::number(share(left))));
+
+	const auto still_a_quarter = [&](const char *after) {
+		const double now = share(left);
+		QVERIFY2(qAbs(now - 0.25) < 0.05,
+		          qPrintable(QStringLiteral("after %1 the left pane is %2 of the width, not a quarter")
+		                             .arg(QString::fromLatin1(after)).arg(now)));
+	};
+
+	/* A tab opened in the right pane: the same shape, rebuilt. */
+	bssh_session *third = window.registry()->create(named(QStringLiteral("third")));
+	window.panes()->focus_session(layout->front_of(right));
+	window.adopt_session(third);
+	QTest::qWait(50);
+	still_a_quarter("a tab opened");
+
+	/* The bars moved to the bottom: rebuilt again. */
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_BOTTOM);
+	window.apply_device_settings();
+	QTest::qWait(50);
+	still_a_quarter("the bars moved");
+
+	/* A new pane split off the right one: the left keeps its width. */
+	window.drop_session_on(third, layout->front_of(third), bssh_layout_manager::EDGE_BOTTOM);
+	QTest::qWait(50);
+	QCOMPARE(layout->visible_panes().size(), 3);
+	still_a_quarter("the right pane was split");
+}
+
 void layout_test::a_shape_survives_being_written_down() {
 	bssh_session_registry registry;
 	bssh_layout_manager layout;

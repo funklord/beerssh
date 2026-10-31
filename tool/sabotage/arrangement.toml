@@ -154,3 +154,11 @@ file = "src/ui/main_window.cpp"
 find = "\tif (!m_layout->room_to_split(target, edge, new_pane ? nullptr : session)) return folded;\n"
 replace = "\tif (new_pane && !m_layout->room_to_split(target, edge)) return folded;\n"
 expect = "moving_a_pane_where_it_does_not_fit_folds_no_other"
+
+# The dividers built afresh at their default split on every rebuild.
+[[sabotage]]
+name = "a dragged divider springs back"
+file = "src/ui/pane_container.cpp"
+find = "\tif (!column) restore_divisions(m_layout->visible_tree());\n"
+replace = ""
+expect = "a_dragged_divider_stays_where_it_was_put"

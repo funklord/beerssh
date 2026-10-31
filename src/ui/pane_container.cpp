@@ -124,16 +124,20 @@ void bssh_pane_container::build_panes(const QList<bssh_session *> &panes) {
 	}
 
 	m_splitter->setOrientation(tree.orientation);
-	add_split_children(tree, m_splitter);
+	add_split_children(tree, m_splitter, QStringLiteral("r"));
 }
 
-void bssh_pane_container::add_split_children(const bssh_pane_node &node, QSplitter *into) {
+void bssh_pane_container::add_split_children(const bssh_pane_node &node, QSplitter *into,
+                                             const QString &path) {
+	m_splitter_paths.insert(into, path);
+	int index = 0;
 	/*
 	 * In order, and that is what places them: a QSplitter lays out its
 	 * children in the order they were created in it, so building depth
 	 * first puts every pane and every nested split where the tree says.
 	 */
 	for (const bssh_pane_node &child : node.children) {
+		const QString here = path + QLatin1Char('.') + QString::number(index++);
 		if (child.is_leaf()) {
 			add_pane_view(child.session, into);
 			continue;
@@ -150,7 +154,7 @@ void bssh_pane_container::add_split_children(const bssh_pane_node &node, QSplitt
 		QSplitter *nested = new QSplitter(child.orientation, into);
 		into->addWidget(nested);
 		configure_splitter(nested);
-		add_split_children(child, nested);
+		add_split_children(child, nested, here);
 	}
 }
 
@@ -236,6 +240,7 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	 */
 	parent->addWidget(frame);
 	m_frames.append(frame);
+	m_frame_tabs.insert(frame, m_layout ? m_layout->tabs(session) : QList<bssh_session *>{ session });
 	m_bars.append(bar);
 
 	/*
@@ -508,6 +513,122 @@ int bssh_pane_container::divider() const {
 	return m_splitter->handleWidth();
 }
 
+namespace {
+
+/* A tree's shape without its sessions: which way each split runs and how
+ * many it holds. Two builds with the same signature have their dividers
+ * in the same places. */
+QString division_signature(const bssh_pane_node &node) {
+	if (node.is_leaf()) return QStringLiteral("p");
+	QString out = node.orientation == Qt::Horizontal ? QStringLiteral("H(") : QStringLiteral("V(");
+	bool first = true;
+	for (const bssh_pane_node &child : node.children) {
+		if (!first) out += QLatin1Char(',');
+		first = false;
+		out += division_signature(child);
+	}
+	return out + QLatin1Char(')');
+}
+
+} /* namespace */
+
+void bssh_pane_container::remember_divisions() {
+	/*
+	 * Only what was laid out: a window not yet shown has splitters of
+	 * nothing, and remembering those would forget the real ones.
+	 */
+	QHash<QString, QList<int>> divisions;
+	for (auto it = m_splitter_paths.cbegin(); it != m_splitter_paths.cend(); ++it) {
+		const QList<int> sizes = it.key()->sizes();
+		int total = 0;
+		for (const int size : sizes) total += size;
+		if (total > 0) divisions.insert(it.value(), sizes);
+	}
+	if (divisions.isEmpty()) return;
+	m_divisions = divisions;
+
+	QSet<bssh_session *> fronts;
+	for (int i = 0; i < m_frames.size() && i < m_sessions.size(); ++i) {
+		QWidget *frame = m_frames.at(i);
+		if (!frame || frame->size().isEmpty()) continue;
+		m_pane_sizes.insert(m_sessions.at(i), frame->size());
+		fronts.insert(m_sessions.at(i));
+	}
+	m_last_fronts = fronts;
+}
+
+int bssh_pane_container::extent_of(QWidget *child, Qt::Orientation axis) const {
+	if (QSplitter *splitter = qobject_cast<QSplitter *>(child)) {
+		/* Across its own direction a split is as wide as its widest
+		 * part; along it, its parts added up. */
+		int widest = -1;
+		int sum = 0;
+		int known = 0;
+		for (int i = 0; i < splitter->count(); ++i) {
+			const int part = extent_of(splitter->widget(i), axis);
+			if (part < 0) continue;
+			widest = qMax(widest, part);
+			sum += part;
+			++known;
+		}
+		if (known == 0) return -1;
+		if (splitter->orientation() != axis) return widest;
+		return sum + (splitter->count() - known) * (sum / known);
+	}
+
+	/* A pane: the room its own front had last time, found through any of
+	 * its tabs that was in front, since picking a tab changes the front
+	 * of the same pane. */
+	for (bssh_session *session : m_frame_tabs.value(child)) {
+		if (!m_last_fronts.contains(session)) continue;
+		const QSize size = m_pane_sizes.value(session);
+		if (size.isEmpty()) continue;
+		return axis == Qt::Horizontal ? size.width() : size.height();
+	}
+	return -1;
+}
+
+void bssh_pane_container::restore_divisions(const bssh_pane_node &tree) {
+	const QString shape = division_signature(tree);
+	const bool same_shape = shape == m_division_shape;
+	m_division_shape = shape;
+	if (tree.is_leaf() || tree.is_empty()) return;
+
+	for (auto it = m_splitter_paths.cbegin(); it != m_splitter_paths.cend(); ++it) {
+		QSplitter *splitter = it.key();
+
+		/* The same shape: every divider exactly where it was. */
+		if (same_shape) {
+			const QList<int> was = m_divisions.value(it.value());
+			if (was.size() == splitter->count()) splitter->setSizes(was);
+			continue;
+		}
+
+		/*
+		 * A new shape: each part as big as its panes were. A part with
+		 * no history -- a new pane -- takes its neighbour's, which for a
+		 * pane just split off halves the one it came from. setSizes()
+		 * shares the room out in these proportions.
+		 */
+		QList<int> sizes;
+		for (int i = 0; i < splitter->count(); ++i)
+			sizes << extent_of(splitter->widget(i), splitter->orientation());
+		bool any = false;
+		for (const int size : sizes) any = any || size >= 0;
+		if (!any) continue;
+		for (int i = 0; i < sizes.size(); ++i) {
+			if (sizes.at(i) >= 0) continue;
+			int near = -1;
+			for (int step = 1; near < 0 && step < sizes.size(); ++step) {
+				if (i - step >= 0 && sizes.at(i - step) >= 0) near = sizes.at(i - step);
+				else if (i + step < sizes.size() && sizes.at(i + step) >= 0) near = sizes.at(i + step);
+			}
+			sizes[i] = near;
+		}
+		splitter->setSizes(sizes);
+	}
+}
+
 void bssh_pane_container::rebuild() {
 	if (!m_layout) return;
 
@@ -550,6 +671,11 @@ void bssh_pane_container::rebuild() {
 	 * loses precisely nothing. Diffing would be an optimisation of the
 	 * cheap half at the cost of the subtle half.
 	 */
+	/* What the dividers were, before the splitters holding them go. */
+	if (!column) remember_divisions();
+	m_splitter_paths.clear();
+	m_frame_tabs.clear();
+
 	/* The frames, which take their bars and views with them. */
 	m_rebuilding = true;
 	qDeleteAll(m_frames);
@@ -587,6 +713,7 @@ void bssh_pane_container::rebuild() {
 	update_on_screen();
 
 	build_panes(panes);
+	if (!column) restore_divisions(m_layout->visible_tree());
 
 	/*
 	 * The handles are QSplitter's own and are made and unmade with the
