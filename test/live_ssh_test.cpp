@@ -1122,7 +1122,9 @@ void live_ssh_test::a_copy_cut_off_by_a_disconnect_says_so()
 	 * The connection closing during a copy (sec 6.4): the SFTP session and
 	 * the file open on it are freed by the teardown, a piece already
 	 * scheduled finds nothing to do, and the copy is reported as cut off
-	 * -- once, not never and not twice.
+	 * -- once, not never and not twice. The disconnect is asked for, so
+	 * the connection is still there to remove the half-written file over,
+	 * and it goes.
 	 */
 	QTemporaryDir from;
 	QTemporaryDir into;
@@ -1176,6 +1178,8 @@ void live_ssh_test::a_copy_cut_off_by_a_disconnect_says_so()
 	QCOMPARE(finished, 1);
 	QVERIFY2(!finished_ok, "a copy cut off by a disconnect reported success");
 	QVERIFY2(!why.isEmpty(), "and said nothing about why");
+	QVERIFY2(!QFileInfo::exists(into.filePath(QStringLiteral("big.bin"))),
+	         "a disconnect left the half-written file behind");
 }
 
 void live_ssh_test::a_copy_can_be_stopped_and_leaves_nothing_half_written()

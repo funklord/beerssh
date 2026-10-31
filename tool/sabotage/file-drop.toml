@@ -73,3 +73,13 @@ file = "src/ssh/pty_session.cpp"
 find = "\t\tm_copier->wait();\n"
 replace = ""
 expect = "a_closed_local_session_leaves_no_half_copied_file"
+
+# A disconnect asked for mid-copy leaves the half-written file on the
+# remote, though the connection was still there to remove it over.
+# Its test is live, so run this one with check-ssh as the suite.
+[[sabotage]]
+name = "a disconnect leaves the half-written remote file"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\t\tif (m_session && ssh_is_connected(m_session)) drop_partial_upload();\n"
+replace = ""
+expect = "a_copy_cut_off_by_a_disconnect_says_so"

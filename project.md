@@ -3455,9 +3455,10 @@ model on a finger.
   **A copy under way can be stopped**, from the terminal menu's "Stop the
   Copy to host:/dir" while one runs: the file half-written is removed, by
   SFTP or locally, and the pane says "Copy stopped". **A connection that
-  closes mid-copy** reports it cut off, once, with its reason; the file it
-  was writing may be left partly written there, since there is no
-  connection left to remove it over. Both measured against a real sshd
+  closes mid-copy** reports it cut off, once, with its reason. Closed on
+  purpose -- the tab, Disconnect -- it is still up while it goes, so the
+  half-written file is removed over it first; one that dropped may leave
+  the file partly written, with no connection left to remove it over. Both measured against a real sshd
   (`a_copy_can_be_stopped_and_leaves_nothing_half_written`,
   `a_copy_cut_off_by_a_disconnect_says_so`), the stop also locally and
   through the window (`a_local_copy_can_be_stopped`).

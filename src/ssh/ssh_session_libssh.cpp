@@ -227,6 +227,7 @@ public slots:
 	void do_find_working_directory();
 	void do_upload(const QStringList &paths, const QString &directory);
 	void do_cancel_upload();
+	void drop_partial_upload();
 	void do_restart_shell(const QStringList &command);
 	void do_set_compression(bool compression);
 	void do_set_identity_file(const QString &path);
@@ -409,8 +410,16 @@ void bssh_libssh_worker::teardown() {
 		emit working_directory_found(bssh_working_directory_t());
 	}
 
-	/* SFTP lives on the session, so it goes first; a copy cut off says so. */
-	if (m_upload) finish_upload(false, QStringLiteral("the connection closed during the copy"));
+	/*
+	 * SFTP lives on the session, so it goes first; a copy cut off says so.
+	 * Where the connection is still up -- the tab closed, Disconnect -- the
+	 * half-written file goes too, as a stopped copy's does; one that has
+	 * already dropped has nothing left to remove it over.
+	 */
+	if (m_upload) {
+		if (m_session && ssh_is_connected(m_session)) drop_partial_upload();
+		finish_upload(false, QStringLiteral("the connection closed during the copy"));
+	}
 
 	if (m_channel) {
 		if (ssh_channel_is_open(m_channel)) ssh_channel_close(m_channel);
@@ -1446,14 +1455,18 @@ void bssh_libssh_worker::step_upload() {
 
 void bssh_libssh_worker::do_cancel_upload() {
 	if (!m_upload) return;
+	drop_partial_upload();
+	finish_upload(false, QString::fromLatin1(BSSH_COPY_STOPPED));
+}
+
+/* The file half-written goes, as the local copy's does. */
+void bssh_libssh_worker::drop_partial_upload() {
 	upload_job &job = *m_upload;
-	/* The file half-written goes, as the local copy's does. */
 	if (job.file && job.at < job.items.size()) {
 		sftp_close(job.file);
 		job.file = nullptr;
 		sftp_unlink(job.sftp, job.items.at(job.at).remote.toUtf8().constData());
 	}
-	finish_upload(false, QString::fromLatin1(BSSH_COPY_STOPPED));
 }
 
 void bssh_libssh_worker::finish_upload(bool ok, const QString &why) {
