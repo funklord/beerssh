@@ -38,6 +38,7 @@ private slots:
 	void a_refused_password_is_not_reconnected();
 	void a_reconnect_offers_only_the_password_that_got_in();
 	void a_password_never_answered_is_not_replayed();
+	void a_search_cut_off_by_a_reconnect_is_answered();
 };
 
 #endif /* BSSH_CONN_MANAGER_TEST_H */

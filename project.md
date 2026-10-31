@@ -3482,10 +3482,15 @@ model on a finger.
   so itself** (2026-10-31): the transport's own report comes after it is
   deleted -- dropped outright by a local copy's guard, and behind the
   deferred delete when it comes from the SSH worker -- so the session went
-  on saying a copy ran, offering Stop for nothing and refusing every move
-  to another process. `reconnect()` stops the copy, cuts the old transport
-  loose and reports it cut off, once
-  (`a_copy_cut_off_by_a_reconnect_is_reported_once`). Under ASan and UBSan, the
+  on saying a copy ran, offering Stop for nothing. (Not refusing moves, as
+  `a8b8349` said: that refusal asks the transport, and the new one has no
+  copy.) `reconnect()` stops the copy, cuts the old transport loose and
+  reports it cut off, once (`a_copy_cut_off_by_a_reconnect_is_reported_once`).
+  A search for the shell's directory pending on the old transport is
+  answered likewise, with nothing found: the window waits for one answer,
+  and with none coming its wait stayed armed, so the next drop opened the
+  earlier drop's menu as well, with the earlier files
+  (`a_search_cut_off_by_a_reconnect_is_answered`). Under ASan and UBSan, the
   three live copy tests ran clean in both phases that connect.
   `the_working_directory_rules_hold`,
   `the_probe_finds_the_shell_on_its_connections_terminal`,

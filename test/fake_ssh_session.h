@@ -59,6 +59,7 @@ public:
 	 * copy that records what it was asked for and succeeds. */
 	void set_working_directory(const bssh_working_directory_t &found) { m_found = found; }
 	void find_working_directory() override {
+		if (m_find_held) return;
 		const bssh_working_directory_t found = m_found;
 		QMetaObject::invokeMethod(this, [this, found] { emit working_directory_found(found); },
 		                          Qt::QueuedConnection);
@@ -80,6 +81,9 @@ public:
 	}
 	/* A copy that runs until it is stopped. */
 	void set_upload_held(bool held) { m_upload_held = held; }
+	/* A search whose answer never comes, as the SSH worker's is lost
+	 * when its transport is deleted before the answer is delivered. */
+	void set_find_held(bool held) { m_find_held = held; }
 	void cancel_upload() override {
 		const QString directory = m_uploaded_to;
 		QMetaObject::invokeMethod(this, [this, directory] {
@@ -175,6 +179,7 @@ private:
 	QStringList m_uploaded;
 	QString m_uploaded_to;
 	bool m_upload_held = false;
+	bool m_find_held = false;
 	QStringList m_side_commands;
 	QStringList m_restarts;
 	QString m_fail_reason;

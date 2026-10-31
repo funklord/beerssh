@@ -395,6 +395,7 @@ private:
 	bool m_mux_answered = false;
 	bool m_mux_listing = false;
 	bool m_uploading = false;
+	bool m_finding_directory = false;
 	QString m_upload_directory;
 
 	/* Lists what is running beside the shell, if it should; asked, even

@@ -388,6 +388,7 @@ void bssh_session::wire_transport() {
 	/* Where a dropped file goes, and the copy (sec 6.4). */
 	connect(m_transport, &bssh_ssh_session::working_directory_found, this,
 	         [this](bssh_working_directory_t found) {
+		m_finding_directory = false;
 		if (found.path.isEmpty() && !found.elsewhere && m_emulator)
 			found.path = bssh_reported_directory(m_emulator->reported_directory(), found.host);
 		emit working_directory_found(found);
@@ -539,17 +540,27 @@ void bssh_session::reconnect() {
 
 	if (m_transport) {
 		/*
-		 * A copy on the old transport ends with it (sec 6.4), and says so
-		 * here: its own report would come after the transport is deleted
-		 * -- dropped by a local copy's guard, or behind the deferred delete
-		 * from the SSH worker -- and the session would go on saying a copy
-		 * runs: Stop offered for nothing, a move refused for ever. Stopped
-		 * first, so a local one removes what it half wrote, and cut loose
-		 * so a late report cannot come twice.
+		 * What is in flight on the old transport ends with it (sec 6.4),
+		 * and the session says so: the transport's own report would come
+		 * after it is deleted -- dropped by a local copy's guard, or behind
+		 * the deferred delete from the SSH worker -- and never arrive. A
+		 * copy left "running" offers Stop for nothing; a search for the
+		 * shell's directory left unanswered leaves the window's wait armed,
+		 * and the next drop's answer opens this drop's menu too. The copy
+		 * is stopped first, so a local one removes what it half wrote; the
+		 * transport is cut loose so a late report cannot come twice; and
+		 * the search is answered, with nothing found, from the event loop,
+		 * since the answer opens a menu and this is no place for its loop.
 		 */
+		if (m_uploading || m_finding_directory) disconnect(m_transport, nullptr, this, nullptr);
+		if (m_finding_directory) {
+			m_finding_directory = false;
+			QMetaObject::invokeMethod(this, [this] {
+				emit working_directory_found(bssh_working_directory_t());
+			}, Qt::QueuedConnection);
+		}
 		if (m_uploading) {
 			m_transport->cancel_upload();
-			disconnect(m_transport, nullptr, this, nullptr);
 			const QString directory = m_upload_directory;
 			m_uploading = false;
 			m_upload_directory.clear();
@@ -936,7 +947,10 @@ bool bssh_session::can_offer_multiplexers() const {
 }
 
 void bssh_session::find_working_directory() {
-	if (m_transport) m_transport->find_working_directory();
+	if (m_transport) {
+		m_finding_directory = true;
+		m_transport->find_working_directory();
+	}
 	else emit working_directory_found(bssh_working_directory_t());
 }
 

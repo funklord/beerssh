@@ -93,3 +93,13 @@ file = "src/model/session.cpp"
 find = "\t\tif (m_uploading) {\n\t\t\tm_transport->cancel_upload();\n"
 replace = "\t\tif (false) {\n\t\t\tm_transport->cancel_upload();\n"
 expect = "a_copy_cut_off_by_a_reconnect_is_reported_once"
+
+# A search for the shell's directory pending when the transport is
+# replaced is never answered, and the window's wait stays armed for the
+# next drop's answer.
+[[sabotage]]
+name = "a reconnect leaves a directory search unanswered"
+file = "src/model/session.cpp"
+find = "\t\tif (m_finding_directory) {\n\t\t\tm_finding_directory = false;\n"
+replace = "\t\tif (false) {\n\t\t\tm_finding_directory = false;\n"
+expect = "a_search_cut_off_by_a_reconnect_is_answered"

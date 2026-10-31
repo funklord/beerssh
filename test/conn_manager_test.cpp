@@ -540,3 +540,42 @@ void conn_manager_test::a_network_change_does_not_dial_a_session_never_connected
 
 	bssh_ssh_session::set_factory(nullptr);
 }
+
+void conn_manager_test::a_search_cut_off_by_a_reconnect_is_answered() {
+	/*
+	 * A drop asks where the shell is and waits for one answer (sec 6.4).
+	 * The transport is replaced before it comes -- the SSH worker's
+	 * answer then arrives behind the old transport's deferred delete and
+	 * is lost, which the held fake stands for -- and the session answers
+	 * itself, with nothing found, once: otherwise the window's wait stays
+	 * armed and the next drop opens this one's menu as well.
+	 */
+	const bssh_factory_reset_t reset;
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_session session(host(QStringLiteral("searching")));
+	session.connect_to_host();
+	QVERIFY(fake != nullptr);
+	fake->simulate_key_auth_success();
+	fake->set_find_held(true);
+
+	QSignalSpy answered(&session, &bssh_session::working_directory_found);
+	session.find_working_directory();
+	session.reconnect();
+	QTRY_COMPARE_WITH_TIMEOUT(answered.count(), 1, 2000);
+	QVERIFY(answered.first().at(0).value<bssh_working_directory_t>().path.isEmpty());
+
+	/* The new transport answers the next search, and only that. */
+	bssh_working_directory_t there;
+	there.path = QStringLiteral("/srv/next");
+	fake->set_working_directory(there);
+	session.find_working_directory();
+	QTRY_COMPARE_WITH_TIMEOUT(answered.count(), 2, 2000);
+	QCOMPARE(answered.at(1).at(0).value<bssh_working_directory_t>().path, QStringLiteral("/srv/next"));
+	QTest::qWait(200);
+	QCOMPARE(answered.count(), 2);
+}
