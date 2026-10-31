@@ -459,7 +459,7 @@ void platform_test::the_focus_follows_mouse_setting_survives_a_restart() {
 	 */
 	{
 		bssh_app_settings settings(dir.path());
-		QVERIFY2(!settings.focus_follows_mouse(), "off by default, per sec 8.3");
+		QVERIFY2(settings.focus_follows_mouse(), "on by default, per sec 8.3");
 
 		settings.set_focus_follows_mouse(true);
 	}

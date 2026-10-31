@@ -6388,11 +6388,15 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   border or dimmed inactive panes. Non-negotiable for safety (§6.3), and *more*
   important on desktop, not less: four panes fit on a monitor, and a pointer
   moving over an unfocused pane invites the assumption that it's the live one.
-  **[DECIDED]** desktop offers focus-follows-mouse, **off by default** — which
-  is what this line asked for before it was built. Off because it surprises
-  anyone expecting click-to-focus, and the cost of that surprise is typing into
-  the wrong shell, which is the same hazard this bullet calls non-negotiable
-  about the border.
+  **[DECIDED]** desktop offers focus-follows-mouse, **on by default** -- the
+  holder, 2026-10-31: "the focus follows mouse is not on by default nor is
+  there any config for it". It was off at first, for anyone expecting
+  click-to-focus, whose surprise is typing into the wrong shell; the border
+  this bullet calls non-negotiable is what answers that now, showing which
+  pane has the keyboard wherever the pointer is. The setting was there all
+  along, on the Terminal page and explained only in a tooltip, and the holder
+  looked for it and did not find it -- so it sits with the other pane
+  settings on Appearance now, with its note in sight.
   Implemented by **asking for focus** on pointer-enter rather than by telling
   the pane container directly, so hover goes down the identical path a click
   does: the border, the status line, what copy and paste act on, and §7.1's
@@ -16840,7 +16844,7 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
 | Desktop secret-store backend and its no-keyring fallback — both built, chosen at runtime | §11 |
 | Desktop packaging — tarball, `make install` and a `.deb`; Flatpak deferred | §12.2 |
 | Multiple top-level windows on desktop — in, one process-wide registry | §8.4 |
-| Focus-follows-mouse on desktop — offered, off by default | §8.3 |
+| Focus-follows-mouse on desktop — offered, on by default | §8.3 |
 | Font shortlist — six selectable, two fallback-only | §9.2 |
 | `~/.ssh/config` import — built, an explicit import and never a live read | §10.5 |
 | Bundled soft keyboard — built, `KEYBOARD_SYSTEM` or `KEYBOARD_BUILT_IN` | §6.2 |

@@ -529,6 +529,27 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (on_this_page(SECTION_APPEARANCE, snap_note)) form->addRow(snap_note);
 
 	/*
+	 * Offered only where there is a pointer to hover (sec 8.3). On touch
+	 * it would be a setting with nothing to act on, which is the same
+	 * dishonesty as offering to hide a window from screenshots where
+	 * nothing can. With the other pane settings, and its reason in sight
+	 * rather than in a tooltip: on the Terminal page, explained only on
+	 * hover, the holder looked for it and concluded there was none.
+	 */
+	m_focus_follows_mouse = nullptr;
+	if (!touch) {
+		m_focus_follows_mouse =
+		        new QCheckBox(QStringLiteral("Focus the pane under the pointer"), this);
+		if (on_this_page(SECTION_APPEARANCE, m_focus_follows_mouse)) form->addRow(m_focus_follows_mouse);
+		QLabel *follows_note = bssh_wrapped_note(
+		        QStringLiteral("With more than one pane, the one the pointer is over takes "
+		                        "the keyboard without a click. Off, a click chooses."),
+		        this);
+		if (on_this_page(SECTION_APPEARANCE, follows_note)) form->addRow(follows_note);
+	}
+
+
+	/*
 	 * What the status line says, or that it says nothing (sec 8.4). It
 	 * used to be unconditional, and its first field was the QPA platform
 	 * name -- a fact a developer wants and a user has no use for.
@@ -630,24 +651,6 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 		                        "whatever was last on screen, which here is your shell. It "
 		                        "stops you screenshotting the terminal too."));
 		if (on_this_page(SECTION_TERMINAL, m_hide_from_screenshots)) form->addRow(m_hide_from_screenshots);
-	}
-
-	/*
-	 * Offered only where there is a pointer to hover (sec 8.3). On touch
-	 * it would be a setting with nothing to act on, which is the same
-	 * dishonesty as offering to hide a window from screenshots where
-	 * nothing can.
-	 */
-	m_focus_follows_mouse = nullptr;
-	if (!touch) {
-		m_focus_follows_mouse =
-		        new QCheckBox(QStringLiteral("Focus the pane under the pointer"), this);
-		m_focus_follows_mouse->setToolTip(
-		        QStringLiteral("With more than one pane, moving the pointer over one "
-		                        "gives it the keyboard without clicking. Off by default: "
-		                        "it surprises anyone expecting click-to-focus, and the "
-		                        "cost of that surprise is typing into the wrong shell."));
-		if (on_this_page(SECTION_TERMINAL, m_focus_follows_mouse)) form->addRow(m_focus_follows_mouse);
 	}
 
 	/*

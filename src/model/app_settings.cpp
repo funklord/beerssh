@@ -304,7 +304,7 @@ void bssh_app_settings::set_hide_from_screenshots(bool hide) {
 }
 
 bool bssh_app_settings::focus_follows_mouse() const {
-	return value(QStringLiteral("input/focus_follows_mouse"), false).toBool();
+	return value(QStringLiteral("input/focus_follows_mouse"), true).toBool();
 }
 
 void bssh_app_settings::set_focus_follows_mouse(bool follows) {
