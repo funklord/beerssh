@@ -291,6 +291,9 @@ public:
 	 * implementation.
 	 */
 	bool mouse_reporting() const;
+
+	/* The last OSC 7 the shell sent, as it sent it; empty if none. */
+	QString reported_directory() const;
 	void send_mouse_move(int row, int col, quint8 modifiers);
 	void send_mouse_button(int button, bool pressed, quint8 modifiers);
 
@@ -500,6 +503,14 @@ signals:
 
 	/* OSC 0/2. Feeds the tab label and, on desktop, the window title. */
 	void title_changed(const QString &title);
+
+	/*
+	 * OSC 7 -- "file://host/path", the shell saying where it is -- or
+	 * iTerm2's OSC 1337 CurrentDir, given here in the same form. Kept as
+	 * reported_directory(); what a file dropped on the terminal is copied
+	 * to where nothing better is known (sec 6.4).
+	 */
+	void working_directory_reported(const QString &url);
 
 	void bell();
 

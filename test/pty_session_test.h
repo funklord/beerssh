@@ -20,6 +20,13 @@ private slots:
 	void kitty_itself_decodes_what_the_router_sends();
 	void a_shell_starts_and_echoes_what_it_is_given();
 	void a_local_shell_lists_tmux_and_screen_beside_itself();
+
+	/* sec 6.4's dropped files: where "here" is, found without the shell's
+	 * help, and a copy that never replaces what is there. */
+	void the_working_directory_rules_hold();
+	void the_probe_finds_the_shell_on_its_connections_terminal();
+	void a_local_shells_directory_is_read_from_proc();
+	void a_local_copy_keeps_both_when_a_name_is_taken();
 	void a_restarted_shell_is_replaced_without_an_exit();
 	void exiting_the_shell_is_not_a_dropped_connection();
 	void a_resize_reaches_the_shell();

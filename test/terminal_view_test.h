@@ -42,6 +42,7 @@ private slots:
 	/* sec 6.4's drops: a file's path, shell-safe, or the text itself. */
 	void a_dropped_file_arrives_as_a_path_a_shell_can_read();
 	void a_drop_asks_the_window_to_paste_rather_than_pasting_itself();
+	void dropped_files_are_copied_where_the_shell_is();
 
 	/* sec 8.3's scrollbar: the grid gives up the width it takes. */
 	void a_scrollbar_does_not_hide_what_is_drawn_over_the_pane();

@@ -6,8 +6,11 @@
 #include <QStringList>
 
 #include <functional>
+#include <QMetaType>
 #include <QObject>
 #include <QString>
+
+#include "ssh/working_directory.h"
 
 /*
  * bssh_ssh_session -- the SSH transport, behind an interface (project.md
@@ -245,7 +248,31 @@ public:
 	 */
 	virtual void restart_shell(const QStringList &command) { Q_UNUSED(command); }
 
+	/*
+	 * Where the shell on the other end is, for a file dropped on its
+	 * terminal (sec 6.4); answered by working_directory_found(). Over SSH
+	 * the probe in ssh/working_directory.h on a channel of its own, so it
+	 * never waits on the tmux listing; locally the child's /proc. The
+	 * default answers that nothing is known, a turn later.
+	 */
+	virtual void find_working_directory();
+
+	/*
+	 * Copies local files and directories into `directory` on the other
+	 * end -- empty for the home directory -- never replacing what is
+	 * there (bssh_free_name). Over SSH by SFTP on this connection, a piece
+	 * at a time so the shell beside it keeps running; locally a copy on
+	 * a thread of its own. upload_progress() as it goes, upload_finished()
+	 * once, with the names it wrote. The default refuses.
+	 */
+	virtual void upload(const QStringList &paths, const QString &directory);
+
 signals:
+	void working_directory_found(const bssh_working_directory_t &found);
+	void upload_progress(qint64 done, qint64 total);
+	void upload_finished(bool ok, const QString &directory, const QStringList &written,
+	                     const QString &why);
+
 	/* What run_on_the_side() printed; empty when it printed nothing or failed. */
 	void side_output_ready(const QByteArray &output);
 
@@ -320,5 +347,7 @@ protected:
 private:
 	state_t m_state;
 };
+
+Q_DECLARE_METATYPE(bssh_working_directory_t)
 
 #endif /* BSSH_SSH_SESSION_H */

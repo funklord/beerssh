@@ -1,0 +1,31 @@
+# Sabotages for sec 6.4's dropped files: copied to where the shell is, by
+# SFTP or locally, never over what is there, and never to the wrong host.
+#
+# The view's own branch -- local files go to the window as files, not as a
+# paste -- has no entry: Qt swallows a synthetic QDropEvent, so no test
+# reaches dropEvent (terminal_view_test records the measurement), and the
+# window is driven from the signal instead.
+
+# A taken name used as it is: the copy replaces what was there.
+[[sabotage]]
+name = "a dropped file replaces one of the same name"
+file = "src/ssh/working_directory.cpp"
+find = "\tif (!taken(name)) return name;\n"
+replace = "\treturn name;\n"
+expect = "a_local_copy_keeps_both_when_a_name_is_taken"
+
+# A shell connected onward is offered the copy anyway, to the wrong host.
+[[sabotage]]
+name = "a copy is offered from a tab running ssh onward"
+file = "src/ui/main_window.cpp"
+find = "\tif (found.elsewhere) {\n\t\tcopy = menu->addAction("
+replace = "\tif (false) {\n\t\tcopy = menu->addAction("
+expect = "dropped_files_are_copied_where_the_shell_is"
+
+# OSC 7 ignored: a remote with no /proc always gets the home directory.
+[[sabotage]]
+name = "the shell's own report of its directory is ignored"
+file = "src/model/session.cpp"
+find = "\t\tif (found.path.isEmpty() && !found.elsewhere && m_emulator)\n"
+replace = "\t\tif (false)\n"
+expect = "dropped_files_are_copied_where_the_shell_is"

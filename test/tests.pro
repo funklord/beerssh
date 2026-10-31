@@ -97,6 +97,7 @@ SOURCES += \
     ../src/hang_watchdog.cpp \
     ../src/input/input_router.cpp \
     ../src/ssh/pty_session.cpp \
+    ../src/ssh/working_directory.cpp \
     ../src/ssh/ssh_session.cpp \
     ../src/ssh/jump_tunnel.cpp \
     ../src/ssh/ssh_session_libssh.cpp \
@@ -207,6 +208,7 @@ HEADERS += \
     ../src/hang_watchdog.h \
     ../src/input/input_router.h \
     ../src/ssh/pty_session.h \
+    ../src/ssh/working_directory.h \
     ../src/ssh/ssh_session.h \
     ../src/ssh/jump_tunnel.h \
     ../src/ssh/ssh_session_libssh.h \

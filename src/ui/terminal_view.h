@@ -855,6 +855,14 @@ signals:
 	 */
 	void paste_requested(const QString &text);
 
+	/*
+	 * Local files dropped on this pane (sec 6.4): the window asks where
+	 * the shell is and offers to copy them there or paste their paths.
+	 * `as_text` is the paste, the paths quoted for a shell; `global` is
+	 * where they landed, for the menu.
+	 */
+	void files_dropped(const QStringList &paths, const QString &as_text, const QPoint &global);
+
 	/* A selection was made or cleared -- the window updates the clipboard. */
 	void selection_changed();
 

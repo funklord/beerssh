@@ -22,6 +22,11 @@
 #include <sys/socket.h>
 
 #include <libssh/libssh.h>
+#include <libssh/sftp.h>
+
+#include <QDirIterator>
+#include <fcntl.h>
+#include <memory>
 
 /*
  * Everything below the facade runs on the worker thread. Nothing here
@@ -219,6 +224,8 @@ public slots:
 	void do_set_term(const QString &term);
 	void do_set_command(const QStringList &command);
 	void do_run_on_the_side(const QString &command);
+	void do_find_working_directory();
+	void do_upload(const QStringList &paths, const QString &directory);
 	void do_restart_shell(const QStringList &command);
 	void do_set_compression(bool compression);
 	void do_set_identity_file(const QString &path);
@@ -245,6 +252,10 @@ signals:
 	void state_changed(int state);
 	void bytes_received(const QByteArray &bytes);
 	void side_output_ready(const QByteArray &output);
+	void working_directory_found(const bssh_working_directory_t &found);
+	void upload_progress(qint64 done, qint64 total);
+	void upload_finished(bool ok, const QString &directory, const QStringList &written,
+	                     const QString &why);
 	void failed(const QString &reason);
 	void exited(int exit_status);
 	void password_required();
@@ -305,6 +316,41 @@ private:
 	void drain_side();
 	void finish_side();
 
+	/* find_working_directory()'s probe: its own channel, so it never waits
+	 * on the tmux listing, read and answered the same way. */
+	ssh_channel m_probe_channel = nullptr;
+	QByteArray m_probe_output;
+	QElapsedTimer m_probe_started;
+	void drain_probe();
+	void finish_probe();
+
+	/*
+	 * upload(): one copy at a time, a piece per turn of this thread's
+	 * event loop, so the shell's channel is drained between pieces and a
+	 * large file does not freeze the terminal it was dropped on.
+	 */
+	struct upload_item {
+		QString local;
+		QString remote;
+		bool directory = false;
+	};
+	struct upload_job {
+		sftp_session sftp = nullptr;
+		sftp_file file = nullptr;
+		QFile source;
+		QList<upload_item> items;
+		int at = 0;
+		qint64 done = 0;
+		qint64 total = 0;
+		QString directory;
+		QStringList written;
+		QElapsedTimer since_progress;
+	};
+	std::unique_ptr<upload_job> m_upload;
+	void step_upload();
+	void finish_upload(bool ok, const QString &why);
+	QString sftp_error() const;
+
 	/* Empty means the default identities; see set_identity_file. */
 	QString m_identity_file;
 
@@ -355,6 +401,15 @@ void bssh_libssh_worker::teardown() {
 		m_side_channel = nullptr;
 		m_side_output.clear();
 	}
+	if (m_probe_channel) {
+		ssh_channel_free(m_probe_channel);
+		m_probe_channel = nullptr;
+		m_probe_output.clear();
+		emit working_directory_found(bssh_working_directory_t());
+	}
+
+	/* SFTP lives on the session, so it goes first; a copy cut off says so. */
+	if (m_upload) finish_upload(false, QStringLiteral("the connection closed during the copy"));
 
 	if (m_channel) {
 		if (ssh_channel_is_open(m_channel)) ssh_channel_close(m_channel);
@@ -1202,6 +1257,202 @@ void bssh_libssh_worker::do_run_on_the_side(const QString &command) {
 	drain_side();
 }
 
+void bssh_libssh_worker::do_find_working_directory() {
+	if (!m_session) {
+		emit working_directory_found(bssh_working_directory_t());
+		return;
+	}
+	/* One in flight answers for everybody who asked. */
+	if (m_probe_channel) return;
+
+	m_probe_channel = ssh_channel_new(m_session);
+	const QByteArray probe = bssh_working_directory_probe().toUtf8();
+	if (!m_probe_channel || ssh_channel_open_session(m_probe_channel) != SSH_OK ||
+	    ssh_channel_request_exec(m_probe_channel, probe.constData()) != SSH_OK) {
+		if (m_probe_channel) ssh_channel_free(m_probe_channel);
+		m_probe_channel = nullptr;
+		emit working_directory_found(bssh_working_directory_t());
+		return;
+	}
+	m_probe_output.clear();
+	m_probe_started.start();
+	drain_probe();
+}
+
+void bssh_libssh_worker::drain_probe() {
+	if (!m_probe_channel) return;
+	char buffer[4096];
+	for (;;) {
+		const int n = ssh_channel_read_nonblocking(m_probe_channel, buffer, sizeof(buffer), 0);
+		if (n == SSH_ERROR) {
+			finish_probe();
+			return;
+		}
+		if (n <= 0) break;
+		if (m_probe_output.size() < 64 * 1024) m_probe_output.append(buffer, n);
+	}
+	if (ssh_channel_is_eof(m_probe_channel) || !ssh_channel_is_open(m_probe_channel) ||
+	    m_probe_started.elapsed() > 5000)
+		finish_probe();
+}
+
+void bssh_libssh_worker::finish_probe() {
+	const bssh_working_directory_t found = bssh_parse_working_directory(m_probe_output);
+	if (ssh_channel_is_open(m_probe_channel)) ssh_channel_close(m_probe_channel);
+	ssh_channel_free(m_probe_channel);
+	m_probe_channel = nullptr;
+	m_probe_output.clear();
+	emit working_directory_found(found);
+}
+
+QString bssh_libssh_worker::sftp_error() const {
+	if (!m_upload || !m_upload->sftp) return session_error();
+	switch (sftp_get_error(m_upload->sftp)) {
+	case SSH_FX_PERMISSION_DENIED: return QStringLiteral("permission denied");
+	case SSH_FX_NO_SUCH_FILE:      return QStringLiteral("no such directory");
+	case SSH_FX_FILE_ALREADY_EXISTS: return QStringLiteral("a file of that name appeared");
+	default:                       return session_error();
+	}
+}
+
+void bssh_libssh_worker::do_upload(const QStringList &paths, const QString &directory) {
+	if (!m_session) {
+		emit upload_finished(false, directory, QStringList(), QStringLiteral("not connected"));
+		return;
+	}
+	if (m_upload) {
+		emit upload_finished(false, directory, QStringList(),
+		                     QStringLiteral("another copy is still running"));
+		return;
+	}
+
+	m_upload = std::make_unique<upload_job>();
+	upload_job &job = *m_upload;
+	job.directory = directory;
+	job.sftp = sftp_new(m_session);
+	if (!job.sftp || sftp_init(job.sftp) != SSH_OK) {
+		/* A server without the SFTP subsystem: said in its own words. */
+		finish_upload(false, QStringLiteral("the server offers no SFTP"));
+		return;
+	}
+	if (job.directory.isEmpty()) {
+		char *home = sftp_canonicalize_path(job.sftp, ".");
+		if (home) {
+			job.directory = QString::fromUtf8(home);
+			ssh_string_free_char(home);
+		}
+	}
+	const QString base = job.directory.endsWith(QLatin1Char('/')) ? job.directory
+	                                                                : job.directory + QLatin1Char('/');
+
+	/* Each top-level name made free first; what is inside a new directory
+	 * cannot collide, since the directory is new. */
+	for (const QString &path : paths) {
+		const QFileInfo info(path);
+		if (!info.exists()) continue;
+		const QString name = bssh_free_name(info.fileName(), [&job, &base](const QString &candidate) {
+			sftp_attributes there = sftp_lstat(job.sftp, (base + candidate).toUtf8().constData());
+			if (!there) return false;
+			sftp_attributes_free(there);
+			return true;
+		});
+		if (name.isEmpty()) continue;
+		const QString remote = base + name;
+		job.written << name;
+		if (!info.isDir()) {
+			job.items.append({ info.absoluteFilePath(), remote, false });
+			job.total += info.size();
+			continue;
+		}
+		job.items.append({ info.absoluteFilePath(), remote, true });
+		QDirIterator inside(info.absoluteFilePath(), QDir::AllEntries | QDir::NoDotAndDotDot | QDir::Hidden,
+		                    QDirIterator::Subdirectories);
+		while (inside.hasNext()) {
+			const QFileInfo each(inside.next());
+			if (each.isSymLink() && each.isDir()) continue;
+			const QString relative = QDir(info.absoluteFilePath()).relativeFilePath(each.absoluteFilePath());
+			job.items.append({ each.absoluteFilePath(), remote + QLatin1Char('/') + relative, each.isDir() });
+			if (!each.isDir()) job.total += each.size();
+		}
+	}
+	job.since_progress.start();
+	emit upload_progress(0, job.total);
+	QTimer::singleShot(0, this, &bssh_libssh_worker::step_upload);
+}
+
+void bssh_libssh_worker::step_upload() {
+	if (!m_upload) return;
+	upload_job &job = *m_upload;
+
+	if (!job.file) {
+		if (job.at >= job.items.size()) {
+			finish_upload(true, QString());
+			return;
+		}
+		const upload_item &item = job.items.at(job.at);
+		const QByteArray remote = item.remote.toUtf8();
+		if (item.directory) {
+			if (sftp_mkdir(job.sftp, remote.constData(), 0755) != SSH_OK) {
+				finish_upload(false, QStringLiteral("could not make %1: %2").arg(item.remote, sftp_error()));
+				return;
+			}
+			++job.at;
+			QTimer::singleShot(0, this, &bssh_libssh_worker::step_upload);
+			return;
+		}
+		job.source.setFileName(item.local);
+		if (!job.source.open(QIODevice::ReadOnly)) {
+			finish_upload(false, QStringLiteral("could not read %1").arg(item.local));
+			return;
+		}
+		/* Its permissions, so a script dropped stays a script; O_EXCL, so
+		 * the free name found a moment ago is not overwritten either. */
+		const mode_t perms = (QFileInfo(item.local).isExecutable() ? 0755 : 0644);
+		job.file = sftp_open(job.sftp, remote.constData(), O_WRONLY | O_CREAT | O_EXCL, perms);
+		if (!job.file) {
+			job.source.close();
+			finish_upload(false, QStringLiteral("could not write %1: %2").arg(item.remote, sftp_error()));
+			return;
+		}
+	}
+
+	char buffer[32 * 1024];
+	const qint64 n = job.source.read(buffer, sizeof(buffer));
+	if (n < 0) {
+		finish_upload(false, QStringLiteral("could not read %1").arg(job.source.fileName()));
+		return;
+	}
+	if (n > 0) {
+		if (sftp_write(job.file, buffer, size_t(n)) != ssize_t(n)) {
+			finish_upload(false, QStringLiteral("writing %1 failed: %2")
+			                             .arg(job.items.at(job.at).remote, sftp_error()));
+			return;
+		}
+		job.done += n;
+	}
+	if (n == 0 || job.source.atEnd()) {
+		sftp_close(job.file);
+		job.file = nullptr;
+		job.source.close();
+		++job.at;
+	}
+	if (job.since_progress.elapsed() >= 100) {
+		job.since_progress.restart();
+		emit upload_progress(job.done, job.total);
+	}
+	QTimer::singleShot(0, this, &bssh_libssh_worker::step_upload);
+}
+
+void bssh_libssh_worker::finish_upload(bool ok, const QString &why) {
+	if (!m_upload) return;
+	std::unique_ptr<upload_job> job = std::move(m_upload);
+	if (job->file) sftp_close(job->file);
+	if (job->source.isOpen()) job->source.close();
+	if (job->sftp) sftp_free(job->sftp);
+	if (ok) emit upload_progress(job->total, job->total);
+	emit upload_finished(ok, job->directory, job->written, why);
+}
+
 void bssh_libssh_worker::drain_side() {
 	if (!m_side_channel) return;
 
@@ -1355,6 +1606,7 @@ void bssh_libssh_worker::drain() {
 	/* The side channel first: it is short, and the shell's loop below can
 	 * end the session. */
 	drain_side();
+	drain_probe();
 
 	/*
 	 * Anything the window had no room for last time. This runs from the
@@ -1783,6 +2035,13 @@ bssh_ssh_session_libssh::bssh_ssh_session_libssh(QObject *parent)
 	         this, &bssh_ssh_session::bytes_received);
 	connect(m_worker, &bssh_libssh_worker::side_output_ready,
 	         this, &bssh_ssh_session::side_output_ready);
+	qRegisterMetaType<bssh_working_directory_t>();
+	connect(m_worker, &bssh_libssh_worker::working_directory_found,
+	         this, &bssh_ssh_session::working_directory_found);
+	connect(m_worker, &bssh_libssh_worker::upload_progress,
+	         this, &bssh_ssh_session::upload_progress);
+	connect(m_worker, &bssh_libssh_worker::upload_finished,
+	         this, &bssh_ssh_session::upload_finished);
 	connect(m_worker, &bssh_libssh_worker::failed,
 	         this, &bssh_ssh_session::failed);
 	connect(m_worker, &bssh_libssh_worker::exited,
@@ -1863,6 +2122,17 @@ void bssh_ssh_session_libssh::set_term(const QString &term) {
 void bssh_ssh_session_libssh::restart_shell(const QStringList &command) {
 	QMetaObject::invokeMethod(m_worker, [this, command] {
 		m_worker->do_restart_shell(command);
+	}, Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::find_working_directory() {
+	QMetaObject::invokeMethod(m_worker, [this] { m_worker->do_find_working_directory(); },
+	                          Qt::QueuedConnection);
+}
+
+void bssh_ssh_session_libssh::upload(const QStringList &paths, const QString &directory) {
+	QMetaObject::invokeMethod(m_worker, [this, paths, directory] {
+		m_worker->do_upload(paths, directory);
 	}, Qt::QueuedConnection);
 }
 

@@ -50,6 +50,19 @@ bool bssh_ssh_session::import_transport(const QByteArray &state, const QList<int
 	return false;
 }
 
+void bssh_ssh_session::find_working_directory() {
+	QMetaObject::invokeMethod(this, [this] { emit working_directory_found(bssh_working_directory_t()); },
+	                          Qt::QueuedConnection);
+}
+
+void bssh_ssh_session::upload(const QStringList &paths, const QString &directory) {
+	Q_UNUSED(paths);
+	QMetaObject::invokeMethod(this, [this, directory] {
+		emit upload_finished(false, directory, QStringList(),
+		                     QStringLiteral("this connection cannot copy files"));
+	}, Qt::QueuedConnection);
+}
+
 void bssh_ssh_session::run_on_the_side(const QString &command) {
 	Q_UNUSED(command);
 	QMetaObject::invokeMethod(this, [this] { emit side_output_ready(QByteArray()); },

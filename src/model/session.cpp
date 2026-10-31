@@ -385,6 +385,16 @@ void bssh_session::wire_transport() {
 		if (!reply.isEmpty()) send_out(reply);
 	});
 
+	/* Where a dropped file goes, and the copy (sec 6.4). */
+	connect(m_transport, &bssh_ssh_session::working_directory_found, this,
+	         [this](bssh_working_directory_t found) {
+		if (found.path.isEmpty() && !found.elsewhere && m_emulator)
+			found.path = bssh_reported_directory(m_emulator->reported_directory(), found.host);
+		emit working_directory_found(found);
+	});
+	connect(m_transport, &bssh_ssh_session::upload_progress, this, &bssh_session::upload_progress);
+	connect(m_transport, &bssh_ssh_session::upload_finished, this, &bssh_session::upload_finished);
+
 	/*
 	 * The tmux and screen listing coming back. Nothing found is nothing
 	 * shown, and the question stays open: a reconnect lists again, in case
@@ -900,6 +910,16 @@ void bssh_session::offer_multiplexers_again() {
 
 bool bssh_session::can_offer_multiplexers() const {
 	return m_transport && is_live() && m_profile.command.isEmpty();
+}
+
+void bssh_session::find_working_directory() {
+	if (m_transport) m_transport->find_working_directory();
+	else emit working_directory_found(bssh_working_directory_t());
+}
+
+void bssh_session::upload(const QStringList &paths, const QString &directory) {
+	if (m_transport) m_transport->upload(paths, directory);
+	else emit upload_finished(false, directory, QStringList(), QStringLiteral("not connected"));
 }
 
 void bssh_session::list_multiplexers(bool asked) {

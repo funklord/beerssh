@@ -2,7 +2,12 @@
 
 #include "platform/platform.h"
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QElapsedTimer>
 #include <QDataStream>
+#include <QPointer>
+#include <QThread>
 #include <QIODevice>
 #include <QList>
 #include <QProcess>
@@ -543,6 +548,41 @@ const char BSSH_PTY_HANDOFF_MAGIC[] = "bssh-pty-transport";
 const quint32 BSSH_PTY_HANDOFF_FORMAT = 1;
 
 }  // namespace
+
+void bssh_pty_session::find_working_directory() {
+	const bssh_working_directory_t found = bssh_local_working_directory(m_child);
+	QMetaObject::invokeMethod(this, [this, found] { emit working_directory_found(found); },
+	                          Qt::QueuedConnection);
+}
+
+void bssh_pty_session::upload(const QStringList &paths, const QString &directory) {
+	/*
+	 * On a thread of its own: a large file copied here would hold the
+	 * window. Reports go through the application object with a guarded
+	 * pointer, so a tab closed during the copy is simply not told.
+	 */
+	const QPointer<bssh_pty_session> guard(this);
+	QThread *copier = QThread::create([guard, paths, directory] {
+		QStringList written;
+		QString why;
+		QElapsedTimer since;
+		since.start();
+		const bool ok = bssh_copy_into(paths, directory, written, why,
+		                               [guard, &since](qint64 done, qint64 total) {
+			if (since.elapsed() < 100 && done < total) return;
+			since.restart();
+			QMetaObject::invokeMethod(qApp, [guard, done, total] {
+				if (guard) emit guard->upload_progress(done, total);
+			}, Qt::QueuedConnection);
+		});
+		const QString into = directory.isEmpty() ? QDir::homePath() : directory;
+		QMetaObject::invokeMethod(qApp, [guard, ok, into, written, why] {
+			if (guard) emit guard->upload_finished(ok, into, written, why);
+		}, Qt::QueuedConnection);
+	});
+	QObject::connect(copier, &QThread::finished, copier, &QObject::deleteLater);
+	copier->start();
+}
 
 void bssh_pty_session::run_on_the_side(const QString &command) {
 	/*

@@ -4,6 +4,7 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QTimer>
+#include <QTemporaryDir>
 #include <QtTest>
 
 #include "live_ssh_test.h"
@@ -1009,6 +1010,103 @@ void live_ssh_test::a_command_runs_beside_the_shell_without_disturbing_it()
 
 	session->disconnect_from_host();
 	delete session;
+}
+
+void live_ssh_test::a_dropped_file_goes_to_the_shells_directory_by_sftp()
+{
+	if (!server_available()) return;
+	if (!fresh_connection_expected()) {
+		QSKIP("this phase has taken the link down or swapped the key before "
+		       "here; a fresh connection cannot authenticate by design");
+	}
+
+	/*
+	 * sec 6.4 against a real sshd: the shell cd's somewhere, the probe on
+	 * a channel beside it finds that directory without the shell's help,
+	 * and a file and a directory go there by SFTP on the same connection
+	 * -- keeping both where the name is taken -- while the shell goes on
+	 * answering.
+	 */
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	const auto write = [](const QString &path, const QByteArray &bytes) {
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	};
+	write(from.filePath(QStringLiteral("notes.txt")), QByteArray(200 * 1024, 'x'));
+	QVERIFY(QDir(from.path()).mkpath(QStringLiteral("tree/inner")));
+	write(from.filePath(QStringLiteral("tree/inner/leaf")), "leaf");
+	write(into.filePath(QStringLiteral("notes.txt")), "already here");
+
+	bssh_ssh_session *session = bssh_ssh_session::create();
+	QEventLoop loop;
+	QByteArray shell;
+	bssh_working_directory_t found;
+	bool probed = false;
+	bool copied = false;
+	bool copied_ok = false;
+	QStringList written;
+	QString why;
+
+	QObject::connect(session, &bssh_ssh_session::host_key_unknown,
+	                  [session](const QString &) { session->accept_host_key(); });
+	QObject::connect(session, &bssh_ssh_session::failed, &loop, &QEventLoop::quit);
+	QObject::connect(session, &bssh_ssh_session::bytes_received, [&](const QByteArray &bytes) {
+		shell += bytes;
+		if (shell.contains("BSSH_CD_OK") && !probed) {
+			probed = true;
+			session->find_working_directory();
+		}
+		if (shell.contains("BSSH_AFTER_OK")) loop.quit();
+	});
+	QObject::connect(session, &bssh_ssh_session::working_directory_found,
+	                  [&](const bssh_working_directory_t &answer) {
+		found = answer;
+		session->upload({ from.filePath(QStringLiteral("notes.txt")), from.filePath(QStringLiteral("tree")) },
+		                answer.path);
+	});
+	QObject::connect(session, &bssh_ssh_session::upload_finished,
+	                  [&](bool ok, const QString &, const QStringList &names, const QString &reason) {
+		copied = true;
+		copied_ok = ok;
+		written = names;
+		why = reason;
+		session->send(QByteArrayLiteral("echo BSSH_AFTER_\"OK\"\n"));
+	});
+	QObject::connect(session, &bssh_ssh_session::state_changed,
+	                  [&](bssh_ssh_session::state_t state) {
+		if (state != bssh_ssh_session::CONNECTED) return;
+		session->open_shell(80, 24);
+		session->send(QStringLiteral("cd %1 && echo BSSH_CD_\"OK\"\n").arg(into.path()).toUtf8());
+	});
+
+	session->set_identity_file(test_key());
+	session->connect_to_host(QStringLiteral("127.0.0.1"), test_port(), qEnvironmentVariable("USER"));
+	QTimer guard;
+	guard.setSingleShot(true);
+	QObject::connect(&guard, &QTimer::timeout, &loop, &QEventLoop::quit);
+	guard.start(20000);
+	loop.exec();
+	session->disconnect_from_host();
+	delete session;
+
+	QVERIFY2(probed, qPrintable(QStringLiteral("the shell never cd'd; saw: %1")
+	                                    .arg(QString::fromLocal8Bit(shell.right(200)))));
+	QVERIFY(found.proc);
+	QCOMPARE(QFileInfo(found.path).canonicalFilePath(), QFileInfo(into.path()).canonicalFilePath());
+	QVERIFY2(copied && copied_ok, qPrintable(why));
+	QCOMPARE(written, QStringList({ QStringLiteral("notes (1).txt"), QStringLiteral("tree") }));
+	QVERIFY2(shell.contains("BSSH_AFTER_OK"), "the shell did not answer after the copy");
+
+	const auto read = [](const QString &path) {
+		QFile file(path);
+		return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray("<missing>");
+	};
+	QCOMPARE(read(into.filePath(QStringLiteral("notes.txt"))), QByteArray("already here"));
+	QCOMPARE(read(into.filePath(QStringLiteral("notes (1).txt"))).size(), 200 * 1024);
+	QCOMPARE(read(into.filePath(QStringLiteral("tree/inner/leaf"))), QByteArray("leaf"));
 }
 
 void live_ssh_test::a_restarted_shell_runs_its_command_on_the_same_connection()

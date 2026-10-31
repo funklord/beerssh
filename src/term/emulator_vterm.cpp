@@ -1,6 +1,7 @@
 #include "term/emulator.h"
 #include "term/colour_scheme.h"
 
+#include <QUrl>
 #include <QDataStream>
 #include <QHash>
 #include <QIODevice>
@@ -41,6 +42,7 @@ struct bssh_emulator_private {
 	QByteArray pending_output;
 	QByteArray pending_input;
 	QString title;
+	QString reported_directory;
 
 	/*
 	 * Kitty keyboard protocol flags, as a stack: the protocol is defined
@@ -1187,11 +1189,25 @@ int on_osc_colour(int command, const QByteArray &payload, bssh_emulator_private 
 int on_osc(int command, VTermStringFragment frag, void *user) {
 	bssh_emulator_private *self = static_cast<bssh_emulator_private *>(user);
 	if (command != 1337 && command != 8 && command != 4
-	    && command != 10 && command != 11) {
+	    && command != 10 && command != 11 && command != 7) {
 		return 0;
 	}
 
 	if (!bssh_accumulate(self->osc_buffer, self->osc_oversized, frag)) return 1;
+
+	/*
+	 * Where the shell is (sec 6.4): OSC 7, and iTerm2's CurrentDir for the
+	 * shell integrations that send that instead -- caught before the 1337
+	 * image parser below, which would drop it in silence.
+	 */
+	if (command == 7 || (command == 1337 && self->osc_buffer.startsWith("CurrentDir="))) {
+		QString url = QString::fromUtf8(self->osc_buffer);
+		if (command == 1337)
+			url = QUrl::fromLocalFile(url.mid(int(qstrlen("CurrentDir=")))).toString();
+		self->reported_directory = url;
+		emit self->owner->working_directory_reported(url);
+		return 1;
+	}
 
 	/*
 	 * OSC 8 and OSC 1337 arrive through the same callback and are
@@ -2616,6 +2632,10 @@ QString bssh_emulator::link_uri(quint16 id) const {
 
 bool bssh_emulator::synchronised_output() const {
 	return m_private->sync_output;
+}
+
+QString bssh_emulator::reported_directory() const {
+	return m_private->reported_directory;
 }
 
 bool bssh_emulator::mouse_reporting() const {

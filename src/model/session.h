@@ -282,7 +282,21 @@ public:
 	/* The tab's command since a choice, its words joined; empty before. */
 	QString multiplexer_attach() const { return m_mux_command.join(QLatin1Char(' ')); }
 
+	/*
+	 * Where a file dropped on this terminal would go (sec 6.4), answered
+	 * by working_directory_found(): the transport's own finding, and the
+	 * shell's OSC 7 report where that found nothing and the report names
+	 * this host. upload() copies there, never over what is there.
+	 */
+	void find_working_directory();
+	void upload(const QStringList &paths, const QString &directory);
+
 signals:
+	void working_directory_found(const bssh_working_directory_t &found);
+	void upload_progress(qint64 done, qint64 total);
+	void upload_finished(bool ok, const QString &directory, const QStringList &written,
+	                     const QString &why);
+
 	/* Sessions are running there; the window offers them. Never empty. */
 	void multiplexers_found(const QList<bssh_mux_session_t> &found);
 

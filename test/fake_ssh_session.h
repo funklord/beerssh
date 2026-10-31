@@ -55,6 +55,27 @@ public:
 	/* Everything the client has written, concatenated. */
 	QByteArray written() const { return m_written; }
 
+	/* sec 6.4's dropped files: where the probe says the shell is, and a
+	 * copy that records what it was asked for and succeeds. */
+	void set_working_directory(const bssh_working_directory_t &found) { m_found = found; }
+	void find_working_directory() override {
+		const bssh_working_directory_t found = m_found;
+		QMetaObject::invokeMethod(this, [this, found] { emit working_directory_found(found); },
+		                          Qt::QueuedConnection);
+	}
+	void upload(const QStringList &paths, const QString &directory) override {
+		m_uploaded = paths;
+		m_uploaded_to = directory;
+		QStringList names;
+		for (const QString &path : paths) names << path.section(QLatin1Char('/'), -1);
+		QMetaObject::invokeMethod(this, [this, directory, names] {
+			emit upload_progress(50, 100);
+			emit upload_finished(true, directory, names, QString());
+		}, Qt::QueuedConnection);
+	}
+	QStringList uploaded() const { return m_uploaded; }
+	QString uploaded_to() const { return m_uploaded_to; }
+
 	/*
 	 * Forget it, so the next assertion is about one exchange rather than
 	 * about everything since the connection opened. A test that asks
@@ -137,6 +158,9 @@ private:
 	QString m_proxy_jump;
 	QList<QByteArray> m_script;
 	QByteArray m_written;
+	bssh_working_directory_t m_found;
+	QStringList m_uploaded;
+	QString m_uploaded_to;
 	QStringList m_side_commands;
 	QStringList m_restarts;
 	QString m_fail_reason;

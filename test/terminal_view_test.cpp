@@ -28,6 +28,7 @@
 #include "ui/theme.h"
 #include <QContextMenuEvent>
 #include <QMenu>
+#include <QTimer>
 #include "ui/main_window.h"
 #include "model/session.h"
 #include "terminal_view_test.h"
@@ -3046,6 +3047,102 @@ void terminal_view_test::a_dropped_file_arrives_as_a_path_a_shell_can_read() {
 	session.setData(QStringLiteral("application/x-bssh-session"), QByteArrayLiteral("3"));
 	QVERIFY(bssh_terminal_view::text_for_drop(&session).isEmpty());
 	QVERIFY(bssh_terminal_view::text_for_drop(nullptr).isEmpty());
+}
+
+void terminal_view_test::dropped_files_are_copied_where_the_shell_is() {
+	/*
+	 * The holder, 2026-10-31: "we should support file copying via drag and
+	 * drop, to the cwd", with a menu at the drop that names where (sec
+	 * 6.4). Driven from the view's signal, since Qt swallows a synthetic
+	 * drop (see the test after this one).
+	 */
+	const bssh_factory_reset_t factory_reset;
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_fake_ssh_session *fake = nullptr;
+	bssh_ssh_session::set_factory([&fake](QObject *parent) -> bssh_ssh_session * {
+		fake = new bssh_fake_ssh_session(parent);
+		return fake;
+	});
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("dropped on");
+	profile.host = QStringLiteral("host.example");
+	profile.user = QStringLiteral("nabbe");
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	bssh_session *session = window.registry()->create(profile);
+	session->connect_to_host();
+	window.adopt_session(session);
+	QCoreApplication::processEvents();
+	QVERIFY(fake);
+	bssh_terminal_view *view = window.findChild<bssh_pane_container *>()->views().first();
+	QVERIFY(view);
+
+	/* Drops a file and answers the menu with `pick`, returning its entries. */
+	const auto drop = [&](const QString &pick) -> QStringList {
+		QStringList seen;
+		QTimer::singleShot(200, [&seen, pick] {
+			QMenu *menu = qobject_cast<QMenu *>(QApplication::activePopupWidget());
+			if (!menu) return;
+			for (QAction *action : menu->actions())
+				seen << action->text() + (action->isEnabled() ? QString() : QStringLiteral(" [off]"));
+			/* Chosen as a user does, so exec() returns it: trigger() alone
+			 * does not end the menu with an answer. */
+			QAction *chosen = menu->findChild<QAction *>(pick);
+			if (chosen && chosen->isEnabled()) {
+				menu->setActiveAction(chosen);
+				QTest::keyClick(menu, Qt::Key_Return);
+			} else {
+				menu->close();
+			}
+		});
+		emit view->files_dropped({ QStringLiteral("/tmp/notes.txt") }, QStringLiteral("/tmp/notes.txt"),
+		                         view->mapToGlobal(QPoint(40, 40)));
+		QTest::qWaitFor([&seen] { return !seen.isEmpty(); }, 5000);
+		return seen;
+	};
+
+	/* Found: copied there, and the pane says what and where. */
+	bssh_working_directory_t found;
+	found.host = QStringLiteral("box");
+	found.proc = true;
+	found.path = QStringLiteral("/srv/work");
+	fake->set_working_directory(found);
+	QStringList seen = drop(QStringLiteral("drop_copy"));
+	QCOMPARE(seen.value(0), QStringLiteral("Copy here (host.example:/srv/work)"));
+	QCOMPARE(seen.value(1), QStringLiteral("Paste the path"));
+	QTRY_COMPARE(fake->uploaded(), QStringList({ QStringLiteral("/tmp/notes.txt") }));
+	QCOMPARE(fake->uploaded_to(), QStringLiteral("/srv/work"));
+	QTRY_COMPARE(view->notice(), QStringLiteral("Copied notes.txt to host.example:/srv/work"));
+
+	/* ssh onward: no copy to the wrong machine, and the path still pastes. */
+	found.foreground = QStringLiteral("ssh");
+	found.elsewhere = true;
+	fake->set_working_directory(found);
+	fake->clear_written();
+	seen = drop(QStringLiteral("drop_paste"));
+	QVERIFY2(seen.value(0).endsWith(QStringLiteral("[off]")), qPrintable(seen.join(QStringLiteral(" | "))));
+	QTRY_VERIFY(fake->written().contains("/tmp/notes.txt"));
+
+	/* No /proc there: the shell's OSC 7 stands in when it names the host. */
+	fake->emit_chunk("\x1b]7;file://mac/Users/u/x\x07");
+	QCoreApplication::processEvents();
+	bssh_working_directory_t bare;
+	bare.host = QStringLiteral("mac");
+	fake->set_working_directory(bare);
+	seen = drop(QStringLiteral("drop_none"));
+	QCOMPARE(seen.value(0), QStringLiteral("Copy here (host.example:/Users/u/x)"));
+
+	/* Nothing known at all: the home directory, named as such. */
+	bare.host = QStringLiteral("elsewhere");
+	fake->set_working_directory(bare);
+	seen = drop(QStringLiteral("drop_none"));
+	QCOMPARE(seen.value(0), QStringLiteral("Copy to the home directory (host.example:~)"));
 }
 
 void terminal_view_test::a_drop_asks_the_window_to_paste_rather_than_pasting_itself() {

@@ -3417,8 +3417,49 @@ model on a finger.
 | Copy | `Ctrl+Shift+C` (never bare `Ctrl+C` — that's `SIGINT`) | Selection toolbar |
 | Paste | `Ctrl+Shift+V`, middle-click on X11/Wayland | Selection toolbar / key row |
 | Scroll | Wheel, `Shift+PgUp/PgDn` | Drag, under §8.7's scroll mode — **built**, not `QScroller` |
-| Drop a file | Pastes its path, shell-quoted — **built** | No system drag source in practice |
+| Drop a file | A menu: copy it to the shell's directory, or paste its path shell-quoted — **built 2026-10-31** | No system drag source in practice |
 
+- **Dropped files are copied to where the shell is -- [BUILT 2026-10-31].**
+  The holder: "we should support file copying via drag and drop, to the cwd,
+  how can this be achieved in a terminal-agnostic way?", and on the choices:
+  a menu on drop, and keep both on a name collision. Local files dropped on a
+  pane open a menu at the drop: **Copy here (host:/dir)** first, naming the
+  destination so a wrong guess is caught before anything is written, then
+  **Paste the path(s)**, the old behaviour.
+  **Transport: SFTP on the session's own connection** -- already
+  authenticated, through any jump host, needing no help from the shell,
+  only the server's sftp subsystem, which nearly every sshd has. A piece of
+  32 KiB per turn of the worker's event loop, so the shell's channel is
+  drained between pieces and a large file does not freeze the terminal;
+  files opened `O_EXCL`. Rejected: ZMODEM (`rz`), which crosses nested ssh
+  and serial lines but needs lrzsz on every host and takes the screen over;
+  kitty's transfer protocol, which needs a kitty-aware far end.
+  **"Here", in order:** (1) a POSIX script on a second channel
+  (`ssh/working_directory.cpp`) -- its own SSH_CONNECTION is the
+  connection's, through a jump host too, so among /proc it finds the
+  session leader of a terminal with that value, our shell, and reports its
+  directory and the foreground program's, which a sub-shell's `cd` or an
+  editor changes. One round trip; reading /proc over SFTP instead would be
+  hundreds. Its own channel, not `run_on_the_side()`'s, which serves one
+  caller at a time and the tmux listing uses on connect. (2) Where there is
+  no /proc, the shell's OSC 7 (or iTerm2's OSC 1337 CurrentDir) when it names
+  that host. (3) The home directory, said so in the menu. A foreground of
+  ssh, mosh, telnet and kin means "here" is another machine: the copy entry
+  says so and is off rather than writing to the wrong host. Locally the
+  same answer from the child's /proc, and the copy runs on a thread of its
+  own. The probe line was run here under sh, dash and zsh; fish, tcsh and
+  csh are not installed, so its claim to pass through them untouched is
+  argued from their quoting rules, not measured.
+  **A collision keeps both:** "notes (1).txt", the extension after the last
+  dot, ".bashrc (1)" for a leading dot; the pane says the names written.
+  `the_working_directory_rules_hold`,
+  `the_probe_finds_the_shell_on_its_connections_terminal`,
+  `a_local_shells_directory_is_read_from_proc`,
+  `a_local_copy_keeps_both_when_a_name_is_taken`,
+  `dropped_files_are_copied_where_the_shell_is`, and against a real sshd
+  (`make check-ssh`, whose server now has `Subsystem sftp internal-sftp`)
+  `a_dropped_file_goes_to_the_shells_directory_by_sftp`;
+  `tool/sabotage/file-drop.toml`.
 - **Paste always goes through the router** so bracketed-paste mode applies. A
   paste that bypasses it will silently break `vim` and any shell with bracketed
   paste enabled.

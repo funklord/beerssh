@@ -10,6 +10,7 @@
 
 #include <functional>
 
+#include "ssh/working_directory.h"
 #include "model/app_settings.h"
 #include "ui/input_mode.h"
 #include "ui/long_press.h"
@@ -972,6 +973,21 @@ public:
 	 * which of them are available, and how big the rows are.
 	 */
 	QMenu *build_terminal_menu(QWidget *parent, const QString &link = QString()) const;
+
+	/*
+	 * Files dropped on a terminal (sec 6.4; the holder, 2026-10-31): a menu
+	 * at the drop -- "Copy here", naming where, and "Paste the path" --
+	 * once the session has said where its shell is. Built and acted on
+	 * apart from showing it, for the reason build_terminal_menu() is.
+	 */
+	void offer_file_drop(const QStringList &paths, const QString &as_text, const QPoint &global);
+	QMenu *build_drop_menu(QWidget *parent, bssh_session *session,
+	                       const bssh_working_directory_t &found, int count) const;
+	void act_on_drop_menu(QMenu *menu, const QAction *chosen, bssh_session *session,
+	                      const QStringList &paths, const QString &as_text,
+	                      const bssh_working_directory_t &found);
+	/* Where a copy goes, as the menu and the notices say it. */
+	QString drop_destination(bssh_session *session, const QString &directory) const;
 
 	/*
 	 * What choosing one of that menu's entries does. Public and separate

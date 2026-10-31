@@ -116,6 +116,8 @@ public:
 
 	QString kind() const override;
 	void run_on_the_side(const QString &command) override;
+	void find_working_directory() override;
+	void upload(const QStringList &paths, const QString &directory) override;
 	void restart_shell(const QStringList &command) override;
 	bool export_transport(QByteArray &state, QList<int> &fds, QString *why) override;
 	void release_transport() override;

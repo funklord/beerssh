@@ -1,3 +1,4 @@
+#include <QFileInfo>
 #include <QApplication>
 #include <climits>
 #include "ui/interface_scale.h"
@@ -2360,6 +2361,9 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 		 */
 		connect(m_terminal_view, &bssh_terminal_view::paste_requested,
 		         this, [this](const QString &text) { paste_into_current(text); });
+
+		/* Files, which may be copied rather than named (sec 6.4). */
+		connect(m_terminal_view, &bssh_terminal_view::files_dropped, this, &bssh_main_window::offer_file_drop);
 
 		/*
 		 * Middle-click pastes the PRIMARY selection, not the clipboard.
@@ -5583,6 +5587,113 @@ void bssh_main_window::refresh_menu_bar() {
 
 	/* Detaching the only tab would leave an empty window behind. */
 	if (m_detach_action) m_detach_action->setEnabled(m_shown.size() > 1);
+}
+
+QString bssh_main_window::drop_destination(bssh_session *session, const QString &directory) const {
+	const QString where = directory.isEmpty() ? QStringLiteral("~") : directory;
+	if (!session || session->profile().local) return where;
+	return session->profile().host + QLatin1Char(':') + where;
+}
+
+QMenu *bssh_main_window::build_drop_menu(QWidget *parent, bssh_session *session,
+                                         const bssh_working_directory_t &found, int count) const {
+	QMenu *menu = new QMenu(parent);
+	menu->setObjectName(QStringLiteral("drop_menu"));
+
+	/*
+	 * Where it goes, in the entry itself: the place was found by looking,
+	 * and the menu is where a wrong answer is caught before anything is
+	 * written. A shell connected onward -- ssh to a third machine -- has
+	 * its "here" on a host this connection cannot write to, and says so
+	 * rather than copying to the wrong one; one whose directory could not
+	 * be found offers the home directory under that name.
+	 */
+	QAction *copy = nullptr;
+	if (found.elsewhere) {
+		copy = menu->addAction(QStringLiteral("Copy here -- not from this tab: it is running %1")
+		                                .arg(found.foreground));
+		copy->setEnabled(false);
+	} else if (found.path.isEmpty()) {
+		copy = menu->addAction(QStringLiteral("Copy to the home directory (%1)")
+		                                .arg(drop_destination(session, QString())));
+	} else {
+		copy = menu->addAction(QStringLiteral("Copy here (%1)").arg(drop_destination(session, found.path)));
+	}
+	copy->setObjectName(QStringLiteral("drop_copy"));
+
+	QAction *paste = menu->addAction(count == 1 ? QStringLiteral("Paste the path")
+	                                            : QStringLiteral("Paste the paths"));
+	paste->setObjectName(QStringLiteral("drop_paste"));
+	return menu;
+}
+
+void bssh_main_window::act_on_drop_menu(QMenu *menu, const QAction *chosen, bssh_session *session,
+                                        const QStringList &paths, const QString &as_text,
+                                        const bssh_working_directory_t &found) {
+	if (!menu || !chosen || !session) return;
+	if (chosen == menu->findChild<QAction *>(QStringLiteral("drop_paste"))) {
+		paste_into_current(as_text);
+		return;
+	}
+	if (chosen != menu->findChild<QAction *>(QStringLiteral("drop_copy")) || found.elsewhere) return;
+
+	/*
+	 * Said over the pane as it goes, and once it is done: where, and the
+	 * names written -- which differ from the files dropped wherever one of
+	 * that name was already there (bssh_free_name).
+	 */
+	const QPointer<bssh_session> held = session;
+	const QString count = paths.size() == 1 ? QFileInfo(paths.first()).fileName()
+	                                        : QStringLiteral("%1 items").arg(paths.size());
+	auto progress = std::make_shared<QMetaObject::Connection>();
+	auto finished = std::make_shared<QMetaObject::Connection>();
+	*progress = connect(session, &bssh_session::upload_progress, this,
+	                    [this, held, count, found](qint64 done, qint64 total) {
+		if (!held) return;
+		const int percent = total > 0 ? int(done * 100 / total) : 100;
+		flash_session_notice(held, QStringLiteral("Copying %1 to %2 -- %3%")
+		                                   .arg(count, drop_destination(held, found.path)).arg(percent));
+	});
+	*finished = connect(session, &bssh_session::upload_finished, this,
+	                    [this, held, progress, finished](bool ok, const QString &directory,
+	                                                     const QStringList &written, const QString &why) {
+		disconnect(*progress);
+		disconnect(*finished);
+		if (!held) return;
+		QString names = written.mid(0, 3).join(QStringLiteral(", "));
+		if (written.size() > 3) names += QStringLiteral(" and %1 more").arg(written.size() - 3);
+		flash_session_notice(held, ok ? QStringLiteral("Copied %1 to %2")
+		                                        .arg(names, drop_destination(held, directory))
+		                              : QStringLiteral("Copy failed: %1").arg(why));
+	});
+	session->upload(paths, found.path);
+}
+
+void bssh_main_window::offer_file_drop(const QStringList &paths, const QString &as_text,
+                                       const QPoint &global) {
+	bssh_session *session = m_current;
+	if (!session) {
+		paste_into_current(as_text);
+		return;
+	}
+
+	/*
+	 * Asked first, shown once answered: the menu names the destination,
+	 * and finding it is a round trip on the connection. One answer, then
+	 * the connection is let go.
+	 */
+	const QPointer<bssh_session> held = session;
+	auto answered = std::make_shared<QMetaObject::Connection>();
+	*answered = connect(session, &bssh_session::working_directory_found, this,
+	                    [this, held, answered, paths, as_text, global](const bssh_working_directory_t &found) {
+		disconnect(*answered);
+		if (!held) return;
+		QMenu *menu = build_drop_menu(this, held, found, int(paths.size()));
+		const QAction *chosen = menu->exec(global);
+		act_on_drop_menu(menu, chosen, held, paths, as_text, found);
+		menu->deleteLater();
+	});
+	session->find_working_directory();
 }
 
 QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &link) const {

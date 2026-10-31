@@ -1469,6 +1469,16 @@ void bssh_terminal_view::dropEvent(QDropEvent *event) {
 	 */
 	setFocus(Qt::MouseFocusReason);
 
+	/* Files, every one of them local: copied or pasted, the window asks. */
+	QStringList files;
+	const QList<QUrl> urls = event->mimeData()->urls();
+	for (const QUrl &url : urls)
+		if (url.isLocalFile()) files << url.toLocalFile();
+	if (!files.isEmpty() && files.size() == urls.size()) {
+		emit files_dropped(files, text, mapToGlobal(event->position().toPoint()));
+		return;
+	}
+
 	emit paste_requested(text);
 }
 

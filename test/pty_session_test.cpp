@@ -2,6 +2,7 @@
 #include <QtTest>
 #include <QTemporaryDir>
 
+#include <QProcess>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 
@@ -11,6 +12,7 @@
 #include "term/emulator.h"
 #include "platform/platform.h"
 #include "ssh/pty_session.h"
+#include "ssh/working_directory.h"
 #include "input/input_router.h"
 
 #include <QKeyEvent>
@@ -732,6 +734,133 @@ void pty_session_test::a_local_shell_lists_tmux_and_screen_beside_itself() {
 	QCOMPARE(found.size(), 2);
 	QCOMPARE(found.at(0).name, QStringLiteral("dev"));
 	QCOMPARE(found.at(1).name, QStringLiteral("4242.notes"));
+}
+
+void pty_session_test::the_working_directory_rules_hold() {
+	/* The foreground's directory over the shell's, where it can be read. */
+	bssh_working_directory_t found = bssh_parse_working_directory(
+	        "host\tbox\nproc\t1\nshell\t/home/u\nfg\tvim\t/home/u/src\n");
+	QCOMPARE(found.host, QStringLiteral("box"));
+	QVERIFY(found.proc && !found.elsewhere);
+	QCOMPARE(found.path, QStringLiteral("/home/u/src"));
+
+	/* After sudo -i the foreground is not ours to read: the shell's. */
+	found = bssh_parse_working_directory("host\tbox\nproc\t1\nshell\t/home/u\nfg\tbash\t\n");
+	QCOMPARE(found.path, QStringLiteral("/home/u"));
+
+	/* ssh onward: "here" is another machine, and is said to be. */
+	found = bssh_parse_working_directory("host\tbox\nproc\t1\nshell\t/home/u\nfg\tssh\t/home/u\n");
+	QVERIFY(found.elsewhere);
+
+	/* No /proc: nothing but the host, for OSC 7 to be checked against. */
+	found = bssh_parse_working_directory("host\tmac\n");
+	QVERIFY(!found.proc);
+	QVERIFY(found.path.isEmpty());
+
+	/* OSC 7 counts only when it names this host. */
+	QCOMPARE(bssh_reported_directory(QStringLiteral("file://mac/Users/u/x"), QStringLiteral("mac")),
+	         QStringLiteral("/Users/u/x"));
+	QCOMPARE(bssh_reported_directory(QStringLiteral("file:///tmp/x"), QStringLiteral("mac")),
+	         QStringLiteral("/tmp/x"));
+	QVERIFY(bssh_reported_directory(QStringLiteral("file://inner/srv"), QStringLiteral("mac")).isEmpty());
+	QVERIFY(bssh_reported_directory(QStringLiteral("http://mac/x"), QStringLiteral("mac")).isEmpty());
+
+	/* Free names: never the one taken, a predictable one instead. */
+	const QStringList taken = { QStringLiteral("a.txt"), QStringLiteral("a (1).txt"),
+	                            QStringLiteral(".bashrc"), QStringLiteral("dir") };
+	const auto is_taken = [&taken](const QString &name) { return taken.contains(name); };
+	QCOMPARE(bssh_free_name(QStringLiteral("new.txt"), is_taken), QStringLiteral("new.txt"));
+	QCOMPARE(bssh_free_name(QStringLiteral("a.txt"), is_taken), QStringLiteral("a (2).txt"));
+	QCOMPARE(bssh_free_name(QStringLiteral(".bashrc"), is_taken), QStringLiteral(".bashrc (1)"));
+	QCOMPARE(bssh_free_name(QStringLiteral("dir"), is_taken), QStringLiteral("dir (1)"));
+}
+
+void pty_session_test::the_probe_finds_the_shell_on_its_connections_terminal() {
+	/*
+	 * The remote half, run here for real: a process leading a terminal
+	 * with SSH_CONNECTION in its environment and a directory of its own,
+	 * as sshd leaves a login shell -- and the probe, run as an exec
+	 * request would be with the same SSH_CONNECTION, must find it.
+	 */
+	if (!QFileInfo::exists(QStringLiteral("/proc/self"))) QSKIP("no /proc here");
+	QTemporaryDir where;
+	QVERIFY(where.isValid());
+	const QString marker = QStringLiteral("bssh-probe-%1").arg(QCoreApplication::applicationPid());
+
+	bssh_pty_session session;
+	session.set_command({ QStringLiteral("sh"), QStringLiteral("-c"),
+	                      QStringLiteral("cd %1 && exec env SSH_CONNECTION=%2 sleep 30")
+	                              .arg(where.path(), marker) });
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(80, 24);
+	QTest::qWait(300);
+
+	QProcess probe;
+	QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+	env.insert(QStringLiteral("SSH_CONNECTION"), marker);
+	probe.setProcessEnvironment(env);
+	probe.start(QStringLiteral("/bin/sh"), { QStringLiteral("-c"), bssh_working_directory_probe() });
+	QVERIFY(probe.waitForFinished(10000));
+	const bssh_working_directory_t found = bssh_parse_working_directory(probe.readAllStandardOutput());
+	session.disconnect_from_host();
+
+	QVERIFY(found.proc);
+	QVERIFY(!found.host.isEmpty());
+	QCOMPARE(found.foreground, QStringLiteral("sleep"));
+	QCOMPARE(QFileInfo(found.path).canonicalFilePath(), QFileInfo(where.path()).canonicalFilePath());
+	QVERIFY(!found.elsewhere);
+}
+
+void pty_session_test::a_local_shells_directory_is_read_from_proc() {
+	if (!QFileInfo::exists(QStringLiteral("/proc/self"))) QSKIP("no /proc here");
+	QTemporaryDir where;
+	QVERIFY(where.isValid());
+
+	bssh_pty_session session;
+	session.set_command({ QStringLiteral("sh"), QStringLiteral("-c"),
+	                      QStringLiteral("cd %1 && exec sleep 30").arg(where.path()) });
+	session.connect_to_host(QString(), 0, QString());
+	session.open_shell(80, 24);
+	QTest::qWait(300);
+
+	QSignalSpy found(&session, &bssh_ssh_session::working_directory_found);
+	session.find_working_directory();
+	QVERIFY(found.wait(5000));
+	const bssh_working_directory_t answer = found.first().first().value<bssh_working_directory_t>();
+	session.disconnect_from_host();
+	QCOMPARE(QFileInfo(answer.path).canonicalFilePath(), QFileInfo(where.path()).canonicalFilePath());
+}
+
+void pty_session_test::a_local_copy_keeps_both_when_a_name_is_taken() {
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	const auto write = [](const QString &path, const QByteArray &bytes) {
+		QFile file(path);
+		QVERIFY(file.open(QIODevice::WriteOnly));
+		file.write(bytes);
+	};
+	write(from.filePath(QStringLiteral("notes.txt")), "dropped");
+	QVERIFY(QDir(from.path()).mkpath(QStringLiteral("tree/inner")));
+	write(from.filePath(QStringLiteral("tree/inner/leaf")), "leaf");
+	write(into.filePath(QStringLiteral("notes.txt")), "already here");
+
+	bssh_pty_session session;
+	QSignalSpy done(&session, &bssh_ssh_session::upload_finished);
+	session.upload({ from.filePath(QStringLiteral("notes.txt")), from.filePath(QStringLiteral("tree")) },
+	               into.path());
+	QVERIFY(done.wait(10000));
+	QVERIFY2(done.first().at(0).toBool(), qPrintable(done.first().at(3).toString()));
+	QCOMPARE(done.first().at(2).toStringList(),
+	         QStringList({ QStringLiteral("notes (1).txt"), QStringLiteral("tree") }));
+
+	const auto read = [](const QString &path) {
+		QFile file(path);
+		return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray("<missing>");
+	};
+	QCOMPARE(read(into.filePath(QStringLiteral("notes.txt"))), QByteArray("already here"));
+	QCOMPARE(read(into.filePath(QStringLiteral("notes (1).txt"))), QByteArray("dropped"));
+	QCOMPARE(read(into.filePath(QStringLiteral("tree/inner/leaf"))), QByteArray("leaf"));
 }
 
 void pty_session_test::a_restarted_shell_is_replaced_without_an_exit() {

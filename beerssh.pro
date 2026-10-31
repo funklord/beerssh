@@ -87,6 +87,7 @@ SOURCES += \
     src/platform/platform.cpp \
     src/platform/secret_store.cpp \
     src/ssh/pty_session.cpp \
+    src/ssh/working_directory.cpp \
     src/ssh/ssh_session.cpp \
     src/ssh/jump_tunnel.cpp \
     src/ssh/ssh_session_libssh.cpp \
@@ -158,6 +159,7 @@ HEADERS += \
     src/platform/platform.h \
     src/platform/secret_store.h \
     src/ssh/pty_session.h \
+    src/ssh/working_directory.h \
     src/ssh/ssh_session.h \
     src/ssh/jump_tunnel.h \
     src/ssh/ssh_session_libssh.h \

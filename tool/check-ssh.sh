@@ -86,6 +86,7 @@ KbdInteractiveAuthentication no
 PubkeyAuthentication yes
 UsePAM no
 StrictModes no
+Subsystem sftp internal-sftp
 EOF
 
 echo "check-ssh: sshd on 127.0.0.1:$PORT, one generated key, no passwords"
