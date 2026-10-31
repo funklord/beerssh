@@ -64,3 +64,12 @@ file = "src/ssh/pty_session.cpp"
 find = "\tif (m_copying) {\n"
 replace = "\tif (false) {\n"
 expect = "a_local_session_copying_a_file_is_not_moved"
+
+# A local session closed mid-copy returns at once, leaving the copy to
+# run on unwatched -- and a quit kills it with half a file written.
+[[sabotage]]
+name = "a closed local session does not wait for its copy"
+file = "src/ssh/pty_session.cpp"
+find = "\t\tm_copier->wait();\n"
+replace = ""
+expect = "a_closed_local_session_leaves_no_half_copied_file"

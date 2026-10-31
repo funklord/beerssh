@@ -3471,7 +3471,12 @@ model on a finger.
   sabotage is run with check-ssh as the suite. A local shell is held the
   same way: its copy runs on a thread of this process and reports to the
   session object that goes with the move, so the move waits for the
-  copy's end to be reported (`a_local_session_copying_a_file_is_not_moved`). Under ASan and UBSan, the
+  copy's end to be reported (`a_local_session_copying_a_file_is_not_moved`).
+  And a local session closed mid-copy -- the tab, or the program quitting
+  -- stops its copy and waits for it, one piece at most, so the directory
+  holds the whole file or none of it; before, the copy ran on unwatched
+  and a quit cut it off half written
+  (`a_closed_local_session_leaves_no_half_copied_file`). Under ASan and UBSan, the
   three live copy tests ran clean in both phases that connect.
   `the_working_directory_rules_hold`,
   `the_probe_finds_the_shell_on_its_connections_terminal`,

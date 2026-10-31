@@ -125,6 +125,15 @@ bssh_pty_session::bssh_pty_session(QObject *parent)
 }
 
 bssh_pty_session::~bssh_pty_session() {
+	/*
+	 * A copy still running is stopped and waited for -- one piece at
+	 * most -- so that closing the tab or quitting leaves either the whole
+	 * file or none of it, never half of one under its free name.
+	 */
+	if (m_copier) {
+		cancel_upload();
+		m_copier->wait();
+	}
 	disconnect_from_host();
 }
 
@@ -586,6 +595,7 @@ void bssh_pty_session::upload(const QStringList &paths, const QString &directory
 		}, Qt::QueuedConnection);
 	});
 	QObject::connect(copier, &QThread::finished, copier, &QObject::deleteLater);
+	m_copier = copier;
 	copier->start();
 }
 

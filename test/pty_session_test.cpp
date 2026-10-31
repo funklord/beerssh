@@ -887,6 +887,31 @@ void pty_session_test::a_local_copy_can_be_stopped() {
 	QVERIFY2(!QFileInfo::exists(into.filePath(QStringLiteral("big.bin"))), "a stopped copy left its file");
 }
 
+void pty_session_test::a_closed_local_session_leaves_no_half_copied_file() {
+	/*
+	 * The tab closed, or the program quit, straight after the drop: by the
+	 * time the session is gone the file is whole or absent. Large enough
+	 * that the copy is under way when the session goes; were it already
+	 * done, whole is the right answer too.
+	 */
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	const qint64 size = 64 * 1024 * 1024;
+	{
+		QFile big(from.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		QVERIFY(big.resize(size));
+	}
+	auto *session = new bssh_pty_session;
+	session->upload({ from.filePath(QStringLiteral("big.bin")) }, into.path());
+	QTest::qWait(1);
+	delete session;
+	const QFileInfo left(into.filePath(QStringLiteral("big.bin")));
+	QVERIFY2(!left.exists() || left.size() == size,
+	         qPrintable(QStringLiteral("half a file left: %1 of %2 bytes").arg(left.size()).arg(size)));
+}
+
 void pty_session_test::a_local_session_copying_a_file_is_not_moved() {
 	/*
 	 * The copy's end is reported on this thread, a turn after it is done,

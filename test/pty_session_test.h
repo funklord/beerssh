@@ -28,6 +28,7 @@ private slots:
 	void a_local_shells_directory_is_read_from_proc();
 	void a_local_copy_keeps_both_when_a_name_is_taken();
 	void a_local_copy_can_be_stopped();
+	void a_closed_local_session_leaves_no_half_copied_file();
 	void a_local_session_copying_a_file_is_not_moved();
 	void a_restarted_shell_is_replaced_without_an_exit();
 	void exiting_the_shell_is_not_a_dropped_connection();
