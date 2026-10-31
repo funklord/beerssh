@@ -6200,7 +6200,8 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 	 * pane with a view, or a tab in a shown pane's bar. Seeded, and each
 	 * failure prints the steps that led to it.
 	 */
-	const forced_touch_t desktop(0);
+	/* BSSH_WALK_TOUCH=1 walks as a phone does: its own caps and bars. */
+	const forced_touch_t desktop(qEnvironmentVariableIntValue("BSSH_WALK_TOUCH") > 0 ? 1 : 0);
 	struct restore_t {
 		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
 		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
@@ -6273,6 +6274,31 @@ void layout_test::no_terminal_is_lost_however_the_panes_are_moved() {
 				if (tabs.size() > 1 && (!bar || !bar->isVisible() || bar->sessions() != tabs))
 					return QStringLiteral("%1's bar does not list its %2 tabs").arg(name(front))
 					        .arg(tabs.size());
+			}
+			/*
+			 * And each in ONE place: a terminal moved out of a bar is gone
+			 * from it, not shown in its new pane and still a tab in the old
+			 * one ("tabs moved out don't disappear from the tab", the
+			 * holder, 2026-10-30). Asked of the bars on screen, which is
+			 * what the holder saw, as well as of the layout.
+			 */
+			QHash<bssh_session *, int> places;
+			for (bssh_session *front : visible) {
+				QList<bssh_session *> here = layout->bar_tabs(front);
+				if (!here.contains(front)) here.prepend(front);
+				for (bssh_session *session : here) ++places[session];
+				bssh_pane_bar *bar = window.bar_for(front);
+				if (bar && bar->isVisible()) {
+					for (bssh_session *shown : bar->sessions()) {
+						if (!here.contains(shown))
+							return QStringLiteral("%1's bar shows %2, which is not its tab")
+							        .arg(name(front), name(shown));
+					}
+				}
+			}
+			for (auto it = places.cbegin(); it != places.cend(); ++it) {
+				if (it.value() > 1)
+					return QStringLiteral("%1 is in %2 places").arg(name(it.key())).arg(it.value());
 			}
 			const QList<bssh_session *> held = window.shown_sessions();
 			const QList<bssh_session *> placed = layout->sessions();

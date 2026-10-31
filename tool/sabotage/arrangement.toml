@@ -172,3 +172,17 @@ file = "src/ui/pane_container.cpp"
 find = "\tif (!column) restore_divisions(m_layout->visible_tree());\n"
 replace = ""
 expect = "a_dragged_divider_stays_where_it_was_put"
+
+# A terminal taken out of a pane's tabs stays among them: shown in its
+# new pane and still a tab where it was ("tabs moved out don't disappear
+# from the tab", the holder, 2026-10-30). Every terminal is still
+# reachable, so the walk sees it only through its one-place check, and
+# does, run alone ("s0 is in 2 places", seed 1). In the suite this edit
+# crashes layout_test before the walk is reached, so the test named is
+# the first of the eleven it fails.
+[[sabotage]]
+name = "a terminal moved out stays a tab where it was"
+file = "src/ui/layout_manager.cpp"
+find = "\tconst int at = rest.indexOf(session);\n\trest.removeAt(at);\n"
+replace = "\tconst int at = rest.indexOf(session);\n"
+expect = "a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there"
