@@ -255,3 +255,11 @@ file = "src/ui/terminal_view.cpp"
 find = "\tm_overlay = new pane_overlay(this);\n"
 replace = "\tm_overlay = new pane_overlay(this);\n\tm_overlay->lower();\n"
 expect = "a_scrollbar_does_not_hide_what_is_drawn_over_the_pane"
+
+# No way back to a hidden menu bar from the terminal menu.
+[[sabotage]]
+name = "the terminal menu cannot show the hidden menu bar"
+file = "src/ui/main_window.cpp"
+find = "\t\tshow_bar->setObjectName(QStringLiteral(\"terminal_show_menu_bar\"));\n"
+replace = "\t\tshow_bar->setVisible(false);\n"
+expect = "a_hidden_menu_bar_comes_back_from_the_terminal_menu"

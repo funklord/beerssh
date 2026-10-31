@@ -5937,6 +5937,19 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	 * Session > Sessions entry added that day was the same door twice
 	 * and was taken out again (the holder).
 	 */
+	/*
+	 * The way back to a hidden menu bar from where the pointer already is
+	 * (the holder, 2026-10-31): View holds Show Menu Bar, and View is in
+	 * the bar that is hidden -- the corner's menus button reaches it, but
+	 * the right button is where a desktop user looks first. A menu-local
+	 * entry rather than View's action itself, because the touch layout
+	 * rewrites the actions of the menu it is given.
+	 */
+	if (m_menu_bar && m_menu_bar->isHidden() && m_menu_bar_action) {
+		QAction *show_bar = menu->addAction(QStringLiteral("Show &Menu Bar"));
+		show_bar->setObjectName(QStringLiteral("terminal_show_menu_bar"));
+	}
+
 	QAction *front_door = menu->addAction(m_host_list ? QStringLiteral("&Sessions and Hosts")
 	                                                  : QStringLiteral("&Hosts and Settings"));
 	front_door->setObjectName(QStringLiteral("terminal_front_door"));
@@ -6053,6 +6066,13 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	        menu->findChild<QAction *>(QStringLiteral("terminal_open_link"));
 	if (open_link && chosen == open_link) {
 		open_remote_link(link);
+		return;
+	}
+
+	const QAction *show_bar =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_show_menu_bar"));
+	if (show_bar && chosen == show_bar) {
+		if (m_menu_bar_action) m_menu_bar_action->setChecked(true);
 		return;
 	}
 

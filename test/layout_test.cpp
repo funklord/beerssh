@@ -848,6 +848,43 @@ void layout_test::the_selector_pushes_its_mode_to_every_pane() {
 	while (shared->count() > 0) shared->close(shared->at(0));
 }
 
+void layout_test::a_hidden_menu_bar_comes_back_from_the_terminal_menu() {
+	/*
+	 * The holder, 2026-10-31: "we should have a show menubar in the right
+	 * click menu too when it is hidden". Offered there only while it is.
+	 */
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bool shown = bssh_app_settings().menu_bar_shown();
+		~restore_t() { bssh_app_settings().set_menu_bar_shown(shown); }
+	} restore;
+	bssh_app_settings().set_menu_bar_shown(false);
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	window.adopt_session(window.registry()->create(named(QStringLiteral("alpha"))));
+	QCoreApplication::processEvents();
+	QMenuBar *bar = window.findChild<QMenuBar *>();
+	QVERIFY(bar && bar->isHidden());
+
+	QMenu *menu = window.build_terminal_menu(&window);
+	QAction *show = menu->findChild<QAction *>(QStringLiteral("terminal_show_menu_bar"));
+	QVERIFY2(show, "no way back to the hidden menu bar from the terminal menu");
+	window.act_on_terminal_menu(menu, show);
+	delete menu;
+	QCoreApplication::processEvents();
+	QVERIFY2(!bar->isHidden(), "Show Menu Bar did not bring it back");
+	QVERIFY(bssh_app_settings().menu_bar_shown());
+
+	/* And not offered while it shows. */
+	menu = window.build_terminal_menu(&window);
+	QVERIFY(!menu->findChild<QAction *>(QStringLiteral("terminal_show_menu_bar")));
+	delete menu;
+}
+
 void layout_test::hidden_bars_are_reached_from_the_corner() {
 	/*
 	 * The holder: "if we hide the tab bar or the top menu bar they also

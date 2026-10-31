@@ -81,6 +81,7 @@ private slots:
 	void the_bar_side_and_the_tab_bands_are_where_the_pointer_is();
 	void the_tab_bar_is_dragged_to_another_side();
 	void a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there();
+	void a_hidden_menu_bar_comes_back_from_the_terminal_menu();
 	void hidden_bars_are_reached_from_the_corner();
 	void the_drum_steps_with_the_wheel_and_a_drag_and_wraps();
 
