@@ -196,6 +196,14 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	bssh_fit_items(m_key_row);
 	if (on_this_page(SECTION_KEYBOARD, m_key_row)) form->addRow(QStringLiteral("On-screen keys"), m_key_row);
 
+	/* Under the control it explains: added after the keyboard's rows, it
+	 * read as a note about the keyboard layout. */
+	QLabel *note = bssh_wrapped_note(
+	        QStringLiteral("Automatic shows the key row when touch is this device's main "
+	                        "input. Override it if you have a keyboard attached to a "
+	                        "tablet, or a touchscreen on a laptop."), this);
+	if (on_this_page(SECTION_KEYBOARD, note)) form->addRow(note);
+
 	/*
 	 * Composing your own row (sec 6.2, sec 6.3). Device-wide, like the
 	 * custom palette above and for the same reason: WHICH row a host uses
@@ -356,11 +364,6 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 * could read, on the one layout built for a thumb. Every checkbox and
 	 * every note on this page had been paying it.
 	 */
-	QLabel *note = bssh_wrapped_note(
-	        QStringLiteral("Automatic shows the key row when touch is this device's main "
-	                        "input. Override it if you have a keyboard attached to a "
-	                        "tablet, or a touchscreen on a laptop."), this);
-	if (on_this_page(SECTION_KEYBOARD, note)) form->addRow(note);
 
 	/*
 	 * Light/dark, defaulting to whatever the desktop is asking for
@@ -912,6 +915,7 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 * shortcuts-only page would otherwise carry an empty form and the
 	 * spacing that goes with it.
 	 */
+	bssh_attach_notes(form);
 	if (form->rowCount() > 0) body->addLayout(form);
 	else delete form;
 

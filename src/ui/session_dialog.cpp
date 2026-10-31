@@ -258,6 +258,20 @@ QWidget *bssh_session_dialog::build_session_page() {
 
 	destination->addRow(QStringLiteral("Private key file"), identity_row);
 
+	/*
+	 * What the key field means, beside the key field (sec 8.5). This was
+	 * a whole category of its own -- an SSH page holding a paragraph and
+	 * a button back to here -- which put the explanation one click away
+	 * from the control it explains.
+	 */
+	QLabel *keys_note = bssh_wrapped_note(
+	        QStringLiteral("Keys are offered before any password is asked for: the agent "
+	                        "first, then your default identities. Name a file above only "
+	                        "if this host needs a particular key. Host keys are trusted "
+	                        "on first use and checked every time after."),
+	        page);
+	destination->addRow(keys_note);
+
 	connect(browse_key, &QPushButton::clicked, this, [this] {
 		/*
 		 * Starting in ~/.ssh, and with no name filter: a private key has
@@ -287,19 +301,6 @@ QWidget *bssh_session_dialog::build_session_page() {
 	        QStringLiteral("Leave empty to connect straight to the host."));
 	destination->addRow(QStringLiteral("Connect via"), m_jump);
 
-	/*
-	 * What the key field means, beside the key field (sec 8.5). This was
-	 * a whole category of its own -- an SSH page holding a paragraph and
-	 * a button back to here -- which put the explanation one click away
-	 * from the control it explains.
-	 */
-	QLabel *keys_note = bssh_wrapped_note(
-	        QStringLiteral("Keys are offered before any password is asked for: the agent "
-	                        "first, then your default identities. Name a file above only "
-	                        "if this host needs a particular key. Host keys are trusted "
-	                        "on first use and checked every time after."),
-	        page);
-	destination->addRow(keys_note);
 
 	/*
 	 * Per host and off unless asked for (bssh_kept_scrollback): the
@@ -337,6 +338,7 @@ QWidget *bssh_session_dialog::build_session_page() {
 	keeps->addStretch(1);
 	destination->addRow(keeps);
 
+	bssh_attach_notes(destination);
 	layout->addLayout(destination);
 
 	/*

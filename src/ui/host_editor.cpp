@@ -285,6 +285,7 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	         this, &bssh_host_editor::revert_font_to_preset);
 
 	body->addStretch(1);
+	bssh_attach_notes(body);
 
 	m_save = new QPushButton(QStringLiteral("Add host"), this);
 	QPushButton *cancel = new QPushButton(QStringLiteral("Cancel"), this);

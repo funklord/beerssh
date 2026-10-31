@@ -196,8 +196,15 @@ void shoot_whole_page(const QString &name, QWidget *surface) {
 	const QSize was = content->size();
 
 	/* Capped, so a page asking for something absurd makes a large
-	 * picture rather than exhausting memory. */
-	content->resize(width, qMin(content->sizeHint().height(), 3000));
+	 * picture rather than exhausting memory.
+	 *
+	 * And at the height the page needs AT THIS WIDTH: a note under a
+	 * control in a labelled row wraps to the field's width, and
+	 * sizeHint() asks nothing about width -- so the page came out short
+	 * and the notes clipped, in a picture of something the app, whose
+	 * scroll area asks heightForWidth(), never draws. */
+	const int tall = content->hasHeightForWidth() ? content->heightForWidth(width) : 0;
+	content->resize(width, qMin(qMax(tall, content->sizeHint().height()), 3000));
 	QTest::qWait(50);
 
 	const QString path = shot_dir() + QStringLiteral("/") + name
@@ -915,7 +922,9 @@ void bssh_ui_shots::render_front_door_pages() {
 			                   ? area->viewport()->width()
 			                   : BSSH_SMALL_DESKTOP_W - 220;
 
-			content->resize(width, qMin(content->sizeHint().height(), 3000));
+			/* At the height for this width, as shoot_whole_page() says. */
+			const int needed = content->hasHeightForWidth() ? content->heightForWidth(width) : 0;
+			content->resize(width, qMin(qMax(needed, content->sizeHint().height()), 3000));
 			QTest::qWait(50);
 
 			const QString tall = shot_dir() + QStringLiteral("/desktop-page-")

@@ -6928,6 +6928,83 @@ void layout_test::a_dragged_divider_stays_where_it_was_put() {
 	still_a_quarter("the right pane was split");
 }
 
+namespace {
+
+/*
+ * Each visible note on `surface` measured against the controls around it:
+ * the gap to the nearest one above, and to the nearest one below, both
+ * over the same columns. A note equally far from both reads as belonging
+ * to either -- the holder's complaint -- so the one above must be clearly
+ * nearer. Returns what fails, empty when nothing does.
+ */
+QStringList bssh_notes_far_from_their_controls(QWidget *surface, const QString &name, int *measured) {
+	QStringList far;
+	const auto rect_of = [surface](QWidget *widget) {
+		return QRect(widget->mapTo(surface, QPoint(0, 0)), widget->size());
+	};
+	const auto is_control = [](QWidget *widget) {
+		return qobject_cast<QAbstractButton *>(widget) || qobject_cast<QComboBox *>(widget)
+		       || qobject_cast<QAbstractSlider *>(widget) || qobject_cast<QLineEdit *>(widget)
+		       || qobject_cast<QAbstractSpinBox *>(widget);
+	};
+	for (QLabel *note : surface->findChildren<QLabel *>()) {
+		if (!note->property("bssh_note").toBool() || !note->isVisibleTo(surface)) continue;
+		if (note->text().isEmpty()) continue;
+		const QRect at = rect_of(note);
+		int above = INT_MAX;
+		int below = INT_MAX;
+		for (QWidget *other : surface->findChildren<QWidget *>()) {
+			if (!is_control(other) || !other->isVisibleTo(surface)) continue;
+			if (qobject_cast<QAbstractButton *>(other->parentWidget())) continue;
+			const QRect it = rect_of(other);
+			if (it.right() < at.left() || it.left() > at.right()) continue;
+			if (it.bottom() <= at.top()) above = qMin(above, at.top() - it.bottom());
+			else if (it.top() >= at.bottom()) below = qMin(below, it.top() - at.bottom());
+		}
+		/* A note with no control above is an introduction; with none below
+		 * it is the last thing, and nothing can be confused with it. */
+		if (above == INT_MAX || below == INT_MAX) continue;
+		++*measured;
+		if (above * 2 > below)
+			far << QStringLiteral("%1: \"%2...\" is %3px under its control and %4px over the next")
+			               .arg(name, note->text().left(40)).arg(above).arg(below);
+	}
+	return far;
+}
+
+} /* namespace */
+
+void layout_test::a_note_sits_with_the_control_it_explains() {
+	/*
+	 * The holder, 2026-10-31: "in the config alignment of widget and its
+	 * help text makes it often unclear what it pertains to as it is
+	 * equidistant from the top and the bottom widget, this should be taken
+	 * as general advice for widgets and their accompanying help text."
+	 */
+	QStringList far;
+	int measured = 0;
+	for (const int touch : { 0, 1 }) {
+		const forced_touch_t forced(touch);
+		for (const bssh_app_settings_view::section_t section :
+		     { bssh_app_settings_view::SECTION_KEYBOARD, bssh_app_settings_view::SECTION_APPEARANCE,
+		       bssh_app_settings_view::SECTION_TERMINAL, bssh_app_settings_view::SECTION_PASSWORDS }) {
+			bssh_app_settings_view page(section, nullptr);
+			page.resize(touch ? 360 : 700, 2400);
+			page.show();
+			QVERIFY(QTest::qWaitForWindowExposed(&page));
+			QTest::qWait(20);
+			QScrollArea *area = page.findChild<QScrollArea *>();
+			QWidget *content = area && area->widget() ? area->widget() : &page;
+			far += bssh_notes_far_from_their_controls(
+			        content, QStringLiteral("%1 page %2").arg(touch ? "touch" : "desktop").arg(int(section)),
+			        &measured);
+		}
+	}
+	/* A check over no notes passes too, and says nothing. */
+	QVERIFY2(measured >= 12, qPrintable(QStringLiteral("only %1 notes measured").arg(measured)));
+	QVERIFY2(far.isEmpty(), qPrintable(far.join(QLatin1Char('\n'))));
+}
+
 void layout_test::a_shape_survives_being_written_down() {
 	bssh_session_registry registry;
 	bssh_layout_manager layout;

@@ -6514,6 +6514,29 @@ a tab dragged to the end of a two-tab bar would tear itself out mid-reorder.
   `bssh_wrapped_note()` sets `heightForWidth` on the policy, and every
   wrapped note in the app is built through it — one function rather than
   fourteen call sites, so a note added later cannot quietly miss it.
+  **A note sits with the control it explains -- the holder's general rule,
+  2026-10-31:** "alignment of widget and its help text makes it often unclear
+  what it pertains to as it is equidistant from the top and the bottom widget,
+  this should be taken as general advice for widgets and their accompanying
+  help text". A form spaces every row alike, so a note added as a row of its
+  own was as near the next control as its own. `bssh_attach_notes()` makes
+  each note and the control above it one row: the note 2px under it, in the
+  field's column where the row has a label, and the form's spacing between
+  that pair and the next. It runs on the settings form, the session dialog's
+  form and the host editor's column; elsewhere a note introduces what follows
+  it and is left alone. Two notes were in the wrong place and moved: the key
+  row's under On-screen keys (it sat after the keyboard rows, explaining the
+  layout instead), and the session dialog's keys note under the key field (it
+  said "a file above" from under Connect via). The pair follows its parts'
+  visibility, asks the form for height-for-width, keeps a combo box its own
+  width, and names the control from the row's label, since a screen reader
+  finds a field's name on a label beside it and the pair moved the field. The
+  full-page shots now ask the page for its height at their width; they used
+  `sizeHint()` and clipped every note in a labelled row, in a picture of
+  something the app never draws. `a_note_sits_with_the_control_it_explains`
+  holds every visible note on the four settings pages, desktop and touch, at
+  most half as far from its control as from the next; caught in
+  `arrangement.toml`.
   **Fixing it made a second defect visible, which is the point.** With the
   labels reporting honestly, the device settings page asks for **752px of a
   640px screen**: it was always that tall and had simply never said so. It is

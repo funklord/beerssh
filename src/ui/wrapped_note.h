@@ -3,6 +3,7 @@
 
 #include <QString>
 
+class QLayout;
 class QLabel;
 class QWidget;
 
@@ -42,5 +43,23 @@ QLabel *bssh_wrapped_note(const QString &text, QWidget *parent);
  * never drift into disagreeing about what a note is.
  */
 void bssh_wrap_note(QLabel *note);
+
+/*
+ * Each note in `form` put with the control it explains (the holder,
+ * 2026-10-31): "alignment of widget and its help text makes it often
+ * unclear what it pertains to as it is equidistant from the top and the
+ * bottom widget, this should be taken as general advice for widgets and
+ * their accompanying help text".
+ *
+ * A form spaces every row alike, so a note added as a row of its own sat
+ * as close to the control after it as to the one it describes. Here each
+ * note and the control above it become one row: the note just under it,
+ * in the field's column where the row has a label, and the form's own
+ * spacing between that pair and the next. A form, or a column of
+ * widgets, the same way. Call it once the layout is built.
+ * A note with no control above it -- the first row, or one after another
+ * note -- stays a row of its own.
+ */
+void bssh_attach_notes(QLayout *layout);
 
 #endif /* BSSH_WRAPPED_NOTE_H */

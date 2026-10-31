@@ -309,6 +309,7 @@ private slots:
 	void side_tabs_take_a_tap_and_a_swipe_on_touch();
 	void a_touch_windows_pane_controls_reach_the_floor();
 	void a_dragged_divider_stays_where_it_was_put();
+	void a_note_sits_with_the_control_it_explains();
 	void a_shape_survives_being_written_down();
 
 	/*

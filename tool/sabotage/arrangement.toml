@@ -155,6 +155,16 @@ find = "\tif (!m_layout->room_to_split(target, edge, new_pane ? nullptr : sessio
 replace = "\tif (new_pane && !m_layout->room_to_split(target, edge)) return folded;\n"
 expect = "moving_a_pane_where_it_does_not_fit_folds_no_other"
 
+# The settings form's notes left as rows of their own: each as far from
+# the control after it as from the one it explains (the holder,
+# 2026-10-31).
+[[sabotage]]
+name = "a note floats between two controls"
+file = "src/ui/app_settings_view.cpp"
+find = "\tbssh_attach_notes(form);\n"
+replace = ""
+expect = "a_note_sits_with_the_control_it_explains"
+
 # The dividers built afresh at their default split on every rebuild.
 [[sabotage]]
 name = "a dragged divider springs back"
