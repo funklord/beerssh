@@ -18,8 +18,8 @@ expect = "a_local_copy_keeps_both_when_a_name_is_taken"
 [[sabotage]]
 name = "a copy is offered from a tab running ssh onward"
 file = "src/ui/main_window.cpp"
-find = "\tif (found.elsewhere) {\n\t\tcopy = menu->addAction("
-replace = "\tif (false) {\n\t\tcopy = menu->addAction("
+find = "} else if (found.elsewhere) {\n\t\tcopy = menu->addAction("
+replace = "} else if (false) {\n\t\tcopy = menu->addAction("
 expect = "dropped_files_are_copied_where_the_shell_is"
 
 # OSC 7 ignored: a remote with no /proc always gets the home directory.
@@ -103,3 +103,20 @@ file = "src/model/session.cpp"
 find = "\t\tif (m_finding_directory) {\n\t\t\tm_finding_directory = false;\n"
 replace = "\t\tif (false) {\n\t\t\tm_finding_directory = false;\n"
 expect = "a_search_cut_off_by_a_reconnect_is_answered"
+
+# The drop menu offers a second copy while one runs.
+[[sabotage]]
+name = "the drop menu offers a copy while one runs"
+file = "src/ui/main_window.cpp"
+find = "\tif (session && session->upload_in_progress()) {\n"
+replace = "\tif (false) {\n"
+expect = "dropped_files_are_copied_where_the_shell_is"
+
+# The session starts a second copy over the first, which then ends
+# unreported and, locally, unstoppable.
+[[sabotage]]
+name = "the session starts a second copy over the first"
+file = "src/model/session.cpp"
+find = "\tif (m_uploading) return;\n"
+replace = ""
+expect = "dropped_files_are_copied_where_the_shell_is"

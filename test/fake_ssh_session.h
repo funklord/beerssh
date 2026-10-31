@@ -65,6 +65,7 @@ public:
 		                          Qt::QueuedConnection);
 	}
 	void upload(const QStringList &paths, const QString &directory) override {
+		++m_upload_count;
 		m_uploaded = paths;
 		m_uploaded_to = directory;
 		QStringList names;
@@ -91,6 +92,7 @@ public:
 		}, Qt::QueuedConnection);
 	}
 	QStringList uploaded() const { return m_uploaded; }
+	int upload_count() const { return m_upload_count; }
 	QString uploaded_to() const { return m_uploaded_to; }
 
 	/*
@@ -180,6 +182,7 @@ private:
 	QString m_uploaded_to;
 	bool m_upload_held = false;
 	bool m_find_held = false;
+	int m_upload_count = 0;
 	QStringList m_side_commands;
 	QStringList m_restarts;
 	QString m_fail_reason;

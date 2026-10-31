@@ -3490,7 +3490,15 @@ model on a finger.
   answered likewise, with nothing found: the window waits for one answer,
   and with none coming its wait stayed armed, so the next drop opened the
   earlier drop's menu as well, with the earlier files
-  (`a_search_cut_off_by_a_reconnect_is_answered`). Under ASan and UBSan, the
+  (`a_search_cut_off_by_a_reconnect_is_answered`).
+  **One copy at a time on a session.** A second drop while a copy ran
+  started another: over SSH the worker refused it, and the refusal,
+  reported through the same signal, ended the first copy's notice and
+  its Stop while it still ran; locally two threads ran and the second
+  took the first's stop flag and thread handle, leaving the first
+  unstoppable and unwaited at quit. The drop menu now shows "Copy here
+  -- a copy is still running; wait or stop it", disabled, and the session
+  refuses a second outright (`dropped_files_are_copied_where_the_shell_is`). Under ASan and UBSan, the
   three live copy tests ran clean in both phases that connect.
   `the_working_directory_rules_hold`,
   `the_probe_finds_the_shell_on_its_connections_terminal`,

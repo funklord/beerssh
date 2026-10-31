@@ -959,6 +959,12 @@ void bssh_session::cancel_upload() {
 }
 
 void bssh_session::upload(const QStringList &paths, const QString &directory) {
+	/*
+	 * One at a time (the drop menu offers no second, and one started
+	 * while that menu was open ends here): a refusal reported through
+	 * upload_finished would read as the end of the copy running.
+	 */
+	if (m_uploading) return;
 	if (m_transport) {
 		m_uploading = true;
 		m_upload_directory = directory;

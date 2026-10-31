@@ -3153,6 +3153,22 @@ void terminal_view_test::dropped_files_are_copied_where_the_shell_is() {
 	fake->set_upload_held(true);
 	drop(QStringLiteral("drop_copy"));
 	QTRY_VERIFY(session->upload_in_progress());
+
+	/* And no second copy while it runs: it would take over the first's
+	 * report and its Stop. */
+	const int copies = fake->upload_count();
+	seen = drop(QStringLiteral("drop_copy"));
+	QVERIFY2(seen.value(0).endsWith(QStringLiteral("[off]")), qPrintable(seen.join(QStringLiteral(" | "))));
+	QTest::qWait(100);
+	QCOMPARE(fake->upload_count(), copies);
+	QVERIFY(session->upload_in_progress());
+	/* Nor one asked of the session directly, as a drop whose menu was
+	 * open while this copy started would. */
+	session->upload({ QStringLiteral("/tmp/other.txt") }, QStringLiteral("/srv/work"));
+	QTest::qWait(100);
+	QCOMPARE(fake->upload_count(), copies);
+	QVERIFY(session->upload_in_progress());
+
 	QMenu *menu = window.build_terminal_menu(&window);
 	QAction *stop = menu->findChild<QAction *>(QStringLiteral("terminal_stop_copy"));
 	QVERIFY2(stop, "no way to stop a copy under way");

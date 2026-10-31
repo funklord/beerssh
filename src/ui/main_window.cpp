@@ -5608,8 +5608,17 @@ QMenu *bssh_main_window::build_drop_menu(QWidget *parent, bssh_session *session,
 	 * rather than copying to the wrong one; one whose directory could not
 	 * be found offers the home directory under that name.
 	 */
+	/*
+	 * One copy at a time on a session: a second would share the first's
+	 * report, its Stop and, locally, its thread's handle, so the first
+	 * would end unreported and unstoppable. Said in the entry, as the
+	 * onward case is, rather than refused after the choice.
+	 */
 	QAction *copy = nullptr;
-	if (found.elsewhere) {
+	if (session && session->upload_in_progress()) {
+		copy = menu->addAction(QStringLiteral("Copy here -- a copy is still running; wait or stop it"));
+		copy->setEnabled(false);
+	} else if (found.elsewhere) {
 		copy = menu->addAction(QStringLiteral("Copy here -- not from this tab: it is running %1")
 		                                .arg(found.foreground));
 		copy->setEnabled(false);
