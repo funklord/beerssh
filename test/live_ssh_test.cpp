@@ -4,6 +4,7 @@
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QTimer>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -1246,6 +1247,64 @@ void live_ssh_test::a_copy_can_be_stopped_and_leaves_nothing_half_written()
 	QCOMPARE(why, QString::fromLatin1(BSSH_COPY_STOPPED));
 	QVERIFY2(!QFileInfo::exists(into.filePath(QStringLiteral("big.bin"))), "a stopped copy left its file");
 	QVERIFY2(shell.contains("BSSH_AFTER_OK"), "the shell did not answer after the stop");
+}
+
+void live_ssh_test::a_session_copying_a_file_is_not_moved_to_another_process()
+{
+	if (!test_port()) QSKIP("no test server; run make check-ssh");
+	if (!ordinary_phase()) QSKIP("the host key has been swapped; authentication is refused by design here");
+
+	/*
+	 * A move carries the shell's channel and nothing else (sec 8.4). A
+	 * copy under way (sec 6.4) has an SFTP channel of its own, whose next
+	 * piece would be written into a connection another process owned by
+	 * then -- so the move is refused, naming the copy, and goes ahead once
+	 * the copy is over.
+	 */
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	{
+		QFile big(from.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		const QByteArray block(1024 * 1024, 'z');
+		for (int i = 0; i < 20; ++i) big.write(block);
+	}
+
+	bssh_profile_t profile;
+	profile.name = QStringLiteral("copy-move-test");
+	profile.host = QStringLiteral("127.0.0.1");
+	profile.port = test_port();
+	profile.user = qEnvironmentVariable("USER");
+	profile.identity_file = test_key();
+
+	bssh_session *session = new bssh_session(profile);
+	session->resize(80, 12);
+	QObject::connect(session, &bssh_session::host_key_unknown, session, [session] { session->accept_host_key(); });
+	session->connect_to_host();
+	QTRY_COMPARE_WITH_TIMEOUT(session->state(), bssh_ssh_session::CONNECTED, 15000);
+
+	QSignalSpy progress(session, &bssh_session::upload_progress);
+	QSignalSpy finished(session, &bssh_session::upload_finished);
+	session->upload({ from.filePath(QStringLiteral("big.bin")) }, into.path());
+	QTRY_VERIFY_WITH_TIMEOUT(!progress.isEmpty() && progress.last().at(0).toLongLong() > 0, 15000);
+
+	QByteArray state;
+	QList<int> fds;
+	QString why;
+	if (finished.isEmpty()) {
+		QVERIFY2(!session->export_handoff(state, fds, &why), "moved with a copy running on the connection");
+		QVERIFY2(why.contains(QStringLiteral("copy")), qPrintable(why));
+	}
+
+	QTRY_VERIFY_WITH_TIMEOUT(!finished.isEmpty(), 30000);
+	QVERIFY2(finished.first().at(0).toBool(), qPrintable(finished.first().at(3).toString()));
+	QCOMPARE(QFileInfo(into.filePath(QStringLiteral("big.bin"))).size(), qint64(20 * 1024 * 1024));
+
+	/* Over, the move is allowed again. */
+	QVERIFY2(session->export_handoff(state, fds, &why), qPrintable(why));
+	session->resume_handoff();
+	delete session;
 }
 
 void live_ssh_test::a_restarted_shell_runs_its_command_on_the_same_connection()

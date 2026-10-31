@@ -95,6 +95,7 @@ private slots:
 	void a_dropped_file_goes_to_the_shells_directory_by_sftp();
 	void a_copy_cut_off_by_a_disconnect_says_so();
 	void a_copy_can_be_stopped_and_leaves_nothing_half_written();
+	void a_session_copying_a_file_is_not_moved_to_another_process();
 	void a_restarted_shell_runs_its_command_on_the_same_connection();
 
 	void the_remote_is_told_the_size_it_was_given();

@@ -1831,6 +1831,20 @@ bool bssh_libssh_worker::do_export(QByteArray &state, QList<int> &fds, QString &
 		why = QStringLiteral("the connection is still listing its tmux and screen sessions");
 		return false;
 	}
+	/*
+	 * Nor while a dropped file is being looked for a place or copied (sec
+	 * 6.4): the copy's SFTP channel would stay here, and its next piece
+	 * would be written into a connection another process now owns --
+	 * corrupting the stream under its shell.
+	 */
+	if (m_probe_channel) {
+		why = QStringLiteral("the connection is still finding the shell's directory");
+		return false;
+	}
+	if (m_upload) {
+		why = QStringLiteral("a copy is still running on the connection; stop it or let it finish");
+		return false;
+	}
 	/* Stopped: nothing reads the channel from here until the release or
 	 * the resume. What libssh reads while the export waits stays in its
 	 * channel buffer and travels with the state. */

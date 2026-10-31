@@ -45,3 +45,13 @@ file = "src/ui/main_window.cpp"
 find = "\tif (m_current && m_current->upload_in_progress()) {\n"
 replace = "\tif (false) {\n"
 expect = "dropped_files_are_copied_where_the_shell_is"
+
+# A session moved to another process with a copy still running on its
+# connection: the copy's next piece goes into a stream it no longer owns.
+# Its test is live, so run this one with check-ssh as the suite.
+[[sabotage]]
+name = "a session is moved with a copy running"
+file = "src/ssh/ssh_session_libssh.cpp"
+find = "\tif (m_upload) {\n\t\twhy = QStringLiteral(\"a copy is still running"
+replace = "\tif (false) {\n\t\twhy = QStringLiteral(\"a copy is still running"
+expect = "a_session_copying_a_file_is_not_moved_to_another_process"

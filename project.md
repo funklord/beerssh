@@ -3461,6 +3461,15 @@ model on a finger.
   (`a_copy_can_be_stopped_and_leaves_nothing_half_written`,
   `a_copy_cut_off_by_a_disconnect_says_so`), the stop also locally and
   through the window (`a_local_copy_can_be_stopped`).
+  **And a session copying is not moved to another process** (sec 8.4):
+  the move carries the shell's channel only, as it already refused while
+  the tmux listing was open, and a copy's SFTP channel left behind would
+  have written its next piece into a connection the other process owned
+  -- the stream under its shell corrupted. The move is refused while the
+  probe or a copy runs, naming which, and goes ahead once it is over.
+  `a_session_copying_a_file_is_not_moved_to_another_process`, live; its
+  sabotage is run with check-ssh as the suite. Under ASan and UBSan, the
+  three live copy tests ran clean in both phases that connect.
   `the_working_directory_rules_hold`,
   `the_probe_finds_the_shell_on_its_connections_terminal`,
   `a_local_shells_directory_is_read_from_proc`,
