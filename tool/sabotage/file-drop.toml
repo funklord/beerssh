@@ -83,3 +83,13 @@ file = "src/ssh/ssh_session_libssh.cpp"
 find = "\t\tif (m_session && ssh_is_connected(m_session)) drop_partial_upload();\n"
 replace = ""
 expect = "a_copy_cut_off_by_a_disconnect_says_so"
+
+# A reconnect replaces the transport without saying the copy on the old
+# one ended: its own report comes after the transport is gone, and the
+# session goes on saying a copy runs.
+[[sabotage]]
+name = "a reconnect leaves a copy running with no transport"
+file = "src/model/session.cpp"
+find = "\t\tif (m_uploading) {\n\t\t\tm_transport->cancel_upload();\n"
+replace = "\t\tif (false) {\n\t\t\tm_transport->cancel_upload();\n"
+expect = "a_copy_cut_off_by_a_reconnect_is_reported_once"

@@ -3477,7 +3477,15 @@ model on a finger.
   -- stops its copy and waits for it, one piece at most, so the directory
   holds the whole file or none of it; before, the copy ran on unwatched
   and a quit cut it off half written
-  (`a_closed_local_session_leaves_no_half_copied_file`). Under ASan and UBSan, the
+  (`a_closed_local_session_leaves_no_half_copied_file`).
+  **A reconnect ends a copy on the old transport, and the session says
+  so itself** (2026-10-31): the transport's own report comes after it is
+  deleted -- dropped outright by a local copy's guard, and behind the
+  deferred delete when it comes from the SSH worker -- so the session went
+  on saying a copy ran, offering Stop for nothing and refusing every move
+  to another process. `reconnect()` stops the copy, cuts the old transport
+  loose and reports it cut off, once
+  (`a_copy_cut_off_by_a_reconnect_is_reported_once`). Under ASan and UBSan, the
   three live copy tests ran clean in both phases that connect.
   `the_working_directory_rules_hold`,
   `the_probe_finds_the_shell_on_its_connections_terminal`,

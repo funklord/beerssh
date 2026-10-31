@@ -912,6 +912,44 @@ void pty_session_test::a_closed_local_session_leaves_no_half_copied_file() {
 	         qPrintable(QStringLiteral("half a file left: %1 of %2 bytes").arg(left.size()).arg(size)));
 }
 
+void pty_session_test::a_copy_cut_off_by_a_reconnect_is_reported_once() {
+	/*
+	 * A reconnect replaces the transport, and a copy on the old one ends
+	 * with it. Its own report would arrive after the transport is gone --
+	 * and a local copy's is dropped then -- so the session says so itself,
+	 * at once, and only once: no copy left "running" with nothing behind
+	 * it.
+	 */
+	QTemporaryDir from;
+	QTemporaryDir into;
+	QVERIFY(from.isValid() && into.isValid());
+	const qint64 size = 64 * 1024 * 1024;
+	{
+		QFile big(from.filePath(QStringLiteral("big.bin")));
+		QVERIFY(big.open(QIODevice::WriteOnly));
+		QVERIFY(big.resize(size));
+	}
+	bssh_profile_t local;
+	local.local = true;
+	local.name = QStringLiteral("Local shell");
+	bssh_session session(local);
+	session.connect_to_host();
+	QTest::qWait(200);
+
+	QSignalSpy done(&session, &bssh_session::upload_finished);
+	session.upload({ from.filePath(QStringLiteral("big.bin")) }, into.path());
+	QVERIFY(session.upload_in_progress());
+	session.reconnect();
+	QVERIFY2(!session.upload_in_progress(), "a reconnect left the copy running with no transport");
+	QCOMPARE(done.size(), 1);
+	QVERIFY(!done.first().at(0).toBool());
+
+	QTest::qWait(500);
+	QCOMPARE(done.size(), 1);
+	const QFileInfo left(into.filePath(QStringLiteral("big.bin")));
+	QVERIFY2(!left.exists() || left.size() == size, "half a file left");
+}
+
 void pty_session_test::a_local_session_copying_a_file_is_not_moved() {
 	/*
 	 * The copy's end is reported on this thread, a turn after it is done,

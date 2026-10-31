@@ -538,6 +538,24 @@ void bssh_session::reconnect() {
 	if (m_emulator) m_emulator->reset_modes();
 
 	if (m_transport) {
+		/*
+		 * A copy on the old transport ends with it (sec 6.4), and says so
+		 * here: its own report would come after the transport is deleted
+		 * -- dropped by a local copy's guard, or behind the deferred delete
+		 * from the SSH worker -- and the session would go on saying a copy
+		 * runs: Stop offered for nothing, a move refused for ever. Stopped
+		 * first, so a local one removes what it half wrote, and cut loose
+		 * so a late report cannot come twice.
+		 */
+		if (m_uploading) {
+			m_transport->cancel_upload();
+			disconnect(m_transport, nullptr, this, nullptr);
+			const QString directory = m_upload_directory;
+			m_uploading = false;
+			m_upload_directory.clear();
+			emit upload_finished(false, directory, QStringList(),
+			                     QStringLiteral("the connection closed during the copy"));
+		}
 		m_transport->disconnect_from_host();
 		m_transport->deleteLater();
 		m_transport = nullptr;
