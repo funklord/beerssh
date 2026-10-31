@@ -44,6 +44,7 @@ private slots:
 	void a_drop_asks_the_window_to_paste_rather_than_pasting_itself();
 
 	/* sec 8.3's scrollbar: the grid gives up the width it takes. */
+	void a_scrollbar_does_not_hide_what_is_drawn_over_the_pane();
 	void the_scrollbar_takes_its_width_from_the_grid();
 	void the_scrollbar_follows_the_view_and_drives_it();
 

@@ -9387,6 +9387,16 @@ tab bar there in addition to the other drop zones we already have."
   carried across the window looked like it was taking the bar to the
   terminal under it. Now the side is the nearest of the bar's own pane,
   only that pane lights, and letting go anywhere else does nothing.
+- **Drawn over the scrollbar too, 2026-10-31.** The holder: "when a scrollbar
+  is on the right side it covers some of the things drawn like the visual
+  helpers when drag n dropping". The bar is a child of the view, and a child
+  paints over its parent, so the drop zones, the hatch on a pane being carried
+  and the focus border, all painted by the view, lost the bar's strip. They
+  are painted by a transparent child stacked above the bar and below the
+  corner and the drawer (`paint_over()`), which takes no pointer and so no
+  drops. Seen under twin: a right-half zone tints the bar with the rest.
+  `a_scrollbar_does_not_hide_what_is_drawn_over_the_pane`; caught in
+  `pane-corner.toml`.
 - Seen under twin on Xvfb: the handle dragged to the left lit the pane's
   left band and moved the tabs there.
   `the_bar_side_and_the_tab_bands_are_where_the_pointer_is`,

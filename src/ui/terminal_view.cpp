@@ -80,6 +80,34 @@ static const int BSSH_GRID_INSET_PX = 1;
  */
 static const char *const BSSH_PLACEHOLDER = "BeerSSH -- no session (M0 skeleton)";
 
+namespace {
+
+/*
+ * The layer over a pane (paint_over()). Transparent to the pointer, which
+ * keeps it out of drops too -- Qt finds a drop target with childAt(),
+ * which passes over such a widget -- and it needs no repaint of its own:
+ * repainting the view repaints the children over the region.
+ */
+class pane_overlay : public QWidget {
+public:
+	explicit pane_overlay(bssh_terminal_view *view) : QWidget(view), m_view(view) {
+		setAttribute(Qt::WA_TransparentForMouseEvents);
+		setAttribute(Qt::WA_NoSystemBackground);
+		setFocusPolicy(Qt::NoFocus);
+	}
+
+protected:
+	void paintEvent(QPaintEvent *) override {
+		QPainter painter(this);
+		m_view->paint_over(painter);
+	}
+
+private:
+	bssh_terminal_view *m_view;
+};
+
+} /* namespace */
+
 bssh_terminal_view::bssh_terminal_view(QWidget *parent)
     : QWidget(parent),
       m_dragging_handle(-1),
@@ -90,6 +118,7 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
       m_scroll_offset(0),
       m_scrollbar(nullptr),
       m_scrollbar_position(default_scrollbar_position()),
+      m_overlay(nullptr),
       m_focus_border(false),
       m_being_dragged(false),
       m_drop_edge(-1),
@@ -180,6 +209,11 @@ bssh_terminal_view::bssh_terminal_view(QWidget *parent)
 
 	m_scrollbar = new QScrollBar(Qt::Vertical, this);
 	m_scrollbar->setVisible(m_scrollbar_position != SCROLLBAR_NONE);
+
+	/* Made after the bar, so it is stacked above it; the corner and the
+	 * drawer come later still and stay above this. */
+	m_overlay = new pane_overlay(this);
+	m_overlay->setGeometry(rect());
 
 	connect(m_scrollbar, &QScrollBar::valueChanged, this, [this](int value) {
 		const int history = m_scrollback ? m_scrollback->count() : 0;
@@ -1593,6 +1627,7 @@ void bssh_terminal_view::inputMethodEvent(QInputMethodEvent *event) {
 
 void bssh_terminal_view::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
+	if (m_overlay) m_overlay->setGeometry(rect());
 
 	/* Placed before the grid is recomputed: the bar's width is part of
 	 * the arithmetic, not a decoration applied afterwards. */
@@ -1811,6 +1846,116 @@ QRect bssh_terminal_view::pane_grip_rect() const {
 	if (!m_corner || !m_corner->isVisible()) return QRect();
 	const QRect grip = m_corner->grip_rect();
 	return grip.isNull() ? QRect() : grip.translated(m_corner->pos());
+}
+
+void bssh_terminal_view::paint_over(QPainter &painter) {
+	if (m_focus_border) {
+		/*
+		 * Drawn last, over everything, and inset by half a pen width so
+		 * the whole line lands inside the widget rather than half of it
+		 * being clipped away by the neighbouring pane.
+		 */
+		/*
+		 * The theme's accent rather than a third copy of the literal
+		 * (sec 6.2). Read from the palette so it follows whatever is
+		 * applied, including a palette the platform supplied.
+		 */
+		QPen border(palette().color(QPalette::Highlight));
+		border.setWidth(2);
+		painter.setPen(border);
+		painter.drawRect(rect().adjusted(1, 1, -1, -1));
+	}
+
+
+	/*
+	 * And, while a drag is carrying this pane, a net over the whole of
+	 * it and a border around it.
+	 *
+	 * Drawn LAST, over the focus border and the grip, because it is the
+	 * one thing on the pane that has to be unmistakable: the question a
+	 * user is asking mid-drag is "which terminal am I about to move",
+	 * and an answer that a cursor or a title bar could obscure is not an
+	 * answer. The diagonal net rather than a tint, because a tint over a
+	 * dark scheme is a slightly different dark and reads as nothing.
+	 */
+	/*
+	 * The zone a dragged pane would land in: half the pane at the edge it
+	 * would split (the half the arrival would get), or a frame inset from
+	 * all four sides for the swap. Filled rather than hatched, because the
+	 * hatch already means "this is the pane being carried".
+	 */
+	if (m_drop_edge == BSSH_DROP_CANCEL) {
+		/*
+		 * Letting go here does nothing, and the pane says so: a ring with
+		 * a bar through it, in the middle, over the hatch that already
+		 * marks this as the pane being carried.
+		 */
+		const int radius = qMax(12, qMin(width(), height()) / 8);
+		const QPoint centre = rect().center();
+		QPen ring(palette().color(QPalette::Highlight));
+		ring.setWidthF(qMax(2.0, radius / 5.0));
+		painter.setPen(ring);
+		painter.setBrush(Qt::NoBrush);
+		painter.drawEllipse(centre, radius, radius);
+		const qreal reach = radius * 0.7071;
+		painter.drawLine(QPointF(centre) + QPointF(-reach, -reach),
+		                 QPointF(centre) + QPointF(reach, reach));
+	} else if (bssh_is_tab_drop(m_drop_edge)) {
+		/*
+		 * A tab bar made by the drop: a bar's thickness along that side,
+		 * solid enough to read as a bar rather than as a split's half.
+		 */
+		const int band = bssh_drop_band(m_cell_height);
+		QRect strip = rect();
+		switch (m_drop_edge - BSSH_DROP_TAB_BASE) {
+		case bssh_layout_manager::EDGE_LEFT:   strip.setWidth(band); break;
+		case bssh_layout_manager::EDGE_RIGHT:  strip.setLeft(width() - band); break;
+		case bssh_layout_manager::EDGE_TOP:    strip.setHeight(band); break;
+		default:                               strip.setTop(height() - band); break;
+		}
+		QColor fill(palette().color(QPalette::Highlight));
+		fill.setAlphaF(0.75);
+		painter.fillRect(strip, fill);
+	} else if (m_drop_edge >= 0) {
+		QRect zone = rect();
+		switch (m_drop_edge) {
+		case bssh_layout_manager::EDGE_LEFT:   zone.setWidth(width() / 2); break;
+		case bssh_layout_manager::EDGE_RIGHT:  zone.setLeft(width() / 2); break;
+		case bssh_layout_manager::EDGE_TOP:    zone.setHeight(height() / 2); break;
+		case bssh_layout_manager::EDGE_BOTTOM: zone.setTop(height() / 2); break;
+		default:
+			zone = rect().adjusted(width() / 4, height() / 4, -width() / 4, -height() / 4);
+			break;
+		}
+
+		QColor fill(palette().color(QPalette::Highlight));
+		fill.setAlphaF(0.35);
+		painter.fillRect(zone, fill);
+	}
+
+	if (m_being_dragged) {
+		const QColor accent = palette().color(QPalette::Highlight);
+
+		QColor mesh(accent);
+		mesh.setAlphaF(0.35);
+		QPen net(mesh);
+		net.setWidthF(qMax(1.0, m_cell_height / 8.0));
+		painter.setPen(net);
+
+		const int step = qMax(10, m_cell_height);
+		for (int x = -height(); x < width(); x += step) {
+			painter.drawLine(x, height(), x + height(), 0);
+		}
+
+		QColor edge(accent);
+		edge.setAlphaF(0.9);
+		QPen outline(edge);
+		outline.setWidth(qMax(3, m_cell_height / 4));
+		painter.setPen(outline);
+		painter.setBrush(Qt::NoBrush);
+		const int inset = outline.width() / 2;
+		painter.drawRect(rect().adjusted(inset, inset, -inset - 1, -inset - 1));
+	}
 }
 
 void bssh_terminal_view::paintEvent(QPaintEvent *event) {
@@ -2243,23 +2388,6 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	 */
 	painter.resetTransform();
 
-	if (m_focus_border) {
-		/*
-		 * Drawn last, over everything, and inset by half a pen width so
-		 * the whole line lands inside the widget rather than half of it
-		 * being clipped away by the neighbouring pane.
-		 */
-		/*
-		 * The theme's accent rather than a third copy of the literal
-		 * (sec 6.2). Read from the palette so it follows whatever is
-		 * applied, including a palette the platform supplied.
-		 */
-		QPen border(palette().color(QPalette::Highlight));
-		border.setWidth(2);
-		painter.setPen(border);
-		painter.drawRect(rect().adjusted(1, 1, -1, -1));
-	}
-
 	/*
 	 * The pane's drag handle is the corner's top slot now (sec 8.7a), a
 	 * child widget over this one -- not painted here. While it shows,
@@ -2269,95 +2397,6 @@ void bssh_terminal_view::paintEvent(QPaintEvent *event) {
 	if (m_corner && m_corner->isVisible())
 		m_corner->selector()->set_program_listening(m_emulator && m_emulator->mouse_reporting());
 
-	/*
-	 * And, while a drag is carrying this pane, a net over the whole of
-	 * it and a border around it.
-	 *
-	 * Drawn LAST, over the focus border and the grip, because it is the
-	 * one thing on the pane that has to be unmistakable: the question a
-	 * user is asking mid-drag is "which terminal am I about to move",
-	 * and an answer that a cursor or a title bar could obscure is not an
-	 * answer. The diagonal net rather than a tint, because a tint over a
-	 * dark scheme is a slightly different dark and reads as nothing.
-	 */
-	/*
-	 * The zone a dragged pane would land in: half the pane at the edge it
-	 * would split (the half the arrival would get), or a frame inset from
-	 * all four sides for the swap. Filled rather than hatched, because the
-	 * hatch already means "this is the pane being carried".
-	 */
-	if (m_drop_edge == BSSH_DROP_CANCEL) {
-		/*
-		 * Letting go here does nothing, and the pane says so: a ring with
-		 * a bar through it, in the middle, over the hatch that already
-		 * marks this as the pane being carried.
-		 */
-		const int radius = qMax(12, qMin(width(), height()) / 8);
-		const QPoint centre = rect().center();
-		QPen ring(palette().color(QPalette::Highlight));
-		ring.setWidthF(qMax(2.0, radius / 5.0));
-		painter.setPen(ring);
-		painter.setBrush(Qt::NoBrush);
-		painter.drawEllipse(centre, radius, radius);
-		const qreal reach = radius * 0.7071;
-		painter.drawLine(QPointF(centre) + QPointF(-reach, -reach),
-		                 QPointF(centre) + QPointF(reach, reach));
-	} else if (bssh_is_tab_drop(m_drop_edge)) {
-		/*
-		 * A tab bar made by the drop: a bar's thickness along that side,
-		 * solid enough to read as a bar rather than as a split's half.
-		 */
-		const int band = bssh_drop_band(m_cell_height);
-		QRect strip = rect();
-		switch (m_drop_edge - BSSH_DROP_TAB_BASE) {
-		case bssh_layout_manager::EDGE_LEFT:   strip.setWidth(band); break;
-		case bssh_layout_manager::EDGE_RIGHT:  strip.setLeft(width() - band); break;
-		case bssh_layout_manager::EDGE_TOP:    strip.setHeight(band); break;
-		default:                               strip.setTop(height() - band); break;
-		}
-		QColor fill(palette().color(QPalette::Highlight));
-		fill.setAlphaF(0.75);
-		painter.fillRect(strip, fill);
-	} else if (m_drop_edge >= 0) {
-		QRect zone = rect();
-		switch (m_drop_edge) {
-		case bssh_layout_manager::EDGE_LEFT:   zone.setWidth(width() / 2); break;
-		case bssh_layout_manager::EDGE_RIGHT:  zone.setLeft(width() / 2); break;
-		case bssh_layout_manager::EDGE_TOP:    zone.setHeight(height() / 2); break;
-		case bssh_layout_manager::EDGE_BOTTOM: zone.setTop(height() / 2); break;
-		default:
-			zone = rect().adjusted(width() / 4, height() / 4, -width() / 4, -height() / 4);
-			break;
-		}
-
-		QColor fill(palette().color(QPalette::Highlight));
-		fill.setAlphaF(0.35);
-		painter.fillRect(zone, fill);
-	}
-
-	if (m_being_dragged) {
-		const QColor accent = palette().color(QPalette::Highlight);
-
-		QColor mesh(accent);
-		mesh.setAlphaF(0.35);
-		QPen net(mesh);
-		net.setWidthF(qMax(1.0, m_cell_height / 8.0));
-		painter.setPen(net);
-
-		const int step = qMax(10, m_cell_height);
-		for (int x = -height(); x < width(); x += step) {
-			painter.drawLine(x, height(), x + height(), 0);
-		}
-
-		QColor edge(accent);
-		edge.setAlphaF(0.9);
-		QPen outline(edge);
-		outline.setWidth(qMax(3, m_cell_height / 4));
-		painter.setPen(outline);
-		painter.setBrush(Qt::NoBrush);
-		const int inset = outline.width() / 2;
-		painter.drawRect(rect().adjusted(inset, inset, -inset - 1, -inset - 1));
-	}
 
 	paint_notes(painter);
 

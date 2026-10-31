@@ -19,6 +19,7 @@
 #include <QTemporaryDir>
 #include "ui/touch_metrics.h"
 #include "model/profile_store.h"
+#include "ui/layout_manager.h"
 #include "ui/session_dialog.h"
 #include "model/app_settings.h"
 #include <QHash>
@@ -2842,6 +2843,40 @@ void terminal_view_test::the_touch_layout_grows_the_rows_and_drops_the_chords() 
 	QVERIFY2(verb_row <= 56,
 	          qPrintable(QStringLiteral("a touch row is %1dp, padding rather than text")
 	                             .arg(verb_row)));
+}
+
+void terminal_view_test::a_scrollbar_does_not_hide_what_is_drawn_over_the_pane() {
+	/*
+	 * The holder: "when a scrollbar is on the right side it covers some of
+	 * the things drawn like the visual helpers when drag n dropping". The
+	 * bar is a child of the view, and a child paints over its parent --
+	 * so the drop zone, the hatch on a pane being carried and the focus
+	 * border, all painted by the view, were hidden under it.
+	 */
+	bssh_terminal_view view;
+	view.resize(800, 400);
+	view.set_scrollbar_position(bssh_terminal_view::SCROLLBAR_RIGHT);
+	view.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&view));
+	QScrollBar *bar = view.findChild<QScrollBar *>();
+	QVERIFY(bar && bar->isVisible());
+	const QPoint on_bar = bar->geometry().center();
+
+	const QImage plain = view.grab().toImage();
+	view.show_drop_zone(BSSH_DROP_TAB_BASE + int(bssh_layout_manager::EDGE_RIGHT));
+	QCoreApplication::processEvents();
+	const QImage zoned = view.grab().toImage();
+	view.show_drop_zone(-1);
+
+	const QColor was = plain.pixelColor(on_bar);
+	const QColor now = zoned.pixelColor(on_bar);
+	const int moved = qAbs(was.red() - now.red()) + qAbs(was.green() - now.green())
+	                  + qAbs(was.blue() - now.blue());
+	QVERIFY2(moved > 60,
+	          qPrintable(QStringLiteral("the band for a tab bar on the right left the scrollbar at %1 "
+	                                     "untouched (%2 then %3)")
+	                             .arg(QStringLiteral("%1,%2").arg(on_bar.x()).arg(on_bar.y()),
+	                                  was.name(), now.name())));
 }
 
 void terminal_view_test::the_scrollbar_takes_its_width_from_the_grid() {

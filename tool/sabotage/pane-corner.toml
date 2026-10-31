@@ -246,3 +246,12 @@ file = "src/ui/main_window.cpp"
 find = "\tif (!view->rect().contains(at)) return false;\n"
 replace = ""
 expect = "the_tab_bar_is_dragged_to_another_side"
+
+# The overlay under the scrollbar, as the view's own painting was: the
+# drop zone, the hatch and the focus border hidden where the bar is.
+[[sabotage]]
+name = "the scrollbar covers what is drawn over the pane"
+file = "src/ui/terminal_view.cpp"
+find = "\tm_overlay = new pane_overlay(this);\n"
+replace = "\tm_overlay = new pane_overlay(this);\n\tm_overlay->lower();\n"
+expect = "a_scrollbar_does_not_hide_what_is_drawn_over_the_pane"

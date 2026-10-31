@@ -954,6 +954,18 @@ public:
 	 */
 	void set_pane_handle(bool handle);
 
+	/*
+	 * What is drawn OVER the pane rather than in it: the focus border,
+	 * the zone a drop would land in, and the hatch on a pane being
+	 * carried. Painted by a transparent child above the scrollbar, not by
+	 * paintEvent -- the bar is a child too, and a child paints over its
+	 * parent, so on the right it hid a strip of each (the holder: "when a
+	 * scrollbar is on the right side it covers some of the things drawn
+	 * like the visual helpers when drag n dropping"). Public only so that
+	 * child can call it.
+	 */
+	void paint_over(QPainter &painter);
+
 protected:
 	void leaveEvent(QEvent *event) override;
 	void paintEvent(QPaintEvent *event) override;
@@ -1103,6 +1115,9 @@ private:
 	 */
 	QScrollBar *m_scrollbar;
 	scrollbar_position_t m_scrollbar_position;
+
+	/* Above the scrollbar, below the corner and the drawer: paint_over(). */
+	QWidget *m_overlay;
 
 	/*
 	 * Where the grid starts and how wide it is, once the bar has taken
