@@ -186,3 +186,21 @@ file = "src/ui/layout_manager.cpp"
 find = "\tconst int at = rest.indexOf(session);\n\trest.removeAt(at);\n"
 replace = "\tconst int at = rest.indexOf(session);\n"
 expect = "a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there"
+
+# A tab picked in one pane's bar rebuilds every pane again, which is what
+# flickered the whole window (the holder, 2026-10-31).
+[[sabotage]]
+name = "a tab switch rebuilds every pane"
+file = "src/ui/pane_container.cpp"
+find = "\tif (!swap_one_pane(m_layout->visible_panes())) rebuild();\n"
+replace = "\trebuild();\n"
+expect = "switching_tabs_in_one_pane_leaves_the_others_alone"
+
+# Every pane rebuild rebuilds the built-in keyboard's keys, which
+# collapses it and grows it back, moving every terminal in the window.
+[[sabotage]]
+name = "every rebuild rebuilds the keyboard's keys"
+file = "src/ui/main_window.cpp"
+find = "\tif (keys_for != m_keys_built_for) {\n"
+replace = "\tif (true) {\n"
+expect = "switching_tabs_in_one_pane_leaves_the_others_alone"

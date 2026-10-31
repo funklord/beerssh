@@ -1208,6 +1208,9 @@ private:
 	 */
 	bool m_forms_use_softkeys = false;
 	int m_forms_keyboard_setting = -1;
+	/* The layout and custom-table version this window's keys were built
+	 * for (apply_keyboard_style). */
+	QString m_keys_built_for;
 	void use_softkeys_in_forms(bool use);
 	void update_form_keyboard();
 	QString m_error;

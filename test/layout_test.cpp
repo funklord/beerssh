@@ -29,6 +29,7 @@
 #include <QSignalSpy>
 #include <QWheelEvent>
 #include <QScrollBar>
+#include <QScreen>
 #include <QMimeData>
 #include <QWindow>
 #include <QPointer>
@@ -9658,9 +9659,18 @@ void layout_test::a_resize_that_keeps_the_size_class_keeps_the_views() {
 	 * class that fits more panes MUST still rebuild, which is what the
 	 * layout_changed signal is for.
 	 */
+	QSignalSpy relaid(window.layout_manager(), &bssh_layout_manager::layout_changed);
 	window.resize(BSSH_SMALL_DESKTOP_W, BSSH_SMALL_DESKTOP_H);
-	QVERIFY2(view.isNull(),
-	          "crossing the size class must still rebuild, or this test would "
+	QCoreApplication::processEvents();
+	/*
+	 * Asked of the layout rather than of the view: with one session there
+	 * is nothing more to show in the wider class, and the panes are left
+	 * as built when the layout's answer has not changed (2026-10-31, the
+	 * tab switch that rebuilt every pane). What this control guards is
+	 * that the window still lays out at all.
+	 */
+	QVERIFY2(relaid.count() > 0,
+	          "crossing the size class must still reach the layout, or this test would "
 	          "pass against a window that had stopped laying out entirely");
 
 	bssh_ssh_session::set_factory(nullptr);
@@ -14644,4 +14654,130 @@ void layout_test::a_desktop_can_be_asked_for_the_column() {
 	}
 
 	bssh_app_settings().set_arrangement(was);
+}
+
+void layout_test::switching_tabs_in_one_pane_leaves_the_others_alone() {
+	/*
+	 * The holder, 2026-10-31: "when I created a tab bar in one of the
+	 * terminals, switching between them flickers the whole window". A
+	 * click on a pane's tab changes what THAT pane shows; the pane beside
+	 * it is the same terminal before and after, so its view, its pixels
+	 * and its size on the remote must not move at any frame in between.
+	 */
+	const forced_touch_t desktop(0);
+	const bssh_factory_reset_t factory_reset;
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		bssh_app_settings::keyboard_t keyboard = bssh_app_settings().keyboard();
+		~restore_t() {
+			bssh_app_settings().set_tab_position(tabs);
+			bssh_app_settings().set_keyboard(keyboard);
+		}
+	} restore;
+	/*
+	 * On top and down a side, which the holder also uses: a side bar is
+	 * as wide as its labels, so a new one could move the divider. And
+	 * with the built-in keyboard showing, which every rebuild used to
+	 * tear down and grow back, moving every terminal in the window.
+	 */
+	struct pass_t { bssh_app_settings::tab_position_t side; bssh_app_settings::keyboard_t keyboard; };
+	for (const pass_t pass : { pass_t{ bssh_app_settings::TABS_TOP, bssh_app_settings::KEYBOARD_SYSTEM },
+	                           pass_t{ bssh_app_settings::TABS_LEFT, bssh_app_settings::KEYBOARD_SYSTEM },
+	                           pass_t{ bssh_app_settings::TABS_TOP, bssh_app_settings::KEYBOARD_BUILT_IN } }) {
+		const bssh_app_settings::tab_position_t side = pass.side;
+		bssh_app_settings().set_tab_position(side);
+		bssh_app_settings().set_keyboard(pass.keyboard);
+		QHash<QString, bssh_fake_ssh_session *> fakes;
+		int made = 0;
+		bssh_ssh_session::set_factory([&fakes, &made](QObject *parent) -> bssh_ssh_session * {
+			auto *fake = new bssh_fake_ssh_session(parent);
+			fakes.insert(QString::number(made++), fake);
+			return fake;
+		});
+		bssh_session_registry *shared = bssh_session_registry::shared();
+		while (shared->count() > 0) shared->close(shared->at(0));
+		const registry_left_as_found_t tidy(shared);
+
+		bssh_main_window window;
+		window.resize(1200, 700);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+		a->connect_to_host();
+		window.adopt_session(a);
+		bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+		b->connect_to_host();
+		window.drop_session_on(b, a, bssh_layout_manager::EDGE_RIGHT);
+		bssh_session *t = window.registry()->create(named(QStringLiteral("t")));
+		t->connect_to_host();
+		window.drop_session_as_tab(t, a, -1);
+		window.layout_manager()->bring_to_front(a);
+		window.panes()->rebuild();
+		a->emulator()->feed(QByteArrayLiteral("left pane, first tab"));
+		t->emulator()->feed(QByteArrayLiteral("left pane, second tab"));
+		b->emulator()->feed(QByteArrayLiteral("right pane, never touched"));
+		QTest::qWait(300);
+
+		bssh_fake_ssh_session *b_fake = fakes.value(QStringLiteral("1"));
+		QVERIFY(b_fake);
+		const QPointer<bssh_terminal_view> b_view = window.panes()->view_for(b);
+		QVERIFY(b_view && b_view->isVisible());
+		const QRect b_rect(b_view->mapTo(&window, QPoint(0, 0)), b_view->size());
+		const int resizes = b_fake->resize_count();
+
+		bssh_pane_bar *bar = window.bar_for(a);
+		QVERIFY(bar && bar->isVisible());
+		const int at = bar->sessions().indexOf(t);
+		QVERIFY(at >= 0);
+		/* What the window itself goes through: a resize, a new minimum. */
+		struct counter_t : QObject {
+			int resized = 0;
+			bool eventFilter(QObject *, QEvent *event) override {
+				if (event->type() == QEvent::Resize) ++resized;
+				return false;
+			}
+		} counter;
+		window.installEventFilter(&counter);
+		const QSize least = window.minimumSizeHint();
+		const QSize sized = window.size();
+		/* On a real display the screen's own pixels, which is what is seen;
+		 * offscreen the widget's rendering, which is all there is. */
+		const bool real = QGuiApplication::platformName() == QLatin1String("xcb");
+		const auto shot = [&]() -> QImage {
+			if (!real) return window.grab().toImage().copy(b_rect);
+			const QPoint at_screen = window.mapToGlobal(b_rect.topLeft());
+			return window.screen()->grabWindow(0, at_screen.x(), at_screen.y(), b_rect.width(), b_rect.height())
+			        .toImage();
+		};
+		const QImage seen = shot();
+		/* Each call is the window telling the window manager new size limits,
+		 * which the offscreen platform reports and X11 sends as a property
+		 * change that a window manager may answer by redrawing the window. */
+		static int hints = 0;
+		static QtMessageHandler passed = nullptr;
+		hints = 0;
+		passed = qInstallMessageHandler([](QtMsgType type, const QMessageLogContext &context, const QString &text) {
+			if (text.contains(QLatin1String("propagateSizeHints"))) ++hints;
+			if (passed) passed(type, context, text);
+		});
+		bar->tab_bar()->setCurrentIndex(at);
+
+		int changed = 0;
+		for (int turn = 0; turn < 20; ++turn) {
+			QCoreApplication::processEvents();
+			if (real) QTest::qWait(5);
+			if (shot() != seen) ++changed;
+		}
+		QTRY_VERIFY(window.panes()->view_for(t));
+		qInstallMessageHandler(passed);
+		window.removeEventFilter(&counter);
+		const QByteArray where = QByteArray("bars at ") + QByteArray::number(int(side)) + ", keyboard "
+		        + QByteArray::number(int(pass.keyboard));
+		QVERIFY2(changed == 0, where + ": the untouched pane's pixels changed");
+		QVERIFY2(b_fake->resize_count() == resizes, where + ": the untouched pane's remote was resized");
+		QVERIFY2(b_view, where + ": the untouched pane's view was rebuilt");
+		QVERIFY2(counter.resized == 0 && window.size() == sized, where + ": the window was resized");
+		QVERIFY2(hints == 0 && window.minimumSizeHint() == least,
+		         where + ": the window's size limits moved, which a window manager may redraw it for");
+	}
 }

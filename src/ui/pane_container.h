@@ -44,6 +44,13 @@ public:
 	/* Rebuilds the panes from the layout manager's current answer. */
 	void rebuild();
 
+	/*
+	 * The same, rebuilding only what changed when that is one pane's
+	 * terminal -- a tab picked in its bar -- and everything else rebuilt
+	 * as rebuild() does.
+	 */
+	void refresh();
+
 	bssh_session *focused_session() const { return m_focused; }
 	bssh_terminal_view *focused_view() const;
 
@@ -267,7 +274,11 @@ private:
 	 */
 	void build_panes(const QList<bssh_session *> &panes);
 	void add_split_children(const bssh_pane_node &node, QSplitter *into, const QString &path);
-	bssh_terminal_view *add_pane_view(bssh_session *session, QSplitter *parent);
+	bssh_terminal_view *add_pane_view(bssh_session *session, QSplitter *parent,
+	                                  QWidget *replacing = nullptr);
+	bool swap_one_pane(const QList<bssh_session *> &panes);
+	bool tabs_as_built(int except) const;
+	QString visible_shape(const QList<bssh_session *> &panes) const;
 
 	/* Handle width, collapsing and the snap, the same for every splitter. */
 	void configure_splitter(QSplitter *splitter);
@@ -321,6 +332,11 @@ private:
 	std::function<QWidget *(bssh_session *, QWidget *)> m_bar_factory;
 	Qt::Edge m_bar_edge = Qt::TopEdge;
 	bool m_rebuilding = false;
+	/* What the last rebuild built, as structure alone: refresh() swaps
+	 * one pane only while the tree still has this shape. */
+	QString m_built_shape;
+	Qt::Edge m_built_edge = Qt::TopEdge;
+	bool m_built_column = false;
 
 	QList<bssh_terminal_view *> m_views;
 	QList<bssh_session *> m_sessions;

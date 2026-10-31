@@ -6234,6 +6234,31 @@ rebuild. Which also means the "destroy and rebuild rather than diff" decision
 in `bssh_pane_container` is not the thing to revisit if that frame ever needs
 shortening.
 
+**Revisited for what it showed rather than what it cost (2026-10-31).** The
+holder: "when I created a tab bar in one of the terminals, switching between
+them flickers the whole window". A tab picked in one pane's bar rebuilt every
+pane, twice -- `bring_to_front()` announced the layout and the container
+rebuilt, then `show_session()` rebuilt again -- and every rebuild re-applied
+the device settings, whose keyboard step rebuilt the built-in keyboard's keys
+each time: `sk_set_keyboard_layout()` answers true for the layout already
+current, and this tree read that as "changed". The keyboard collapsed and
+grew back over several frames, every terminal in the window moved with it,
+and each remote was told four sizes per click (measured with fakes:
+4 resizes and 7 size-hint updates to the window manager). Now:
+`bssh_pane_container::refresh()`, which the layout's signal and
+`show_session()` both use, replaces only the one pane whose terminal changed,
+in its slot in its splitter (`QSplitter::replaceWidget`, so the divider
+stays), when the splits, bar edge and arrangement are as built and every
+other pane's tabs are unchanged; it does nothing when nothing changed; and
+it rebuilds as before otherwise. The keys are rebuilt when the layout they
+show changed, remembered per window, and the custom table is handed to
+softkeys only when it differs from the last one, since doing so makes it
+the current layout. `switching_tabs_in_one_pane_leaves_the_others_alone`
+holds the untouched pane's pixels, view, remote size and the window's size
+limits through a switch, with bars on top and down a side and with the
+built-in keyboard showing; it was read on a real X server (Xvfb) as well as
+offscreen.
+
 The benchmark asserts the pane count in both directions as well as timing it:
 a measurement that cannot tell "faster" from "stopped collapsing" would report
 the same number for a layout manager that had quietly stopped working.

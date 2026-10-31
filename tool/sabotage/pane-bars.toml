@@ -57,9 +57,9 @@ expect = "a_column_reorder_survives_a_new_session"
 [[sabotage]]
 name = "a pane's frame is left for the splitter to show"
 file = "src/ui/pane_container.cpp"
-find = "\tparent->addWidget(frame);\n"
+find = "\telse parent->addWidget(frame);\n"
 replace = ""
-expect = "dividers_snap_to_whole_cells"
+expect = "panes_get_their_own_geometry"
 
 # Split Beside Current moves the session being looked at into the new pane,
 # alone, and leaves the new one behind in its bar. Opening the new session

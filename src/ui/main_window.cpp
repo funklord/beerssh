@@ -1525,7 +1525,8 @@ void bssh_main_window::show_session(bssh_session *session) {
 	sync_tree_with_shown();
 	m_layout->bring_to_front(session);
 
-	m_panes->rebuild();
+	/* One pane's terminal changing rebuilds that pane alone. */
+	m_panes->refresh();
 	m_panes->focus_session(session);
 
 	if (m_terminal_view) {
@@ -1878,6 +1879,15 @@ void bssh_main_window::apply_input_mode() {
 	}
 }
 
+/*
+ * The custom keyboard table last given to softkeys, whose layout state is
+ * process-wide, and how many times it has changed: a window rebuilds its
+ * keys when the version it built them for is behind.
+ */
+static QMap<QString, QString> g_custom_layout_rows;
+static QString g_custom_layout_name;
+static int g_custom_layout_version = 0;
+
 void bssh_main_window::apply_device_settings() {
 	/*
 	 * "Follow the system font size" takes effect when it is toggled, not
@@ -1940,14 +1950,25 @@ void bssh_main_window::apply_device_settings() {
 	 * anything to anybody. Ignoring it would leave a person who wrote a
 	 * broken layout with a chooser that silently does not list it.
 	 */
+	/*
+	 * Only when it differs from what was last given: sk_set_custom_layout()
+	 * makes the custom layout the current one every time, so sending it on
+	 * every pass switched the keyboard to it and back -- and this runs on
+	 * every pane rebuild, a tab click included.
+	 */
 	const QMap<QString, QString> layout_rows = settings.custom_keyboard_layout();
-	if (!layout_rows.isEmpty()) {
+	const QString layout_name = settings.custom_keyboard_layout_name();
+	if (!layout_rows.isEmpty()
+	    && (layout_rows != g_custom_layout_rows || layout_name != g_custom_layout_name)) {
 		QString why;
-		if (!sk_set_custom_layout(settings.custom_keyboard_layout_name(),
-		                             sk_parse_layout_slots(layout_rows), &why)) {
+		if (!sk_set_custom_layout(layout_name, sk_parse_layout_slots(layout_rows), &why)) {
 			m_error = QStringLiteral("custom keyboard layout refused: %1").arg(why);
 			if (m_terminal_view) m_terminal_view->flash_notice(QStringLiteral("Keyboard layout refused: %1").arg(why));
 			update_status();
+		} else {
+			g_custom_layout_rows = layout_rows;
+			g_custom_layout_name = layout_name;
+			++g_custom_layout_version;
 		}
 	}
 
@@ -2261,7 +2282,23 @@ void bssh_main_window::apply_keyboard_style() {
 	 * newer version, or by hand, should not quietly become a keyboard
 	 * whose letters are somewhere else.
 	 */
-	if (sk_set_keyboard_layout(settings.keyboard_layout())) {
+	/*
+	 * Keys rebuilt when the layout they show has changed, and not
+	 * otherwise. sk_set_keyboard_layout() answers true for any layout it
+	 * knows, the current one included, and this read that as "changed":
+	 * every call rebuilt the keys, the keyboard collapsed and grew back
+	 * over several frames, and every terminal in the window moved with it
+	 * and told its remote each size on the way -- on every pane rebuild,
+	 * so on every tab click (the holder, 2026-10-31: "switching between
+	 * them flickers the whole window"). Remembered per window, since the
+	 * layout is softkeys' global and another window's keyboard must still
+	 * follow a change made from this one.
+	 */
+	const QString layout_id = settings.keyboard_layout();
+	if (layout_id != sk_keyboard_layout()) sk_set_keyboard_layout(layout_id);
+	const QString keys_for = sk_keyboard_layout() + QLatin1Char('#') + QString::number(g_custom_layout_version);
+	if (keys_for != m_keys_built_for) {
+		m_keys_built_for = keys_for;
 		m_keyboard->rebuild_keys();
 	}
 

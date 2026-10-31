@@ -69,7 +69,7 @@ bssh_pane_container::bssh_pane_container(bssh_layout_manager *layout, QWidget *p
 
 	if (m_layout) {
 		connect(m_layout, &bssh_layout_manager::layout_changed,
-		         this, &bssh_pane_container::rebuild);
+		         this, &bssh_pane_container::refresh);
 	}
 }
 
@@ -207,13 +207,15 @@ void bssh_pane_container::configure_splitter(QSplitter *splitter) {
 }
 
 bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
-                                                    QSplitter *parent) {
+                                                    QSplitter *parent, QWidget *replacing) {
 	/*
 	 * A frame per pane, its bar on the set edge and the view taking the
 	 * rest (sec 8.3's bar per pane). The splitter holds frames, so a
 	 * divider moves a pane and its bar together.
 	 */
-	QWidget *frame = new QWidget(parent);
+	/* Unparented when it replaces one: QSplitter::replaceWidget() refuses
+	 * a widget that is already the splitter's child. */
+	QWidget *frame = new QWidget(replacing ? nullptr : parent);
 	frame->setObjectName(QStringLiteral("pane-frame"));
 	QBoxLayout::Direction direction = QBoxLayout::TopToBottom;
 	switch (m_bar_edge) {
@@ -238,7 +240,8 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	 * frame -- the view did it for itself, measuring its font -- so the
 	 * first pane of a rebuild came up hidden and zero wide.
 	 */
-	parent->addWidget(frame);
+	if (replacing) parent->replaceWidget(parent->indexOf(replacing), frame);
+	else parent->addWidget(frame);
 	m_frames.append(frame);
 	m_frame_tabs.insert(frame, m_layout ? m_layout->tabs(session) : QList<bssh_session *>{ session });
 	m_bars.append(bar);
@@ -629,6 +632,89 @@ void bssh_pane_container::restore_divisions(const bssh_pane_node &tree) {
 	}
 }
 
+QString bssh_pane_container::visible_shape(const QList<bssh_session *> &panes) const {
+	/* One mark per pane, whatever its terminal: the splits and their
+	 * order, and nothing about which tab is in front. */
+	return bssh_layout_manager::shape_text(m_layout->visible_tree(), [&panes](bssh_session *each) {
+		return panes.contains(each) ? QStringLiteral("p") : QString();
+	});
+}
+
+void bssh_pane_container::refresh() {
+	if (!m_layout) return;
+	if (!swap_one_pane(m_layout->visible_panes())) rebuild();
+}
+
+/* Every pane but `except` holds the tabs the layout gives it now. */
+bool bssh_pane_container::tabs_as_built(int except) const {
+	for (int i = 0; i < m_frames.size(); ++i) {
+		if (i == except) continue;
+		if (m_frame_tabs.value(m_frames.at(i)) != m_layout->tabs(m_sessions.at(i))) return false;
+	}
+	return true;
+}
+
+/*
+ * The holder, 2026-10-31: "when I created a tab bar in one of the
+ * terminals, switching between them flickers the whole window". A tab
+ * picked in one pane's bar went through rebuild(), which takes down every
+ * pane's frame, bar and view and builds them again -- so every pane on
+ * screen was new for a click that changed one, and the window repainted
+ * whole. When the panes differ from what is built in exactly one place,
+ * with the same splits, the same bar edge and the same arrangement, only
+ * that pane's frame is replaced, in its slot in its splitter, which
+ * keeps the divider where it was; everything else stays as built.
+ */
+bool bssh_pane_container::swap_one_pane(const QList<bssh_session *> &panes) {
+	if (m_rebuilding || panes.size() != m_sessions.size() || m_frames.size() != m_sessions.size())
+		return false;
+	const bool column = m_layout->arrangement() == bssh_layout_manager::COLUMN;
+	if (column != m_built_column || m_bar_edge != m_built_edge) return false;
+	int at = -1;
+	for (int i = 0; i < panes.size(); ++i) {
+		if (panes.at(i) == m_sessions.at(i)) continue;
+		if (at >= 0) return false;
+		at = i;
+	}
+	if (visible_shape(panes) != m_built_shape) return false;
+	/*
+	 * Nothing at all to change -- the layout announcing what is already
+	 * built, as show_session() does after bring_to_front() -- is done
+	 * here too, rather than rebuilt for nothing.
+	 */
+	if (at < 0) return !m_rebuilding && tabs_as_built(-1);
+	if (m_sessions.contains(panes.at(at)) || !tabs_as_built(at)) return false;
+
+	QWidget *old_frame = m_frames.at(at);
+	QSplitter *parent = qobject_cast<QSplitter *>(old_frame->parentWidget());
+	if (!parent) return false;
+	bssh_session *was = m_sessions.at(at);
+	bssh_session *now = panes.at(at);
+
+	m_rebuilding = true;
+	const QList<int> sizes = parent->sizes();
+	add_pane_view(now, parent, old_frame);
+	/* Built at the end of the lists; moved into the slot it took. */
+	m_frames[at] = m_frames.takeLast();
+	m_bars[at] = m_bars.takeLast();
+	m_views[at] = m_views.takeLast();
+	m_frame_tabs.remove(old_frame);
+	delete old_frame;
+	parent->setSizes(sizes);
+
+	was->set_on_screen(false);
+	m_sessions[at] = now;
+	update_on_screen();
+	m_rebuilding = false;
+	if (m_focused == was) m_focused = now;
+
+	apply_focus_styling();
+	apply_column_visible();
+	emit panes_rebuilt();
+	emit focus_changed(m_focused);
+	return true;
+}
+
 void bssh_pane_container::rebuild() {
 	if (!m_layout) return;
 
@@ -714,6 +800,9 @@ void bssh_pane_container::rebuild() {
 
 	build_panes(panes);
 	if (!column) restore_divisions(m_layout->visible_tree());
+	m_built_shape = visible_shape(panes);
+	m_built_edge = m_bar_edge;
+	m_built_column = column;
 
 	/*
 	 * The handles are QSplitter's own and are made and unmade with the
