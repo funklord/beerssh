@@ -9574,9 +9574,17 @@ every width, ran clean. Two things to know before running the walk
 there. QtTest kills a function past five minutes, which forty seeds
 under ASan are, so `QTEST_FUNCTION_TIMEOUT` needs raising. And after that
 abort QtTest's fatal-signal handler reported the signal two million
-times in a loop under the sanitizer runtime until `BSSH_TEST_MAX_OUTPUT`
-stopped it at 270 MB -- the cap doing its job, and the reason not to
-lift it with `-maxwarnings 0` as one run here did.
+times in a loop until `BSSH_TEST_MAX_OUTPUT` stopped it at 270 MB -- the
+cap doing its job, and the reason not to lift it with `-maxwarnings 0`
+as one run here did. ~~Under the sanitizer runtime~~: the ordinary build
+does it too, measured 2026-10-31 (300 seeds with `BSSH_TEST_TIMEOUT=0`,
+273 MB). QtTest's handler keeps the actions it restores in one static
+array shared by every qExec, and this binary runs one per class while the
+abort, raised on QtTest's watchdog thread, is still being handled. So
+`test/main.cpp` now sets `QTEST_FUNCTION_TIMEOUT` past its own budget,
+or to the maximum when that is 0, unless it is given: our watchdog ends
+a hung run with `_exit` and one message, and raising
+`BSSH_TEST_TIMEOUT` is all a long walk needs.
 
 **Open: "tabs moved out don't disappear from the tab" (the holder,
 2026-10-30) -- not reproduced.** Tried under twin with three tabs: torn

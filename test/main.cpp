@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <climits>
 #include <condition_variable>
 #include <cstdio>
 #include <mutex>
@@ -184,6 +185,26 @@ static void watchdog_main(long long cap_bytes) {
 static void watchdog_start() {
 	watchdog_seconds = watchdog_env_seconds();
 	const long long cap_bytes = watchdog_env_output_bytes();
+
+	/*
+	 * QtTest's own per-function limit, five minutes unless told, must not
+	 * fire before this one. It ends the run with qFatal on its own thread,
+	 * and its fatal-signal handler keeps the actions it restores in one
+	 * static array shared by every qExec: this binary runs a qExec per
+	 * class, the main thread goes on to the next class while the abort is
+	 * being handled, and the handler is put back behind it -- "Received
+	 * signal 6" two million times, until the output cap stopped it at 270
+	 * MB, in the ordinary build as much as under ASan. Ours ends with
+	 * _exit and one message. Its budget starts with the class and QtTest's
+	 * with the function, so ours already came first at the defaults; this
+	 * keeps it first when BSSH_TEST_TIMEOUT is raised or set to 0, which
+	 * is when a long run meets it. A QTEST_FUNCTION_TIMEOUT given
+	 * explicitly is left alone.
+	 */
+	if (qEnvironmentVariableIsEmpty("QTEST_FUNCTION_TIMEOUT")) {
+		const long long ms = watchdog_seconds > 0 ? (watchdog_seconds + 60) * 1000LL : INT_MAX;
+		qputenv("QTEST_FUNCTION_TIMEOUT", QByteArray::number(qMin<long long>(ms, INT_MAX)));
+	}
 	if (watchdog_seconds <= 0 && cap_bytes <= 0) {
 		return;
 	}
