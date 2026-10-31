@@ -2,6 +2,7 @@
 #include <QTemporaryDir>
 #include <QtTest>
 
+#include <signal.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -188,14 +189,11 @@ static void watchdog_start() {
 
 	/*
 	 * QtTest's own per-function limit, five minutes unless told, must not
-	 * fire before this one. It ends the run with qFatal on its own thread,
-	 * and its fatal-signal handler keeps the actions it restores in one
-	 * static array shared by every qExec: this binary runs a qExec per
-	 * class, the main thread goes on to the next class while the abort is
-	 * being handled, and the handler is put back behind it -- "Received
-	 * signal 6" two million times, until the output cap stopped it at 270
-	 * MB, in the ordinary build as much as under ASan. Ours ends with
-	 * _exit and one message. Its budget starts with the class and QtTest's
+	 * fire before this one. It ends the run with qFatal and an abort, which
+	 * QtTest's fatal-signal handler took for ever to report until
+	 * run_test() put the handlers back between classes ("Received signal
+	 * 6" two million times, 270 MB); ours ends with _exit and one message,
+	 * and does not depend on that. Its budget starts with the class and QtTest's
 	 * with the function, so ours already came first at the defaults; this
 	 * keeps it first when BSSH_TEST_TIMEOUT is raised or set to 0, which
 	 * is when a long run meets it. A QTEST_FUNCTION_TIMEOUT given
@@ -255,7 +253,26 @@ static int run_test(int argc, char *argv[]) {
 	 * the thing nobody could tell from 693 GB of deleted log.
 	 */
 	watchdog_enter(instance.metaObject()->className());
+
+	/*
+	 * QtTest's fatal-signal handler is put back as it was found after
+	 * every class. Qt 6.8 does not do it for a signal that was at its
+	 * default when qExec began -- its destructor skips those as "already
+	 * the default" -- so the first class's handler stays installed, and
+	 * every later class records it as the action to restore. On a crash
+	 * the handler then restores itself and returns, the faulting
+	 * instruction runs again, and it reports the signal for ever: 1.78
+	 * million "Received signal 11" and 274 MB, measured, until the output
+	 * cap ended the run, for any crash in any class after the first. The
+	 * list is QtTest's own (qtestcrashhandler_p.h).
+	 */
+	static const int fatal[] = { SIGHUP, SIGINT, SIGQUIT, SIGABRT, SIGILL,
+	                             SIGBUS, SIGFPE, SIGSEGV, SIGPIPE, SIGTERM };
+	struct sigaction before[sizeof(fatal) / sizeof(fatal[0])];
+	for (size_t i = 0; i < sizeof(fatal) / sizeof(fatal[0]); ++i) sigaction(fatal[i], nullptr, &before[i]);
 	const int failed = QTest::qExec(&instance, argc, argv);
+	for (size_t i = 0; i < sizeof(fatal) / sizeof(fatal[0]); ++i) sigaction(fatal[i], &before[i], nullptr);
+
 	watchdog_leave();
 	return failed;
 }

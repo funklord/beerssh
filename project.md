@@ -9600,13 +9600,20 @@ times in a loop until `BSSH_TEST_MAX_OUTPUT` stopped it at 270 MB -- the
 cap doing its job, and the reason not to lift it with `-maxwarnings 0`
 as one run here did. ~~Under the sanitizer runtime~~: the ordinary build
 does it too, measured 2026-10-31 (300 seeds with `BSSH_TEST_TIMEOUT=0`,
-273 MB). QtTest's handler keeps the actions it restores in one static
-array shared by every qExec, and this binary runs one per class while the
-abort, raised on QtTest's watchdog thread, is still being handled. So
-`test/main.cpp` now sets `QTEST_FUNCTION_TIMEOUT` past its own budget,
-or to the maximum when that is 0, unless it is given: our watchdog ends
-a hung run with `_exit` and one message, and raising
-`BSSH_TEST_TIMEOUT` is all a long walk needs.
+273 MB). `test/main.cpp` sets `QTEST_FUNCTION_TIMEOUT` past its own
+budget, or to the maximum when that is 0, unless it is given, so our
+watchdog ends a hung run with `_exit` and one message. **That treated the
+timeout and missed the cause, which any crash reaches** -- found the same
+day when a sabotaged layout crashed `layout_test` with a SIGSEGV and the
+run wrote 1.78 million reports, 274 MB. Qt 6.8's handler destructor does
+not put back a signal that was at its default when qExec began ("already
+the default"), so the first class's handler stays installed and every
+later class records it as the action to restore; on a crash it restores
+itself, the faulting instruction runs again, and it reports for ever.
+`run_test()` now saves the ten actions before each qExec and puts them
+back after. Measured on the same crash, `layout_test` run on its own
+names: 49,462 reports and the 5 MB cap before, one report and the
+process's own SIGSEGV after.
 
 **Open: "tabs moved out don't disappear from the tab" (the holder,
 2026-10-30) -- not reproduced.** Tried under twin with three tabs: torn
