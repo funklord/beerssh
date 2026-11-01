@@ -7501,6 +7501,9 @@ void layout_test::a_background_tab_can_be_dragged_out() {
 	QCOMPARE(dragged.count(), 1);
 	QCOMPARE(dragged.at(0).at(0).value<bssh_session *>(), a);
 	QCOMPARE(picked.count(), 0);
+	/* Carried off, not picked: the bar marks the tab in front again, so a
+	 * drag cancelled or dropped where nothing changes leaves it right. */
+	QCOMPARE(bar->currentIndex(), 2);
 
 	/* A click on another: picked when the button comes up. */
 	const QPoint on_b = bar->tabRect(1).center();

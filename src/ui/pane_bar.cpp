@@ -553,6 +553,19 @@ bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
 					               mouse->modifiers());
 					QCoreApplication::sendEvent(m_bar, &up);
 					m_bar->releaseMouse();
+					/*
+					 * And the tab in front marked again: the press selected
+					 * the tab it was on, for a pick its release would have
+					 * made. Carried off instead, the pane still shows its
+					 * front, and a drag cancelled or dropped where nothing
+					 * changes left the bar marking the wrong tab (seen
+					 * 2026-11-01, after Escape).
+					 */
+					const int front_at = sessions().indexOf(m_front);
+					if (front_at >= 0 && m_bar->currentIndex() != front_at) {
+						const QSignalBlocker quiet(m_bar);
+						m_bar->setCurrentIndex(front_at);
+					}
 					emit drag_requested(session);
 					return true;
 				}

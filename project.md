@@ -6334,6 +6334,13 @@ report until a sequence that loses one turns up.
   `a_tab_dragged_along_its_bar_is_reported_moved`, on the top and the left.
   And a tab's menu down the side says Move Up and Move Down, not Left and
   Right (`a_tab_menu_names_moves_the_way_its_bar_runs`).
+- **A drag cancelled with Escape left the bar marking the wrong tab.** A
+  press selects the tab it is on, for the pick its release would make;
+  carried off by a drag instead, the tab stayed marked while the pane
+  showed its front, until something rebuilt the bar -- which, since panes
+  are kept where nothing changed, could be never. The bar marks its front
+  again when it hands the tab to the drag
+  (`a_background_tab_can_be_dragged_out`).
 
 The benchmark asserts the pane count in both directions as well as timing it:
 a measurement that cannot tell "faster" from "stopped collapsing" would report

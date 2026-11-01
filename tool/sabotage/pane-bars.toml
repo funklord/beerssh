@@ -140,3 +140,12 @@ file = "src/ui/pane_bar.cpp"
 find = "\t\tbssh_session *session = m_pressed && m_press_tab ? m_press_tab.data() : session_at(to);\n"
 replace = "\t\tbssh_session *session = session_at(to);\n"
 expect = "a_tab_dragged_along_its_bar_is_reported_moved"
+
+# A tab carried off by a drag leaves the bar marking it: cancelled, or
+# dropped where nothing changes, the bar marks a tab the pane is not showing.
+[[sabotage]]
+name = "a tab carried off leaves the bar marking it"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\t\t\tif (front_at >= 0 && m_bar->currentIndex() != front_at) {\n"
+replace = "\t\t\t\t\tif (false) {\n"
+expect = "a_background_tab_can_be_dragged_out"
