@@ -102,6 +102,8 @@ private:
 	/* And a reorder made under it, applied the same way. */
 	QPointer<bssh_session> m_moved;
 	int m_moved_to = 0;
+	/* The tab the press is on: the one a drag along the bar moves. */
+	QPointer<bssh_session> m_press_tab;
 	QToolButton *m_add;
 	QWidget *m_handle;
 	bssh_long_press *m_long_press;

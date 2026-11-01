@@ -122,3 +122,21 @@ file = "src/ui/main_window.cpp"
 find = "\tplaced.setX(qMax(free.left(), qMin(placed.x(), free.right() + 1 - size.width())));\n"
 replace = ""
 expect = "a_tab_torn_out_at_the_screen_edge_opens_on_the_screen"
+
+# Down the side, every close button placed at the first tab's height:
+# one over another, and only the first tab can be closed.
+[[sabotage]]
+name = "side tabs' close buttons all sit on the first tab"
+file = "src/ui/pane_bar.cpp"
+find = "\t\t\t\trect.moveTop(tab->rect.top() + (tab->rect.height() - rect.height()) / 2);\n"
+replace = "\t\t\t\t;\n"
+expect = "every_tab_down_the_side_can_be_closed"
+
+# QTabBar's last tabMoved taken as the dragged tab: it names the last
+# neighbour stepped past, so a drag along the bar moves the wrong tab.
+[[sabotage]]
+name = "a dragged tab is taken from QTabBar's last move"
+file = "src/ui/pane_bar.cpp"
+find = "\t\tbssh_session *session = m_pressed && m_press_tab ? m_press_tab.data() : session_at(to);\n"
+replace = "\t\tbssh_session *session = session_at(to);\n"
+expect = "a_tab_dragged_along_its_bar_is_reported_moved"

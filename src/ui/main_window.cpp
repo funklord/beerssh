@@ -6562,11 +6562,15 @@ QMenu *bssh_main_window::build_tab_menu(bssh_session *session, QWidget *parent) 
 	 * window's tabs (sec 8.4). Both were measured -- the first on a
 	 * phone, where the item fired and the bar did not move.
 	 */
-	QAction *move_left = menu->addAction(QStringLiteral("Move &Left"));
+	/* Named for the way the bar runs: down the side, a tab moves up and down. */
+	const bool down_the_side = m_tab_position == bssh_app_settings::TABS_LEFT
+	                           || m_tab_position == bssh_app_settings::TABS_RIGHT;
+	QAction *move_left = menu->addAction(down_the_side ? QStringLiteral("Move &Up") : QStringLiteral("Move &Left"));
 	move_left->setObjectName(QStringLiteral("tab_move_left"));
 	move_left->setEnabled(index > 0);
 
-	QAction *move_right = menu->addAction(QStringLiteral("Move &Right"));
+	QAction *move_right = menu->addAction(down_the_side ? QStringLiteral("Move &Down")
+	                                                    : QStringLiteral("Move &Right"));
 	move_right->setObjectName(QStringLiteral("tab_move_right"));
 	move_right->setEnabled(index < tabs.size() - 1);
 

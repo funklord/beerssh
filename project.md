@@ -6316,6 +6316,24 @@ report until a sequence that loses one turns up.
   at the size the window really took; a window larger than the screen keeps
   its corner on it. An explicit `--geometry` from the command line is left
   as given. `a_tab_torn_out_at_the_screen_edge_opens_on_the_screen`.
+- **Down the side, only the first tab could be closed.** The tab style
+  lays a sideways tab's label and close button out as a top bar's, so the
+  label reads across; Qt works a button's height out relative to 0, right
+  for a row whose tabs all start at the top and wrong for a column, so
+  every close button sat on the first tab, one over another. Each is now
+  centred on its own tab. `every_tab_down_the_side_can_be_closed` checks
+  every tab's button on every edge.
+- **A tab dragged along its bar moved the wrong tab.** QTabBar reports a
+  drag as the neighbours stepping aside -- a tab dragged left past three is
+  three moves of one step right -- and the bar took the last report as the
+  dragged tab: dragging the tab in front to the start applied as the first
+  tab moved to the second slot, so the order stayed, and that tab came to
+  the front. Along the top as well as down the side. The bar now reports
+  the tab the press was on, at the index it ended at; a move made by
+  `moveTab()` from code still names the tab it moved.
+  `a_tab_dragged_along_its_bar_is_reported_moved`, on the top and the left.
+  And a tab's menu down the side says Move Up and Move Down, not Left and
+  Right (`a_tab_menu_names_moves_the_way_its_bar_runs`).
 
 The benchmark asserts the pane count in both directions as well as timing it:
 a measurement that cannot tell "faster" from "stopped collapsing" would report

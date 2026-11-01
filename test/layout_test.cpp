@@ -15193,3 +15193,126 @@ void layout_test::a_tab_torn_out_at_the_screen_edge_opens_on_the_screen() {
 		torn->close();
 	}
 }
+
+void layout_test::every_tab_down_the_side_can_be_closed() {
+	/*
+	 * Driving the desktop build, 2026-11-01: with the bar moved down the
+	 * left, only the first tab showed a close button -- every tab's sat on
+	 * the first tab, one over another -- so the one in front and the rest
+	 * could not be closed from the bar. Each tab's lies on that tab, on
+	 * every edge.
+	 */
+	bssh_session_registry registry;
+	QList<bssh_session *> tabs;
+	for (const char *name : { "a", "b", "c", "d" }) tabs << registry.create(named(QString::fromLatin1(name)));
+
+	for (const Qt::Edge edge : { Qt::TopEdge, Qt::LeftEdge, Qt::RightEdge, Qt::BottomEdge }) {
+		QWidget host;
+		QBoxLayout *box = new QBoxLayout(edge == Qt::LeftEdge || edge == Qt::RightEdge
+		                                         ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom, &host);
+		bssh_pane_bar *row = new bssh_pane_bar(tabs.last(), tabs, edge, true, &host);
+		box->addWidget(row);
+		box->addStretch(1);
+		host.resize(700, 500);
+		host.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&host));
+		QTest::qWait(100);
+		QTabBar *bar = row->tab_bar();
+		for (int i = 0; i < bar->count(); ++i) {
+			QWidget *button = bar->tabButton(i, QTabBar::RightSide);
+			if (!button) button = bar->tabButton(i, QTabBar::LeftSide);
+			const QByteArray what = "edge " + QByteArray::number(int(edge)) + ", tab " + QByteArray::number(i);
+			QVERIFY2(button, what + ": no close button");
+			QVERIFY2(button->isVisible(), what + ": its close button is hidden");
+			QVERIFY2(bar->tabRect(i).contains(button->geometry().center()),
+			         what + ": its close button lies outside the tab");
+		}
+	}
+}
+
+void layout_test::a_tab_dragged_along_its_bar_is_reported_moved() {
+	/*
+	 * Driving the desktop build, 2026-11-01: the tab in front dragged to
+	 * the top of a bar down the side was drawn there and never moved --
+	 * the pane showed the first tab's terminal instead, and the dragged
+	 * one was still last. Along a bar on every edge, the tab in front
+	 * dragged to the start is reported moved there, and nothing else is
+	 * picked.
+	 */
+	bssh_session_registry registry;
+	QList<bssh_session *> tabs;
+	for (const char *name : { "a", "b", "c", "d" }) tabs << registry.create(named(QString::fromLatin1(name)));
+
+	for (const Qt::Edge edge : { Qt::TopEdge, Qt::LeftEdge }) {
+		QWidget host;
+		const bool side = edge == Qt::LeftEdge;
+		QBoxLayout *box = new QBoxLayout(side ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom, &host);
+		bssh_pane_bar *row = new bssh_pane_bar(tabs.last(), tabs, edge, true, &host);
+		box->addWidget(row);
+		box->addStretch(1);
+		host.resize(700, 500);
+		host.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&host));
+		QTest::qWait(100);
+		QTabBar *bar = row->tab_bar();
+		QCOMPARE(bar->currentIndex(), 3);
+		QSignalSpy moved(row, &bssh_pane_bar::tab_moved);
+		QSignalSpy picked(row, &bssh_pane_bar::tab_picked);
+		QSignalSpy dragged(row, &bssh_pane_bar::drag_requested);
+
+		const auto send = [bar](QEvent::Type type, const QPoint &at, Qt::MouseButton button,
+		                        Qt::MouseButtons held) {
+			QMouseEvent event(type, at, bar->mapToGlobal(at), button, held, Qt::NoModifier);
+			QApplication::sendEvent(bar, &event);
+		};
+		const QPoint from = bar->tabRect(3).center();
+		const QPoint to = bar->tabRect(0).center();
+		send(QEvent::MouseButtonPress, from, Qt::LeftButton, Qt::LeftButton);
+		for (int step = 1; step <= 10; ++step)
+			send(QEvent::MouseMove, from + (to - from) * step / 10, Qt::NoButton, Qt::LeftButton);
+		send(QEvent::MouseButtonRelease, to, Qt::LeftButton, Qt::NoButton);
+		QTest::qWait(400);
+
+		const QByteArray where = side ? "down the side" : "along the top";
+		QVERIFY2(dragged.isEmpty(), where + ": a drag along the bar tore the tab out");
+		QVERIFY2(!moved.isEmpty(), where + ": the move was never reported");
+		QCOMPARE(moved.last().at(0).value<bssh_session *>(), tabs.last());
+		QCOMPARE(moved.last().at(1).toInt(), 0);
+		for (const QList<QVariant> &each : picked)
+			QVERIFY2(each.at(0).value<bssh_session *>() == tabs.last(), where + ": another tab was picked");
+	}
+}
+
+void layout_test::a_tab_menu_names_moves_the_way_its_bar_runs() {
+	/* Seen 2026-11-01: a tab down the side offered Move Left and Move Right. */
+	struct restore_t {
+		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
+		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
+	} restore;
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window window;
+	window.resize(760, 560);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	bssh_session *a = window.registry()->create(named(QStringLiteral("a")));
+	window.adopt_session(a);
+	bssh_session *b = window.registry()->create(named(QStringLiteral("b")));
+	window.drop_session_as_tab(b, a, -1);
+
+	struct side_t { bssh_app_settings::tab_position_t side; const char *back; const char *on; };
+	for (const side_t side : { side_t{ bssh_app_settings::TABS_TOP, "Move &Left", "Move &Right" },
+	                           side_t{ bssh_app_settings::TABS_BOTTOM, "Move &Left", "Move &Right" },
+	                           side_t{ bssh_app_settings::TABS_LEFT, "Move &Up", "Move &Down" },
+	                           side_t{ bssh_app_settings::TABS_RIGHT, "Move &Up", "Move &Down" } }) {
+		bssh_app_settings().set_tab_position(side.side);
+		window.apply_device_settings();
+		QCoreApplication::processEvents();
+		std::unique_ptr<QMenu> menu(window.build_tab_menu(b, &window));
+		QVERIFY(menu);
+		QCOMPARE(menu->findChild<QAction *>(QStringLiteral("tab_move_left"))->text(), QString::fromLatin1(side.back));
+		QCOMPARE(menu->findChild<QAction *>(QStringLiteral("tab_move_right"))->text(), QString::fromLatin1(side.on));
+	}
+}

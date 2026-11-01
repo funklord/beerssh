@@ -186,7 +186,17 @@ public:
 		                          || element == SE_TabBarTabRightButton)) {
 			QStyleOptionTab across(*tab);
 			across.shape = QTabBar::RoundedNorth;
-			return QProxyStyle::subElementRect(element, &across, widget);
+			QRect rect = QProxyStyle::subElementRect(element, &across, widget);
+			/*
+			 * A button's height is worked out for a row of tabs, every one
+			 * of which starts at the top, so it comes back relative to 0:
+			 * down the side every tab's close button sat on the first tab,
+			 * one over another, and only the first tab could be closed
+			 * (seen 2026-11-01). Centred on its own tab instead.
+			 */
+			if (element != SE_TabBarTabText)
+				rect.moveTop(tab->rect.top() + (tab->rect.height() - rect.height()) / 2);
+			return rect;
 		}
 		return QProxyStyle::subElementRect(element, option, widget);
 	}
@@ -327,8 +337,20 @@ bssh_pane_bar::bssh_pane_bar(bssh_session *front, const QList<bssh_session *> &t
 		if (bssh_session *session = session_at(index)) emit close_requested(session);
 	});
 	connect(m_bar, &QTabBar::tabMoved, this, [this](int, int to) {
-		bssh_session *session = session_at(to);
+		/*
+		 * Under a press, the tab pressed and where it now is. QTabBar
+		 * reports a drag as its NEIGHBOURS moving -- a tab dragged left
+		 * past three is three moves of one step right -- so the tab at
+		 * `to` was the last one stepped past, and the tab in front dragged
+		 * to the start of its bar was applied as the first tab moved to
+		 * the second slot: nothing moved, and that tab came to the front
+		 * (seen 2026-11-01). A move with no press, moveTab() from code,
+		 * names the tab it moved.
+		 */
+		bssh_session *session = m_pressed && m_press_tab ? m_press_tab.data() : session_at(to);
 		if (!session) return;
+		to = sessions().indexOf(session);
+		if (to < 0) return;
 
 		/*
 		 * Under a held press, held too: applying a reorder rebuilds the
@@ -497,6 +519,7 @@ bool bssh_pane_bar::eventFilter(QObject *watched, QEvent *event) {
 	if (type == QEvent::MouseButtonPress
 	    && static_cast<QMouseEvent *>(event)->button() == Qt::LeftButton) {
 		m_pressed = true;
+		m_press_tab = session_at(m_bar->tabAt(static_cast<QMouseEvent *>(event)->position().toPoint()));
 	}
 
 	/*
