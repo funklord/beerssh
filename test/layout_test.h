@@ -324,6 +324,8 @@ private slots:
 	void a_tab_dropped_on_its_own_pane_stays();
 	void splitting_a_pane_keeps_what_its_terminals_show();
 	void a_bar_a_tab_was_torn_from_is_left_drawn_as_it_is();
+	void a_terminal_moved_to_a_pane_is_told_the_pane_size();
+	void a_tab_torn_out_at_the_screen_edge_opens_on_the_screen();
 	void the_middle_swaps_panes_whole_and_trades_a_tab();
 	void a_collapsed_pane_lives_on_in_the_last_bar();
 	void a_pane_of_tabs_survives_being_written_down();

@@ -104,3 +104,21 @@ file = "src/ui/pane_bar.cpp"
 find = "\t\t\t\t\tQCoreApplication::sendEvent(m_bar, &up);\n"
 replace = ""
 expect = "a_bar_a_tab_was_torn_from_is_left_drawn_as_it_is"
+
+# A view sized before it is shown says nothing when it appears: a moved
+# terminal keeps its old size, drawn clipped, its shell never told.
+[[sabotage]]
+name = "a view shown at its final size never tells its session"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_cols > 0 && m_rows > 0 && width() > 0 && height() > 0) emit grid_resized(m_cols, m_rows);\n"
+replace = ""
+expect = "a_terminal_moved_to_a_pane_is_told_the_pane_size"
+
+# A torn-out window placed at the pointer whatever its size: near the
+# screen's edge most of it opens out of sight.
+[[sabotage]]
+name = "a torn-out window is placed off the screen"
+file = "src/ui/main_window.cpp"
+find = "\tplaced.setX(qMax(free.left(), qMin(placed.x(), free.right() + 1 - size.width())));\n"
+replace = ""
+expect = "a_tab_torn_out_at_the_screen_edge_opens_on_the_screen"

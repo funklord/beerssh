@@ -68,6 +68,9 @@ class bssh_terminal_view;
  * pointer below is M1 scaffolding, not the design (sec 3, core principle
  * 2).
  */
+/* Where a window of `size` let go at `at` goes: there, moved onto the screen. */
+QPoint bssh_fit_on_screen(const QPoint &at, const QSize &size);
+
 class bssh_main_window : public QWidget {
 	Q_OBJECT
 

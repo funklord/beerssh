@@ -4380,7 +4380,26 @@ void bssh_main_window::move_pane(bssh_session *session, int direction) {
 	update_status();
 }
 
-bssh_main_window *bssh_main_window::tear_out(bssh_session *session, const QPoint &at,
+/*
+ * Where a window of `size` goes when let go at `at`: there, moved just
+ * far enough to lie inside the screen's free area. A tab torn out near
+ * the right or bottom edge made a window that started at the pointer and
+ * ran off the screen -- most of it out of sight, which reads as the tab
+ * having vanished (seen on Xvfb, 2026-11-01). A window larger than the
+ * screen keeps its top-left corner on it.
+ */
+QPoint bssh_fit_on_screen(const QPoint &at, const QSize &size) {
+	const QScreen *screen = QGuiApplication::screenAt(at);
+	if (!screen) screen = QGuiApplication::primaryScreen();
+	if (!screen) return at;
+	const QRect free = screen->availableGeometry();
+	QPoint placed = at;
+	placed.setX(qMax(free.left(), qMin(placed.x(), free.right() + 1 - size.width())));
+	placed.setY(qMax(free.top(), qMin(placed.y(), free.bottom() + 1 - size.height())));
+	return placed;
+}
+
+bssh_main_window *bssh_main_window::tear_out(bssh_session *session, const QPoint &given,
                                              bool placed) {
 	if (!session || !m_shown.contains(session)) return nullptr;
 
@@ -4399,6 +4418,12 @@ bssh_main_window *bssh_main_window::tear_out(bssh_session *session, const QPoint
 	 * grid stays the size it was, and the window lands where it was let
 	 * go.
 	 */
+	const QSize grid = session->emulator()
+	        ? QSize(session->emulator()->screen().cols(), session->emulator()->screen().rows())
+	        : QSize();
+	const QPoint at = placed
+	        ? bssh_fit_on_screen(given, grid.isValid() ? size_for_grid(grid.width(), grid.height()) : size())
+	        : given;
 	const bssh_handoff_point *point = bssh_handoff_point::instance();
 	if (point && session->emulator()) {
 		QString geometry = QStringLiteral("%1x%2")
@@ -4422,6 +4447,8 @@ bssh_main_window *bssh_main_window::tear_out(bssh_session *session, const QPoint
 	if (placed) window->move(at);
 	window->show();
 	window->adopt_session(session);
+	/* Fitted again at the size it took, which is this window's, not the grid's. */
+	if (placed) window->move(bssh_fit_on_screen(window->pos(), window->size()));
 
 	return window;
 }

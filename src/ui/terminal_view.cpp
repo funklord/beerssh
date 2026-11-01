@@ -1636,6 +1636,20 @@ void bssh_terminal_view::inputMethodEvent(QInputMethodEvent *event) {
 	QWidget::inputMethodEvent(event);
 }
 
+/*
+ * The resize promised above, when the view had its size before it was
+ * shown: a pane built for a terminal is often laid out first and shown
+ * after, at a size that no longer changes -- a tab dropped on an edge, a
+ * tab behind picked -- and with no resize to follow, the session kept the
+ * size it had before and the pane drew its first columns of it, the rest
+ * and the cursor off its edge (2026-11-01). The session ignores a size it
+ * already has.
+ */
+void bssh_terminal_view::showEvent(QShowEvent *event) {
+	QWidget::showEvent(event);
+	if (m_cols > 0 && m_rows > 0 && width() > 0 && height() > 0) emit grid_resized(m_cols, m_rows);
+}
+
 void bssh_terminal_view::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
 	if (m_overlay) m_overlay->setGeometry(rect());

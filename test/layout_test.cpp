@@ -5617,44 +5617,60 @@ void layout_test::a_background_tab_swapped_across_windows_stays_in_a_bar() {
 }
 
 void layout_test::a_drag_released_outside_every_window_tears_out() {
-	bssh_main_window window;
-	window.resize(1000, 700);
-	window.move(0, 0);
-	window.show();
-	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	/*
+	 * Released where no window of ours is: the terminal gets a window of
+	 * its own, put where the pointer let go -- and, let go past the
+	 * screen's edge, brought back onto it rather than opened out of sight
+	 * (2026-11-01). The offscreen platform's screen is 800x600, so the
+	 * window stays small enough to leave room beside it.
+	 */
+	const QRect free = QGuiApplication::primaryScreen()->availableGeometry();
+	for (const bool off_screen : { false, true }) {
+		/* In the top right, leaving the left of the screen to let go on:
+		 * a new window may be wider than this one (its own minimum). */
+		bssh_main_window window;
+		window.resize(300, 200);
+		window.move(free.right() + 1 - 300, free.top());
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
 
-	bssh_session_registry *registry = window.registry();
-	QVERIFY(registry);
-	const registry_left_as_found_t tidy(registry);
+		bssh_session_registry *registry = window.registry();
+		QVERIFY(registry);
+		const registry_left_as_found_t tidy(registry);
 
-	bssh_session *staying = registry->create(named(QStringLiteral("staying")));
-	bssh_session *leaving = registry->create(named(QStringLiteral("leaving")));
-	window.adopt_session(staying);
-	window.adopt_session(leaving);
-	QCoreApplication::processEvents();
+		bssh_session *staying = registry->create(named(QStringLiteral("staying")));
+		bssh_session *leaving = registry->create(named(QStringLiteral("leaving")));
+		window.adopt_session(staying);
+		window.adopt_session(leaving);
+		QCoreApplication::processEvents();
 
-	/* Nowhere any window of ours is. */
-	const QPoint outside(window.geometry().right() + 3000, window.geometry().bottom() + 3000);
-	QVERIFY(!QApplication::topLevelAt(outside));
+		/* Nowhere any window of ours is: beside it on the screen, or past it. */
+		const QPoint outside = off_screen
+		        ? QPoint(window.geometry().right() + 3000, window.geometry().bottom() + 3000)
+		        : free.topLeft() + QPoint(60, window.height() + 80);
+		QVERIFY(!QApplication::topLevelAt(outside));
 
-	window.finish_session_drag(leaving, outside);
-	QCoreApplication::processEvents();
+		window.finish_session_drag(leaving, outside);
+		QCoreApplication::processEvents();
 
-	bssh_main_window *torn = nullptr;
-	for (QWidget *top : QApplication::topLevelWidgets()) {
-		bssh_main_window *each = qobject_cast<bssh_main_window *>(top);
-		if (each && each != &window && each->isVisible()) torn = each;
+		bssh_main_window *torn = nullptr;
+		for (QWidget *top : QApplication::topLevelWidgets()) {
+			bssh_main_window *each = qobject_cast<bssh_main_window *>(top);
+			if (each && each != &window && each->isVisible()) torn = each;
+		}
+		QVERIFY2(torn, "released outside every window, and no window of its own opened");
+		QVERIFY(!window.findChild<bssh_pane_container *>()->view_for(leaving));
+
+		const QString where = QStringLiteral("opened at %1,%2 %3x%4 for a release at %5,%6")
+		        .arg(torn->x()).arg(torn->y()).arg(torn->width()).arg(torn->height())
+		        .arg(outside.x()).arg(outside.y());
+		QVERIFY2(free.contains(QRect(torn->pos(), torn->size())), qPrintable(where));
+		/* Put where the pointer let go, not wherever a new window lands. */
+		if (!off_screen) QVERIFY2((torn->pos() - outside).manhattanLength() < 100, qPrintable(where));
+
+		torn->close();
+		delete torn;
 	}
-	QVERIFY2(torn, "released outside every window, and no window of its own opened");
-	QVERIFY(!window.findChild<bssh_pane_container *>()->view_for(leaving));
-
-	/* Put where the pointer let go, not wherever a new window lands. */
-	QVERIFY2((torn->pos() - outside).manhattanLength() < 100,
-	          qPrintable(QStringLiteral("opened at %1,%2 for a release at %3,%4")
-	                     .arg(torn->x()).arg(torn->y()).arg(outside.x()).arg(outside.y())));
-
-	torn->close();
-	delete torn;
 }
 
 void layout_test::a_drag_released_on_another_windows_pane_places_it() {
@@ -15047,4 +15063,133 @@ void layout_test::a_bar_a_tab_was_torn_from_is_left_drawn_as_it_is() {
 	QCOMPARE(row->tab_bar()->currentIndex(), fresh->tab_bar()->currentIndex());
 	QVERIFY2(row->grab().toImage() == fresh->grab().toImage(),
 	         "the bar a tab was torn from is drawn otherwise than one built fresh");
+}
+
+void layout_test::a_terminal_moved_to_a_pane_is_told_the_pane_size() {
+	/*
+	 * Driving the desktop build with a real pointer, 2026-11-01: a tab
+	 * behind another, dropped on its own pane's edge, came up in a pane of
+	 * 38 columns still holding the 98 it had been given when the window
+	 * first showed it -- the pane drew its first 38, the command line and
+	 * the cursor were off its right edge, and the shell was never told.
+	 * The new pane's view had its size before it was shown, said nothing
+	 * then, as a hidden view must not, and nothing said it once shown.
+	 * Every pane on screen holds a terminal the size of its view, and its
+	 * remote was told that size; after a drop on an edge, and after a tab
+	 * behind is picked.
+	 */
+	const forced_touch_t desktop(0);
+	const bssh_factory_reset_t factory_reset;
+	QHash<bssh_session *, bssh_fake_ssh_session *> fakes;
+	bssh_fake_ssh_session *last = nullptr;
+	bssh_ssh_session::set_factory([&last](QObject *parent) -> bssh_ssh_session * {
+		last = new bssh_fake_ssh_session(parent);
+		return last;
+	});
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const auto make = [&](const QString &name) {
+		bssh_session *session = window.registry()->create(named(name));
+		session->connect_to_host();
+		/* The transport is made by the connect, so read after it. */
+		fakes.insert(session, last);
+		return session;
+	};
+	bssh_session *a = make(QStringLiteral("a"));
+	window.adopt_session(a);
+	QTest::qWait(200);
+	bssh_session *b = make(QStringLiteral("b"));
+	window.drop_session_as_tab(b, a, -1);
+	bssh_session *c = make(QStringLiteral("c"));
+	window.drop_session_as_tab(c, a, -1);
+	window.layout_manager()->bring_to_front(c);
+	QTest::qWait(300);
+
+	const auto sized = [&](const char *after) {
+		for (bssh_session *front : window.layout_manager()->visible_panes()) {
+			bssh_terminal_view *view = window.panes()->view_for(front);
+			QVERIFY(view);
+			const bssh_screen &screen = front->emulator()->screen();
+			const QByteArray what = QByteArray(after) + ", " + front->title().toUtf8() + ": view "
+			        + QByteArray::number(view->cols()) + "x" + QByteArray::number(view->rows()) + ", terminal "
+			        + QByteArray::number(screen.cols()) + "x" + QByteArray::number(screen.rows());
+			QVERIFY2(screen.cols() == view->cols() && screen.rows() == view->rows(), what);
+			bssh_fake_ssh_session *fake = fakes.value(front);
+			QVERIFY(fake);
+			QVERIFY2(fake->cols() == view->cols() && fake->rows() == view->rows(),
+			         what + ", remote told " + QByteArray::number(fake->cols()) + "x"
+			         + QByteArray::number(fake->rows()));
+		}
+	};
+
+	/* a, behind c, dropped on c's right edge: a pane of its own. */
+	window.drop_session_on(a, c, bssh_layout_manager::EDGE_RIGHT);
+	QTest::qWait(300);
+	QCOMPARE(window.layout_manager()->visible_panes().size(), 2);
+	sized("after the drop");
+
+	/* b, behind c, picked: the one-pane swap. */
+	window.layout_manager()->bring_to_front(b);
+	QTest::qWait(300);
+	QVERIFY(window.layout_manager()->visible_panes().contains(b));
+	sized("after picking a tab behind");
+}
+
+void layout_test::a_tab_torn_out_at_the_screen_edge_opens_on_the_screen() {
+	/*
+	 * Seen on Xvfb, 2026-11-01: a tab torn out near the screen's right
+	 * edge opened a window starting at the pointer and running off the
+	 * screen, nearly all of it out of sight. Let go anywhere, the window
+	 * lies on the screen.
+	 */
+	const QScreen *screen = QGuiApplication::primaryScreen();
+	QVERIFY(screen);
+	const QRect free = screen->availableGeometry();
+	const QSize window(free.width() / 2, free.height() / 2);
+	for (const QPoint &at : { free.bottomRight(), free.topRight(), free.bottomLeft(),
+	                          free.center(), free.topLeft() - QPoint(50, 50) }) {
+		const QRect placed(bssh_fit_on_screen(at, window), window);
+		QVERIFY2(free.contains(placed),
+		         qPrintable(QStringLiteral("let go at %1,%2: placed at %3,%4 %5x%6 on %7x%8")
+		                    .arg(at.x()).arg(at.y()).arg(placed.x()).arg(placed.y())
+		                    .arg(placed.width()).arg(placed.height()).arg(free.width()).arg(free.height())));
+	}
+	/* Where it fits already, exactly where it was let go. */
+	QCOMPARE(bssh_fit_on_screen(free.topLeft() + QPoint(10, 10), window), free.topLeft() + QPoint(10, 10));
+	/* Larger than the screen: its corner on it. */
+	QCOMPARE(bssh_fit_on_screen(free.center(), free.size() * 2), free.topLeft());
+
+	/* And the tear-out itself, kept in this process as a test's is. */
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+	const registry_left_as_found_t tidy(shared);
+	bssh_main_window source;
+	source.resize(free.width() / 2, free.height() / 2);
+	source.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&source));
+	bssh_session *a = source.registry()->create(named(QStringLiteral("a")));
+	source.adopt_session(a);
+	bssh_session *b = source.registry()->create(named(QStringLiteral("b")));
+	source.drop_session_as_tab(b, a, -1);
+	/* Released outside every window, as a drag to empty screen is. */
+	source.move(free.topLeft());
+	QCoreApplication::processEvents();
+	const QList<QWidget *> before = QApplication::topLevelWidgets();
+	source.finish_session_drag(b, free.bottomRight() - QPoint(5, 5));
+	QCoreApplication::processEvents();
+	QPointer<bssh_main_window> torn;
+	for (QWidget *widget : QApplication::topLevelWidgets()) {
+		if (before.contains(widget)) continue;
+		if (auto *window = qobject_cast<bssh_main_window *>(widget)) torn = window;
+	}
+	if (torn) {
+		QVERIFY2(free.contains(QRect(torn->pos(), torn->size())), "the torn-out window ran off the screen");
+		torn->close();
+	}
 }

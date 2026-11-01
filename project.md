@@ -6295,6 +6295,28 @@ with one pane and with two, keeps it (`a_tab_dropped_on_its_own_pane_stays`).
 Both faults above make a terminal look gone, which is the best reading of the
 report until a sequence that loses one turns up.
 
+**And two more the next day, the same way (2026-11-01).**
+
+- **A terminal moved into a new pane kept its old size.** A tab behind
+  another, dropped on its pane's edge or brought to the front, got a view
+  laid out at its final size before it was shown; a hidden view does not
+  tell its session its size, as it must not, and once shown nothing did,
+  since its size no longer changed. The terminal kept the 98 columns the
+  window first gave it, the 38-column pane drew its first 38, and the
+  command line's end and the cursor were off its right edge -- which looked
+  like lost rows and was first taken for a reflow fault (an emulator test of
+  that theory passed, and was dropped). The view now tells its session its
+  size when it is shown. `a_terminal_moved_to_a_pane_is_told_the_pane_size`
+  checks every pane's terminal and remote against its view, after a drop
+  and after a tab behind is picked.
+- **A tab torn out near the screen's edge opened mostly off it.** The new
+  window started at the pointer and ran past the right or bottom edge.
+  `bssh_fit_on_screen()` moves it just far enough to lie in the screen's
+  free area, for the new process's `--geometry` and again in this process
+  at the size the window really took; a window larger than the screen keeps
+  its corner on it. An explicit `--geometry` from the command line is left
+  as given. `a_tab_torn_out_at_the_screen_edge_opens_on_the_screen`.
+
 The benchmark asserts the pane count in both directions as well as timing it:
 a measurement that cannot tell "faster" from "stopped collapsing" would report
 the same number for a layout manager that had quietly stopped working.
