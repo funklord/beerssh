@@ -152,6 +152,27 @@ static bssh_profile_t named(const QString &name) {
 	return profile;
 }
 
+/*
+ * An app.ini entry put back as the test found it, absent if it was
+ * absent. Writing back what a getter returned is not the same thing: a
+ * getter answers its DEFAULT for an absent entry, and under forced touch
+ * that default is the built-in keyboard -- written back, it was stored
+ * for every test after, desktop or not (2026-11-02).
+ */
+struct setting_left_as_found_t {
+	explicit setting_left_as_found_t(const QString &key)
+	    : key(key), path(bssh_app_settings().path()),
+	      was(QSettings(path, QSettings::IniFormat).value(key)) {}
+	~setting_left_as_found_t() {
+		QSettings file(path, QSettings::IniFormat);
+		if (was.isValid()) file.setValue(key, was);
+		else file.remove(key);
+	}
+	QString key;
+	QString path;
+	QVariant was;
+};
+
 void layout_test::size_classes_follow_the_window_not_the_platform() {
 	/* Android's thresholds, applied to whatever window is in front of us. */
 	QCOMPARE(bssh_layout_manager::size_class_for(360), bssh_layout_manager::COMPACT);
@@ -2594,7 +2615,7 @@ void layout_test::no_section_page_shows_a_widget_from_another_section() {
 	const forced_touch_t thumb(1);
 
 	bssh_app_settings settings;
-	const bssh_app_settings::keyboard_t before = settings.keyboard();
+	const setting_left_as_found_t keyboard_left(QStringLiteral("input/keyboard"));
 	settings.set_keyboard(bssh_app_settings::KEYBOARD_BUILT_IN_FULL);
 
 	const bssh_app_settings_view::section_t order[] = {
@@ -2636,8 +2657,6 @@ void layout_test::no_section_page_shows_a_widget_from_another_section() {
 		                             .arg(stray.join(QStringLiteral("\n  ")))));
 		page.hide();
 	}
-
-	settings.set_keyboard(before);
 }
 
 void layout_test::every_setting_is_on_exactly_one_section() {
@@ -7244,10 +7263,7 @@ void layout_test::a_grid_opens_rows_of_terminals_of_one_host() {
 	/* The system keyboard, whatever an earlier test left: the built-in
 	 * one's halves take the sides of the window, and the row below is
 	 * about how the panes share what is left. */
-	struct keyboard_restore_t {
-		bssh_app_settings::keyboard_t was = bssh_app_settings().keyboard();
-		~keyboard_restore_t() { bssh_app_settings().set_keyboard(was); }
-	} keyboard_restore;
+	const setting_left_as_found_t keyboard_left(QStringLiteral("input/keyboard"));
 	bssh_app_settings().set_keyboard(bssh_app_settings::KEYBOARD_SYSTEM);
 
 	int made = 0;

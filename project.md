@@ -8310,6 +8310,12 @@ edit in `grid.toml`. That check first passed alone and missed in the suite:
 an earlier test leaves the built-in keyboard on, its halves took 373 of the
 window's 760 pixels, and with that little room QSplitter happened to split
 evenly. The test now sets the system keyboard and puts back what it found.
+The leak itself was `no_section_page_shows_a_widget_from_another_section`:
+under forced touch it saved `keyboard()` -- which answers the TOUCH default
+for an absent entry -- and wrote that back, storing the built-in keyboard
+for the 112 tests after it. It now puts the app.ini entry back as found,
+absent if absent (`setting_left_as_found_t`); the suite passes without the
+leak, 919 tests.
 
 ### 8.5 The front door — **[DECIDED]**
 
