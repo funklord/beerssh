@@ -4,6 +4,8 @@
 #include <QList>
 #include <QPair>
 #include <QString>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QMap>
 #include <QStringList>
 
@@ -303,6 +305,19 @@ public:
 	void set_default_font_size(int point_size);
 	QString default_colour_scheme() const;
 	void set_default_colour_scheme(const QString &scheme);
+
+	/*
+	 * Every other field a host's settings hold (sec 10.2's list: TERM,
+	 * scrollback, the cursor, the bell, keepalive...), set for every host
+	 * on this device -- the holder's choice, 2026-11-02, since nothing
+	 * else could set them for a host that follows no preset. Keyed by the
+	 * preset's own JSON names, as stored, untyped; settings_resolver
+	 * types them against the built-in values. A field put back to its
+	 * built-in value is removed rather than stored.
+	 */
+	QJsonObject default_settings() const;
+	void set_default_setting(const QString &key, const QJsonValue &value);
+	void forget_default_setting(const QString &key);
 
 	/*
 	 * Which keyboard layout the built-in keyboard draws (sec 6.2).

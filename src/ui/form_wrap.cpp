@@ -1,4 +1,6 @@
 #include "ui/form_wrap.h"
+#include <QVBoxLayout>
+#include <QToolButton>
 
 #include <QEvent>
 #include <QFormLayout>
@@ -75,4 +77,36 @@ void bssh_watch_form_width(QFormLayout *form, QWidget *page) {
 
 	/* And once now, so the first paint is not a layout nobody decided. */
 	bssh_apply_form_wrap(form, page);
+}
+
+/*
+ * A section under a heading that opens and closes it, closed unless asked.
+ * "This host" on Appearance and Terminal: most people set what every host
+ * has and never one host's own (the holder, 2026-11-02), and open, the
+ * host's half took the page and squeezed every host's into a strip.
+ */
+QWidget *bssh_foldable(QVBoxLayout *layout, const QString &title, QWidget *page,
+                  QToolButton **toggle) {
+	QToolButton *button = new QToolButton(page);
+	button->setText(title);
+	button->setCheckable(true);
+	button->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+	button->setArrowType(Qt::RightArrow);
+	button->setAutoRaise(true);
+	QFont bold = button->font();
+	bold.setBold(true);
+	button->setFont(bold);
+	layout->addWidget(button);
+
+	QWidget *body = new QWidget(page);
+	QVBoxLayout *inside = new QVBoxLayout(body);
+	inside->setContentsMargins(0, 0, 0, 0);
+	body->hide();
+	layout->addWidget(body);
+	QObject::connect(button, &QToolButton::toggled, body, [button, body](bool open) {
+		button->setArrowType(open ? Qt::DownArrow : Qt::RightArrow);
+		body->setVisible(open);
+	});
+	*toggle = button;
+	return body;
 }

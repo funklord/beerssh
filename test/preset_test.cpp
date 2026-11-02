@@ -189,7 +189,7 @@ void preset_test::editing_a_preset_reaches_every_host_that_did_not_override() {
 
 void preset_test::the_starter_presets_differ_where_it_matters() {
 	const QList<bssh_preset_t> builtins = bssh_preset_t::builtins();
-	QVERIFY(builtins.size() >= 5);
+	QCOMPARE(builtins.size(), 2);
 
 	QMap<QString, bssh_preset_t> by_name;
 	for (const bssh_preset_t &preset : builtins) {
@@ -202,12 +202,12 @@ void preset_test::the_starter_presets_differ_where_it_matters() {
 	 * matters, not cosmetically -- they double as documentation of what a
 	 * preset can express.
 	 */
-	QCOMPARE(by_name.value(QStringLiteral("OpenWrt / BusyBox router")).term,
-	          QStringLiteral("vt100"));
-	QVERIFY(!by_name.value(QStringLiteral("Network switch / serial-ish")).bell_enabled);
+	const bssh_preset_t limited = by_name.value(QStringLiteral("Old or limited equipment"));
+	QCOMPARE(limited.term, QStringLiteral("vt100"));
+	QVERIFY(!limited.bell_enabled);
+	QCOMPARE(limited.term_features, QStringLiteral("none"));
 	QVERIFY(by_name.value(QStringLiteral("tmux-first")).on_connect_command.contains(
 	                QStringLiteral("tmux")));
-	QVERIFY(by_name.value(QStringLiteral("Raspberry Pi / SBC")).compression);
 }
 
 void preset_test::the_exported_file_contains_nothing_private() {

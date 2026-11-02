@@ -13,6 +13,7 @@ class QListWidget;
 class QPushButton;
 class QSpinBox;
 class bssh_font_picker;
+class bssh_terminal_fields;
 class bssh_profile_store;
 
 /*
@@ -81,14 +82,8 @@ public:
 	 * agree about what TERM means, which is the shape this project keeps
 	 * unpicking.
 	 */
-	enum section_t {
-		EVERYTHING,  /* the Presets category: the whole preset */
-		TERMINAL,    /* TERM, scrollback, bell, cursor */
-		CONNECTION   /* keepalive, compression, clipboard, on connect */
-	};
 
 	explicit bssh_preset_editor(bssh_profile_store *store, layout_t layout = DESKTOP,
-	                             section_t section = EVERYTHING,
 	                             QWidget *parent = nullptr);
 
 	/* Re-reads the store -- after a save, or after a host changed which
@@ -124,25 +119,14 @@ private:
 	void update_controls();
 
 	bssh_profile_store *m_store;
-	section_t m_section;
 
 	QListWidget *m_presets;
 	QLabel *m_usage;
 
 	QLineEdit *m_name;
-	QLineEdit *m_term;
-	QSpinBox *m_scrollback;
-	QCheckBox *m_bell;
-	QComboBox *m_cursor_style;
-	QCheckBox *m_cursor_blink;
+	bssh_terminal_fields *m_fields;
 	bssh_font_picker *m_font;
-	QSpinBox *m_keepalive;
-	QCheckBox *m_compression;
-	QCheckBox *m_clipboard;
-	QLineEdit *m_on_connect;
-	QComboBox *m_key_row;
 
-	QPushButton *m_features;
 	QPushButton *m_save;
 	QPushButton *m_clone;
 	QPushButton *m_delete;

@@ -389,18 +389,18 @@ void profile_store_test::the_starter_presets_are_seeded_once() {
 	{
 		bssh_profile_store store(path);
 		seeded = store.presets().count();
-		QVERIFY(seeded >= 5);
+		QCOMPARE(seeded, 2);
 
-		bool found_openwrt = false;
+		bool found_limited = false;
 		for (const bssh_preset_t &preset : store.presets()) {
 			QVERIFY(preset.id != 0);
-			if (preset.name.contains(QStringLiteral("OpenWrt"))) {
-				found_openwrt = true;
+			if (preset.name == QStringLiteral("Old or limited equipment")) {
+				found_limited = true;
 				QCOMPARE(preset.term, QStringLiteral("vt100"));
 				QVERIFY(preset.is_builtin);
 			}
 		}
-		QVERIFY(found_openwrt);
+		QVERIFY(found_limited);
 	}
 
 	/*
@@ -410,6 +410,57 @@ void profile_store_test::the_starter_presets_are_seeded_once() {
 	 */
 	bssh_profile_store reopened(path);
 	QCOMPARE(reopened.presets().count(), seeded);
+}
+
+void profile_store_test::the_retired_shipped_presets_go_and_their_hosts_follow_none() {
+	/*
+	 * Six shipped before 2026-11-02 and two after (the holder's choice).
+	 * A presets file from before keeps a copy the user made, loses the
+	 * shipped ones no longer shipped, gains the new one, and a host that
+	 * followed a retired one follows none -- this device's defaults.
+	 */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	{
+		QSettings presets(dir.filePath(QStringLiteral("presets.ini")), QSettings::IniFormat);
+		presets.setValue(QStringLiteral("bsd/id"), 4);
+		presets.setValue(QStringLiteral("bsd/name"), QStringLiteral("BSD"));
+		presets.setValue(QStringLiteral("bsd/builtin"), true);
+		presets.setValue(QStringLiteral("bsd/term"), QStringLiteral("xterm"));
+		presets.setValue(QStringLiteral("tmux-first/id"), 6);
+		presets.setValue(QStringLiteral("tmux-first/name"), QStringLiteral("tmux-first"));
+		presets.setValue(QStringLiteral("tmux-first/builtin"), true);
+		presets.setValue(QStringLiteral("tmux-first/on_connect_command"),
+		                 QStringLiteral("tmux attach || tmux new"));
+		presets.setValue(QStringLiteral("bsd-copy/id"), 7);
+		presets.setValue(QStringLiteral("bsd-copy/name"), QStringLiteral("BSD copy"));
+		presets.setValue(QStringLiteral("bsd-copy/term"), QStringLiteral("xterm"));
+		presets.sync();
+		QSettings hosts(dir.filePath(QStringLiteral("hosts.ini")), QSettings::IniFormat);
+		hosts.setValue(QStringLiteral("box/host"), QStringLiteral("box.example"));
+		hosts.setValue(QStringLiteral("box/preset"), QStringLiteral("bsd"));
+		hosts.sync();
+	}
+
+	bssh_profile_store store(dir.path());
+	QStringList names;
+	for (const bssh_preset_t &preset : store.presets()) names << preset.name;
+	QVERIFY2(!names.contains(QStringLiteral("BSD")), qPrintable(names.join(QStringLiteral(", "))));
+	QVERIFY(names.contains(QStringLiteral("tmux-first")));
+	QVERIFY(names.contains(QStringLiteral("Old or limited equipment")));
+	QVERIFY(names.contains(QStringLiteral("BSD copy")));
+
+	bool found = false;
+	for (const bssh_profile_t &host : store.profiles()) {
+		if (host.host != QStringLiteral("box.example")) continue;
+		found = true;
+		QCOMPARE(host.preset_id, 0);
+	}
+	QVERIFY(found);
+
+	/* Written back, so the next start finds the same set. */
+	bssh_profile_store again(dir.path());
+	QCOMPARE(again.presets().size(), store.presets().size());
 }
 
 void profile_store_test::a_host_follows_a_preset_and_may_override_it() {
@@ -1393,20 +1444,21 @@ void profile_store_test::repeated_imports_get_distinguishable_names() {
 	 * and sec 10.4 refuses to delete a preset a host still follows, so
 	 * tidying up meant guessing which was which.
 	 *
-	 * Note the FIRST import already collides: BSD is a shipped preset
-	 * (sec 10.4), so this is the ordinary case rather than an edge one.
+	 * Note the FIRST import already collides: tmux-first is a shipped
+	 * preset (sec 10.4), so this is the ordinary case rather than an edge
+	 * one.
 	 */
 	QStringList names;
 	for (int round = 0; round < 3; ++round) {
 		bssh_preset_t imported;
-		imported.name = store.unique_preset_name(QStringLiteral("BSD"));
+		imported.name = store.unique_preset_name(QStringLiteral("tmux-first"));
 		QVERIFY(store.save_preset(imported) != 0);
 		names.append(imported.name);
 	}
 
-	QCOMPARE(names, QStringList({ QStringLiteral("BSD (imported)"),
-		                            QStringLiteral("BSD (imported 2)"),
-		                            QStringLiteral("BSD (imported 3)") }));
+	QCOMPARE(names, QStringList({ QStringLiteral("tmux-first (imported)"),
+		                            QStringLiteral("tmux-first (imported 2)"),
+		                            QStringLiteral("tmux-first (imported 3)") }));
 
 	/* A name nothing uses is left alone -- the suffix is not decoration. */
 	QCOMPARE(store.unique_preset_name(QStringLiteral("Something else")),

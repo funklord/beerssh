@@ -20,8 +20,8 @@ expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"
 [[sabotage]]
 name = "the app defaults ignore the device's size"
 file = "src/model/settings_resolver.cpp"
-find = "\tif (size > 0) defaults.insert(QStringLiteral(\"font_size\"), size);\n"
-replace = ""
+find = "\t\tif (key == QLatin1String(\"font_size\") && typed.toInt() <= 0) continue;\n"
+replace = "\t\tif (key == QLatin1String(\"font_size\")) continue;\n"
 expect = "a_host_with_no_preset_uses_its_own_size_and_the_device_default"
 
 # Open terminals keep the old default until reopened.

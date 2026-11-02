@@ -12,14 +12,38 @@ QJsonObject bssh_settings_resolver::app_defaults() {
 	 */
 	QJsonObject defaults = bssh_preset_t().to_json();
 
-	/* And what this device set for every host over the built-in values. */
-	const bssh_app_settings settings;
-	const QString family = settings.default_font_family();
-	if (!family.isEmpty()) defaults.insert(QStringLiteral("font_family"), family);
-	const int size = settings.default_font_size();
-	if (size > 0) defaults.insert(QStringLiteral("font_size"), size);
-	const QString scheme = settings.default_colour_scheme();
-	if (!scheme.isEmpty()) defaults.insert(QStringLiteral("colour_scheme"), scheme);
+	/*
+	 * And what this device set for every host over the built-in values,
+	 * each typed as its built-in value is: app.ini holds text, and a
+	 * "false" laid over a bool unconverted would read as true. The name
+	 * and schema are the preset's own, never a default. An empty font or
+	 * scheme, or a size of 0, is the built-in one.
+	 */
+	const QJsonObject stored = bssh_app_settings().default_settings();
+	for (auto it = stored.constBegin(); it != stored.constEnd(); ++it) {
+		const QString &key = it.key();
+		if (key == QLatin1String("name") || key == QLatin1String("schema")) continue;
+		const QJsonValue built_in = defaults.value(key);
+		if (built_in.isUndefined()) continue;
+		const QVariant raw = it.value().toVariant();
+		QJsonValue typed;
+		if (built_in.isBool()) {
+			typed = raw.toString() == QLatin1String("true") || raw.toString() == QLatin1String("1")
+			        || (raw.typeId() == QMetaType::Bool && raw.toBool());
+		} else if (built_in.isDouble()) {
+			bool ok = false;
+			const int number = raw.toString().toInt(&ok);
+			if (!ok) continue;
+			typed = number;
+		} else {
+			typed = raw.toString();
+		}
+		if ((key == QLatin1String("font_family") || key == QLatin1String("colour_scheme"))
+		    && typed.toString().isEmpty())
+			continue;
+		if (key == QLatin1String("font_size") && typed.toInt() <= 0) continue;
+		defaults.insert(key, typed);
+	}
 	return defaults;
 }
 

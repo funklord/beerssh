@@ -16,6 +16,7 @@
 #include "model/preset.h"
 #include "ui/override_badge.h"
 #include "model/app_settings.h"
+#include "ui/terminal_fields.h"
 
 #include <QSettings>
 #include <QSpinBox>
@@ -305,6 +306,138 @@ void font_picker_test::the_dialog_shows_a_hosts_own_size_and_follows_the_default
 	/* A host with a size of its own shows that. */
 	dialog.set_current_profile(store.profile(own_id));
 	QCOMPARE(host->point_size(), 17);
+}
+
+void font_picker_test::every_setting_has_a_default_and_a_hosts_own() {
+	/*
+	 * The holder, 2026-11-02: everything a preset holds gets a default for
+	 * every host on this device and a value of a host's own, and a preset
+	 * is a template a host may follow. Nothing on any screen could attach
+	 * one, so scrollback, the cursor, TERM and the rest were out of every
+	 * host's reach.
+	 */
+	struct defaults_left_t {
+		QString path = bssh_app_settings().path();
+		QVariantMap was;
+		defaults_left_t() {
+			QSettings file(path, QSettings::IniFormat);
+			file.beginGroup(QStringLiteral("defaults"));
+			for (const QString &key : file.childKeys()) was.insert(key, file.value(key));
+		}
+		~defaults_left_t() {
+			QSettings file(path, QSettings::IniFormat);
+			file.remove(QStringLiteral("defaults"));
+			for (auto it = was.cbegin(); it != was.cend(); ++it)
+				file.setValue(QStringLiteral("defaults/") + it.key(), it.value());
+		}
+	} left;
+	{
+		QSettings file(bssh_app_settings().path(), QSettings::IniFormat);
+		file.remove(QStringLiteral("defaults"));
+	}
+
+	/*
+	 * app.ini holds text: a "false" must come back false, a number a
+	 * number. Written AS text here, as a later start reads it -- in the
+	 * process that wrote them, QSettings hands back the values it was
+	 * given, typed, and the conversion would go untested.
+	 */
+	{
+		QSettings file(bssh_app_settings().path(), QSettings::IniFormat);
+		file.setValue(QStringLiteral("defaults/bell_enabled"), QStringLiteral("false"));
+		file.setValue(QStringLiteral("defaults/scrollback_lines"), QStringLiteral("1234"));
+		file.sync();
+	}
+	const QJsonObject defaults = bssh_settings_resolver::app_defaults();
+	QCOMPARE(defaults.value(QStringLiteral("bell_enabled")), QJsonValue(false));
+	QCOMPARE(defaults.value(QStringLiteral("scrollback_lines")), QJsonValue(1234));
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+	bssh_preset_t router;
+	router.name = QStringLiteral("router");
+	router.term = QStringLiteral("vt100");
+	const int router_id = store.save_preset(router);
+
+	bssh_session_dialog dialog(&store);
+	QWidget *everywhere = dialog.findChild<QWidget *>(QStringLiteral("device_terminal"));
+	QVERIFY(everywhere);
+	bssh_terminal_fields *device =
+	        everywhere->findChild<bssh_terminal_fields *>(QStringLiteral("default_terminal_fields"));
+	bssh_terminal_fields *host =
+	        dialog.findChild<bssh_terminal_fields *>(QStringLiteral("host_terminal_fields"));
+	QVERIFY(device && host);
+	QCOMPARE(host->values().value(QStringLiteral("scrollback_lines")).toInt(), 1234);
+
+	/* A default changed on the page is stored, and the host follows it. */
+	QSpinBox *device_scrollback = device->findChild<QSpinBox *>(QStringLiteral("fields-scrollback"));
+	QVERIFY(device_scrollback);
+	device_scrollback->setValue(4321);
+	QCOMPARE(bssh_settings_resolver::app_defaults().value(QStringLiteral("scrollback_lines")).toInt(),
+	         4321);
+	QCOMPARE(host->values().value(QStringLiteral("scrollback_lines")).toInt(), 4321);
+
+	/* Put back to the built-in value, it is forgotten rather than stored. */
+	device_scrollback->setValue(bssh_preset_t().scrollback_lines);
+	QVERIFY(!bssh_app_settings().default_settings().contains(QStringLiteral("scrollback_lines")));
+
+	/* A host's own value is recorded, and only that. */
+	QSpinBox *host_scrollback = host->findChild<QSpinBox *>(QStringLiteral("fields-scrollback"));
+	QVERIFY(host_scrollback);
+	host_scrollback->setValue(99);
+	bssh_profile_t saved = dialog.current_profile();
+	QCOMPARE(saved.overrides.value(QStringLiteral("scrollback_lines")).toInt(), 99);
+	QVERIFY(!saved.overrides.contains(QStringLiteral("term")));
+	QVERIFY(!saved.overrides.contains(QStringLiteral("bell_enabled")));
+
+	/* A template chosen: its TERM shows, and the host's own stays. */
+	QComboBox *templates = dialog.findChild<QComboBox *>(QStringLiteral("host_template"));
+	QVERIFY(templates);
+	const int at = templates->findData(router_id);
+	QVERIFY(at > 0);
+	templates->setCurrentIndex(at);
+	QCOMPARE(host->values().value(QStringLiteral("term")).toString(), QStringLiteral("vt100"));
+	saved = dialog.current_profile();
+	QCOMPARE(saved.preset_id, router_id);
+	QCOMPARE(saved.overrides.value(QStringLiteral("scrollback_lines")).toInt(), 99);
+	QVERIFY(!saved.overrides.contains(QStringLiteral("term")));
+}
+
+void font_picker_test::the_touch_editor_keeps_a_hosts_terminal_settings() {
+	/* The phone's host page, by the same rule as the desktop dialog. */
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+	bssh_preset_t router;
+	router.name = QStringLiteral("router");
+	router.term = QStringLiteral("vt100");
+	const int router_id = store.save_preset(router);
+
+	bssh_profile_t host;
+	host.name = QStringLiteral("box");
+	host.host = QStringLiteral("box.example");
+	const int id = store.save(host);
+
+	bssh_host_editor editor(&store);
+	editor.set_profile(store.profile(id));
+	bssh_terminal_fields *fields =
+	        editor.findChild<bssh_terminal_fields *>(QStringLiteral("host_terminal_fields"));
+	QComboBox *templates = editor.findChild<QComboBox *>(QStringLiteral("host_template"));
+	QVERIFY(fields && templates);
+
+	QVERIFY(editor.profile().overrides.isEmpty());
+	QSpinBox *scrollback = fields->findChild<QSpinBox *>(QStringLiteral("fields-scrollback"));
+	QVERIFY(scrollback);
+	scrollback->setValue(99);
+	QCOMPARE(editor.profile().overrides.value(QStringLiteral("scrollback_lines")).toInt(), 99);
+
+	templates->setCurrentIndex(templates->findData(router_id));
+	QCOMPARE(fields->values().value(QStringLiteral("term")).toString(), QStringLiteral("vt100"));
+	const bssh_profile_t saved = editor.profile();
+	QCOMPARE(saved.preset_id, router_id);
+	QCOMPARE(saved.overrides.value(QStringLiteral("scrollback_lines")).toInt(), 99);
+	QVERIFY(!saved.overrides.contains(QStringLiteral("term")));
 }
 
 void font_picker_test::the_touch_badge_follows_the_picker() {

@@ -980,8 +980,7 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 		 * whatever was shipped.
 		 */
 		m_preset_editor = new bssh_preset_editor(m_profile_store,
-		                                          bssh_preset_editor::TOUCH,
-		                                          bssh_preset_editor::EVERYTHING, this);
+		                                          bssh_preset_editor::TOUCH, this);
 		m_pages->addWidget(m_preset_editor);
 
 		connect(m_preset_editor, &bssh_preset_editor::preset_saved,
@@ -1076,25 +1075,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 
 		QList<QWidget *> section_pages;
 
-		/*
-		 * PRESETS IS A ROW HERE, not a sibling of this page (sec 8.7).
-		 *
-		 * It was in the host list's overflow menu beside "This device",
-		 * which made a preset -- the thing every host's font, colours,
-		 * scrollback and keepalive resolve through (sec 10.1) -- a
-		 * peer of config rather than part of it. The holder asked for
-		 * "exactly one config menu" with "the presets in the config
-		 * menu, editable", and this is that: same editor, same page,
-		 * reached from the one road.
-		 *
-		 * First rather than last because it is the setting that reaches
-		 * furthest -- the five below it describe this device, and a
-		 * preset describes every host that follows it.
-		 */
-		QListWidgetItem *presets_row =
-		        new QListWidgetItem(QStringLiteral("Presets"), sections);
-		presets_row->setSizeHint(QSize(0, BSSH_TOUCH_TARGET_DP));
-		section_pages.append(m_preset_editor);
 
 		for (bssh_app_settings_view::section_t which : order) {
 			bssh_app_settings_view *page =
@@ -1110,6 +1090,21 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 			row->setSizeHint(QSize(0, BSSH_TOUCH_TARGET_DP));
 			section_pages.append(page);
 		}
+
+		/*
+		 * PRESETS IS A ROW HERE, not a sibling of this page (sec 8.7):
+		 * the holder asked for "exactly one config menu" with "the
+		 * presets in the config menu, editable", and this is that.
+		 *
+		 * Last but the licences since 2026-11-02, when it was first. Most
+		 * people never make a preset (the holder), every host's settings
+		 * are on the pages above, and a preset is a template a host can
+		 * choose to follow on its own page.
+		 */
+		QListWidgetItem *presets_row =
+		        new QListWidgetItem(QStringLiteral("Presets"), sections);
+		presets_row->setSizeHint(QSize(0, BSSH_TOUCH_TARGET_DP));
+		section_pages.append(m_preset_editor);
 
 		/* The licences reach the same list, being the other thing a
 		 * person looks for under settings. */

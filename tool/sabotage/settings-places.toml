@@ -8,20 +8,20 @@
 [[sabotage]]
 name = "This device shows the appearance a second time"
 file = "src/ui/session_dialog.cpp"
-find = "\t        bssh_app_settings_view::EVERYTHING_BUT_APPEARANCE, this);"
+find = "\t        bssh_app_settings_view::THIS_DEVICE, this);"
 replace = "\t        bssh_app_settings_view::EVERYTHING, this);"
 expect = "brightness_is_on_the_appearance_page"
 
 [[sabotage]]
 name = "the Appearance page has no device appearance"
 file = "src/ui/session_dialog.cpp"
-find = "\tlayout->addWidget(everywhere, 1);\n"
-replace = "\teverywhere->hide();\n"
+find = "\teverywhere->setObjectName(QStringLiteral(\"device_appearance\"));\n\teverywhere->set_heading(QStringLiteral(\"Every host on this device\"));\n\tlayout->addWidget(everywhere, 1);\n"
+replace = "\teverywhere->setObjectName(QStringLiteral(\"device_appearance\"));\n\teverywhere->hide();\n"
 expect = "brightness_is_on_the_appearance_page"
 
 [[sabotage]]
 name = "the everything-but mode lets the appearance through"
 file = "src/ui/app_settings_view.cpp"
-find = "\t                    || (m_section == EVERYTHING_BUT_APPEARANCE && section != SECTION_APPEARANCE);"
-replace = "\t                    || m_section == EVERYTHING_BUT_APPEARANCE;"
+find = "\t                    || (m_section == THIS_DEVICE && section != SECTION_APPEARANCE\n"
+replace = "\t                    || (m_section == THIS_DEVICE\n"
 expect = "brightness_is_on_the_appearance_page"

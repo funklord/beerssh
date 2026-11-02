@@ -19,6 +19,8 @@ class QTreeWidgetItem;
 class QLabel;
 class QPushButton;
 class bssh_font_picker;
+class bssh_terminal_fields;
+class QToolButton;
 class bssh_preset_editor;
 class bssh_profile_store;
 
@@ -101,6 +103,20 @@ private:
 	 */
 	QWidget *build_window_page();
 
+	/*
+	 * This host's terminal and connection settings (the holder,
+	 * 2026-11-02): the defaults for every host above, the host's own
+	 * below, and the preset it follows, if any, as a template.
+	 */
+	QWidget *build_terminal_page();
+	void reload_templates();
+	void on_template_chosen();
+	void show_resolved_terminal(const QJsonObject &resolved);
+	void update_terminal_scope();
+
+	/* What this host would have without settings of its own. */
+	QJsonObject inherited_settings(const bssh_profile_t &profile) const;
+
 	/* This host's preset with its own overrides applied (sec 10.1). */
 	QJsonObject resolved_settings(const bssh_profile_t &profile) const;
 
@@ -122,6 +138,7 @@ private:
 	QString m_shown_font;
 	int m_shown_size = 0;
 	QString m_shown_scheme;
+	QJsonObject m_shown_terminal;
 
 	void reload_sessions();
 	int selected_profile_id() const;
@@ -155,6 +172,11 @@ private:
 	bssh_font_picker *m_font_picker;
 	bssh_preset_editor *m_preset_editor;
 	QLabel *m_font_scope;
+	QComboBox *m_template = nullptr;
+	QToolButton *m_appearance_toggle = nullptr;
+	QToolButton *m_terminal_toggle = nullptr;
+	bssh_terminal_fields *m_host_fields = nullptr;
+	QLabel *m_terminal_scope = nullptr;
 	QPushButton *m_font_revert;
 };
 

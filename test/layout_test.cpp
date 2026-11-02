@@ -2773,28 +2773,28 @@ void layout_test::a_form_stacks_on_width_not_on_touch() {
 		                        static_cast<QWidget *>(&presets)));
 
 		for (const QPair<QString, QWidget *> &page : pages) {
+			/* Every form on the page, and at least one: the host editor has
+			 * its own and, since 2026-11-02, the terminal fields'. */
 			const QList<QFormLayout *> forms = watched(page.second);
-			QVERIFY2(forms.size() == 1,
-			          qPrintable(QStringLiteral("%1 has %2 width-keyed forms, "
-			                                     "expected exactly one")
-			                             .arg(page.first).arg(forms.size())));
-
-			QFormLayout *form = forms.first();
+			QVERIFY2(!forms.isEmpty(),
+			          qPrintable(QStringLiteral("%1 has no width-keyed form").arg(page.first)));
 
 			page.second->resize(BSSH_PHONE_DP, BSSH_PHONE_TALL_DP);
 			page.second->show();
 			QCoreApplication::processEvents();
-			QVERIFY2(form->rowWrapPolicy() == QFormLayout::WrapAllRows,
-			          qPrintable(QStringLiteral("%1 at %2dp with touch=%3 kept its "
-			                                     "labels beside its fields")
-			                             .arg(page.first).arg(BSSH_PHONE_DP).arg(touch)));
+			for (QFormLayout *form : forms)
+				QVERIFY2(form->rowWrapPolicy() == QFormLayout::WrapAllRows,
+				          qPrintable(QStringLiteral("%1 at %2dp with touch=%3 kept its "
+				                                     "labels beside its fields")
+				                             .arg(page.first).arg(BSSH_PHONE_DP).arg(touch)));
 
 			page.second->resize(BSSH_SMALL_DESKTOP_W, BSSH_PHONE_TALL_DP);
 			QCoreApplication::processEvents();
-			QVERIFY2(form->rowWrapPolicy() == QFormLayout::DontWrapRows,
-			          qPrintable(QStringLiteral("%1 at %2px with touch=%3 stacked its "
-			                                     "labels above fields that had room")
-			                             .arg(page.first).arg(BSSH_SMALL_DESKTOP_W).arg(touch)));
+			for (QFormLayout *form : forms)
+				QVERIFY2(form->rowWrapPolicy() == QFormLayout::DontWrapRows,
+				          qPrintable(QStringLiteral("%1 at %2px with touch=%3 stacked its "
+				                                     "labels above fields that had room")
+				                             .arg(page.first).arg(BSSH_SMALL_DESKTOP_W).arg(touch)));
 
 			page.second->hide();
 		}
@@ -7383,6 +7383,18 @@ void layout_test::a_host_with_no_preset_uses_its_own_size_and_the_device_default
 	QCoreApplication::processEvents();
 	QTRY_COMPARE(size_of(plain), built_in + 4);
 	QTRY_COMPARE(size_of(mine), 17);
+
+	/* And the terminal's own settings the same way: a default for every
+	 * host reaches an open one, and a value of the host's own wins. */
+	const setting_left_as_found_t scrollback_left(QStringLiteral("defaults/scrollback_lines"));
+	const setting_left_as_found_t cursor_left(QStringLiteral("defaults/cursor_style"));
+	bssh_app_settings().set_default_setting(QStringLiteral("scrollback_lines"), 777);
+	bssh_app_settings().set_default_setting(QStringLiteral("cursor_style"), QStringLiteral("bar"));
+	window.apply_device_settings();
+	QCoreApplication::processEvents();
+	QCOMPARE(plain->settings().value(QStringLiteral("scrollback_lines")).toInt(), 777);
+	QCOMPARE(plain->settings().value(QStringLiteral("cursor_style")).toString(), QStringLiteral("bar"));
+	QCOMPARE(mine->settings().value(QStringLiteral("cursor_style")).toString(), QStringLiteral("bar"));
 }
 
 void layout_test::a_bar_side_belongs_to_its_pane() {
@@ -7958,10 +7970,14 @@ void layout_test::the_picture_history_setting_reaches_every_terminal() {
 		 * is already open -- the setting is per terminal, so it has to
 		 * reach the ones that exist, not only the next.
 		 */
-		bssh_app_settings_view *page = window.findChild<bssh_app_settings_view *>();
-		QVERIFY(page);
-		QSpinBox *control = page->findChild<QSpinBox *>(QStringLiteral("image_history"));
-		QVERIFY2(control && !control->isHidden(), "the settings page offers no picture history");
+		/* Whichever settings page shows it: the dialog holds one per
+		 * category, and picture history is on Terminal's. */
+		QSpinBox *control = nullptr;
+		for (bssh_app_settings_view *page : window.findChildren<bssh_app_settings_view *>()) {
+			QSpinBox *found = page->findChild<QSpinBox *>(QStringLiteral("image_history"));
+			if (found && !found->isHidden()) control = found;
+		}
+		QVERIFY2(control, "no settings page offers picture history");
 		control->setValue(64);
 		QCOMPARE(bssh_app_settings().image_history_mb(), 64);
 
@@ -12379,13 +12395,16 @@ void layout_test::every_config_category_shows_its_own_page() {
 	/*
 	 * Named, not counted: Terminal and Connection were removed on purpose
 	 * (2026-10-10) as slices of Presets, and a floor on the count would
-	 * let either come back unnoticed.
+	 * let either come back unnoticed. Terminal is back since 2026-11-02 as
+	 * something else -- the defaults for every host and the host's own,
+	 * as Appearance is -- and Presets moved last but the licences, since
+	 * most people never make one (the holder).
 	 */
 	QStringList names;
 	for (const QTreeWidgetItem *item : items) names.append(item->text(0));
 	QCOMPARE(names, QStringList({ QStringLiteral("Session"), QStringLiteral("Appearance"),
-	                              QStringLiteral("Presets"), QStringLiteral("This device"),
-	                              QStringLiteral("Licences") }));
+	                              QStringLiteral("Terminal"), QStringLiteral("This device"),
+	                              QStringLiteral("Presets"), QStringLiteral("Licences") }));
 
 	QSet<QWidget *> seen;
 	for (QTreeWidgetItem *item : items) {

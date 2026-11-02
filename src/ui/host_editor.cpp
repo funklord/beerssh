@@ -22,6 +22,10 @@
 #include "ui/font_picker.h"
 #include "ui/form_wrap.h"
 #include "ui/override_badge.h"
+#include "ui/terminal_fields.h"
+
+#include <QSignalBlocker>
+#include <QToolButton>
 
 #include "model/profile_store.h"
 
@@ -284,6 +288,30 @@ bssh_host_editor::bssh_host_editor(bssh_profile_store *store, QWidget *parent)
 	connect(m_font_revert, &QPushButton::clicked,
 	         this, &bssh_host_editor::revert_font_to_preset);
 
+	/*
+	 * TERM, scrollback, the cursor, keepalive and the rest of this host's
+	 * own, and the preset it follows as a template -- closed, since nearly
+	 * every host has what every host on this device has (the holder,
+	 * 2026-11-02), and those are on the settings page.
+	 */
+	QWidget *own = bssh_foldable(body, QStringLiteral("Terminal settings for this host"),
+	                             this, &m_terminal_toggle);
+	m_terminal_toggle->setObjectName(QStringLiteral("host_terminal_toggle"));
+	m_terminal_toggle->setMinimumHeight(BSSH_TOUCH_TARGET_DP);
+	QVBoxLayout *inside = qobject_cast<QVBoxLayout *>(own->layout());
+	QFormLayout *choice = new QFormLayout();
+	m_template = new QComboBox(own);
+	m_template->setObjectName(QStringLiteral("host_template"));
+	choice->addRow(QStringLiteral("Template"), m_template);
+	inside->addLayout(choice);
+	reload_templates();
+	connect(m_template, &QComboBox::currentIndexChanged,
+	         this, &bssh_host_editor::on_template_chosen);
+	m_host_fields = new bssh_terminal_fields(own);
+	m_host_fields->setObjectName(QStringLiteral("host_terminal_fields"));
+	inside->addWidget(m_host_fields);
+	bssh_watch_form_width(m_host_fields->form(), this);
+
 	body->addStretch(1);
 	bssh_attach_notes(body);
 
@@ -357,8 +385,46 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
 	        resolved.value(QStringLiteral("font_size")).toInt());
 	m_font_picker->set_scheme(resolved.value(QStringLiteral("colour_scheme")).toString());
 
+	reload_templates();
+	m_host_fields->set_values(resolved);
+	bool own_terminal = profile.preset_id != 0;
+	for (const QString &key : bssh_terminal_fields::keys())
+		own_terminal = own_terminal || profile.overrides.contains(key);
+	m_terminal_toggle->setChecked(own_terminal);
+
 	update_override_badge();
 	m_host->setFocus();
+}
+
+void bssh_host_editor::reload_templates() {
+	if (!m_template) return;
+	const QSignalBlocker quiet(m_template);
+	m_template->clear();
+	m_template->addItem(QStringLiteral("None"), 0);
+	if (m_store) {
+		for (const bssh_preset_t &preset : m_store->presets())
+			m_template->addItem(preset.name, preset.id);
+	}
+	const int at = m_template->findData(m_profile.preset_id);
+	m_template->setCurrentIndex(at < 0 ? 0 : at);
+}
+
+void bssh_host_editor::on_template_chosen() {
+	/*
+	 * What was changed here stays this host's own, measured against the
+	 * template it had; the rest now comes from the template chosen.
+	 * profile() takes the template from m_profile, not from the list, for
+	 * this: measured against the NEW one, every field still showing the
+	 * old template's value read as the host's own and pinned it.
+	 */
+	m_profile = profile();
+	m_profile.preset_id = m_template->currentData().toInt();
+	const QJsonObject resolved = resolved_settings();
+	m_font_picker->set_font_choice(resolved.value(QStringLiteral("font_family")).toString(),
+	                                resolved.value(QStringLiteral("font_size")).toInt());
+	m_font_picker->set_scheme(resolved.value(QStringLiteral("colour_scheme")).toString());
+	m_host_fields->set_values(resolved);
+	update_override_badge();
 }
 
 /*
@@ -457,6 +523,8 @@ bssh_profile_t bssh_host_editor::profile() const {
 	edited.overrides = bssh_appearance_overrides(
 	        m_store, edited, m_font_picker->font_id(),
 	        m_font_picker->point_size(), m_font_picker->scheme_id());
+	if (m_host_fields)
+		edited.overrides = bssh_terminal_overrides(m_store, edited, m_host_fields->values());
 
 	/* An unnamed host is named after itself, so the list never shows a
 	 * blank row. */

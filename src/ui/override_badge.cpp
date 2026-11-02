@@ -5,6 +5,7 @@
 #include "model/settings_resolver.h"
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
+#include "ui/terminal_fields.h"
 
 namespace {
 
@@ -153,4 +154,24 @@ QJsonObject bssh_appearance_overrides(const bssh_profile_store *store,
 	}
 
 	return overrides;
+}
+
+QJsonObject bssh_inherited_settings(const bssh_profile_store *store,
+                                     const bssh_profile_t &profile) {
+	QJsonObject without = profile.overrides;
+	for (const QString &key : bssh_terminal_fields::keys()) without.remove(key);
+	if (!store || profile.preset_id == 0) return bssh_settings_resolver::for_host(nullptr, without);
+	const bssh_preset_t preset = store->preset(profile.preset_id);
+	return bssh_settings_resolver::for_host(&preset, without);
+}
+
+QJsonObject bssh_terminal_overrides(const bssh_profile_store *store,
+                                     const bssh_profile_t &profile,
+                                     const QJsonObject &shown) {
+	QJsonObject out = profile.overrides;
+	for (const QString &key : bssh_terminal_fields::keys()) out.remove(key);
+	const QJsonObject own =
+	        bssh_terminal_fields::differing(shown, bssh_inherited_settings(store, profile));
+	for (auto it = own.constBegin(); it != own.constEnd(); ++it) out.insert(it.key(), it.value());
+	return out;
 }

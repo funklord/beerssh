@@ -4,6 +4,8 @@
 #include <QString>
 
 class QFormLayout;
+class QToolButton;
+class QVBoxLayout;
 class QWidget;
 
 /*
@@ -63,5 +65,13 @@ void bssh_apply_form_wrap(QFormLayout *form, const QWidget *page);
  * written in seven places under four names.
  */
 void bssh_watch_form_width(QFormLayout *form, QWidget *page);
+
+/*
+ * A section under a heading that opens and closes it, added to `layout`,
+ * closed until opened; its body has a QVBoxLayout to add rows to. The
+ * heading's button is handed back for opening it from code.
+ */
+QWidget *bssh_foldable(QVBoxLayout *layout, const QString &title, QWidget *page,
+                       QToolButton **toggle);
 
 #endif /* BSSH_FORM_WRAP_H */

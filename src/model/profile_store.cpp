@@ -302,7 +302,44 @@ void bssh_profile_store::load_presets() {
 		m_slugs.insert(preset.id, section);
 	}
 
+	/*
+	 * The shipped set changed (2026-11-02): those no longer shipped go, and
+	 * one newly shipped comes in. A shipped preset cannot be edited or
+	 * deleted, so one retired here holds nothing of the user's -- a copy
+	 * the user made is not marked shipped and stays -- and a host that
+	 * followed it follows none, which is this device's defaults.
+	 */
+	bool changed = false;
+	bool seeded_by_us = false;
+	for (const bssh_preset_t &preset : m_presets) seeded_by_us = seeded_by_us || preset.is_builtin;
+	const QStringList retired = bssh_preset_t::retired_builtin_names();
+	for (int i = m_presets.size() - 1; i >= 0; --i) {
+		if (!m_presets.at(i).is_builtin || !retired.contains(m_presets.at(i).name)) continue;
+		m_slugs.remove(m_presets.at(i).id);
+		m_presets.removeAt(i);
+		changed = true;
+	}
+	/*
+	 * Only into a file this program seeded: one written by hand, with no
+	 * shipped preset in it, is somebody's chosen set and stays as written
+	 * -- the reason the first seeding happens once (sec 10.4).
+	 */
+	for (const bssh_preset_t &builtin : bssh_preset_t::builtins()) {
+		if (!seeded_by_us) break;
+		bool present = false;
+		for (const bssh_preset_t &preset : m_presets)
+			present = present || (preset.is_builtin && preset.name == builtin.name);
+		if (present) continue;
+		bssh_preset_t added = builtin;
+		added.is_builtin = true;
+		added.id = ++highest;
+		m_slugs.insert(added.id, unique_slug(slug_for(added.name), added.id));
+		m_presets.append(added);
+		changed = true;
+	}
+
 	sort_presets();
+	if (changed) write_presets();
 }
 
 void bssh_profile_store::load_profiles() {

@@ -18,6 +18,7 @@ class QSpinBox;
 class QLineEdit;
 class QComboBox;
 class bssh_font_picker;
+class bssh_terminal_fields;
 
 /*
  * bssh_app_settings_view -- the settings that belong to the device
@@ -58,11 +59,13 @@ public:
 
 		/*
 		 * The desktop's "This device" category: everything but the
-		 * appearance, which the dialog's Appearance category shows --
-		 * brightness was there to find and nobody looked under "This
-		 * device" for it (reported 2026-10-10).
+		 * appearance and the terminal, which the dialog's Appearance and
+		 * Terminal categories show beside each host's own -- brightness
+		 * was there to find and nobody looked under "This device" for it
+		 * (reported 2026-10-10), and the terminal defaults joined their
+		 * host's on Terminal (2026-11-02).
 		 */
-		EVERYTHING_BUT_APPEARANCE,
+		THIS_DEVICE,
 		SECTION_KEYBOARD,
 		SECTION_APPEARANCE,
 		SECTION_TERMINAL,
@@ -152,7 +155,7 @@ private:
 	QLabel *m_heading = nullptr;
 
 	/* The whole view rather than one section's page: the desktop's form. */
-	bool whole() const { return m_section == EVERYTHING || m_section == EVERYTHING_BUT_APPEARANCE; }
+	bool whole() const { return m_section == EVERYTHING || m_section == THIS_DEVICE; }
 
 	QComboBox *m_key_row;
 	QComboBox *m_keyboard;
@@ -162,6 +165,10 @@ private:
 
 	/* The font, size and colours every host has unless it says otherwise. */
 	bssh_font_picker *m_default_font = nullptr;
+
+	/* The terminal and connection settings every host has unless it says
+	 * otherwise. */
+	bssh_terminal_fields *m_default_fields = nullptr;
 	QComboBox *m_scrollbar;
 	QComboBox *m_arrangement;
 	QComboBox *m_tab_position = nullptr;

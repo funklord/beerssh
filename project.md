@@ -11441,6 +11441,37 @@ its page, shown as the default until it is set; a preset is an advanced
 *template* a host may follow, chosen on its page, and the Presets page goes
 last.
 
+**Built 2026-11-02.** `bssh_terminal_fields` is the one form of those fields
+-- TERM, scrollback, bell, cursor, blink, terminal features, key row,
+keepalive, compression, clipboard, on connect -- used in three places: the
+defaults for every host (the settings page's Terminal section, at its top,
+stored in `app.ini`'s `defaults/` group by the preset's own JSON names and
+typed against the built-in values on the way back, since app.ini holds text
+and a "false" laid over unconverted would read as true), a host's own, and
+the preset editor, which lost its own copy of the eleven fields. A value
+counts as a host's own, or a device default, only where it differs from what
+it would otherwise be (`differing`, which compares as the settings mean them:
+an empty TERM is the built-in one, an unset key row the default row), and a
+default put back to the built-in value is forgotten rather than stored. The
+desktop dialog's categories are Session, Appearance, Terminal, This device,
+Presets, Licences: Appearance and Terminal each show *Every host on this
+device* above *This host*, which opens and closes and starts closed unless
+the host has something of its own -- open, it took the page and squeezed
+every host's half into a strip. *This host* on Terminal carries the
+**Template** chooser, the only place a host is given a preset, on the phone's
+host page as well. *This device* keeps the keyboard, passwords and shortcuts
+(`THIS_DEVICE`, which was "everything but appearance"). The phone lists
+Presets last. A host's own terminal settings are measured against the
+template it HAD when another is chosen: the phone's editor first took the
+new one from the list, and every field still showing the old template's
+value was recorded as the host's own -- a chosen template whose TERM never
+showed. Seen under twin: the cursor default set to Bar, and the open shell's
+cursor a bar at once. `every_setting_has_a_default_and_a_hosts_own`,
+`the_touch_editor_keeps_a_hosts_terminal_settings`,
+`the_retired_shipped_presets_go_and_their_hosts_follow_none`, and the window
+test above extended to the terminal's settings;
+`tool/sabotage/settings-model.toml`, nine edits.
+
 **And the app defaults are this device's to set, 2026-11-02.** The holder:
 setting the font size "in config does nothing", and "it is also impossible to
 set the default font size". Two faults. A host following no preset -- the local
@@ -11846,16 +11877,16 @@ The round trip is lossless for every key the defaults carry, which the test
 asserts directly rather than trusting.
 
 ### 10.4 Built-in starter presets
-Ship a handful of **read-only** presets that users clone rather than edit:
-*Default Linux*, *Raspberry Pi / SBC*, *OpenWrt / BusyBox router* (limited `TERM`,
-no colour assumptions), *BSD*, *Network switch / serial-ish* (conservative
-sequences, no UTF-8 box drawing), *tmux-first* (auto-attach on connect).
+Two **read-only** presets ship, which users clone rather than edit, each for a
+host that genuinely needs handling different from the defaults: *tmux-first*
+(auto-attach on connect) and *Old or limited equipment* (`vt100`, no bell, the
+terminal extensions off). They double as documentation of what a template can
+do.
 
-Each sets sensible `TERM`, colours, and key-row defaults for that target. These
-double as documentation of what a preset can do.
-
-**Two kept, 2026-11-02 -- the holder chose it.** As shipped they did not do
-that. *Default Linux* is the built-in values; *BSD* differs only in `TERM=xterm`;
+**Two kept, 2026-11-02 -- the holder chose it.** Six shipped before: *Default
+Linux*, *Raspberry Pi / SBC*, *OpenWrt / BusyBox router*, *BSD*, *Network switch
+/ serial-ish* and *tmux-first*, each meant to set sensible `TERM`, colours and
+key-row defaults for its target. As shipped they did not do that. *Default Linux* is the built-in values; *BSD* differs only in `TERM=xterm`;
 *Raspberry Pi / SBC* in a smaller scrollback, a shorter keepalive and
 compression; *OpenWrt* in `TERM=vt100` and a small scrollback; *Network switch*
 in `vt100`, no bell and a large scrollback; *tmux-first* in its on-connect
@@ -11868,6 +11899,13 @@ genuinely needs different handling. Removing a shipped preset needs a
 migration for hosts that follow it, which falls back to the device's defaults.
 The holder chose that: *tmux-first* and one for old or limited equipment
 ship, and the other four go.
+Built 2026-11-02: *Old or limited equipment* is `vt100`, no bell, the
+terminal extensions off and a 10000-line scrollback for the configuration
+dumps such equipment prints. On load, a presets file that still holds a
+retired shipped preset loses it -- a shipped preset cannot be edited or
+deleted, so nothing of the user's is lost, and a copy they made is not marked
+shipped and stays -- gains the new one, and is written back; a host that
+followed a retired one follows none.
 
 ### 10.5 Import / export
 - **Export works on both platforms. Import works on both platforms**, by two

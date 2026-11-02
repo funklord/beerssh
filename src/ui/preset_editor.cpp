@@ -24,7 +24,7 @@
 #include "term/colour_scheme.h"
 #include "term/font_catalog.h"
 #include "ui/font_picker.h"
-#include "ui/term_features_editor.h"
+#include "ui/terminal_fields.h"
 
 namespace {
 
@@ -37,9 +37,6 @@ namespace {
  * The ellipsis is added HERE rather than inside summary(), which stays a
  * plain statement of the state for anybody else who wants to say it.
  */
-QString features_button_text(const QString &spec) {
-	return bssh_term_features_editor::summary(spec) + QStringLiteral("...");
-}
 
 /*
  * What did not happen, then the store's reason. Every one of these
@@ -65,10 +62,9 @@ void warn_not_written(QWidget *parent, const QString &title,
  */
 
 bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layout,
-                                        section_t section, QWidget *parent)
+                                        QWidget *parent)
     : QWidget(parent),
       m_store(store),
-      m_section(section),
       m_touch(layout == TOUCH) {
 	QHBoxLayout *columns = new QHBoxLayout(this);
 
@@ -138,160 +134,18 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 		columns->addLayout(right, 1);
 	}
 
-	QFormLayout *form = new QFormLayout();
-	form->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
-
-
+	/*
+	 * The terminal and connection fields are bssh_terminal_fields, the
+	 * one form every place that sets them uses -- the defaults for every
+	 * host, a host's own, and here (the holder, 2026-11-02). The name is
+	 * the preset's alone and goes first in that form, so the labels line
+	 * up in one column.
+	 */
 	m_name = new QLineEdit(this);
-
-	m_term = new QLineEdit(this);
-	m_term->setPlaceholderText(QStringLiteral("xterm-256color"));
-
-	m_scrollback = new QSpinBox(this);
-	m_scrollback->setRange(BSSH_PRESET_MIN_SCROLLBACK, BSSH_PRESET_MAX_SCROLLBACK);
-	m_scrollback->setSuffix(QStringLiteral(" lines"));
-
-	m_bell = new QCheckBox(QStringLiteral("Bell enabled"), this);
-
-	m_cursor_style = new QComboBox(this);
-	m_cursor_style->addItem(QStringLiteral("Block"), QStringLiteral("block"));
-	m_cursor_style->addItem(QStringLiteral("Underline"), QStringLiteral("underline"));
-	m_cursor_style->addItem(QStringLiteral("Bar"), QStringLiteral("bar"));
-
-	m_cursor_blink = new QCheckBox(QStringLiteral("Cursor blinks"), this);
-
-	/*
-	 * Which extensions this host's terminal speaks (sec 7.1). A button
-	 * to a dialog rather than fourteen checkboxes on this page, which is
-	 * the colour editor's shape and its argument: this is the rarer of
-	 * the two choices and sec 7.1 calls it "not a preference knob: it is
-	 * a test instrument", so it belongs a deliberate trip away rather
-	 * than beside the cursor style.
-	 *
-	 * The label carries the state, because a button reading only
-	 * "Terminal features..." says nothing about whether this host has
-	 * any turned off -- and that is the whole question somebody scanning
-	 * the page is asking.
-	 */
-	m_features = new QPushButton(this);
-	m_features->setObjectName(QStringLiteral("preset-term-features"));
-	m_features->setToolTip(
-	        QStringLiteral("Turn terminal extensions off for this host, to see how a "
-	                        "program behaves against a terminal that lacks them."));
-	connect(m_features, &QPushButton::clicked, this, [this] {
-		bssh_term_features_editor editor(m_current.term_features, this);
-		if (editor.exec() != QDialog::Accepted) return;
-
-		/*
-		 * Straight into m_current, which is what save() starts from --
-		 * the same route colour_scheme and key_row_layout take, and for
-		 * the reason the comment there gives: a field this form holds
-		 * outside its own widget must not be read back off a widget
-		 * that does not exist.
-		 */
-		m_current.term_features = editor.spec();
-		m_features->setText(features_button_text(m_current.term_features));
-	});
-
-	m_font = new bssh_font_picker(this);
-
-	m_keepalive = new QSpinBox(this);
-	m_keepalive->setRange(BSSH_PRESET_MIN_KEEPALIVE, BSSH_PRESET_MAX_KEEPALIVE);
-	m_keepalive->setSuffix(QStringLiteral(" s"));
-	/*
-	 * Says what 0 costs rather than only what it means. A phone behind a
-	 * carrier NAT with keepalive off loses idle sessions for reasons the
-	 * user will blame on the app (sec 4).
-	 */
-	m_keepalive->setSpecialValueText(QStringLiteral("off (idle sessions may drop)"));
-
-	m_compression = new QCheckBox(QStringLiteral("Request compression"), this);
-
-	/*
-	 * Named for what it lets the host DO rather than for the sequence it
-	 * enables: "OSC 52" means nothing to the person deciding whether they
-	 * trust this machine, and the decision is about trust (sec 7.1).
-	 */
-	m_clipboard = new QCheckBox(
-	        QStringLiteral("Let this host set my clipboard"), this);
-	m_clipboard->setToolTip(
-	        QStringLiteral("Lets programs on the host copy to your clipboard, so "
-	                        "yanking in vim over SSH works. A host that can do this "
-	                        "can also replace what you copied, so leave it off for "
-	                        "machines you do not control."));
-
-	m_on_connect = new QLineEdit(this);
-	m_on_connect->setPlaceholderText(QStringLiteral("tmux attach || tmux new"));
-
-	/*
-	 * The on-screen key row for this kind of host (sec 6.2). Shown on both
-	 * platforms even though the row itself only appears on touch: a
-	 * preset is edited wherever the user happens to be, and a setting that
-	 * vanished on the desktop would be one they could not prepare before
-	 * picking up the phone.
-	 */
-	m_key_row = new QComboBox(this);
-	m_key_row->setObjectName(QStringLiteral("preset-key-row"));
-	for (const sk_key_row_layout_t &layout : sk_key_row_catalog::instance().all()) {
-		m_key_row->addItem(layout.display_name, layout.id);
-		m_key_row->setItemData(m_key_row->count() - 1, layout.description, Qt::ToolTipRole);
-	}
-
-	/*
-	 * Which rows this view shows (sec 8.5). Every field is BUILT either
-	 * way -- load() and save() address them all, and a field that existed
-	 * only on one page would be a field the other page silently discarded
-	 * on save. Only what is added to the form differs.
-	 */
-	const bool all = m_section == EVERYTHING;
-	const bool terminal = all || m_section == TERMINAL;
-	const bool connection = all || m_section == CONNECTION;
-
-	/*
-	 * A field this view does not show is HIDDEN, not merely left out of
-	 * the form.
-	 *
-	 * Every one of them was built with this widget as its parent, and a
-	 * widget with a parent and no layout is drawn wherever its default
-	 * geometry puts it -- which is the top-left corner. Leaving them out
-	 * of the form painted the key-row combo and the name field over the
-	 * preset list, on top of its first row. Found by looking at the
-	 * page; no assertion here would have said a word, because every
-	 * widget was present, sized and inside the page.
-	 */
-	const auto shown = [](QWidget *field, bool visible) {
-		if (!visible) field->hide();
-		return visible;
-	};
-
-	if (shown(m_name, all)) form->addRow(QStringLiteral("Name"), m_name);
-
-	/*
-	 * Headed where the whole preset is shown, which is now the only place
-	 * the desktop edits one: the Terminal and Connection categories that
-	 * each showed one of these groups are gone (2026-10-10), and the
-	 * headings keep the two groups as easy to find as the categories did.
-	 */
-	const auto heading = [&](const QString &text) {
-		if (all) form->addRow(new QLabel(QStringLiteral("<b>%1</b>").arg(text), this));
-	};
-
-	heading(QStringLiteral("Terminal"));
-	if (shown(m_term, terminal)) form->addRow(QStringLiteral("TERM"), m_term);
-	if (shown(m_scrollback, terminal)) form->addRow(QStringLiteral("Scrollback"), m_scrollback);
-	if (shown(m_bell, terminal)) form->addRow(QString(), m_bell);
-	if (shown(m_cursor_style, terminal)) form->addRow(QStringLiteral("Cursor"), m_cursor_style);
-	if (shown(m_cursor_blink, terminal)) form->addRow(QString(), m_cursor_blink);
-	if (shown(m_features, terminal)) form->addRow(QStringLiteral("Features"), m_features);
-
-	if (shown(m_key_row, all)) form->addRow(QStringLiteral("Key row"), m_key_row);
-
-	heading(QStringLiteral("Connection"));
-	if (shown(m_keepalive, connection)) form->addRow(QStringLiteral("Keepalive"), m_keepalive);
-	if (shown(m_compression, connection)) form->addRow(QString(), m_compression);
-	if (shown(m_clipboard, connection)) form->addRow(QString(), m_clipboard);
-	if (shown(m_on_connect, connection)) form->addRow(QStringLiteral("On connect"), m_on_connect);
-	fields->addLayout(form);
+	m_fields = new bssh_terminal_fields(content);
+	QFormLayout *form = m_fields->form();
+	form->insertRow(0, QStringLiteral("Name"), m_name);
+	fields->addWidget(m_fields);
 
 	/*
 	 * Where the room is short the label goes ABOVE its field, for the
@@ -320,13 +174,8 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	 */
 	bssh_watch_form_width(form, this);
 
-	/*
-	 * The font and colours belong to the Appearance category, not to
-	 * Terminal or Connection -- so a section view builds the picker (save
-	 * writes its values back) and does not show it twice.
-	 */
+	m_font = new bssh_font_picker(content);
 	fields->addWidget(m_font);
-	if (m_section != EVERYTHING) m_font->hide();
 
 	/*
 	 * The picker brings its own form layout, and two of those size their
@@ -363,23 +212,6 @@ bssh_preset_editor::bssh_preset_editor(bssh_profile_store *store, layout_t layou
 	transfer->addWidget(m_import);
 	transfer->addWidget(m_export);
 	right->addLayout(transfer);
-
-	/*
-	 * Import and Export move whole preset FILES between machines, which
-	 * is the Presets category's business. On the Terminal and Connection
-	 * pages they are two more buttons between a reader and the four
-	 * settings they came for -- and this dialog was reported as
-	 * confusing, so an operation offered in three places when it belongs
-	 * in one is worth removing rather than defending.
-	 *
-	 * Hidden rather than left unbuilt: save() and the shipped-preset
-	 * rules address them, and a pointer that exists on one page and not
-	 * another is a null nobody remembers to check.
-	 */
-	if (m_section != EVERYTHING) {
-		m_import->hide();
-		m_export->hide();
-	}
 
 	QHBoxLayout *buttons = new QHBoxLayout();
 	m_save = new QPushButton(QStringLiteral("Save"), this);
@@ -483,24 +315,9 @@ void bssh_preset_editor::show_preset(const bssh_preset_t &preset) {
 	m_current = preset;
 
 	m_name->setText(preset.name);
-	m_term->setText(preset.term);
-	m_scrollback->setValue(preset.scrollback_lines);
-	m_features->setText(features_button_text(preset.term_features));
-	m_bell->setChecked(preset.bell_enabled);
-	m_cursor_blink->setChecked(preset.cursor_blink);
-	m_keepalive->setValue(preset.keepalive_seconds);
-	m_compression->setChecked(preset.compression);
-	m_clipboard->setChecked(preset.allow_clipboard_write);
-	m_on_connect->setText(preset.on_connect_command);
+	m_fields->set_values(preset.to_json());
 	m_font->set_font_choice(preset.font_family, preset.font_size);
 	m_font->set_scheme(preset.colour_scheme);
-
-	const sk_key_row_catalog &rows = sk_key_row_catalog::instance();
-	const int row_index = m_key_row->findData(rows.effective_id(preset.key_row_layout));
-	m_key_row->setCurrentIndex(row_index < 0 ? 0 : row_index);
-
-	const int style = m_cursor_style->findData(preset.cursor_style);
-	m_cursor_style->setCurrentIndex(style < 0 ? 0 : style);
 
 	update_controls();
 }
@@ -512,14 +329,21 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 	 * are not silently cleared by saving. The session dialog lost host
 	 * settings exactly this way.
 	 */
-	bssh_preset_t preset = m_current;
+	/*
+	 * The fields that differ from the loaded preset, laid over it: the
+	 * same rule as a host's own settings -- a value only agreeing with
+	 * what it would have been anyway is not recorded, so an untouched key
+	 * row stays unset and follows the default row.
+	 */
+	QJsonObject json = m_current.to_json();
+	const QJsonObject changed = m_fields->differing_from(json);
+	for (auto it = changed.constBegin(); it != changed.constEnd(); ++it)
+		json.insert(it.key(), it.value());
+	bssh_preset_t preset = bssh_preset_t::from_json(json);
+	preset.id = m_current.id;
+	preset.is_builtin = m_current.is_builtin;
 
 	preset.name = m_name->text().trimmed();
-	preset.term = m_term->text().trimmed();
-	preset.scrollback_lines = m_scrollback->value();
-	preset.bell_enabled = m_bell->isChecked();
-	preset.cursor_style = m_cursor_style->currentData().toString();
-	preset.cursor_blink = m_cursor_blink->isChecked();
 	/*
 	 * An untouched font stays UNSET rather than becoming whatever the
 	 * picker resolved it to. The picker cannot show "unset" -- an empty
@@ -527,31 +351,16 @@ bssh_preset_t bssh_preset_editor::edited_preset() const {
 	 * and writing the resolved value back would pin it: the preset would
 	 * then carry jetbrains-mono as a choice, and stop following the
 	 * default if the default ever moved.
-	 *
-	 * Same rule as a host override: do not record a value that only
-	 * agrees with what it would have resolved to anyway.
 	 */
 	const QString resolved = bssh_font_catalog::instance().effective_id(m_current.font_family);
-
 	if (m_font->font_id() != resolved) preset.font_family = m_font->font_id();
 	preset.font_size = m_font->point_size();
-
-	const sk_key_row_catalog &rows = sk_key_row_catalog::instance();
-	if (m_key_row->currentData().toString() != rows.effective_id(m_current.key_row_layout)) {
-		preset.key_row_layout = m_key_row->currentData().toString();
-	}
 
 	/* Same rule for the scheme: an untouched default stays unset. */
 	const bssh_colour_scheme_catalog &schemes = bssh_colour_scheme_catalog::instance();
 	if (m_font->scheme_id() != schemes.effective_id(m_current.colour_scheme)) {
 		preset.colour_scheme = m_font->scheme_id();
 	}
-	preset.keepalive_seconds = m_keepalive->value();
-	preset.compression = m_compression->isChecked();
-	preset.allow_clipboard_write = m_clipboard->isChecked();
-	preset.on_connect_command = m_on_connect->text();
-
-	if (preset.term.isEmpty()) preset.term = QStringLiteral("xterm-256color");
 
 	return preset;
 }

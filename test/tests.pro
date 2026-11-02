@@ -144,6 +144,7 @@ SOURCES += \
     ../src/ui/form_wrap.cpp \
     ../src/ui/password_prompt.cpp \
     ../src/ui/preset_editor.cpp \
+    ../src/ui/terminal_fields.cpp \
     ../src/ui/host_editor.cpp \
     ../src/ui/override_badge.cpp \
     ../src/ui/host_list.cpp \
@@ -250,6 +251,7 @@ HEADERS += \
     ../src/ui/form_wrap.h \
     ../src/ui/password_prompt.h \
     ../src/ui/preset_editor.h \
+    ../src/ui/terminal_fields.h \
     ../src/ui/host_editor.h \
     ../src/ui/override_badge.h \
     ../src/ui/host_list.h \

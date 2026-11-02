@@ -3,6 +3,7 @@
 
 #include <QJsonObject>
 #include <QString>
+#include <QStringList>
 
 /*
  * bssh_preset_t -- a reusable named template attached to many hosts
@@ -150,6 +151,13 @@ struct bssh_preset_t {
 
 	/* The starter set (sec 10.4). Read-only; users clone them. */
 	static QList<bssh_preset_t> builtins();
+
+	/*
+	 * The shipped presets that no longer ship (2026-11-02). One still in a
+	 * presets file, marked shipped, is taken out on load; a host that
+	 * followed it follows none, which is this device's defaults.
+	 */
+	static QStringList retired_builtin_names();
 };
 
 #endif /* BSSH_PRESET_H */

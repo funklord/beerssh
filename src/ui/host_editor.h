@@ -15,6 +15,8 @@ class QLineEdit;
 class QPushButton;
 class QSpinBox;
 class bssh_font_picker;
+class bssh_terminal_fields;
+class QToolButton;
 class bssh_profile_store;
 
 /*
@@ -100,6 +102,14 @@ private:
 	QLineEdit *m_user;
 	QSpinBox *m_port;
 	bssh_font_picker *m_font_picker;
+
+	/* This host's terminal settings and the preset it follows as a
+	 * template (the holder, 2026-11-02), folded away until opened. */
+	QComboBox *m_template = nullptr;
+	bssh_terminal_fields *m_host_fields = nullptr;
+	QToolButton *m_terminal_toggle = nullptr;
+	void reload_templates();
+	void on_template_chosen();
 };
 
 #endif /* BSSH_HOST_EDITOR_H */

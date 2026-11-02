@@ -100,70 +100,45 @@ bssh_preset_t bssh_preset_t::from_json(const QJsonObject &object) {
 }
 
 QList<bssh_preset_t> bssh_preset_t::builtins() {
+	/*
+	 * Two, each for a host that genuinely needs something different (the
+	 * holder's choice, 2026-11-02). Six shipped before, and four of them
+	 * differed from the defaults by a value nobody would pick a template
+	 * for -- BSD by TERM alone, a Raspberry Pi by a smaller scrollback --
+	 * so they read, in the holder's words, as "not obviously different use
+	 * cases". Everything else a person sets for every host or for one, with
+	 * no preset at all.
+	 */
 	QList<bssh_preset_t> presets;
-
-	/*
-	 * The starter set (sec 10.4). These double as documentation of what a
-	 * preset can express, which is why each one differs in a way that
-	 * matters rather than in cosmetics.
-	 */
-	bssh_preset_t linux_default;
-	linux_default.name = QStringLiteral("Default Linux");
-	linux_default.is_builtin = true;
-	presets.append(linux_default);
-
-	bssh_preset_t sbc;
-	sbc.name = QStringLiteral("Raspberry Pi / SBC");
-	sbc.is_builtin = true;
-	/* A slow link and a small machine: less history, keepalive sooner. */
-	sbc.scrollback_lines = 2000;
-	sbc.keepalive_seconds = 30;
-	sbc.compression = true;
-	presets.append(sbc);
-
-	bssh_preset_t openwrt;
-	openwrt.name = QStringLiteral("OpenWrt / BusyBox router");
-	openwrt.is_builtin = true;
-	/*
-	 * BusyBox's ash and a router's terminfo know far less than
-	 * xterm-256color claims. Promising colour a device cannot deliver is
-	 * how a TUI ends up drawing escape sequences as text.
-	 */
-	openwrt.term = QStringLiteral("vt100");
-	openwrt.scrollback_lines = 1000;
-	openwrt.compression = true;
-	presets.append(openwrt);
-
-	bssh_preset_t bsd;
-	bsd.name = QStringLiteral("BSD");
-	bsd.is_builtin = true;
-	bsd.term = QStringLiteral("xterm");
-	presets.append(bsd);
-
-	bssh_preset_t network_switch;
-	network_switch.name = QStringLiteral("Network switch / serial-ish");
-	network_switch.is_builtin = true;
-	/*
-	 * Conservative on purpose: switch consoles are frequently a serial
-	 * line wearing an SSH costume, and box-drawing or a bell can leave
-	 * one in a state that needs a power cycle.
-	 */
-	network_switch.term = QStringLiteral("vt100");
-	network_switch.bell_enabled = false;
-	network_switch.scrollback_lines = 10000;
-	presets.append(network_switch);
 
 	bssh_preset_t tmux_first;
 	tmux_first.name = QStringLiteral("tmux-first");
 	tmux_first.is_builtin = true;
-	/*
-	 * The available answer to sec 5.3: plain SSH cannot resume a shell,
-	 * so attach to one that outlives the connection.
-	 */
 	tmux_first.on_connect_command = QStringLiteral("tmux attach || tmux new");
 	presets.append(tmux_first);
 
+	/*
+	 * Switches, routers, serial consoles behind a terminal server: vt100,
+	 * no bell to ring at every rejected keystroke, none of the terminal
+	 * extensions a modern shell asks about, and a long scrollback for the
+	 * configuration dumps such equipment prints.
+	 */
+	bssh_preset_t limited;
+	limited.name = QStringLiteral("Old or limited equipment");
+	limited.is_builtin = true;
+	limited.term = QStringLiteral("vt100");
+	limited.bell_enabled = false;
+	limited.term_features = QStringLiteral("none");
+	limited.scrollback_lines = 10000;
+	presets.append(limited);
+
 	return presets;
+}
+
+QStringList bssh_preset_t::retired_builtin_names() {
+	return { QStringLiteral("Default Linux"), QStringLiteral("Raspberry Pi / SBC"),
+	         QStringLiteral("OpenWrt / BusyBox router"), QStringLiteral("BSD"),
+	         QStringLiteral("Network switch / serial-ish") };
 }
 
 /*

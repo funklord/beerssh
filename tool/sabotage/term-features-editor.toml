@@ -16,7 +16,7 @@
 # opens it, so a host's spec is back to being an app.ini edit.
 [[sabotage]]
 name = "nothing in the preset editor opens the features dialog"
-file = "src/ui/preset_editor.cpp"
+file = "src/ui/terminal_fields.cpp"
 find = "\tm_features->setObjectName(QStringLiteral(\"preset-term-features\"));"
 replace = "\tm_features->setObjectName(QStringLiteral(\"preset-term-features-gone\"));"
 expect = "a_host_can_be_given_a_reduced_terminal_without_a_text_editor"

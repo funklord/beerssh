@@ -346,6 +346,27 @@ void bssh_app_settings::set_default_colour_scheme(const QString &scheme) {
 	store(QStringLiteral("defaults/colour_scheme"), scheme);
 }
 
+QJsonObject bssh_app_settings::default_settings() const {
+	QJsonObject out;
+	if (m_path.isEmpty()) return out;
+	QSettings file(m_path, QSettings::IniFormat);
+	file.beginGroup(QStringLiteral("defaults"));
+	for (const QString &key : file.childKeys())
+		out.insert(key, QJsonValue::fromVariant(file.value(key)));
+	return out;
+}
+
+void bssh_app_settings::set_default_setting(const QString &key, const QJsonValue &value) {
+	store(QStringLiteral("defaults/") + key, value.toVariant());
+}
+
+void bssh_app_settings::forget_default_setting(const QString &key) {
+	if (m_path.isEmpty()) return;
+	QSettings file(m_path, QSettings::IniFormat);
+	file.remove(QStringLiteral("defaults/") + key);
+	file.sync();
+}
+
 QString bssh_app_settings::keyboard_layout() const {
 	return value(QStringLiteral("input/keyboard_layout"),
 	              QStringLiteral("us-intl")).toString();

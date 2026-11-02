@@ -33,7 +33,9 @@
 #include "platform/secret_store.h"
 #include "ui/theme.h"
 #include "ui/font_picker.h"
+#include "ui/terminal_fields.h"
 #include "model/preset.h"
+#include "model/settings_resolver.h"
 
 /*
  * A combo box wide enough for the longest thing it can show.
@@ -80,7 +82,7 @@ QString bssh_app_settings_view::section_name(section_t section) {
 	case SECTION_PASSWORDS:  return QStringLiteral("Stored passwords");
 	case SECTION_SHORTCUTS:  return QStringLiteral("Shortcuts");
 	case EVERYTHING:
-	case EVERYTHING_BUT_APPEARANCE:
+	case THIS_DEVICE:
 		break;
 	}
 	return QStringLiteral("This device");
@@ -92,7 +94,8 @@ void bssh_app_settings_view::set_heading(const QString &heading) {
 
 bool bssh_app_settings_view::on_this_page(section_t section, QWidget *widget) {
 	const bool wanted = m_section == EVERYTHING || m_section == section
-	                    || (m_section == EVERYTHING_BUT_APPEARANCE && section != SECTION_APPEARANCE);
+	                    || (m_section == THIS_DEVICE && section != SECTION_APPEARANCE
+	                        && section != SECTION_TERMINAL);
 	if (!wanted && widget) widget->hide();
 	return wanted;
 }
@@ -644,6 +647,19 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (on_this_page(SECTION_APPEARANCE, m_honour_remote_cursor))
 		form->addRow(m_honour_remote_cursor);
 
+	/*
+	 * TERM, scrollback, the cursor, the bell, keepalive and the rest, for
+	 * every host on this device -- first on the Terminal page, as the font
+	 * is on Appearance. Nothing could set them for a host that follows no
+	 * preset, which is nearly every host (the holder, 2026-11-02).
+	 */
+	if (on_this_page(SECTION_TERMINAL, nullptr)) {
+		m_default_fields = new bssh_terminal_fields(this);
+		m_default_fields->setObjectName(QStringLiteral("default_terminal_fields"));
+		form->addRow(m_default_fields);
+		form->addRow(new QLabel(QStringLiteral("<b>Behaviour</b>"), this));
+	}
+
 	m_context_menu = new QComboBox(this);
 	m_context_menu->addItem(QStringLiteral("Automatic"),
 	                         int(bssh_app_settings::CONTEXT_MENU_AUTO));
@@ -1185,6 +1201,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	const int theme_index = m_theme->findData(settings.theme());
 	if (theme_index >= 0) m_theme->setCurrentIndex(theme_index);
 
+	if (m_default_fields) m_default_fields->set_values(bssh_settings_resolver::app_defaults());
+
 	if (m_default_font) {
 		const bssh_preset_t built_in;
 		const QString family = settings.default_font_family();
@@ -1210,6 +1228,23 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 * changing IT saved nothing until the key row was also touched --
 	 * which looks exactly like a setting that does not work.
 	 */
+	if (m_default_fields) {
+		connect(m_default_fields, &bssh_terminal_fields::changed, this, [this] {
+			/*
+			 * Stored only where it differs from the built-in value, and
+			 * forgotten where it has been put back: a default that agrees
+			 * with the built-in one is not a choice anybody made.
+			 */
+			const QJsonObject differing =
+			        m_default_fields->differing_from(bssh_preset_t().to_json());
+			commit([differing](bssh_app_settings &s) {
+				for (const QString &key : bssh_terminal_fields::keys()) {
+					if (differing.contains(key)) s.set_default_setting(key, differing.value(key));
+					else s.forget_default_setting(key);
+				}
+			});
+		});
+	}
 	if (m_default_font) {
 		connect(m_default_font, &bssh_font_picker::font_chosen, this,
 		         [this](const QString &id, int point_size) {

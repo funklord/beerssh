@@ -1,6 +1,8 @@
 #include "ui/session_dialog.h"
 
 #include <QCloseEvent>
+#include <QSignalBlocker>
+#include <QToolButton>
 
 #include "ui/ssh_config_import.h"
 
@@ -13,6 +15,8 @@
 #include "ui/app_settings_view.h"
 #include "ui/licences_view.h"
 #include "ui/preset_editor.h"
+#include "ui/terminal_fields.h"
+#include "ui/form_wrap.h"
 
 #include <QDir>
 #include <QFileDialog>
@@ -116,8 +120,13 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	 * because a preset is not a property of the session being opened --
 	 * it is the thing many sessions share.
 	 */
-	QTreeWidgetItem *presets = new QTreeWidgetItem(m_categories,
-	        QStringList(QStringLiteral("Presets")));
+	/*
+	 * TERM, scrollback, the cursor, keepalive and the rest, for every host
+	 * and for this one -- beside Appearance, which does the same for the
+	 * font (the holder, 2026-11-02).
+	 */
+	QTreeWidgetItem *terminal = new QTreeWidgetItem(m_categories,
+	        QStringList(QStringLiteral("Terminal")));
 
 
 	/*
@@ -128,6 +137,14 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	 */
 	QTreeWidgetItem *application = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("This device")));
+
+	/*
+	 * Last but the licences: most people never make a preset (the holder,
+	 * 2026-11-02), and everything they set is on the pages above. A
+	 * preset is a template a host can follow, chosen on Terminal.
+	 */
+	QTreeWidgetItem *presets = new QTreeWidgetItem(m_categories,
+	        QStringList(QStringLiteral("Presets")));
 
 	QTreeWidgetItem *licences = new QTreeWidgetItem(m_categories,
 	        QStringList(QStringLiteral("Licences")));
@@ -151,26 +168,32 @@ bssh_session_dialog::bssh_session_dialog(bssh_profile_store *store, QWidget *par
 	 * one place, its fields under Terminal and Connection headings.
 	 */
 	m_pages->addWidget(build_window_page());
-	m_preset_editor = new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP,
-	                                          bssh_preset_editor::EVERYTHING, this);
+	m_pages->addWidget(build_terminal_page());
+
+	/* Its appearance and terminal are on those pages; see above. */
+	bssh_app_settings_view *device = new bssh_app_settings_view(
+	        bssh_app_settings_view::THIS_DEVICE, this);
+	m_pages->addWidget(device);
+	connect(device, &bssh_app_settings_view::changed,
+	         this, &bssh_session_dialog::device_settings_changed);
+
+	m_preset_editor = new bssh_preset_editor(m_store, bssh_preset_editor::DESKTOP, this);
 	m_pages->addWidget(m_preset_editor);
 	connect(m_preset_editor, &bssh_preset_editor::preset_saved,
 	         this, &bssh_session_dialog::presets_changed);
 	connect(m_preset_editor, &bssh_preset_editor::preset_removed,
 	         this, &bssh_session_dialog::presets_changed);
-
-	/* Its appearance is on the Appearance page; see build_window_page. */
-	bssh_app_settings_view *device = new bssh_app_settings_view(
-	        bssh_app_settings_view::EVERYTHING_BUT_APPEARANCE, this);
-	m_pages->addWidget(device);
-	connect(device, &bssh_app_settings_view::changed,
-	         this, &bssh_session_dialog::device_settings_changed);
+	connect(m_preset_editor, &bssh_preset_editor::preset_saved,
+	         this, &bssh_session_dialog::reload_templates);
+	connect(m_preset_editor, &bssh_preset_editor::preset_removed,
+	         this, &bssh_session_dialog::reload_templates);
 
 	m_pages->addWidget(new bssh_licences_view(this));
 
 	Q_UNUSED(session);
 	Q_UNUSED(window);
 	Q_UNUSED(presets);
+	Q_UNUSED(terminal);
 	Q_UNUSED(licences);
 	Q_UNUSED(application);
 
@@ -506,9 +529,10 @@ void bssh_session_dialog::on_category_changed() {
 	 */
 	if (name == QStringLiteral("Session")) m_pages->setCurrentIndex(0);
 	else if (name == QStringLiteral("Appearance")) m_pages->setCurrentIndex(1);
-	else if (name == QStringLiteral("Presets")) m_pages->setCurrentIndex(2);
+	else if (name == QStringLiteral("Terminal")) m_pages->setCurrentIndex(2);
 	else if (name == QStringLiteral("This device")) m_pages->setCurrentIndex(3);
-	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(4);
+	else if (name == QStringLiteral("Presets")) m_pages->setCurrentIndex(4);
+	else if (name == QStringLiteral("Licences")) m_pages->setCurrentIndex(5);
 }
 
 void bssh_session_dialog::reload_sessions() {
@@ -601,6 +625,14 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 		        m_font_picker->point_size(), m_font_picker->scheme_id());
 	}
 
+	/*
+	 * And the terminal fields by the same rule: recorded where they differ
+	 * from what the host would have without them, dropped where they
+	 * agree.
+	 */
+	if (m_host_fields)
+		profile.overrides = bssh_terminal_overrides(m_store, profile, m_host_fields->values());
+
 	return profile;
 }
 
@@ -630,6 +662,8 @@ void bssh_session_dialog::follow_new_defaults() {
 	 * as an override -- pinning the host to the size the user had just
 	 * moved every host away from. One the user has changed is theirs.
 	 */
+	if (m_host_fields && m_host_fields->values() == m_shown_terminal)
+		show_resolved_terminal(resolved_settings(m_current));
 	if (!m_font_picker) return;
 	if (m_font_picker->font_id() != m_shown_font || m_font_picker->point_size() != m_shown_size
 	    || m_font_picker->scheme_id() != m_shown_scheme)
@@ -654,6 +688,118 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 		show_resolved_font(resolved_settings(profile));
 		update_override_badges();
 	}
+
+	if (m_template) {
+		const QSignalBlocker quiet(m_template);
+		const int at = m_template->findData(profile.preset_id);
+		m_template->setCurrentIndex(at < 0 ? 0 : at);
+	}
+	show_resolved_terminal(resolved_settings(profile));
+
+	/* Open where this host has something of its own to show, closed where
+	 * it follows the defaults like nearly every host. */
+	bool own_appearance = false;
+	bool own_terminal = profile.preset_id != 0;
+	for (auto it = profile.overrides.constBegin(); it != profile.overrides.constEnd(); ++it) {
+		if (bssh_terminal_fields::keys().contains(it.key())) own_terminal = true;
+		else own_appearance = true;
+	}
+	if (m_appearance_toggle) m_appearance_toggle->setChecked(own_appearance);
+	if (m_terminal_toggle) m_terminal_toggle->setChecked(own_terminal);
+}
+
+QJsonObject bssh_session_dialog::inherited_settings(const bssh_profile_t &profile) const {
+	return bssh_inherited_settings(m_store, profile);
+}
+
+void bssh_session_dialog::show_resolved_terminal(const QJsonObject &resolved) {
+	if (!m_host_fields) return;
+	m_host_fields->set_values(resolved);
+	m_shown_terminal = m_host_fields->values();
+	update_terminal_scope();
+}
+
+void bssh_session_dialog::update_terminal_scope() {
+	if (!m_terminal_scope || !m_host_fields) return;
+	const int own = m_host_fields->differing_from(inherited_settings(m_current)).size();
+	const QString source = m_current.preset_id && m_store
+	        ? QStringLiteral("the template \"%1\"").arg(m_store->preset(m_current.preset_id).name)
+	        : QStringLiteral("this device's defaults");
+	m_terminal_scope->setText(own == 0
+	        ? QStringLiteral("Following %1.").arg(source)
+	        : QStringLiteral("Following %1, with %2 setting%3 of its own.")
+	                  .arg(source).arg(own).arg(own == 1 ? QString() : QStringLiteral("s")));
+}
+
+void bssh_session_dialog::reload_templates() {
+	if (!m_template) return;
+	const QSignalBlocker quiet(m_template);
+	m_template->clear();
+	m_template->addItem(QStringLiteral("None"), 0);
+	if (m_store) {
+		for (const bssh_preset_t &preset : m_store->presets())
+			m_template->addItem(preset.name, preset.id);
+	}
+	const int at = m_template->findData(m_current.preset_id);
+	m_template->setCurrentIndex(at < 0 ? 0 : at);
+}
+
+void bssh_session_dialog::on_template_chosen() {
+	/*
+	 * Whatever was changed on this page stays the host's own; the rest
+	 * now comes from the template chosen.
+	 */
+	m_current = current_profile();
+	m_current.preset_id = m_template->currentData().toInt();
+	show_resolved_font(resolved_settings(m_current));
+	update_override_badges();
+	show_resolved_terminal(resolved_settings(m_current));
+}
+
+
+QWidget *bssh_session_dialog::build_terminal_page() {
+	QWidget *page = new QWidget(this);
+	QVBoxLayout *layout = new QVBoxLayout(page);
+
+	bssh_app_settings_view *everywhere = new bssh_app_settings_view(
+	        bssh_app_settings_view::SECTION_TERMINAL, page);
+	everywhere->setObjectName(QStringLiteral("device_terminal"));
+	everywhere->set_heading(QStringLiteral("Every host on this device"));
+	layout->addWidget(everywhere, 1);
+	connect(everywhere, &bssh_app_settings_view::changed,
+	         this, &bssh_session_dialog::device_settings_changed);
+	connect(everywhere, &bssh_app_settings_view::changed,
+	         this, &bssh_session_dialog::follow_new_defaults);
+
+	QWidget *own = bssh_foldable(layout, QStringLiteral("This host"), page, &m_terminal_toggle);
+	m_terminal_toggle->setObjectName(QStringLiteral("host_terminal_toggle"));
+	QVBoxLayout *inside = qobject_cast<QVBoxLayout *>(own->layout());
+
+	QFormLayout *choice = new QFormLayout();
+	m_template = new QComboBox(own);
+	m_template->setObjectName(QStringLiteral("host_template"));
+	m_template->setToolTip(QStringLiteral(
+	        "A preset this host follows: its settings stand in for this device's "
+	        "defaults wherever this host has none of its own."));
+	choice->addRow(QStringLiteral("Template"), m_template);
+	inside->addLayout(choice);
+	reload_templates();
+	connect(m_template, &QComboBox::currentIndexChanged,
+	         this, &bssh_session_dialog::on_template_chosen);
+
+	m_host_fields = new bssh_terminal_fields(own);
+	m_host_fields->setObjectName(QStringLiteral("host_terminal_fields"));
+	inside->addWidget(m_host_fields);
+	connect(m_host_fields, &bssh_terminal_fields::changed,
+	         this, &bssh_session_dialog::update_terminal_scope);
+
+	m_terminal_scope = new QLabel(page);
+	m_terminal_scope->setObjectName(QStringLiteral("host_terminal_scope"));
+	bssh_wrap_note(m_terminal_scope);
+	layout->addWidget(m_terminal_scope);
+
+	show_resolved_terminal(resolved_settings(m_current));
+	return page;
 }
 
 void bssh_session_dialog::on_load() {
@@ -780,10 +926,10 @@ QWidget *bssh_session_dialog::build_window_page() {
 	connect(everywhere, &bssh_app_settings_view::changed,
 	         this, &bssh_session_dialog::follow_new_defaults);
 
-	QLabel *heading = new QLabel(QStringLiteral("<b>This host</b>"), page);
-	layout->addWidget(heading);
+	QWidget *own = bssh_foldable(layout, QStringLiteral("This host"), page, &m_appearance_toggle);
+	m_appearance_toggle->setObjectName(QStringLiteral("host_appearance_toggle"));
 
-	m_font_picker = new bssh_font_picker(page);
+	m_font_picker = new bssh_font_picker(own);
 
 	/*
 	 * Named, because the dialog contains several pickers -- this one and
@@ -794,7 +940,7 @@ QWidget *bssh_session_dialog::build_window_page() {
 	 * more than one picker started reporting the same family.
 	 */
 	m_font_picker->setObjectName(QStringLiteral("host_font_picker"));
-	layout->addWidget(m_font_picker);
+	own->layout()->addWidget(m_font_picker);
 
 	/*
 	 * Filled from what the host resolves to from the start. It was left
@@ -855,6 +1001,9 @@ QWidget *bssh_session_dialog::build_window_page() {
 	 */
 	connect(m_font_picker, &bssh_font_picker::scheme_chosen,
 	         this, [this] { update_override_badges(); });
+
+	/* Said from the start, not only once a saved host is loaded. */
+	update_override_badges();
 
 	/* No stretch of its own: the device's half above scrolls and takes it. */
 	return page;
