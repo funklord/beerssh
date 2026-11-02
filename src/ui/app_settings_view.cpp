@@ -32,6 +32,8 @@
 #include "platform/platform.h"
 #include "platform/secret_store.h"
 #include "ui/theme.h"
+#include "ui/font_picker.h"
+#include "model/preset.h"
 
 /*
  * A combo box wide enough for the longest thing it can show.
@@ -385,6 +387,21 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	m_theme->addItem(QStringLiteral("Dark"), QStringLiteral("dark"));
 	bssh_fit_items(m_theme);
 	if (on_this_page(SECTION_APPEARANCE, m_theme)) form->addRow(QStringLiteral("Appearance"), m_theme);
+
+	/*
+	 * The font, its size and the colours of every host, first on the
+	 * page. Most people never make a preset (the holder, 2026-11-02), so
+	 * this is the setting they mean by "font size" -- and there was none:
+	 * the size lived in the shipped presets, which cannot be edited, and
+	 * in each host's own settings one host at a time.
+	 */
+	/* Only where it is shown: a picker builds its catalogue and preview,
+	 * and the dialog holds a page per section. */
+	if (on_this_page(SECTION_APPEARANCE, nullptr)) {
+		m_default_font = new bssh_font_picker(this);
+		m_default_font->setObjectName(QStringLiteral("default_font_picker"));
+		form->addRow(m_default_font);
+	}
 
 	/*
 	 * Where brightness and contrast go, built further down: straight
@@ -1168,6 +1185,16 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	const int theme_index = m_theme->findData(settings.theme());
 	if (theme_index >= 0) m_theme->setCurrentIndex(theme_index);
 
+	if (m_default_font) {
+		const bssh_preset_t built_in;
+		const QString family = settings.default_font_family();
+		const int size = settings.default_font_size();
+		const QString scheme = settings.default_colour_scheme();
+		m_default_font->set_font_choice(family.isEmpty() ? built_in.font_family : family,
+		                                size > 0 ? size : built_in.font_size);
+		m_default_font->set_scheme(scheme.isEmpty() ? built_in.colour_scheme : scheme);
+	}
+
 	const int index = m_key_row->findData(int(settings.key_row_visibility()));
 	m_key_row->setCurrentIndex(index < 0 ? 0 : index);
 
@@ -1183,6 +1210,19 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	 * changing IT saved nothing until the key row was also touched --
 	 * which looks exactly like a setting that does not work.
 	 */
+	if (m_default_font) {
+		connect(m_default_font, &bssh_font_picker::font_chosen, this,
+		         [this](const QString &id, int point_size) {
+			commit([id, point_size](bssh_app_settings &s) {
+				s.set_default_font_family(id);
+				s.set_default_font_size(point_size);
+			});
+		});
+		connect(m_default_font, &bssh_font_picker::scheme_chosen, this,
+		         [this](const QString &id) {
+			commit([id](bssh_app_settings &s) { s.set_default_colour_scheme(id); });
+		});
+	}
 	connect(m_key_row, &QComboBox::currentIndexChanged, this, [this] {
 		commit([this](bssh_app_settings &s) {
 			s.set_key_row_visibility(bssh_app_settings::key_row_visibility_t(

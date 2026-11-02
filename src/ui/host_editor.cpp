@@ -372,17 +372,11 @@ void bssh_host_editor::set_profile(const bssh_profile_t &profile) {
  * following its preset at all.
  */
 QJsonObject bssh_host_editor::resolved_settings() const {
-	if (!m_store || m_profile.preset_id == 0) {
-		QJsonObject resolved = bssh_settings_resolver::app_defaults();
-		for (auto it = m_profile.overrides.constBegin();
-		     it != m_profile.overrides.constEnd(); ++it) {
-			resolved.insert(it.key(), it.value());
-		}
-		return resolved;
-	}
+	if (!m_store || m_profile.preset_id == 0)
+		return bssh_settings_resolver::for_host(nullptr, m_profile.overrides);
 
-	return bssh_settings_resolver::resolve(m_store->preset(m_profile.preset_id),
-	                                        m_profile.overrides);
+	const bssh_preset_t preset = m_store->preset(m_profile.preset_id);
+	return bssh_settings_resolver::for_host(&preset, m_profile.overrides);
 }
 
 void bssh_host_editor::set_editing(bool editing) {
@@ -414,6 +408,9 @@ void bssh_host_editor::update_override_badge() {
 	m_font_scope->setText(badge.text);
 	m_font_scope->setVisible(true);
 	m_font_revert->setVisible(badge.overridden);
+	/* Most hosts follow no preset, and "the preset's" named nothing. */
+	m_font_revert->setText(m_profile.preset_id ? QStringLiteral("Use the preset's font")
+	                                           : QStringLiteral("Use the default font"));
 }
 
 void bssh_host_editor::revert_font_to_preset() {

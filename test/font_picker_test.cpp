@@ -15,10 +15,14 @@
 #include "ui/session_dialog.h"
 #include "model/preset.h"
 #include "ui/override_badge.h"
+#include "model/app_settings.h"
+
+#include <QSettings>
+#include <QSpinBox>
 
 void font_picker_test::offers_the_set_then_what_is_installed() {
 	bssh_font_picker picker;
-	const QComboBox *combo = picker.findChild<QComboBox *>();
+	const QComboBox *combo = picker.findChild<QComboBox *>(QStringLiteral("font-picker-family"));
 	QVERIFY(combo != nullptr);
 
 	const bssh_font_catalog &catalog = bssh_font_catalog::instance();
@@ -64,7 +68,7 @@ void font_picker_test::an_installed_font_that_is_gone_is_shown_not_swallowed() {
 
 	/* Kept, named for what it is, and not called "not in this build". */
 	QCOMPARE(picker.font_id(), gone);
-	const QComboBox *combo = picker.findChild<QComboBox *>();
+	const QComboBox *combo = picker.findChild<QComboBox *>(QStringLiteral("font-picker-family"));
 	QVERIFY(combo->currentText().startsWith(QStringLiteral("No Such Family Anywhere")));
 	QVERIFY(combo->currentText().contains(QStringLiteral("not installed")));
 }
@@ -95,13 +99,13 @@ void font_picker_test::a_font_this_build_does_not_have_is_shown_not_swallowed() 
 	QCOMPARE(picker.font_id(), QStringLiteral("some-future-font"));
 	QCOMPARE(picker.point_size(), 13);
 
-	const QComboBox *combo = picker.findChild<QComboBox *>();
+	const QComboBox *combo = picker.findChild<QComboBox *>(QStringLiteral("font-picker-family"));
 	QVERIFY(combo->currentText().contains(QStringLiteral("not in this build")));
 }
 
 void font_picker_test::choosing_a_font_reports_its_id_rather_than_its_label() {
 	bssh_font_picker picker;
-	QComboBox *combo = picker.findChild<QComboBox *>();
+	QComboBox *combo = picker.findChild<QComboBox *>(QStringLiteral("font-picker-family"));
 
 	QSignalSpy spy(&picker, &bssh_font_picker::font_chosen);
 
@@ -250,6 +254,57 @@ void font_picker_test::the_badge_covers_what_the_save_writes() {
 
 	picker->set_scheme(other);
 	QVERIFY2(scope->text().contains(QStringLiteral("Overrides")), qPrintable(scope->text()));
+}
+
+void font_picker_test::the_dialog_shows_a_hosts_own_size_and_follows_the_default() {
+	/*
+	 * The holder, 2026-11-02: font size "in config does nothing", and no
+	 * default size to set. A host following no preset -- every host the
+	 * desktop dialog saves -- was shown and resolved without its own
+	 * size, and the page had no default to change.
+	 */
+	struct defaults_left_t {
+		QString path = bssh_app_settings().path();
+		QVariant size = QSettings(path, QSettings::IniFormat).value(QStringLiteral("defaults/font_size"));
+		~defaults_left_t() {
+			QSettings file(path, QSettings::IniFormat);
+			if (size.isValid()) file.setValue(QStringLiteral("defaults/font_size"), size);
+			else file.remove(QStringLiteral("defaults/font_size"));
+		}
+	} left;
+	bssh_app_settings().set_default_font_size(0);
+
+	QTemporaryDir dir;
+	QVERIFY(dir.isValid());
+	bssh_profile_store store(dir.path());
+
+	bssh_profile_t own;
+	own.name = QStringLiteral("own");
+	own.host = QStringLiteral("own.example");
+	own.overrides.insert(QStringLiteral("font_size"), 17);
+	const int own_id = store.save(own);
+
+	bssh_session_dialog dialog(&store);
+	bssh_font_picker *host =
+	        dialog.findChild<bssh_font_picker *>(QStringLiteral("host_font_picker"));
+	QWidget *everywhere = dialog.findChild<QWidget *>(QStringLiteral("device_appearance"));
+	QVERIFY(everywhere);
+	bssh_font_picker *device =
+	        everywhere->findChild<bssh_font_picker *>(QStringLiteral("default_font_picker"));
+	QVERIFY(host && device);
+
+	/* The dialog as it opens, on a new destination: the default, and it
+	 * goes on following the default as that changes. */
+	QCOMPARE(host->point_size(), bssh_preset_t().font_size);
+	QSpinBox *size = device->findChild<QSpinBox *>();
+	QVERIFY(size);
+	size->setValue(bssh_preset_t().font_size + 5);
+	QCOMPARE(bssh_app_settings().default_font_size(), bssh_preset_t().font_size + 5);
+	QCOMPARE(host->point_size(), bssh_preset_t().font_size + 5);
+
+	/* A host with a size of its own shows that. */
+	dialog.set_current_profile(store.profile(own_id));
+	QCOMPARE(host->point_size(), 17);
 }
 
 void font_picker_test::the_touch_badge_follows_the_picker() {

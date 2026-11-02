@@ -605,10 +605,37 @@ bssh_profile_t bssh_session_dialog::current_profile() const {
 }
 
 QJsonObject bssh_session_dialog::resolved_settings(const bssh_profile_t &profile) const {
-	if (!m_store || profile.preset_id == 0) return bssh_settings_resolver::app_defaults();
+	if (!m_store || profile.preset_id == 0)
+		return bssh_settings_resolver::for_host(nullptr, profile.overrides);
 
-	return bssh_settings_resolver::resolve(m_store->preset(profile.preset_id),
-	                                        profile.overrides);
+	const bssh_preset_t preset = m_store->preset(profile.preset_id);
+	return bssh_settings_resolver::for_host(&preset, profile.overrides);
+}
+
+void bssh_session_dialog::show_resolved_font(const QJsonObject &resolved) {
+	if (!m_font_picker) return;
+	m_font_picker->set_font_choice(resolved.value(QStringLiteral("font_family")).toString(),
+	                                resolved.value(QStringLiteral("font_size")).toInt());
+	m_font_picker->set_scheme(resolved.value(QStringLiteral("colour_scheme")).toString());
+	m_shown_font = m_font_picker->font_id();
+	m_shown_size = m_font_picker->point_size();
+	m_shown_scheme = m_font_picker->scheme_id();
+}
+
+void bssh_session_dialog::follow_new_defaults() {
+	/*
+	 * The device's defaults changed above: a host picker still showing
+	 * what this host resolved to shows what it resolves to now. Left as
+	 * it was, it showed the old default, and saving the host wrote that
+	 * as an override -- pinning the host to the size the user had just
+	 * moved every host away from. One the user has changed is theirs.
+	 */
+	if (!m_font_picker) return;
+	if (m_font_picker->font_id() != m_shown_font || m_font_picker->point_size() != m_shown_size
+	    || m_font_picker->scheme_id() != m_shown_scheme)
+		return;
+	show_resolved_font(resolved_settings(m_current));
+	update_override_badges();
 }
 
 void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
@@ -624,12 +651,7 @@ void bssh_session_dialog::set_current_profile(const bssh_profile_t &profile) {
 	m_folder->setCurrentText(profile.folder);
 
 	if (m_font_picker) {
-		const QJsonObject resolved = resolved_settings(profile);
-		m_font_picker->set_font_choice(
-		        resolved.value(QStringLiteral("font_family")).toString(),
-		        resolved.value(QStringLiteral("font_size")).toInt());
-		m_font_picker->set_scheme(
-		        resolved.value(QStringLiteral("colour_scheme")).toString());
+		show_resolved_font(resolved_settings(profile));
 		update_override_badges();
 	}
 }
@@ -755,6 +777,8 @@ QWidget *bssh_session_dialog::build_window_page() {
 	layout->addWidget(everywhere, 1);
 	connect(everywhere, &bssh_app_settings_view::changed,
 	         this, &bssh_session_dialog::device_settings_changed);
+	connect(everywhere, &bssh_app_settings_view::changed,
+	         this, &bssh_session_dialog::follow_new_defaults);
 
 	QLabel *heading = new QLabel(QStringLiteral("<b>This host</b>"), page);
 	layout->addWidget(heading);
@@ -771,6 +795,15 @@ QWidget *bssh_session_dialog::build_window_page() {
 	 */
 	m_font_picker->setObjectName(QStringLiteral("host_font_picker"));
 	layout->addWidget(m_font_picker);
+
+	/*
+	 * Filled from what the host resolves to from the start. It was left
+	 * at the picker's own starting values until a saved host was loaded,
+	 * so a new destination showed white on black over a light terminal
+	 * and 11 pt whatever the device's default -- and could not follow a
+	 * change to that default, having never shown it.
+	 */
+	show_resolved_font(resolved_settings(m_current));
 
 	/*
 	 * sec 10.1's badge and revert control. The three layers only mean
@@ -808,11 +841,7 @@ QWidget *bssh_session_dialog::build_window_page() {
 		        bssh_settings_resolver::revert_field(m_current.overrides,
 		                                              QStringLiteral("font_size"));
 
-		const QJsonObject resolved = resolved_settings(m_current);
-		m_font_picker->set_font_choice(
-		        resolved.value(QStringLiteral("font_family")).toString(),
-		        resolved.value(QStringLiteral("font_size")).toInt());
-
+		show_resolved_font(resolved_settings(m_current));
 		update_override_badges();
 	});
 
@@ -839,7 +868,12 @@ void bssh_session_dialog::update_override_badges() {
 	        m_font_picker->scheme_id());
 
 	m_font_scope->setText(badge.text);
-	if (m_font_revert) m_font_revert->setEnabled(badge.overridden);
+	if (m_font_revert) {
+		m_font_revert->setEnabled(badge.overridden);
+		/* Most hosts follow no preset, and "the preset's" named nothing. */
+		m_font_revert->setText(m_current.preset_id ? QStringLiteral("Use the preset's font")
+		                                           : QStringLiteral("Use the default font"));
+	}
 }
 
 void bssh_session_dialog::closeEvent(QCloseEvent *event) {

@@ -48,6 +48,16 @@ public:
 
 	/* App defaults, the bottom layer: a preset with nothing set. */
 	static QJsonObject app_defaults();
+
+	/*
+	 * A host's settings from all three layers: the app defaults, its
+	 * preset when it follows one (null when it follows none), and its
+	 * own overrides. One function for every caller -- four had their own
+	 * copy, and three of them dropped a preset-less host's overrides, so
+	 * a font size set for the local shell, or for any host saved from the
+	 * desktop dialog, which offers no preset, was stored and never used.
+	 */
+	static QJsonObject for_host(const bssh_preset_t *preset, const QJsonObject &overrides);
 };
 
 #endif /* BSSH_SETTINGS_RESOLVER_H */

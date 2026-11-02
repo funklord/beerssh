@@ -280,9 +280,22 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 		m_scheme->addItem(scheme.display_name, scheme.id);
 	}
 
+	/*
+	 * What stands in for missing characters, under the font it is about.
+	 * It sat below the preview and the colours, 85px from the font and
+	 * 7px over "Use a font file...", so it read as that button's (the
+	 * holder's rule, 2026-10-31: a note goes with the control it
+	 * explains). Seen when this picker joined the settings page, whose
+	 * notes are measured.
+	 */
+	m_note = new QLabel(this);
+	bssh_wrap_note(m_note);
+
 	form->addRow(QStringLiteral("Font"), m_family);
+	form->addRow(m_note);
 	form->addRow(QStringLiteral("Size"), m_size);
 	form->addRow(QStringLiteral("Colours"), m_scheme);
+	bssh_attach_notes(form);
 	outer->addLayout(form);
 
 	m_preview = new QLabel(QString::fromUtf8(BSSH_PREVIEW_TEXT), this);
@@ -332,10 +345,6 @@ bssh_font_picker::bssh_font_picker(QWidget *parent)
 	m_swatches->setToolTip(QStringLiteral(
 	        "The scheme's sixteen colours: normal above, bright below."));
 	outer->addWidget(m_swatches);
-
-	m_note = new QLabel(this);
-	bssh_wrap_note(m_note);
-	outer->addWidget(m_note);
 
 	m_download = new QPushButton(this);
 	m_download->setObjectName(QStringLiteral("font_download"));

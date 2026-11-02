@@ -2,6 +2,7 @@
 #define BSSH_MAIN_WINDOW_H
 
 #include <QHash>
+#include <QJsonObject>
 #include <QPoint>
 #include <QSizePolicy>
 #include <QString>
@@ -950,6 +951,9 @@ private:
 	/* The tab position setting as last seen, to tell a change of it
 	 * from the passes that merely re-read it; -1 before the first. */
 	int m_tab_setting_seen = -1;
+
+	/* The app defaults as last applied, to tell a change from a re-read. */
+	QJsonObject m_defaults_applied;
 	QVBoxLayout *m_page_layout = nullptr;
 	QHBoxLayout *m_body = nullptr;
 

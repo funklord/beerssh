@@ -1,5 +1,7 @@
 #include "model/settings_resolver.h"
 
+#include "model/app_settings.h"
+
 QJsonObject bssh_settings_resolver::app_defaults() {
 	/*
 	 * A default-constructed preset IS the app defaults, rather than a
@@ -8,15 +10,30 @@ QJsonObject bssh_settings_resolver::app_defaults() {
 	 * a preset was attached -- which is precisely the bug this layering
 	 * exists to prevent.
 	 */
-	return bssh_preset_t().to_json();
+	QJsonObject defaults = bssh_preset_t().to_json();
+
+	/* And what this device set for every host over the built-in values. */
+	const bssh_app_settings settings;
+	const QString family = settings.default_font_family();
+	if (!family.isEmpty()) defaults.insert(QStringLiteral("font_family"), family);
+	const int size = settings.default_font_size();
+	if (size > 0) defaults.insert(QStringLiteral("font_size"), size);
+	const QString scheme = settings.default_colour_scheme();
+	if (!scheme.isEmpty()) defaults.insert(QStringLiteral("colour_scheme"), scheme);
+	return defaults;
 }
 
 QJsonObject bssh_settings_resolver::resolve(const bssh_preset_t &preset,
                                              const QJsonObject &overrides) {
+	return for_host(&preset, overrides);
+}
+
+QJsonObject bssh_settings_resolver::for_host(const bssh_preset_t *preset,
+                                              const QJsonObject &overrides) {
 	QJsonObject resolved = app_defaults();
 
 	/* Preset over defaults. */
-	const QJsonObject preset_json = preset.to_json();
+	const QJsonObject preset_json = preset ? preset->to_json() : QJsonObject();
 	for (auto it = preset_json.constBegin(); it != preset_json.constEnd(); ++it) {
 		resolved.insert(it.key(), it.value());
 	}

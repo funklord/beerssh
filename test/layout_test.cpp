@@ -47,6 +47,8 @@
 #include <QTimer>
 #include "model/command_line.h"
 #include "model/profile.h"
+#include "model/preset.h"
+#include "model/settings_resolver.h"
 #include "platform/platform.h"
 #include <QFile>
 #include "term/font_catalog.h"
@@ -7322,6 +7324,65 @@ void layout_test::a_grid_opens_rows_of_terminals_of_one_host() {
 		         qPrintable(QStringLiteral("the top row is uneven: ") + seen.join(QStringLiteral(", "))));
 	}
 
+}
+
+void layout_test::a_host_with_no_preset_uses_its_own_size_and_the_device_default() {
+	/*
+	 * The holder, 2026-11-02: "setting certain options like font size in
+	 * config does nothing", and no way to set a default size at all. A
+	 * host that follows no preset -- the local shell, and every host the
+	 * desktop dialog saves, since it offers no preset -- resolved to the
+	 * app defaults alone, its own size stored and never used; and the app
+	 * defaults were constants.
+	 */
+	const forced_touch_t desktop(0);
+	const setting_left_as_found_t family_left(QStringLiteral("defaults/font_family"));
+	const setting_left_as_found_t size_left(QStringLiteral("defaults/font_size"));
+	const setting_left_as_found_t scheme_left(QStringLiteral("defaults/colour_scheme"));
+	bssh_app_settings().set_default_font_size(0);
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	bssh_ssh_session::set_factory([](QObject *parent) -> bssh_ssh_session * {
+		return new bssh_fake_ssh_session(parent);
+	});
+	struct factory_reset_t { ~factory_reset_t() { bssh_ssh_session::set_factory(nullptr); } } reset;
+
+	bssh_profile_t own = named(QStringLiteral("own"));
+	own.overrides.insert(QStringLiteral("font_size"), 17);
+	bssh_main_window window(own);
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	QCoreApplication::processEvents();
+
+	const auto size_of = [&window](bssh_session *session) {
+		bssh_terminal_view *view = window.panes()->view_for(session);
+		return view ? view->font_point_size() : -1;
+	};
+	bssh_session *mine = window.registry()->sessions().value(0);
+	QVERIFY(mine);
+	QCOMPARE(mine->profile().preset_id, 0);
+	QTRY_COMPARE(size_of(mine), 17);
+
+	/* A second host, following the defaults. */
+	bssh_session *plain = window.registry()->create(named(QStringLiteral("plain")));
+	window.adopt_session(plain);
+	window.split_with(mine);
+	QCoreApplication::processEvents();
+	plain->set_settings(bssh_settings_resolver::for_host(nullptr, plain->profile().overrides));
+	QCoreApplication::processEvents();
+	const int built_in = bssh_preset_t().font_size;
+	QTRY_COMPARE(size_of(plain), built_in);
+
+	/* The device's default changed: the one following it takes it now,
+	 * and the one with a size of its own keeps that. */
+	bssh_app_settings().set_default_font_size(built_in + 4);
+	window.apply_device_settings();
+	QCoreApplication::processEvents();
+	QTRY_COMPARE(size_of(plain), built_in + 4);
+	QTRY_COMPARE(size_of(mine), 17);
 }
 
 void layout_test::a_bar_side_belongs_to_its_pane() {

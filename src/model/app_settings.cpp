@@ -322,6 +322,30 @@ QString bssh_app_settings::theme() const {
 	return value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString();
 }
 
+QString bssh_app_settings::default_font_family() const {
+	return value(QStringLiteral("defaults/font_family"), QString()).toString();
+}
+
+void bssh_app_settings::set_default_font_family(const QString &family) {
+	store(QStringLiteral("defaults/font_family"), family);
+}
+
+int bssh_app_settings::default_font_size() const {
+	return value(QStringLiteral("defaults/font_size"), 0).toInt();
+}
+
+void bssh_app_settings::set_default_font_size(int point_size) {
+	store(QStringLiteral("defaults/font_size"), qMax(0, point_size));
+}
+
+QString bssh_app_settings::default_colour_scheme() const {
+	return value(QStringLiteral("defaults/colour_scheme"), QString()).toString();
+}
+
+void bssh_app_settings::set_default_colour_scheme(const QString &scheme) {
+	store(QStringLiteral("defaults/colour_scheme"), scheme);
+}
+
 QString bssh_app_settings::keyboard_layout() const {
 	return value(QStringLiteral("input/keyboard_layout"),
 	              QStringLiteral("us-intl")).toString();

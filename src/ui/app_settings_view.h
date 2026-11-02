@@ -17,6 +17,7 @@ class QSlider;
 class QSpinBox;
 class QLineEdit;
 class QComboBox;
+class bssh_font_picker;
 
 /*
  * bssh_app_settings_view -- the settings that belong to the device
@@ -158,6 +159,9 @@ private:
 	QLabel *m_keyboard_fallback;
 	QComboBox *m_keyboard_layout;
 	QComboBox *m_theme;
+
+	/* The font, size and colours every host has unless it says otherwise. */
+	bssh_font_picker *m_default_font = nullptr;
 	QComboBox *m_scrollbar;
 	QComboBox *m_arrangement;
 	QComboBox *m_tab_position = nullptr;

@@ -111,6 +111,18 @@ private:
 	 * a badge that lies for the rest of the session.
 	 */
 	void update_override_badges();
+
+	/*
+	 * Puts what this host resolves to in its font picker, and remembers
+	 * what that showed, so a change to the device's defaults can tell a
+	 * picker still showing them from one the user has changed.
+	 */
+	void show_resolved_font(const QJsonObject &resolved);
+	void follow_new_defaults();
+	QString m_shown_font;
+	int m_shown_size = 0;
+	QString m_shown_scheme;
+
 	void reload_sessions();
 	int selected_profile_id() const;
 

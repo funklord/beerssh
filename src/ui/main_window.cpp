@@ -1917,6 +1917,22 @@ void bssh_main_window::apply_device_settings() {
 	apply_key_row_visibility();
 	apply_menu_bar();
 
+	/*
+	 * The font, size and colours every host has unless it says otherwise
+	 * (sec 10.1's app defaults): every open terminal that follows them
+	 * takes them now, the local shell too. Only on a real change -- this
+	 * runs on every settings pass, and re-resolving reflows every grid.
+	 */
+	const QJsonObject defaults = bssh_settings_resolver::app_defaults();
+	if (defaults != m_defaults_applied) {
+		const bool first = m_defaults_applied.isEmpty();
+		m_defaults_applied = defaults;
+		if (!first && m_registry) {
+			for (bssh_session *session : m_registry->sessions())
+				session->set_settings(resolved_settings(session->profile()));
+		}
+	}
+
 	const bssh_app_settings settings;
 	const bool raise = settings.raise_contrast();
 	const int brightness = settings.text_brightness();
@@ -5395,7 +5411,7 @@ void bssh_main_window::reresolve_sessions(int preset_id) {
 }
 
 QJsonObject bssh_main_window::resolved_settings(const bssh_profile_t &profile) const {
-	if (!m_profile_store) return bssh_settings_resolver::app_defaults();
+	if (!m_profile_store) return bssh_settings_resolver::for_host(nullptr, profile.overrides);
 
 	/*
 	 * preset_id 0 is "follows nothing", which is what a host created from
@@ -5403,10 +5419,10 @@ QJsonObject bssh_main_window::resolved_settings(const bssh_profile_t &profile) c
 	 * than to a preset that does not exist, so such a session still gets
 	 * a font and a size rather than an empty object.
 	 */
-	if (profile.preset_id == 0) return bssh_settings_resolver::app_defaults();
+	if (profile.preset_id == 0) return bssh_settings_resolver::for_host(nullptr, profile.overrides);
 
 	const bssh_preset_t preset = m_profile_store->preset(profile.preset_id);
-	return bssh_settings_resolver::resolve(preset, profile.overrides);
+	return bssh_settings_resolver::for_host(&preset, profile.overrides);
 }
 
 void bssh_main_window::set_session_note(bssh_session *session, const QString &text) {

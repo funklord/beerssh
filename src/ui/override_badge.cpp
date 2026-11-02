@@ -54,7 +54,7 @@ inherited_t inherited_appearance(const bssh_profile_store *store,
 	        followed.value(QStringLiteral("colour_scheme")).toString());
 
 	out.source = profile.preset_id == 0
-	        ? QStringLiteral("the app defaults")
+	        ? QStringLiteral("this device's defaults")
 	        : QStringLiteral("preset \"%1\"").arg(out.preset.name);
 
 	return out;

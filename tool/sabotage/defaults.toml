@@ -1,0 +1,57 @@
+# Every host's font, size and colours, and a host's own (the holder,
+# 2026-11-02: font size "in config does nothing", and no default to set).
+
+# A host following no preset resolved without its own settings.
+[[sabotage]]
+name = "the window drops a preset-less host's own size"
+file = "src/ui/main_window.cpp"
+find = "\tif (profile.preset_id == 0) return bssh_settings_resolver::for_host(nullptr, profile.overrides);\n"
+replace = "\tif (profile.preset_id == 0) return bssh_settings_resolver::app_defaults();\n"
+expect = "a_host_with_no_preset_uses_its_own_size_and_the_device_default"
+
+[[sabotage]]
+name = "the dialog drops a preset-less host's own size"
+file = "src/ui/session_dialog.cpp"
+find = "\t\treturn bssh_settings_resolver::for_host(nullptr, profile.overrides);\n"
+replace = "\t\treturn bssh_settings_resolver::app_defaults();\n"
+expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"
+
+# The device's size stored and never used.
+[[sabotage]]
+name = "the app defaults ignore the device's size"
+file = "src/model/settings_resolver.cpp"
+find = "\tif (size > 0) defaults.insert(QStringLiteral(\"font_size\"), size);\n"
+replace = ""
+expect = "a_host_with_no_preset_uses_its_own_size_and_the_device_default"
+
+# Open terminals keep the old default until reopened.
+[[sabotage]]
+name = "a new default reaches no open terminal"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tfor (bssh_session *session : m_registry->sessions())\n\t\t\t\tsession->set_settings(resolved_settings(session->profile()));\n"
+replace = ""
+expect = "a_host_with_no_preset_uses_its_own_size_and_the_device_default"
+
+# The host picker keeps showing the old default, and saving pins it.
+[[sabotage]]
+name = "the host picker stays on the old default"
+file = "src/ui/session_dialog.cpp"
+find = "\tshow_resolved_font(resolved_settings(m_current));\n\tupdate_override_badges();\n}\n\nvoid bssh_session_dialog::set_current_profile("
+replace = "\tupdate_override_badges();\n}\n\nvoid bssh_session_dialog::set_current_profile("
+expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"
+
+# The page writes nothing when the default is changed.
+[[sabotage]]
+name = "the default size is not saved"
+file = "src/ui/app_settings_view.cpp"
+find = "\t\t\t\ts.set_default_font_size(point_size);\n"
+replace = ""
+expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"
+
+# A new destination's picker left at its own starting values.
+[[sabotage]]
+name = "the host picker starts at the picker's own values"
+file = "src/ui/session_dialog.cpp"
+find = "\t */\n\tshow_resolved_font(resolved_settings(m_current));\n"
+replace = "\t */\n"
+expect = "the_dialog_shows_a_hosts_own_size_and_follows_the_default"

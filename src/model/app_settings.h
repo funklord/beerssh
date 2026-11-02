@@ -291,6 +291,20 @@ public:
 	void set_theme(const QString &theme);
 
 	/*
+	 * The font, size and colours every host on this device has unless it
+	 * says otherwise (sec 10.1's app defaults, which the holder asked to
+	 * be settable, 2026-11-02). Empty, or a size of 0, means the built-in
+	 * value. A host following a preset that names its own takes the
+	 * preset's.
+	 */
+	QString default_font_family() const;
+	void set_default_font_family(const QString &family);
+	int default_font_size() const;
+	void set_default_font_size(int point_size);
+	QString default_colour_scheme() const;
+	void set_default_colour_scheme(const QString &scheme);
+
+	/*
 	 * Which keyboard layout the built-in keyboard draws (sec 6.2).
 	 *
 	 * GLOBAL rather than preset-owned, unlike the colour scheme and the

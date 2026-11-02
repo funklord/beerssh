@@ -11415,6 +11415,56 @@ a one-time intention.
 **[DECIDED]** Presets are **reusable named templates** attachable to many hosts —
 not per-host settings duplicated everywhere, and not just shipped defaults.
 
+**Most people will never use presets, and the configuration reflects that
+strongly -- [DECIDED 2026-11-02, the holder].** "Most people will never use
+presets, and the config should reflect that use case strongly." So the
+settings a person reaches for are this device's defaults for every host and a
+host's own, and neither needs a preset: the font, its size and the colours of
+every host are the first thing on the Appearance page, under *Every host on
+this device*, and *This host* below them is for one that differs. Presets stay
+for whoever wants a named template, and nothing assumes one -- a revert button
+on a host that follows none says "Use the default font", not "the preset's".
+The holder also found the shipped presets (§10.4) indistinguishable -- "they
+are not obviously different use cases or do they have any special needs that
+stand out" -- which §10.4 now settles.
+
+**Every setting a preset holds has a device default and a per-host value --
+[DECIDED 2026-11-02, the holder].** Nothing on any screen attached a preset to a
+host -- the desktop dialog had no chooser, nor did the phone's host editor, and
+the only writers of `preset_id` were `hosts.ini` and a session restore -- so
+presets could be made and never used, and everything only a preset holds
+(scrollback, cursor, bell, `TERM`, the terminal extensions, keepalive,
+compression, the command run on connect) was out of every host's reach. Asked
+how to offer them, the holder chose: each gets a default for every host on this
+device, the way the font now has one, and an optional value of the host's own on
+its page, shown as the default until it is set; a preset is an advanced
+*template* a host may follow, chosen on its page, and the Presets page goes
+last.
+
+**And the app defaults are this device's to set, 2026-11-02.** The holder:
+setting the font size "in config does nothing", and "it is also impossible to
+set the default font size". Two faults. A host following no preset -- the local
+shell, a command-line host, and every host the desktop dialog saves, since it
+offers no preset -- resolved to the app defaults ALONE: its own size was stored
+and never used, in the window and in the dialog, while the phone's host editor
+alone applied it. Four places resolved a host, each its own copy of the rule;
+there is one now, `bssh_settings_resolver::for_host`. And the app defaults were
+`bssh_preset_t()`'s constants, with the size in the shipped presets, which
+cannot be edited. `app.ini`'s `defaults/` group now holds a font, size and
+colour scheme laid over the built-in values (empty, or a size of 0, is the
+built-in one); changing them re-resolves every open terminal that follows them,
+the local shell too, and the dialog's host picker follows them unless the user
+has changed it or the host sets its own. A host following a preset takes the
+preset's -- presets always carry a size, so the default does not reach through
+one. The host picker also showed its own starting values, white on black and
+11 pt, on a new destination over a light terminal; it is filled from what the
+host resolves to when the page is built. Seen under twin: the default raised to
+16 pt, the open local shell redrawn at 16 at once, *This host* following, and
+16 back after a restart.
+`a_host_with_no_preset_uses_its_own_size_and_the_device_default`,
+`the_dialog_shows_a_hosts_own_size_and_follows_the_default`;
+`tool/sabotage/defaults.toml`, seven edits.
+
 ### 10.1 The layering model
 Three layers, highest precedence wins:
 
@@ -11803,6 +11853,21 @@ sequences, no UTF-8 box drawing), *tmux-first* (auto-attach on connect).
 
 Each sets sensible `TERM`, colours, and key-row defaults for that target. These
 double as documentation of what a preset can do.
+
+**Two kept, 2026-11-02 -- the holder chose it.** As shipped they did not do
+that. *Default Linux* is the built-in values; *BSD* differs only in `TERM=xterm`;
+*Raspberry Pi / SBC* in a smaller scrollback, a shorter keepalive and
+compression; *OpenWrt* in `TERM=vt100` and a small scrollback; *Network switch*
+in `vt100`, no bell and a large scrollback; *tmux-first* in its on-connect
+command. None sets colours or a key row, and the holder found them
+indistinguishable. The proposal: drop the four that differ by a value nobody
+would choose a template for, keep *tmux-first*, which does something a person
+would want on many hosts, and keep one for old or limited equipment -- `vt100`,
+no bell, the terminal extensions off -- which is the one case where a host
+genuinely needs different handling. Removing a shipped preset needs a
+migration for hosts that follow it, which falls back to the device's defaults.
+The holder chose that: *tmux-first* and one for old or limited equipment
+ship, and the other four go.
 
 ### 10.5 Import / export
 - **Export works on both platforms. Import works on both platforms**, by two

@@ -28,6 +28,7 @@ private slots:
 	void a_font_matching_the_preset_is_not_recorded_as_an_override();
 	void reverting_drops_the_override_rather_than_copying_the_value();
 	void the_badge_covers_what_the_save_writes();
+	void the_dialog_shows_a_hosts_own_size_and_follows_the_default();
 	void the_touch_badge_follows_the_picker();
 	void the_swatches_show_what_the_terminal_will_draw();
 };
