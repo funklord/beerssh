@@ -38,6 +38,14 @@ name, and the `beerssh` binary name against anything already in `$PATH` on a
 normal Linux install. A collision there is cheap to find now and expensive after
 users have the package.
 
+**Re-checked 2026-11-03: all free.** Debian's package search (all suites) has
+no `beerssh`; the AUR's RPC search by name returns 0 results; Flathub has no
+`se.vibes.beerssh` (its appstream API answers 404) and its search for
+"beerssh" returns only unrelated apps; and on a Devuan desktop with TDE the
+only `beerssh` on `$PATH` is this package's own. Re-check again at the
+release itself if it is far off -- a name is free only until someone takes
+it.
+
 **Notes:**
 - The package ID uses the `vibes.se` domain the author owns, so reverse-DNS
   collision is impossible regardless of app name.
