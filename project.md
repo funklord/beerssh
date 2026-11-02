@@ -189,7 +189,7 @@ run.
 | Build system | **[DECIDED]** **qmake** (`.pro`/`.pri`) for every target + Gradle for Android packaging only | One project file, scoped per platform; `androiddeployqt` drives the Android side. **Not CMake** — the sibling `fuzzypickles` GUI is qmake, and one build system across both trees is worth more than CMake being Qt 6's default. |
 | Desktop targets | **[DECIDED]** Linux (primary), macOS + Windows best-effort | Linux is the development platform; see §1. |
 | Min SDK | **[DECIDED]** API **26** (Android 8) | Below 26, foreground-service + Keystore APIs differ; 26 keeps code simple. Android-only concern. Set as `ANDROID_MIN_SDK_VERSION` in `beerssh.pro`, which is what settled it. |
-| Target SDK | **[DECIDED]** API **36 (Android 16)** | Play has refused new apps and updates targeting below 36 since 2026-08-31 (developer.android.com/google/play/requirements/target-sdk, read 2026-10-22). Raised from 35 on the holder's instruction 2026-10-22, beersshd with it; `make android-aab` ends in `android-play-check`, which refuses a bundle below the floor; its first run on a Gradle bundle read targetSdk 36, versionCode 10000 and ten 64-bit libraries all 16 KB aligned, and refused it only as unsigned (it is: Gradle signs a keyless release bundle with nothing). At 36 Android enforces edge-to-edge with no opt-out, which costs nothing here (the window is `Qt::ExpandedClientAreaHint` and follows the safe area, sec 6). **Open:** Android 16 also stops delivering Back to apps at 36 unless they opt out; the manifest's `enableOnBackInvokedCallback="false"` is that opt-out, and that it still holds on 16 is unverified -- no device or image here runs 16. |
+| Target SDK | **[DECIDED]** API **36 (Android 16)** | Play has refused new apps and updates targeting below 36 since 2026-08-31 (developer.android.com/google/play/requirements/target-sdk, read 2026-10-22). Raised from 35 on the holder's instruction 2026-10-22, beersshd with it; `make android-aab` ends in `android-play-check`, which refuses a bundle below the floor; its first run on a Gradle bundle read targetSdk 36, versionCode 10000 and ten 64-bit libraries all 16 KB aligned, and refused it only as unsigned (it is: Gradle signs a keyless release bundle with nothing). At 36 Android enforces edge-to-edge with no opt-out, which costs nothing here (the window is `Qt::ExpandedClientAreaHint` and follows the safe area, sec 6). Android 16 also stops delivering Back to apps at 36 unless they opt out; the manifest's `enableOnBackInvokedCallback="false"` is that opt-out, and **it holds on 16** -- measured 2026-11-03 on an API 36 emulator image (`bssh_api36`, Google APIs x86_64): Add host opened, the first Back closed the keyboard, the second returned to the host list, and the app stayed the resumed activity throughout. |
 | ABIs | arm64-v8a (primary), armeabi-v7a, x86_64 (emulator) | Google Play requires 64-bit; ship arm64 + optionally armv7. Desktop: x86_64 + aarch64. |
 | Package format | **AAB** (Android App Bundle); desktop per §12.2 | AAB required by Play, and enables per-ABI + asset-pack splits (see §9.4). |
 | Code style | **[DECIDED]** see **§18** | `snake_case`, tabs for indent, lowercase filenames — same rules as `fuzzypickles`. |
@@ -11486,6 +11486,18 @@ cursor a bar at once. `every_setting_has_a_default_and_a_hosts_own`,
 test above extended to the terminal's settings;
 `tool/sabotage/settings-model.toml`, nine edits.
 
+**Host Settings, from the terminal, 2026-11-02.** Opened from a terminal's
+menu, the configuration window is the new-connection door, so its *This host*
+was a blank destination -- a change there reached nothing on screen, which is
+half of what the holder met as a font size that "does nothing". The terminal
+menu's Session group carries **Host Settings...**, enabled for a session with
+a saved host: on a desktop the window opens with that host loaded, ready to
+change and Save; on a phone it is the host page, as editing from the host list
+is. A local shell or a typed destination has no settings of its own to open,
+and every host's are on the settings pages.
+`host_settings_open_the_terminals_own_host`; one more edit in
+`settings-model.toml`.
+
 **And the app defaults are this device's to set, 2026-11-02.** The holder:
 setting the font size "in config does nothing", and "it is also impossible to
 set the default font size". Two faults. A host following no preset -- the local
@@ -13908,7 +13920,8 @@ store keeps to its config directory under test mode now
 (`a_store_view_touches_nothing_of_the_users`).
 First device-side run of the target anywhere, on `bssh_api34`: four
 captures at 1080x1920, and the display size and SystemUI demo mode put
-back afterwards. The first attempt was refused at the focus check, right:
+back afterwards. Run again on Android 16 (`bssh_api36`, the
+x86_64 build) 2026-11-03: the same four, the display put back. The first attempt was refused at the focus check, right:
 the emulator's own "System UI isn't responding" dialog had the focus.
 **Settled by the holder the same day:** no status line in the store views
 (it could only say "disconnected", true and beside the point, and nothing

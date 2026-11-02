@@ -7397,6 +7397,37 @@ void layout_test::a_host_with_no_preset_uses_its_own_size_and_the_device_default
 	QCOMPARE(mine->settings().value(QStringLiteral("cursor_style")).toString(), QStringLiteral("bar"));
 }
 
+void layout_test::host_settings_open_the_terminals_own_host() {
+	/*
+	 * Opened from a terminal, the settings door is the new-connection one,
+	 * so "This host" was a blank destination and a change to it reached
+	 * nothing on screen. Host Settings opens the terminal's own.
+	 */
+	const forced_touch_t desktop(0);
+	bssh_main_window window;
+	window.resize(760, 560);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+
+	bssh_profile_t saved = named(QStringLiteral("saved"));
+	saved.id = window.profile_store()->save(saved);
+	QVERIFY(saved.id > 0);
+	bssh_session *session = window.registry()->create(saved);
+	window.adopt_session(session);
+	QCoreApplication::processEvents();
+
+	window.show_host_settings(session);
+	QCoreApplication::processEvents();
+	bssh_session_dialog *dialog = window.findChild<bssh_session_dialog *>();
+	QVERIFY(dialog);
+	QTRY_VERIFY(dialog->isVisible());
+	QCOMPARE(dialog->current_profile().id, saved.id);
+	QCOMPARE(dialog->current_profile().host, saved.host);
+	dialog->hide();
+	window.profile_store()->remove(saved.id);
+}
+
 void layout_test::a_bar_side_belongs_to_its_pane() {
 	/*
 	 * The holder, 2026-11-02: moving one pane's bar to a side moved every

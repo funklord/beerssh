@@ -6263,6 +6263,18 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	duplicate->setEnabled(m_current != nullptr);
 
 	/*
+	 * This terminal's host, opened for changing. The settings door opened
+	 * from a terminal is the new-connection door, so "This host" there was
+	 * a blank destination and a change to it reached nothing on screen.
+	 * Only for a saved host: a local shell or a typed destination has no
+	 * settings of its own to open, and every host's are on the settings
+	 * pages.
+	 */
+	QAction *host_settings = session_menu->addAction(QStringLiteral("Host &Settings..."));
+	host_settings->setObjectName(QStringLiteral("terminal_host_settings"));
+	host_settings->setEnabled(m_current && m_current->profile().id > 0);
+
+	/*
 	 * Behind a separator, because Close is the only verb here that cannot
 	 * be undone -- the same shape and the same argument as the tab menu's
 	 * own ordering.
@@ -6602,6 +6614,16 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 		return;
 	}
 
+	const QAction *host_settings =
+	        menu->findChild<QAction *>(QStringLiteral("terminal_host_settings"));
+	if (host_settings && chosen == host_settings) {
+		const QPointer<bssh_session> session = m_current;
+		QMetaObject::invokeMethod(this, [this, session] {
+			if (session) show_host_settings(session);
+		}, Qt::QueuedConnection);
+		return;
+	}
+
 	const QAction *new_grid = menu->findChild<QAction *>(QStringLiteral("terminal_new_grid"));
 	if (new_grid && chosen == new_grid) {
 		/* Queued: the menu is still unwinding, and this opens a dialog. */
@@ -6612,6 +6634,25 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	const QAction *front_door =
 	        menu->findChild<QAction *>(QStringLiteral("terminal_front_door"));
 	if (chosen == front_door) show_front_door();
+}
+
+void bssh_main_window::show_host_settings(bssh_session *session) {
+	if (!session || !m_profile_store) return;
+	const int id = session->profile().id;
+	if (id <= 0) return;
+	const bssh_profile_t stored = m_profile_store->profile(id);
+	if (stored.id != id) return;
+
+	/* The phone's host page, as editing it from the host list does. */
+	if (m_host_list && m_host_editor) {
+		m_host_editor->set_profile(stored);
+		m_host_editor->set_editing(true);
+		show_page(m_host_editor);
+		return;
+	}
+	if (!m_session_dialog) return;
+	m_session_dialog->set_current_profile(stored);
+	show_front_door();
 }
 
 void bssh_main_window::show_front_door() {

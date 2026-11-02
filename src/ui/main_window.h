@@ -308,6 +308,13 @@ public:
 	void open_grid(int cols, int rows);
 
 	/*
+	 * The settings of the saved host behind `session`, opened to change:
+	 * the host page on a phone, the configuration window loaded with it
+	 * on a desktop. Nothing for a session with no saved host.
+	 */
+	void show_host_settings(bssh_session *session);
+
+	/*
 	 * The window size that gives each of a `cols` by `rows` grid of
 	 * terminals `each` cells, kept on the screen this window is on.
 	 */

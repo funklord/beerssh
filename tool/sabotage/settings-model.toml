@@ -75,3 +75,11 @@ file = "src/term/colour_scheme.cpp"
 find = "\t\tconst QRgb *palette = entry.ansi ? entry.ansi : BSSH_CLASSIC_ANSI;\n"
 replace = "\t\tconst QRgb *palette = BSSH_CLASSIC_ANSI;\n"
 expect = "a_scheme_owns_the_background_and_the_text_not_the_palette"
+
+# Host Settings opens the blank new-connection door, not the host.
+[[sabotage]]
+name = "host settings open a blank destination"
+file = "src/ui/main_window.cpp"
+find = "\tm_session_dialog->set_current_profile(stored);\n\tshow_front_door();\n"
+replace = "\tshow_front_door();\n"
+expect = "host_settings_open_the_terminals_own_host"

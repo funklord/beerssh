@@ -314,6 +314,7 @@ private slots:
 	void the_terminal_menu_opens_once_however_focus_moved();
 	void a_grid_opens_rows_of_terminals_of_one_host();
 	void a_host_with_no_preset_uses_its_own_size_and_the_device_default();
+	void host_settings_open_the_terminals_own_host();
 	void a_bar_side_belongs_to_its_pane();
 	void a_shape_survives_being_written_down();
 
