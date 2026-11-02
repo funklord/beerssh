@@ -1501,7 +1501,7 @@ void bssh_terminal_view::dropEvent(QDropEvent *event) {
 	 * into the session it considers current. Taking focus the way a click
 	 * does makes the pane that was dropped on the pane that receives it,
 	 * and it is also what wires this signal up: the window connects to
-	 * the FOCUSED view (see m_wired_view), so emitting first would emit
+	 * the FOCUSED view (on_pane_focus_changed), so emitting first would emit
 	 * into nothing.
 	 */
 	setFocus(Qt::MouseFocusReason);

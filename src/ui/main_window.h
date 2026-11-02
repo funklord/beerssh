@@ -1144,27 +1144,6 @@ private:
 	bool m_room_queued = false;
 	bssh_find_bar *m_find_bar;
 
-	/*
-	 * The view whose signals are already connected. A plain pointer
-	 * compared for identity, never dereferenced: it may be dangling after
-	 * a pane rebuild, and comparing a dangling pointer against a fresh
-	 * one is exactly the test wanted -- they differ.
-	 */
-	/*
-	 * Which view's signals are already connected.
-	 *
-	 * A QPointer, not a raw one, and that is the whole fix for a bug this
-	 * found the hard way: panes are destroyed and rebuilt, the allocator
-	 * hands the replacement the address the old one had, and a raw
-	 * comparison then says "already wired" about an object that has never
-	 * been connected to anything. Every signal in that block -- the grid
-	 * size, the link prompt, the primary-selection copy, the context menu
-	 * -- is silently dead on that view.
-	 *
-	 * A QPointer is cleared when its object is destroyed, so the
-	 * replacement compares unequal however the allocator behaves.
-	 */
-	QPointer<bssh_terminal_view> m_wired_view;
 	QLabel *m_status_label;
 
 	/* The status line's row; see place_status_line. */

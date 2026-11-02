@@ -426,7 +426,6 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
       m_panes(nullptr),
       m_input_mode(bssh_default_input_mode()),
       m_find_bar(nullptr),
-      m_wired_view(nullptr),
       m_status_label(new QLabel(this)),
       m_registry(bssh_session_registry::shared()),
       m_layout(nullptr),
@@ -2379,8 +2378,20 @@ void bssh_main_window::on_pane_focus_changed(bssh_session *session) {
 	 * quietly stopped working when this moved out of the constructor --
 	 * a warning on stderr and two features gone.
 	 */
-	if (m_terminal_view != m_wired_view) {
-		m_wired_view = m_terminal_view;
+	/*
+	 * Marked on the view itself, not remembered as the last one wired:
+	 * focus going A, B, A found A unlike the last and connected it again,
+	 * and every connection is one more menu. The holder, 2026-11-02: the
+	 * right-click menu "getting stuck every time I open it" -- dismissed,
+	 * the next copy opened in its place, holding the pointer all the
+	 * while. A paste went in twice the same way. Nothing showed it while
+	 * every tab switch rebuilt every view; switching one pane's tab
+	 * without a rebuild (82fe373) let a view live through focus changes.
+	 * A mark on the object also cannot be fooled by a new view at a dead
+	 * one's address, which a remembered pointer once was.
+	 */
+	if (m_terminal_view && !m_terminal_view->property("bssh_wired").toBool()) {
+		m_terminal_view->setProperty("bssh_wired", true);
 
 		connect(m_terminal_view, &bssh_terminal_view::grid_resized,
 		         this, &bssh_main_window::on_grid_resized);

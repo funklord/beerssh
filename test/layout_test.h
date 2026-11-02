@@ -311,6 +311,7 @@ private slots:
 	void a_touch_windows_pane_controls_reach_the_floor();
 	void a_dragged_divider_stays_where_it_was_put();
 	void a_note_sits_with_the_control_it_explains();
+	void the_terminal_menu_opens_once_however_focus_moved();
 	void a_shape_survives_being_written_down();
 
 	/*

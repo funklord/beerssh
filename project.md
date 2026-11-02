@@ -4258,6 +4258,18 @@ pointer-to-member. **Wire once, where the object arrives once.** Both moved to
 the registry's `session_added`, which fires exactly once per session, so no
 uniqueness trick is needed at all.
 
+**And the guard itself was the third, 2026-11-02.** `m_wired_view` remembered
+the LAST view wired, so focus going A, B, A found A unlike it and connected A
+again: each return of focus was one more terminal menu per right-click, and
+one more paste per paste. The holder saw it as the menu "getting stuck every
+time I open it" -- dismissed, the next copy opened in its place, holding the
+pointer so no other program could be used meanwhile. It hid while every tab
+switch rebuilt every view, and showed once switching one pane's tab stopped
+doing that (`82fe373`). The view is marked as wired now (a `bssh_wired`
+property), which holds however focus moves and cannot be fooled by a new view
+at a dead one's address. `the_terminal_menu_opens_once_however_focus_moved`
+counts the menus one right-click opens; caught in `menu-truth.toml`.
+
 Only the window **showing** a session honours its clipboard request. A session
 is on screen in exactly one place (§8.4), so one remote request produces one
 clipboard write and one line of status rather than one per window that has ever

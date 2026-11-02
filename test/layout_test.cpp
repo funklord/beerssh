@@ -7150,6 +7150,52 @@ void layout_test::a_note_sits_with_the_control_it_explains() {
 	QVERIFY2(far.isEmpty(), qPrintable(far.join(QLatin1Char('\n'))));
 }
 
+void layout_test::the_terminal_menu_opens_once_however_focus_moved() {
+	/*
+	 * The holder, 2026-11-02: the right-click menu "getting stuck every
+	 * time I open it" and holding the pointer meanwhile. Focus going
+	 * between two panes connected each view again on every return, and
+	 * each connection opened one more menu as the last was dismissed.
+	 */
+	const forced_touch_t desktop(0);
+	bssh_main_window window;
+	window.resize(760, 560);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	const registry_left_as_found_t tidy(window.registry());
+	bssh_session *a = window.registry()->create(named(QStringLiteral("alpha")));
+	bssh_session *b = window.registry()->create(named(QStringLiteral("beta")));
+	window.adopt_session(a);
+	window.adopt_session(b);
+	window.split_with(a);
+	QCoreApplication::processEvents();
+
+	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
+	QVERIFY(panes);
+	QCOMPARE(panes->views().size(), 2);
+	for (bssh_session *each : { a, b, a, b, a }) {
+		panes->focus_session(each);
+		QCoreApplication::processEvents();
+	}
+	bssh_terminal_view *view = panes->view_for(a);
+	QVERIFY(view);
+
+	/* Each menu that comes up is counted and dismissed. */
+	int menus = 0;
+	QTimer dismiss;
+	dismiss.setInterval(20);
+	QObject::connect(&dismiss, &QTimer::timeout, [&menus] {
+		if (QWidget *popup = QApplication::activePopupWidget()) {
+			++menus;
+			popup->close();
+		}
+	});
+	dismiss.start();
+	emit view->context_menu_requested(view->mapToGlobal(view->rect().center()));
+	dismiss.stop();
+	QCOMPARE(menus, 1);
+}
+
 void layout_test::a_shape_survives_being_written_down() {
 	bssh_session_registry registry;
 	bssh_layout_manager layout;

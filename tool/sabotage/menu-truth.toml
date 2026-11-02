@@ -57,3 +57,12 @@ file = "src/ui/main_window.cpp"
 find = "\tconst QAction *split = menu->findChild<QAction *>(QStringLiteral(\"terminal_split\"));\n\tif (chosen == split) {\n\t\tsplit_beside_current();"
 replace = "\tconst QAction *split = menu->findChild<QAction *>(QStringLiteral(\"terminal_split\"));\n\tif (chosen == split) {"
 expect = "the_arrangement_verbs_on_that_menu_act_too"
+
+# Wired again each time focus comes back, so one right-click opens the
+# menu as many times as focus has returned (the holder, 2026-11-02).
+[[sabotage]]
+name = "the terminal menu opens once per return of focus"
+file = "src/ui/main_window.cpp"
+find = "\tif (m_terminal_view && !m_terminal_view->property(\"bssh_wired\").toBool()) {\n"
+replace = "\tif (m_terminal_view) {\n"
+expect = "the_terminal_menu_opens_once_however_focus_moved"
