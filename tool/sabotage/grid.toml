@@ -1,0 +1,34 @@
+# New Window Grid and --grid (the holder, 2026-11-02): COLS side by side
+# and ROWS one above the other, all of one host.
+
+# Columns of rows instead of rows of columns.
+[[sabotage]]
+name = "a grid is laid out on its side"
+file = "src/ui/main_window.cpp"
+find = "\ttree.orientation = Qt::Vertical;\n\tfor (int row = 0; row * cols < sessions.size(); ++row) {\n"
+replace = "\ttree.orientation = Qt::Horizontal;\n\tfor (int row = 0; row * cols < sessions.size(); ++row) {\n"
+expect = "a_grid_opens_rows_of_terminals_of_one_host"
+
+# One terminal short: the first session counted twice.
+[[sabotage]]
+name = "a grid opens one terminal too few"
+file = "src/ui/main_window.cpp"
+find = "\twhile (sessions.size() < cols * rows) {\n"
+replace = "\twhile (sessions.size() < cols * rows - 1) {\n"
+expect = "a_grid_opens_rows_of_terminals_of_one_host"
+
+# A typo of a grid obeyed.
+[[sabotage]]
+name = "a grid past eight each way is obeyed"
+file = "src/model/command_line.cpp"
+find = "\t\t    || line.grid_cols > BSSH_MAX_GRID || line.grid_rows > BSSH_MAX_GRID) {\n"
+replace = "\t\t    ) {\n"
+expect = "a_grid_is_counted_in_terminals"
+
+# The dialog's numbers lost on the way to the new program.
+[[sabotage]]
+name = "the grid dialog opens the default size whatever is chosen"
+file = "src/ui/main_window.cpp"
+find = "\topen_grid_window(across->value(), down->value(), what->currentData().toInt());\n"
+replace = "\topen_grid_window(2, 2, what->currentData().toInt());\n"
+expect = "a_torn_out_tab_and_a_new_window_start_processes_of_their_own"

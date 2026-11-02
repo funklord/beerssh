@@ -121,6 +121,22 @@ void command_line_test::geometry_that_is_not_a_grid_is_refused() {
 	                 .error.isEmpty());
 }
 
+void command_line_test::a_grid_is_counted_in_terminals() {
+	const bssh_command_line_t line = parse({
+		QStringLiteral("--grid"), QStringLiteral("3x2"), QStringLiteral("--geometry"),
+		QStringLiteral("100x30"),
+	});
+	QVERIFY2(line.error.isEmpty(), qPrintable(line.error));
+	QCOMPARE(line.grid_cols, 3);
+	QCOMPARE(line.grid_rows, 2);
+	QCOMPARE(line.cols, 100);
+	QCOMPARE(parse({}).grid_cols, 0);
+
+	QVERIFY(!parse({ QStringLiteral("--grid"), QStringLiteral("3") }).error.isEmpty());
+	QVERIFY(!parse({ QStringLiteral("--grid"), QStringLiteral("0x2") }).error.isEmpty());
+	QVERIFY(!parse({ QStringLiteral("--grid"), QStringLiteral("9x2") }).error.isEmpty());
+}
+
 void command_line_test::an_ini_path_is_a_document_and_not_a_host() {
 	const bssh_command_line_t line = parse({ QStringLiteral("/tmp/servers.ini") });
 

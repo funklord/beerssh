@@ -83,8 +83,10 @@ static qint64 other_beerssh_pid_under_pointer(const QWidget *ours);
 #include "input/input_router.h"
 #include "term/emulator.h"
 #include <QCheckBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
+#include <QSpinBox>
 
 #include "platform/platform.h"
 #include "platform/secret_store.h"
@@ -4309,6 +4311,115 @@ void bssh_main_window::dropEvent(QDropEvent *event) {
 	event->acceptProposedAction();
 }
 
+void bssh_main_window::open_grid(int cols, int rows) {
+	if (!m_layout || !m_panes || m_shown.isEmpty() || cols < 1 || rows < 1) return;
+
+	const bssh_profile_t profile = m_shown.first()->profile();
+	QList<bssh_session *> sessions{ m_shown.first() };
+	while (sessions.size() < cols * rows) {
+		bssh_session *session = prepare_profile(profile);
+		if (!session || sessions.contains(session)) break;
+		session->connect_to_host();
+		sessions.append(session);
+	}
+
+	/* Rows one above the other, each a run of panes side by side. */
+	bssh_pane_node tree;
+	tree.orientation = Qt::Vertical;
+	for (int row = 0; row * cols < sessions.size(); ++row) {
+		bssh_pane_node line;
+		line.orientation = Qt::Horizontal;
+		for (int col = 0; col < cols && row * cols + col < sessions.size(); ++col) {
+			bssh_pane_node pane;
+			pane.session = sessions.at(row * cols + col);
+			line.children.push_back(pane);
+		}
+		tree.children.push_back(line);
+	}
+	m_layout->set_tree(tree);
+	m_panes->rebuild();
+	m_panes->focus_session(sessions.first());
+	update_status();
+}
+
+QSize bssh_main_window::size_for_grid_of(int cols, int rows, const QSize &each) {
+	QSize wanted = size_for_grid(each.width() * qMax(1, cols), each.height() * qMax(1, rows));
+	if (QScreen *on = screen()) wanted = wanted.boundedTo(on->availableGeometry().size());
+	return wanted;
+}
+
+void bssh_main_window::open_grid_window() {
+	/*
+	 * The holder, 2026-11-02: "an open grid option where a window comes
+	 * up allowing to choose X x Y amount of terminals to open in a new
+	 * window". Of a local shell or a saved host, the one in front
+	 * offered first.
+	 */
+	QDialog dialog(this);
+	dialog.setObjectName(QStringLiteral("grid_dialog"));
+	dialog.setWindowTitle(QStringLiteral("New Window Grid"));
+	QFormLayout *form = new QFormLayout(&dialog);
+
+	QSpinBox *across = new QSpinBox(&dialog);
+	across->setObjectName(QStringLiteral("grid_columns"));
+	across->setRange(1, 8);
+	across->setValue(2);
+	form->addRow(QStringLiteral("Side by side"), across);
+
+	QSpinBox *down = new QSpinBox(&dialog);
+	down->setObjectName(QStringLiteral("grid_rows"));
+	down->setRange(1, 8);
+	down->setValue(2);
+	form->addRow(QStringLiteral("One above the other"), down);
+
+	QComboBox *what = new QComboBox(&dialog);
+	what->setObjectName(QStringLiteral("grid_profile"));
+	what->addItem(QStringLiteral("Local shell"), 0);
+	const int current = m_current ? m_current->profile().id : 0;
+	if (m_profile_store) {
+		for (const bssh_profile_t &profile : m_profile_store->profiles()) {
+			what->addItem(profile.name, profile.id);
+			if (profile.id != 0 && profile.id == current) what->setCurrentIndex(what->count() - 1);
+		}
+	}
+	form->addRow(QStringLiteral("In each"), what);
+
+	QDialogButtonBox *buttons = new QDialogButtonBox(
+	        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
+	buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("&Open"));
+	connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
+	connect(buttons, &QDialogButtonBox::rejected, &dialog, &QDialog::reject);
+	form->addRow(buttons);
+
+	if (dialog.exec() != QDialog::Accepted) return;
+	open_grid_window(across->value(), down->value(), what->currentData().toInt());
+}
+
+void bssh_main_window::open_grid_window(int cols, int rows, int profile_id) {
+	const bssh_profile_t profile = profile_id && m_profile_store
+	                                       ? m_profile_store->profile(profile_id)
+	                                       : bssh_profile_t::local_shell();
+	if (!profile.is_valid()) return;
+
+	/* In a process of its own where windows are, as New Window's are. */
+	if (bssh_handoff_point::instance()) {
+		QStringList arguments = {
+			QStringLiteral("--grid"), QStringLiteral("%1x%2").arg(cols).arg(rows)
+		};
+		if (profile_id) arguments << QStringLiteral("--load") << profile.name;
+		QString why;
+		if (start_this_program(arguments, &why)) return;
+		qWarning("window: %s, so it opens in this process", qPrintable(why));
+	}
+
+	bssh_main_window *window = new bssh_main_window;
+	window->setAttribute(Qt::WA_DeleteOnClose);
+	window->open_profile(profile);
+	window->open_grid(cols, rows);
+	window->resize(window->size_for_grid_of(cols, rows, QSize(80, 24)));
+	window->show();
+}
+
 void bssh_main_window::open_another_session(bool in_a_window) {
 	const bool touch = bssh_platform::instance()
 	        && bssh_platform::instance()->is_touch_primary();
@@ -5421,6 +5532,9 @@ void bssh_main_window::build_menu_bar() {
 	new_window->setShortcut(chord("new-window"));
 	connect(new_window, &QAction::triggered, this, [this] { open_another_session(true); });
 
+	QAction *new_grid = file->addAction(QStringLiteral("New Window &Grid..."));
+	connect(new_grid, &QAction::triggered, this, [this] { open_grid_window(); });
+
 	file->addSeparator();
 
 	QAction *close_tab = file->addAction(QStringLiteral("&Close Tab"));
@@ -6124,6 +6238,9 @@ QMenu *bssh_main_window::build_terminal_menu(QWidget *parent, const QString &lin
 	new_window->setShortcut(
 	        QKeySequence(bssh_input_router::binding_for(QStringLiteral("new-window"))));
 
+	QAction *new_grid = session_menu->addAction(QStringLiteral("New Window &Grid..."));
+	new_grid->setObjectName(QStringLiteral("terminal_new_grid"));
+
 	/*
 	 * Duplicate opens a new session on the same profile through the front
 	 * door's own path (sec 8.3), so a host needing a password is asked for
@@ -6471,6 +6588,13 @@ void bssh_main_window::act_on_terminal_menu(QMenu *menu, const QAction *chosen,
 	        menu->findChild<QAction *>(QStringLiteral("terminal_new_window"));
 	if (chosen == new_window) {
 		open_another_session(true);
+		return;
+	}
+
+	const QAction *new_grid = menu->findChild<QAction *>(QStringLiteral("terminal_new_grid"));
+	if (new_grid && chosen == new_grid) {
+		/* Queued: the menu is still unwinding, and this opens a dialog. */
+		QMetaObject::invokeMethod(this, [this] { open_grid_window(); }, Qt::QueuedConnection);
 		return;
 	}
 

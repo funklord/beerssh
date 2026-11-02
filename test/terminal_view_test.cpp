@@ -2718,7 +2718,7 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	 * cannot be undone.
 	 */
 	/*
-	 * Five here rather than six: this window has no session, so Connect
+	 * Six here rather than seven: this window has no session, so Connect
 	 * is absent by the same rule the tab menu follows -- a verb offered
 	 * only where it applies. a_session_can_be_closed_without_a_tab_bar
 	 * is where its presence is asserted, with a session that is not live.
@@ -2741,12 +2741,13 @@ void terminal_view_test::the_terminal_menu_offers_the_three_verbs_in_order() {
 	QVERIFY(!state.at(3)->isEnabled());
 
 	const QList<QAction *> sessions = actions.at(10)->menu()->actions();
-	QCOMPARE(sessions.size(), 5);
+	QCOMPARE(sessions.size(), 6);
 	QCOMPARE(sessions.at(0)->text(), QStringLiteral("New &Tab"));
 	QCOMPARE(sessions.at(1)->text(), QStringLiteral("New &Window"));
-	QCOMPARE(sessions.at(2)->text(), QStringLiteral("&Duplicate"));
-	QVERIFY(sessions.at(3)->isSeparator());
-	QCOMPARE(sessions.at(4)->text(), QStringLiteral("&Close"));
+	QCOMPARE(sessions.at(2)->text(), QStringLiteral("New Window &Grid..."));
+	QCOMPARE(sessions.at(3)->text(), QStringLiteral("&Duplicate"));
+	QVERIFY(sessions.at(4)->isSeparator());
+	QCOMPARE(sessions.at(5)->text(), QStringLiteral("&Close"));
 
 	QList<QAction *> every = actions;
 	every += sizes;

@@ -1,6 +1,11 @@
 #include "handoff_test.h"
 
 #include <QAction>
+#include <QApplication>
+#include <QComboBox>
+#include <QDialog>
+#include <QSpinBox>
+#include <QTimer>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QFileInfo>
@@ -555,6 +560,30 @@ void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own(
 	QCOMPARE(started.size(), 2);
 	QCOMPARE(started.last().value(0), QStringLiteral("--geometry"));
 	QVERIFY(!started.last().contains(QStringLiteral("--adopt-from")));
+
+	/*
+	 * New Window Grid: asked how many, and a program of its own opening
+	 * that many (the holder, 2026-11-02). Three across, two down, of a
+	 * local shell, so nothing names a host.
+	 */
+	QAction *new_grid = nullptr;
+	for (QAction *action : window.findChildren<QAction *>())
+		if (action->text() == QStringLiteral("New Window &Grid...")) new_grid = action;
+	QVERIFY(new_grid);
+	bool answered = false;
+	QTimer::singleShot(0, [&answered] {
+		QDialog *dialog = qobject_cast<QDialog *>(QApplication::activeModalWidget());
+		if (!dialog || dialog->objectName() != QStringLiteral("grid_dialog")) return;
+		dialog->findChild<QSpinBox *>(QStringLiteral("grid_columns"))->setValue(3);
+		dialog->findChild<QSpinBox *>(QStringLiteral("grid_rows"))->setValue(2);
+		dialog->findChild<QComboBox *>(QStringLiteral("grid_profile"))->setCurrentIndex(0);
+		answered = true;
+		dialog->accept();
+	});
+	new_grid->trigger();
+	QVERIFY2(answered, "no grid dialog came up");
+	QCOMPARE(started.size(), 3);
+	QCOMPARE(started.last(), QStringList({ QStringLiteral("--grid"), QStringLiteral("3x2") }));
 
 	bssh_main_window::set_process_starter(nullptr);
 	for (bssh_session *session : sessions) registry->close(session);

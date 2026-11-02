@@ -23,6 +23,7 @@ private slots:
 	void execute_with_nothing_after_it_is_refused();
 	void geometry_is_counted_in_cells();
 	void geometry_that_is_not_a_grid_is_refused();
+	void a_grid_is_counted_in_terminals();
 	void an_ini_path_is_a_document_and_not_a_host();
 	void two_destinations_are_refused();
 	void load_and_a_destination_are_refused();

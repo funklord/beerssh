@@ -7228,6 +7228,48 @@ void layout_test::the_terminal_menu_opens_once_however_focus_moved() {
 	QCOMPARE(menus, 1);
 }
 
+void layout_test::a_grid_opens_rows_of_terminals_of_one_host() {
+	/*
+	 * The holder, 2026-11-02: "an open grid option where a window comes
+	 * up allowing to choose X x Y amount of terminals". Three across and
+	 * two down of the host the window opened, each connecting, as two
+	 * rows of three panes.
+	 */
+	const forced_touch_t desktop(0);
+	bssh_session_registry *shared = bssh_session_registry::shared();
+	while (shared->count() > 0) shared->close(shared->at(0));
+
+	int made = 0;
+	bssh_ssh_session::set_factory([&made](QObject *parent) -> bssh_ssh_session * {
+		++made;
+		return new bssh_fake_ssh_session(parent);
+	});
+	struct factory_reset_t { ~factory_reset_t() { bssh_ssh_session::set_factory(nullptr); } } reset;
+	{
+		bssh_main_window window(named(QStringLiteral("grid")));
+		window.resize(760, 560);
+		window.show();
+		QVERIFY(QTest::qWaitForWindowExposed(&window));
+		const registry_left_as_found_t tidy(window.registry());
+		QCoreApplication::processEvents();
+		QCOMPARE(made, 1);
+
+		window.open_grid(3, 2);
+		QCoreApplication::processEvents();
+		QCOMPARE(made, 6);
+
+		bssh_layout_manager *layout = window.layout_manager();
+		QCOMPARE(layout->intent().size(), 6);
+		QList<bssh_session *> order = layout->intent();
+		const QString shape = bssh_layout_manager::shape_text(layout->tree(), [&order](bssh_session *each) {
+			return QString::number(order.indexOf(each));
+		});
+		QCOMPARE(shape, QStringLiteral("V(H(0,1,2),H(3,4,5))"));
+		for (bssh_session *each : order)
+			QCOMPARE(each->profile().host, QStringLiteral("grid.example"));
+	}
+}
+
 void layout_test::a_bar_side_belongs_to_its_pane() {
 	/*
 	 * The holder, 2026-11-02: moving one pane's bar to a side moved every

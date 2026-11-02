@@ -90,6 +90,14 @@ struct bssh_command_line_t {
 	int cols;
 	int rows;
 
+	/*
+	 * Open COLSxROWS terminals of what this run opens, side by side and
+	 * one above the other (--grid); zero for one terminal. With
+	 * --geometry, that is each terminal's size.
+	 */
+	int grid_cols;
+	int grid_rows;
+
 	/* The +X+Y half of --geometry, in pixels. Unset unless has_position. */
 	int x;
 	int y;
@@ -155,7 +163,7 @@ struct bssh_command_line_t {
 	QString error;
 
 	bssh_command_line_t()
-	    : cols(0), rows(0), x(0), y(0), has_position(false), hold(false),
+	    : cols(0), rows(0), grid_cols(0), grid_rows(0), x(0), y(0), has_position(false), hold(false),
 	      self_test(false), help(false), version(false), man(false),
 	      completion(false) {}
 

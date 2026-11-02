@@ -8275,6 +8275,26 @@ would be started without starting it;
 checks that it took one session of two, went on reading it, and asked
 nobody to quit. `tool/sabotage/window-processes.toml`, four edits.
 
+**New Window Grid -- [BUILT 2026-11-02, the holder].** "An open grid option
+where a window comes up allowing to choose X x Y amount of terminals to open
+in a new window." File and the terminal menu's Session carry **New Window
+Grid...**: side by side, one above the other (1 to 8 each), and what to open
+in each -- a local shell or a saved host, the host in front offered first. It
+starts the program again with `--grid COLSxROWS` (and `--load NAME` for a
+host), a process of its own as New Window's is, or opens in this process
+without a hand-off point. `--grid` is an option in its own right: it opens that
+many of whatever the command line opens, a local shell when it names nothing,
+as rows of panes (`open_grid`), every one connecting. `--geometry` is then each
+terminal's size, 80x24 when not given, and the window is kept on its screen;
+what does not fit becomes tabs, as any layout does (sec 8.2). A host that
+asks for a password asks once per terminal -- each is its own connection.
+Seen under twin: `--grid 3x2` as two rows of three shells filling a
+1400x900 screen, and the dialog's 2x2 as a second process with four.
+`a_grid_opens_rows_of_terminals_of_one_host`, `a_grid_is_counted_in_terminals`,
+and the dialog's arguments in
+`a_torn_out_tab_and_a_new_window_start_processes_of_their_own`;
+`tool/sabotage/grid.toml`, four edits.
+
 ### 8.5 The front door — **[DECIDED]**
 
 **Android's Back leaves the PAGE, not the app — [FIXED 2026-09-06].**

@@ -318,6 +318,9 @@ int main(int argc, char *argv[]) {
 		launch = bssh_profile_t::local_shell();
 	}
 
+	/* A grid of nothing named is a grid of local shells. */
+	if (!launch.is_valid() && line.grid_cols > 0) launch = bssh_profile_t::local_shell();
+
 	if (launch.is_valid()) {
 		launch.command = line.command;
 		launch.working_directory = line.working_directory;
@@ -385,7 +388,13 @@ int main(int argc, char *argv[]) {
 	 * 80x24 has to mean the same terminal in a large font as in a small
 	 * one, which is the whole reason xterm counts this way.
 	 */
-	if (line.cols > 0 && line.rows > 0) {
+	if (line.grid_cols > 0 && !line.self_test) {
+		/* --geometry is each terminal's size then, 80x24 when not given. */
+		window.open_grid(line.grid_cols, line.grid_rows);
+		const QSize each = line.cols > 0 && line.rows > 0 ? QSize(line.cols, line.rows)
+		                                                  : QSize(80, 24);
+		window.resize(window.size_for_grid_of(line.grid_cols, line.grid_rows, each));
+	} else if (line.cols > 0 && line.rows > 0) {
 		window.resize(window.size_for_grid(line.cols, line.rows));
 	}
 	if (line.has_position) window.move(line.x, line.y);

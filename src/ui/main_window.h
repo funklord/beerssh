@@ -298,6 +298,21 @@ public:
 	void open_default_session();
 
 	/*
+	 * Makes the window a grid of `cols` by `rows` terminals of the
+	 * profile its first session was opened on (--grid, and New Window
+	 * Grid): that one and as many more, each connecting, laid out as
+	 * rows of panes. What the window is too small to show becomes tabs,
+	 * as any layout does (sec 8.2).
+	 */
+	void open_grid(int cols, int rows);
+
+	/*
+	 * The window size that gives each of a `cols` by `rows` grid of
+	 * terminals `each` cells, kept on the screen this window is on.
+	 */
+	QSize size_for_grid_of(int cols, int rows, const QSize &each);
+
+	/*
 	 * Reopens the hosts a previous run left open (sec 8.4), unconnected.
 	 *
 	 * Called by main() and not by the constructor, and it joins the other
@@ -535,6 +550,10 @@ private:
 	 * new-tab and new-window chords).
 	 */
 	void open_another_session(bool in_a_window);
+
+	/* Asks how many terminals, and of what, and opens a window of them. */
+	void open_grid_window();
+	void open_grid_window(int cols, int rows, int profile_id);
 
 	/*
 	 * Every paste goes through here: the shortcut, the context menu and

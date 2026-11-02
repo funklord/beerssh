@@ -83,6 +83,7 @@ beerssh user@host -e htop        # htop over there, as `ssh -t` runs it
 beerssh --workdir /srv -T Logs -e tail -f app.log
 beerssh --geometry 120x40        # cells, as xterm counts them -- not pixels
 beerssh --load "prod bastion"    # a saved session, by name
+beerssh --grid 3x2 user@host     # six shells on that host, three across, two down
 ```
 
 `--hold` keeps a pane after the command exits, `--help` lists the rest, and

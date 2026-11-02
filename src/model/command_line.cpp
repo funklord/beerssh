@@ -22,6 +22,13 @@ namespace {
  */
 const int BSSH_MAX_CELLS = 1000;
 
+/*
+ * The most terminals --grid opens each way. Eight by eight is already
+ * sixty-four shells, more than any screen shows as panes; past it is a
+ * typo, not a layout.
+ */
+const int BSSH_MAX_GRID = 8;
+
 /* Where the description column starts in the help text. */
 const int BSSH_HELP_COLUMN = 32;
 const int BSSH_HELP_WIDTH = 79;
@@ -107,6 +114,12 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 			"The terminal size in CELLS, as xterm means it -- 80x24 is "
 			"eighty columns and twenty-four rows, whatever the font. An "
 			"optional +X+Y places the window, in pixels." },
+		{ "grid", "", "COLSxROWS",
+			"Open that many terminals of whatever this run opens -- a "
+			"shell, a host, a saved session -- COLS side by side and "
+			"ROWS one above the other, in one window. --geometry is then "
+			"each terminal's size. What does not fit on the screen "
+			"becomes tabs." },
 		{ "load", "", "session",
 			"Open a saved session by name, as PuTTY's -load does. The "
 			"name is the one the host list shows. Run --load=? to list "
@@ -652,6 +665,26 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 			line.has_position = true;
 			line.x = match.captured(3).toInt();
 			line.y = match.captured(4).toInt();
+		}
+	}
+
+	if (parser.isSet(QStringLiteral("grid"))) {
+		const QString spec = parser.value(QStringLiteral("grid"));
+		static const QRegularExpression pattern(QStringLiteral("^(\\d+)x(\\d+)$"));
+		const QRegularExpressionMatch match = pattern.match(spec);
+		if (!match.hasMatch()) {
+			line.error = QStringLiteral("--grid wants COLSxROWS, not \"%1\"").arg(spec);
+			return line;
+		}
+		line.grid_cols = match.captured(1).toInt();
+		line.grid_rows = match.captured(2).toInt();
+		if (line.grid_cols < 1 || line.grid_rows < 1
+		    || line.grid_cols > BSSH_MAX_GRID || line.grid_rows > BSSH_MAX_GRID) {
+			line.error = QStringLiteral("--grid: %1x%2 is outside 1 to %3 each way")
+			                     .arg(line.grid_cols)
+			                     .arg(line.grid_rows)
+			                     .arg(BSSH_MAX_GRID);
+			return line;
 		}
 	}
 
