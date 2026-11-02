@@ -5469,3 +5469,45 @@ void terminal_view_test::an_unchosen_scheme_follows_the_app_and_a_chosen_one_sta
 
 	bssh_theme::apply(was_light ? bssh_theme::MODE_LIGHT : bssh_theme::MODE_DARK);
 }
+
+void terminal_view_test::an_underscore_is_drawn_in_its_cell() {
+	/*
+	 * Driving the desktop build on Xvfb, 2026-11-02: "a_b__c" read
+	 * "a b  c" -- no underscore drawn at all, in the shell and in mc. Its
+	 * ink landed a pixel below the cell at some sizes, 11 points among
+	 * them, where the next row's background covers it. A lone underscore,
+	 * cursor elsewhere, leaves ink in its own cell at every size.
+	 */
+	const bssh_terminal_view::scrollbar_position_t original =
+	        bssh_terminal_view::default_scrollbar_position();
+	bssh_terminal_view::set_default_scrollbar_position(bssh_terminal_view::SCROLLBAR_NONE);
+	for (const char *font : { "dejavu-sans-mono", "jetbrains-mono", "hack" }) {
+		for (const int size : { 9, 10, 11, 12, 13, 14, 16 }) {
+			bssh_terminal_view view;
+			view.resize(400, 120);
+			QJsonObject settings;
+			settings.insert(QStringLiteral("font_family"), QString::fromLatin1(font));
+			settings.insert(QStringLiteral("font_size"), size);
+			bssh_apply_appearance(&view, settings);
+			bssh_screen screen(view.cols(), view.rows());
+			bssh_cell_t under;
+			under.ch = U'_';
+			screen.set_cell(0, 2, under);
+			screen.set_cursor(view.rows() - 1, view.cols() - 1);
+			screen.set_cursor_visible(false);
+			view.attach_screen(&screen);
+			view.show();
+			QVERIFY(QTest::qWaitForWindowExposed(&view));
+			const QImage frame = view.grab().toImage();
+			const QColor background = frame.pixelColor(frame.width() / 2, frame.height() - 3);
+			/* The grid sits one pixel in from the top and from the left. */
+			const QRect cell(1 + 2 * view.cell_width(), 1, view.cell_width(), view.cell_height());
+			const QRect ink = ink_box(frame.copy(cell.adjusted(0, 0, 0, 0)), background);
+			QVERIFY2(!ink.isEmpty(),
+			         qPrintable(QStringLiteral("%1 at %2: no ink in the underscore's cell %3x%4")
+			                    .arg(QString::fromLatin1(font)).arg(size)
+			                    .arg(view.cell_width()).arg(view.cell_height())));
+		}
+	}
+	bssh_terminal_view::set_default_scrollbar_position(original);
+}

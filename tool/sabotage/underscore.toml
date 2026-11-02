@@ -1,0 +1,11 @@
+# The underscore is the lowest ink a terminal prints. Sized by the font's
+# rounded height alone, the cell ends above it at some sizes -- 11 points
+# of DejaVu Sans Mono among them -- and the next row's background covers
+# every underscore on screen.
+
+[[sabotage]]
+name = "the cell is sized without the underscore"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tm_cell_height = qMax(m_cell_height, m_baseline + int(std::ceil(under.bottom())));\n"
+replace = "\t\t;\n"
+expect = "an_underscore_is_drawn_in_its_cell"

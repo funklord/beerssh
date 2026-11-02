@@ -14599,10 +14599,6 @@ void layout_test::the_divider_magnet_is_the_users_to_set_or_switch_off() {
 	QSplitter *splitter = container.findChild<QSplitter *>();
 	QVERIFY(splitter);
 
-	const QList<int> sizes = splitter->sizes();
-	QCOMPARE(sizes.size(), 2);
-	const int total = sizes.at(0) + sizes.at(1);
-
 	/*
 	 * A position inside the default magnet whose own row-floor is NOT
 	 * the halfway line's, so the two settings give different answers.
@@ -14610,14 +14606,25 @@ void layout_test::the_divider_magnet_is_the_users_to_set_or_switch_off() {
 	 * nearest row boundary falls on depends on the widget's height and
 	 * the font's cell, and a fixed offset happens to separate nothing at
 	 * some of them -- which is a test that passes while asking nothing.
+	 * The height is searched too: a cell one pixel taller (the underscore
+	 * fix, 2026-11-02) left no such position at 600.
 	 */
-	const int half = total / 2;
+	int total = 0;
+	int half = 0;
 	int near = -1;
-	for (int d = 1; d <= BSSH_COLUMN_SNAP_RADIUS && near < 0; ++d) {
-		if (bssh_snap_pane_extent(half - d, cell) != bssh_snap_pane_extent(half, cell))
-			near = half - d;
-		else if (bssh_snap_pane_extent(half + d, cell) != bssh_snap_pane_extent(half, cell))
-			near = half + d;
+	for (int extra = 0; extra < 2 * cell && near < 0; ++extra) {
+		container.resize(400, 600 + extra);
+		QCoreApplication::processEvents();
+		const QList<int> sizes = splitter->sizes();
+		QCOMPARE(sizes.size(), 2);
+		total = sizes.at(0) + sizes.at(1);
+		half = total / 2;
+		for (int d = 1; d <= BSSH_COLUMN_SNAP_RADIUS && near < 0; ++d) {
+			if (bssh_snap_pane_extent(half - d, cell) != bssh_snap_pane_extent(half, cell))
+				near = half - d;
+			else if (bssh_snap_pane_extent(half + d, cell) != bssh_snap_pane_extent(half, cell))
+				near = half + d;
+		}
 	}
 	QVERIFY2(near > 0, "no position inside the magnet floors to a different row, "
 	                    "so this geometry cannot tell the settings apart");

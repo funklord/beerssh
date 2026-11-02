@@ -32,6 +32,8 @@
 #include <QContextMenuEvent>
 #include <QPainter>
 #include <QPainterPath>
+
+#include <cmath>
 #include <QTimer>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -989,6 +991,21 @@ void bssh_terminal_view::update_metrics() {
 	m_cell_width = qMax(1, qRound(metrics.horizontalAdvance(QLatin1Char('W'))));
 	m_cell_height = qMax(1, qRound(metrics.height()));
 	m_baseline = qRound(metrics.ascent());
+
+	/*
+	 * Tall enough for the underscore, which sits lowest of anything a
+	 * terminal prints. The font's height is its ascent plus its descent,
+	 * rounded, and the baseline its rounded ascent -- and at some sizes the
+	 * underscore's ink lands a pixel below the cell that makes. The next
+	 * row's background is painted over it, and every underscore on screen
+	 * is gone: "a_b__c" read "a b  c" with DejaVu Sans Mono at 11 points,
+	 * the desktop default, at 14 and at 16 (seen 2026-11-02). Measured from
+	 * the glyph's own ink rather than from the font's descent, which is
+	 * what disagreed.
+	 */
+	const QRectF under = metrics.tightBoundingRect(QStringLiteral("_"));
+	if (under.isValid())
+		m_cell_height = qMax(m_cell_height, m_baseline + int(std::ceil(under.bottom())));
 
 	/*
 	 * ...and whole DEVICE pixels, not merely whole logical ones, which is

@@ -11045,6 +11045,19 @@ once and never refreshed. The second is the subtler of the two -- it
 leaves a session that changes font wearing the note it had, including
 an empty one forever, which is the silent case again by a quieter road.
 
+**The cell holds the underscore (2026-11-02).** Driving the desktop build
+on Xvfb, "a_b__c" read "a b  c" -- in the shell, in mc, everywhere: with
+DejaVu Sans Mono at 11 points, the desktop default, and at 14 and 16, the
+underscore's ink lay one pixel below the cell its row makes, and the next
+row's background was painted over it. The cell is the font's ascent plus
+descent, rounded, with the baseline at the rounded ascent, and the
+underscore's real ink sits lower than that descent at those sizes. The
+cell height is now at least the baseline plus the bottom of the
+underscore's tight bounding box, so a row grows by a pixel where it has
+to and stays as it was where it fits. `an_underscore_is_drawn_in_its_cell`
+draws a lone underscore in three fonts at seven sizes and finds its ink in
+its own cell; `tool/sabotage/underscore.toml`.
+
 ### 9.5a Repainting only the rows that changed — **[BUILT 2026-10-23]**
 
 **The holder asked why beerssh felt "slightly off" beside TDE Konsole** --
