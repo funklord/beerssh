@@ -10317,6 +10317,7 @@ is the one colour the remote never sets. Hence the set:
 | id | background | ordinary text | for |
 |---|---|---|---|
 | `default` | `#000000` | `#ffffff` | the default while the app is dark |
+| `konsole` | `#000000` | `#b2b2b2` | the holder's TDE Konsole colours, with their own sixteen |
 | `green-on-black` | `#000000` | `#00ff00` | the green phosphor |
 | `yellow-on-black` | `#000000` | `#ffff00` | the amber phosphor |
 | `black-on-white` | `#ffffff` | `#000000` | e-paper, and the default while the app is light |
@@ -10342,6 +10343,19 @@ ordinary thing to do. The id `default` is kept rather than renamed to what it
 now is, so every stored profile already saying `default` keeps working, and
 the removed ids pass through §10.1's resolver unchanged and draw in the
 default — a profile pinned to `solarized-dark` degrades rather than breaking.
+
+**One exception to the shared palette, by the holder's request, 2026-11-02:
+`konsole`.** "Add another white on black colour preset called konsole and copy
+my tde konsole colour scheme." Their Konsole uses TDE's `Linux.schema` (*Linux
+Colors*, `/opt/trinity/share/apps/konsole/`): grey `#b2b2b2` text on black and
+the Linux console's palette, which is dimmer than VGA in the normal half
+(`0xb2` against `0xaa`) and has a grey `#686868` for bright black. It is the
+palette they already read every day, so it is reproduced with its own sixteen
+(`BSSH_KONSOLE_LINUX`) rather than drawn in classic ANSI; it is the only entry
+that brings its own, and the shared-palette test names it as the exception
+and pins its numbers to the schema's. The renderer's contrast lift applies as
+to any scheme, so its black and dark blue are lifted on black like the rest.
+
 
 **Contrast is still a property of the reader.** The floor below was written to
 reconcile faithfulness with legibility, and it survives the change intact for

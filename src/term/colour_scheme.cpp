@@ -6,7 +6,7 @@
 namespace {
 
 /*
- * The set. Four fixed schemes and a custom one, and the shape of the list
+ * The set. Five fixed schemes and a custom one, and the shape of the list
  * is the decision: a terminal is not a canvas.
  *
  * The palette argument is settled and has been for decades. What a program
@@ -40,6 +40,21 @@ const QRgb BSSH_CLASSIC_ANSI[16] = {
 	0x5555ff, 0xff55ff, 0x55ffff, 0xffffff
 };
 
+/*
+ * The holder's own TDE Konsole colours, its Linux.schema: the Linux
+ * console's palette, dimmer than VGA in the normal half (0xb2 against
+ * 0xaa) and a grey rather than VGA's for bright black. The one entry with
+ * a palette of its own, asked for by name (2026-11-02) -- the argument
+ * above is against offering designer palettes as an ordinary choice, and
+ * this is the set the holder already reads every day in Konsole.
+ */
+const QRgb BSSH_KONSOLE_LINUX[16] = {
+	0x000000, 0xb21818, 0x18b218, 0xb26818,
+	0x1818b2, 0xb218b2, 0x18b2b2, 0xb2b2b2,
+	0x686868, 0xff5454, 0x54ff54, 0xffff54,
+	0x5454ff, 0xff54ff, 0x54ffff, 0xffffff
+};
+
 struct entry_t {
 	const char *id;
 	const char *display_name;
@@ -48,6 +63,9 @@ struct entry_t {
 	QRgb background;
 	QRgb foreground;
 	QRgb cursor;
+
+	/* The sixteen, or null for the classic ANSI set every other uses. */
+	const QRgb *ansi = nullptr;
 };
 
 /*
@@ -62,6 +80,10 @@ struct entry_t {
 const entry_t BSSH_SCHEMES[] = {
 	{ "default", "White on black", "Classic ANSI", true,
 		0x000000, 0xffffff, 0xffffff },
+
+	/* Konsole's "Linux Colors": grey text on black, white for bold. */
+	{ "konsole", "Konsole", "TDE Konsole, Linux.schema", true,
+		0x000000, 0xb2b2b2, 0xb2b2b2, BSSH_KONSOLE_LINUX },
 
 	{ "green-on-black", "Green on black", "Classic ANSI", true,
 		0x000000, 0x00ff00, 0x00ff00 },
@@ -104,14 +126,15 @@ bssh_colour_scheme_catalog::bssh_colour_scheme_catalog() {
 		scheme.dark = entry.dark;
 
 		/*
-		 * One palette, shared by every scheme. A scheme chooses the
-		 * background and the colour of ordinary text; it does not get
-		 * to redefine what the program meant by red.
+		 * One palette, shared by every scheme but the one that brings its
+		 * own. A scheme chooses the background and the colour of ordinary
+		 * text; it does not get to redefine what the program meant by red.
 		 */
+		const QRgb *palette = entry.ansi ? entry.ansi : BSSH_CLASSIC_ANSI;
 		for (int i = 0; i < 16; ++i) {
 			/* The table is written as 0xRRGGBB for readability; QRgb wants
 			 * the alpha byte set or every colour is transparent. */
-			scheme.ansi[i] = 0xff000000u | BSSH_CLASSIC_ANSI[i];
+			scheme.ansi[i] = 0xff000000u | palette[i];
 		}
 
 		scheme.background = 0xff000000u | entry.background;

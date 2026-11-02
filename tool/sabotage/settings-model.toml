@@ -67,3 +67,11 @@ file = "src/model/settings_resolver.cpp"
 find = "\tconst QJsonObject stored = bssh_app_settings().default_settings();\n"
 replace = "\tconst QJsonObject stored;\n"
 expect = "a_host_with_no_preset_uses_its_own_size_and_the_device_default"
+
+# The Konsole scheme drawn in the shared palette, not the holder's own.
+[[sabotage]]
+name = "the Konsole scheme loses its own palette"
+file = "src/term/colour_scheme.cpp"
+find = "\t\tconst QRgb *palette = entry.ansi ? entry.ansi : BSSH_CLASSIC_ANSI;\n"
+replace = "\t\tconst QRgb *palette = BSSH_CLASSIC_ANSI;\n"
+expect = "a_scheme_owns_the_background_and_the_text_not_the_palette"

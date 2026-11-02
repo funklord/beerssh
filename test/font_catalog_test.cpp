@@ -334,6 +334,7 @@ void font_catalog_test::a_scheme_owns_the_background_and_the_text_not_the_palett
 	QVERIFY(catalog.by_id(QStringLiteral("yellow-on-black")) != nullptr);
 	QVERIFY(catalog.by_id(QStringLiteral("black-on-white")) != nullptr);
 	QVERIFY(catalog.by_id(QStringLiteral("custom")) != nullptr);
+	QVERIFY(catalog.by_id(QStringLiteral("konsole")) != nullptr);
 
 	/*
 	 * ONE palette across all of them, which is the point of the set. A
@@ -345,12 +346,31 @@ void font_catalog_test::a_scheme_owns_the_background_and_the_text_not_the_palett
 	const bssh_colour_scheme_t *shared = catalog.by_id(catalog.default_id());
 	QVERIFY(shared);
 	for (const bssh_colour_scheme_t &scheme : catalog.all()) {
+		/*
+		 * The one exception, asked for by name (the holder, 2026-11-02):
+		 * the holder's own TDE Konsole colours, its Linux.schema, the
+		 * palette they already read every day. Its numbers are pinned
+		 * below rather than left to drift.
+		 */
+		if (scheme.id == QStringLiteral("konsole")) continue;
 		for (int i = 0; i < 16; ++i) {
 			QVERIFY2(scheme.ansi[i] == shared->ansi[i],
 			          qPrintable(QStringLiteral("%1 repaints ANSI %2")
 			                             .arg(scheme.id).arg(i)));
 		}
 	}
+
+	/* Konsole's Linux.schema, slots 2-9 and 12-19, and its text colour. */
+	const bssh_colour_scheme_t *konsole = catalog.by_id(QStringLiteral("konsole"));
+	const QRgb linux_schema[16] = {
+		qRgb(0, 0, 0),       qRgb(178, 24, 24),  qRgb(24, 178, 24),  qRgb(178, 104, 24),
+		qRgb(24, 24, 178),   qRgb(178, 24, 178), qRgb(24, 178, 178), qRgb(178, 178, 178),
+		qRgb(104, 104, 104), qRgb(255, 84, 84),  qRgb(84, 255, 84),  qRgb(255, 255, 84),
+		qRgb(84, 84, 255),   qRgb(255, 84, 255), qRgb(84, 255, 255), qRgb(255, 255, 255) };
+	for (int i = 0; i < 16; ++i) QCOMPARE(konsole->ansi[i], linux_schema[i]);
+	QCOMPARE(konsole->foreground, qRgb(178, 178, 178));
+	QCOMPARE(konsole->background, qRgb(0, 0, 0));
+	QVERIFY(konsole->dark);
 
 	for (const bssh_colour_scheme_t &scheme : catalog.all()) {
 		QVERIFY(!scheme.id.isEmpty());
