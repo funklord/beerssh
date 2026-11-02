@@ -9593,20 +9593,35 @@ tab bar there in addition to the other drop zones we already have."
 - **The bar's handle** is a block of dots at the bar's start -- not three
   lines, which is the pane grip's, since the two move different things.
   Dragged, the side of the panes' area nearest the pointer is lit along
-  the panes on it, and letting go puts every bar there, as the "Tabs,
-  side by side" setting would (`bssh_bar_side_at`; no middle -- every
-  point is nearest some side). The light is each pane's own painting, as
+  the panes on it, and letting go puts that pane's bar there
+  (`bssh_bar_side_at`; no middle -- every point is nearest some side). The light is each pane's own painting, as
   a drop zone is: an overlay widget over the panes was tried first, and
   was laid out, shown and rendered by `grab()`, yet twin's screen never
   had it on.
 - **A band along each edge of a pane that shows no bar** -- a line of text
   wide (`bssh_drop_band`) -- is a tab zone: a terminal dropped there joins
-  the pane as a tab and the bar goes on that side
+  the pane as a tab and that pane's bar goes on that side
   (`BSSH_DROP_TAB_BASE` plus the edge, `bssh_drop_zone_at`). The rest of
   the edge zone splits as before. Offered only side by side, where the
   pane shows no bar (one tab, or bars hidden) and the session is not
   already one of its tabs; anywhere else the band is part of the edge it
   lies on, so every drop that worked before does the same.
+- **Each pane's bar keeps its own side, 2026-11-02.** The holder:
+  moving one bar to a side moved every other bar too, "practical
+  usually but less intuitive, than leaving the others alone and
+  allowing them to sit on different sides until moved". Both the handle
+  and a band wrote the "Tabs, side by side" setting. Now the side is the
+  PANE's (`bssh_pane_node::bar_edge`): it stays as the front changes and
+  as panes trade places, a tab carried off to a pane of its own takes
+  the setting's side, and it is saved with the shape as `a|*b@l`. The
+  setting is the side for a pane nobody has moved a bar of, and choosing
+  a side in Settings puts every bar there, since that is a choice made
+  for all of them; Hidden clears nothing. The stacked column has no
+  sides to offer and keeps the setting's. Rejected: keeping the side per
+  session, which jumps a bar whenever a tab from elsewhere comes to the
+  front of it. `a_bar_side_belongs_to_its_pane`, and
+  `the_tab_bar_is_dragged_to_another_side` now with a second barred pane
+  that must not move; three edits in `tab-position.toml`.
 - **The handle works on its own pane only, 2026-10-30.** The holder: "a
   tab bar shouldn't be movable to other terminals". The side was read
   from the whole panes area and lit every pane along it, so a handle

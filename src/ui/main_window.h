@@ -928,6 +928,9 @@ private:
 	 */
 	void apply_tab_position(int position);
 	int m_tab_position = 0;
+	/* The tab position setting as last seen, to tell a change of it
+	 * from the passes that merely re-read it; -1 before the first. */
+	int m_tab_setting_seen = -1;
 	QVBoxLayout *m_page_layout = nullptr;
 	QHBoxLayout *m_body = nullptr;
 

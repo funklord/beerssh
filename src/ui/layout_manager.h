@@ -31,6 +31,13 @@ struct bssh_pane_node {
 	 */
 	QList<bssh_session *> tabs;
 
+	/*
+	 * The side a leaf's bar is on, when it has been put somewhere of its
+	 * own; none means the window's setting. A pane's, not a session's:
+	 * it stays as the front changes and a tab carried off leaves it.
+	 */
+	Qt::Edges bar_edge;
+
 	Qt::Orientation orientation = Qt::Horizontal;
 	std::vector<bssh_pane_node> children;
 
@@ -268,6 +275,17 @@ public:
 	bool bring_to_front(bssh_session *session);
 
 	/*
+	 * The side of its pane that the bar of the pane holding `member` was
+	 * put on, or none when it follows the window's setting. Setting it
+	 * moves that pane's bar alone (the holder, 2026-11-02: moving one bar
+	 * took every other along); clearing them all puts every bar back on
+	 * the setting, which is what choosing one in Settings means.
+	 */
+	Qt::Edges bar_edge(bssh_session *member) const;
+	void set_bar_edge(bssh_session *member, Qt::Edges edge);
+	void clear_bar_edges();
+
+	/*
 	 * Where a dropped pane goes, relative to the pane it was dropped on
 	 * (sec 8.3). An edge splits the target that way -- left and right
 	 * side by side, top and bottom one above the other -- and the middle
@@ -316,6 +334,8 @@ public:
 	 * `name` gives nothing for is left out, and one that `find` cannot
 	 * resolve on the way back is dropped, the shape closing around it:
 	 * a host deleted since the save does not come back as a hole.
+	 * A pane whose bar was put on a side of its own carries it after its
+	 * tabs, as "a|*b@l" -- l, r, t or b.
 	 * Unparseable text reads as an empty tree, which callers treat as
 	 * "nothing saved".
 	 */

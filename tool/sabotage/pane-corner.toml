@@ -113,7 +113,7 @@ expect = "a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there"
 [[sabotage]]
 name = "a band drop does not move the bar"
 file = "src/ui/main_window.cpp"
-find = "\t\tbssh_app_settings().set_tab_position(side);\n\t\tapply_tab_position(int(side));\n\t\tdrop_session_as_tab(session, target, INT_MAX);"
+find = "\t\tm_layout->set_bar_edge(target, side);\n\t\tdrop_session_as_tab(session, target, INT_MAX);"
 replace = "\t\tdrop_session_as_tab(session, target, INT_MAX);"
 expect = "a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there"
 

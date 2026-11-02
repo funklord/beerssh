@@ -135,3 +135,28 @@ file = "src/ui/pane_bar.cpp"
 find = "new bar_handle(this, vertical, pointer ? 0 : BSSH_TOUCH_TARGET_DP)"
 replace = "new bar_handle(this, vertical, 0)"
 expect = "a_touch_windows_pane_controls_reach_the_floor"
+
+# A pane's own side, not every bar's (the holder, 2026-11-02): the other
+# panes' bars follow one moved by its handle.
+[[sabotage]]
+name = "a pane's own bar side is ignored"
+file = "src/ui/pane_container.cpp"
+find = "\tconst Qt::Edges own = m_layout->bar_edge(member);\n"
+replace = "\tconst Qt::Edges own;\n"
+expect = "the_tab_bar_is_dragged_to_another_side"
+
+# Two panes trading places, and the side stays in the slot.
+[[sabotage]]
+name = "a bar side stays behind when its pane moves"
+file = "src/ui/layout_manager.cpp"
+find = "\t\t\tnode.bar_edge = was.bar_edge;\n"
+replace = ""
+expect = "a_bar_side_belongs_to_its_pane"
+
+# Settings chosen, and a bar put on a side of its own stays there.
+[[sabotage]]
+name = "a side chosen in Settings leaves single bars where they were"
+file = "src/ui/layout_manager.cpp"
+find = "\tif (clear_edges(m_tree)) emit layout_changed();\n"
+replace = ""
+expect = "the_tab_bar_is_dragged_to_another_side"

@@ -1,6 +1,7 @@
 #include "ui/layout_manager.h"
 
 #include <functional>
+#include <utility>
 
 #include <QHash>
 #include <QStringList>
@@ -64,11 +65,12 @@ void collect_all(const bssh_pane_node &node, QList<bssh_session *> &out) {
 	for (const bssh_pane_node &child : node.children) collect_all(child, out);
 }
 
-/* Each leaf's tabs, keyed by its front, so a front can be moved with them. */
+/* Each leaf as it is -- tabs and bar side -- keyed by its front, so a
+ * front can be moved with them. */
 void collect_stacks(const bssh_pane_node &node,
-                    QHash<bssh_session *, QList<bssh_session *>> &out) {
+                    QHash<bssh_session *, bssh_pane_node> &out) {
 	if (node.is_leaf()) {
-		out.insert(node.session, node.tabs);
+		out.insert(node.session, node);
 		return;
 	}
 	for (const bssh_pane_node &child : node.children) collect_stacks(child, out);
@@ -82,11 +84,13 @@ void collect_stacks(const bssh_pane_node &node,
  * it); one new to the tree arrives alone.
  */
 void assign_leaves(bssh_pane_node &node, const QList<bssh_session *> &order, int &next,
-                   const QHash<bssh_session *, QList<bssh_session *>> &stacks) {
+                   const QHash<bssh_session *, bssh_pane_node> &stacks) {
 	if (node.is_leaf()) {
 		if (next < order.size()) {
+			const bssh_pane_node was = stacks.value(order.at(next));
 			node.session = order.at(next);
-			node.tabs = stacks.value(node.session);
+			node.tabs = was.tabs;
+			node.bar_edge = was.bar_edge;
 		}
 		++next;
 		return;
@@ -95,7 +99,7 @@ void assign_leaves(bssh_pane_node &node, const QList<bssh_session *> &order, int
 }
 
 void assign_leaves(bssh_pane_node &root, const QList<bssh_session *> &order) {
-	QHash<bssh_session *, QList<bssh_session *>> stacks;
+	QHash<bssh_session *, bssh_pane_node> stacks;
 	collect_stacks(root, stacks);
 	int next = 0;
 	assign_leaves(root, order, next, stacks);
@@ -460,6 +464,28 @@ void bssh_layout_manager::set_tree(const bssh_pane_node &tree) {
 	emit layout_changed();
 }
 
+namespace {
+
+/* A bar side in a saved shape, and back: l, r, t, b. */
+QChar edge_letter(Qt::Edges edge) {
+	if (edge & Qt::LeftEdge) return QLatin1Char('l');
+	if (edge & Qt::RightEdge) return QLatin1Char('r');
+	if (edge & Qt::BottomEdge) return QLatin1Char('b');
+	return QLatin1Char('t');
+}
+
+Qt::Edges letter_edge(QChar letter) {
+	switch (letter.unicode()) {
+	case 'l': return Qt::LeftEdge;
+	case 'r': return Qt::RightEdge;
+	case 'b': return Qt::BottomEdge;
+	case 't': return Qt::TopEdge;
+	default:  return {};
+	}
+}
+
+} /* namespace */
+
 QString bssh_layout_manager::shape_text(const bssh_pane_node &node,
                                         const std::function<QString(bssh_session *)> &name) {
 	if (node.is_leaf()) {
@@ -477,9 +503,15 @@ QString bssh_layout_manager::shape_text(const bssh_pane_node &node,
 			if (each == node.session) front = int(named.size());
 			named.append(text);
 		}
-		if (named.size() < 2) return named.value(0);
-		named[qMax(0, front)].prepend(QLatin1Char('*'));
-		return named.join(QLatin1Char('|'));
+		QString text;
+		if (named.size() < 2) {
+			text = named.value(0);
+		} else {
+			named[qMax(0, front)].prepend(QLatin1Char('*'));
+			text = named.join(QLatin1Char('|'));
+		}
+		if (text.isEmpty() || !node.bar_edge) return text;
+		return text + QLatin1Char('@') + edge_letter(node.bar_edge);
 	}
 	if (node.is_empty()) return QString();
 
@@ -527,10 +559,18 @@ bool parse_node(const QString &text, int &at, bssh_pane_node &out,
 		++at;
 	if (at == start) return false;
 
-	/* "b|*a|c": tabs, the front marked; hosts not found are dropped. */
+	/* "b|*a|c": tabs, the front marked; hosts not found are dropped.
+	 * "@l" after them is the side the pane's bar was put on. */
+	QString leaf_text = text.mid(start, at - start);
+	Qt::Edges edge;
+	const int mark = leaf_text.lastIndexOf(QLatin1Char('@'));
+	if (mark >= 0 && mark == leaf_text.size() - 2) {
+		edge = letter_edge(leaf_text.at(mark + 1));
+		if (edge) leaf_text.truncate(mark);
+	}
 	QList<bssh_session *> tabs;
 	bssh_session *front = nullptr;
-	for (QString part : text.mid(start, at - start).split(QLatin1Char('|'))) {
+	for (QString part : leaf_text.split(QLatin1Char('|'))) {
 		const bool marked = part.startsWith(QLatin1Char('*'));
 		if (marked) part.remove(0, 1);
 		bssh_session *found = part.isEmpty() ? nullptr : find(part);
@@ -541,6 +581,7 @@ bool parse_node(const QString &text, int &at, bssh_pane_node &out,
 	if (tabs.isEmpty()) return true;
 	out.session = front ? front : tabs.first();
 	if (tabs.size() > 1) out.tabs = tabs;
+	out.bar_edge = edge;
 	return true;
 }
 
@@ -679,4 +720,31 @@ bool bssh_layout_manager::bring_to_front(bssh_session *session) {
 
 	emit layout_changed();
 	return true;
+}
+
+Qt::Edges bssh_layout_manager::bar_edge(bssh_session *member) const {
+	const bssh_pane_node *pane = find_pane(m_tree, member);
+	return pane ? pane->bar_edge : Qt::Edges();
+}
+
+void bssh_layout_manager::set_bar_edge(bssh_session *member, Qt::Edges edge) {
+	bssh_pane_node *pane = find_pane(m_tree, member);
+	if (!pane || pane->bar_edge == edge) return;
+	pane->bar_edge = edge;
+	emit layout_changed();
+}
+
+namespace {
+
+bool clear_edges(bssh_pane_node &node) {
+	if (node.is_leaf()) return std::exchange(node.bar_edge, Qt::Edges()) != Qt::Edges();
+	bool any = false;
+	for (bssh_pane_node &child : node.children) any = clear_edges(child) || any;
+	return any;
+}
+
+} /* namespace */
+
+void bssh_layout_manager::clear_bar_edges() {
+	if (clear_edges(m_tree)) emit layout_changed();
 }

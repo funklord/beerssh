@@ -1057,6 +1057,16 @@ void layout_test::the_tab_bar_is_dragged_to_another_side() {
 	window.drop_session_on(gamma, window.layout_manager()->front_of(gamma), bssh_layout_manager::EDGE_RIGHT);
 	QCoreApplication::processEvents();
 
+	/* A tab beside gamma too, so both panes show a bar: the one not
+	 * dragged must stay where it is (the holder, 2026-11-02). */
+	bssh_session *delta = window.registry()->create(named(QStringLiteral("delta")));
+	window.adopt_session(delta);
+	QCoreApplication::processEvents();
+	QVERIFY(window.layout_manager()->add_tab(delta, gamma, INT_MAX));
+	QCoreApplication::processEvents();
+	QVERIFY(window.layout_manager()->bring_to_front(gamma));
+	QCoreApplication::processEvents();
+
 	bssh_pane_container *panes = window.findChild<bssh_pane_container *>();
 	QVERIFY(panes);
 	QCOMPARE(panes->bar_edge(), Qt::TopEdge);
@@ -1109,10 +1119,29 @@ void layout_test::the_tab_bar_is_dragged_to_another_side() {
 	QCOMPARE(other->drop_zone(), -1);
 
 	QTest::mouseRelease(handle, Qt::LeftButton, Qt::NoModifier, left_middle);
-	QTRY_COMPARE(panes->bar_edge(), Qt::LeftEdge);
-	QCOMPARE(bssh_app_settings().tab_position(), bssh_app_settings::TABS_LEFT);
+	QTRY_COMPARE(panes->bar_edge_for(alpha), Qt::LeftEdge);
 	for (bssh_terminal_view *after : panes->views())
 		QVERIFY2(after->drop_zone() == -1, "a pane stayed lit after the drop");
+
+	/* That pane's bar alone: the other stays on top, and so does the
+	 * setting every new pane takes its side from. */
+	const auto shape_of_bar = [&window](bssh_session *member) {
+		bssh_pane_bar *row = window.bar_for(window.layout_manager()->front_of(member));
+		QTabBar *tabs = row ? row->findChild<QTabBar *>() : nullptr;
+		return tabs && tabs->isVisible() ? int(tabs->shape()) : -1;
+	};
+	QTRY_COMPARE(shape_of_bar(alpha), int(QTabBar::RoundedWest));
+	QCOMPARE(panes->bar_edge_for(gamma), Qt::TopEdge);
+	QCOMPARE(shape_of_bar(gamma), int(QTabBar::RoundedNorth));
+	QCOMPARE(bssh_app_settings().tab_position(), bssh_app_settings::TABS_TOP);
+
+	/* A side chosen in Settings is for every bar, and the one put on a
+	 * side of its own gives way to it. */
+	bssh_app_settings().set_tab_position(bssh_app_settings::TABS_BOTTOM);
+	window.apply_device_settings();
+	QTRY_COMPARE(panes->bar_edge_for(alpha), Qt::BottomEdge);
+	QCOMPARE(panes->bar_edge_for(gamma), Qt::BottomEdge);
+	QTRY_COMPARE(shape_of_bar(alpha), int(QTabBar::RoundedSouth));
 }
 
 void layout_test::a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there() {
@@ -1154,8 +1183,9 @@ void layout_test::a_terminal_dropped_on_a_side_band_makes_a_tab_bar_there() {
 	QCoreApplication::processEvents();
 	QCOMPARE(layout->intent().size(), 1);
 	QCOMPARE(layout->tabs(layout->intent().first()).size(), 2);
-	QTRY_COMPARE(panes->bar_edge(), Qt::RightEdge);
-	QCOMPARE(bssh_app_settings().tab_position(), bssh_app_settings::TABS_RIGHT);
+	QTRY_COMPARE(panes->bar_edge_for(a), Qt::RightEdge);
+	QCOMPARE(panes->bar_edge(), Qt::TopEdge);
+	QCOMPARE(bssh_app_settings().tab_position(), bssh_app_settings::TABS_TOP);
 
 	/*
 	 * Now the pane HAS a bar: a band there is just the edge it lies on, a
@@ -5050,11 +5080,11 @@ void layout_test::a_release_on_a_strip_makes_a_tab() {
 		bssh_app_settings::tab_position_t tabs = bssh_app_settings().tab_position();
 		~restore_t() { bssh_app_settings().set_tab_position(tabs); }
 	} restore;
-	struct side_t { int edge; bssh_app_settings::tab_position_t bars; };
-	for (const side_t side : { side_t{ bssh_layout_manager::EDGE_TOP, bssh_app_settings::TABS_TOP },
-	                           side_t{ bssh_layout_manager::EDGE_LEFT, bssh_app_settings::TABS_LEFT },
-	                           side_t{ bssh_layout_manager::EDGE_BOTTOM, bssh_app_settings::TABS_BOTTOM },
-	                           side_t{ bssh_layout_manager::EDGE_RIGHT, bssh_app_settings::TABS_RIGHT } }) {
+	struct side_t { int edge; Qt::Edge bars; };
+	for (const side_t side : { side_t{ bssh_layout_manager::EDGE_TOP, Qt::TopEdge },
+	                           side_t{ bssh_layout_manager::EDGE_LEFT, Qt::LeftEdge },
+	                           side_t{ bssh_layout_manager::EDGE_BOTTOM, Qt::BottomEdge },
+	                           side_t{ bssh_layout_manager::EDGE_RIGHT, Qt::RightEdge } }) {
 		bssh_app_settings().set_tab_position(bssh_app_settings::TABS_TOP);
 		bssh_session_registry *shared = bssh_session_registry::shared();
 		while (shared->count() > 0) shared->close(shared->at(0));
@@ -5096,7 +5126,9 @@ void layout_test::a_release_on_a_strip_makes_a_tab() {
 		QVERIFY2(window.panes()->pane_count() == 1, where + ": split rather than made a tab");
 		QVERIFY2(tab_sessions(window, a).size() == 2 && tab_sessions(window, a).contains(c),
 		         where + ": not a tab");
-		QVERIFY2(bssh_app_settings().tab_position() == side.bars, where + ": the bar went elsewhere");
+		QVERIFY2(window.panes()->bar_edge_for(a) == side.bars, where + ": the bar went elsewhere");
+		QVERIFY2(bssh_app_settings().tab_position() == bssh_app_settings::TABS_TOP,
+		         where + ": the setting moved, and every other bar with it");
 		for (bssh_terminal_view *each : window.panes()->views())
 			QVERIFY2(!each->tab_ring_shown(), where + ": the ring outlived the drag");
 	}
@@ -7194,6 +7226,57 @@ void layout_test::the_terminal_menu_opens_once_however_focus_moved() {
 	emit view->context_menu_requested(view->mapToGlobal(view->rect().center()));
 	dismiss.stop();
 	QCOMPARE(menus, 1);
+}
+
+void layout_test::a_bar_side_belongs_to_its_pane() {
+	/*
+	 * The holder, 2026-11-02: moving one pane's bar to a side moved every
+	 * other bar with it. The side is the pane's: it stays as the front
+	 * changes and as panes trade places, a tab carried off to a pane of
+	 * its own leaves it behind, and it is written down with the shape.
+	 */
+	bssh_session_registry registry;
+	bssh_layout_manager layout;
+	layout.set_width(1200);
+
+	bssh_session *a = registry.create(named(QStringLiteral("a")));
+	bssh_session *b = registry.create(named(QStringLiteral("b")));
+	bssh_session *c = registry.create(named(QStringLiteral("c")));
+	const QHash<bssh_session *, QString> names{
+		{a, QStringLiteral("a")}, {b, QStringLiteral("b")}, {c, QStringLiteral("c")}};
+
+	layout.set_intent({a, b});
+	QVERIFY(layout.add_tab(c, a, INT_MAX));
+	layout.set_bar_edge(c, Qt::LeftEdge);
+	QCOMPARE(layout.bar_edge(a), Qt::Edges(Qt::LeftEdge));
+	QCOMPARE(layout.bar_edge(b), Qt::Edges());
+
+	QVERIFY(layout.bring_to_front(a));
+	QCOMPARE(layout.bar_edge(c), Qt::Edges(Qt::LeftEdge));
+
+	/* The two panes swap whole, and the side goes with its pane. */
+	QVERIFY(layout.place(a, b, bssh_layout_manager::EDGE_MIDDLE));
+	QCOMPARE(layout.intent().first(), b);
+	QCOMPARE(layout.bar_edge(a), Qt::Edges(Qt::LeftEdge));
+	QCOMPARE(layout.bar_edge(b), Qt::Edges());
+
+	const auto name = [&names](bssh_session *session) { return names.value(session); };
+	const auto find = [&names](const QString &text) { return names.key(text, nullptr); };
+	const QString text = bssh_layout_manager::shape_text(layout.tree(), name);
+	QCOMPARE(text, QStringLiteral("H(b,*a|c@l)"));
+	bssh_layout_manager restored;
+	restored.set_width(1200);
+	restored.set_tree(bssh_layout_manager::parse_shape(text, find));
+	QCOMPARE(restored.bar_edge(c), Qt::Edges(Qt::LeftEdge));
+	QCOMPARE(restored.bar_edge(b), Qt::Edges());
+
+	/* A tab carried off to a pane of its own takes the window's side. */
+	QVERIFY(layout.place(c, b, bssh_layout_manager::EDGE_RIGHT));
+	QCOMPARE(layout.bar_edge(c), Qt::Edges());
+	QCOMPARE(layout.bar_edge(a), Qt::Edges(Qt::LeftEdge));
+
+	layout.clear_bar_edges();
+	QCOMPARE(layout.bar_edge(a), Qt::Edges());
 }
 
 void layout_test::a_shape_survives_being_written_down() {

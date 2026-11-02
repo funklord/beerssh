@@ -87,6 +87,16 @@ void bssh_pane_container::set_bar_edge(Qt::Edge edge) {
 	rebuild();
 }
 
+Qt::Edge bssh_pane_container::bar_edge_for(bssh_session *member) const {
+	if (!m_layout || m_layout->arrangement() != bssh_layout_manager::TILED) return m_bar_edge;
+	const Qt::Edges own = m_layout->bar_edge(member);
+	if (own & Qt::LeftEdge) return Qt::LeftEdge;
+	if (own & Qt::RightEdge) return Qt::RightEdge;
+	if (own & Qt::BottomEdge) return Qt::BottomEdge;
+	if (own & Qt::TopEdge) return Qt::TopEdge;
+	return m_bar_edge;
+}
+
 QWidget *bssh_pane_container::frame_for(bssh_session *front) const {
 	const int index = m_sessions.indexOf(front);
 	return index >= 0 && index < m_frames.size() ? m_frames.at(index) : nullptr;
@@ -221,7 +231,7 @@ bssh_terminal_view *bssh_pane_container::add_pane_view(bssh_session *session,
 	QWidget *frame = new QWidget(replacing ? nullptr : parent);
 	frame->setObjectName(QStringLiteral("pane-frame"));
 	QBoxLayout::Direction direction = QBoxLayout::TopToBottom;
-	switch (m_bar_edge) {
+	switch (bar_edge_for(session)) {
 	case Qt::BottomEdge: direction = QBoxLayout::BottomToTop; break;
 	case Qt::LeftEdge:   direction = QBoxLayout::LeftToRight; break;
 	case Qt::RightEdge:  direction = QBoxLayout::RightToLeft; break;

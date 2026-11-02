@@ -1746,6 +1746,24 @@ bool bssh_main_window::apply_arrangement() {
 	const bool changed = m_layout->arrangement() != choice.arrangement;
 	if (changed) m_layout->set_arrangement(choice.arrangement);
 
+	/*
+	 * A side chosen in Settings is a choice for every bar, so the sides
+	 * single bars were put on give way to it. Only on a real change of
+	 * the setting -- this runs on every settings pass and every screen
+	 * change -- and not for Hidden, which puts nothing anywhere. Queued:
+	 * this can run inside a rebuild, and clearing rebuilds.
+	 */
+	const int setting = int(bssh_app_settings().tab_position());
+	if (setting != m_tab_setting_seen) {
+		if (m_tab_setting_seen >= 0 && setting != bssh_app_settings::TABS_HIDDEN) {
+			QPointer<bssh_layout_manager> layout = m_layout;
+			QMetaObject::invokeMethod(this, [layout] {
+				if (layout) layout->clear_bar_edges();
+			}, Qt::QueuedConnection);
+		}
+		m_tab_setting_seen = setting;
+	}
+
 	if (m_panes) m_panes->set_column_visible(choice.visible);
 
 	/*
@@ -3400,19 +3418,19 @@ void bssh_main_window::drop_session_on(bssh_session *session, bssh_session *targ
 	if (plan < 0) return;
 
 	/*
-	 * A band: the bar goes on that side, for every pane as the setting
-	 * says, and the session joins the target's pane as a tab there.
+	 * A band: the session joins the target's pane as a tab, and that
+	 * pane's bar goes on that side -- that pane's alone, every other
+	 * staying where it is (the holder, 2026-11-02).
 	 */
 	if (bssh_is_tab_drop(plan)) {
-		bssh_app_settings::tab_position_t side = bssh_app_settings::TABS_TOP;
+		Qt::Edge side = Qt::TopEdge;
 		switch (plan - BSSH_DROP_TAB_BASE) {
-		case bssh_layout_manager::EDGE_LEFT:   side = bssh_app_settings::TABS_LEFT; break;
-		case bssh_layout_manager::EDGE_RIGHT:  side = bssh_app_settings::TABS_RIGHT; break;
-		case bssh_layout_manager::EDGE_BOTTOM: side = bssh_app_settings::TABS_BOTTOM; break;
+		case bssh_layout_manager::EDGE_LEFT:   side = Qt::LeftEdge; break;
+		case bssh_layout_manager::EDGE_RIGHT:  side = Qt::RightEdge; break;
+		case bssh_layout_manager::EDGE_BOTTOM: side = Qt::BottomEdge; break;
 		default:                               break;
 		}
-		bssh_app_settings().set_tab_position(side);
-		apply_tab_position(int(side));
+		m_layout->set_bar_edge(target, side);
 		drop_session_as_tab(session, target, INT_MAX);
 		return;
 	}
@@ -3565,8 +3583,6 @@ void bssh_main_window::set_session_drag_active(bool active) {
 	}
 	if (!active || !m_terminal_page || !m_panes || !m_layout) return;
 
-	const bool vertical = m_tab_position == bssh_app_settings::TABS_LEFT
-	                      || m_tab_position == bssh_app_settings::TABS_RIGHT;
 	const int deep = fontMetrics().height() * 2;
 
 	/*
@@ -3580,6 +3596,8 @@ void bssh_main_window::set_session_drag_active(bool active) {
 
 		bssh_pane_bar *bar = bar_for(front);
 		const bool strip = !bar || bar->isHidden();
+		const Qt::Edge side = m_panes->bar_edge_for(front);
+		const bool vertical = side == Qt::LeftEdge || side == Qt::RightEdge;
 		const QRect pane(frame->mapTo(m_terminal_page, QPoint(0, 0)), frame->size());
 
 		/*
@@ -3599,14 +3617,14 @@ void bssh_main_window::set_session_drag_active(bool active) {
 		if (!strip) {
 			where = QRect(bar->mapTo(m_terminal_page, QPoint(0, 0)), bar->size());
 		} else {
-			switch (m_tab_position) {
-			case bssh_app_settings::TABS_BOTTOM:
+			switch (side) {
+			case Qt::BottomEdge:
 				where = QRect(pane.left(), pane.bottom() - deep + 1, pane.width(), deep);
 				break;
-			case bssh_app_settings::TABS_LEFT:
+			case Qt::LeftEdge:
 				where = QRect(pane.left(), pane.top(), deep, pane.height());
 				break;
-			case bssh_app_settings::TABS_RIGHT:
+			case Qt::RightEdge:
 				where = QRect(pane.right() - deep + 1, pane.top(), deep, pane.height());
 				break;
 			default:
@@ -4839,15 +4857,12 @@ void bssh_main_window::finish_bar_side(bssh_session *front, const QPoint &global
 	Qt::Edge edge = Qt::TopEdge;
 	if (!bar_side_in_own_pane(front, global, &edge)) return;
 
-	bssh_app_settings::tab_position_t side = bssh_app_settings::TABS_TOP;
-	switch (edge) {
-	case Qt::LeftEdge:   side = bssh_app_settings::TABS_LEFT; break;
-	case Qt::RightEdge:  side = bssh_app_settings::TABS_RIGHT; break;
-	case Qt::BottomEdge: side = bssh_app_settings::TABS_BOTTOM; break;
-	default:             break;
-	}
-	bssh_app_settings().set_tab_position(side);
-	apply_tab_position(int(side));
+	/*
+	 * This pane's bar only. It used to write the setting, which moved
+	 * every pane's bar with it -- the holder, 2026-11-02: "practical
+	 * usually but less intuitive, than leaving the others alone".
+	 */
+	if (m_layout) m_layout->set_bar_edge(front, edge);
 }
 
 void bssh_main_window::apply_menu_bar() {
@@ -4902,7 +4917,7 @@ QWidget *bssh_main_window::make_pane_bar(bssh_session *front, QWidget *parent) {
 	const QList<bssh_session *> tabs = m_layout->bar_tabs(front);
 	const bool pointer = bssh_platform::instance()
 	                     && !bssh_platform::instance()->is_touch_primary();
-	bssh_pane_bar *bar = new bssh_pane_bar(front, tabs, m_panes->bar_edge(), pointer, parent);
+	bssh_pane_bar *bar = new bssh_pane_bar(front, tabs, m_panes->bar_edge_for(front), pointer, parent);
 
 	/* No bar for a pane of one: the bar appears with the second tab (sec 8.3);
 	 * and none at all while bars are hidden (sec 8.7a). */
@@ -6574,8 +6589,8 @@ QMenu *bssh_main_window::build_tab_menu(bssh_session *session, QWidget *parent) 
 	 * phone, where the item fired and the bar did not move.
 	 */
 	/* Named for the way the bar runs: down the side, a tab moves up and down. */
-	const bool down_the_side = m_tab_position == bssh_app_settings::TABS_LEFT
-	                           || m_tab_position == bssh_app_settings::TABS_RIGHT;
+	const Qt::Edge side = m_panes ? m_panes->bar_edge_for(session) : Qt::TopEdge;
+	const bool down_the_side = side == Qt::LeftEdge || side == Qt::RightEdge;
 	QAction *move_left = menu->addAction(down_the_side ? QStringLiteral("Move &Up") : QStringLiteral("Move &Left"));
 	move_left->setObjectName(QStringLiteral("tab_move_left"));
 	move_left->setEnabled(index > 0);
@@ -7104,8 +7119,8 @@ QSize bssh_main_window::size_for_grid(int cols, int rows) {
 	if (bssh_pane_bar *bar = m_current && m_layout ? bar_for(m_layout->front_of(m_current))
 	                                                : nullptr) {
 		if (!bar->isHidden()) {
-			if (m_tab_position == bssh_app_settings::TABS_LEFT
-			    || m_tab_position == bssh_app_settings::TABS_RIGHT)
+			const Qt::Edge side = m_panes->bar_edge_for(m_current);
+			if (side == Qt::LeftEdge || side == Qt::RightEdge)
 				wanted.rwidth() += bar->sizeHint().width();
 			else
 				wanted.rheight() += bar->sizeHint().height();

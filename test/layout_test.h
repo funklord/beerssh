@@ -312,6 +312,7 @@ private slots:
 	void a_dragged_divider_stays_where_it_was_put();
 	void a_note_sits_with_the_control_it_explains();
 	void the_terminal_menu_opens_once_however_focus_moved();
+	void a_bar_side_belongs_to_its_pane();
 	void a_shape_survives_being_written_down();
 
 	/*

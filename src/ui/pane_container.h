@@ -160,6 +160,14 @@ public:
 	void set_bar_edge(Qt::Edge edge);
 	Qt::Edge bar_edge() const { return m_bar_edge; }
 
+	/*
+	 * The side the bar of the pane holding `member` is on: the side it
+	 * was put on, side by side, or else the setting's. The stacked
+	 * column has no sides of its own to offer, so it is the setting's
+	 * there.
+	 */
+	Qt::Edge bar_edge_for(bssh_session *member) const;
+
 	/* The frame a pane is drawn in -- its bar and its view -- or null. */
 	QWidget *frame_for(bssh_session *front) const;
 
