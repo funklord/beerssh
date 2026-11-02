@@ -1,5 +1,7 @@
 #include <cstdio>
 
+#include <algorithm>
+
 #include <QApplication>
 #include <QAbstractButton>
 #include <QGroupBox>
@@ -7239,6 +7241,15 @@ void layout_test::a_grid_opens_rows_of_terminals_of_one_host() {
 	bssh_session_registry *shared = bssh_session_registry::shared();
 	while (shared->count() > 0) shared->close(shared->at(0));
 
+	/* The system keyboard, whatever an earlier test left: the built-in
+	 * one's halves take the sides of the window, and the row below is
+	 * about how the panes share what is left. */
+	struct keyboard_restore_t {
+		bssh_app_settings::keyboard_t was = bssh_app_settings().keyboard();
+		~keyboard_restore_t() { bssh_app_settings().set_keyboard(was); }
+	} keyboard_restore;
+	bssh_app_settings().set_keyboard(bssh_app_settings::KEYBOARD_SYSTEM);
+
 	int made = 0;
 	bssh_ssh_session::set_factory([&made](QObject *parent) -> bssh_ssh_session * {
 		++made;
@@ -7267,7 +7278,34 @@ void layout_test::a_grid_opens_rows_of_terminals_of_one_host() {
 		QCOMPARE(shape, QStringLiteral("V(H(0,1,2),H(3,4,5))"));
 		for (bssh_session *each : order)
 			QCOMPARE(each->profile().host, QStringLiteral("grid.example"));
+
+		/*
+		 * The panes this window has room for share their row evenly. None
+		 * had been on screen, so nothing was known of their sizes, and
+		 * QSplitter left to itself gave the first its narrowest and the
+		 * last the rest; the holder's 4x4 showed its top row so, and kept
+		 * it when the other rows arrived (2026-11-02).
+		 */
+		const QList<bssh_session *> shown = layout->visible_panes();
+		QVERIFY(shown.size() >= 2);
+		bssh_pane_container *panes = window.panes();
+		const int slack = panes->view_for(shown.first())->cell_width() * 2;
+		QList<int> widths;
+		for (bssh_session *each : shown) {
+			if (order.indexOf(each) >= 3) continue;
+			QWidget *frame = panes->frame_for(each);
+			QVERIFY(frame);
+			widths << frame->width();
+		}
+		QVERIFY(widths.size() >= 2);
+		const int least = *std::min_element(widths.cbegin(), widths.cend());
+		const int most = *std::max_element(widths.cbegin(), widths.cend());
+		QStringList seen;
+		for (const int width : widths) seen << QString::number(width);
+		QVERIFY2(most - least <= slack,
+		         qPrintable(QStringLiteral("the top row is uneven: ") + seen.join(QStringLiteral(", "))));
 	}
+
 }
 
 void layout_test::a_bar_side_belongs_to_its_pane() {

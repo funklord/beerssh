@@ -8295,6 +8295,22 @@ and the dialog's arguments in
 `a_torn_out_tab_and_a_new_window_start_processes_of_their_own`;
 `tool/sabotage/grid.toml`, four edits.
 
+**And a split nobody has sized splits evenly, 2026-11-02.** The holder's
+4x4 came up with three of its top row at their narrowest and the fourth
+taking the rest. Before the window knew its room only that row fitted, and
+none of its panes had been on screen, so nothing was known of their sizes
+and the split was left to QSplitter -- which gave every pane but the last
+its narrowest. That was remembered, and the other rows arrived around it.
+`restore_divisions` now gives even shares where nothing is known of any
+part. Seen under twin: the 4x4 even in every row. The suite's offscreen
+window knows its room from the start, so the 4x4 never shows it there; a
+two-pane row built the same way does (214 and 538 pixels without the fix),
+which is what `a_grid_opens_rows_of_terminals_of_one_host` checks; a fifth
+edit in `grid.toml`. That check first passed alone and missed in the suite:
+an earlier test leaves the built-in keyboard on, its halves took 373 of the
+window's 760 pixels, and with that little room QSplitter happened to split
+evenly. The test now sets the system keyboard and puts back what it found.
+
 ### 8.5 The front door — **[DECIDED]**
 
 **Android's Back leaves the PAGE, not the app — [FIXED 2026-09-06].**

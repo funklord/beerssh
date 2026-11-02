@@ -32,3 +32,12 @@ file = "src/ui/main_window.cpp"
 find = "\topen_grid_window(across->value(), down->value(), what->currentData().toInt());\n"
 replace = "\topen_grid_window(2, 2, what->currentData().toInt());\n"
 expect = "a_torn_out_tab_and_a_new_window_start_processes_of_their_own"
+
+# A split nothing is known of left to QSplitter: every pane but the last
+# at its narrowest (the holder's 4x4 top row, 2026-11-02).
+[[sabotage]]
+name = "a split with no history is left to QSplitter"
+file = "src/ui/pane_container.cpp"
+find = "\t\t\tsplitter->setSizes(QList<int>(splitter->count(), 1));\n"
+replace = ""
+expect = "a_grid_opens_rows_of_terminals_of_one_host"

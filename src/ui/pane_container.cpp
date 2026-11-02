@@ -631,7 +631,18 @@ void bssh_pane_container::restore_divisions(const bssh_pane_node &tree) {
 			sizes << extent_of(splitter->widget(i), splitter->orientation());
 		bool any = false;
 		for (const int size : sizes) any = any || size >= 0;
-		if (!any) continue;
+		/*
+		 * Nothing known of any part: even shares. Left to QSplitter, a
+		 * split of panes it had not laid out gave every one but the last
+		 * its narrowest and the last the rest -- a grid built before its
+		 * window knew its room showed its top row that way, was
+		 * remembered so, and kept it when the other rows arrived (the
+		 * holder's 4x4, 2026-11-02).
+		 */
+		if (!any) {
+			splitter->setSizes(QList<int>(splitter->count(), 1));
+			continue;
+		}
 		for (int i = 0; i < sizes.size(); ++i) {
 			if (sizes.at(i) >= 0) continue;
 			int near = -1;
