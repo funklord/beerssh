@@ -11056,7 +11056,18 @@ cell height is now at least the baseline plus the bottom of the
 underscore's tight bounding box, so a row grows by a pixel where it has
 to and stays as it was where it fits. `an_underscore_is_drawn_in_its_cell`
 draws a lone underscore in three fonts at seven sizes and finds its ink in
-its own cell; `tool/sabotage/underscore.toml`.
+its own cell; `tool/sabotage/desktop-drive.toml`.
+
+**The wheel scrolls a full-screen program that asked for no mouse
+(2026-11-02).** less, man, git's pager and nano take the alternate screen
+and ask for no mouse reports, so the wheel was neither theirs nor the
+history's -- there is none on the alternate screen -- and did nothing in
+exactly the programs it is most reached for in. Each notch now sends three
+arrow keys there, as Konsole, GNOME Terminal and kitty do ("alternate
+scroll"), through the emulator's key path so the program's cursor-key mode
+spells them; Shift and the Select and Scroll modes keep the wheel local, as
+they do for a program that did ask.
+`the_wheel_scrolls_a_program_that_did_not_ask_for_the_mouse`.
 
 ### 9.5a Repainting only the rows that changed — **[BUILT 2026-10-23]**
 

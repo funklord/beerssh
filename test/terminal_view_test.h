@@ -19,6 +19,7 @@ private slots:
 	void an_unchosen_scheme_follows_the_app_and_a_chosen_one_stays();
 	void the_cursor_style_reaches_the_pixels();
 	void an_underscore_is_drawn_in_its_cell();
+	void the_wheel_scrolls_a_program_that_did_not_ask_for_the_mouse();
 	void a_reattached_screen_is_not_read_from_the_old_one();
 	void an_unfocused_cursor_is_hollow();
 	void only_the_focused_pane_blinks();

@@ -5511,3 +5511,49 @@ void terminal_view_test::an_underscore_is_drawn_in_its_cell() {
 	}
 	bssh_terminal_view::set_default_scrollbar_position(original);
 }
+
+void terminal_view_test::the_wheel_scrolls_a_program_that_did_not_ask_for_the_mouse() {
+	/*
+	 * Seen in less on the desktop build, 2026-11-02: the wheel did
+	 * nothing. less is on the alternate screen and asks for no mouse, so
+	 * the wheel was neither the program's nor the history's. It is three
+	 * arrow keys a notch, spelled as the program's cursor-key mode wants;
+	 * Shift and Select keep it local.
+	 */
+	forced_touch_t desktop(0);
+	bssh_terminal_view view;
+	show_and_resize(view, 640, 320);
+	bssh_emulator emulator(view.cols(), view.rows());
+	view.attach_screen(&emulator.screen());
+	view.attach_scrollback(&emulator.scrollback());
+	view.attach_emulator(&emulator);
+	QCOMPARE(view.input_mode(), BSSH_INPUT_CLICK);
+
+	const QPoint middle(view.width() / 2, view.height() / 2);
+	const auto notch = [&](int sign, Qt::KeyboardModifiers modifiers) {
+		QWheelEvent event(middle, view.mapToGlobal(middle), QPoint(), QPoint(0, 120 * sign),
+		                  Qt::NoButton, modifiers, Qt::NoScrollPhase, false);
+		QCoreApplication::sendEvent(&view, &event);
+		return emulator.take_output();
+	};
+
+	/* On the primary screen the wheel is the history's: nothing is sent. */
+	emulator.take_output();
+	QCOMPARE(notch(1, Qt::NoModifier), QByteArray());
+
+	emulator.feed(QByteArrayLiteral("\x1b[?1049h"));
+	QVERIFY(emulator.alternate_screen());
+	QVERIFY(!emulator.mouse_reporting());
+	emulator.take_output();
+	QCOMPARE(notch(1, Qt::NoModifier), QByteArray("\x1b[A\x1b[A\x1b[A"));
+	QCOMPARE(notch(-1, Qt::NoModifier), QByteArray("\x1b[B\x1b[B\x1b[B"));
+
+	/* Application cursor keys, as less sets them. */
+	emulator.feed(QByteArrayLiteral("\x1b[?1h"));
+	emulator.take_output();
+	QCOMPARE(notch(1, Qt::NoModifier), QByteArray("\x1bOA\x1bOA\x1bOA"));
+
+	QCOMPARE(notch(1, Qt::ShiftModifier), QByteArray());
+	view.set_input_mode(BSSH_INPUT_SELECT);
+	QCOMPARE(notch(1, Qt::NoModifier), QByteArray());
+}

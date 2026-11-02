@@ -1,0 +1,22 @@
+# Found driving the desktop build on Xvfb with xdotool, 2026-11-02.
+
+# The underscore is the lowest ink a terminal prints. Sized by the font's
+# rounded height alone, the cell ends above it at some sizes -- 11 points
+# of DejaVu Sans Mono among them -- and the next row's background covers
+# every underscore on screen.
+
+[[sabotage]]
+name = "the cell is sized without the underscore"
+file = "src/ui/terminal_view.cpp"
+find = "\t\tm_cell_height = qMax(m_cell_height, m_baseline + int(std::ceil(under.bottom())));\n"
+replace = "\t\t;\n"
+expect = "an_underscore_is_drawn_in_its_cell"
+
+# Not the underscore, but found the same morning by the same means: the
+# wheel over a full-screen program that asked for no mouse does nothing.
+[[sabotage]]
+name = "the wheel does nothing in less"
+file = "src/ui/terminal_view.cpp"
+find = "\tif (m_emulator && m_emulator->alternate_screen() && !wheel_local\n"
+replace = "\tif (false && m_emulator && m_emulator->alternate_screen() && !wheel_local\n"
+expect = "the_wheel_scrolls_a_program_that_did_not_ask_for_the_mouse"

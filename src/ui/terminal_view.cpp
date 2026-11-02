@@ -847,6 +847,25 @@ void bssh_terminal_view::wheelEvent(QWheelEvent *event) {
 		return;
 	}
 
+	/*
+	 * A full-screen program that did not ask for the mouse -- less, man,
+	 * git's pager, nano -- is given arrow keys for the wheel, three a
+	 * notch, as Konsole, GNOME Terminal and kitty do ("alternate scroll").
+	 * Its screen is the alternate one, which holds no history here, so the
+	 * wheel otherwise did nothing at all inside the very programs a user
+	 * most expects it to scroll (seen in less, 2026-11-02). Sent as keys,
+	 * so the program's cursor-key mode decides how they are spelled.
+	 * Shift and the local modes keep the wheel local, as for a program
+	 * that did ask.
+	 */
+	if (m_emulator && m_emulator->alternate_screen() && !wheel_local
+	     && !event->modifiers().testFlag(Qt::ShiftModifier)) {
+		const int key = notches > 0 ? bssh_emulator::KEY_UP : bssh_emulator::KEY_DOWN;
+		for (int i = 0; i < qAbs(notches) * 3; ++i) m_emulator->send_key(key, 0);
+		event->accept();
+		return;
+	}
+
 	if (!m_scrollback) {
 		QWidget::wheelEvent(event);
 		return;
