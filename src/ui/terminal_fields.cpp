@@ -127,9 +127,11 @@ bssh_terminal_fields::bssh_terminal_fields(QWidget *parent) : QWidget(parent) {
 	m_on_connect->setPlaceholderText(QStringLiteral("tmux attach || tmux new"));
 
 	const auto heading = [this](const QString &text) {
-		m_form->addRow(new QLabel(QStringLiteral("<b>%1</b>").arg(text), this));
+		QLabel *label = new QLabel(QStringLiteral("<b>%1</b>").arg(text), this);
+		m_form->addRow(label);
+		return label;
 	};
-	heading(QStringLiteral("Terminal"));
+	m_first_heading = heading(QStringLiteral("Terminal"));
 	m_form->addRow(QStringLiteral("TERM"), m_term);
 	m_form->addRow(QStringLiteral("Scrollback"), m_scrollback);
 	m_form->addRow(QString(), m_bell);
@@ -157,6 +159,10 @@ bssh_terminal_fields::bssh_terminal_fields(QWidget *parent) : QWidget(parent) {
 	connect(m_on_connect, &QLineEdit::textEdited, this, &bssh_terminal_fields::emit_changed);
 
 	set_values(bssh_preset_t().to_json());
+}
+
+void bssh_terminal_fields::set_first_heading_shown(bool shown) {
+	m_first_heading->setVisible(shown);
 }
 
 QStringList bssh_terminal_fields::keys() {

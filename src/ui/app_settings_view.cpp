@@ -90,6 +90,7 @@ QString bssh_app_settings_view::section_name(section_t section) {
 
 void bssh_app_settings_view::set_heading(const QString &heading) {
 	m_heading->setText(QStringLiteral("<b>%1</b>").arg(heading.toHtmlEscaped()));
+	if (m_default_fields) m_default_fields->set_first_heading_shown(heading != section_name(SECTION_TERMINAL));
 }
 
 bool bssh_app_settings_view::on_this_page(section_t section, QWidget *widget) {
@@ -656,6 +657,8 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	if (on_this_page(SECTION_TERMINAL, nullptr)) {
 		m_default_fields = new bssh_terminal_fields(this);
 		m_default_fields->setObjectName(QStringLiteral("default_terminal_fields"));
+		/* Not "Terminal" twice on a page titled Terminal (the phone's). */
+		m_default_fields->set_first_heading_shown(m_section != SECTION_TERMINAL);
 		form->addRow(m_default_fields);
 		form->addRow(new QLabel(QStringLiteral("<b>Behaviour</b>"), this));
 	}

@@ -8,6 +8,7 @@
 class QCheckBox;
 class QComboBox;
 class QFormLayout;
+class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSpinBox;
@@ -53,6 +54,12 @@ public:
 
 	QFormLayout *form() const { return m_form; }
 
+	/*
+	 * Whether the first heading, "Terminal", shows. A page already titled
+	 * Terminal -- the phone's settings page of that name -- said it twice.
+	 */
+	void set_first_heading_shown(bool shown);
+
 signals:
 	/* The user changed a field. Not emitted by set_values(). */
 	void changed();
@@ -61,6 +68,7 @@ private:
 	void emit_changed();
 
 	QFormLayout *m_form;
+	QLabel *m_first_heading = nullptr;
 	QLineEdit *m_term;
 	QSpinBox *m_scrollback;
 	QCheckBox *m_bell;
