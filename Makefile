@@ -547,7 +547,8 @@ doc: $(DOCS)
 # The bundle android-play-check reads (play-store skill). Named before the
 # include, because the fragment's own `ANDROID_AAB ?=` defines it empty and
 # a `?=` after that would find it already set.
-ANDROID_AAB ?= $(ANDROID_BUILD_DIR)/beerssh-$(VERSION).aab
+# Named for the program, so beersshd's bundle (android-sshd-aab) says so.
+ANDROID_AAB ?= $(ANDROID_BUILD_DIR)/$(ANDROID_PROGRAM)-$(VERSION).aab
 
 # The listing's screenshots, in listing order (`make android-screenshots`,
 # the play-store skill). Each is a view src/ui/store_view.cpp builds from
@@ -1343,7 +1344,7 @@ android-fonts:
 # what number you built.
 AAB_NAME = $(notdir $(ANDROID_AAB))
 
-android-aab: $(ANDROID_BUILD_DIR)/Makefile android-fonts android-terminfo
+android-aab: $(ANDROID_BUILD_DIR)/Makefile $(ANDROID_ASSETS)
 	$(MAKE) -C $(ANDROID_BUILD_DIR) aab
 	@src=$$(find $(ANDROID_BUILD_DIR)/android-build/build/outputs -name '*.aab' -print -quit); \
 	if [ -z "$$src" ]; then echo "android-aab: no .aab was produced" >&2; exit 1; fi; \
@@ -1482,10 +1483,15 @@ SSHD_APP_ID = se.vibes.beersshd
 SSHD_ANDROID = ANDROID_PROGRAM=$(SSHD_TARGET) APP_ID=$(SSHD_APP_ID) ANDROID_PRO=beersshd.pro \
                ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS=
 
-android-sshd android-sshd-install android-sshd-run android-sshd-log android-sshd-uninstall:
+# android-sshd-aab is beersshd's Play bundle (sec 13): the same rule as
+# BeerSSH's, so the same naming, versionCode and refusal to leave an
+# unsigned bundle behind.
+android-sshd android-sshd-install android-sshd-run android-sshd-log android-sshd-uninstall \
+android-sshd-aab:
 	$(MAKE) --no-print-directory $(patsubst android-sshd%,android%,$@) $(SSHD_ANDROID)
 
-.PHONY: android-sshd android-sshd-install android-sshd-run android-sshd-log android-sshd-uninstall
+.PHONY: android-sshd android-sshd-install android-sshd-run android-sshd-log android-sshd-uninstall \
+        android-sshd-aab
 
 # sec 12.2's other half for Android: is it signed by who you think, and
 # does the artifact install and run?

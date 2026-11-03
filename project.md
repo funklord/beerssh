@@ -16779,7 +16779,9 @@ honest data handling) apply to both packages.
   comes out as `beerssh-<version>.aab`, reports the versionCode it was built
   with rather than leaving that to be discovered from the Console after the
   upload, and **refuses to produce a debug-signed bundle at all**, since Play
-  will not take one.
+  will not take one. **beersshd's is `make android-sshd-aab`** (2026-11-03;
+  there was none), the same rule with the bundle named for the program:
+  arm64, `beersshd-1.0.aab`, versionCode 10000, refused as unsigned.
 
 ---
 
