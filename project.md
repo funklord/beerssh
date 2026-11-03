@@ -7868,6 +7868,22 @@ window with no name is a blank row in the task switcher.
   views *write* through. Half a rule is not half a fix: the read path
   looked correct, was tested, and was the reason nobody looked at the
   write path — and the write path is where a loss can happen at all.
+  **And it came back across processes, found 2026-11-03.** `shared()` is
+  process-wide, and every desktop window has been a process of its own
+  since 2026-10-30 (§8.4) -- so two windows were two stores again, and the
+  measurement above repeated with two stores over one directory: the same
+  id minted for two hosts. **Now every change re-reads first**
+  (`refresh()` at the top of `save`, `remove`, `save_preset`,
+  `remove_preset`): the files are loaded again when their size or
+  modification time differs from what this process last read or wrote,
+  with `QSettings::sync()` so another process's write is read rather than
+  this process's cached copy, and not at all from a file that cannot be
+  read -- an unconditional reload emptied the store in the two tests that
+  block `presets.ini` to see a write refused.
+  `a_store_that_loaded_first_does_not_erase_a_later_save` failed on
+  `a != b` before and passes after. **Still open:** a window's host list
+  shows another window's change only after its own next change or a
+  restart; nothing watches the files.
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with

@@ -14,6 +14,7 @@ class profile_store_test : public QObject {
 	Q_OBJECT
 
 private slots:
+	void a_store_that_loaded_first_does_not_erase_a_later_save();
 	void deleting_a_host_takes_its_password_with_it();
 	void a_password_a_locked_store_kept_is_swept_at_the_next_unlock();
 	void an_id_is_never_reissued_to_another_host();

@@ -170,6 +170,11 @@ private:
 	void load();
 	void load_presets();
 	void load_profiles();
+
+	/* load(), before a change: another process may have written since (sec 8.4). */
+	void refresh();
+	static QString file_stamp(const QString &path);
+	void remember_stamps();
 	/*
 	 * False when the file could not be written -- a read-only home, a
 	 * full disk, or a config directory somebody's permissions do not
@@ -202,6 +207,8 @@ private:
 	QString m_directory;
 	QString m_last_error;
 	bool m_open;
+	QString m_hosts_stamp;     /* size and mtime as last read or written; see refresh() */
+	QString m_presets_stamp;
 
 	/*
 	 * The next host id to hand out, and it only ever GOES UP.

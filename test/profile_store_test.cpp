@@ -2460,3 +2460,33 @@ void profile_store_test::a_hand_typed_override_meets_the_same_bounds_as_a_preset
 	                  bssh_preset_t().scrollback_lines,
 	          true);
 }
+
+/*
+ * Two windows are two processes now (sec 8.4), each with its own store,
+ * and shared() only joins the windows of one process. A host saved in
+ * one window must survive the next save in the other, and the two must
+ * not mint the same id -- secrets are keyed by it (sec 11).
+ */
+void profile_store_test::a_store_that_loaded_first_does_not_erase_a_later_save() {
+	QTemporaryDir dir;
+	bssh_profile_store first(dir.filePath(QStringLiteral("test.db")));
+	bssh_profile_store second(dir.filePath(QStringLiteral("test.db")));
+	QVERIFY(first.is_open() && second.is_open());
+
+	const int a = first.save(make_profile(QStringLiteral("alpha"), QStringLiteral("alpha.example")));
+	const int b = second.save(make_profile(QStringLiteral("beta"), QStringLiteral("beta.example")));
+	QVERIFY(a > 0 && b > 0);
+	QVERIFY(a != b);
+
+	bssh_profile_store reader(dir.filePath(QStringLiteral("test.db")));
+	QCOMPARE(reader.profiles().count(), 2);
+
+	/* And a removal in one keeps what the other added since. */
+	QVERIFY(first.save(make_profile(QStringLiteral("gamma"), QStringLiteral("gamma.example"))) > 0);
+	QVERIFY(second.remove(b));
+	bssh_profile_store after(dir.filePath(QStringLiteral("test.db")));
+	QStringList names;
+	for (const bssh_profile_t &profile : after.profiles()) names << profile.name;
+	names.sort();
+	QCOMPARE(names, QStringList({QStringLiteral("alpha"), QStringLiteral("gamma")}));
+}

@@ -225,10 +225,51 @@ void bssh_profile_store::load() {
 
 	load_presets();
 	load_profiles();
+	remember_stamps();
+}
+
+/*
+ * What is on disk, read again before every change. Every desktop window
+ * is a process of its own now (sec 8.4), so shared() joins the windows of
+ * one process and no more: another BeerSSH may have written the files
+ * since this one read them, and a change made to the list as this
+ * process last saw it would write that list back whole -- erasing a host
+ * the other added, and minting an id the other had already used, which
+ * keys a secret (sec 11). The failure shared() was made for, met again
+ * across processes and measured: two stores over one file gave the same
+ * id to two hosts.
+ */
+void bssh_profile_store::refresh() {
+	if (!m_open) return;
+	/*
+	 * Only when a file has changed since this process last read or wrote
+	 * it, and only one that can be read: a file that cannot be read is
+	 * not news from another process, and reloading from it would empty
+	 * the store in memory -- found by the tests that make presets.ini
+	 * unreadable to see a write refused.
+	 */
+	const QString hosts = file_stamp(hosts_path());
+	const QString presets = file_stamp(presets_path());
+	if (hosts.isEmpty() && QFileInfo::exists(hosts_path())) return;
+	if (presets.isEmpty() && QFileInfo::exists(presets_path())) return;
+	if (hosts == m_hosts_stamp && presets == m_presets_stamp) return;
+	load();
+}
+
+QString bssh_profile_store::file_stamp(const QString &path) {
+	const QFileInfo info(path);
+	if (!info.isFile() || !info.isReadable()) return QString();
+	return QStringLiteral("%1:%2").arg(info.size()).arg(info.lastModified().toMSecsSinceEpoch());
+}
+
+void bssh_profile_store::remember_stamps() {
+	m_hosts_stamp = file_stamp(hosts_path());
+	m_presets_stamp = file_stamp(presets_path());
 }
 
 void bssh_profile_store::load_presets() {
 	QSettings file(presets_path(), QSettings::IniFormat);
+	file.sync();   /* another process's write, not this process's cached copy */
 	const QStringList sections = file.childGroups();
 
 	/*
@@ -344,6 +385,7 @@ void bssh_profile_store::load_presets() {
 
 void bssh_profile_store::load_profiles() {
 	QSettings file(hosts_path(), QSettings::IniFormat);
+	file.sync();   /* as in load_presets */
 
 	/*
 	 * A root-level key, so the loop below -- which walks GROUPS -- never
@@ -542,6 +584,7 @@ bool bssh_profile_store::write_presets() {
 		m_last_error = QStringLiteral("could not write %1").arg(file.fileName());
 		return false;
 	}
+	remember_stamps();
 	return true;
 }
 
@@ -622,6 +665,7 @@ bool bssh_profile_store::write_profiles() {
 		m_last_error = QStringLiteral("could not write %1").arg(file.fileName());
 		return false;
 	}
+	remember_stamps();
 	return true;
 }
 
@@ -643,6 +687,7 @@ bssh_profile_store *bssh_profile_store::shared() {
 
 int bssh_profile_store::save(const bssh_profile_t &profile) {
 	if (!m_open || !profile.is_valid()) return 0;
+	refresh();
 
 	const QList<bssh_profile_t> before_write = m_profiles;
 
@@ -706,6 +751,7 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 
 bool bssh_profile_store::remove(int id) {
 	if (!m_open || id == 0) return false;
+	refresh();
 
 	/*
 	 * Cleared on entry, or a caller that checks it after a SUCCESSFUL
@@ -801,6 +847,7 @@ bssh_preset_t bssh_profile_store::preset(int id) const {
 }
 
 int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
+	refresh();
 	const QList<bssh_preset_t> presets_before = m_presets;
 	const QHash<int, QString> slugs_before = m_slugs;
 	if (!m_open) return 0;
@@ -895,6 +942,7 @@ int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
 }
 
 bool bssh_profile_store::remove_preset(int id) {
+	refresh();
 	const QList<bssh_preset_t> presets_before = m_presets;
 	const QHash<int, QString> slugs_before = m_slugs;
 	if (!m_open || id == 0) return false;
