@@ -7881,9 +7881,13 @@ window with no name is a blank row in the task switcher.
   read -- an unconditional reload emptied the store in the two tests that
   block `presets.ini` to see a write refused.
   `a_store_that_loaded_first_does_not_erase_a_later_save` failed on
-  `a != b` before and passes after. **Still open:** a window's host list
-  shows another window's change only after its own next change or a
-  restart; nothing watches the files.
+  `a != b` before and passes after. **And another window's change is
+  shown without waiting for this one's**: the store watches both files
+  and their directories (QSettings saves by replacing the file, which
+  stops a file watch, so the files are added back each time) and, when
+  `refresh()` finds them changed, emits `changed()`, which the host lists
+  already rebuild on. `another_stores_save_is_seen_and_announced` fails
+  with the watch taken out.
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with

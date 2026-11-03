@@ -35,6 +35,8 @@
  * between machines, and it is the same rule that keeps a host or user out
  * of a preset (sec 10.3).
  */
+class QFileSystemWatcher;
+
 class bssh_profile_store : public QObject {
 	Q_OBJECT
 
@@ -171,8 +173,13 @@ private:
 	void load_presets();
 	void load_profiles();
 
-	/* load(), before a change: another process may have written since (sec 8.4). */
-	void refresh();
+	/*
+	 * load(), if another process has written since (sec 8.4); true when it
+	 * did. Before every change, and when the files are seen to change.
+	 */
+	bool refresh();
+	void watch();
+	void rewatch();
 	static QString file_stamp(const QString &path);
 	void remember_stamps();
 	/*
@@ -209,6 +216,7 @@ private:
 	bool m_open;
 	QString m_hosts_stamp;     /* size and mtime as last read or written; see refresh() */
 	QString m_presets_stamp;
+	QFileSystemWatcher *m_watcher = nullptr;
 
 	/*
 	 * The next host id to hand out, and it only ever GOES UP.

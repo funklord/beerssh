@@ -2490,3 +2490,19 @@ void profile_store_test::a_store_that_loaded_first_does_not_erase_a_later_save()
 	names.sort();
 	QCOMPARE(names, QStringList({QStringLiteral("alpha"), QStringLiteral("gamma")}));
 }
+
+/* And the other window shows it without making a change of its own. */
+void profile_store_test::another_stores_save_is_seen_and_announced() {
+	QTemporaryDir dir;
+	bssh_profile_store first(dir.filePath(QStringLiteral("test.db")));
+	bssh_profile_store second(dir.filePath(QStringLiteral("test.db")));
+	QSignalSpy announced(&second, &bssh_profile_store::changed);
+
+	QVERIFY(first.save(make_profile(QStringLiteral("alpha"), QStringLiteral("alpha.example"))) > 0);
+	QTRY_COMPARE(second.profiles().count(), 1);
+	QVERIFY(announced.count() >= 1);
+
+	/* A second change, after the file was replaced once: still watched. */
+	QVERIFY(first.save(make_profile(QStringLiteral("beta"), QStringLiteral("beta.example"))) > 0);
+	QTRY_COMPARE(second.profiles().count(), 2);
+}

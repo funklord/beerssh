@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QFileSystemWatcher>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QVariant>
@@ -124,7 +125,39 @@ bool bssh_profile_store::open(const QString &directory) {
 
 	migrate_hosts_if_needed();
 	load();
+	watch();
 	return true;
+}
+
+/*
+ * Another window's change, shown here without waiting for this window's
+ * own next one: every desktop window is a process (sec 8.4), and a host
+ * added in one is otherwise missing from every other host list until it
+ * restarts. The directories are watched as well as the files, because
+ * QSettings saves by replacing the file, and a watched path that is
+ * replaced stops being watched -- so the files are added back each time.
+ * This store's own writes come back here too and are let go by the
+ * stamps refresh() compares.
+ */
+void bssh_profile_store::watch() {
+	if (!m_watcher) {
+		m_watcher = new QFileSystemWatcher(this);
+		auto changed_on_disk = [this] {
+			rewatch();
+			if (refresh()) emit changed();
+		};
+		connect(m_watcher, &QFileSystemWatcher::fileChanged, this, changed_on_disk);
+		connect(m_watcher, &QFileSystemWatcher::directoryChanged, this, changed_on_disk);
+	}
+	rewatch();
+}
+
+void bssh_profile_store::rewatch() {
+	for (const QString &path : {hosts_path(), presets_path()}) {
+		const QString directory = QFileInfo(path).absolutePath();
+		if (!m_watcher->directories().contains(directory)) m_watcher->addPath(directory);
+		if (QFileInfo(path).isFile() && !m_watcher->files().contains(path)) m_watcher->addPath(path);
+	}
 }
 
 /*
@@ -239,8 +272,8 @@ void bssh_profile_store::load() {
  * across processes and measured: two stores over one file gave the same
  * id to two hosts.
  */
-void bssh_profile_store::refresh() {
-	if (!m_open) return;
+bool bssh_profile_store::refresh() {
+	if (!m_open) return false;
 	/*
 	 * Only when a file has changed since this process last read or wrote
 	 * it, and only one that can be read: a file that cannot be read is
@@ -250,10 +283,11 @@ void bssh_profile_store::refresh() {
 	 */
 	const QString hosts = file_stamp(hosts_path());
 	const QString presets = file_stamp(presets_path());
-	if (hosts.isEmpty() && QFileInfo::exists(hosts_path())) return;
-	if (presets.isEmpty() && QFileInfo::exists(presets_path())) return;
-	if (hosts == m_hosts_stamp && presets == m_presets_stamp) return;
+	if (hosts.isEmpty() && QFileInfo::exists(hosts_path())) return false;
+	if (presets.isEmpty() && QFileInfo::exists(presets_path())) return false;
+	if (hosts == m_hosts_stamp && presets == m_presets_stamp) return false;
 	load();
+	return true;
 }
 
 QString bssh_profile_store::file_stamp(const QString &path) {
