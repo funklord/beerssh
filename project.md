@@ -17923,7 +17923,8 @@ package sources are `android-sshd/`; the C++ is the same server under
   server and logs why, before stopping the service as Android requires.
   `specialUse` has no limit and needs a written justification instead.
 - **Wi-Fi only.** It listens on `wlan*`'s IPv4 address, polls every five
-  seconds, restarts on a new address and stops when there is none. Mobile
+  seconds, restarts on a new address and waits when there is none (since
+  2026-11-03, §19.6; it used to stop). Mobile
   data is behind the carrier's NAT, and a hotspot the phone provides is a
   different interface and deliberately not matched.
 - **The access screen explains before it sends.** Settings says only
@@ -18054,6 +18055,40 @@ caught.
   prerequisite (`SecurityException`). The logger asked about (below) was
   for finding how the 6-hour budget is kept; with `dataSync` gone it is
   moot unless the holder still wants it.
+- **A Wi-Fi drop in the background left a dead server that said
+  "Serving" -- found and fixed 2026-11-03, on the API 36 emulator.** Two
+  facts made it. **Android destroys a socket bound to an address when the
+  network that owned the address goes**, so the listener died the moment
+  Wi-Fi did, with no call into the app. And **Qt blocks its main thread's
+  event loop while the app is suspended** -- `QtActivityBase.onStop` sets
+  `ApplicationSuspended` and `QAndroidEventDispatcherStopper` stops every
+  dispatcher it registered, which is the main thread's only, unless the
+  manifest sets `android.app.background_running` (neither app does) --
+  so the window's five-second address poll did not run either. That is
+  also what the time-limit entry above saw: the queued stop "did not run
+  in the background". Measured, app sent home, `svc wifi disable` then
+  `enable`: the listener gone, the accepting thread spinning at ~90% of a
+  core on the dead socket for as long as Wi-Fi was off (it inherits the
+  name `qtMainLoopThread` from the thread that made it, which reads like
+  Qt's own until the tids are compared), nothing listening once Wi-Fi was
+  back, and on reopening still "Serving", since the address was the same
+  and the poll saw no change. **Now the accepting thread owns it**: an
+  error on the listener closes it and takes it out of the poll set, and
+  the same address and port are tried once a second until they bind,
+  logged once each way. **And losing Wi-Fi no longer switches the server
+  off** in the foreground either: it waits, says "Waiting for Wi-Fi" on
+  screen and in the notification, and a different address is followed
+  when the poll next runs. Rerun with the fix: 0% CPU with Wi-Fi off,
+  listening again by itself when it returned, banner answered, the app
+  still in the background. **Log lines are stamped when they happen**, on
+  the server's thread; stamped on arrival they all carried the second the
+  app was reopened. **Still open:** a *different* address while the app
+  stays in the background is followed only when Qt next runs, and with no
+  wake lock the one-second retry runs only when Doze lets the CPU wake.
+  Guarded by `a_listener_the_system_takes_away_comes_back_without_spinning`,
+  which shuts the listener down from outside and holds the port so the
+  retry fails for three seconds, asserting the process spent under 0.3 s
+  of CPU meanwhile.
 - **Periodic work in the background, asked 2026-11-03 -- not built, the
   answer recorded.** The service is no scheduler: a `dataSync` foreground
   service that keeps the process alive while the server runs. The server's

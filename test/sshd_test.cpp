@@ -4,7 +4,14 @@
 #include <QFile>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QTcpServer>
+#include <QTcpSocket>
 #include <QTest>
+
+#include <ctime>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include "sshd/root_path.h"
 #include "sshd/sshd.h"
@@ -24,6 +31,32 @@ QByteArray read_file(const QString &path) {
 bool have_openssh() {
 	return !QStandardPaths::findExecutable(QStringLiteral("sftp")).isEmpty()
 	       && !QStandardPaths::findExecutable(QStringLiteral("ssh-keygen")).isEmpty();
+}
+
+/*
+ * The descriptor in this process listening on `port`, or -1. Found by
+ * looking rather than by asking the server, which has no reason to hand
+ * its socket out.
+ */
+int listener_on(int port) {
+	const QStringList fds = QDir(QStringLiteral("/proc/self/fd")).entryList(QDir::NoDotAndDotDot | QDir::System
+	                                                                           | QDir::Files);
+	for (const QString &name : fds) {
+		const int fd = name.toInt();
+		int listening = 0;
+		socklen_t size = sizeof listening;
+		if (::getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &listening, &size) != 0 || !listening) continue;
+		struct sockaddr_in address;
+		socklen_t length = sizeof address;
+		if (::getsockname(fd, reinterpret_cast<sockaddr *>(&address), &length) != 0) continue;
+		if (address.sin_family == AF_INET && ntohs(address.sin_port) == port) return fd;
+	}
+	return -1;
+}
+
+/* Process CPU time, user and system, in seconds. */
+double cpu_seconds() {
+	return double(std::clock()) / CLOCKS_PER_SEC;
 }
 
 } /* namespace */
@@ -386,4 +419,54 @@ void sshd_test::scp_finishes_with_a_clean_exit() {
 	args.replace(args.indexOf(QStringLiteral("LogLevel=ERROR")), QStringLiteral("LogLevel=INFO"));
 	QCOMPARE(client(QStringLiteral("scp"), args, QByteArray(), &output), 0);
 	QVERIFY2(!output.contains("closed by remote host"), output.constData());
+}
+
+/*
+ * Android destroys a socket bound to an address when the network that
+ * owned the address goes (project.md sec 19.6). Seen on an API 36
+ * emulator before this was handled: the accepting thread spun at ~90% of
+ * a core on the dead socket while Wi-Fi was off, and nothing listened
+ * once it was back. Here the socket is shut down from outside, which
+ * Linux reports to poll() the same way, and the port is then held so
+ * that listening again fails for a while -- the window in which a loop
+ * that kept the dead socket would spin.
+ */
+void sshd_test::a_listener_the_system_takes_away_comes_back_without_spinning() {
+	bssh_sshd_config_t config;
+	config.root = QFile::encodeName(m_root);
+	config.host_key_path = m_config + QStringLiteral("/host_key");
+	config.authorized_keys_path = m_config + QStringLiteral("/authorized_keys");
+	config.bind_address = "127.0.0.1";
+	config.port = 0;
+
+	m_server = std::make_unique<bssh_sshd>();
+	QString error;
+	QVERIFY2(m_server->start(config, &error), qPrintable(error));
+	const int port = m_server->port();
+	QVERIFY(m_server->listening());
+
+	const int fd = listener_on(port);
+	QVERIFY(fd >= 0);
+	QCOMPARE(::shutdown(fd, SHUT_RDWR), 0);
+	QTRY_VERIFY(!m_server->listening());
+	QVERIFY(m_server->running());
+
+	/* The port taken while it is free, so listening again fails. */
+	QTcpServer blocker;
+	QVERIFY(blocker.listen(QHostAddress(QStringLiteral("127.0.0.1")), quint16(port)));
+
+	const double before = cpu_seconds();
+	QTest::qWait(3000);
+	const double spent = cpu_seconds() - before;
+	QVERIFY2(spent < 0.3, qPrintable(QStringLiteral("%1 s of CPU in 3 s without a listener").arg(spent)));
+	QVERIFY(!m_server->listening());
+
+	blocker.close();
+	QTRY_VERIFY_WITH_TIMEOUT(m_server->listening(), 5000);
+
+	QTcpSocket probe;
+	probe.connectToHost(QHostAddress(QStringLiteral("127.0.0.1")), quint16(port));
+	QVERIFY(probe.waitForConnected(3000));
+	QTRY_VERIFY(probe.bytesAvailable() >= 8 || probe.waitForReadyRead(100));
+	QVERIFY(probe.readAll().startsWith("SSH-2.0-"));
 }

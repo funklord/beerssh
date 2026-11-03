@@ -11,6 +11,7 @@ class QLineEdit;
 class QPlainTextEdit;
 class QPushButton;
 class QSpinBox;
+class QTime;
 class QTimer;
 class bssh_sshd_platform;
 
@@ -59,6 +60,7 @@ private:
 	void set_password(const QString &password);
 	void refresh_password_state();
 	void log(const QString &line);
+	void log_at(const QTime &when, const QString &line);
 	void update_status();
 	QString status_line() const;
 

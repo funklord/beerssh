@@ -16,7 +16,7 @@ private slots:
 	void without_access_it_asks_and_does_not_start();
 	void it_serves_the_platform_root_on_the_platform_address();
 	void the_time_limit_stops_the_server_and_says_why();
-	void losing_wifi_stops_and_a_new_address_restarts();
+	void losing_wifi_waits_and_a_new_address_restarts();
 	void saved_keys_are_counted_by_the_login_parse();
 	void the_keys_box_follows_the_file_but_not_over_edits();
 };

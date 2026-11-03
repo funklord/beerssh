@@ -69,6 +69,14 @@ public:
 	void stop();
 
 	bool running() const { return m_running.load(); }
+
+	/*
+	 * Whether a socket is listening now. A running server whose listener
+	 * the system took away -- Android does, when the network goes --
+	 * runs on without one and listens again, by itself, once the address
+	 * can be bound again; this is false in between.
+	 */
+	bool listening() const { return m_running.load() && m_listening.load(); }
 	int port() const { return m_port; }
 	int connections() const { return m_live.load(); }
 
@@ -107,6 +115,9 @@ signals:
 	/* One line about a connection: who logged in, what was refused. */
 	void logged(const QString &line);
 
+	/* listening() changed, from the accepting thread. */
+	void listening_changed(bool listening);
+
 private:
 	void accept_loop();
 	void serve(connection_t *connection);
@@ -121,6 +132,7 @@ private:
 	std::atomic<bool> m_stopping{false};
 	std::thread m_accepting;
 	std::atomic<bool> m_running{false};
+	std::atomic<bool> m_listening{false};
 	std::mutex m_lifecycle;   /* start() and stop() against each other */
 
 	std::mutex m_mutex;

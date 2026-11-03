@@ -361,6 +361,7 @@ bool bssh_sshd::start(const bssh_sshd_config_t &config, QString *error) {
 	m_config = config;
 	m_bind = bind;
 	m_stopping = false;
+	m_listening = true;
 	m_accepting = std::thread([this] { accept_loop(); });
 	m_running = true;
 	return true;
@@ -412,17 +413,66 @@ void bssh_sshd::reap(bool all) {
 	for (const std::unique_ptr<connection_t> &connection : finished) connection->thread.join();
 }
 
+/*
+ * Listens again on the address and port the server started with. The
+ * port is the one in use rather than the configured one, which may have
+ * been 0 for "any". The keys are already loaded, so this is a socket, a
+ * bind and a listen -- cheap enough to try once a second.
+ */
+static bool listen_again(ssh_bind bind, int port) {
+	ssh_bind_set_fd(bind, SSH_INVALID_SOCKET);
+	return ssh_bind_options_set(bind, SSH_BIND_OPTIONS_BINDPORT, &port) == SSH_OK
+	       && ssh_bind_listen(bind) == SSH_OK;
+}
+
 void bssh_sshd::accept_loop() {
 	ssh_bind bind = static_cast<ssh_bind>(m_bind);
+	const QString where = QStringLiteral("%1:%2")
+	                      .arg(QString::fromLatin1(m_config.bind_address)).arg(m_port);
 
 	while (!m_stopping) {
+		/*
+		 * A negative fd is one poll() skips: while the listener is gone,
+		 * only the stop pipe and the one-second timeout wake this loop.
+		 */
+		const bool listening = m_listening.load();
 		struct pollfd fds[2] = {
-			{ssh_bind_get_fd(bind), POLLIN, 0},
+			{listening ? ssh_bind_get_fd(bind) : -1, POLLIN, 0},
 			{m_wake[0], POLLIN, 0},
 		};
 		if (::poll(fds, 2, 1000) < 0 && errno != EINTR) break;
 		reap(false);
 		if (m_stopping || fds[1].revents) break;
+
+		if (!listening) {
+			if (!listen_again(bind, m_port)) continue;
+			m_listening = true;
+			emit logged(QStringLiteral("Listening again on %1").arg(where));
+			emit listening_changed(true);
+			continue;
+		}
+
+		/*
+		 * The listener died under us. Android destroys every socket bound
+		 * to an address the moment the network that owned it goes, so a
+		 * Wi-Fi drop does this while nothing on Qt's thread is running to
+		 * notice (project.md sec 19.6). Seen on an API 36 emulator: left
+		 * in the poll set, the dead socket reported an error at once on
+		 * every pass and this loop spun a core at ~90% for as long as
+		 * Wi-Fi was off, and when it came back nothing listened -- while
+		 * the screen and the notification still said "Serving". So it is
+		 * closed and taken out of the set, and the address is tried again
+		 * once a second until it is back.
+		 */
+		if (fds[0].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+			::close(ssh_bind_get_fd(bind));
+			ssh_bind_set_fd(bind, SSH_INVALID_SOCKET);
+			m_listening = false;
+			emit logged(QStringLiteral("No longer listening on %1: the network is gone. "
+			                           "Listening again when it is back.").arg(where));
+			emit listening_changed(false);
+			continue;
+		}
 		if (!(fds[0].revents & POLLIN)) continue;
 
 		ssh_session session = ssh_new();

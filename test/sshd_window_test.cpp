@@ -167,7 +167,7 @@ void sshd_window_test::the_time_limit_stops_the_server_and_says_why() {
 	QVERIFY(child<QPlainTextEdit>(window, "sshd-log")->toPlainText().contains(QStringLiteral("would not keep the file server running")));
 }
 
-void sshd_window_test::losing_wifi_stops_and_a_new_address_restarts() {
+void sshd_window_test::losing_wifi_waits_and_a_new_address_restarts() {
 	QTemporaryDir dir;
 	fake_platform platform(dir.path());
 
@@ -188,11 +188,25 @@ void sshd_window_test::losing_wifi_stops_and_a_new_address_restarts() {
 	QVERIFY(window.serving());
 	QCOMPARE(window.server().config().bind_address, QByteArray("127.0.0.2"));
 
+	/*
+	 * Wi-Fi gone: still on, because the user switched it on and it is to
+	 * be reachable when the phone is back (sec 19.6). Stop stays offered.
+	 */
 	platform.address = QHostAddress();
 	window.follow_address();
+	QVERIFY(window.serving());
+	QVERIFY(platform.serving);
+	QVERIFY(child<QPushButton>(window, "sshd-toggle")->isEnabled());
+
+	/* And back on another network: followed there. */
+	platform.address = QHostAddress(QStringLiteral("127.0.0.1"));
+	window.follow_address();
+	QVERIFY(window.serving());
+	QCOMPARE(window.server().config().bind_address, QByteArray("127.0.0.1"));
+
+	child<QPushButton>(window, "sshd-toggle")->click();
 	QVERIFY(!window.serving());
 	QVERIFY(!platform.serving);
-	QVERIFY(!child<QPushButton>(window, "sshd-toggle")->isEnabled());
 }
 
 void sshd_window_test::saved_keys_are_counted_by_the_login_parse() {

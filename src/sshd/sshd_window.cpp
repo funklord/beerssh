@@ -168,8 +168,20 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	outer->setContentsMargins(0, 0, 0, 0);
 	outer->addWidget(scroll);
 
-	connect(&m_server, &bssh_sshd::logged, this, &bssh_sshd_window::log);
+	/*
+	 * Stamped on the server's thread, when it happened, and only then
+	 * queued to this one: on Android Qt's thread does not run while the
+	 * app is in the background, so a line stamped on arrival said when
+	 * the user next opened the app -- a night's Wi-Fi drop and return all
+	 * read as the same second (sec 19.6). Direct, then queued; the
+	 * window's stop() joins the server's threads before it goes.
+	 */
+	connect(&m_server, &bssh_sshd::logged, this, [this](const QString &line) {
+		const QTime when = QTime::currentTime();
+		QMetaObject::invokeMethod(this, [this, when, line] { log_at(when, line); }, Qt::QueuedConnection);
+	}, Qt::DirectConnection);
 	connect(&m_server, &bssh_sshd::connections_changed, this, &bssh_sshd_window::update_status);
+	connect(&m_server, &bssh_sshd::listening_changed, this, &bssh_sshd_window::update_status);
 
 	/*
 	 * The server only: the screen is Qt's, and is brought up to date by
@@ -263,6 +275,12 @@ void bssh_sshd_window::refresh() {
 }
 
 QString bssh_sshd_window::status_line() const {
+	if (serving() && !m_server.listening()) {
+		return tr("Waiting for Wi-Fi: serves %1 again at %2, port %3, when it is back.")
+		        .arg(m_server.config().root.isEmpty() ? QString() : QFile::decodeName(m_server.config().root),
+		             m_bound.toString())
+		        .arg(m_server.port());
+	}
 	if (serving()) {
 		return tr("Serving %1 at %2, port %3 -- %n connection(s)", nullptr, m_server.connections())
 		        .arg(m_server.config().root.isEmpty() ? QString() : QFile::decodeName(m_server.config().root),
@@ -277,7 +295,9 @@ QString bssh_sshd_window::status_line() const {
 void bssh_sshd_window::update_status() {
 	m_status->setText(status_line());
 	m_toggle->setText(serving() ? tr("Stop") : tr("Start"));
-	if (serving()) {
+	if (serving() && !m_server.listening()) {
+		m_platform->set_serving(true, tr("Waiting for Wi-Fi"));
+	} else if (serving()) {
 		m_platform->set_serving(true, tr("Serving at %1:%2 -- %n connection(s)", nullptr,
 		                                 m_server.connections())
 		                              .arg(m_bound.toString()).arg(m_server.port()));
@@ -345,11 +365,16 @@ void bssh_sshd_window::follow_address() {
 	const QHostAddress now = m_platform->listen_address();
 	if (now == m_bound) return;
 
-	if (now.isNull()) {
-		stop();
-		log(tr("Stopped: Wi-Fi is gone, and the server listens on Wi-Fi only."));
-		return;
-	}
+	/*
+	 * Wi-Fi gone is not a reason to stop: beersshd is to be reachable
+	 * whenever the user has it on (the holder, 2026-11-03, sec 19.6), and a
+	 * server that switched itself off when the phone left home would miss
+	 * that night's backup when it came back. The address is kept; the
+	 * server listens again on it by itself when the same network returns,
+	 * which is the common case, and a different address is followed below
+	 * the next time this runs.
+	 */
+	if (now.isNull()) return;
 
 	log(tr("The Wi-Fi address changed to %1; listening there instead.").arg(now.toString()));
 	stop();
@@ -373,5 +398,9 @@ void bssh_sshd_window::save_keys() {
 }
 
 void bssh_sshd_window::log(const QString &line) {
-	m_log->appendPlainText(QTime::currentTime().toString(QStringLiteral("HH:mm:ss ")) + line);
+	log_at(QTime::currentTime(), line);
+}
+
+void bssh_sshd_window::log_at(const QTime &when, const QString &line) {
+	m_log->appendPlainText(when.toString(QStringLiteral("HH:mm:ss ")) + line);
 }

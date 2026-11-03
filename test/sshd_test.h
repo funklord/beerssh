@@ -35,6 +35,7 @@ private slots:
 	void a_key_with_options_is_not_honoured_without_them();
 	void sftp_is_all_it_serves();
 	void scp_finishes_with_a_clean_exit();
+	void a_listener_the_system_takes_away_comes_back_without_spinning();
 
 private:
 	bool start_server();
