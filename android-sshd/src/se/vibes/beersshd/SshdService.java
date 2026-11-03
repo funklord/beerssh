@@ -45,6 +45,7 @@ public class SshdService extends Service {
 
 	public static void start(Context context, String status) {
 		s_status = status;
+		SshdBoot.clearNotice(context);
 		context.startForegroundService(new Intent(context, SshdService.class));
 	}
 

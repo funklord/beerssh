@@ -35,6 +35,9 @@ public:
 
 	void request_notifications() override { ++notification_requests; }
 
+	bool switched_on() const override { return on; }
+	void set_switched_on(bool now) override { on = now; }
+
 	void set_serving(bool now, const QString &status) override {
 		serving = now;
 		last_status = status;
@@ -52,6 +55,7 @@ public:
 	int requests = 0;
 	int notification_requests = 0;
 	bool serving = false;
+	bool on = false;
 	QString last_status;
 
 private:
@@ -258,4 +262,57 @@ void sshd_window_test::the_keys_box_follows_the_file_but_not_over_edits() {
 	keys->document()->setModified(true);
 	window.reload_keys();
 	QCOMPARE(keys->toPlainText(), QStringLiteral("half-typed"));
+}
+
+/*
+ * Only Start and Stop change whether it is switched on, and a window
+ * opened while it is on serves again -- at once, or once Wi-Fi is back,
+ * since an app Android ended or a phone that rebooted should not need
+ * Start pressed a second time to be reachable (sec 19.6).
+ */
+void sshd_window_test::switched_on_lasts_and_serves_again_when_it_can() {
+	QTemporaryDir dir;
+	fake_platform platform(dir.path());
+	const int port = free_port();
+
+	{
+		bssh_sshd_window window(&platform);
+		child<QSpinBox>(window, "sshd-port")->setValue(port);
+		QVERIFY(!platform.on);
+		child<QPushButton>(window, "sshd-toggle")->click();
+		QVERIFY(window.serving());
+		QVERIFY(platform.on);
+	}
+
+	/* A new window, as after Android ended the app: on, so serving. */
+	{
+		bssh_sshd_window window(&platform);
+		QVERIFY(window.serving());
+
+		/* The system stopping it leaves it switched on. */
+		std::thread android_thread;
+		platform.time_out_from(android_thread);
+		QTRY_VERIFY(!platform.serving);
+		QVERIFY(platform.on);
+	}
+
+	/* Opened with no Wi-Fi: waits, then serves once an address comes. */
+	platform.address = QHostAddress();
+	{
+		bssh_sshd_window window(&platform);
+		QVERIFY(!window.serving());
+		platform.address = QHostAddress(QHostAddress::LocalHost);
+		window.follow_address();
+		QVERIFY(window.serving());
+
+		child<QPushButton>(window, "sshd-toggle")->click();
+		QVERIFY(!window.serving());
+		QVERIFY(!platform.on);
+	}
+
+	/* Switched off: a new window stays off. */
+	bssh_sshd_window window(&platform);
+	QVERIFY(!window.serving());
+	window.follow_address();
+	QVERIFY(!window.serving());
 }

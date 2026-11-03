@@ -9,6 +9,7 @@ namespace {
 
 const char *const SERVICE_CLASS = "se/vibes/beersshd/SshdService";
 const char *const STORAGE_CLASS = "se/vibes/beersshd/SshdStorage";
+const char *const BOOT_CLASS = "se/vibes/beersshd/SshdBoot";
 
 QJniObject android_context() {
 	return QNativeInterface::QAndroidApplication::context();
@@ -70,6 +71,27 @@ public:
 			}
 		}
 		return QHostAddress();
+	}
+
+	/*
+	 * In SharedPreferences rather than QSettings, because SshdBoot reads it
+	 * at boot from Java, with no Qt loaded.
+	 */
+	bool switched_on() const override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return false;
+		const bool on = QJniObject::callStaticMethod<jboolean>(
+		        BOOT_CLASS, "switchedOn", "(Landroid/content/Context;)Z", context.object()) == JNI_TRUE;
+		QJniEnvironment().checkAndClearExceptions();
+		return on;
+	}
+
+	void set_switched_on(bool on) override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+		QJniObject::callStaticMethod<void>(BOOT_CLASS, "setSwitchedOn", "(Landroid/content/Context;Z)V",
+		                                   context.object(), jboolean(on));
+		QJniEnvironment().checkAndClearExceptions();
 	}
 
 	void request_notifications() override {

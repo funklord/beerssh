@@ -66,8 +66,13 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	m_toggle = new QPushButton(tr("Start"));
 	m_toggle->setObjectName(QStringLiteral("sshd-toggle"));
 	connect(m_toggle, &QPushButton::clicked, this, [this] {
-		if (serving()) stop();
-		else start();
+		if (serving()) {
+			stop();
+			m_platform->set_switched_on(false);
+		} else {
+			start();
+			if (serving()) m_platform->set_switched_on(true);
+		}
 	});
 	layout->addWidget(m_toggle);
 
@@ -191,6 +196,12 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 
 	connect(m_platform, &bssh_sshd_platform::time_limit_reached, this, [this] {
 		if (m_bound.isNull()) return;
+		/*
+		 * Still switched on, but not started again by the poll: Android
+		 * said no, and asking every five seconds would only hear it again.
+		 * The next time the app comes to the front, it is.
+		 */
+		m_held_by_system = true;
 		stop();
 		/*
 		 * What happened, and no promise about when Start works again: the
@@ -209,8 +220,10 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	 */
 	connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
 		if (state != Qt::ApplicationActive) return;
+		m_held_by_system = false;
 		reload_keys();
 		refresh();
+		follow_address();
 	});
 
 	m_address_timer = new QTimer(this);
@@ -218,9 +231,14 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	connect(m_address_timer, &QTimer::timeout, this, &bssh_sshd_window::follow_address);
 	m_address_timer->start();
 
+	/*
+	 * Left on when the app last ran: serving again at once, or as soon as
+	 * Wi-Fi and access allow, which follow_address() checks every poll.
+	 */
 	reload_keys();
 	refresh_password_state();
 	refresh();
+	if (m_platform->switched_on()) start();
 }
 
 QString bssh_sshd_window::password_path() const {
@@ -358,6 +376,12 @@ void bssh_sshd_window::stop() {
 
 void bssh_sshd_window::follow_address() {
 	if (!serving()) {
+		/* Switched on and stopped by something else: serve again once it can. */
+		if (m_platform->switched_on() && !m_held_by_system && m_platform->has_storage_access()
+		    && !m_platform->listen_address().isNull()) {
+			start();
+			return;
+		}
 		refresh();
 		return;
 	}

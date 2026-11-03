@@ -51,6 +51,18 @@ public:
 	 */
 	virtual void request_notifications() {}
 
+	/*
+	 * Whether the user has the server switched on, kept across a restart
+	 * of the app and of the phone: beersshd is to be reachable whenever
+	 * it is on (sec 19.6), so an app that Android ended, or a phone that
+	 * rebooted, starts serving again once it can rather than waiting for
+	 * Start to be pressed a second time. Only the user's Start and Stop
+	 * change it; the system stopping the server does not. Kept nowhere by
+	 * default, which is the desktop's and the tests' answer.
+	 */
+	virtual bool switched_on() const { return false; }
+	virtual void set_switched_on(bool) {}
+
 	/* Where the host key and the authorized keys live: never inside the root. */
 	virtual QString data_directory() const;
 

@@ -67,6 +67,7 @@ private:
 	bssh_sshd_platform *m_platform;
 	bssh_sshd m_server;
 	QHostAddress m_bound;
+	bool m_held_by_system = false;   /* stopped by Android; see time_limit_reached */
 
 	QLabel *m_status = nullptr;
 	QLineEdit *m_fingerprint = nullptr;

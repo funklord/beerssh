@@ -18123,6 +18123,31 @@ caught.
   which shuts the listener down from outside and holds the port so the
   retry fails for three seconds, asserting the process spent under 0.3 s
   of CPU meanwhile.
+- **After a restart, of the app or the phone -- BUILT 2026-11-03, first
+  step.** Whether the user has the server switched on is kept
+  (`switched_on`, in SharedPreferences so Java can read it with no Qt
+  loaded), changed only by Start and Stop. A window opened while it is on
+  serves again at once, or on the first poll that finds Wi-Fi and access;
+  after Android stops it the poll does not retry until the app is next in
+  front, since asking every five seconds would only hear no again. A
+  reboot with it on posts one notification, "beersshd stopped when the
+  phone restarted -- Tap to serve files again" (`SshdBoot`, on
+  `BOOT_COMPLETED`), cleared whenever the service starts. Seen on the API
+  36 emulator: force-stopped and relaunched, serving; rebooted, the notice
+  about 50 s after boot completed on that loaded machine; a tap or the
+  launcher, serving, notice gone; after Stop, a relaunch stays off.
+  **Serving again unattended at boot is the next step, and it is a
+  redesign rather than a flag.** Android allows it (Android 15's
+  `BOOT_COMPLETED` restrictions name `dataSync` and five other types, not
+  `connectedDevice`), but the server lives in the Qt app: a `QtService`
+  started at boot loads Qt in the process, and `QtActivityBase.onCreate`
+  then calls `restartApplication()` the moment the user opens the app,
+  "we don't yet have a reliable way to keep the app running properly in
+  case of an Activity only restart" (Qt 6.12) -- dropping whatever
+  transfer is running. The two ways out: the server in its own process
+  (`android:process`), a headless Qt service there and the window talking
+  to it over IPC; or the server loaded without Qt's loader, from plain
+  Java, with the window adopting it. Neither is started.
 - **Periodic work in the background, asked 2026-11-03 -- not built, the
   answer recorded.** The service is no scheduler: a `dataSync` foreground
   service that keeps the process alive while the server runs. The server's
