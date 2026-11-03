@@ -18030,6 +18030,18 @@ caught.
   with it. The Android dependency build checksums `libssh-patch/`, so it
   rebuilds libssh for every ABI the next time it runs. Not offered
   upstream yet.
+- **Periodic work in the background, asked 2026-11-03 -- not built, the
+  answer recorded.** The service is no scheduler: a `dataSync` foreground
+  service that keeps the process alive while the server runs. The server's
+  accept thread already wakes once a second (`poll()` with a 1000 ms
+  timeout in `accept_loop()`), so a periodic log line could ride on it --
+  on that thread, not a `QTimer`, since Qt's own thread was seen not to run
+  queued work in the background (the time-limit entry above). Two limits: no
+  wake lock is held, so the CPU sleeps in Doze and such a timer stalls (an
+  incoming connection still wakes it), and `dataSync` ends after 6 hours in
+  24 on Android 15. Work that must run on a schedule whether or not the
+  server is on is WorkManager's (15-minute floor) or AlarmManager's. Waits
+  on the holder saying what the log is for.
 - **The icon** is Android's default, with BeerSSH's (sec 0.1) undecided.
 - **Release:** a keystore, and Play's declarations for
   `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.
