@@ -51,11 +51,15 @@ OpenSSH. Against them, what BeerSSH brings:
   reflow, with the scrollback history rewrapped as well as the screen. On
   the desktop these are what kitty, foot and WezTerm offer; BeerSSH brings
   the same set to the phone.
-- **A file server for the phone, beersshd**: an SFTP-only server that makes
-  one folder on the phone reachable from a desktop with `sftp` or `scp`,
-  logging in with a listed key or a salted password, and nothing outside
-  that folder reachable at all -- where the usual way is a full SSH server
-  under Termux, which gives whoever logs in a shell.
+- **A file server for the phone, beersshd**: an SFTP-only server that keeps
+  the phone's storage reachable from a computer on the same Wi-Fi -- for a
+  backup the computer runs on its own schedule with rsync over sshfs,
+  restic or rclone, or for `sftp` and `scp` -- logging in with a listed key
+  or a salted password, and nothing outside that storage reachable at all.
+  It is meant to be left on: it keeps serving in the background, follows
+  the Wi-Fi when it drops and returns, and can start again by itself after
+  the phone restarts. The usual way is a full SSH server under Termux, which
+  gives whoever logs in a shell, and has to be started by hand.
 
 Qt Widgets, C++. A Debian package for the desktop, and an APK for Android.
 
@@ -266,11 +270,11 @@ See `project.md` §14 for the milestone plan.
 ## beersshd
 
 A second, separate program from this tree: an SFTP server and nothing else.
-It serves one folder to the keys in one authorized-keys file — no shell, no
-commands, no passwords — and is meant for an Android phone, where it will
-be its own app so that the permission to reach shared storage belongs to a
-file server rather than to the terminal. On the desktop it is a command
-line:
+It serves one folder to the keys in one authorized-keys file, and to a
+password where one is set — no shell, no commands, no forwarding — and is
+meant for an Android phone, where it is its own app so that the permission
+to reach shared storage belongs to a file server rather than to the
+terminal. On the desktop it is a command line:
 
 ```sh
 ./beersshd --root ~/Public --port 8022
@@ -280,7 +284,13 @@ sftp -P 8022 phone-or-host          # or: scp -P 8022 file host:
 On Android it is its own app, `se.vibes.beersshd`, built with
 `make android-sshd` (and `android-sshd-install`): it asks for All files
 access, serves shared storage on the phone's Wi-Fi address, and takes its
-authorized keys from a box on its one screen.
+authorized keys and password from its one screen. It is built to stay
+reachable: the server runs in a foreground service of its own, with Stop
+in its notification; it waits out a Wi-Fi drop and listens again when the
+network returns; with "Serve again after the phone restarts" ticked it
+comes back after a reboot with no tap; and it offers to be left out of
+battery optimisation, which is what a vendor's battery manager would
+otherwise use to pause it.
 
 The host key is generated on first start under `~/.config/beersshd/`, and
 keys are read from `~/.config/beersshd/authorized_keys` at every login.
