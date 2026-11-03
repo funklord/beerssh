@@ -18147,7 +18147,12 @@ caught.
   transfer is running. The two ways out: the server in its own process
   (`android:process`), a headless Qt service there and the window talking
   to it over IPC; or the server loaded without Qt's loader, from plain
-  Java, with the window adopting it. Neither is started.
+  Java, with the window adopting it. Neither is started, and **whether to
+  is the holder's**: §19.7's case for the service rests on it being
+  started only by the user's Start, and Play asks that the work be
+  "initiated by the user or user perceptible". A start at boot with no tap
+  -- most likely an opt-in setting, off by default -- changes the
+  declaration the holder writes, so it waits on that decision.
 - **Periodic work in the background, asked 2026-11-03 -- not built, the
   answer recorded.** The service is no scheduler: a `dataSync` foreground
   service that keeps the process alive while the server runs. The server's
