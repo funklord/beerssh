@@ -15662,3 +15662,40 @@ void layout_test::a_tab_menu_names_moves_the_way_its_bar_runs() {
 		QCOMPARE(menu->findChild<QAction *>(QStringLiteral("tab_move_right"))->text(), QString::fromLatin1(side.on));
 	}
 }
+
+/*
+ * Every desktop window is a process (sec 8.4), so a setting changed in
+ * one has to reach the others without a restart. The file is rewritten
+ * here behind this process's back -- not through QSettings, whose copy is
+ * per process -- as another BeerSSH would, and the window follows.
+ */
+void layout_test::a_setting_another_process_writes_is_applied() {
+	const forced_touch_t desktop(0);
+	struct restore_t {
+		bool shown = bssh_app_settings().menu_bar_shown();
+		~restore_t() { bssh_app_settings().set_menu_bar_shown(shown); }
+	} restore;
+	bssh_app_settings().set_menu_bar_shown(true);
+
+	bssh_main_window window;
+	window.resize(900, 600);
+	window.show();
+	QVERIFY(QTest::qWaitForWindowExposed(&window));
+	QMenuBar *bar = window.findChild<QMenuBar *>();
+	QVERIFY(bar && !bar->isHidden());
+
+	const QString path = bssh_app_settings().path();
+	QFile file(path);
+	QVERIFY(file.open(QIODevice::ReadOnly));
+	QString text = QString::fromUtf8(file.readAll());
+	file.close();
+	static const QRegularExpression shown(QStringLiteral("menu_bar=true"));
+	QVERIFY2(text.contains(shown), qPrintable(text));
+	text.replace(shown, QStringLiteral("menu_bar=false"));
+	QSaveFile save(path);
+	QVERIFY(save.open(QIODevice::WriteOnly));
+	save.write(text.toUtf8());
+	QVERIFY(save.commit());
+
+	QTRY_VERIFY2(bar->isHidden(), "another process's setting was not applied");
+}

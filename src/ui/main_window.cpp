@@ -1,4 +1,6 @@
 #include <QFileInfo>
+#include <QFileSystemWatcher>
+#include <QSettings>
 #include <QApplication>
 #include <climits>
 #include "ui/interface_scale.h"
@@ -1368,6 +1370,37 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	 * keyboard docked could not dismiss it.
 	 */
 	apply_device_settings();
+
+	/*
+	 * And when another window changes them. Every desktop window is a
+	 * process of its own (sec 8.4), so a default font or colours chosen in
+	 * one reached only that one until the others restarted. The directory
+	 * is watched as well as app.ini because QSettings saves by replacing
+	 * the file, which ends a file watch; the file is added back each time,
+	 * and Qt's per-process copy is synced once so the reads that follow see
+	 * the other process's write. apply_device_settings() does real work
+	 * only where something changed, so this window's own writes cost a
+	 * pass and nothing more.
+	 */
+	{
+		const QString path = bssh_app_settings().path();
+		if (!path.isEmpty()) {
+			auto *watcher = new QFileSystemWatcher(this);
+			auto rewatch = [watcher, path] {
+				const QString directory = QFileInfo(path).absolutePath();
+				if (!watcher->directories().contains(directory)) watcher->addPath(directory);
+				if (QFileInfo(path).isFile() && !watcher->files().contains(path)) watcher->addPath(path);
+			};
+			rewatch();
+			auto changed = [this, path, rewatch] {
+				rewatch();
+				QSettings(path, QSettings::IniFormat).sync();
+				apply_device_settings();
+			};
+			connect(watcher, &QFileSystemWatcher::fileChanged, this, changed);
+			connect(watcher, &QFileSystemWatcher::directoryChanged, this, changed);
+		}
+	}
 
 	/*
 	 * Shortcuts are the window's, because they act on the window: copy

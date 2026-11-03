@@ -7887,7 +7887,14 @@ window with no name is a blank row in the task switcher.
   stops a file watch, so the files are added back each time) and, when
   `refresh()` finds them changed, emits `changed()`, which the host lists
   already rebuild on. `another_stores_save_is_seen_and_announced` fails
-  with the watch taken out.
+  with the watch taken out. **The device settings had the same gap**
+  (`app.ini`: default font, colours, key row, menu bar): read per call and
+  written per key, so nothing was lost, but a change reached only the
+  window it was made in. Each window watches the file now, syncs Qt's
+  per-process copy once, and runs `apply_device_settings()`;
+  `a_setting_another_process_writes_is_applied` rewrites the file behind
+  QSettings' back and sees the menu bar follow, and fails without the
+  watch.
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with
