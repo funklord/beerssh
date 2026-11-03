@@ -41,15 +41,22 @@ HEADERS += \
 # Android hat: it builds in the desktop test suite over a platform the
 # tests control (test/sshd_window_test.cpp).
 android {
-    QT = core gui widgets network
+    # core-private for QAndroidService, which a QtService's main must use
+    # (src/sshd/main_android.cpp says why).
+    QT = core core-private gui widgets network
 
     SOURCES += \
         src/sshd/main_android.cpp \
+        src/sshd/sshd_keeper.cpp \
         src/sshd/sshd_platform.cpp \
+        src/sshd/sshd_remote.cpp \
         src/sshd/sshd_platform_android.cpp \
         src/sshd/sshd_window.cpp
     HEADERS += \
         src/sshd/sshd_platform.h \
+        src/sshd/sshd_control.h \
+        src/sshd/sshd_keeper.h \
+        src/sshd/sshd_remote.h \
         src/sshd/sshd_window.h
 
     # The same cross-compiled libssh BeerSSH links, built with its server

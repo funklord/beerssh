@@ -104,7 +104,9 @@ SOURCES += \
     ../src/sshd/root_path.cpp \
     ../src/sshd/sftp_handler.cpp \
     ../src/sshd/sshd.cpp \
+    ../src/sshd/sshd_keeper.cpp \
     ../src/sshd/sshd_platform.cpp \
+    ../src/sshd/sshd_remote.cpp \
     ../src/sshd/sshd_platform_desktop.cpp \
     ../src/sshd/sshd_window.cpp \
     ../src/term/emulator_vterm.cpp \
@@ -217,6 +219,9 @@ HEADERS += \
     ../src/sshd/sftp_handler.h \
     ../src/sshd/sshd.h \
     ../src/sshd/sshd_platform.h \
+    ../src/sshd/sshd_control.h \
+    ../src/sshd/sshd_keeper.h \
+    ../src/sshd/sshd_remote.h \
     ../src/sshd/sshd_window.h \
     ../src/term/emulator.h \
     ../src/term/graphics_internal.h \

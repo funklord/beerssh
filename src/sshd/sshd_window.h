@@ -5,6 +5,7 @@
 #include <QWidget>
 
 #include "sshd/sshd.h"
+#include "sshd/sshd_control.h"
 
 class QLabel;
 class QLineEdit;
@@ -13,6 +14,7 @@ class QPushButton;
 class QSpinBox;
 class QTime;
 class QTimer;
+class bssh_sshd_keeper;
 class bssh_sshd_platform;
 
 /*
@@ -27,11 +29,20 @@ class bssh_sshd_window : public QWidget {
 	Q_OBJECT
 
 public:
-	explicit bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent = nullptr);
+	/*
+	 * Drives `control`, which the window takes over; with none, a keeper
+	 * of its own, running the server here -- the desktop's and the tests'
+	 * case. Android's window is given a bssh_sshd_remote.
+	 */
+	explicit bssh_sshd_window(bssh_sshd_platform *platform, bssh_sshd_control *control = nullptr,
+	                          QWidget *parent = nullptr);
 	~bssh_sshd_window() override;
 
-	bool serving() const { return m_server.running(); }
-	const bssh_sshd &server() const { return m_server; }
+	/* On: serving, or waiting for Wi-Fi to. */
+	bool serving() const;
+
+	/* The server, where this window runs it itself; not for a remote one. */
+	const bssh_sshd &server() const;
 
 	/* Where the authorized keys are kept: the platform's data directory. */
 	QString authorized_keys_path() const;
@@ -61,13 +72,10 @@ private:
 	void refresh_password_state();
 	void log(const QString &line);
 	void log_at(const QTime &when, const QString &line);
-	void update_status();
-	QString status_line() const;
 
 	bssh_sshd_platform *m_platform;
-	bssh_sshd m_server;
-	QHostAddress m_bound;
-	bool m_held_by_system = false;   /* stopped by Android; see time_limit_reached */
+	bssh_sshd_control *m_control;
+	bssh_sshd_keeper *m_keeper = nullptr;   /* m_control, where it runs here */
 
 	QLabel *m_status = nullptr;
 	QLineEdit *m_fingerprint = nullptr;
@@ -79,7 +87,6 @@ private:
 	QLineEdit *m_password = nullptr;
 	QLabel *m_password_state = nullptr;
 	QPlainTextEdit *m_log = nullptr;
-	QTimer *m_address_timer = nullptr;
 };
 
 #endif /* BSSH_SSHD_WINDOW_H */

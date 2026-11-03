@@ -1,5 +1,6 @@
 #include "sshd/sshd_window.h"
 
+#include <QCheckBox>
 #include <QDir>
 #include <QFile>
 #include <QFormLayout>
@@ -17,6 +18,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
+#include "sshd/sshd_keeper.h"
 #include "sshd/sshd_platform.h"
 
 namespace {
@@ -27,8 +29,6 @@ namespace {
  */
 const int DEFAULT_PORT = 8022;
 
-const int ADDRESS_POLL_MS = 5000;
-
 QLabel *wrapped_label(const QString &text = QString()) {
 	auto *label = new QLabel(text);
 	label->setWordWrap(true);
@@ -37,8 +37,16 @@ QLabel *wrapped_label(const QString &text = QString()) {
 
 } /* namespace */
 
-bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent)
-    : QWidget(parent), m_platform(platform) {
+bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, bssh_sshd_control *control,
+                                   QWidget *parent)
+    : QWidget(parent), m_platform(platform), m_control(control) {
+	if (!m_control) {
+		m_keeper = new bssh_sshd_keeper(platform, this);
+		m_control = m_keeper;
+	} else {
+		m_control->setParent(this);
+	}
+
 	setWindowTitle(QStringLiteral("beersshd"));
 
 	auto *content = new QWidget;
@@ -66,15 +74,24 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	m_toggle = new QPushButton(tr("Start"));
 	m_toggle->setObjectName(QStringLiteral("sshd-toggle"));
 	connect(m_toggle, &QPushButton::clicked, this, [this] {
-		if (serving()) {
-			stop();
-			m_platform->set_switched_on(false);
-		} else {
-			start();
-			if (serving()) m_platform->set_switched_on(true);
-		}
+		if (m_control->active()) m_control->switch_off();
+		else m_control->switch_on();
 	});
 	layout->addWidget(m_toggle);
+
+	/*
+	 * Configurable, and off until turned on: the holder, 2026-11-03, "it
+	 * restarts if configured to do so. That is the whole point of an
+	 * sshd." With it off, a restart with the server on leaves a
+	 * notification to tap instead (sec 19.6).
+	 */
+	if (m_platform->can_start_at_boot()) {
+		auto *boot = new QCheckBox(tr("Serve again after the phone restarts"));
+		boot->setObjectName(QStringLiteral("sshd-start-at-boot"));
+		boot->setChecked(m_platform->start_at_boot());
+		connect(boot, &QCheckBox::toggled, this, [this](bool on) { m_platform->set_start_at_boot(on); });
+		layout->addWidget(boot);
+	}
 
 	/*
 	 * Shown until access is granted, and the reason given in the app's own
@@ -173,45 +190,8 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	outer->setContentsMargins(0, 0, 0, 0);
 	outer->addWidget(scroll);
 
-	/*
-	 * Stamped on the server's thread, when it happened, and only then
-	 * queued to this one: on Android Qt's thread does not run while the
-	 * app is in the background, so a line stamped on arrival said when
-	 * the user next opened the app -- a night's Wi-Fi drop and return all
-	 * read as the same second (sec 19.6). Direct, then queued; the
-	 * window's stop() joins the server's threads before it goes.
-	 */
-	connect(&m_server, &bssh_sshd::logged, this, [this](const QString &line) {
-		const QTime when = QTime::currentTime();
-		QMetaObject::invokeMethod(this, [this, when, line] { log_at(when, line); }, Qt::QueuedConnection);
-	}, Qt::DirectConnection);
-	connect(&m_server, &bssh_sshd::connections_changed, this, &bssh_sshd_window::update_status);
-	connect(&m_server, &bssh_sshd::listening_changed, this, &bssh_sshd_window::update_status);
-
-	/*
-	 * The server only: the screen is Qt's, and is brought up to date by
-	 * time_limit_reached below once Qt's thread runs again.
-	 */
-	m_platform->set_stop_hook([this] { m_server.stop(); });
-
-	connect(m_platform, &bssh_sshd_platform::time_limit_reached, this, [this] {
-		if (m_bound.isNull()) return;
-		/*
-		 * Still switched on, but not started again by the poll: Android
-		 * said no, and asking every five seconds would only hear it again.
-		 * The next time the app comes to the front, it is.
-		 */
-		m_held_by_system = true;
-		stop();
-		/*
-		 * What happened, and no promise about when Start works again: the
-		 * Fold started fine an hour after a timeout, and whether opening
-		 * the app renewed the allowance or the test's own reset of the
-		 * limit did was not separated (project.md sec 19.6).
-		 */
-		log(tr("Stopped: Android would not keep the file server running "
-		       "in the background."));
-	});
+	connect(m_control, &bssh_sshd_control::logged, this, &bssh_sshd_window::log_at);
+	connect(m_control, &bssh_sshd_control::changed, this, &bssh_sshd_window::refresh);
 
 	/*
 	 * Coming back from Settings is how access arrives, so look again then
@@ -220,29 +200,23 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 	 */
 	connect(qApp, &QGuiApplication::applicationStateChanged, this, [this](Qt::ApplicationState state) {
 		if (state != Qt::ApplicationActive) return;
-		m_held_by_system = false;
 		reload_keys();
+		m_control->resumed();
 		refresh();
-		follow_address();
 	});
-
-	m_address_timer = new QTimer(this);
-	m_address_timer->setInterval(ADDRESS_POLL_MS);
-	connect(m_address_timer, &QTimer::timeout, this, &bssh_sshd_window::follow_address);
-	m_address_timer->start();
 
 	/*
 	 * Left on when the app last ran: serving again at once, or as soon as
-	 * Wi-Fi and access allow, which follow_address() checks every poll.
+	 * Wi-Fi and access allow, which the keeper's poll checks.
 	 */
 	reload_keys();
 	refresh_password_state();
 	refresh();
-	if (m_platform->switched_on()) start();
+	if (m_keeper) m_keeper->start_if_switched_on();
 }
 
 QString bssh_sshd_window::password_path() const {
-	return m_platform->data_directory() + QStringLiteral("/password");
+	return bssh_sshd_keeper::password_path(m_platform);
 }
 
 void bssh_sshd_window::set_password(const QString &password) {
@@ -277,132 +251,55 @@ void bssh_sshd_window::reload_keys() {
 }
 
 bssh_sshd_window::~bssh_sshd_window() {
-	m_platform->set_stop_hook(nullptr);
-	stop();
+	/*
+	 * First, and unhooked: stopping a keeper reports, and a report that
+	 * arrived while ~QWidget was deleting children would refresh a window
+	 * that is half gone.
+	 */
+	m_control->disconnect(this);
+	delete m_control;
+}
+
+bool bssh_sshd_window::serving() const {
+	return m_control->active();
+}
+
+const bssh_sshd &bssh_sshd_window::server() const {
+	Q_ASSERT(m_keeper);
+	return m_keeper->server();
 }
 
 QString bssh_sshd_window::authorized_keys_path() const {
-	return m_platform->data_directory() + QStringLiteral("/authorized_keys");
+	return bssh_sshd_keeper::authorized_keys_path(m_platform);
 }
 
 void bssh_sshd_window::refresh() {
 	const bool access = m_platform->has_storage_access();
+	const bool active = m_control->active();
 	m_access->setVisible(!access);
-	m_toggle->setEnabled(serving() || (access && !m_platform->listen_address().isNull()));
-	update_status();
-}
-
-QString bssh_sshd_window::status_line() const {
-	if (serving() && !m_server.listening()) {
-		return tr("Waiting for Wi-Fi: serves %1 again at %2, port %3, when it is back.")
-		        .arg(m_server.config().root.isEmpty() ? QString() : QFile::decodeName(m_server.config().root),
-		             m_bound.toString())
-		        .arg(m_server.port());
-	}
-	if (serving()) {
-		return tr("Serving %1 at %2, port %3 -- %n connection(s)", nullptr, m_server.connections())
-		        .arg(m_server.config().root.isEmpty() ? QString() : QFile::decodeName(m_server.config().root),
-		             m_bound.toString())
-		        .arg(m_server.port());
-	}
-	if (!m_platform->has_storage_access()) return tr("Stopped. Needs All files access to serve storage.");
-	if (m_platform->listen_address().isNull()) return tr("Stopped. Connect to Wi-Fi to serve files.");
-	return tr("Stopped.");
-}
-
-void bssh_sshd_window::update_status() {
-	m_status->setText(status_line());
-	m_toggle->setText(serving() ? tr("Stop") : tr("Start"));
-	if (serving() && !m_server.listening()) {
-		m_platform->set_serving(true, tr("Waiting for Wi-Fi"));
-	} else if (serving()) {
-		m_platform->set_serving(true, tr("Serving at %1:%2 -- %n connection(s)", nullptr,
-		                                 m_server.connections())
-		                              .arg(m_bound.toString()).arg(m_server.port()));
+	m_toggle->setEnabled(active || (access && !m_platform->listen_address().isNull()));
+	m_toggle->setText(active ? tr("Stop") : tr("Start"));
+	m_port->setEnabled(!active);
+	m_status->setText(m_control->status_line());
+	const QString fingerprint = m_control->fingerprint();
+	if (fingerprint != m_fingerprint->text()) {
+		m_fingerprint->setText(fingerprint);
+		m_fingerprint->setCursorPosition(0);
 	}
 }
 
 void bssh_sshd_window::start() {
-	if (serving()) return;
-
-	const QHostAddress address = m_platform->listen_address();
-	if (!m_platform->has_storage_access() || address.isNull()) {
-		refresh();
-		return;
-	}
-
-	const QString data = m_platform->data_directory();
-	QDir().mkpath(data);
-
-	bssh_sshd_config_t config;
-	config.root = QFile::encodeName(m_platform->storage_root());
-	config.host_key_path = data + QStringLiteral("/host_ed25519_key");
-	config.authorized_keys_path = authorized_keys_path();
-	config.password_path = password_path();
-	config.bind_address = address.toString().toLatin1();
-	config.port = m_port->value();
-
-	QString error;
-	if (!m_server.start(config, &error)) {
-		log(error);
-		refresh();
-		return;
-	}
-
-	m_bound = address;
-	m_port->setEnabled(false);
-	m_platform->request_notifications();
-	m_fingerprint->setText(m_server.host_key_fingerprint());
-	m_fingerprint->setCursorPosition(0);
-	log(tr("Listening on %1:%2").arg(address.toString()).arg(m_server.port()));
-	update_status();
-	refresh();
+	if (m_keeper) m_keeper->start();
+	else m_control->switch_on();
 }
 
 void bssh_sshd_window::stop() {
-	/*
-	 * By the bound address rather than serving(): the platform's stop hook
-	 * may already have stopped the server, and the rest of this is still
-	 * owed -- the port unlocked, the notification gone, the log told.
-	 */
-	if (m_bound.isNull()) return;
-	m_server.stop();
-	m_bound = QHostAddress();
-	m_port->setEnabled(true);
-	m_platform->set_serving(false, QString());
-	log(tr("Stopped listening"));
-	refresh();
+	if (m_keeper) m_keeper->stop();
+	else m_control->switch_off();
 }
 
 void bssh_sshd_window::follow_address() {
-	if (!serving()) {
-		/* Switched on and stopped by something else: serve again once it can. */
-		if (m_platform->switched_on() && !m_held_by_system && m_platform->has_storage_access()
-		    && !m_platform->listen_address().isNull()) {
-			start();
-			return;
-		}
-		refresh();
-		return;
-	}
-
-	const QHostAddress now = m_platform->listen_address();
-	if (now == m_bound) return;
-
-	/*
-	 * Wi-Fi gone is not a reason to stop: beersshd is to be reachable
-	 * whenever the user has it on (the holder, 2026-11-03, sec 19.6), and a
-	 * server that switched itself off when the phone left home would miss
-	 * that night's backup when it came back. The address is kept; the
-	 * server listens again on it by itself when the same network returns,
-	 * which is the common case, and a different address is followed below
-	 * the next time this runs.
-	 */
-	if (now.isNull()) return;
-
-	log(tr("The Wi-Fi address changed to %1; listening there instead.").arg(now.toString()));
-	stop();
-	start();
+	m_control->follow();
 }
 
 void bssh_sshd_window::save_keys() {

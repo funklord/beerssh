@@ -124,6 +124,48 @@ public:
 		QJniEnvironment().checkAndClearExceptions();
 	}
 
+	/*
+	 * The :server process, through the same service it runs as: starting
+	 * it there loads Qt in that process and runs main with --serve
+	 * (AndroidManifest.xml), and the keeper there serves because it is
+	 * switched on.
+	 */
+	void start_server_process() override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+		QJniObject::callStaticMethod<void>(
+		        SERVICE_CLASS, "start", "(Landroid/content/Context;Ljava/lang/String;)V", context.object(),
+		        QJniObject::fromString(QStringLiteral("Starting")).object<jstring>());
+		QJniEnvironment().checkAndClearExceptions();
+	}
+
+	void stop_server_process() override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+		QJniObject::callStaticMethod<void>(SERVICE_CLASS, "stop", "(Landroid/content/Context;)V",
+		                                   context.object());
+		QJniEnvironment().checkAndClearExceptions();
+	}
+
+	bool can_start_at_boot() const override { return true; }
+
+	bool start_at_boot() const override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return false;
+		const bool on = QJniObject::callStaticMethod<jboolean>(
+		        BOOT_CLASS, "startAtBoot", "(Landroid/content/Context;)Z", context.object()) == JNI_TRUE;
+		QJniEnvironment().checkAndClearExceptions();
+		return on;
+	}
+
+	void set_start_at_boot(bool on) override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+		QJniObject::callStaticMethod<void>(BOOT_CLASS, "setStartAtBoot", "(Landroid/content/Context;Z)V",
+		                                   context.object(), jboolean(on));
+		QJniEnvironment().checkAndClearExceptions();
+	}
+
 	void stop_now() { run_stop_hook(); }
 
 	void report_timeout() {

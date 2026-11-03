@@ -6,16 +6,23 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.IBinder;
 
+import org.qtproject.qt.android.bindings.QtService;
+
 /*
- * The foreground service that keeps beersshd's process alive while it
- * listens (project.md sec 19).
+ * The foreground service that IS beersshd's server (project.md sec 19.6):
+ * it runs in its own :server process, and as a QtService it loads Qt
+ * there and runs main with --serve, which keeps the server going with no
+ * window. The app's window drives it from the app's process with start
+ * and stop below, and reads what it reports from two files. A process of
+ * its own is what lets it start at boot: a Qt that a service started in
+ * the app's process makes QtActivityBase restart the whole process when
+ * the app is opened, which would drop every transfer.
  *
  * The same shape as BeerSSH's BsshService, and for the same reasons,
  * which that file states at length: a stop is delivered as a START
@@ -32,13 +39,14 @@ import android.os.IBinder;
  * first, so it stops listening rather than having the process taken from
  * under it, and the notification says why it stopped.
  */
-public class SshdService extends Service {
+public class SshdService extends QtService {
 
 	private static final String CHANNEL_ID = "beersshd_server";
 	private static final int NOTIFICATION_ID = 1;
 	private static final String ACTION_STOP = "se.vibes.beersshd.STOP";
 
-	private static String s_status = "Serving files";
+	/* Per process: the :server process starts with this, whatever its starter set. */
+	private static String s_status = "Starting";
 
 	/* Registered from C++; the server stops when Android's time is up. */
 	private static native void nativeTimedOut();
@@ -84,6 +92,26 @@ public class SshdService extends Service {
 		if (manager != null) {
 			manager.notify(NOTIFICATION_ID, buildNotification(context, status));
 		}
+	}
+
+	/*
+	 * Foreground before Qt is loaded, which QtService's onCreate does
+	 * synchronously. Seen at boot on the API 36 emulator: loading took
+	 * long enough that Android logged "Timeout executing service" and the
+	 * service never became foreground (startForegroundCount=0) although
+	 * the server inside it was listening -- a process Android may freeze
+	 * or kill at will. The contract from startForegroundService() runs
+	 * from the start call, so it is met here, first.
+	 */
+	@Override
+	public void onCreate() {
+		createChannel();
+		try {
+			startForeground(NOTIFICATION_ID, buildNotification(this, s_status));
+		} catch (IllegalStateException | SecurityException refused) {
+			/* onStartCommand tries again and reports it. */
+		}
+		super.onCreate();
 	}
 
 	@Override
@@ -136,6 +164,23 @@ public class SshdService extends Service {
 	@Override
 	public IBinder onBind(Intent intent) {
 		return null;
+	}
+
+	/*
+	 * Stopping the service is ending the :server process, and with it the
+	 * server -- by killing it rather than through QtService's onDestroy.
+	 * That one terminates Qt and calls System.exit(0), and on the API 36
+	 * emulator the process was still there afterwards, its listener
+	 * closed and Qt shut down: the next Start then created the service in
+	 * it again, Qt would not start a second time, and Android's main
+	 * thread waited for it for ever. Nothing here needs an orderly exit --
+	 * the kernel closes the sockets, and a status naming a dead process is
+	 * read as stopped (bssh_sshd_remote).
+	 */
+	@Override
+	public void onDestroy() {
+		stopForeground(STOP_FOREGROUND_REMOVE);
+		android.os.Process.killProcess(android.os.Process.myPid());
 	}
 
 	private void createChannel() {

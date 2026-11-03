@@ -63,6 +63,25 @@ public:
 	virtual bool switched_on() const { return false; }
 	virtual void set_switched_on(bool) {}
 
+	/*
+	 * Where the server runs in a process of its own (Android's :server,
+	 * for bssh_sshd_remote): start it, which also makes it serve because
+	 * it is switched on, and stop it.
+	 */
+	virtual void start_server_process() {}
+	virtual void stop_server_process() {}
+
+	/*
+	 * Whether a phone that restarts with the server switched on serves
+	 * again by itself, with no tap -- the holder, 2026-11-03: "it restarts
+	 * if configured to do so. That is the whole point of an sshd." Off
+	 * until the user turns it on; offered only where there is a boot to
+	 * start at.
+	 */
+	virtual bool can_start_at_boot() const { return false; }
+	virtual bool start_at_boot() const { return false; }
+	virtual void set_start_at_boot(bool) {}
+
 	/* Where the host key and the authorized keys live: never inside the root. */
 	virtual QString data_directory() const;
 

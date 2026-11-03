@@ -18136,23 +18136,52 @@ caught.
   36 emulator: force-stopped and relaunched, serving; rebooted, the notice
   about 50 s after boot completed on that loaded machine; a tap or the
   launcher, serving, notice gone; after Stop, a relaunch stays off.
-  **Serving again unattended at boot is the next step, and it is a
-  redesign rather than a flag.** Android allows it (Android 15's
-  `BOOT_COMPLETED` restrictions name `dataSync` and five other types, not
-  `connectedDevice`), but the server lives in the Qt app: a `QtService`
-  started at boot loads Qt in the process, and `QtActivityBase.onCreate`
-  then calls `restartApplication()` the moment the user opens the app,
-  "we don't yet have a reliable way to keep the app running properly in
-  case of an Activity only restart" (Qt 6.12) -- dropping whatever
-  transfer is running. The two ways out: the server in its own process
-  (`android:process`), a headless Qt service there and the window talking
-  to it over IPC; or the server loaded without Qt's loader, from plain
-  Java, with the window adopting it. Neither is started, and **whether to
-  is the holder's**: §19.7's case for the service rests on it being
-  started only by the user's Start, and Play asks that the work be
-  "initiated by the user or user perceptible". A start at boot with no tap
-  -- most likely an opt-in setting, off by default -- changes the
-  declaration the holder writes, so it waits on that decision.
+  **Serving again unattended at boot -- BUILT 2026-11-03, on the
+  holder's word: "Yes, it restarts if configured to do so. That is the
+  whole point of an sshd. All configurable."** "Serve again after the
+  phone restarts", off until ticked; with it on, `SshdBoot` starts the
+  server at `BOOT_COMPLETED` (Android 15 lets a boot receiver start
+  `connectedDevice`), and the notice above is what is left when it is
+  off. **It needed the server moved to a process of its own**, because
+  `QtActivityBase.onCreate` calls `restartApplication()` when Qt is
+  already up in its process (Qt 6.12: "we don't yet have a reliable way
+  to keep the app running properly in case of an Activity only
+  restart"). So:
+  - `SshdService` is a `QtService` in `android:process=":server"`, whose
+    meta-data runs the same library's main with `--serve`: a
+    `bssh_sshd_keeper` (the window's server logic, moved out unchanged)
+    and no window. Start, Stop and a boot all go through it, so there is
+    one way the server runs.
+  - The window drives it as a `bssh_sshd_remote`: Start and Stop are the
+    service's start and stop, and what it shows comes from two files the
+    server process writes in the data directory, `server.status`
+    (replaced whole) and `server.log` (appended, cut back past 256 KB).
+    The keys, password and port were files already. A status is believed
+    only while the pid it names is a live `:server` process; switched on
+    and no process is started again, at most every ten seconds. The
+    desktop and the tests keep the server in the window's process, and
+    the remote is tested there against a keeper reporting as the server
+    process does.
+  - **Three Qt-on-Android facts it took, each seen on the emulator.**
+    `QtService.onCreate` loads Qt synchronously, and at boot that ran past
+    Android's deadline ("Timeout executing service",
+    `startForegroundCount=0` while the server listened), so
+    `startForeground()` comes first in `onCreate`. Its `onCreate` then
+    waits on Android's main thread for a semaphore only
+    `QAndroidService` releases, so `--serve` builds one rather than a
+    `QCoreApplication` -- with the latter Stop was never delivered,
+    `onStartCommand` waiting behind it (`QT += core-private`,
+    `qandroidextras_p.h`). And its `onDestroy` ends in `System.exit(0)`,
+    after which the process was still there with Qt shut down, so the
+    next Start created the service in it and hung for ever; `onDestroy`
+    kills the process instead.
+  Seen on the API 36 emulator: Start runs `se.vibes.beersshd:server`,
+  foreground, and the window shows its status, host key and log; the
+  app's own process killed, the server answers on; Start/Stop twice, a
+  new process each time and none left after Stop; ticked and rebooted,
+  serving about 50 s after boot completed with no tap and no notice;
+  Wi-Fi off and on in that state, logged at the times they happened and
+  serving again; Stop from the app ends it. Not yet seen on the Fold.
 - **Periodic work in the background, asked 2026-11-03 -- not built, the
   answer recorded.** The service is no scheduler: a `dataSync` foreground
   service that keeps the process alive while the server runs. The server's

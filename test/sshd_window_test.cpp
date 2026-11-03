@@ -5,6 +5,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QScrollArea>
+#include <QSettings>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QSpinBox>
@@ -13,9 +14,12 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <memory>
 #include <thread>
 
 #include "sshd/sshd_platform.h"
+#include "sshd/sshd_keeper.h"
+#include "sshd/sshd_remote.h"
 #include "sshd/sshd_window.h"
 
 namespace {
@@ -38,6 +42,9 @@ public:
 	bool switched_on() const override { return on; }
 	void set_switched_on(bool now) override { on = now; }
 
+	void start_server_process() override { ++process_starts; }
+	void stop_server_process() override { ++process_stops; }
+
 	void set_serving(bool now, const QString &status) override {
 		serving = now;
 		last_status = status;
@@ -56,6 +63,8 @@ public:
 	int notification_requests = 0;
 	bool serving = false;
 	bool on = false;
+	int process_starts = 0;
+	int process_stops = 0;
 	QString last_status;
 
 private:
@@ -315,4 +324,77 @@ void sshd_window_test::switched_on_lasts_and_serves_again_when_it_can() {
 	QVERIFY(!window.serving());
 	window.follow_address();
 	QVERIFY(!window.serving());
+}
+
+/*
+ * The window over the server in another process, as on Android (sec
+ * 19.6): Start and Stop go to the process, and what is shown comes from
+ * the two files that process writes. Here the "process" is a keeper in
+ * this one, reporting the way the :server process does, and the process
+ * check is told any live process will do.
+ */
+void sshd_window_test::the_remote_window_shows_what_the_server_process_reports() {
+	QTemporaryDir dir;
+	fake_platform platform(dir.path());
+	bssh_sshd_remote::set_process_suffix(QByteArray());
+	QSettings().setValue(QStringLiteral("port"), free_port());
+
+	auto *remote = new bssh_sshd_remote(&platform);
+	bssh_sshd_window window(&platform, remote);
+	QVERIFY(!window.serving());
+	QCOMPARE(child<QPushButton>(window, "sshd-toggle")->text(), QStringLiteral("Start"));
+
+	child<QPushButton>(window, "sshd-toggle")->click();
+	QVERIFY(platform.on);
+	QCOMPARE(platform.process_starts, 1);
+	QVERIFY(window.serving());
+	QVERIFY(child<QLabel>(window, "sshd-status")->text().contains(QStringLiteral("Starting")));
+
+	/* The process comes up, and serves because it is switched on. */
+	auto server = std::make_unique<bssh_sshd_keeper>(&platform);
+	bssh_sshd_remote::report_from(server.get(), &platform);
+	server->start_if_switched_on();
+	QVERIFY(server->serving());
+
+	QTRY_VERIFY(child<QLabel>(window, "sshd-status")->text().startsWith(QStringLiteral("Serving")));
+	QCOMPARE(child<QLineEdit>(window, "sshd-fingerprint")->text(), server->fingerprint());
+	QTRY_VERIFY(child<QPlainTextEdit>(window, "sshd-log")->toPlainText().contains(QStringLiteral("Listening on")));
+	QVERIFY(!child<QSpinBox>(window, "sshd-port")->isEnabled());
+
+	/* Stop goes to the process, which ends. */
+	child<QPushButton>(window, "sshd-toggle")->click();
+	QVERIFY(!platform.on);
+	QCOMPARE(platform.process_stops, 1);
+	server.reset();
+	QTRY_VERIFY(!child<QLabel>(window, "sshd-status")->text().startsWith(QStringLiteral("Serving")));
+	QCOMPARE(child<QPushButton>(window, "sshd-toggle")->text(), QStringLiteral("Start"));
+	QCOMPARE(platform.process_starts, 1);
+
+	bssh_sshd_remote::set_process_suffix(QByteArrayLiteral(":server"));
+}
+
+/*
+ * Switched on and the process gone -- Android ended it -- is asked to
+ * start again, and a status naming a process that is not alive is not
+ * believed.
+ */
+void sshd_window_test::a_dead_server_process_is_started_again_while_switched_on() {
+	QTemporaryDir dir;
+	fake_platform platform(dir.path());
+	platform.on = true;
+	QDir().mkpath(platform.data_directory());
+
+	/* A status left behind by a process that is gone: pid 0 is nobody. */
+	QFile stale(bssh_sshd_remote::status_path(&platform));
+	QVERIFY(stale.open(QIODevice::WriteOnly));
+	stale.write("pid=0\nserving=1\nstatus=Serving /x at 1.2.3.4, port 1 -- 0 connection(s)\n");
+	stale.close();
+
+	bssh_sshd_remote remote(&platform);
+	QCOMPARE(platform.process_starts, 1);
+	QCOMPARE(remote.status_line(), QStringLiteral("Starting..."));
+
+	/* Not asked again while that start is on its way. */
+	remote.follow();
+	QCOMPARE(platform.process_starts, 1);
 }

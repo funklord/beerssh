@@ -18,6 +18,8 @@ private slots:
 	void the_time_limit_stops_the_server_and_says_why();
 	void losing_wifi_waits_and_a_new_address_restarts();
 	void switched_on_lasts_and_serves_again_when_it_can();
+	void the_remote_window_shows_what_the_server_process_reports();
+	void a_dead_server_process_is_started_again_while_switched_on();
 	void saved_keys_are_counted_by_the_login_parse();
 	void the_keys_box_follows_the_file_but_not_over_edits();
 };

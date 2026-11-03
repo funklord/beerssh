@@ -110,9 +110,29 @@
 			</intent-filter>
 		</receiver>
 
+		<!--
+			The server, in a process of its own (sec 19.6). As a QtService it
+			loads Qt there and runs main with the arguments below, which
+			serve with no window; the app's window starts and stops it and
+			reads what it writes. Its own process because a Qt a service
+			started in the app's process makes the activity restart that
+			whole process when it opens, and the server has to come up at
+			boot, before any activity. background_running for the reason
+			the activity has it: Qt otherwise stops this process's event
+			loop, and the Wi-Fi poll with it, since a service is never in
+			front.
+		-->
 		<service android:name="se.vibes.beersshd.SshdService"
 		         android:exported="false"
-		         android:foregroundServiceType="connectedDevice"/>
+		         android:process=":server"
+		         android:foregroundServiceType="connectedDevice">
+			<meta-data android:name="android.app.lib_name"
+			           android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
+			<meta-data android:name="android.app.arguments"
+			           android:value="--serve"/>
+			<meta-data android:name="android.app.background_running"
+			           android:value="true"/>
+		</service>
 
 		<provider android:name="androidx.core.content.FileProvider"
 		          android:authorities="${applicationId}.qtprovider"
