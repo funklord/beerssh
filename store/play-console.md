@@ -42,6 +42,18 @@ connected while the user switches apps"*, the same description and impact
 above, or `remoteMessaging`, which ConnectBot declares. Either is a manifest
 change and an Android 14 run on `bssh_api34` before resubmitting.
 
+## Battery optimisation (REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+
+Declared since 2026-11-03 (sec 5.4). Asked only from "Allow running in the
+background" on the Terminal settings page, which is shown only while the
+app is still optimised. **Why:** a session kept open in the background --
+the editor, the long command, the database console in it -- is ended if a
+vendor's battery manager pauses the app, and SSH cannot pick it up again;
+the foreground service covers Android's own Doze, not those. If Play does
+not accept the reason, the permission and the button go and the app links
+to the battery settings list instead (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`,
+no permission needed) -- the fallback `BsshBattery.request` already uses.
+
 ## Data safety
 
 - **Does the app collect or share any of the required user data types?**
