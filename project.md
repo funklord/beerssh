@@ -18182,6 +18182,21 @@ caught.
   serving about 50 s after boot completed with no tap and no notice;
   Wi-Fi off and on in that state, logged at the times they happened and
   serving again; Stop from the app ends it. Not yet seen on the Fold.
+- **Stop in the notification -- BUILT 2026-11-03.** Play asks that a
+  foreground service can be stopped by the user, and §19.7's declaration
+  says it can, "Stop in the notification and the app"; the notification
+  had none. It is the user's Stop, so it switches the server off as well
+  -- which is why "switched on" moved from SharedPreferences to a
+  one-byte file (`files/switched_on`): two processes change it now, and
+  SharedPreferences are read once per process and kept, so the app would
+  have gone on seeing "on" and started the server again. And the boot
+  receiver does nothing while the service is running: on the loaded
+  emulator `BOOT_COMPLETED` arrived a minute late, after the app had
+  been opened and started, and posted "stopped when the phone restarted"
+  beside a running server. Seen on the API 36 emulator: Stop from the
+  notification, the :server process gone, the file gone, and the app,
+  still open, leaving it off for 20 s; a boot broadcast while serving
+  posted nothing, and with nothing running it posted the notice.
 - **Periodic work in the background, asked 2026-11-03 -- not built, the
   answer recorded.** The service is no scheduler: a `dataSync` foreground
   service that keeps the process alive while the server runs. The server's

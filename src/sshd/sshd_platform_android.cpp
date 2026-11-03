@@ -74,7 +74,7 @@ public:
 	}
 
 	/*
-	 * In SharedPreferences rather than QSettings, because SshdBoot reads it
+	 * In a file SshdBoot keeps rather than QSettings, because SshdBoot reads it
 	 * at boot from Java, with no Qt loaded.
 	 */
 	bool switched_on() const override {

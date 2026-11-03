@@ -45,6 +45,9 @@ public class SshdService extends QtService {
 	private static final int NOTIFICATION_ID = 1;
 	private static final String ACTION_STOP = "se.vibes.beersshd.STOP";
 
+	/* Stop in the notification: the user's Stop, so it also switches the server off. */
+	private static final String ACTION_SWITCH_OFF = "se.vibes.beersshd.SWITCH_OFF";
+
 	/* Per process: the :server process starts with this, whatever its starter set. */
 	private static String s_status = "Starting";
 
@@ -139,7 +142,11 @@ public class SshdService extends QtService {
 			return START_NOT_STICKY;
 		}
 
-		if (intent == null || ACTION_STOP.equals(intent.getAction())) {
+		if (intent != null && ACTION_SWITCH_OFF.equals(intent.getAction())) {
+			SshdBoot.setSwitchedOn(this, false);
+		}
+		if (intent == null || ACTION_STOP.equals(intent.getAction())
+				|| ACTION_SWITCH_OFF.equals(intent.getAction())) {
 			stopForeground(STOP_FOREGROUND_REMOVE);
 			stopSelf();
 		}
@@ -209,6 +216,15 @@ public class SshdService extends QtService {
 			.setSmallIcon(android.R.drawable.stat_sys_upload_done)
 			.setContentIntent(pending)
 			.setOngoing(true)
+			/*
+			 * Play asks that a foreground service can be stopped by the
+			 * user, and the declaration says it is, here as in the app
+			 * (project.md sec 19.7).
+			 */
+			.addAction(new Notification.Action.Builder(null, "Stop",
+				PendingIntent.getService(context, 1,
+					new Intent(context, SshdService.class).setAction(ACTION_SWITCH_OFF),
+					PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)).build())
 			.build();
 	}
 }
