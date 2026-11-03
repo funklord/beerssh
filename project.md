@@ -18185,6 +18185,12 @@ Recommended: **A**, with the declaration written per the rhetoric above, and
 C costed properly before the first submission so a refusal of all-files
 access has an answer ready rather than a rewrite.
 
+The holder on the analysis, 2026-11-03: "Your reasoning sounds good." Asked
+whether that makes A the decision; **not yet confirmed**. Next, once it is:
+beersshd's manifest from `dataSync` to `connectedDevice` with
+`CHANGE_NETWORK_STATE`, a run on `bssh_api34` and `bssh_api36`, and the
+time-limit test re-run to see no timeout; then C costed.
+
 ## From fmake: `--eject` needs one define the README's fmake line does not
 
 **Taken, both lines** -- `d4994f7` put `BSSH_TEST_FONT_DIR` and the
