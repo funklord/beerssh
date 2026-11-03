@@ -1168,6 +1168,34 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   The soft keyboard's Ctrl was driven on the emulator under `cat -v` with
   real taps: one control byte per tap, the next key plain.
 
+- **[FIXED 2026-11-03] A backgrounded session did not reconnect at all.**
+  Qt stops its main thread's event loop from the activity's `onStop`
+  (`QtActivityBase` sets `ApplicationSuspended`, and
+  `QAndroidEventDispatcherStopper` blocks every dispatcher it registered)
+  unless the manifest sets `android.app.background_running`. Everything
+  this section describes lives on that thread -- `bssh_conn_manager`'s
+  timer, the `QNetworkInformation` handling, the queued news from each
+  session's worker thread -- so the foreground service kept the process
+  and the socket alive, and nothing could act on a drop until the app was
+  reopened. **M4 and M5's "verified on an emulator" never asked this**:
+  they kept a backgrounded session alive and reconnected in the
+  foreground, and neither measured a drop while away. Measured on an API
+  36 emulator against a throwaway host sshd at 10.0.2.2, the server side
+  of the connection killed: **2 s** to reconnect in the foreground,
+  **none in 60 s** in the background, then 15 s after reopening. With
+  `background_running` set on the activity: **1 s**, the launcher still in
+  front. Qt warns that drawing after suspension may crash, so three
+  minutes of `top` in the background were run too: the process lived, one
+  `makeCurrent(): no EGLSurface` warning, no crash; an idle session in the
+  background for 200 s and `top` in the foreground for 180 s dropped
+  nothing. **One drop stays unexplained**: during an earlier background
+  wait on the same build, a session the client closed itself after about
+  100 s, not reproduced in the three windows after. The worker threads
+  were never affected -- a `QThread` gets a plain `QEventDispatcherUNIX`,
+  which the stopper does not hold -- which is why sessions *stayed* up.
+  beersshd sets the same flag (§19.6). Not yet seen on the Fold, where
+  OEM battery management (§5.4) is the remaining unknown.
+
 ### 5.4 Battery / OEM caveats (Android)
 Aggressive OEM battery managers (e.g. some Chinese OEM skins) may kill the
 service anyway. Add an in-app prompt to whitelist the app from battery
@@ -18063,7 +18091,8 @@ caught.
   event loop while the app is suspended** -- `QtActivityBase.onStop` sets
   `ApplicationSuspended` and `QAndroidEventDispatcherStopper` stops every
   dispatcher it registered, which is the main thread's only, unless the
-  manifest sets `android.app.background_running` (neither app does) --
+  manifest sets `android.app.background_running` (both apps do since
+  2026-11-03, §5.3) --
   so the window's five-second address poll did not run either. That is
   also what the time-limit entry above saw: the queued stop "did not run
   in the background". Measured, app sent home, `svc wifi disable` then
@@ -18082,9 +18111,11 @@ caught.
   listening again by itself when it returned, banner answered, the app
   still in the background. **Log lines are stamped when they happen**, on
   the server's thread; stamped on arrival they all carried the second the
-  app was reopened. **Still open:** a *different* address while the app
-  stays in the background is followed only when Qt next runs, and with no
-  wake lock the one-second retry runs only when Doze lets the CPU wake.
+  app was reopened. With `background_running` set the poll runs in the
+  background too: the notification read "Waiting for Wi-Fi" with Wi-Fi off
+  and "Serving" again after, the app never reopened. **Still open:** with
+  no wake lock the poll and the one-second retry run only when Doze lets
+  the CPU wake.
   Guarded by `a_listener_the_system_takes_away_comes_back_without_spinning`,
   which shuts the listener down from outside and holds the port so the
   retry fails for three seconds, asserting the process spent under 0.3 s

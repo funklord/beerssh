@@ -88,6 +88,16 @@
 			           android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
 			<meta-data android:name="android.app.arguments"
 			           android:value="-- %%INSERT_APP_ARGUMENTS%% --"/>
+
+			<!--
+				Qt's thread runs in the background, as in BeerSSH and for
+				the same reason (its manifest says why): the window's Wi-Fi
+				poll lives there, and without this it stops at onStop, so a
+				new address while the app is away was followed only once
+				it was reopened (sec 19.6).
+			-->
+			<meta-data android:name="android.app.background_running"
+			           android:value="true"/>
 		</activity>
 
 		<service android:name="se.vibes.beersshd.SshdService"

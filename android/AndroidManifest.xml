@@ -164,6 +164,27 @@
 			           android:value="-- %%INSERT_APP_LIB_NAME%% --"/>
 			<meta-data android:name="android.app.arguments"
 			           android:value="-- %%INSERT_APP_ARGUMENTS%% --"/>
+
+			<!--
+				Keeps Qt's own thread running while the app is in the
+				background (project.md sec 5). Without it Qt stops that
+				thread's event loop from onStop until the app is reopened,
+				and everything that lives there stops with it: the
+				reconnect timer, the network-change handling, the queued
+				news from the session threads. Measured on an API 36
+				emulator, 2026-11-03: a session dropped from the server
+				side reconnected in 2 s in the foreground and not at all
+				in 60 s in the background, then 15 s after reopening. The
+				foreground service was up throughout; it keeps the
+				process, not Qt's loop. With this set, the same drop
+				reconnected in 1 s with the launcher in front. Qt warns
+				that drawing after suspension may crash, so that was
+				checked too: three minutes of top in the background left
+				the process alive, with one "makeCurrent(): no EGLSurface"
+				warning and no crash.
+			-->
+			<meta-data android:name="android.app.background_running"
+			           android:value="true"/>
 		</activity>
 
 		<!--
