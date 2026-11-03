@@ -82,6 +82,13 @@ public:
 	virtual bool start_at_boot() const { return false; }
 	virtual void set_start_at_boot(bool) {}
 
+	/*
+	 * Whether the platform may pause the app to save battery, and the way
+	 * to ask it not to (sec 5.4). Nothing to ask on the desktop.
+	 */
+	virtual bool battery_restricted() const { return false; }
+	virtual void request_battery_exemption() {}
+
 	/* Where the host key and the authorized keys live: never inside the root. */
 	virtual QString data_directory() const;
 

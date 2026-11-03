@@ -78,6 +78,12 @@
 	-->
 	<uses-permission android:name="android.permission.USE_BIOMETRIC"/>
 
+	<!--
+	  The battery-optimisation dialog on the Terminal settings page (sec
+	  5.4), asked only when the user presses its button.
+	-->
+	<uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+
 	<supports-screens
 	        android:anyDensity="true"
 	        android:largeScreens="true"

@@ -81,6 +81,7 @@ private:
 	QLineEdit *m_fingerprint = nullptr;
 	QPushButton *m_toggle = nullptr;
 	QWidget *m_access = nullptr;
+	QWidget *m_battery = nullptr;
 	QSpinBox *m_port = nullptr;
 	QPlainTextEdit *m_keys = nullptr;
 	QLabel *m_key_count = nullptr;

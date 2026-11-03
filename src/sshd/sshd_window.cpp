@@ -85,6 +85,24 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, bssh_sshd_contr
 	 * sshd." With it off, a restart with the server on leaves a
 	 * notification to tap instead (sec 19.6).
 	 */
+	/*
+	 * Shown while Android may still pause the app to save battery (sec
+	 * 5.4): a vendor's battery manager is the likeliest thing to make a
+	 * server on all day unreachable at night. Asked only from this button.
+	 */
+	m_battery = new QWidget;
+	m_battery->setObjectName(QStringLiteral("sshd-battery"));
+	auto *battery_layout = new QVBoxLayout(m_battery);
+	battery_layout->setContentsMargins(0, 0, 0, 0);
+	battery_layout->addWidget(wrapped_label(
+	        tr("Android may pause beersshd to save battery, and a paused server cannot be "
+	           "reached. Allow it to run in the background to keep it reachable.")));
+	auto *allow = new QPushButton(tr("Allow running in the background"));
+	allow->setObjectName(QStringLiteral("sshd-battery-allow"));
+	connect(allow, &QPushButton::clicked, this, [this] { m_platform->request_battery_exemption(); });
+	battery_layout->addWidget(allow);
+	layout->addWidget(m_battery);
+
 	if (m_platform->can_start_at_boot()) {
 		auto *boot = new QCheckBox(tr("Serve again after the phone restarts"));
 		boot->setObjectName(QStringLiteral("sshd-start-at-boot"));
@@ -277,6 +295,7 @@ void bssh_sshd_window::refresh() {
 	const bool access = m_platform->has_storage_access();
 	const bool active = m_control->active();
 	m_access->setVisible(!access);
+	m_battery->setVisible(m_platform->battery_restricted());
 	m_toggle->setEnabled(active || (access && !m_platform->listen_address().isNull()));
 	m_toggle->setText(active ? tr("Stop") : tr("Start"));
 	m_port->setEnabled(!active);

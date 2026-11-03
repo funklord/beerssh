@@ -1190,7 +1190,9 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   background for 200 s and `top` in the foreground for 180 s dropped
   nothing. **One drop stays unexplained**: during an earlier background
   wait on the same build, a session the client closed itself after about
-  100 s, not reproduced in the three windows after. The worker threads
+  100 s, not reproduced in the three windows after, nor in ten minutes
+  idle in the background on the build after `b1fad8e` (one connection
+  throughout, the host's log silent). The worker threads
   were never affected -- a `QThread` gets a plain `QEventDispatcherUNIX`,
   which the stopper does not hold -- which is why sessions *stayed* up.
   And §5.3's own case, a network change in the background: `svc wifi
@@ -1204,6 +1206,21 @@ Aggressive OEM battery managers (e.g. some Chinese OEM skins) may kill the
 service anyway. Add an in-app prompt to whitelist the app from battery
 optimization (`REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`) — but note Play restricts
 this permission's use, so gate it behind clear user action.
+
+**BUILT 2026-11-03, in both apps.** While Android may still pause the app
+(`PowerManager.isIgnoringBatteryOptimizations` false), BeerSSH's Terminal
+settings page and beersshd's window show one line and a button, "Allow
+running in the background", which opens Android's own yes/no dialog
+(`ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`, the app-list settings
+page where a vendor has none). Asked only from that button; the manifests
+declare `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` for it, which is the
+permission Play reviews -- its declaration is the holder's, with the
+others. The foreground service already keeps the network in Doze; this is
+for vendors' battery managers beyond Android's rules, the likeliest thing
+to make a 24/7 server unreachable at night. Seen on the API 36 emulator,
+both apps: the line shown, the dialog opened, Allow put the app on
+`dumpsys deviceidle whitelist`, and the line was gone (beersshd at once,
+BeerSSH the next time its page is built).
 
 ### 5.5 The desktop equivalent — **[DECIDED, and built]**
 No service, no notification channel, no OS permission: a desktop process that

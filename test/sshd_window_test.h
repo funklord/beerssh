@@ -20,6 +20,7 @@ private slots:
 	void switched_on_lasts_and_serves_again_when_it_can();
 	void the_remote_window_shows_what_the_server_process_reports();
 	void a_dead_server_process_is_started_again_while_switched_on();
+	void the_battery_line_shows_until_the_app_is_allowed();
 	void saved_keys_are_counted_by_the_login_parse();
 	void the_keys_box_follows_the_file_but_not_over_edits();
 };

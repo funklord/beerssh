@@ -317,6 +317,24 @@ public:
 		return true;
 	}
 
+	bool battery_restricted() const override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return false;
+		const bool exempt = QJniObject::callStaticMethod<jboolean>(
+		        "se/vibes/beerssh/BsshBattery", "exempt", "(Landroid/content/Context;)Z",
+		        context.object()) == JNI_TRUE;
+		QJniEnvironment().checkAndClearExceptions();
+		return !exempt;
+	}
+
+	void request_battery_exemption() override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+		QJniObject::callStaticMethod<void>("se/vibes/beerssh/BsshBattery", "request",
+		                                   "(Landroid/content/Context;)V", context.object());
+		QJniEnvironment().checkAndClearExceptions();
+	}
+
 	/*
 	 * The status bar hidden and the navigation bar shown, and again
 	 * whenever Qt may have undone it.

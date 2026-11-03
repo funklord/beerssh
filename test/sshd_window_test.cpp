@@ -42,6 +42,9 @@ public:
 	bool switched_on() const override { return on; }
 	void set_switched_on(bool now) override { on = now; }
 
+	bool battery_restricted() const override { return restricted; }
+	void request_battery_exemption() override { ++battery_requests; }
+
 	void start_server_process() override { ++process_starts; }
 	void stop_server_process() override { ++process_stops; }
 
@@ -63,6 +66,8 @@ public:
 	int notification_requests = 0;
 	bool serving = false;
 	bool on = false;
+	bool restricted = false;
+	int battery_requests = 0;
 	int process_starts = 0;
 	int process_stops = 0;
 	QString last_status;
@@ -397,4 +402,28 @@ void sshd_window_test::a_dead_server_process_is_started_again_while_switched_on(
 	/* Not asked again while that start is on its way. */
 	remote.follow();
 	QCOMPARE(platform.process_starts, 1);
+}
+
+/*
+ * The battery line (sec 5.4): shown while the platform may pause the app,
+ * asking only from its button, and gone once allowed -- looked at again
+ * when the app comes back from the system's dialog, as refresh() does.
+ */
+void sshd_window_test::the_battery_line_shows_until_the_app_is_allowed() {
+	QTemporaryDir dir;
+	fake_platform platform(dir.path());
+	platform.restricted = true;
+
+	bssh_sshd_window window(&platform);
+	QWidget *line = window.findChild<QWidget *>(QStringLiteral("sshd-battery"));
+	QVERIFY(line);
+	QVERIFY(!line->isHidden());
+	QCOMPARE(platform.battery_requests, 0);
+
+	child<QPushButton>(window, "sshd-battery-allow")->click();
+	QCOMPARE(platform.battery_requests, 1);
+
+	platform.restricted = false;
+	window.refresh();
+	QVERIFY(line->isHidden());
 }

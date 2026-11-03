@@ -213,6 +213,13 @@ public:
 	 * checkbox: it is a security control that reports success and does
 	 * nothing.
 	 */
+	/*
+	 * Whether the platform may pause the app to save battery, and the way
+	 * to ask it not to (sec 5.4). Nothing to ask on the desktop.
+	 */
+	virtual bool battery_restricted() const { return false; }
+	virtual void request_battery_exemption() {}
+
 	virtual bool can_hide_from_screenshots() const = 0;
 
 	/*

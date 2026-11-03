@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Environment;
+import android.os.PowerManager;
 import android.provider.Settings;
 
 /*
@@ -37,6 +38,37 @@ public class SshdStorage {
 			context.startActivity(intent);
 		} catch (ActivityNotFoundException error) {
 			Intent list = new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION);
+			list.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+			context.startActivity(list);
+		}
+	}
+
+	/*
+	 * Whether Android has been told to leave beersshd out of battery
+	 * optimisation (project.md sec 5.4). A foreground service already
+	 * keeps the network in Doze; this is for what vendors' battery
+	 * managers do beyond Android's own rules, which is what a server
+	 * reachable all day most has to fear.
+	 */
+	public static boolean batteryExempt(Context context) {
+		PowerManager power = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+		return power == null || power.isIgnoringBatteryOptimizations(context.getPackageName());
+	}
+
+	/*
+	 * Android's own yes/no dialog for this app, asked only from the
+	 * button the window shows -- Play allows the permission behind a
+	 * clear user action (sec 5.4). The list of all apps where a vendor
+	 * has no such dialog.
+	 */
+	public static void requestBatteryExemption(Context context) {
+		Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+			Uri.parse("package:" + context.getPackageName()));
+		intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+		try {
+			context.startActivity(intent);
+		} catch (ActivityNotFoundException error) {
+			Intent list = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
 			list.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 			context.startActivity(list);
 		}

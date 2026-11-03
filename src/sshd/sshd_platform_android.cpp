@@ -147,6 +147,23 @@ public:
 		QJniEnvironment().checkAndClearExceptions();
 	}
 
+	bool battery_restricted() const override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return false;
+		const bool exempt = QJniObject::callStaticMethod<jboolean>(
+		        STORAGE_CLASS, "batteryExempt", "(Landroid/content/Context;)Z", context.object()) == JNI_TRUE;
+		QJniEnvironment().checkAndClearExceptions();
+		return !exempt;
+	}
+
+	void request_battery_exemption() override {
+		const QJniObject context = android_context();
+		if (!context.isValid()) return;
+		QJniObject::callStaticMethod<void>(STORAGE_CLASS, "requestBatteryExemption",
+		                                   "(Landroid/content/Context;)V", context.object());
+		QJniEnvironment().checkAndClearExceptions();
+	}
+
 	bool can_start_at_boot() const override { return true; }
 
 	bool start_at_boot() const override {

@@ -720,6 +720,25 @@ bssh_app_settings_view::bssh_app_settings_view(section_t section, QWidget *paren
 	        this);
 	if (on_this_page(SECTION_TERMINAL, close_note)) form->addRow(close_note);
 
+	/*
+	 * sec 5.4: offered only while Android may still pause the app, and
+	 * asked only from this button. Gone the next time the page is built
+	 * once the answer is yes.
+	 */
+	if (bssh_platform::instance() && bssh_platform::instance()->battery_restricted()) {
+		QLabel *battery_note = bssh_wrapped_note(
+		        QStringLiteral("Android may pause BeerSSH in the background to save battery, "
+		                        "which can end sessions however they are kept."),
+		        this);
+		auto *battery = new QPushButton(QStringLiteral("Allow running in the background"), this);
+		battery->setObjectName(QStringLiteral("battery-allow"));
+		connect(battery, &QPushButton::clicked, this, [] {
+			if (bssh_platform::instance()) bssh_platform::instance()->request_battery_exemption();
+		});
+		if (on_this_page(SECTION_TERMINAL, battery_note)) form->addRow(battery_note);
+		if (on_this_page(SECTION_TERMINAL, battery)) form->addRow(battery);
+	}
+
 	/* sec 10.2a: tmux and screen sessions offered when a shell connects. */
 	m_offer_multiplexers = new QCheckBox(QStringLiteral("Offer tmux and screen sessions"), this);
 	if (on_this_page(SECTION_TERMINAL, m_offer_multiplexers)) form->addRow(m_offer_multiplexers);
