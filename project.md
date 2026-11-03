@@ -18030,6 +18030,17 @@ caught.
   with it. The Android dependency build checksums `libssh-patch/`, so it
   rebuilds libssh for every ABI the next time it runs. Not offered
   upstream yet.
+- **beersshd must run 24/7 -- [DECIDED 2026-11-03, the holder].** "As it is
+  an sshd it needs to be able to transfer files and data 24/7, that is its
+  main and only purpose." So `dataSync`, with its 6 hours in 24 on Android
+  15, is the wrong foreground-service type for it. **Open, the holder's:**
+  which of the two without a limit -- `connectedDevice` (the terminal's type,
+  accepted on Android 14, qualifying on `CHANGE_NETWORK_STATE`; recommended)
+  or `specialUse` (most accurate, reviewed case by case). Then: change the
+  manifest, run it on `bssh_api34`/`bssh_api36`, and re-run the time-limit
+  test above to see no timeout. The logger asked about (below) was for
+  finding how the 6-hour budget is kept; with `dataSync` gone it is moot
+  unless the holder still wants it.
 - **Periodic work in the background, asked 2026-11-03 -- not built, the
   answer recorded.** The service is no scheduler: a `dataSync` foreground
   service that keeps the process alive while the server runs. The server's
