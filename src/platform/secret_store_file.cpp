@@ -2,6 +2,7 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -238,6 +239,7 @@ public:
 
 		m_secrets = QJsonDocument::fromJson(plaintext).object();
 		m_key = key;
+		m_stamp = stamp_of(store_path());
 		m_unlocked = true;
 		return true;
 	}
@@ -267,6 +269,7 @@ public:
 		 * either holds the secret or it does not, and the answer has to
 		 * be the one it gave.
 		 */
+		if (!reread()) return false;
 		const QJsonObject before = m_secrets;
 		m_secrets.insert(id, secret);
 		if (flush()) return true;
@@ -277,6 +280,7 @@ public:
 
 	QString load(const QString &id) const override {
 		if (!m_unlocked) return QString();
+		reread();
 		return m_secrets.value(id).toString();
 	}
 
@@ -290,6 +294,7 @@ public:
 		 * successful write for any OTHER id persists the erasure that
 		 * was reported as failed.
 		 */
+		if (!reread()) return false;
 		const QJsonObject before = m_secrets;
 		m_secrets.remove(id);
 		if (flush()) return true;
@@ -299,6 +304,46 @@ public:
 	}
 
 private:
+	static QString stamp_of(const QString &path) {
+		const QFileInfo info(path);
+		if (!info.isFile()) return QString();
+		return QStringLiteral("%1:%2").arg(info.size()).arg(info.lastModified().toMSecsSinceEpoch());
+	}
+
+	/*
+	 * What another process wrote since this one last read or wrote the
+	 * file: every desktop window is a process (sec 8.4), each unlocks its
+	 * own copy of the map, and flush() writes the whole map back -- so a
+	 * password saved in one window was erased by the next save in another,
+	 * and never seen by it. Decrypted with the key already held; a
+	 * different salt means the store was made again elsewhere, and false
+	 * then keeps this one from writing over secrets it cannot read.
+	 */
+	bool reread() const {
+		const QString stamp = stamp_of(store_path());
+		if (stamp.isEmpty() || stamp == m_stamp) return true;
+
+		QFile file(store_path());
+		if (!file.open(QIODevice::ReadOnly)) return false;
+		const QByteArray blob = file.readAll();
+
+		const int header = int(sizeof(BSSH_MAGIC)) + 1 + BSSH_SALT_BYTES + BSSH_NONCE_BYTES;
+		if (blob.size() < header) return false;
+		if (blob.left(int(sizeof(BSSH_MAGIC))) != QByteArray(BSSH_MAGIC, sizeof(BSSH_MAGIC))) return false;
+		int offset = int(sizeof(BSSH_MAGIC));
+		if (quint8(blob.at(offset++)) != BSSH_FORMAT_VERSION) return false;
+		if (blob.mid(offset, BSSH_SALT_BYTES) != m_salt) return false;
+		offset += BSSH_SALT_BYTES;
+		const QByteArray nonce = blob.mid(offset, BSSH_NONCE_BYTES);
+		offset += BSSH_NONCE_BYTES;
+
+		const QByteArray plaintext = decrypt(blob.mid(offset), m_key, nonce);
+		if (plaintext.isEmpty()) return false;
+		m_secrets = QJsonDocument::fromJson(plaintext).object();
+		m_stamp = stamp;
+		return true;
+	}
+
 	bool flush() {
 		QByteArray nonce;
 		const QByteArray ciphertext =
@@ -353,16 +398,23 @@ private:
 		if (file.write(blob) != blob.size()) return false;
 
 		/* commit() flushes, renames and reports -- close() would not. */
-		return file.commit();
+		if (!file.commit()) return false;
+		m_stamp = stamp_of(store_path());
+		return true;
 	}
 
 	bool m_unlocked;
 	QByteArray m_key;
 	QByteArray m_salt;
-	QJsonObject m_secrets;
+	mutable QJsonObject m_secrets;   /* mutable for reread() under load() */
+	mutable QString m_stamp;         /* the file's size and time as last read or written */
 };
 
 bssh_secret_store *bssh_make_file_secret_store() {
 	static bssh_secret_store_file store;
 	return &store;
+}
+
+bssh_secret_store *bssh_make_separate_file_secret_store() {
+	return new bssh_secret_store_file;
 }

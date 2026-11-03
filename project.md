@@ -13580,6 +13580,21 @@ store is a no-op rather than a silent loss.
 
 ---
 
+**The file store, two processes over one file -- fixed 2026-11-03.** The
+passphrase-encrypted file (the fallback where no keyring runs) unlocked
+its map once and wrote it back whole on every store and erase. With every
+desktop window a process (sec 8.4), each window unlocked its own copy, so
+a password saved in one was erased by the next save in another and never
+seen by it -- the same shape as the host store's (sec 8.4), in the file
+that holds the credentials. It re-reads now before store, erase and load
+when the file's size or time differs from what it last read or wrote,
+decrypting with the key it holds; a different salt means the store was
+made again elsewhere, and it then refuses to write rather than replace
+secrets it cannot read. `two_open_stores_keep_each_others_secrets`, over
+two separate stores (`bssh_make_separate_file_secret_store`, since the
+process's own is one instance), fails on the second store's read with
+the re-read taken out.
+
 ## 12. Build, packaging, CI
 
 

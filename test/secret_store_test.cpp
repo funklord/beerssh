@@ -1,6 +1,8 @@
 #include <QFile>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+
+#include <memory>
 #include <QAbstractButton>
 #include <QLabel>
 #include <QFileInfo>
@@ -569,4 +571,30 @@ void secret_store_test::the_store_is_replaced_atomically_and_stays_owner_only() 
 	QVERIFY(store->unlock(QStringLiteral("correct horse")));
 	QCOMPARE(store->load(QStringLiteral("profile:1:password")), QStringLiteral("hunter2"));
 	QCOMPARE(store->load(QStringLiteral("profile:2:password")), QStringLiteral("second"));
+}
+
+/*
+ * Two windows are two processes, each with its file store unlocked (sec
+ * 8.4). A password saved through one must survive a save through the
+ * other, and be read by it -- each wrote back the map it had unlocked.
+ */
+void secret_store_test::two_open_stores_keep_each_others_secrets() {
+	QTemporaryDir dir;
+	const app_data_redirect redirect(dir);
+
+	std::unique_ptr<bssh_secret_store> first(bssh_make_separate_file_secret_store());
+	std::unique_ptr<bssh_secret_store> second(bssh_make_separate_file_secret_store());
+	QVERIFY(first->unlock(QStringLiteral("correct horse")));
+	QVERIFY(second->unlock(QStringLiteral("correct horse")));
+
+	QVERIFY(first->store(QStringLiteral("profile:1:password"), QStringLiteral("one")));
+	QVERIFY(second->store(QStringLiteral("profile:2:password"), QStringLiteral("two")));
+	QCOMPARE(second->load(QStringLiteral("profile:1:password")), QStringLiteral("one"));
+	QCOMPARE(first->load(QStringLiteral("profile:2:password")), QStringLiteral("two"));
+
+	QVERIFY(first->erase(QStringLiteral("profile:1:password")));
+	std::unique_ptr<bssh_secret_store> reader(bssh_make_separate_file_secret_store());
+	QVERIFY(reader->unlock(QStringLiteral("correct horse")));
+	QCOMPARE(reader->load(QStringLiteral("profile:1:password")), QString());
+	QCOMPARE(reader->load(QStringLiteral("profile:2:password")), QStringLiteral("two"));
 }

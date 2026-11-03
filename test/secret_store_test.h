@@ -22,6 +22,7 @@ private slots:
 	/* XDG_DATA_HOME is as found when the class is done; see app_data_redirect. */
 	void initTestCase();
 	void cleanupTestCase();
+	void two_open_stores_keep_each_others_secrets();
 
 	void the_store_is_replaced_atomically_and_stays_owner_only();
 	/*

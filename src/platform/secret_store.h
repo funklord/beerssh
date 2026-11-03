@@ -98,6 +98,13 @@ public:
  * whatever happens to be running on the machine it runs on.
  */
 bssh_secret_store *bssh_make_file_secret_store();
+
+/*
+ * A file store of its own, not the process's, which the caller owns: what
+ * another BeerSSH process holds over the same file (sec 8.4), for the
+ * tests that stand two of them side by side.
+ */
+bssh_secret_store *bssh_make_separate_file_secret_store();
 bssh_secret_store *bssh_make_libsecret_store();   /* nullptr when unavailable */
 bssh_secret_store *bssh_make_keystore_secret_store();  /* Android; nullptr when unavailable */
 
