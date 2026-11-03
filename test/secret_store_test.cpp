@@ -26,16 +26,52 @@
  * credentials -- a test that can destroy the thing it is testing is a test
  * nobody dares run twice.
  */
-static QString redirect_app_data(QTemporaryDir &dir) {
-	QStandardPaths::setTestModeEnabled(false);
-	qputenv("XDG_DATA_HOME", dir.path().toUtf8());
-	return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-	        + QStringLiteral("/secrets.enc");
+/*
+ * And puts it back when the test ends. Left pointing at the test's
+ * directory, every later class in the suite wrote its secrets into a
+ * directory that QTemporaryDir had already deleted -- the store's
+ * mkpath() made it again, nothing removed it, and one
+ * `beerssh_test-XXXXXX/beerssh_test/secrets.enc` was left in /tmp per
+ * run: 2215 of them when it was found, 2026-11-03. profile_store_test
+ * had met the same file from the inside, as a store "another test had
+ * created". Declared after the QTemporaryDir, so it is undone first.
+ */
+class app_data_redirect {
+public:
+	explicit app_data_redirect(const QTemporaryDir &dir)
+	        : m_had(qEnvironmentVariableIsSet("XDG_DATA_HOME")), m_old(qgetenv("XDG_DATA_HOME")) {
+		QStandardPaths::setTestModeEnabled(false);
+		qputenv("XDG_DATA_HOME", dir.path().toUtf8());
+		path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+		       + QStringLiteral("/secrets.enc");
+	}
+
+	~app_data_redirect() {
+		if (m_had) qputenv("XDG_DATA_HOME", m_old);
+		else qunsetenv("XDG_DATA_HOME");
+	}
+
+	app_data_redirect(const app_data_redirect &) = delete;
+	app_data_redirect &operator=(const app_data_redirect &) = delete;
+
+	QString path;
+
+private:
+	bool m_had;
+	QByteArray m_old;
+};
+
+void secret_store_test::initTestCase() {
+	m_data_home = qgetenv("XDG_DATA_HOME");
+}
+
+void secret_store_test::cleanupTestCase() {
+	QCOMPARE(qgetenv("XDG_DATA_HOME"), m_data_home);
 }
 
 void secret_store_test::stores_and_loads_a_secret() {
 	QTemporaryDir dir;
-	redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
 
 	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
@@ -55,7 +91,7 @@ void secret_store_test::stores_and_loads_a_secret() {
 
 void secret_store_test::the_wrong_passphrase_is_rejected_not_guessed_at() {
 	QTemporaryDir dir;
-	redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
 
 	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
@@ -80,7 +116,8 @@ void secret_store_test::the_wrong_passphrase_is_rejected_not_guessed_at() {
 
 void secret_store_test::the_file_does_not_contain_the_secret() {
 	QTemporaryDir dir;
-	const QString path = redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
+	const QString &path = redirect.path;
 
 	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
@@ -104,7 +141,8 @@ void secret_store_test::the_file_does_not_contain_the_secret() {
 
 void secret_store_test::tampering_is_detected() {
 	QTemporaryDir dir;
-	const QString path = redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
+	const QString &path = redirect.path;
 
 	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
@@ -127,7 +165,7 @@ void secret_store_test::tampering_is_detected() {
 
 void secret_store_test::a_locked_store_yields_nothing() {
 	QTemporaryDir dir;
-	redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
 
 	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
@@ -163,7 +201,8 @@ void secret_store_test::an_unlock_that_could_not_be_written_is_not_unlocked() {
 	 * for one, and unlock() would take the read branch instead.
 	 */
 	QTemporaryDir dir;
-	const QString path = redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
+	const QString &path = redirect.path;
 	const QString data_dir = QFileInfo(path).absolutePath();
 
 	QDir(data_dir).removeRecursively();
@@ -210,7 +249,8 @@ void secret_store_test::an_erase_that_cannot_be_written_keeps_the_secret_readabl
 	 * ignores the mode. That cost a test earlier in this project's life.
 	 */
 	QTemporaryDir dir;
-	const QString path = redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
+	const QString &path = redirect.path;
 
 	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
@@ -241,7 +281,7 @@ void secret_store_test::an_erase_that_cannot_be_written_keeps_the_secret_readabl
 
 void secret_store_test::erasing_removes_it_from_the_file() {
 	QTemporaryDir dir;
-	redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
 
 	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();
@@ -494,7 +534,7 @@ void secret_store_test::the_store_is_replaced_atomically_and_stays_owner_only() 
 	 * setPermissions survives the rename.
 	 */
 	QTemporaryDir dir;
-	redirect_app_data(dir);
+	const app_data_redirect redirect(dir);
 
 	bssh_secret_store *store = bssh_make_file_secret_store();
 	store->lock();

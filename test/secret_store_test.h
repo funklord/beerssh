@@ -1,6 +1,7 @@
 #ifndef BSSH_SECRET_STORE_TEST_H
 #define BSSH_SECRET_STORE_TEST_H
 
+#include <QByteArray>
 #include <QObject>
 
 /*
@@ -15,7 +16,13 @@
 class secret_store_test : public QObject {
 	Q_OBJECT
 
+	QByteArray m_data_home;
+
 private slots:
+	/* XDG_DATA_HOME is as found when the class is done; see app_data_redirect. */
+	void initTestCase();
+	void cleanupTestCase();
+
 	void the_store_is_replaced_atomically_and_stays_owner_only();
 	/*
 	 * sec 11 asks the UI to name the backend and say whether it is
