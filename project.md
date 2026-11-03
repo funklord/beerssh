@@ -18058,6 +18058,133 @@ caught.
   `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.
 - **A Debian package** for the desktop program is undecided.
 
+### 19.7 Reachable 24/7 on Play: the bureaucratic case — **[RESEARCHED 2026-11-03]**
+
+Asked by the holder after deciding beersshd must run 24/7 (§19.6): analyse
+the question "on a bureaucratic and rhetorical level", no code. The premise,
+the holder's: **an sshd on Android is in 95% of cases a backup source** -- a
+computer runs backup jobs, or moves other files, on its own schedule -- and
+**a phone that cannot be reached is lost data.** "An sshd that needs to be
+manually activated and can only run for 6h is better than nothing, but let's
+not settle for that." Every quote below was read on the date given, from the
+page named; the Play pages change, so re-read before submitting.
+
+**What the rules say, verbatim.**
+
+- **`dataSync` is the wrong type, now and more so from 2027.** Android's
+  timeout page (developer.android.com, *fgs/timeout*): "a total of 6 hours in
+  a 24-hour period", shared by all of an app's `dataSync` services; then
+  `onTimeout()` and a few seconds to stop; and "if the user brings the app to
+  the foreground, the timer resets". Play's *Foreground service* policy for
+  the version **effective 27 January 2027** (Play Console Help 16965181,
+  preview): `TYPE_DATA_SYNC` -- "Use for specifically user-initiated work and
+  not for regular system or server-initiated tasks", with the example
+  "selecting a specific photo to back up to cloud vs daily auto backup of all
+  new photos". A computer pulling a nightly backup is a regular,
+  server-initiated task: **exactly the case the policy excludes.** The
+  current preset list (Help 13392821) already reads "User-initiated
+  backup/restore".
+- **`connectedDevice` is written for it.** Android's definition (*fgs
+  service-types*): "Interactions with external devices that require a
+  Bluetooth, NFC, IR, USB, or network connection." Android's own migration
+  guide away from `dataSync` (*datasync-migration*), under *Use a connected
+  device foreground service*: "Transferring data to a locally connected
+  device, by a USB connection, NFC, or **a local internet connection**." And
+  Play's 2027 policy: "Interactions with external devices **including data
+  transfer** that require a Bluetooth, NFC, IR, USB, or **network
+  connection**." No time limit (the timeout page lists only `dataSync` and
+  `mediaProcessing`). Qualifies on a declared `CHANGE_NETWORK_STATE`. The
+  weak point is Play's preset *examples* (Bluetooth/NFC/USB, car keys) --
+  examples, not the definition -- and Android's note that the companion
+  device manager may serve "instead", which pairs Bluetooth/Wi-Fi
+  peripherals in range and has no notion of a computer on a LAN.
+- **`specialUse` is the fallback**, "in limited scenarios, if your use case
+  meets the other characteristics", with a manifest `<property>` and a
+  free-text case reviewed individually.
+- **Play's five general conditions** (Device and Network Abuse, Help
+  16559646): the use "provides a feature that is beneficial to the user and
+  relevant to the core functionality of the app; is initiated by the user or
+  is user perceptible; can be terminated or stopped by the user; can't be
+  interrupted or deferred by the system without causing a negative user
+  experience; runs only for as long as necessary to complete the task." The
+  last is the one to answer with care: for a server, "the task" is *being
+  reachable while the user has the server switched on*, and it ends when the
+  user switches it off.
+- **Doze does not cut it off.** Android's *power-details* table, "App process
+  is running a foreground service": network "No restrictions" -- also with
+  the screen off and Doze active. So a foreground service is the documented
+  way to stay reachable; what remains is OEM battery management, which is
+  outside Play's rules and needs measuring on the phone.
+
+**What comparable apps did** (manifests and listings read 2026-11-03):
+
+- **KDE Connect** (`org.kde.kdeconnect_tp`): **on Play**, declares
+  `connectedDevice` for its always-on phone-to-computer link over the LAN,
+  file transfer included. The closest precedent and the strongest.
+- **primitive ftpd** (FTP/SFTP server): declares `specialUse`; **gone from
+  Play** -- its README shows Google's mail refusing *all files access*, not
+  the service type. F-Droid only.
+- **Syncthing** (continuous sync): **left Play** in 2024 after updates were
+  rejected from February over *all files access*, with demands its
+  maintainer called vague (issue #2064; archived 2024-12-03). The Syncthing-
+  Fork continues outside Play.
+- **SimpleSSHD**: not on Play now (404), F-Droid only; its page gives no
+  reason.
+
+**So the real Play risk is the second gate, not the first.** beersshd also
+declares `MANAGE_EXTERNAL_STORAGE` (§19's storage decision). Play's *All
+files access* policy (Help 10467955) qualifies "Backup and restore apps" and
+"File managers" -- the 95% case is the first by name -- but names the
+Storage Access Framework as the privacy-friendly alternative "when users
+select specific files", and a server of **one folder** reads, to a reviewer,
+like a folder the user could pick through it. §19 records why not: the
+handlers are plain POSIX calls on paths, and SAF would mean rewriting them
+over document URIs. That is the argument the declaration form must make,
+and two comparable apps failed at exactly this form.
+
+**The rhetoric, for the declarations** (the holder's to write and submit):
+
+1. **Lead with the consequence, in Play's own words.** The form asks for the
+   "user impact if the task is deferred ... or interrupted by the system".
+   The answer is data loss: the user's computer runs its backup on its own
+   schedule, and if the phone does not answer, that night's backup of the
+   phone does not happen and nothing tells the user until they need it.
+2. **Name the category the policy names.** For all-files access: a backup
+   and restore app -- the computer's backup tool reads the phone's files
+   over SFTP. For the service: data transfer to a computer on the local
+   network, which is `connectedDevice`'s text in both Android's and Play's
+   2027 wording.
+3. **Show it is user-perceptible and user-stoppable,** which the policy
+   requires: started only by the user's Start, a notification the whole
+   time it runs, Stop in the notification and the app, and no start at boot
+   unless the user turns that on.
+4. **Do not argue that `dataSync` fits.** Play's own example of what it is
+   not for is the automatic backup. Asking for it would invite the 2027
+   wording as the refusal.
+5. **The video** (required): a computer on the same Wi-Fi running a backup
+   (rsync or a backup tool over `sftp`) against the phone with the screen
+   off; the transfer completes; Stop ends the service and the notification.
+
+**Options, with costs -- the holder's to choose:**
+
+- **A. `connectedDevice` + all-files access.** Matches KDE Connect's
+  precedent and both definitions. Manifest change, an Android 14/16
+  emulator run, the time-limit test re-run to see no timeout. Risk:
+  the all-files form, as above.
+- **B. `specialUse` + all-files access.** The most literal description;
+  reviewed case by case; primitive ftpd's route, which did not keep it on
+  Play (for the other reason).
+- **C. Either type + a user-picked folder through SAF** instead of all-files
+  access. Removes the gate that sank primitive ftpd and Syncthing; costs
+  rewriting the SFTP handlers over document URIs, and SAF is slower on
+  large trees. A real engineering change, not a declaration.
+- **D. Keep F-Droid as the always-available channel** whatever Play
+  decides -- what primitive ftpd, Syncthing and SimpleSSHD fell back to.
+
+Recommended: **A**, with the declaration written per the rhetoric above, and
+C costed properly before the first submission so a refusal of all-files
+access has an answer ready rather than a rewrite.
+
 ## From fmake: `--eject` needs one define the README's fmake line does not
 
 **Taken, both lines** -- `d4994f7` put `BSSH_TEST_FONT_DIR` and the
