@@ -1193,6 +1193,9 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   100 s, not reproduced in the three windows after. The worker threads
   were never affected -- a `QThread` gets a plain `QEventDispatcherUNIX`,
   which the stopper does not hold -- which is why sessions *stayed* up.
+  And §5.3's own case, a network change in the background: `svc wifi
+  disable` with the app at home reconnected over the emulator's mobile
+  data in 2 s; Wi-Fi coming back left that working session where it was.
   beersshd sets the same flag (§19.6). Not yet seen on the Fold, where
   OEM battery management (§5.4) is the remaining unknown.
 
