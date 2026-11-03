@@ -186,8 +186,8 @@ bssh_sshd_window::bssh_sshd_window(bssh_sshd_platform *platform, QWidget *parent
 		 * the app renewed the allowance or the test's own reset of the
 		 * limit did was not separated (project.md sec 19.6).
 		 */
-		log(tr("Stopped: Android ended the file-transfer service. It allows one "
-		       "six hours in any 24 while the app is in the background."));
+		log(tr("Stopped: Android would not keep the file server running "
+		       "in the background."));
 	});
 
 	/*

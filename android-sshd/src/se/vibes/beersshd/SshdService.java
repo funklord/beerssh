@@ -23,11 +23,14 @@ import android.os.IBinder;
  * always honoured before the service goes; and it is never sticky, since
  * a service restarted without the process it keeps alive serves nothing.
  *
- * What is new is onTimeout. dataSync is limited on Android 15 to six
- * hours in twenty-four; when that runs out Android calls onTimeout and
- * expects the service gone within seconds, or the app is killed. The
- * server is told first, so it stops listening rather than having the
- * process taken from under it, and the notification says why it stopped.
+ * What is new is onTimeout. The type is connectedDevice, which has no
+ * time limit, so Android should never call it; it is kept from when the
+ * type was dataSync, whose six hours in twenty-four did fire it on the
+ * Fold (project.md sec 19.6), because a type Android limits later would
+ * otherwise kill the app instead of stopping the server. When it comes,
+ * Android expects the service gone within seconds. The server is told
+ * first, so it stops listening rather than having the process taken from
+ * under it, and the notification says why it stopped.
  */
 public class SshdService extends Service {
 
@@ -87,17 +90,19 @@ public class SshdService extends Service {
 		createChannel();
 
 		/*
-		 * Refused once the day's dataSync time is spent: Android 15 throws
-		 * ForegroundServiceStartNotAllowedException from startForeground()
-		 * for the rest of the 24 hours. Uncaught, that is a crash on Start
-		 * -- and on Stop, which comes through here too. Caught, the server
-		 * is told the same thing onTimeout tells it, since it is the same
-		 * limit. Written from the documentation; not yet seen on a device
-		 * (project.md sec 19.6).
+		 * Android may refuse: ForegroundServiceStartNotAllowedException (an
+		 * IllegalStateException) for a start it counts as from the
+		 * background, or when a limited type's time is spent, and a
+		 * SecurityException where a type's prerequisite is missing.
+		 * Uncaught, any of them is a crash on Start -- and on Stop, which
+		 * comes through here too. Caught, the server is told the same thing
+		 * onTimeout tells it: Android will not keep it running. Written
+		 * from the documentation; not yet seen on a device (project.md
+		 * sec 19.6).
 		 */
 		try {
 			startForeground(NOTIFICATION_ID, buildNotification(this, s_status));
-		} catch (IllegalStateException refused) {
+		} catch (IllegalStateException | SecurityException refused) {
 			if (intent != null && !ACTION_STOP.equals(intent.getAction())) {
 				tellNativeTimedOut();
 			}

@@ -164,7 +164,7 @@ void sshd_window_test::the_time_limit_stops_the_server_and_says_why() {
 	QVERIFY(platform.serving);
 	QTRY_VERIFY(!platform.serving);
 	QVERIFY(child<QSpinBox>(window, "sshd-port")->isEnabled());
-	QVERIFY(child<QPlainTextEdit>(window, "sshd-log")->toPlainText().contains(QStringLiteral("six hours")));
+	QVERIFY(child<QPlainTextEdit>(window, "sshd-log")->toPlainText().contains(QStringLiteral("would not keep the file server running")));
 }
 
 void sshd_window_test::losing_wifi_stops_and_a_new_address_restarts() {

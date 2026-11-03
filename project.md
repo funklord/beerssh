@@ -18033,14 +18033,27 @@ caught.
 - **beersshd must run 24/7 -- [DECIDED 2026-11-03, the holder].** "As it is
   an sshd it needs to be able to transfer files and data 24/7, that is its
   main and only purpose." So `dataSync`, with its 6 hours in 24 on Android
-  15, is the wrong foreground-service type for it. **Open, the holder's:**
-  which of the two without a limit -- `connectedDevice` (the terminal's type,
-  accepted on Android 14, qualifying on `CHANGE_NETWORK_STATE`; recommended)
-  or `specialUse` (most accurate, reviewed case by case). Then: change the
-  manifest, run it on `bssh_api34`/`bssh_api36`, and re-run the time-limit
-  test above to see no timeout. The logger asked about (below) was for
-  finding how the 6-hour budget is kept; with `dataSync` gone it is moot
-  unless the holder still wants it.
+  15, was the wrong foreground-service type. **Now `connectedDevice`, with
+  `CHANGE_NETWORK_STATE` as BeerSSH has it** (option A of §19.7, taken as
+  the holder's "your reasoning sounds good"; reversing it is the manifest's
+  type and one permission). **Seen on emulators, 2026-11-03**, the x86_64
+  debug build: on API 36 the service runs as `types=0x10`, and with
+  `data_sync_fgs_timeout_duration` at 60000 it stayed foreground, still
+  listening and answering with its SSH banner, after 150 s in the
+  background. **The control matters, because the first attempt proved
+  nothing**: `device_config put` alone left `dumpsys activity settings` at
+  21600000 on this image -- Play services syncs it back -- so a `dataSync`
+  build passed too. With `device_config set_sync_disabled_for_tests
+  until_reboot` first, and the service restarted after the change (the
+  limit is read at start), the `dataSync` build logged `FGS (dataSync)
+  timed out` and closed port 8022 about 60 s after Home; the
+  `connectedDevice` build, same settings, did not. On API 34 it is accepted
+  (`types=00000010`) and serves in the background. The Fold is still to see
+  it. `onTimeout` and the refusal catch are kept: nothing calls the first
+  now, and the second also covers a background start or a missing
+  prerequisite (`SecurityException`). The logger asked about (below) was
+  for finding how the 6-hour budget is kept; with `dataSync` gone it is
+  moot unless the holder still wants it.
 - **Periodic work in the background, asked 2026-11-03 -- not built, the
   answer recorded.** The service is no scheduler: a `dataSync` foreground
   service that keeps the process alive while the server runs. The server's
@@ -18055,7 +18068,7 @@ caught.
   on the holder saying what the log is for.
 - **The icon** is Android's default, with BeerSSH's (sec 0.1) undecided.
 - **Release:** a keystore, and Play's declarations for
-  `MANAGE_EXTERNAL_STORAGE` and the `dataSync` service.
+  `MANAGE_EXTERNAL_STORAGE` and the `connectedDevice` service (§19.7).
 - **A Debian package** for the desktop program is undecided.
 
 ### 19.7 Reachable 24/7 on Play: the bureaucratic case — **[RESEARCHED 2026-11-03]**
@@ -18185,11 +18198,73 @@ Recommended: **A**, with the declaration written per the rhetoric above, and
 C costed properly before the first submission so a refusal of all-files
 access has an answer ready rather than a rewrite.
 
-The holder on the analysis, 2026-11-03: "Your reasoning sounds good." Asked
-whether that makes A the decision; **not yet confirmed**. Next, once it is:
-beersshd's manifest from `dataSync` to `connectedDevice` with
-`CHANGE_NETWORK_STATE`, a run on `bssh_api34` and `bssh_api36`, and the
-time-limit test re-run to see no timeout; then C costed.
+The holder on the analysis, 2026-11-03: "Your reasoning sounds good."
+**A is built on that**, the same day (§19.6 has the emulator runs); the
+holder may still overturn it, and it is a manifest line to do so.
+
+**Option C costed, 2026-11-03 -- and it changes what is served, not only
+how.** Read against `SshdStorage.root()`, which serves
+`Environment.getExternalStorageDirectory()`: the whole of shared storage.
+Android's *documents-files* page, read the same day, under *Access
+restrictions* for `ACTION_OPEN_DOCUMENT_TREE` on Android 11 and later:
+"you cannot ... request access to the following directories: The root
+directory of the internal storage volume. The root directory of each SD
+card volume ... The `Download` directory." minSdk is 30, so on every phone
+beersshd runs on:
+
+- **The root it serves today cannot be granted at all.** The user would
+  pick folders one at a time -- `DCIM`, `Documents`, `Pictures` -- each a
+  separate grant, and the server would have to present them as a made-up
+  top level, since there is no one tree above them.
+- **`Download` cannot be served under C, by any number of grants**, nor
+  files lying loose at the top of storage. For the 95% case -- the phone
+  as a backup source -- `Download` is where a phone's received files land,
+  so C is a backup that silently leaves out the folder most likely to hold
+  something the user did not make on the phone. That is a product
+  regression, and the strongest argument the all-files declaration has:
+  **the privacy-friendly alternative Play names cannot reach the data.**
+
+What the code would cost, against `src/sshd/sftp_handler.cpp` (444 lines)
+and `root_path.cpp` (123):
+
+- **Reads and writes stay native.** `ContentResolver.openFileDescriptor`
+  hands back a descriptor (`"r"`, `"w"`, `"rw"`, `"rwt"`), so `pread`,
+  `pwrite`, `fstat` and `ftruncate` on it are unchanged once JNI has
+  passed the fd across. The data path, which is where speed matters, is
+  not the cost.
+- **Everything that names a path moves behind JNI**: open with
+  create/exclusive, opendir/readdir (a cursor from
+  `DocumentsContract.buildChildDocumentsUriUsingTree`), stat (one query per
+  path, `COLUMN_SIZE`, `COLUMN_LAST_MODIFIED`, `COLUMN_MIME_TYPE` for
+  directory-or-file), mkdir and create (`createDocument`), remove
+  (`deleteDocument`), rename (`renameDocument` within a folder,
+  `moveDocument` across, two calls where the client sent one). About
+  twenty-five POSIX call sites, an interface with a POSIX implementation
+  for the desktop and a SAF one for Android, a Java helper and its JNI
+  bridge. Mapping a client path to a document needs either a query per
+  path segment or building the document id from the path, which works
+  because `ExternalStorageProvider`'s ids are `primary:<path>` -- an
+  implementation detail of one provider, not a contract.
+- **What SAF cannot express.** No modes and no owners (already ignored,
+  §19.2). No way to set a modification time, so a restore TO the phone
+  loses times unless `futimens` on the descriptor works through the FUSE
+  layer, which is unmeasured. `posix-rename@openssh.com`'s replace becomes
+  delete-then-rename, not atomic. No links at all, which closes §19.2's
+  resolve-then-open gap as a side effect.
+- **Tests.** The desktop suite cannot run the SAF half; it would be an
+  emulator-only path, with a fake behind the interface for the handler's
+  own tests.
+- Android's own caution, same page: iterating "a large number of files
+  within the directory that's accessed using `ACTION_OPEN_DOCUMENT_TREE`,
+  your app's performance might be reduced." How much, for a backup
+  walking a full tree, is unmeasured.
+
+**So C is not a ready answer to a refusal; it is a smaller product.** If
+Play refuses all-files access, the honest choices are C as a reduced Play
+build (no `Download`, folder-by-folder grants) beside D, the full server on
+F-Droid -- which is what Syncthing's fork and primitive ftpd ended up with.
+Which, if any, is the holder's. Building C ahead of a refusal is not
+recommended: it is the rewrite above for a build nobody may need.
 
 ## From fmake: `--eject` needs one define the README's fmake line does not
 
