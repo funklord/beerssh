@@ -16782,6 +16782,15 @@ honest data handling) apply to both packages.
   will not take one. **beersshd's is `make android-sshd-aab`** (2026-11-03;
   there was none), the same rule with the bundle named for the program:
   arm64, `beersshd-1.0.aab`, versionCode 10000, refused as unsigned.
+  **Its screenshots are `make android-sshd-screenshots`** (and
+  `android-sshd-store-screenshots` for the shared store emulator), two
+  views from `main_android.cpp`'s store_view half: `server`, serving with
+  two keys and a log, and `setup`, the first screen asking for All files
+  access -- all of it `sshd_demo.cpp`'s, from a throwaway data directory,
+  so the user's keys and log never reach a listing. First run, on a Nexus
+  5X AVD like `store`: both at 1080x1920, the status bar hidden. A first
+  `keys` view, the same window scrolled, came out byte-identical to
+  `server` -- the window fits one screen -- and was replaced.
 
 ---
 

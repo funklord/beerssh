@@ -18,6 +18,7 @@
 #include <thread>
 
 #include "sshd/sshd_platform.h"
+#include "sshd/sshd_demo.h"
 #include "sshd/sshd_keeper.h"
 #include "sshd/sshd_remote.h"
 #include "sshd/sshd_window.h"
@@ -426,4 +427,24 @@ void sshd_window_test::the_battery_line_shows_until_the_app_is_allowed() {
 	platform.restricted = false;
 	window.refresh();
 	QVERIFY(line->isHidden());
+}
+
+/*
+ * The store screenshots' window (main_android.cpp, the play-store skill):
+ * made-up content throughout -- the demo's address, host key and two
+ * keys that parse -- from a data directory of its own, so the listing
+ * can never show the user's keys or log.
+ */
+void sshd_window_test::the_store_demo_shows_only_made_up_content() {
+	bssh_sshd_demo_platform platform;
+	auto *control = new bssh_sshd_demo_control;
+	bssh_sshd_window window(&platform, control);
+	control->tell();
+
+	QVERIFY(window.serving());
+	QVERIFY(child<QLabel>(window, "sshd-status")->text().contains(QStringLiteral("192.168.1.23")));
+	QVERIFY(child<QLineEdit>(window, "sshd-fingerprint")->text().startsWith(QStringLiteral("SHA256:")));
+	QCOMPARE(child<QLabel>(window, "sshd-key-count")->text(), QStringLiteral("2 usable key(s)."));
+	QVERIFY(child<QPlainTextEdit>(window, "sshd-log")->toPlainText().contains(QStringLiteral("started SFTP")));
+	QVERIFY(window.authorized_keys_path().startsWith(platform.data_directory()));
 }

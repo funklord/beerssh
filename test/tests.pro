@@ -104,6 +104,7 @@ SOURCES += \
     ../src/sshd/root_path.cpp \
     ../src/sshd/sftp_handler.cpp \
     ../src/sshd/sshd.cpp \
+    ../src/sshd/sshd_demo.cpp \
     ../src/sshd/sshd_keeper.cpp \
     ../src/sshd/sshd_platform.cpp \
     ../src/sshd/sshd_remote.cpp \
@@ -220,6 +221,7 @@ HEADERS += \
     ../src/sshd/sshd.h \
     ../src/sshd/sshd_platform.h \
     ../src/sshd/sshd_control.h \
+    ../src/sshd/sshd_demo.h \
     ../src/sshd/sshd_keeper.h \
     ../src/sshd/sshd_remote.h \
     ../src/sshd/sshd_window.h \

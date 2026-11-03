@@ -1481,17 +1481,22 @@ endif
 # one no generated Makefile uses.
 SSHD_APP_ID = se.vibes.beersshd
 SSHD_ANDROID = ANDROID_PROGRAM=$(SSHD_TARGET) APP_ID=$(SSHD_APP_ID) ANDROID_PRO=beersshd.pro \
-               ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS=
+               ANDROID_BUILD_DIR=build-sshd-android-$(ANDROID_ABI) ANDROID_ASSETS= \
+               STORE_VIEWS='server setup'
 
 # android-sshd-aab is beersshd's Play bundle (sec 13): the same rule as
 # BeerSSH's, so the same naming, versionCode and refusal to leave an
-# unsigned bundle behind.
+# unsigned bundle behind. android-sshd-screenshots and
+# android-sshd-store-screenshots take its listing's pictures, of the two
+# views main_android.cpp shows filled with demo content: the server
+# serving with its keys and log, and the first screen, asking for All
+# files access.
 android-sshd android-sshd-install android-sshd-run android-sshd-log android-sshd-uninstall \
-android-sshd-aab:
+android-sshd-aab android-sshd-screenshots android-sshd-store-screenshots:
 	$(MAKE) --no-print-directory $(patsubst android-sshd%,android%,$@) $(SSHD_ANDROID)
 
 .PHONY: android-sshd android-sshd-install android-sshd-run android-sshd-log android-sshd-uninstall \
-        android-sshd-aab
+        android-sshd-aab android-sshd-screenshots android-sshd-store-screenshots
 
 # sec 12.2's other half for Android: is it signed by who you think, and
 # does the artifact install and run?

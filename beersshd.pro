@@ -47,6 +47,7 @@ android {
 
     SOURCES += \
         src/sshd/main_android.cpp \
+        src/sshd/sshd_demo.cpp \
         src/sshd/sshd_keeper.cpp \
         src/sshd/sshd_platform.cpp \
         src/sshd/sshd_remote.cpp \
@@ -55,6 +56,7 @@ android {
     HEADERS += \
         src/sshd/sshd_platform.h \
         src/sshd/sshd_control.h \
+        src/sshd/sshd_demo.h \
         src/sshd/sshd_keeper.h \
         src/sshd/sshd_remote.h \
         src/sshd/sshd_window.h

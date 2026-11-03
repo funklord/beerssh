@@ -10,9 +10,13 @@
 
 #include <QApplication>
 #include <QCoreApplication>
+#include <QJniObject>
 #include <QStringList>
+#include <QTimer>
+#include <QWindow>
 #include <QtCore/private/qandroidextras_p.h>
 
+#include "sshd/sshd_demo.h"
 #include "sshd/sshd_keeper.h"
 #include "sshd/sshd_platform.h"
 #include "sshd/sshd_remote.h"
@@ -30,6 +34,55 @@ bool serve_mode(int argc, char *argv[]) {
 		if (qstrcmp(argv[i], "--serve") == 0) return true;
 	}
 	return false;
+}
+
+/* The store_view extra of the launching intent, or empty (the play-store skill). */
+QString store_view() {
+	const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+	if (!activity.isValid()) return QString();
+	const QJniObject intent = activity.callObjectMethod("getIntent", "()Landroid/content/Intent;");
+	if (!intent.isValid()) return QString();
+	return intent.callObjectMethod("getStringExtra", "(Ljava/lang/String;)Ljava/lang/String;",
+	                               QJniObject::fromString(QStringLiteral("store_view")).object<jstring>())
+	        .toString();
+}
+
+/*
+ * The device's status bar out of the listing: demo mode cannot be relied
+ * on (Samsung ignores it), so the app hides it, and again whenever focus
+ * moves, since Qt puts the system bars back as it shows a window.
+ */
+void hide_status_bar() {
+	QNativeInterface::QAndroidApplication::runOnAndroidMainThread([] {
+		const QJniObject activity = QNativeInterface::QAndroidApplication::context();
+		const QJniObject window = activity.callObjectMethod("getWindow", "()Landroid/view/Window;");
+		const QJniObject controller =
+		        window.callObjectMethod("getInsetsController", "()Landroid/view/WindowInsetsController;");
+		const jint status_bars = QJniObject::callStaticMethod<jint>("android/view/WindowInsets$Type",
+		                                                             "statusBars", "()I");
+		if (controller.isValid()) controller.callMethod<void>("hide", "(I)V", status_bars);
+	});
+}
+
+/* A demo window for one store view, and its ready line once it has drawn. */
+int run_store_view(QApplication &app, const QString &view) {
+	/*
+	 * Two views: "server", serving with keys and a log, and "setup", the
+	 * first screen a new user sees, asking for All files access.
+	 */
+	auto *platform = new bssh_sshd_demo_platform;
+	auto *control = new bssh_sshd_demo_control;
+	const bool setup = view == QStringLiteral("setup");
+	platform->access = !setup;
+	control->serving = !setup;
+	bssh_sshd_window window(platform, control);
+	window.show();
+	if (!setup) control->tell();
+	hide_status_bar();
+	QObject::connect(&app, &QGuiApplication::focusWindowChanged, [] { hide_status_bar(); });
+
+	QTimer::singleShot(1500, &window, [view] { qInfo("store-view-ready %s", qPrintable(view)); });
+	return app.exec();
 }
 
 } /* namespace */
@@ -65,6 +118,9 @@ int main(int argc, char *argv[]) {
 
 	QApplication app(argc, argv);
 	name_the_application();
+
+	const QString view = store_view();
+	if (!view.isEmpty()) return run_store_view(app, view);
 
 	bssh_sshd_platform *platform = bssh_sshd_platform::instance();
 	bssh_sshd_window window(platform, new bssh_sshd_remote(platform));
