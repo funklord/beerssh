@@ -13287,10 +13287,10 @@ store is a no-op rather than a silent loss.
     `.so` stay 16 KB aligned. The order matters — `zipalign` alone destroys
     the signature, since it drops the signing block — and `-p 16` is not
     `-P 16`: the lower-case form takes no argument and silently gives 4 KB
-    alignment, which would break 16 KB-page devices. **Not yet done here**,
-    because it belongs in the shared `tool/android.mk` that four projects
-    copy, which makes it a signal rather than a local edit
-    (`harmonization.md`).
+    alignment, which would break 16 KB-page devices. **Done since 2026-11-05**: the shared
+    `tool/android.mk` gained `android-fresh`, which `android` now depends on,
+    so Gradle has no old APK to reopen. x86_64 measured 51,306,265 bytes
+    before and 42,298,577 after, one build apart.
 
     **~~Open: whether deleting the output APK before packaging is enough.~~
     Measured 2026-09-04, and it is: 46,639,876 → 39,692,128 bytes, ZERO

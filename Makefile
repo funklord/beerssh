@@ -683,6 +683,9 @@ $(VTERM_LIB): $(VTERM_OBJS)
 		echo "make:     git submodule update --init"; \
 		exit 1; \
 	fi
+	@# ar r never removes a member, so an object whose source went would
+	@# stay in an archive that was only ever updated.
+	rm -f $@
 	$(AR) rcs $@ $(VTERM_OBJS)
 
 # A qmake Makefile regenerates ITSELF from the project file it was made
@@ -1178,6 +1181,7 @@ $(VTERM_ANDROID_DIR)/%.o: $(VTERM_DIR)/src/%.c $(VTERM_ANDROID_STAMP)
 -include $(VTERM_ANDROID_OBJS:.o=.d)
 
 $(VTERM_ANDROID_LIB): $(VTERM_ANDROID_OBJS)
+	rm -f $@
 	$(NDK_BIN)/llvm-ar rcs $@ $(VTERM_ANDROID_OBJS)
 
 # Everything the Android build needs, checked by name. Each of these fails
@@ -1396,7 +1400,7 @@ android-aab: $(ANDROID_BUILD_DIR)/Makefile $(ANDROID_ASSETS)
 ANDROID_PROGRAM ?= $(TARGET)
 ANDROID_ARTIFACT = $(ANDROID_BUILD_DIR)/$(ANDROID_PROGRAM)-$(VERSION)-$(ANDROID_ABI).apk
 
-android: $(ANDROID_BUILD_DIR)/Makefile $(ANDROID_ASSETS)
+android: android-fresh $(ANDROID_BUILD_DIR)/Makefile $(ANDROID_ASSETS)
 ifneq ($(ANDROID_KEYSTORE),)
 	@# The flags go to androiddeployqt itself, because Qt's generated
 	@# Makefile hardcodes its command line and accepts nothing from here.
