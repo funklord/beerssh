@@ -11,9 +11,12 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QFileSystemWatcher>
+#include <QLockFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QVariant>
+
+#include <sys/stat.h>
 
 #include <algorithm>
 
@@ -262,6 +265,32 @@ void bssh_profile_store::load() {
 }
 
 /*
+ * One change at a time across every BeerSSH on this account, from the
+ * re-read to the write. refresh() alone is a check and then an act: two
+ * windows saving at once each read the list, each added their host and
+ * each wrote the list back, and measured with three real processes
+ * adding hosts together, 200 of 300 were gone. A window's save is rare
+ * and short, so a queue costs nothing, and a peer stopped under a
+ * debugger costs five seconds and a warning rather than a save refused:
+ * going on without the lock is what happened before it existed.
+ */
+namespace {
+class store_change {
+public:
+	explicit store_change(const QString &directory)
+	        : m_lock(directory + QStringLiteral("/.store.lock")) {
+		m_lock.setStaleLockTime(10000);
+		if (!m_lock.tryLock(5000)) {
+			qWarning("hosts: another BeerSSH holds the store, changing it anyway");
+		}
+	}
+
+private:
+	QLockFile m_lock;
+};
+}
+
+/*
  * What is on disk, read again before every change. Every desktop window
  * is a process of its own now (sec 8.4), so shared() joins the windows of
  * one process and no more: another BeerSSH may have written the files
@@ -293,7 +322,17 @@ bool bssh_profile_store::refresh() {
 QString bssh_profile_store::file_stamp(const QString &path) {
 	const QFileInfo info(path);
 	if (!info.isFile() || !info.isReadable()) return QString();
-	return QStringLiteral("%1:%2").arg(info.size()).arg(info.lastModified().toMSecsSinceEpoch());
+
+	/*
+	 * And which file: QSettings saves by replacing it, so a new inode says
+	 * "written" where a clock ticking every few milliseconds and a row of
+	 * the same length would not.
+	 */
+	struct stat status;
+	const qulonglong inode = ::stat(QFile::encodeName(path).constData(), &status) == 0
+	                                 ? qulonglong(status.st_ino) : 0;
+	return QStringLiteral("%1:%2:%3").arg(info.size())
+	        .arg(info.lastModified().toMSecsSinceEpoch()).arg(inode);
 }
 
 void bssh_profile_store::remember_stamps() {
@@ -721,6 +760,7 @@ bssh_profile_store *bssh_profile_store::shared() {
 
 int bssh_profile_store::save(const bssh_profile_t &profile) {
 	if (!m_open || !profile.is_valid()) return 0;
+	const store_change change(m_directory);
 	refresh();
 
 	const QList<bssh_profile_t> before_write = m_profiles;
@@ -785,6 +825,7 @@ int bssh_profile_store::save(const bssh_profile_t &profile) {
 
 bool bssh_profile_store::remove(int id) {
 	if (!m_open || id == 0) return false;
+	const store_change change(m_directory);
 	refresh();
 
 	/*
@@ -881,6 +922,8 @@ bssh_preset_t bssh_profile_store::preset(int id) const {
 }
 
 int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
+	if (!m_open) return 0;
+	const store_change change(m_directory);
 	refresh();
 	const QList<bssh_preset_t> presets_before = m_presets;
 	const QHash<int, QString> slugs_before = m_slugs;
@@ -976,6 +1019,8 @@ int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
 }
 
 bool bssh_profile_store::remove_preset(int id) {
+	if (!m_open || id == 0) return false;
+	const store_change change(m_directory);
 	refresh();
 	const QList<bssh_preset_t> presets_before = m_presets;
 	const QHash<int, QString> slugs_before = m_slugs;

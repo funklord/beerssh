@@ -1,5 +1,8 @@
 #include <QApplication>
+#include <QElapsedTimer>
+#include <QFile>
 #include <QTemporaryDir>
+#include <QThread>
 #include <QtTest>
 
 #include <signal.h>
@@ -10,13 +13,16 @@
 #include <climits>
 #include <condition_variable>
 #include <cstdio>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 
 #include "model/app_settings.h"
+#include "model/profile_store.h"
 #include "platform/headless.h"
 #include "platform/platform.h"
+#include "platform/secret_store.h"
 #include "command_line_test.h"
 #include "conn_manager_test.h"
 #include "emulator_bench.h"
@@ -245,6 +251,14 @@ struct watchdog_guard {
 
 template <typename test_t>
 static int run_test(int argc, char *argv[]) {
+	/*
+	 * BSSH_TEST_CLASSES=a,b runs those classes and no others. A sabotage
+	 * spec names what should notice, and the rest of a ten-minute suite
+	 * per edit answers nothing it asked.
+	 */
+	const QByteArray only = qgetenv("BSSH_TEST_CLASSES");
+	if (!only.isEmpty() && !only.split(',').contains(test_t::staticMetaObject.className())) return 0;
+
 	test_t instance;
 	/*
 	 * The class names itself through QMetaObject, so the budget covers
@@ -277,6 +291,60 @@ static int run_test(int argc, char *argv[]) {
 	return failed;
 }
 
+/*
+ * A second real process for the store tests: BSSH_TEST_STORE_WRITER says
+ * kind|dir|prefix|count, kind being hosts or secrets. Windows are
+ * processes (sec 8.4), and a store's guarantee across them cannot be
+ * measured from inside one -- two stores in one process take turns
+ * however they are written.
+ *
+ * Started together rather than merely started: without the wait the first
+ * writer finished before the last had got through QApplication, and the
+ * test passed by taking turns. Bounded, as everything is here.
+ */
+static int run_store_writer(const QString &spec) {
+	const QStringList parts = spec.split(QLatin1Char('|'));
+	if (parts.size() != 4) return 2;
+	const bool hosts = parts.at(0) == QStringLiteral("hosts");
+	const QString dir = parts.at(1);
+	const QString prefix = parts.at(2);
+	const int count = parts.at(3).toInt();
+
+	std::unique_ptr<bssh_profile_store> store;
+	std::unique_ptr<bssh_secret_store> secrets;
+	if (hosts) {
+		store.reset(new bssh_profile_store(dir + QStringLiteral("/test.db")));
+		if (!store->is_open()) return 3;
+	} else {
+		qputenv("XDG_DATA_HOME", dir.toUtf8());
+		secrets.reset(bssh_make_separate_file_secret_store());
+	}
+
+	QFile(dir + QStringLiteral("/ready-") + prefix).open(QIODevice::WriteOnly);
+	QElapsedTimer waited;
+	waited.start();
+	while (!QFile::exists(dir + QStringLiteral("/go"))) {
+		if (waited.elapsed() > 30000) return 5;
+		QThread::msleep(1);
+	}
+
+	if (secrets && !secrets->unlock(QStringLiteral("correct horse"))) return 6;
+
+	for (int i = 0; i < count; ++i) {
+		const QString name = QStringLiteral("%1-%2").arg(prefix).arg(i);
+		if (secrets) {
+			if (!secrets->store(name, name)) return 4;
+			continue;
+		}
+		bssh_profile_t profile;
+		profile.name = name;
+		profile.host = name + QStringLiteral(".example");
+		profile.user = QStringLiteral("user");
+		if (store->save(profile) <= 0) return 4;
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[]) {
 	/*
 	 * Point every standard location at a throwaway tree, BEFORE
@@ -302,6 +370,10 @@ int main(int argc, char *argv[]) {
 
 	bssh_drop_theme_when_offscreen();
 	QApplication app(argc, argv);
+
+	if (qEnvironmentVariableIsSet("BSSH_TEST_STORE_WRITER")) {
+		return run_store_writer(qEnvironmentVariable("BSSH_TEST_STORE_WRITER"));
+	}
 
 	/*
 	 * In front, as an app being used is: the offscreen platform never

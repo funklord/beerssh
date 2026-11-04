@@ -15,6 +15,7 @@
 #include "ui/main_window.h"
 #include "ui/password_prompt.h"
 #include "secret_store_test.h"
+#include "store_writers.h"
 #include "phone_metrics.h"
 
 /*
@@ -597,4 +598,26 @@ void secret_store_test::two_open_stores_keep_each_others_secrets() {
 	QVERIFY(reader->unlock(QStringLiteral("correct horse")));
 	QCOMPARE(reader->load(QStringLiteral("profile:1:password")), QString());
 	QCOMPARE(reader->load(QStringLiteral("profile:2:password")), QStringLiteral("two"));
+}
+
+/*
+ * Three real processes, first use included: each unlocks a store that may
+ * not exist yet and saves its own secrets (sec 8.4, sec 11). A process
+ * that made a store of its own would fail here on the passphrase's salt;
+ * one that wrote a stale map back would leave a secret missing.
+ */
+void secret_store_test::two_processes_saving_at_once_lose_no_secret() {
+	QTemporaryDir dir;
+	app_data_redirect redirect(dir);
+	const int each = 30;
+	QVERIFY(bssh_run_store_writers(QStringLiteral("secrets"), dir.path(), each));
+
+	std::unique_ptr<bssh_secret_store> reader(bssh_make_separate_file_secret_store());
+	QVERIFY(reader->unlock(QStringLiteral("correct horse")));
+	for (const QString &prefix : { QStringLiteral("a"), QStringLiteral("b"), QStringLiteral("c") }) {
+		for (int i = 0; i < each; ++i) {
+			const QString name = QStringLiteral("%1-%2").arg(prefix).arg(i);
+			QCOMPARE(reader->load(name), name);
+		}
+	}
 }

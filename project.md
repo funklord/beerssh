@@ -7895,6 +7895,20 @@ window with no name is a blank row in the task switcher.
   `a_setting_another_process_writes_is_applied` rewrites the file behind
   QSettings' back and sees the menu bar follow, and fails without the
   watch.
+  **And a re-read alone is a check and then an act, measured 2026-11-04.**
+  The tests above take turns, which two stores in one process must. Three
+  real processes adding 100 hosts each, held at a start line so that they
+  overlap, left **100 of 300**: each read the list, added its host and
+  wrote the list back. The first version of that test passed, because the
+  first writer finished before the last had got through QApplication. A
+  lock now runs from the re-read to the write (`store_change`, in
+  `<config>/.store.lock`, and beside `secrets.enc` for the file of
+  secrets, first use included), and the stamp carries the inode, since a
+  same-length row inside one clock tick left size and time as they were.
+  A peer stopped under a debugger costs five seconds and a warning, not a
+  refused save. `two_processes_saving_at_once_lose_nothing`,
+  `two_processes_saving_at_once_lose_no_secret`,
+  `tool/sabotage/store-across-processes.toml`.
 - **A pane drag was raised from inside the view's own signal emission, and
   the thing it reaches destroys that view.** `mouseMoveEvent` emits
   `pane_drag_requested`; `start_session_drag` answers it with

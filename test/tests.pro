@@ -194,6 +194,7 @@ HEADERS += \
     secret_store_test.h \
     ui_shots.h \
     profile_store_test.h \
+    store_writers.h \
     session_registry_test.h \
     tab_status_test.h \
     host_key_test.h \

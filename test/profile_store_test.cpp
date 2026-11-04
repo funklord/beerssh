@@ -9,7 +9,12 @@
 #include "platform/secret_store.h"
 #include <QHash>
 #include <QDir>
+#include <QSet>
 #include "profile_store_test.h"
+#include "store_writers.h"
+
+#include <QProcess>
+#include <QSet>
 #include <QListWidget>
 #include "ui/host_list.h"
 #include "ui/session_dialog.h"
@@ -2489,6 +2494,25 @@ void profile_store_test::a_store_that_loaded_first_does_not_erase_a_later_save()
 	for (const bssh_profile_t &profile : after.profiles()) names << profile.name;
 	names.sort();
 	QCOMPARE(names, QStringList({QStringLiteral("alpha"), QStringLiteral("gamma")}));
+}
+
+/*
+ * The two tests above take turns, as two stores in one process must. Two
+ * windows do not: this is two real processes adding hosts at the same
+ * time, and every host has to be there afterwards under an id of its own
+ * -- an id keys a secret (sec 11), so a shared one hands a password to
+ * the wrong host.
+ */
+void profile_store_test::two_processes_saving_at_once_lose_nothing() {
+	QTemporaryDir dir;
+	const int each = 100;
+	QVERIFY(bssh_run_store_writers(QStringLiteral("hosts"), dir.path(), each));
+
+	bssh_profile_store reader(dir.filePath(QStringLiteral("test.db")));
+	QSet<int> ids;
+	for (const bssh_profile_t &profile : reader.profiles()) ids.insert(profile.id);
+	QCOMPARE(reader.profiles().count(), 3 * each);
+	QCOMPARE(ids.size(), 3 * each);
 }
 
 /* And the other window shows it without making a change of its own. */

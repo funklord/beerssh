@@ -3,10 +3,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QLockFile>
 #include <QSaveFile>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QStandardPaths>
+
+#include <sys/stat.h>
 
 #include <openssl/evp.h>
 #include <openssl/rand.h>
@@ -158,6 +161,29 @@ QByteArray decrypt(const QByteArray &ciphertext, const QByteArray &key, const QB
 
 } /* namespace */
 
+/*
+ * One change at a time across every BeerSSH on this account, from the
+ * re-read to the write: reread() alone is a check and then an act, and
+ * two windows saving at once each wrote the map back without the
+ * other's secret. The host store's reason, and its measurement (sec 11).
+ * Going on without the lock after five seconds is what happened before
+ * it existed, and is better than refusing to keep a password.
+ */
+namespace {
+class store_change {
+public:
+	store_change() : m_lock(store_path() + QStringLiteral(".lock")) {
+		m_lock.setStaleLockTime(10000);
+		if (!m_lock.tryLock(5000)) {
+			qWarning("secrets: another BeerSSH holds the store, changing it anyway");
+		}
+	}
+
+private:
+	QLockFile m_lock;
+};
+}
+
 class bssh_secret_store_file : public bssh_secret_store {
 public:
 	bssh_secret_store_file() : m_unlocked(false) {}
@@ -176,6 +202,8 @@ public:
 	bool needs_passphrase() const override { return true; }
 
 	bool unlock(const QString &passphrase) override {
+		/* Two first uses at once would otherwise each make a store. */
+		const store_change change;
 		QFile file(store_path());
 
 		if (!file.exists()) {
@@ -269,6 +297,7 @@ public:
 		 * either holds the secret or it does not, and the answer has to
 		 * be the one it gave.
 		 */
+		const store_change change;
 		if (!reread()) return false;
 		const QJsonObject before = m_secrets;
 		m_secrets.insert(id, secret);
@@ -294,6 +323,7 @@ public:
 		 * successful write for any OTHER id persists the erasure that
 		 * was reported as failed.
 		 */
+		const store_change change;
 		if (!reread()) return false;
 		const QJsonObject before = m_secrets;
 		m_secrets.remove(id);
@@ -307,7 +337,17 @@ private:
 	static QString stamp_of(const QString &path) {
 		const QFileInfo info(path);
 		if (!info.isFile()) return QString();
-		return QStringLiteral("%1:%2").arg(info.size()).arg(info.lastModified().toMSecsSinceEpoch());
+
+		/*
+		 * The inode too: QSaveFile replaces the file, and one secret
+		 * swapped for another of the same length inside a clock tick
+		 * leaves the size and the time as they were.
+		 */
+		struct stat status;
+		const qulonglong inode = ::stat(QFile::encodeName(path).constData(), &status) == 0
+		                                 ? qulonglong(status.st_ino) : 0;
+		return QStringLiteral("%1:%2:%3").arg(info.size())
+		        .arg(info.lastModified().toMSecsSinceEpoch()).arg(inode);
 	}
 
 	/*

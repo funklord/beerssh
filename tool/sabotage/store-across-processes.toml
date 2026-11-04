@@ -1,0 +1,19 @@
+# Sabotages for one change at a time across processes (project.md sec 8.4,
+# sec 11): three real processes write one store at once, and every host and
+# every secret has to survive. Without the lock 200 of 300 hosts were gone.
+
+# The host store checks and then acts, with nothing between the two.
+[[sabotage]]
+name = "a host save takes no lock"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (!m_lock.tryLock(5000)) {\n"
+replace = "\t\tif (false) {\n"
+expect = "two_processes_saving_at_once_lose_nothing"
+
+# The same in the file of secrets.
+[[sabotage]]
+name = "a secret save takes no lock"
+file = "src/platform/secret_store_file.cpp"
+find = "\t\tif (!m_lock.tryLock(5000)) {\n"
+replace = "\t\tif (false) {\n"
+expect = "two_processes_saving_at_once_lose_no_secret"

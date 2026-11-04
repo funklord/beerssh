@@ -19,6 +19,7 @@ class secret_store_test : public QObject {
 	QByteArray m_data_home;
 
 private slots:
+	void two_processes_saving_at_once_lose_no_secret();
 	/* XDG_DATA_HOME is as found when the class is done; see app_data_redirect. */
 	void initTestCase();
 	void cleanupTestCase();
