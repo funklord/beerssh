@@ -168,13 +168,22 @@ bool bssh_sftp_handler::do_open(sftp_client_message msg) {
 	if (msg->attr && (msg->attr->flags & SSH_FILEXFER_ATTR_PERMISSIONS))
 		permissions = msg->attr->permissions & 07777;
 
-	const int fd = ::open(path.real.constData(), mode | O_CLOEXEC, permissions);
+	/*
+	 * Not blocking, and files only. A named pipe in the root waits in
+	 * open() for a writer that may never come, holding this connection's
+	 * thread where neither the client hanging up nor Stop can reach it:
+	 * Stop joins that thread, so the whole server stopped stopping. A
+	 * device is no file to transfer either. O_NONBLOCK means nothing to a
+	 * regular file, so what is kept behaves as it did.
+	 */
+	const int fd = ::open(path.real.constData(), mode | O_CLOEXEC | O_NONBLOCK, permissions);
 	if (fd < 0) return reply_errno(msg, errno);
 
-	struct stat st;
-	if (::fstat(fd, &st) == 0 && S_ISDIR(st.st_mode)) {
+	struct stat st = {};
+	if (::fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) {
+		const int error = S_ISDIR(st.st_mode) ? EISDIR : EACCES;
 		::close(fd);
-		return reply_errno(msg, EISDIR);
+		return reply_errno(msg, error);
 	}
 
 	open_t *open = new open_t;

@@ -161,3 +161,11 @@ file = "src/sshd/login_throttle.h"
 find = "\t\tif (m_addresses.size() < max_addresses) return;\n"
 replace = "\t\treturn;\n"
 expect = "wrong_passwords_wait_longer_and_longer"
+
+# A pipe blocks in open(), where Stop cannot reach it.
+[[sabotage]]
+name = "a named pipe is opened and waited on"
+file = "src/sshd/sftp_handler.cpp"
+find = "mode | O_CLOEXEC | O_NONBLOCK, permissions);"
+replace = "mode | O_CLOEXEC, permissions);"
+expect = "a_named_pipe_is_refused_and_holds_nothing_up"

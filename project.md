@@ -18006,6 +18006,13 @@ SFTP and nothing else, inside one directory, to the keys in one file.
   nothing, and a long password is still the answer to that.
   `wrong_passwords_wait_longer_and_longer`,
   `guessing_across_connections_stops_a_right_password_too`.
+- **Only regular files are opened, since 2026-11-05.** A named pipe in the
+  root waited in `open()` for a writer, on a connection's thread that
+  neither the client leaving nor Stop could reach, and Stop joins that
+  thread, so one `get` of a pipe stopped the server from stopping. Opened
+  with `O_NONBLOCK` and refused unless it is a regular file, which also
+  keeps a client off the devices when the root is `/`.
+  `a_named_pipe_is_refused_and_holds_nothing_up`.
 - **Formerly keys only.** `ssh_set_auth_methods(PUBLICKEY)`; no password, no
   keyboard-interactive. The authorized-keys file is OpenSSH's format and is
   **re-read at every login**, so an edit applies to the next connection.

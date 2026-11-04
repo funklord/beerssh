@@ -1,6 +1,7 @@
 #include "sshd_test.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QProcess>
 #include <QStandardPaths>
@@ -10,8 +11,10 @@
 
 #include <chrono>
 #include <ctime>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "sshd/root_path.h"
@@ -453,6 +456,49 @@ void sshd_test::guessing_across_connections_stops_a_right_password_too() {
 
 	m_server->throttle().succeeded(address);
 	QVERIFY2(client(QStringLiteral("sftp"), args, "ls\n", &output, environment) == 0, output.constData());
+}
+
+/*
+ * A pipe in the root waited in open() for a writer, on a thread that
+ * neither the client hanging up nor Stop could reach, and Stop joins it.
+ * So the proof that nothing is held is every connection ending.
+ */
+void sshd_test::a_named_pipe_is_refused_and_holds_nothing_up() {
+	if (!start_server()) QSKIP("the OpenSSH client is not installed");
+
+	QVERIFY(::mkfifo(QFile::encodeName(m_root + QStringLiteral("/pipe")).constData(), 0600) == 0);
+
+	QStringList args = client_options(m_config + QStringLiteral("/client"));
+	args << QStringLiteral("-b") << QStringLiteral("-") << QStringLiteral("-P")
+	     << QString::number(m_server->port()) << QStringLiteral("127.0.0.1");
+
+	/*
+	 * put and not get: OpenSSH's client asks first and will not download
+	 * what is not a file, so the open never came and this passed with the
+	 * guard taken out. An upload opens without asking.
+	 */
+	const QByteArray upload = "put " + QFile::encodeName(m_root + QStringLiteral("/hello.txt")) + " pipe\n";
+	QByteArray output;
+	QVERIFY(client(QStringLiteral("sftp"), args, upload, &output) != 0);
+	QVERIFY(client(QStringLiteral("sftp"), args, "ls\n", &output) == 0);
+
+	/*
+	 * Every connection over once its client has gone. A thread in open()
+	 * shows as one that never ends; a reader lets it go, whichever way
+	 * this came out, or cleanup() would hang in the same join Stop does
+	 * instead of this failing.
+	 */
+	QElapsedTimer waited;
+	waited.start();
+	while (m_server->connections() != 0 && waited.elapsed() < 5000) QTest::qWait(50);
+	const int connections = m_server->connections();
+
+	const int reader = ::open(QFile::encodeName(m_root + QStringLiteral("/pipe")).constData(),
+	                          O_RDONLY | O_NONBLOCK);
+	QTest::qWait(200);
+	if (reader >= 0) ::close(reader);
+
+	QCOMPARE(connections, 0);
 }
 
 void sshd_test::a_key_with_options_is_not_honoured_without_them() {
