@@ -54,33 +54,33 @@ expect = "scp_finishes_with_a_clean_exit"
 # button is not the only way in.
 [[sabotage]]
 name = "the window starts without storage access"
-file = "src/sshd/sshd_window.cpp"
+file = "src/sshd/sshd_keeper.cpp"
 find = "\tif (!m_platform->has_storage_access() || address.isNull()) {"
 replace = "\tif (address.isNull()) {"
 expect = "without_access_it_asks_and_does_not_start"
 
-# Losing Wi-Fi is treated as nothing changing, so the server goes on
-# listening on an address the phone no longer has.
+# Losing Wi-Fi stops a server the user switched on, which is to be reachable
+# again when the phone is back (sec 19.6).
 [[sabotage]]
-name = "losing Wi-Fi leaves the server listening"
-file = "src/sshd/sshd_window.cpp"
-find = "\tif (now == m_bound) return;"
-replace = "\tif (now == m_bound || now.isNull()) return;"
-expect = "losing_wifi_stops_and_a_new_address_restarts"
+name = "losing Wi-Fi stops the server"
+file = "src/sshd/sshd_keeper.cpp"
+find = "\tif (now.isNull()) return;\n"
+replace = ""
+expect = "losing_wifi_waits_and_a_new_address_restarts"
 
 # Android's time limit arrives and nothing stops.
 [[sabotage]]
 name = "the time limit is ignored"
-file = "src/sshd/sshd_window.cpp"
-find = "\t\tif (m_bound.isNull()) return;\n\t\tstop();"
-replace = "\t\tif (m_bound.isNull()) return;"
+file = "src/sshd/sshd_keeper.cpp"
+find = "\t\tm_held_by_system = true;\n\t\tstop();\n"
+replace = "\t\tm_held_by_system = true;\n"
 expect = "the_time_limit_stops_the_server_and_says_why"
 
 # Start no longer asks to show the notification, so on Android 13+ the
 # one sign that the phone is serving files stays hidden.
 [[sabotage]]
 name = "Start does not ask to show the notification"
-file = "src/sshd/sshd_window.cpp"
+file = "src/sshd/sshd_keeper.cpp"
 find = "\tm_platform->request_notifications();"
 replace = ""
 expect = "it_serves_the_platform_root_on_the_platform_address"
@@ -107,7 +107,7 @@ expect = "it_serves_the_platform_root_on_the_platform_address"
 # process kept its socket in LISTEN.
 [[sabotage]]
 name = "the time limit stops the server only when Qt next runs"
-file = "src/sshd/sshd_window.cpp"
+file = "src/sshd/sshd_keeper.cpp"
 find = "\tm_platform->set_stop_hook([this] { m_server.stop(); });"
 replace = "\tm_platform->set_stop_hook([] {});"
 expect = "the_time_limit_stops_the_server_and_says_why"
