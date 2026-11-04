@@ -16,6 +16,10 @@ class profile_store_test : public QObject {
 private slots:
 	void a_store_that_loaded_first_does_not_erase_a_later_save();
 	void two_processes_saving_at_once_lose_nothing();
+	void each_window_keeps_a_layout_of_its_own();
+	void the_same_hosts_do_not_pile_up_windows();
+	void remembered_windows_are_bounded();
+	void an_empty_window_and_a_handed_over_one_leave_no_layout();
 	void another_stores_save_is_seen_and_announced();
 	void deleting_a_host_takes_its_password_with_it();
 	void a_password_a_locked_store_kept_is_swept_at_the_next_unlock();

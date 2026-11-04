@@ -251,7 +251,12 @@ QString bssh_profile_store::presets_path() const {
 }
 
 QString bssh_profile_store::layout_path() const {
-	return m_directory + QStringLiteral("/layout.ini");
+	return layout_path(m_layout_number);
+}
+
+QString bssh_profile_store::layout_path(int number) const {
+	if (number == 0) return m_directory + QStringLiteral("/layout.ini");
+	return m_directory + QStringLiteral("/layout-%1.ini").arg(number);
 }
 
 void bssh_profile_store::load() {
@@ -927,7 +932,6 @@ int bssh_profile_store::save_preset(const bssh_preset_t &preset) {
 	refresh();
 	const QList<bssh_preset_t> presets_before = m_presets;
 	const QHash<int, QString> slugs_before = m_slugs;
-	if (!m_open) return 0;
 
 	/*
 	 * Cleared on entry, as remove() does, and every refusal below gives
@@ -1024,7 +1028,6 @@ bool bssh_profile_store::remove_preset(int id) {
 	refresh();
 	const QList<bssh_preset_t> presets_before = m_presets;
 	const QHash<int, QString> slugs_before = m_slugs;
-	if (!m_open || id == 0) return false;
 
 	/* Cleared on entry and given a reason; see save_preset(). */
 	m_last_error.clear();
@@ -1081,20 +1084,119 @@ int bssh_profile_store::hosts_using(int preset_id) const {
 	return count;
 }
 
+/*
+ * Not <file>.lock: that is QSettings' own lock around a write, and a
+ * window holding it for its whole life waited on itself at the first save.
+ */
+QString bssh_profile_store::layout_held_path(int number) const {
+	return layout_path(number) + QStringLiteral(".held");
+}
+
+QList<int> bssh_profile_store::free_layouts() const {
+	QList<int> found;
+	if (!m_open) return found;
+
+	for (int number = 0; number < max_window_layouts; ++number) {
+		if (m_layout_lock && number == m_layout_number) continue;
+		if (!QFile::exists(layout_path(number))) continue;
+
+		QLockFile probe(layout_held_path(number));
+		probe.setStaleLockTime(0);
+		if (probe.tryLock(0)) found.append(number);
+	}
+	return found;
+}
+
+bool bssh_profile_store::claim_layout(int number) {
+	if (!m_open || number < 0 || number >= max_window_layouts) return false;
+
+	/*
+	 * No age limit: a window holds this for as long as it is open, and a
+	 * lock file whose process has died is stale whatever its age, which
+	 * is the only staleness there is here.
+	 */
+	std::unique_ptr<QLockFile> lock(new QLockFile(layout_held_path(number)));
+	lock->setStaleLockTime(0);
+	if (!lock->tryLock(0)) return false;
+
+	m_layout_lock = std::move(lock);
+	m_layout_number = number;
+	return true;
+}
+
+void bssh_profile_store::release_layout() {
+	if (!m_layout_lock) return;
+	QFile::remove(layout_path());
+	m_layout_lock.reset();
+	m_layout_number = 0;
+}
+
+/*
+ * A window that restored nothing has no layout yet, and takes one the
+ * first time it has something to save. In order of preference:
+ *
+ * The one already saved for these same hosts. A window opened by
+ * `--load prod` every morning and closed every evening would otherwise
+ * leave a layout a day, and the next plain start would open them all.
+ *
+ * Then the first number with nothing saved under it, and failing that the
+ * oldest saved, so that what is remembered stays bounded and what falls
+ * off the end is what has been closed longest.
+ */
+bool bssh_profile_store::claim_layout_for(const QString &hosts) {
+	const QList<int> saved = free_layouts();
+
+	for (int number : saved) {
+		QSettings file(layout_path(number), QSettings::IniFormat);
+		if (file.value(QStringLiteral("layout/hosts")).toString() == hosts && claim_layout(number)) {
+			return true;
+		}
+	}
+
+	for (int number = 0; number < max_window_layouts; ++number) {
+		if (!QFile::exists(layout_path(number)) && claim_layout(number)) return true;
+	}
+
+	QList<int> oldest = saved;
+	std::sort(oldest.begin(), oldest.end(), [this](int a, int b) {
+		return QFileInfo(layout_path(a)).lastModified() < QFileInfo(layout_path(b)).lastModified();
+	});
+	for (int number : oldest) {
+		if (claim_layout(number)) return true;
+	}
+	return false;
+}
+
 bool bssh_profile_store::save_layout(const layout_state_t &layout) {
 	if (!m_open) return false;
 
-	QSettings file(layout_path(), QSettings::IniFormat);
-	file.clear();
-
 	QStringList ids;
 	for (int id : layout.profile_ids) ids.append(QString::number(id));
+
+	if (m_window_layouts) {
+		/*
+		 * A window with no host in it is not worth a window at the next
+		 * start: what it held has gone, so what was saved for it goes.
+		 */
+		if (layout.is_empty()) {
+			if (m_layout_lock) QFile::remove(layout_path());
+			return true;
+		}
+		if (!m_layout_lock && !claim_layout_for(ids.join(QLatin1Char(',')))) {
+			m_last_error = QStringLiteral("every remembered window is open");
+			return false;
+		}
+	}
+
+	QSettings file(layout_path(), QSettings::IniFormat);
+	file.clear();
 
 	file.beginGroup(QStringLiteral("layout"));
 	file.setValue(QStringLiteral("hosts"), ids.join(QLatin1Char(',')));
 	file.setValue(QStringLiteral("panes"), layout.pane_count);
 	file.setValue(QStringLiteral("active"), layout.active_index);
 	if (!layout.shape.isEmpty()) file.setValue(QStringLiteral("shape"), layout.shape);
+	if (!layout.geometry.isNull()) file.setValue(QStringLiteral("geometry"), layout.geometry);
 	file.endGroup();
 	file.sync();
 
@@ -1119,6 +1221,7 @@ bssh_profile_store::layout_state_t bssh_profile_store::layout() const {
 	const int panes = file.value(QStringLiteral("panes"), 1).toInt();
 	const int active = file.value(QStringLiteral("active"), 0).toInt();
 	state.shape = file.value(QStringLiteral("shape")).toString();
+	state.geometry = file.value(QStringLiteral("geometry")).toRect();
 	file.endGroup();
 
 	/*

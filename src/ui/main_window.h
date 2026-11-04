@@ -333,6 +333,12 @@ public:
 	 */
 	void restore_layout();
 
+	/* Every saved window: this one here, the rest in programs of their own. */
+	void restore_windows();
+
+	/* Whether this window has anything to show. */
+	bool has_sessions() const { return !m_shown.isEmpty(); }
+
 	/*
 	 * How big this window has to be for a terminal of cols x rows
 	 * (sec 8.6's --geometry).
@@ -380,6 +386,7 @@ protected:
 	 * half-screen column collapses the splits to tabs and remembers them.
 	 */
 	void resizeEvent(QResizeEvent *event) override;
+	void moveEvent(QMoveEvent *event) override;
 
 	/*
 	 * Where the screen watch is armed (sec 9.5). The window handle does
@@ -572,6 +579,9 @@ private:
 	void paste_into_current(const QString &text);
 
 	void save_layout();
+	void note_arrangement_changed();
+	QTimer *m_layout_timer = nullptr;
+	bool m_closing = false;
 
 	/*
 	 * How many of the sessions THIS window shows are live. Closing a

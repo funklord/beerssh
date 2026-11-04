@@ -1844,8 +1844,14 @@ void bssh_main_window::place_status_line() {
 	if (m_status_row->indexOf(m_status_label) < 0) m_status_row->insertWidget(0, m_status_label, 1);
 }
 
+void bssh_main_window::moveEvent(QMoveEvent *event) {
+	QWidget::moveEvent(event);
+	note_arrangement_changed();
+}
+
 void bssh_main_window::resizeEvent(QResizeEvent *event) {
 	QWidget::resizeEvent(event);
+	note_arrangement_changed();
 
 	place_status_line();
 
@@ -4448,7 +4454,8 @@ void bssh_main_window::open_grid_window(int cols, int rows, int profile_id) {
 	/* In a process of its own where windows are, as New Window's are. */
 	if (bssh_handoff_point::instance()) {
 		QStringList arguments = {
-			QStringLiteral("--grid"), QStringLiteral("%1x%2").arg(cols).arg(rows)
+			QStringLiteral("--grid"), QStringLiteral("%1x%2").arg(cols).arg(rows),
+			QStringLiteral("--no-restore")
 		};
 		if (profile_id) arguments << QStringLiteral("--load") << profile.name;
 		QString why;
@@ -4487,7 +4494,8 @@ void bssh_main_window::open_another_session(bool in_a_window) {
 	if (bssh_handoff_point::instance() && m_terminal_view) {
 		const QStringList arguments = {
 			QStringLiteral("--geometry"),
-			QStringLiteral("%1x%2").arg(m_terminal_view->cols()).arg(m_terminal_view->rows())
+			QStringLiteral("%1x%2").arg(m_terminal_view->cols()).arg(m_terminal_view->rows()),
+			QStringLiteral("--no-restore")
 		};
 		QString why;
 		if (start_this_program(arguments, &why)) return;
@@ -4859,6 +4867,7 @@ void bssh_main_window::changeEvent(QEvent *event) {
 }
 
 void bssh_main_window::refresh_tab_bar() {
+	note_arrangement_changed();
 	if (!m_panes || !m_layout) return;
 
 	/*
@@ -5216,6 +5225,25 @@ void bssh_main_window::on_registry_changed() {
 	update_status();
 }
 
+/*
+ * Saved as it changes, a moment after the last change, and not only when
+ * a window closes: nothing is closed at a logout or a shutdown, where the
+ * session manager ends the process, nor in a crash -- and those are the
+ * starts worth bringing windows back for. Measured with real windows:
+ * killed, they left whatever they had been restored from. Desktop only,
+ * where a layout is a window's; a phone saves when it is left.
+ */
+void bssh_main_window::note_arrangement_changed() {
+	if (m_closing || !bssh_handoff_point::instance()) return;
+	if (!m_layout_timer) {
+		m_layout_timer = new QTimer(this);
+		m_layout_timer->setSingleShot(true);
+		m_layout_timer->setInterval(1000);
+		connect(m_layout_timer, &QTimer::timeout, this, [this] { save_layout(); });
+	}
+	m_layout_timer->start();
+}
+
 void bssh_main_window::save_layout() {
 	/*
 	 * Profile ids, not session ids: sessions do not survive a restart,
@@ -5252,12 +5280,51 @@ void bssh_main_window::save_layout() {
 		});
 	}
 
+	/* Only where windows are placed by the user rather than by a phone. */
+	if (bssh_handoff_point::instance()) layout.geometry = QRect(pos(), size());
+
 	m_profile_store->save_layout(layout);
+}
+
+/*
+ * Every window that was open, each a process of its own again (sec 8.4):
+ * this one takes the first saved layout and starts the program for each
+ * of the others, which claims its own and shows it. A window still open
+ * in another BeerSSH holds its layout and is not in the list, so a second
+ * start opens what is closed and duplicates nothing. The fan-out is
+ * bounded by max_window_layouts, because the store keeps no more.
+ */
+void bssh_main_window::restore_windows() {
+	const QList<int> saved = m_profile_store->free_layouts();
+
+	int mine = -1;
+	for (int number : saved) {
+		if (!m_profile_store->claim_layout(number)) continue;
+		mine = number;
+		break;
+	}
+	if (mine < 0) return;
+	restore_layout();
+
+	for (int number : saved) {
+		if (number == mine) continue;
+		QString why;
+		if (!start_this_program({ QStringLiteral("--restore-window"), QString::number(number) }, &why)) {
+			qWarning("window: %s, so window %d stays saved", qPrintable(why), number);
+		}
+	}
 }
 
 void bssh_main_window::restore_layout() {
 	const bssh_profile_store::layout_state_t layout = m_profile_store->layout();
 	if (layout.is_empty()) return;
+
+	if (layout.geometry.isValid()) {
+		resize(layout.geometry.size());
+
+		/* Not onto a monitor that has since been unplugged. */
+		if (QGuiApplication::screenAt(layout.geometry.center())) move(layout.geometry.topLeft());
+	}
 
 	/*
 	 * Every remembered host comes back as a tab, and **not one of them
@@ -7189,7 +7256,13 @@ void bssh_main_window::closeEvent(QCloseEvent *event) {
 		return;
 	}
 
+	/*
+	 * Last, and final: the sessions closing below are the window going,
+	 * not the arrangement changing, and would save an empty one over it.
+	 */
 	save_layout();
+	m_closing = true;
+	if (m_layout_timer) m_layout_timer->stop();
 
 	/*
 	 * ONLY what this window shows. This iterated the registry, so

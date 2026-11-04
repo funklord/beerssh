@@ -2515,6 +2515,106 @@ void profile_store_test::two_processes_saving_at_once_lose_nothing() {
 	QCOMPARE(ids.size(), 3 * each);
 }
 
+/*
+ * Every desktop window is a process, and one layout.ini held whichever of
+ * them closed last (sec 8.4). Two processes here are two stores, each
+ * saving what it shows; both have to be there for the next start.
+ */
+void profile_store_test::each_window_keeps_a_layout_of_its_own() {
+	QTemporaryDir dir;
+	bssh_profile_store::layout_state_t one;
+	one.profile_ids = { 1 };
+	one.geometry = QRect(10, 20, 300, 200);
+	bssh_profile_store::layout_state_t two;
+	two.profile_ids = { 2 };
+
+	{
+		bssh_profile_store first(dir.filePath(QStringLiteral("test.db")));
+		bssh_profile_store second(dir.filePath(QStringLiteral("test.db")));
+		first.use_window_layouts();
+		second.use_window_layouts();
+		first.save(make_profile(QStringLiteral("alpha"), QStringLiteral("alpha.example")));
+		second.save(make_profile(QStringLiteral("beta"), QStringLiteral("beta.example")));
+		QVERIFY(first.save_layout(one));
+		QVERIFY(second.save_layout(two));
+
+		/* Open windows hold theirs: a start finds neither to bring back. */
+		bssh_profile_store starting(dir.filePath(QStringLiteral("test.db")));
+		starting.use_window_layouts();
+		QCOMPARE(starting.free_layouts(), QList<int>());
+		QVERIFY(!starting.claim_layout(0));
+	}
+
+	bssh_profile_store starting(dir.filePath(QStringLiteral("test.db")));
+	starting.use_window_layouts();
+	QCOMPARE(starting.free_layouts(), QList<int>({ 0, 1 }));
+
+	QVERIFY(starting.claim_layout(1));
+	QCOMPARE(starting.layout().profile_ids, QList<int>({ 2 }));
+	QVERIFY(starting.claim_layout(0));
+	QCOMPARE(starting.layout().profile_ids, QList<int>({ 1 }));
+	QCOMPARE(starting.layout().geometry, QRect(10, 20, 300, 200));
+}
+
+/* One host opened and closed daily is one layout, not one a day. */
+void profile_store_test::the_same_hosts_do_not_pile_up_windows() {
+	QTemporaryDir dir;
+	bssh_profile_store::layout_state_t layout;
+	{
+		bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+		layout.profile_ids = { store.save(make_profile(QStringLiteral("alpha"), QStringLiteral("alpha.example"))) };
+	}
+
+	for (int run = 0; run < 3; ++run) {
+		bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+		store.use_window_layouts();
+		QVERIFY(store.save_layout(layout));
+	}
+
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+	store.use_window_layouts();
+	QCOMPARE(store.free_layouts(), QList<int>({ 0 }));
+}
+
+/* What a start opens is bounded, however many windows were closed. */
+void profile_store_test::remembered_windows_are_bounded() {
+	QTemporaryDir dir;
+	for (int run = 1; run <= bssh_profile_store::max_window_layouts + 4; ++run) {
+		bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+		store.use_window_layouts();
+		bssh_profile_store::layout_state_t layout;
+		layout.profile_ids = { run };
+		QVERIFY(store.save_layout(layout));
+	}
+
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+	store.use_window_layouts();
+	QCOMPARE(store.free_layouts().size(), int(bssh_profile_store::max_window_layouts));
+}
+
+/*
+ * A window that ends with no host in it leaves nothing, and neither does
+ * one whose sessions went to a new program, or both would be back beside
+ * what replaced them.
+ */
+void profile_store_test::an_empty_window_and_a_handed_over_one_leave_no_layout() {
+	QTemporaryDir dir;
+	bssh_profile_store store(dir.filePath(QStringLiteral("test.db")));
+	store.use_window_layouts();
+	bssh_profile_store::layout_state_t layout;
+	layout.profile_ids = { 1 };
+
+	QVERIFY(store.save_layout(layout));
+	QVERIFY(QFile::exists(dir.filePath(QStringLiteral("layout.ini"))));
+	QVERIFY(store.save_layout(bssh_profile_store::layout_state_t()));
+	QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("layout.ini"))));
+
+	QVERIFY(store.save_layout(layout));
+	store.release_layout();
+	QVERIFY(!QFile::exists(dir.filePath(QStringLiteral("layout.ini"))));
+	QVERIFY(store.claim_layout(0));
+}
+
 /* And the other window shows it without making a change of its own. */
 void profile_store_test::another_stores_save_is_seen_and_announced() {
 	QTemporaryDir dir;

@@ -126,6 +126,14 @@ struct bssh_command_line_t {
 	/* CI's headless smoke test (sec 12.4). */
 	bool self_test;
 
+	/*
+	 * Which saved window this process is, from another BeerSSH bringing
+	 * back every window; -1 when it is not (sec 8.4). --no-restore: this
+	 * window is a new one, so last time's windows stay where they are.
+	 */
+	int restore_window;
+	bool no_restore;
+
 	/* A store screenshot's view (ui/store_view.h); validated by main. */
 	QString store_view;
 
@@ -164,6 +172,7 @@ struct bssh_command_line_t {
 
 	bssh_command_line_t()
 	    : cols(0), rows(0), grid_cols(0), grid_rows(0), x(0), y(0), has_position(false), hold(false),
+	      restore_window(-1), no_restore(false),
 	      self_test(false), help(false), version(false), man(false),
 	      completion(false) {}
 

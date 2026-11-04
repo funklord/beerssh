@@ -27,6 +27,7 @@
 #include "model/app_settings.h"
 #include "model/handoff_point.h"
 #include "model/profile.h"
+#include "model/profile_store.h"
 #include "model/session.h"
 #include "model/session_registry.h"
 #include "ui/main_window.h"
@@ -562,6 +563,13 @@ void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own(
 	QVERIFY(!started.last().contains(QStringLiteral("--adopt-from")));
 
 	/*
+	 * And not last time's hosts: main() restores on any plain start, so
+	 * New Window came up with whatever window had closed last instead of
+	 * a shell, until it said otherwise.
+	 */
+	QVERIFY(started.last().contains(QStringLiteral("--no-restore")));
+
+	/*
 	 * New Window Grid: asked how many, and a program of its own opening
 	 * that many (the holder, 2026-11-02). Three across, two down, of a
 	 * local shell, so nothing names a host.
@@ -583,10 +591,76 @@ void handoff_test::a_torn_out_tab_and_a_new_window_start_processes_of_their_own(
 	new_grid->trigger();
 	QVERIFY2(answered, "no grid dialog came up");
 	QCOMPARE(started.size(), 3);
-	QCOMPARE(started.last(), QStringList({ QStringLiteral("--grid"), QStringLiteral("3x2") }));
+	const QStringList grid = { QStringLiteral("--grid"), QStringLiteral("3x2"),
+	                           QStringLiteral("--no-restore") };
+	QCOMPARE(started.last(), grid);
 
 	bssh_main_window::set_process_starter(nullptr);
 	for (bssh_session *session : sessions) registry->close(session);
+}
+
+/*
+ * A start brings back every window, each a process again (sec 8.4): this
+ * one takes the first saved layout and starts the program for the others,
+ * which is what the holder's windows being processes costs layout.ini. A
+ * window still open elsewhere holds its layout and is left alone.
+ */
+void handoff_test::a_start_brings_back_every_window_not_open_elsewhere() {
+	QList<QStringList> started;
+	bssh_main_window::set_process_starter([&started](const QString &, const QStringList &arguments) {
+		started.append(arguments);
+		return true;
+	});
+
+	bssh_profile_store *store = bssh_profile_store::shared();
+	bssh_profile_t host;
+	host.name = QStringLiteral("alpha");
+	host.host = QStringLiteral("alpha.example");
+	host.user = QStringLiteral("nabbe");
+	const int id = store->save(host);
+	QVERIFY(id > 0);
+
+	bssh_profile_store::layout_state_t layout;
+	layout.profile_ids = { id };
+	layout.geometry = QRect(40, 30, 700, 500);
+	const QString path = store->directory() + QStringLiteral("/test.db");
+
+	/* Saved by windows of two other programs, one of them still open. */
+	{
+		bssh_profile_store closed_one(path);
+		bssh_profile_store closed_two(path);
+		closed_one.use_window_layouts();
+		closed_two.use_window_layouts();
+		QVERIFY(closed_one.claim_layout(0));
+		QVERIFY(closed_two.claim_layout(1));
+		QVERIFY(closed_one.save_layout(layout));
+		QVERIFY(closed_two.save_layout(layout));
+	}
+	bssh_profile_store still_open(path);
+	still_open.use_window_layouts();
+	QVERIFY(still_open.claim_layout(2));
+	QVERIFY(still_open.save_layout(layout));
+
+	{
+		bssh_main_window window;
+		window.restore_windows();
+		QVERIFY2(window.has_sessions(), "this window did not take the first layout");
+		QCOMPARE(window.size(), QSize(700, 500));
+		const QStringList expected = { QStringLiteral("--restore-window"), QStringLiteral("1") };
+		QCOMPARE(started.size(), 1);
+		QCOMPARE(started.first(), expected);
+		for (bssh_session *session : window.registry()->sessions()) {
+			window.registry()->close(session);
+		}
+	}
+
+	/* What this test wrote is the suite's shared store's, so it goes. */
+	store->release_layout();
+	still_open.release_layout();
+	QVERIFY(store->claim_layout(1));
+	store->release_layout();
+	store->remove(id);
+	bssh_main_window::set_process_starter(nullptr);
 }
 
 void handoff_test::a_torn_out_tab_arrives_in_a_process_of_its_own() {

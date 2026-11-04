@@ -3,8 +3,12 @@
 
 #include <QHash>
 #include <QList>
+#include <QLockFile>
 #include <QObject>
+#include <QRect>
 #include <QString>
+
+#include <memory>
 
 #include "model/preset.h"
 #include "model/profile.h"
@@ -19,7 +23,8 @@
  *   hosts.ini     [host-3]   name/host/user/port/preset, plus any
  *                            per-field overrides of the preset
  *   presets.ini   [servers]  the preset fields, section named by slug
- *   layout.ini    [layout]   which hosts were open, and how
+ *   layout.ini    [layout]   which hosts were open, and how; a desktop
+ *                            window beyond the first has layout-N.ini
  *
  * This replaced a SQLite database. The data is tens of rows with no query
  * that is not a full scan and no concurrent writer, so what the database
@@ -116,6 +121,13 @@ public:
 		 */
 		QString shape;
 
+		/*
+		 * Where the window was, in pixels, so that several windows come
+		 * back as they were rather than in a pile. Null where nothing
+		 * places windows: a phone, or a layout saved before this.
+		 */
+		QRect geometry;
+
 		layout_state_t() : pane_count(1), active_index(0) {}
 		bool is_empty() const { return profile_ids.isEmpty(); }
 	};
@@ -146,6 +158,30 @@ public:
 	/* Ids that no longer exist are dropped -- a profile can be deleted
 	 * between one run and the next. */
 	layout_state_t layout() const;
+
+	/*
+	 * One layout per window, where every window is a process (sec 8.4).
+	 * Without this there is one layout.ini, which is the whole of it on
+	 * a phone: one process, one arrangement.
+	 *
+	 * With it a process holds one numbered layout under a lock, from
+	 * claim_layout() or from its first save_layout(), until it ends. The
+	 * lock is what tells a window that is open from one that has closed,
+	 * and it goes with the process however that ends.
+	 */
+	void use_window_layouts() { m_window_layouts = true; }
+
+	/* The saved layouts no running window holds, oldest number first. */
+	QList<int> free_layouts() const;
+
+	/* False when another window holds it. layout() then reads this one. */
+	bool claim_layout(int number);
+
+	/* Forget this process's layout: its sessions went to a new program. */
+	void release_layout();
+
+	/* How many windows can be remembered; the start's fan-out too. */
+	static const int max_window_layouts = 16;
 
 	/*
 	 * A name nothing else in the store is already using, for imports
@@ -197,6 +233,9 @@ private:
 	QString hosts_path() const;
 	QString presets_path() const;
 	QString layout_path() const;
+	QString layout_path(int number) const;
+	QString layout_held_path(int number) const;
+	bool claim_layout_for(const QString &hosts);
 
 	/*
 	 * Presets are addressed by slug in the files and by id in memory. The
@@ -217,6 +256,9 @@ private:
 	QString m_hosts_stamp;     /* size and mtime as last read or written; see refresh() */
 	QString m_presets_stamp;
 	QFileSystemWatcher *m_watcher = nullptr;
+	bool m_window_layouts = false;
+	int m_layout_number = 0;
+	std::unique_ptr<QLockFile> m_layout_lock;
 
 	/*
 	 * The next host id to hand out, and it only ever GOES UP.

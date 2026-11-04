@@ -43,6 +43,8 @@
 #                        runs the real job on every push
 #   make check-startup -- start the packaged binary as a user would, on
 #                        Xvfb, and see it come up
+#   make check-windows -- a start brings every saved window back, and New
+#                        Window is a new shell; real programs on Xvfb
 #   make check-x11-drag -- a pane dropped on another BeerSSH is refused on
 #                        X11 (needs Xvfb, xdotool; sec 8.4)
 #   make sabotage     -- break the code on purpose and see each named test
@@ -1077,6 +1079,11 @@ check-startup: $(TARGET)
 check-x11-drag: $(TARGET)
 	./tool/check-x11-drag.sh
 
+# sec 8.4's windows across processes: a start brings every saved window back,
+# and New Window is a new shell. Needs what check-x11-drag does.
+check-windows: $(TARGET)
+	./tool/check-windows.sh
+
 # sec 5.3's dead-peer detection against a link whose packets vanish.
 # Needs docker and NET_ADMIN -- a closed socket is not a dropped link, and
 # only iptables can make packets disappear rather than be refused. Slow by
@@ -1810,7 +1817,7 @@ distclean: veryclean
 help:
 	@sed -n '/^# TARGETS/,/^#$$/p' $(firstword $(MAKEFILE_LIST)) | sed 's/^# \{0,1\}//'
 
-.PHONY: deb-clean all doc run test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
+.PHONY: deb-clean all doc run test libssh-source bench style sabotage check-ci check-ssh check-handoff check-keepalive check-windows fonts fonts-list check-fonts android-fonts terminfo android-terminfo check-build-tree uninstall \
         deb \
         android android-check android-aab android-run install clean veryclean \
         distclean help check style-tool style-source style-docs hooks version-check

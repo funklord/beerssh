@@ -8372,6 +8372,63 @@ would be started without starting it;
 checks that it took one session of two, went on reading it, and asked
 nobody to quit. `tool/sabotage/window-processes.toml`, four edits.
 
+**A start brings back every window -- [BUILT 2026-11-04; decided by the
+session, the holder to overrule].** The question had been left for the
+holder with the guess "yes, one layout per window". It was taken because
+§8.2 says an arrangement must not be lost, and because reading the start
+path found it was not one question: every window being a process had
+broken three things at once.
+
+- **Only the last window closed was remembered**, since all of them wrote
+  `layout.ini`.
+- **New Window was not a new window.** It starts the program with
+  `--geometry`, and a plain start restores, so New Window and New Window
+  Grid opened whatever had closed last instead of a shell. They say
+  `--no-restore` now.
+- **Nothing was saved at a logout, a shutdown or a crash**, because a
+  layout was written only in `closeEvent` and nothing handles SIGTERM. So
+  the start most worth restoring was the one with the stalest file. It is
+  saved a second after the arrangement changes now, on the desktop.
+
+Each window holds a numbered layout -- `layout.ini`, then `layout-1.ini`
+upward -- under a `QLockFile`, `<layout>.held`, for as long as it is open.
+**The lock is what tells an open window from a closed one**, and it goes
+with the process however that ends. A plain start takes the first free
+layout and starts `beerssh --restore-window N` for the rest; a window
+already open elsewhere is simply not free, so a second start duplicates
+nothing. Sizes and positions come back too, except a position on a monitor
+that has gone. A window with no host in it leaves no layout. A process
+whose sessions went to a new program releases its layout, or it would
+return beside them.
+
+**Two bounds, because the input is a directory of files.** Sixteen windows
+at most, which is also the start's fan-out: past that the oldest closed
+goes. And a window with the same hosts as a saved layout reuses it, or
+`--load prod` every morning would leave a layout a day for the next plain
+start to open.
+
+**`<layout>.lock` was the first name, and a window then waited on itself at
+its first save**: that is QSettings' own lock around the write. Found
+because the test hung, in `QSettings::sync()`.
+
+**What this does not do:** a window closed by hand while another stays open
+comes back at the next start. Telling "closed on purpose" from "closed on
+the way out" has no signal behind it, and losing the arrangement is the
+worse error; closing its tabs first dismisses it. **Rejected:** a browser's
+rule, where only the windows open at the end return -- with no quit
+gesture across processes, closing three windows in turn would bring back
+one, which is what this replaces. Android is one process and keeps one
+`layout.ini`, unchanged.
+
+`make check-windows` runs real programs on Xvfb: two saved windows return
+as two processes, New Window is neither, ending all three by signal leaves
+two layouts, and a second start returns them. In the suite:
+`each_window_keeps_a_layout_of_its_own`,
+`the_same_hosts_do_not_pile_up_windows`, `remembered_windows_are_bounded`,
+`an_empty_window_and_a_handed_over_one_leave_no_layout`,
+`a_start_brings_back_every_window_not_open_elsewhere`;
+`tool/sabotage/window-layouts.toml`, six edits.
+
 **New Window Grid -- [BUILT 2026-11-02, the holder].** "An open grid option
 where a window comes up allowing to choose X x Y amount of terminals to open
 in a new window." File and the terminal menu's Session carry **New Window
@@ -12184,7 +12241,7 @@ followed a retired one follows none.
   |---|---|
   | `~/.ssh/beerssh_hosts` | `[host-3]` — name, host, user, port, key file, jump host, which preset it follows, and any per-field overrides as ordinary keys |
   | `presets.ini` | `[servers]` — the preset's fields, section named by slug |
-  | `layout.ini` | `[layout]` — which hosts were open, and how |
+  | `layout.ini`, `layout-N.ini` | `[layout]` — which hosts were open, and how, one per desktop window (§8.4) |
   | `app.ini` | this device's own: `[appearance]` theme, scrollbar, status line, window-title format, contrast floor; `[input]` key row, terminal menu, Caps-as-Ctrl, focus-follows-mouse; `[chords]` one line per rebindable chord (§6.1); `[security]` hide-from-screenshots |
 
   **Everything in `app.ini` is written as WORDS**, not as the enum's number:
@@ -17468,12 +17525,9 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   Home; reboot with "Serve again after the phone restarts" ticked must
   serve with no tap; and see what One UI does with the battery button
   (§5.4). BeerSSH's background reconnect (§5.3) wants the same phone.
-  **Open, the holder's:** whether a desktop start should restore every
-  window -- `layout.ini` holds one window's arrangement and every
-  window is a process (§8.4), so the last one closed wins; the guess is
-  one layout file per window. **Unmeasured:** the cross-process fixes of
-  2026-11-03 (hosts, secrets, settings) are tested in one process; a run
-  with two real BeerSSH windows has not been done.
+  (The two questions that stood here -- whether a start restores every
+  window, and the cross-process fixes never having met two real
+  processes -- are settled in §8.4 and §7's store entry, 2026-11-04.)
 
 **Decided, and kept here so they are not reopened:**
 

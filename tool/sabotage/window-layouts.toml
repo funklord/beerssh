@@ -1,0 +1,51 @@
+# Sabotages for a layout per window (project.md sec 8.4): every window comes
+# back at a start, a window open elsewhere does not, and New Window is a new
+# shell rather than last time's hosts.
+
+# Only the first saved window comes back, as when layout.ini was all there was.
+[[sabotage]]
+name = "a start brings back one window"
+file = "src/ui/main_window.cpp"
+find = "\t\tif (number == mine) continue;\n"
+replace = "\t\tbreak;\n"
+expect = "a_start_brings_back_every_window_not_open_elsewhere"
+
+# Every process writes the one file again.
+[[sabotage]]
+name = "windows share one layout"
+file = "src/model/profile_store.cpp"
+find = "\tif (number == 0) return m_directory + QStringLiteral(\"/layout.ini\");\n"
+replace = "\treturn m_directory + QStringLiteral(\"/layout.ini\");\n"
+expect = "each_window_keeps_a_layout_of_its_own"
+
+# A window that is open no longer holds what it was restored from.
+[[sabotage]]
+name = "a claimed layout is not held"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (probe.tryLock(0)) found.append(number);\n"
+replace = "\t\tfound.append(number);\n"
+expect = "each_window_keeps_a_layout_of_its_own"
+
+# A daily window leaves a layout a day.
+[[sabotage]]
+name = "the same hosts take a new layout"
+file = "src/model/profile_store.cpp"
+find = "\t\tif (file.value(QStringLiteral(\"layout/hosts\")).toString() == hosts && claim_layout(number)) {\n"
+replace = "\t\tif (false) {\n"
+expect = "the_same_hosts_do_not_pile_up_windows"
+
+# An empty window stays saved, and comes back with nothing in it.
+[[sabotage]]
+name = "an empty window keeps its layout"
+file = "src/model/profile_store.cpp"
+find = "\t\t\tif (m_layout_lock) QFile::remove(layout_path());\n"
+replace = ""
+expect = "an_empty_window_and_a_handed_over_one_leave_no_layout"
+
+# New Window restores like any plain start.
+[[sabotage]]
+name = "New Window restores"
+file = "src/ui/main_window.cpp"
+find = "\t\t\tQStringLiteral(\"%1x%2\").arg(m_terminal_view->cols()).arg(m_terminal_view->rows()),\n\t\t\tQStringLiteral(\"--no-restore\")\n"
+replace = "\t\t\tQStringLiteral(\"%1x%2\").arg(m_terminal_view->cols()).arg(m_terminal_view->rows())\n"
+expect = "a_torn_out_tab_and_a_new_window_start_processes_of_their_own"

@@ -157,6 +157,13 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 			"program running: how a tab torn out of a window becomes a "
 			"window in a process of its own, so that ending one window's "
 			"process ends no other window." },
+		{ "restore-window", "", "number",
+			"Be saved window number: what a start passes to the program it "
+			"starts for each further window it brings back. Exits at once "
+			"if another BeerSSH already has that window." },
+		{ "no-restore", "", "",
+			"Bring back no saved window. What New Window passes, because a "
+			"new window is a new shell and not last time's hosts." },
 		{ "man", "", "",
 			"Write this program's manual page to stdout and exit. It is "
 			"generated from the same table these options are read from, so "
@@ -345,7 +352,8 @@ QString bssh_command_line_man_page(const QString &version) {
 	        "Host presets: the settings a saved session inherits.\n"
 	        ".TP\n"
 	        "\\fB~/.config/beerssh/layout.ini\\fR\n"
-	        "Which hosts were open last time, and how they were arranged.\n"
+	        "Which hosts were open last time, and how they were arranged. "
+	        "Each window has its own: layout-2.ini and so on beside it.\n"
 	        ".SH ENVIRONMENT\n");
 
 	out += roff("Qt's own options are not accepted on the command line, "
@@ -577,6 +585,15 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 	line.store_view = parser.value(QStringLiteral("store-view"));
 	line.adopt_from = parser.value(QStringLiteral("adopt-from"));
 	line.adopt_session = parser.value(QStringLiteral("adopt-session"));
+	line.no_restore = parser.isSet(QStringLiteral("no-restore"));
+	if (parser.isSet(QStringLiteral("restore-window"))) {
+		bool ok = false;
+		line.restore_window = parser.value(QStringLiteral("restore-window")).toInt(&ok);
+		if (!ok || line.restore_window < 0) {
+			line.error = QStringLiteral("--restore-window wants a window number");
+			return line;
+		}
+	}
 	line.hold = parser.isSet(QStringLiteral("hold"));
 
 	if (parser.isSet(QStringLiteral("term-features"))) {

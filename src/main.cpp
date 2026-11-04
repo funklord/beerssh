@@ -376,9 +376,38 @@ int main(int argc, char *argv[]) {
 	 * --geometry be measured against the terminal that will actually be
 	 * on screen rather than against a guess.
 	 */
-	if (!line.self_test && !launch.is_valid() && line.store_view.isEmpty() &&
-	    line.adopt_from.isEmpty()) {
+#ifndef Q_OS_ANDROID
+	/*
+	 * A layout per window, because a window is a process here (sec 8.4)
+	 * -- not for a store screenshot, whose hosts are made up, nor for the
+	 * smoke test, which owns no window worth remembering.
+	 */
+	if (!line.self_test && line.store_view.isEmpty()) {
+		bssh_profile_store::shared()->use_window_layouts();
+	}
+
+	/*
+	 * Sent by another start to be one saved window. Somebody else being
+	 * that window already, or the window having nothing left in it, is
+	 * nothing to show and no shell to open.
+	 */
+	if (line.restore_window >= 0) {
+		if (!bssh_profile_store::shared()->claim_layout(line.restore_window)) return 0;
 		window.restore_layout();
+		if (!window.has_sessions()) {
+			bssh_profile_store::shared()->release_layout();
+			return 0;
+		}
+	}
+#endif
+
+	if (!line.self_test && !launch.is_valid() && line.store_view.isEmpty() &&
+	    line.adopt_from.isEmpty() && line.restore_window < 0) {
+#ifdef Q_OS_ANDROID
+		window.restore_layout();
+#else
+		if (!line.no_restore) window.restore_windows();
+#endif
 		window.open_default_session();
 	}
 
@@ -488,7 +517,15 @@ int main(int argc, char *argv[]) {
 		 * time -- keeps this one running, rather than ending with the
 		 * program. */
 		QObject::connect(handoff, &bssh_handoff_point::quit_requested, &app, [registry] {
-			if (registry->live_count() == 0) QCoreApplication::quit();
+			if (registry->live_count() != 0) return;
+
+			/*
+			 * Its sessions live on in the program that asked, which keeps
+			 * a layout of its own, so this window's would come back beside
+			 * them at the next start.
+			 */
+			bssh_profile_store::shared()->release_layout();
+			QCoreApplication::quit();
 		});
 
 		/*
