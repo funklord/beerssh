@@ -8,6 +8,7 @@
 #include <QTcpSocket>
 #include <QTest>
 
+#include <chrono>
 #include <ctime>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -366,6 +367,92 @@ void sshd_test::a_password_logs_in_once_it_is_set() {
 	const int rc = client(QStringLiteral("sftp"), args, "ls\n", &output, environment);
 	QVERIFY2(rc == 0, output.constData());
 	QVERIFY2(output.contains("hello.txt"), output.constData());
+}
+
+/*
+ * Twelve guesses a second, for as long as the server is up, is what a
+ * connection's own limits left (sec 19). Six are free, then each wrong one
+ * doubles the wait to an hour; an address is its own, and a success or a
+ * quiet day forgives.
+ */
+void sshd_test::wrong_passwords_wait_longer_and_longer() {
+	using std::chrono::hours;
+	using std::chrono::seconds;
+	bssh_login_throttle throttle;
+	const QString guesser = QStringLiteral("192.0.2.1");
+	auto now = bssh_login_throttle::clock::now();
+
+	for (int i = 0; i < bssh_login_throttle::free_failures; ++i) {
+		QVERIFY(throttle.allowed(guesser, now));
+		throttle.failed(guesser, now);
+	}
+	QVERIFY2(throttle.allowed(guesser, now), "a person mistyping was made to wait");
+
+	throttle.failed(guesser, now);
+	QVERIFY(!throttle.allowed(guesser, now));
+	QVERIFY(!throttle.allowed(guesser, now + seconds(1)));
+	QVERIFY(throttle.allowed(guesser, now + seconds(2)));
+	QVERIFY2(throttle.allowed(QStringLiteral("192.0.2.2"), now), "one address made another wait");
+
+	for (int i = 0; i < 40; ++i) throttle.failed(guesser, now);
+	QVERIFY(!throttle.allowed(guesser, now + hours(1) - seconds(1)));
+	QVERIFY2(throttle.allowed(guesser, now + hours(1)), "the wait went past its hour");
+
+	throttle.succeeded(guesser);
+	QVERIFY(throttle.allowed(guesser, now));
+
+	/* The table holds a bounded number of addresses, however many knock. */
+	for (int i = 0; i < bssh_login_throttle::max_addresses + 50; ++i) {
+		throttle.failed(QString::number(i), now);
+	}
+	QVERIFY(throttle.addresses() <= bssh_login_throttle::max_addresses);
+}
+
+/* Over the wire: the wait refuses the right password as well, and a key never waits. */
+void sshd_test::guessing_across_connections_stops_a_right_password_too() {
+	if (!start_server()) QSKIP("the OpenSSH client is not installed");
+
+	const QString askpass = m_config + QStringLiteral("/askpass");
+	QVERIFY(write_file(askpass, "#!/bin/sh\necho 'correct horse'\n"));
+	QVERIFY(QFile::setPermissions(askpass, QFileDevice::ReadOwner | QFileDevice::WriteOwner
+	                                       | QFileDevice::ExeOwner));
+	const QStringList environment = {QStringLiteral("SSH_ASKPASS=") + askpass,
+	                                  QStringLiteral("SSH_ASKPASS_REQUIRE=force"),
+	                                  QStringLiteral("DISPLAY=:0")};
+	const QStringList args = {
+		QStringLiteral("-o"), QStringLiteral("PubkeyAuthentication=no"),
+		QStringLiteral("-o"), QStringLiteral("PreferredAuthentications=password"),
+		QStringLiteral("-o"), QStringLiteral("NumberOfPasswordPrompts=1"),
+		QStringLiteral("-o"), QStringLiteral("IdentityAgent=none"),
+		QStringLiteral("-o"), QStringLiteral("StrictHostKeyChecking=no"),
+		QStringLiteral("-o"), QStringLiteral("UserKnownHostsFile=/dev/null"),
+		QStringLiteral("-o"), QStringLiteral("LogLevel=ERROR"),
+		QStringLiteral("-F"), QStringLiteral("/dev/null"),
+		QStringLiteral("-P"), QString::number(m_server->port()), QStringLiteral("anyone@127.0.0.1")};
+
+	QString error;
+	QVERIFY(bssh_sshd::set_password(m_config + QStringLiteral("/password"),
+	                                QStringLiteral("correct horse"), &error));
+
+	/* As seven earlier connections would have left it, without their seven seconds. */
+	const QString address = QStringLiteral("127.0.0.1");
+	const auto now = bssh_login_throttle::clock::now() + std::chrono::minutes(1);
+	for (int i = 0; i <= bssh_login_throttle::free_failures; ++i) m_server->throttle().failed(address, now);
+
+	QByteArray output;
+	QVERIFY2(client(QStringLiteral("sftp"), args, "ls\n", &output, environment) != 0,
+	         "the right password got through a wait");
+	QVERIFY2(output.contains("Permission denied"), output.constData());
+
+	/* The key beside it logs in as if nothing had happened. */
+	QStringList keyed = client_options(m_config + QStringLiteral("/client"));
+	keyed << QStringLiteral("-b") << QStringLiteral("-") << QStringLiteral("-P")
+	      << QString::number(m_server->port()) << QStringLiteral("127.0.0.1");
+	const int rc = client(QStringLiteral("sftp"), keyed, "ls\n", &output);
+	QVERIFY2(rc == 0, output.constData());
+
+	m_server->throttle().succeeded(address);
+	QVERIFY2(client(QStringLiteral("sftp"), args, "ls\n", &output, environment) == 0, output.constData());
 }
 
 void sshd_test::a_key_with_options_is_not_honoured_without_them() {

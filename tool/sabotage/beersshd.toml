@@ -136,3 +136,28 @@ file = "src/sshd/sshd.cpp"
 find = "\t        + ':' + salt.toHex() + ':' + hash.toHex() + '\\n';"
 replace = "\t        + ':' + salt.toHex() + ':' + hash.toHex() + ':' + password.toUtf8() + '\\n';"
 expect = "a_password_is_stored_as_a_salted_hash"
+
+# Wrong passwords counted per connection only: twelve guesses a second, for
+# as long as the server is up.
+[[sabotage]]
+name = "a wait does not stop a password"
+file = "src/sshd/sshd.cpp"
+find = "\tif (!throttle.allowed(connection->peer, now)) {\n"
+replace = "\tif (false) {\n"
+expect = "guessing_across_connections_stops_a_right_password_too"
+
+# The wait stops doubling.
+[[sabotage]]
+name = "wrong passwords never wait longer"
+file = "src/sshd/login_throttle.h"
+find = "\t\tconst std::chrono::seconds wait(1LL << std::min(over, 12));\n"
+replace = "\t\tconst std::chrono::seconds wait(2);\n"
+expect = "wrong_passwords_wait_longer_and_longer"
+
+# Any number of addresses is remembered.
+[[sabotage]]
+name = "the table of addresses grows without bound"
+file = "src/sshd/login_throttle.h"
+find = "\t\tif (m_addresses.size() < max_addresses) return;\n"
+replace = "\t\treturn;\n"
+expect = "wrong_passwords_wait_longer_and_longer"

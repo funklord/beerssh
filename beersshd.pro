@@ -33,6 +33,7 @@ SOURCES += \
 HEADERS += \
     src/sshd/root_path.h \
     src/sshd/sftp_handler.h \
+    src/sshd/login_throttle.h \
     src/sshd/sshd.h
 
 # The one platform conditional. The desktop program is a command line

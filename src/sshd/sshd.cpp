@@ -49,9 +49,9 @@ const int AUTH_ATTEMPT_LIMIT = 20;
 
 /*
  * Passwords, unlike keys, can be guessed: three tries a connection, a
- * second's pause after each wrong one, and the four-connection cap above
- * all of it -- about twelve guesses a second at the very most, and every
- * one of them in the log.
+ * second's pause after each wrong one, and every one of them in the log.
+ * That bounds a connection and nothing else, so bssh_login_throttle counts
+ * them across connections.
  */
 const int PASSWORD_ATTEMPT_LIMIT = 3;
 const auto PASSWORD_FAILURE_PAUSE = std::chrono::seconds(1);
@@ -650,6 +650,16 @@ int on_auth_password(ssh_session, const char *user, const char *password, void *
 	if (connection->password_attempts >= PASSWORD_ATTEMPT_LIMIT) return SSH_AUTH_DENIED;
 	++connection->password_attempts;
 
+	/* Not even hashed: a guess during the wait learns nothing, right or wrong. */
+	bssh_login_throttle &throttle = connection->owner->throttle();
+	const auto now = bssh_login_throttle::clock::now();
+	if (!throttle.allowed(connection->peer, now)) {
+		emit connection->owner->logged(
+		        QStringLiteral("%1: too many wrong passwords, not tried").arg(connection->peer));
+		std::this_thread::sleep_for(PASSWORD_FAILURE_PAUSE);
+		return SSH_AUTH_DENIED;
+	}
+
 	/*
 	 * Re-read now, like the keys: a password changed or removed on the
 	 * phone applies to the next attempt, not the next start.
@@ -658,9 +668,11 @@ int on_auth_password(ssh_session, const char *user, const char *password, void *
 	                                             QByteArray(password))) {
 		connection->authenticated = true;
 		connection->user = QString::fromUtf8(user);
+		throttle.succeeded(connection->peer);
 		return SSH_AUTH_SUCCESS;
 	}
 
+	throttle.failed(connection->peer, now);
 	emit connection->owner->logged(QStringLiteral("%1: wrong password").arg(connection->peer));
 	std::this_thread::sleep_for(PASSWORD_FAILURE_PAUSE);
 	return SSH_AUTH_DENIED;

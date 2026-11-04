@@ -11,6 +11,8 @@
 #include <mutex>
 #include <thread>
 
+#include "sshd/login_throttle.h"
+
 struct bssh_sshd_config_t {
 	/* The directory served as "/". */
 	QByteArray root;
@@ -80,6 +82,9 @@ public:
 	int port() const { return m_port; }
 	int connections() const { return m_live.load(); }
 
+	/* Wrong passwords across connections, for the login callback. */
+	bssh_login_throttle &throttle() { return m_throttle; }
+
 	/* "SHA256:..." as ssh(1) prints it, for the user to check on first connect. */
 	QString host_key_fingerprint() const { return m_fingerprint; }
 
@@ -129,6 +134,7 @@ private:
 	QString m_fingerprint;
 
 	int m_wake[2] = {-1, -1};
+	bssh_login_throttle m_throttle;
 	std::atomic<bool> m_stopping{false};
 	std::thread m_accepting;
 	std::atomic<bool> m_running{false};

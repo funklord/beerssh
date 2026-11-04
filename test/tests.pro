@@ -219,6 +219,7 @@ HEADERS += \
     ../src/ssh/ssh_session_libssh.h \
     ../src/sshd/root_path.h \
     ../src/sshd/sftp_handler.h \
+    ../src/sshd/login_throttle.h \
     ../src/sshd/sshd.h \
     ../src/sshd/sshd_platform.h \
     ../src/sshd/sshd_control.h \

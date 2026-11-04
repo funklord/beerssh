@@ -17991,6 +17991,21 @@ SFTP and nothing else, inside one directory, to the keys in one file.
   turns on ssh's BatchMode and refuses every password prompt: the first
   version's refusals passed because no password was ever sent. The attempt
   limit itself has no test. No keyboard-interactive.
+  **Guesses are counted across connections too, since 2026-11-05.** Three
+  tries a connection, a second's pause each and four connections at once
+  is twelve guesses a second for as long as the server is up -- and this
+  one is meant to be up all the time, so a six-digit PIN lasted a day.
+  `bssh_login_throttle` counts wrong passwords per address: six are free,
+  which is somebody mistyping twice over, then each doubles the wait up to
+  an hour, about twenty-four guesses a day. **A right password during a
+  wait is refused like a wrong one**, or the wait would answer whether a
+  guess was right. A key is not asked about, so nobody hammering from the
+  owner's own network locks the owner's key out; a day's quiet or a
+  success forgives; the table holds 1024 addresses; a restart forgives,
+  which needs the phone in hand. Spread over many addresses it slows
+  nothing, and a long password is still the answer to that.
+  `wrong_passwords_wait_longer_and_longer`,
+  `guessing_across_connections_stops_a_right_password_too`.
 - **Formerly keys only.** `ssh_set_auth_methods(PUBLICKEY)`; no password, no
   keyboard-interactive. The authorized-keys file is OpenSSH's format and is
   **re-read at every login**, so an edit applies to the next connection.

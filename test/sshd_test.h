@@ -32,6 +32,8 @@ private slots:
 	void only_a_listed_key_logs_in();
 	void a_password_is_stored_as_a_salted_hash();
 	void a_password_logs_in_once_it_is_set();
+	void wrong_passwords_wait_longer_and_longer();
+	void guessing_across_connections_stops_a_right_password_too();
 	void a_key_with_options_is_not_honoured_without_them();
 	void sftp_is_all_it_serves();
 	void scp_finishes_with_a_clean_exit();
