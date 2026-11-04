@@ -6278,11 +6278,18 @@ takes the same 49x40 to 120x2 and back and keeps the line, so the
 emulator is not what lost it; Android's shell, told of two size changes,
 did not redraw its prompt. Recorded as the shell's, cause unconfirmed.
 
-**Steps 2 and 3 are still unverified on a device** — panes converting to tabs
-on rotate-to-portrait, and the remembered intent restoring the split on
-rotate-back. Both are unit-tested against `bssh_layout_manager` and neither has
-been driven on hardware. The attempt was abandoned mid-test rather than
-completed, so nothing here should be read as evidence either way.
+**Steps 2 and 3 seen on an emulator, for a stacked pair, 2026-11-05.** API 36
+at 1080x2400, `--es store_view split`, keyboard up: two panes stacked upright;
+turned sideways, where a stack has no height, one pane, the other session kept
+as a tab; turned back, both panes again in their places, no crash. **The
+side-by-side pair is still undriven.** It is unit-tested against
+`bssh_layout_manager`; two tries with the store view changed by hand to
+`EDGE_RIGHT` opened on the host list rather than on panes, the second under a
+System UI ANR on a loaded machine, and why was not established. A
+phone held upright keeps a stack rather than going to tabs, which is the
+column arrangement `max_panes()` allows and this section's "tabs" predates.
+**Seen in passing and not chased:** a store view opened already sideways, with
+the keyboard down, gave the first pane about 60 px.
 
 **The 1886 ms frame that same run logged is not this section's**, and that is
 measured rather than assumed. The device reported `Skipped 92 frames` and a
