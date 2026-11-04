@@ -17444,6 +17444,23 @@ on a schedule**, so the re-derivation catches a backlog rather than a drift.
   one of the four that overwrites no recorded decision: it is additive, and
   `--term-features=?` had already set the shape. See §8.6.
 
+- **Where the 2026-11-03/04 session stopped (folded at 97 per cent).**
+  Waiting on the phone: the Fold has not been on adb (`lsusb` showed no
+  Samsung device on 2026-11-04). On it, run beersshd's arm64 build
+  (`make android-sshd ANDROID_ABI=arm64-v8a`, built): `dumpsys activity
+  services` should say `types=0x10`; with the dataSync limit at 60 s
+  (`device_config set_sync_disabled_for_tests until_reboot` FIRST, then
+  `put`, then start the service -- §19.6) it must keep serving after
+  Home; reboot with "Serve again after the phone restarts" ticked must
+  serve with no tap; and see what One UI does with the battery button
+  (§5.4). BeerSSH's background reconnect (§5.3) wants the same phone.
+  **Open, the holder's:** whether a desktop start should restore every
+  window -- `layout.ini` holds one window's arrangement and every
+  window is a process (§8.4), so the last one closed wins; the guess is
+  one layout file per window. **Unmeasured:** the cross-process fixes of
+  2026-11-03 (hosts, secrets, settings) are tested in one process; a run
+  with two real BeerSSH windows has not been done.
+
 **Decided, and kept here so they are not reopened:**
 
 | Decision | Where |
