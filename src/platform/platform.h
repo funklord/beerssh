@@ -516,6 +516,13 @@ signals:
 
 	/* is_application_active() may have a new answer. */
 	void application_active_changed();
+
+	/*
+	 * The system handed a running app something to open: what
+	 * launch_document() would have said had it not been running yet.
+	 * Android only -- a desktop start is always a new process.
+	 */
+	void document_opened(const QString &document);
 };
 
 

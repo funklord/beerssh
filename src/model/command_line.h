@@ -223,6 +223,20 @@ struct bssh_option_t {
 const QList<bssh_option_t> &bssh_command_line_options();
 
 /*
+ * An ssh:// link as the [user@]host[:port] the rest of the program reads,
+ * or empty when it is not one (sec 8.6): what a browser, a desktop's URL
+ * handler or an Android intent hands over.
+ *
+ * Nothing in a link gets past what a typed destination could say. A
+ * password in it is dropped rather than used, since a link is not a place
+ * anybody should keep one, and so is the fingerprint the URI draft allows
+ * after the user: the host key is checked as for any other host. A host
+ * opening with a dash, which would read as an option, is one QUrl refuses;
+ * a test holds it to that, a link being somebody else's text.
+ */
+QString bssh_target_from_ssh_url(const QString &link);
+
+/*
  * Parses QCoreApplication::arguments() -- argv[0] included, and skipped.
  *
  * Never exits, never prints: --help and --version come back as fields so

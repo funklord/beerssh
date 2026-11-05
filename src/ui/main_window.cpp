@@ -5428,6 +5428,20 @@ void bssh_main_window::import_launch_document() {
 
 	const QString document = platform->launch_document();
 	if (document.isEmpty()) return;
+	open_document(document);
+}
+
+void bssh_main_window::open_document(const QString &document) {
+	if (document.startsWith(QStringLiteral("ssh:"), Qt::CaseInsensitive)) {
+		const QString target = bssh_target_from_ssh_url(document);
+		if (target.isEmpty()) {
+			QMessageBox::warning(this, QStringLiteral("Not a host"),
+			                      QStringLiteral("BeerSSH could not read a host from that link."));
+			return;
+		}
+		open_profile(bssh_profile_t::from_target(target));
+		return;
+	}
 
 	bool ok = false;
 	QString why;

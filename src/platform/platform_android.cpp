@@ -11,6 +11,7 @@
 #include <QCoreApplication>
 #include <QJniEnvironment>
 #include <QJniObject>
+#include <QtCore/private/qjnihelpers_p.h>
 #include <QHash>
 #include <QMutex>
 #include <QMutexLocker>
@@ -238,6 +239,7 @@ public:
 		/* Qt has no TLS here; see BsshHttp.java. */
 		bssh_install_android_range_source();
 		if (qApp) qApp->installEventFilter(this);
+		QtAndroidPrivate::registerNewIntentListener(new new_intent_listener(this));
 	}
 
 	QString name() const override {
@@ -585,21 +587,7 @@ public:
 		                                name.object<jstring>()).toString();
 	}
 
-	QString launch_document() const override {
-		/*
-		 * The URI the activity was started with, straight out of the
-		 * launch intent. Qt's file engine opens a content:// URI as
-		 * happily as a path, so what comes back here can be handed to
-		 * QFile unchanged and never has to be turned into a filename --
-		 * which is fortunate, because a content URI does not have one.
-		 */
-		QJniObject activity = QNativeInterface::QAndroidApplication::context();
-		if (!activity.isValid()) return QString();
-
-		QJniObject intent = activity.callObjectMethod(
-		        "getIntent", "()Landroid/content/Intent;");
-		if (!intent.isValid()) return QString();
-
+	static QString document_of_intent(const QJniObject &intent) {
 		QJniObject data = intent.callObjectMethod("getData", "()Landroid/net/Uri;");
 
 		/*
@@ -617,6 +605,43 @@ public:
 		if (!data.isValid()) return QString();
 
 		return data.callObjectMethod("toString", "()Ljava/lang/String;").toString();
+	}
+
+	/*
+	 * singleTop, so a link or a file opened while the app is up comes
+	 * here rather than to a new start, and getIntent() goes on naming
+	 * the old one. Called on Android's main thread, which is why it only
+	 * posts: everything it reaches lives on Qt's.
+	 */
+	struct new_intent_listener : QtAndroidPrivate::NewIntentListener {
+		explicit new_intent_listener(bssh_platform *platform) : platform(platform) {}
+		bool handleNewIntent(JNIEnv *, jobject intent) override {
+			const QString document = document_of_intent(QJniObject(intent));
+			if (document.isEmpty()) return false;
+			QMetaObject::invokeMethod(platform, [platform = platform, document] {
+				emit platform->document_opened(document);
+			}, Qt::QueuedConnection);
+			return true;
+		}
+		bssh_platform *platform;
+	};
+
+	QString launch_document() const override {
+		/*
+		 * The URI the activity was started with, straight out of the
+		 * launch intent. Qt's file engine opens a content:// URI as
+		 * happily as a path, so what comes back here can be handed to
+		 * QFile unchanged and never has to be turned into a filename --
+		 * which is fortunate, because a content URI does not have one.
+		 */
+		QJniObject activity = QNativeInterface::QAndroidApplication::context();
+		if (!activity.isValid()) return QString();
+
+		QJniObject intent = activity.callObjectMethod(
+		        "getIntent", "()Landroid/content/Intent;");
+		if (!intent.isValid()) return QString();
+
+		return document_of_intent(intent);
 	}
 
 	/*

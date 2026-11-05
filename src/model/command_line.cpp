@@ -1,5 +1,7 @@
 #include "model/command_line.h"
 
+#include <QUrl>
+
 #include "term/term_features.h"
 
 #include "model/document_path.h"
@@ -181,7 +183,7 @@ const QList<bssh_option_t> &bssh_command_line_options() {
 
 QString bssh_command_line_usage() {
 	QString text = QStringLiteral(
-	        "Usage: beerssh [options] [[user@]host[:port] | preset.ini]\n"
+	        "Usage: beerssh [options] [[user@]host[:port] | ssh://link | preset.ini]\n"
 	        "\n"
 	        "An SSH terminal, and a terminal. With no arguments it opens a local\n"
 	        "shell on a desktop and its host list on a phone.\n"
@@ -211,6 +213,7 @@ QString bssh_command_line_usage() {
 	        "Examples:\n"
 	        "  beerssh                       a local shell\n"
 	        "  beerssh user@host:2222        a shell on that host\n"
+	        "  beerssh ssh://user@host:2222  the same, from a link\n"
 	        "  beerssh -e htop               a local shell running htop\n"
 	        "  beerssh user@host -e htop     htop over there, as `ssh -t` runs it\n"
 	        "  beerssh --workdir /srv -T Logs -e tail -f app.log\n"
@@ -519,6 +522,20 @@ QString bssh_command_line_completion() {
 	return out;
 }
 
+QString bssh_target_from_ssh_url(const QString &link) {
+	const QUrl url(link, QUrl::StrictMode);
+	if (!url.isValid() || url.scheme().compare(QLatin1String("ssh"), Qt::CaseInsensitive) != 0) return QString();
+
+	const QString host = url.host();
+	if (host.isEmpty()) return QString();
+
+	QString target = url.userName().section(QLatin1Char(';'), 0, 0);
+	if (!target.isEmpty()) target += QLatin1Char('@');
+	target += host.contains(QLatin1Char(':')) ? QLatin1Char('[') + host + QLatin1Char(']') : host;
+	if (url.port() > 0) target += QLatin1Char(':') + QString::number(url.port());
+	return target;
+}
+
 bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 	bssh_command_line_t line;
 
@@ -737,6 +754,16 @@ bssh_command_line_t bssh_parse_command_line(const QStringList &arguments) {
 			return line;
 		}
 		line.target = argument;
+
+		/* What a desktop's URL handler passes (sec 8.6). */
+		if (argument.startsWith(QStringLiteral("ssh:"), Qt::CaseInsensitive)) {
+			line.target = bssh_target_from_ssh_url(argument);
+			if (line.target.isEmpty()) {
+				line.error = QStringLiteral("\"%1\" is not an ssh:// link with a host in it")
+				                     .arg(argument);
+				return line;
+			}
+		}
 	}
 
 	if (!line.target.isEmpty() && !line.saved_session.isEmpty()) {

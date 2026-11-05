@@ -157,6 +157,18 @@
 			</intent-filter>
 
 			<!--
+				An ssh:// link (sec 8.6), from a browser or anything
+				else that opens one. Read by import_launch_document and,
+				with the app already up, by the new-intent listener.
+			-->
+			<intent-filter>
+				<action android:name="android.intent.action.VIEW"/>
+				<category android:name="android.intent.category.DEFAULT"/>
+				<category android:name="android.intent.category.BROWSABLE"/>
+				<data android:scheme="ssh"/>
+			</intent-filter>
+
+			<!--
 				Sharing a preset to BeerSSH, which is what a file manager
 				offers when a document has no obvious owner.
 			-->

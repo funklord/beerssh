@@ -10126,7 +10126,27 @@ ignored it would be one people have to write a wrapper script around.
 | `--self-test` | ours | §12.4's headless smoke test. |
 | `-h/--help`, `-v/--version` | everybody | |
 | `[user@]host[:port]` | ssh | The destination. Was already accepted; now parsed in one place (`bssh_profile_t::from_target`, beside the `target()` that writes one). |
+| `ssh://[user@]host[:port]` | RFC-draft link | The same destination from a link: what a browser or the desktop's URL handler passes. |
 | `preset.ini` | §10.5 | A preset to import — what a file manager passes to a registered handler. |
+
+**`ssh://` links, 2026-11-05.** The desktop entry claims
+`x-scheme-handler/ssh` and takes `%u`, the manifest has a BROWSABLE filter for
+the scheme, and `bssh_target_from_ssh_url` turns a link into the destination
+syntax above. **A link says no more than a typed destination could:** a
+password in it is dropped, so is the draft's `;fingerprint=`, the host key is
+checked as for any host, and a host opening with a dash is refused (by QUrl,
+which a test holds to it) because a link is somebody else's text. Rejected: a confirmation before connecting. An
+unknown host already stops at the host-key prompt, before any authentication,
+so a second question would only be asked about the known ones.
+
+**On Android the same intent reaches a running app differently.** The
+activity is singleTop, so a link or a preset opened while BeerSSH is up never
+reached `import_launch_document`, which reads the launch intent once. A preset
+goes the same way (read from the code; only the link was run: cold and warm on
+an API 36 emulator, the warm one arriving as a second tab). Qt has no
+public hook, so `platform_android` registers a
+`QtAndroidPrivate::NewIntentListener` (`core-private`, as beersshd already
+links) and `document_opened` carries it to `open_document`.
 
 **One parser, and there were two.** `main()` had a hand-rolled loop that took
 `--self-test` and the first bare argument as a destination, while

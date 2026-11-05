@@ -34,6 +34,8 @@ LIBS += -lz
 # QtDBus is desktop-only: the XDG portal is where Linux keeps the
 # light/dark preference, and Qt does not always read it for us (sec 6.2).
 !android: QT += dbus
+# The new-intent listener: Qt has no public way to hear one (sec 8.6).
+android: QT += core-private
 CONFIG += c++17
 CONFIG -= app_bundle
 

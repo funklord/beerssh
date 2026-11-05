@@ -282,6 +282,7 @@ public:
 	 * happened the first time this ran from the constructor.
 	 */
 	void import_launch_document();
+	void open_document(const QString &document);
 
 	/*
 	 * Opens what this device starts with: a local shell on desktop, and

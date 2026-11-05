@@ -505,6 +505,30 @@ void command_line_test::the_completion_offers_the_options_the_parser_takes() {
 	}
 }
 
+void command_line_test::an_ssh_link_reads_as_a_destination() {
+	/* What a browser or a desktop's URL handler passes (sec 8.6). */
+	const auto parsed = [](const char *link) {
+		return bssh_parse_command_line({QStringLiteral("beerssh"), QString::fromLatin1(link)});
+	};
+	QCOMPARE(parsed("ssh://ada@box.example:2200/").target, QStringLiteral("ada@box.example:2200"));
+	QCOMPARE(parsed("SSH://box.example").target, QStringLiteral("box.example"));
+
+	/* An address with colons has to survive from_target. */
+	const bssh_profile_t address = bssh_profile_t::from_target(parsed("ssh://ada@[2001:db8::1]:2222").target);
+	QCOMPARE(address.host, QStringLiteral("2001:db8::1"));
+	QCOMPARE(address.port, quint16(2222));
+	QCOMPARE(address.user, QStringLiteral("ada"));
+
+	/* A link carries no password and no fingerprint into the program. */
+	QCOMPARE(parsed("ssh://ada:secret@box.example").target, QStringLiteral("ada@box.example"));
+	QCOMPARE(parsed("ssh://ada;fingerprint=ssh-rsa-00@box.example").target, QStringLiteral("ada@box.example"));
+
+	/* Somebody else's text: QUrl refuses a host that would read as an option. */
+	QVERIFY(!parsed("ssh://-oProxyCommand").error.isEmpty());
+	QVERIFY(parsed("ssh://-oProxyCommand").target.isEmpty());
+	QVERIFY(!parsed("ssh://").error.isEmpty());
+}
+
 void command_line_test::a_target_with_colons_is_a_host_not_a_port() {
 	/*
 	 * from_target split on the LAST colon, so every IPv6 literal was

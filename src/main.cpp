@@ -465,6 +465,9 @@ int main(int argc, char *argv[]) {
 	 * under --self-test, which has nobody to dismiss it.
 	 */
 	window.import_launch_document();
+	if (!line.self_test && platform) {
+		QObject::connect(platform, &bssh_platform::document_opened, &window, &bssh_main_window::open_document);
+	}
 
 	/*
 	 * Kept scrollback is written when a session closes, and also at the

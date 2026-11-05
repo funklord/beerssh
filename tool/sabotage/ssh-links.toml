@@ -1,0 +1,26 @@
+# Sabotages for ssh:// links (project.md sec 8.6): a link says no more than a
+# typed destination could.
+
+# The link's text reaches the connection whole.
+[[sabotage]]
+name = "a link is taken as a hostname"
+file = "src/model/command_line.cpp"
+find = "\t\t\tline.target = bssh_target_from_ssh_url(argument);\n"
+replace = "\t\t\tline.target = argument;\n"
+expect = "an_ssh_link_reads_as_a_destination"
+
+# An address loses its brackets, so from_target finds no port.
+[[sabotage]]
+name = "an address is not bracketed"
+file = "src/model/command_line.cpp"
+find = "\ttarget += host.contains(QLatin1Char(':')) ? QLatin1Char('[') + host + QLatin1Char(']') : host;\n"
+replace = "\ttarget += host;\n"
+expect = "an_ssh_link_reads_as_a_destination"
+
+# The fingerprint stays in the user name.
+[[sabotage]]
+name = "the fingerprint stays in the user"
+file = "src/model/command_line.cpp"
+find = "\tQString target = url.userName().section(QLatin1Char(';'), 0, 0);\n"
+replace = "\tQString target = url.userName();\n"
+expect = "an_ssh_link_reads_as_a_destination"
