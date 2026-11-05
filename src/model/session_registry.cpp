@@ -149,7 +149,6 @@ void bssh_session_registry::attach(bssh_session *session) {
 	 * currently displaying still keeps them correct.
 	 */
 	connect(session, &bssh_session::title_changed, this, &bssh_session_registry::changed);
-	connect(session, &bssh_session::state_changed, this, &bssh_session_registry::changed);
 
 	/*
 	 * Every session gets its own reconnection machine (sec 5.3), so a
@@ -161,6 +160,17 @@ void bssh_session_registry::attach(bssh_session *session) {
 	m_managers.insert(session, manager);
 	connect(manager, &bssh_conn_manager::reconnecting_changed,
 	         this, &bssh_session_registry::changed);
+
+	/*
+	 * AFTER the manager, whose constructor connects to the same signal:
+	 * slots run in the order they were connected, and a window told of a
+	 * drop before the manager has decided to retry sees nothing connected
+	 * and nothing coming. On a phone that stopped the foreground service,
+	 * Android refused the restart from the background, and the process
+	 * was cached with its network cut -- a session that could never come
+	 * back while "1 session connected" stayed on the screen.
+	 */
+	connect(session, &bssh_session::state_changed, this, &bssh_session_registry::changed);
 
 	connect(bssh_platform::instance(), &bssh_platform::network_changed,
 	         manager, &bssh_conn_manager::note_network_changed);

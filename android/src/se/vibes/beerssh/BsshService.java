@@ -58,15 +58,27 @@ public class BsshService extends Service {
 	 * and no lifecycle knowledge -- it says "keep running" and this
 	 * translates that into Android's terms.
 	 */
-	public static void start(Context context, String status) {
+	public static boolean start(Context context, String status) {
 		s_status = status;
 
 		Intent intent = new Intent(context, BsshService.class);
-		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-			context.startForegroundService(intent);
-		} else {
-			context.startService(intent);
+		try {
+			if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+				context.startForegroundService(intent);
+			} else {
+				context.startService(intent);
+			}
+		} catch (IllegalStateException | SecurityException refused) {
+			/*
+			 * Android 12 and later refuse this from the background
+			 * (ForegroundServiceStartNotAllowedException is one of
+			 * these). Said to the caller, which tries again when the app
+			 * comes to the front: thrown, it ended in Qt's JNI wrapper
+			 * with the app believing the service was running.
+			 */
+			return false;
 		}
+		return true;
 	}
 
 	public static void stop(Context context) {

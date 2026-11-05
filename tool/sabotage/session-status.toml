@@ -10,10 +10,18 @@ find = "if (session->state() == bssh_ssh_session::CONNECTED) ++connected;"
 replace = "if (session->is_live()) ++connected;"
 expect = "only_a_connected_session_counts_as_connected"
 
-# A drop reaches the registry before the manager has decided to retry, so
-# without this the count stays at what it was when nothing was coming.
+# Giving up or being told to stop moves the count with no state change.
 [[sabotage]]
 name = "the manager keeps its decision to itself"
 file = "src/model/conn_manager.cpp"
 find = "	emit reconnecting_changed();"
+expect = "only_a_connected_session_counts_as_connected"
+
+# The window told of a drop before the manager has decided: nothing connected
+# and nothing coming, and on a phone the foreground service stopped for good.
+[[sabotage]]
+name = "a drop is announced before the manager has decided"
+file = "src/model/session_registry.cpp"
+find = "\tbssh_conn_manager *manager = new bssh_conn_manager(session, this);\n"
+replace = "\tconnect(session, &bssh_session::state_changed, this, &bssh_session_registry::changed);\n\tbssh_conn_manager *manager = new bssh_conn_manager(session, this);\n"
 expect = "only_a_connected_session_counts_as_connected"

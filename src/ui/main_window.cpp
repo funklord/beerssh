@@ -760,6 +760,15 @@ bssh_main_window::bssh_main_window(const bssh_profile_t &launch, QWidget *parent
 	         this, &bssh_main_window::on_registry_changed);
 
 	/*
+	 * Android refuses to start the service from the background, and the
+	 * front is where it can be asked again.
+	 */
+	if (bssh_platform *platform = bssh_platform::instance()) {
+		connect(platform, &bssh_platform::application_active_changed,
+		         this, &bssh_main_window::update_residency);
+	}
+
+	/*
 	 * A host row changing has to reach the sessions already open on it.
 	 * The store announces every write through one signal, and this is the
 	 * only listener it has ever had -- before this, an edit made while

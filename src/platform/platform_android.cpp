@@ -276,10 +276,13 @@ public:
 
 		if (keep_alive) {
 			const QJniObject status = QJniObject::fromString(m_status);
-			QJniObject::callStaticMethod<void>(
+			const jboolean started = QJniObject::callStaticMethod<jboolean>(
 			        BSSH_SERVICE_CLASS, "start",
-			        "(Landroid/content/Context;Ljava/lang/String;)V",
+			        "(Landroid/content/Context;Ljava/lang/String;)Z",
 			        context.object(), status.object<jstring>());
+
+			/* Refused in the background: left unset, the next call retries. */
+			if (!started) return;
 		} else {
 			QJniObject::callStaticMethod<void>(
 			        BSSH_SERVICE_CLASS, "stop", "(Landroid/content/Context;)V",

@@ -66,9 +66,9 @@ signals:
 	void gave_up();
 
 	/*
-	 * is_reconnecting() moved. A drop reaches the registry as a state
-	 * change BEFORE this class has decided anything, so a count taken
-	 * then is out of date until this says so.
+	 * is_reconnecting() moved. Giving up, or cancelling because the
+	 * session ended, changes what the registry counts with no state
+	 * change to say so.
 	 */
 	void reconnecting_changed();
 

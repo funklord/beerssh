@@ -55,6 +55,15 @@ bssh_platform::bssh_platform(QObject *parent) : QObject(parent) {
 			         this, [this](QNetworkInformation::Reachability) {
 				emit network_changed();
 			});
+			/*
+			 * Wi-Fi back on a phone with mobile data never changes
+			 * reachability: it was online throughout. The Fold sat out
+			 * its backoff against a LAN host with the LAN already back.
+			 */
+			connect(info, &QNetworkInformation::transportMediumChanged,
+			         this, [this](QNetworkInformation::TransportMedium) {
+				emit network_changed();
+			});
 		}
 	}
 }

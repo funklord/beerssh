@@ -191,22 +191,25 @@ void session_registry_test::only_a_connected_session_counts_as_connected() {
 
 	/*
 	 * Dropped, and waiting out the backoff: no longer live, still on its
-	 * way back. Read from the last `changed`, since that is when a window
-	 * asks: the drop reaches the registry before the manager has decided
-	 * to retry, so the count at the state change alone says nothing is
-	 * coming.
+	 * way back. And at EVERY `changed`, because that is when a window
+	 * asks, and one answer of nothing connected and nothing coming stops
+	 * the foreground service -- which Android will not let a backgrounded
+	 * app start again.
 	 */
-	int connecting_when_told = -1;
-	connect(&registry, &bssh_session_registry::changed, this,
-	        [&] { connecting_when_told = registry.connecting_count(); });
+	QList<int> held_when_told;
+	connect(&registry, &bssh_session_registry::changed, this, [&] {
+		held_when_told.append(registry.connected_count() + registry.connecting_count());
+	});
 	fakes.at(0)->simulate_connection_lost();
 	QVERIFY(!session->is_live());
 	QCOMPARE(registry.connected_count(), 0);
-	QCOMPARE(connecting_when_told, 1);
+	QCOMPARE(registry.connecting_count(), 1);
+	QVERIFY(!held_when_told.isEmpty());
+	QVERIFY(!held_when_told.contains(0));
 
 	/* Told to stop retrying, it is on its way nowhere, and that is said too. */
 	session->disconnect_from_host();
-	QCOMPARE(connecting_when_told, 0);
+	QCOMPARE(held_when_told.last(), 0);
 }
 
 void session_registry_test::title_falls_back_from_osc_to_profile() {

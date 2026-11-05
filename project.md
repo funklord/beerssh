@@ -1204,21 +1204,36 @@ events from `bssh_platform` (§3) without caring which platform produced them.
   **On the Fold, 2026-11-05** (arm64, One UI, another app in front, a
   throwaway sshd in a container on the LAN, opened with an `ssh://` link):
   the server side killed, signed in again **1.3 s** later, on the password
-  typed at the first login. Frozen with `docker pause` for two minutes the
-  session went down within 8 s and retried on its backoff until the host
-  thawed, then came back in 16 s; frozen for 29 s after that it did not go
-  down at all, so **why the first freeze dropped it so fast is not
-  established** -- nothing the client does should notice a frozen peer that
-  soon, the TCP timers being 30 s and up. Same family as the drop above.
+  typed at the first login. That looked like success; see the next entry.
   The worker threads
   were never affected -- a `QThread` gets a plain `QEventDispatcherUNIX`,
   which the stopper does not hold -- which is why sessions *stayed* up.
   And §5.3's own case, a network change in the background: `svc wifi
   disable` with the app at home reconnected over the emulator's mobile
   data in 2 s; Wi-Fi coming back left that working session where it was.
-  beersshd sets the same flag (§19.6). Not yet seen on the Fold, where
-  OEM battery management (§5.4) is the remaining unknown.
+  beersshd sets the same flag (§19.6). On the Fold One UI's battery
+  management never got in the way: what stopped it was ours, below.
 
+- **[FIXED 2026-11-06, found on the Fold] One drop in the background ended the
+  session for good.** `bssh_session_registry` was connected to `state_changed`
+  before the manager, so a window heard of a drop first, counted nothing
+  connected and nothing coming, and called `set_keep_alive(false)`. Android 12+
+  refuses to start the service again from the background, the exception died
+  in Qt's JNI wrapper with `m_keep_alive` true, and the process went to
+  `cch`/`previous-expired`, where Android blocks its network. So every dial
+  timed out while the host answered from `adb shell`: Wi-Fi off 30 s and on
+  again, **no reconnect in 5 minutes**, and with the app reopened, "1 session
+  connected" with no foreground service at all. Any drop quick enough to land
+  inside the grace period looked fine, which is why the emulator's 1 s and the
+  1.3 s above passed. It also explains a session "dropping" 8 s into a
+  `docker pause` while a later 29 s freeze dropped nothing: the first was the
+  network being cut about 40 s after the service went. Whether the
+  unexplained drop above was the same thing cannot now be shown.
+  Now the manager goes first, a refused start is reported (`BsshService.start`
+  returns false) and retried at the next `application_active_changed`, and
+  `transportMediumChanged` counts as a network change, since Wi-Fi back on a
+  phone with mobile data never changes reachability. Same 30-45 s off:
+  service up throughout, signed in again **8 s** after Wi-Fi came back.
 ### 5.4 Battery / OEM caveats (Android)
 Aggressive OEM battery managers (e.g. some Chinese OEM skins) may kill the
 service anyway. Add an in-app prompt to whitelist the app from battery
